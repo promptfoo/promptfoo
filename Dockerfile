@@ -77,6 +77,13 @@ RUN ln -s /app /app/node_modules/promptfoo && \
     ln -s /app/dist/src/entrypoint.js /usr/local/bin/pf && \
     mkdir -p /home/promptfoo/.promptfoo && chown promptfoo:promptfoo /home/promptfoo/.promptfoo
 
+# Alpine publishes fixes between rebuilds of the Node image, and the `apk upgrade` in the
+# base stage is replayed from the build cache until that image changes. A new value here
+# re-runs only this step, so the dependency and build layers stay cached. CI passes one
+# for every build.
+ARG OS_PACKAGE_REFRESH=
+RUN apk upgrade --no-cache
+
 ENV API_PORT=3000
 ENV HOST=0.0.0.0
 ENV PROMPTFOO_SELF_HOSTED=1

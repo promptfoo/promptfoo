@@ -5,7 +5,12 @@ import { matchesGEval } from '../../src/matchers/llmGrading';
 import { createPassingGrade } from '../factories/literalFixtures';
 import { createMockProvider, createProviderResponse } from '../factories/provider';
 
-import type { ApiProvider, Assertion, AtomicTestCase } from '../../src/types/index';
+import type {
+  ApiProvider,
+  Assertion,
+  AssertionParams,
+  AtomicTestCase,
+} from '../../src/types/index';
 
 const createEmptyEvalTest = () => ({
   vars: {},
@@ -42,6 +47,37 @@ const createMultiCriteriaAssertion = <TType extends 'not-g-eval' | 'g-eval'>(typ
   threshold: 0.7,
 });
 
+function createGevalParams(
+  context: Partial<Pick<AssertionParams['assertionValueContext'], 'prompt' | 'provider'>> = {},
+): Omit<AssertionParams, 'assertion' | 'renderedValue' | 'inverse'> {
+  return {
+    prompt: 'test prompt',
+    outputString: 'test output',
+    test: createEmptyEvalTest(),
+    baseType: 'g-eval',
+    assertionValueContext: {
+      prompt: 'test prompt',
+      vars: {},
+      test: createEmptyEvalTest(),
+      logProbs: undefined,
+      provider: {
+        id: () => 'test-provider',
+        callApi: async () => ({ output: 'test' }),
+      },
+      providerResponse: {
+        output: 'test output',
+        error: undefined,
+      },
+      ...context,
+    },
+    output: 'test output',
+    providerResponse: {
+      output: 'test output',
+      error: undefined,
+    },
+  };
+}
+
 vi.mock('../../src/matchers/llmGrading', async () => {
   const actual = await vi.importActual<typeof import('../../src/matchers/llmGrading')>(
     '../../src/matchers/llmGrading',
@@ -62,31 +98,14 @@ describe('handleGEval', () => {
     mockMatchesGEval.mockResolvedValue(createPassingGrade());
 
     const result = await handleGEval({
-      assertion: createGevalAssertion('g-eval', 'test criteria'),
-      renderedValue: 'test criteria',
-      prompt: 'test prompt',
-      outputString: 'test output',
-      test: createEmptyEvalTest(),
-      baseType: 'g-eval',
-      assertionValueContext: {
-        prompt: 'test prompt',
-        vars: {},
-        test: createEmptyEvalTest(),
-        logProbs: undefined,
+      ...createGevalParams({
         provider: createMockProvider({
           response: createProviderResponse({ output: 'test' }),
         }),
-        providerResponse: {
-          output: 'test output',
-          error: undefined,
-        },
-      },
+      }),
+      assertion: createGevalAssertion('g-eval', 'test criteria'),
+      renderedValue: 'test criteria',
       inverse: false,
-      output: 'test output',
-      providerResponse: {
-        output: 'test output',
-        error: undefined,
-      },
     });
 
     expect(result).toEqual({
@@ -116,31 +135,14 @@ describe('handleGEval', () => {
     mockMatchesGEval.mockResolvedValueOnce(createFailingGevalResult());
 
     const result = await handleGEval({
-      assertion: createMultiCriteriaAssertion('g-eval'),
-      renderedValue: ['criteria1', 'criteria2'],
-      prompt: 'test prompt',
-      outputString: 'test output',
-      test: createEmptyEvalTest(),
-      baseType: 'g-eval',
-      assertionValueContext: {
-        prompt: 'test prompt',
-        vars: {},
-        test: createEmptyEvalTest(),
-        logProbs: undefined,
+      ...createGevalParams({
         provider: createMockProvider({
           response: createProviderResponse({ output: 'test' }),
         }),
-        providerResponse: {
-          output: 'test output',
-          error: undefined,
-        },
-      },
+      }),
+      assertion: createMultiCriteriaAssertion('g-eval'),
+      renderedValue: ['criteria1', 'criteria2'],
       inverse: false,
-      output: 'test output',
-      providerResponse: {
-        output: 'test output',
-        error: undefined,
-      },
     });
 
     expect(result).toEqual({
@@ -160,36 +162,14 @@ describe('handleGEval', () => {
     const mockMatchesGEval = vi.mocked(matchesGEval);
 
     const result = await handleGEval({
+      ...createGevalParams(),
       assertion: {
         type: 'g-eval',
         value: [],
         threshold: 0.7,
       },
       renderedValue: [],
-      prompt: 'test prompt',
-      outputString: 'test output',
-      test: createEmptyEvalTest(),
-      baseType: 'g-eval',
-      assertionValueContext: {
-        prompt: 'test prompt',
-        vars: {},
-        test: createEmptyEvalTest(),
-        logProbs: undefined,
-        provider: {
-          id: () => 'test-provider',
-          callApi: async () => ({ output: 'test' }),
-        },
-        providerResponse: {
-          output: 'test output',
-          error: undefined,
-        },
-      },
       inverse: false,
-      output: 'test output',
-      providerResponse: {
-        output: 'test output',
-        error: undefined,
-      },
     });
 
     expect(result).toEqual({
@@ -210,34 +190,17 @@ describe('handleGEval', () => {
     mockMatchesGEval.mockResolvedValue(createPassingGrade());
 
     await handleGEval({
+      ...createGevalParams({
+        provider: createMockProvider({
+          response: createProviderResponse({ output: 'test' }),
+        }),
+      }),
       assertion: {
         type: 'g-eval',
         value: 'test criteria',
       },
       renderedValue: 'test criteria',
-      prompt: 'test prompt',
-      outputString: 'test output',
-      test: createEmptyEvalTest(),
-      baseType: 'g-eval',
-      assertionValueContext: {
-        prompt: 'test prompt',
-        vars: {},
-        test: createEmptyEvalTest(),
-        logProbs: undefined,
-        provider: createMockProvider({
-          response: createProviderResponse({ output: 'test' }),
-        }),
-        providerResponse: {
-          output: 'test output',
-          error: undefined,
-        },
-      },
       inverse: false,
-      output: 'test output',
-      providerResponse: {
-        output: 'test output',
-        error: undefined,
-      },
     });
 
     expect(mockMatchesGEval).toHaveBeenCalledWith(
@@ -253,6 +216,11 @@ describe('handleGEval', () => {
   it('should throw error for invalid renderedValue type', async () => {
     await expect(
       handleGEval({
+        ...createGevalParams({
+          provider: createMockProvider({
+            response: createProviderResponse({ output: 'test' }),
+          }),
+        }),
         assertion: {
           type: 'g-eval',
           value: 'test',
@@ -260,29 +228,6 @@ describe('handleGEval', () => {
         renderedValue: undefined,
         prompt: 'test',
         outputString: 'test',
-        test: {
-          vars: {},
-          assert: [],
-          options: {},
-        },
-        baseType: 'g-eval',
-        assertionValueContext: {
-          prompt: 'test prompt',
-          vars: {},
-          test: {
-            vars: {},
-            assert: [],
-            options: {},
-          },
-          logProbs: undefined,
-          provider: createMockProvider({
-            response: createProviderResponse({ output: 'test' }),
-          }),
-          providerResponse: {
-            output: 'test output',
-            error: undefined,
-          },
-        },
         inverse: false,
         output: 'test',
         providerResponse: {
@@ -298,31 +243,16 @@ describe('handleGEval', () => {
     mockMatchesGEval.mockResolvedValue(createPassingGrade());
 
     const result = await handleGEval({
-      assertion: createGevalAssertion('g-eval', 'test criteria'),
-      renderedValue: 'test criteria',
-      prompt: undefined,
-      outputString: 'test output',
-      test: createEmptyEvalTest(),
-      baseType: 'g-eval',
-      assertionValueContext: {
+      ...createGevalParams({
         prompt: undefined,
-        vars: {},
-        test: createEmptyEvalTest(),
-        logProbs: undefined,
         provider: createMockProvider({
           response: createProviderResponse({ output: 'test' }),
         }),
-        providerResponse: {
-          output: 'test output',
-          error: undefined,
-        },
-      },
+      }),
+      assertion: createGevalAssertion('g-eval', 'test criteria'),
+      renderedValue: 'test criteria',
+      prompt: undefined,
       inverse: false,
-      output: 'test output',
-      providerResponse: {
-        output: 'test output',
-        error: undefined,
-      },
     });
 
     expect(result).toEqual({
@@ -352,31 +282,16 @@ describe('handleGEval', () => {
     mockMatchesGEval.mockResolvedValueOnce(createFailingGevalResult());
 
     const result = await handleGEval({
-      assertion: createMultiCriteriaAssertion('g-eval'),
-      renderedValue: ['criteria1', 'criteria2'],
-      prompt: undefined,
-      outputString: 'test output',
-      test: createEmptyEvalTest(),
-      baseType: 'g-eval',
-      assertionValueContext: {
+      ...createGevalParams({
         prompt: undefined,
-        vars: {},
-        test: createEmptyEvalTest(),
-        logProbs: undefined,
         provider: createMockProvider({
           response: createProviderResponse({ output: 'test' }),
         }),
-        providerResponse: {
-          output: 'test output',
-          error: undefined,
-        },
-      },
+      }),
+      assertion: createMultiCriteriaAssertion('g-eval'),
+      renderedValue: ['criteria1', 'criteria2'],
+      prompt: undefined,
       inverse: false,
-      output: 'test output',
-      providerResponse: {
-        output: 'test output',
-        error: undefined,
-      },
     });
 
     expect(result).toEqual({
@@ -409,36 +324,10 @@ describe('handleGEval', () => {
     );
   });
 
-  const baseParams = {
-    prompt: 'test prompt',
-    outputString: 'test output',
-    test: createEmptyEvalTest(),
-    baseType: 'g-eval' as const,
-    assertionValueContext: {
-      prompt: 'test prompt',
-      vars: {},
-      test: createEmptyEvalTest(),
-      logProbs: undefined,
-      provider: {
-        id: () => 'test-provider',
-        callApi: async () => ({ output: 'test' }),
-      },
-      providerResponse: {
-        output: 'test output',
-        error: undefined,
-      },
-    },
-    output: 'test output',
-    providerResponse: {
-      output: 'test output',
-      error: undefined,
-    },
-  };
-
   it('should throw error for array renderedValue entries that are not strings', async () => {
     await expect(
       handleGEval({
-        ...baseParams,
+        ...createGevalParams(),
         assertion: {
           type: 'g-eval',
           value: ['valid criteria', 42] as any,
@@ -459,7 +348,7 @@ describe('handleGEval', () => {
       });
 
       const result = await handleGEval({
-        ...baseParams,
+        ...createGevalParams(),
         assertion: createGevalAssertion('not-g-eval', 'test criteria'),
         renderedValue: 'test criteria',
         inverse: true,
@@ -486,7 +375,7 @@ describe('handleGEval', () => {
       });
 
       const result = await handleGEval({
-        ...baseParams,
+        ...createGevalParams(),
         assertion: createGevalAssertion('not-g-eval', 'test criteria'),
         renderedValue: 'test criteria',
         inverse: true,
@@ -510,7 +399,7 @@ describe('handleGEval', () => {
       mockMatchesGEval.mockResolvedValueOnce(createFailingGevalResult());
 
       const result = await handleGEval({
-        ...baseParams,
+        ...createGevalParams(),
         assertion: createMultiCriteriaAssertion('not-g-eval'),
         renderedValue: ['criteria1', 'criteria2'],
         inverse: true,
@@ -545,7 +434,7 @@ describe('handleGEval', () => {
       });
 
       const result = await handleGEval({
-        ...baseParams,
+        ...createGevalParams(),
         assertion: createMultiCriteriaAssertion('not-g-eval'),
         renderedValue: ['criteria1', 'criteria2'],
         inverse: true,
@@ -568,7 +457,7 @@ describe('handleGEval', () => {
       const mockMatchesGEval = vi.mocked(matchesGEval);
 
       const result = await handleGEval({
-        ...baseParams,
+        ...createGevalParams(),
         assertion: {
           type: 'not-g-eval',
           value: [],
@@ -600,7 +489,7 @@ describe('handleGEval', () => {
       mockMatchesGEval.mockResolvedValue(createPassingGrade(0.7, 'exactly at threshold'));
 
       const result = await handleGEval({
-        ...baseParams,
+        ...createGevalParams(),
         assertion: { type: 'g-eval', value: 'test criteria', threshold: 0.7 },
         renderedValue: 'test criteria',
         inverse: false,
@@ -615,7 +504,7 @@ describe('handleGEval', () => {
       mockMatchesGEval.mockResolvedValue(createPassingGrade(0.7, 'exactly at threshold'));
 
       const result = await handleGEval({
-        ...baseParams,
+        ...createGevalParams(),
         assertion: { type: 'not-g-eval', value: 'test criteria', threshold: 0.7 },
         renderedValue: 'test criteria',
         inverse: true,
@@ -643,7 +532,7 @@ describe('handleGEval', () => {
       });
 
       const result = await handleGEval({
-        ...baseParams,
+        ...createGevalParams(),
         assertion: createGevalAssertion('g-eval', 'test criteria'),
         renderedValue: 'test criteria',
         inverse: false,
@@ -674,7 +563,7 @@ describe('handleGEval', () => {
       });
 
       const result = await handleGEval({
-        ...baseParams,
+        ...createGevalParams(),
         assertion: createGevalAssertion('not-g-eval', 'test criteria'),
         renderedValue: 'test criteria',
         inverse: true,
@@ -706,7 +595,7 @@ describe('handleGEval', () => {
       });
 
       const result = await handleGEval({
-        ...baseParams,
+        ...createGevalParams(),
         assertion: {
           type: 'g-eval',
           value: 'test criteria',
@@ -746,7 +635,7 @@ describe('handleGEval', () => {
       });
 
       const result = await handleGEval({
-        ...baseParams,
+        ...createGevalParams(),
         assertion: createMultiCriteriaAssertion('not-g-eval'),
         renderedValue: ['criteria1', 'criteria2'],
         inverse: true,
@@ -787,7 +676,7 @@ describe('handleGEval', () => {
       });
 
       const result = await handleGEval({
-        ...baseParams,
+        ...createGevalParams(),
         assertion: {
           type: 'g-eval',
           value: ['criteria1', 'criteria2', 'criteria3'],
@@ -817,7 +706,7 @@ describe('handleGEval', () => {
       });
 
       const result = await handleGEval({
-        ...baseParams,
+        ...createGevalParams(),
         assertion: createGevalAssertion('not-g-eval', 'test criteria'),
         renderedValue: 'test criteria',
         inverse: true,
