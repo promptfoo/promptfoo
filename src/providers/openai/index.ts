@@ -10,7 +10,6 @@ import type {
   CallApiOptionsParams,
   ProviderResponse,
 } from '../../types/index';
-import type { ProviderOptions } from '../../types/providers';
 import type { FetchOptions } from '../../util/fetch/types';
 import type { OpenAiSharedOptions } from './types';
 
@@ -63,7 +62,7 @@ export class OpenAiGenericProvider implements ApiProvider {
 
   constructor(
     modelName: string,
-    options: Pick<ProviderOptions<OpenAiSharedOptions>, 'config' | 'id' | 'env'> = {},
+    options: { config?: OpenAiSharedOptions; id?: string; env?: EnvOverrides } = {},
   ) {
     const { config, id, env } = options;
     this.env = env;

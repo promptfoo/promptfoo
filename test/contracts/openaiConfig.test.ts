@@ -133,7 +133,68 @@ const chatValid = [
   },
 ];
 const responseValid = [
-  ...chatValid,
+  {
+    tools: [
+      {
+        type: 'function',
+        name: 'no_args',
+        parameters: null,
+        strict: null,
+        description: null,
+        output_schema: { type: 'object' },
+      },
+    ],
+  },
+  {
+    tools: [
+      {
+        type: 'function',
+        name: 'lookup',
+        defer_loading: true,
+        async: false,
+        allowed_callers: ['direct'],
+        parameters: { type: 'object' },
+      },
+    ],
+    tool_choice: { type: 'custom', name: 'lookup', future: { keep: true } },
+  },
+  ...baseValid,
+  {
+    model: 'custom-model',
+    temperature: 0,
+    max_output_tokens: 10,
+    top_p: 0,
+    seed: 0,
+    service_tier: 'scale',
+    omitDefaults: true,
+    passthrough: { future_field: { keep: true } },
+  },
+  {
+    response_format: nestedFormat,
+    tools: 'file://tools.yaml',
+    functionToolCallbacks: { lookup: 'file://callback.js' },
+    mcp: { server: { command: 'node' } },
+  },
+  {
+    reasoning: {
+      effort: '{{ effort }}',
+      summary: '{{ summary }}',
+      context: '{{ context }}',
+      mode: '{{ mode }}',
+    },
+  },
+  {
+    tools: [
+      {
+        type: 'namespace',
+        name: 'crm',
+        description: 'CRM tools',
+        tools: [{ type: 'function', name: 'lookup', parameters: { type: 'object' } }],
+      },
+      { type: 'tool_search', execution: 'client', parameters: { type: 'object' } },
+      { type: 'custom', name: 'command', format: { type: 'text' } },
+    ],
+  },
   {
     max_output_tokens: 0,
     max_tool_calls: 4,
@@ -197,6 +258,14 @@ const invalidShared = [
   { unknown: true },
 ];
 const invalidChat = [
+  { tool_choice: { type: 'mcp', server_label: 123 } },
+  { tool_choice: { type: 'allowed_tools', mode: 7, tools: [] } },
+  {
+    tool_choice: { type: 'allowed_tools', mode: 'auto', tools: [{ type: 'function', name: 123 }] },
+  },
+  { tools: [{ type: 'custom' }] },
+  { tools: [{ type: 'namespace', name: 'crm', tools: [] }] },
+  { tools: [{ type: 'tool_search', execution: 'invalid' }] },
   ...invalidShared,
   { temperature: 'warm' },
   { temperature: Infinity },
@@ -268,6 +337,8 @@ describe('OpenAI portable configuration contracts', () => {
         { max_output_tokens: '20' },
         { include: [123] },
         { access_programs: { cyber: 'unknown' } },
+        { max_tokens: 32 },
+        { max_completion_tokens: 32 },
       ],
     },
     {

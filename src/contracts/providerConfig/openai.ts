@@ -34,9 +34,16 @@ export const OpenAiSharedConfigInputSchema = z.strictObject({
 const SchemaDocument = z.union([JsonObjectInputSchema, z.boolean(), FileReferenceInputSchema]);
 const FunctionDefinition = z.strictObject({
   name: z.string(),
-  description: z.string().optional(),
-  parameters: SchemaDocument.optional(),
+  description: z.string().nullable().optional(),
+  parameters: z.union([JsonObjectInputSchema, z.boolean()]).nullable().optional(),
+  output_schema: JsonObjectInputSchema.nullable().optional(),
   strict: z.boolean().nullable().optional(),
+  defer_loading: z.boolean().optional(),
+  async: z.boolean().optional(),
+  allowed_callers: z
+    .array(z.enum(['direct', 'programmatic']))
+    .nullable()
+    .optional(),
 });
 const ChatFunctionTool = z.strictObject({
   type: z.literal('function'),
@@ -96,19 +103,56 @@ const FileSearchTool = JsonObjectInputSchema.and(
     max_num_results: z.number().optional(),
   }),
 );
-const BuiltInTool = JsonObjectInputSchema.and(
-  z.object({
+const CustomTool = z
+  .object({
+    type: z.literal('custom'),
+    name: z.string(),
+    description: z.string().optional(),
+    format: JsonObjectInputSchema.optional(),
+    allowed_callers: z
+      .array(z.enum(['direct', 'programmatic']))
+      .nullable()
+      .optional(),
+    async: z.boolean().optional(),
+    defer_loading: z.boolean().optional(),
+  })
+  .catchall(z.json());
+const NamespaceTool = z
+  .object({
+    type: z.literal('namespace'),
+    name: z.string(),
+    description: z.string(),
+    tools: z.array(z.union([ResponsesFunctionTool, CustomTool])),
+  })
+  .catchall(z.json());
+const ToolSearchTool = z
+  .object({
+    type: z.literal('tool_search'),
+    description: z.string().nullable().optional(),
+    execution: z.enum(['server', 'client']).optional(),
+    parameters: z.json().nullable().optional(),
+  })
+  .catchall(z.json());
+const ComputerPreviewTool = z
+  .object({
+    type: z.literal('computer_use_preview'),
+    display_width: z.number(),
+    display_height: z.number(),
+    environment: z.enum(['windows', 'mac', 'linux', 'ubuntu', 'browser']),
+  })
+  .catchall(z.json());
+const BuiltInTool = z
+  .object({
     type: z.enum([
       'computer',
-      'computer_use_preview',
+      'computer_use',
       'image_generation',
       'local_shell',
       'shell',
       'apply_patch',
-      'custom',
     ]),
-  }),
-);
+  })
+  .catchall(z.json());
 const Tool = z.union([
   ChatFunctionTool,
   ResponsesFunctionTool,
@@ -116,33 +160,57 @@ const Tool = z.union([
   WebSearchTool,
   CodeInterpreterTool,
   FileSearchTool,
+  CustomTool,
+  NamespaceTool,
+  ToolSearchTool,
+  ComputerPreviewTool,
   BuiltInTool,
 ]);
 const Tools = z.union([
   FileReferenceInputSchema,
   z.array(z.union([Tool, FileReferenceInputSchema])),
 ]);
+const NamedToolChoice = z
+  .object({ type: z.enum(['function', 'custom']), name: z.string() })
+  .catchall(z.json());
+const McpToolChoice = z
+  .object({
+    type: z.literal('mcp'),
+    server_label: z.string(),
+    name: z.string().nullable().optional(),
+  })
+  .catchall(z.json());
+const BuiltInToolChoice = z
+  .object({
+    type: z.enum([
+      'web_search',
+      'web_search_preview',
+      'web_search_preview_2025_03_11',
+      'file_search',
+      'code_interpreter',
+      'image_generation',
+      'computer',
+      'computer_use',
+      'computer_use_preview',
+      'shell',
+      'apply_patch',
+      'tool_search',
+    ]),
+  })
+  .catchall(z.json());
 const ToolChoice = z.union([
   z.enum(['none', 'auto', 'required']),
   z.strictObject({ type: z.literal('function'), function: z.strictObject({ name: z.string() }) }),
-  z.strictObject({ type: z.literal('function'), name: z.string() }),
-  // Responses supports selecting built-in tools and restricted sets of allowed tools.
-  JsonObjectInputSchema.and(
-    z.object({
-      type: z.enum([
-        'mcp',
-        'web_search',
-        'web_search_preview',
-        'file_search',
-        'code_interpreter',
-        'image_generation',
-        'computer',
-        'computer_use_preview',
-        'custom',
-        'allowed_tools',
-      ]),
-    }),
-  ),
+  NamedToolChoice,
+  McpToolChoice,
+  BuiltInToolChoice,
+  z
+    .object({
+      type: z.literal('allowed_tools'),
+      mode: z.enum(['auto', 'required']),
+      tools: z.array(z.union([NamedToolChoice, McpToolChoice, BuiltInToolChoice])),
+    })
+    .catchall(z.json()),
 ]);
 const NestedResponseFormat = z.strictObject({
   type: z.literal('json_schema'),
@@ -179,13 +247,22 @@ const Template = z
   .regex(/\{\{[\s\S]+\}\}/)
   .describe('Runtime template expression');
 const Reasoning = z.strictObject({
-  context: z.enum(['auto', 'current_turn', 'all_turns']).nullable().optional(),
+  context: z
+    .union([z.enum(['auto', 'current_turn', 'all_turns']), Template])
+    .nullable()
+    .optional(),
   effort: z.union([ReasoningEffort, Template]).nullable().optional(),
-  mode: z.enum(['standard', 'pro']).nullable().optional(),
-  summary: z.enum(['auto', 'concise', 'detailed']).nullable().optional(),
+  mode: z
+    .union([z.enum(['standard', 'pro']), Template])
+    .nullable()
+    .optional(),
+  summary: z
+    .union([z.enum(['auto', 'concise', 'detailed']), Template])
+    .nullable()
+    .optional(),
 });
 const ServiceTier = z
-  .enum(['auto', 'default', 'fast', 'flex', 'priority', 'premium', 'ultrafast'])
+  .enum(['auto', 'default', 'fast', 'flex', 'priority', 'premium', 'ultrafast', 'scale'])
   .nullable();
 
 const TextFields = OpenAiSharedConfigInputSchema.extend({
@@ -254,24 +331,38 @@ export const OpenAiCompletionConfigInputSchema = TextFields.describe(
 export const OpenAiChatConfigInputSchema = ChatFields.describe(
   'Serializable OpenAI Chat Completions configuration',
 );
-export const OpenAiResponsesConfigInputSchema = ChatFields.extend({
-  response_format: ResponsesResponseFormat.optional(),
-  instructions: z.string().optional(),
-  max_output_tokens: z.number().optional(),
-  max_tool_calls: z.number().optional(),
-  access_programs: z
-    .strictObject({ cyber: z.enum(['standard', 'daybreak_blue', 'daybreak_red']).optional() })
-    .optional(),
-  include: z.array(z.string()).nullable().optional(),
-  parallel_tool_calls: z.boolean().optional(),
-  previous_response_id: z.string().optional(),
-  stream: z.boolean().optional(),
-  truncation: z.enum(['auto', 'disabled']).optional(),
-  background: z.boolean().optional(),
-  webhook_url: z.string().optional(),
-}).describe(
-  'Serializable OpenAI Responses configuration, including compatible Chat option aliases',
-);
+export const OpenAiResponsesConfigInputSchema = ChatFields.omit({
+  max_tokens: true,
+  max_completion_tokens: true,
+  best_of: true,
+  stop: true,
+  frequency_penalty: true,
+  presence_penalty: true,
+  functions: true,
+  function_call: true,
+  tool_resources: true,
+  modalities: true,
+  audio: true,
+})
+  .extend({
+    response_format: ResponsesResponseFormat.optional(),
+    instructions: z.string().optional(),
+    max_output_tokens: z.number().optional(),
+    max_tool_calls: z.number().optional(),
+    access_programs: z
+      .strictObject({ cyber: z.enum(['standard', 'daybreak_blue', 'daybreak_red']).optional() })
+      .optional(),
+    include: z.array(z.string()).nullable().optional(),
+    parallel_tool_calls: z.boolean().optional(),
+    previous_response_id: z.string().optional(),
+    stream: z.boolean().optional(),
+    truncation: z.enum(['auto', 'disabled']).optional(),
+    background: z.boolean().optional(),
+    webhook_url: z.string().optional(),
+  })
+  .describe(
+    'Serializable OpenAI Responses configuration; use max_output_tokens for the output limit',
+  );
 export const OpenAiEmbeddingConfigInputSchema = OpenAiSharedConfigInputSchema.extend({
   model: z.string().optional(),
   passthrough: JsonObjectInputSchema.optional().describe(
