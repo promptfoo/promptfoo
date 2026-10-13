@@ -30,12 +30,12 @@ export const OpenAiSharedConfigInputSchema = z.strictObject({
     .describe('Defaults to 4 at runtime; negative values are clamped to zero'),
 });
 
-// JSON Schema documents can contain arbitrary keywords, references, and boolean schemas.
-const SchemaDocument = z.union([JsonObjectInputSchema, z.boolean(), FileReferenceInputSchema]);
+// OpenAI requires an object at the schema root; nested JSON Schema keywords remain open.
+const SchemaDocument = z.union([JsonObjectInputSchema, FileReferenceInputSchema]);
 const FunctionDefinition = z.strictObject({
   name: z.string(),
   description: z.string().nullable().optional(),
-  parameters: z.union([JsonObjectInputSchema, z.boolean()]).nullable().optional(),
+  parameters: JsonObjectInputSchema.nullable().optional(),
   output_schema: JsonObjectInputSchema.nullable().optional(),
   strict: z.boolean().nullable().optional(),
   defer_loading: z.boolean().optional(),
@@ -93,7 +93,12 @@ const McpTool = z.union([
 // Built-in tool payloads evolve independently of promptfoo; retain JSON extension fields.
 const WebSearchTool = JsonObjectInputSchema.and(
   z.object({
-    type: z.enum(['web_search', 'web_search_preview']),
+    type: z.enum([
+      'web_search',
+      'web_search_preview',
+      'web_search_2025_08_26',
+      'web_search_preview_2025_03_11',
+    ]),
     external_web_access: z.boolean().optional(),
     return_token_budget: z.enum(['default', 'unlimited']).optional(),
     search_context_size: z.enum(['low', 'medium', 'high']).optional(),
@@ -258,7 +263,10 @@ const FlatResponseFormat = z.strictObject({
   type: z.literal('json_schema'),
   name: z.string().optional(),
   description: z.string().optional(),
-  strict: z.boolean().optional(),
+  strict: z
+    .literal(true)
+    .optional()
+    .describe('Responses config.response_format uses strict mode at runtime'),
   schema: SchemaDocument,
 });
 const BasicResponseFormat = z.strictObject({ type: z.enum(['text', 'json_object']) });
@@ -270,7 +278,14 @@ const ChatResponseFormat = z.union([
 const ResponsesResponseFormat = z.union([
   FileReferenceInputSchema,
   BasicResponseFormat,
-  NestedResponseFormat,
+  NestedResponseFormat.extend({
+    json_schema: NestedResponseFormat.shape.json_schema.extend({
+      strict: z
+        .literal(true)
+        .optional()
+        .describe('Responses config.response_format uses strict mode at runtime'),
+    }),
+  }),
   FlatResponseFormat,
 ]);
 
@@ -354,7 +369,13 @@ const ChatFields = TextFields.extend({
     .describe(
       'Inline callback code or file:// references; functions are supported only in-process',
     ),
-  mcp: McpConfigInputSchema.optional(),
+  mcp: McpConfigInputSchema.extend({
+    enabled: z
+      .boolean()
+      .describe(
+        'Set true to initialize MCP tools; the provider checks this before loading the client',
+      ),
+  }).optional(),
 });
 
 export const OpenAiCompletionConfigInputSchema = TextFields.describe(

@@ -120,6 +120,7 @@ const chatValid = [
   },
   {
     mcp: {
+      enabled: true,
       servers: [
         { command: 'node', args: ['./server.js'] },
         { url: '{{ env.MCP_URL }}', auth: { type: 'bearer', token: '{{ env.TOKEN }}' } },
@@ -128,6 +129,8 @@ const chatValid = [
   },
 ];
 const responseValid = [
+  { tools: [{ type: 'web_search_2025_08_26' }, { type: 'web_search_preview_2025_03_11' }] },
+  { mcp: { enabled: false } },
   {
     tools: [
       { type: 'code_interpreter', container: { type: 'auto', file_ids: ['id'] } },
@@ -174,10 +177,13 @@ const responseValid = [
     passthrough: { future_field: { keep: true } },
   },
   {
-    response_format: nestedFormat,
+    response_format: {
+      ...nestedFormat,
+      json_schema: { ...nestedFormat.json_schema, strict: true },
+    },
     tools: 'file://tools.yaml',
     functionToolCallbacks: { lookup: 'file://callback.js' },
-    mcp: { server: { command: 'node' } },
+    mcp: { enabled: true, server: { command: 'node' } },
   },
   {
     reasoning: {
@@ -214,7 +220,7 @@ const responseValid = [
   },
   {
     include: null,
-    response_format: { type: 'json_schema', name: 'result', schema: true, strict: false },
+    response_format: { type: 'json_schema', name: 'result', schema: schemaDocument, strict: true },
   },
   {
     tools: [
@@ -303,6 +309,8 @@ const invalidCommon = [
   { metadata: { key: 1 } },
   { store: 0 },
   { mcp: { server: { url: 123 } } },
+  { mcp: { server: { command: 'node' } } },
+  { response_format: { type: 'json_schema', json_schema: { name: 'result', schema: true } } },
 ];
 
 const invalidChat = [
@@ -341,6 +349,16 @@ describe('OpenAI portable configuration contracts', () => {
         { access_programs: { cyber: 'unknown' } },
         { max_tokens: 32 },
         { max_completion_tokens: 32 },
+        { response_format: { type: 'json_schema', schema: true } },
+        {
+          response_format: {
+            type: 'json_schema',
+            name: 'result',
+            schema: schemaDocument,
+            strict: false,
+          },
+        },
+        { response_format: nestedFormat },
       ],
     },
     {
