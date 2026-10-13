@@ -54,6 +54,27 @@ describe('manual ratings', () => {
     });
   });
 
+  it('restores a legacy grader error from its automated components', () => {
+    const approved = {
+      ...graderError,
+      pass: true,
+      score: 1,
+      failureReason: ResultFailureReason.NONE,
+      error: null,
+      gradingResult: {
+        ...graderError.gradingResult,
+        pass: true,
+        score: 1,
+        reason: 'Manual result',
+        componentResults: [
+          ...graderError.gradingResult.componentResults,
+          { pass: true, score: 1, reason: 'Manual result', assertion: { type: 'human' as const } },
+        ],
+      },
+    };
+    expect(applyManualRating(approved, { action: 'clear' })).toEqual(graderError);
+  });
+
   it('clears legacy ratings that have no saved snapshot', () => {
     const original = {
       pass: false,
