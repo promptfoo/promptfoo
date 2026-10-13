@@ -895,6 +895,8 @@ operate differently from standard models with specific requirements:
 For `azure:responses` reasoning deployments, use `max_output_tokens` and the Responses
 configuration documented above.
 
+For reasoning Chat deployments, `max_tokens` is accepted as an alias for `max_completion_tokens`; a prompt-level cap overrides the provider cap, and the canonical field wins within the same config. Unknown deployment aliases default to this modern cap field and forward explicitly configured `reasoning_effort`, without injecting sampling defaults or a legacy environment token limit. Set `modelName` for a known model's specific rules, or `isReasoningModel: false` to retain legacy defaults for an unrecognized deployment. Known older OpenAI and Foundry models keep their existing request fields.
+
 `azure:completion` has no reasoning support: it always sends `max_tokens` and ignores
 `isReasoningModel`, `max_completion_tokens`, and `reasoning_effort`. Use `azure:chat` or
 `azure:responses` for reasoning deployments.

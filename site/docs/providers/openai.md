@@ -237,7 +237,11 @@ Promptfoo omits `temperature` for models it recognizes as reasoning models, incl
 <details>
 <summary>Defaults and additional request options</summary>
 
-For non-reasoning requests, Promptfoo defaults to `temperature: 0` and an output limit of 1,024 tokens. For reasoning requests, Promptfoo leaves the output limit unset unless you configure it or set an applicable environment variable. Set the limit explicitly when comparing models.
+Known older families such as GPT-4.1, GPT-4o, GPT-3.5, and GPT Audio keep `temperature: 0` and an output limit of 1,024 tokens. Reasoning models and unknown OpenAI Chat aliases use `max_completion_tokens`, with no built-in output limit. Unknown aliases also leave temperature unset and forward explicitly configured `reasoning_effort`, so internal names do not need a recognized model slug.
+
+For these modern Chat requests, `max_tokens` is accepted as an alias for `max_completion_tokens`. A prompt-level cap overrides a provider-level cap; within the same config, `max_completion_tokens` wins over `max_tokens`. Passthrough caps retain their request override precedence, including OpenRouter's legacy `max_tokens` override. Responses continues to use `max_output_tokens`.
+
+For an unknown alias served by an older OpenAI-compatible endpoint, set `useLegacyTokenCap: true` to retain `max_tokens` and the legacy defaults. Dedicated provider adapters retain their own capability rules.
 
 `omitDefaults: true` omits Promptfoo's default temperature and output limit. Explicit configuration and environment values still apply.
 
@@ -1091,7 +1095,7 @@ Prefer provider configuration when comparing different settings in the same eval
 | `PROMPTFOO_RETRY_5XX`          | Set to `true` to retry server errors                                                                                            |
 | `PROMPTFOO_DELAY_MS`           | Delay between calls in milliseconds; defaults to 0                                                                              |
 
-Reasoning Chat requests to OpenAI ignore `OPENAI_MAX_TOKENS`, because their limit also counts reasoning tokens; set `OPENAI_MAX_COMPLETION_TOKENS` for them. GPT-6 Chat requests still fall back to `OPENAI_MAX_TOKENS` when `reasoning_effort` is `none`, when they go through OpenRouter, and on Azure.
+Reasoning Chat requests and unknown OpenAI Chat aliases ignore `OPENAI_MAX_TOKENS`, because their limit may also count reasoning tokens; set `OPENAI_MAX_COMPLETION_TOKENS` for them. GPT-6 Chat requests still fall back to `OPENAI_MAX_TOKENS` when `reasoning_effort` is `none`, when they go through OpenRouter, and on Azure.
 
 Within endpoint environment settings, `OPENAI_API_HOST` is checked first. Provider `env` base URL overrides are checked before process base URL values. Explicit provider connection settings take precedence over these environment variables.
 
