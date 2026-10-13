@@ -22,13 +22,6 @@ describe('FrameworkCompliance', () => {
       <div data-testid={`framework-card-${framework}`} data-severity={frameworkSeverity} />
     ));
     mockCSVExporter.mockImplementation(() => <div data-testid="csv-exporter" />);
-
-    mockUseReportStore.mockReturnValue({
-      pluginPassRateThreshold: 0.9,
-      setPluginPassRateThreshold: vi.fn(),
-      showUntestedPlugins: true,
-      setShowUntestedPlugins: vi.fn(),
-    });
   });
 
   const renderFrameworkCompliance = (
