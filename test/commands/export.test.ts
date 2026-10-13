@@ -127,6 +127,22 @@ describe('exportCommand', () => {
     process.exitCode = 0;
   });
 
+  it('should describe report formats and output defaults in eval export help', () => {
+    exportCommand(program);
+
+    const evalCmd = program.commands
+      .find((cmd) => cmd.name() === 'export')
+      ?.commands.find((cmd) => cmd.name() === 'eval');
+    expect(evalCmd).toBeDefined();
+
+    const helpText = evalCmd?.helpInformation().replace(/\s+/g, ' ');
+    expect(helpText).toContain(
+      'Export a saved eval as JSON, HTML, CSV, or another supported format',
+    );
+    expect(helpText).toContain('-o, --output [outputPath]');
+    expect(helpText).toContain('Output path; extension selects format (JSON to stdout by default)');
+  });
+
   it('should export latest eval record', async () => {
     vi.spyOn(Eval, 'latest').mockResolvedValue(mockEval);
 
