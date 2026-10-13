@@ -655,10 +655,7 @@ export class HuggingfaceTokenExtractionProvider implements ApiProvider {
     interface HuggingfaceTokenClassificationResponse {
       error?: string;
     }
-    type TokenClassificationItem = { score: number } & (
-      | { entity_group: string }
-      | { entity: string }
-    );
+    type TokenClassificationItem = { entity_group?: string; entity?: string; score: number };
 
     let response:
       | FetchWithCacheResult<HuggingfaceTokenClassificationResponse | TokenClassificationItem[]>
@@ -693,11 +690,16 @@ export class HuggingfaceTokenExtractionProvider implements ApiProvider {
         };
       }
 
-      // Take the highest score of each entity group
+      // Take the highest score of each label: entity_group for aggregated tokens, entity for
+      // aggregation_strategy "none". The unused field may be absent or null.
       const classification: Record<string, number> = {};
       for (const item of response.data) {
-        // Unaggregated tokens use entity rather than entity_group.
-        const label = 'entity_group' in item ? item.entity_group : item.entity;
+        const label = item.entity_group ?? item.entity;
+        if (!label) {
+          return {
+            error: `Malformed response data: ${JSON.stringify(item)}`,
+          };
+        }
         if (!classification[label] || classification[label] < item.score) {
           classification[label] = item.score;
         }

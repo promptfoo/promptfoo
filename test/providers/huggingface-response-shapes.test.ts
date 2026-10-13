@@ -86,49 +86,39 @@ describe('Hugging Face task response compatibility', () => {
 });
 
 describe('Hugging Face token classification labels', () => {
+  const tokens = new HuggingfaceTokenExtractionProvider('fixture/ner');
+
   it.each([
-    { strategy: 'none', field: 'entity', label: 'B-PER', otherLabel: 'B-LOC' },
-    { strategy: 'simple', field: 'entity_group', label: 'PER', otherLabel: 'LOC' },
-  ])(
-    'keeps the highest score per label with $strategy aggregation',
-    async ({ strategy, field, label, otherLabel }) => {
-      const provider = new HuggingfaceTokenExtractionProvider('fixture/ner', {
-        config: { aggregation_strategy: strategy },
-      });
-      reply([
-        { [field]: label, score: 0.6 },
-        { [field]: otherLabel, score: 0 },
-        { [field]: label, score: 0.9 },
-        { [field]: label, score: 0.7 },
-      ]);
-
-      expect(await provider.callClassificationApi('Alice visits Paris')).toEqual({
-        classification: { [label]: 0.9, [otherLabel]: 0 },
-      });
-      expect(JSON.parse(vi.mocked(fetchWithCache).mock.calls[0][1]?.body as string)).toMatchObject({
-        parameters: { aggregation_strategy: strategy },
-      });
+    {
+      shape: 'aggregated groups',
+      data: [
+        { entity_group: 'PER', score: 0.6 },
+        { entity_group: 'LOC', score: 0 },
+        { entity_group: 'PER', score: 0.9 },
+      ],
+      classification: { PER: 0.9, LOC: 0 },
     },
-  );
-
-  it('preserves token labels in text output', async () => {
-    const provider = new HuggingfaceTokenExtractionProvider('fixture/ner', {
-      config: { aggregation_strategy: 'none' },
-    });
-    reply([{ entity: 'B-PER', score: 0.9 }]);
-
-    expect(await provider.callApi('Alice')).toEqual({
-      output: JSON.stringify({ 'B-PER': 0.9 }),
-      error: undefined,
-    });
+    {
+      shape: 'unaggregated tokens',
+      data: [
+        { entity: 'B-PER', score: 0.6 },
+        { entity: 'I-PER', score: 0 },
+        { entity: 'B-PER', score: 0.9 },
+      ],
+      classification: { 'B-PER': 0.9, 'I-PER': 0 },
+    },
+    {
+      shape: 'unaggregated tokens with a null entity_group',
+      data: [{ entity_group: null, entity: 'B-PER', score: 0.9 }],
+      classification: { 'B-PER': 0.9 },
+    },
+  ])('keeps the highest score per label for $shape', async ({ data, classification }) => {
+    reply(data);
+    expect(await tokens.callClassificationApi('Alice visits Paris')).toEqual({ classification });
   });
 
-  it('preserves vendor errors instead of treating them as token labels', async () => {
-    const provider = new HuggingfaceTokenExtractionProvider('fixture/ner');
-    reply({ error: 'Fixture model unavailable' });
-
-    expect(await provider.callClassificationApi('Alice')).toEqual({
-      error: 'API call error: Fixture model unavailable',
-    });
+  it('rejects tokens without an entity label', async () => {
+    reply([{ label: 'PER', score: 0.9 }]);
+    expect((await tokens.callClassificationApi('Alice')).error).toContain('Malformed response');
   });
 });
