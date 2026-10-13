@@ -11,8 +11,8 @@ import logger from '../../logger';
 import { createEmptyTokenUsage } from '../../util/tokenUsageUtils';
 import { AnthropicGenericProvider, hashAnthropicCacheValue } from './generic';
 
-import type { EnvOverrides } from '../../types/env';
 import type { ProviderResponse } from '../../types/index';
+import type { ProviderOptions } from '../../types/providers';
 import type { AnthropicCompletionOptions } from './types';
 
 function getCompletionRequestMetadata(params: Anthropic.CompletionCreateParams) {
@@ -54,12 +54,10 @@ export class AnthropicCompletionProvider extends AnthropicGenericProvider {
 
   constructor(
     modelName: string,
-    options: {
-      config?: AnthropicCompletionOptions;
-      id?: string;
-      label?: string;
-      env?: EnvOverrides;
-    } = {},
+    options: Pick<
+      ProviderOptions<AnthropicCompletionOptions>,
+      'config' | 'id' | 'label' | 'env'
+    > = {},
   ) {
     super(modelName, options);
   }
