@@ -81,5 +81,8 @@ export function createEnvoyProvider(
     },
   };
 
-  return new OpenAiChatCompletionProvider(modelName, envoyConfig);
+  return new OpenAiChatCompletionProvider(modelName, {
+    ...envoyConfig,
+    useOpenAiDefaultsForUnknownModels: false,
+  });
 }

@@ -405,9 +405,12 @@ const ChatFields = TextFields.omit({ best_of: true }).extend({
 export const OpenAiCompletionConfigInputSchema = TextFields.describe(
   'Serializable legacy OpenAI Completions configuration',
 );
-export const OpenAiChatConfigInputSchema = ChatFields.describe(
-  'Serializable OpenAI Chat Completions configuration',
-);
+export const OpenAiChatConfigInputSchema = ChatFields.extend({
+  useLegacyTokenCap: z
+    .boolean()
+    .optional()
+    .describe('Retain max_tokens and legacy defaults for an unknown Chat model alias'),
+}).describe('Serializable OpenAI Chat Completions configuration');
 export const OpenAiResponsesConfigInputSchema = ChatFields.omit({
   max_tokens: true,
   max_completion_tokens: true,
@@ -425,6 +428,7 @@ export const OpenAiResponsesConfigInputSchema = ChatFields.omit({
   showThinking: true,
 })
   .extend({
+    reasoning: Reasoning.nullable().optional(),
     tools: ResponsesTools.optional(),
     tool_choice: ToolChoice.optional(),
     response_format: ResponsesResponseFormat.optional(),

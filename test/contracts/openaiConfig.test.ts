@@ -58,6 +58,8 @@ const baseValid = [
   },
 ];
 const chatValid = [
+  { useLegacyTokenCap: true },
+  { useLegacyTokenCap: false },
   { mcp: { enabled: false } },
   {
     tools: [{ type: 'custom', custom: { name: 'grammar', format: { type: 'text' } } }],
@@ -129,6 +131,7 @@ const chatValid = [
   },
 ];
 const responseValid = [
+  { reasoning: null },
   { tools: [{ type: 'web_search_2025_08_26' }, { type: 'web_search_preview_2025_03_11' }] },
   {
     tools: [
@@ -322,6 +325,7 @@ const invalidCommon = [
 ];
 
 const invalidChat = [
+  { useLegacyTokenCap: 'true' },
   { best_of: 1 },
   ...invalidCommon,
   { tools: [{ type: 'function', name: 'lookup' }] },
@@ -358,6 +362,7 @@ describe('OpenAI portable configuration contracts', () => {
         { access_programs: { cyber: 'unknown' } },
         { max_tokens: 32 },
         { max_completion_tokens: 32 },
+        { useLegacyTokenCap: true },
         { mcp: { enabled: true, server: { command: 'node' } } },
         { functionToolCallbacks: { lookup: 'file://callback.js' } },
         { seed: 1 },
@@ -513,6 +518,7 @@ describe('OpenAI portable configuration contracts', () => {
     expectTypeOf<OpenAiChatConfigInput>().toEqualTypeOf<
       z.input<typeof OpenAiChatConfigInputSchema>
     >();
+    expectTypeOf<{ reasoning: null }>().toExtend<OpenAiResponsesConfigInput>();
     expectTypeOf<OpenAiResponsesConfigInput>().toEqualTypeOf<
       z.input<typeof OpenAiResponsesConfigInputSchema>
     >();

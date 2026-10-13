@@ -1,6 +1,6 @@
 import type { EnvOverrides } from '../../types/env';
 import type { MCPConfig } from '../mcp/types';
-import type { AssistantFunctionCallback, GPT5ReasoningEffort } from '../openai/types';
+import type { AssistantFunctionCallback, Reasoning, ReasoningEffort } from '../openai/types';
 
 /**
  * Options for configuring retry behavior
@@ -102,7 +102,7 @@ export interface AzureCompletionOptions {
       };
   stop?: string[];
   seed?: number;
-  reasoning_effort?: GPT5ReasoningEffort;
+  reasoning_effort?: ReasoningEffort;
   /**
    * Controls the verbosity of the model's responses. Only used for reasoning models (GPT-5, o1, o3, etc.).
    */
@@ -137,6 +137,7 @@ export interface AzureChatResponsesOptions extends AzureCompletionOptions {
  * Options specific to the Azure Responses provider.
  */
 export interface AzureResponsesOptions extends Omit<AzureChatResponsesOptions, 'response_format'> {
+  reasoning?: Reasoning | null;
   response_format?:
     | AzureCompletionOptions['response_format']
     | {

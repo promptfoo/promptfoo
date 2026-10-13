@@ -40,12 +40,9 @@ import {
   calculateOpenAIUsageCost,
   usesAzureOpenAiBilling,
 } from './billing';
-import {
-  applyGpt6RequestRules,
-  getGpt6ResponsesReasoning,
-  getGpt6Variant,
-  isGpt6Model,
-} from './gpt6';
+import { applyGpt6RequestRules, getGpt6Variant, isGpt6Model } from './gpt6';
+import { resolveResponsesReasoning } from './reasoning';
+import { isLegacyOpenAiChatModel } from './tokenCaps';
 import {
   appendOpenAiApiPath,
   assertOpenAiApiModel,
@@ -73,7 +70,7 @@ import type {
 } from '../../types/index';
 import type { ProviderOptions } from '../../types/providers';
 import type { FetchOptions } from '../../util/fetch/types';
-import type { OpenAiCompletionOptions, ReasoningEffort } from './types';
+import type { OpenAiCompletionOptions } from './types';
 
 // OpenAI SDK has APIError class for exceptions, but not a type for error responses
 // in the JSON body. This interface represents the structure when the API returns
@@ -1071,6 +1068,25 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       supportsVerbosity,
       supportsTemperature,
     } = this.getDeploymentCapabilities(config);
+    const supportsReasoningConfig =
+      isReasoningModel || !isLegacyOpenAiChatModel(this.getEffectiveModelName(config));
+    const renderedReasoning = supportsReasoningConfig
+      ? resolveResponsesReasoning(this.config, context?.prompt?.config, (value) =>
+          renderVarsInObject(value, context?.vars),
+        )
+      : undefined;
+    const effectiveReasoningEffort = renderedReasoning?.effort;
+    const hasAzureReasoningEffort =
+      isAzureResponsesDeploymentWithReasoningConfig &&
+      effectiveReasoningEffort !== undefined &&
+      effectiveReasoningEffort !== 'none';
+    // Explicit clears also defer to the model's defaults rather than restoring client defaults.
+    const hasExplicitReasoning =
+      supportsReasoningConfig &&
+      (renderedReasoning !== undefined ||
+        config.reasoning !== undefined ||
+        config.reasoning_effort !== undefined ||
+        config.passthrough?.reasoning !== undefined);
     const maxOutputTokensDefault = config.omitDefaults
       ? getEnvString('OPENAI_MAX_TOKENS') === undefined
         ? undefined
@@ -1080,28 +1096,12 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       getEnvInt('OPENAI_MAX_COMPLETION_TOKENS') ?? getEnvInt('OPENAI_MAX_TOKENS');
     const maxOutputTokens =
       config.max_output_tokens ??
-      (isReasoningModel ? reasoningMaxOutputTokensDefault : maxOutputTokensDefault);
-
-    const gpt6Reasoning = isGPT6Model
-      ? getGpt6ResponsesReasoning(this.config, context?.prompt?.config, (value) =>
-          renderVarsInObject(value, context?.vars),
-        )
-      : undefined;
-    const renderedReasoning = isGPT6Model
-      ? (gpt6Reasoning as typeof config.reasoning)
-      : (renderVarsInObject(config.reasoning, context?.vars) as typeof config.reasoning);
-    const renderedReasoningEffort =
-      isReasoningModel && !isGPT6Model
-        ? (renderVarsInObject(config.reasoning_effort, context?.vars) as ReasoningEffort)
-        : undefined;
-    const effectiveReasoningEffort = renderedReasoning?.effort ?? renderedReasoningEffort;
-    const hasAzureReasoningEffort =
-      isAzureResponsesDeploymentWithReasoningConfig &&
-      effectiveReasoningEffort !== undefined &&
-      effectiveReasoningEffort !== 'none';
+      (isReasoningModel || hasExplicitReasoning
+        ? reasoningMaxOutputTokensDefault
+        : maxOutputTokensDefault);
 
     const temperatureDefault =
-      config.omitDefaults || isGPT6Model
+      config.omitDefaults || isGPT6Model || hasExplicitReasoning
         ? getEnvString('OPENAI_TEMPERATURE') === undefined
           ? undefined
           : getEnvFloat('OPENAI_TEMPERATURE')
@@ -1110,7 +1110,6 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       supportsTemperature && (isGPT6Model || !hasAzureReasoningEffort)
         ? (config.temperature ?? temperatureDefault)
         : undefined;
-    const reasoningEffort = isReasoningModel ? effectiveReasoningEffort : undefined;
 
     const instructions = config.instructions;
 
@@ -1177,10 +1176,12 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       input,
       ...(config.access_programs === undefined ? {} : { access_programs: config.access_programs }),
       ...(maxOutputTokens === undefined ? {} : { max_output_tokens: maxOutputTokens }),
-      ...(reasoningEffort ? { reasoning: { effort: reasoningEffort } } : {}),
       ...(temperature === undefined ? {} : { temperature }),
       ...(instructions ? { instructions } : {}),
-      ...((isGPT6Model || !reasoningEffort || reasoningEffort === 'none') &&
+      ...((isGPT6Model ||
+        !isReasoningModel ||
+        !effectiveReasoningEffort ||
+        effectiveReasoningEffort === 'none') &&
       (config.top_p !== undefined || getEnvString('OPENAI_TOP_P'))
         ? { top_p: config.top_p ?? getEnvFloat('OPENAI_TOP_P', 1) }
         : {}),
@@ -1228,18 +1229,12 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     }
     assertOpenAiApiModel(body.model, this.getApiUrl());
 
-    // Handle reasoning parameters for reasoning models
-    // Note: reasoning_effort is deprecated and has been moved to reasoning.effort
-    // Merge with existing body.reasoning (from reasoning_effort) so that
-    // config.reasoning extra fields (e.g. summary) don't silently drop effort.
-    if (isGPT6Model) {
-      if (gpt6Reasoning) {
-        body.reasoning = gpt6Reasoning;
+    if (supportsReasoningConfig) {
+      if (renderedReasoning) {
+        body.reasoning = renderedReasoning;
       } else {
         delete body.reasoning;
       }
-    } else if (renderedReasoning && isReasoningModel) {
-      body.reasoning = { ...body.reasoning, ...renderedReasoning };
     }
 
     // The Responses API uses max_output_tokens, never max_tokens; strip max_tokens if it
