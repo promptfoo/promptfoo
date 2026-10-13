@@ -647,6 +647,10 @@ table.results-table,
   box-shadow: none;
 }
 
+.results-table thead tr:first-child th {
+  background-color: hsl(var(--muted));
+}
+
 .lightbox {
   position: fixed;
   top: 0;
