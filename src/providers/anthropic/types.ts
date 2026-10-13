@@ -51,6 +51,7 @@ export type ClaudeEffort = 'low' | 'medium' | 'high' | 'xhigh' | 'max';
  */
 export interface AnthropicBaseOptions {
   apiKey?: string;
+  apiKeyEnvar?: string;
   apiBaseUrl?: string;
   /**
    * When `false`, skip promptfoo's upfront API key check and authenticate
@@ -99,8 +100,8 @@ export interface AnthropicMessageOptions extends AnthropicBaseOptions {
   output_format?: OutputFormat; // Structured outputs - JSON schema for response format
 }
 
-export interface AnthropicCompletionOptions {
-  apiKey?: string;
+export interface AnthropicCompletionOptions
+  extends Pick<AnthropicBaseOptions, 'apiKey' | 'apiKeyEnvar' | 'apiBaseUrl' | 'headers'> {
   max_tokens_to_sample?: number;
   temperature?: number;
   top_p?: number;

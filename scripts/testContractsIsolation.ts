@@ -133,6 +133,8 @@ assert.equal(contracts.hasFunctionToolCallValidator({ validateFunctionToolCall: 
 assert.equal(contracts.UserSchemas.Login.Request, contracts.LoginRequestSchema);
 assert.equal(contracts.OpenAiProviderOptionsInputSchema.safeParse({ id: 'openai:responses:test', config: { max_output_tokens: 20 } }).success, true);
 assert.equal(contracts.OpenAiProviderOptionsInputSchema.safeParse({ id: 'openai:chat:test', config: { temperature: 'warm' } }).success, false);
+assert.equal(contracts.AzureProviderOptionsInputSchema.safeParse({ id: 'azureopenai:chat:deployment', config: { temperature: 0 } }).success, true);
+assert.equal(contracts.AnthropicProviderOptionsInputSchema.safeParse({ id: 'anthropic:messages:test', config: { thinking: { type: 'enabled' } } }).success, false);
 assert.equal('TRACE_CREDENTIAL_PATH_SEGMENT' in contracts, false);
 `;
   fs.writeFileSync(
@@ -151,13 +153,17 @@ const user: contracts.GetUserResponse = { email: null };
 const openai: contracts.OpenAiProviderOptionsInput = { id: 'openai:chat:test', config: { temperature: 0 } };
 // @ts-expect-error Exported provider configs must retain numeric sampling fields.
 const invalidOpenai: contracts.OpenAiProviderOptionsInput = { id: 'openai:chat:test', config: { temperature: 'warm' } };
+const azure: contracts.AzureProviderOptionsInput = { id: 'azure:responses:deployment', config: { max_output_tokens: 20 } };
+const anthropic: contracts.AnthropicProviderOptionsInput = { id: 'anthropic:messages:test', config: { thinking: { type: 'adaptive' } } };
+// @ts-expect-error Thinking configuration must retain its required numeric budget.
+const invalidAnthropic: contracts.AnthropicProviderOptionsInput = { id: 'anthropic:messages:test', config: { thinking: { type: 'enabled' } } };
 contracts.PromptSchema.parse(prompt);
 contracts.GetUserResponseSchema.parse(user);
 // @ts-expect-error Public declarations must retain the required string prompt body.
 const invalid: contracts.Prompt = { raw: 3, label: 'bad' };
 // @ts-expect-error Provider output images retain the BlobRef contract.
 const invalidBlob: contracts.BlobRef = { ...blob, hash: 3 };
-void [response, invalid, invalidBlob, openai, invalidOpenai];
+void [response, invalid, invalidBlob, openai, invalidOpenai, azure, anthropic, invalidAnthropic];
 `;
   fs.writeFileSync(
     path.join(consumer, 'types.mts'),
