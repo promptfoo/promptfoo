@@ -3116,6 +3116,196 @@ describe('EvalOutputCell inline image lightbox', () => {
     vi.clearAllMocks();
   });
 
+  it.each([
+    'data:text/plain,diagnostic',
+    'data:application/json,%7B%7D',
+    'DATA:TEXT/PLAIN,diagnostic',
+  ])('keeps Markdown output truncation for non-image source %s', async (source) => {
+    const user = userEvent.setup();
+    const text = `${'Diagnostic text. '.repeat(30)}![Diagnostic](${source}) TAIL_MARKER`;
+    const { container } = renderWithProviders(
+      <EvalOutputCell {...createMarkdownPreviewProps(text, 100)} />,
+    );
+
+    expect(container.querySelector('.truncation-toggler')).toBeInTheDocument();
+    expect(container).not.toHaveTextContent('TAIL_MARKER');
+
+    await user.click(screen.getByText('...'));
+    expect(container).toHaveTextContent('TAIL_MARKER');
+    expect(screen.getByRole('img', { name: 'Diagnostic' })).toHaveAttribute('src', source);
+
+    await user.click(screen.getByText('Show less'));
+    expect(container).not.toHaveTextContent('TAIL_MARKER');
+  });
+
+  it('keeps truncation for a reference-style non-image source', async () => {
+    const user = userEvent.setup();
+    const source = 'data:text/plain,diagnostic';
+    const text = `${'Diagnostic text. '.repeat(30)}![Diagnostic][image] TAIL_MARKER\n\n[image]: ${source}`;
+    const { container } = renderWithProviders(
+      <EvalOutputCell {...createMarkdownPreviewProps(text, 100)} />,
+    );
+
+    expect(container.querySelector('.truncation-toggler')).toBeInTheDocument();
+    expect(container).not.toHaveTextContent('TAIL_MARKER');
+    await user.click(screen.getByText('...'));
+    expect(screen.getByRole('img', { name: 'Diagnostic' })).toHaveAttribute('src', source);
+  });
+
+  it.each(['', '   ', '\t'])(
+    'keeps truncation and alt text for empty Markdown image destination %j',
+    async (destination) => {
+      const user = userEvent.setup();
+      const text = `${'Diagnostic text. '.repeat(30)}![Missing preview](${destination}) TAIL_MARKER`;
+      const { container } = renderWithProviders(
+        <EvalOutputCell {...createMarkdownPreviewProps(text, 100)} />,
+      );
+
+      expect(container.querySelector('.truncation-toggler')).toBeInTheDocument();
+      expect(container).not.toHaveTextContent('TAIL_MARKER');
+      await user.click(screen.getByText('...'));
+      expect(container).toHaveTextContent('Missing preview');
+      expect(container).toHaveTextContent('TAIL_MARKER');
+      expect(screen.queryByRole('img')).not.toBeInTheDocument();
+      expect(
+        screen.queryByRole('button', { name: 'Open image preview: Missing preview' }),
+      ).not.toBeInTheDocument();
+    },
+  );
+
+  it.each([
+    ['PNG data', 'data:image/png;base64,AA=='],
+    ['mixed-case image data', 'DATA:IMAGE/PNG;BASE64,AA=='],
+    ['parameterized image data', 'data:image/png;charset=utf-8;base64,AA=='],
+    ['octet-stream image data', 'data:application/octet-stream;base64,AA=='],
+    ['HTTP', 'http://example.com/image.png'],
+    ['HTTPS', 'https://example.com/image.png'],
+    ['protocol-relative', '//example.com/image.png'],
+    ['root-relative', '/images/image.png'],
+    ['relative', 'images/image.png'],
+    ['relative path with colon', 'images/version:2.png'],
+    ['blob', 'blob:https://example.com/diagnostic-image'],
+  ])('preserves the Markdown preview exemption and source for %s', (_label, source) => {
+    const text = `${'Diagnostic text. '.repeat(30)}![Preview](${source}) TAIL_MARKER`;
+    const { container } = renderWithProviders(
+      <EvalOutputCell {...createMarkdownPreviewProps(text, 100)} />,
+    );
+
+    expect(container.querySelector('.truncation-toggler')).not.toBeInTheDocument();
+    expect(container).toHaveTextContent('TAIL_MARKER');
+    expect(screen.getByRole('img', { name: 'Preview' })).toHaveAttribute('src', source);
+  });
+
+  it('keeps eligible image deduplication alongside a non-image Markdown source', () => {
+    const source = 'data:image/png;base64,AA==';
+    const props = createMarkdownPreviewProps(
+      `${'Diagnostic text. '.repeat(30)}![Diagnostic](data:text/plain,diagnostic) ![Preview](${source}) TAIL_MARKER`,
+      100,
+    );
+    props.output.images = [{ data: source }];
+
+    const { container } = renderWithProviders(<EvalOutputCell {...props} />);
+
+    expect(container.querySelector('.truncation-toggler')).not.toBeInTheDocument();
+    expect(container).toHaveTextContent('TAIL_MARKER');
+    expect(container.querySelectorAll('img')).toHaveLength(2);
+    expect(screen.getByRole('img', { name: 'Preview' })).toHaveAttribute('src', source);
+  });
+
+  it('keeps a structured image when a malformed Markdown source shares its payload', () => {
+    const source = 'data:image/png;base64,AA==';
+    const props = createMarkdownPreviewProps('![Diagnostic](data:image/;base64,AA==)', 1000);
+    props.output.images = [{ data: source }];
+
+    renderWithProviders(<EvalOutputCell {...props} />);
+
+    expect(screen.getByRole('img', { name: 'Test prompt' })).toHaveAttribute('src', source);
+    expect(screen.getByRole('img', { name: 'Diagnostic' })).toHaveAttribute(
+      'src',
+      'data:image/;base64,AA==',
+    );
+  });
+
+  it('preserves Markdown rendering precedence during search for non-image sources', async () => {
+    const user = userEvent.setup();
+    mockTableStoreState.shouldHighlightSearchText = true;
+    const source = 'data:text/plain,diagnostic';
+    const props = createMarkdownPreviewProps(
+      `${'Diagnostic text. '.repeat(30)}![Diagnostic](${source}) TAIL_MARKER`,
+      100,
+    );
+    props.searchText = 'Diagnostic';
+
+    const { container } = renderWithProviders(<EvalOutputCell {...props} />);
+
+    expect(container.querySelector('.search-highlight')).not.toBeInTheDocument();
+    expect(container.querySelector('.truncation-toggler')).toBeInTheDocument();
+    await user.click(screen.getByText('...'));
+    expect(screen.getByRole('img', { name: 'Diagnostic' })).toHaveAttribute('src', source);
+  });
+
+  it('recomputes truncation eligibility across source and Markdown-mode changes', async () => {
+    const user = userEvent.setup();
+    const createProps = (source: string) =>
+      createMarkdownPreviewProps(
+        `${'Diagnostic text. '.repeat(30)}![Preview](${source}) TAIL_MARKER`,
+        100,
+      );
+    const nonImageProps = createProps('data:text/plain,diagnostic');
+    const imageProps = createProps('data:image/png;base64,AA==');
+    const { container, rerender } = renderWithProviders(<EvalOutputCell {...nonImageProps} />);
+
+    expect(container.querySelector('.truncation-toggler')).toBeInTheDocument();
+    rerender(
+      <ShiftKeyProvider>
+        <EvalOutputCell {...imageProps} />
+      </ShiftKeyProvider>,
+    );
+    expect(container.querySelector('.truncation-toggler')).not.toBeInTheDocument();
+    expect(container).toHaveTextContent('TAIL_MARKER');
+    rerender(
+      <ShiftKeyProvider>
+        <EvalOutputCell {...nonImageProps} />
+      </ShiftKeyProvider>,
+    );
+    expect(container.querySelector('.truncation-toggler')).toBeInTheDocument();
+    expect(container).not.toHaveTextContent('TAIL_MARKER');
+
+    mockResultsViewSettings.renderMarkdown = false;
+    rerender(
+      <ShiftKeyProvider>
+        <EvalOutputCell {...nonImageProps} output={{ ...nonImageProps.output }} />
+      </ShiftKeyProvider>,
+    );
+    expect(container.querySelector('.truncation-toggler')).toBeInTheDocument();
+    await user.click(screen.getByText('...'));
+    expect(container).toHaveTextContent('![Preview](data:text/plain,diagnostic)');
+    expect(screen.queryByRole('img', { name: 'Preview' })).not.toBeInTheDocument();
+
+    mockResultsViewSettings.renderMarkdown = true;
+    rerender(
+      <ShiftKeyProvider>
+        <EvalOutputCell {...nonImageProps} output={{ ...nonImageProps.output }} />
+      </ShiftKeyProvider>,
+    );
+    expect(screen.getByRole('img', { name: 'Preview' })).toHaveAttribute(
+      'src',
+      'data:text/plain,diagnostic',
+    );
+    expect(container).not.toHaveTextContent('![Preview](data:text/plain,diagnostic)');
+    await user.click(screen.getByText('Show less'));
+    expect(container).not.toHaveTextContent('TAIL_MARKER');
+
+    mockResultsViewSettings.renderMarkdown = false;
+    rerender(
+      <ShiftKeyProvider>
+        <EvalOutputCell {...nonImageProps} output={{ ...nonImageProps.output }} />
+      </ShiftKeyProvider>,
+    );
+    expect(container.querySelector('.truncation-toggler')).toBeInTheDocument();
+    expect(container).not.toHaveTextContent('TAIL_MARKER');
+  });
+
   it('opens lightbox for an uppercase image data URI and closes when clicked', async () => {
     const user = userEvent.setup();
     // Use a data URI which triggers the inline image rendering path (not markdown)

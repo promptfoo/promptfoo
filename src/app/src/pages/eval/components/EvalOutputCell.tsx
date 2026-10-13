@@ -182,6 +182,16 @@ function hasImageSrcComparisonKey(keys: Set<string>, src: string): boolean {
   return getImageSrcComparisonKeys(src).some((key) => keys.has(key));
 }
 
+// Preview bookkeeping only: keep the renderer's URL policy and payload handling unchanged.
+function isMarkdownImagePreviewEligible(src: string): boolean {
+  const source = src.trimStart();
+  return (
+    isImageDataUrl(source) ||
+    /^(?:https?:|blob:)/i.test(source) ||
+    !/^[a-z][a-z\d+.-]*:/i.test(source)
+  );
+}
+
 export function extractMarkdownImageSources(markdown: string): string[] {
   return [...new Set(extractRawMarkdownImageSources(markdown).map(normalizeImageSrcForComparison))];
 }
@@ -492,7 +502,9 @@ function renderStructuredImages({
   }
   if (renderedMarkdownOutput) {
     for (const source of renderedMarkdownImageSources) {
-      addRenderedMarkdownImageSrcComparisonKeys(renderedImageSrcs, source);
+      if (isMarkdownImagePreviewEligible(source)) {
+        addRenderedMarkdownImageSrcComparisonKeys(renderedImageSrcs, source);
+      }
     }
   }
 
@@ -603,7 +615,7 @@ function renderOutputNode({
       prettifiedJson,
       markdownComponents,
       onImageClick: toggleLightbox,
-      hasRenderedMarkdownImage: renderedMarkdownImageSources.length > 0,
+      hasRenderedMarkdownImage: renderedMarkdownImageSources.some(isMarkdownImagePreviewEligible),
       renderAfterDataImages: (visibleImageSources) =>
         renderStructuredImages({
           output,
