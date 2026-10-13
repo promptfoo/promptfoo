@@ -100,7 +100,8 @@ export interface AnthropicMessageOptions extends AnthropicBaseOptions {
   output_format?: OutputFormat; // Structured outputs - JSON schema for response format
 }
 
-export interface AnthropicCompletionOptions extends AnthropicBaseOptions {
+export interface AnthropicCompletionOptions
+  extends Pick<AnthropicBaseOptions, 'apiKey' | 'apiKeyEnvar' | 'apiBaseUrl' | 'headers'> {
   max_tokens_to_sample?: number;
   temperature?: number;
   top_p?: number;
