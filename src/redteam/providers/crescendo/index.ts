@@ -124,7 +124,7 @@ type CrescendoAttackPromptResponse = {
   tokenUsage?: TokenUsage;
 };
 
-interface CrescendoConfig {
+export interface CrescendoConfig {
   injectVar: string;
   maxTurns?: number;
   /** @deprecated Use maxTurns instead */
@@ -149,6 +149,27 @@ interface CrescendoConfig {
   [key: string]: unknown;
 }
 
+/**
+ * Injectable identity/prompt options for {@link CrescendoProvider}.
+ * Sibling strategies that reuse the crescendo multi-turn execution path
+ * (e.g. `react-crescendo`) pass their own values here; defaults preserve
+ * the legacy crescendo behavior exactly.
+ */
+export interface CrescendoProviderOptions {
+  /** Provider id returned by `id()`. Defaults to `'promptfoo:redteam:crescendo'`. */
+  providerId?: string;
+  /** Strategy id recorded in tracing options. Defaults to `'crescendo'`. */
+  strategyId?: string;
+  /** Attacker system-prompt template. Defaults to {@link CRESCENDO_SYSTEM_PROMPT}. */
+  systemPromptTemplate?: string;
+}
+
+const DEFAULT_CRESCENDO_PROVIDER_OPTIONS: Required<CrescendoProviderOptions> = {
+  providerId: 'promptfoo:redteam:crescendo',
+  strategyId: 'crescendo',
+  systemPromptTemplate: CRESCENDO_SYSTEM_PROMPT,
+};
+
 export class CrescendoProvider implements ApiProvider {
   readonly config: CrescendoConfig;
   private readonly nunjucks: any;
@@ -164,10 +185,17 @@ export class CrescendoProvider implements ApiProvider {
   private excludeTargetOutputFromAgenticAttackGeneration: boolean;
   private readonly perTurnLayers: LayerConfig[];
   private successfulAttacks: SuccessfulAttack[] = [];
+  /**
+   * Injectable identity/prompt options so sibling strategies (e.g.
+   * `react-crescendo`) can reuse the full multi-turn execution path with
+   * their own attacker prompt. Defaults preserve legacy crescendo behavior.
+   */
+  protected readonly providerOptions: Required<CrescendoProviderOptions>;
 
-  constructor(config: CrescendoConfig) {
+  constructor(config: CrescendoConfig, options: CrescendoProviderOptions = {}) {
     // Create a copy of config to avoid mutating the original
     this.config = { ...config };
+    this.providerOptions = { ...DEFAULT_CRESCENDO_PROVIDER_OPTIONS, ...options };
     // Support backwards compatibility: use maxRounds if maxTurns is not provided
     this.maxTurns = config.maxTurns ?? config.maxRounds ?? DEFAULT_MAX_TURNS;
     this.maxBacktracks = config.maxBacktracks ?? DEFAULT_MAX_BACKTRACKS;
@@ -242,7 +270,7 @@ export class CrescendoProvider implements ApiProvider {
   }
 
   id() {
-    return 'promptfoo:redteam:crescendo';
+    return this.providerOptions.providerId;
   }
 
   async callApi(
@@ -333,7 +361,7 @@ export class CrescendoProvider implements ApiProvider {
     let lastFinalAttackPrompt: string | undefined;
 
     const tracingOptions = resolveTracingOptions({
-      strategyId: 'crescendo',
+      strategyId: this.providerOptions.strategyId,
       test,
       config: this.config,
     });
@@ -341,7 +369,7 @@ export class CrescendoProvider implements ApiProvider {
       tracingOptions.enabled && (tracingOptions.includeInAttack || tracingOptions.includeInGrading);
     const traceSnapshots: TraceContextData[] = [];
 
-    const systemPrompt = this.nunjucks.renderString(CRESCENDO_SYSTEM_PROMPT, {
+    const systemPrompt = this.nunjucks.renderString(this.providerOptions.systemPromptTemplate, {
       conversationObjective: this.userGoal,
       maxTurns: this.maxTurns,
       successFlag: this.successfulAttacks.length,
@@ -381,22 +409,25 @@ export class CrescendoProvider implements ApiProvider {
         roundNum++;
 
         // Update system prompt with current round number and success count
-        const updatedSystemPrompt = this.nunjucks.renderString(CRESCENDO_SYSTEM_PROMPT, {
-          conversationObjective: this.userGoal,
-          currentRound: roundNum,
-          maxTurns: this.maxTurns,
-          successFlag: this.successfulAttacks.length,
-          purpose: context?.test?.metadata?.purpose,
-          modifierSection:
-            Object.entries(
-              context?.test?.metadata?.modifiers ||
-                context?.test?.metadata?.pluginConfig?.modifiers ||
-                {},
-            )
-              .map(([key, value]) => `${key}: ${value}`)
-              .join('\n') || undefined,
-          inputs: buildPromptInputDescriptions(this.config.inputs),
-        });
+        const updatedSystemPrompt = this.nunjucks.renderString(
+          this.providerOptions.systemPromptTemplate,
+          {
+            conversationObjective: this.userGoal,
+            currentRound: roundNum,
+            maxTurns: this.maxTurns,
+            successFlag: this.successfulAttacks.length,
+            purpose: context?.test?.metadata?.purpose,
+            modifierSection:
+              Object.entries(
+                context?.test?.metadata?.modifiers ||
+                  context?.test?.metadata?.pluginConfig?.modifiers ||
+                  {},
+              )
+                .map(([key, value]) => `${key}: ${value}`)
+                .join('\n') || undefined,
+            inputs: buildPromptInputDescriptions(this.config.inputs),
+          },
+        );
 
         const conversation = this.memory.getConversation(this.redTeamingChatConversationId);
         if (conversation[0]?.role === 'system') {
@@ -980,11 +1011,16 @@ export class CrescendoProvider implements ApiProvider {
             generatedQuestion: string | Record<string, string>;
             rationaleBehindJailbreak: string;
             lastResponseSummary: string;
+            observation?: string;
+            reasoning?: string;
+            strategyVector?: string;
           }>(response.output)
         : Array.isArray(response.output)
           ? response.output[0]
           : response.output;
     const expectedKeys = ['generatedQuestion', 'rationaleBehindJailbreak', 'lastResponseSummary'];
+    // Optional ReAct reasoning keys emitted by sibling strategies (e.g. react-crescendo).
+    const optionalKeys = ['observation', 'reasoning', 'strategyVector'];
 
     const missingKeys: string[] = [];
     for (const key of expectedKeys) {
@@ -1010,11 +1046,20 @@ export class CrescendoProvider implements ApiProvider {
       rationaleBehindJailbreak: ${parsedOutput.rationaleBehindJailbreak}
       lastResponseSummary: ${parsedOutput.lastResponseSummary}
     `);
+    if (parsedOutput.observation || parsedOutput.reasoning || parsedOutput.strategyVector) {
+      logger.debug(dedent`
+        [Crescendo] ReAct reasoning:
 
-    if (Object.keys(parsedOutput).length !== expectedKeys.length) {
-      logger.debug(
-        `[Crescendo] Unexpected keys in response: ${Object.keys(parsedOutput).join(', ')}`,
-      );
+        observation: ${parsedOutput.observation}
+        reasoning: ${parsedOutput.reasoning}
+        strategyVector: ${parsedOutput.strategyVector}
+      `);
+    }
+
+    const knownKeys = new Set([...expectedKeys, ...optionalKeys]);
+    const unexpectedKeys = Object.keys(parsedOutput).filter((key) => !knownKeys.has(key));
+    if (unexpectedKeys.length > 0) {
+      logger.debug(`[Crescendo] Unexpected keys in response: ${unexpectedKeys.join(', ')}`);
     }
 
     this.memory.addMessage(this.redTeamingChatConversationId, {

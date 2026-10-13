@@ -50,6 +50,10 @@ describe('redteamProviderFactories', () => {
     },
     { path: 'promptfoo:redteam:best-of-n', expectedId: 'promptfoo:redteam:best-of-n' },
     { path: 'promptfoo:redteam:crescendo', expectedId: 'promptfoo:redteam:crescendo' },
+    {
+      path: 'promptfoo:redteam:react-crescendo',
+      expectedId: 'promptfoo:redteam:react-crescendo',
+    },
     { path: 'promptfoo:redteam:custom', expectedId: 'promptfoo:redteam:custom' },
     { path: 'promptfoo:redteam:custom:my-strategy', expectedId: 'promptfoo:redteam:custom' },
     { path: 'promptfoo:redteam:goat', expectedId: 'promptfoo:redteam:goat' },

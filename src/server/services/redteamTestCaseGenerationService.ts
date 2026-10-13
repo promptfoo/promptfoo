@@ -105,6 +105,7 @@ const MULTI_TURN_HANDLERS: Record<MultiTurnStrategy, MultiTurnHandler> = {
   goat: handleGoatStrategy,
   'mischievous-user': handleMischievousUserStrategy,
   crescendo: handleCrescendoLikeStrategy,
+  'react-crescendo': handleCrescendoLikeStrategy,
   custom: handleCrescendoLikeStrategy,
   'jailbreak:hydra': async (ctx) =>
     handleHydraLikeStrategy(ctx, {

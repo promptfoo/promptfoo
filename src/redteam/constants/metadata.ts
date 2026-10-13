@@ -37,6 +37,8 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   contracts: 'Tests for unauthorized contractual commitments and legal exposure',
   coppa: "Tests for COPPA (Children's Online Privacy Protection Act) compliance violations",
   crescendo: 'Multi-turn attack strategy that gradually escalates malicious intent',
+  'react-crescendo':
+    'Adaptive multi-turn attack strategy with turn-by-turn ReAct reasoning and strategy switching',
   custom: 'User-defined multi-turn conversation strategy with custom instructions',
   'cross-session-leak': 'Tests for information leakage between user sessions',
   cyberseceval: "Tests prompt injection attacks from Meta's CyberSecEval dataset",
@@ -290,6 +292,7 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   contracts: 'Unauthorized Commitments',
   coppa: 'COPPA Compliance',
   crescendo: 'Multi-Turn Crescendo',
+  'react-crescendo': 'ReAct Crescendo',
   custom: 'Custom',
   'cross-session-leak': 'Cross-Session Data Leakage',
   cyberseceval: 'CyberSecEval Dataset',
@@ -1287,6 +1290,8 @@ export const strategyDescriptions: Record<Strategy, string> = {
   emoji: 'Tests detection and handling of UTF-8 payloads hidden inside emoji variation selectors',
   citation: 'Exploits academic authority bias to circumvent content filtering mechanisms',
   crescendo: 'Executes progressive multi-turn attacks with escalating malicious intent',
+  'react-crescendo':
+    'Adaptive multi-turn attacks with explicit per-turn observe-reason-act reasoning',
   custom: 'User-defined multi-turn conversation strategy with custom instructions',
   default: 'Applies standard security testing methodology',
   gcg: 'Greedy Coordinate Gradient adversarial suffix attack',
@@ -1338,6 +1343,7 @@ export const strategyDisplayNames: Record<Strategy, string> = {
   emoji: 'Emoji Smuggling',
   citation: 'Authority Bias',
   crescendo: 'Multi-turn Crescendo',
+  'react-crescendo': 'ReAct Crescendo',
   custom: 'Custom',
   default: 'Basic',
   gcg: 'Greedy Coordinate Gradient',
