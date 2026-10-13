@@ -787,9 +787,103 @@ export const AssertionSetSchema = z.object({
 
 export type AssertionSet = z.infer<typeof AssertionSetSchema>;
 
+/**
+ * Validate an evidence path using a simple linear scan.
+ *
+ * Rules:
+ *   - Must start with exactly "metadata".
+ *   - Must contain at least one child segment after "metadata" (no `from: metadata`).
+ *   - Each segment after "metadata" is either a bare identifier (letters/digits/_/$/-)
+ *     or a non-negative integer index.
+ *   - No ReDoS-prone regex backtracking — the check is O(n) string walking.
+ *
+ * Returns undefined when valid, or an error message when invalid.
+ */
+export function validateEvidencePath(path: string): string | undefined {
+  if (typeof path !== 'string') {
+    return 'evidence.from must be a string';
+  }
+  if (!path.startsWith('metadata')) {
+    return 'evidence.from must select a provider metadata path like metadata.fileChanges';
+  }
+  // "metadata" alone is not allowed — it would project the entire metadata object
+  // and leak unselected sibling keys.
+  if (path.length === 'metadata'.length) {
+    return 'evidence.from must select at least one child under metadata (for example metadata.fileChanges, not metadata)';
+  }
+  if (path.charCodeAt('metadata'.length) !== '.'.charCodeAt(0)) {
+    return 'evidence.from must select a provider metadata path like metadata.fileChanges';
+  }
+
+  // Walk segment-by-segment after the leading "metadata."
+  let i = 'metadata'.length + 1;
+  let hadSegment = false;
+  while (i <= path.length) {
+    if (i === path.length) {
+      // Trailing dot — malformed.
+      return 'evidence.from must select a provider metadata path like metadata.fileChanges';
+    }
+    const start = i;
+    const first = path.charCodeAt(i);
+    const isIndex = first >= 48 && first <= 57; // '0'..'9'
+    i++;
+    while (i < path.length) {
+      const c = path.charCodeAt(i);
+      if (c === '.'.charCodeAt(0)) {
+        break;
+      }
+      if (isIndex) {
+        if (c < 48 || c > 57) {
+          return 'evidence.from must select a provider metadata path like metadata.fileChanges';
+        }
+      } else {
+        // identifier: alphanumeric, _, $, -
+        const ok =
+          (c >= 65 && c <= 90) || // A-Z
+          (c >= 97 && c <= 122) || // a-z
+          (c >= 48 && c <= 57) || // 0-9
+          c === 95 || // _
+          c === 36 || // $
+          c === 45; // -
+        if (!ok) {
+          return 'evidence.from must select a provider metadata path like metadata.fileChanges';
+        }
+      }
+      i++;
+    }
+    const seg = path.slice(start, i);
+    if (seg.length === 0) {
+      return 'evidence.from must select a provider metadata path like metadata.fileChanges';
+    }
+    if (isIndex && seg.length > 1 && seg.charCodeAt(0) === 48) {
+      // No leading zeros for numeric indices.
+      return 'evidence.from must select a provider metadata path like metadata.fileChanges';
+    }
+    hadSegment = true;
+    if (i === path.length) {
+      break;
+    }
+    // Next char must be '.'
+    if (path.charCodeAt(i) !== '.'.charCodeAt(0)) {
+      return 'evidence.from must select a provider metadata path like metadata.fileChanges';
+    }
+    i++; // consume '.'
+  }
+  if (!hadSegment) {
+    return 'evidence.from must select at least one child under metadata';
+  }
+  return undefined;
+}
+
 const AssertionEvidenceSchema = z.object({
-  from: z.string().regex(/^metadata(?:\.[A-Za-z0-9_$-]+|\.\d+)*$/, {
-    message: 'evidence.from must select a provider metadata path like metadata.fileChanges',
+  from: z.string().superRefine((val, ctx) => {
+    const err = validateEvidencePath(val);
+    if (err) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: err,
+      });
+    }
   }),
   label: z.string().optional(),
   maxBytes: z.number().int().positive(),

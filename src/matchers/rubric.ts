@@ -764,6 +764,35 @@ async function buildGradingProviderPrompt(
   };
 }
 
+/**
+ * Append an evidence block to a rendered grader prompt.
+ *
+ * The rendered prompt is either a JSON-encoded messages array (the default) or
+ * a legacy plaintext template. For the JSON case we push a fresh `user` role
+ * message so structured rubrics keep working; for plaintext we append the
+ * block as-is. The evidence block must NEVER be spliced into the candidate
+ * output string itself — that would corrupt structured-json outputs and break
+ * the image-output normalisation that happens before the prompt is built.
+ */
+function injectEvidenceBlockIntoPrompt(
+  renderedPrompt: string,
+  evidenceBlock: string | undefined,
+): string {
+  if (!evidenceBlock) {
+    return renderedPrompt;
+  }
+  try {
+    const parsed = JSON.parse(renderedPrompt);
+    if (Array.isArray(parsed)) {
+      parsed.push({ role: 'user', content: evidenceBlock });
+      return JSON.stringify(parsed);
+    }
+  } catch {
+    // Not JSON — fall through to plaintext append.
+  }
+  return `${renderedPrompt}\n\n${evidenceBlock}`;
+}
+
 function parseJsonGradingResponse(
   label: string,
   resp: ProviderResponse,
@@ -885,6 +914,7 @@ export async function runJsonGradingPrompt({
   vars,
   images,
   audio,
+  evidenceBlock,
 }: {
   assertion?: Assertion;
   checkName: string;
@@ -898,9 +928,17 @@ export async function runJsonGradingPrompt({
   vars: Record<string, VarValue>;
   images?: ImageOutput[];
   audio?: ProviderResponse['audio'];
+  /**
+   * Optional supplementary evidence block. When present it is appended to the
+   * rendered grader prompt as a separate user-role message (for JSON messages
+   * prompts) or plaintext suffix — it never replaces or mutates the `output`
+   * variable so structured-json outputs and image normalisation stay intact.
+   */
+  evidenceBlock?: string;
 }): Promise<GradingResult> {
   const rubricPrompt = await loadRubricPrompt(grading.rubricPrompt, defaultPrompt);
   const renderedPrompt = await renderLlmRubricPrompt(rubricPrompt, vars);
+  const finalPrompt = injectEvidenceBlockIntoPrompt(renderedPrompt, evidenceBlock);
 
   const defaultProviders = await getDefaultProviders();
   const defaultProvider =
@@ -915,7 +953,7 @@ export async function runJsonGradingPrompt({
     prompt: providerPrompt,
     imageCount,
     audioAttached,
-  } = await buildGradingProviderPrompt(renderedPrompt, images, finalProvider, audio);
+  } = await buildGradingProviderPrompt(finalPrompt, images, finalProvider, audio);
   const resp = await callProviderWithContext(
     finalProvider,
     providerPrompt,

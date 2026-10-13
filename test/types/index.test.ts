@@ -69,6 +69,27 @@ describe('AssertionSchema', () => {
     expect(result.success).toBe(false);
   });
 
+  it('should reject evidence paths that point at the metadata root itself', () => {
+    const result = AssertionSchema.safeParse({
+      type: 'llm-rubric',
+      value: 'Check the output',
+      evidence: [{ from: 'metadata', maxBytes: 1024 }],
+    });
+
+    expect(result.success).toBe(false);
+  });
+
+  it('should reject malformed evidence paths (empty segment, trailing dot, leading zero)', () => {
+    for (const bad of ['metadata.', 'metadata..foo', 'metadata.01', 'metadata.fileChanges.', 'metadata.fileChanges..foo']) {
+      const result = AssertionSchema.safeParse({
+        type: 'llm-rubric',
+        value: 'Check',
+        evidence: [{ from: bad, maxBytes: 1024 }],
+      });
+      expect(result.success).withContext(`from=${bad}`).toBe(false);
+    }
+  });
+
   it('should validate all base assertion types', () => {
     const baseTypes = BaseAssertionTypesSchema.options;
 
