@@ -62,6 +62,10 @@ const ResponsesFunctionTool = FunctionDefinition.extend({ type: z.literal('funct
 const McpToolFields = z.strictObject({
   type: z.literal('mcp'),
   server_label: z.string(),
+  allowed_callers: z
+    .array(z.enum(['direct', 'programmatic']))
+    .nullable()
+    .optional(),
   server_url: z.string().optional(),
   connector_id: z.string().optional(),
   tunnel_id: z.string().optional(),
@@ -283,7 +287,6 @@ const NestedResponseFormat = z.strictObject({
 const FlatResponseFormat = z.strictObject({
   type: z.literal('json_schema'),
   name: z.string().optional(),
-  description: z.string().optional(),
   strict: z
     .literal(true)
     .optional()
@@ -300,7 +303,7 @@ const ResponsesResponseFormat = z.union([
   FileReferenceInputSchema,
   BasicResponseFormat,
   NestedResponseFormat.extend({
-    json_schema: NestedResponseFormat.shape.json_schema.extend({
+    json_schema: NestedResponseFormat.shape.json_schema.omit({ description: true }).extend({
       strict: z
         .literal(true)
         .optional()
