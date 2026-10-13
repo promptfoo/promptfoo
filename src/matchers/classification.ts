@@ -36,7 +36,8 @@ export async function matchesClassification(
   );
 
   const scores = Object.values(resp.classification ?? {});
-  if (!resp.classification || scores.length === 0) {
+  // No scores means no verdict, unless the provider confirms that it ran and detected no labels.
+  if (!resp.classification || (scores.length === 0 && resp.noLabelsDetected !== true)) {
     const failure = graderFail(
       resp.classification
         ? 'No classification scores returned'
@@ -49,7 +50,8 @@ export async function matchesClassification(
     };
   }
 
-  const score = expected === undefined ? Math.max(...scores) : resp.classification[expected] || 0;
+  const maxScore = scores.length > 0 ? Math.max(...scores) : 0;
+  const score = expected === undefined ? maxScore : resp.classification[expected] || 0;
   const pass = score >= threshold - Number.EPSILON;
   const subject =
     expected === undefined
