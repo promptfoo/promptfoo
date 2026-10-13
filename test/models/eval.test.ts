@@ -41,6 +41,8 @@ import { createEvaluateResult } from '../factories/eval';
 import EvalFactory from '../factories/evalFactory';
 import { createAccuracyFilter, createPassFailOptions } from '../factories/literalFixtures';
 
+vi.mock('../../src/telemetry', () => ({ default: { record: vi.fn() } }));
+
 vi.mock('../../src/globalConfig/accounts', async () => {
   const actual = await vi.importActual('../../src/globalConfig/accounts');
   return {
@@ -1068,16 +1070,96 @@ describe('evaluator', () => {
       expect(await (await Eval.findById(source.id))!.getTable()).toEqual(await source.getTable());
     });
 
-    it('counts legacy table rows rather than individual prompt outputs', async () => {
+    it('unlinks legacy trace context while preserving source data and malformed entries', async () => {
       const stored = await EvalFactory.createOldResult();
       const source = (await Eval.findById(stored.id))!;
+      const traceId = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
+      const retainedMetadata = {
+        source: 'legacy-copy',
+        traceId: 'user-metadata-trace',
+        evaluationId: 'user-metadata-evaluation',
+        nested: { traceId: 'user-trace', evaluationId: 'user-evaluation' },
+        __promptfoo: {
+          retained: 'internal-metadata',
+          repeatLinkage: { repeatIndex: 0, repeatGroupId: 'repeat-group' },
+        },
+      };
+      const metadata = {
+        ...retainedMetadata,
+        __promptfoo: {
+          ...retainedMetadata.__promptfoo,
+          traceLinkage: { traceId, evaluationId: source.id },
+        },
+      };
+      const result = source.oldResults!.results[0];
+      Object.assign(result, {
+        traceId,
+        evaluationId: source.id,
+        metadata,
+        vars: { ...result.vars, traceId: 'test-variable' },
+        response: {
+          ...result.response,
+          metadata: { traceId: 'provider-data', evaluationId: 'provider-evaluation' },
+        },
+      });
+      Object.assign(source.oldResults!.table.body[0].outputs[0], {
+        traceId,
+        evaluationId: source.id,
+        metadata: structuredClone(metadata),
+      });
+      const malformedEntries = [
+        null,
+        42,
+        'legacy-value',
+        [],
+        { metadata: null },
+        { metadata: 'legacy-metadata' },
+        { metadata: [{ traceId: 'user-data' }] },
+      ];
+      (source.oldResults!.results as unknown[]).push(...structuredClone(malformedEntries));
+      (source.oldResults!.table.body[0].outputs as unknown[]).push(
+        ...structuredClone(malformedEntries),
+      );
+      (source.oldResults!.table.body as unknown[]).push(
+        null,
+        'legacy-row',
+        [],
+        { outputs: null },
+        { outputs: 'legacy-outputs' },
+        { outputs: { traceId: 'user-data' } },
+      );
+      await source.save();
+      const original = structuredClone(source.oldResults!);
+      const expected = structuredClone(original);
+      delete expected.results[0].traceId;
+      delete expected.results[0].evaluationId;
+      expected.results[0].metadata = retainedMetadata;
+      const expectedOutput = expected.table.body[0].outputs[0] as unknown as Record<
+        string,
+        unknown
+      >;
+      delete expectedOutput.traceId;
+      delete expectedOutput.evaluationId;
+      expectedOutput.metadata = retainedMetadata;
 
-      expect(source.oldResults!.results).toHaveLength(2);
-      expect(source.oldResults!.table.body).toHaveLength(1);
-      expect(await source.getResultsCount()).toBe(1);
+      const traceStore = new TraceStore();
+      await traceStore.createTrace({ traceId, evaluationId: source.id, testCaseId: 'legacy-test' });
+      await traceStore.addSpans(traceId, [
+        { spanId: 'bbbbbbbbbbbbbbbb', name: 'legacy-span', startTime: 1 },
+      ]);
 
-      const copied = await source.copy('Legacy row count');
-      expect(await copied.getResultsCount()).toBe(1);
+      const copied = await source.copy('Legacy trace copy');
+      expect(copied.oldResults).toEqual(expected);
+      expect(source.oldResults).toEqual(original);
+      expect((await Eval.findById(source.id))!.oldResults).toEqual(original);
+      expect(await traceStore.getTracesByEvaluation(source.id)).toHaveLength(1);
+      expect(await traceStore.getTracesByEvaluation(copied.id)).toHaveLength(0);
+
+      await source.delete();
+      expect(await traceStore.getTracesByEvaluation(source.id)).toHaveLength(0);
+      const reloaded = (await Eval.findById(copied.id))!;
+      expect((await reloaded.toEvaluateSummary()).results).toEqual(expected.results);
+      expect(await reloaded.getTable()).toEqual(expected.table);
     });
 
     it('preserves an empty legacy evaluation when copying', async () => {

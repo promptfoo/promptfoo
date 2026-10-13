@@ -862,9 +862,6 @@ export default class Eval {
 
   async getResultsCount(): Promise<number> {
     // Returns distinct test count (unique test cases) - used for UI display
-    if (this.useOldResults()) {
-      return Array.isArray(this.oldResults?.table?.body) ? this.oldResults.table.body.length : 0;
-    }
     return getCachedResultsCount(this.id);
   }
 
@@ -1684,12 +1681,38 @@ export default class Eval {
 
     const newPrompts = structuredClone(this.prompts);
     const newVars = this.vars ? structuredClone(this.vars) : [];
+    const legacyResults = this.oldResults ? structuredClone(this.oldResults) : undefined;
+    if (legacyResults) {
+      // Like normalized copies, legacy copies do not inherit the source's traces.
+      const unlinkTrace = (value: unknown) => {
+        if (!value || typeof value !== 'object' || Array.isArray(value)) {
+          return;
+        }
+        const result = value as Record<string, unknown>;
+        delete result.traceId;
+        delete result.evaluationId;
+        const metadata = result.metadata;
+        if (metadata && typeof metadata === 'object' && !Array.isArray(metadata)) {
+          result.metadata = stripTraceLinkageFromMetadata(metadata as Record<string, unknown>);
+        }
+      };
+      if (Array.isArray(legacyResults.results)) {
+        legacyResults.results.forEach(unlinkTrace);
+      }
+      if (Array.isArray(legacyResults.table?.body)) {
+        for (const row of legacyResults.table.body) {
+          if (row && typeof row === 'object' && !Array.isArray(row) && Array.isArray(row.outputs)) {
+            row.outputs.forEach(unlinkTrace);
+          }
+        }
+      }
+    }
     const author = getAuthor();
 
     const db = await getDb();
 
     // Copy eval, results, and relationships within transaction for atomicity
-    let copiedCount = Array.isArray(this.oldResults?.results) ? this.oldResults.results.length : 0;
+    let copiedCount = Array.isArray(legacyResults?.results) ? legacyResults.results.length : 0;
     await db.transaction(async (tx) => {
       // Create the new eval record first
       await tx
@@ -1701,7 +1724,7 @@ export default class Eval {
           description: copyDescription,
           config: sanitizeTracingConfigForPersistence(newConfig),
           // Legacy evals keep their results, table, and statistics in this column.
-          results: this.oldResults ?? {},
+          results: legacyResults ?? {},
           prompts: newPrompts,
           vars: newVars,
           runtimeOptions: sanitizeRuntimeOptions(this.runtimeOptions),

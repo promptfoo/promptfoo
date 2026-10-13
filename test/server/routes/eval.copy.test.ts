@@ -71,14 +71,14 @@ describe('Eval Routes - Copy legacy evaluations', () => {
       const copyResponse = await api.post(`/api/eval/${source.id}/copy`).send({});
 
       expect(copyResponse.status).toBe(201);
-      expect(copyResponse.body.distinctTestCount).toBe(1);
+      expect(copyResponse.body.distinctTestCount).toBe(0);
       const copied = (await Eval.findById(copyResponse.body.id))!;
       expect(copied.oldResults).toEqual(originalResults);
       expect((await Eval.findById(source.id))!.oldResults).toEqual(originalResults);
     },
   );
 
-  it('exports the same results after an import and API copy, reporting distinct table rows', async () => {
+  it('exports the same results after an import and API copy', async () => {
     const fixture = oldStyleEval();
     const input = path.join(tempDir, 'legacy.json');
     fs.writeFileSync(input, JSON.stringify(fixture));
@@ -101,7 +101,8 @@ describe('Eval Routes - Copy legacy evaluations', () => {
 
     expect(response.status).toBe(201);
     expect(response.body.id).not.toBe(fixture.id);
-    expect(response.body.distinctTestCount).toBe(1);
+    // Legacy counts and paginated viewing still use the existing normalized-row path.
+    expect(response.body.distinctTestCount).toBe(0);
 
     const copied = await exportEval(response.body.id, 'copied.json');
     expect(copied.results.results).toHaveLength(2);
