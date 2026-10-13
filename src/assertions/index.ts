@@ -43,6 +43,7 @@ import { getNunjucksEngine } from '../util/templates';
 import { sleep } from '../util/time';
 import { transform } from '../util/transform';
 import { loadYaml } from '../util/yamlLoad';
+import { validateEvidencePath } from '../types/index';
 import { handleAgentRubric } from './agentRubric';
 import { handleAnswerRelevance } from './answerRelevance';
 import { AssertionsResult } from './assertionsResult';
@@ -440,6 +441,19 @@ async function runAssertionInternal({
   let output = originalOutput;
 
   invariant(assertion.type, `Assertion must have a type: ${JSON.stringify(assertion)}`);
+
+  // The programmatic `assertions.runAssertion` API bypasses Zod schema
+  // validation, so re-check evidence paths here to reject `from: metadata`
+  // (which would project every sibling including credentials) and any path
+  // with malformed segments before we sink into the llm-rubric handler.
+  if (assertion.evidence?.length) {
+    for (const item of assertion.evidence) {
+      const err = validateEvidencePath(item.from);
+      if (err) {
+        throw new Error(`Invalid llm-rubric evidence path: ${err}`);
+      }
+    }
+  }
 
   if (assertion.transform) {
     output = await transform(assertion.transform, output, {
