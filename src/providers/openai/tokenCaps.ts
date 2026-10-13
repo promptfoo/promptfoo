@@ -5,7 +5,9 @@ export function isLegacyOpenAiChatModel(modelName: string): boolean {
     .toLowerCase()
     .replace(/(^|\/)ft:/, '$1')
     .split(':')[0];
-  return /(^|\/|-)gpt-(?:3\.5(?:-|$)|4(?:[.-]|o(?:-|$)|$)|audio(?:-|$))/.test(model);
+  return /(^|\/|-)(?:gpt-(?:3\.5(?:-|$)|4(?:[.-]|o(?:-|$)|$)|audio(?:-|$))|chatgpt-4o(?:-|$))/.test(
+    model,
+  );
 }
 
 /** Explicit Chat caps are resolved per config scope before environment fallbacks. */

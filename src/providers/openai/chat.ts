@@ -302,10 +302,11 @@ function reconcileOpenRouterReasoning(
 }
 
 export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
-  private usesOpenRouter(): boolean {
+  private usesOpenRouter(config = this.config): boolean {
     const system = this.getGenAISystem();
     return (
-      system === 'openrouter' || (system === 'openai' && isOpenRouterEndpoint(this.getApiUrl()))
+      system === 'openrouter' ||
+      (system === 'openai' && isOpenRouterEndpoint(this.getApiUrl(config)))
     );
   }
 
@@ -479,7 +480,8 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       capabilityModelName.includes('/o3') ||
       capabilityModelName.includes('/o4');
     const isGPT6Model = isGpt6Model(capabilityModelName);
-    const isOpenRouterGpt6 = isGPT6Model && this.usesOpenRouter();
+    const isOpenRouter = this.usesOpenRouter(config);
+    const isOpenRouterGpt6 = isGPT6Model && isOpenRouter;
     const isReasoningModel = usesConfiguredCapabilities
       ? this.isReasoningModel()
       : this.isReasoningCapabilityModel(capabilityModelName);
@@ -502,18 +504,19 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       : getEnvInt('OPENAI_MAX_TOKENS', 1024);
     const maxTokens = usesModernTokenCap ? undefined : (config.max_tokens ?? maxTokensDefault);
 
-    const temperatureDefault = config.omitDefaults
-      ? getEnvString('OPENAI_TEMPERATURE') === undefined
-        ? undefined
-        : getEnvFloat('OPENAI_TEMPERATURE')
-      : getEnvFloat('OPENAI_TEMPERATURE', 0);
+    const temperatureDefault =
+      config.omitDefaults || assumeModernModel
+        ? getEnvString('OPENAI_TEMPERATURE') === undefined
+          ? undefined
+          : getEnvFloat('OPENAI_TEMPERATURE')
+        : getEnvFloat('OPENAI_TEMPERATURE', 0);
     const supportsTemperature =
       isGPT6Model ||
       (usesConfiguredCapabilities
         ? this.supportsTemperature()
         : this.supportsTemperatureForCapabilityModel(capabilityModelName));
     const temperature = supportsTemperature
-      ? (config.temperature ?? (assumeModernModel ? undefined : temperatureDefault))
+      ? (config.temperature ?? temperatureDefault)
       : undefined;
     const reasoningEffort =
       usesModernTokenCap && !isGPT6Model
@@ -636,20 +639,15 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
           )
         : undefined;
     if (normalizeTokenCap) {
-      const outputCap = resolveChatOutputCap(
-        this.config,
-        context?.prompt?.config,
-        this.usesOpenRouter(),
-        {
-          maxCompletionTokens: getEnvInt('OPENAI_MAX_COMPLETION_TOKENS'),
-          // OPENAI_MAX_TOKENS limits the visible output of non-reasoning requests. As a GPT-6
-          // cap it would also limit reasoning, as it never has for o-series or GPT-5 Chat
-          // requests, so it applies only when reasoning is turned off. OpenRouter requests,
-          // which have always honored it, keep falling back to it.
-          maxTokens:
-            isOpenRouterGpt6 || gpt6Effort === 'none' ? getEnvInt('OPENAI_MAX_TOKENS') : undefined,
-        },
-      );
+      const outputCap = resolveChatOutputCap(this.config, context?.prompt?.config, isOpenRouter, {
+        maxCompletionTokens: getEnvInt('OPENAI_MAX_COMPLETION_TOKENS'),
+        // OPENAI_MAX_TOKENS limits the visible output of non-reasoning requests. As a GPT-6
+        // cap it would also limit reasoning, as it never has for o-series or GPT-5 Chat
+        // requests, so it applies only when reasoning is turned off. OpenRouter requests,
+        // which have always honored it, keep falling back to it.
+        maxTokens:
+          isOpenRouterGpt6 || gpt6Effort === 'none' ? getEnvInt('OPENAI_MAX_TOKENS') : undefined,
+      });
       delete body.max_tokens;
       if (outputCap === undefined) {
         delete body.max_completion_tokens;

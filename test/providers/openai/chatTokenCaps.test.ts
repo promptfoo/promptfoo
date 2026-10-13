@@ -178,6 +178,65 @@ describe('Chat output cap compatibility', () => {
     expect(body).not.toHaveProperty('useLegacyTokenCap');
   });
 
+  it.each(['0', '0.7'])(
+    'preserves explicit sampling environment values for unknown aliases: %s',
+    async (value) => {
+      const reset = mockProcessEnv({
+        OPENAI_TEMPERATURE: value,
+        OPENAI_TOP_P: value,
+        OPENAI_PRESENCE_PENALTY: value,
+        OPENAI_FREQUENCY_PENALTY: value,
+      });
+      try {
+        for (const provider of [
+          new OpenAiChatCompletionProvider('internal-alias'),
+          new AzureChatCompletionProvider('internal-deployment'),
+        ]) {
+          const { body } = await provider.getOpenAiBody('Say ready.');
+          expect(body).toMatchObject({
+            temperature: Number(value),
+            top_p: Number(value),
+            presence_penalty: Number(value),
+            frequency_penalty: Number(value),
+          });
+          expect(body).not.toHaveProperty('max_tokens');
+          expect(body).not.toHaveProperty('max_completion_tokens');
+        }
+      } finally {
+        reset();
+      }
+    },
+  );
+
+  it('preserves the legacy request defaults for the ChatGPT GPT-4o alias', async () => {
+    const { body } = await new OpenAiChatCompletionProvider('chatgpt-4o-latest', {
+      config: { apiBaseUrl: 'https://proxy.example.test/v1', max_tokens: 128 },
+    }).getOpenAiBody('Say ready.');
+    expect(body).toMatchObject({ max_tokens: 128, temperature: 0 });
+    expect(body).not.toHaveProperty('max_completion_tokens');
+  });
+
+  it.each([
+    ['https://proxy.example.test/v1', 'https://openrouter.ai/api/v1', 60],
+    ['https://openrouter.ai/api/v1', 'https://proxy.example.test/v1', 50],
+  ] as const)(
+    'uses the effective prompt endpoint for cap precedence: %s to %s',
+    async (providerUrl, promptUrl, expected) => {
+      const { body } = await new OpenAiChatCompletionProvider('o3', {
+        config: {
+          apiBaseUrl: providerUrl,
+          max_completion_tokens: 50,
+          passthrough: { max_tokens: 60 },
+        },
+      }).getOpenAiBody('Say ready.', {
+        vars: {},
+        prompt: { raw: 'Say ready.', label: 'ready', config: { apiBaseUrl: promptUrl } },
+      });
+      expect(body.max_completion_tokens).toBe(expected);
+      expect(body).not.toHaveProperty('max_tokens');
+    },
+  );
+
   it.each(['o3-mini', 'internal-deployment'])(
     'normalizes Azure explicit caps for %s',
     async (deployment) => {

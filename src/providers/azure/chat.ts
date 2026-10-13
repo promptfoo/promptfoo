@@ -253,22 +253,26 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
     const maxCompletionTokens =
       config.max_completion_tokens ?? getEnvInt('OPENAI_MAX_COMPLETION_TOKENS') ?? maxTokens;
 
-    const temperatureDefault = config.omitDefaults
-      ? getEnvString('OPENAI_TEMPERATURE') === undefined
-        ? undefined
-        : getEnvFloat('OPENAI_TEMPERATURE')
-      : getEnvFloat('OPENAI_TEMPERATURE', 0);
-    const temperature = config.temperature ?? (assumeModernModel ? undefined : temperatureDefault);
+    const temperatureDefault =
+      config.omitDefaults || assumeModernModel
+        ? getEnvString('OPENAI_TEMPERATURE') === undefined
+          ? undefined
+          : getEnvFloat('OPENAI_TEMPERATURE')
+        : getEnvFloat('OPENAI_TEMPERATURE', 0);
+    const temperature = config.temperature ?? temperatureDefault;
 
-    const topP = config.omitDefaults
-      ? (config.top_p ?? getEnvFloat('OPENAI_TOP_P'))
-      : (config.top_p ?? getEnvFloat('OPENAI_TOP_P', 1));
-    const presencePenalty = config.omitDefaults
-      ? (config.presence_penalty ?? getEnvFloat('OPENAI_PRESENCE_PENALTY'))
-      : (config.presence_penalty ?? getEnvFloat('OPENAI_PRESENCE_PENALTY', 0));
-    const frequencyPenalty = config.omitDefaults
-      ? (config.frequency_penalty ?? getEnvFloat('OPENAI_FREQUENCY_PENALTY'))
-      : (config.frequency_penalty ?? getEnvFloat('OPENAI_FREQUENCY_PENALTY', 0));
+    const topP =
+      config.omitDefaults || assumeModernModel
+        ? (config.top_p ?? getEnvFloat('OPENAI_TOP_P'))
+        : (config.top_p ?? getEnvFloat('OPENAI_TOP_P', 1));
+    const presencePenalty =
+      config.omitDefaults || assumeModernModel
+        ? (config.presence_penalty ?? getEnvFloat('OPENAI_PRESENCE_PENALTY'))
+        : (config.presence_penalty ?? getEnvFloat('OPENAI_PRESENCE_PENALTY', 0));
+    const frequencyPenalty =
+      config.omitDefaults || assumeModernModel
+        ? (config.frequency_penalty ?? getEnvFloat('OPENAI_FREQUENCY_PENALTY'))
+        : (config.frequency_penalty ?? getEnvFloat('OPENAI_FREQUENCY_PENALTY', 0));
 
     // Get reasoning effort for reasoning models
     const configuredGpt6Effort = gpt6Variant
@@ -327,19 +331,11 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
       ...(grokSamplingRestricted && !isReasoningModel && config.reasoning_effort !== undefined
         ? { reasoning_effort: renderVarsInObject(config.reasoning_effort, context?.vars) }
         : {}),
-      ...(topP === undefined ||
-      samplingParamsDeprecated ||
-      (assumeModernModel && config.top_p === undefined)
-        ? {}
-        : { top_p: topP }),
-      ...(presencePenalty === undefined ||
-      grokSamplingRestricted ||
-      (assumeModernModel && config.presence_penalty === undefined)
+      ...(topP === undefined || samplingParamsDeprecated ? {} : { top_p: topP }),
+      ...(presencePenalty === undefined || grokSamplingRestricted
         ? {}
         : { presence_penalty: presencePenalty }),
-      ...(frequencyPenalty === undefined ||
-      grokSamplingRestricted ||
-      (assumeModernModel && config.frequency_penalty === undefined)
+      ...(frequencyPenalty === undefined || grokSamplingRestricted
         ? {}
         : { frequency_penalty: frequencyPenalty }),
       ...(config.seed === undefined ? {} : { seed: config.seed }),
