@@ -241,12 +241,11 @@ describe('exportCommand', () => {
       mockFsPromises.access.mockResolvedValue(undefined);
       // Reset all mocks for clean state
       vi.clearAllMocks();
+      exportCommand(program);
     });
 
     it('should handle missing log directory', async () => {
       mockFsPromises.access.mockRejectedValue(new Error('ENOENT'));
-
-      exportCommand(program);
 
       await program.parseAsync(['node', 'test', 'export', 'logs']);
 
@@ -259,8 +258,6 @@ describe('exportCommand', () => {
     it('should handle no log files found', async () => {
       mockGetLogFiles.mockResolvedValue([]);
 
-      exportCommand(program);
-
       await program.parseAsync(['node', 'test', 'export', 'logs']);
 
       expect(logger.error).toHaveBeenCalledWith(
@@ -269,7 +266,10 @@ describe('exportCommand', () => {
       expect(process.exitCode).toBe(1);
     });
 
-    it('should handle invalid count parameter', async () => {
+    it.each([
+      ['should handle invalid count parameter', 'invalid'],
+      ['should handle zero count parameter', '0'],
+    ])('%s', async (_title, count) => {
       mockGetLogFiles.mockResolvedValue([
         {
           name: 'promptfoo-debug-2025-01-01.log',
@@ -280,28 +280,7 @@ describe('exportCommand', () => {
         },
       ]);
 
-      exportCommand(program);
-
-      await program.parseAsync(['node', 'test', 'export', 'logs', '--count', 'invalid']);
-
-      expect(logger.error).toHaveBeenCalledWith('Count must be a positive number');
-      expect(process.exitCode).toBe(1);
-    });
-
-    it('should handle zero count parameter', async () => {
-      mockGetLogFiles.mockResolvedValue([
-        {
-          name: 'promptfoo-debug-2025-01-01.log',
-          path: '/test/config/logs/promptfoo-debug-2025-01-01.log',
-          mtime: new Date(),
-          type: 'debug',
-          size: 1024,
-        },
-      ]);
-
-      exportCommand(program);
-
-      await program.parseAsync(['node', 'test', 'export', 'logs', '--count', '0']);
+      await program.parseAsync(['node', 'test', 'export', 'logs', '--count', count]);
 
       expect(logger.error).toHaveBeenCalledWith('Count must be a positive number');
       expect(process.exitCode).toBe(1);
@@ -340,8 +319,6 @@ describe('exportCommand', () => {
           mtime: new Date('2025-01-01T00:00:00.000Z'),
         } as fs.Stats;
       });
-
-      exportCommand(program);
 
       await program.parseAsync(['node', 'test', 'export', 'logs', '--output', 'logs.gz']);
 

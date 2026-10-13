@@ -452,7 +452,7 @@ assert:
         - root.sibling
 ```
 
-This checks if the XML is a supported well-formed document and contains the specified elements. The elements are specified as dot-separated paths, allowing for nested element checking.
+This checks if the XML is a supported well-formed document and contains the specified elements. The elements are specified as dot-separated paths, allowing for nested element checking. Required paths match actual XML element names, including names such as `toString`; inherited JavaScript object properties do not count.
 
 #### How it works
 
