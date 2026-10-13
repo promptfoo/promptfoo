@@ -11,7 +11,7 @@ const createSimilarityTest = () => ({
   options: {},
 });
 
-function createSimilarityParams(output: string, provider: ReturnType<typeof createMockProvider>) {
+function createSimilarityParams(output: string) {
   return {
     baseType: 'similar' as const,
     outputString: output,
@@ -21,7 +21,7 @@ function createSimilarityParams(output: string, provider: ReturnType<typeof crea
       vars: {},
       test: createSimilarityTest(),
       logProbs: undefined,
-      provider,
+      provider: createMockProvider({ response: {} }),
       providerResponse: { output },
     },
     output,
@@ -50,11 +50,7 @@ describe('handleSimilar', () => {
       assertion: createStringAssertion('similar', 'hello world'),
       renderedValue: 'hello world',
       inverse: false,
-      ...createSimilarityParams(
-        'hello world',
-        // @ts-ignore
-        createMockProvider({ response: {} }),
-      ),
+      ...createSimilarityParams('hello world'),
     });
 
     expect(result.pass).toBe(true);
@@ -69,11 +65,7 @@ describe('handleSimilar', () => {
       },
       renderedValue: ['hello world', 'hi world'],
       inverse: false,
-      ...createSimilarityParams(
-        'hello world',
-        // @ts-ignore
-        createMockProvider({ response: {} }),
-      ),
+      ...createSimilarityParams('hello world'),
     });
 
     expect(result.pass).toBe(true);
@@ -89,11 +81,7 @@ describe('handleSimilar', () => {
       },
       renderedValue: 'hello world',
       inverse: false,
-      ...createSimilarityParams(
-        'hello world',
-        // @ts-ignore
-        createMockProvider({ response: {} }),
-      ),
+      ...createSimilarityParams('hello world'),
     });
 
     expect(result.pass).toBe(true);
@@ -104,11 +92,7 @@ describe('handleSimilar', () => {
       assertion: createStringAssertion('similar', 'hello world'),
       renderedValue: 'hello world',
       inverse: true,
-      ...createSimilarityParams(
-        'completely different',
-        // @ts-ignore
-        createMockProvider({ response: {} }),
-      ),
+      ...createSimilarityParams('completely different'),
     });
 
     expect(result.pass).toBe(true);
@@ -123,11 +107,7 @@ describe('handleSimilar', () => {
       },
       renderedValue: ['hello world', 'hi world'],
       inverse: false,
-      ...createSimilarityParams(
-        'completely different',
-        // @ts-ignore
-        createMockProvider({ response: {} }),
-      ),
+      ...createSimilarityParams('completely different'),
     });
 
     expect(result.pass).toBe(false);
@@ -149,11 +129,7 @@ describe('handleSimilar', () => {
       },
       renderedValue: ['far value', 'closer value'],
       inverse: false,
-      ...createSimilarityParams(
-        'some output',
-        // @ts-ignore
-        createMockProvider({ response: {} }),
-      ),
+      ...createSimilarityParams('some output'),
     });
 
     expect(result.pass).toBe(false);
@@ -181,11 +157,7 @@ describe('handleSimilar', () => {
       },
       renderedValue: ['forbidden answer A', 'unrelated answer B'],
       inverse: true,
-      ...createSimilarityParams(
-        'forbidden answer A',
-        // @ts-ignore
-        createMockProvider({ response: {} }),
-      ),
+      ...createSimilarityParams('forbidden answer A'),
     });
 
     // Before the fix this returned pass: true (dissimilar to the second value
@@ -209,11 +181,7 @@ describe('handleSimilar', () => {
       },
       renderedValue: ['forbidden answer A', 'forbidden answer B'],
       inverse: true,
-      ...createSimilarityParams(
-        'a totally different response',
-        // @ts-ignore
-        createMockProvider({ response: {} }),
-      ),
+      ...createSimilarityParams('a totally different response'),
     });
 
     expect(result.pass).toBe(true);
@@ -251,11 +219,7 @@ describe('handleSimilar', () => {
         },
         renderedValue: 123 as any,
         inverse: false,
-        ...createSimilarityParams(
-          'test',
-          // @ts-ignore
-          createMockProvider({ response: {} }),
-        ),
+        ...createSimilarityParams('test'),
       }),
     ).rejects.toThrow('Similarity assertion type must have a string or array of strings value');
   });
@@ -269,11 +233,7 @@ describe('handleSimilar', () => {
         },
         renderedValue: [],
         inverse: false,
-        ...createSimilarityParams(
-          'test',
-          // @ts-ignore
-          createMockProvider({ response: {} }),
-        ),
+        ...createSimilarityParams('test'),
       }),
     ).rejects.toThrow('Similarity assertion must have at least one value to compare against');
   });
@@ -288,11 +248,7 @@ describe('handleSimilar', () => {
       },
       renderedValue: 'hello world',
       inverse: false,
-      ...createSimilarityParams(
-        'hello world',
-        // @ts-ignore
-        createMockProvider({ response: {} }),
-      ),
+      ...createSimilarityParams('hello world'),
     });
 
     // Verify that matchesSimilarity was called with dot_product metric
@@ -317,11 +273,7 @@ describe('handleSimilar', () => {
       },
       renderedValue: 'hello world',
       inverse: false,
-      ...createSimilarityParams(
-        'hello world',
-        // @ts-ignore
-        createMockProvider({ response: {} }),
-      ),
+      ...createSimilarityParams('hello world'),
     });
 
     // Verify that matchesSimilarity was called with euclidean metric
@@ -343,11 +295,7 @@ describe('handleSimilar', () => {
       assertion: createStringAssertion('similar', 'hello world'),
       renderedValue: 'hello world',
       inverse: false,
-      ...createSimilarityParams(
-        'hello world',
-        // @ts-ignore
-        createMockProvider({ response: {} }),
-      ),
+      ...createSimilarityParams('hello world'),
     });
 
     // Verify that matchesSimilarity was called with cosine metric (default)

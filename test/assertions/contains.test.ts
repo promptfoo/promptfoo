@@ -546,175 +546,86 @@ describe('handleIContainsAny', () => {
     });
   });
 
-  it('should handle comma-separated string input case-insensitively', () => {
-    const params: AssertionParams = {
-      ...defaultParams,
-      assertion: { type: 'icontains-any', value: 'WORLD,UNIVERSE' },
-      renderedValue: 'WORLD,UNIVERSE' as AssertionValue,
+  for (const { name, value, outputString, pass, reason = 'Assertion passed' } of [
+    {
+      name: 'should handle comma-separated string input case-insensitively',
+      value: 'WORLD,UNIVERSE',
       outputString: 'hello world',
-    };
-
-    const result = handleIContainsAny(params);
-    expect(result).toEqual({
       pass: true,
-      score: 1,
-      reason: 'Assertion passed',
-      assertion: params.assertion,
-    });
-  });
-
-  it('should handle string input with multiple commas and spaces', () => {
-    const params: AssertionParams = {
-      ...defaultParams,
-      assertion: { type: 'icontains-any', value: 'HELLO,  WORLD  ,  UNIVERSE' },
-      renderedValue: 'HELLO,  WORLD  ,  UNIVERSE' as AssertionValue,
+    },
+    {
+      name: 'should handle string input with multiple commas and spaces',
+      value: 'HELLO,  WORLD  ,  UNIVERSE',
       outputString: 'hello',
-    };
-
-    const result = handleIContainsAny(params);
-    expect(result).toEqual({
       pass: true,
-      score: 1,
-      reason: 'Assertion passed',
-      assertion: params.assertion,
-    });
-  });
-
-  it('should ignore empty entries in comma-separated list', () => {
-    const params: AssertionParams = {
-      ...defaultParams,
-      assertion: { type: 'icontains-any', value: ',WORLD,,' },
-      renderedValue: ',WORLD,,' as AssertionValue,
+    },
+    {
+      name: 'should ignore empty entries in comma-separated list',
+      value: ',WORLD,,',
       outputString: '',
-    };
-
-    const result = handleIContainsAny(params);
-    expect(result).toEqual({
       pass: false,
-      score: 0,
       reason: 'Expected output to contain one of "WORLD"',
-      assertion: params.assertion,
-    });
-  });
-
-  it('should preserve quoted empty strings in comma-separated list', () => {
-    const params: AssertionParams = {
-      ...defaultParams,
-      assertion: { type: 'icontains-any', value: '"",WORLD' },
-      renderedValue: '"",WORLD' as AssertionValue,
+    },
+    {
+      name: 'should preserve quoted empty strings in comma-separated list',
+      value: '"",WORLD',
       outputString: '',
-    };
-
-    const result = handleIContainsAny(params);
-    expect(result).toEqual({
       pass: true,
-      score: 1,
-      reason: 'Assertion passed',
-      assertion: params.assertion,
-    });
-  });
-
-  it('should handle string value with spaces', () => {
-    const params: AssertionParams = {
-      ...defaultParams,
-      assertion: { type: 'icontains-any', value: '  HELLO  ' },
-      renderedValue: '  HELLO  ' as AssertionValue,
+    },
+    {
+      name: 'should handle string value with spaces',
+      value: '  HELLO  ',
       outputString: 'hello',
-    };
-
-    const result = handleIContainsAny(params);
-    expect(result).toEqual({
       pass: true,
-      score: 1,
-      reason: 'Assertion passed',
-      assertion: params.assertion,
-    });
-  });
-
-  it('should handle string value with multiple spaces between commas', () => {
-    const params: AssertionParams = {
-      ...defaultParams,
-      assertion: { type: 'icontains-any', value: 'HELLO  ,  WORLD' },
-      renderedValue: 'HELLO  ,  WORLD' as AssertionValue,
+    },
+    {
+      name: 'should handle string value with multiple spaces between commas',
+      value: 'HELLO  ,  WORLD',
       outputString: 'hello',
-    };
-
-    const result = handleIContainsAny(params);
-    expect(result).toEqual({
       pass: true,
-      score: 1,
-      reason: 'Assertion passed',
-      assertion: params.assertion,
-    });
-  });
-
-  it('should handle string value with multiple spaces and special characters', () => {
-    const params: AssertionParams = {
-      ...defaultParams,
-      assertion: { type: 'icontains-any', value: '  HELLO  ,  WORLD  ' },
-      renderedValue: '  HELLO  ,  WORLD  ' as AssertionValue,
+    },
+    {
+      name: 'should handle string value with multiple spaces and special characters',
+      value: '  HELLO  ,  WORLD  ',
       outputString: 'hello',
-    };
-
-    const result = handleIContainsAny(params);
-    expect(result).toEqual({
       pass: true,
-      score: 1,
-      reason: 'Assertion passed',
-      assertion: params.assertion,
-    });
-  });
-
-  it('should handle string value with multiple spaces and commas', () => {
-    const params: AssertionParams = {
-      ...defaultParams,
-      assertion: { type: 'icontains-any', value: '  HELLO  ,  ,  WORLD  ' },
-      renderedValue: '  HELLO  ,  ,  WORLD  ' as AssertionValue,
+    },
+    {
+      name: 'should handle string value with multiple spaces and commas',
+      value: '  HELLO  ,  ,  WORLD  ',
       outputString: 'hello',
-    };
-
-    const result = handleIContainsAny(params);
-    expect(result).toEqual({
       pass: true,
-      score: 1,
-      reason: 'Assertion passed',
-      assertion: params.assertion,
-    });
-  });
-
-  it('should handle string value with multiple consecutive commas', () => {
-    const params: AssertionParams = {
-      ...defaultParams,
-      assertion: { type: 'icontains-any', value: 'HELLO,,,,WORLD' },
-      renderedValue: 'HELLO,,,,WORLD' as AssertionValue,
+    },
+    {
+      name: 'should handle string value with multiple consecutive commas',
+      value: 'HELLO,,,,WORLD',
       outputString: 'hello',
-    };
-
-    const result = handleIContainsAny(params);
-    expect(result).toEqual({
       pass: true,
-      score: 1,
-      reason: 'Assertion passed',
-      assertion: params.assertion,
-    });
-  });
-
-  it('should handle string value with only spaces and commas', () => {
-    const params: AssertionParams = {
-      ...defaultParams,
-      assertion: { type: 'icontains-any', value: '  ,  ,  ' },
-      renderedValue: '  ,  ,  ' as AssertionValue,
+    },
+    {
+      name: 'should handle string value with only spaces and commas',
+      value: '  ,  ,  ',
       outputString: '',
-    };
-
-    const result = handleIContainsAny(params);
-    expect(result).toEqual({
       pass: false,
-      score: 0,
       reason: 'Expected output to contain one of ""',
-      assertion: params.assertion,
+    },
+  ]) {
+    it(name, () => {
+      const params: AssertionParams = {
+        ...defaultParams,
+        assertion: { type: 'icontains-any', value },
+        renderedValue: value,
+        outputString,
+      };
+
+      expect(handleIContainsAny(params)).toEqual({
+        pass,
+        score: pass ? 1 : 0,
+        reason,
+        assertion: params.assertion,
+      });
     });
-  });
+  }
 });
 
 describe('handleContainsAll', () => {
