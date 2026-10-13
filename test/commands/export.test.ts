@@ -140,7 +140,7 @@ describe('exportCommand', () => {
       'Export a saved eval as JSON, HTML, CSV, or another supported format',
     );
     expect(helpText).toContain('-o, --output [outputPath]');
-    expect(helpText).toContain('Output path; extension selects format (JSON to stdout by default)');
+    expect(helpText).toContain('Output path; extension selects format (console output by default)');
   });
 
   it('should export latest eval record', async () => {

@@ -121,7 +121,7 @@ export function exportCommand(program: Command) {
     .description('Export a saved eval as JSON, HTML, CSV, or another supported format')
     .option(
       '-o, --output [outputPath]',
-      'Output path; extension selects format (JSON to stdout by default)',
+      'Output path; extension selects format (console output by default)',
     )
     .option('--include-media', 'Embed referenced blob media bytes for portable imports')
     .action(async (evalId, cmdObj) => {

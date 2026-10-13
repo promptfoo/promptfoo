@@ -547,7 +547,7 @@ Export eval records or logs.
 
 ### `promptfoo export eval <evalId>`
 
-Export a saved eval without rerunning providers. To export the most recent, use `latest`. The output filename extension selects the format; without `-o`, the command writes JSON to stdout.
+Export a saved eval without rerunning providers. To export the most recent, use `latest`. The output filename extension selects the format; without `-o`, results are printed to the console.
 
 | Option                    | Description                                             |
 | ------------------------- | ------------------------------------------------------- |
@@ -560,7 +560,7 @@ promptfoo export eval latest -o report.csv
 promptfoo export eval latest -o report.json
 ```
 
-Use JSON to preserve eval data for [`promptfoo import`](#promptfoo-import-filepath); HTML and CSV provide reports for viewing or analysis.
+Use `-o report.json` to preserve eval data for [`promptfoo import`](#promptfoo-import-filepath); HTML and CSV provide reports for viewing or analysis. Console output may include update notices, so use `-o` when saving a report.
 
 Exports always redact config secrets before writing. Media bytes are opt-in because they can make the export much larger and may contain sensitive user content. Without `--include-media`, blob references remain in the exported results and resolve only when the target Promptfoo data directory already has the referenced blobs.
 
