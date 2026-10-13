@@ -36,6 +36,7 @@ import {
   type GradingResult,
   type TraceData,
   type VarValue,
+  validateEvidencePath,
 } from '../types/index';
 import { isJavascriptFile } from '../util/fileExtensions';
 import invariant from '../util/invariant';
@@ -43,7 +44,6 @@ import { getNunjucksEngine } from '../util/templates';
 import { sleep } from '../util/time';
 import { transform } from '../util/transform';
 import { loadYaml } from '../util/yamlLoad';
-import { validateEvidencePath } from '../types/index';
 import { handleAgentRubric } from './agentRubric';
 import { handleAnswerRelevance } from './answerRelevance';
 import { AssertionsResult } from './assertionsResult';
