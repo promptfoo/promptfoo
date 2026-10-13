@@ -417,6 +417,9 @@ export const OpenAiResponsesConfigInputSchema = ChatFields.omit({
   modalities: true,
   audio: true,
   mcp: true,
+  functionToolCallbacks: true,
+  seed: true,
+  showThinking: true,
 })
   .extend({
     tools: ResponsesTools.optional(),

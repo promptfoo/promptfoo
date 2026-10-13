@@ -181,7 +181,6 @@ const responseValid = [
     temperature: 0,
     max_output_tokens: 16,
     top_p: 0,
-    seed: 0,
     service_tier: 'scale',
     omitDefaults: true,
     passthrough: { future_field: { keep: true } },
@@ -192,7 +191,6 @@ const responseValid = [
       json_schema: { ...nestedFormat.json_schema, strict: true },
     },
     tools: 'file://tools.yaml',
-    functionToolCallbacks: { lookup: 'file://callback.js' },
   },
   {
     reasoning: {
@@ -360,6 +358,9 @@ describe('OpenAI portable configuration contracts', () => {
         { max_tokens: 32 },
         { max_completion_tokens: 32 },
         { mcp: { enabled: true, server: { command: 'node' } } },
+        { functionToolCallbacks: { lookup: 'file://callback.js' } },
+        { seed: 1 },
+        { showThinking: true },
         { tools: [{ type: 'code_interpreter' }] },
         { tools: [{ type: 'code_interpreter', container: {} }] },
         { tools: [{ type: 'mcp', server_label: 'remote', tunnel_id: 123 }] },
