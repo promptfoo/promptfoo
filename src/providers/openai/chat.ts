@@ -45,7 +45,8 @@ import {
 } from '../tracing';
 import { OpenAiGenericProvider } from './';
 import { calculateOpenAIUsageCost } from './billing';
-import { applyGpt6RequestRules, getGpt6ChatReasoningEffort, isGpt6Model } from './gpt6';
+import { applyGpt6RequestRules, isGpt6Model } from './gpt6';
+import { resolveChatReasoningEffort } from './reasoning';
 import { isLegacyOpenAiChatModel, resolveChatOutputCap } from './tokenCaps';
 import {
   appendOpenAiApiPath,
@@ -74,7 +75,7 @@ import type {
 } from '../../types/index';
 import type { ProviderOptions } from '../../types/providers';
 import type { McpToolCallEntry } from '../mcp/types';
-import type { OpenAiCompletionOptions, ReasoningEffort } from './types';
+import type { OpenAiCompletionOptions } from './types';
 
 export type OpenAiChatCompletionCostData = Pick<
   OpenAI.Chat.Completions.ChatCompletion,
@@ -518,9 +519,12 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     const temperature = supportsTemperature
       ? (config.temperature ?? temperatureDefault)
       : undefined;
+    const resolvesReasoning = usesModernTokenCap || capabilityModelName.includes('gpt-oss');
     const reasoningEffort =
-      usesModernTokenCap && !isGPT6Model
-        ? (renderVarsInObject(config.reasoning_effort, context?.vars) as ReasoningEffort)
+      resolvesReasoning && !isOpenRouterGpt6
+        ? resolveChatReasoningEffort(this.config, context?.prompt?.config, (value) =>
+            renderVarsInObject(value, context?.vars),
+          )
         : undefined;
 
     // --- MCP tool injection logic ---
@@ -607,15 +611,6 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     };
     assertOpenAiApiModel(body.model, this.getApiUrl());
 
-    // Handle reasoning_effort and reasoning parameters for reasoning models
-    if (
-      !isGPT6Model &&
-      config.reasoning_effort &&
-      (usesModernTokenCap || capabilityModelName.includes('gpt-oss'))
-    ) {
-      body.reasoning_effort = renderVarsInObject(config.reasoning_effort, context?.vars);
-    }
-
     if (config.reasoning && isOSeriesModel) {
       body.reasoning = config.reasoning;
     }
@@ -631,13 +626,6 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       body.store = config.store;
     }
 
-    // Whether a native GPT-6 request reasons decides which environment limit applies to it.
-    const gpt6Effort =
-      isGPT6Model && !isOpenRouterGpt6
-        ? getGpt6ChatReasoningEffort(this.config, context?.prompt?.config, (value) =>
-            renderVarsInObject(value, context?.vars),
-          )
-        : undefined;
     if (normalizeTokenCap) {
       const outputCap = resolveChatOutputCap(this.config, context?.prompt?.config, isOpenRouter, {
         maxCompletionTokens: getEnvInt('OPENAI_MAX_COMPLETION_TOKENS'),
@@ -646,7 +634,9 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         // requests, so it applies only when reasoning is turned off. OpenRouter requests,
         // which have always honored it, keep falling back to it.
         maxTokens:
-          isOpenRouterGpt6 || gpt6Effort === 'none' ? getEnvInt('OPENAI_MAX_TOKENS') : undefined,
+          isOpenRouterGpt6 || (isGPT6Model && reasoningEffort === 'none')
+            ? getEnvInt('OPENAI_MAX_TOKENS')
+            : undefined,
       });
       delete body.max_tokens;
       if (outputCap === undefined) {
@@ -661,16 +651,16 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     }
     if (isOpenRouterGpt6) {
       reconcileOpenRouterReasoning(body, this.config, context?.prompt?.config, context?.vars);
-    } else if (isGPT6Model) {
-      if (config.reasoning != null) {
+    } else if (resolvesReasoning) {
+      if (isGPT6Model && config.reasoning != null) {
         throw new Error(
           'GPT-6 Chat Completions requests use reasoning_effort. Configure reasoning_effort, or use the Responses API for config.reasoning.',
         );
       }
-      if (gpt6Effort === undefined) {
+      if (reasoningEffort == null || reasoningEffort === '') {
         delete body.reasoning_effort;
       } else {
-        body.reasoning_effort = gpt6Effort;
+        body.reasoning_effort = reasoningEffort;
       }
     }
     // OpenRouter can translate Chat tools to the upstream Responses API.

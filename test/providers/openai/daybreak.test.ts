@@ -80,7 +80,11 @@ describe.each([
         body[Provider === OpenAiChatCompletionProvider ? 'max_tokens' : 'max_output_tokens'],
       ).toBe(1024);
       expect(body).not.toHaveProperty('reasoning_effort');
-      expect(body).not.toHaveProperty('reasoning');
+      if (model === 'gpt-4.1') {
+        expect(body).not.toHaveProperty('reasoning');
+      } else {
+        expect(body.reasoning).toEqual({ effort: 'high' });
+      }
     },
   );
 });

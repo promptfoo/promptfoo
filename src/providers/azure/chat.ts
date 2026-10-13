@@ -23,12 +23,8 @@ import {
 import { FunctionCallbackHandler } from '../functionCallbackUtils';
 import { McpClientSession } from '../mcp/session';
 import { transformMCPToolsToOpenAi } from '../mcp/transform';
-import {
-  applyGpt6RequestRules,
-  getGpt6ChatReasoningEffort,
-  getGpt6Variant,
-  isGpt6Model,
-} from '../openai/gpt6';
+import { applyGpt6RequestRules, getGpt6Variant, isGpt6Model } from '../openai/gpt6';
+import { resolveChatReasoningEffort } from '../openai/reasoning';
 import { isLegacyOpenAiChatModel, resolveChatOutputCap } from '../openai/tokenCaps';
 import { getRequestTimeoutMs, parseChatPrompt, transformTools } from '../shared';
 import { AZURE_MODELS, DEFAULT_AZURE_API_VERSION } from './defaults';
@@ -275,25 +271,20 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
         : (config.frequency_penalty ?? getEnvFloat('OPENAI_FREQUENCY_PENALTY', 0));
 
     // Get reasoning effort for reasoning models
-    const configuredGpt6Effort = gpt6Variant
-      ? getGpt6ChatReasoningEffort(this.config, context?.prompt?.config, (value) =>
-          renderVarsInObject(value, context?.vars),
-        )
-      : undefined;
+    const resolvesReasoning = usesModernTokenCap || grokSamplingRestricted;
+    const configuredReasoningEffort =
+      resolvesReasoning && !isFixedReasoningModel
+        ? resolveChatReasoningEffort(this.config, context?.prompt?.config, (value) =>
+            renderVarsInObject(value, context?.vars),
+          )
+        : undefined;
     const defaultReasoningEffort =
       config.omitDefaults || useModelDefaults || assumeModernModel ? undefined : 'medium';
-    const reasoningEffort = isFixedReasoningModel
+    const renderedReasoningEffort = isFixedReasoningModel
       ? undefined
-      : gpt6Variant
-        ? configuredGpt6Effort === undefined
-          ? defaultReasoningEffort
-          : configuredGpt6Effort
-        : (config.reasoning_effort ?? defaultReasoningEffort);
-    const renderedReasoningEffort = usesModernTokenCap
-      ? gpt6Variant
-        ? reasoningEffort
-        : renderVarsInObject(reasoningEffort, context?.vars)
-      : undefined;
+      : configuredReasoningEffort === undefined && usesModernTokenCap
+        ? defaultReasoningEffort
+        : configuredReasoningEffort;
 
     // --- MCP tool injection logic ---
     const mcpTools = this.mcpClient ? transformMCPToolsToOpenAi(this.mcpClient.getAllTools()) : [];
@@ -325,12 +316,6 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
             ...(maxTokens === undefined ? {} : { max_tokens: maxTokens }),
             ...(temperature === undefined || samplingParamsDeprecated ? {} : { temperature }),
           }),
-      // Grok accepts reasoning_effort (low/medium/high) but is not classified as a reasoning
-      // model here — it keeps max_tokens and temperature, unlike o-series/GPT-5. Forward an
-      // explicitly configured value so it is not silently dropped; the default is left alone.
-      ...(grokSamplingRestricted && !isReasoningModel && config.reasoning_effort !== undefined
-        ? { reasoning_effort: renderVarsInObject(config.reasoning_effort, context?.vars) }
-        : {}),
       ...(topP === undefined || samplingParamsDeprecated ? {} : { top_p: topP }),
       ...(presencePenalty === undefined || grokSamplingRestricted
         ? {}
@@ -372,8 +357,8 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
       delete body.reasoning_effort;
     }
 
-    if (gpt6Variant) {
-      if (renderedReasoningEffort === undefined) {
+    if (resolvesReasoning) {
+      if (renderedReasoningEffort == null || renderedReasoningEffort === '') {
         delete body.reasoning_effort;
       } else {
         body.reasoning_effort = renderedReasoningEffort;

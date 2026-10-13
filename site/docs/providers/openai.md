@@ -250,6 +250,8 @@ Reasoning tokens count toward the output limit and billing, even though they are
 <Link id="gpt-41" />
 <Link id="usage-examples" />
 
+Reasoning settings on an individual prompt override the provider's settings. To clear an inherited effort setting, use `reasoning_effort: null` with Chat Completions or `reasoning: { effort: null }` with Responses. Other Responses options, such as `summary`, are retained. Use `reasoning: null` to clear all inherited Responses reasoning options.
+
 Promptfoo omits `temperature` for models it recognizes as reasoning models, including GPT-5, GPT-6, and o-series models. GPT-6 Sol and Luna allow sampling when reasoning effort is `none`. For a non-reasoning model such as `gpt-4.1-mini`, you can set `temperature: 0` and, on Chat Completions, `max_tokens`. Check the selected model's API documentation before using other sampling options.
 
 <details>

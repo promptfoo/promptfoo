@@ -54,7 +54,15 @@ export interface OpenAiSharedOptions {
   maxRetries?: number;
 }
 
-export type ReasoningEffort = 'none' | 'low' | 'medium' | 'high' | null;
+export type ReasoningEffort =
+  | 'none'
+  | 'minimal'
+  | 'low'
+  | 'medium'
+  | 'high'
+  | 'xhigh'
+  | 'max'
+  | null;
 
 /**
  * Configuration options for OpenAI reasoning models, including o-series and GPT-5 models.
@@ -65,14 +73,7 @@ export interface Reasoning {
   /** Controls which reasoning items are rendered back to the model on later turns. */
   context?: 'auto' | 'current_turn' | 'all_turns' | null;
 
-  /**
-   * **o-series models only**
-   *
-   * Constraints effort on reasoning for
-   * [reasoning models](https://platform.openai.com/docs/guides/reasoning). Supported
-   * values are `low`, `medium`, and `high` for o-series models. Reducing reasoning
-   * effort can result in faster responses and fewer tokens used on reasoning in a response.
-   */
+  /** Reasoning effort. Supported values depend on the model. Null clears an inherited value. */
   effort?: ReasoningEffort;
 
   /** Selects standard reasoning or GPT-5.6 Pro mode. */
@@ -86,15 +87,11 @@ export interface Reasoning {
   summary?: 'auto' | 'concise' | 'detailed' | null;
 }
 
-/**
- * Shared reasoning effort options for GPT models. Accepted values vary by model;
- * Astra's runtime validation rejects `none` and `minimal` from this shared union.
- */
-export type GPT5ReasoningEffort = Exclude<ReasoningEffort, null> | 'minimal' | 'xhigh' | 'max';
+/** @deprecated Use ReasoningEffort. */
+export type GPT5ReasoningEffort = Exclude<ReasoningEffort, null>;
 
-export type GPT5Reasoning = Omit<Reasoning, 'effort'> & {
-  effort?: GPT5ReasoningEffort;
-};
+/** @deprecated Use Reasoning. */
+export type GPT5Reasoning = Omit<Reasoning, 'effort'> & { effort?: GPT5ReasoningEffort };
 
 /** Verbosity level supported by GPT-5 models */
 export type GPT5Verbosity = 'low' | 'medium' | 'high';
@@ -176,8 +173,8 @@ export type OpenAiCompletionOptions = OpenAiSharedOptions & {
   prompt_cache_options?: OpenAiPromptCacheOptions;
   prompt_cache_retention?: OpenAiPromptCacheRetention;
   safety_identifier?: string;
-  reasoning_effort?: GPT5ReasoningEffort;
-  reasoning?: Reasoning | GPT5Reasoning;
+  reasoning_effort?: ReasoningEffort;
+  reasoning?: Reasoning | null;
   service_tier?:
     | ('auto' | 'default' | 'fast' | 'flex' | 'priority' | 'premium' | 'ultrafast')
     | null;

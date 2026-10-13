@@ -920,6 +920,8 @@ providers:
 
 ### Using Variables with Reasoning Effort
 
+Reasoning settings on an individual prompt override the provider's settings. To clear an inherited effort setting, use `reasoning_effort: null` with Chat Completions or `reasoning: { effort: null }` with Responses. Other Responses options, such as `summary`, are retained. Use `reasoning: null` to clear all inherited Responses reasoning options.
+
 You can use variables in your configuration to dynamically adjust the reasoning effort based on your test cases:
 
 ```yaml title="promptfooconfig.yaml"
