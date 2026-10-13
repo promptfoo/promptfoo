@@ -908,17 +908,9 @@ export function modelScanCommand(program: Command): void {
       const saveToDatabase = options.write === undefined || options.write === true;
 
       // Look up the audit to update and its pre-scan revision.
-      let existingAuditToUpdate: ModelAudit | null = null;
-      let huggingFaceRevision: HuggingFaceRevisionSnapshot | undefined;
-      if (saveToDatabase) {
-        const { existingAudit, huggingFaceRevision: scannedRevision } = await checkExistingScan(
-          paths,
-          options,
-          currentScannerVersion,
-        );
-        existingAuditToUpdate = existingAudit;
-        huggingFaceRevision = scannedRevision;
-      }
+      const { existingAudit: existingAuditToUpdate, huggingFaceRevision } = saveToDatabase
+        ? await checkExistingScan(paths, options, currentScannerVersion)
+        : { existingAudit: null, huggingFaceRevision: undefined };
 
       // Parse CLI arguments
       const outputFormat = saveToDatabase ? 'json' : options.format || 'text';
