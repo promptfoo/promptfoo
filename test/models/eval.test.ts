@@ -2,7 +2,15 @@ import { eq, sql } from 'drizzle-orm';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getDb } from '../../src/database/index';
 import { updateSignalFile, updateSignalFileForDeletedEvals } from '../../src/database/signal';
-import { evalResultsTable, evalsTable, spansTable, tracesTable } from '../../src/database/tables';
+import {
+  evalResultsTable,
+  evalsTable,
+  evalsToDatasetsTable,
+  evalsToPromptsTable,
+  evalsToTagsTable,
+  spansTable,
+  tracesTable,
+} from '../../src/database/tables';
 import { getAuthor } from '../../src/globalConfig/accounts';
 import { runDbMigrations } from '../../src/migrate';
 import Eval, {
@@ -1014,6 +1022,104 @@ describe('evaluator', () => {
   });
 
   describe('copy', () => {
+    it('preserves legacy results, tables, and statistics without changing the source', async () => {
+      const stored = await EvalFactory.createOldResult();
+      const fixture = (await Eval.findById(stored.id))!;
+      const sourceId = await writeResultsToDatabase(fixture.oldResults!, {
+        ...fixture.config,
+        tags: { purpose: 'legacy-copy' },
+      });
+      const source = (await Eval.findById(sourceId))!;
+      const db = await getDb();
+      const sourceRecord = await db
+        .select()
+        .from(evalsTable)
+        .where(eq(evalsTable.id, source.id))
+        .get();
+      const summary = await source.toEvaluateSummary();
+
+      const copied = await source.copy('Legacy copy');
+      const reloaded = (await Eval.findById(copied.id))!;
+      const copiedSummary = await reloaded.toEvaluateSummary();
+
+      expect(copied.id).not.toBe(source.id);
+      expect(copiedSummary.results).toEqual(summary.results);
+      expect(reloaded.useOldResults()).toBe(true);
+      expect(copiedSummary.stats).toEqual(summary.stats);
+      expect(await reloaded.getTable()).toEqual(await source.getTable());
+      expect(reloaded.getPrompts()).toEqual(source.getPrompts());
+      expect(reloaded.config).toEqual({ ...source.config, description: 'Legacy copy' });
+      expect(await EvalResult.findManyByEvalId(copied.id)).toEqual([]);
+      expect(await db.select().from(evalsTable).where(eq(evalsTable.id, source.id)).get()).toEqual(
+        sourceRecord,
+      );
+      for (const table of [evalsToDatasetsTable, evalsToPromptsTable, evalsToTagsTable]) {
+        const originalRelations = await db.select().from(table).where(eq(table.evalId, source.id));
+        const copiedRelations = await db.select().from(table).where(eq(table.evalId, copied.id));
+        expect(originalRelations.length).toBeGreaterThan(0);
+        expect(copiedRelations).toHaveLength(originalRelations.length);
+        expect(copiedRelations).toEqual(
+          expect.arrayContaining(originalRelations.map((row) => ({ ...row, evalId: copied.id }))),
+        );
+      }
+
+      reloaded.oldResults!.table.body[0].outputs[0].text = 'Edited copy';
+      await reloaded.save();
+      expect(await (await Eval.findById(source.id))!.getTable()).toEqual(await source.getTable());
+    });
+
+    it('counts legacy table rows rather than individual prompt outputs', async () => {
+      const stored = await EvalFactory.createOldResult();
+      const source = (await Eval.findById(stored.id))!;
+
+      expect(source.oldResults!.results).toHaveLength(2);
+      expect(source.oldResults!.table.body).toHaveLength(1);
+      expect(await source.getResultsCount()).toBe(1);
+
+      const copied = await source.copy('Legacy row count');
+      expect(await copied.getResultsCount()).toBe(1);
+    });
+
+    it('preserves an empty legacy evaluation when copying', async () => {
+      const stored = await EvalFactory.createOldResult();
+      const source = (await Eval.findById(stored.id))!;
+      source.oldResults!.results = [];
+      source.oldResults!.table.body = [];
+      await source.save();
+
+      const copied = await source.copy('Empty legacy copy');
+      expect(copied.useOldResults()).toBe(true);
+      expect(await copied.getResults()).toEqual([]);
+      expect(await copied.getTable()).toEqual(await source.getTable());
+      expect(await copied.getResultsCount()).toBe(0);
+    });
+
+    it('continues copying normalized results with new IDs and their dataset relationship', async () => {
+      const source = (await Eval.findById((await EvalFactory.create()).id))!;
+      const originalResults = await EvalResult.findManyByEvalId(source.id);
+
+      const copied = await source.copy('Normalized copy');
+      const copiedResults = await EvalResult.findManyByEvalId(copied.id);
+
+      expect(copied.useOldResults()).toBe(false);
+      expect(copied.datasetId).toBe(source.datasetId);
+      expect(copied.getPrompts()).toEqual(source.getPrompts());
+      expect(await copied.getResultsCount()).toBe(2);
+      expect(copiedResults).toHaveLength(originalResults.length);
+      for (const result of copiedResults) {
+        const original = originalResults.find((row) => row.testIdx === result.testIdx)!;
+        expect(result.id).not.toBe(original.id);
+        expect(result.evalId).toBe(copied.id);
+        expect(result.toEvaluateResult()).toEqual({
+          ...original.toEvaluateResult(),
+          id: result.id,
+        });
+      }
+      expect((await EvalResult.findManyByEvalId(source.id)).map((row) => row.id)).toEqual(
+        originalResults.map((row) => row.id),
+      );
+    });
+
     it('removes trace-provider credentials when copying a live evaluation', async () => {
       const evaluation = await Eval.create(
         {

@@ -862,6 +862,9 @@ export default class Eval {
 
   async getResultsCount(): Promise<number> {
     // Returns distinct test count (unique test cases) - used for UI display
+    if (this.useOldResults()) {
+      return this.oldResults!.table.body.length;
+    }
     return getCachedResultsCount(this.id);
   }
 
@@ -1686,7 +1689,7 @@ export default class Eval {
     const db = await getDb();
 
     // Copy eval, results, and relationships within transaction for atomicity
-    let copiedCount = 0;
+    let copiedCount = this.oldResults?.results.length ?? 0;
     await db.transaction(async (tx) => {
       // Create the new eval record first
       await tx
@@ -1697,7 +1700,8 @@ export default class Eval {
           author,
           description: copyDescription,
           config: sanitizeTracingConfigForPersistence(newConfig),
-          results: {},
+          // Legacy evals keep their results, table, and statistics in this column.
+          results: this.oldResults ?? {},
           prompts: newPrompts,
           vars: newVars,
           runtimeOptions: sanitizeRuntimeOptions(this.runtimeOptions),
