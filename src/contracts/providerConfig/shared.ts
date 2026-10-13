@@ -3,9 +3,7 @@ import { ProviderEnvOverridesSchema } from '../env.js';
 
 /** Provider-owned configuration is closed; request payloads and schemas remain open JSON. */
 export const JsonObjectInputSchema = z.record(z.string(), z.json());
-export const FileReferenceInputSchema = z
-  .string()
-  .regex(/^file:\/\/.+/, 'Expected a file:// reference');
+export const FileReferenceInputSchema = z.templateLiteral(['file://', z.string().regex(/[\s\S]+/)]);
 
 const InputConfigFields = z.strictObject({
   benign: z.boolean().optional(),

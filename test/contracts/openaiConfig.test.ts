@@ -58,6 +58,10 @@ const baseValid = [
   },
 ];
 const chatValid = [
+  {
+    tools: [{ type: 'custom', custom: { name: 'grammar', format: { type: 'text' } } }],
+    tool_choice: { type: 'custom', custom: { name: 'grammar' } },
+  },
   ...baseValid,
   {
     model: 'custom-model',
@@ -83,7 +87,7 @@ const chatValid = [
   },
   {
     functions: 'file://functions.json',
-    tools: ['file://tools.yaml', { type: 'function', function: { name: 'no_args' } }],
+    tools: ['file://tools.yaml', 'file://other-tools.json'],
     response_format: 'file://formats/{{ name }}.json',
     functionToolCallbacks: { lookup: 'file://callback.js', other: 'return args;' },
   },
@@ -96,15 +100,6 @@ const chatValid = [
   },
   { response_format: { type: 'text' } },
   { response_format: { type: 'json_object' } },
-  {
-    tools: [
-      { type: 'code_interpreter', container: { type: 'auto', file_ids: ['id'] } },
-      { type: 'file_search', vector_store_ids: ['id'], max_num_results: 5 },
-      { type: 'custom', name: 'new_tool', format: { type: 'text' } },
-    ],
-    tool_choice: { type: 'function', name: 'lookup' },
-    stop: 'end',
-  },
   {
     reasoning: { effort: 'max', context: 'all_turns', summary: 'detailed', mode: 'pro' },
     reasoning_effort: '{{ effort }}',
@@ -133,6 +128,15 @@ const chatValid = [
   },
 ];
 const responseValid = [
+  {
+    tools: [
+      { type: 'code_interpreter', container: { type: 'auto', file_ids: ['id'] } },
+      { type: 'file_search', vector_store_ids: ['id'], max_num_results: 5 },
+      { type: 'custom', name: 'new_tool', format: { type: 'text' } },
+    ],
+    tool_choice: { type: 'function', name: 'lookup' },
+  },
+
   {
     tools: [
       {
@@ -257,7 +261,8 @@ const invalidShared = [
   { inputCost: '1' },
   { unknown: true },
 ];
-const invalidChat = [
+const invalidCommon = [
+  { tools: [{ type: 'function', function: { name: 'lookup' } }, 'file://tools.yaml'] },
   { tool_choice: { type: 'mcp', server_label: 123 } },
   { tool_choice: { type: 'allowed_tools', mode: 7, tools: [] } },
   {
@@ -292,13 +297,19 @@ const invalidChat = [
     },
   },
   { response_format: { type: 'json_schema', json_schema: { name: 'result' } } },
-  { response_format: { type: 'json_schema', schema: schemaDocument } },
   { reasoning_effort: 'unknown' },
   { reasoning: { effort: 'unknown' } },
   { prompt_cache_options: { ttl: '1h' } },
   { metadata: { key: 1 } },
   { store: 0 },
   { mcp: { server: { url: 123 } } },
+];
+
+const invalidChat = [
+  ...invalidCommon,
+  { tools: [{ type: 'function', name: 'lookup' }] },
+  { tool_choice: { type: 'function', name: 'lookup' } },
+  { response_format: { type: 'json_schema', schema: schemaDocument } },
   { max_output_tokens: 20 },
 ];
 
@@ -324,16 +335,7 @@ describe('OpenAI portable configuration contracts', () => {
       jsonSchema: OpenAiResponsesConfigInputJsonSchema,
       valid: responseValid,
       invalid: [
-        ...invalidChat.filter(
-          (value) =>
-            !('max_output_tokens' in Object(value)) &&
-            !(
-              typeof value === 'object' &&
-              value !== null &&
-              'response_format' in value &&
-              'schema' in Object(value.response_format)
-            ),
-        ),
+        ...invalidCommon,
         { max_output_tokens: '20' },
         { include: [123] },
         { access_programs: { cyber: 'unknown' } },
@@ -477,6 +479,7 @@ describe('OpenAI portable configuration contracts', () => {
       z.input<typeof OpenAiResponsesConfigInputSchema>
     >();
     expectTypeOf<OpenAiProviderOptionsInput>().not.toBeAny();
+    expectTypeOf<{ reasoning: { effort: 'unknown' } }>().not.toExtend<OpenAiChatConfigInput>();
     expectTypeOf<
       NonNullable<ProviderOptions<OpenAiChatConfigInput>['config']>
     >().toEqualTypeOf<OpenAiChatConfigInput>();
