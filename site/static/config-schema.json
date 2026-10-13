@@ -1073,7 +1073,7 @@
             "properties": {
               "from": {
                 "type": "string",
-                "pattern": "^metadata(?:\\.[A-Za-z0-9_$-]+|\\.\\d+)+$"
+                "pattern": "^metadata(?:\\.(?:[A-Za-z_$-][A-Za-z0-9_$-]*|\\d+))+$"
               },
               "label": {
                 "type": "string"

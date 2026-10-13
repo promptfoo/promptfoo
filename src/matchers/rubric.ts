@@ -788,7 +788,23 @@ function injectEvidenceBlockIntoPrompt(
       return JSON.stringify(parsed);
     }
   } catch {
-    // Not JSON — fall through to plaintext append.
+    // Not JSON — try YAML chat prompt format next.
+  }
+  // YAML chat prompts are arrays of `{role, content}` messages — detect by a
+  // leading `- role:` line, the canonical `loadYaml` input shape. Append a
+  // fresh user message so YAML-custom-rubric consumers don't see a second
+  // document marker that multi-document YAML loaders would reject.
+  const trimmed = renderedPrompt.trimStart();
+  if (trimmed.startsWith('- role:')) {
+    try {
+      const parsed = loadYaml(renderedPrompt) as { role?: string }[] | undefined;
+      if (Array.isArray(parsed)) {
+        parsed.push({ role: 'user', content: evidenceBlock });
+        return JSON.stringify(parsed);
+      }
+    } catch {
+      // YAML parse failed — fall through to plaintext.
+    }
   }
   return `${renderedPrompt}\n\n${evidenceBlock}`;
 }
