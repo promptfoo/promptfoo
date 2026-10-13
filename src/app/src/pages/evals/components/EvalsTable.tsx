@@ -297,7 +297,7 @@ export default function EvalsTable({
         cell: ({ getValue }) => (
           <span className="font-mono tabular-nums">{getValue<number>()}</span>
         ),
-        size: 80,
+        size: 112,
         meta: { align: 'right' },
       },
     ],
