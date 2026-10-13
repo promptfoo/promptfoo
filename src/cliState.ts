@@ -49,7 +49,7 @@ interface CliState {
   retryMode?: boolean;
 
   /**
-   * Stores the IDs of ERROR results that are being retried.
+   * Stores the IDs of results being retried, including comparison-group siblings.
    * These are deleted after successful retry to avoid duplicates.
    * Added in v0.121.0 as part of the retry data safety fix.
    */

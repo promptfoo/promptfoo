@@ -15,9 +15,13 @@ import { getTotalResultRowCount } from '../../src/models/evalPerformance';
 import {
   deleteErrorResults,
   getErrorResultIds,
+  getRetryResultIds,
+  hasRetryReplacements,
   recalculatePromptMetrics,
   retryCommand,
 } from '../../src/node/retry';
+import { HUMAN_ASSERTION_TYPE } from '../../src/providers/constants';
+import { EchoProvider } from '../../src/providers/echo';
 import { ResultFailureReason } from '../../src/types/index';
 import { shouldShareResults } from '../../src/util/sharing';
 
@@ -144,10 +148,295 @@ describe('retry command', () => {
 
       const errorIds = await getErrorResultIds(emptyEval.id);
       expect(errorIds).toHaveLength(0);
+      expect(await getRetryResultIds(emptyEval.id)).toEqual([]);
+      expect(await hasRetryReplacements(emptyEval.id, [])).toBe(true);
     });
   });
 
+  it.each(['select-best', 'max-score'] as const)(
+    'retries all %s siblings only when their comparison group has an error',
+    async (type) => {
+      const evalRecord = await Eval.create({}, [], { id: uniqueEvalId() });
+      const db = await getDb();
+      const rows = [
+        {
+          id: 'comparison-pass',
+          testIdx: 0,
+          promptIdx: 0,
+          failureReason: ResultFailureReason.NONE,
+          testCase: { assert: [{ type }] },
+        },
+        {
+          id: 'comparison-error',
+          testIdx: 0,
+          promptIdx: 1,
+          failureReason: ResultFailureReason.ERROR,
+          testCase: {},
+        },
+        {
+          id: 'comparison-fail',
+          testIdx: 0,
+          promptIdx: 2,
+          failureReason: ResultFailureReason.ASSERT,
+          testCase: {},
+        },
+        {
+          id: 'ordinary-pass',
+          testIdx: 1,
+          promptIdx: 0,
+          failureReason: ResultFailureReason.NONE,
+          testCase: {},
+        },
+        {
+          id: 'ordinary-error',
+          testIdx: 1,
+          promptIdx: 1,
+          failureReason: ResultFailureReason.ERROR,
+          testCase: {},
+        },
+        {
+          id: 'completed-comparison-pass',
+          testIdx: 2,
+          promptIdx: 0,
+          failureReason: ResultFailureReason.NONE,
+          testCase: { assert: [{ type }] },
+        },
+        {
+          id: 'completed-comparison-fail',
+          testIdx: 2,
+          promptIdx: 1,
+          failureReason: ResultFailureReason.ASSERT,
+          testCase: { assert: [{ type }] },
+        },
+      ];
+      await db.insert(evalResultsTable).values(
+        rows.map((row) => ({
+          ...row,
+          id: `${evalRecord.id}-${row.id}`,
+          evalId: evalRecord.id,
+          prompt: { raw: 'test', label: 'test' },
+          provider: { id: 'echo' },
+          success: row.failureReason === ResultFailureReason.NONE,
+          score: row.failureReason === ResultFailureReason.NONE ? 1 : 0,
+          namedScores: {},
+        })),
+      );
+
+      const selectedIds = await getRetryResultIds(evalRecord.id);
+      expect(selectedIds.sort()).toEqual(
+        ['comparison-pass', 'comparison-error', 'comparison-fail', 'ordinary-error']
+          .map((id) => `${evalRecord.id}-${id}`)
+          .sort(),
+      );
+      expect((await getErrorResultIds(evalRecord.id)).sort()).toEqual(
+        ['comparison-error', 'ordinary-error'].map((id) => `${evalRecord.id}-${id}`).sort(),
+      );
+      expect(await hasRetryReplacements(evalRecord.id, selectedIds)).toBe(false);
+      const replace = async (originals: typeof rows) => {
+        await db.insert(evalResultsTable).values(
+          originals.map((row) => ({
+            ...row,
+            id: `${evalRecord.id}-${row.id}-replacement`,
+            evalId: evalRecord.id,
+            prompt: { raw: 'test', label: 'test' },
+            provider: { id: 'echo' },
+            success: true,
+            score: 1,
+            failureReason: ResultFailureReason.NONE,
+            namedScores: {},
+          })),
+        );
+      };
+      await replace(rows.filter((row) => row.id.endsWith('-error')));
+      expect(await hasRetryReplacements(evalRecord.id, selectedIds)).toBe(false);
+      await replace(
+        rows.filter((row) => row.id === 'comparison-pass' || row.id === 'comparison-fail'),
+      );
+      expect(await hasRetryReplacements(evalRecord.id, selectedIds)).toBe(true);
+    },
+  );
+
   describe('retryCommand', () => {
+    it.each([
+      {
+        name: 'top-level human rating',
+        type: 'select-best' as const,
+        legacyError: false,
+        grading: {
+          pass: true,
+          score: 1,
+          reason: 'Approved',
+          assertion: { type: HUMAN_ASSERTION_TYPE },
+        },
+      },
+      {
+        name: 'child human rating on a legacy error',
+        type: 'max-score' as const,
+        legacyError: true,
+        grading: {
+          pass: true,
+          score: 1,
+          reason: 'Approved',
+          componentResults: [
+            {
+              pass: true,
+              score: 1,
+              reason: 'Human approval',
+              assertion: { type: HUMAN_ASSERTION_TYPE },
+            },
+          ],
+        },
+      },
+      {
+        name: 'comment-only annotation',
+        type: 'select-best' as const,
+        legacyError: false,
+        grading: { pass: true, score: 1, reason: 'Passed', comment: 'Keep this review note' },
+      },
+      {
+        name: 'comment on a legacy error',
+        type: 'max-score' as const,
+        legacyError: true,
+        grading: {
+          pass: false,
+          score: 0,
+          reason: 'Grader unavailable',
+          comment: 'Investigate this result',
+        },
+      },
+    ])(
+      'preserves $name before retrying a comparison group',
+      async ({ type, legacyError, grading }) => {
+        const prompts = [
+          { raw: 'first', label: 'first' },
+          { raw: 'second', label: 'second' },
+        ];
+        const testCase = { assert: [{ type, value: 'Choose the better response' }] };
+        const evalRecord = await Eval.create(
+          { prompts: ['first', 'second'], providers: ['echo'], tests: [testCase] },
+          prompts,
+          { id: uniqueEvalId() },
+        );
+        const db = await getDb();
+        await db.insert(evalResultsTable).values(
+          prompts.map((prompt, promptIdx) => ({
+            id: `${evalRecord.id}-${promptIdx}`,
+            evalId: evalRecord.id,
+            testIdx: 0,
+            promptIdx,
+            prompt,
+            testCase,
+            provider: { id: 'echo' },
+            response: { output: prompt.raw },
+            success: promptIdx === 1 && !legacyError,
+            score: promptIdx === 1 ? grading.score : 0,
+            failureReason:
+              promptIdx === 0 || legacyError ? ResultFailureReason.ERROR : ResultFailureReason.NONE,
+            gradingResult: promptIdx === 1 ? grading : undefined,
+            namedScores: {},
+          })),
+        );
+        const original = await db
+          .select()
+          .from(evalResultsTable)
+          .where(eq(evalResultsTable.evalId, evalRecord.id));
+        const targetCall = vi.spyOn(EchoProvider.prototype, 'callApi');
+        try {
+          await expect(retryCommand(evalRecord.id, {})).rejects.toThrow(
+            'This comparison group has manual ratings or comments. Run a new eval to preserve them.',
+          );
+          expect(targetCall).not.toHaveBeenCalled();
+          const saved = await db
+            .select()
+            .from(evalResultsTable)
+            .where(eq(evalResultsTable.evalId, evalRecord.id));
+          expect(saved).toEqual(original);
+        } finally {
+          targetCall.mockRestore();
+        }
+      },
+    );
+
+    it('keeps ordinary individual errors with comments eligible for retry', async () => {
+      const evalRecord = await Eval.create({}, [], { id: uniqueEvalId() });
+      const db = await getDb();
+      const id = `${evalRecord.id}-error`;
+      await db.insert(evalResultsTable).values({
+        id,
+        evalId: evalRecord.id,
+        testIdx: 0,
+        promptIdx: 0,
+        prompt: { raw: 'test', label: 'test' },
+        testCase: {},
+        provider: { id: 'echo' },
+        success: false,
+        score: 0,
+        failureReason: ResultFailureReason.ERROR,
+        gradingResult: { pass: false, score: 0, reason: 'Unavailable', comment: 'Review note' },
+        namedScores: {},
+      });
+      expect(await getRetryResultIds(evalRecord.id)).toEqual([id]);
+    });
+
+    it('preserves healthy comparison siblings when a retry cannot replace the full group', async () => {
+      const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-partial-retry-'));
+      const configPath = path.join(directory, 'promptfooconfig.json');
+      const prompts = [
+        { raw: 'first', label: 'first' },
+        { raw: 'second', label: 'second' },
+      ];
+      const testCase = { assert: [{ type: 'max-score' as const }] };
+      const evalRecord = await Eval.create(
+        { prompts: ['first', 'second'], providers: ['echo'], tests: [testCase] },
+        prompts,
+        { id: uniqueEvalId() },
+      );
+      const db = await getDb();
+      const ids = prompts.map((_prompt, index) => `${evalRecord.id}-original-${index}`);
+      await db.insert(evalResultsTable).values(
+        prompts.map((prompt, promptIdx) => ({
+          id: ids[promptIdx],
+          evalId: evalRecord.id,
+          testIdx: 0,
+          promptIdx,
+          prompt,
+          testCase,
+          provider: { id: 'echo' },
+          response: { output: prompt.raw },
+          success: promptIdx === 1,
+          score: promptIdx === 1 ? 1 : 0,
+          failureReason: promptIdx === 1 ? ResultFailureReason.NONE : ResultFailureReason.ERROR,
+          namedScores: {},
+        })),
+      );
+      fs.writeFileSync(
+        configPath,
+        JSON.stringify({
+          prompts: ['first'],
+          providers: ['echo'],
+          tests: [{ vars: {} }],
+        }),
+      );
+      try {
+        await expect(retryCommand(evalRecord.id, { config: configPath })).rejects.toThrow(
+          'Retry did not replace all selected results. Original results were preserved.',
+        );
+        const saved = await db
+          .select()
+          .from(evalResultsTable)
+          .where(eq(evalResultsTable.evalId, evalRecord.id));
+        expect(saved.filter((row) => ids.includes(row.id))).toHaveLength(2);
+        expect(saved.find((row) => row.id === ids[1])).toMatchObject({
+          success: true,
+          score: 1,
+          response: { output: 'second' },
+        });
+        expect(saved.filter((row) => !ids.includes(row.id))).toHaveLength(1);
+      } finally {
+        fs.rmSync(directory, { recursive: true, force: true });
+      }
+    });
+
     it('preserves persisted errors when an override config no longer matches the stored provider filter', async () => {
       const artifactId = randomUUID();
       const configPath = path.join(os.tmpdir(), `promptfoo-retry-filter-${artifactId}.yaml`);

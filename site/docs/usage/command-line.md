@@ -219,7 +219,8 @@ promptfoo eval --retry-errors      # retries all ERROR results from the latest e
 - The retry errors feature automatically finds ERROR results from the latest eval and re-runs only those test cases. This is useful when evals fail due to temporary network issues, rate limits, or API errors.
 - **Data safety**: If the retry fails, your original ERROR results are preserved. Old ERROR results are only removed after the retry succeeds. You can safely run `--retry-errors` again if it fails.
 - Cannot be used together with `--resume` or `--no-write` flags.
-- Uses the original eval's configuration and runtime options, but disables response caching for the retry so target and grader calls are fresh. Grader execution errors are retried alongside provider errors. Ordinary assertion failures are not retried.
+- Uses the original eval's configuration and runtime options, but disables response caching for the retry so target and grader calls are fresh. Grader execution errors are retried alongside provider errors. Ordinary assertion failures are not retried unless they belong to the same `select-best` or `max-score` comparison group as an error. Those groups rerun together so their winners and scores reflect the new outputs.
+- Comparison groups with manual ratings or comments require a new eval, preserving those annotations on the original results.
 
 ## `promptfoo init [directory]`
 

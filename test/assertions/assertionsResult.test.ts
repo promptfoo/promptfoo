@@ -324,6 +324,40 @@ describe('AssertionsResult', () => {
       },
     );
 
+    it.each(['assertion', 'set'] as const)(
+      'retains a parent metric when an unavailable child %s has zero weight',
+      async (kind) => {
+        const unavailable: GradingResult =
+          kind === 'assertion'
+            ? {
+                ...graderFailure,
+                pass: true,
+                assertion: { type: 'similar', value: 'reference', weight: 0 },
+              }
+            : {
+                ...graderFailure,
+                pass: true,
+                metadata: {
+                  graderError: true,
+                  assertionSet: { type: 'assert-set', assertionCount: 1, weight: 0 },
+                },
+              };
+        const nested = new AssertionsResult({});
+        nested.addResult({ index: 0, result: { pass: true, score: 1, reason: 'Valid verdict' } });
+        nested.addResult({ index: 1, result: unavailable, weight: 0, metric: 'unavailable' });
+        const result = new AssertionsResult({});
+        result.addResult({ index: 0, result: await nested.testResult(), metric: 'quality' });
+        const aggregate = await result.testResult();
+        expect(aggregate).toMatchObject({
+          pass: true,
+          score: 1,
+          namedScores: { quality: 1 },
+          namedScoreWeights: { quality: 1 },
+        });
+        expect(aggregate.namedScores).not.toHaveProperty('unavailable');
+      },
+    );
+
     it.each([
       { metricOnly: false, scorerGraderError: undefined, pass: false, expected: true },
       { metricOnly: false, scorerGraderError: undefined, pass: true, expected: undefined },

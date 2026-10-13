@@ -275,7 +275,12 @@ export class AssertionsResult {
     const metricWeight = weight === 0 ? 1 : weight;
     const hasUnavailableGrade =
       result.metadata?.graderError === true ||
-      result.componentResults?.some((component) => component.metadata?.graderError === true);
+      result.componentResults?.some(
+        (component) =>
+          component.metadata?.graderError === true &&
+          component.assertion?.weight !== 0 &&
+          component.metadata.assertionSet?.weight !== 0,
+      );
     if (metric && !hasUnavailableGrade) {
       this.namedScores[metric] = (this.namedScores[metric] ?? 0) + result.score * metricWeight;
       this.namedScoreWeights[metric] = (this.namedScoreWeights[metric] ?? 0) + metricWeight;

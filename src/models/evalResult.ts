@@ -1,6 +1,6 @@
 import { isDeepStrictEqual } from 'node:util';
 
-import { and, eq, gte, inArray, lt, ne } from 'drizzle-orm';
+import { and, eq, gte, inArray, lt, ne, notInArray } from 'drizzle-orm';
 import { extractBlobHashesFromValue } from '../blobs/blobRefs';
 import { extractAndStoreBinaryData, isBlobStorageEnabled } from '../blobs/extractor';
 import { getDb } from '../database/index';
@@ -1185,17 +1185,18 @@ export default class EvalResult {
    */
   static async getCompletedIndexPairs(
     evalId: string,
-    opts?: { excludeErrors?: boolean },
+    opts?: { excludeErrors?: boolean; excludeResultIds?: string[] },
   ): Promise<Set<string>> {
     const db = await getDb();
-    const whereClause = opts?.excludeErrors
-      ? and(
-          eq(evalResultsTable.evalId, evalId),
-          // Exclude ERROR results so they can be retried
-          // This prevents resume mode from skipping ERROR results during retry
-          ne(evalResultsTable.failureReason, ResultFailureReason.ERROR),
-        )
-      : eq(evalResultsTable.evalId, evalId);
+    const whereClause = and(
+      eq(evalResultsTable.evalId, evalId),
+      opts?.excludeErrors
+        ? ne(evalResultsTable.failureReason, ResultFailureReason.ERROR)
+        : undefined,
+      opts?.excludeResultIds?.length
+        ? notInArray(evalResultsTable.id, opts.excludeResultIds)
+        : undefined,
+    );
 
     const rows = await db
       .select({ testIdx: evalResultsTable.testIdx, promptIdx: evalResultsTable.promptIdx })

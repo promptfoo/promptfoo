@@ -208,6 +208,49 @@ describe('EvalOutputCell', () => {
     },
   );
 
+  it.each([false, true])(
+    'preserves legacy grader causes unless manually rated (%s)',
+    (manuallyRated) => {
+      const reason = 'Legacy grader unavailable';
+      renderWithProviders(
+        <EvalOutputCell
+          {...defaultProps}
+          output={{
+            ...defaultProps.output,
+            pass: false,
+            failureReason: ResultFailureReason.ASSERT,
+            error: reason,
+            gradingResult: {
+              pass: false,
+              score: 0,
+              reason,
+              componentResults: [
+                { pass: false, score: 0, reason, metadata: { graderError: true } },
+                ...(manuallyRated
+                  ? [
+                      {
+                        pass: false,
+                        score: 0,
+                        reason: 'Manual result',
+                        assertion: { type: 'human' as const },
+                      },
+                    ]
+                  : []),
+              ],
+            },
+          }}
+        />,
+      );
+      expect(screen.getByText('FAIL', { exact: true })).toBeInTheDocument();
+      if (manuallyRated) {
+        expect(screen.queryByText(reason)).not.toBeInTheDocument();
+        expect(screen.getByText('Manual result')).toBeInTheDocument();
+      } else {
+        expect(screen.getAllByText(reason)).toHaveLength(1);
+      }
+    },
+  );
+
   it('shows a promoted grader error only once', () => {
     const reason = 'Grader unavailable';
     renderWithProviders(

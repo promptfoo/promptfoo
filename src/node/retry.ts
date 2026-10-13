@@ -1,5 +1,5 @@
 import chalk from 'chalk';
-import { and, eq, inArray } from 'drizzle-orm';
+import { and, eq, inArray, notInArray } from 'drizzle-orm';
 import cliState from '../cliState';
 import { getDb } from '../database/index';
 import { evalResultsTable } from '../database/tables';
@@ -7,6 +7,7 @@ import { evaluate } from '../evaluator';
 import logger from '../logger';
 import Eval from '../models/eval';
 import { notifyEvaluationChanged } from '../models/evalMutation';
+import { HUMAN_ASSERTION_TYPE } from '../providers/constants';
 import { createShareableUrl, isSharingEnabled } from '../share';
 import { ResultFailureReason } from '../types/index';
 import { ConfigResolutionError, resolveConfigs } from '../util/config/load';
@@ -137,8 +138,93 @@ export async function getErrorResultIds(evalId: string): Promise<string[]> {
   return errorResults.map((r) => r.id);
 }
 
+export async function getRetryResultIds(evalId: string): Promise<string[]> {
+  const resultIds = new Set(await getErrorResultIds(evalId));
+  if (resultIds.size === 0) {
+    return [];
+  }
+
+  const db = await getDb();
+  const errorTestIndices = db
+    .select({ testIdx: evalResultsTable.testIdx })
+    .from(evalResultsTable)
+    .where(
+      and(
+        eq(evalResultsTable.evalId, evalId),
+        eq(evalResultsTable.failureReason, ResultFailureReason.ERROR),
+      ),
+    );
+  const siblings = await db
+    .select({
+      id: evalResultsTable.id,
+      testIdx: evalResultsTable.testIdx,
+      testCase: evalResultsTable.testCase,
+      gradingResult: evalResultsTable.gradingResult,
+    })
+    .from(evalResultsTable)
+    .where(
+      and(eq(evalResultsTable.evalId, evalId), inArray(evalResultsTable.testIdx, errorTestIndices)),
+    )
+    .all();
+  const comparisonTests = new Set(
+    siblings
+      .filter((row) =>
+        row.testCase.assert?.some(
+          (assertion) => assertion.type === 'select-best' || assertion.type === 'max-score',
+        ),
+      )
+      .map((row) => row.testIdx),
+  );
+  for (const row of siblings) {
+    if (comparisonTests.has(row.testIdx)) {
+      const grading = row.gradingResult;
+      if (
+        grading?.comment ||
+        grading?.assertion?.type === HUMAN_ASSERTION_TYPE ||
+        grading?.componentResults?.some(
+          (result) => result?.assertion?.type === HUMAN_ASSERTION_TYPE,
+        )
+      ) {
+        throw new Error(
+          'This comparison group has manual ratings or comments. Run a new eval to preserve them.',
+        );
+      }
+      resultIds.add(row.id);
+    }
+  }
+  return [...resultIds];
+}
+
+export async function hasRetryReplacements(evalId: string, resultIds: string[]): Promise<boolean> {
+  if (resultIds.length === 0) {
+    return true;
+  }
+  const db = await getDb();
+  const originalRows = await db
+    .select({ testIdx: evalResultsTable.testIdx, promptIdx: evalResultsTable.promptIdx })
+    .from(evalResultsTable)
+    .where(and(eq(evalResultsTable.evalId, evalId), inArray(evalResultsTable.id, resultIds)))
+    .all();
+  if (originalRows.length !== resultIds.length) {
+    return false;
+  }
+  const replacementRows = await db
+    .select({ testIdx: evalResultsTable.testIdx, promptIdx: evalResultsTable.promptIdx })
+    .from(evalResultsTable)
+    .where(
+      and(
+        eq(evalResultsTable.evalId, evalId),
+        inArray(evalResultsTable.testIdx, [...new Set(originalRows.map((row) => row.testIdx))]),
+        notInArray(evalResultsTable.id, resultIds),
+      ),
+    )
+    .all();
+  const replacements = new Set(replacementRows.map((row) => `${row.testIdx}:${row.promptIdx}`));
+  return originalRows.every((row) => replacements.has(`${row.testIdx}:${row.promptIdx}`));
+}
+
 /**
- * Deletes ERROR results after successful retry.
+ * Deletes selected results after their retry replacements have been saved.
  * Uses batch delete for better performance.
  */
 export async function deleteErrorResults(resultIds: string[]): Promise<void> {
@@ -160,7 +246,7 @@ export async function deleteErrorResults(resultIds: string[]): Promise<void> {
     notifyEvaluationChanged(evalId);
   }
 
-  logger.debug(`Deleted ${resultIds.length} error results from database`);
+  logger.debug(`Deleted ${resultIds.length} original results from database`);
 }
 
 // Batch size of 1000 balances memory usage vs. database query overhead for large evals (40K+ results)
@@ -303,13 +389,13 @@ export async function retryCommand(evalId: string, cmdObj: RetryCommandOptions) 
   }
 
   // Get all ERROR result IDs - capture these BEFORE retry so we know what to delete on success
-  const errorResultIds = await getErrorResultIds(evalId);
+  const errorResultIds = await getRetryResultIds(evalId);
   if (errorResultIds.length === 0) {
     logger.info('✅ No ERROR results found in this evaluation');
     return originalEval;
   }
 
-  logger.info(`Found ${errorResultIds.length} ERROR results to retry`);
+  logger.info(`Found ${errorResultIds.length} results to retry`);
 
   // Load configuration - from provided config file or from original evaluation
   const resolvedConfig = await resolveRetryConfigs(originalEval, cmdObj);
@@ -343,7 +429,7 @@ async function retryWithConfig(
   );
 
   // Enable resume mode so only the missing results will be evaluated
-  // Enable retry mode so getCompletedIndexPairs excludes ERROR results
+  // Retry mode excludes the selected errors and their comparison siblings.
   cliState.resume = true;
   cliState.retryMode = true;
   cliState._retryErrorResultIds = errorResultIds;
@@ -382,13 +468,18 @@ async function retryWithConfig(
   };
 
   try {
-    // Run the retry evaluation - this will only run ERROR test cases due to retry mode
+    // Run the selected errors and their comparison siblings.
     const retriedEval = await evaluate(testSuite, originalEval, evaluateOptions);
     const jsonlOutputPaths = getJsonlOutputPaths(originalEval.config.outputPath);
 
     if (retriedEval.resultPersistenceFailed) {
       await restoreJsonlOutputsAfterPersistenceFailure(jsonlOutputPaths, retriedEval);
       throw new Error('Retry results failed to persist. Existing ERROR rows were preserved.');
+    }
+    if (!(await hasRetryReplacements(evalId, errorResultIds))) {
+      throw new Error(
+        'Retry did not replace all selected results. Original results were preserved.',
+      );
     }
 
     let errorRowsDeleted = false;

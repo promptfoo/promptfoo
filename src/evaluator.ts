@@ -3677,6 +3677,7 @@ async function filterCompletedResumeSteps(
   try {
     const completedPairs = await store.readCompletedIndexPairs({
       excludeErrors: cliState.retryMode,
+      ...(cliState.retryMode && { excludeResultIds: cliState._retryErrorResultIds }),
     });
     const originalCount = runEvalOptions.length;
     for (let i = runEvalOptions.length - 1; i >= 0; i--) {

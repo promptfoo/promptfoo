@@ -232,13 +232,12 @@ function getFailAndPassReasons(output: EvaluateTableOutput): {
   failReasons: string[];
   passReasons: string[];
 } {
+  const showGraderErrors =
+    output.failureReason === ResultFailureReason.ERROR || (!output.pass && !getHumanRating(output));
   const failReasons =
     output.gradingResult?.componentResults
       ?.filter(
-        (result) =>
-          result &&
-          !result.pass &&
-          (!result.metadata?.graderError || output.failureReason === ResultFailureReason.ERROR),
+        (result) => result && !result.pass && (!result.metadata?.graderError || showGraderErrors),
       )
       .map((result) => result.reason)
       .filter((reason) => reason) ?? [];

@@ -38,7 +38,8 @@ import {
 } from '../../src/node/doEval';
 import {
   deleteErrorResults,
-  getErrorResultIds,
+  getRetryResultIds,
+  hasRetryReplacements,
   recalculatePromptMetrics,
 } from '../../src/node/retry';
 import { ClaudeCodeSDKProvider } from '../../src/providers/claude-agent-sdk';
@@ -85,7 +86,8 @@ vi.mock('../../src/globalConfig/cloud', async (importOriginal) => {
 vi.mock('../../src/migrate');
 vi.mock('../../src/node/retry', () => ({
   deleteErrorResults: vi.fn(),
-  getErrorResultIds: vi.fn(),
+  getRetryResultIds: vi.fn(),
+  hasRetryReplacements: vi.fn(),
   recalculatePromptMetrics: vi.fn(),
 }));
 vi.mock('../../src/providers');
@@ -222,7 +224,8 @@ describe('evalCommand', () => {
     vi.mocked(promptForEmailUnverified).mockResolvedValue({ emailNeedsValidation: false });
     vi.mocked(checkEmailStatusAndMaybeExit).mockResolvedValue('ok');
     vi.mocked(deleteErrorResults).mockResolvedValue(undefined);
-    vi.mocked(getErrorResultIds).mockResolvedValue([]);
+    vi.mocked(hasRetryReplacements).mockReset().mockResolvedValue(true);
+    vi.mocked(getRetryResultIds).mockResolvedValue([]);
     vi.mocked(recalculatePromptMetrics).mockResolvedValue(undefined);
   });
 
@@ -2131,7 +2134,7 @@ describe('evalCommand', () => {
     latestEval.prompts = [{ raw: 'retry prompt', label: 'Retry', config: {} }] as any;
     latestEval.runtimeOptions = { cache: true, providerFilter: 'selected-target' };
     const latestSpy = vi.spyOn(Eval, 'latest').mockResolvedValueOnce(latestEval);
-    vi.mocked(getErrorResultIds).mockResolvedValueOnce(['result-1', 'result-2']);
+    vi.mocked(getRetryResultIds).mockResolvedValueOnce(['result-1', 'result-2']);
     vi.mocked(resolveConfigs).mockResolvedValueOnce({
       config: {} as UnifiedConfig,
       testSuite: {
@@ -2285,7 +2288,7 @@ describe('evalCommand', () => {
     vi.mocked(withCacheEnabled).mockImplementation((_enabled, callback) => callback());
     vi.mocked(withCacheNamespace).mockImplementation((_namespace, callback) => callback());
     if (mode === 'retry-errors') {
-      vi.mocked(getErrorResultIds).mockResolvedValueOnce(['mocked-retry-row']);
+      vi.mocked(getRetryResultIds).mockResolvedValueOnce(['mocked-retry-row']);
     }
     vi.mocked(resolveConfigs).mockResolvedValueOnce({
       config: record.config as UnifiedConfig,
@@ -2361,7 +2364,7 @@ describe('evalCommand', () => {
   it('should return the latest eval when retry-errors finds no error results', async () => {
     const latestEval = new Eval({ prompts: [] } as UnifiedConfig);
     const latestSpy = vi.spyOn(Eval, 'latest').mockResolvedValueOnce(latestEval);
-    vi.mocked(getErrorResultIds).mockResolvedValueOnce([]);
+    vi.mocked(getRetryResultIds).mockResolvedValueOnce([]);
 
     try {
       const result = await doEval({ retryErrors: true }, defaultConfig, defaultConfigPath, {});
@@ -2373,11 +2376,43 @@ describe('evalCommand', () => {
     }
   });
 
+  it.each([
+    {
+      persistenceFailed: false,
+      message: 'Retry did not replace all selected results. Original results were preserved.',
+    },
+    {
+      persistenceFailed: true,
+      message: 'Retry results failed to persist. Original results were preserved.',
+    },
+  ])(
+    'preserves original retry results when persistenceFailed=$persistenceFailed',
+    async ({ persistenceFailed, message }) => {
+      const latestEval = new Eval({ prompts: [] } as UnifiedConfig);
+      latestEval.resultPersistenceFailed = persistenceFailed;
+      const latestSpy = vi.spyOn(Eval, 'latest').mockResolvedValueOnce(latestEval);
+      vi.mocked(getRetryResultIds).mockResolvedValueOnce(['error', 'comparison-sibling']);
+      vi.mocked(hasRetryReplacements).mockResolvedValueOnce(false);
+      vi.mocked(evaluate).mockResolvedValueOnce(latestEval);
+      try {
+        await expect(
+          doEval({ retryErrors: true }, defaultConfig, defaultConfigPath, {}),
+        ).rejects.toThrow(message);
+        expect(deleteErrorResults).not.toHaveBeenCalled();
+        expect(recalculatePromptMetrics).not.toHaveBeenCalled();
+        expect(cliState.retryMode).toBe(false);
+        expect(cliState._retryErrorResultIds).toBeUndefined();
+      } finally {
+        latestSpy.mockRestore();
+      }
+    },
+  );
+
   it('should preserve error results when the stored provider filter matches no providers', async () => {
     const latestEval = new Eval({ prompts: [] } as UnifiedConfig);
     latestEval.runtimeOptions = { providerFilter: 'selected-target' };
     const latestSpy = vi.spyOn(Eval, 'latest').mockResolvedValueOnce(latestEval);
-    vi.mocked(getErrorResultIds).mockResolvedValueOnce(['result-1']);
+    vi.mocked(getRetryResultIds).mockResolvedValueOnce(['result-1']);
     vi.mocked(resolveConfigs).mockResolvedValueOnce({
       config: {} as UnifiedConfig,
       testSuite: { prompts: [], providers: [] },
@@ -2406,7 +2441,7 @@ describe('evalCommand', () => {
     const latestEval = new Eval({ prompts: [] } as UnifiedConfig);
     latestEval.runtimeOptions = { providerFilter: '[' };
     const latestSpy = vi.spyOn(Eval, 'latest').mockResolvedValueOnce(latestEval);
-    vi.mocked(getErrorResultIds).mockResolvedValueOnce(['result-1']);
+    vi.mocked(getRetryResultIds).mockResolvedValueOnce(['result-1']);
 
     try {
       await expect(
