@@ -1,5 +1,8 @@
+import { shouldGenerateRemote } from '../../remoteGeneration';
 import { type CrescendoConfig, CrescendoProvider } from '../crescendo/index';
 import { REACT_CRESCENDO_SYSTEM_PROMPT } from './prompts';
+
+import type { CallApiContextParams, CallApiOptionsParams } from '../../../types/index';
 
 /**
  * ReAct crescendo provider.
@@ -12,10 +15,6 @@ import { REACT_CRESCENDO_SYSTEM_PROMPT } from './prompts';
  * The attacker must observe each target response, reason about why the last
  * approach succeeded or failed, switch strategy vectors when stalled, and
  * only then generate the next prompt.
- *
- * Note: remote generation falls back to the shared `crescendo` task handler,
- * which does not know this prompt. Local `redteamProvider` runs use the
- * ReAct prompt below.
  */
 export class ReactCrescendoProvider extends CrescendoProvider {
   constructor(config: CrescendoConfig) {
@@ -24,5 +23,19 @@ export class ReactCrescendoProvider extends CrescendoProvider {
       strategyId: 'react-crescendo',
       systemPromptTemplate: REACT_CRESCENDO_SYSTEM_PROMPT,
     });
+  }
+
+  async callApi(prompt: string, context?: CallApiContextParams, options?: CallApiOptionsParams) {
+    // The shared remote `crescendo` task does not know the ReAct prompt, so
+    // running it remotely would silently record plain-Crescendo attacks as
+    // `react-crescendo` results. Fail fast and point at a local provider
+    // instead. (Refusal/eval scoring stays remote-capable via the base class.)
+    if (shouldGenerateRemote() && !this.config.redteamProvider) {
+      throw new Error(
+        '[ReactCrescendo] Remote attack generation does not support the ReAct prompt. ' +
+          'Set `redteamProvider` to a local provider in the strategy config, or disable remote generation.',
+      );
+    }
+    return super.callApi(prompt, context, options);
   }
 }

@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ReactCrescendoProvider } from '../../../src/redteam/providers/react-crescendo/index';
 import { REACT_CRESCENDO_SYSTEM_PROMPT } from '../../../src/redteam/providers/react-crescendo/prompts';
 import { redteamProviderManager } from '../../../src/redteam/providers/shared';
+import { shouldGenerateRemote } from '../../../src/redteam/remoteGeneration';
 import { createMockProvider } from '../../factories/provider';
 
 import type { CallApiContextParams } from '../../../src/types/index';
@@ -40,6 +41,7 @@ function createContext(targetProvider: ReturnType<typeof createMockProvider>) {
 describe('ReactCrescendoProvider', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(shouldGenerateRemote).mockReturnValue(false);
   });
 
   it('should identify as the react-crescendo provider', () => {
@@ -134,5 +136,61 @@ describe('ReactCrescendoProvider', () => {
 
     expect(result.metadata?.stopReason).toBe('Max backtracks reached');
     expect(result.metadata?.crescendoBacktrackCount).toBe(1);
+  });
+
+  it('should refuse remote attack generation without an explicit redteamProvider', async () => {
+    vi.mocked(shouldGenerateRemote).mockReturnValue(true);
+    const target = createMockProvider({ id: 'target' });
+
+    const provider = new ReactCrescendoProvider({
+      injectVar: 'goal',
+      maxTurns: 1,
+      redteamProvider: 'echo',
+    });
+    // Simulate a YAML config that omits redteamProvider (the Cloud path).
+    delete (provider.config as Record<string, unknown>).redteamProvider;
+
+    await expect(provider.callApi('test prompt', createContext(target))).rejects.toThrow(
+      /Remote attack generation does not support the ReAct prompt.*redteamProvider/,
+    );
+    expect(target.callApi).not.toHaveBeenCalled();
+  });
+
+  it('should allow an explicit redteamProvider even when remote generation is on', async () => {
+    vi.mocked(shouldGenerateRemote).mockReturnValue(true);
+    const attacker = createMockProvider({
+      id: 'attacker',
+      response: { output: REACT_ATTACK_RESPONSE },
+    });
+    const scoring = createMockProvider({ id: 'scoring' });
+    scoring.callApi
+      .mockResolvedValueOnce({
+        output: JSON.stringify({ value: false, rationale: 'Not a refusal', metadata: 10 }),
+      })
+      .mockResolvedValueOnce({
+        output: JSON.stringify({
+          value: false,
+          description: 'test goal',
+          rationale: 'No progress yet',
+          metadata: 20,
+        }),
+      });
+    vi.spyOn(redteamProviderManager, 'getProvider').mockResolvedValue(attacker);
+    vi.spyOn(redteamProviderManager, 'getGradingProvider').mockResolvedValue(scoring);
+
+    const target = createMockProvider({
+      id: 'target',
+      response: { output: 'Here is some general information about chemistry.' },
+    });
+
+    const provider = new ReactCrescendoProvider({
+      injectVar: 'goal',
+      maxTurns: 1,
+      redteamProvider: 'echo',
+    });
+    const result = await provider.callApi('test prompt', createContext(target));
+
+    expect(target.callApi).toHaveBeenCalledTimes(1);
+    expect(result.metadata?.crescendoRoundsCompleted).toBe(1);
   });
 });
