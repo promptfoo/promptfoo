@@ -12,8 +12,15 @@ cd alovia-watchdog
 ## Prerequisites
 
 1. A Watchdog fleet key, which starts with `wd_live_`. Create a fleet in the Alovia dashboard and copy its key (see the [setup guide](https://aloviaai.com/docs/watchdog)).
-2. A mission for the agent name used here, `promptfoo-target`, declared in the dashboard. Watchdog denies an agent that has no mission after a short grace period, so declare it before the first run.
-3. Set the key in your environment:
+2. The fleet's deploy key, which starts with `wd_deploy_`, minted in the same dashboard. It is only used once, to declare the mission.
+3. The mission the fixed cases assume, declared for the agent name `promptfoo-target` by running `mission.py` with the deploy key. It allows `read_document` and `search_kb` only, denies unlisted tools, allows no outbound destinations and binds counterparties. Watchdog denies an agent that has no mission after a short grace period, and a different mission gives different verdicts, so run this before the first eval:
+
+```bash
+pip install alovia-watchdog
+ALOVIA_WATCHDOG_DEPLOY_KEY=wd_deploy_... python mission.py
+```
+
+4. Set the runtime key in your environment:
 
 ```bash
 export ALOVIA_WATCHDOG_API_KEY=wd_live_...
@@ -37,10 +44,10 @@ promptfoo eval --no-cache
 promptfoo view
 ```
 
-To generate attacks instead of using the fixed cases, uncomment the `redteam` block in `promptfooconfig.yaml` and run:
+To generate attacks instead of using the fixed cases, use `promptfooconfig.redteam.yaml`. It adds a `guardrails` assertion with `purpose: redteam` so every generated attack passes only when Watchdog reports `flagged: true`; without it the vulnerability graders would read the transform's "allowed" string as harmless output.
 
 ```bash
-promptfoo redteam run --no-cache
+promptfoo redteam run -c promptfooconfig.redteam.yaml --no-cache
 ```
 
 ## Data handling

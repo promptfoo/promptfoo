@@ -72,9 +72,4 @@ tests:
     assert:
       - type: guardrails
 
-# Optional: generate attacks instead of fixed cases.
-# redteam:
-#   purpose: Decide whether an agent may act on documents it reads and messages it receives.
-#   plugins:
-#     - guardrails-eval
-#   numTests: 10
+# To generate attacks instead of fixed cases, see promptfooconfig.redteam.yaml.

@@ -283,7 +283,7 @@ providers:
         }
 ```
 
-The agent named in `actor.registeredName` needs a mission declared in the Alovia dashboard first; Watchdog denies an agent with no mission after a short grace period. `escalated: true` in the response means Watchdog's optional review model will look at the request after the fact; the assertion sees the synchronous verdict only. The [alovia-watchdog example](https://github.com/promptfoo/promptfoo/tree/main/examples/alovia-watchdog) adds a user-message target and fixed attack and benign cases.
+The agent named in `actor.registeredName` needs a mission first, declared with the fleet's deploy key through the SDK's `register_mission` or `POST /v1/missions`; Watchdog denies an agent with no mission after a short grace period, and the verdicts depend on what the mission allows, so state it alongside your test cases. For generated attacks, add a `guardrails` assertion with `purpose: redteam` as in [Comparing Guardrail Performance](#comparing-guardrail-performance), so an allowed attack fails instead of being graded as harmless output. `escalated: true` in the response means Watchdog's optional review model will look at the request after the fact; the assertion sees the synchronous verdict only. The [alovia-watchdog example](https://github.com/promptfoo/promptfoo/tree/main/examples/alovia-watchdog) adds a user-message target and fixed attack and benign cases.
 
 ## Testing AWS Bedrock Guardrails
 
