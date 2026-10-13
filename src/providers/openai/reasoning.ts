@@ -59,9 +59,12 @@ function getResponsesReasoning(
   config: ReasoningConfig | undefined,
   render: (value: unknown) => unknown,
   resolveEffort = true,
-) {
+): { options: Record<string, unknown>; effort: unknown; clearOptions: boolean } {
   const typed = renderResponsesReasoning(config?.reasoning, render, resolveEffort);
-  const typedEffort = typed === null ? null : getObject(typed)?.effort;
+  if (typed === null) {
+    return { options: {}, effort: null, clearOptions: true };
+  }
+  const typedEffort = getObject(typed)?.effort;
   const passthrough = renderResponsesReasoning(
     getObject(config?.passthrough)?.reasoning,
     render,
@@ -79,7 +82,7 @@ function getResponsesReasoning(
   );
   const effort =
     nestedEffort === undefined && resolveEffort ? render(config?.reasoning_effort) : nestedEffort;
-  return { options, effort, clearOptions: typed === null || passthrough === null };
+  return { options, effort, clearOptions: passthrough === null };
 }
 
 /** Merge Responses options across scopes, preserving explicit clears and rendering only selected effort. */

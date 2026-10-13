@@ -116,6 +116,26 @@ describe('reasoning configuration', () => {
     ).toBeUndefined();
   });
 
+  it('lets a named full clear suppress same-scope passthrough without evaluating it', () => {
+    const ignored = vi.fn(() => {
+      throw new Error('cleared');
+    });
+    const render = (value: unknown) => (typeof value === 'function' ? value() : value);
+    const cleared = { reasoning: null, passthrough: { reasoning: ignored } };
+    expect(resolveResponsesReasoning(cleared, undefined, render)).toBeUndefined();
+    expect(
+      resolveResponsesReasoning({ reasoning: { effort: 'high' } }, cleared, render),
+    ).toBeUndefined();
+    expect(ignored).not.toHaveBeenCalled();
+    expect(
+      resolveResponsesReasoning(
+        { reasoning: null, passthrough: { reasoning: { summary: 'auto' } } },
+        undefined,
+        identity,
+      ),
+    ).toBeUndefined();
+  });
+
   it('gives nested fields priority within a config', () => {
     expect(
       resolveResponsesReasoning(

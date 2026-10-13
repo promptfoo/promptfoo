@@ -406,13 +406,6 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
       operationName: 'chat',
       model: this.deploymentName,
       providerId: this.id(),
-      // Optional request parameters
-      maxTokens: this.config.max_tokens,
-      temperature: this.config.temperature,
-      topP: this.config.top_p,
-      stopSequences: this.config.stop,
-      frequencyPenalty: this.config.frequency_penalty,
-      presencePenalty: this.config.presence_penalty,
       // Promptfoo context from test case if available
       testIndex: context?.testIdx ?? (context?.test?.vars?.__testIdx as number | undefined),
       promptLabel: context?.prompt?.label,
@@ -446,10 +439,33 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
       return result;
     };
 
+    let prepared: Awaited<ReturnType<AzureChatCompletionProvider['getOpenAiBody']>>;
+    try {
+      prepared = await this.getOpenAiBody(prompt, context, callApiOptions);
+    } catch (error) {
+      return withGenAISpan(
+        spanContext,
+        async () => {
+          throw error;
+        },
+        resultExtractor,
+      );
+    }
+    const { body } = prepared;
+    // Trace the parameters actually sent, including prompt overrides, defaults, and explicit clears.
+    Object.assign(spanContext, {
+      maxTokens: body.max_completion_tokens ?? body.max_tokens ?? undefined,
+      temperature: body.temperature ?? undefined,
+      topP: body.top_p ?? undefined,
+      stopSequences: body.stop ?? undefined,
+      frequencyPenalty: body.frequency_penalty ?? undefined,
+      presencePenalty: body.presence_penalty ?? undefined,
+    });
+
     // Wrap the API call in a span
     return withGenAISpan(
       spanContext,
-      () => this.callApiInternal(prompt, context, callApiOptions),
+      () => this.callApiInternal(prepared, context),
       resultExtractor,
     );
   }
@@ -458,11 +474,10 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
    * Internal implementation of callApi without tracing wrapper.
    */
   private async callApiInternal(
-    prompt: string,
+    prepared: Awaited<ReturnType<AzureChatCompletionProvider['getOpenAiBody']>>,
     context?: CallApiContextParams,
-    callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
-    const { body, config } = await this.getOpenAiBody(prompt, context, callApiOptions);
+    const { body, config } = prepared;
 
     let data;
     let cached = false;

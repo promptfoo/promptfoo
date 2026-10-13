@@ -330,6 +330,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
   static OPENAI_CHAT_MODEL_NAMES = OPENAI_CHAT_MODELS.map((model) => model.id);
 
   config: OpenAiCompletionOptions;
+  private readonly useOpenAiDefaultsForUnknownModels: boolean;
   private mcpClient: MCPClient | null = null;
   private initializationPromise: Promise<void> | null = null;
   private initializationPending = false;
@@ -339,12 +340,19 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
 
   constructor(
     modelName: string,
-    options: Pick<ProviderOptions<OpenAiCompletionOptions>, 'config' | 'id' | 'env'> = {},
+    options: Pick<ProviderOptions<OpenAiCompletionOptions>, 'config' | 'id' | 'env'> & {
+      /** Compatible factories opt out of OpenAI defaults for unrecognized model names. */
+      useOpenAiDefaultsForUnknownModels?: boolean;
+    } = {},
   ) {
     if (!OpenAiChatCompletionProvider.OPENAI_CHAT_MODEL_NAMES.includes(modelName)) {
       logger.debug(`Using unknown chat model: ${modelName}`);
     }
     super(modelName, options);
+    // Preserve subclass behavior while allowing factories that return this base class to opt out.
+    this.useOpenAiDefaultsForUnknownModels =
+      options.useOpenAiDefaultsForUnknownModels ??
+      this.constructor === OpenAiChatCompletionProvider;
     this.config = options.config ? { ...options.config } : {};
 
     if (this.config.mcp?.enabled) {
@@ -488,7 +496,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     // OpenAI aliases may conceal a newer model family. Dedicated compatible adapters
     // retain their own capability overrides and legacy request defaults.
     const assumeModernModel =
-      this.constructor === OpenAiChatCompletionProvider &&
+      this.useOpenAiDefaultsForUnknownModels &&
       config.useLegacyTokenCap !== true &&
       !isReasoningModel &&
       !isLegacyOpenAiChatModel(capabilityModelName);

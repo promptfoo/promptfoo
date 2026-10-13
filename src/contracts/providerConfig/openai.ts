@@ -428,6 +428,7 @@ export const OpenAiResponsesConfigInputSchema = ChatFields.omit({
   showThinking: true,
 })
   .extend({
+    reasoning: Reasoning.nullable().optional(),
     tools: ResponsesTools.optional(),
     tool_choice: ToolChoice.optional(),
     response_format: ResponsesResponseFormat.optional(),

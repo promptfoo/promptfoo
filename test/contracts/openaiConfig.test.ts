@@ -131,6 +131,7 @@ const chatValid = [
   },
 ];
 const responseValid = [
+  { reasoning: null },
   { tools: [{ type: 'web_search_2025_08_26' }, { type: 'web_search_preview_2025_03_11' }] },
   {
     tools: [
@@ -517,6 +518,7 @@ describe('OpenAI portable configuration contracts', () => {
     expectTypeOf<OpenAiChatConfigInput>().toEqualTypeOf<
       z.input<typeof OpenAiChatConfigInputSchema>
     >();
+    expectTypeOf<{ reasoning: null }>().toExtend<OpenAiResponsesConfigInput>();
     expectTypeOf<OpenAiResponsesConfigInput>().toEqualTypeOf<
       z.input<typeof OpenAiResponsesConfigInputSchema>
     >();

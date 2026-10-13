@@ -60,7 +60,10 @@ export function createCometApiProvider(
   };
 
   if (type === 'chat') {
-    return new OpenAiChatCompletionProvider(modelName, openaiOptions);
+    return new OpenAiChatCompletionProvider(modelName, {
+      ...openaiOptions,
+      useOpenAiDefaultsForUnknownModels: false,
+    });
   } else if (type === 'completion') {
     return new OpenAiCompletionProvider(modelName, openaiOptions);
   } else if (type === 'embedding' || type === 'embeddings') {
@@ -71,5 +74,8 @@ export function createCometApiProvider(
 
   // Default to chat provider when no type is specified
   const defaultModel = splits.slice(1).join(':');
-  return new OpenAiChatCompletionProvider(defaultModel, openaiOptions);
+  return new OpenAiChatCompletionProvider(defaultModel, {
+    ...openaiOptions,
+    useOpenAiDefaultsForUnknownModels: false,
+  });
 }

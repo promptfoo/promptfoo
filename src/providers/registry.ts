@@ -874,6 +874,7 @@ export const providerMap: ProviderFactory[] = [
       const baseUrl = configuredBaseUrl.replace(/\/+$/, '');
       return new OpenAiChatCompletionProvider(endpoint, {
         ...providerOptions,
+        useOpenAiDefaultsForUnknownModels: false,
         config: {
           ...providerOptions.config,
           apiBaseUrl: `${baseUrl}/${endpoint}`,
