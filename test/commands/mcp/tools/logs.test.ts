@@ -277,14 +277,12 @@ describe('logs MCP tools', () => {
     it('should register both list_logs and read_logs tools', async () => {
       const { registerLogTools } = await import('../../../../src/commands/mcp/tools/logs');
 
-      const registeredTools: string[] = [];
       const mockServer = {
-        tool: vi.fn((name: string) => {
-          registeredTools.push(name);
-        }),
+        tool: vi.fn(),
       };
 
       registerLogTools(mockServer as any);
+      const registeredTools = mockServer.tool.mock.calls.map(([name]) => name);
 
       expect(registeredTools).toContain('list_logs');
       expect(registeredTools).toContain('read_logs');

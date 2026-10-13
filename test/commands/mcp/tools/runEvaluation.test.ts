@@ -168,16 +168,9 @@ describe('runEvaluation tool', () => {
         version: 3,
         stats: { successes: 5, failures: 2, errors: 0 },
         results: Array.from({ length: 10 }, (_, i) => ({
-          testCase: { description: `test case ${i}`, assert: [] },
-          vars: { index: i },
-          prompt: { label: 'test', raw: 'prompt text' },
-          provider: { id: 'provider', label: 'Provider' },
-          response: { output: `response ${i}` },
+          ...createSuccessfulEvaluation(_, i),
           success: i < 5,
           score: i < 5 ? 1 : 0,
-          namedScores: {},
-          cost: 0.001,
-          latencyMs: 100,
         })),
         prompts: [],
       };
