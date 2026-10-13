@@ -71,6 +71,7 @@ export const AzureResponsesConfigInputSchema = ChatFields.omit({
   systemPrompt: true,
   dataSources: true,
   deployment_id: true,
+  isClaudeOpus47OrLater: true,
 })
   .extend(
     OpenAiResponsesConfigInputSchema.pick({

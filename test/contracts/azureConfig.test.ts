@@ -149,6 +149,7 @@ describe('Azure portable configuration contracts', () => {
         ...commonInvalid,
         { max_output_tokens: '10' },
         { model: 'ignored-model' },
+        { isClaudeOpus47OrLater: true },
         { mcp: { enabled: true, server: { command: 'node' } } },
         { max_output_tokens: 0 },
         { max_tokens: 32 },
