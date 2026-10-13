@@ -18,6 +18,7 @@ import invariant from '../../util/invariant';
 import {
   isForcedToolChoiceUnsupportedClaudeModel,
   isSamplingParamsDeprecatedClaudeModel,
+  looksLikeClaudeModelId,
 } from '../anthropic/util';
 import { FunctionCallbackHandler } from '../functionCallbackUtils';
 import { McpClientSession } from '../mcp/session';
@@ -27,10 +28,10 @@ import {
   getGpt6ChatReasoningEffort,
   getGpt6Variant,
   isGpt6Model,
-  resolveGpt6ChatOutputCap,
 } from '../openai/gpt6';
+import { isLegacyOpenAiChatModel, resolveChatOutputCap } from '../openai/tokenCaps';
 import { getRequestTimeoutMs, parseChatPrompt, transformTools } from '../shared';
-import { DEFAULT_AZURE_API_VERSION } from './defaults';
+import { AZURE_MODELS, DEFAULT_AZURE_API_VERSION } from './defaults';
 import { AzureGenericProvider } from './generic';
 import { calculateAzureCost } from './util';
 
@@ -219,12 +220,27 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
         : (config.modelName ?? this.deploymentName)
     ).toLowerCase();
     const isReasoningModel = this.isReasoningModel(capabilityModelName);
+    const grokSamplingRestricted = this.isGrok4OrNewerModel();
+    // Preserve known Foundry models' existing request surface. Unknown deployment
+    // aliases default to modern OpenAI caps; an explicit false keeps legacy behavior.
+    const assumeModernModel =
+      config.isReasoningModel !== false &&
+      !isReasoningModel &&
+      !config.isClaudeOpus47OrLater &&
+      !grokSamplingRestricted &&
+      !looksLikeClaudeModelId(capabilityModelName.replace(/^.*-claude-/, 'claude-')) &&
+      !isLegacyOpenAiChatModel(capabilityModelName) &&
+      !AZURE_MODELS.some(
+        ({ id }) =>
+          capabilityModelName === id.toLowerCase() ||
+          capabilityModelName.endsWith(`-${id.toLowerCase()}`),
+      );
+    const usesModernTokenCap = isReasoningModel || assumeModernModel;
     const isFixedReasoningModel = /^gpt-chat-latest(?:-|$)/.test(capabilityModelName);
     const gpt6Variant = getGpt6Variant(capabilityModelName);
     const useModelDefaults =
       gpt6Variant === 'sol' || gpt6Variant === 'luna' || gpt6Variant === '6.1-sol';
     const samplingParamsDeprecated = this.isSamplingParamsDeprecatedClaudeModel(config);
-    const grokSamplingRestricted = this.isGrok4OrNewerModel();
 
     // Get max tokens based on model type
     const maxTokensDefault =
@@ -242,7 +258,7 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
         ? undefined
         : getEnvFloat('OPENAI_TEMPERATURE')
       : getEnvFloat('OPENAI_TEMPERATURE', 0);
-    const temperature = config.temperature ?? temperatureDefault;
+    const temperature = config.temperature ?? (assumeModernModel ? undefined : temperatureDefault);
 
     const topP = config.omitDefaults
       ? (config.top_p ?? getEnvFloat('OPENAI_TOP_P'))
@@ -260,7 +276,8 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
           renderVarsInObject(value, context?.vars),
         )
       : undefined;
-    const defaultReasoningEffort = config.omitDefaults || useModelDefaults ? undefined : 'medium';
+    const defaultReasoningEffort =
+      config.omitDefaults || useModelDefaults || assumeModernModel ? undefined : 'medium';
     const reasoningEffort = isFixedReasoningModel
       ? undefined
       : gpt6Variant
@@ -268,7 +285,7 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
           ? defaultReasoningEffort
           : configuredGpt6Effort
         : (config.reasoning_effort ?? defaultReasoningEffort);
-    const renderedReasoningEffort = isReasoningModel
+    const renderedReasoningEffort = usesModernTokenCap
       ? gpt6Variant
         ? reasoningEffort
         : renderVarsInObject(reasoningEffort, context?.vars)
@@ -288,7 +305,7 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
     const body = {
       model: this.deploymentName,
       messages,
-      ...(isReasoningModel
+      ...(usesModernTokenCap
         ? {
             ...(renderedReasoningEffort === undefined
               ? {}
@@ -296,7 +313,7 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
             ...(maxCompletionTokens === undefined
               ? {}
               : { max_completion_tokens: maxCompletionTokens }),
-            ...(isGpt6Model(capabilityModelName) && temperature !== undefined
+            ...((isGpt6Model(capabilityModelName) || assumeModernModel) && temperature !== undefined
               ? { temperature }
               : {}),
           }
@@ -310,11 +327,19 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
       ...(grokSamplingRestricted && !isReasoningModel && config.reasoning_effort !== undefined
         ? { reasoning_effort: renderVarsInObject(config.reasoning_effort, context?.vars) }
         : {}),
-      ...(topP === undefined || samplingParamsDeprecated ? {} : { top_p: topP }),
-      ...(presencePenalty === undefined || grokSamplingRestricted
+      ...(topP === undefined ||
+      samplingParamsDeprecated ||
+      (assumeModernModel && config.top_p === undefined)
+        ? {}
+        : { top_p: topP }),
+      ...(presencePenalty === undefined ||
+      grokSamplingRestricted ||
+      (assumeModernModel && config.presence_penalty === undefined)
         ? {}
         : { presence_penalty: presencePenalty }),
-      ...(frequencyPenalty === undefined || grokSamplingRestricted
+      ...(frequencyPenalty === undefined ||
+      grokSamplingRestricted ||
+      (assumeModernModel && config.frequency_penalty === undefined)
         ? {}
         : { frequency_penalty: frequencyPenalty }),
       ...(config.seed === undefined ? {} : { seed: config.seed }),
@@ -358,11 +383,13 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
         body.reasoning_effort = renderedReasoningEffort;
       }
     }
-    if (useModelDefaults) {
-      const outputCap = resolveGpt6ChatOutputCap(this.config, context?.prompt?.config, false, {
+    if (usesModernTokenCap) {
+      const outputCap = resolveChatOutputCap(this.config, context?.prompt?.config, false, {
         maxCompletionTokens: getEnvInt('OPENAI_MAX_COMPLETION_TOKENS'),
-        maxTokens: getEnvInt('OPENAI_MAX_TOKENS'),
+        // Retain Azure's established environment/default cap policy independently of aliases.
+        maxTokens: assumeModernModel ? undefined : maxTokensDefault,
       });
+      delete body.max_tokens;
       if (outputCap === undefined) {
         delete body.max_completion_tokens;
       } else {

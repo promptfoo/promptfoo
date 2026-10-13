@@ -496,7 +496,7 @@ describe('redteam UI initial target runtime contracts', () => {
         expect(request!.headers).toMatchObject({ Authorization: 'Bearer selected-local-key' });
         expect(JSON.parse(request!.body as string)).toMatchObject({
           model: 'tenant/private-served-model:Q4_K_M',
-          max_tokens: 100,
+          max_completion_tokens: 100,
           messages: [{ role: 'user', content: 'Keep this prompt on the selected server' }],
         });
       } finally {

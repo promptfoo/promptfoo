@@ -67,6 +67,14 @@ describe.each([
         config: { reasoning_effort: 'high' },
       }).getOpenAiBody('Hello');
 
+      if (Provider === OpenAiChatCompletionProvider && model !== 'gpt-4.1') {
+        expect(body).not.toHaveProperty('temperature');
+        expect(body).not.toHaveProperty('max_tokens');
+        expect(body).not.toHaveProperty('max_completion_tokens');
+        expect(body.reasoning_effort).toBe('high');
+        expect(body).not.toHaveProperty('reasoning');
+        return;
+      }
       expect(body.temperature).toBe(0);
       expect(
         body[Provider === OpenAiChatCompletionProvider ? 'max_tokens' : 'max_output_tokens'],

@@ -211,7 +211,6 @@ describe('Envoy gateway URLs', () => {
       expect(JSON.parse(request?.body as string)).toEqual({
         model: 'route:stable',
         messages: [{ role: 'user', content: 'Hello' }],
-        max_tokens: 1024,
         temperature: 0.25,
       });
     },

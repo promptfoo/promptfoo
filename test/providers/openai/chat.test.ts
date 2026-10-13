@@ -578,7 +578,7 @@ describe('OpenAI Provider', () => {
             providerConfig: { max_completion_tokens: 4096 },
             promptConfig: { max_tokens: 50 },
             wireField: 'max_completion_tokens',
-            expected: 4096,
+            expected: 50,
           },
           {
             model: 'gpt-4o',
@@ -3204,7 +3204,7 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
       const gpt5Call = mockFetchWithCache.mock.calls[0] as [string, { body: string }];
       const gpt5Body = JSON.parse(gpt5Call[1].body);
       expect(gpt5Body.max_tokens).toBeUndefined();
-      expect(gpt5Body.max_completion_tokens).toBeUndefined();
+      expect(gpt5Body.max_completion_tokens).toBe(300);
 
       // Test prefixed GPT-5 model (GitHub Models) should not include max_tokens
       mockFetchWithCache.mockClear();
@@ -3215,7 +3215,7 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
       const prefixedGpt5Call = mockFetchWithCache.mock.calls[0] as [string, { body: string }];
       const prefixedGpt5Body = JSON.parse(prefixedGpt5Call[1].body);
       expect(prefixedGpt5Body.max_tokens).toBeUndefined();
-      expect(prefixedGpt5Body.max_completion_tokens).toBeUndefined();
+      expect(prefixedGpt5Body.max_completion_tokens).toBe(400);
     });
 
     it('should strip max_tokens from passthrough for GPT-5 models', async () => {

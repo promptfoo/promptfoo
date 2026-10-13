@@ -137,6 +137,8 @@ export interface OpenAiPromptCacheOptions {
 }
 
 export type OpenAiCompletionOptions = OpenAiSharedOptions & {
+  /** Retain max_tokens and legacy defaults for an unknown Chat model alias. */
+  useLegacyTokenCap?: boolean;
   temperature?: number;
   max_completion_tokens?: number;
   max_tokens?: number;

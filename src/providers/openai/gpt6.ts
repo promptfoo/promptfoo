@@ -44,40 +44,6 @@ function firstDefined(...values: unknown[]): unknown {
   return values.find((value) => value !== undefined);
 }
 
-type ChatOutputCapConfig = {
-  max_tokens?: number | null;
-  max_completion_tokens?: number | null;
-  passthrough?: unknown;
-};
-
-function getGpt6ChatOutputCap(config: ChatOutputCapConfig | undefined, isOpenRouter: boolean) {
-  const passthrough = getObject(config?.passthrough) as
-    | Omit<ChatOutputCapConfig, 'passthrough'>
-    | undefined;
-  return [
-    passthrough?.max_completion_tokens,
-    ...(isOpenRouter
-      ? [passthrough?.max_tokens, config?.max_completion_tokens]
-      : [config?.max_completion_tokens, passthrough?.max_tokens]),
-    config?.max_tokens,
-  ].find((value) => value !== undefined);
-}
-
-export function resolveGpt6ChatOutputCap(
-  providerConfig: ChatOutputCapConfig,
-  promptConfig: ChatOutputCapConfig | undefined,
-  isOpenRouter: boolean,
-  environment: { maxCompletionTokens?: number; maxTokens?: number },
-): number | undefined {
-  const cap = [
-    getGpt6ChatOutputCap(promptConfig, isOpenRouter),
-    getGpt6ChatOutputCap(providerConfig, isOpenRouter),
-    environment.maxCompletionTokens,
-    environment.maxTokens,
-  ].find((value) => value !== undefined);
-  return cap ?? undefined;
-}
-
 export function getGpt6ChatReasoningEffort(
   providerConfig: ReasoningConfig,
   promptConfig: ReasoningConfig | undefined,

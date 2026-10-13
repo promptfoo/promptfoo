@@ -45,12 +45,8 @@ import {
 } from '../tracing';
 import { OpenAiGenericProvider } from './';
 import { calculateOpenAIUsageCost } from './billing';
-import {
-  applyGpt6RequestRules,
-  getGpt6ChatReasoningEffort,
-  isGpt6Model,
-  resolveGpt6ChatOutputCap,
-} from './gpt6';
+import { applyGpt6RequestRules, getGpt6ChatReasoningEffort, isGpt6Model } from './gpt6';
+import { isLegacyOpenAiChatModel, resolveChatOutputCap } from './tokenCaps';
 import {
   appendOpenAiApiPath,
   assertOpenAiApiModel,
@@ -487,7 +483,16 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     const isReasoningModel = usesConfiguredCapabilities
       ? this.isReasoningModel()
       : this.isReasoningCapabilityModel(capabilityModelName);
-    const maxCompletionTokens = isReasoningModel
+    // OpenAI aliases may conceal a newer model family. Dedicated compatible adapters
+    // retain their own capability overrides and legacy request defaults.
+    const assumeModernModel =
+      this.constructor === OpenAiChatCompletionProvider &&
+      config.useLegacyTokenCap !== true &&
+      !isReasoningModel &&
+      !isLegacyOpenAiChatModel(capabilityModelName);
+    const usesModernTokenCap = isReasoningModel || isGPT5Model || assumeModernModel;
+    const normalizeTokenCap = assumeModernModel || super.isReasoningModel(capabilityModelName);
+    const maxCompletionTokens = usesModernTokenCap
       ? (config.max_completion_tokens ?? getEnvInt('OPENAI_MAX_COMPLETION_TOKENS'))
       : undefined;
     const maxTokensDefault = config.omitDefaults
@@ -495,8 +500,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         ? undefined
         : getEnvInt('OPENAI_MAX_TOKENS')
       : getEnvInt('OPENAI_MAX_TOKENS', 1024);
-    const maxTokens =
-      isReasoningModel || isGPT5Model ? undefined : (config.max_tokens ?? maxTokensDefault);
+    const maxTokens = usesModernTokenCap ? undefined : (config.max_tokens ?? maxTokensDefault);
 
     const temperatureDefault = config.omitDefaults
       ? getEnvString('OPENAI_TEMPERATURE') === undefined
@@ -509,10 +513,10 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         ? this.supportsTemperature()
         : this.supportsTemperatureForCapabilityModel(capabilityModelName));
     const temperature = supportsTemperature
-      ? (config.temperature ?? temperatureDefault)
+      ? (config.temperature ?? (assumeModernModel ? undefined : temperatureDefault))
       : undefined;
     const reasoningEffort =
-      isReasoningModel && !isGPT6Model
+      usesModernTokenCap && !isGPT6Model
         ? (renderVarsInObject(config.reasoning_effort, context?.vars) as ReasoningEffort)
         : undefined;
 
@@ -604,7 +608,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     if (
       !isGPT6Model &&
       config.reasoning_effort &&
-      (isReasoningModel || capabilityModelName.includes('gpt-oss'))
+      (usesModernTokenCap || capabilityModelName.includes('gpt-oss'))
     ) {
       body.reasoning_effort = renderVarsInObject(config.reasoning_effort, context?.vars);
     }
@@ -624,13 +628,6 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       body.store = config.store;
     }
 
-    // Sanitize body for models that reject max_tokens (e.g. GPT-5, reasoning models).
-    // This catches max_tokens introduced via passthrough or YAML anchors that bypass
-    // the normal maxTokens variable logic above.
-    if ((isReasoningModel || isGPT5Model) && 'max_tokens' in body) {
-      delete body.max_tokens;
-    }
-
     // Whether a native GPT-6 request reasons decides which environment limit applies to it.
     const gpt6Effort =
       isGPT6Model && !isOpenRouterGpt6
@@ -638,11 +635,11 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
             renderVarsInObject(value, context?.vars),
           )
         : undefined;
-    if (isGPT6Model) {
-      const outputCap = resolveGpt6ChatOutputCap(
+    if (normalizeTokenCap) {
+      const outputCap = resolveChatOutputCap(
         this.config,
         context?.prompt?.config,
-        isOpenRouterGpt6,
+        this.usesOpenRouter(),
         {
           maxCompletionTokens: getEnvInt('OPENAI_MAX_COMPLETION_TOKENS'),
           // OPENAI_MAX_TOKENS limits the visible output of non-reasoning requests. As a GPT-6
@@ -653,11 +650,16 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
             isOpenRouterGpt6 || gpt6Effort === 'none' ? getEnvInt('OPENAI_MAX_TOKENS') : undefined,
         },
       );
+      delete body.max_tokens;
       if (outputCap === undefined) {
         delete body.max_completion_tokens;
       } else {
         body.max_completion_tokens = outputCap;
       }
+    } else if (usesModernTokenCap) {
+      // Compatible adapters can override reasoning capabilities without adopting
+      // OpenAI's cap alias and null-clearing policy.
+      delete body.max_tokens;
     }
     if (isOpenRouterGpt6) {
       reconcileOpenRouterReasoning(body, this.config, context?.prompt?.config, context?.vars);
