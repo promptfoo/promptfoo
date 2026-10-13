@@ -32,7 +32,6 @@ const shared = {
   azureTenantId: '{{ TENANT }}',
   azureAuthorityHost: '{{ AUTHORITY }}',
   azureTokenScope: '{{ SCOPE }}',
-  deployment_id: 'deployment',
 };
 const commonInvalid: unknown[] = [
   null,
@@ -53,6 +52,7 @@ const nestedFormat = {
   },
 };
 const chat = {
+  deployment_id: 'deployment',
   ...shared,
   temperature: 0,
   max_tokens: 1,

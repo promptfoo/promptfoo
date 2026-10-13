@@ -19,7 +19,6 @@ export const AzureSharedConfigInputSchema = z.strictObject({
   azureTenantId: z.string().optional(),
   azureAuthorityHost: z.string().optional(),
   azureTokenScope: z.string().optional(),
-  deployment_id: z.string().optional(),
 });
 
 const ChatFields = OpenAiChatConfigInputSchema.pick({
@@ -44,6 +43,7 @@ const ChatFields = OpenAiChatConfigInputSchema.pick({
 })
   .extend(AzureSharedConfigInputSchema.shape)
   .extend({
+    deployment_id: z.string().optional(),
     modelName: z.string().optional(),
     systemPrompt: z.string().optional(),
     dataSources: z.json().optional().describe('Azure retrieval data-source request payload'),
