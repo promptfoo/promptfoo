@@ -39,6 +39,8 @@ const commonInvalid: unknown[] = [
   { unknown: true },
 ];
 const validMessages = [
+  { apiKeyEnvar: 'CUSTOM_ANTHROPIC_KEY' },
+  { tools: [{ type: 'function', function: { name: 'ping' } }] },
   { tools: ['file://tools.json', 'file://other-tools.yaml'] },
   {},
   shared,
@@ -58,7 +60,7 @@ const validMessages = [
     beta: ['future-beta'],
     showThinking: true,
     max_tool_calls: 0,
-    mcp: { server: { command: 'node' } },
+    mcp: { enabled: true, server: { command: 'node' } },
     output_format: {
       type: 'json_schema',
       schema: { type: 'object', $defs: { item: { type: 'string' } }, additionalProperties: false },
@@ -113,6 +115,20 @@ const validMessages = [
   { tool_choice: { type: 'none' } },
 ];
 const invalidMessages: unknown[] = [
+  { apiKeyEnvar: 123 },
+  { mcp: { server: { command: 'node' } } },
+  {
+    tools: [
+      { name: 'native', input_schema: {} },
+      { type: 'function', function: { name: 'ping' } },
+    ],
+  },
+  {
+    tools: [
+      { type: 'function', function: { name: 'ping' } },
+      { name: 'native', input_schema: {} },
+    ],
+  },
   { tools: [{ name: 'lookup', input_schema: {} }, 'file://tools.json'] },
   ...commonInvalid,
   { temperature: 'warm' },
@@ -158,12 +174,8 @@ describe('Anthropic portable configuration contracts', () => {
       name: 'completion',
       schema: AnthropicCompletionConfigInputSchema,
       jsonSchema: AnthropicCompletionConfigInputJsonSchema,
-      valid: [
-        {},
-        shared,
-        { max_tokens_to_sample: 10, temperature: 0, top_p: 0, top_k: 1, mcp: {} },
-      ],
-      invalid: [...commonInvalid, { max_tokens_to_sample: '10' }, { tools: [] }],
+      valid: [{}, shared, { max_tokens_to_sample: 10, temperature: 0, top_p: 0, top_k: 1 }],
+      invalid: [...commonInvalid, { max_tokens_to_sample: '10' }, { tools: [] }, { mcp: {} }],
     },
   ]) {
     describe(name, () => {

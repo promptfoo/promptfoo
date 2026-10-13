@@ -72,7 +72,7 @@ const chat = {
   verbosity: 'low',
   functionToolCallbacks: { lookup: 'file://callback.js' },
   passthrough: { extra: true },
-  mcp: { server: { command: 'node' } },
+  mcp: { enabled: true, server: { command: 'node' } },
   omitDefaults: true,
   modelName: 'underlying-model',
   systemPrompt: '{{ prompt }}',
@@ -120,10 +120,13 @@ describe('Azure portable configuration contracts', () => {
         {
           ...shared,
           modelName: 'underlying-model',
-          response_format: nestedFormat,
+          response_format: {
+            ...nestedFormat,
+            json_schema: { ...nestedFormat.json_schema, strict: true },
+          },
           tools: 'file://tools.yaml',
           functionToolCallbacks: { lookup: 'file://callback.js' },
-          mcp: { server: { command: 'node' } },
+          mcp: { enabled: true, server: { command: 'node' } },
         },
         {
           instructions: '{{ prompt }}',
@@ -140,7 +143,7 @@ describe('Azure portable configuration contracts', () => {
           response_format: {
             type: 'json_schema',
             name: 'result',
-            strict: false,
+            strict: true,
             schema: 'file://schema.json',
           },
         },

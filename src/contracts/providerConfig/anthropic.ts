@@ -8,6 +8,7 @@ import {
 
 export const AnthropicSharedConfigInputSchema = z.strictObject({
   apiKey: z.string().optional(),
+  apiKeyEnvar: z.string().optional(),
   apiBaseUrl: z.string().optional(),
   apiKeyRequired: z
     .boolean()
@@ -51,14 +52,15 @@ const OpenAiFunctionTool = z.strictObject({
   function: z.strictObject({
     name: z.string(),
     description: z.string().optional(),
-    parameters: JsonObjectInputSchema,
+    parameters: JsonObjectInputSchema.optional(),
     strict: z.boolean().optional(),
   }),
 });
 const Tools = z.union([
   FileReferenceInputSchema,
   z.array(FileReferenceInputSchema),
-  z.array(z.union([CustomTool, BuiltInTool, OpenAiFunctionTool])),
+  z.array(z.union([CustomTool, BuiltInTool])),
+  z.array(OpenAiFunctionTool),
 ]);
 const Thinking = z.union([
   z.strictObject({
@@ -104,7 +106,9 @@ export const AnthropicMessagesConfigInputSchema = AnthropicSharedConfigInputSche
   tool_choice: ToolChoice.optional(),
   beta: z.array(z.string()).optional(),
   showThinking: z.boolean().optional(),
-  mcp: McpConfigInputSchema.optional(),
+  mcp: McpConfigInputSchema.extend({
+    enabled: z.boolean().describe('Set true to initialize MCP tools'),
+  }).optional(),
   max_tool_calls: z.number().optional(),
   output_format: z
     .union([
@@ -121,7 +125,6 @@ export const AnthropicCompletionConfigInputSchema = AnthropicSharedConfigInputSc
   temperature: z.number().optional(),
   top_p: z.number().optional(),
   top_k: z.number().optional(),
-  mcp: McpConfigInputSchema.optional(),
 }).describe('Serializable legacy Anthropic Completions configuration');
 
 export const AnthropicProviderOptionsInputSchema = z.union([
