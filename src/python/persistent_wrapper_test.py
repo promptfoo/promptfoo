@@ -6,7 +6,7 @@ import sys
 import tempfile
 import unittest
 from types import ModuleType, SimpleNamespace
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from python import persistent_wrapper
@@ -403,14 +403,16 @@ class TestTracedCallExecution(unittest.TestCase):
                             self.span, telemetry_failure
                         ).side_effect = RuntimeError("span failed")
                     original = ValueError("provider failed")
-                    mock_type = AsyncMock if asynchronous else MagicMock
-                    provider = mock_type(side_effect=original)
+                    provider_call = MagicMock(side_effect=original)
+
+                    async def async_provider(*args, provider_call=provider_call):
+                        return provider_call(*args)
+
+                    provider = async_provider if asynchronous else provider_call
                     with self.assertRaises(ValueError) as raised:
                         persistent_wrapper._traced_call(provider, self.args, "call_api")
                     self.assertIs(raised.exception, original)
-                    provider.assert_called_once_with(*self.args)
-                    if asynchronous:
-                        provider.assert_awaited_once_with(*self.args)
+                    provider_call.assert_called_once_with(*self.args)
 
     def test_process_control_exceptions_are_not_retried(self) -> None:
         for exception_type in [KeyboardInterrupt, SystemExit]:
@@ -452,15 +454,17 @@ class TestTracedCallExecution(unittest.TestCase):
 
                         self.span.set_attribute.side_effect = set_attribute
                     expected = {"output": "completed"}
-                    mock_type = AsyncMock if asynchronous else MagicMock
-                    provider = mock_type(return_value=expected)
+                    provider_call = MagicMock(return_value=expected)
+
+                    async def async_provider(*args, provider_call=provider_call):
+                        return provider_call(*args)
+
+                    provider = async_provider if asynchronous else provider_call
                     result = persistent_wrapper._traced_call(
                         provider, self.args, "call_api"
                     )
                     self.assertIs(result, expected)
-                    provider.assert_called_once_with(*self.args)
-                    if asynchronous:
-                        provider.assert_awaited_once_with(*self.args)
+                    provider_call.assert_called_once_with(*self.args)
 
     def test_completed_none_result_is_not_retried(self) -> None:
         self.manager.__exit__.side_effect = RuntimeError("span exit failed")
