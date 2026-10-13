@@ -721,6 +721,69 @@ describe('Re-scan on version change behavior', () => {
     },
   );
 
+  for (const failure of [
+    'missing metadata',
+    'metadata request failure',
+    'revision lookup failure',
+  ] as const) {
+    it(`scans and persists findings after a pre-scan ${failure}`, async () => {
+      vi.mocked(isHuggingFaceModel).mockReturnValue(true);
+      vi.mocked(parseHuggingFaceModel).mockReturnValue({ owner: 'test-owner', repo: 'test-model' });
+      vi.mocked(getHuggingFaceMetadata).mockResolvedValue({
+        modelId: 'test-owner/test-model',
+        sha: 'abc123',
+        lastModified: '2026-04-27T00:00:00.000Z',
+        author: 'test-owner',
+      });
+      if (failure === 'missing metadata') {
+        vi.mocked(getHuggingFaceMetadata).mockResolvedValueOnce(null);
+      } else if (failure === 'metadata request failure') {
+        vi.mocked(getHuggingFaceMetadata).mockRejectedValueOnce(new Error('metadata unavailable'));
+      } else {
+        vi.mocked(ModelAudit.findByRevision).mockRejectedValueOnce(new Error('lookup unavailable'));
+      }
+      const results = {
+        ...JSON.parse(VALID_SCAN_OUTPUT),
+        content_hash: 'scanned-content',
+        issues: [{ severity: 'warning', message: 'fresh scan finding' }],
+      };
+      vi.mocked(spawn).mockReturnValue(
+        asMockChildProcess(createMockChildProcess({ stdoutData: JSON.stringify(results) })),
+      );
+
+      modelScanCommand(program);
+      await program.commands[0].parseAsync(['node', 'scan-model', 'hf://test-owner/test-model']);
+
+      expect(spawn).toHaveBeenCalledTimes(1);
+      expect(getHuggingFaceMetadata).toHaveBeenCalledTimes(2);
+      expect(ModelAudit.findByRevision).toHaveBeenCalledTimes(
+        failure === 'revision lookup failure' ? 2 : 1,
+      );
+      if (failure === 'revision lookup failure') {
+        expect(ModelAudit.findByRevision).toHaveBeenNthCalledWith(
+          1,
+          'test-owner/test-model',
+          'abc123',
+        );
+      }
+      expect(ModelAudit.findByRevision).toHaveBeenLastCalledWith(
+        'test-owner/test-model',
+        'abc123',
+        'scanned-content',
+      );
+      expect(ModelAudit.create).toHaveBeenCalledExactlyOnceWith(
+        expect.objectContaining({
+          modelId: 'test-owner/test-model',
+          revisionSha: 'abc123',
+          contentHash: 'scanned-content',
+          results,
+        }),
+      );
+      expect(logger.error).not.toHaveBeenCalled();
+      expect(process.exitCode).toBe(1);
+    });
+  }
+
   it('should re-scan a mutable HuggingFace alias even when the same revision was seen before', async () => {
     // Mock HuggingFace model detection
     (isHuggingFaceModel as Mock).mockReturnValue(true);
