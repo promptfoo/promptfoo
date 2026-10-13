@@ -863,7 +863,7 @@ export default class Eval {
   async getResultsCount(): Promise<number> {
     // Returns distinct test count (unique test cases) - used for UI display
     if (this.useOldResults()) {
-      return this.oldResults!.table.body.length;
+      return Array.isArray(this.oldResults?.table?.body) ? this.oldResults.table.body.length : 0;
     }
     return getCachedResultsCount(this.id);
   }
@@ -1689,7 +1689,7 @@ export default class Eval {
     const db = await getDb();
 
     // Copy eval, results, and relationships within transaction for atomicity
-    let copiedCount = this.oldResults?.results.length ?? 0;
+    let copiedCount = Array.isArray(this.oldResults?.results) ? this.oldResults.results.length : 0;
     await db.transaction(async (tx) => {
       // Create the new eval record first
       await tx
