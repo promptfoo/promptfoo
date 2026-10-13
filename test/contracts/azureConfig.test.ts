@@ -32,7 +32,6 @@ const shared = {
   azureTenantId: '{{ TENANT }}',
   azureAuthorityHost: '{{ AUTHORITY }}',
   azureTokenScope: '{{ SCOPE }}',
-  deployment_id: 'deployment',
 };
 const commonInvalid: unknown[] = [
   null,
@@ -53,6 +52,7 @@ const nestedFormat = {
   },
 };
 const chat = {
+  deployment_id: 'deployment',
   ...shared,
   temperature: 0,
   max_tokens: 1,
@@ -60,7 +60,6 @@ const chat = {
   top_p: 0,
   frequency_penalty: 0,
   presence_penalty: 0,
-  best_of: 1,
   functions: 'file://functions.json',
   function_call: { name: 'lookup' },
   tools: 'file://tools.yaml',
@@ -69,7 +68,6 @@ const chat = {
   stop: ['end'],
   seed: 1,
   reasoning_effort: 'high',
-  verbosity: 'low',
   functionToolCallbacks: { lookup: 'file://callback.js' },
   passthrough: { extra: true },
   mcp: { enabled: true, server: { command: 'node' } },
@@ -125,13 +123,12 @@ describe('Azure portable configuration contracts', () => {
             json_schema: { ...nestedFormat.json_schema, strict: true },
           },
           tools: 'file://tools.yaml',
-          functionToolCallbacks: { lookup: 'file://callback.js' },
-          mcp: { enabled: true, server: { command: 'node' } },
+          verbosity: 'low',
+          reasoning: { effort: 'high', summary: 'auto', mode: 'standard' },
         },
         {
           instructions: '{{ prompt }}',
-          model: 'configured-model',
-          max_output_tokens: 0,
+          max_output_tokens: 16,
           max_tool_calls: 4,
           previous_response_id: 'resp',
           truncation: 'disabled',
@@ -151,6 +148,9 @@ describe('Azure portable configuration contracts', () => {
       invalid: [
         ...commonInvalid,
         { max_output_tokens: '10' },
+        { model: 'ignored-model' },
+        { mcp: { enabled: true, server: { command: 'node' } } },
+        { max_output_tokens: 0 },
         { max_tokens: 32 },
         { max_completion_tokens: 32 },
         { service_tier: 'standard_only' },

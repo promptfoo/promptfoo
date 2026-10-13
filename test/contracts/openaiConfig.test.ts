@@ -60,6 +60,7 @@ const baseValid = [
 const chatValid = [
   { useLegacyTokenCap: true },
   { useLegacyTokenCap: false },
+  { mcp: { enabled: false } },
   {
     tools: [{ type: 'custom', custom: { name: 'grammar', format: { type: 'text' } } }],
     tool_choice: { type: 'custom', custom: { name: 'grammar' } },
@@ -73,7 +74,6 @@ const chatValid = [
     top_p: 0,
     frequency_penalty: 0,
     presence_penalty: 0,
-    best_of: 1,
     stop: ['end'],
     seed: 0,
     service_tier: null,
@@ -132,7 +132,18 @@ const chatValid = [
 ];
 const responseValid = [
   { tools: [{ type: 'web_search_2025_08_26' }, { type: 'web_search_preview_2025_03_11' }] },
-  { mcp: { enabled: false } },
+  {
+    tools: [
+      {
+        type: 'mcp',
+        server_label: 'remote',
+        tunnel_id: 'tunnel',
+        allowed_callers: ['programmatic'],
+        require_approval: { never: { read_only: true } },
+      },
+    ],
+  },
+  { tools: [{ type: 'programmatic_tool_calling' }] },
   {
     tools: [
       { type: 'code_interpreter', container: { type: 'auto', file_ids: ['id'] } },
@@ -171,9 +182,8 @@ const responseValid = [
   {
     model: 'custom-model',
     temperature: 0,
-    max_output_tokens: 10,
+    max_output_tokens: 16,
     top_p: 0,
-    seed: 0,
     service_tier: 'scale',
     omitDefaults: true,
     passthrough: { future_field: { keep: true } },
@@ -184,8 +194,6 @@ const responseValid = [
       json_schema: { ...nestedFormat.json_schema, strict: true },
     },
     tools: 'file://tools.yaml',
-    functionToolCallbacks: { lookup: 'file://callback.js' },
-    mcp: { enabled: true, server: { command: 'node' } },
   },
   {
     reasoning: {
@@ -208,7 +216,7 @@ const responseValid = [
     ],
   },
   {
-    max_output_tokens: 0,
+    max_output_tokens: 16,
     max_tool_calls: 4,
     instructions: '{{ instructions }}',
     previous_response_id: 'resp_1',
@@ -317,6 +325,7 @@ const invalidCommon = [
 
 const invalidChat = [
   { useLegacyTokenCap: 'true' },
+  { best_of: 1 },
   ...invalidCommon,
   { tools: [{ type: 'function', name: 'lookup' }] },
   { tool_choice: { type: 'function', name: 'lookup' } },
@@ -353,6 +362,17 @@ describe('OpenAI portable configuration contracts', () => {
         { max_tokens: 32 },
         { max_completion_tokens: 32 },
         { useLegacyTokenCap: true },
+        { mcp: { enabled: true, server: { command: 'node' } } },
+        { functionToolCallbacks: { lookup: 'file://callback.js' } },
+        { seed: 1 },
+        { showThinking: true },
+        {
+          response_format: { type: 'json_schema', schema: schemaDocument, description: 'ignored' },
+        },
+        { tools: [{ type: 'code_interpreter' }] },
+        { tools: [{ type: 'code_interpreter', container: {} }] },
+        { tools: [{ type: 'mcp', server_label: 'remote', tunnel_id: 123 }] },
+        ...[0, 15, 16.5].map((max_output_tokens) => ({ max_output_tokens })),
         { response_format: { type: 'json_schema', schema: true } },
         {
           response_format: {

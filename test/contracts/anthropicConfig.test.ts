@@ -39,6 +39,7 @@ const commonInvalid: unknown[] = [
   { unknown: true },
 ];
 const validMessages = [
+  { tools: [{ type: 'web_search_20260209' }, { type: 'web_fetch_20260209' }] },
   { apiKeyEnvar: 'CUSTOM_ANTHROPIC_KEY' },
   { tools: [{ type: 'function', function: { name: 'ping' } }] },
   { tools: ['file://tools.json', 'file://other-tools.yaml'] },
@@ -104,7 +105,6 @@ const validMessages = [
           name: 'lookup',
           description: 'lookup',
           parameters: { type: 'object' },
-          strict: false,
         },
       },
     ],
@@ -115,6 +115,8 @@ const validMessages = [
   { tool_choice: { type: 'none' } },
 ];
 const invalidMessages: unknown[] = [
+  { tools: [{ type: 'function', function: { name: 'lookup', strict: true } }] },
+  { tools: [{ type: 'bash_20250124' }] },
   { apiKeyEnvar: 123 },
   { mcp: { server: { command: 'node' } } },
   {
@@ -174,8 +176,28 @@ describe('Anthropic portable configuration contracts', () => {
       name: 'completion',
       schema: AnthropicCompletionConfigInputSchema,
       jsonSchema: AnthropicCompletionConfigInputJsonSchema,
-      valid: [{}, shared, { max_tokens_to_sample: 10, temperature: 0, top_p: 0, top_k: 1 }],
-      invalid: [...commonInvalid, { max_tokens_to_sample: '10' }, { tools: [] }, { mcp: {} }],
+      valid: [
+        {},
+        {
+          apiKey: shared.apiKey,
+          apiKeyEnvar: 'CUSTOM_KEY',
+          apiBaseUrl: shared.apiBaseUrl,
+          headers: shared.headers,
+        },
+        { max_tokens_to_sample: 10, temperature: 0 },
+      ],
+      invalid: [
+        ...commonInvalid,
+        { max_tokens_to_sample: '10' },
+        { tools: [] },
+        { mcp: {} },
+        { apiKeyRequired: false },
+        { cost: 1 },
+        { inputCost: 1 },
+        { outputCost: 1 },
+        { top_p: 0.9 },
+        { top_k: 1 },
+      ],
     },
   ]) {
     describe(name, () => {

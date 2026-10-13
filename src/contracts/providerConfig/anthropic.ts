@@ -53,13 +53,18 @@ const OpenAiFunctionTool = z.strictObject({
     name: z.string(),
     description: z.string().optional(),
     parameters: JsonObjectInputSchema.optional(),
-    strict: z.boolean().optional(),
   }),
 });
+const ServerTool = JsonObjectInputSchema.and(
+  z.object({
+    type: z.string().regex(/^(?:web_search|web_fetch)_\d{8}$/),
+    name: z.string().optional(),
+  }),
+);
 const Tools = z.union([
   FileReferenceInputSchema,
   z.array(FileReferenceInputSchema),
-  z.array(z.union([CustomTool, BuiltInTool])),
+  z.array(z.union([CustomTool, BuiltInTool, ServerTool])),
   z.array(OpenAiFunctionTool),
 ]);
 const Thinking = z.union([
@@ -120,12 +125,17 @@ export const AnthropicMessagesConfigInputSchema = AnthropicSharedConfigInputSche
     ])
     .optional(),
 }).describe('Serializable Anthropic Messages configuration');
-export const AnthropicCompletionConfigInputSchema = AnthropicSharedConfigInputSchema.extend({
-  max_tokens_to_sample: z.number().optional(),
-  temperature: z.number().optional(),
-  top_p: z.number().optional(),
-  top_k: z.number().optional(),
-}).describe('Serializable legacy Anthropic Completions configuration');
+export const AnthropicCompletionConfigInputSchema = AnthropicSharedConfigInputSchema.omit({
+  apiKeyRequired: true,
+  cost: true,
+  inputCost: true,
+  outputCost: true,
+})
+  .extend({
+    max_tokens_to_sample: z.number().optional(),
+    temperature: z.number().optional(),
+  })
+  .describe('Serializable legacy Anthropic Completions configuration');
 
 export const AnthropicProviderOptionsInputSchema = z.union([
   ProviderOptionsInputFieldsSchema.extend({

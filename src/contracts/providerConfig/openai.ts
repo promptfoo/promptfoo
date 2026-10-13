@@ -62,8 +62,13 @@ const ResponsesFunctionTool = FunctionDefinition.extend({ type: z.literal('funct
 const McpToolFields = z.strictObject({
   type: z.literal('mcp'),
   server_label: z.string(),
+  allowed_callers: z
+    .array(z.enum(['direct', 'programmatic']))
+    .nullable()
+    .optional(),
   server_url: z.string().optional(),
   connector_id: z.string().optional(),
+  tunnel_id: z.string().optional(),
   authorization: z.string().optional(),
   server_description: z.string().optional(),
   headers: z.record(z.string(), z.string()).optional(),
@@ -80,8 +85,18 @@ const McpToolFields = z.strictObject({
     .union([
       z.enum(['always', 'never']),
       z.strictObject({
-        always: z.strictObject({ tool_names: z.array(z.string()).optional() }).optional(),
-        never: z.strictObject({ tool_names: z.array(z.string()).optional() }).optional(),
+        always: z
+          .strictObject({
+            tool_names: z.array(z.string()).optional(),
+            read_only: z.boolean().optional(),
+          })
+          .optional(),
+        never: z
+          .strictObject({
+            tool_names: z.array(z.string()).optional(),
+            read_only: z.boolean().optional(),
+          })
+          .optional(),
       }),
     ])
     .optional(),
@@ -89,6 +104,7 @@ const McpToolFields = z.strictObject({
 const McpTool = z.union([
   McpToolFields.extend({ server_url: z.string() }),
   McpToolFields.extend({ connector_id: z.string() }),
+  McpToolFields.extend({ tunnel_id: z.string() }),
 ]);
 // Built-in tool payloads evolve independently of promptfoo; retain JSON extension fields.
 const WebSearchTool = JsonObjectInputSchema.and(
@@ -107,7 +123,16 @@ const WebSearchTool = JsonObjectInputSchema.and(
 const CodeInterpreterTool = JsonObjectInputSchema.and(
   z.object({
     type: z.literal('code_interpreter'),
-    container: z.union([z.string(), JsonObjectInputSchema]).optional(),
+    container: z.union([
+      z.string(),
+      z
+        .object({
+          type: z.literal('auto'),
+          file_ids: z.array(z.string()).optional(),
+          memory_limit: z.enum(['1g', '4g', '16g', '64g']).nullable().optional(),
+        })
+        .catchall(z.json()),
+    ]),
   }),
 );
 const FileSearchTool = JsonObjectInputSchema.and(
@@ -159,7 +184,7 @@ const BuiltInTool = z
   .object({
     type: z.enum([
       'computer',
-      'computer_use',
+      'programmatic_tool_calling',
       'image_generation',
       'local_shell',
       'shell',
@@ -262,7 +287,6 @@ const NestedResponseFormat = z.strictObject({
 const FlatResponseFormat = z.strictObject({
   type: z.literal('json_schema'),
   name: z.string().optional(),
-  description: z.string().optional(),
   strict: z
     .literal(true)
     .optional()
@@ -279,7 +303,7 @@ const ResponsesResponseFormat = z.union([
   FileReferenceInputSchema,
   BasicResponseFormat,
   NestedResponseFormat.extend({
-    json_schema: NestedResponseFormat.shape.json_schema.extend({
+    json_schema: NestedResponseFormat.shape.json_schema.omit({ description: true }).extend({
       strict: z
         .literal(true)
         .optional()
@@ -327,7 +351,7 @@ const TextFields = OpenAiSharedConfigInputSchema.extend({
     'Additional request fields passed to the API',
   ),
 });
-const ChatFields = TextFields.extend({
+const ChatFields = TextFields.omit({ best_of: true }).extend({
   max_completion_tokens: z.number().optional(),
   functions: z.union([FileReferenceInputSchema, z.array(ChatFunctionDefinition)]).optional(),
   function_call: z
@@ -390,7 +414,6 @@ export const OpenAiChatConfigInputSchema = ChatFields.extend({
 export const OpenAiResponsesConfigInputSchema = ChatFields.omit({
   max_tokens: true,
   max_completion_tokens: true,
-  best_of: true,
   stop: true,
   frequency_penalty: true,
   presence_penalty: true,
@@ -399,13 +422,17 @@ export const OpenAiResponsesConfigInputSchema = ChatFields.omit({
   tool_resources: true,
   modalities: true,
   audio: true,
+  mcp: true,
+  functionToolCallbacks: true,
+  seed: true,
+  showThinking: true,
 })
   .extend({
     tools: ResponsesTools.optional(),
     tool_choice: ToolChoice.optional(),
     response_format: ResponsesResponseFormat.optional(),
     instructions: z.string().optional(),
-    max_output_tokens: z.number().optional(),
+    max_output_tokens: z.number().int().min(16).optional(),
     max_tool_calls: z.number().optional(),
     access_programs: z
       .strictObject({ cyber: z.enum(['standard', 'daybreak_blue', 'daybreak_red']).optional() })
