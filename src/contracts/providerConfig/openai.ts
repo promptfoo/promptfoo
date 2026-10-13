@@ -1,0 +1,347 @@
+import { z } from 'zod';
+import { McpConfigInputSchema } from './mcp.js';
+import {
+  FileReferenceInputSchema,
+  JsonObjectInputSchema,
+  ProviderOptionsInputFieldsSchema,
+} from './shared.js';
+
+export const OpenAiSharedConfigInputSchema = z.strictObject({
+  apiKey: z.string().optional().describe('API key; omitted uses provider environment settings'),
+  apiKeyEnvar: z
+    .string()
+    .optional()
+    .describe('Name of the environment variable containing the API key'),
+  apiKeyRequired: z.boolean().optional(),
+  useDefaultApiKey: z.boolean().optional(),
+  apiHost: z.string().optional().describe('API host; supports environment templates'),
+  apiBaseUrl: z.string().optional().describe('API base URL; supports environment templates'),
+  organization: z.string().optional(),
+  cost: z.number().optional(),
+  inputCost: z.number().optional(),
+  outputCost: z.number().optional(),
+  audioCost: z.number().optional(),
+  audioInputCost: z.number().optional(),
+  audioOutputCost: z.number().optional(),
+  headers: z.record(z.string(), z.string()).optional(),
+  maxRetries: z
+    .number()
+    .optional()
+    .describe('Defaults to 4 at runtime; negative values are clamped to zero'),
+});
+
+// JSON Schema documents can contain arbitrary keywords, references, and boolean schemas.
+const SchemaDocument = z.union([JsonObjectInputSchema, z.boolean(), FileReferenceInputSchema]);
+const FunctionDefinition = z.strictObject({
+  name: z.string(),
+  description: z.string().optional(),
+  parameters: SchemaDocument.optional(),
+  strict: z.boolean().nullable().optional(),
+});
+const ChatFunctionTool = z.strictObject({
+  type: z.literal('function'),
+  function: FunctionDefinition,
+});
+const ResponsesFunctionTool = FunctionDefinition.extend({ type: z.literal('function') });
+const McpToolFields = z.strictObject({
+  type: z.literal('mcp'),
+  server_label: z.string(),
+  server_url: z.string().optional(),
+  connector_id: z.string().optional(),
+  authorization: z.string().optional(),
+  server_description: z.string().optional(),
+  headers: z.record(z.string(), z.string()).optional(),
+  allowed_tools: z
+    .union([
+      z.array(z.string()),
+      z.strictObject({
+        tool_names: z.array(z.string()).optional(),
+        read_only: z.boolean().optional(),
+      }),
+    ])
+    .optional(),
+  require_approval: z
+    .union([
+      z.enum(['always', 'never']),
+      z.strictObject({
+        always: z.strictObject({ tool_names: z.array(z.string()).optional() }).optional(),
+        never: z.strictObject({ tool_names: z.array(z.string()).optional() }).optional(),
+      }),
+    ])
+    .optional(),
+});
+const McpTool = z.union([
+  McpToolFields.extend({ server_url: z.string() }),
+  McpToolFields.extend({ connector_id: z.string() }),
+]);
+// Built-in tool payloads evolve independently of promptfoo; retain JSON extension fields.
+const WebSearchTool = JsonObjectInputSchema.and(
+  z.object({
+    type: z.enum(['web_search', 'web_search_preview']),
+    external_web_access: z.boolean().optional(),
+    return_token_budget: z.enum(['default', 'unlimited']).optional(),
+    search_context_size: z.enum(['low', 'medium', 'high']).optional(),
+  }),
+);
+const CodeInterpreterTool = JsonObjectInputSchema.and(
+  z.object({
+    type: z.literal('code_interpreter'),
+    container: z.union([z.string(), JsonObjectInputSchema]).optional(),
+  }),
+);
+const FileSearchTool = JsonObjectInputSchema.and(
+  z.object({
+    type: z.literal('file_search'),
+    vector_store_ids: z.array(z.string()),
+    max_num_results: z.number().optional(),
+  }),
+);
+const BuiltInTool = JsonObjectInputSchema.and(
+  z.object({
+    type: z.enum([
+      'computer',
+      'computer_use_preview',
+      'image_generation',
+      'local_shell',
+      'shell',
+      'apply_patch',
+      'custom',
+    ]),
+  }),
+);
+const Tool = z.union([
+  ChatFunctionTool,
+  ResponsesFunctionTool,
+  McpTool,
+  WebSearchTool,
+  CodeInterpreterTool,
+  FileSearchTool,
+  BuiltInTool,
+]);
+const Tools = z.union([
+  FileReferenceInputSchema,
+  z.array(z.union([Tool, FileReferenceInputSchema])),
+]);
+const ToolChoice = z.union([
+  z.enum(['none', 'auto', 'required']),
+  z.strictObject({ type: z.literal('function'), function: z.strictObject({ name: z.string() }) }),
+  z.strictObject({ type: z.literal('function'), name: z.string() }),
+  // Responses supports selecting built-in tools and restricted sets of allowed tools.
+  JsonObjectInputSchema.and(
+    z.object({
+      type: z.enum([
+        'mcp',
+        'web_search',
+        'web_search_preview',
+        'file_search',
+        'code_interpreter',
+        'image_generation',
+        'computer',
+        'computer_use_preview',
+        'custom',
+        'allowed_tools',
+      ]),
+    }),
+  ),
+]);
+const NestedResponseFormat = z.strictObject({
+  type: z.literal('json_schema'),
+  json_schema: z.strictObject({
+    name: z.string(),
+    description: z.string().optional(),
+    strict: z.boolean().optional(),
+    schema: SchemaDocument,
+  }),
+});
+const FlatResponseFormat = z.strictObject({
+  type: z.literal('json_schema'),
+  name: z.string().optional(),
+  description: z.string().optional(),
+  strict: z.boolean().optional(),
+  schema: SchemaDocument,
+});
+const BasicResponseFormat = z.strictObject({ type: z.enum(['text', 'json_object']) });
+const ChatResponseFormat = z.union([
+  FileReferenceInputSchema,
+  BasicResponseFormat,
+  NestedResponseFormat,
+]);
+const ResponsesResponseFormat = z.union([
+  FileReferenceInputSchema,
+  BasicResponseFormat,
+  NestedResponseFormat,
+  FlatResponseFormat,
+]);
+
+const ReasoningEffort = z.enum(['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max']);
+const Template = z
+  .string()
+  .regex(/\{\{[\s\S]+\}\}/)
+  .describe('Runtime template expression');
+const Reasoning = z.strictObject({
+  context: z.enum(['auto', 'current_turn', 'all_turns']).nullable().optional(),
+  effort: z.union([ReasoningEffort, Template]).nullable().optional(),
+  mode: z.enum(['standard', 'pro']).nullable().optional(),
+  summary: z.enum(['auto', 'concise', 'detailed']).nullable().optional(),
+});
+const ServiceTier = z
+  .enum(['auto', 'default', 'fast', 'flex', 'priority', 'premium', 'ultrafast'])
+  .nullable();
+
+const TextFields = OpenAiSharedConfigInputSchema.extend({
+  model: z.string().optional().describe('Model used when the provider ID omits a model name'),
+  temperature: z.number().optional(),
+  max_tokens: z.number().optional(),
+  top_p: z.number().optional(),
+  frequency_penalty: z.number().optional(),
+  presence_penalty: z.number().optional(),
+  best_of: z.number().optional(),
+  stop: z.union([z.string(), z.array(z.string())]).optional(),
+  seed: z.number().optional(),
+  service_tier: ServiceTier.optional(),
+  passthrough: JsonObjectInputSchema.optional().describe(
+    'Additional request fields passed to the API',
+  ),
+});
+const ChatFields = TextFields.extend({
+  max_completion_tokens: z.number().optional(),
+  functions: z.union([FileReferenceInputSchema, z.array(FunctionDefinition)]).optional(),
+  function_call: z
+    .union([z.enum(['none', 'auto']), z.strictObject({ name: z.string() })])
+    .optional(),
+  tools: Tools.optional(),
+  tool_choice: ToolChoice.optional(),
+  tool_resources: JsonObjectInputSchema.optional(),
+  response_format: ChatResponseFormat.optional(),
+  showThinking: z.boolean().optional(),
+  reasoning_effort: z.union([ReasoningEffort, Template]).nullable().optional(),
+  reasoning: Reasoning.optional(),
+  verbosity: z.enum(['low', 'medium', 'high']).optional(),
+  prompt_cache_key: z.string().optional(),
+  prompt_cache_options: z
+    .strictObject({
+      mode: z.enum(['implicit', 'explicit']).optional(),
+      ttl: z.literal('30m').optional(),
+    })
+    .optional(),
+  prompt_cache_retention: z.enum(['in_memory', '24h']).nullable().optional(),
+  safety_identifier: z.string().optional(),
+  modalities: z.array(z.string()).optional(),
+  audio: z
+    .strictObject({
+      bitrate: z.string().optional(),
+      format: z.string().optional(),
+      speed: z.number().optional(),
+      voice: z.string().optional(),
+    })
+    .optional(),
+  user: z.string().optional(),
+  metadata: z.record(z.string(), z.string()).optional(),
+  store: z.boolean().optional(),
+  omitDefaults: z.boolean().optional(),
+  functionToolCallbacks: z
+    .record(z.string(), z.string())
+    .optional()
+    .describe(
+      'Inline callback code or file:// references; functions are supported only in-process',
+    ),
+  mcp: McpConfigInputSchema.optional(),
+});
+
+export const OpenAiCompletionConfigInputSchema = TextFields.describe(
+  'Serializable legacy OpenAI Completions configuration',
+);
+export const OpenAiChatConfigInputSchema = ChatFields.describe(
+  'Serializable OpenAI Chat Completions configuration',
+);
+export const OpenAiResponsesConfigInputSchema = ChatFields.extend({
+  response_format: ResponsesResponseFormat.optional(),
+  instructions: z.string().optional(),
+  max_output_tokens: z.number().optional(),
+  max_tool_calls: z.number().optional(),
+  access_programs: z
+    .strictObject({ cyber: z.enum(['standard', 'daybreak_blue', 'daybreak_red']).optional() })
+    .optional(),
+  include: z.array(z.string()).nullable().optional(),
+  parallel_tool_calls: z.boolean().optional(),
+  previous_response_id: z.string().optional(),
+  stream: z.boolean().optional(),
+  truncation: z.enum(['auto', 'disabled']).optional(),
+  background: z.boolean().optional(),
+  webhook_url: z.string().optional(),
+}).describe(
+  'Serializable OpenAI Responses configuration, including compatible Chat option aliases',
+);
+export const OpenAiEmbeddingConfigInputSchema = OpenAiSharedConfigInputSchema.extend({
+  model: z.string().optional(),
+  passthrough: JsonObjectInputSchema.optional().describe(
+    'Embedding request fields such as dimensions and encoding_format',
+  ),
+}).describe('Serializable OpenAI embeddings configuration');
+
+const ChatOptions = ProviderOptionsInputFieldsSchema.extend({
+  id: z.union([z.literal('openai:chat'), z.templateLiteral(['openai:chat:', z.string()])]),
+  config: OpenAiChatConfigInputSchema.optional(),
+});
+const CompletionOptions = ProviderOptionsInputFieldsSchema.extend({
+  id: z.union([
+    z.literal('openai:completion'),
+    z.templateLiteral(['openai:completion:', z.string()]),
+  ]),
+  config: OpenAiCompletionConfigInputSchema.optional(),
+});
+const ResponsesOptions = ProviderOptionsInputFieldsSchema.extend({
+  id: z.union([
+    z.literal('openai:responses'),
+    z.templateLiteral(['openai:responses:', z.string()]),
+  ]),
+  config: OpenAiResponsesConfigInputSchema.optional(),
+});
+const EmbeddingOptions = ProviderOptionsInputFieldsSchema.extend({
+  id: z.union([
+    z.literal('openai:embedding'),
+    z.literal('openai:embeddings'),
+    z.templateLiteral(['openai:embedding:', z.string()]),
+    z.templateLiteral(['openai:embeddings:', z.string()]),
+  ]),
+  config: OpenAiEmbeddingConfigInputSchema.optional(),
+});
+
+/** Explicit API routes keep config correlated with id and cannot fall back to an unrestricted branch. */
+export const OpenAiProviderOptionsInputSchema = z.union([
+  ChatOptions,
+  CompletionOptions,
+  ResponsesOptions,
+  EmbeddingOptions,
+]);
+export type OpenAiSharedConfigInput = z.input<typeof OpenAiSharedConfigInputSchema>;
+export type OpenAiCompletionConfigInput = z.input<typeof OpenAiCompletionConfigInputSchema>;
+export type OpenAiChatConfigInput = z.input<typeof OpenAiChatConfigInputSchema>;
+export type OpenAiResponsesConfigInput = z.input<typeof OpenAiResponsesConfigInputSchema>;
+export type OpenAiEmbeddingConfigInput = z.input<typeof OpenAiEmbeddingConfigInputSchema>;
+export type OpenAiProviderOptionsInput = z.input<typeof OpenAiProviderOptionsInputSchema>;
+
+export const OpenAiSharedConfigInputJsonSchema = z.toJSONSchema(OpenAiSharedConfigInputSchema, {
+  target: 'draft-07',
+  io: 'input',
+});
+export const OpenAiCompletionConfigInputJsonSchema = z.toJSONSchema(
+  OpenAiCompletionConfigInputSchema,
+  { target: 'draft-07', io: 'input' },
+);
+export const OpenAiChatConfigInputJsonSchema = z.toJSONSchema(OpenAiChatConfigInputSchema, {
+  target: 'draft-07',
+  io: 'input',
+});
+export const OpenAiResponsesConfigInputJsonSchema = z.toJSONSchema(
+  OpenAiResponsesConfigInputSchema,
+  { target: 'draft-07', io: 'input' },
+);
+export const OpenAiEmbeddingConfigInputJsonSchema = z.toJSONSchema(
+  OpenAiEmbeddingConfigInputSchema,
+  { target: 'draft-07', io: 'input' },
+);
+export const OpenAiProviderOptionsInputJsonSchema = z.toJSONSchema(
+  OpenAiProviderOptionsInputSchema,
+  { target: 'draft-07', io: 'input' },
+);
