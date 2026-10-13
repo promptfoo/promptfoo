@@ -56,25 +56,18 @@ describe('downloadBlob', () => {
       fileName: 'document.pdf',
       mockUrl: 'blob:http://localhost/mock-pdf-uuid',
     },
+    {
+      description: 'with special characters in the filename',
+      blob: new Blob(['file content'], { type: 'text/plain' }),
+      fileName: 'file/with\\special:characters*.txt',
+      mockUrl: 'blob:http://localhost/mock-uuid',
+    },
   ])('should trigger a file download $description', ({ blob, fileName, mockUrl }) => {
     mockObjectUrl(mockUrl);
 
     downloadBlob(blob, fileName);
 
     verifyDownloadProcess(blob, fileName, mockUrl);
-  });
-
-  it('should handle filenames with special characters', () => {
-    const blob = new Blob(['file content'], { type: 'text/plain' });
-    const fileName = 'file/with\\special:characters*.txt';
-    const mockUrl = 'blob:http://localhost/mock-uuid';
-    mockObjectUrl(mockUrl);
-
-    downloadBlob(blob, fileName);
-
-    expect(document.body.appendChild).toHaveBeenCalledTimes(1);
-    const link = (document.body.appendChild as any).mock.calls[0][0] as HTMLAnchorElement;
-    expect(link.download).toBe(fileName);
   });
 
   it('should handle errors when URL.createObjectURL fails', () => {
