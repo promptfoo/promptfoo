@@ -8,30 +8,41 @@ import {
   rejectCallApiOnce,
   resetCallApiMock,
 } from '@app/tests/apiMocks';
-import { restoreTestTimers, useTestTimers } from '@app/tests/timers';
+import { useTestTimers } from '@app/tests/timers';
 import { callApi } from '@app/utils/api';
 import { act, renderHook, waitFor } from '@testing-library/react';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useVersionCheck } from './useVersionCheck';
 
 vi.mock('@app/utils/api', () => ({
   callApi: vi.fn(),
-  fetchUserEmail: vi.fn(() => Promise.resolve('test@example.com')),
-  fetchUserId: vi.fn(() => Promise.resolve('test-user-id')),
-  updateEvalAuthor: vi.fn(() => Promise.resolve({})),
 }));
+
+function createVersionInfo() {
+  return {
+    currentVersion: '1.0.0',
+    latestVersion: '1.1.0',
+    updateAvailable: true,
+  };
+}
+
+function createFullVersionInfo() {
+  return {
+    ...createVersionInfo(),
+    selfHosted: true,
+    isNpx: false,
+    updateCommands: {
+      primary: 'npm i -g promptfoo@latest',
+      alternative: 'npx promptfoo@latest',
+    },
+  };
+}
 
 describe('useVersionCheck', () => {
   beforeEach(() => {
     resetCallApiMock();
-    localStorage.clear();
     // Note: Do NOT use vi.useFakeTimers() here - it breaks waitFor
     // Only use fake timers in specific tests that need timer control
-  });
-
-  afterEach(() => {
-    restoreTestTimers();
-    vi.restoreAllMocks();
   });
 
   it('should initialize with loading=true, error=null, dismissed=false, and versionInfo=null', () => {
@@ -44,17 +55,7 @@ describe('useVersionCheck', () => {
   });
 
   it('should set versionInfo, loading=false, and error=null on a successful API call', async () => {
-    const mockVersionInfo = {
-      currentVersion: '1.0.0',
-      latestVersion: '1.1.0',
-      updateAvailable: true,
-      selfHosted: true,
-      isNpx: false,
-      updateCommands: {
-        primary: 'npm i -g promptfoo@latest',
-        alternative: 'npx promptfoo@latest',
-      },
-    };
+    const mockVersionInfo = createFullVersionInfo();
 
     mockCallApiResponse(mockVersionInfo);
 
@@ -71,17 +72,7 @@ describe('useVersionCheck', () => {
   });
 
   it('should set dismissed=true if the latest version matches the value in localStorage', async () => {
-    const mockVersionInfo = {
-      currentVersion: '1.0.0',
-      latestVersion: '1.1.0',
-      updateAvailable: true,
-      selfHosted: true,
-      isNpx: false,
-      updateCommands: {
-        primary: 'npm i -g promptfoo@latest',
-        alternative: 'npx promptfoo@latest',
-      },
-    };
+    const mockVersionInfo = createFullVersionInfo();
     const STORAGE_KEY = 'promptfoo:update:dismissedVersion';
 
     localStorage.setItem(STORAGE_KEY, mockVersionInfo.latestVersion);
@@ -98,17 +89,7 @@ describe('useVersionCheck', () => {
   });
 
   it('should store the latest version in localStorage and set dismissed=true when dismiss is called and versionInfo.latestVersion is present', async () => {
-    const mockVersionInfo = {
-      currentVersion: '1.0.0',
-      latestVersion: '1.1.0',
-      updateAvailable: true,
-      selfHosted: true,
-      isNpx: false,
-      updateCommands: {
-        primary: 'npm i -g promptfoo@latest',
-        alternative: 'npx promptfoo@latest',
-      },
-    };
+    const mockVersionInfo = createFullVersionInfo();
 
     mockCallApiResponse(mockVersionInfo);
 
@@ -132,11 +113,7 @@ describe('useVersionCheck', () => {
     const getItemSpy = vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
       throw new Error('SecurityError');
     });
-    const versionInfo = {
-      currentVersion: '1.0.0',
-      latestVersion: '1.1.0',
-      updateAvailable: true,
-    };
+    const versionInfo = createVersionInfo();
     mockCallApiResponse(versionInfo);
 
     const { result } = renderHook(() => useVersionCheck());
@@ -152,11 +129,7 @@ describe('useVersionCheck', () => {
     const setItemSpy = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
       throw new Error('QuotaExceededError');
     });
-    const versionInfo = {
-      currentVersion: '1.0.0',
-      latestVersion: '1.1.0',
-      updateAvailable: true,
-    };
+    const versionInfo = createVersionInfo();
     mockCallApiResponse(versionInfo);
 
     const { result } = renderHook(() => useVersionCheck());
@@ -175,17 +148,7 @@ describe('useVersionCheck', () => {
 
   it('should only call the API once on mount and not refresh', async () => {
     const timers = useTestTimers();
-    const mockVersionInfo = {
-      currentVersion: '1.0.0',
-      latestVersion: '1.1.0',
-      updateAvailable: true,
-      selfHosted: true,
-      isNpx: false,
-      updateCommands: {
-        primary: 'npm i -g promptfoo@latest',
-        alternative: 'npx promptfoo@latest',
-      },
-    };
+    const mockVersionInfo = createFullVersionInfo();
 
     mockCallApiResponse(mockVersionInfo);
 
@@ -223,11 +186,7 @@ describe('useVersionCheck', () => {
 
   it('retries failed version checks and clears the error after recovering', async () => {
     const timers = useTestTimers();
-    const versionInfo = {
-      currentVersion: '1.0.0',
-      latestVersion: '1.1.0',
-      updateAvailable: true,
-    };
+    const versionInfo = createVersionInfo();
     rejectCallApiOnce(new Error('First network error'));
     rejectCallApiOnce(new Error('Second network error'));
     mockCallApiResponseOnce(versionInfo);
@@ -289,11 +248,7 @@ describe('useVersionCheck', () => {
           rejectStaleRequest = reject;
         }),
     );
-    const versionInfo = {
-      currentVersion: '1.0.0',
-      latestVersion: '1.1.0',
-      updateAvailable: true,
-    };
+    const versionInfo = createVersionInfo();
     mockCallApiResponseOnce(versionInfo);
 
     const { result } = renderHook(() => useVersionCheck(), { wrapper: StrictMode });

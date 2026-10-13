@@ -411,6 +411,22 @@ providers:
 
 `store: false` controls storage at OpenAI. It does not disable Promptfoo's local response cache. Use `--no-cache` when you need fresh API requests. OpenAI's [data controls](https://developers.openai.com/api/docs/guides/your-data) describe retention and account-level restrictions.
 
+### Daybreak access programs
+
+Set `config.access_programs.cyber` to select `standard`, `daybreak_blue`, or `daybreak_red` for a Responses request:
+
+```yaml
+providers:
+  - id: openai:responses:gpt-6-sol
+    config:
+      access_programs:
+        cyber: daybreak_blue
+```
+
+Your OpenAI project needs access to the selected model and program. Use `daybreak_blue` with supported mainline models and `daybreak_red` with cyber models such as `gpt-5.6-cyber`. Use `standard` to explicitly request standard safeguards. If omitted, OpenAI chooses based on the model and your access. See [OpenAI's Daybreak guide](https://developers.openai.com/api/docs/guides/daybreak) for model eligibility.
+
+The selected program is available in the provider response's `raw.access_programs.cyber` when OpenAI returns it. Existing `config.passthrough.access_programs` settings continue to work and override the named option.
+
 ### Response state and streaming {#responses-specific-configuration-options}
 
 <details>
