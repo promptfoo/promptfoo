@@ -255,7 +255,7 @@ Promptfoo omits `temperature` for models it recognizes as reasoning models, incl
 <details>
 <summary>Defaults and additional request options</summary>
 
-Known older families such as GPT-4.1, GPT-4o, GPT-3.5, and GPT Audio keep `temperature: 0` and an output limit of 1,024 tokens. Reasoning models and unknown OpenAI Chat aliases use `max_completion_tokens`, with no built-in output limit. Unknown aliases also leave temperature unset and forward explicitly configured `reasoning_effort`, so internal names do not need a recognized model slug.
+Known older families such as GPT-4.1, GPT-4o, GPT-3.5, and GPT Audio keep `temperature: 0` and an output limit of 1,024 tokens. Reasoning models and unknown OpenAI Chat aliases use `max_completion_tokens`, with no built-in output limit. Unknown aliases also omit the built-in temperature default and forward explicitly configured `reasoning_effort`, so internal names do not need a recognized model slug. Explicit sampling config and environment values still apply.
 
 For these modern Chat requests, `max_tokens` is accepted as an alias for `max_completion_tokens`. A prompt-level cap overrides a provider-level cap; within the same config, `max_completion_tokens` wins over `max_tokens`. Passthrough caps retain their request override precedence, including OpenRouter's legacy `max_tokens` override. Responses continues to use `max_output_tokens`.
 
