@@ -894,12 +894,11 @@ operate differently from standard models with specific requirements:
 2. They don't support `temperature` (it's ignored)
 3. They accept a `reasoning_effort` parameter ('low', 'medium', 'high')
 
-For `azure:responses` reasoning deployments, use `max_output_tokens` and the Responses
-configuration documented above.
-
-For these models, use `max_completion_tokens` to limit the total number of tokens used for reasoning and the answer. You can also use `max_tokens`; promptfoo sends that value as `max_completion_tokens`. If you set both fields in the same config, `max_completion_tokens` takes precedence.
+With `azure:chat`, use `max_completion_tokens` to limit the total number of tokens used for reasoning and the answer. You can also use `max_tokens`; promptfoo sends that value as `max_completion_tokens`. If you set both fields in the same config, `max_completion_tokens` takes precedence.
 
 A token limit set for an individual prompt overrides the provider's limit. For example, a prompt with `max_tokens: 500` uses a limit of 500 tokens even if the provider has `max_completion_tokens: 2000`.
+
+With `azure:responses`, use `max_output_tokens` to limit the total number of tokens used for reasoning and the answer. The `max_tokens` and `max_completion_tokens` settings apply to Chat Completions; they do not set the Responses token limit.
 
 `azure:completion` has no reasoning support: it always sends `max_tokens` and ignores
 `isReasoningModel`, `max_completion_tokens`, and `reasoning_effort`. Use `azure:chat` or
