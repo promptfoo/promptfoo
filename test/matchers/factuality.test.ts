@@ -226,7 +226,7 @@ describe('matchesFactuality', () => {
     await expect(matchesFactuality(input, expected, output, grading)).resolves.toEqual({
       pass: false,
       score: 0,
-      reason: 'Invalid category value: Z',
+      reason: 'Factuality grader returned an invalid category',
       tokensUsed: expect.objectContaining({
         total: expect.any(Number),
         prompt: expect.any(Number),
@@ -273,8 +273,7 @@ describe('matchesFactuality', () => {
     ).resolves.toEqual({
       pass: false,
       score: 0,
-      reason:
-        'Factuality checker output did not match expected format: I am not able to grade this submission.',
+      reason: 'Factuality checker output did not match expected format',
       tokensUsed: expect.objectContaining({
         total: expect.any(Number),
         prompt: expect.any(Number),
@@ -282,6 +281,17 @@ describe('matchesFactuality', () => {
       }),
       metadata: { graderError: true },
     });
+  });
+
+  it.each([
+    'sensitive judge content',
+    '{"category":"sensitive judge content"}',
+    { category: 'sensitive judge content' },
+  ])('keeps malformed grader payloads out of failure reasons: %j', async (output) => {
+    vi.spyOn(DefaultGradingProvider, 'callApi').mockResolvedValue({ output });
+    const result = await matchesFactuality('Input', 'Expected', 'Answer', {});
+    expect(result).toMatchObject({ pass: false, score: 0, metadata: { graderError: true } });
+    expect(result.reason).not.toContain('sensitive judge content');
   });
 
   it('should use custom prompt override when provided', async () => {

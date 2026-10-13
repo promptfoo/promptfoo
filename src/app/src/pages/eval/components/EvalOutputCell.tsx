@@ -234,19 +234,24 @@ function getFailAndPassReasons(output: EvaluateTableOutput): {
 } {
   const failReasons =
     output.gradingResult?.componentResults
-      ?.filter((result) => (result ? !result.pass : false))
+      ?.filter(
+        (result) =>
+          result &&
+          !result.pass &&
+          (!result.metadata?.graderError || output.failureReason === ResultFailureReason.ERROR),
+      )
       .map((result) => result.reason)
       .filter((reason) => reason) ?? [];
 
   const passReasons =
     output.gradingResult?.componentResults
-      ?.filter((result) => (result ? result.pass : false))
+      ?.filter((result) => result?.pass && !result.metadata?.graderError)
       .map((result) => result.reason)
       .filter((reason) => reason) ?? [];
 
   if (output.error && output.failureReason === ResultFailureReason.ERROR) {
     return {
-      failReasons: [output.error, ...failReasons],
+      failReasons: [output.error, ...failReasons.filter((reason) => reason !== output.error)],
       passReasons,
     };
   }
@@ -608,7 +613,10 @@ function getPassFailCounts(output: EvaluateTableOutput): {
   const componentResults = output.gradingResult?.componentResults;
   if (componentResults?.length) {
     componentResults.forEach((result) => {
-      if (result?.pass) {
+      if (!result || result.metadata?.graderError) {
+        return;
+      }
+      if (result.pass) {
         passCount++;
       } else {
         failCount++;
@@ -621,6 +629,11 @@ function getPassFailCounts(output: EvaluateTableOutput): {
     passCount = 1;
   } else if (output.pass === false) {
     failCount = 1;
+  }
+
+  if (passCount === 0 && failCount === 0 && output.failureReason !== ResultFailureReason.ERROR) {
+    passCount = output.pass ? 1 : 0;
+    failCount = output.pass ? 0 : 1;
   }
 
   return {

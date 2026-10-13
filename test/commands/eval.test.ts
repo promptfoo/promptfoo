@@ -1945,7 +1945,7 @@ describe('evalCommand', () => {
     },
   );
 
-  it('should resume an existing eval with persisted prompts', async () => {
+  it.each([true, false])('should resume with persisted prompts and cache=%s', async (cache) => {
     const authored = { id: 'authored-prompt', raw: 'current prompt', label: 'Saved' };
     const resumeEval = new Eval({ prompts: [authored] } as UnifiedConfig);
     resumeEval.prompts = [
@@ -1953,7 +1953,7 @@ describe('evalCommand', () => {
     ] as any;
     resumeEval.runtimeOptions = {
       repeat: 2,
-      cache: false,
+      cache,
       maxConcurrency: 2,
       delay: 0,
       providerFilter: 'selected-target',
@@ -1976,7 +1976,7 @@ describe('evalCommand', () => {
     vi.mocked(evaluate).mockImplementationOnce(async (testSuite, evalRecord, options) => {
       expect(testSuite.prompts).toEqual([authored]);
       expect(options).toEqual(
-        expect.objectContaining({ repeat: 2, cache: false, restorePromptColumns: true }),
+        expect.objectContaining({ repeat: 2, cache, restorePromptColumns: true }),
       );
       return evalRecord as Eval;
     });
@@ -2129,7 +2129,7 @@ describe('evalCommand', () => {
     const authored = { raw: 'retry prompt', label: 'Retry', config: { temperature: 1 } };
     const latestEval = new Eval({ prompts: [authored] } as UnifiedConfig);
     latestEval.prompts = [{ raw: 'retry prompt', label: 'Retry', config: {} }] as any;
-    latestEval.runtimeOptions = { providerFilter: 'selected-target' };
+    latestEval.runtimeOptions = { cache: true, providerFilter: 'selected-target' };
     const latestSpy = vi.spyOn(Eval, 'latest').mockResolvedValueOnce(latestEval);
     vi.mocked(getErrorResultIds).mockResolvedValueOnce(['result-1', 'result-2']);
     vi.mocked(resolveConfigs).mockResolvedValueOnce({
@@ -2149,6 +2149,7 @@ describe('evalCommand', () => {
     vi.mocked(evaluate).mockImplementationOnce(async (testSuite, evalRecord, options) => {
       expect(testSuite.prompts).toEqual([authored]);
       expect(options.restorePromptColumns).toBe(true);
+      expect(options.cache).toBe(false);
       return evalRecord as Eval;
     });
 

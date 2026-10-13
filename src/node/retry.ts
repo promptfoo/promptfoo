@@ -226,10 +226,10 @@ export async function recalculatePromptMetrics(evalRecord: Eval): Promise<void> 
         // Update assertion counts
         if (result.gradingResult?.componentResults) {
           metrics.assertPassCount += result.gradingResult.componentResults.filter(
-            (r) => r.pass,
+            (r) => r.pass && r.metadata?.graderError !== true,
           ).length;
           metrics.assertFailCount += result.gradingResult.componentResults.filter(
-            (r) => !r.pass,
+            (r) => !r.pass && r.metadata?.graderError !== true,
           ).length;
         }
 
@@ -373,6 +373,7 @@ async function retryWithConfig(
 
   // Set up evaluation options
   const evaluateOptions: InternalEvaluateOptions = {
+    cache: false,
     maxConcurrency: effectiveDelay && effectiveDelay > 0 ? 1 : effectiveMaxConcurrency,
     delay: effectiveDelay,
     eventSource: 'cli',

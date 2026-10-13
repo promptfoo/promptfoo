@@ -2,6 +2,40 @@ import { describe, expect, it } from 'vitest';
 import { accumulateNamedMetric, backfillNamedScoreWeights } from '../../src/util/namedMetrics';
 
 describe('accumulateNamedMetric', () => {
+  it('does not count an unavailable grader alongside a valid observation of the same metric', () => {
+    const metrics = { namedScores: {}, namedScoresCount: {}, namedScoreWeights: {} };
+    accumulateNamedMetric(metrics, {
+      metricName: 'quality',
+      metricValue: 1,
+      gradingResult: {
+        pass: false,
+        score: 0.5,
+        reason: 'Judge unavailable',
+        namedScoreWeights: { quality: 1 },
+        componentResults: [
+          {
+            pass: true,
+            score: 1,
+            reason: 'Correct',
+            assertion: { type: 'llm-rubric', metric: 'quality' },
+          },
+          {
+            pass: false,
+            score: 0,
+            reason: 'Judge unavailable',
+            assertion: { type: 'llm-rubric', metric: 'quality' },
+            metadata: { graderError: true },
+          },
+        ],
+      },
+    });
+    expect(metrics).toEqual({
+      namedScores: { quality: 1 },
+      namedScoresCount: { quality: 1 },
+      namedScoreWeights: { quality: 1 },
+    });
+  });
+
   it('preserves weighted totals from grading results while keeping assertion counts', () => {
     const metrics = {
       namedScores: {},

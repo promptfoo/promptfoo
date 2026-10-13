@@ -59,14 +59,18 @@ it.each<{
     expect(row).toMatchObject({
       success: pass,
       score: Number(pass),
-      failureReason: pass ? ResultFailureReason.NONE : ResultFailureReason.ASSERT,
+      failureReason: pass
+        ? ResultFailureReason.NONE
+        : graderError
+          ? ResultFailureReason.ERROR
+          : ResultFailureReason.ASSERT,
     });
     expect(row.gradingResult.metadata?.graderError).toBe(graderError || undefined);
     expect(row.gradingResult.reason).toBe(grade.reason);
     expect(exported.results.stats).toMatchObject({
       successes: Number(pass),
-      failures: Number(!pass),
-      errors: 0,
+      failures: Number(!pass && !graderError),
+      errors: Number(graderError),
     });
   },
 );

@@ -204,7 +204,11 @@ describe('retryCommand', () => {
               pass: true,
               score: 1,
               reason: 'passed',
-              componentResults: [{ pass: true }, { pass: false }],
+              componentResults: [
+                { pass: true },
+                { pass: false },
+                { pass: false, metadata: { graderError: true } },
+              ],
               tokensUsed: { total: 3, prompt: 2, completion: 1 },
             },
           },
@@ -529,6 +533,7 @@ describe('retryCommand', () => {
       expect(receivedSuite).toBe(testSuite);
       expect(receivedEval).toBe(originalEval);
       expect(options).toEqual({
+        cache: false,
         delay: 0,
         eventSource: 'cli',
         maxConcurrency: 4,
@@ -573,6 +578,7 @@ describe('retryCommand', () => {
     vi.mocked(evaluate).mockImplementation(async (_suite, _eval, options) => {
       expect(cliState.maxConcurrency).toBe(1);
       expect(options).toEqual({
+        cache: false,
         delay: 25,
         eventSource: 'cli',
         maxConcurrency: 1,

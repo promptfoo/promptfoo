@@ -29,7 +29,12 @@ import {
   getPrimaryTokenUsageLabel,
   getTokenUsageTotal,
 } from '@app/utils/tokenUsage';
-import { FILE_METADATA_KEY, HUMAN_ASSERTION_TYPE } from '@promptfoo/providers/constants';
+import {
+  applyManualRating,
+  type ManualRating,
+  updateManualRatingMetrics,
+} from '@promptfoo/presentation/manualRating';
+import { FILE_METADATA_KEY } from '@promptfoo/providers/constants';
 import {
   type EvalResultsFilterMode,
   type EvaluateTable,
@@ -518,13 +523,6 @@ type PromptSummaryMetric = {
 
 type PromptMetrics = ReturnType<ReturnType<typeof useMetricsGetter>>;
 
-type ManualRatingUpdate = {
-  pass: EvaluateTableOutput['pass'];
-  score: EvaluateTableOutput['score'];
-  componentResults?: NonNullable<GradingResult['componentResults']>;
-  modifiedComponentResults: boolean;
-};
-
 function formatProviderString(prompt: EvaluateTable['head']['prompts'][number]): string {
   if (typeof prompt.provider === 'string') {
     return prompt.provider;
@@ -812,193 +810,19 @@ function renderTokensPerSecondMetric(metrics: PromptMetrics['total']): React.Rea
   );
 }
 
-function averageComponentResultScore(
-  componentResults: NonNullable<GradingResult['componentResults']>,
-  fallbackScore: EvaluateTableOutput['score'],
-): EvaluateTableOutput['score'] {
-  const scores = componentResults
-    .map((result) => result.score)
-    .filter((resultScore): resultScore is number => typeof resultScore === 'number');
-
-  if (scores.length === 0) {
-    return fallbackScore;
-  }
-
-  return scores.reduce((sum, resultScore) => sum + resultScore, 0) / scores.length;
-}
-
-function getManualRatingUpdate({
-  existingOutput,
-  isPass,
-  score,
-  comment,
-}: {
-  existingOutput: EvaluateTableOutput;
-  isPass?: boolean | null;
-  score?: number;
-  comment?: string;
-}): ManualRatingUpdate {
-  let finalPass = existingOutput.pass;
-  let finalScore = existingOutput.score;
-
-  if (typeof score !== 'undefined') {
-    finalScore = score;
-  } else if (typeof isPass !== 'undefined' && isPass !== null) {
-    finalScore = isPass ? 1 : 0;
-  }
-
-  if (typeof isPass === 'undefined') {
-    return {
-      pass: finalPass,
-      score: finalScore,
-      modifiedComponentResults: false,
-    };
-  }
-
-  const componentResults = [...(existingOutput.gradingResult?.componentResults || [])];
-  const humanResultIndex = componentResults.findIndex(
-    (result) => result.assertion?.type === HUMAN_ASSERTION_TYPE,
-  );
-
-  if (isPass === null) {
-    if (humanResultIndex !== -1) {
-      componentResults.splice(humanResultIndex, 1);
-    }
-
-    if (componentResults.length > 0) {
-      finalPass =
-        componentResults.filter((result) => result.pass).length === componentResults.length;
-      finalScore = averageComponentResultScore(componentResults, finalScore);
-    }
-
-    return {
-      pass: finalPass,
-      score: finalScore,
-      componentResults,
-      modifiedComponentResults: true,
-    };
-  }
-
-  finalPass = isPass;
-
-  const humanResult = {
-    pass: finalPass,
-    score: finalScore,
-    reason: 'Manual result (overrides all other grading results)',
-    comment,
-    assertion: { type: HUMAN_ASSERTION_TYPE },
-  };
-
-  if (humanResultIndex === -1) {
-    componentResults.push(humanResult);
-  } else {
-    componentResults[humanResultIndex] = humanResult;
-  }
-
-  return {
-    pass: finalPass,
-    score: finalScore,
-    componentResults,
-    modifiedComponentResults: true,
-  };
-}
-
-function buildManualGradingResult({
-  existingOutput,
-  ratingUpdate,
-  isPass,
-  score,
-  comment,
-}: {
-  existingOutput: EvaluateTableOutput;
-  ratingUpdate: ManualRatingUpdate;
-  isPass?: boolean | null;
-  score?: number;
-  comment?: string;
-}): GradingResult {
-  const { componentResults: _, ...existingGradingResultWithoutComponents } =
-    existingOutput.gradingResult || {};
-
-  const gradingResult: GradingResult = {
-    ...existingGradingResultWithoutComponents,
-    pass: existingOutput.gradingResult?.pass ?? ratingUpdate.pass,
-    score: existingOutput.gradingResult?.score ?? ratingUpdate.score,
-    reason: existingOutput.gradingResult?.reason ?? 'Manual result',
-    comment,
-  };
-
-  if (isPass === null) {
-    gradingResult.pass = ratingUpdate.pass;
-    gradingResult.score = ratingUpdate.score;
-    if (gradingResult.reason === 'Manual result (overrides all other grading results)') {
-      gradingResult.reason = ratingUpdate.componentResults?.[0]?.reason || 'Manual rating cleared';
-    }
-    if (gradingResult.assertion?.type === HUMAN_ASSERTION_TYPE) {
-      delete gradingResult.assertion;
-    }
-  } else if (typeof isPass !== 'undefined' || typeof score !== 'undefined') {
-    gradingResult.pass = ratingUpdate.pass;
-    gradingResult.score = ratingUpdate.score;
-    gradingResult.reason = 'Manual result (overrides all other grading results)';
-    if (existingOutput.gradingResult?.assertion) {
-      gradingResult.assertion = existingOutput.gradingResult.assertion;
-    }
-  }
-
-  if (ratingUpdate.modifiedComponentResults && ratingUpdate.componentResults) {
-    gradingResult.componentResults = ratingUpdate.componentResults;
-  } else if (existingOutput.gradingResult?.componentResults?.length) {
-    gradingResult.componentResults = existingOutput.gradingResult.componentResults;
-  }
-
-  return gradingResult;
-}
-
-function buildRatingTableUpdate({
-  head,
-  body,
-  rowIndex,
-  promptIndex,
-  ratingUpdate,
-  gradingResult,
-}: {
-  head: EvaluateTable['head'];
-  body: EvaluateTable['body'];
-  rowIndex: number;
-  promptIndex: number;
-  ratingUpdate: ManualRatingUpdate;
-  gradingResult: GradingResult;
-}): EvaluateTable {
-  const updatedData = [...body];
-  const updatedRow = { ...updatedData[rowIndex] };
-  const updatedOutputs = [...updatedRow.outputs];
-
-  updatedOutputs[promptIndex] = {
-    ...updatedOutputs[promptIndex],
-    pass: ratingUpdate.pass,
-    score: ratingUpdate.score,
-    gradingResult,
-  };
-  updatedRow.outputs = updatedOutputs;
-  updatedData[rowIndex] = updatedRow;
-
-  return {
-    head,
-    body: updatedData,
-  };
-}
-
 async function saveManualRating({
   evalId,
   resultId,
   version,
   gradingResult,
+  action,
   table,
 }: {
   evalId: string | null;
   resultId: string;
   version: number | null | undefined;
   gradingResult: GradingResult;
+  action: ManualRating['action'];
   table: EvaluateTable;
 }): Promise<void> {
   invariant(evalId, 'Cannot save manual rating without an evaluation ID');
@@ -1010,7 +834,7 @@ async function saveManualRating({
           headers: {
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify({ ...gradingResult }),
+          body: JSON.stringify({ ...gradingResult, action }),
         })
       : await callApi(EVAL_ROUTES.DETAIL(evalId), {
           method: 'PATCH',
@@ -1694,27 +1518,42 @@ function ResultsTable({
       comment?: string,
     ) => {
       const existingOutput = body[rowIndex].outputs[promptIndex];
-      const ratingUpdate = getManualRatingUpdate({
-        existingOutput,
-        isPass,
+      const action =
+        isPass === null
+          ? 'clear'
+          : isPass !== undefined || score !== undefined
+            ? 'rate'
+            : 'annotate';
+      const ratedOutput = applyManualRating(existingOutput, {
+        action,
+        pass: isPass ?? undefined,
         score,
         comment,
       });
-      const gradingResult = buildManualGradingResult({
-        existingOutput,
-        ratingUpdate,
-        isPass,
-        score,
-        comment,
-      });
-      const newTable = buildRatingTableUpdate({
-        head,
-        body,
-        rowIndex,
-        promptIndex,
-        ratingUpdate,
-        gradingResult,
-      });
+      const gradingResult = ratedOutput.gradingResult;
+      const newTable = {
+        head: {
+          ...head,
+          prompts: head.prompts.map((prompt, index) =>
+            index === promptIndex && prompt.metrics
+              ? {
+                  ...prompt,
+                  metrics: updateManualRatingMetrics(prompt.metrics, existingOutput, ratedOutput),
+                }
+              : prompt,
+          ),
+        },
+        body: body.map((row, index) =>
+          index === rowIndex
+            ? {
+                ...row,
+                outputs: row.outputs.map((output, column) =>
+                  column === promptIndex ? { ...output, ...ratedOutput } : output,
+                ),
+              }
+            : row,
+        ),
+      };
 
       setTable(newTable);
       if (inComparisonMode) {
@@ -1726,6 +1565,7 @@ function ResultsTable({
             resultId,
             version,
             gradingResult,
+            action,
             table: newTable,
           });
         } catch (error) {

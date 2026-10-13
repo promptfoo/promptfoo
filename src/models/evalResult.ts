@@ -1331,8 +1331,8 @@ export default class EvalResult {
     this.pluginId = opts.testCase.metadata?.pluginId;
   }
 
-  async save() {
-    const db = await getDb();
+  async save(transaction?: Pick<Awaited<ReturnType<typeof getDb>>, 'insert' | 'update'>) {
+    const db = transaction ?? (await getDb());
     // Trace/repeat linkage and `pluginId` aren't schema columns — `pluginId` is re-derived
     // from testCase metadata, while linkage travels inside the metadata JSON. Drizzle would
     // drop them silently, but excluding them explicitly keeps the payload aligned with the schema.

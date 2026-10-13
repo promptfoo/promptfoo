@@ -21,6 +21,9 @@ function getContributingAssertionCount(
 ): number {
   const contributingAssertions =
     gradingResult?.componentResults?.reduce((count, componentResult) => {
+      if (componentResult.metadata?.graderError === true) {
+        return count;
+      }
       const renderedMetric = renderMetricName(componentResult.assertion?.metric, testVars);
       return renderedMetric === metricName ? count + 1 : count;
     }, 0) ?? 0;

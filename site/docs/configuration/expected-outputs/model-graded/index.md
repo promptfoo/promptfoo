@@ -741,7 +741,9 @@ Assertions with built-in thresholds, such as `answer-relevance`, `context-recall
 `context-relevance`, and `context-faithfulness`, default to `0.5` when `threshold` is
 omitted.
 
-Aggregated grading results preserve `metadata.graderError: true` for grader execution failures from failed components with nonzero assertion and parent-set weights. Valid negative judgments do not add this flag, and passing aggregates do not inherit it from failed components. Inspect it on `assertions.runAssertions(...)` results or `result.gradingResult` in full JSON exports. This metadata does not change row status, counters, or retry selection.
+Grader execution failures, such as unavailable providers, missing output, or malformed verdicts, carry `metadata.graderError: true`. When an effective failed assertion propagates this flag, the test is recorded as `ERROR` (`failureReason: 2`) in the CLI, viewer, and JSON export. Valid negative judgments remain assertion failures (`failureReason: 1`). Passing aggregates and zero-weight assertions do not become errors because of an ignored grader failure.
+
+Unavailable grader observations remain in the diagnostic results but are excluded from named quality metrics and assertion pass/fail counts. Overall scores and thresholds remain unchanged, and errors still count against the CLI pass-rate threshold. Use `promptfoo eval --retry-errors` to rerun error cases with fresh target and grader responses. In the viewer, manual ratings override the error, and clearing a rating restores the original result.
 
 **Common issue**: Tests show PASS even when scores are low
 

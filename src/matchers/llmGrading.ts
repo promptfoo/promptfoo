@@ -11,7 +11,6 @@ import {
 import { getDefaultProviders } from '../providers/defaults';
 import { doRemoteGrading } from '../remoteGrading';
 import { doRemoteScoringWithPi } from '../remoteScoring';
-import invariant from '../util/invariant';
 import { extractFirstJsonObject } from '../util/json';
 import { accumulateTokenUsage } from '../util/tokenUsageUtils';
 import {
@@ -94,7 +93,7 @@ function parseFactualityJsonResponse(
 
     const option = jsonData.category.trim().toUpperCase();
     if (!/^[A-E]$/.test(option)) {
-      throw new Error(`Invalid category value: ${option}`);
+      throw new Error('Factuality grader returned an invalid category');
     }
 
     return {
@@ -105,10 +104,10 @@ function parseFactualityJsonResponse(
     };
   } catch (err) {
     const error = err as Error;
-    if (error.message.startsWith('Invalid category value:')) {
+    if (error.message === 'Factuality grader returned an invalid category') {
       throw error;
     }
-    logger.debug(`JSON parsing failed: ${error.message}`);
+    logger.debug('Factuality grader response was not valid JSON');
     return undefined;
   }
 }
@@ -116,7 +115,7 @@ function parseFactualityJsonResponse(
 function parseLegacyFactualityResponse(responseText: string): { option: string; reason: string } {
   const answerMatch = responseText.match(/\s*\(?([a-eA-E])\)/);
   if (!answerMatch) {
-    throw new Error(`Factuality checker output did not match expected format: ${responseText}`);
+    throw new Error('Factuality checker output did not match expected format');
   }
 
   const option = answerMatch[1].toUpperCase();
@@ -358,7 +357,9 @@ export async function matchesFactuality(
     return graderFail(resp.error || 'No output', resp.tokenUsage);
   }
 
-  invariant(typeof resp.output === 'string', 'factuality produced malformed response');
+  if (typeof resp.output !== 'string') {
+    return graderFail('Factuality grader produced a non-text response', resp.tokenUsage);
+  }
 
   try {
     const parsedJson = parseFactualityJsonResponse(resp.output);
@@ -416,7 +417,9 @@ export async function matchesClosedQa(
     return graderFail(resp.error || 'No output', resp.tokenUsage);
   }
 
-  invariant(typeof resp.output === 'string', 'model-graded-closedqa produced malformed response');
+  if (typeof resp.output !== 'string') {
+    return graderFail('Closed-QA grader produced a non-text response', resp.tokenUsage);
+  }
   try {
     const pass = resp.output.trimEnd().endsWith('Y');
     let reason;
@@ -425,10 +428,7 @@ export async function matchesClosedQa(
     } else if (resp.output.trimEnd().endsWith('N')) {
       reason = `The submission does not meet the criterion:\n${resp.output}`;
     } else {
-      return graderFail(
-        `Model grader produced a malformed response:\n${resp.output}`,
-        resp.tokenUsage,
-      );
+      return graderFail('Closed-QA grader produced a malformed response', resp.tokenUsage);
     }
     return {
       pass,
@@ -436,8 +436,8 @@ export async function matchesClosedQa(
       reason,
       tokensUsed: normalizeMatcherTokenUsage(resp.tokenUsage),
     };
-  } catch (err) {
-    return graderFail(`Error parsing output: ${(err as Error).message}`, resp.tokenUsage);
+  } catch {
+    return graderFail('Closed-QA grader produced a malformed response', resp.tokenUsage);
   }
 }
 

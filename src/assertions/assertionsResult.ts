@@ -273,14 +273,17 @@ export class AssertionsResult {
 
     // Zero-weight assertions collect measurements without affecting the aggregate score.
     const metricWeight = weight === 0 ? 1 : weight;
-    if (metric) {
+    const hasUnavailableGrade =
+      result.metadata?.graderError === true ||
+      result.componentResults?.some((component) => component.metadata?.graderError === true);
+    if (metric && !hasUnavailableGrade) {
       this.namedScores[metric] = (this.namedScores[metric] ?? 0) + result.score * metricWeight;
       this.namedScoreWeights[metric] = (this.namedScoreWeights[metric] ?? 0) + metricWeight;
     }
 
-    if (result.namedScores) {
+    if (result.namedScores && (!hasUnavailableGrade || result.componentResults?.length)) {
       Object.entries(result.namedScores).forEach(([metricName, score]) => {
-        if (metricName !== metric) {
+        if (metricName !== metric || hasUnavailableGrade) {
           const incomingWeight =
             result.namedScoreWeights &&
             Object.prototype.hasOwnProperty.call(result.namedScoreWeights, metricName)
@@ -300,13 +303,16 @@ export class AssertionsResult {
       accumulateNormalizedAssertionTokenUsage(this.tokensUsed, tokensUsed);
     }
 
-    if (result.pass) {
+    if (result.pass || weight === 0) {
       return;
     }
 
     this.failedReason = result.reason;
 
-    if (getEnvBool('PROMPTFOO_SHORT_CIRCUIT_TEST_FAILURES')) {
+    if (
+      getEnvBool('PROMPTFOO_SHORT_CIRCUIT_TEST_FAILURES') &&
+      this._parentAssertionSet?.assertionSet.weight !== 0
+    ) {
       throw new Error(result.reason);
     }
   }
@@ -465,6 +471,9 @@ export class AssertionsResult {
     // Custom scoring may change the preliminary pass/fail state or metadata.
     if (!this.result.pass && failedGrader) {
       this.result.metadata = { ...this.result.metadata, graderError: true as const };
+      if (!scoringFunction) {
+        this.result.reason = failedGrader.reason || 'Grader failed to produce a verdict';
+      }
     }
 
     return this.result;

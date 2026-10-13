@@ -253,7 +253,9 @@ describe('AssertionsResult', () => {
       const aggregate = await result.testResult();
       expect(aggregate.pass).toBe(false);
       expect(aggregate.metadata?.graderError).toBe(threshold === 0 ? undefined : true);
-      expect(aggregate.reason).toBe(ordinaryFailure.reason);
+      expect(aggregate.reason).toBe(
+        threshold === 0 ? ordinaryFailure.reason : graderFailure.reason,
+      );
     });
 
     it('ignores force-passed metric-only grader failures', async () => {
@@ -265,16 +267,62 @@ describe('AssertionsResult', () => {
       expect(aggregate.metadata?.graderError).toBeUndefined();
     });
 
-    it('preserves the threshold reason while carrying grader failure metadata', async () => {
+    it('preserves the grader cause when a thresholded aggregate fails', async () => {
       const result = new AssertionsResult({ threshold: 0.6 });
       result.addResult({ index: 0, result: { pass: true, score: 1, reason: 'Criterion met' } });
       result.addResult({ index: 1, result: graderFailure });
       expect(await result.testResult()).toMatchObject({
         pass: false,
-        reason: 'Aggregate score 0.50 < 0.6 threshold',
+        reason: graderFailure.reason,
         metadata: { graderError: true },
       });
     });
+
+    it.each([0, 1])('omits unavailable metrics with assertion weight %s', async (weight) => {
+      const result = new AssertionsResult({});
+      result.addResult({
+        index: 0,
+        metric: 'quality',
+        result: { pass: true, score: 1, reason: 'Criterion met' },
+      });
+      result.addResult({
+        index: 1,
+        metric: 'quality',
+        weight,
+        result: {
+          ...graderFailure,
+          pass: weight === 0,
+          namedScores: { unavailable: 0 },
+          tokensUsed: { total: 10 },
+        },
+      });
+      const aggregate = await result.testResult();
+      expect(aggregate.namedScores).toEqual({ quality: 1 });
+      expect(aggregate.namedScoreWeights).toEqual({ quality: 1 });
+      expect(aggregate.componentResults?.[1].metadata?.graderError).toBe(true);
+      expect(aggregate.tokensUsed?.total).toBe(10);
+      expect(aggregate.score).toBe(weight === 0 ? 1 : 0.5);
+    });
+
+    it.each([undefined, 0])(
+      'retains valid child metrics in an incomplete set with threshold %s',
+      async (threshold) => {
+        const nested = new AssertionsResult({ threshold });
+        nested.addResult({
+          index: 0,
+          metric: 'quality',
+          result: { pass: true, score: 1, reason: 'Criterion met' },
+        });
+        nested.addResult({ index: 1, metric: 'quality', result: graderFailure });
+        const result = new AssertionsResult({});
+        result.addResult({ index: 0, metric: 'setQuality', result: await nested.testResult() });
+        expect(await result.testResult()).toMatchObject({
+          namedScores: { quality: 1 },
+          namedScoreWeights: { quality: 1 },
+        });
+        expect((await result.testResult()).namedScores).not.toHaveProperty('setQuality');
+      },
+    );
 
     it.each([
       { metricOnly: false, scorerGraderError: undefined, pass: false, expected: true },

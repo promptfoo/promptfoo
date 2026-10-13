@@ -593,7 +593,7 @@ async function doEvalWithEnv(
       };
     }
 
-    // Resume and error retries must preserve the original expansion and cache settings.
+    // Resume preserves cache settings. Explicit error retries need fresh grader responses.
     let repeat: number;
     let cache: boolean | undefined;
     let maxConcurrency: number;
@@ -606,7 +606,7 @@ async function doEvalWithEnv(
         Number.isSafeInteger(persisted.repeat || 0) && (persisted.repeat as number) > 0
           ? (persisted.repeat as number)
           : 1;
-      cache = persisted.cache ?? true;
+      cache = retryErrors ? false : (persisted.cache ?? true);
       maxConcurrency = (persisted.maxConcurrency as number | undefined) ?? DEFAULT_MAX_CONCURRENCY;
       delay = (persisted.delay as number | undefined) ?? 0;
     } else {

@@ -178,6 +178,59 @@ describe('EvalOutputCell', () => {
     timers = undefined;
   });
 
+  it.each([false, true])(
+    'excludes grader errors from verdict counts when component pass is %s',
+    (graderPass) => {
+      const reason = 'Grader unavailable';
+      renderWithProviders(
+        <EvalOutputCell
+          {...defaultProps}
+          output={{
+            ...defaultProps.output,
+            pass: true,
+            failureReason: ResultFailureReason.NONE,
+            error: null,
+            gradingResult: {
+              pass: true,
+              score: 1,
+              reason: 'Manual result',
+              componentResults: [
+                { pass: graderPass, score: 0, reason, metadata: { graderError: true } },
+                { pass: true, score: 1, reason: 'Manual result', assertion: { type: 'human' } },
+              ],
+            },
+          }}
+        />,
+      );
+      expect(screen.getByText('PASS', { exact: true })).toBeInTheDocument();
+      expect(screen.queryByText(/FAIL/)).not.toBeInTheDocument();
+      expect(screen.queryByText(reason)).not.toBeInTheDocument();
+    },
+  );
+
+  it('shows a promoted grader error only once', () => {
+    const reason = 'Grader unavailable';
+    renderWithProviders(
+      <EvalOutputCell
+        {...defaultProps}
+        output={{
+          ...defaultProps.output,
+          pass: false,
+          failureReason: ResultFailureReason.ERROR,
+          error: reason,
+          gradingResult: {
+            pass: false,
+            score: 0,
+            reason,
+            componentResults: [{ pass: false, score: 0, reason, metadata: { graderError: true } }],
+          },
+        }}
+      />,
+    );
+    expect(screen.getAllByText(reason)).toHaveLength(1);
+    expect(screen.queryByText('1/2')).not.toBeInTheDocument();
+  });
+
   it.each([
     [true, 'Mark as safe', 'Mark as vulnerable', 'lucide-check', 'lucide-x'],
     [false, 'Mark test passed', 'Mark test failed', 'lucide-thumbs-up', 'lucide-thumbs-down'],
