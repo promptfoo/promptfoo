@@ -45,9 +45,18 @@ const FunctionDefinition = z.strictObject({
     .nullable()
     .optional(),
 });
+const ChatFunctionDefinition = FunctionDefinition.pick({
+  name: true,
+  description: true,
+  parameters: true,
+  strict: true,
+}).extend({
+  description: z.string().optional(),
+  parameters: JsonObjectInputSchema.optional(),
+});
 const ChatFunctionTool = z.strictObject({
   type: z.literal('function'),
-  function: FunctionDefinition,
+  function: ChatFunctionDefinition,
 });
 const ResponsesFunctionTool = FunctionDefinition.extend({ type: z.literal('function') });
 const McpToolFields = z.strictObject({
@@ -166,9 +175,33 @@ const Tool = z.union([
   ComputerPreviewTool,
   BuiltInTool,
 ]);
-const Tools = z.union([
+const ChatCustomTool = z
+  .object({
+    type: z.literal('custom'),
+    custom: z
+      .object({
+        name: z.string(),
+        description: z.string().optional(),
+        format: JsonObjectInputSchema.optional(),
+      })
+      .catchall(z.json()),
+  })
+  .catchall(z.json());
+// The loader flattens arrays only when every entry loads as an array. Keep references separate.
+const ChatTools = z.union([
   FileReferenceInputSchema,
-  z.array(z.union([Tool, FileReferenceInputSchema])),
+  z.array(FileReferenceInputSchema),
+  z.array(z.union([ChatFunctionTool, ChatCustomTool])),
+]);
+const ResponsesTools = z.union([
+  FileReferenceInputSchema,
+  z.array(FileReferenceInputSchema),
+  z.array(Tool),
+]);
+const ChatToolChoice = z.union([
+  z.enum(['none', 'auto', 'required']),
+  z.strictObject({ type: z.literal('function'), function: z.strictObject({ name: z.string() }) }),
+  z.strictObject({ type: z.literal('custom'), custom: z.strictObject({ name: z.string() }) }),
 ]);
 const NamedToolChoice = z
   .object({ type: z.enum(['function', 'custom']), name: z.string() })
@@ -243,8 +276,7 @@ const ResponsesResponseFormat = z.union([
 
 const ReasoningEffort = z.enum(['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max']);
 const Template = z
-  .string()
-  .regex(/\{\{[\s\S]+\}\}/)
+  .templateLiteral([z.string(), '{{', z.string().regex(/[\s\S]+/), '}}', z.string()])
   .describe('Runtime template expression');
 const Reasoning = z.strictObject({
   context: z
@@ -282,12 +314,12 @@ const TextFields = OpenAiSharedConfigInputSchema.extend({
 });
 const ChatFields = TextFields.extend({
   max_completion_tokens: z.number().optional(),
-  functions: z.union([FileReferenceInputSchema, z.array(FunctionDefinition)]).optional(),
+  functions: z.union([FileReferenceInputSchema, z.array(ChatFunctionDefinition)]).optional(),
   function_call: z
     .union([z.enum(['none', 'auto']), z.strictObject({ name: z.string() })])
     .optional(),
-  tools: Tools.optional(),
-  tool_choice: ToolChoice.optional(),
+  tools: ChatTools.optional(),
+  tool_choice: ChatToolChoice.optional(),
   tool_resources: JsonObjectInputSchema.optional(),
   response_format: ChatResponseFormat.optional(),
   showThinking: z.boolean().optional(),
@@ -345,6 +377,8 @@ export const OpenAiResponsesConfigInputSchema = ChatFields.omit({
   audio: true,
 })
   .extend({
+    tools: ResponsesTools.optional(),
+    tool_choice: ToolChoice.optional(),
     response_format: ResponsesResponseFormat.optional(),
     instructions: z.string().optional(),
     max_output_tokens: z.number().optional(),
