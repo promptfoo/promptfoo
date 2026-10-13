@@ -30,6 +30,38 @@ describe('VariableMarkdownCell', () => {
       expect(screen.getByText('Hello, world!')).toBeInTheDocument();
     });
 
+    it.each([
+      '![request screenshot]()',
+      '![request screenshot](data:text/plain,diagnostic)',
+      '![request screenshot][image]\n\n[image]: data:text/plain,diagnostic',
+    ])('preserves alt text for an empty or filtered image source: %s', (value) => {
+      const onImageClick = vi.fn();
+      render(
+        <VariableMarkdownCell value={value} maxTextLength={200} onImageClick={onImageClick} />,
+      );
+
+      expect(screen.getByText('request screenshot')).toBeVisible();
+      expect(screen.queryByRole('img')).not.toBeInTheDocument();
+      expect(screen.queryByRole('button')).not.toBeInTheDocument();
+      expect(onImageClick).not.toHaveBeenCalled();
+    });
+
+    it('preserves the link label when its image source is filtered', () => {
+      render(
+        <VariableMarkdownCell
+          value="[![request screenshot](data:text/plain,diagnostic)](#details)"
+          maxTextLength={200}
+        />,
+      );
+
+      expect(screen.getByRole('link', { name: 'request screenshot' })).toHaveAttribute(
+        'href',
+        '#details',
+      );
+      expect(screen.queryByRole('img')).not.toBeInTheDocument();
+      expect(screen.queryByRole('button')).not.toBeInTheDocument();
+    });
+
     it('skips ordinary text parsing and parses image syntax once', () => {
       const extractSpy = vi.spyOn(markdownConfig, 'extractRenderableMarkdownImages');
 

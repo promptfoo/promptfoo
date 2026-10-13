@@ -4,6 +4,22 @@ import { describe, expect, it, vi } from 'vitest';
 import MarkdownImage, { MarkdownImageLink } from './MarkdownImage';
 
 describe('MarkdownImage', () => {
+  it.each([undefined, ''])('preserves alt text when the image source is %s', (src) => {
+    const onImageClick = vi.fn();
+    render(<MarkdownImage src={src} alt="request screenshot" onImageClick={onImageClick} />);
+
+    expect(screen.getByText('request screenshot')).toBeVisible();
+    expect(screen.queryByRole('img')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button')).not.toBeInTheDocument();
+    expect(onImageClick).not.toHaveBeenCalled();
+  });
+
+  it.each([undefined, ''])('renders nothing for a missing source and alt text %s', (alt) => {
+    const { container } = render(<MarkdownImage alt={alt} />);
+
+    expect(container).toBeEmptyDOMElement();
+  });
+
   it('opens image previews with the keyboard', async () => {
     const user = userEvent.setup();
     const onImageClick = vi.fn();
@@ -56,9 +72,20 @@ describe('MarkdownImage', () => {
   });
 
   it('renders a non-interactive image when no preview callback is provided', () => {
-    render(<MarkdownImage src="data:image/png;base64,AA==" alt="Static chart" />);
+    render(
+      <MarkdownImage
+        src="data:image/png;base64,AA=="
+        alt="Static chart"
+        title="Chart details"
+        className="max-h-48"
+      />,
+    );
 
-    expect(screen.getByRole('img', { name: 'Static chart' })).toBeInTheDocument();
+    const image = screen.getByRole('img', { name: 'Static chart' });
+    expect(image).toHaveAttribute('src', 'data:image/png;base64,AA==');
+    expect(image).toHaveAttribute('title', 'Chart details');
+    expect(image).toHaveAttribute('loading', 'lazy');
+    expect(image).toHaveClass('max-h-48');
     expect(screen.queryByRole('button')).not.toBeInTheDocument();
   });
 });
