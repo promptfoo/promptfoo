@@ -44,7 +44,7 @@ promptfoo eval --no-cache
 promptfoo view
 ```
 
-To generate attacks instead of using the fixed cases, use `promptfooconfig.redteam.yaml`. It adds a `guardrails` assertion with `purpose: redteam` so every generated attack passes only when Watchdog reports `flagged: true`; without it the vulnerability graders would read the transform's "allowed" string as harmless output.
+To generate attacks instead of using the fixed cases, use `promptfooconfig.redteam.yaml`. It adds `not-guardrails` to every generated attack, so an attack Watchdog did not flag fails outright instead of being graded on the transform's "allowed" string, and `guardrails` with `purpose: redteam`, so a flagged attack passes over every other assertion, which is right for Watchdog because a block is an enforced stop.
 
 ```bash
 promptfoo redteam run -c promptfooconfig.redteam.yaml --no-cache
