@@ -39,6 +39,45 @@ Trajectory-based:
 
 Context-based assertions are particularly useful for evaluating RAG systems. For complete RAG evaluation examples, see the [RAG Evaluation Guide](/docs/guides/evaluate-rag).
 
+## Limiting variables sent to graders
+
+By default, model-graded assertions that accept test variables pass all of them to the grader. Use `graderVars` to allowlist only the variables the grader needs. This prevents large, unused variables from making grader requests too large:
+
+```yaml
+tests:
+  - vars:
+      criteria: Summarize accurately
+      foo: file://fixtures/large-input.txt
+    assert:
+      - type: llm-rubric
+        value: The output satisfies {{criteria}}
+        graderVars:
+          - criteria
+```
+
+Set `graderVars: []` to pass no test variables. Built-in inputs such as the model output and rubric are still included. Names reserved for an assertion's built-in grader inputs are ignored if they appear in `graderVars`.
+
+Reserved names depend on the assertion type:
+
+- `llm-rubric`, `agent-rubric`, and `search-rubric`: `output`, `rubric`
+- `factuality` and `model-graded-factuality`: `input`, `ideal`, `completion`
+- `model-graded-closedqa`: `input`, `criteria`, `completion`
+- `context-faithfulness`: `question`, `answer`, `context`, `statements`
+- `context-recall`: `context`, `groundTruth`
+- `conversation-relevance`: `messages`
+- `trajectory:goal-success`: `goal`, `output`, `trajectory`
+- `select-best`: `criteria`, `outputs`
+
+The same protection applies to `not-` variants such as `not-llm-rubric`.
+
+For assertions dispatched through `runAssertion`, `graderVars` does not remove values already inserted into an assertion's `value`. For example, a rubric containing `{{foo}}` still includes the value of `foo` after variable substitution. `select-best` does not substitute test variables into its `value`.
+
+`graderVars` filters only the ambient variable map. It does not remove values used to construct built-in grader inputs such as the evaluated prompt, output, question, context, messages, goal, or trajectory. To keep a value out of the grader request, omit it from `graderVars`, assertion values, and built-in inputs.
+
+A custom `rubricPrompt` is rendered with the projected variables. References to variables excluded by `graderVars` render as empty strings. Assertion types not listed below do not use `graderVars`.
+
+This option is supported by `llm-rubric`, `agent-rubric`, `search-rubric`, `model-graded-closedqa`, `factuality`, `model-graded-factuality`, `conversation-relevance`, `context-recall`, `context-faithfulness`, `trajectory:goal-success`, and `select-best`.
+
 ## Examples (output-based)
 
 Example of `llm-rubric` and/or `model-graded-closedqa`:
@@ -74,7 +113,7 @@ tests:
         value: 'Determine the shipping status for order {{ order_id }} and tell the user whether it has shipped'
 ```
 
-Like other model-graded assertions, you can set `threshold`, `provider`, or `rubricPrompt`:
+Like other model-graded assertions, you can set `threshold`, `provider`, `rubricPrompt`, or `graderVars`:
 
 ```yaml
 tests:

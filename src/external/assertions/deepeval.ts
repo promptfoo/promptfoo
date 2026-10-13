@@ -16,6 +16,23 @@ const DEFAULT_WINDOW_SIZE = 5;
 // DeepEval's default pass threshold for the conversation relevancy metric.
 const DEFAULT_THRESHOLD = 0.5;
 
+function getConversationGraderVars(
+  assertion: AssertionParams['assertion'],
+  vars: AssertionParams['test']['vars'],
+) {
+  if (assertion.graderVars === undefined) {
+    return vars;
+  }
+  if (!vars) {
+    return {};
+  }
+  return Object.fromEntries(
+    assertion.graderVars
+      .filter((name) => name !== 'messages' && Object.prototype.hasOwnProperty.call(vars, name))
+      .map((name) => [name, vars[name]]),
+  );
+}
+
 export const handleConversationRelevance = async ({
   assertion,
   inverse,
@@ -54,7 +71,7 @@ export const handleConversationRelevance = async ({
     const result = await matchesConversationRelevance(
       windowMessages,
       1.0, // Use 1.0 threshold for individual windows
-      test.vars,
+      getConversationGraderVars(assertion, test.vars),
       test.options,
       providerCallContext,
     );

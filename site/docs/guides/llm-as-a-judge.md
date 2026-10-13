@@ -547,7 +547,7 @@ The `rubricPrompt` supports these variables:
 
 - `{{output}}`: The LLM output being graded
 - `{{rubric}}`: The `value` from your assertion
-- Any test `vars` (e.g., `{{question}}`, `{{context}}`)
+- Test `vars` allowed by the assertion's `graderVars` setting (all test vars when `graderVars` is omitted). Excluded vars render as empty strings.
 
 ## Rubric examples
 

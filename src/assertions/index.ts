@@ -100,7 +100,13 @@ import {
   handleTrajectoryToolSequence,
   handleTrajectoryToolUsed,
 } from './trajectory';
-import { coerceString, getFinalTest, loadFromJavaScriptFile, processFileReference } from './utils';
+import {
+  coerceString,
+  getFinalTest,
+  getGraderVars,
+  loadFromJavaScriptFile,
+  processFileReference,
+} from './utils';
 import { handleWebhook } from './webhook';
 import { handleWordCount } from './wordCount';
 import { handleIsXml } from './xml';
@@ -925,7 +931,7 @@ export async function runCompareAssertion(
     assertion.value,
     outputs,
     test.options,
-    test.vars,
+    getGraderVars(assertion, test.vars),
     context,
   );
   // The runtime assertion may contain a live grader and secrets. Results only need
