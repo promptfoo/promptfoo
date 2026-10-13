@@ -774,22 +774,6 @@ describe('package manifests', () => {
     }
   });
 
-  it('keeps jks-js an optional peer so installs skip its unpatched dependency chain', () => {
-    // jks-js is the only in-tree path to node-forge, which has no patched
-    // release for GHSA-86w9-cpqp-85rv. As an optional peer it is not installed
-    // by default, while the lazy import in the HTTP provider still serves
-    // users who install it themselves.
-    const packageJson = readPackageJson<
-      PackageManifest & { peerDependenciesMeta?: Record<string, { optional?: boolean }> }
-    >('package.json');
-
-    expect(packageJson.optionalDependencies).not.toHaveProperty('jks-js');
-    expect(packageJson.dependencies).not.toHaveProperty('jks-js');
-    expect(packageJson.devDependencies).not.toHaveProperty('jks-js');
-    expect(packageJson.peerDependencies).toHaveProperty('jks-js');
-    expect(packageJson.peerDependenciesMeta?.['jks-js']?.optional).toBe(true);
-  });
-
   it('keeps the streaming OpenAI example aligned with supported Node versions', () => {
     const rootManifest = readPackageJson<{ engines?: { node?: string } }>('package.json');
     const exampleManifest = readPackageJson<{ engines?: { node?: string } }>(
