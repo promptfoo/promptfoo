@@ -136,6 +136,7 @@ const responseValid = [
         type: 'mcp',
         server_label: 'remote',
         tunnel_id: 'tunnel',
+        allowed_callers: ['programmatic'],
         require_approval: { never: { read_only: true } },
       },
     ],
@@ -361,6 +362,9 @@ describe('OpenAI portable configuration contracts', () => {
         { functionToolCallbacks: { lookup: 'file://callback.js' } },
         { seed: 1 },
         { showThinking: true },
+        {
+          response_format: { type: 'json_schema', schema: schemaDocument, description: 'ignored' },
+        },
         { tools: [{ type: 'code_interpreter' }] },
         { tools: [{ type: 'code_interpreter', container: {} }] },
         { tools: [{ type: 'mcp', server_label: 'remote', tunnel_id: 123 }] },
