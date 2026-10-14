@@ -1,5 +1,9 @@
 import { shouldGenerateRemote } from '../../remoteGeneration';
-import { type CrescendoConfig, CrescendoProvider } from '../crescendo/index';
+import {
+  type CrescendoConfig,
+  CrescendoProvider,
+  type CrescendoResponse,
+} from '../crescendo/index';
 import { REACT_CRESCENDO_SYSTEM_PROMPT } from './prompts';
 
 import type { CallApiContextParams, CallApiOptionsParams } from '../../../types/index';
@@ -25,7 +29,11 @@ export class ReactCrescendoProvider extends CrescendoProvider {
     });
   }
 
-  async callApi(prompt: string, context?: CallApiContextParams, options?: CallApiOptionsParams) {
+  async callApi(
+    prompt: string,
+    context?: CallApiContextParams,
+    options?: CallApiOptionsParams,
+  ): Promise<CrescendoResponse> {
     // The shared remote `crescendo` task does not know the ReAct prompt, so
     // running it remotely would silently record plain-Crescendo attacks as
     // `react-crescendo` results. Fail fast and point at a local provider

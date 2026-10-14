@@ -111,8 +111,11 @@ interface CrescendoMetadata extends BaseRedteamMetadata {
 
 /**
  * Represents the complete response from a Crescendo conversation.
+ *
+ * Exported for sibling strategies (e.g. `react-crescendo`) that reuse the
+ * crescendo execution path and need to name this type in signatures.
  */
-interface CrescendoResponse extends ProviderResponse {
+export interface CrescendoResponse extends ProviderResponse {
   metadata: CrescendoMetadata;
 }
 
