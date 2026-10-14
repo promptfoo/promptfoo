@@ -4109,6 +4109,11 @@ describe('ClaudeCodeSDKProvider', () => {
           expect(result.output).toContain(expectedOutput);
           expect(JSON.stringify(result)).not.toContain(secretTranscript);
           expect(spawnClaudeCodeProcess).toHaveBeenCalledTimes(1);
+          expect(spawnClaudeCodeProcess).toHaveBeenCalledWith(
+            expect.objectContaining({
+              args: expect.arrayContaining(['--permission-mode', 'default']),
+            }),
+          );
         });
 
         it('preserves ordinary TaskOutput results and user-defined PostToolUse hooks', async () => {
@@ -4506,24 +4511,27 @@ describe('ClaudeCodeSDKProvider', () => {
           });
         });
 
-        it('normalizes the manual permission mode alias to default', async () => {
-          mockQuery.mockReturnValue(createMockResponse('Response'));
+        it.each([undefined, 'default', 'manual'] as const)(
+          'uses manual approvals for permission_mode=%s',
+          async (permissionMode) => {
+            mockQuery.mockReturnValue(createMockResponse('Response'));
 
-          const provider = new ClaudeCodeSDKProvider({
-            config: {
-              permission_mode: 'manual',
-            },
-            env: { ANTHROPIC_API_KEY: 'test-api-key' },
-          });
-          await provider.callApi('Test prompt');
+            const provider = new ClaudeCodeSDKProvider({
+              config: {
+                permission_mode: permissionMode,
+              },
+              env: { ANTHROPIC_API_KEY: 'test-api-key' },
+            });
+            await provider.callApi('Test prompt');
 
-          expect(mockQuery).toHaveBeenCalledWith({
-            prompt: 'Test prompt',
-            options: expect.objectContaining({
-              permissionMode: 'default',
-            }),
-          });
-        });
+            expect(mockQuery).toHaveBeenCalledWith({
+              prompt: 'Test prompt',
+              options: expect.objectContaining({
+                permissionMode: 'default',
+              }),
+            });
+          },
+        );
 
         it('with auto permission mode', async () => {
           mockQuery.mockReturnValue(createMockResponse('Response'));
