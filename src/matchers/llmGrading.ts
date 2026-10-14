@@ -226,14 +226,10 @@ export async function matchesLlmRubric(
     shouldUseRemoteGrading({ canUseCodexDefaultProvider: true })
   ) {
     try {
-      const enrichedRubric =
-        options?.evidenceBlock && typeof rubric === 'string'
-          ? `${rubric}\n\n${options.evidenceBlock}`
-          : rubric;
       return {
         ...(await doRemoteGrading({
           task: 'llm-rubric',
-          rubric: enrichedRubric,
+          rubric,
           evidence: options?.evidenceBlock,
           output: gradingOutput,
           vars: vars || {},

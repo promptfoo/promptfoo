@@ -1024,7 +1024,7 @@ export async function runJsonGradingPrompt({
     }),
     metadata: {
       ...trustedResponseMetadata,
-      renderedGradingPrompt: renderedPrompt,
+      renderedGradingPrompt: finalPrompt,
       ...(imageCount > 0 ? { renderedGradingPromptImages: imageCount } : {}),
       ...(audioAttached ? { renderedGradingPromptAudio: true } : {}),
       ...(resp.cached ? { cachedResponse: true } : {}),
