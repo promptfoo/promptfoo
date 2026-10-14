@@ -115,8 +115,8 @@ try {
     if (state === 'missing' && pathname === '/jks') {
       await assert.rejects(provider.callApi('fixture prompt'), (error) => {
         assert.match(error.message, /JKS certificate support requires the "jks-js" package/);
-        assert.match(error.message, /npm install (?:promptfoo )?jks-js/);
-        assert.match(error.message, /npm install -g (?:promptfoo )?jks-js/);
+        assert.ok(error.message.includes('npm install promptfoo jks-js@^1.1.5'));
+        assert.ok(error.message.includes('npm install -g promptfoo jks-js@^1.1.5'));
         return true;
       });
     } else {
