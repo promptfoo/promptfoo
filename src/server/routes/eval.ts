@@ -280,11 +280,11 @@ evalRouter.patch('/:id/author', async (req: Request, res: Response): Promise<voi
       return;
     }
 
-    eval_.author = author;
+    eval_.author = author || null;
     await eval_.save();
 
-    // NOTE: Side effect. If user email is not set, set it to the author's email
-    if (!getUserEmail()) {
+    // Use a supplied author as the account email only when none is configured.
+    if (author && !getUserEmail()) {
       setUserEmail(author);
     }
 

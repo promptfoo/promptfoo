@@ -20,7 +20,7 @@ export type EvalIdParam = z.infer<typeof EvalIdParamSchema>;
 export const UpdateEvalAuthorParamsSchema = EvalIdParamSchema;
 
 export const UpdateEvalAuthorRequestSchema = z.object({
-  author: EmailSchema,
+  author: z.union([z.literal(''), EmailSchema]),
 });
 
 export const UpdateEvalAuthorResponseSchema = MessageResponseSchema;
