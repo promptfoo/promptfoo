@@ -890,16 +890,34 @@ export function validateEvidencePath(path: string): string | undefined {
   return undefined;
 }
 
+// Non-backtracking regex for evidence path validation in the source schema.
+// Each segment alternative is mutually exclusive at every position:
+//   - identifier:  starts with a non-digit [A-Za-z_$-], followed by [A-Za-z0-9_$-]*
+//   - index-zero:  literal "0"
+//   - index-int:   [1-9][0-9]* (no leading zeros for multi-digit indices)
+// Because the three alternatives never overlap at the first character, there
+// is no exponential backtracking risk even on adversarial inputs. This regex
+// is what z.toJSONSchema translates into the published config-schema.json
+// pattern, so editors and Ajv consumers validate the same shape as runtime.
+const EVIDENCE_PATH_REGEX =
+  /^metadata\.([A-Za-z_$-][A-Za-z0-9_$-]*|0|[1-9][0-9]*)(\.([A-Za-z_$-][A-Za-z0-9_$-]*|0|[1-9][0-9]*))*$/;
+
 const AssertionEvidenceSchema = z.object({
-  from: z.string().superRefine((val, ctx) => {
-    const err = validateEvidencePath(val);
-    if (err) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: err,
-      });
-    }
-  }),
+  from: z
+    .string()
+    .regex(
+      EVIDENCE_PATH_REGEX,
+      'evidence.from must select a provider metadata path like metadata.fileChanges',
+    )
+    .superRefine((val, ctx) => {
+      const err = validateEvidencePath(val);
+      if (err) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: err,
+        });
+      }
+    }),
   label: z.string().optional(),
   maxBytes: z.number().int().positive(),
 });
