@@ -55,15 +55,15 @@ The text providers in the basic and Gemini comparison configurations set `expres
 
 This example includes:
 
-- `promptfooconfig.gemini.yaml`: Gemini 3.8 Flash, 3.7 Flash, 3.6 Flash, 3.5 Flash-Lite, and earlier models with function calling, system instructions, and safety settings
+- `promptfooconfig.gemini.yaml`: Gemini 4 Argon, 3.8 Flash, 3.7 Flash, 3.6 Flash, 3.5 Flash-Lite, and earlier models with function calling, system instructions, and safety settings
 - `promptfooconfig.claude.yaml`: Claude Opus 5, Sonnet 5, Opus 4.6, Opus 4.1, and Haiku 4.5 reviewing code for issues
 - `promptfooconfig.llama.yaml`: Llama models with safety features and region configuration
 - `promptfooconfig.search.yaml`: Search grounding with Gemini 3.6 Flash and Gemini 3.5 Flash-Lite
 - `promptfooconfig.image.yaml`: Multimodal image inputs with Gemini 3.6 Flash and Gemini 3.5 Flash-Lite
 - `promptfooconfig.response-schema.yaml`: Response schemas with structured output
 
-The Gemini Flash examples use Vertex AI's `global` endpoint. Gemini 3.8 Flash,
-3.7 Flash, 3.6 Flash, and 3.5 Flash-Lite also support `us` and `eu`, at a 10%
+The Gemini 4 Argon and Flash examples use Vertex AI's `global` endpoint. Gemini 4 Argon,
+3.8 Flash, 3.7 Flash, 3.6 Flash, and 3.5 Flash-Lite also support `us` and `eu`, at a 10%
 premium. The examples use `thinkingLevel` because these models no longer support
 manual sampling parameters such as `temperature`, `topP`, and `topK`.
 

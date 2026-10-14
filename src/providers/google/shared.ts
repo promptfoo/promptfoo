@@ -44,6 +44,8 @@ export interface GoogleModel {
 // global-only availability or global as the broadly available endpoint:
 // https://docs.cloud.google.com/vertex-ai/generative-ai/docs/learn/locations#generative_ai_models
 const VERTEX_GLOBAL_DEFAULT_MODELS = new Set([
+  'gemini-4-argon',
+  'gemini-4-argon-cyber-permissive',
   'gemini-3.8-flash-tts',
   'gemini-3.8-flash-lite-tts',
   'gemini-3.8-flash',
@@ -83,6 +85,12 @@ export const GEMINI_FLASH_MODELS = [
   { id: 'gemini-3.5-flash-lite', name: 'Gemini 3.5 Flash-Lite' },
 ] as const;
 
+// Gemini models offered as targets by `promptfoo redteam init`. All use the global Vertex endpoint.
+export const GEMINI_TARGET_MODELS = [
+  { id: 'gemini-4-argon', name: 'Gemini 4 Argon' },
+  ...GEMINI_FLASH_MODELS,
+] as const;
+
 export function getVertexApiHostForRegion(region: string): string {
   if (region === 'global') {
     return 'aiplatform.googleapis.com';
@@ -94,6 +102,14 @@ export function getVertexApiHostForRegion(region: string): string {
 
   return `${region}-aiplatform.googleapis.com`;
 }
+
+const GEMINI_4_ARGON_COST = {
+  input: 4.0 / 1e6,
+  output: 20.0 / 1e6,
+  cacheRead: 0.2 / 1e6,
+  priorityMultiplier: 1.8,
+  flexMultiplier: 0.5,
+};
 
 const GEMINI_3_PRO_COST = { input: 2.0 / 1e6, output: 12.0 / 1e6, cacheRead: 0.2 / 1e6 };
 const GEMINI_3_PRO_TIERED_COST = {
@@ -130,6 +146,20 @@ const GEMINI_3_5_FLASH_LITE_COST = {
  * @see https://cloud.google.com/vertex-ai/generative-ai/pricing
  */
 export const GOOGLE_MODELS: GoogleModel[] = [
+  // Gemini 4 Argon receives a 50% discount through 2026-11-30.
+  {
+    id: 'gemini-4-argon',
+    cost: GEMINI_4_ARGON_COST,
+    introductoryPricing: { expiresAt: Date.UTC(2026, 11, 1), multiplier: 0.5 },
+    vertexRegionalPremium: 1.1,
+  },
+  // Fairwind allowlisted Vertex model; the Argon introductory discount does not apply.
+  {
+    id: 'gemini-4-argon-cyber-permissive',
+    vertexCost: GEMINI_4_ARGON_COST,
+    vertexRegionalPremium: 1.1,
+  },
+
   // Fairwind allowlisted Vertex model; the Flash introductory discount does not apply.
   {
     id: 'gemini-3.8-flash-cyber',

@@ -298,6 +298,7 @@ describe('createDummyFiles', () => {
       providerPrompt.choices.find((choice: { name: string }) => choice.name.startsWith('[Google]'))
         .value,
     ).toEqual([
+      { id: 'vertex:gemini-4-argon', config: { region: 'global' } },
       { id: 'vertex:gemini-3.8-flash', config: { region: 'global' } },
       { id: 'vertex:gemini-3.7-flash', config: { region: 'global' } },
       { id: 'vertex:gemini-3.6-flash', config: { region: 'global' } },
@@ -344,8 +345,9 @@ describe('createDummyFiles', () => {
     });
   });
 
-  it('offers current Gemini Flash models during interactive onboarding', async () => {
+  it('offers current Gemini models during interactive onboarding', async () => {
     const googleModels = [
+      { id: 'vertex:gemini-4-argon', config: { region: 'global' } },
       { id: 'vertex:gemini-3.8-flash', config: { region: 'global' } },
       { id: 'vertex:gemini-3.7-flash', config: { region: 'global' } },
       { id: 'vertex:gemini-3.6-flash', config: { region: 'global' } },
@@ -362,7 +364,7 @@ describe('createDummyFiles', () => {
       expect.objectContaining({
         choices: expect.arrayContaining([
           expect.objectContaining({
-            name: '[Google] Gemini 3.8 Flash, 3.7 Flash, 3.6 Flash, 3.5 Flash-Lite, ...',
+            name: '[Google] Gemini 4 Argon, 3.8 Flash, 3.7 Flash, 3.6 Flash, 3.5 Flash-Lite, ...',
             value: googleModels,
           }),
         ]),

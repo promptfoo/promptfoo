@@ -20,6 +20,7 @@ The example tests across multiple Gemini and Gemma models:
 
 - **Gemma 4 31B IT** - Open model with strong reasoning, coding, and agentic capabilities
 - **Gemma 4 26B A4B IT** - Smaller open Gemma 4 model for lower-latency reasoning and coding evals
+- **Gemini 4 Argon** - Flagship reasoning model for complex coding and knowledge work
 - **Gemini 3.8 Flash** - Latest Flash model for coding and agentic workflows
 - **Gemini 3.6 Flash** - Previous-generation Flash model for coding and multi-step tasks
 - **Gemini 3.5 Flash-Lite** - Low-latency model for high-volume agentic tasks
@@ -28,9 +29,10 @@ The example tests across multiple Gemini and Gemma models:
 - **Gemini 3.1 Flash-Lite** - Low-latency, cost-efficient model for high-volume tasks
 - **gemini-embedding-001** - Embedding model used for similarity-based assertions
 
-Gemini 3.8 Flash, 3.6 Flash, and 3.5 Flash-Lite use `thinkingLevel` instead of
-deprecated `temperature`, `topP`, or `topK` controls. Gemini 3.8 Flash does not
-support `MINIMAL` thinking.
+Gemini 4 Argon, 3.8 Flash, 3.6 Flash, and 3.5 Flash-Lite use `thinkingLevel` instead of
+deprecated `temperature`, `topP`, or `topK` controls. Gemini 4 Argon and 3.8 Flash do not
+support `MINIMAL` thinking. Gemini 4 Argon's `maxOutputTokens` covers thinking and the answer,
+so the example allows 32,768 tokens. Gemini 4 Argon is not available on the Gemini API free tier.
 
 The Gemini API redirects 3.7 Flash to 3.8 Flash and 3.5 Flash to 3.6 Flash. This comparison uses the replacement IDs, with 3.8 Flash for structured output, function calling, and system instructions. Check the [Gemini API lifecycle](https://ai.google.dev/gemini-api/docs/deprecations) before adding legacy models.
 
