@@ -1543,7 +1543,7 @@ function ResultsTableHeader({
       data-testid="results-table-header"
       data-header-collapsed={collapsed}
       className={cn(
-        'relative -mx-4 overflow-hidden px-4',
+        'relative -mx-4 overflow-hidden border-t border-border',
         stickyHeader && 'results-table-sticky',
         stickyHeader && collapsed !== undefined && 'results-table-scroll-fallback',
         hasMinimalScrollRoom && 'minimal-scroll-room',
@@ -1554,7 +1554,7 @@ function ResultsTableHeader({
           type="button"
           onClick={() => setStickyHeader(false)}
           aria-label="Dismiss sticky header"
-          className="p-1.5 rounded hover:bg-muted hover:text-foreground transition-colors"
+          className="inline-flex size-7 cursor-pointer items-center justify-center rounded-md bg-muted text-muted-foreground transition-colors hover:bg-foreground/10 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
           <X className="size-4" />
         </button>
@@ -1562,7 +1562,7 @@ function ResultsTableHeader({
       <div
         ref={headerScrollRef}
         data-testid="results-table-header-scroll-container"
-        className="overflow-x-auto overflow-y-hidden overscroll-x-contain"
+        className="overflow-x-auto overflow-y-hidden overscroll-x-contain px-4"
       >
         <table
           className={`results-table results-table-header-table firefox-fix ${
