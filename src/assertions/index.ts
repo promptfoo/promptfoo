@@ -452,6 +452,16 @@ async function runAssertionInternal({
       if (err) {
         throw new Error(`Invalid llm-rubric evidence path: ${err}`);
       }
+      if (
+        typeof item.maxBytes !== 'number' ||
+        !Number.isFinite(item.maxBytes) ||
+        !Number.isInteger(item.maxBytes) ||
+        item.maxBytes <= 0
+      ) {
+        throw new Error(
+          `Invalid llm-rubric evidence maxBytes: must be a positive finite integer, got ${item.maxBytes}`,
+        );
+      }
     }
   }
 

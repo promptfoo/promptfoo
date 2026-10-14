@@ -78,6 +78,10 @@ function breakCyclesAgainstRoot<T>(value: T, root: object | null): T {
   }
   collectAncestors(root, value);
 
+  // Remove the final element — that's the selected `value` itself, which we
+  // want to clone and preserve. Only its ancestors should trigger elision.
+  ancestors.pop();
+
   const ancestorSet = new WeakSet<object>(ancestors);
 
   function clone(v: unknown): unknown {
@@ -110,20 +114,49 @@ function breakCyclesAgainstRoot<T>(value: T, root: object | null): T {
   return clone(value) as T;
 }
 
+/**
+ * Deep-clone a value while replacing actual cyclic references (where an
+ * object points back to one of its own ancestors) with `[Circular]`.
+ *
+ * Repeated references to the same object in non-circular positions are
+ * preserved — direct JavaScript providers can legitimately share objects
+ * between trace entries or summaries, and we should not silently drop
+ * those associations.
+ */
+function safeClone(value: unknown, ancestors: object[] = []): unknown {
+  if (value === null || value === undefined) {
+    return value;
+  }
+  if (typeof value !== 'object') {
+    return value;
+  }
+
+  const obj = value as object;
+  // Is this object one of its own ancestors? If so, that's a real cycle.
+  if (ancestors.includes(obj)) {
+    return '[Circular]';
+  }
+
+  const nextAncestors = [...ancestors, obj];
+
+  if (Array.isArray(value)) {
+    return value.map((item) => safeClone(item, nextAncestors));
+  }
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+    out[k] = safeClone(v, nextAncestors);
+  }
+  return out;
+}
+
 function stringifyEvidenceValue(value: unknown) {
-  const seen = new WeakSet<object>();
   try {
+    const cloned = safeClone(value);
     return JSON.stringify(
-      value,
+      cloned,
       (_key, nestedValue) => {
         if (typeof nestedValue === 'bigint') {
           return nestedValue.toString();
-        }
-        if (nestedValue && typeof nestedValue === 'object') {
-          if (seen.has(nestedValue)) {
-            return '[Circular]';
-          }
-          seen.add(nestedValue);
         }
         return nestedValue;
       },
@@ -160,9 +193,13 @@ function truncateToMaxBytes(value: string, maxBytes: number) {
     }
     safeEnd--;
   }
-  // If safeEnd is past the start of a multi-byte lead byte, move back one more
-  // step so we don't leave a lead byte without its trailing bytes.
-  if (safeEnd > 0) {
+  // If safeEnd points at a multi-byte lead byte whose full sequence does not
+  // fit inside the slice, move back one more step so we don't leave a lead
+  // byte without its trailing bytes. Only applies when we actually walked
+  // back over continuation bytes — when safeEnd === maxBytes and that byte
+  // is a lead, the character already lies completely outside our slice and
+  // no further back-up is needed.
+  if (safeEnd > 0 && safeEnd < maxBytes) {
     const lead = bytes[safeEnd];
     // Lead byte masks per UTF-8
     const isLeadOf4 = (lead & 0xf8) === 0xf0;
@@ -277,24 +314,26 @@ export const handleLlmRubric = async ({
   // grader can inject it after output normalisation.
   const evidenceBlock = renderEvidenceBlock(assertion.evidence, providerResponse?.metadata);
 
+  // Only forward provider media to the matcher when (a) we have evidence
+  // to inject or (b) there is no assertion transform. When `assertion.transform`
+  // is set, the `outputString` passed above is the transformed text, so the
+  // original provider images/audio no longer correspond — the matcher would
+  // end up grading transformed text against stale media.
+  const hasMedia = !assertion.transform && (providerResponse?.images?.length || providerResponse?.audio);
+  const matcherOptions = evidenceBlock || hasMedia
+    ? {
+        ...(evidenceBlock ? { evidenceBlock } : {}),
+        ...(hasMedia ? { providerResponse } : {}),
+      }
+    : undefined;
+
   const resp = await matchesLlmRubric(
     renderedValue || '',
     outputString,
     test.options,
     test.vars,
     assertion,
-    {
-      evidenceBlock,
-      // Only forward provider media to the matcher when (a) we have evidence
-      // to inject or (b) there is no assertion transform. When `assertion.transform`
-      // is set, the `outputString` passed above is the transformed text, so the
-      // original provider images/audio no longer correspond — the matcher would
-      // end up grading transformed text against stale media.
-      ...(evidenceBlock ||
-      (!assertion.transform && (providerResponse?.images?.length || providerResponse?.audio))
-        ? { providerResponse }
-        : {}),
-    },
+    matcherOptions,
     providerCallContext,
   );
 
