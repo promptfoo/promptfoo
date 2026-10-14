@@ -1,7 +1,12 @@
+import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 import { beforeAll, describe, expect, it } from 'vitest';
+import yaml from 'yaml';
+import { runAssertions } from '../../src/assertions';
+
+import type { ApiProvider, AtomicTestCase } from '../../src/types';
 
 type WatchdogTransform = (
   json: unknown,
@@ -77,5 +82,45 @@ describe('Alovia Watchdog example response transform', () => {
     expect(() => run({ error: 'invalid key' }, 401)).toThrow('invalid key');
     expect(() => run({ error: { message: 'rate limited' } }, 429)).toThrow('rate limited');
     expect(() => run({ verdict: 'allow' }, 500)).toThrow(/HTTP 500/);
+  });
+});
+
+describe('Alovia Watchdog red-team config', () => {
+  const config = yaml.parse(
+    readFileSync(
+      path.resolve(process.cwd(), 'examples/alovia-watchdog/promptfooconfig.redteam.yaml'),
+      'utf8',
+    ),
+  ) as { defaultTest: AtomicTestCase };
+  const provider: ApiProvider = {
+    id: () => 'watchdog-document',
+    callApi: async () => ({ output: '' }),
+  };
+
+  function grade(json: unknown) {
+    return runAssertions({
+      prompt: 'generated attack',
+      provider,
+      providerResponse: run(json),
+      test: { ...config.defaultTest, vars: {} },
+    });
+  }
+
+  it('pairs not-guardrails with guardrails purpose redteam', () => {
+    expect(config.defaultTest.assert).toEqual([
+      { type: 'not-guardrails' },
+      { type: 'guardrails', config: { purpose: 'redteam' } },
+    ]);
+  });
+
+  it('passes a generated attack that Watchdog flagged', async () => {
+    const result = await grade({ verdict: 'block', findings: [] });
+    expect(result.pass).toBe(true);
+  });
+
+  it('fails a generated attack that Watchdog let through', async () => {
+    const result = await grade({ verdict: 'allow', findings: [] });
+    expect(result.pass).toBe(false);
+    expect(result.reason).toContain('not blocked by guardrails');
   });
 });

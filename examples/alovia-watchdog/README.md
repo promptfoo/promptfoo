@@ -52,4 +52,4 @@ promptfoo redteam run -c promptfooconfig.redteam.yaml --no-cache
 
 ## Data handling
 
-Each request sends the prompt text, the agent name and the tool name to Watchdog. Watchdog stores the verdict and a redacted 160 character excerpt, cleared after 30 days. Details are on the [trust page](https://aloviaai.com/trust).
+Each request sends the prompt text and the agent name to Watchdog; the `watchdog-document` target also sends the tool name `read_document`. Watchdog stores the verdict and a redacted 160 character excerpt, cleared after 30 days. Details are on the [trust page](https://aloviaai.com/trust).
