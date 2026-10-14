@@ -1,5 +1,7 @@
+import { getActualPrompt } from '@promptfoo/util/providerResponse';
 import { describe, expect, it } from 'vitest';
-import { getActualPrompt, type ProviderResponsePrompt } from './providerResponse';
+
+type ProviderResponsePrompt = NonNullable<Parameters<typeof getActualPrompt>[0]>;
 
 describe('getActualPrompt', () => {
   it('should return undefined for undefined response', () => {

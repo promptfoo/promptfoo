@@ -260,7 +260,6 @@ function scanBatchForDiscovery(
 }
 
 type StreamRow = {
-  testIdx: number;
   vars: string[];
   outputs: Array<{
     text: string;
@@ -301,7 +300,6 @@ function batchToStreamRows(
     let row = rowsByTestIdx.get(result.testIdx);
     if (!row) {
       row = {
-        testIdx: result.testIdx,
         vars: varNames.map((varName) => {
           const value = result.testCase?.vars?.[varName];
           return value === undefined ? '' : String(value);

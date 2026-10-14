@@ -1,28 +1,35 @@
 import { describe, expect, it } from 'vitest';
 import { handleLevenshtein } from '../../src/assertions/levenshtein';
 
+import type { AssertionParams } from '../../src/types/index';
+
+function createLevenshteinParams(
+  outputString: string,
+): Omit<AssertionParams, 'assertion' | 'renderedValue' | 'inverse'> {
+  return {
+    outputString,
+    test: {},
+    providerResponse: { output: outputString, tokenUsage: {} },
+    baseType: 'contains',
+    assertionValueContext: {
+      prompt: '',
+      vars: {},
+      test: {},
+      logProbs: undefined,
+      provider: {} as any,
+      providerResponse: { output: outputString, tokenUsage: {} },
+    },
+    output: outputString,
+  };
+}
+
 describe('handleLevenshtein', () => {
   it('should pass when strings are identical', () => {
     const result = handleLevenshtein({
       assertion: { type: 'levenshtein' },
       renderedValue: 'test',
-      outputString: 'test',
-      test: {},
-      providerResponse: {
-        output: 'test',
-        tokenUsage: {},
-      },
-      baseType: 'contains' as any,
-      assertionValueContext: {
-        prompt: '',
-        vars: {},
-        test: {},
-        logProbs: undefined,
-        provider: {} as any,
-        providerResponse: { output: 'test', tokenUsage: {} },
-      },
+      ...createLevenshteinParams('test'),
       inverse: false,
-      output: 'test',
     });
 
     expect(result.pass).toBe(true);
@@ -34,23 +41,8 @@ describe('handleLevenshtein', () => {
     const result = handleLevenshtein({
       assertion: { type: 'levenshtein' },
       renderedValue: 'test',
-      outputString: 'tast', // Distance of 1
-      test: {},
-      providerResponse: {
-        output: 'tast',
-        tokenUsage: {},
-      },
-      baseType: 'contains' as any,
-      assertionValueContext: {
-        prompt: '',
-        vars: {},
-        test: {},
-        logProbs: undefined,
-        provider: {} as any,
-        providerResponse: { output: 'tast', tokenUsage: {} },
-      },
+      ...createLevenshteinParams('tast'), // Distance of 1
       inverse: false,
-      output: 'tast',
     });
 
     expect(result.pass).toBe(true);
@@ -61,23 +53,8 @@ describe('handleLevenshtein', () => {
     const result = handleLevenshtein({
       assertion: { type: 'levenshtein', threshold: 2 },
       renderedValue: 'test',
-      outputString: 'tost', // Distance of 1
-      test: {},
-      providerResponse: {
-        output: 'tost',
-        tokenUsage: {},
-      },
-      baseType: 'contains' as any,
-      assertionValueContext: {
-        prompt: '',
-        vars: {},
-        test: {},
-        logProbs: undefined,
-        provider: {} as any,
-        providerResponse: { output: 'tost', tokenUsage: {} },
-      },
+      ...createLevenshteinParams('tost'), // Distance of 1
       inverse: false,
-      output: 'tost',
     });
 
     expect(result.pass).toBe(true);
@@ -88,23 +65,8 @@ describe('handleLevenshtein', () => {
     const result = handleLevenshtein({
       assertion: { type: 'levenshtein', threshold: 1 },
       renderedValue: 'test',
-      outputString: 'toast', // Distance of 2
-      test: {},
-      providerResponse: {
-        output: 'toast',
-        tokenUsage: {},
-      },
-      baseType: 'contains' as any,
-      assertionValueContext: {
-        prompt: '',
-        vars: {},
-        test: {},
-        logProbs: undefined,
-        provider: {} as any,
-        providerResponse: { output: 'toast', tokenUsage: {} },
-      },
+      ...createLevenshteinParams('toast'), // Distance of 2
       inverse: false,
-      output: 'toast',
     });
 
     expect(result.pass).toBe(false);
@@ -116,23 +78,8 @@ describe('handleLevenshtein', () => {
     const result = handleLevenshtein({
       assertion: { type: 'levenshtein' },
       renderedValue: 'test',
-      outputString: 'completely different', // Distance > 5
-      test: {},
-      providerResponse: {
-        output: 'completely different',
-        tokenUsage: {},
-      },
-      baseType: 'contains' as any,
-      assertionValueContext: {
-        prompt: '',
-        vars: {},
-        test: {},
-        logProbs: undefined,
-        provider: {} as any,
-        providerResponse: { output: 'completely different', tokenUsage: {} },
-      },
+      ...createLevenshteinParams('completely different'), // Distance > 5
       inverse: false,
-      output: 'completely different',
     });
 
     expect(result.pass).toBe(false);
@@ -144,23 +91,8 @@ describe('handleLevenshtein', () => {
       handleLevenshtein({
         assertion: { type: 'levenshtein' },
         renderedValue: 123 as any,
-        outputString: 'test',
-        test: {},
-        providerResponse: {
-          output: 'test',
-          tokenUsage: {},
-        },
-        baseType: 'contains' as any,
-        assertionValueContext: {
-          prompt: '',
-          vars: {},
-          test: {},
-          logProbs: undefined,
-          provider: {} as any,
-          providerResponse: { output: 'test', tokenUsage: {} },
-        },
+        ...createLevenshteinParams('test'),
         inverse: false,
-        output: 'test',
       }),
     ).toThrow('"levenshtein" assertion type must have a string value');
   });
@@ -169,23 +101,8 @@ describe('handleLevenshtein', () => {
     const result = handleLevenshtein({
       assertion: { type: 'levenshtein' },
       renderedValue: '',
-      outputString: '',
-      test: {},
-      providerResponse: {
-        output: '',
-        tokenUsage: {},
-      },
-      baseType: 'contains' as any,
-      assertionValueContext: {
-        prompt: '',
-        vars: {},
-        test: {},
-        logProbs: undefined,
-        provider: {} as any,
-        providerResponse: { output: '', tokenUsage: {} },
-      },
+      ...createLevenshteinParams(''),
       inverse: false,
-      output: '',
     });
 
     expect(result.pass).toBe(true);
@@ -196,23 +113,8 @@ describe('handleLevenshtein', () => {
     const result = handleLevenshtein({
       assertion: { type: 'levenshtein', threshold: 10 },
       renderedValue: 'this is a very long string to test',
-      outputString: 'this is a vary long string to test',
-      test: {},
-      providerResponse: {
-        output: 'this is a vary long string to test',
-        tokenUsage: {},
-      },
-      baseType: 'contains' as any,
-      assertionValueContext: {
-        prompt: '',
-        vars: {},
-        test: {},
-        logProbs: undefined,
-        provider: {} as any,
-        providerResponse: { output: 'this is a vary long string to test', tokenUsage: {} },
-      },
+      ...createLevenshteinParams('this is a vary long string to test'),
       inverse: false,
-      output: 'this is a vary long string to test',
     });
 
     expect(result.pass).toBe(true);
@@ -224,20 +126,8 @@ describe('handleLevenshtein', () => {
       const result = handleLevenshtein({
         assertion: { type: 'levenshtein', threshold: 5 },
         renderedValue: 'test',
-        outputString: 'tast', // Distance of 1, within threshold
-        test: {},
-        providerResponse: { output: 'tast', tokenUsage: {} },
-        baseType: 'contains' as any,
-        assertionValueContext: {
-          prompt: '',
-          vars: {},
-          test: {},
-          logProbs: undefined,
-          provider: {} as any,
-          providerResponse: { output: 'tast', tokenUsage: {} },
-        },
+        ...createLevenshteinParams('tast'), // Distance of 1, within threshold
         inverse: true,
-        output: 'tast',
       });
 
       expect(result.pass).toBe(false);
@@ -249,20 +139,8 @@ describe('handleLevenshtein', () => {
       const result = handleLevenshtein({
         assertion: { type: 'levenshtein', threshold: 2 },
         renderedValue: 'test',
-        outputString: 'completely different', // Distance well over threshold
-        test: {},
-        providerResponse: { output: 'completely different', tokenUsage: {} },
-        baseType: 'contains' as any,
-        assertionValueContext: {
-          prompt: '',
-          vars: {},
-          test: {},
-          logProbs: undefined,
-          provider: {} as any,
-          providerResponse: { output: 'completely different', tokenUsage: {} },
-        },
+        ...createLevenshteinParams('completely different'), // Distance well over threshold
         inverse: true,
-        output: 'completely different',
       });
 
       expect(result.pass).toBe(true);
@@ -274,20 +152,8 @@ describe('handleLevenshtein', () => {
       const result = handleLevenshtein({
         assertion: { type: 'levenshtein', threshold: 2 },
         renderedValue: 'test',
-        outputString: 'toast', // Distance of exactly 2, equal to threshold
-        test: {},
-        providerResponse: { output: 'toast', tokenUsage: {} },
-        baseType: 'contains' as any,
-        assertionValueContext: {
-          prompt: '',
-          vars: {},
-          test: {},
-          logProbs: undefined,
-          provider: {} as any,
-          providerResponse: { output: 'toast', tokenUsage: {} },
-        },
+        ...createLevenshteinParams('toast'), // Distance of exactly 2, equal to threshold
         inverse: true,
-        output: 'toast',
       });
 
       expect(result.pass).toBe(false);
@@ -299,20 +165,8 @@ describe('handleLevenshtein', () => {
       const result = handleLevenshtein({
         assertion: { type: 'levenshtein' }, // Default threshold of 5
         renderedValue: 'test',
-        outputString: 'tast', // Distance of 1, within default threshold
-        test: {},
-        providerResponse: { output: 'tast', tokenUsage: {} },
-        baseType: 'contains' as any,
-        assertionValueContext: {
-          prompt: '',
-          vars: {},
-          test: {},
-          logProbs: undefined,
-          provider: {} as any,
-          providerResponse: { output: 'tast', tokenUsage: {} },
-        },
+        ...createLevenshteinParams('tast'), // Distance of 1, within default threshold
         inverse: true,
-        output: 'tast',
       });
 
       expect(result.pass).toBe(false);

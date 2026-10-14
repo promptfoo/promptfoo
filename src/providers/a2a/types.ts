@@ -105,6 +105,7 @@ export const A2AProviderConfigSchema = z
     agentCardUrl: z.string().optional(),
     auth: A2AAuthSchema.optional(),
     configuration: RecordSchema.optional(),
+    metadata: RecordSchema.optional(),
     headers: z.record(z.string(), z.string()).optional(),
     message: RecordSchema.optional(),
     mode: z.enum(['auto', 'send', 'stream']).prefault('auto'),
