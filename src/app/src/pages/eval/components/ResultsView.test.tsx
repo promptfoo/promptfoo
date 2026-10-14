@@ -1,7 +1,7 @@
 import { mockWindowOpen } from '@app/tests/browserMocks';
-import { callApi } from '@app/utils/api';
+import { callApi, updateEvalAuthor } from '@app/utils/api';
 import { renderWithProviders } from '@app/utils/testutils';
-import { act, screen, waitFor } from '@testing-library/react';
+import { act, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -255,14 +255,6 @@ vi.mock('./ResultsFilters/FiltersButton', () => ({
 
 vi.mock('./ResultsFilters/FiltersForm', () => ({
   default: () => <div>Filters Form</div>,
-}));
-
-vi.mock('./AuthorChip', () => ({
-  AuthorChip: () => <div>Author Chip</div>,
-}));
-
-vi.mock('./EvalIdChip', () => ({
-  EvalIdChip: () => <div>Eval ID Chip</div>,
 }));
 
 vi.mock('./ConfigModal', () => ({
@@ -1375,6 +1367,84 @@ describe('ResultsView User-Rated Badge display', () => {
     // Verify it has the purple styling classes
     expect(badge).toHaveClass('bg-purple-50');
     expect(badge).toHaveClass('text-purple-700');
+  });
+});
+
+describe('ResultsView metadata details', () => {
+  let tableStore: ReturnType<typeof createTableStore>;
+
+  beforeEach(() => {
+    resetResultsViewMocks();
+    tableStore = createTableStore({ evalId: 'eval-1', stats: { durationMs: 45000 } });
+    vi.mocked(useTableStore).mockReturnValue(tableStore);
+  });
+
+  it('opens the full metadata and returns focus to the trigger on Escape', async () => {
+    const user = userEvent.setup();
+    renderResultsView(vi.fn());
+
+    const trigger = screen.getByRole('button', { name: 'More evaluation details' });
+    expect(screen.queryByRole('button', { name: /^AUTHOR/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^DURATION/ })).not.toBeInTheDocument();
+
+    await user.click(trigger);
+
+    const details = screen.getByRole('dialog', { name: 'Evaluation details' });
+    expect(within(details).getByText('Test Author')).toBeInTheDocument();
+    expect(within(details).getByText('45.0s')).toBeInTheDocument();
+    expect(within(details).getByText('env: test')).toBeInTheDocument();
+    expect(within(details).getByRole('button', { name: /^DATE/ })).toBeInTheDocument();
+
+    await user.keyboard('{Escape}');
+
+    expect(screen.queryByRole('dialog', { name: 'Evaluation details' })).not.toBeInTheDocument();
+    expect(trigger).toHaveFocus();
+  });
+
+  it('copies the eval ID from the details popover', async () => {
+    const user = userEvent.setup();
+    const writeText = vi.spyOn(navigator.clipboard, 'writeText').mockResolvedValue(undefined);
+    renderResultsView(vi.fn());
+
+    await user.click(screen.getByRole('button', { name: 'More evaluation details' }));
+    const details = screen.getByRole('dialog', { name: 'Evaluation details' });
+    await user.click(within(details).getByRole('button', { name: /^ID/ }));
+
+    expect(writeText).toHaveBeenCalledWith('eval-1');
+    expect(mockShowToast).toHaveBeenCalledWith('Eval ID copied to clipboard', 'success');
+  });
+
+  it('saves an author edit inside the details popover', async () => {
+    const user = userEvent.setup();
+    renderResultsView(vi.fn());
+
+    await user.click(screen.getByRole('button', { name: 'More evaluation details' }));
+    const details = screen.getByRole('dialog', { name: 'Evaluation details' });
+    await user.click(within(details).getByRole('button', { name: /^AUTHOR/ }));
+    const input = within(details).getByPlaceholderText('email@example.com');
+    await user.clear(input);
+    await user.type(input, 'new@example.com');
+    await user.click(within(details).getByRole('button', { name: 'Save' }));
+
+    expect(updateEvalAuthor).toHaveBeenCalledWith('eval-1', 'new@example.com');
+    expect(tableStore.setAuthor).toHaveBeenCalledWith('new@example.com');
+    expect(details).toBeInTheDocument();
+  });
+
+  it('reports a failed author edit without updating the stored author', async () => {
+    const user = userEvent.setup();
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    vi.mocked(updateEvalAuthor).mockRejectedValueOnce(new Error('Could not save author'));
+    renderResultsView(vi.fn());
+
+    await user.click(screen.getByRole('button', { name: 'More evaluation details' }));
+    const details = screen.getByRole('dialog', { name: 'Evaluation details' });
+    await user.click(within(details).getByRole('button', { name: /^AUTHOR/ }));
+    await user.click(within(details).getByRole('button', { name: 'Save' }));
+
+    expect(mockShowToast).toHaveBeenCalledWith('Could not save author', 'error');
+    expect(tableStore.setAuthor).not.toHaveBeenCalled();
+    expect(details).toBeInTheDocument();
   });
 });
 

@@ -15,13 +15,14 @@ import {
   DropdownMenuContent,
   DropdownMenuTrigger,
 } from '@app/components/ui/dropdown-menu';
+import { Popover, PopoverContent, PopoverTrigger } from '@app/components/ui/popover';
 import { Tabs, TabsList, TabsTrigger } from '@app/components/ui/tabs';
 import { EVAL_ROUTES } from '@app/constants/routes';
 import { useToast } from '@app/hooks/useToast';
 import { cn } from '@app/lib/utils';
 import { fetchUserEmail, updateEvalAuthor } from '@app/utils/api';
 import { formatDuration } from '@app/utils/date';
-import { ChevronDown } from 'lucide-react';
+import { ChevronDown, Ellipsis } from 'lucide-react';
 import { Link } from 'react-router';
 import { AuthorChip } from './AuthorChip';
 import { EvalIdChip } from './EvalIdChip';
@@ -63,6 +64,7 @@ export default function EvalHeader({
   const [evalSelectorDialogOpen, setEvalSelectorDialogOpen] = React.useState(false);
   const [evalActionsOpen, setEvalActionsOpen] = React.useState(false);
   const [currentUserEmail, setCurrentUserEmail] = React.useState<string | null>(null);
+  const evalDetailsRef = React.useRef<HTMLDivElement>(null);
 
   React.useEffect(() => {
     fetchUserEmail().then((email) => {
@@ -189,41 +191,84 @@ export default function EvalHeader({
           <h1 className="hidden print:block text-2xl font-bold">
             {config?.description || evalId || 'Evaluation'}
           </h1>
-          {/* Screen: interactive chips */}
-          <div className="flex flex-wrap gap-x-3 gap-y-1 items-center mt-2 print:hidden">
-            {evalId && <EvalIdChip evalId={evalId} onCopy={handleEvalIdCopyClick} />}
-            <AuthorChip
-              author={author}
-              onEditAuthor={handleEditAuthor}
-              currentUserEmail={currentUserEmail}
-              editable
-            />
+          <div className="mt-2 flex min-w-0 flex-nowrap items-center gap-3 print:hidden">
+            {evalId && (
+              <div className="min-w-0">
+                <EvalIdChip evalId={evalId} onCopy={handleEvalIdCopyClick} />
+              </div>
+            )}
             {formattedDate && (
-              <Chip label="DATE" interactive={false}>
+              <Chip label="DATE" interactive={false} className="hidden shrink-0 md:inline-flex">
                 {formattedDate}
               </Chip>
             )}
-            <Chip label="PROVIDERS" interactive={false}>
+            <Chip label="PROVIDERS" interactive={false} className="shrink-0">
               {uniqueProviderCount}
             </Chip>
-            <Chip label="TESTS" interactive={false}>
+            <Chip label="TESTS" interactive={false} className="shrink-0">
               {totalResultsCount}
             </Chip>
-            {isRedteam && (
-              <Chip label="PROBES" interactive={false}>
-                {probesCount}
-              </Chip>
-            )}
-            {stats?.durationMs != null && (
-              <Chip label="DURATION" interactive={false}>
-                {formatDuration(stats.durationMs)}
-              </Chip>
-            )}
-            {Object.keys(config?.tags || {}).map((tag) => (
-              <Badge key={tag} variant="secondary" className="opacity-70">
-                {`${tag}: ${config?.tags?.[tag]}`}
-              </Badge>
-            ))}
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="size-7 shrink-0"
+                  aria-label="More evaluation details"
+                  title="More evaluation details"
+                >
+                  <Ellipsis className="size-4" />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent
+                ref={evalDetailsRef}
+                align="end"
+                aria-label="Evaluation details"
+                onOpenAutoFocus={(event) => {
+                  event.preventDefault();
+                  evalDetailsRef.current?.focus();
+                }}
+                className="w-96 max-w-[calc(100vw-2rem)] max-h-[var(--radix-popover-content-available-height)] overflow-y-auto print:hidden"
+              >
+                <h2 className="mb-2 text-sm font-semibold">Evaluation details</h2>
+                <div className="flex flex-col items-start gap-1">
+                  {evalId && <EvalIdChip evalId={evalId} onCopy={handleEvalIdCopyClick} />}
+                  <AuthorChip
+                    author={author}
+                    onEditAuthor={handleEditAuthor}
+                    currentUserEmail={currentUserEmail}
+                    editable
+                  />
+                  {formattedDate && (
+                    <Chip label="DATE" interactive={false}>
+                      {formattedDate}
+                    </Chip>
+                  )}
+                  <Chip label="PROVIDERS" interactive={false}>
+                    {uniqueProviderCount}
+                  </Chip>
+                  <Chip label="TESTS" interactive={false}>
+                    {totalResultsCount}
+                  </Chip>
+                  {isRedteam && (
+                    <Chip label="PROBES" interactive={false}>
+                      {probesCount}
+                    </Chip>
+                  )}
+                  {stats?.durationMs != null && (
+                    <Chip label="DURATION" interactive={false}>
+                      {formatDuration(stats.durationMs)}
+                    </Chip>
+                  )}
+                  {Object.keys(config?.tags || {}).map((tag) => (
+                    <Badge key={tag} variant="secondary" className="whitespace-normal break-all">
+                      {`${tag}: ${config?.tags?.[tag]}`}
+                    </Badge>
+                  ))}
+                </div>
+              </PopoverContent>
+            </Popover>
           </div>
           {/* Print: clean property grid */}
           <div className="hidden print:block mt-2">
