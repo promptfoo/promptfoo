@@ -1554,7 +1554,7 @@ function ResultsTableHeader({
           type="button"
           onClick={() => setStickyHeader(false)}
           aria-label="Dismiss sticky header"
-          className="p-1.5 rounded hover:bg-muted hover:text-foreground transition-colors"
+          className="inline-flex size-7 items-center justify-center rounded-md bg-muted text-muted-foreground transition-colors hover:bg-foreground/10 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
           <X className="size-4" />
         </button>
