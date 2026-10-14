@@ -1477,28 +1477,15 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
     }
     validateClaudeToolPolicyConfig(config);
 
-    // Sort keys for stable cache-key hashing. Precedence is documented on the
-    // `env` field of ClaudeCodeOptions: process.env < config.env < EnvOverrides.
+    // Preserve provider environment values when a prompt overrides individual keys.
+    // Precedence: process.env < provider config.env < prompt config.env < EnvOverrides.
     const env: Record<string, string> = {};
-    const processEnv = getProcessEnv();
-    for (const key of Object.keys(processEnv).sort()) {
-      if (processEnv[key] !== undefined) {
-        env[key] = processEnv[key];
+    for (const source of [getProcessEnv(), this.config.env, config.env, this.env]) {
+      if (!source) {
+        continue;
       }
-    }
-
-    if (config.env) {
-      for (const key of Object.keys(config.env).sort()) {
-        const value = config.env[key];
-        if (value !== undefined) {
-          env[key] = value;
-        }
-      }
-    }
-
-    if (this.env) {
-      for (const key of Object.keys(this.env).sort()) {
-        const value = this.env[key as keyof typeof this.env];
+      for (const key of Object.keys(source).sort()) {
+        const value = source[key as keyof typeof source];
         if (value !== undefined) {
           env[key] = value;
         }
@@ -1559,7 +1546,8 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
     }
 
     // Prompt config overrides provider config; explicit keys take precedence over env.
-    const effectiveApiKey = config.apiKey || this.apiKey;
+    const effectiveApiKey =
+      config.apiKey || this.config.apiKey || (env.ANTHROPIC_API_KEY ?? this.apiKey);
     if (effectiveApiKey) {
       env.ANTHROPIC_API_KEY = effectiveApiKey;
     }
