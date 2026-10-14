@@ -1047,10 +1047,12 @@ The JKS file is processed using the `jks-js` library, which automatically:
 JKS support requires the opt-in `jks-js` package, which is not installed with Promptfoo. Install it alongside a local Promptfoo installation with:
 
 ```bash
-npm install jks-js
+npm install promptfoo jks-js@^1.1.5
 ```
 
-For a globally installed Promptfoo CLI, use `npm install -g jks-js`, or the global install command of the package manager used to install Promptfoo.
+Then run the local CLI with `npx promptfoo`. This also works if you previously used `npx promptfoo@latest` without a local installation.
+
+For a globally installed Promptfoo CLI, use `npm install -g promptfoo jks-js@^1.1.5`, or the global install command of the package manager used to install Promptfoo.
 
 To avoid this dependency, convert the keystore to PKCS#12/PFX with Java's [`keytool -importkeystore`](https://docs.oracle.com/en/java/javase/25/docs/specs/man/keytool.html), then configure `pfxPath` and `passphrase` instead. PEM certificates and keys are also supported.
 
@@ -1508,7 +1510,7 @@ providers:
 
 :::info Dependencies
 
-- **JKS support** requires the opt-in `jks-js` package: `npm install jks-js` (use `npm install -g jks-js` for npm-global Promptfoo). See [JKS installation guidance](#using-jks-java-keystore-certificates) for other package managers.
+- **JKS support** requires the opt-in `jks-js` package: `npm install promptfoo jks-js@^1.1.5` (add `-g` for npm-global Promptfoo). See [JKS installation guidance](#using-jks-java-keystore-certificates) for other package managers.
 - **PFX support** uses the optional `pem` runtime package: `npm install pem`
 
 :::
