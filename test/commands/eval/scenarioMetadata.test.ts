@@ -8,7 +8,7 @@ import { doEval } from '../../../src/node/doEval';
 import { resolveConfigs } from '../../../src/util/config/load';
 import { mockProcessEnv } from '../../util/utils';
 
-import type { CommandLineOptions, TestCase, UnifiedConfig } from '../../../src/types/index';
+import type { TestCase, UnifiedConfig } from '../../../src/types/index';
 
 vi.mock('../../../src/telemetry', () => ({
   default: {
@@ -52,7 +52,7 @@ describe('CLI scenario metadata filtering', () => {
     return { vars: { input }, description, ...(metadata && { metadata }) };
   }
 
-  async function run(config: Partial<UnifiedConfig>, filters: Partial<CommandLineOptions> = {}) {
+  async function run(config: Partial<UnifiedConfig>, filters: Parameters<typeof doEval>[0] = {}) {
     const configPath = path.join(directory, 'config.json');
     fs.writeFileSync(
       configPath,
