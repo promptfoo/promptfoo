@@ -48,7 +48,7 @@ Store your LLM provider API keys as repository variables in Bitbucket:
 
 ### Fail the Pipeline on Failed Assertions
 
-`promptfoo eval` [exits with code `100`](/docs/usage/command-line#promptfoo-eval) when any assertion fails, so the pipeline fails without extra flags:
+`promptfoo eval` [exits with code `100`](/docs/usage/command-line#promptfoo-eval) when any test fails (or the pass rate falls below `PROMPTFOO_PASS_RATE_THRESHOLD`), so the pipeline fails without extra flags:
 
 ```yaml
 script:

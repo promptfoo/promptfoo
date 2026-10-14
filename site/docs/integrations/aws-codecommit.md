@@ -72,7 +72,7 @@ cache:
 
 ## Add a quality gate
 
-If you want a custom pass-rate threshold instead of failing on any assertion failure, write the JSON output and check the stats in a second command:
+If you want a custom pass-rate threshold instead of failing on any test failure, write the JSON output and check the stats in a second command:
 
 ```yaml
 phases:

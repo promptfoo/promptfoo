@@ -69,7 +69,7 @@ Store your LLM provider API keys as environment variables in Travis CI:
 
 ### Fail the Build on Failed Assertions
 
-`promptfoo eval` [exits with code `100`](/docs/usage/command-line#promptfoo-eval) when any assertion fails, so the build fails without extra flags:
+`promptfoo eval` [exits with code `100`](/docs/usage/command-line#promptfoo-eval) when any test fails (or the pass rate falls below `PROMPTFOO_PASS_RATE_THRESHOLD`), so the build fails without extra flags:
 
 ```yaml
 script:
