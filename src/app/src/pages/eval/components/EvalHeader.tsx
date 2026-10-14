@@ -192,22 +192,34 @@ export default function EvalHeader({
             {config?.description || evalId || 'Evaluation'}
           </h1>
           <div className="mt-2 flex min-w-0 flex-nowrap items-center gap-3 print:hidden">
-            {evalId && (
-              <div className="min-w-0">
-                <EvalIdChip evalId={evalId} onCopy={handleEvalIdCopyClick} />
-              </div>
-            )}
             {formattedDate && (
-              <Chip label="DATE" interactive={false} className="hidden shrink-0 md:inline-flex">
+              <Chip label="DATE" interactive={false} className="shrink-0">
                 {formattedDate}
               </Chip>
             )}
-            <Chip label="PROVIDERS" interactive={false} className="shrink-0">
+            <Chip
+              label="AUTHOR"
+              interactive={false}
+              className="hidden min-w-0 max-w-64 md:inline-flex"
+            >
+              {author || 'Unknown'}
+            </Chip>
+            {stats?.durationMs != null && (
+              <Chip label="DURATION" interactive={false} className="hidden shrink-0 sm:inline-flex">
+                {formatDuration(stats.durationMs)}
+              </Chip>
+            )}
+            <Chip label="PROVIDERS" interactive={false} className="hidden shrink-0 sm:inline-flex">
               {uniqueProviderCount}
             </Chip>
             <Chip label="TESTS" interactive={false} className="shrink-0">
               {totalResultsCount}
             </Chip>
+            {evalId && (
+              <div className="hidden min-w-0 lg:block">
+                <EvalIdChip evalId={evalId} onCopy={handleEvalIdCopyClick} />
+              </div>
+            )}
             <Popover>
               <PopoverTrigger asChild>
                 <Button
@@ -233,16 +245,20 @@ export default function EvalHeader({
               >
                 <h2 className="mb-2 text-sm font-semibold">Evaluation details</h2>
                 <div className="flex flex-col items-start gap-1">
-                  {evalId && <EvalIdChip evalId={evalId} onCopy={handleEvalIdCopyClick} />}
+                  {formattedDate && (
+                    <Chip label="DATE" interactive={false}>
+                      {formattedDate}
+                    </Chip>
+                  )}
                   <AuthorChip
                     author={author}
                     onEditAuthor={handleEditAuthor}
                     currentUserEmail={currentUserEmail}
                     editable
                   />
-                  {formattedDate && (
-                    <Chip label="DATE" interactive={false}>
-                      {formattedDate}
+                  {stats?.durationMs != null && (
+                    <Chip label="DURATION" interactive={false}>
+                      {formatDuration(stats.durationMs)}
                     </Chip>
                   )}
                   <Chip label="PROVIDERS" interactive={false}>
@@ -256,16 +272,12 @@ export default function EvalHeader({
                       {probesCount}
                     </Chip>
                   )}
-                  {stats?.durationMs != null && (
-                    <Chip label="DURATION" interactive={false}>
-                      {formatDuration(stats.durationMs)}
-                    </Chip>
-                  )}
                   {Object.keys(config?.tags || {}).map((tag) => (
                     <Badge key={tag} variant="secondary" className="whitespace-normal break-all">
                       {`${tag}: ${config?.tags?.[tag]}`}
                     </Badge>
                   ))}
+                  {evalId && <EvalIdChip evalId={evalId} onCopy={handleEvalIdCopyClick} />}
                 </div>
               </PopoverContent>
             </Popover>
@@ -273,10 +285,10 @@ export default function EvalHeader({
           {/* Print: clean property grid */}
           <div className="hidden print:block mt-2">
             <div className="grid grid-cols-3 gap-x-6 gap-y-1 text-sm">
-              {evalId && (
+              {formattedDate && (
                 <div>
-                  <span className="font-semibold text-gray-700">Eval ID:</span>{' '}
-                  <span>{evalId}</span>
+                  <span className="font-semibold text-gray-700">Date:</span>{' '}
+                  <span>{formattedDate}</span>
                 </div>
               )}
               {author && (
@@ -284,10 +296,10 @@ export default function EvalHeader({
                   <span className="font-semibold text-gray-700">Author:</span> <span>{author}</span>
                 </div>
               )}
-              {formattedDate && (
+              {stats?.durationMs != null && (
                 <div>
-                  <span className="font-semibold text-gray-700">Date:</span>{' '}
-                  <span>{formattedDate}</span>
+                  <span className="font-semibold text-gray-700">Duration:</span>{' '}
+                  <span>{formatDuration(stats.durationMs)}</span>
                 </div>
               )}
               <div>
@@ -304,18 +316,18 @@ export default function EvalHeader({
                   <span>{probesCount}</span>
                 </div>
               )}
-              {stats?.durationMs != null && (
-                <div>
-                  <span className="font-semibold text-gray-700">Duration:</span>{' '}
-                  <span>{formatDuration(stats.durationMs)}</span>
-                </div>
-              )}
               {Object.keys(config?.tags || {}).map((tag) => (
                 <div key={tag}>
                   <span className="font-semibold text-gray-700">{tag}:</span>{' '}
                   <span>{config?.tags?.[tag]}</span>
                 </div>
               ))}
+              {evalId && (
+                <div>
+                  <span className="font-semibold text-gray-700">Eval ID:</span>{' '}
+                  <span>{evalId}</span>
+                </div>
+              )}
             </div>
           </div>
           {children}

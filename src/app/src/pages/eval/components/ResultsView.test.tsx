@@ -1384,9 +1384,6 @@ describe('ResultsView metadata details', () => {
     renderResultsView(vi.fn());
 
     const trigger = screen.getByRole('button', { name: 'More evaluation details' });
-    expect(screen.queryByRole('button', { name: /^AUTHOR/ })).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /^DURATION/ })).not.toBeInTheDocument();
-
     await user.click(trigger);
 
     const details = screen.getByRole('dialog', { name: 'Evaluation details' });
