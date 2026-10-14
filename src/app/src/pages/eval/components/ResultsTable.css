@@ -534,7 +534,7 @@ table.results-table,
 
 .header-dismiss {
   position: absolute;
-  top: 8px;
+  top: 6px;
   right: 1.5rem;
   z-index: 11;
 }
