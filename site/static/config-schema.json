@@ -1073,7 +1073,7 @@
             "properties": {
               "from": {
                 "type": "string",
-                "pattern": "^metadata(?:\\.(?:[A-Za-z_$-][A-Za-z0-9_$-]*|\\d+))+$"
+                "pattern": "^metadata\\.([A-Za-z_$-][A-Za-z0-9_$-]*|0|[1-9][0-9]*)(\\.([A-Za-z_$-][A-Za-z0-9_$-]*|0|[1-9][0-9]*))*$"
               },
               "label": {
                 "type": "string"
@@ -1084,8 +1084,7 @@
                 "maximum": 9007199254740991
               }
             },
-            "required": ["from", "maxBytes"],
-            "additionalProperties": false
+            "required": ["from", "maxBytes"]
           }
         },
         "contextTransform": {
