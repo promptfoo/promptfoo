@@ -51,6 +51,18 @@ describe('Hugging Face task response compatibility', () => {
     expect(await tokens.callClassificationApi('Alice')).toEqual({ classification: { PER: 0.9 } });
   });
 
+  it('does not report an empty list from a failed request as no detected labels', async () => {
+    const tokens = new HuggingfaceTokenExtractionProvider('fixture/ner');
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      data: [],
+      cached: false,
+      status: 503,
+      statusText: 'Service Unavailable',
+      headers: {},
+    });
+    expect(await tokens.callClassificationApi('A pleasant day')).toEqual({ classification: {} });
+  });
+
   it.each([[0.1, 0.2], [[0.1, 0.2]]].map((data) => [data]))(
     'normalizes a single embedding vector: %j',
     async (data) => {
