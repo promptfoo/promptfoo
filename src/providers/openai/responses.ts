@@ -10,6 +10,7 @@ import logger from '../../logger';
 import { sha256 } from '../../util/createHash';
 import {
   formatRateLimitErrorMessage,
+  getAbortError,
   HttpRateLimitError,
   isAbortError,
 } from '../../util/fetch/errors';
@@ -49,6 +50,7 @@ import {
   appendOpenAiApiPath,
   assertOpenAiApiModel,
   classifyOpenAiGatewayStreamError,
+  flattenResponseTool,
   formatOpenAiError,
   getOpenAiEffectiveServiceTier,
   getOpenAiGatewayErrorType,
@@ -175,16 +177,6 @@ const inFlightBackgroundResponses = new Map<
     billed: boolean;
   }
 >();
-
-function getAbortError(signal: AbortSignal): Error {
-  const reason = signal.reason;
-  if (reason instanceof Error && reason.name === 'AbortError') {
-    return reason;
-  }
-  const error = new Error(reason instanceof Error ? reason.message : 'Request was aborted');
-  error.name = 'AbortError';
-  return error;
-}
 
 function isSensitiveBackgroundCacheHeader(key: string): boolean {
   return (
@@ -1170,13 +1162,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       ? await maybeLoadToolsFromExternalFile(config.tools, context?.vars)
       : undefined;
     const responsesTools = Array.isArray(loadedTools)
-      ? loadedTools.map((tool) => {
-          if (tool?.type !== 'function' || !tool.function) {
-            return tool;
-          }
-          const { function: functionDefinition, ...rest } = tool;
-          return { ...rest, ...functionDefinition };
-        })
+      ? loadedTools.map(flattenResponseTool)
       : loadedTools;
     const toolChoice =
       config.tool_choice &&
@@ -1189,6 +1175,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     const body = {
       model: this.modelName,
       input,
+      ...(config.access_programs === undefined ? {} : { access_programs: config.access_programs }),
       ...(maxOutputTokens === undefined ? {} : { max_output_tokens: maxOutputTokens }),
       ...(reasoningEffort ? { reasoning: { effort: reasoningEffort } } : {}),
       ...(temperature === undefined ? {} : { temperature }),

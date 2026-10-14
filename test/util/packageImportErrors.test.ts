@@ -16,10 +16,20 @@ describe('optionalPackageInstallHint', () => {
   it('keeps every package of a multi-package command in the global form', () => {
     expect(
       optionalPackageInstallHint(
-        'npm install promptfoo @ibm-cloud/watsonx-ai@^1.7.16 ibm-cloud-sdk-core@^5.6.2',
+        'npm install promptfoo @ibm-cloud/watsonx-ai@^1.7.16 ibm-cloud-sdk-core@5.6.2',
       ),
     ).toContain(
-      'with npm: npm install -g promptfoo @ibm-cloud/watsonx-ai@^1.7.16 ibm-cloud-sdk-core@^5.6.2;',
+      'with npm: npm install -g promptfoo @ibm-cloud/watsonx-ai@^1.7.16 ibm-cloud-sdk-core@5.6.2;',
+    );
+  });
+
+  it('keeps every step of a multi-line installation global', () => {
+    expect(
+      optionalPackageInstallHint(
+        'npm install promptfoo ibm-cloud-sdk-core@5.6.2\nnpm install --save-exact ibm-cloud-sdk-core@5.6.2',
+      ),
+    ).toContain(
+      'with npm: npm install -g promptfoo ibm-cloud-sdk-core@5.6.2\nnpm install -g --save-exact ibm-cloud-sdk-core@5.6.2;',
     );
   });
 });

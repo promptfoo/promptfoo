@@ -1,6 +1,6 @@
 import { fetchWithCache } from '../../cache';
 import logger from '../../logger';
-import { getRequestTimeoutMs } from '../shared';
+import { getRequestTimeoutMs, shouldBustProviderCache, withResponseCacheMetadata } from '../shared';
 import { OpenAiGenericProvider } from '.';
 import { calculateOpenAIUsageCost } from './billing';
 import {
@@ -11,14 +11,41 @@ import {
 } from './util';
 
 import type { EnvOverrides } from '../../types/env';
-import type { ProviderEmbeddingResponse } from '../../types/index';
+import type {
+  CallApiContextParams,
+  CallApiOptionsParams,
+  ProviderEmbeddingResponse,
+} from '../../types/index';
 import type { OpenAiSharedOptions } from './types';
 
 type OpenAiEmbeddingOptions = OpenAiSharedOptions & {
   passthrough?: object;
 };
 
+function decodeBase64Embedding(value: string): number[] {
+  const bytes = Buffer.from(value, 'base64');
+  const canonical = bytes.toString('base64');
+  if (
+    bytes.length === 0 ||
+    bytes.length % Float32Array.BYTES_PER_ELEMENT !== 0 ||
+    (value !== canonical && value !== canonical.replace(/=+$/, ''))
+  ) {
+    throw new Error('Invalid base64 embedding in OpenAI embeddings API response');
+  }
+
+  const embedding = Array.from(
+    { length: bytes.length / Float32Array.BYTES_PER_ELEMENT },
+    (_, index) => bytes.readFloatLE(index * Float32Array.BYTES_PER_ELEMENT),
+  );
+  if (embedding.some((number) => !Number.isFinite(number))) {
+    throw new Error('Invalid base64 embedding in OpenAI embeddings API response');
+  }
+  return embedding;
+}
+
 export class OpenAiEmbeddingProvider extends OpenAiGenericProvider {
+  readonly supportsEmbeddingCancellation = true;
+
   declare config: OpenAiEmbeddingOptions;
 
   constructor(
@@ -36,7 +63,11 @@ export class OpenAiEmbeddingProvider extends OpenAiGenericProvider {
       : super.getBillingModelName(config);
   }
 
-  async callEmbeddingApi(text: string): Promise<ProviderEmbeddingResponse> {
+  async callEmbeddingApi(
+    text: string,
+    context?: CallApiContextParams,
+    options?: CallApiOptionsParams,
+  ): Promise<ProviderEmbeddingResponse> {
     // Validate API key first (like chat provider)
     if (this.requiresApiKey() && !this.getApiKey()) {
       return {
@@ -76,10 +107,11 @@ export class OpenAiEmbeddingProvider extends OpenAiGenericProvider {
             ...this.getOpenAiRequestHeaders(),
           },
           body: JSON.stringify(body),
+          ...(options?.abortSignal && { signal: options.abortSignal }),
         },
         getRequestTimeoutMs(),
         'json',
-        false,
+        shouldBustProviderCache(context),
         this.config.maxRetries,
       );
       ({ data, cached, status, statusText, latencyMs, deleteFromCache } = response as any);
@@ -91,6 +123,7 @@ export class OpenAiEmbeddingProvider extends OpenAiGenericProvider {
         };
       }
     } catch (err) {
+      options?.abortSignal?.throwIfAborted();
       logger.error(`API call error: ${String(err)}`);
       await deleteFromCache?.();
       return {
@@ -107,19 +140,20 @@ export class OpenAiEmbeddingProvider extends OpenAiGenericProvider {
       }
       const billingModelName = this.getBillingModelName(this.config);
       const billingLookupModel = normalizeOpenAiBillingModelName(billingModelName);
-      return {
-        embedding,
-        latencyMs,
-        tokenUsage: getTokenUsage(data, cached),
-        cost: calculateOpenAIUsageCost(billingLookupModel, this.config, data.usage, {
-          cachedResponse: cached,
-        }),
-      };
+      return withResponseCacheMetadata(
+        {
+          embedding: typeof embedding === 'string' ? decodeBase64Embedding(embedding) : embedding,
+          latencyMs,
+          tokenUsage: getTokenUsage(data, false),
+          cost: calculateOpenAIUsageCost(billingLookupModel, this.config, data.usage),
+        },
+        cached,
+      );
     } catch (err) {
       logger.error(`Response parsing error: ${String(err)}`);
       await deleteFromCache?.();
       return {
-        error: `API error: ${String(err)}: ${JSON.stringify(data)}`,
+        error: `API error: ${String(err)}`,
       };
     }
   }

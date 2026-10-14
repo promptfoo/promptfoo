@@ -407,13 +407,14 @@ export class OpenAICodexSecurityProvider implements ApiProvider {
           callOptions,
         );
       } finally {
-        this.activeClients.delete(client);
-        try {
-          await client.close();
-        } catch (error) {
-          logger.warn('[CodexSecurity] Error while closing SDK client', {
-            error: safeSdkDiagnostic(error),
-          });
+        if (this.activeClients.delete(client)) {
+          try {
+            await client.close();
+          } catch (error) {
+            logger.warn('[CodexSecurity] Error while closing SDK client', {
+              error: safeSdkDiagnostic(error),
+            });
+          }
         }
       }
     } catch (error) {

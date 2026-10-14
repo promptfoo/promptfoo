@@ -19,6 +19,10 @@ import { createDeferred } from '../util/utils';
 
 import type { CallApiContextParams } from '../../src/types/index';
 
+const createDeepScanConfig = () => ({
+  config: { operation: 'deep-security-scan' as const },
+});
+
 vi.mock('../../src/esm', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../src/esm')>()),
   importModule: vi.fn(),
@@ -499,9 +503,7 @@ describe('OpenAICodexSecurityProvider', () => {
           },
         }),
       );
-      const provider = new OpenAICodexSecurityProvider({
-        config: { operation: 'deep-security-scan' },
-      });
+      const provider = new OpenAICodexSecurityProvider(createDeepScanConfig());
 
       const response = await provider.callApi('Run a complete deep scan');
 
@@ -519,9 +521,7 @@ describe('OpenAICodexSecurityProvider', () => {
     });
 
     it('distinguishes SDK prompt-cache tokens from cached Promptfoo scan responses', async () => {
-      const provider = new OpenAICodexSecurityProvider({
-        config: { operation: 'deep-security-scan' },
-      });
+      const provider = new OpenAICodexSecurityProvider(createDeepScanConfig());
 
       const freshResponse = await provider.callApi('Run a complete deep scan');
       const tokenUsage = createEmptyTokenUsage();
@@ -874,9 +874,7 @@ describe('OpenAICodexSecurityProvider', () => {
         });
         throw new Error('Deep scan worker was interrupted');
       });
-      const provider = new OpenAICodexSecurityProvider({
-        config: { operation: 'deep-security-scan' },
-      });
+      const provider = new OpenAICodexSecurityProvider(createDeepScanConfig());
 
       expect(await provider.callApi('Scan')).toMatchObject({
         error: 'Codex Security operation failed: Deep scan worker was interrupted',
@@ -1094,6 +1092,65 @@ describe('OpenAICodexSecurityProvider', () => {
   });
 
   describe('lifecycle', () => {
+    it.each(
+      (['security-scan', 'validation'] as const).flatMap((operation) =>
+        [false, true].flatMap((operationFails) =>
+          [false, true].map((closeFails) => ({ operation, operationFails, closeFails })),
+        ),
+      ),
+    )(
+      'closes a $operation client once when cleanup overlaps (operationFails=$operationFails, closeFails=$closeFails)',
+      async ({ operation, operationFails, closeFails }) => {
+        const operationResult = createDeferred<unknown>();
+        const closing = createDeferred<void>();
+        const operationMock = operation === 'validation' ? mockValidate : mockRun;
+        operationMock.mockReturnValueOnce(operationResult.promise);
+        mockClose.mockReturnValueOnce(closing.promise);
+        const warn = vi.spyOn(logger, 'warn');
+        const provider = new OpenAICodexSecurityProvider({ config: { operation } });
+        const call = provider.callApi('Check this repository');
+        await vi.waitFor(() => expect(operationMock).toHaveBeenCalledTimes(1));
+
+        const cleanup = provider.cleanup();
+        expect(mockClose).toHaveBeenCalledTimes(1);
+        try {
+          if (operationFails) {
+            operationResult.reject(new Error('Operation interrupted'));
+          } else {
+            operationResult.resolve(
+              operation === 'validation'
+                ? { disposition: 'reportable', report: 'Validated finding' }
+                : createScanResult(),
+            );
+          }
+          const response = await call;
+          expect(response.error).toBe(
+            operationFails ? 'Codex Security operation failed: Operation interrupted' : undefined,
+          );
+          expect(mockClose).toHaveBeenCalledTimes(1);
+
+          if (closeFails) {
+            closing.reject(new Error('Client close failed'));
+          } else {
+            closing.resolve();
+          }
+          await cleanup;
+          await provider.cleanup();
+          expect(mockClose).toHaveBeenCalledTimes(1);
+          expect(warn).toHaveBeenCalledTimes(closeFails ? 1 : 0);
+          if (closeFails) {
+            expect(warn).toHaveBeenCalledWith('[CodexSecurity] Error while closing SDK client', {
+              error: 'Client close failed',
+            });
+          }
+        } finally {
+          operationResult.resolve(createScanResult());
+          closing.resolve();
+          await Promise.all([call, cleanup]);
+        }
+      },
+    );
+
     it.each(['cleanup', 'shutdown', 'shutdownAll'] as const)(
       'registers reused resources after %s',
       async (method) => {

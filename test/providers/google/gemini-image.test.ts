@@ -2,7 +2,25 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache } from '../../../src/cache';
 import { GeminiImageProvider } from '../../../src/providers/google/gemini-image';
 import * as googleUtil from '../../../src/providers/google/util';
-import { mockProcessEnv } from '../../util/utils';
+import { checkProviderApiKeys } from '../../../src/util/provider';
+import { createGoogleSearchTool, createImageUsageCounts } from '../../factories/literalFixtures';
+import { createGoogleImageEnvCleanup, mockProcessEnv } from '../../util/utils';
+import { createMockFetchResponse as createMockProviderResponse } from '../mockProviderResponses';
+
+const createInlineImageCandidate = () => ({
+  content: {
+    parts: [
+      {
+        inlineData: {
+          mimeType: 'image/png',
+          data: 'base64data',
+        },
+      },
+    ],
+  },
+  finishReason: 'STOP',
+});
+
 import type { GoogleAuthOptions } from 'google-auth-library';
 
 vi.mock('../../../src/cache', () => ({
@@ -23,6 +41,23 @@ vi.mock('../../../src/providers/google/util', async (importOriginal) => {
     createAuthCacheDiscriminator: vi.fn().mockReturnValue(''),
     normalizeTools: actual.normalizeTools,
   };
+});
+
+const createMockFetchResponse = () => ({
+  status: 200,
+  data: createMockImageData(),
+  cached: false,
+  statusText: 'OK',
+});
+
+const createMockImageData = () => ({
+  candidates: [createInlineImageCandidate()],
+});
+
+const createMockVertexClient = () => ({
+  request: vi.fn().mockResolvedValue({
+    data: createMockImageData(),
+  }),
 });
 
 describe('GeminiImageProvider', () => {
@@ -69,17 +104,250 @@ describe('GeminiImageProvider', () => {
     mockResolveProjectId.mockResolvedValue('test-project');
   });
 
-  afterEach(() => {
-    mockProcessEnv({ GOOGLE_API_KEY: undefined });
-    mockProcessEnv({ GOOGLE_PROJECT_ID: undefined });
-    mockProcessEnv({ GOOGLE_CLOUD_PROJECT: undefined });
-    mockProcessEnv({ VERTEX_PROJECT_ID: undefined });
-    mockProcessEnv({ VERTEX_API_KEY: undefined });
-    mockProcessEnv({ VERTEX_REGION: undefined });
-    mockProcessEnv({ GOOGLE_CLOUD_LOCATION: undefined });
-    mockProcessEnv({ GOOGLE_LOCATION: undefined });
-    mockProcessEnv({ GOOGLE_GENERATIVE_AI_API_KEY: undefined });
-    mockProcessEnv({ GEMINI_API_KEY: undefined });
+  afterEach(createGoogleImageEnvCleanup());
+
+  describe('API key preflight', () => {
+    let restoreEnv: () => void;
+
+    beforeEach(() => {
+      restoreEnv = mockProcessEnv({
+        GOOGLE_API_KEY: undefined,
+        GOOGLE_GENERATIVE_AI_API_KEY: undefined,
+        GEMINI_API_KEY: undefined,
+        GOOGLE_GENAI_USE_VERTEXAI: undefined,
+        VERTEX_PROJECT_ID: undefined,
+        GOOGLE_PROJECT_ID: undefined,
+        GOOGLE_CLOUD_PROJECT: undefined,
+      });
+    });
+
+    afterEach(() => restoreEnv());
+
+    it.each([
+      { config: { projectId: 'vertex-project' } },
+      { env: { GOOGLE_PROJECT_ID: 'scoped-vertex-project' } },
+      { env: { GOOGLE_CLOUD_PROJECT: 'scoped-cloud-project' } },
+      { config: { vertexai: true } },
+    ])('allows Vertex OAuth without a native API key: %j', (options) => {
+      const provider = new GeminiImageProvider('gemini-3.1-flash-image', options);
+
+      expect(checkProviderApiKeys([provider])).toEqual(new Map());
+      expect(mockFetchWithCache).not.toHaveBeenCalled();
+      expect(mockGetGoogleClient).not.toHaveBeenCalled();
+    });
+
+    it('reports the missing key for native image generation', () => {
+      const provider = new GeminiImageProvider('gemini-3.1-flash-image');
+
+      expect(checkProviderApiKeys([provider])).toEqual(
+        new Map([['GOOGLE_API_KEY', [provider.id()]]]),
+      );
+    });
+
+    it('honors an explicit native route even when a cloud project is present', () => {
+      const provider = new GeminiImageProvider('gemini-3.1-flash-image', {
+        config: { vertexai: false, projectId: 'vertex-project' },
+        env: { GOOGLE_PROJECT_ID: 'scoped-vertex-project' },
+      });
+
+      expect(checkProviderApiKeys([provider])).toEqual(
+        new Map([['GOOGLE_API_KEY', [provider.id()]]]),
+      );
+    });
+
+    it('preserves an explicit API-key preflight opt-out', () => {
+      const provider = new GeminiImageProvider('gemini-3.1-flash-image', {
+        config: { vertexai: false, apiKeyRequired: false },
+      });
+
+      expect(checkProviderApiKeys([provider])).toEqual(new Map());
+    });
+  });
+
+  describe('Nano Banana 2.1', () => {
+    it.each([
+      ['1K', 0.0336],
+      ['2K', 0.0504],
+      ['4K', 0.1134],
+    ])(
+      'sends %s output resolution and bills image plus text/thinking tokens',
+      async (imageSize, imageCost) => {
+        const provider = new GeminiImageProvider('gemini-nano-banana-2.1', {
+          config: {
+            vertexai: false,
+            imageSize: imageSize as '1K' | '2K' | '4K',
+            imageAspectRatio: '8:1',
+          },
+        });
+        mockFetchWithCache.mockResolvedValueOnce({
+          ...createMockFetchResponse(),
+          data: {
+            candidates: [createInlineImageCandidate()],
+            usageMetadata: {
+              promptTokenCount: 100,
+              thoughtsTokenCount: 20,
+              candidatesTokensDetails: [
+                { modality: 'TEXT', tokenCount: 10 },
+                { modality: 'IMAGE', tokenCount: 1120 },
+              ],
+            },
+          },
+        });
+        const result = await provider.callApi('Draw a panorama');
+        expect(result.error).toBeUndefined();
+        expect(result.images).toHaveLength(1);
+        expect(result.cost).toBeCloseTo(
+          Number(imageCost) + (100 * 1.5) / 1e6 + (30 * 7.5) / 1e6,
+          10,
+        );
+        const body = JSON.parse(mockFetchWithCache.mock.calls[0][1]?.body as string);
+        expect(body.generationConfig.imageConfig).toEqual({ imageSize, aspectRatio: '8:1' });
+      },
+    );
+
+    it.each([
+      'IMAGE_SAFETY',
+      'IMAGE_PROHIBITED_CONTENT',
+      'IMAGE_RECITATION',
+      'NO_IMAGE',
+      'IMAGE_OTHER',
+    ])('preserves the %s refusal and message', async (finishReason) => {
+      mockFetchWithCache.mockResolvedValueOnce({
+        ...createMockFetchResponse(),
+        data: {
+          candidates: [
+            { content: {}, finishReason, finishMessage: 'Unable to show the generated image.' },
+          ],
+        },
+      });
+      const provider = new GeminiImageProvider('gemini-nano-banana-2.1', {
+        config: { vertexai: false },
+      });
+      expect((await provider.callApi('Draw')).error).toContain(
+        `${finishReason}: Unable to show the generated image.`,
+      );
+    });
+
+    it.each([false, true])(
+      'prices implicit cached input only on Vertex (Vertex: %s)',
+      async (vertexai) => {
+        const data = {
+          candidates: [createInlineImageCandidate()],
+          usageMetadata: {
+            promptTokenCount: 1000,
+            cachedContentTokenCount: 800,
+            candidatesTokenCount: 1120,
+            totalTokenCount: 2120,
+          },
+        };
+        mockFetchWithCache.mockResolvedValueOnce({ ...createMockFetchResponse(), data });
+        const provider = new GeminiImageProvider('gemini-nano-banana-2.1', {
+          config: { vertexai, apiKey: 'test-key', expressMode: true },
+        });
+        const result = await provider.callApi('Draw');
+        expect(result.error).toBeUndefined();
+        expect(result.cached).toBe(false);
+        expect(result.tokenUsage).toMatchObject({ prompt: 1000, cached: 800 });
+        expect(result.cost).toBeCloseTo(
+          0.0336 + (vertexai ? (200 * 1.5 + 800 * 0.15) / 1e6 : (1000 * 1.5) / 1e6),
+          12,
+        );
+      },
+    );
+
+    it.each(['NO_IMAGE', 'IMAGE_OTHER'])(
+      'does not treat explanatory text after %s as success',
+      async (finishReason) => {
+        mockFetchWithCache.mockResolvedValueOnce({
+          ...createMockFetchResponse(),
+          data: {
+            candidates: [
+              {
+                content: { parts: [{ text: 'Could not generate an image.' }] },
+                finishReason,
+                finishMessage: 'Try another prompt.',
+              },
+            ],
+          },
+        });
+        const provider = new GeminiImageProvider('gemini-nano-banana-2.1', {
+          config: { vertexai: false },
+        });
+        const result = await provider.callApi('Draw');
+        expect(result.error).toContain(`${finishReason}: Try another prompt.`);
+        expect(result.output).toBeUndefined();
+      },
+    );
+
+    it('resolves prompt-owned instruction files against their own base path', async () => {
+      mockSuccessfulImageResponse();
+      const provider = new GeminiImageProvider('gemini-nano-banana-2.1', {
+        config: {
+          vertexai: false,
+          basePath: '/provider',
+          systemInstruction: 'provider instruction',
+        },
+      });
+      await provider.callApi('Draw', {
+        vars: {},
+        prompt: {
+          raw: 'Draw',
+          label: 'Draw',
+          config: {
+            systemInstruction: 'file://instruction.txt',
+            basePath: '/prompt',
+            useAssistantRole: true,
+          },
+        },
+      });
+      expect(googleUtil.geminiFormatAndSystemInstructions).toHaveBeenCalledWith(
+        'Draw',
+        {},
+        'file://instruction.txt',
+        { basePath: '/prompt', useAssistantRole: true },
+      );
+      mockSuccessfulImageResponse();
+      await provider.callApi('Draw', {
+        vars: {},
+        prompt: { raw: 'Draw', label: 'Draw', config: { basePath: '/prompt' } },
+      });
+      expect(googleUtil.geminiFormatAndSystemInstructions).toHaveBeenLastCalledWith(
+        'Draw',
+        {},
+        'provider instruction',
+        { basePath: '/provider', useAssistantRole: undefined },
+      );
+    });
+
+    it('uses the global Vertex endpoint', async () => {
+      const client = createMockVertexClient();
+      mockGetGoogleClient.mockResolvedValueOnce({
+        client: client as any,
+        projectId: 'test-project',
+      });
+      const provider = new GeminiImageProvider('gemini-nano-banana-2.1', {
+        config: { projectId: 'test-project', region: 'us-central1', imageSize: '2K' },
+      });
+      expect((await provider.callApi('Draw a panorama')).error).toBeUndefined();
+      expect(client.request).toHaveBeenCalledWith(
+        expect.objectContaining({
+          url: 'https://aiplatform.googleapis.com/v1/projects/test-project/locations/global/publishers/google/models/gemini-nano-banana-2.1:generateContent',
+        }),
+      );
+    });
+
+    it.each([
+      { imageSize: '512px' as const },
+      { generationConfig: { imageConfig: { imageSize: '512px' } } },
+      { temperature: 0 },
+      { generationConfig: { topK: 1 } },
+      { seed: 0 },
+    ])('rejects unsupported settings before a request: %j', async (config) => {
+      const provider = new GeminiImageProvider('gemini-nano-banana-2.1', { config });
+      expect((await provider.callApi('Draw')).error).toBeDefined();
+      expect(mockFetchWithCache).not.toHaveBeenCalled();
+      expect(mockGetGoogleClient).not.toHaveBeenCalled();
+    });
   });
 
   it('should construct with model name', () => {
@@ -112,11 +380,7 @@ describe('GeminiImageProvider', () => {
             finishReason: 'STOP',
           },
         ],
-        usageMetadata: {
-          promptTokenCount: 10,
-          candidatesTokenCount: 1290,
-          totalTokenCount: 1300,
-        },
+        usageMetadata: createImageUsageCounts(1290, 1300),
       },
       cached: false,
       statusText: 'OK',
@@ -301,6 +565,43 @@ describe('GeminiImageProvider', () => {
       true,
     );
   });
+
+  it.each([
+    { scope: 'provider', expressMode: undefined },
+    { scope: 'provider', expressMode: true },
+    { scope: 'process', expressMode: undefined },
+    { scope: 'process', expressMode: true },
+  ])(
+    'routes environment-selected Vertex Express for $scope with expressMode=$expressMode',
+    async ({ scope, expressMode }) => {
+      const restore =
+        scope === 'process' ? mockProcessEnv({ GOOGLE_GENAI_USE_VERTEXAI: 'true' }) : () => {};
+      try {
+        const provider = new GeminiImageProvider('gemini-3.1-flash-image', {
+          config: { apiKey: 'explicit-vertex-key', expressMode },
+          env: scope === 'provider' ? { GOOGLE_GENAI_USE_VERTEXAI: 'true' } : undefined,
+        });
+        mockSuccessfulImageResponse();
+
+        const result = await provider.callApi('Draw a circle');
+
+        expect(result.error).toBeUndefined();
+        expect(mockGetGoogleClient).not.toHaveBeenCalled();
+        expect(mockResolveProjectId).not.toHaveBeenCalled();
+        expect(mockFetchWithCache).toHaveBeenCalledWith(
+          'https://aiplatform.googleapis.com/v1/publishers/google/models/gemini-3.1-flash-image:generateContent',
+          expect.objectContaining({
+            headers: expect.objectContaining({ 'x-goog-api-key': 'explicit-vertex-key' }),
+          }),
+          expect.any(Number),
+          'json',
+          true,
+        );
+      } finally {
+        restore();
+      }
+    },
+  );
 
   it('should honor a custom base URL for Vertex Express image requests', async () => {
     const provider = new GeminiImageProvider('gemini-3-pro-image-preview', {
@@ -616,27 +917,7 @@ describe('GeminiImageProvider', () => {
         },
       });
 
-      const mockClient = {
-        request: vi.fn().mockResolvedValue({
-          data: {
-            candidates: [
-              {
-                content: {
-                  parts: [
-                    {
-                      inlineData: {
-                        mimeType: 'image/png',
-                        data: 'base64data',
-                      },
-                    },
-                  ],
-                },
-                finishReason: 'STOP',
-              },
-            ],
-          },
-        }),
-      };
+      const mockClient = createMockVertexClient();
 
       mockGetGoogleClient.mockResolvedValue({
         client: mockClient as any,
@@ -871,20 +1152,7 @@ describe('GeminiImageProvider', () => {
         },
       });
 
-      const mockClient = {
-        request: vi.fn().mockResolvedValue({
-          data: {
-            candidates: [
-              {
-                content: {
-                  parts: [{ inlineData: { mimeType: 'image/png', data: 'base64data' } }],
-                },
-                finishReason: 'STOP',
-              },
-            ],
-          },
-        }),
-      };
+      const mockClient = createMockVertexClient();
 
       mockGetGoogleClient.mockResolvedValue({
         client: mockClient as any,
@@ -914,20 +1182,7 @@ describe('GeminiImageProvider', () => {
         },
       });
 
-      const mockClient = {
-        request: vi.fn().mockResolvedValue({
-          data: {
-            candidates: [
-              {
-                content: {
-                  parts: [{ inlineData: { mimeType: 'image/png', data: 'base64data' } }],
-                },
-                finishReason: 'STOP',
-              },
-            ],
-          },
-        }),
-      };
+      const mockClient = createMockVertexClient();
 
       mockGetGoogleClient.mockResolvedValue({
         client: mockClient as any,
@@ -957,20 +1212,7 @@ describe('GeminiImageProvider', () => {
         },
       });
 
-      const mockClient = {
-        request: vi.fn().mockResolvedValue({
-          data: {
-            candidates: [
-              {
-                content: {
-                  parts: [{ inlineData: { mimeType: 'image/png', data: 'base64data' } }],
-                },
-                finishReason: 'STOP',
-              },
-            ],
-          },
-        }),
-      };
+      const mockClient = createMockVertexClient();
 
       mockGetGoogleClient.mockResolvedValue({
         client: mockClient as any,
@@ -1004,28 +1246,7 @@ describe('GeminiImageProvider', () => {
         },
       });
 
-      mockFetchWithCache.mockResolvedValueOnce({
-        status: 200,
-        data: {
-          candidates: [
-            {
-              content: {
-                parts: [
-                  {
-                    inlineData: {
-                      mimeType: 'image/png',
-                      data: 'base64data',
-                    },
-                  },
-                ],
-              },
-              finishReason: 'STOP',
-            },
-          ],
-        },
-        cached: false,
-        statusText: 'OK',
-      });
+      mockFetchWithCache.mockResolvedValueOnce(createMockFetchResponse());
 
       await provider.callApi('Test prompt');
 
@@ -1055,21 +1276,7 @@ describe('GeminiImageProvider', () => {
         },
       });
 
-      mockFetchWithCache.mockResolvedValueOnce({
-        status: 200,
-        data: {
-          candidates: [
-            {
-              content: {
-                parts: [{ inlineData: { mimeType: 'image/png', data: 'base64data' } }],
-              },
-              finishReason: 'STOP',
-            },
-          ],
-        },
-        cached: false,
-        statusText: 'OK',
-      });
+      mockFetchWithCache.mockResolvedValueOnce(createMockFetchResponse());
 
       const result = await provider.callApi('Test prompt');
 
@@ -1092,28 +1299,7 @@ describe('GeminiImageProvider', () => {
         },
       });
 
-      mockFetchWithCache.mockResolvedValueOnce({
-        status: 200,
-        data: {
-          candidates: [
-            {
-              content: {
-                parts: [
-                  {
-                    inlineData: {
-                      mimeType: 'image/png',
-                      data: 'base64data',
-                    },
-                  },
-                ],
-              },
-              finishReason: 'STOP',
-            },
-          ],
-        },
-        cached: false,
-        statusText: 'OK',
-      });
+      mockFetchWithCache.mockResolvedValueOnce(createMockFetchResponse());
 
       await provider.callApi('Test prompt');
 
@@ -1133,28 +1319,7 @@ describe('GeminiImageProvider', () => {
         },
       });
 
-      mockFetchWithCache.mockResolvedValueOnce({
-        status: 200,
-        data: {
-          candidates: [
-            {
-              content: {
-                parts: [
-                  {
-                    inlineData: {
-                      mimeType: 'image/png',
-                      data: 'base64data',
-                    },
-                  },
-                ],
-              },
-              finishReason: 'STOP',
-            },
-          ],
-        },
-        cached: false,
-        statusText: 'OK',
-      });
+      mockFetchWithCache.mockResolvedValueOnce(createMockFetchResponse());
 
       await provider.callApi('Test prompt');
 
@@ -1174,28 +1339,7 @@ describe('GeminiImageProvider', () => {
         },
       });
 
-      mockFetchWithCache.mockResolvedValueOnce({
-        status: 200,
-        data: {
-          candidates: [
-            {
-              content: {
-                parts: [
-                  {
-                    inlineData: {
-                      mimeType: 'image/png',
-                      data: 'base64data',
-                    },
-                  },
-                ],
-              },
-              finishReason: 'STOP',
-            },
-          ],
-        },
-        cached: false,
-        statusText: 'OK',
-      });
+      mockFetchWithCache.mockResolvedValueOnce(createMockFetchResponse());
 
       await provider.callApi('Test prompt');
 
@@ -1277,26 +1421,8 @@ describe('GeminiImageProvider', () => {
       mockFetchWithCache.mockResolvedValueOnce({
         status: 200,
         data: {
-          candidates: [
-            {
-              content: {
-                parts: [
-                  {
-                    inlineData: {
-                      mimeType: 'image/png',
-                      data: 'base64data',
-                    },
-                  },
-                ],
-              },
-              finishReason: 'STOP',
-            },
-          ],
-          usageMetadata: {
-            promptTokenCount: 10,
-            candidatesTokenCount: 1290,
-            totalTokenCount: 1300,
-          },
+          candidates: [createInlineImageCandidate()],
+          usageMetadata: createImageUsageCounts(1290, 1300),
         },
         cached: false,
         statusText: 'OK',
@@ -1312,7 +1438,7 @@ describe('GeminiImageProvider', () => {
       });
     });
 
-    it('should count cached responses as one logical request', async () => {
+    it('preserves cached token counts without reporting an incurred request', async () => {
       const provider = new GeminiImageProvider('gemini-3-pro-image-preview');
 
       mockFetchWithCache.mockResolvedValueOnce({
@@ -1339,9 +1465,12 @@ describe('GeminiImageProvider', () => {
       const result = await provider.callApi('Generate a picture of a cat');
 
       expect(result.tokenUsage).toEqual({
+        prompt: 4,
+        completion: 6,
         cached: 10,
         total: 10,
-        numRequests: 1,
+        numRequests: 0,
+        incurredTokenUsage: {},
       });
     });
   });
@@ -1444,28 +1573,7 @@ describe('GeminiImageProvider', () => {
     it('should return correct cost for gemini-3-pro-image-preview', async () => {
       const provider = new GeminiImageProvider('gemini-3-pro-image-preview');
 
-      mockFetchWithCache.mockResolvedValueOnce({
-        status: 200,
-        data: {
-          candidates: [
-            {
-              content: {
-                parts: [
-                  {
-                    inlineData: {
-                      mimeType: 'image/png',
-                      data: 'base64data',
-                    },
-                  },
-                ],
-              },
-              finishReason: 'STOP',
-            },
-          ],
-        },
-        cached: false,
-        statusText: 'OK',
-      });
+      mockFetchWithCache.mockResolvedValueOnce(createMockFetchResponse());
 
       const result = await provider.callApi('Test prompt');
 
@@ -1475,28 +1583,7 @@ describe('GeminiImageProvider', () => {
     it('should return correct cost for gemini-2.5-flash-image', async () => {
       const provider = new GeminiImageProvider('gemini-2.5-flash-image');
 
-      mockFetchWithCache.mockResolvedValueOnce({
-        status: 200,
-        data: {
-          candidates: [
-            {
-              content: {
-                parts: [
-                  {
-                    inlineData: {
-                      mimeType: 'image/png',
-                      data: 'base64data',
-                    },
-                  },
-                ],
-              },
-              finishReason: 'STOP',
-            },
-          ],
-        },
-        cached: false,
-        statusText: 'OK',
-      });
+      mockFetchWithCache.mockResolvedValueOnce(createMockFetchResponse());
 
       const result = await provider.callApi('Test prompt');
 
@@ -1506,28 +1593,7 @@ describe('GeminiImageProvider', () => {
     it('should return correct cost for gemini-3.1-flash-image-preview', async () => {
       const provider = new GeminiImageProvider('gemini-3.1-flash-image-preview');
 
-      mockFetchWithCache.mockResolvedValueOnce({
-        status: 200,
-        data: {
-          candidates: [
-            {
-              content: {
-                parts: [
-                  {
-                    inlineData: {
-                      mimeType: 'image/png',
-                      data: 'base64data',
-                    },
-                  },
-                ],
-              },
-              finishReason: 'STOP',
-            },
-          ],
-        },
-        cached: false,
-        statusText: 'OK',
-      });
+      mockFetchWithCache.mockResolvedValueOnce(createMockFetchResponse());
 
       const result = await provider.callApi('Test prompt');
 
@@ -1537,28 +1603,7 @@ describe('GeminiImageProvider', () => {
     it('should return correct cost for gemini-3.1-flash-lite-image (Nano Banana 2 Lite)', async () => {
       const provider = new GeminiImageProvider('gemini-3.1-flash-lite-image');
 
-      mockFetchWithCache.mockResolvedValueOnce({
-        status: 200,
-        data: {
-          candidates: [
-            {
-              content: {
-                parts: [
-                  {
-                    inlineData: {
-                      mimeType: 'image/png',
-                      data: 'base64data',
-                    },
-                  },
-                ],
-              },
-              finishReason: 'STOP',
-            },
-          ],
-        },
-        cached: false,
-        statusText: 'OK',
-      });
+      mockFetchWithCache.mockResolvedValueOnce(createMockFetchResponse());
 
       const result = await provider.callApi('Test prompt');
 
@@ -1568,21 +1613,7 @@ describe('GeminiImageProvider', () => {
     it('should return correct cost for gemini-3.1-flash-image (GA Nano Banana 2)', async () => {
       const provider = new GeminiImageProvider('gemini-3.1-flash-image');
 
-      mockFetchWithCache.mockResolvedValueOnce({
-        status: 200,
-        data: {
-          candidates: [
-            {
-              content: {
-                parts: [{ inlineData: { mimeType: 'image/png', data: 'base64data' } }],
-              },
-              finishReason: 'STOP',
-            },
-          ],
-        },
-        cached: false,
-        statusText: 'OK',
-      });
+      mockFetchWithCache.mockResolvedValueOnce(createMockFetchResponse());
 
       const result = await provider.callApi('Test prompt');
 
@@ -1592,21 +1623,7 @@ describe('GeminiImageProvider', () => {
     it('should return correct cost for gemini-3-pro-image (GA Nano Banana Pro)', async () => {
       const provider = new GeminiImageProvider('gemini-3-pro-image');
 
-      mockFetchWithCache.mockResolvedValueOnce({
-        status: 200,
-        data: {
-          candidates: [
-            {
-              content: {
-                parts: [{ inlineData: { mimeType: 'image/png', data: 'base64data' } }],
-              },
-              finishReason: 'STOP',
-            },
-          ],
-        },
-        cached: false,
-        statusText: 'OK',
-      });
+      mockFetchWithCache.mockResolvedValueOnce(createMockFetchResponse());
 
       const result = await provider.callApi('Test prompt');
 
@@ -1625,21 +1642,7 @@ describe('GeminiImageProvider', () => {
       async ({ model, imageSize, expected }) => {
         const provider = new GeminiImageProvider(model, { config: { imageSize } });
 
-        mockFetchWithCache.mockResolvedValueOnce({
-          status: 200,
-          data: {
-            candidates: [
-              {
-                content: {
-                  parts: [{ inlineData: { mimeType: 'image/png', data: 'base64data' } }],
-                },
-                finishReason: 'STOP',
-              },
-            ],
-          },
-          cached: false,
-          statusText: 'OK',
-        });
+        mockFetchWithCache.mockResolvedValueOnce(createMockFetchResponse());
 
         const result = await provider.callApi('Test prompt');
 
@@ -1650,41 +1653,20 @@ describe('GeminiImageProvider', () => {
     it('should default resolution-tiered cost to the 1K price when imageSize is unset', async () => {
       const provider = new GeminiImageProvider('gemini-3.1-flash-image');
 
-      mockFetchWithCache.mockResolvedValueOnce({
-        status: 200,
-        data: {
-          candidates: [
-            {
-              content: {
-                parts: [{ inlineData: { mimeType: 'image/png', data: 'base64data' } }],
-              },
-              finishReason: 'STOP',
-            },
-          ],
-        },
-        cached: false,
-        statusText: 'OK',
-      });
+      mockFetchWithCache.mockResolvedValueOnce(createMockFetchResponse());
 
       const result = await provider.callApi('Test prompt');
 
       expect(result.cost).toBe(0.067);
     });
 
-    it('should not report cost for cached responses', async () => {
+    it('preserves the reported estimate on cached responses', async () => {
       const provider = new GeminiImageProvider('gemini-3.1-flash-image');
 
       mockFetchWithCache.mockResolvedValueOnce({
         status: 200,
         data: {
-          candidates: [
-            {
-              content: {
-                parts: [{ inlineData: { mimeType: 'image/png', data: 'base64data' } }],
-              },
-              finishReason: 'STOP',
-            },
-          ],
+          candidates: [createInlineImageCandidate()],
           usageMetadata: { totalTokenCount: 1200 },
         },
         cached: true,
@@ -1694,7 +1676,8 @@ describe('GeminiImageProvider', () => {
       const result = await provider.callApi('Test prompt');
 
       expect(result.cached).toBe(true);
-      expect(result.cost).toBeUndefined();
+      expect(result.cost).toBe(0.067);
+      expect(result.tokenUsage?.numRequests).toBe(0);
     });
 
     it('should bill prompt and text/thinking tokens on top of the per-image price', async () => {
@@ -1740,21 +1723,7 @@ describe('GeminiImageProvider', () => {
         config: { generationConfig: { imageConfig: { imageSize: '4K' } } },
       });
 
-      mockFetchWithCache.mockResolvedValueOnce({
-        status: 200,
-        data: {
-          candidates: [
-            {
-              content: {
-                parts: [{ inlineData: { mimeType: 'image/png', data: 'base64data' } }],
-              },
-              finishReason: 'STOP',
-            },
-          ],
-        },
-        cached: false,
-        statusText: 'OK',
-      });
+      mockFetchWithCache.mockResolvedValueOnce(createMockFetchResponse());
 
       const result = await provider.callApi('Test prompt');
 
@@ -1819,21 +1788,7 @@ describe('GeminiImageProvider', () => {
         config: { imageSize: '1K' },
       });
 
-      mockFetchWithCache.mockResolvedValueOnce({
-        status: 200,
-        data: {
-          candidates: [
-            {
-              content: {
-                parts: [{ inlineData: { mimeType: 'image/png', data: 'base64data' } }],
-              },
-              finishReason: 'STOP',
-            },
-          ],
-        },
-        cached: false,
-        statusText: 'OK',
-      });
+      mockFetchWithCache.mockResolvedValueOnce(createMockFetchResponse());
 
       const result = await provider.callApi('Test prompt');
 
@@ -1849,28 +1804,7 @@ describe('GeminiImageProvider', () => {
 
       const provider = new GeminiImageProvider('gemini-3-pro-image-preview');
 
-      mockFetchWithCache.mockResolvedValueOnce({
-        status: 200,
-        data: {
-          candidates: [
-            {
-              content: {
-                parts: [
-                  {
-                    inlineData: {
-                      mimeType: 'image/png',
-                      data: 'base64data',
-                    },
-                  },
-                ],
-              },
-              finishReason: 'STOP',
-            },
-          ],
-        },
-        cached: false,
-        statusText: 'OK',
-      });
+      mockFetchWithCache.mockResolvedValueOnce(createMockFetchResponse());
 
       const result = await provider.callApi('Test prompt');
 
@@ -1897,28 +1831,7 @@ describe('GeminiImageProvider', () => {
         },
       });
 
-      mockFetchWithCache.mockResolvedValueOnce({
-        status: 200,
-        data: {
-          candidates: [
-            {
-              content: {
-                parts: [
-                  {
-                    inlineData: {
-                      mimeType: 'image/png',
-                      data: 'base64data',
-                    },
-                  },
-                ],
-              },
-              finishReason: 'STOP',
-            },
-          ],
-        },
-        cached: false,
-        statusText: 'OK',
-      });
+      mockFetchWithCache.mockResolvedValueOnce(createMockFetchResponse());
 
       await provider.callApi('Test prompt');
 
@@ -1940,21 +1853,7 @@ describe('GeminiImageProvider', () => {
     it('should use v1beta for gemini-3 models', async () => {
       const provider = new GeminiImageProvider('gemini-3-pro-image-preview');
 
-      mockFetchWithCache.mockResolvedValueOnce({
-        status: 200,
-        data: {
-          candidates: [
-            {
-              content: {
-                parts: [{ inlineData: { mimeType: 'image/png', data: 'base64data' } }],
-              },
-              finishReason: 'STOP',
-            },
-          ],
-        },
-        cached: false,
-        statusText: 'OK',
-      });
+      mockFetchWithCache.mockResolvedValueOnce(createMockFetchResponse());
 
       await provider.callApi('Test prompt');
 
@@ -1970,21 +1869,7 @@ describe('GeminiImageProvider', () => {
     it('should use v1beta for non-gemini-3 models', async () => {
       const provider = new GeminiImageProvider('gemini-2.5-flash-image');
 
-      mockFetchWithCache.mockResolvedValueOnce({
-        status: 200,
-        data: {
-          candidates: [
-            {
-              content: {
-                parts: [{ inlineData: { mimeType: 'image/png', data: 'base64data' } }],
-              },
-              finishReason: 'STOP',
-            },
-          ],
-        },
-        cached: false,
-        statusText: 'OK',
-      });
+      mockFetchWithCache.mockResolvedValueOnce(createMockFetchResponse());
 
       await provider.callApi('Test prompt');
 
@@ -2000,21 +1885,7 @@ describe('GeminiImageProvider', () => {
     it('should use v1beta for gemini-3.1 image models', async () => {
       const provider = new GeminiImageProvider('gemini-3.1-flash-image-preview');
 
-      mockFetchWithCache.mockResolvedValueOnce({
-        status: 200,
-        data: {
-          candidates: [
-            {
-              content: {
-                parts: [{ inlineData: { mimeType: 'image/png', data: 'base64data' } }],
-              },
-              finishReason: 'STOP',
-            },
-          ],
-        },
-        cached: false,
-        statusText: 'OK',
-      });
+      mockFetchWithCache.mockResolvedValueOnce(createMockFetchResponse());
 
       await provider.callApi('Test prompt');
 
@@ -2047,21 +1918,7 @@ describe('GeminiImageProvider', () => {
             tools: canonicalFirst ? [camelTool, snakeTool] : [snakeTool, camelTool],
           },
         });
-        mockFetchWithCache.mockResolvedValueOnce({
-          data: {
-            candidates: [
-              {
-                content: {
-                  parts: [{ inlineData: { mimeType: 'image/png', data: 'base64data' } }],
-                },
-                finishReason: 'STOP',
-              },
-            ],
-          },
-          cached: false,
-          status: 200,
-          statusText: 'OK',
-        });
+        mockFetchWithCache.mockResolvedValueOnce(createMockProviderResponse(createMockImageData()));
 
         expect((await provider.callApi('Generate an image')).error).toBeUndefined();
         const body = JSON.parse(mockFetchWithCache.mock.calls[0][1]?.body as string);
@@ -2072,29 +1929,11 @@ describe('GeminiImageProvider', () => {
     it('should include googleSearch tool in request body', async () => {
       const provider = new GeminiImageProvider('gemini-3.1-flash-image-preview', {
         config: {
-          tools: [
-            {
-              googleSearch: {},
-            },
-          ],
+          tools: [createGoogleSearchTool()],
         },
       });
 
-      mockFetchWithCache.mockResolvedValueOnce({
-        status: 200,
-        data: {
-          candidates: [
-            {
-              content: {
-                parts: [{ inlineData: { mimeType: 'image/png', data: 'base64data' } }],
-              },
-              finishReason: 'STOP',
-            },
-          ],
-        },
-        cached: false,
-        statusText: 'OK',
-      });
+      mockFetchWithCache.mockResolvedValueOnce(createMockFetchResponse());
 
       await provider.callApi('Generate a grounded image');
 
@@ -2106,11 +1945,7 @@ describe('GeminiImageProvider', () => {
     it('should preserve googleSearch when function calling is disabled', async () => {
       const provider = new GeminiImageProvider('gemini-3.1-flash-image-preview', {
         config: {
-          tools: [
-            {
-              googleSearch: {},
-            },
-          ],
+          tools: [createGoogleSearchTool()],
           toolConfig: {
             functionCallingConfig: {
               mode: 'NONE',
@@ -2119,21 +1954,7 @@ describe('GeminiImageProvider', () => {
         },
       });
 
-      mockFetchWithCache.mockResolvedValueOnce({
-        status: 200,
-        data: {
-          candidates: [
-            {
-              content: {
-                parts: [{ inlineData: { mimeType: 'image/png', data: 'base64data' } }],
-              },
-              finishReason: 'STOP',
-            },
-          ],
-        },
-        cached: false,
-        statusText: 'OK',
-      });
+      mockFetchWithCache.mockResolvedValueOnce(createMockFetchResponse());
 
       await provider.callApi('Generate a grounded image');
 
@@ -2159,21 +1980,7 @@ describe('GeminiImageProvider', () => {
         },
       });
 
-      mockFetchWithCache.mockResolvedValueOnce({
-        status: 200,
-        data: {
-          candidates: [
-            {
-              content: {
-                parts: [{ inlineData: { mimeType: 'image/png', data: 'base64data' } }],
-              },
-              finishReason: 'STOP',
-            },
-          ],
-        },
-        cached: false,
-        statusText: 'OK',
-      });
+      mockFetchWithCache.mockResolvedValueOnce(createMockFetchResponse());
 
       await provider.callApi('Generate a grounded image');
 

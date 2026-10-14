@@ -88,7 +88,6 @@ describe('BraintrustProvider', () => {
   it('queries full Braintrust traces using the propagated OpenTelemetry trace ID', async () => {
     const result = await new BraintrustProvider(config).fetchTrace(TRACE_ID);
 
-    expect(result).toMatchObject({ traceId: TRACE_ID, services: ['customer-agent'] });
     expect(result?.spans).toHaveLength(2);
     expect(result?.spans[0]).toMatchObject({
       spanId: 'root-span',

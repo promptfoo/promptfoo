@@ -65,6 +65,7 @@ For GPT-5.6 and newer models, use `openai:<model>`, such as `openai:gpt-6-luna`.
 | -------------------------------------- | ------------------------------------------ | ------------------------------------------------------------------------ |
 | GPT-5.6+ text, image inputs, and tools | `openai:<model>`                           | [Responses API](#responses-api)                                          |
 | Chat Completions                       | `openai:chat:<model>`                      | [Parameters](#configuring-parameters)                                    |
+| Classification and scoring             | `openai:decisions:<model>`                 | [Decisions API](./openai-decisions.md)                                   |
 | Embeddings                             | `openai:embedding:<model>`                 | [Embedding dimensions](#reducing-embedding-dimensions)                   |
 | Moderation                             | `openai:moderation:omni-moderation-latest` | [Moderation assertions](/docs/configuration/expected-outputs/moderation) |
 | Image generation                       | `openai:image:<model>`                     | [Images](#images)                                                        |
@@ -382,6 +383,8 @@ providers:
         dimensions: 1024
 ```
 
+You can also set `encoding_format: base64` under `passthrough`. Promptfoo decodes base64 responses into numeric vectors for similarity assertions; numeric responses remain supported.
+
 When grading generated text with embeddings, configure the embedding provider on the [similarity assertion](/docs/configuration/expected-outputs/similar/). See the [Embeddings API reference](https://developers.openai.com/api/reference/resources/embeddings/methods/create) for model limits.
 
 ## Responses API
@@ -408,6 +411,22 @@ providers:
 
 `store: false` controls storage at OpenAI. It does not disable Promptfoo's local response cache. Use `--no-cache` when you need fresh API requests. OpenAI's [data controls](https://developers.openai.com/api/docs/guides/your-data) describe retention and account-level restrictions.
 
+### Daybreak access programs
+
+Set `config.access_programs.cyber` to select `standard`, `daybreak_blue`, or `daybreak_red` for a Responses request:
+
+```yaml
+providers:
+  - id: openai:responses:gpt-6-sol
+    config:
+      access_programs:
+        cyber: daybreak_blue
+```
+
+Your OpenAI project needs access to the selected model and program. Use `daybreak_blue` with supported mainline models and `daybreak_red` with cyber models such as `gpt-5.6-cyber`. Use `standard` to explicitly request standard safeguards. If omitted, OpenAI chooses based on the model and your access. See [OpenAI's Daybreak guide](https://developers.openai.com/api/docs/guides/daybreak) for model eligibility.
+
+The selected program is available in the provider response's `raw.access_programs.cyber` when OpenAI returns it. Existing `config.passthrough.access_programs` settings continue to work and override the named option.
+
 ### Response state and streaming {#responses-specific-configuration-options}
 
 <details>
@@ -427,6 +446,8 @@ providers:
 | `stream`               | Request streaming; Promptfoo collects the stream into the eval result.                                        |
 
 The provider response's `raw` field contains the Responses object, including `id` and `output` items. Its `metadata` includes extracted annotations and HTTP metadata. Use these fields when you need to inspect tool results or continue a conversation.
+
+For incomplete Responses output, `metadata.responseStatus` and `metadata.incompleteReason` expose the API status and reason. `max_output_tokens` maps to `finishReason: 'length'`, which you can check with a `finish-reason` assertion. Partial text remains available in `output`; Promptfoo does not automatically retry or continue it.
 
 </details>
 

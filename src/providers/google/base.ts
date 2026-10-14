@@ -21,23 +21,18 @@ import {
   resolveCallbackPath,
   wrapError,
 } from '../../util/functions/loadFunction';
-import { maybeLoadToolsFromExternalFile } from '../../util/index';
 import { getNunjucksEngine } from '../../util/templates';
-import { MCPClient } from '../mcp/client';
+import { McpClientSession } from '../mcp/session';
 import { transformMCPToolsToGoogle } from '../mcp/transform';
-import { getRequestTimeoutMs, transformTools } from '../shared';
+import { getRequestTimeoutMs } from '../shared';
 import { withGenAIToolSpan } from '../tracing';
 import { GoogleAuthManager } from './auth';
 import { getVertexModelDefaultRegion } from './shared';
-import {
-  normalizeTools,
-  resolveGoogleToolConfig,
-  stripExecutableToolFileReferences,
-  validateFunctionCall,
-} from './util';
+import { loadGoogleTools, resolveGoogleToolConfig, validateFunctionCall } from './util';
 
 import type { EnvOverrides } from '../../types/env';
 import type { ApiProvider, CallApiContextParams, ProviderResponse } from '../../types/index';
+import type { MCPClient } from '../mcp/client';
 import type {
   CompletionOptions,
   GoogleProviderConfig,
@@ -346,8 +341,8 @@ export abstract class GoogleGenericProvider implements ApiProvider {
 
   /** MCP client for tool integration */
   protected mcpClient: MCPClient | null = null;
-
-  /** Promise that resolves when MCP initialization is complete */
+  private mcpSession?: McpClientSession;
+  /** Preserves the eager MCP startup contract for subclasses and callers. */
   protected initializationPromise: Promise<void> | null = null;
 
   /** Cache of loaded function callbacks */
@@ -392,9 +387,9 @@ export abstract class GoogleGenericProvider implements ApiProvider {
       this.customId = () => id;
     }
 
-    // Initialize MCP if configured
     if (this.config.mcp?.enabled) {
       this.initializationPromise = this.initializeMCP();
+      void this.initializationPromise.catch(() => undefined);
     }
   }
 
@@ -498,12 +493,12 @@ export abstract class GoogleGenericProvider implements ApiProvider {
   /**
    * Initialize the MCP client for tool integration.
    */
-  protected async initializeMCP(): Promise<void> {
-    if (!this.config.mcp) {
+  protected async initializeMCP(signal?: AbortSignal): Promise<void> {
+    if (!this.config.mcp?.enabled) {
       return;
     }
-    this.mcpClient = new MCPClient(this.config.mcp);
-    await this.mcpClient.initialize();
+    this.mcpSession ??= new McpClientSession(this.config.mcp);
+    this.mcpClient = await this.mcpSession.initialize(signal);
   }
 
   /**
@@ -516,6 +511,7 @@ export abstract class GoogleGenericProvider implements ApiProvider {
     context?: CallApiContextParams,
     options: { skipExecutableToolFiles?: boolean } = {},
   ): Promise<Tool[]> {
+    await this.initializeMCP();
     // Get MCP tools if client is available
     const mcpTools = this.mcpClient ? transformMCPToolsToGoogle(this.mcpClient.getAllTools()) : [];
 
@@ -523,20 +519,7 @@ export abstract class GoogleGenericProvider implements ApiProvider {
     // This allows per-prompt tool overrides in test cases
     const promptConfig = context?.prompt?.config as CompletionOptions | undefined;
     const configTools = promptConfig?.tools ?? this.config.tools;
-    const requestTools = options.skipExecutableToolFiles
-      ? stripExecutableToolFileReferences(configTools, context?.vars)
-      : configTools;
-    const loadedTools = requestTools
-      ? await maybeLoadToolsFromExternalFile(requestTools, context?.vars)
-      : [];
-
-    // Transform tools to Google format if needed
-    const transformedTools = Array.isArray(loadedTools)
-      ? (transformTools(loadedTools, 'google') as Tool[])
-      : loadedTools
-        ? [loadedTools]
-        : [];
-    const normalizedTools = normalizeTools(transformedTools);
+    const normalizedTools = await loadGoogleTools(configTools, context?.vars, options);
 
     // Combine all tools
     const allTools = [...mcpTools, ...normalizedTools];
@@ -780,12 +763,10 @@ export abstract class GoogleGenericProvider implements ApiProvider {
    * Should be called when the provider is no longer needed.
    */
   async cleanup(): Promise<void> {
-    if (this.mcpClient) {
-      if (this.initializationPromise != null) {
-        await this.initializationPromise;
-      }
-      await this.mcpClient.cleanup();
-      this.mcpClient = null;
+    try {
+      await this.mcpSession?.cleanup();
+    } finally {
+      this.mcpClient = this.mcpSession?.client ?? null;
     }
   }
 

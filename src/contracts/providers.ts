@@ -83,6 +83,8 @@ export interface ProviderResponse {
   prompt?: string | ChatMessage[];
   raw?: string | any;
   output?: string | any;
+  /** Native output used for conversation history when display output has been normalized. */
+  conversationOutput?: string | object;
   /**
    * Input materialization metadata returned by a remote Promptfoo server.
    */
@@ -156,8 +158,10 @@ export interface ProviderSimilarityResponse {
 }
 
 export interface ProviderClassificationResponse {
+  cached?: boolean;
   error?: string;
   classification?: Record<string, number>;
+  tokenUsage?: Partial<TokenUsage>;
 }
 
 export interface FunctionToolCallValidator {

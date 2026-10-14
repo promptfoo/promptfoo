@@ -1,27 +1,25 @@
+const { createWarningLoggerModule } = await vi.hoisted(
+  async () => import('../../factories/logger'),
+);
+
 import path from 'path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { CallbackPathTraversalError } from '../../../src/util/functions/loadFunction';
 
 // Mock dependencies before importing the base class
+const createStreamingToolConfig = () => ({
+  streaming: true,
+  toolConfig: { functionCallingConfig: { streamFunctionCallArguments: true } },
+});
+
 vi.mock('../../../src/envars', () => ({
   getEnvString: vi.fn(),
   getEnvInt: vi.fn().mockReturnValue(300000),
   getEnvBool: vi.fn().mockReturnValue(false),
 }));
 
-vi.mock('../../../src/logger', () => ({
-  default: {
-    debug: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-  },
-}));
-
-vi.mock('../../../src/cliState', () => ({
-  default: {
-    basePath: '/test/base/path',
-  },
-}));
+vi.mock('../../../src/logger', () => createWarningLoggerModule());
 
 vi.mock('../../../src/esm', () => ({
   importModule: vi.fn(),
@@ -29,9 +27,6 @@ vi.mock('../../../src/esm', () => ({
 
 vi.mock('../../../src/util/file', () => ({
   maybeLoadFromExternalFile: vi.fn(),
-}));
-
-vi.mock('../../../src/util/index', () => ({
   maybeLoadToolsFromExternalFile: vi.fn().mockResolvedValue([]),
 }));
 
@@ -93,7 +88,7 @@ import { importModule } from '../../../src/esm';
 import { GoogleAuthManager } from '../../../src/providers/google/auth';
 import { GoogleGenericProvider } from '../../../src/providers/google/base';
 import { withGenAIToolSpan } from '../../../src/providers/tracing';
-import { maybeLoadToolsFromExternalFile } from '../../../src/util/index';
+import { maybeLoadToolsFromExternalFile } from '../../../src/util/file';
 
 import type { CallApiContextParams, ProviderResponse } from '../../../src/types/index';
 
@@ -113,7 +108,11 @@ class TestGoogleProvider extends GoogleGenericProvider {
 }
 
 describe('GoogleGenericProvider', () => {
+  let originalBasePath: string | undefined;
+
   beforeEach(() => {
+    originalBasePath = cliState.basePath;
+    cliState.basePath = '/test/base/path';
     vi.clearAllMocks();
     // Reset hoisted mock instance methods to ensure test isolation
     mockMcpInstance.initialize.mockReset().mockResolvedValue(undefined);
@@ -130,6 +129,7 @@ describe('GoogleGenericProvider', () => {
   });
 
   afterEach(() => {
+    cliState.basePath = originalBasePath;
     vi.clearAllMocks();
     vi.restoreAllMocks();
   });
@@ -302,7 +302,11 @@ describe('GoogleGenericProvider', () => {
 
       const tools = await provider['getAllTools']();
 
-      expect(maybeLoadToolsFromExternalFile).toHaveBeenCalledWith(configTools, undefined);
+      expect(maybeLoadToolsFromExternalFile).toHaveBeenCalledWith(
+        configTools,
+        undefined,
+        undefined,
+      );
       expect(tools).toEqual(configTools);
     });
 
@@ -336,6 +340,23 @@ describe('GoogleGenericProvider', () => {
   });
 
   describe('loadExternalFunction()', () => {
+    it('preserves callback traversal errors by identity', async () => {
+      const error = new CallbackPathTraversalError('../callback.js', '/test/base/path');
+      vi.mocked(importModule).mockRejectedValueOnce(error);
+      const provider = new TestGoogleProvider('gemini-2.5-pro');
+      await expect(provider['loadExternalFunction']('file://test.js')).rejects.toBe(error);
+    });
+
+    it('preserves callback load failure context and cause', async () => {
+      const error = new Error('module unavailable');
+      vi.mocked(importModule).mockRejectedValueOnce(error);
+      const provider = new TestGoogleProvider('gemini-2.5-pro');
+      await expect(provider['loadExternalFunction']('file://test.js')).rejects.toMatchObject({
+        message: 'Error loading function from file://test.js: module unavailable',
+        cause: error,
+      });
+    });
+
     it('should load function from file', async () => {
       const mockFn = vi.fn().mockReturnValue('result');
       vi.mocked(importModule).mockResolvedValue(mockFn);
@@ -633,10 +654,7 @@ describe('GoogleGenericProvider', () => {
           { text: 'after first call' },
           { functionCall: { name: 'second', args: {} }, thoughtSignature: 'second-signature' },
         ],
-        {
-          streaming: true,
-          toolConfig: { functionCallingConfig: { streamFunctionCallArguments: true } },
-        },
+        createStreamingToolConfig(),
         false,
       );
 
@@ -980,10 +998,7 @@ describe('GoogleGenericProvider', () => {
             },
           },
         ],
-        {
-          streaming: true,
-          toolConfig: { functionCallingConfig: { streamFunctionCallArguments: true } },
-        },
+        createStreamingToolConfig(),
         false,
       );
 
@@ -1009,10 +1024,7 @@ describe('GoogleGenericProvider', () => {
           inlineData,
           { text: 'After the call' },
         ],
-        {
-          streaming: true,
-          toolConfig: { functionCallingConfig: { streamFunctionCallArguments: true } },
-        },
+        createStreamingToolConfig(),
         false,
       );
 
@@ -1034,10 +1046,7 @@ describe('GoogleGenericProvider', () => {
 
       const result = await provider['executeFunctionToolCallbacks'](
         output,
-        {
-          streaming: true,
-          toolConfig: { functionCallingConfig: { streamFunctionCallArguments: true } },
-        },
+        createStreamingToolConfig(),
         false,
       );
 
@@ -1278,10 +1287,7 @@ describe('GoogleGenericProvider', () => {
             thoughtSignature: 'late-signature',
           },
         ],
-        {
-          streaming: true,
-          toolConfig: { functionCallingConfig: { streamFunctionCallArguments: true } },
-        },
+        createStreamingToolConfig(),
         false,
       );
 

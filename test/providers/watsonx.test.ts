@@ -17,6 +17,42 @@ import {
   WatsonXProvider,
 } from '../../src/providers/watsonx';
 import { createEmptyTokenUsage } from '../../src/util/tokenUsageUtils';
+import { createChatUsage } from '../factories/literalFixtures';
+
+const createWatsonGenerationResponse = () => ({
+  result: {
+    model_id: 'test-model',
+    model_version: '1.0.0',
+    created_at: '2023-10-10T00:00:00Z',
+    results: [
+      {
+        generated_text: 'Test response',
+        generated_token_count: 10,
+        input_token_count: 5,
+        stop_reason: 'max_tokens',
+      },
+    ],
+  },
+});
+
+const createGenerationConfig = () => ({
+  apiKey: 'test-api-key',
+  projectId: 'test-project-id',
+  modelId: 'test-model-id',
+  maxNewTokens: 50,
+});
+
+const createGenerationResult = () => ({
+  generated_text: 'Test response',
+  generated_token_count: 100,
+  input_token_count: 50,
+  stop_reason: 'max_tokens',
+});
+
+const createOutputLimits = (maxOutputTokens: number) => ({
+  max_sequence_length: 131072,
+  max_output_tokens: maxOutputTokens,
+});
 
 const mockListFoundationModelSpecs = vi.fn();
 
@@ -75,13 +111,18 @@ vi.mock('../../src/envars', async (importOriginal) => {
 });
 
 describe('WatsonXProvider', () => {
-  const modelName = 'test-model';
-  const config = {
-    apiKey: 'test-api-key',
-    projectId: 'test-project-id',
-    modelId: 'test-model-id',
-    maxNewTokens: 50,
+  const createWatsonxIdCheck = () => () => {
+    const mockedWatsonXAIClient: Partial<any> = {
+      generateText: vi.fn(),
+    };
+    mockClient(mockedWatsonXAIClient);
+
+    const provider = new WatsonXProvider(modelName, { config });
+    expect(provider.id()).toBe(`watsonx:${modelName}`);
   };
+
+  const modelName = 'test-model';
+  const config = createGenerationConfig();
   const prompt = 'Test prompt';
 
   beforeEach(() => {
@@ -110,27 +151,11 @@ describe('WatsonXProvider', () => {
       expect(logger.info).toHaveBeenCalledWith('Using IAM Authentication.');
     });
 
-    it('should initialize with default id based on modelName', () => {
-      const mockedWatsonXAIClient: Partial<any> = {
-        generateText: vi.fn(),
-      };
-      mockClient(mockedWatsonXAIClient);
-
-      const provider = new WatsonXProvider(modelName, { config });
-      expect(provider.id()).toBe(`watsonx:${modelName}`);
-    });
+    it('should initialize with default id based on modelName', createWatsonxIdCheck());
   });
 
   describe('id', () => {
-    it('should return the correct id string', () => {
-      const mockedWatsonXAIClient: Partial<any> = {
-        generateText: vi.fn(),
-      };
-      mockClient(mockedWatsonXAIClient);
-
-      const provider = new WatsonXProvider(modelName, { config });
-      expect(provider.id()).toBe(`watsonx:${modelName}`);
-    });
+    it('should return the correct id string', createWatsonxIdCheck());
   });
 
   describe('toString', () => {
@@ -339,9 +364,7 @@ describe('WatsonXProvider', () => {
       vi.mocked(getCache).mockImplementation(function () {
         return cache as any;
       });
-      vi.mocked(isCacheEnabled).mockImplementation(function () {
-        return true;
-      });
+      vi.mocked(isCacheEnabled).mockReturnValue(true);
 
       const provider = new WatsonXProvider(modelName, { config });
       const response = await provider.callApi(prompt);
@@ -427,9 +450,7 @@ describe('WatsonXProvider', () => {
       vi.mocked(getCache).mockImplementation(function () {
         return cache as any;
       });
-      vi.mocked(isCacheEnabled).mockImplementation(function () {
-        return false;
-      });
+      vi.mocked(isCacheEnabled).mockReturnValue(false);
 
       const response = await new WatsonXProvider(modelName, { config }).callApi(prompt);
 
@@ -467,9 +488,7 @@ describe('WatsonXProvider', () => {
       vi.mocked(getCache).mockImplementation(function () {
         return cache as any;
       });
-      vi.mocked(isCacheEnabled).mockImplementation(function () {
-        return true;
-      });
+      vi.mocked(isCacheEnabled).mockReturnValue(true);
 
       const apiKey = 'watsonx-config-secret-api-key';
       const bearerToken = 'watsonx-config-secret-bearer-token';
@@ -516,9 +535,7 @@ describe('WatsonXProvider', () => {
       vi.mocked(getCache).mockImplementation(function () {
         return cache as any;
       });
-      vi.mocked(isCacheEnabled).mockImplementation(function () {
-        return true;
-      });
+      vi.mocked(isCacheEnabled).mockReturnValue(true);
 
       const apiKey = 'watsonx-env-secret-api-key';
       const bearerToken = 'watsonx-env-secret-bearer-token';
@@ -570,9 +587,7 @@ describe('WatsonXProvider', () => {
       vi.mocked(getCache).mockImplementation(function () {
         return cache as any;
       });
-      vi.mocked(isCacheEnabled).mockImplementation(function () {
-        return true;
-      });
+      vi.mocked(isCacheEnabled).mockReturnValue(true);
 
       const apiKeyA = 'watsonx-config-secret-api-key-a';
       const apiKeyB = 'watsonx-config-secret-api-key-b';
@@ -633,9 +648,7 @@ describe('WatsonXProvider', () => {
       vi.mocked(getCache).mockImplementation(function () {
         return cache as any;
       });
-      vi.mocked(isCacheEnabled).mockImplementation(function () {
-        return true;
-      });
+      vi.mocked(isCacheEnabled).mockReturnValue(true);
 
       const sharedApiKey = 'watsonx-shared-stable-api-key';
       await new WatsonXProvider(modelName, {
@@ -679,9 +692,7 @@ describe('WatsonXProvider', () => {
       vi.mocked(getCache).mockImplementation(function () {
         return cache as any;
       });
-      vi.mocked(isCacheEnabled).mockImplementation(function () {
-        return true;
-      });
+      vi.mocked(isCacheEnabled).mockReturnValue(true);
 
       const originalApiKey = 'watsonx-original-env-api-key';
       const rotatedApiKey = 'watsonx-rotated-env-api-key';
@@ -777,9 +788,7 @@ describe('WatsonXProvider', () => {
       vi.mocked(getCache).mockImplementation(function () {
         return cache as any;
       });
-      vi.mocked(isCacheEnabled).mockImplementation(function () {
-        return true;
-      });
+      vi.mocked(isCacheEnabled).mockReturnValue(true);
 
       // Must mock WatsonXAI.newInstance to ensure test isolation
       const mockedWatsonXAIClient: Partial<any> = {
@@ -823,9 +832,7 @@ describe('WatsonXProvider', () => {
       vi.mocked(getCache).mockImplementation(function () {
         return cache as any;
       });
-      vi.mocked(isCacheEnabled).mockImplementation(function () {
-        return true;
-      });
+      vi.mocked(isCacheEnabled).mockReturnValue(true);
       const provider = new WatsonXProvider(modelName, { config });
       const response = await provider.callApi(prompt);
       expect(response).toEqual({
@@ -856,9 +863,7 @@ describe('WatsonXProvider', () => {
       vi.mocked(getCache).mockImplementation(function () {
         return cache as any;
       });
-      vi.mocked(isCacheEnabled).mockImplementation(function () {
-        return true;
-      });
+      vi.mocked(isCacheEnabled).mockReturnValue(true);
 
       const response = await new WatsonXProvider(modelName, { config }).callApi(prompt);
 
@@ -889,10 +894,7 @@ describe('WatsonXProvider', () => {
                 label: 'llama-3-3-70b-instruct',
                 provider: 'Meta',
                 source: 'Hugging Face',
-                model_limits: {
-                  max_sequence_length: 131072,
-                  max_output_tokens: 8192,
-                },
+                model_limits: createOutputLimits(8192),
               },
             ],
           },
@@ -912,14 +914,7 @@ describe('WatsonXProvider', () => {
             model_id: MODEL_ID,
             model_version: '3.2.0',
             created_at: '2024-03-25T00:00:00Z',
-            results: [
-              {
-                generated_text: 'Test response',
-                generated_token_count: 100,
-                input_token_count: 50,
-                stop_reason: 'max_tokens',
-              },
-            ],
+            results: [createGenerationResult()],
           },
         }),
       };
@@ -933,9 +928,7 @@ describe('WatsonXProvider', () => {
       vi.mocked(getCache).mockImplementation(function () {
         return cache as any;
       });
-      vi.mocked(isCacheEnabled).mockImplementation(function () {
-        return true;
-      });
+      vi.mocked(isCacheEnabled).mockReturnValue(true);
 
       const provider = new WatsonXProvider(MODEL_ID, { config: configWithModelId });
       const response = await provider.callApi(prompt);
@@ -1008,9 +1001,7 @@ describe('WatsonXProvider', () => {
         vi.mocked(getCache).mockImplementation(function () {
           return cache as any;
         });
-        vi.mocked(isCacheEnabled).mockImplementation(function () {
-          return true;
-        });
+        vi.mocked(isCacheEnabled).mockReturnValue(true);
 
         const response = await new WatsonXProvider(MODEL_ID, {
           config: configWithModelId,
@@ -1043,10 +1034,7 @@ describe('WatsonXProvider', () => {
                 input_tier: 'class_9',
                 output_tier: 'class_9',
                 number_params: '11b',
-                model_limits: {
-                  max_sequence_length: 131072,
-                  max_output_tokens: 8192,
-                },
+                model_limits: createOutputLimits(8192),
               },
             ],
           },
@@ -1064,14 +1052,7 @@ describe('WatsonXProvider', () => {
             model_id: modelId,
             model_version: '3.2.0',
             created_at: '2024-03-25T00:00:00Z',
-            results: [
-              {
-                generated_text: 'Test response',
-                generated_token_count: 100,
-                input_token_count: 50,
-                stop_reason: 'max_tokens',
-              },
-            ],
+            results: [createGenerationResult()],
           },
         }),
       };
@@ -1085,9 +1066,7 @@ describe('WatsonXProvider', () => {
       vi.mocked(getCache).mockImplementation(function () {
         return cache as any;
       });
-      vi.mocked(isCacheEnabled).mockImplementation(function () {
-        return true;
-      });
+      vi.mocked(isCacheEnabled).mockReturnValue(true);
 
       const provider = new WatsonXProvider(modelId, { config: configWithClass9ModelId });
       const response = await provider.callApi(prompt);
@@ -1120,10 +1099,7 @@ describe('WatsonXProvider', () => {
                 input_tier: 'class_18',
                 output_tier: 'class_5',
                 number_params: '30b',
-                model_limits: {
-                  max_sequence_length: 131072,
-                  max_output_tokens: 16384,
-                },
+                model_limits: createOutputLimits(16384),
               },
             ],
           },
@@ -1162,9 +1138,7 @@ describe('WatsonXProvider', () => {
       vi.mocked(getCache).mockImplementation(function () {
         return cache as any;
       });
-      vi.mocked(isCacheEnabled).mockImplementation(function () {
-        return true;
-      });
+      vi.mocked(isCacheEnabled).mockReturnValue(true);
 
       const provider = new WatsonXProvider(modelId, { config: configWithGraniteModelId });
       const response = await provider.callApi(prompt);
@@ -1195,10 +1169,7 @@ describe('WatsonXProvider', () => {
                 input_tier: 'Mistral Large Input',
                 output_tier: 'Mistral Large',
                 number_params: 'unknown',
-                model_limits: {
-                  max_sequence_length: 131072,
-                  max_output_tokens: 16384,
-                },
+                model_limits: createOutputLimits(16384),
               },
             ],
           },
@@ -1237,9 +1208,7 @@ describe('WatsonXProvider', () => {
       vi.mocked(getCache).mockImplementation(function () {
         return cache as any;
       });
-      vi.mocked(isCacheEnabled).mockImplementation(function () {
-        return true;
-      });
+      vi.mocked(isCacheEnabled).mockReturnValue(true);
 
       const provider = new WatsonXProvider(modelId, { config: configWithMistralModelId });
       const response = await provider.callApi(prompt);
@@ -1262,21 +1231,7 @@ describe('WatsonXProvider', () => {
       };
 
       const mockedWatsonXAIClient: Partial<any> = {
-        generateText: vi.fn().mockResolvedValue({
-          result: {
-            model_id: 'test-model',
-            model_version: '1.0.0',
-            created_at: '2023-10-10T00:00:00Z',
-            results: [
-              {
-                generated_text: 'Test response',
-                generated_token_count: 10,
-                input_token_count: 5,
-                stop_reason: 'max_tokens',
-              },
-            ],
-          },
-        }),
+        generateText: vi.fn().mockResolvedValue(createWatsonGenerationResponse()),
       };
       mockClient(mockedWatsonXAIClient);
 
@@ -1288,9 +1243,7 @@ describe('WatsonXProvider', () => {
       vi.mocked(getCache).mockImplementation(function () {
         return cache as any;
       });
-      vi.mocked(isCacheEnabled).mockImplementation(function () {
-        return true;
-      });
+      vi.mocked(isCacheEnabled).mockReturnValue(true);
 
       const provider = new WatsonXProvider(modelName, { config: configWithTemperature });
       await provider.callApi(prompt);
@@ -1311,21 +1264,7 @@ describe('WatsonXProvider', () => {
       };
 
       const mockedWatsonXAIClient: Partial<any> = {
-        generateText: vi.fn().mockResolvedValue({
-          result: {
-            model_id: 'test-model',
-            model_version: '1.0.0',
-            created_at: '2023-10-10T00:00:00Z',
-            results: [
-              {
-                generated_text: 'Test response',
-                generated_token_count: 10,
-                input_token_count: 5,
-                stop_reason: 'max_tokens',
-              },
-            ],
-          },
-        }),
+        generateText: vi.fn().mockResolvedValue(createWatsonGenerationResponse()),
       };
       mockClient(mockedWatsonXAIClient);
 
@@ -1337,9 +1276,7 @@ describe('WatsonXProvider', () => {
       vi.mocked(getCache).mockImplementation(function () {
         return cache as any;
       });
-      vi.mocked(isCacheEnabled).mockImplementation(function () {
-        return true;
-      });
+      vi.mocked(isCacheEnabled).mockReturnValue(true);
 
       const provider = new WatsonXProvider(modelName, { config: configWithStopSequences });
       await provider.callApi(prompt);
@@ -1366,21 +1303,7 @@ describe('WatsonXProvider', () => {
       };
 
       const mockedWatsonXAIClient: Partial<any> = {
-        generateText: vi.fn().mockResolvedValue({
-          result: {
-            model_id: 'test-model',
-            model_version: '1.0.0',
-            created_at: '2023-10-10T00:00:00Z',
-            results: [
-              {
-                generated_text: 'Test response',
-                generated_token_count: 10,
-                input_token_count: 5,
-                stop_reason: 'max_tokens',
-              },
-            ],
-          },
-        }),
+        generateText: vi.fn().mockResolvedValue(createWatsonGenerationResponse()),
       };
       mockClient(mockedWatsonXAIClient);
 
@@ -1392,9 +1315,7 @@ describe('WatsonXProvider', () => {
       vi.mocked(getCache).mockImplementation(function () {
         return cache as any;
       });
-      vi.mocked(isCacheEnabled).mockImplementation(function () {
-        return true;
-      });
+      vi.mocked(isCacheEnabled).mockReturnValue(true);
 
       const provider = new WatsonXProvider(modelName, { config: fullConfig });
       await provider.callApi(prompt);
@@ -1421,21 +1342,7 @@ describe('WatsonXProvider', () => {
       };
 
       const mockedWatsonXAIClient: Partial<any> = {
-        generateText: vi.fn().mockResolvedValue({
-          result: {
-            model_id: 'test-model',
-            model_version: '1.0.0',
-            created_at: '2023-10-10T00:00:00Z',
-            results: [
-              {
-                generated_text: 'Test response',
-                generated_token_count: 10,
-                input_token_count: 5,
-                stop_reason: 'max_tokens',
-              },
-            ],
-          },
-        }),
+        generateText: vi.fn().mockResolvedValue(createWatsonGenerationResponse()),
       };
       mockClient(mockedWatsonXAIClient);
 
@@ -1447,9 +1354,7 @@ describe('WatsonXProvider', () => {
       vi.mocked(getCache).mockImplementation(function () {
         return cache as any;
       });
-      vi.mocked(isCacheEnabled).mockImplementation(function () {
-        return true;
-      });
+      vi.mocked(isCacheEnabled).mockReturnValue(true);
 
       const provider = new WatsonXProvider(modelName, { config: providerConfig });
 
@@ -1477,12 +1382,7 @@ describe('WatsonXProvider', () => {
 
 describe('WatsonXChatProvider', () => {
   const modelName = 'test-model';
-  const config = {
-    apiKey: 'test-api-key',
-    projectId: 'test-project-id',
-    modelId: 'test-model-id',
-    maxNewTokens: 50,
-  };
+  const config = createGenerationConfig();
   const prompt = 'Test prompt';
 
   beforeEach(() => {
@@ -1683,9 +1583,7 @@ describe('WatsonXChatProvider', () => {
     vi.mocked(getCache).mockImplementation(function () {
       return cache as any;
     });
-    vi.mocked(isCacheEnabled).mockImplementation(function () {
-      return true;
-    });
+    vi.mocked(isCacheEnabled).mockReturnValue(true);
 
     const provider = new WatsonXChatProvider(modelName, { config });
     const response = await provider.callApi(chatPrompt);
@@ -1721,11 +1619,7 @@ describe('WatsonXChatProvider', () => {
               finish_reason: 'stop',
             },
           ],
-          usage: {
-            prompt_tokens: 5,
-            completion_tokens: 4,
-            total_tokens: 9,
-          },
+          usage: createChatUsage(5, 4, 9),
         },
       }),
     };
@@ -1739,9 +1633,7 @@ describe('WatsonXChatProvider', () => {
     vi.mocked(getCache).mockImplementation(function () {
       return cache as any;
     });
-    vi.mocked(isCacheEnabled).mockImplementation(function () {
-      return true;
-    });
+    vi.mocked(isCacheEnabled).mockReturnValue(true);
 
     const chatPrompt = 'PFQA_WATSONX_CHAT_PROMPT_SENTINEL';
     const provider = new WatsonXChatProvider(modelName, { config });
@@ -1776,11 +1668,7 @@ describe('WatsonXChatProvider', () => {
               finish_reason: 'stop',
             },
           ],
-          usage: {
-            prompt_tokens: 5,
-            completion_tokens: 4,
-            total_tokens: 9,
-          },
+          usage: createChatUsage(5, 4, 9),
         },
       }),
     };
@@ -1794,9 +1682,7 @@ describe('WatsonXChatProvider', () => {
     vi.mocked(getCache).mockImplementation(function () {
       return cache as any;
     });
-    vi.mocked(isCacheEnabled).mockImplementation(function () {
-      return true;
-    });
+    vi.mocked(isCacheEnabled).mockReturnValue(true);
 
     const originalApiKey = 'watsonx-original-chat-env-api-key';
     const rotatedApiKey = 'watsonx-rotated-chat-env-api-key';
@@ -1835,9 +1721,7 @@ describe('WatsonXChatProvider', () => {
     vi.mocked(getCache).mockImplementation(function () {
       return cache as any;
     });
-    vi.mocked(isCacheEnabled).mockImplementation(function () {
-      return true;
-    });
+    vi.mocked(isCacheEnabled).mockReturnValue(true);
 
     const provider = new WatsonXChatProvider(modelName, { config });
     const response = await provider.callApi(prompt);
@@ -1891,9 +1775,7 @@ describe('WatsonXChatProvider', () => {
     vi.mocked(getCache).mockImplementation(function () {
       return cache as any;
     });
-    vi.mocked(isCacheEnabled).mockImplementation(function () {
-      return true;
-    });
+    vi.mocked(isCacheEnabled).mockReturnValue(true);
 
     const provider = new WatsonXChatProvider(modelName, { config: configWithParams });
     await provider.callApi(prompt);

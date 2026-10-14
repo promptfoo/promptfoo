@@ -53,6 +53,6 @@ export function isMissingPackageImportError(error: unknown, packageName: string)
  * each one keeps its own global directory.
  */
 export function optionalPackageInstallHint(command: string): string {
-  const globalCommand = command.replace(/^npm install /, 'npm install -g ');
+  const globalCommand = command.replace(/^npm install /gm, 'npm install -g ');
   return `Install it with: ${command} (or, if Promptfoo is installed globally with npm: ${globalCommand}; with pnpm, Yarn or Bun, use its global install instead)`;
 }

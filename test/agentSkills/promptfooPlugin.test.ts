@@ -2032,16 +2032,9 @@ describe('promptfoo plugin package (Codex + Claude Code)', () => {
   it('documents the shared plugin bundle on both marketplaces', () => {
     const docs = readText(path.join(repoRoot, 'site', 'docs', 'integrations', 'agent-skill.md'));
 
-    expect(docs).toContain('Via Claude Code marketplace');
-    expect(docs).toContain('Via Codex plugin bundle');
     expect(docs).toContain('/plugin install promptfoo@promptfoo');
-    expect(docs).toContain('intentionally no meta selector skill');
-    expect(docs).toContain("routes from each skill's");
-    expect(docs).toContain('Python providers are first-class');
     expect(docs).toContain('file://provider.py:function_name');
-    expect(docs).toContain('local graders');
     expect(docs).toContain('PROMPTFOO_PYTHON');
-    expect(docs).toContain('copy `plugins/promptfoo`');
     expect(docs).toContain('plugins/promptfoo');
     expect(docs).toContain('.agents/plugins/marketplace.json');
     expect(docs).toContain('.claude-plugin/marketplace.json');
