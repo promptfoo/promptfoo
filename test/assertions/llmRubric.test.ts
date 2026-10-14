@@ -5,10 +5,12 @@ import { createPassingGrade } from '../factories/literalFixtures';
 
 import type { Assertion, AssertionParams, GradingResult } from '../../src/types/index';
 
-const createRubricPromptOptions = () => ({
+const createRubricPromptOptions = (
+  rubricPrompt: Assertion['rubricPrompt'] = 'rubric from options',
+) => ({
   vars: {},
   options: {
-    rubricPrompt: 'rubric from options',
+    rubricPrompt,
   },
 });
 
@@ -314,13 +316,8 @@ describe('handleLlmRubric', () => {
   it('should stringify object rubricPrompt', async () => {
     const params: AssertionParams = {
       ...defaultParams,
-      test: {
-        vars: {},
-        // Using a valid structure for rubricPrompt as per type definition
-        options: {
-          rubricPrompt: [{ role: 'system', content: 'test prompt' }],
-        },
-      },
+      // Using a valid structure for rubricPrompt as per type definition
+      test: createRubricPromptOptions([{ role: 'system', content: 'test prompt' }]),
     };
 
     const expectedResult: GradingResult = createPassingGrade(1);
@@ -401,12 +398,7 @@ describe('handleLlmRubric', () => {
     const rubricPromptObj = [{ role: 'user', content: 'bar' }];
     const params: AssertionParams = {
       ...defaultParams,
-      test: {
-        vars: {},
-        options: {
-          rubricPrompt: rubricPromptObj,
-        },
-      },
+      test: createRubricPromptOptions(rubricPromptObj),
       renderedValue: undefined,
     };
 
@@ -427,12 +419,7 @@ describe('handleLlmRubric', () => {
     const rubricPromptStr = '[{"role":"system","content":"already stringified"}]';
     const params: AssertionParams = {
       ...defaultParams,
-      test: {
-        vars: {},
-        options: {
-          rubricPrompt: rubricPromptStr,
-        },
-      },
+      test: createRubricPromptOptions(rubricPromptStr),
       renderedValue: undefined,
     };
 
@@ -478,12 +465,7 @@ describe('handleLlmRubric', () => {
     const rubricPromptObj: { role: string; content: string }[] = [];
     const params: AssertionParams = {
       ...defaultParams,
-      test: {
-        vars: {},
-        options: {
-          rubricPrompt: rubricPromptObj,
-        },
-      },
+      test: createRubricPromptOptions(rubricPromptObj),
       renderedValue: undefined,
     };
 
@@ -534,12 +516,7 @@ describe('handleLlmRubric', () => {
     const rubricPromptObj: any = { foo: 'bar', baz: 3 };
     const params: AssertionParams = {
       ...defaultParams,
-      test: {
-        vars: {},
-        options: {
-          rubricPrompt: rubricPromptObj,
-        },
-      },
+      test: createRubricPromptOptions(rubricPromptObj),
       renderedValue: undefined,
     };
 
