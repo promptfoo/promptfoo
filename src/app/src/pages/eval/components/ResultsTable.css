@@ -651,6 +651,13 @@ table.results-table,
   background-color: hsl(var(--muted));
 }
 
+/* Fill the scroll gutters even at 50% table zoom. */
+.results-table thead tr:first-child {
+  box-shadow:
+    -2rem 0 hsl(var(--muted)),
+    2rem 0 hsl(var(--muted));
+}
+
 .lightbox {
   position: fixed;
   top: 0;

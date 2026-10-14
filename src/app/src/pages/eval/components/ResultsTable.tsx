@@ -1543,7 +1543,7 @@ function ResultsTableHeader({
       data-testid="results-table-header"
       data-header-collapsed={collapsed}
       className={cn(
-        'relative -mx-4 overflow-hidden px-4',
+        'relative -mx-4 overflow-hidden',
         stickyHeader && 'results-table-sticky',
         stickyHeader && collapsed !== undefined && 'results-table-scroll-fallback',
         hasMinimalScrollRoom && 'minimal-scroll-room',
@@ -1562,7 +1562,7 @@ function ResultsTableHeader({
       <div
         ref={headerScrollRef}
         data-testid="results-table-header-scroll-container"
-        className="overflow-x-auto overflow-y-hidden overscroll-x-contain"
+        className="overflow-x-auto overflow-y-hidden overscroll-x-contain px-4"
       >
         <table
           className={`results-table results-table-header-table firefox-fix ${
