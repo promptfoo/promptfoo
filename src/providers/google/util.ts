@@ -3,6 +3,7 @@ import path from 'path';
 
 import Clone from 'rfdc';
 import { z } from 'zod';
+import { InvalidToolCallError } from '../../contracts/providers';
 import logger from '../../logger';
 import { extractBase64FromDataUrl, isDataUrl, parseDataUrl } from '../../util/dataUrl';
 import {
@@ -24,7 +25,7 @@ import {
   transformToolChoice,
   transformTools,
 } from '../shared';
-import { InvalidToolCallError, InvalidToolSchemaError } from '../toolSchemaError';
+import { InvalidToolSchemaError } from '../toolSchemaError';
 import { loadCredentials } from './auth';
 import {
   GEMINI_FLASH_MODELS,
@@ -2259,7 +2260,7 @@ export function validateFunctionCall(
     const functionName = functionCall.name;
     let functionArgs;
     try {
-      functionArgs = parseStringObject(functionCall.args);
+      functionArgs = functionCall.args === undefined ? {} : parseStringObject(functionCall.args);
     } catch (err) {
       throw new InvalidToolCallError((err as Error).message);
     }

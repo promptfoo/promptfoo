@@ -1,11 +1,12 @@
 import OpenAI from 'openai';
+import { InvalidToolCallError } from '../../contracts/providers';
 import logger from '../../logger';
 import { maybeLoadFromExternalFileWithVars } from '../../util/index';
 import { getAjv, safeJsonStringify } from '../../util/json';
 import { isSafeCost, isSafeTokenCount } from '../../util/numeric';
 import { isNonCredentialHeader, looksLikeSecret, sanitizeUrl } from '../../util/sanitizer';
 import { calculateCost } from '../shared';
-import { InvalidToolCallError, InvalidToolSchemaError } from '../toolSchemaError';
+import { InvalidToolSchemaError } from '../toolSchemaError';
 
 import type { TokenUsage, VarValue } from '../../types/index';
 import type { ProviderConfig } from '../shared';

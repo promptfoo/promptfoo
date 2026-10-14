@@ -81,7 +81,13 @@ export const handleIsValidOpenAiToolsCall = async ({
   }
   if (
     !Array.isArray(tools) ||
-    tools.some((tool) => !tool || typeof tool !== 'object' || typeof tool.type !== 'string')
+    tools.some(
+      (tool) =>
+        !tool ||
+        typeof tool !== 'object' ||
+        typeof tool.type !== 'string' ||
+        (tool.type === 'function' && !('function' in tool)),
+    )
   ) {
     return {
       pass: false,

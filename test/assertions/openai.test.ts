@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { handleIsValidFunctionCall } from '../../src/assertions/functionToolCall';
 import { runAssertion } from '../../src/assertions/index';
 import { handleIsValidOpenAiToolsCall } from '../../src/assertions/openai';
+import { InvalidToolCallError } from '../../src/contracts';
 import { hasFunctionToolCallValidator } from '../../src/contracts/providers';
 import { validateFunctionCall as validateGoogleFunctionCall } from '../../src/providers/google/util';
 import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
@@ -1370,6 +1371,68 @@ describe('OpenAI assertions', () => {
         pass: false,
         score: 0,
         reason: 'validator unavailable',
+      });
+    });
+
+    it('inverts invalid-call errors from a custom provider using the public contract', async () => {
+      const provider = {
+        ...createMockProvider(),
+        validateFunctionToolCall: () => {
+          throw new InvalidToolCallError('Unknown function');
+        },
+      };
+      await expect(run('is-valid-function-call', toolCall, provider)).resolves.toMatchObject({
+        pass: false,
+        score: 0,
+        reason: 'Unknown function',
+      });
+      await expect(run('not-is-valid-function-call', toolCall, provider)).resolves.toMatchObject({
+        pass: true,
+        score: 1,
+      });
+    });
+
+    it.each([{ type: 'function' }, { type: 'function', function: null }])(
+      'rejects incomplete tools alongside a valid definition: %j',
+      async (incomplete) => {
+        const provider = new OpenAiChatCompletionProvider('test-provider', {
+          config: {
+            tools: [
+              { type: 'function', function: { name: 'weather', parameters: { type: 'object' } } },
+              incomplete,
+            ] as any,
+          },
+        });
+        await expect(
+          run(
+            'not-is-valid-openai-tools-call',
+            [{ type: 'function', function: badArgsCall }],
+            provider,
+          ),
+        ).resolves.toMatchObject({ pass: false, score: 0 });
+      },
+    );
+
+    it.each([
+      [undefined, true],
+      [{ type: 'OBJECT', properties: {} }, true],
+      [{ type: 'OBJECT', properties: { city: { type: 'STRING' } }, required: ['city'] }, false],
+    ])('validates omitted Google args against %j', async (parameters, valid) => {
+      const provider = {
+        ...createMockProvider(),
+        validateFunctionToolCall: (value: string | object) =>
+          validateGoogleFunctionCall(value, [
+            { functionDeclarations: [{ name: 'weather', parameters }] },
+          ] as any),
+      };
+      const output = { toolCall: { functionCalls: [{ name: 'weather' }] } };
+      await expect(run('is-valid-function-call', output, provider)).resolves.toMatchObject({
+        pass: valid,
+        score: valid ? 1 : 0,
+      });
+      await expect(run('not-is-valid-function-call', output, provider)).resolves.toMatchObject({
+        pass: !valid,
+        score: valid ? 0 : 1,
       });
     });
 
