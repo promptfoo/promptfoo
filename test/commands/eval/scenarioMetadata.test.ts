@@ -86,6 +86,25 @@ describe('CLI scenario metadata filtering', () => {
     expect(results.map((result) => result.response?.output)).toEqual(['keep']);
   });
 
+  it.each([
+    { label: 'null', category: null, filter: 'null', matches: false },
+    { label: 'undefined', category: undefined, filter: 'undefined', matches: false },
+    { label: 'null array entry', category: [null, 'keep'], filter: 'keep', matches: true },
+    { label: 'only null entries', category: [null], filter: 'null', matches: false },
+    { label: 'false', category: false, filter: 'false', matches: true },
+    { label: 'zero', category: 0, filter: '0', matches: true },
+    { label: 'string', category: 'keep', filter: 'keep', matches: true },
+  ])(
+    'handles $label metadata without discarding other values',
+    async ({ category, filter, matches }) => {
+      const results = await run(
+        { scenarios: [{ config: [{ metadata: { category } }], tests: [row('selected')] }] },
+        { filterMetadata: `category=${filter}` },
+      );
+      expect(results.map((result) => result.response?.output)).toEqual(matches ? ['selected'] : []);
+    },
+  );
+
   it('loads relative YAML scenario test files before filtering their metadata', async () => {
     fs.mkdirSync(path.join(directory, 'scenarios'));
     fs.mkdirSync(path.join(directory, 'data'));

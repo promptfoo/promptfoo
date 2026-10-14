@@ -243,10 +243,10 @@ export async function filterTests(
         const matches = values.some((value) => {
           if (Array.isArray(testValue)) {
             // For array metadata, check if any value includes the search term
-            return testValue.some((v) => v.toString().includes(value));
+            return testValue.some((v) => v != null && v.toString().includes(value));
           }
           // For single value metadata, check if it includes the search term
-          return testValue !== undefined && testValue.toString().includes(value);
+          return testValue != null && testValue.toString().includes(value);
         });
 
         if (!matches) {
