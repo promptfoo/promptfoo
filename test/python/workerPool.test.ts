@@ -1,3 +1,4 @@
+import { once } from 'node:events';
 import fs from 'fs';
 import path from 'path';
 
@@ -252,22 +253,19 @@ def call_api(prompt, options, context):
 `,
     );
 
-    // Replies, then exits shortly afterwards while a helper still holds the worker's output
-    // streams, so the worker only learns about the exit once they have drained.
+    // Hold the worker's output streams open after the test terminates it, so the
+    // replacement request arrives before those streams have drained.
     fs.writeFileSync(
       exitAfterReplyPath,
       `
-import os
 import subprocess
 import sys
-import threading
 
 def call_api(prompt, options, context):
     if prompt == "exit soon":
         helper = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)"])
         with open(${JSON.stringify(exitHelperPidPath)}, "w") as pid_file:
             pid_file.write(str(helper.pid))
-        threading.Timer(0.2, lambda: os._exit(3)).start()
     return {"output": prompt}
 `,
     );
@@ -395,28 +393,22 @@ def call_api(prompt, options, context):
   it(
     'should queue a request that arrives after the worker process exited',
     async () => {
-      const isProcessAlive = (pid: number) => {
-        try {
-          process.kill(pid, 0);
-          return true;
-        } catch {
-          return false;
-        }
-      };
       const pool = new PythonWorkerPool(exitAfterReplyPath, 'call_api', 1);
       await pool.initialize();
       const worker = (pool as unknown as { workers: Array<{ process: PythonShell | null }> })
         .workers[0];
-      const workerPid = worker.process?.childProcess.pid;
-      expect(workerPid).toBeDefined();
+      const workerProcess = worker.process?.childProcess;
+      expect(workerProcess?.pid).toBeDefined();
 
       try {
         await expect(pool.execute('call_api', ['exit soon', {}, {}])).resolves.toEqual({
           output: 'exit soon',
         });
-        await vi.waitFor(() => expect(isProcessAlive(workerPid!)).toBe(false), {
-          timeout: 3_000,
-        });
+        // Stop only after the wrapper has flushed its reply. A timer inside the
+        // provider can otherwise expire before response-file I/O finishes.
+        const workerExited = once(workerProcess!, 'exit');
+        expect(workerProcess!.kill('SIGTERM')).toBe(true);
+        await workerExited;
 
         // Previously this was sent to the exited process while its streams drained, and
         // failed with "Worker crashed" instead of waiting for the restart.
