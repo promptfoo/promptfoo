@@ -69,11 +69,11 @@ Store your LLM provider API keys as environment variables in Travis CI:
 
 ### Fail the Build on Failed Assertions
 
-You can configure the pipeline to fail when promptfoo assertions don't pass:
+`promptfoo eval` [exits with code `100`](/docs/usage/command-line#promptfoo-eval) when any assertion fails, so the build fails without extra flags:
 
 ```yaml
 script:
-  - npx promptfoo eval --fail-on-error
+  - npx promptfoo eval
 ```
 
 ### Testing on Multiple Node.js Versions

@@ -85,11 +85,11 @@ Store your LLM provider API keys as [secret pipeline variables](https://learn.mi
 
 ### Fail the Pipeline on Failed Assertions
 
-You can configure the pipeline to fail when promptfoo assertions don't pass by modifying the script step:
+`promptfoo eval` [exits with code `100`](/docs/usage/command-line#promptfoo-eval) when any assertion fails, so the script step fails the pipeline without extra flags:
 
 ```yaml
 - script: |
-    npx promptfoo eval --fail-on-error -o promptfoo-results.junit.xml
+    npx promptfoo eval -o promptfoo-results.junit.xml
   displayName: 'Run promptfoo evaluations'
   env:
     OPENAI_API_KEY: $(OPENAI_API_KEY)
@@ -101,7 +101,7 @@ If you want to customize where results are stored:
 
 ```yaml
 - script: |
-    npx promptfoo eval --output-path $(Build.ArtifactStagingDirectory)/promptfoo-results.json
+    npx promptfoo eval --output $(Build.ArtifactStagingDirectory)/promptfoo-results.json
   displayName: 'Run promptfoo evaluations'
 ```
 

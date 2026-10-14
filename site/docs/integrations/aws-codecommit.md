@@ -49,7 +49,6 @@ phases:
         promptfoo eval \
           -c promptfooconfig.yaml \
           --share \
-          --fail-on-error \
           -o promptfoo-results.json \
           -o promptfoo-report.html
 
@@ -73,7 +72,7 @@ cache:
 
 ## Add a quality gate
 
-If you want a custom pass-rate threshold instead of `--fail-on-error`, write the JSON output and check the stats in a second command:
+If you want a custom pass-rate threshold instead of failing on any assertion failure, write the JSON output and check the stats in a second command:
 
 ```yaml
 phases:
