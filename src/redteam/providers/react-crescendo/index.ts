@@ -6,7 +6,11 @@ import {
 } from '../crescendo/index';
 import { REACT_CRESCENDO_SYSTEM_PROMPT } from './prompts';
 
-import type { CallApiContextParams, CallApiOptionsParams } from '../../../types/index';
+// Derived from the base class (same-layer import above) so this module adds
+// no new redteam -> legacy-contracts imports; the architecture baseline
+// ratchet rejects any widening of that cross-layer edge.
+type ReactCrescendoContext = Parameters<CrescendoProvider['callApi']>[1];
+type ReactCrescendoOptions = Parameters<CrescendoProvider['callApi']>[2];
 
 /**
  * ReAct crescendo provider.
@@ -31,8 +35,8 @@ export class ReactCrescendoProvider extends CrescendoProvider {
 
   async callApi(
     prompt: string,
-    context?: CallApiContextParams,
-    options?: CallApiOptionsParams,
+    context?: ReactCrescendoContext,
+    options?: ReactCrescendoOptions,
   ): Promise<CrescendoResponse> {
     // The shared remote `crescendo` task does not know the ReAct prompt, so
     // running it remotely would silently record plain-Crescendo attacks as
