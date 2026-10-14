@@ -31,12 +31,13 @@ function run(json: unknown, status = 200) {
   return transform(json, '', { response: { status } });
 }
 
-describe('Alovia Watchdog example response transform', () => {
-  beforeAll(async () => {
-    const module = await import(pathToFileURL(transformPath).href);
-    transform = module.default as WatchdogTransform;
-  });
+// File-level so both suites work in any order (tests are shuffled).
+beforeAll(async () => {
+  const module = await import(pathToFileURL(transformPath).href);
+  transform = module.default as WatchdogTransform;
+});
 
+describe('Alovia Watchdog example response transform', () => {
   it('maps allow to an unflagged result with no reason', () => {
     const result = run({ checkId: 'c1', verdict: 'allow', findings: [] });
     expect(result).toMatchObject({
