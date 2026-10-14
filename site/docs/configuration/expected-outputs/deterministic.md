@@ -1154,8 +1154,8 @@ assert:
 
 The `pattern` field supports glob-style matching:
 
-- `*` matches any sequence of characters
-- `?` matches any single character
+- `*` matches any sequence of characters, including line breaks
+- `?` matches any single character, including a line break
 - Matching is case-insensitive
 
 Common patterns:
