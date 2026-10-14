@@ -51,11 +51,15 @@ function resolveRetryPolicy(
       case 'retryAfter':
         return retryPolicies.retryAfter();
       default:
-        throw invalidRetryPolicy(policy);
+        throw invalidRetryPolicy();
     }
   }
 
-  if (policy !== null && typeof policy === 'object' && 'httpStatus' in policy) {
+  if (policy === null || typeof policy !== 'object' || Object.keys(policy).length !== 1) {
+    throw invalidRetryPolicy();
+  }
+
+  if ('httpStatus' in policy) {
     if (
       !Array.isArray(policy.httpStatus) ||
       policy.httpStatus.length === 0 ||
@@ -63,43 +67,40 @@ function resolveRetryPolicy(
         (status) => Number.isInteger(status) && status >= 100 && status <= 599,
       )
     ) {
-      throw invalidRetryPolicy(policy);
+      throw invalidRetryPolicy();
     }
     return retryPolicies.httpStatus(policy.httpStatus);
   }
 
-  if (policy !== null && typeof policy === 'object' && 'any' in policy) {
-    return retryPolicies.any(...resolveNestedRetryPolicies(policy, policy.any));
+  if ('any' in policy) {
+    return retryPolicies.any(...resolveNestedRetryPolicies(policy.any));
   }
 
-  if (policy !== null && typeof policy === 'object' && 'all' in policy) {
-    return retryPolicies.all(...resolveNestedRetryPolicies(policy, policy.all));
+  if ('all' in policy) {
+    return retryPolicies.all(...resolveNestedRetryPolicies(policy.all));
   }
 
-  throw invalidRetryPolicy(policy);
+  throw invalidRetryPolicy();
 }
 
-function resolveNestedRetryPolicies(
-  policy: OpenAiAgentsRetryPolicyConfig,
-  nestedPolicies: OpenAiAgentsRetryPolicyConfig[],
-) {
+function resolveNestedRetryPolicies(nestedPolicies: OpenAiAgentsRetryPolicyConfig[]) {
   if (!Array.isArray(nestedPolicies) || nestedPolicies.length === 0) {
-    throw invalidRetryPolicy(policy);
+    throw invalidRetryPolicy();
   }
   // Every nested policy must resolve. Dropping an invalid one would change what `any` and
   // `all` retry on.
   return nestedPolicies.map((nestedPolicy) => {
     const resolved = resolveRetryPolicy(nestedPolicy);
     if (!resolved) {
-      throw invalidRetryPolicy(nestedPolicy);
+      throw invalidRetryPolicy();
     }
     return resolved;
   });
 }
 
-function invalidRetryPolicy(policy: unknown): Error {
+function invalidRetryPolicy(): Error {
   return new Error(
-    `Invalid OpenAI Agents retry policy ${JSON.stringify(policy)}. Use one of "never", ` +
+    'Invalid OpenAI Agents retry policy. Use one of "never", ' +
       '"providerSuggested", "networkError", "retryAfter", { httpStatus: [...] }, ' +
       '{ any: [...] }, or { all: [...] }.',
   );

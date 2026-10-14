@@ -27,14 +27,12 @@ describe('resolveModelSettings retry policies', () => {
   });
 
   it('rejects an unknown preset name instead of silently dropping it', () => {
-    expect(() => resolvePolicy('provider-suggested')).toThrow(
-      'Invalid OpenAI Agents retry policy "provider-suggested"',
-    );
+    expect(() => resolvePolicy('provider-suggested')).toThrow('Invalid OpenAI Agents retry policy');
   });
 
   it('rejects an invalid nested policy instead of dropping it from all', () => {
     expect(() => resolvePolicy({ all: [{ httpStatus: [429] }, 'networkErrors'] })).toThrow(
-      'Invalid OpenAI Agents retry policy "networkErrors"',
+      'Invalid OpenAI Agents retry policy',
     );
   });
 
@@ -49,6 +47,9 @@ describe('resolveModelSettings retry policies', () => {
     { httpStatus: [null] },
     { httpStatus: [429.5] },
     { httpStatus: [42] },
+    { any: ['networkError'], all: ['never'] },
+    { httpStatus: [429], typo: true },
+    { any: [{ all: ['never'], extra: 'ignored' }] },
     null,
     false,
     0,
@@ -56,4 +57,12 @@ describe('resolveModelSettings retry policies', () => {
   ])('rejects malformed policy %j', (policy) => {
     expect(() => resolvePolicy(policy)).toThrow('Invalid OpenAI Agents retry policy');
   });
+
+  it.each(['fixture-secret', { apiKey: 'fixture-secret' }])(
+    'does not include raw configuration values in errors',
+    (policy) => {
+      expect(() => resolvePolicy(policy)).toThrow('Invalid OpenAI Agents retry policy');
+      expect(() => resolvePolicy(policy)).not.toThrow('fixture-secret');
+    },
+  );
 });
