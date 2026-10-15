@@ -17,9 +17,9 @@ export default function PresetCard({ name, description, isSelected, onClick }: P
       onClick={onClick}
       className={cn(
         'group flex h-full cursor-pointer flex-col items-start justify-start overflow-hidden p-3 transition-all',
-        isSelected ? 'border-primary bg-primary/[0.04]' : 'border-border bg-background',
+        isSelected ? 'border-primary bg-primary/[0.04]' : 'border-border bg-card',
         'hover:-translate-y-0.5 hover:shadow-md',
-        isSelected ? 'hover:bg-primary/[0.08]' : 'hover:bg-muted/30',
+        isSelected ? 'hover:bg-primary/[0.08]' : 'hover:border-primary/50 hover:bg-primary/5',
       )}
     >
       <h3
