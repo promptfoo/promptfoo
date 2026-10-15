@@ -266,11 +266,11 @@ function resolveStepStatusValue(
     !(
       candidate.status === 'success' ||
       candidate.status === 'error' ||
-      typeof candidate.status === 'number'
+      (typeof candidate.status === 'number' && Number.isFinite(candidate.status))
     )
   ) {
     throw new Error(
-      'trajectory:step-status assertion status must be "success", "error", or a number',
+      'trajectory:step-status assertion status must be "success", "error", or a finite number',
     );
   }
   requireNamedTrajectoryMatcher(candidate, 'trajectory:step-status');

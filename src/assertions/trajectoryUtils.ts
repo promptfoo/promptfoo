@@ -11,7 +11,6 @@ import type { TRAJECTORY_STEP_TYPES } from '../contracts/trajectory';
 import type { TraceData, TraceSpan } from '../types/tracing';
 
 export type TrajectoryStepType = (typeof TRAJECTORY_STEP_TYPES)[number];
-type TrajectoryAttributes = Record<string, unknown>;
 
 export interface TrajectoryStepMatcher {
   name?: string;
