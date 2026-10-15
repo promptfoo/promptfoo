@@ -401,6 +401,41 @@ describe('BestOfNProvider - Runtime Behavior', () => {
     });
   });
 
+  it('keeps sampling candidates after the target refuses', async () => {
+    mockFetchWithProxy.mockResolvedValue({
+      json: async () => ({ modifiedPrompts: ['candidate 1', 'candidate 2', 'candidate 3'] }),
+    });
+    vi.mocked(mockTargetProvider.callApi)
+      .mockResolvedValueOnce(
+        createProviderResponse({ output: "I'm sorry, I can't help with that." }),
+      )
+      .mockResolvedValueOnce(createProviderResponse({ output: '' }))
+      .mockResolvedValueOnce(createProviderResponse({ output: 'Here is how you do it.' }));
+
+    const provider = new BestOfNProvider({ injectVar: 'input', maxConcurrency: 1 });
+    const result = await provider.callApi('test prompt', createMockContext(mockTargetProvider));
+
+    expect(mockTargetProvider.callApi).toHaveBeenCalledTimes(3);
+    expect(result.output).toBe('Here is how you do it.');
+    expect(result.metadata).toMatchObject({ redteamFinalPrompt: 'candidate 3', step: 3 });
+  });
+
+  it('returns the last refusal when every candidate is refused', async () => {
+    mockFetchWithProxy.mockResolvedValue({
+      json: async () => ({ modifiedPrompts: ['candidate 1', 'candidate 2'] }),
+    });
+    vi.mocked(mockTargetProvider.callApi)
+      .mockResolvedValueOnce(createProviderResponse({ output: 'I cannot help with that.' }))
+      .mockResolvedValueOnce(createProviderResponse({ output: 'refused', isRefusal: true }));
+
+    const provider = new BestOfNProvider({ injectVar: 'input', maxConcurrency: 1 });
+    const result = await provider.callApi('test prompt', createMockContext(mockTargetProvider));
+
+    expect(mockTargetProvider.callApi).toHaveBeenCalledTimes(2);
+    expect(result.output).toBe('refused');
+    expect(result.metadata?.redteamFinalPrompt).toBeUndefined();
+  });
+
   it('should pass options to target provider callApi', async () => {
     const provider = new BestOfNProvider({
       injectVar: 'input',

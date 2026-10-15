@@ -17,7 +17,7 @@ import {
 } from '../remoteGeneration';
 import { remoteGenerationContextPayload } from '../remoteGenerationContext';
 import { throwIfTargetPromptExceedsMaxChars } from '../shared/promptLength';
-import { getSessionId } from '../util';
+import { getSessionId, isBasicRefusal, isEmptyResponse } from '../util';
 import { callTargetProvider } from './shared';
 
 import type {
@@ -209,7 +209,9 @@ export default class BestOfNProvider implements ApiProvider {
                 (response.incurredCost ?? (response.cached ? 0 : response.cost));
             }
             currentStep++;
-            if (!response.error) {
+            // A refusal is not a successful jailbreak, so keep sampling candidates until the
+            // target answers or the candidates run out.
+            if (!response.error && !isRefusalResponse(response)) {
               successfulResponse = response;
               successfulResponse.prompt = candidatePrompt;
               successfulResponse.metadata = {
@@ -288,4 +290,14 @@ export default class BestOfNProvider implements ApiProvider {
       };
     }
   }
+}
+
+function isRefusalResponse(response: ProviderResponse): boolean {
+  if (response.isRefusal === true) {
+    return true;
+  }
+  return (
+    typeof response.output === 'string' &&
+    (isEmptyResponse(response.output) || isBasicRefusal(response.output))
+  );
 }
