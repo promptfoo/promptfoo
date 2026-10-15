@@ -1,4 +1,5 @@
-import { describe, expect, it } from 'vitest';
+import { act, renderHook, waitFor } from '@testing-library/react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   formatPrice,
   getAttributeName,
@@ -6,7 +7,60 @@ import {
   getCheckoutUrl,
   isInStock,
   stripHtml,
+  useCart,
 } from './useFourthwall';
+
+describe('cart storage failures', () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  it.each(['getItem', 'setItem', 'removeItem'] as const)(
+    'keeps cart state usable when private browsing rejects %s',
+    async (method) => {
+      vi.spyOn(Storage.prototype, 'getItem').mockReturnValue(
+        method === 'removeItem' ? 'expired' : null,
+      );
+      vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {});
+      vi.spyOn(Storage.prototype, 'removeItem').mockImplementation(() => {});
+      const storage = vi.spyOn(Storage.prototype, method).mockImplementation(() => {
+        throw new Error('Storage unavailable');
+      });
+      const cart = {
+        id: 'new-cart',
+        items: [
+          {
+            variant: { id: 'shirt', name: 'Shirt', unitPrice: { value: 20, currency: 'USD' } },
+            quantity: 2,
+          },
+        ],
+      };
+      const fetchMock = vi
+        .spyOn(globalThis, 'fetch')
+        .mockResolvedValue(new Response(JSON.stringify(cart), { status: 200 }));
+      if (method === 'removeItem') {
+        fetchMock.mockResolvedValueOnce(new Response('', { status: 404 }));
+      }
+      const { result } = renderHook(useCart);
+      await waitFor(() => expect(result.current.isLoading).toBe(false));
+      expect(result.current.cart).toBeNull();
+      await act(async () => {
+        expect(await result.current.addToCart('shirt', 2)).toEqual(cart);
+      });
+      expect(storage).toHaveBeenCalledWith(
+        'promptfoo_cart_id',
+        ...(method === 'setItem' ? ['new-cart'] : []),
+      );
+      expect(result.current.cart).toEqual(cart);
+      expect(result.current.itemCount).toBe(2);
+      expect(result.current.isLoading).toBe(false);
+      const [url, options] = fetchMock.mock.calls.at(-1)!;
+      expect(new URL(String(url)).pathname).toBe('/v1/carts');
+      expect(options?.method).toBe('POST');
+      expect(JSON.parse(String(options?.body))).toEqual({
+        items: [{ variantId: 'shirt', quantity: 2 }],
+      });
+    },
+  );
+});
 
 describe('formatPrice', () => {
   it('formats USD prices correctly', () => {

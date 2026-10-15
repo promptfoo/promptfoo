@@ -5,6 +5,21 @@ import { getGradingProvider } from '../../src/matchers/providers';
 import { loadApiProvider } from '../../src/providers/index';
 import { createMockProvider } from '../factories/provider';
 
+const createAzureDefaultGrader = () => ({
+  defaultTest: {
+    options: {
+      provider: 'azureopenai:chat:gpt-4',
+    },
+  },
+});
+
+const createSimulatedUserProvider = () => ({
+  id: 'promptfoo:simulated-user',
+  config: {
+    maxTurns: 3,
+  },
+});
+
 vi.mock('../../src/providers', () => ({
   loadApiProvider: vi.fn(),
 }));
@@ -112,13 +127,7 @@ describe('getGradingProvider', () => {
     it('should use defaultTest.options.provider when no provider specified', async () => {
       const azureProvider = createMockProvider({ id: 'azureopenai:chat:gpt-4' });
 
-      (cliState as any).config = {
-        defaultTest: {
-          options: {
-            provider: 'azureopenai:chat:gpt-4',
-          },
-        },
-      };
+      (cliState as any).config = createAzureDefaultGrader();
 
       vi.mocked(loadApiProvider).mockResolvedValue(azureProvider);
 
@@ -241,12 +250,7 @@ describe('getGradingProvider', () => {
 
       (cliState as any).config = {
         defaultTest: {
-          provider: {
-            id: 'promptfoo:simulated-user',
-            config: {
-              maxTurns: 3,
-            },
-          },
+          provider: createSimulatedUserProvider(),
         },
       };
 
@@ -261,12 +265,7 @@ describe('getGradingProvider', () => {
 
       (cliState as any).config = {
         defaultTest: {
-          provider: {
-            id: 'promptfoo:simulated-user',
-            config: {
-              maxTurns: 3,
-            },
-          },
+          provider: createSimulatedUserProvider(),
           options: {
             provider: 'azureopenai:chat:gpt-4',
           },
@@ -403,13 +402,7 @@ describe('getGradingProvider', () => {
     it('should use explicit provider over defaultTest.options.provider', async () => {
       const explicitProvider = createMockProvider({ id: 'explicit-provider' });
 
-      (cliState as any).config = {
-        defaultTest: {
-          options: {
-            provider: 'azureopenai:chat:gpt-4',
-          },
-        },
-      };
+      (cliState as any).config = createAzureDefaultGrader();
 
       vi.mocked(loadApiProvider).mockResolvedValue(explicitProvider);
 
@@ -422,13 +415,7 @@ describe('getGradingProvider', () => {
     it('should use explicit provider object over defaultTest', async () => {
       const explicitProvider = createMockProvider({ id: 'explicit-provider' });
 
-      (cliState as any).config = {
-        defaultTest: {
-          options: {
-            provider: 'azureopenai:chat:gpt-4',
-          },
-        },
-      };
+      (cliState as any).config = createAzureDefaultGrader();
 
       const result = await getGradingProvider('text', explicitProvider, null);
 

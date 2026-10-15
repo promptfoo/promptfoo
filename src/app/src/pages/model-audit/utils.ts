@@ -8,15 +8,6 @@ export const getSeverityLabel = (severity: string): string => {
 };
 
 /**
- * Maps display labels back to internal severity values
- * @param label - The display label
- * @returns The internal severity value
- */
-export const getSeverityValue = (label: string): string => {
-  return label === 'critical' ? 'error' : label;
-};
-
-/**
  * Strips position information from a file path
  * @param filePath - The file path that may contain position info
  * @returns The file path without position information

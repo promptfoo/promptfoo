@@ -92,6 +92,27 @@ export async function runInstallProfileCommand(
   }
 }
 
+function darwinProcessGroupHasExited(pid: number): boolean {
+  try {
+    const processes = childProcess.execFileSync('/bin/ps', ['-axo', 'pgid=,stat='], {
+      encoding: 'utf8',
+      timeout: 10000,
+    });
+    if (!processes.trim()) {
+      return false;
+    }
+    return processes.split('\n').every((line) => {
+      if (!line.trim()) {
+        return true;
+      }
+      const match = /^\s*(\d+)\s+(\S+)\s*$/.exec(line);
+      return Boolean(match && (Number(match[1]) !== pid || match[2].startsWith('Z')));
+    });
+  } catch {
+    return false;
+  }
+}
+
 /** Kill a detached POSIX process group or a Windows process and its descendants. */
 export function terminateProcessTree(pid: number, platform = process.platform): void {
   assert(Number.isInteger(pid) && pid > 0, 'Expected a positive integer process id');
@@ -107,6 +128,18 @@ export function terminateProcessTree(pid: number, platform = process.platform): 
     process.kill(-pid, 'SIGKILL');
   } catch (error) {
     if (error !== null && typeof error === 'object' && 'code' in error && error.code === 'ESRCH') {
+      return;
+    }
+    // Darwin's killpg1 skips zombies and returns EPERM when no member can be signaled.
+    // Verify the group has exited rather than suppressing genuine permission failures.
+    if (
+      platform === 'darwin' &&
+      error !== null &&
+      typeof error === 'object' &&
+      'code' in error &&
+      error.code === 'EPERM' &&
+      darwinProcessGroupHasExited(pid)
+    ) {
       return;
     }
     throw error;

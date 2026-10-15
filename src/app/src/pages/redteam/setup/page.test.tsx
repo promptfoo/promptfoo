@@ -57,8 +57,10 @@ const reviewRunGates = vi.hoisted(() => ({
 vi.mock('@app/hooks/useApiHealth', () => ({
   useApiHealth: () => ({ data: { status: 'connected' }, isLoading: false }),
 }));
-vi.mock('@app/hooks/useEmailVerification', () => ({
-  useEmailVerification: () => ({ checkEmailStatus: reviewRunGates.checkEmailStatus }),
+vi.mock('@app/utils/emailVerification', () => ({
+  checkEmailStatus: reviewRunGates.checkEmailStatus,
+  saveEmail: vi.fn(),
+  clearEmail: vi.fn(),
 }));
 vi.mock('@app/hooks/useEvalHistoryRefresh', () => ({
   useEvalHistoryRefresh: () => ({ signalEvalCompleted: reviewRunGates.signalEvalCompleted }),
@@ -73,7 +75,6 @@ vi.mock('@app/stores/redteamJobStore', () => ({
 }));
 
 // Mock child components to isolate the page component
-vi.mock('./components/Targets', () => ({ default: () => <div>Targets</div> }));
 vi.mock('./components/Targets/TargetTypeSelection', () => ({
   default: () => <div>TargetTypeSelection</div>,
 }));
