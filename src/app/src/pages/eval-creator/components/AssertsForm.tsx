@@ -49,6 +49,7 @@ const assertTypes: AssertionType[] = [
 
   // Other LLM-based
   'answer-relevance',
+  'citation-faithfulness',
   'context-faithfulness',
   'context-recall',
   'context-relevance',
@@ -112,6 +113,7 @@ const LLM_ASSERTION_TYPES = new Set<AssertionType>([
   'factuality',
   'model-graded-closedqa',
   'answer-relevance',
+  'citation-faithfulness',
   'context-faithfulness',
   'context-recall',
   'context-relevance',
