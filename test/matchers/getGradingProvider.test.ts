@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import cliState from '../../src/cliState';
+import logger from '../../src/logger';
 import { getGradingProvider } from '../../src/matchers/providers';
 import { loadApiProvider } from '../../src/providers/index';
 import { createMockProvider } from '../factories/provider';
@@ -23,12 +24,15 @@ vi.mock('../../src/providers', () => ({
   loadApiProvider: vi.fn(),
 }));
 
+vi.mock('../../src/logger');
+
 describe('getGradingProvider', () => {
-  const mockProvider = createMockProvider();
+  let mockProvider = createMockProvider();
 
   beforeEach(() => {
     vi.clearAllMocks();
     vi.resetAllMocks();
+    mockProvider = createMockProvider();
     (cliState as any).config = {};
   });
 
@@ -152,6 +156,93 @@ describe('getGradingProvider', () => {
         basePath: undefined,
       });
       expect(result).toBe(azureProvider);
+    });
+
+    it('should warn when defaultTest.provider implicitly selects the same grading provider', async () => {
+      const targetProvider = createMockProvider({ id: 'openai:gpt-4.1' });
+
+      (cliState as any).config = {
+        defaultTest: {
+          provider: 'openai:gpt-4.1',
+        },
+      };
+
+      vi.mocked(loadApiProvider).mockResolvedValue(targetProvider);
+
+      const result = await getGradingProvider('text', undefined, null);
+
+      expect(result).toBe(targetProvider);
+      expect(logger.warn).toHaveBeenCalledWith(
+        '[Grading] defaultTest.provider is being used as the grader because no explicit grader is configured',
+        {
+          providerId: 'openai:gpt-4.1',
+        },
+      );
+    });
+
+    it('does not warn for a chat fallback considered for embedding grading', async () => {
+      cliState.config = { defaultTest: { provider: 'echo' } };
+      vi.mocked(loadApiProvider).mockResolvedValue(mockProvider);
+
+      await getGradingProvider('embedding', undefined, null);
+
+      expect(logger.warn).not.toHaveBeenCalled();
+    });
+
+    it('redacts URL credentials from the implicit-grader warning', async () => {
+      const id = 'https://fixture-user:fixture-password@example.test/judge?api_key=fixture-secret';
+      cliState.config = { defaultTest: { provider: id } };
+      vi.mocked(loadApiProvider).mockResolvedValue(createMockProvider({ id }));
+
+      await getGradingProvider('text', undefined, null);
+
+      const logged = JSON.stringify(vi.mocked(logger.warn).mock.calls);
+      expect(logger.warn).toHaveBeenCalledOnce();
+      expect(logged).toContain('example.test/judge');
+      expect(logged).not.toContain('fixture-user');
+      expect(logged).not.toContain('fixture-password');
+      expect(logged).not.toContain('fixture-secret');
+    });
+
+    it('warns once per implicit grader within a configuration', async () => {
+      cliState.config = { defaultTest: { provider: 'echo' } };
+      vi.mocked(loadApiProvider).mockResolvedValue(mockProvider);
+
+      await getGradingProvider('text', undefined, null);
+      await getGradingProvider('text', undefined, null);
+
+      expect(logger.warn).toHaveBeenCalledTimes(1);
+    });
+
+    it('warns again in a separate evaluation scope using the same configuration', async () => {
+      cliState.config = { defaultTest: { provider: 'echo' } };
+      vi.mocked(loadApiProvider).mockResolvedValue(mockProvider);
+
+      for (let run = 0; run < 2; run++) {
+        await cliState.withEnv(undefined, async () => {
+          await getGradingProvider('text', undefined, null);
+          await getGradingProvider('text', undefined, null);
+        });
+      }
+
+      expect(logger.warn).toHaveBeenCalledTimes(2);
+    });
+
+    it('should not warn when an explicit provider selects the grader', async () => {
+      const graderProvider = createMockProvider({ id: 'openai:gpt-5.6' });
+
+      (cliState as any).config = {
+        defaultTest: {
+          provider: 'openai:gpt-4.1',
+        },
+      };
+
+      vi.mocked(loadApiProvider).mockResolvedValue(graderProvider);
+
+      const result = await getGradingProvider('text', 'openai:gpt-5.6', null);
+
+      expect(result).toBe(graderProvider);
+      expect(logger.warn).not.toHaveBeenCalled();
     });
 
     it('should skip defaultTest.provider when it is promptfoo:simulated-user', async () => {
