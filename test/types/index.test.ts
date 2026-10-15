@@ -80,7 +80,13 @@ describe('AssertionSchema', () => {
   });
 
   it('should reject malformed evidence paths (empty segment, trailing dot, leading zero)', () => {
-    for (const bad of ['metadata.', 'metadata..foo', 'metadata.01', 'metadata.fileChanges.', 'metadata.fileChanges..foo']) {
+    for (const bad of [
+      'metadata.',
+      'metadata..foo',
+      'metadata.01',
+      'metadata.fileChanges.',
+      'metadata.fileChanges..foo',
+    ]) {
       const result = AssertionSchema.safeParse({
         type: 'llm-rubric',
         value: 'Check',
