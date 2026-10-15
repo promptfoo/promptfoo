@@ -83,24 +83,33 @@ function isAllowedCrossSite(origin: string, host: string): boolean {
 export function csrfProtection(req: Request, res: Response, next: NextFunction): void {
   const secFetchSite = req.headers['sec-fetch-site'] as string | undefined;
   const origin = req.headers['origin'] as string | undefined;
+  // Only trust the Host header — X-Forwarded-Host is attacker-controllable
+  // unless a trusted reverse proxy strips/overwrites it.
+  const host = req.headers.host || '';
   const hasBrowserHeaders = secFetchSite !== undefined || origin !== undefined;
+
+  // An explicitly allowlisted cross-site origin (localhost aliases or
+  // PROMPTFOO_CSRF_ALLOWED_ORIGINS) is trusted ahead of the Host gate so a
+  // UI on ui.example.com may talk to an API on api.example.com. A rebinding
+  // domain is never allowlisted, so it still falls through to the Host check.
+  const originIsAllowlisted = origin !== undefined && isAllowedCrossSite(origin, host);
 
   if (SAFE_METHODS.has(req.method)) {
     // Safe methods carry no CSRF risk, but a rebinding-shaped browser GET
     // still reads local data (same-origin requests bypass CORS entirely), so
-    // browser-signal-bearing safe requests face the same Host check below.
+    // browser-signal-bearing safe requests face the same Host check.
     // Health probes and other non-browser clients send neither header and
     // pass straight through, whatever Host they use.
-    if (!hasBrowserHeaders) {
+    if (!hasBrowserHeaders || originIsAllowlisted) {
       return next();
     }
-    if (!isAllowedRequestHost(req.headers.host || '')) {
+    if (!isAllowedRequestHost(host)) {
       logger.warn(
         '[CSRF] Blocked safe request with unexpected Host header (possible DNS rebinding)',
         {
           method: req.method,
           path: req.path,
-          host: req.headers.host || '',
+          host,
         },
       );
       res.status(403).json({ error: 'Requests must use a local or allowlisted host' });
@@ -109,10 +118,6 @@ export function csrfProtection(req: Request, res: Response, next: NextFunction):
     return next();
   }
 
-  // Only trust the Host header — X-Forwarded-Host is attacker-controllable
-  // unless a trusted reverse proxy strips/overwrites it.
-  const host = req.headers.host || '';
-
   // Path 0: DNS-rebinding countermeasure. A page on a rebinding domain
   // (rebind.evil.com → 127.0.0.1) issues requests the browser considers
   // same-origin, so Paths 1 and 2 below pass them: Sec-Fetch-Site is
@@ -120,7 +125,7 @@ export function csrfProtection(req: Request, res: Response, next: NextFunction):
   // Mutating requests must instead arrive on a local or explicitly
   // allowlisted Host. Non-browser clients that target localhost are
   // unaffected.
-  if (!isAllowedRequestHost(host)) {
+  if (!originIsAllowlisted && !isAllowedRequestHost(host)) {
     logger.warn('[CSRF] Blocked request with unexpected Host header (possible DNS rebinding)', {
       method: req.method,
       path: req.path,

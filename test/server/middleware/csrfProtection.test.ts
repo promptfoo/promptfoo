@@ -92,6 +92,9 @@ describe('csrfProtection', () => {
       csrfProtection(req, res, next);
       expect(next).not.toHaveBeenCalled();
       expect(res.status).toHaveBeenCalledWith(403);
+      expect(res.json).toHaveBeenCalledWith({
+        error: 'Requests must use a local or allowlisted host',
+      });
     });
 
     it('allows browser GET with local Host (cross-site read handled by CORS layer)', () => {
@@ -286,6 +289,9 @@ describe('csrfProtection', () => {
       csrfProtection(req, res, next);
       expect(next).not.toHaveBeenCalled();
       expect(res.status).toHaveBeenCalledWith(403);
+      expect(res.json).toHaveBeenCalledWith({
+        error: 'Requests must use a local or allowlisted host',
+      });
     });
 
     it('blocks Path-3 POST with non-local Host and no browser headers', () => {
@@ -296,6 +302,9 @@ describe('csrfProtection', () => {
       csrfProtection(req, res, next);
       expect(next).not.toHaveBeenCalled();
       expect(res.status).toHaveBeenCalledWith(403);
+      expect(res.json).toHaveBeenCalledWith({
+        error: 'Requests must use a local or allowlisted host',
+      });
     });
 
     it('blocks POST with no Host header at all', () => {
@@ -304,6 +313,29 @@ describe('csrfProtection', () => {
       csrfProtection(req, res, next);
       expect(next).not.toHaveBeenCalled();
       expect(res.status).toHaveBeenCalledWith(403);
+      expect(res.json).toHaveBeenCalledWith({
+        error: 'Requests must use a local or allowlisted host',
+      });
+    });
+
+    it('allows allowlisted origin with a different (non-local) Host (ui.example.com -> api.example.com)', () => {
+      vi.mocked(getEnvString).mockImplementation((_key: string, defaultValue?: string) => {
+        if (_key === 'PROMPTFOO_CSRF_ALLOWED_ORIGINS') {
+          return 'https://ui.example.com';
+        }
+        return defaultValue ?? '';
+      });
+      const req = mockReq({
+        headers: {
+          'sec-fetch-site': 'cross-site',
+          origin: 'https://ui.example.com',
+          host: 'api.example.com:15500',
+        },
+      });
+      const res = mockRes();
+      csrfProtection(req, res, next);
+      expect(next).toHaveBeenCalled();
+      expect(res.status).not.toHaveBeenCalled();
     });
 
     it.each(['localhost:15500', '127.0.0.1:15500', '[::1]:15500'])(
