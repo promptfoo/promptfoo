@@ -66,20 +66,19 @@ describe('csrfProtection', () => {
       expect(res.status).not.toHaveBeenCalled();
     });
 
-    it.each([
-      'GET',
-      'HEAD',
-      'OPTIONS',
-    ])('%s without browser headers passes with any Host (health probes)', (method) => {
-      const req = mockReq({
-        method,
-        headers: { host: '192.168.1.50:15500' },
-      });
-      const res = mockRes();
-      csrfProtection(req, res, next);
-      expect(next).toHaveBeenCalled();
-      expect(res.status).not.toHaveBeenCalled();
-    });
+    it.each(['GET', 'HEAD', 'OPTIONS'])(
+      '%s without browser headers passes with any Host (health probes)',
+      (method) => {
+        const req = mockReq({
+          method,
+          headers: { host: '192.168.1.50:15500' },
+        });
+        const res = mockRes();
+        csrfProtection(req, res, next);
+        expect(next).toHaveBeenCalled();
+        expect(res.status).not.toHaveBeenCalled();
+      },
+    );
 
     it('blocks rebinding-shaped GET whose Host is a rebinding domain', () => {
       const req = mockReq({
@@ -307,18 +306,17 @@ describe('csrfProtection', () => {
       expect(res.status).toHaveBeenCalledWith(403);
     });
 
-    it.each([
-      'localhost:15500',
-      '127.0.0.1:15500',
-      '[::1]:15500',
-    ])('allows POST with local Host %s', (host) => {
-      const req = mockReq({
-        headers: { 'sec-fetch-site': 'same-origin', host },
-      });
-      const res = mockRes();
-      csrfProtection(req, res, next);
-      expect(next).toHaveBeenCalled();
-    });
+    it.each(['localhost:15500', '127.0.0.1:15500', '[::1]:15500'])(
+      'allows POST with local Host %s',
+      (host) => {
+        const req = mockReq({
+          headers: { 'sec-fetch-site': 'same-origin', host },
+        });
+        const res = mockRes();
+        csrfProtection(req, res, next);
+        expect(next).toHaveBeenCalled();
+      },
+    );
 
     it('allows non-local Host listed in PROMPTFOO_CSRF_ALLOWED_HOSTS', () => {
       vi.mocked(getEnvString).mockImplementation((_key: string, defaultValue?: string) => {
