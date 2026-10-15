@@ -60,7 +60,7 @@ providers:
 
 ## Cost tracking
 
-Requesty returns the actual USD charge for each call in `usage.cost`. The `requesty:` provider reports that value as the result cost, so routed models like `openai/gpt-4o-mini` or `anthropic/claude-sonnet-4-5` get accurate costs even though they are not in promptfoo's built in price tables. If you set `cost`, `inputCost`, or `outputCost` in the provider config, those rates are used instead.
+Requesty returns the actual USD charge for each call in `usage.cost`. The `requesty:` provider reports that value as the result cost, so routed models from any vendor, such as `anthropic/claude-sonnet-4-5` or `google/gemini-2.5-flash`, get a cost even though they are not in promptfoo's OpenAI price table. If you set `cost`, `inputCost`, or `outputCost` in the provider config, those rates are used instead.
 
 ## Using the generic OpenAI provider
 
