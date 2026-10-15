@@ -60,6 +60,31 @@ describe('processExecutableFile', () => {
     }
   });
 
+  it('passes shell-style quoted arguments to the script as single arguments', async () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-executable-args-'));
+    const scriptPath = path.join(tempDir, 'prompt.cjs');
+    try {
+      // The last argument is always the JSON context
+      fs.writeFileSync(
+        scriptPath,
+        'process.stdout.write(JSON.stringify(process.argv.slice(2, -1)));',
+      );
+      const [prompt] = await processExecutableFile(
+        `"${process.execPath}" "${scriptPath}" --name="John Smith" "" --x='a b' --empty=""`,
+        {},
+      );
+      const output = await prompt.function!({ vars: {}, provider: mockProvider });
+      expect(JSON.parse(output as string)).toEqual([
+        '--name=John Smith',
+        '',
+        '--x=a b',
+        '--empty=',
+      ]);
+    } finally {
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
   it('should process a script with exec: prefix', async () => {
     const scriptPath =
       process.platform === 'win32' ? 'cmd.exe /c echo "test"' : '/usr/bin/echo "test"';
