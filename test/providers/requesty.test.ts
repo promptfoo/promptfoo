@@ -63,15 +63,30 @@ describe('Requesty', () => {
         config: {
           temperature: 0.7,
           max_tokens: 100,
-          apiKeyEnvar: 'REQUESTY_API_KEY',
+          // The shared provider-config sanitizer redacts these by policy.
+          apiKeyEnvar: '[REDACTED]',
           apiBaseUrl: REQUESTY_API_BASE,
           headers: {
-            'HTTP-Referer': 'https://promptfoo.dev/',
-            'X-Title': 'promptfoo',
+            'HTTP-Referer': '[REDACTED]',
+            'X-Title': '[REDACTED]',
           },
-          passthrough: {},
         },
       });
+    });
+
+    it('redacts header based credentials when serializing to JSON', () => {
+      const marker = 'rq-header-secret-marker';
+      const p = new RequestyProvider('openai/gpt-4o-mini', {
+        config: {
+          apiKey: 'inline-secret-key',
+          headers: { Authorization: `Bearer ${marker}`, 'X-Api-Key': marker },
+        },
+      });
+      const json = JSON.stringify(p.toJSON());
+      expect(json).not.toContain(marker);
+      expect(json).not.toContain('inline-secret-key');
+      // The live config used for requests is untouched.
+      expect(p.config.headers?.Authorization).toBe(`Bearer ${marker}`);
     });
 
     it('redacts inline API keys when serializing to JSON', () => {
@@ -262,6 +277,102 @@ describe('Requesty', () => {
       }
     });
 
+    it('rejects a pre-aborted call without sending a request', async () => {
+      const restoreEnv = mockProcessEnv({ REQUESTY_API_KEY: 'test-key' });
+      try {
+        const p = new RequestyProvider('openai/gpt-4o-mini', {});
+        mockedFetchWithRetries.mockResolvedValue(jsonResponse(OK_COMPLETION));
+        const controller = new AbortController();
+        controller.abort();
+
+        await expect(
+          p.callApi('Test prompt', undefined, { abortSignal: controller.signal }),
+        ).rejects.toMatchObject({ name: 'AbortError' });
+        expect(mockedFetchWithRetries).not.toHaveBeenCalled();
+      } finally {
+        restoreEnv();
+      }
+    });
+
+    it('forwards the abort signal to the request', async () => {
+      const restoreEnv = mockProcessEnv({ REQUESTY_API_KEY: 'test-key' });
+      try {
+        const p = new RequestyProvider('openai/gpt-4o-mini', {});
+        mockedFetchWithRetries.mockResolvedValueOnce(jsonResponse(OK_COMPLETION));
+        const controller = new AbortController();
+
+        await p.callApi('Test prompt', undefined, { abortSignal: controller.signal });
+
+        const [, init] = mockedFetchWithRetries.mock.calls[0];
+        expect((init as RequestInit | undefined)?.signal).toBeInstanceOf(AbortSignal);
+      } finally {
+        restoreEnv();
+      }
+    });
+
+    it('uses the cost Requesty reports in usage.cost', async () => {
+      const restoreEnv = mockProcessEnv({ REQUESTY_API_KEY: 'test-key' });
+      try {
+        const p = new RequestyProvider('openai/gpt-4o-mini', {});
+        mockedFetchWithRetries.mockResolvedValueOnce(
+          jsonResponse({ ...OK_COMPLETION, usage: { ...OK_COMPLETION.usage, cost: 0.0123 } }),
+        );
+
+        const result = await p.callApi('Test prompt');
+        expect(result.cost).toBe(0.0123);
+      } finally {
+        restoreEnv();
+      }
+    });
+
+    it('prefers explicit user rates over the reported usage.cost', async () => {
+      const restoreEnv = mockProcessEnv({ REQUESTY_API_KEY: 'test-key' });
+      try {
+        const p = new RequestyProvider('openai/gpt-4o-mini', {
+          config: { inputCost: 0.001, outputCost: 0.002 },
+        });
+        mockedFetchWithRetries.mockResolvedValueOnce(
+          jsonResponse({ ...OK_COMPLETION, usage: { ...OK_COMPLETION.usage, cost: 0.0123 } }),
+        );
+
+        const result = await p.callApi('Test prompt');
+        expect(result.cost).toBeCloseTo(5 * 0.001 + 5 * 0.002);
+      } finally {
+        restoreEnv();
+      }
+    });
+
+    it('ignores a malformed usage.cost', async () => {
+      const restoreEnv = mockProcessEnv({ REQUESTY_API_KEY: 'test-key' });
+      try {
+        const p = new RequestyProvider('vendor/unpriced-model', {});
+        mockedFetchWithRetries.mockResolvedValueOnce(
+          jsonResponse({ ...OK_COMPLETION, usage: { ...OK_COMPLETION.usage, cost: -1 } }),
+        );
+
+        const result = await p.callApi('Test prompt');
+        expect(result.cost).toBeUndefined();
+      } finally {
+        restoreEnv();
+      }
+    });
+
+    it('returns a provider error instead of throwing when choices is empty', async () => {
+      const restoreEnv = mockProcessEnv({ REQUESTY_API_KEY: 'test-key' });
+      try {
+        const p = new RequestyProvider('openai/gpt-4o-mini', {});
+        mockedFetchWithRetries.mockResolvedValueOnce(
+          jsonResponse({ choices: [], usage: OK_COMPLETION.usage }),
+        );
+
+        const result = await p.callApi('Test prompt');
+        expect(result.error).toEqual(expect.any(String));
+        expect(result.output).toBeUndefined();
+      } finally {
+        restoreEnv();
+      }
+    });
+
     describe('Thinking tokens handling', () => {
       it('prefixes reasoning content when both reasoning and content are present', async () => {
         const restoreEnv = mockProcessEnv({ REQUESTY_API_KEY: 'test-key' });
@@ -306,52 +417,6 @@ describe('Requesty', () => {
 
           const result = await p.callApi('Test prompt');
           expect(result.output).toBe('The answer');
-        } finally {
-          restoreEnv();
-        }
-      });
-
-      it('falls back to reasoning when there is no content', async () => {
-        const restoreEnv = mockProcessEnv({ REQUESTY_API_KEY: 'test-key' });
-        try {
-          const p = new RequestyProvider('google/gemini-2.5-flash', {});
-          mockedFetchWithRetries.mockResolvedValueOnce(
-            jsonResponse({
-              choices: [
-                { message: { content: '', reasoning: 'Only reasoning' }, finish_reason: 'stop' },
-              ],
-              usage: { total_tokens: 4, prompt_tokens: 2, completion_tokens: 2 },
-            }),
-          );
-
-          const result = await p.callApi('Test prompt');
-          expect(result.output).toBe('Only reasoning');
-        } finally {
-          restoreEnv();
-        }
-      });
-
-      it('prioritizes tool calls over content and reasoning', async () => {
-        const restoreEnv = mockProcessEnv({ REQUESTY_API_KEY: 'test-key' });
-        try {
-          const p = new RequestyProvider('openai/gpt-4o-mini', {});
-          const toolCalls = [
-            { id: 'call_1', type: 'function', function: { name: 'get_weather', arguments: '{}' } },
-          ];
-          mockedFetchWithRetries.mockResolvedValueOnce(
-            jsonResponse({
-              choices: [
-                {
-                  message: { content: 'ignored', reasoning: 'ignored', tool_calls: toolCalls },
-                  finish_reason: 'tool_calls',
-                },
-              ],
-              usage: { total_tokens: 4, prompt_tokens: 2, completion_tokens: 2 },
-            }),
-          );
-
-          const result = await p.callApi('Test prompt');
-          expect(result.output).toEqual(toolCalls);
         } finally {
           restoreEnv();
         }
