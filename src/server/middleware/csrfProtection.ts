@@ -81,12 +81,34 @@ function isAllowedCrossSite(origin: string, host: string): boolean {
 }
 
 export function csrfProtection(req: Request, res: Response, next: NextFunction): void {
+  const secFetchSite = req.headers['sec-fetch-site'] as string | undefined;
+  const origin = req.headers['origin'] as string | undefined;
+  const hasBrowserHeaders = secFetchSite !== undefined || origin !== undefined;
+
   if (SAFE_METHODS.has(req.method)) {
+    // Safe methods carry no CSRF risk, but a rebinding-shaped browser GET
+    // still reads local data (same-origin requests bypass CORS entirely), so
+    // browser-signal-bearing safe requests face the same Host check below.
+    // Health probes and other non-browser clients send neither header and
+    // pass straight through, whatever Host they use.
+    if (!hasBrowserHeaders) {
+      return next();
+    }
+    if (!isAllowedRequestHost(req.headers.host || '')) {
+      logger.warn(
+        '[CSRF] Blocked safe request with unexpected Host header (possible DNS rebinding)',
+        {
+          method: req.method,
+          path: req.path,
+          host: req.headers.host || '',
+        },
+      );
+      res.status(403).json({ error: 'Requests must use a local or allowlisted host' });
+      return;
+    }
     return next();
   }
 
-  const secFetchSite = req.headers['sec-fetch-site'] as string | undefined;
-  const origin = req.headers['origin'] as string | undefined;
   // Only trust the Host header — X-Forwarded-Host is attacker-controllable
   // unless a trusted reverse proxy strips/overwrites it.
   const host = req.headers.host || '';
@@ -96,8 +118,8 @@ export function csrfProtection(req: Request, res: Response, next: NextFunction):
   // same-origin, so Paths 1 and 2 below pass them: Sec-Fetch-Site is
   // `same-origin` and the Origin matches the attacker-controlled Host.
   // Mutating requests must instead arrive on a local or explicitly
-  // allowlisted Host. Non-browser clients that target localhost, and GET
-  // health probes against container IPs, are unaffected.
+  // allowlisted Host. Non-browser clients that target localhost are
+  // unaffected.
   if (!isAllowedRequestHost(host)) {
     logger.warn('[CSRF] Blocked request with unexpected Host header (possible DNS rebinding)', {
       method: req.method,

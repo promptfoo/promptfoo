@@ -54,12 +54,59 @@ describe('csrfProtection', () => {
     it.each(['GET', 'HEAD', 'OPTIONS'])('%s requests pass through', (method) => {
       const req = mockReq({
         method,
-        headers: { 'sec-fetch-site': 'cross-site', origin: 'http://evil.com' },
+        headers: {
+          'sec-fetch-site': 'cross-site',
+          origin: 'http://evil.com',
+          host: 'localhost:15500',
+        },
       });
       const res = mockRes();
       csrfProtection(req, res, next);
       expect(next).toHaveBeenCalled();
       expect(res.status).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      'GET',
+      'HEAD',
+      'OPTIONS',
+    ])('%s without browser headers passes with any Host (health probes)', (method) => {
+      const req = mockReq({
+        method,
+        headers: { host: '192.168.1.50:15500' },
+      });
+      const res = mockRes();
+      csrfProtection(req, res, next);
+      expect(next).toHaveBeenCalled();
+      expect(res.status).not.toHaveBeenCalled();
+    });
+
+    it('blocks rebinding-shaped GET whose Host is a rebinding domain', () => {
+      const req = mockReq({
+        method: 'GET',
+        headers: {
+          'sec-fetch-site': 'same-origin',
+          host: 'rebind.evil.com:15500',
+        },
+      });
+      const res = mockRes();
+      csrfProtection(req, res, next);
+      expect(next).not.toHaveBeenCalled();
+      expect(res.status).toHaveBeenCalledWith(403);
+    });
+
+    it('allows browser GET with local Host (cross-site read handled by CORS layer)', () => {
+      const req = mockReq({
+        method: 'GET',
+        headers: {
+          'sec-fetch-site': 'cross-site',
+          origin: 'http://evil.com',
+          host: 'localhost:15500',
+        },
+      });
+      const res = mockRes();
+      csrfProtection(req, res, next);
+      expect(next).toHaveBeenCalled();
     });
   });
 
@@ -301,17 +348,6 @@ describe('csrfProtection', () => {
       const res = mockRes();
       csrfProtection(req, res, next);
       expect(next).toHaveBeenCalled();
-    });
-
-    it('does not affect safe methods with non-local Host (health probes)', () => {
-      const req = mockReq({
-        method: 'GET',
-        headers: { host: '192.168.1.50:15500' },
-      });
-      const res = mockRes();
-      csrfProtection(req, res, next);
-      expect(next).toHaveBeenCalled();
-      expect(res.status).not.toHaveBeenCalled();
     });
   });
 });
