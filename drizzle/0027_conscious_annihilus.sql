@@ -1,0 +1,1 @@
+CREATE INDEX `eval_result_manual_rating_idx` ON `eval_results` (`eval_id`,`prompt_idx`) WHERE "eval_results"."manual_rating_state" IS NOT NULL;
