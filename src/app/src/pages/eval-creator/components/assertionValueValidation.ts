@@ -1,10 +1,8 @@
-import { BaseAssertionTypesSchema } from '@promptfoo/types';
 import { TRAJECTORY_STEP_TYPES } from '@promptfoo/contracts/trajectory';
+import { BaseAssertionTypesSchema } from '@promptfoo/types';
 import type { Assertion, AssertionType } from '@promptfoo/types';
 
 const BASE_ASSERTION_TYPE_SET = new Set<string>(BaseAssertionTypesSchema.options);
-
-
 const SPECIAL_ASSERTION_TYPES = new Set<string>(['max-score', 'select-best']);
 
 function isSupportedAssertionType(type: string): boolean {
