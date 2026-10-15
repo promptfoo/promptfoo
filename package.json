@@ -268,7 +268,7 @@
     "@azure/storage-blob": "^12.31.0",
     "@fal-ai/client": "~1.10.1",
     "@googleapis/sheets": "^18.1.0",
-    "@modelcontextprotocol/sdk": "^1.32.0",
+    "@modelcontextprotocol/sdk": "^1.32.1",
     "@modelcontextprotocol/server-filesystem": "2026.8.31",
     "@opencode-ai/sdk": "^1.18.34",
     "@smithy/node-http-handler": "^4.4.14",
