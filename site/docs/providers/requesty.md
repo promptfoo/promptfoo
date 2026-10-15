@@ -1,11 +1,11 @@
 ---
 sidebar_label: Requesty
-description: "Access hundreds of models through Requesty's OpenAI-compatible LLM router with configurable base URL, proxy support, and provider/model naming"
+description: "Access hundreds of models through Requesty's OpenAI-compatible LLM router, with reported per-call cost tracking and EU endpoint support"
 ---
 
 # Requesty
 
-[Requesty](https://requesty.ai/) is an OpenAI-compatible LLM router that provides a single interface for accessing models from OpenAI, Anthropic, Google, DeepSeek, and others. It follows the OpenAI API format - see our [OpenAI provider documentation](/docs/providers/openai/) for base API details.
+[Requesty](https://requesty.ai/) is an OpenAI-compatible LLM router that provides a single interface for accessing models from OpenAI, Anthropic, Google, DeepSeek, and others. It follows the OpenAI API format; see our [OpenAI provider documentation](/docs/providers/openai/) for base API details.
 
 ## Setup
 
@@ -58,13 +58,27 @@ providers:
       apiKeyEnvar: MY_PROXY_KEY # optional: read the Bearer token from $MY_PROXY_KEY
 ```
 
-## Features
+## Cost tracking
 
-- Access to hundreds of models through a single API
-- Mix models from different upstream providers in one evaluation
-- Support for text and multimodal (vision) models
-- Compatible with OpenAI API format
-- Pay-as-you-go pricing
+Requesty returns the actual USD charge for each call in `usage.cost`. The `requesty:` provider reports that value as the result cost, so routed models like `openai/gpt-4o-mini` or `anthropic/claude-sonnet-4-5` get accurate costs even though they are not in promptfoo's built in price tables. If you set `cost`, `inputCost`, or `outputCost` in the provider config, those rates are used instead.
+
+## Using the generic OpenAI provider
+
+Because Requesty is OpenAI compatible, the generic OpenAI provider also works:
+
+```yaml title="promptfooconfig.yaml"
+providers:
+  - id: openai:chat:openai/gpt-4o-mini
+    config:
+      apiBaseUrl: https://router.requesty.ai/v1
+      apiKeyEnvar: REQUESTY_API_KEY
+```
+
+The `requesty:` provider is built on the same OpenAI chat implementation. On top of it, it reads `REQUESTY_API_KEY` without falling back to `OPENAI_API_KEY`, ignores the `OPENAI_BASE_URL` style env vars, sends the optional `HTTP-Referer` and `X-Title` attribution headers, and uses Requesty's reported `usage.cost` for cost tracking.
+
+## Data handling
+
+Requesty documents what it stores, how long it keeps logged prompts and responses, and its training policy in its [privacy policy](https://www.requesty.ai/privacy) and [data privacy docs](https://docs.requesty.ai/features/data-privacy). Retention and training policies of the upstream model providers are listed per model in the [Requesty model library](https://app.requesty.ai/model-library).
 
 ## Thinking/Reasoning Models
 
