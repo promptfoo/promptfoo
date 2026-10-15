@@ -1,0 +1,6 @@
+title: 'Tau Simulated User Testing'
+description: 'Test a conversational airline booking agent with 31 customer personas using simulated multi-turn interactions'
+tags:
+  - Multi-turn
+  - Tool Use
+  - Agents

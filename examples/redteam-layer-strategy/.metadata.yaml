@@ -1,0 +1,4 @@
+title: 'Layer Strategy for Chaining Attacks'
+description: 'Chain multiple red team strategies together using the layer strategy, such as translating then encoding adversarial prompts'
+tags:
+  - Red Teaming
