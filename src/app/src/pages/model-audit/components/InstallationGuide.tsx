@@ -135,7 +135,7 @@ export default function InstallationGuide({
           </a>{' '}
           or check the{' '}
           <a
-            href="https://www.promptfoo.dev/docs/model-audit/installation/"
+            href="https://www.promptfoo.dev/docs/model-audit/#installation"
             target="_blank"
             rel="noopener noreferrer"
             className="text-primary hover:underline"

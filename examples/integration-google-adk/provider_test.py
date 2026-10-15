@@ -1,14 +1,28 @@
 """Focused tests for provider helper behavior."""
 
+import importlib.util
 import sys
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 EXAMPLE_DIR = Path(__file__).resolve().parent
 if str(EXAMPLE_DIR) not in sys.path:
     sys.path.insert(0, str(EXAMPLE_DIR))
 
 import provider
+
+
+class ProviderLoadingTests(unittest.TestCase):
+    def test_loads_by_file_path_without_a_sys_modules_entry(self):
+        # Promptfoo executes provider modules directly from their file paths.
+        spec = importlib.util.spec_from_file_location(
+            "promptfoo_adk_provider_by_path", EXAMPLE_DIR / "provider.py"
+        )
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        self.assertEqual(module._build_steps("hello", {}), ["hello"])
+        self.assertIsNone(module._tracer_provider_state.provider)
 
 
 class BuildStepsTests(unittest.TestCase):
@@ -50,8 +64,10 @@ class SessionIdTests(unittest.TestCase):
 class TracerProviderTests(unittest.TestCase):
     def setUp(self):
         # Module-level state is process-wide; reset it so tests can re-install.
-        provider._configured_tracer_provider = None
-        provider._configured_otlp_endpoint = None
+        provider._tracer_provider_state = provider._TracerProviderState()
+        patcher = patch.object(provider.trace, "set_tracer_provider")
+        patcher.start()
+        self.addCleanup(patcher.stop)
 
     def test_same_endpoint_returns_cached_provider(self):
         first = provider._ensure_tracer_provider("http://localhost:4318")

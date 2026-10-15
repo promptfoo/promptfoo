@@ -4,7 +4,7 @@ import { TooltipProvider } from '@app/components/ui/tooltip';
 import { ToastProvider } from '@app/contexts/ToastContext';
 import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter } from 'react-router';
 import { beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 import { useRecentlyUsedPlugins, useRedTeamConfig } from '../hooks/useRedTeamConfig';
 import Plugins from './Plugins';
@@ -72,7 +72,7 @@ vi.mock('./TestCaseDialog', () => ({
 vi.mock('./PluginsTab', async () => {
   const [{ DEFAULT_PLUGINS, MINIMAL_TEST_PLUGINS }, { useSearchParams }] = await Promise.all([
     import('@promptfoo/redteam/constants'),
-    import('react-router-dom'),
+    import('react-router'),
   ]);
 
   return {

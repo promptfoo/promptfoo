@@ -1,8 +1,8 @@
 import { stat } from 'fs/promises';
+import path from 'path';
 
 import { globSync } from 'glob';
 import logger from '../logger';
-import { isApiProvider } from '../types/providers';
 import { isJavascriptFile } from '../util/fileExtensions';
 import { parsePathOrGlob } from '../util/index';
 import invariant from '../util/invariant';
@@ -10,91 +10,72 @@ import { PromptSchema } from '../validators/prompts';
 import { processCsvPrompts } from './processors/csv';
 import { processExecutableFile } from './processors/executable';
 import { processJsFile } from './processors/javascript';
-import { processJinjaFile } from './processors/jinja';
 import { processJsonFile } from './processors/json';
 import { processJsonlFile } from './processors/jsonl';
-import { processMarkdownFile } from './processors/markdown';
 import { processPythonFile } from './processors/python';
 import { processString } from './processors/string';
-import { processTxtFile } from './processors/text';
+import { processTemplateFile, processTxtFile } from './processors/text';
 import { processYamlFile } from './processors/yaml';
 import { maybeFilePath, normalizeInput } from './utils';
 
-import type {
-  EvaluateTestSuite,
-  Prompt,
-  PromptFunction,
-  ProviderOptions,
-  ProviderOptionsMap,
-  TestSuite,
-} from '../types/index';
+import type { EvaluateTestSuite, Prompt, PromptFunction, TestSuite } from '../types/index';
 
 export * from './grading';
 export { DEFAULT_WEB_SEARCH_PROMPT } from './grading';
 
-/**
- * Reads and maps provider prompts based on the configuration and parsed prompts.
- * @param config - The configuration object.
- * @param parsedPrompts - Array of parsed prompts.
- * @returns A map of provider IDs to their respective prompts.
- */
-export function readProviderPromptMap(
-  config: Pick<Partial<EvaluateTestSuite>, 'providers'>,
-  parsedPrompts: Prompt[],
-): TestSuite['providerPromptMap'] {
-  const ret: Record<string, string[]> = {};
-
-  if (!config.providers) {
-    return ret;
+/** Reads the prompts in one file, choosing the processor by its extension. */
+async function processPromptFile(
+  filePath: string,
+  prompt: Partial<Prompt>,
+  extension: string | undefined,
+  functionName: string | undefined,
+  labelPath: string,
+): Promise<Prompt[]> {
+  if (extension === '.csv') {
+    return processCsvPrompts(filePath, prompt);
   }
-
-  const allPrompts = parsedPrompts.map((prompt) => prompt.label);
-  const addProviderPrompts = (id: string, label?: string, prompts = allPrompts) => {
-    ret[id] = prompts;
-    if (label) {
-      ret[label] = prompts;
+  if (extension === '.j2') {
+    return processTemplateFile(filePath, prompt, labelPath);
+  }
+  if (extension === '.json') {
+    return processJsonFile(filePath, prompt, labelPath);
+  }
+  if (extension === '.jsonl') {
+    return processJsonlFile(filePath, prompt, labelPath);
+  }
+  if (extension && isJavascriptFile(extension)) {
+    return processJsFile(filePath, prompt, functionName, labelPath);
+  }
+  if (extension === '.md') {
+    return processTemplateFile(filePath, prompt, labelPath);
+  }
+  if (extension === '.py') {
+    return processPythonFile(filePath, prompt, functionName, labelPath);
+  }
+  if (extension === '.txt') {
+    return processTxtFile(filePath, prompt, labelPath);
+  }
+  if (extension && ['.yml', '.yaml'].includes(extension)) {
+    return processYamlFile(filePath, prompt, labelPath);
+  }
+  // Handle common executable extensions
+  if (
+    extension &&
+    ['.sh', '.bash', '.exe', '.bat', '.cmd', '.ps1', '.rb', '.pl'].includes(extension)
+  ) {
+    return await processExecutableFile(filePath, prompt, functionName, labelPath);
+  }
+  // If no extension matched but file exists and is executable, treat it as an executable
+  try {
+    const stats = await stat(filePath);
+    if (stats.isFile() && (stats.mode & 0o111) !== 0) {
+      // File is executable
+      return await processExecutableFile(filePath, prompt, functionName, labelPath);
     }
-  };
-
-  if (typeof config.providers === 'string') {
-    return { [config.providers]: allPrompts };
+  } catch (_e) {
+    // File doesn't exist or can't be accessed, fall through
   }
-
-  if (typeof config.providers === 'function') {
-    return { 'Custom function': allPrompts };
-  }
-
-  if (isApiProvider(config.providers)) {
-    addProviderPrompts(config.providers.id());
-    return ret;
-  }
-
-  for (const provider of config.providers) {
-    if (isApiProvider(provider)) {
-      addProviderPrompts(provider.id(), provider.label);
-      continue;
-    }
-
-    if (typeof provider === 'object') {
-      // It's either a ProviderOptionsMap or a ProviderOptions
-      if (provider.id) {
-        const rawProvider = provider as ProviderOptions;
-        invariant(
-          rawProvider.id,
-          'You must specify an `id` on the Provider when you override options.prompts',
-        );
-        addProviderPrompts(rawProvider.id, rawProvider.label, rawProvider.prompts || allPrompts);
-      } else {
-        const rawProvider = provider as ProviderOptionsMap;
-        const originalId = Object.keys(rawProvider)[0];
-        const providerObject = rawProvider[originalId];
-        const id = providerObject.id || originalId;
-        ret[id] = rawProvider[originalId].prompts || allPrompts;
-      }
-    }
-  }
-
-  return ret;
+  return [];
 }
 
 /**
@@ -102,13 +83,20 @@ export function readProviderPromptMap(
  * @param prompt - The raw prompt data.
  * @param basePath - Base path for file resolution.
  * @param maxRecursionDepth - Maximum recursion depth for globbing.
+ * @param labelBasePath - When set, files are labeled as if read from this base instead.
  * @returns Promise resolving to an array of processed prompts.
  */
 async function processPrompt(
   prompt: Partial<Prompt>,
   basePath: string = '',
   maxRecursionDepth: number = 1,
+  labelBasePath?: string,
 ): Promise<Prompt[]> {
+  const getLabelPath = (filePath: string) =>
+    labelBasePath === undefined
+      ? filePath
+      : path.join(labelBasePath, path.relative(basePath, filePath));
+
   invariant(
     typeof prompt.raw === 'string',
     `prompt.raw must be a string, but got ${JSON.stringify(prompt.raw)}`,
@@ -123,7 +111,7 @@ async function processPrompt(
   if (prompt.raw.startsWith('exec:')) {
     const execSpec = prompt.raw.substring(5); // Remove 'exec:' prefix
     const { filePath, functionName } = parsePathOrGlob(basePath, execSpec);
-    return await processExecutableFile(filePath, prompt, functionName);
+    return processExecutableFile(filePath, prompt, functionName, getLabelPath(filePath));
   }
 
   if (!maybeFilePath(prompt.raw)) {
@@ -151,13 +139,35 @@ async function processPrompt(
     );
     const prompts: Prompt[] = [];
     for (const globbedFilePath of globbedPath) {
-      const rawPath = functionName ? `${globbedFilePath}:${functionName}` : globbedFilePath;
+      // The match already includes the base, so resolve it before the base is applied again.
+      const matchedPath = path.resolve(globbedFilePath);
+      const rawPath = functionName ? `${matchedPath}:${functionName}` : matchedPath;
+      const relativePath = path.relative(basePath, matchedPath).replace(/\\/g, '/');
       const processedPrompts = await processPrompt(
-        { raw: rawPath },
+        {
+          ...prompt,
+          raw: rawPath,
+          id: prompt.id && `${prompt.id}:${relativePath}`,
+          // Text files append their path and chunk text in their processor.
+          label:
+            prompt.label &&
+            (path.extname(matchedPath) === '.txt'
+              ? prompt.label
+              : `${prompt.label}: ${relativePath}`),
+        },
         basePath,
         maxRecursionDepth - 1,
+        labelBasePath,
       );
-      prompts.push(...processedPrompts);
+      const expandedId = prompt.id && `${prompt.id}:${relativePath}`;
+      prompts.push(
+        ...processedPrompts.map((processedPrompt, index) => ({
+          ...processedPrompt,
+          ...(expandedId && !processedPrompt.id
+            ? { id: processedPrompts.length > 1 ? `${expandedId}:${index + 1}` : expandedId }
+            : {}),
+        })),
+      );
     }
     if (prompts.length === 0) {
       // There was nothing at this filepath, so treat it as a prompt string.
@@ -169,68 +179,36 @@ async function processPrompt(
     return prompts;
   }
 
-  if (extension === '.csv') {
-    return processCsvPrompts(filePath, prompt);
-  }
-  if (extension === '.j2') {
-    return processJinjaFile(filePath, prompt);
-  }
-  if (extension === '.json') {
-    return processJsonFile(filePath, prompt);
-  }
-  if (extension === '.jsonl') {
-    return processJsonlFile(filePath, prompt);
-  }
-  if (extension && isJavascriptFile(extension)) {
-    return processJsFile(filePath, prompt, functionName);
-  }
-  if (extension === '.md') {
-    return processMarkdownFile(filePath, prompt);
-  }
-  if (extension === '.py') {
-    return processPythonFile(filePath, prompt, functionName);
-  }
-  if (extension === '.txt') {
-    return processTxtFile(filePath, prompt);
-  }
-  if (extension && ['.yml', '.yaml'].includes(extension)) {
-    return processYamlFile(filePath, prompt);
-  }
-  // Handle common executable extensions
-  if (
-    extension &&
-    ['.sh', '.bash', '.exe', '.bat', '.cmd', '.ps1', '.rb', '.pl'].includes(extension)
-  ) {
-    return await processExecutableFile(filePath, prompt, functionName);
-  }
-  // If no extension matched but file exists and is executable, treat it as an executable
-  try {
-    const stats = await stat(filePath);
-    if (stats.isFile() && (stats.mode & 0o111) !== 0) {
-      // File is executable
-      return await processExecutableFile(filePath, prompt, functionName);
-    }
-  } catch (_e) {
-    // File doesn't exist or can't be accessed, fall through
-  }
-  return [];
+  return processPromptFile(filePath, prompt, extension, functionName, getLabelPath(filePath));
 }
 
 /**
  * Reads and processes prompts from a specified path or glob pattern.
  * @param promptPathOrGlobs - The path or glob pattern.
  * @param basePath - Base path for file resolution.
+ * @param labelBasePath - When set, prompt files are labeled as if read from this base. Labels
+ *   identify prompts, so they should not depend on where the project is checked out even
+ *   when `basePath` is absolute.
+ * @param sourceBasePaths - Per-input source directories when combining configuration files.
  * @returns Promise resolving to an array of processed prompts.
  */
 export async function readPrompts(
   promptPathOrGlobs: string | (string | Partial<Prompt>)[] | Record<string, string>,
   basePath: string = '',
+  labelBasePath?: string,
+  sourceBasePaths?: readonly string[],
 ): Promise<Prompt[]> {
   logger.debug(`Reading prompts from ${JSON.stringify(promptPathOrGlobs)}`);
   const promptPartials: Partial<Prompt>[] = normalizeInput(promptPathOrGlobs);
   const prompts: Prompt[] = [];
-  for (const prompt of promptPartials) {
-    const promptBatch = await processPrompt(prompt, basePath);
+  for (const [index, prompt] of promptPartials.entries()) {
+    const sourceBasePath = sourceBasePaths?.[index];
+    const promptBatch = await processPrompt(
+      prompt,
+      sourceBasePath ?? basePath,
+      1,
+      sourceBasePath === undefined ? labelBasePath : path.relative(process.cwd(), sourceBasePath),
+    );
     if (promptBatch.length === 0) {
       throw new Error(`There are no prompts in ${JSON.stringify(prompt.raw)}`);
     }
@@ -241,6 +219,7 @@ export async function readPrompts(
 
 export async function processPrompts(
   prompts: EvaluateTestSuite['prompts'],
+  basePath?: string,
 ): Promise<TestSuite['prompts']> {
   return (
     await Promise.all(
@@ -252,7 +231,7 @@ export async function processPrompts(
             function: promptInput as PromptFunction,
           };
         } else if (typeof promptInput === 'string') {
-          return readPrompts(promptInput);
+          return readPrompts(promptInput, basePath);
         }
         try {
           return PromptSchema.parse(promptInput);

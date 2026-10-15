@@ -1,10 +1,89 @@
-import { render, screen } from '@testing-library/react';
+import { mockClipboard } from '@app/tests/browserMocks';
+import { useTestTimers } from '@app/tests/timers';
+import { act, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { EvaluationPanel } from './EvaluationPanel';
 import type { GradingResult } from '@promptfoo/types';
 
 describe('EvaluationPanel', () => {
+  describe('copy feedback', () => {
+    const gradingResults: GradingResult[] = [
+      {
+        pass: true,
+        score: 1,
+        reason: 'Test reason',
+        assertion: { type: 'contains', value: 'expected value' },
+      },
+    ];
+
+    async function interact(action: () => Promise<void>) {
+      await act(async () => {
+        const interaction = action();
+        await vi.advanceTimersByTimeAsync(0);
+        await interaction;
+      });
+    }
+
+    it('clears pending value and reason feedback timers when unmounted', async () => {
+      const timers = useTestTimers();
+      const user = userEvent.setup({ advanceTimers: timers.advanceBy });
+      const writeText = vi.fn().mockResolvedValue(undefined);
+      mockClipboard({ writeText });
+      const { unmount } = render(<EvaluationPanel gradingResults={gradingResults} />, {
+        reactStrictMode: true,
+      });
+
+      await interact(() => user.hover(screen.getByText('expected value')));
+      await interact(() => user.click(screen.getByLabelText('Copy assertion value 0')));
+      await interact(() => user.hover(screen.getByText('Test reason')));
+      await interact(() => user.click(screen.getByLabelText('Copy assertion reason 0')));
+      expect(writeText.mock.calls).toEqual([['expected value'], ['Test reason']]);
+      expect(timers.getTimerCount()).toBe(2);
+
+      unmount();
+      expect(timers.getTimerCount()).toBe(0);
+    });
+
+    it('does not schedule feedback after a pending clipboard write resolves on unmount', async () => {
+      const timers = useTestTimers();
+      const user = userEvent.setup({ advanceTimers: timers.advanceBy });
+      let resolveWrite!: () => void;
+      const writeText = vi.fn(
+        () =>
+          new Promise<void>((resolve) => {
+            resolveWrite = resolve;
+          }),
+      );
+      mockClipboard({ writeText });
+      const { unmount } = render(<EvaluationPanel gradingResults={gradingResults} />);
+
+      await interact(() => user.hover(screen.getByText('expected value')));
+      await interact(() => user.click(screen.getByLabelText('Copy assertion value 0')));
+      expect(writeText).toHaveBeenCalledWith('expected value');
+      unmount();
+      await act(async () => resolveWrite());
+
+      expect(timers.getTimerCount()).toBe(0);
+    });
+
+    it('resets the copied indicator after the feedback duration', async () => {
+      const timers = useTestTimers();
+      const user = userEvent.setup({ advanceTimers: timers.advanceBy });
+      mockClipboard({ writeText: vi.fn().mockResolvedValue(undefined) });
+      render(<EvaluationPanel gradingResults={gradingResults} />);
+
+      await interact(() => user.hover(screen.getByText('expected value')));
+      await interact(() => user.click(screen.getByLabelText('Copy assertion value 0')));
+      const button = screen.getByLabelText('Copy assertion value 0');
+      expect(button.querySelector('svg.lucide-check')).toBeInTheDocument();
+
+      act(() => timers.advanceBy(2_000));
+      expect(button.querySelector('svg.lucide-copy')).toBeInTheDocument();
+      expect(timers.getTimerCount()).toBe(0);
+    });
+  });
+
   it('renders nothing when gradingResults is undefined', () => {
     const { container } = render(<EvaluationPanel gradingResults={undefined} />);
     expect(container.querySelector('table')).toBeNull();

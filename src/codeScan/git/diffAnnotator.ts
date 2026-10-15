@@ -10,7 +10,7 @@
 
 import { parseHunkHeader } from '../util/diffHunkParser';
 
-import type { LineRange } from '../util/diffLineRanges';
+import type { LineRange } from '../../types/codeScan';
 
 export interface AnnotationResult {
   annotatedDiff: string;
@@ -66,26 +66,13 @@ export function annotateDiffWithLineRanges(patch: string): AnnotationResult {
       continue;
     }
 
-    // Process lines within a hunk
-    if (line.startsWith('-')) {
-      // Removed line - doesn't exist in new file, no line number
-      result.push(line);
-    } else if (line.startsWith('+')) {
-      // Added line - exists in new file at currentNewLine
-      result.push(`L${currentNewLine}: ${line}`);
-      currentNewLine++;
-    } else if (line.startsWith(' ')) {
-      // Context line - exists in new file at currentNewLine
-      result.push(`L${currentNewLine}: ${line}`);
-      currentNewLine++;
-    } else if (line.startsWith('\\')) {
-      // Special marker like "\ No newline at end of file" - preserve as-is
-      result.push(line);
-    } else if (line === '' && isLastLine) {
-      // Trailing empty line (from string split) - preserve as-is without annotation
+    // Removed lines do not exist in the new file. Preserve them, special markers
+    // like "\ No newline at end of file", and the trailing empty split line as-is.
+    if (line.startsWith('-') || line.startsWith('\\') || (line === '' && isLastLine)) {
       result.push(line);
     } else {
-      // Empty lines within hunks or other content - treat as context line
+      // Added and context lines exist in the new file at currentNewLine.
+      // Empty lines within hunks and other content are treated as context lines.
       result.push(`L${currentNewLine}: ${line}`);
       currentNewLine++;
     }
@@ -103,17 +90,4 @@ export function annotateDiffWithLineRanges(patch: string): AnnotationResult {
     annotatedDiff: result.join('\n'),
     lineRanges,
   };
-}
-
-/**
- * Annotate a single file unified diff patch with absolute line numbers.
- *
- * This is a convenience wrapper around annotateDiffWithLineRanges that
- * returns only the annotated diff string.
- *
- * @param patch - Raw unified diff patch string from git diff
- * @returns Annotated patch with line numbers prepended to new file lines
- */
-export function annotateSingleFileDiffWithLineNumbers(patch: string): string {
-  return annotateDiffWithLineRanges(patch).annotatedDiff;
 }

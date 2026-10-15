@@ -3,6 +3,7 @@ import { join } from 'path';
 
 import { themes } from 'prism-react-renderer';
 import webpack from 'webpack';
+import browserInventoryPlugin from './src/plugins/browser-inventory';
 import type * as Preset from '@docusaurus/preset-classic';
 import type { Config, Plugin } from '@docusaurus/types';
 
@@ -19,18 +20,6 @@ const darkCodeTheme = themes.duotoneDark;
  * initial snapshot against the visitor's clock after hydration.
  */
 const BUILD_TIMESTAMP = new Date().toISOString();
-
-function webpackProgressCompatibilityPlugin(): Plugin {
-  return {
-    name: 'webpack-progress-compatibility-plugin',
-    configureWebpack(config) {
-      config.plugins = config.plugins?.filter(
-        (plugin) => plugin?.constructor?.name !== 'WebpackBarPlugin',
-      );
-      return {};
-    },
-  };
-}
 
 /**
  * Bakes `BUILD_TIMESTAMP` into both the server and the client bundle as the same string
@@ -467,7 +456,7 @@ const config: Config = {
   } satisfies Preset.ThemeConfig,
 
   plugins: [
-    webpackProgressCompatibilityPlugin,
+    browserInventoryPlugin,
     buildTimestampPlugin,
     require.resolve('docusaurus-plugin-image-zoom'),
     require.resolve('./src/plugins/docusaurus-plugin-og-image'),
@@ -476,6 +465,10 @@ const config: Config = {
       '@docusaurus/plugin-client-redirects',
       {
         redirects: [
+          {
+            from: '/docs/write-for-promptfoo',
+            to: '/docs/contributing/',
+          },
           {
             from: '/docs/category/troubleshooting',
             to: '/docs/usage/troubleshooting/',
@@ -571,6 +564,10 @@ const config: Config = {
           },
           // Deleted guides redirected to guides index
           {
+            from: '/docs/guides/lintlang-prompt-assertion',
+            to: '/docs/guides/',
+          },
+          {
             from: '/docs/guides/cohere-command-r-benchmark',
             to: '/docs/guides/',
           },
@@ -594,6 +591,15 @@ const config: Config = {
           {
             from: '/docs/guides/agent-eval',
             to: '/docs/guides/evaluate-coding-agents/',
+          },
+          // Paths that never existed but that Promptfoo's web UIs have linked to
+          {
+            from: '/docs/model-audit/installation',
+            to: '/docs/model-audit/#installation',
+          },
+          {
+            from: '/docs/red-team/configuration/multi-input',
+            to: '/docs/red-team/multi-input/',
           },
         ],
       },

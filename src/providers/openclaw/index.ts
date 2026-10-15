@@ -1,3 +1,4 @@
+import { modelNameFromProviderPath } from '../shared';
 import { OpenClawAgentProvider } from './agent';
 import { OpenClawChatProvider } from './chat';
 import { OpenClawEmbeddingProvider } from './embedding';
@@ -47,17 +48,18 @@ export function createOpenClawProvider(
   const splits = providerPath.split(':');
   const keyword = splits[1];
   const opts = { ...providerOptions, env };
+  const modelName = modelNameFromProviderPath(providerPath, 2);
 
   if (keyword === 'responses') {
-    return new OpenClawResponsesProvider(splits[2], opts);
+    return new OpenClawResponsesProvider(modelName, opts);
   }
 
   if (keyword === 'embedding' || keyword === 'embeddings') {
-    return new OpenClawEmbeddingProvider(splits[2], opts);
+    return new OpenClawEmbeddingProvider(modelName, opts);
   }
 
   if (keyword === 'agent') {
-    return new OpenClawAgentProvider(splits[2], opts);
+    return new OpenClawAgentProvider(modelName, opts);
   }
 
   if (keyword === 'tools') {

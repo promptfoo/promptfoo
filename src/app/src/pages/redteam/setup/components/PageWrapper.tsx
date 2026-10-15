@@ -95,12 +95,12 @@ export default function PageWrapper({
   );
 
   return (
-    <div className="flex h-screen w-full flex-col overflow-hidden">
+    <div className="flex h-screen w-full flex-col overflow-hidden bg-card">
       {/* Header */}
       <div
         className={cn(
           'sticky top-0 z-10 border-b border-border backdrop-blur-sm',
-          'bg-background/90 dark:bg-background/90',
+          'bg-card/95',
           'transition-[padding] duration-200 ease-in-out',
           isMinimized ? 'px-6 py-3' : 'p-6',
         )}

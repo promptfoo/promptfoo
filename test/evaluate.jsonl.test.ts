@@ -541,6 +541,10 @@ describe('programmatic JSONL output', () => {
       id: () => 'stripped-recovery-provider',
       callApi: vi.fn().mockResolvedValue({
         output: 'response-output-secret',
+        conversationOutput: [
+          { text: 'native-conversation-private', thoughtSignature: 'private-signature' },
+          { inlineData: { mimeType: 'image/png', data: 'bmF0aXZlLXByaXZhdGU=' } },
+        ],
         metadata: {
           debug: 'response-metadata-secret',
         },
@@ -572,6 +576,8 @@ describe('programmatic JSONL output', () => {
       expect(result.testCase.metadata).toBeUndefined();
       expect(result.metadata).toEqual({});
       expect(JSON.stringify(result)).not.toContain('response-output-secret');
+      expect(JSON.stringify(result)).not.toContain('native-conversation-private');
+      expect(JSON.stringify(result)).not.toContain('bmF0aXZlLXByaXZhdGU=');
       expect(JSON.stringify(result)).not.toContain('response-metadata-secret');
       expect(JSON.stringify(result)).not.toContain('vars-secret@example.com');
       expect(JSON.stringify(result)).not.toContain('testcase-metadata-secret');

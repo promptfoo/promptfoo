@@ -2,7 +2,7 @@ import logo from '@app/assets/logo.svg';
 import { Button } from '@app/components/ui/button';
 import { Card } from '@app/components/ui/card';
 import { BarChart2, ExternalLink, Shield } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router';
 
 const EmptyState = () => {
   const navigate = useNavigate();
