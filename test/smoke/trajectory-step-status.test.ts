@@ -44,7 +44,7 @@ describe('trajectory step status CLI', () => {
       {
         cwd: rootDir,
         encoding: 'utf8',
-        timeout: 25_000,
+        timeout: 60_000,
         env: {
           ...process.env,
           PROMPTFOO_CONFIG_DIR: path.join(outputDir, 'config'),

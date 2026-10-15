@@ -1,3 +1,4 @@
+import { TRAJECTORY_STEP_TYPES } from '../contracts/trajectory';
 import {
   COMMAND_ATTRIBUTE_KEYS,
   getFirstStringAttribute,
@@ -7,7 +8,6 @@ import {
 } from '../tracing/toolAttributes';
 import { matchesPattern } from './traceUtils';
 
-import type { TRAJECTORY_STEP_TYPES } from '../contracts/trajectory';
 import type { TraceData, TraceSpan } from '../types/tracing';
 
 export type TrajectoryStepType = (typeof TRAJECTORY_STEP_TYPES)[number];
