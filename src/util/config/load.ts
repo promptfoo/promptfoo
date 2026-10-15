@@ -57,7 +57,7 @@ import {
   validateTestPromptReferences,
 } from '../validateTestPromptReferences';
 import { validateTestProviderReferences } from '../validateTestProviderReferences';
-import { loadYaml } from '../yamlLoad';
+import { loadYaml, stringifyYamlTimestamps } from '../yamlLoad';
 import { DEFAULT_CONFIG_EXTENSIONS } from './extensions';
 
 const clone = Clone({ circles: true });
@@ -359,7 +359,8 @@ async function readConfigInScope(
   const ext = path.parse(configPath).ext;
   const isDeclarative = ext === '.json' || ext === '.yaml' || ext === '.yml';
   if (isDeclarative) {
-    const rawConfig = loadYaml(await fsPromises.readFile(configPath, 'utf-8')) ?? {};
+    const rawConfig =
+      stringifyYamlTimestamps(loadYaml(await fsPromises.readFile(configPath, 'utf-8'))) ?? {};
     ret = await dereferenceConfig(rawConfig as UnifiedConfig);
   } else if (isJavascriptFile(configPath)) {
     // importModule normalizes ERR_MODULE_NOT_FOUND to ENOENT for missing files

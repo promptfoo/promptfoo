@@ -24,7 +24,7 @@ import { maybeLoadConfigFromExternalFile } from './file';
 import { isJavascriptFile } from './fileExtensions';
 import { renderEnvOnlyInObject } from './render';
 import { parseXlsxFile } from './xlsx';
-import { loadYaml } from './yamlLoad';
+import { loadYaml, stringifyYamlTimestamps } from './yamlLoad';
 
 import type {
   CsvRow,
@@ -438,7 +438,7 @@ function parseJsonlTestCases(fileContent: string, filePath: string): TestCase[] 
 }
 
 function parseYamlTestCases(fileContent: string): TestCase[] {
-  const rawContent = loadYaml(fileContent);
+  const rawContent = stringifyYamlTimestamps(loadYaml(fileContent));
   const testCases: TestCase[] = Array.isArray(rawContent)
     ? (rawContent as TestCase[])
     : [rawContent as TestCase];
