@@ -35,6 +35,36 @@ function stripPort(host: string): string {
   return host.replace(/:\d+$/, '');
 }
 
+function getAllowedRequestHosts(): Set<string> {
+  const hosts = new Set<string>();
+  // Operators who already allowlisted cross-site origins (e.g. a UI on one
+  // origin talking to the API on another) should not also have to repeat the
+  // hostnames here.
+  for (const origin of getAllowedOrigins()) {
+    try {
+      hosts.add(new URL(origin).hostname.toLowerCase());
+    } catch {
+      hosts.add(stripPort(origin).toLowerCase());
+    }
+  }
+  const envHosts = getEnvString('PROMPTFOO_CSRF_ALLOWED_HOSTS', '');
+  for (const entry of envHosts.split(',')) {
+    const trimmed = entry.trim().toLowerCase();
+    if (trimmed) {
+      hosts.add(stripPort(trimmed));
+    }
+  }
+  return hosts;
+}
+
+function isAllowedRequestHost(host: string): boolean {
+  const hostname = stripPort(host).toLowerCase();
+  if (!hostname) {
+    return false;
+  }
+  return isLocalHost(hostname) || getAllowedRequestHosts().has(hostname);
+}
+
 function isAllowedCrossSite(origin: string, host: string): boolean {
   // Check localhost equivalence
   try {
@@ -60,6 +90,23 @@ export function csrfProtection(req: Request, res: Response, next: NextFunction):
   // Only trust the Host header — X-Forwarded-Host is attacker-controllable
   // unless a trusted reverse proxy strips/overwrites it.
   const host = req.headers.host || '';
+
+  // Path 0: DNS-rebinding countermeasure. A page on a rebinding domain
+  // (rebind.evil.com → 127.0.0.1) issues requests the browser considers
+  // same-origin, so Paths 1 and 2 below pass them: Sec-Fetch-Site is
+  // `same-origin` and the Origin matches the attacker-controlled Host.
+  // Mutating requests must instead arrive on a local or explicitly
+  // allowlisted Host. Non-browser clients that target localhost, and GET
+  // health probes against container IPs, are unaffected.
+  if (!isAllowedRequestHost(host)) {
+    logger.warn('[CSRF] Blocked request with unexpected Host header (possible DNS rebinding)', {
+      method: req.method,
+      path: req.path,
+      host,
+    });
+    res.status(403).json({ error: 'Requests must use a local or allowlisted host' });
+    return;
+  }
 
   // Path 1: Browser sent Sec-Fetch-Site (forbidden header, can't be spoofed by JS)
   if (secFetchSite) {
