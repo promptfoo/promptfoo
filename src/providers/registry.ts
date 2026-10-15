@@ -1389,19 +1389,6 @@ export const providerMap: ProviderFactory[] = [
   configuredProviderFactory('openrouter:', () => createOpenRouterProvider),
   configuredProviderFactory('orcarouter:', () => createOrcaRouterProvider),
   {
-    test: (providerPath: string) => providerPath.startsWith('requesty:'),
-    create: async (
-      providerPath: string,
-      providerOptions: ProviderOptions,
-      context: LoadApiProviderContext,
-    ) => {
-      return createRequestyProvider(providerPath, {
-        config: providerOptions,
-        env: context.env,
-      });
-    },
-  },
-  {
     test: (providerPath: string) => providerPath.startsWith('package:'),
     create: async (
       providerPath: string,
@@ -1458,6 +1445,7 @@ export const providerMap: ProviderFactory[] = [
       );
     },
   },
+  configuredProviderFactory('requesty:', () => createRequestyProvider),
   {
     test: (providerPath: string) => providerPath.startsWith('modelslab:'),
     create: async (
