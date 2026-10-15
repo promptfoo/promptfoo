@@ -1,4 +1,4 @@
-# provider-image-to-video-ai (Image to Video AI Example)
+# provider-image-to-video-ai (Async Image to Video Simulation Example)
 
 Demonstrates how to evaluate asynchronous image-to-video generation workflows in Promptfoo using a custom provider.
 
@@ -11,25 +11,29 @@ cd provider-image-to-video-ai
 
 ## Overview
 
-Image-to-video AI services (such as [Image to Video AI](https://imagetovideoai.pro/), Runway, Kling, or Luma) generate short motion video clips from static images and motion prompts. Because video generation is computationally intensive, these APIs follow an asynchronous model:
+Image-to-video AI services (such as Runway, Kling, or Luma) generate short motion video clips from static images and motion prompts. Because video generation is computationally intensive, these APIs follow an asynchronous model:
 
 1. **Task Submission**: Submit source image URL, prompt, motion style, and duration.
 2. **Status Polling**: Poll the task endpoint until status reaches `completed`, `failed`, or a timeout is reached.
-3. **Result Collection**: Retrieve output video URL, generation duration, and resolution metadata.
+3. **Cancellation & Timeout**: Propagate `AbortSignal` cancellation and bound total execution time.
+4. **Result Collection**: Retrieve output video URL and validate observed media metadata (actual duration, resolution, fps) against requested parameters.
 
-This example provides a clean, reusable custom provider in `provider.js` that wraps this workflow for Promptfoo assertions and quality evaluation.
+This example provides an **explicitly generic local simulation and reference template** in `provider.js` that demonstrates this workflow. By default, it runs completely locally in simulation mode with synthetic placeholder media, without making external network calls or requiring paid credentials.
 
 ## Setup
 
-### Environment Variables
+### Local Simulation (Default)
 
-To run against a live API, export your API key:
+By default, the provider runs in **generic local simulation mode**, generating synthetic placeholder URLs (e.g. `https://example.com/simulated-renders/...`) and deterministic media properties so evaluations and CI pass out of the box without network dependencies.
+
+### Optional: Live API Integration
+
+To connect this template to a real asynchronous video API service, provide your endpoint's base URL and API key:
 
 ```bash
 export IMAGE_TO_VIDEO_AI_API_KEY="your-api-key"
+export IMAGE_TO_VIDEO_AI_BASE_URL="https://your-service-api.com/v1"
 ```
-
-> **Note:** If `IMAGE_TO_VIDEO_AI_API_KEY` is not set, the provider automatically runs in **simulated demo mode**, returning deterministic responses so that tests and local evaluations succeed out of the box without requiring paid credentials.
 
 ### Run the Evaluation
 
@@ -61,8 +65,10 @@ providers:
     label: Image to Video AI
     config:
       apiKey: '{{env.IMAGE_TO_VIDEO_AI_API_KEY}}'
+      baseUrl: '{{env.IMAGE_TO_VIDEO_AI_BASE_URL}}' # Optional API base URL
       pollIntervalMs: 500 # Time between polling attempts (ms)
       maxPollAttempts: 30 # Maximum polling iterations before timeout
+      timeoutMs: 60000 # Overall timeout deadline (ms)
       defaultDuration: 5 # Default video length in seconds
       defaultFps: 24 # Frame rate
       defaultResolution: 1280x720
@@ -75,13 +81,13 @@ Each test case can supply:
 - `prompt`: Motion description guiding the animation.
 - `imageUrl`: Public or hosted URL of the source image.
 - `motion`: Style of movement (e.g. `drone-forward-pan`, `subtle-portrait`, `slow-motion-fluid`).
-- `duration`: Video clip duration in seconds.
-- `fps`: Target frame rate (e.g. 24 or 30).
-- `resolution`: Output video resolution (`1280x720`, `1920x1080`).
+- `duration`: Requested video clip duration in seconds.
+- `fps`: Requested frame rate (e.g. 24 or 30).
+- `resolution`: Requested output video resolution (`1280x720`, `1920x1080`).
 
 ## Assertion Types Demonstrated
 
-- **Video URL verification**: Ensuring valid HTTPS `.mp4` URLs are returned.
+- **Video URL verification**: Ensuring valid video preview links are returned.
 - **Completion status**: Confirming the task completed without error.
-- **Duration check**: Asserting the generated duration matches request parameters.
-- **Latency threshold**: Validating total workflow runtime stays within SLA limits.
+- **Observed media properties**: Asserting returned actual media properties match expected criteria (keeping requested parameters distinct).
+- **Latency & SLA thresholds**: Validating total workflow runtime stays within SLA limits.
