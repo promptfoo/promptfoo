@@ -1,7 +1,8 @@
+import * as fs from 'fs';
 import * as path from 'path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { runAssertion } from '../../src/assertions/index';
+import { runAssertion, runAssertions } from '../../src/assertions/index';
 import { buildFunctionBody } from '../../src/assertions/javascript';
 import { importModule } from '../../src/esm';
 import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
@@ -44,15 +45,18 @@ vi.mock('glob', () => ({
   globSync: vi.fn(),
 }));
 
-vi.mock('fs', () => ({
-  readFileSync: vi.fn(),
-  existsSync: vi.fn(),
-  writeFileSync: vi.fn(),
-  mkdirSync: vi.fn(),
-  promises: {
-    readFile: vi.fn(),
-  },
-}));
+vi.mock('fs', () => {
+  const mockedFs = {
+    readFileSync: vi.fn(),
+    existsSync: vi.fn(),
+    writeFileSync: vi.fn(),
+    mkdirSync: vi.fn(),
+    promises: {
+      readFile: vi.fn(),
+    },
+  };
+  return { ...mockedFs, default: mockedFs };
+});
 
 vi.mock('../../src/esm', () => ({
   importModule: vi.fn().mockImplementation((_path, _functionName) => {
@@ -720,6 +724,299 @@ describe('JavaScript file references', () => {
 
   afterEach(() => {
     vi.resetAllMocks();
+  });
+
+  it('should run a Windows script field with a rendered call-site value and safe metadata', async () => {
+    const assertion: Assertion = {
+      type: 'javascript',
+      script: 'file://C:\\checks\\assert.mjs:checkValue',
+      value: 'Expected {{ expected }}',
+    };
+    const provider = new OpenAiChatCompletionProvider('gpt-4o-mini');
+    const providerResponse = { output: 'Expected output' };
+    const mockFn = vi.fn((_output: string, context: { value?: unknown }) => {
+      return context.value === 'Expected rendered';
+    });
+
+    vi.mocked(path.resolve).mockReturnValue('C:\\checks\\assert.mjs');
+    vi.mocked(importModule).mockResolvedValue({ checkValue: mockFn });
+
+    const result = await runAssertion({
+      prompt: 'Some prompt',
+      provider,
+      assertion,
+      test: { vars: { expected: 'rendered' } } as AtomicTestCase,
+      providerResponse,
+    });
+
+    expect(importModule).toHaveBeenCalledWith('C:\\checks\\assert.mjs', 'checkValue');
+    expect(mockFn).toHaveBeenCalledWith(
+      'Expected output',
+      expect.objectContaining({ value: 'Expected rendered' }),
+    );
+    expect(result.pass).toBe(true);
+    expect(result.metadata?.renderedAssertionValue).toBeUndefined();
+  });
+
+  it('loads canonical Windows data-file URLs through their normalized drive path', async () => {
+    const platformDescriptor = Object.getOwnPropertyDescriptor(process, 'platform')!;
+    Object.defineProperty(process, 'platform', { configurable: true, value: 'win32' });
+    try {
+      vi.mocked(path.resolve).mockImplementation(path.win32.resolve);
+      vi.mocked(path.extname).mockImplementation(path.win32.extname);
+      vi.mocked(fs.readFileSync).mockReturnValue('{"expected":"Windows"}');
+      vi.mocked(importModule).mockResolvedValue(
+        (_output: string, context: { value: { expected: string } }) =>
+          context.value.expected === 'Windows',
+      );
+
+      const result = await runAssertion({
+        assertion: {
+          type: 'javascript',
+          script: 'file://C:/checks/assert.cjs',
+          value: 'file:///C:/fixtures/expected.json',
+        },
+        test: {},
+        providerResponse: { output: 'Expected output' },
+      });
+
+      expect(fs.readFileSync).toHaveBeenCalledWith('C:\\fixtures\\expected.json', 'utf8');
+      expect(result).toMatchObject({ pass: true, score: 1 });
+    } finally {
+      Object.defineProperty(process, 'platform', platformDescriptor);
+    }
+  });
+
+  it('should keep rendered script parameters out of failure reasons', async () => {
+    const fakeSecret = 'FAKE-SECRET-SENTINEL';
+    vi.mocked(path.resolve).mockReturnValue('/base/path/checks/assert.js');
+    vi.mocked(importModule).mockResolvedValue(vi.fn(() => false));
+
+    const result = await runAssertion({
+      assertion: {
+        type: 'javascript',
+        script: 'file://checks/assert.js',
+        value: '{{ fakeSecret }}',
+      },
+      test: { vars: { fakeSecret } } as AtomicTestCase,
+      providerResponse: { output: 'Expected output' },
+    });
+
+    expect(result.reason).toBe('Custom function returned false');
+    expect(result.reason).not.toContain(fakeSecret);
+  });
+
+  it('should keep rendered script parameters out of passing and failing aggregate results', async () => {
+    const fakeSecret = 'FAKE-SECRET-SENTINEL';
+    vi.mocked(path.resolve).mockReturnValue('/base/path/checks/assert.js');
+    const results = [];
+
+    for (const scriptResult of [true, false]) {
+      vi.mocked(importModule).mockResolvedValueOnce(vi.fn(() => scriptResult));
+      results.push(
+        await runAssertions({
+          test: {
+            vars: { fakeSecret },
+            assert: [
+              {
+                type: 'javascript',
+                script: 'file://checks/assert.js',
+                value: '{{ fakeSecret }}',
+              },
+            ],
+          } as AtomicTestCase,
+          providerResponse: { output: 'Expected output' },
+        }),
+      );
+    }
+
+    expect(results.map((result) => result.pass)).toEqual([true, false]);
+    expect(
+      results.every(
+        (result) => result.componentResults?.[0].metadata?.renderedAssertionValue === undefined,
+      ),
+    ).toBe(true);
+    expect(
+      results.every(
+        (result) => result.componentResults?.[0].assertion?.value === '{{ fakeSecret }}',
+      ),
+    ).toBe(true);
+    expect(results.every((result) => !JSON.stringify(result).includes(fakeSecret))).toBe(true);
+  });
+
+  it('should preserve script load errors without exposing rendered parameters', async () => {
+    const fakeSecret = 'FAKE-SECRET-SENTINEL';
+    vi.mocked(path.resolve).mockReturnValue('/base/path/checks/assert.js');
+    vi.mocked(importModule).mockRejectedValue(
+      new Error('Unable to load assertion script at /base/path/checks/assert.js'),
+    );
+
+    const result = await runAssertion({
+      assertion: {
+        type: 'javascript',
+        script: 'file://checks/assert.js',
+        value: '{{ fakeSecret }}',
+      },
+      test: { vars: { fakeSecret } } as AtomicTestCase,
+      providerResponse: { output: 'Expected output' },
+    });
+
+    expect(result.reason).toContain(
+      'Unable to load assertion script at /base/path/checks/assert.js',
+    );
+    expect(result.reason).not.toContain(fakeSecret);
+  });
+
+  it('should preserve non-string array items in script call-site values', async () => {
+    const mixedValue = ['{{ label }}', 5, { enabled: true }];
+    const assertion: Assertion = {
+      type: 'javascript',
+      script: 'file://checks/assert.js',
+      value: mixedValue,
+    };
+    const mockFn = vi.fn((_output: string, context: { value?: unknown }) => {
+      return Array.isArray(context.value);
+    });
+
+    vi.mocked(path.resolve).mockReturnValue('/base/path/checks/assert.js');
+    vi.mocked(importModule).mockResolvedValue(mockFn);
+
+    const result = await runAssertion({
+      assertion,
+      test: { vars: { label: 'rendered' } } as AtomicTestCase,
+      providerResponse: { output: 'Expected output' },
+    });
+
+    expect(mockFn).toHaveBeenCalledWith(
+      'Expected output',
+      expect.objectContaining({ value: ['rendered', 5, { enabled: true }] }),
+    );
+    expect(result.pass).toBe(true);
+  });
+
+  it('should recursively render nested script call-site values', async () => {
+    const nestedValue = {
+      expected: '{{ label }}',
+      nested: ['prefix-{{ label }}', { message: '{{ greeting }}' }, 5],
+    };
+    const assertion: Assertion = {
+      type: 'javascript',
+      script: 'file://checks/assert.js',
+      value: nestedValue,
+    };
+    const mockFn = vi.fn(() => true);
+
+    vi.mocked(path.resolve).mockReturnValue('/base/path/checks/assert.js');
+    vi.mocked(importModule).mockResolvedValue(mockFn);
+
+    const result = await runAssertion({
+      assertion,
+      test: { vars: { label: 'rendered', greeting: 'hello' } } as AtomicTestCase,
+      providerResponse: { output: 'Expected output' },
+    });
+
+    expect(mockFn).toHaveBeenCalledWith(
+      'Expected output',
+      expect.objectContaining({
+        value: {
+          expected: 'rendered',
+          nested: ['prefix-rendered', { message: 'hello' }, 5],
+        },
+      }),
+    );
+    expect(result.pass).toBe(true);
+    expect(nestedValue).toEqual({
+      expected: '{{ label }}',
+      nested: ['prefix-{{ label }}', { message: '{{ greeting }}' }, 5],
+    });
+  });
+
+  it('should isolate mutable script call-site values from script mutations', async () => {
+    const mutableValue = [{ nested: { enabled: true } }, ['original']];
+    const assertion: Assertion = {
+      type: 'javascript',
+      script: 'file://checks/assert.js',
+      value: mutableValue,
+    };
+    const mockFn = vi.fn((_output: string, context: { value?: unknown }) => {
+      const value = context.value as [{ nested: { enabled: boolean } }, string[]];
+      value[0].nested.enabled = false;
+      value[1].push('mutated');
+      return true;
+    });
+
+    vi.mocked(path.resolve).mockReturnValue('/base/path/checks/assert.js');
+    vi.mocked(importModule).mockResolvedValue(mockFn);
+
+    const result = await runAssertion({
+      assertion,
+      test: {} as AtomicTestCase,
+      providerResponse: { output: 'Expected output' },
+    });
+
+    expect(result.pass).toBe(true);
+    expect(mutableValue).toEqual([{ nested: { enabled: true } }, ['original']]);
+    expect(assertion.value).toEqual([{ nested: { enabled: true } }, ['original']]);
+  });
+
+  it('should apply existing inverse handling to script fields', async () => {
+    const assertion: Assertion = {
+      type: 'not-javascript',
+      script: 'file://checks/assert.js',
+    };
+
+    vi.mocked(path.resolve).mockReturnValue('/base/path/checks/assert.js');
+    vi.mocked(importModule).mockResolvedValue(vi.fn(() => true));
+
+    const result = await runAssertion({
+      assertion,
+      test: {} as AtomicTestCase,
+      providerResponse: { output: 'Expected output' },
+    });
+
+    expect(result).toMatchObject({ pass: false, score: 0 });
+  });
+
+  it('should report a language mismatch for a JavaScript script field', async () => {
+    const result = await runAssertion({
+      assertion: {
+        type: 'javascript',
+        script: 'file://checks/assert.py',
+      },
+      test: {} as AtomicTestCase,
+      providerResponse: { output: 'Expected output' },
+    });
+
+    expect(result).toMatchObject({
+      pass: false,
+      score: 0,
+      reason: expect.stringContaining(
+        'javascript assertion script must reference a JavaScript file',
+      ),
+    });
+  });
+
+  it('should treat script load errors as passing for weight-zero assertions', async () => {
+    const assertion: Assertion = {
+      type: 'javascript',
+      script: 'file://checks/assert.js',
+      weight: 0,
+    };
+
+    vi.mocked(path.resolve).mockReturnValue('/base/path/checks/assert.js');
+    vi.mocked(importModule).mockRejectedValue(new Error('Unable to load assertion script'));
+
+    const result = await runAssertion({
+      assertion,
+      test: {} as AtomicTestCase,
+      providerResponse: { output: 'Expected output' },
+    });
+
+    expect(result).toMatchObject({
+      pass: true,
+      score: 0,
+      reason: expect.stringContaining('Unable to load assertion script'),
+    });
   });
 
   it('should handle JavaScript file reference with function name', async () => {

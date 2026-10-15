@@ -123,6 +123,20 @@ describe('setupReadiness', () => {
   });
 
   describe('getSetupReadiness', () => {
+    it.each([undefined, 10, { expected: 'hello' }])(
+      'allows running script assertions with call-site value %j',
+      (value) => {
+        const readiness = getSetupReadiness({
+          providers: ['echo'],
+          prompts: ['hello'],
+          tests: [{ assert: [{ type: 'javascript', script: 'file://check.js', value }] }],
+        });
+
+        expect(readiness.isReadyToRun).toBe(true);
+        expect(readiness.testCasesWithInvalidAssertions).toEqual([]);
+      },
+    );
+
     it('blocks running when an inline test case omits a prompt variable', () => {
       const readiness = getSetupReadiness({
         providers: ['openai:gpt-4.1'],
