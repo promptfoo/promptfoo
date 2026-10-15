@@ -246,7 +246,7 @@ JSON, YAML, and Promptfoo XML share an export envelope with these field paths:
 | `config`            | Eval configuration                                                                                        |
 | `shareableUrl`      | Shared result URL, or `null` when unavailable                                                             |
 
-In each result, `failureReason` distinguishes success (`0`), an assertion failure (`1`), and an execution error (`2`). An `error` message can appear for either kind of failure, so its presence alone does not identify an execution error. Optional data such as traces and export metadata may also be present.
+Use `success` for the pass/fail decision. `failureReason` identifies an assertion failure (`1`) or an execution error (`2`). A value of `0` means no classified failure reason and can appear on either a passing result or a failure with an unknown cause. An `error` message can accompany either kind of failure, so its presence alone does not identify an execution error. Optional data such as traces and export metadata may also be present.
 
 :::warning
 

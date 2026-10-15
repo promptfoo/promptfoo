@@ -164,7 +164,7 @@ The configuration defines:
 3. **Target interface** delivers probes to the system
 4. **Evaluation engine** analyzes responses and reports findings
 
-You can generate tests once with `promptfoo redteam generate` and run the saved configuration with `promptfoo redteam eval`. This lets you compare target changes using the same generated cases.
+You can generate initial cases with `promptfoo redteam generate` and run the saved configuration with `promptfoo redteam eval`. This reuses the seed cases and configuration. Adaptive strategies still generate new attacks during evaluation, so their exact inputs can differ between runs.
 
 For CI/CD integration, see our [automation guide](/docs/integrations/ci-cd).
 
