@@ -24,8 +24,11 @@ Save and analyze your evaluation results in various formats.
 ## Quick Start
 
 ```bash
-# Interactive web viewer (default)
+# Run and save results locally
 promptfoo eval
+
+# Open the interactive web viewer
+promptfoo view
 
 # Save as HTML report
 promptfoo eval --output results.html
@@ -61,28 +64,13 @@ promptfoo eval --output report.html
 
 ### JSON Output
 
-Export complete evaluation data:
+Export the eval configuration, summary statistics, and individual results:
 
 ```bash
 promptfoo eval --output results.json
 ```
 
-**Structure:**
-
-```json
-{
-  "version": 3,
-  "timestamp": "2024-01-15T10:30:00Z",
-  "results": {
-    "prompts": [...],
-    "providers": [...],
-    "outputs": [...],
-    "stats": {...}
-  }
-}
-```
-
-**Use when:** Integrating with other tools or performing custom analysis.
+Individual results are in `results.results`. Each row includes `success`, `score`, the provider response, and grading details when available. See [Structured Output Fields](#structured-output-fields) for the field paths and [JSON Processing Example](#json-processing-example) for a working reader.
 
 ### CSV Export
 
@@ -92,16 +80,9 @@ Create spreadsheet-compatible data:
 promptfoo eval --output results.csv
 ```
 
-**Columns include:**
+The CSV contains test-variable columns followed by a column group for each prompt/provider pair. Each group includes the output, `Status` (`PASS`, `FAIL`, or `ERROR`), `Score`, named scores, grading reason, and comments. These metadata headers repeat for each prompt/provider pair, so CSV readers may add suffixes to distinguish duplicate column names.
 
-- Test variables
-- Prompt used
-- Model outputs
-- Pass/fail status
-- Latency
-- Token usage
-
-**Use when:** Analyzing results in Excel, Google Sheets, or data science tools.
+Use CSV to review the result table in a spreadsheet. Use JSON when you need structured responses, token usage, or latency fields.
 
 ### YAML Format
 
@@ -218,8 +199,7 @@ promptfoo eval --output results.xml
     <version>3</version>
     <timestamp>2024-01-15T10:30:00Z</timestamp>
     <prompts>...</prompts>
-    <providers>...</providers>
-    <outputs>...</outputs>
+    <results>...</results>
     <stats>...</stats>
   </results>
   <config>...</config>
@@ -233,44 +213,40 @@ promptfoo eval --output results.xml
 
 ### Setting Output Path in Config
 
-```yaml title="promptfooconfig.yaml"
-# Specify default output file
-outputPath: evaluations/latest_results.html
+Set `outputPath` in your existing config. This fragment writes an HTML report after the eval:
 
-prompts:
-  - '...'
-tests:
-  - '...'
+```yaml
+outputPath: evaluations/latest_results.html
 ```
 
 ### Multiple Output Formats
 
-Generate multiple formats simultaneously:
+Repeat `--output` to export the same run in multiple formats:
 
 ```bash
-# Command line
-promptfoo eval --output results.html --output results.json
-
-# Or use shell commands
-promptfoo eval --output results.json && \
-promptfoo eval --output results.csv
+promptfoo eval --output results.html --output results.json --output results.csv
 ```
+
+Running `promptfoo eval` again starts another eval, which can produce different outputs.
 
 ## Output Contents
 
 ### Structured Output Fields
 
-`json`, `yaml`, `yml`, `txt`, and Promptfoo XML outputs include:
+JSON, YAML, and Promptfoo XML share an export envelope with these field paths:
 
-| Field       | Description                  |
-| ----------- | ---------------------------- |
-| `timestamp` | When the evaluation ran      |
-| `prompts`   | Prompts used in evaluation   |
-| `providers` | LLM providers tested         |
-| `tests`     | Test cases with variables    |
-| `outputs`   | Raw LLM responses            |
-| `results`   | Pass/fail for each assertion |
-| `stats`     | Summary statistics           |
+| Field               | Description                                                                                               |
+| ------------------- | --------------------------------------------------------------------------------------------------------- |
+| `evalId`            | Saved eval identifier                                                                                     |
+| `results.version`   | Result schema version                                                                                     |
+| `results.timestamp` | Eval timestamp                                                                                            |
+| `results.prompts`   | Prompt/provider combinations                                                                              |
+| `results.results`   | Individual results, including `testCase`, `provider`, `response`, `success`, `score`, and `gradingResult` |
+| `results.stats`     | Counts of successes, assertion failures, and errors, plus usage statistics                                |
+| `config`            | Eval configuration                                                                                        |
+| `shareableUrl`      | Shared result URL, or `null` when unavailable                                                             |
+
+In each result, `failureReason` distinguishes success (`0`), an assertion failure (`1`), and an execution error (`2`). An `error` message can appear for either kind of failure, so its presence alone does not identify an execution error. Optional data such as traces and export metadata may also be present.
 
 :::warning
 
@@ -293,47 +269,42 @@ When available, outputs include:
 
 ### JSON Processing Example
 
+Count results by provider while keeping assertion failures separate from execution errors:
+
+<!-- prettier-ignore -->
 ```javascript
-const fs = require('fs');
+const fs = require('node:fs')
+const output = JSON.parse(fs.readFileSync('results.json', 'utf8'))
+const providers = new Map()
 
-// Load results
-const results = JSON.parse(fs.readFileSync('results.json', 'utf8'));
-
-// Analyze pass rates by provider
-const providerStats = {};
-results.results.outputs.forEach((output) => {
-  const provider = output.provider;
-  if (!providerStats[provider]) {
-    providerStats[provider] = { pass: 0, fail: 0 };
-  }
-
-  if (output.pass) {
-    providerStats[provider].pass++;
+for (const result of output.results.results) {
+  const id = result.provider.label || result.provider.id
+  const counts = providers.get(id) || { passed: 0, failed: 0, errors: 0 }
+  if (result.success) {
+    counts.passed++
+  } else if (result.failureReason === 2) {
+    counts.errors++
   } else {
-    providerStats[provider].fail++;
+    counts.failed++
   }
-});
+  providers.set(id, counts)
+}
 
-console.log('Pass rates by provider:', providerStats);
+console.table(Object.fromEntries(providers))
 ```
 
 ### CSV Analysis with Pandas
 
+For a CSV with one prompt/provider pair, count the result statuses:
+
 ```python
 import pandas as pd
 
-# Load results
 df = pd.read_csv('results.csv')
-
-# Group by provider and calculate metrics
-summary = df.groupby('provider').agg({
-    'pass': 'mean',
-    'latency': 'mean',
-    'cost': 'sum'
-})
-
-print(summary)
+print(df['Status'].value_counts())
 ```
+
+For multiple prompt/provider pairs, inspect `df.columns` and select the corresponding status column.
 
 ## Best Practices
 
@@ -383,11 +354,7 @@ promptfoo eval \
 
 ### Web Viewer
 
-The default web viewer (`promptfoo view`) provides:
-
-- Real-time updates during evaluation
-- Interactive exploration
-- Local-only (no data sent externally)
+Run `promptfoo view` to inspect locally saved evals in your browser. Sharing or uploading results is a separate action or account setting. See [sharing results](/docs/usage/sharing) before distributing an eval.
 
 ### Sharing HTML Reports
 
@@ -403,48 +370,27 @@ promptfoo eval --output team-review.html
 
 ### Promptfoo Share
 
-For collaborative review:
-
-```bash
-# Share results with your team
-promptfoo share
-```
-
-Creates a shareable link with:
-
-- Read-only access
-- Commenting capabilities
-- No setup required for viewers
+Run `promptfoo share` to upload a saved eval and get a link for collaborators. Review the [sharing configuration and access rules](/docs/usage/sharing) before uploading sensitive data.
 
 ## Troubleshooting
 
 ### Large Output Files
 
-For extensive evaluations:
+If JSON export fails with a string-length or memory error, use JSONL to write individual result rows:
 
-```yaml
-# Limit output size
-outputPath: results.json
-sharing:
-  # Exclude raw outputs from file
-  includeRawOutputs: false
+```bash
+promptfoo eval --output results.jsonl
 ```
+
+This command starts another eval. To export an existing saved run, use [`promptfoo export eval <evalId>`](/docs/usage/command-line#promptfoo-export).
 
 ### Encoding Issues
 
-Ensure proper encoding for international content:
-
-```bash
-# Explicitly set encoding
-LANG=en_US.UTF-8 promptfoo eval --output results.csv
-```
+Exports use UTF-8. If a spreadsheet shows garbled characters, import the CSV explicitly as UTF-8 rather than changing the eval's locale.
 
 ### Performance Tips
 
-1. **Use JSONL for large datasets** - avoids memory issues
-2. **Use JSON for standard datasets** - complete data structure
-3. **Generate HTML for presentations** - best visual format
-4. **Use CSV for data analysis** - Excel/Sheets compatible
+Choose only the formats you need. JSONL supports processing one result at a time, while JSON includes the configuration and summary in one document. HTML is useful for visual review, and CSV for spreadsheet work.
 
 ## Related Documentation
 

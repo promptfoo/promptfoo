@@ -5,44 +5,32 @@ description: Red team remote API connectivity issues by diagnosing network block
 
 # Remote Generation Errors
 
-You may encounter connection issues due to corporate firewalls or security policies. Since our service generates potentially harmful outputs for testing purposes, some organizations' security policies may block access to our API endpoints.
+Use the failed request's status or error message to distinguish a network problem from a generation failure. DNS resolution, TLS, proxy settings, service errors, and network policies can all prevent a request from completing.
 
 ## Checking Connectivity
 
-To verify if you can reach our API, try accessing Promptfoo's version endpoint:
+From the same machine or CI runner as Promptfoo, check the default service endpoint:
 
 ```bash
-curl https://api.promptfoo.app/version
+curl -i https://api.promptfoo.app/version
 ```
 
-You should receive a response like:
+An HTTP `200` response with a `version` field confirms that this endpoint is reachable. It does not confirm that an authenticated generation request will succeed. If you use a custom remote endpoint, check that host instead.
 
-```json
-{
-  "version": "0.103.3"
-}
-```
-
-If this request fails or times out, it likely means your network is blocking access to our API. You can also try opening `https://api.promptfoo.app/version` in your browser to see if you can reach the page.
+For a failed request, note whether the error concerns DNS, TLS, a proxy, or an HTTP status. Compare it with the failed generation request before attributing the problem to a firewall.
 
 ## Common Solutions
 
-1. **Check with IT**: Since promptfoo generates adversarial content for security testing, our API endpoints may be blocked by corporate security policies. Contact your IT department to:
-   - Allowlist `api.promptfoo.app`
-   - Allow HTTPS traffic to our endpoints
-   - Review security logs for blocked requests
+If logs show a network-policy block, ask your network administrator to allow HTTPS access to the configured generation endpoint. The default host is `api.promptfoo.app`.
 
-2. **Use a Different Network**: Try running promptfoo on:
-   - A personal network
-   - Mobile hotspot
-   - Development environment outside corporate network
+If your environment requires a proxy, configure it before retrying:
 
-3. **Configure Proxy**: If you need to use a corporate proxy, you can configure it using environment variables. Promptfoo uses Node.js's [Unidici](https://undici.nodejs.org/#/docs/api/ProxyAgent.md) to handle proxy configuration. It automatically detects and uses standard proxy environment variables. The proxy URL format is: `[protocol://][user:password@]host[:port]`
+```bash
+export HTTPS_PROXY=http://proxy.company.com:8080
+promptfoo redteam generate --verbose
+```
 
-   ```bash
-   export HTTPS_PROXY=http://proxy.company.com:8080
-   promptfoo eval
-   ```
+Use the proxy and certificate settings required by your organization. A browser may use different settings from the Node.js process, so browser access alone does not confirm the CLI can connect.
 
 ## Why Are Fewer Tests Generated Than Requested?
 
@@ -56,9 +44,9 @@ To diagnose, run with `--verbose` to see detailed logs of any generation failure
 
 ## Is Test Generation Capped?
 
-No. `numTests` accepts any positive integer — there is no fixed upper bound in the config schema.
+`numTests` accepts a positive integer without a fixed upper bound in the config schema. This does not remove provider rate limits or service quotas.
 
-It is worth understanding what the number means before raising it. Each test case is a _seed_, and strategies expand each seed into many attack attempts: `jailbreak:hydra` branches across conversation paths, and `jailbreak:meta` iterates through attack approaches. A small number of seeds therefore still produces broad coverage, and raising `numTests` multiplies generation cost and scan time.
+`numTests` controls the requested seed count per plugin. Strategies can expand each seed into additional attempts, so it is not a limit on target requests. Increasing it can increase generation cost and scan time without guaranteeing additional coverage.
 
 The [default is 5 per plugin](/docs/red-team/configuration/#configuration-fields), and it can be set globally or per plugin:
 
@@ -74,13 +62,7 @@ If you are hitting generation failures, lowering the count is a reasonable first
 
 ## Alternative Options
 
-If you cannot get network access to our remote generation service, you can:
-
-1. Use local generation with a local LLM
-2. Set up your own generation service
-3. Use manual prompt creation
-
-See our [configuration guide](/docs/configuration/guide/) for more details on these options.
+For plugins and strategies that support it, configure a [local generation provider](/docs/red-team/configuration#providers) and disable remote generation. Check the remote-inference indicators in the [plugin](/docs/red-team/plugins) and [strategy](/docs/red-team/strategies) tables before choosing this path.
 
 ## Getting Help
 
