@@ -15,8 +15,8 @@ import {
   setupSignalWatcher,
   updateEvalIds,
 } from '../database/signal';
-import { getDirectory } from '../esm';
 import { getEnvString } from '../envars';
+import { getDirectory } from '../esm';
 import { cloudConfig } from '../globalConfig/cloud';
 import logger from '../logger';
 import { runDbMigrations } from '../migrate';
@@ -63,10 +63,22 @@ const DEFAULT_REQUEST_SIZE_LIMIT = '100mb';
  * Maximum JSON / urlencoded request body size accepted by the local server.
  * Operators who expose the server beyond loopback can lower it with
  * PROMPTFOO_REQUEST_SIZE_LIMIT (any value accepted by body-parser, e.g. "10mb").
+ * Malformed values fall back to the default so an unbound limit is never applied.
  */
+const REQUEST_SIZE_LIMIT_PATTERN = /^\d+(?:\.\d+)?(?:b|kb|mb|gb|tb)$/i;
+
 export function getRequestSizeLimit(): string {
   const configured = getEnvString('PROMPTFOO_REQUEST_SIZE_LIMIT')?.trim();
-  return configured || DEFAULT_REQUEST_SIZE_LIMIT;
+  if (!configured) {
+    return DEFAULT_REQUEST_SIZE_LIMIT;
+  }
+  if (!REQUEST_SIZE_LIMIT_PATTERN.test(configured)) {
+    logger.warn(
+      `Invalid PROMPTFOO_REQUEST_SIZE_LIMIT "${configured}"; using default ${DEFAULT_REQUEST_SIZE_LIMIT}`,
+    );
+    return DEFAULT_REQUEST_SIZE_LIMIT;
+  }
+  return configured;
 }
 
 /**

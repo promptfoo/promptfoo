@@ -26,6 +26,11 @@ describe('server request size limit', () => {
     expect(getRequestSizeLimit()).toBe('100mb');
   });
 
+  it('falls back to the default for a malformed value', () => {
+    restoreEnv = mockProcessEnv({ PROMPTFOO_REQUEST_SIZE_LIMIT: 'tenmb' });
+    expect(getRequestSizeLimit()).toBe('100mb');
+  });
+
   it('rejects JSON bodies larger than the configured limit with 413', async () => {
     restoreEnv = mockProcessEnv({ PROMPTFOO_REQUEST_SIZE_LIMIT: '1kb' });
     const app = createApp();
