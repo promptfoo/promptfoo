@@ -44,6 +44,7 @@ import { filterPrompts } from '../eval/filterPrompts';
 import { filterProviderConfigs, getProviderIdAndLabel } from '../eval/filterProviders';
 import { filterTests } from '../eval/filterTests';
 import { promptfooCommand } from '../promptfooCommand';
+import { normalizeProviderRef } from '../providerRef';
 import { preserveTracingCredentialReferences } from '../sanitizer';
 import {
   isRemoteTestsReference,
@@ -598,24 +599,41 @@ async function prepareCombinedConfig(
 
   const configs = configSources.map(({ config }) => config);
   const combinedEnv = configs.reduce((env, config) => ({ ...env, ...config.env }), {});
+  const resolveConfigPath = (basePath: string, reference: string): string => {
+    if (reference.includes('{{')) {
+      reference = cliState.withEnv(combinedEnv, () => renderEnvOnlyInObject(reference));
+    }
+    if (reference.includes('{{') || isRemoteTestsReference(reference)) {
+      return reference;
+    }
+    const prefix = reference.startsWith('file://') ? 'file://' : '';
+    return prefix + path.resolve(basePath, reference.slice(prefix.length));
+  };
+
   const providers: UnifiedConfig['providers'] = [];
   const seenProviders = new Set<unknown>();
   const functionIds = new Map<Function, number>();
-  configs.forEach((config) => {
+  configSources.forEach(({ config, basePath }) => {
     invariant(
       typeof config.providers !== 'function',
       'Providers cannot be a function for multiple configs',
     );
-    if (typeof config.providers === 'string') {
-      if (!seenProviders.has(config.providers)) {
-        providers.push(config.providers);
-        seenProviders.add(config.providers);
-      }
-    } else if (Array.isArray(config.providers)) {
-      config.providers.forEach((provider) => {
-        const key = providerDedupeKey(provider, functionIds);
+    const configProviders =
+      typeof config.providers === 'string' ? [config.providers] : config.providers;
+    if (Array.isArray(configProviders)) {
+      configProviders.forEach((provider) => {
+        const descriptor =
+          configSources.length > 1 && typeof provider === 'string'
+            ? normalizeProviderRef(provider)
+            : undefined;
+        const scopedProvider =
+          descriptor?.kind === 'file' &&
+          !path.isAbsolute(descriptor.loadProviderPath.slice('file://'.length))
+            ? resolveConfigPath(basePath, descriptor.loadProviderPath)
+            : provider;
+        const key = providerDedupeKey(scopedProvider, functionIds);
         if (!seenProviders.has(key)) {
-          providers.push(provider);
+          providers.push(scopedProvider);
           seenProviders.add(key);
         }
       });
@@ -668,17 +686,6 @@ async function prepareCombinedConfig(
 
   let prompts: UnifiedConfig['prompts'] = configsAreStringOrArray ? [] : {};
   const promptBasePaths = new Map<string | Prompt, string>();
-
-  const resolveConfigPath = (basePath: string, reference: string): string => {
-    if (reference.includes('{{')) {
-      reference = cliState.withEnv(combinedEnv, () => renderEnvOnlyInObject(reference));
-    }
-    if (reference.includes('{{') || isRemoteTestsReference(reference)) {
-      return reference;
-    }
-    const prefix = reference.startsWith('file://') ? 'file://' : '';
-    return prefix + path.resolve(basePath, reference.slice(prefix.length));
-  };
 
   const resolveNestedFileReferences = (basePath: string, value: unknown): unknown => {
     if (typeof value === 'string') {
