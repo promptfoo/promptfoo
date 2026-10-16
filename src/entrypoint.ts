@@ -12,6 +12,7 @@ import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { requestsStructuredCodeScanOutput } from './codeScan/util/structuredOutputDetect';
+import { onlineCaptureArgs } from './commands/online/captureArgs';
 
 type NodeEngineComparatorOperator = '=' | '>' | '>=' | '<' | '<=';
 type NodeEngineVersionTuple = [number, number, number];
@@ -161,9 +162,10 @@ if (invokedAsCli && requestsStructuredCodeScanOutput(process.argv.slice(2))) {
 // Trade-off: This permanently changes argv[1] for the process lifetime.
 // Any code reading argv[1] will see the synthetic main.js path, not entrypoint.js.
 // Hook capture must not load project configuration, dotenv, telemetry or the database.
-if (process.argv[2] === 'online' && process.argv[3] === 'capture') {
+const captureArgs = onlineCaptureArgs(process.argv.slice(2));
+if (captureArgs) {
   const { runCapture } = await import('./commands/online/capture.js');
-  await runCapture(process.argv.slice(4));
+  await runCapture(captureArgs);
 } else {
   process.argv[1] = fileURLToPath(new URL('./main.js', import.meta.url));
   await import('./main.js');

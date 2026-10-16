@@ -8,6 +8,7 @@
 import { fileURLToPath } from 'node:url';
 
 import { requestsStructuredCodeScanOutput } from './codeScan/util/structuredOutputDetect';
+import { onlineCaptureArgs } from './commands/online/captureArgs';
 
 if (requestsStructuredCodeScanOutput(process.argv.slice(2))) {
   // Match the shipped entrypoint: quiet the logger AND route whatever it still
@@ -17,9 +18,10 @@ if (requestsStructuredCodeScanOutput(process.argv.slice(2))) {
 }
 
 // Hook capture must not load project configuration, dotenv, telemetry or the database.
-if (process.argv[2] === 'online' && process.argv[3] === 'capture') {
+const captureArgs = onlineCaptureArgs(process.argv.slice(2));
+if (captureArgs) {
   const { runCapture } = await import('./commands/online/capture.js');
-  await runCapture(process.argv.slice(4));
+  await runCapture(captureArgs);
 } else {
   process.argv[1] = fileURLToPath(new URL('./main.ts', import.meta.url));
   await import('./main.js');

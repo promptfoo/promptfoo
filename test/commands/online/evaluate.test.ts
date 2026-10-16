@@ -4,12 +4,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { evaluateTurn, loadOnlineConfig } from '../../../src/commands/online/evaluate';
 import { evaluateWithSource } from '../../../src/evaluate';
 import { readConfig } from '../../../src/util/config/load';
+import { maybeLoadFromExternalFile } from '../../../src/util/file';
 
 import type { CapturedTurn } from '../../../src/commands/online/store';
 import type { ApiProvider } from '../../../src/types/index';
 
 vi.mock('../../../src/evaluate', () => ({ evaluateWithSource: vi.fn() }));
 vi.mock('../../../src/util/config/load', () => ({ readConfig: vi.fn() }));
+vi.mock('../../../src/util/file', () => ({ maybeLoadFromExternalFile: vi.fn() }));
 beforeEach(() => {
   vi.resetAllMocks();
 });
@@ -28,6 +30,21 @@ const turn: CapturedTurn = {
 };
 
 describe('online grading', () => {
+  it('loads an external default test relative to the resolved base path', async () => {
+    vi.mocked(readConfig).mockResolvedValue({
+      prompts: [],
+      basePath: path.resolve('/trusted/assets'),
+      defaultTest: 'file://rubric.yaml',
+    });
+    vi.mocked(maybeLoadFromExternalFile).mockReturnValue({
+      assert: [{ type: 'contains', value: 'ok' }],
+    });
+    const config = await loadOnlineConfig('/trusted/config/grading.yaml');
+    expect(maybeLoadFromExternalFile).toHaveBeenCalledWith(
+      `file://${path.resolve('/trusted/assets', 'rubric.yaml')}`,
+    );
+    expect(config.grading.assert).toEqual([{ type: 'contains', value: 'ok' }]);
+  });
   it('preserves the resolved asset base path and defaults to the config directory', async () => {
     const defaultTest = { assert: [{ type: 'javascript' as const, value: 'file://grade.js' }] };
     vi.mocked(readConfig).mockResolvedValue({

@@ -8,8 +8,8 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 const root = path.resolve(__dirname, '../..');
 const cli = path.join(root, 'dist/src/entrypoint.js');
 let directory: string;
-function run(args: string[], input?: string) {
-  return spawnSync(process.execPath, [cli, 'online', ...args], {
+function run(args: string[], input?: string, commonOptions: string[] = []) {
+  return spawnSync(process.execPath, [cli, ...commonOptions, 'online', ...args], {
     cwd: directory,
     input,
     encoding: 'utf8',
@@ -31,33 +31,42 @@ afterEach(() => {
 });
 
 describe('online CLI', () => {
-  it('captures hooks without loading working-directory configuration, dotenv or the database', () => {
-    fs.writeFileSync(
-      path.join(directory, 'promptfooconfig.js'),
-      "throw new Error('must not execute project config');",
-    );
-    fs.writeFileSync(path.join(directory, '.env'), 'PROMPTFOO_CONFIG_DIR=/must-not-use\n');
-    const args = ['capture', '--agent', 'claude-code', '--dir', path.join(directory, 'queue')];
-    const submit = run(
-      args,
-      JSON.stringify({ hook_event_name: 'UserPromptSubmit', session_id: 's', prompt: 'task' }),
-    );
-    const stop = run(
-      args,
-      JSON.stringify({ hook_event_name: 'Stop', session_id: 's', last_assistant_message: 'reply' }),
-    );
-    expect(submit.status, submit.stderr).toBe(0);
-    expect(stop.status, stop.stderr).toBe(0);
-    expect(submit.stdout).toBe('{}\n');
-    expect(stop.stdout).toBe('{}\n');
-    expect(fs.existsSync(path.join(directory, 'runtime'))).toBe(false);
-    expect(fs.readdirSync(path.join(directory, 'queue/events'))).toHaveLength(1);
-    const invalid = run(args, '{"secret":"do-not-echo",invalid');
-    expect(invalid.status).toBe(0);
-    expect(invalid.stdout).toBe('{}\n');
-    expect(invalid.stderr).toContain('capture failed');
-    expect(invalid.stderr).not.toContain('do-not-echo');
-  });
+  it.each([[], ['--verbose', '--env-path', 'missing.env']])(
+    'isolates capture with common options %j',
+    (...commonOptions) => {
+      fs.writeFileSync(
+        path.join(directory, 'promptfooconfig.js'),
+        "throw new Error('must not execute project config');",
+      );
+      fs.writeFileSync(path.join(directory, '.env'), 'PROMPTFOO_CONFIG_DIR=/must-not-use\n');
+      const args = ['capture', '--agent', 'claude-code', '--dir', path.join(directory, 'queue')];
+      const submit = run(
+        args,
+        JSON.stringify({ hook_event_name: 'UserPromptSubmit', session_id: 's', prompt: 'task' }),
+        commonOptions,
+      );
+      const stop = run(
+        args,
+        JSON.stringify({
+          hook_event_name: 'Stop',
+          session_id: 's',
+          last_assistant_message: 'reply',
+        }),
+        commonOptions,
+      );
+      expect(submit.status, submit.stderr).toBe(0);
+      expect(stop.status, stop.stderr).toBe(0);
+      expect(submit.stdout).toBe('{}\n');
+      expect(stop.stdout).toBe('{}\n');
+      expect(fs.existsSync(path.join(directory, 'runtime'))).toBe(false);
+      expect(fs.readdirSync(path.join(directory, 'queue/events'))).toHaveLength(1);
+      const invalid = run(args, '{"secret":"do-not-echo",invalid');
+      expect(invalid.status).toBe(0);
+      expect(invalid.stdout).toBe('{}\n');
+      expect(invalid.stderr).toContain('capture failed');
+      expect(invalid.stderr).not.toContain('do-not-echo');
+    },
+  );
 
   it('grades captured replies, exports reports and deduplicates across worker restarts', () => {
     const queue = path.join(directory, 'queue');
@@ -87,11 +96,15 @@ describe('online CLI', () => {
     );
     const config = path.join(directory, 'grading.json');
     fs.writeFileSync(
+      path.join(directory, 'rubric.json'),
+      JSON.stringify({ assert: [{ type: 'equals', value: 'OK' }] }),
+    );
+    fs.writeFileSync(
       config,
       JSON.stringify({
         prompts: ['{{input}}'],
         providers: ['echo'],
-        defaultTest: { assert: [{ type: 'equals', value: 'OK' }] },
+        defaultTest: 'file://rubric.json',
       }),
     );
     const result = run(['watch', '--dir', queue, '-c', config, '--once']);

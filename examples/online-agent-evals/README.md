@@ -14,6 +14,9 @@ Use a Promptfoo installation that includes `online capture` and `online watch`.
 For development, run from the repository root using `npm run local -- online ...`.
 In installed hook commands, use an absolute path to the installed `promptfoo`
 executable; do not use `npx`, a shell background job, or `npm run`.
+Capture ignores common verbosity/environment options. Keep `--env-file` on the
+worker only: some Node versions process that flag before the CLI starts, outside
+capture's isolation boundary. Hook capture needs no environment file.
 
 ## Try it without a model API key
 

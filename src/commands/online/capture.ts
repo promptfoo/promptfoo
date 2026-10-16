@@ -151,6 +151,8 @@ export function configureCapture(command: Command): Command {
       'Capture an Agent hook event without running a model or loading project configuration',
     )
     .requiredOption('--agent <name>', 'claude-code, codex, or generic')
+    .option('-v, --verbose', 'Ignored for hook capture to preserve protocol output')
+    .option('--env-file, --env-path <path>', 'Ignored for hook capture; no dotenv files are loaded')
     .option('--dir <path>', 'Private local queue directory', onlineDirectory())
     .argument('[payload]', 'Codex notify JSON argument; other hooks read stdin');
 }

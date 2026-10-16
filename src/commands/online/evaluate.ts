@@ -3,18 +3,26 @@ import path from 'node:path';
 import { evaluateWithSource } from '../../evaluate';
 import { TestCaseSchema } from '../../types/index';
 import { readConfig } from '../../util/config/load';
+import { maybeLoadFromExternalFile } from '../../util/file';
 
 import type { CapturedTurn } from './store';
 
 /** Only an explicitly selected, trusted grading configuration can supply executable assertions. */
 export async function loadOnlineConfig(configPath: string) {
   const config = await readConfig(path.resolve(configPath));
+  const basePath = config.basePath ?? path.dirname(path.resolve(configPath));
+  const defaultTest =
+    typeof config.defaultTest === 'string' && config.defaultTest.startsWith('file://')
+      ? await maybeLoadFromExternalFile(
+          `file://${path.resolve(basePath, config.defaultTest.slice('file://'.length))}`,
+        )
+      : config.defaultTest;
   const grading = TestCaseSchema.pick({
     assert: true,
     options: true,
     threshold: true,
     vars: true,
-  }).parse(config.defaultTest);
+  }).parse(defaultTest);
   if (!grading.assert?.length) {
     throw new Error('Online evals require at least one assertion in defaultTest.assert');
   }
@@ -22,7 +30,7 @@ export async function loadOnlineConfig(configPath: string) {
     grading,
     env: config.env,
     description: config.description ?? 'Online Agent quality',
-    basePath: config.basePath ?? path.dirname(path.resolve(configPath)),
+    basePath,
   };
 }
 
