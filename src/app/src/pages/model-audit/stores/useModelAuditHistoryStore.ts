@@ -34,6 +34,10 @@ interface ModelAuditHistoryState {
 }
 
 const DEFAULT_PAGE_SIZE = 25;
+let historyRequestId = 0;
+let historyCountRevision = 0;
+let pendingDeletions = 0;
+let deletionOrder: string[] = [];
 
 export const useModelAuditHistoryStore = create<ModelAuditHistoryState>()((set, get) => ({
   // Initial state
@@ -46,6 +50,7 @@ export const useModelAuditHistoryStore = create<ModelAuditHistoryState>()((set, 
 
   // Actions
   fetchHistoricalScans: async (signal?: AbortSignal) => {
+    const requestId = ++historyRequestId;
     set({ isLoadingHistory: true, historyError: null });
 
     try {
@@ -66,21 +71,30 @@ export const useModelAuditHistoryStore = create<ModelAuditHistoryState>()((set, 
       }
 
       const data = await response.json();
+      if (requestId !== historyRequestId) {
+        return;
+      }
+      historyCountRevision++;
       set({
         historicalScans: data.scans || [],
         totalCount: data.total || data.scans?.length || 0,
-        isLoadingHistory: false,
       });
     } catch (error) {
       // Don't set error state if request was aborted
-      if (error instanceof Error && error.name === 'AbortError') {
+      if (
+        requestId !== historyRequestId ||
+        (error instanceof Error && error.name === 'AbortError')
+      ) {
         return;
       }
       const errorMessage = error instanceof Error ? error.message : 'Failed to fetch history';
       set({
-        isLoadingHistory: false,
         historyError: errorMessage,
       });
+    } finally {
+      if (requestId === historyRequestId) {
+        set({ isLoadingHistory: false });
+      }
     }
   },
 
@@ -107,6 +121,7 @@ export const useModelAuditHistoryStore = create<ModelAuditHistoryState>()((set, 
       const data = await response.json();
       const scans = data.scans || [];
       const total = data.total || scans.length || 0;
+      historyCountRevision++;
       set({
         totalCount: total,
         historyError: null,
@@ -145,7 +160,17 @@ export const useModelAuditHistoryStore = create<ModelAuditHistoryState>()((set, 
   deleteHistoricalScan: async (id: string) => {
     // Optimistic delete: remove from UI immediately
     const previousScans = get().historicalScans;
-    const previousCount = get().totalCount;
+    if (pendingDeletions === 0) {
+      // Concurrent deletions share the server's row order, including temporarily hidden rows.
+      deletionOrder = previousScans.map((scan) => scan.id);
+    }
+    pendingDeletions++;
+    const rollbackOrder = deletionOrder.includes(id)
+      ? deletionOrder
+      : previousScans.map((scan) => scan.id);
+    const deletedScan = previousScans.find((scan) => scan.id === id);
+    const countAdjustment = get().totalCount > 0 ? 1 : 0;
+    const countRevision = historyCountRevision;
 
     // Optimistically update UI
     set((state) => ({
@@ -163,14 +188,34 @@ export const useModelAuditHistoryStore = create<ModelAuditHistoryState>()((set, 
         throw new Error('Failed to delete scan');
       }
     } catch (error) {
-      // Revert optimistic update on failure
-      set({
-        historicalScans: previousScans,
-        totalCount: previousCount,
-      });
       const errorMessage = error instanceof Error ? error.message : 'Failed to delete scan';
-      set({ historyError: errorMessage });
+      // Roll back only this deletion, preserving other in-flight deletions and updates.
+      set((state) => {
+        const historicalScans = [...state.historicalScans];
+        const scanAlreadyPresent = historicalScans.some((scan) => scan.id === id);
+        if (deletedScan && !scanAlreadyPresent) {
+          const nextScanId = rollbackOrder
+            .slice(rollbackOrder.indexOf(id) + 1)
+            .find((scanId) => historicalScans.some((current) => current.id === scanId));
+          const insertIndex = nextScanId
+            ? historicalScans.findIndex((scan) => scan.id === nextScanId)
+            : historicalScans.length;
+          historicalScans.splice(insertIndex, 0, deletedScan);
+        }
+        return {
+          historicalScans,
+          totalCount:
+            state.totalCount +
+            (scanAlreadyPresent || countRevision !== historyCountRevision ? 0 : countAdjustment),
+          historyError: errorMessage,
+        };
+      });
       throw error;
+    } finally {
+      pendingDeletions--;
+      if (pendingDeletions === 0) {
+        deletionOrder = [];
+      }
     }
   },
 

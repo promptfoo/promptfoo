@@ -140,8 +140,7 @@ Compare Gemini and Gemma models:
 providers:
   - google:gemma-4-31b-it
   - google:gemini-3.8-flash
-  - google:gemini-2.5-pro
-  - google:gemini-3.7-flash
+  - google:gemini-3.1-pro-preview
   - google:gemini-3.5-flash-lite
 
 prompts:
@@ -180,7 +179,7 @@ providers:
 
 ```bash
 # Check if the environment variable is set
-echo $GOOGLE_API_KEY
+test -n "${GOOGLE_API_KEY:-${GEMINI_API_KEY:-}}" && echo "API key is set" || echo "API key is missing"
 
 # If empty, set it again
 export GOOGLE_API_KEY="your_api_key_here"
@@ -208,7 +207,7 @@ export GOOGLE_API_KEY="your_api_key_here"
     delay: 1000 # 1 second delay between API calls
   ```
 - Upgrade your API quota in Google AI Studio
-- Use a lower rate tier model like `gemini-2.5-flash-lite`
+- Use a lower rate tier model like `gemini-3.5-flash-lite`
 
 #### 4. Model Not Available
 
@@ -231,15 +230,16 @@ export GOOGLE_API_KEY="your_api_key_here"
 2. **Test your API key directly**:
 
    ```bash
-   curl -X POST "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=$GOOGLE_API_KEY" \
+   google_api_key="${GOOGLE_API_KEY:-${GEMINI_API_KEY:-}}"
+   curl -X POST "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key=$google_api_key" \
      -H "Content-Type: application/json" \
      -d '{"contents":[{"parts":[{"text":"Hello"}]}]}'
    ```
 
 3. **Check your environment**:
    ```bash
-   # List all GOOGLE_ environment variables
-   env | grep GOOGLE_
+   # List Google and Gemini environment variable names
+   env | cut -d= -f1 | grep -E '^(GOOGLE|GEMINI)_'
    ```
 
 ## Migration Guide
@@ -248,48 +248,65 @@ export GOOGLE_API_KEY="your_api_key_here"
 
 If you need more advanced features or enterprise capabilities, you can migrate to Vertex AI:
 
-| Google AI Studio               | Vertex AI                      | Notes                                    |
-| ------------------------------ | ------------------------------ | ---------------------------------------- |
-| `google:gemini-3.8-flash`      | `vertex:gemini-3.8-flash`      | Vertex supports `global`, `us`, and `eu` |
-| `google:gemini-3.7-flash`      | `vertex:gemini-3.7-flash`      | Vertex supports `global`, `us`, and `eu` |
-| `google:gemini-3.6-flash`      | `vertex:gemini-3.6-flash`      | Vertex supports `global`, `us`, and `eu` |
-| `google:gemini-3.5-flash-lite` | `vertex:gemini-3.5-flash-lite` | Vertex supports `global`, `us`, and `eu` |
-| `google:gemini-2.5-flash`      | `vertex:gemini-2.5-flash`      | Same model, different endpoint           |
-| `GOOGLE_API_KEY`               | `GOOGLE_CLOUD_PROJECT` + auth  | Vertex uses Google Cloud authentication  |
-| Simple API key                 | Multiple auth methods          | Vertex supports ADC, service accounts    |
-| Global endpoint                | Regional endpoints             | Vertex requires region selection         |
+| Google AI Studio               | Vertex AI                                   | Notes                                    |
+| ------------------------------ | ------------------------------------------- | ---------------------------------------- |
+| `google:gemini-3.8-flash`      | `vertex:gemini-3.8-flash`                   | Vertex supports `global`, `us`, and `eu` |
+| `google:gemini-3.6-flash`      | `vertex:gemini-3.6-flash`                   | Vertex supports `global`, `us`, and `eu` |
+| `google:gemini-3.5-flash-lite` | `vertex:gemini-3.5-flash-lite`              | Vertex supports `global`, `us`, and `eu` |
+| `GOOGLE_API_KEY`               | `GOOGLE_CLOUD_PROJECT` + auth               | Vertex uses Google Cloud authentication  |
+| Simple API key                 | Multiple auth methods                       | Vertex supports ADC, service accounts    |
+| Global endpoint                | Global, regional, or multi-region endpoints | Availability depends on the model        |
 
 Example migration:
 
 ```yaml
 # Before (Google AI Studio)
 providers:
-  - google:gemini-2.5-pro
+  - google:gemini-3.8-flash
 ```
 
 ```yaml
 # After (Vertex AI)
 providers:
-  - id: vertex:gemini-2.5-pro
+  - id: vertex:gemini-3.8-flash
     config:
+      expressMode: false
       projectId: my-project-id
-      region: us-central1
+      region: global
 ```
 
 See the [Vertex AI provider documentation](/docs/providers/vertex) for detailed setup instructions.
 
+## API coverage
+
+A model ID selects a provider route; it does not enable every operation offered by Google. Support also depends on the chosen model and account:
+
+| API path or capability                                        | Promptfoo support                                                                                                                                         |
+| ------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `generateContent`                                             | Chat, multimodal input, structured output, thinking, tools, and [speech output](https://ai.google.dev/gemini-api/docs/generate-content/speech-generation) |
+| `embedContent`                                                | Text strings through `google:embedding:`; multimodal embedding inputs are not exposed                                                                     |
+| Live WebSocket API                                            | Finite text/audio eval sessions, transcripts, and function callbacks through `google:live:`                                                               |
+| Interactions API                                              | Dedicated Gemini Omni video and Robotics routes; not a general-purpose chat or managed-agent endpoint                                                     |
+| Video generation                                              | `google:video:` uses Veo's long-running prediction API; Omni uses Interactions                                                                            |
+| Native Gemini images                                          | Model-specific image provider; the legacy `google:image:` prefix instead selects Imagen's prediction format                                               |
+| Cached content                                                | Reference an existing cache with `passthrough.cachedContent`; cache creation and deletion are not provided                                                |
+| File management, Batch jobs, token counting, voice management | No dedicated provider operations; supplying an existing file URI or voice does not upload a file or create a voice                                        |
+| Lyria music and dedicated Transcribe Live events              | No dedicated adapters                                                                                                                                     |
+
+Use a [custom provider](/docs/providers/custom-api) when you need an operation or response format outside these routes. `passthrough` adds request fields to an existing route; it does not change the API protocol. Consult the [Gemini API reference](https://ai.google.dev/api) for upstream capabilities.
+
 ## Available Models
 
 Lyria music generation is not currently supported by promptfoo's Google providers.
+
+For reproducible comparisons, use the replacement model IDs directly. Since [October 8, 2026](https://ai.google.dev/gemini-api/docs/changelog#october-8-2026), the Gemini API redirects `gemini-3.7-flash` to `gemini-3.8-flash` and `gemini-3.5-flash` to `gemini-3.6-flash`. Comparing an old ID with its replacement no longer compares distinct models. These redirects do not describe Vertex availability.
 
 ### Chat and Multimodal Models
 
 - `google:gemma-4-31b-it` - Gemma 4 31B instruction-tuned open model with strong reasoning, coding, and agentic capabilities
 - `google:gemma-4-26b-a4b-it` - Gemma 4 26B A4B instruction-tuned open model for lower-latency reasoning and coding evals
 - `google:gemini-3.8-flash` - Latest Gemini Flash model for coding and agentic workflows ($0.75/1M input, $3.75/1M output through December 31, 2026)
-- `google:gemini-3.7-flash` - Previous-generation Gemini Flash model for coding, multimodal reasoning, and agentic workflows ($0.75/1M input, $3.75/1M output through December 31, 2026)
 - `google:gemini-3.6-flash` - Previous-generation Gemini Flash model for coding and agentic tasks ($0.75/1M input, $3.75/1M output through December 31, 2026)
-- `google:gemini-3.5-flash` - Gemini 3.5 Flash for agentic and coding tasks ($1.50/1M input, $9/1M output)
 - `google:gemini-3.5-flash-lite` - Fast, cost-efficient Gemini 3.5 model for high-volume agentic workflows ($0.30/1M input, $2.50/1M output)
 - `google:live:gemini-3.5-live-translate-preview` - Gemini 3.5 Live Translate for real-time audio-to-audio translation with text transcripts ($3.50/1M audio input, $21/1M audio output)
 - `google:gemini-omni-1.1-flash` - Stable Gemini Omni Flash for conversational video generation/editing via the Interactions API ($1.50/1M input, $9/1M text/thinking output, $17.50/1M video output); `google:gemini-omni-flash-preview` remains available
@@ -310,7 +327,7 @@ Lyria music generation is not currently supported by promptfoo's Google provider
 - `google:gemini-flash-latest` - Google-maintained alias for the current Gemini Flash release ($0.75/1M input, $3.75/1M output through December 31, 2026)
 - `google:gemini-flash-lite-latest` - Google-maintained alias for the latest Gemini Flash-Lite release (currently Gemini 3.5 Flash-Lite pricing)
 
-Gemini 3.8 Flash, 3.7 Flash, and 3.6 Flash share [introductory pricing](https://ai.google.dev/gemini-api/docs/pricing#gemini-3.8-flash) through December 31, 2026.
+Gemini 3.8 Flash and 3.6 Flash share [introductory pricing](https://ai.google.dev/gemini-api/docs/pricing#gemini-3.8-flash) through December 31, 2026.
 Beginning January 1, 2027, their published rates increase to $1.50 per million input
 tokens and $7.50 per million output tokens. These models support a 1,048,576-token
 input context and up to 65,536 output tokens.
@@ -341,7 +358,7 @@ setting; promptfoo rejects those settings before sending a request.
 
 :::note Gemini 3.8 Flash Cyber
 
-Google provides [Gemini 3.8 Flash Cyber through the Fairwind Program](https://deepmind.google/fairwind-program/). Its public model catalog does not list a Cyber API model ID or pricing. Use the model ID, endpoint, and access instructions supplied by Google; the regular Flash model does not grant Cyber access.
+Google documents [`gemini-3.8-flash-cyber` on Vertex](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/gemini/3-8-flash-cyber) for allowlisted Fairwind customers. Use `vertex:gemini-3.8-flash-cyber` with an authorized project; it defaults to `global` and also supports `region: us`. The public Flash introductory discount does not apply. This model supports structured output and thinking, but not function calling, grounding, code execution, Interactions, or Live. Availability on Vertex does not imply access through the Gemini API. See [Vertex pricing](https://cloud.google.com/gemini-enterprise-agent-platform/generative-ai/pricing).
 
 :::
 
@@ -353,10 +370,6 @@ for updates and the separate [Vertex AI model lifecycle](https://docs.cloud.goog
 for Vertex deployments.
 
 :::
-
-Google recommends `gemini-3.8-flash-tts` or `gemini-3.8-flash-lite-tts` for new TTS work.
-The 2.5 and 3.1 TTS previews have no announced shutdown dates; check the
-[model lifecycle page](https://ai.google.dev/gemini-api/docs/deprecations) before selecting one.
 
 This list describes current endpoints. Promptfoo may retain pricing for retired model IDs so saved
 evaluations can still be scored; historical pricing data does not mean that Google still serves an
@@ -374,6 +387,28 @@ behavior changes.
 :::note
 Gemini 3.5 Flash Cyber is currently available only through Google's limited-access CodeMender pilot and does not have a publicly documented Gemini API model ID. See the [Gemini model announcement](https://blog.google/innovation-and-ai/models-and-research/gemini-models/gemini-3-6-flash-3-5-flash-lite-3-5-flash-cyber/).
 :::
+
+### Text-to-speech
+
+Use `google:gemini-3.8-flash-tts` or `google:gemini-3.8-flash-lite-tts` for speech generation. Both default to audio output with the Kore voice. Unary responses return WAV audio unchanged in `providerResponse.audio`; streamed PCM is assembled into WAV. Use `config.streaming: true` to select `streamGenerateContent`.
+
+Gemini 3.8 TTS reads text verbatim. Put delivery instructions in native Gemini `speechMetadata` parts instead of asking the model to "say cheerfully" in the transcript:
+
+```yaml
+providers:
+  - id: google:gemini-3.8-flash-lite-tts
+    config:
+      generationConfig:
+        speechConfig:
+          voiceConfig:
+            voice: Kore
+prompts:
+  - '[{"role":"user","parts":[{"text":"Have a wonderful day!","speechMetadata":{"style":"cheerful and friendly"}}]}]'
+```
+
+For two speakers on the Gemini API, set `generationConfig.speechConfig.multiSpeakerVoiceConfig.speakerVoiceConfigs` to a list of `{speaker, voiceConfig: {prebuiltVoiceConfig: {voiceName}}}` objects. Vertex uses `{speaker, voiceConfig: {voice}}`. Include the matching `speechMetadata.speaker` on each text part. For a single speaker, `voiceConfig.voice` also accepts an existing stored voice ID; creating or replicating voices is outside this provider's scope. See the [GenerateContent speech guide](https://ai.google.dev/gemini-api/docs/generate-content/speech-generation) and [Vertex speech guide](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/text-to-speech/overview).
+
+The older 2.5 and 3.1 TTS previews have an earliest announced shutdown date of November 17, 2026. Check the [model lifecycle page](https://ai.google.dev/gemini-api/docs/deprecations) before using them. Promptfoo's [cost estimates](https://ai.google.dev/gemini-api/docs/pricing) include the announced introductory discount through December 31, 2026 and the subsequent standard rates.
 
 ### Embedding Models
 
@@ -460,10 +495,13 @@ See the [Google Imagen example](https://github.com/promptfoo/promptfoo/tree/main
 
 Gemini models can generate images natively using the `generateContent` API. Models with `-image` in the name automatically enable image generation. The model IDs and prices below describe the native Gemini API:
 
+- `google:gemini-nano-banana-2.1` - Nano Banana 2.1 for image generation and editing at `1K`, `2K`, or `4K`, including panoramic aspect ratios and Search grounding
 - `google:gemini-3.1-flash-lite-image` - Gemini 3.1 Flash-Lite (Nano Banana 2 Lite) for the fastest, lowest-cost image generation (~$0.034/image at 1K; 1K only; no Google Search grounding)
 - `google:gemini-3.1-flash-image` - Gemini 3.1 Flash (Nano Banana 2) with native image generation (~$0.067/image at 1K, more at higher resolutions)
 - `google:gemini-3-pro-image` - Gemini 3 Pro (Nano Banana Pro) for advanced image generation (~$0.134/image at 1K/2K, ~$0.24 at 4K)
 - `google:gemini-2.5-flash-image` - Gemini 2.5 Flash (Nano Banana) with image generation (~$0.039/image)
+
+[Nano Banana 2.1](https://ai.google.dev/gemini-api/docs/models/gemini-nano-banana-2.1) replaces the deprecated `gemini-3.1-flash-image`. Use `google:gemini-nano-banana-2.1` (without `:image:`). It accepts `imageSize: 1K`, `2K`, or `4K`; `512px`, sampling parameters, and `seed` are unsupported. Set `config.projectId` and authenticate with ADC to use its global Vertex endpoint. Token and resolution charges follow [Google's pricing](https://ai.google.dev/gemini-api/docs/pricing#gemini-nano-banana-2.1).
 
 Use the GA ids above; Google shut down the `gemini-3.1-flash-image-preview` and `gemini-3-pro-image-preview` aliases on June 25, 2026. Nano Banana 2 Lite never had a `-preview` alias.
 
@@ -568,6 +606,10 @@ for capability details and safety guidance.
 ### Video Generation Models (Veo)
 
 Google's Veo models enable AI-powered video generation from text prompts. Use the `google:video:` prefix with `GOOGLE_API_KEY` / `GEMINI_API_KEY` for Google AI Studio. For explicit Vertex AI routing, use the `vertex:video:` prefix instead.
+
+:::warning Gemini API video previews
+Google lists October 22, 2026 as the earliest shutdown date for the native Veo 3.1 previews and `gemini-omni-flash-preview`, with `gemini-omni-1.1-flash` as the replacement. Omni uses the Interactions route rather than the `google:video:` Veo protocol. Check the [Gemini API lifecycle](https://ai.google.dev/gemini-api/docs/deprecations) before running these previews. Vertex video IDs follow a separate lifecycle.
+:::
 
 #### Available Models
 
@@ -765,12 +807,9 @@ The provider supports various configuration options that can be used to customiz
 
 ```yaml
 providers:
-  - id: google:gemini-2.5-pro
+  - id: google:gemini-3.8-flash
     config:
-      temperature: 0.7 # Controls randomness (0.0 to 1.0)
       maxOutputTokens: 2048 # Maximum length of response
-      topP: 0.9 # Nucleus sampling
-      topK: 40 # Top-k sampling
       stopSequences: ['END'] # Stop generation at these sequences
 ```
 
@@ -780,23 +819,23 @@ For models that support thinking capabilities, you can configure how the model r
 
 #### Gemini 3 Models (thinkingLevel)
 
-Gemini 3 models use `thinkingLevel` for more granular control:
+Gemini 3 chat models use `thinkingLevel`. The examples and table below cover chat models; supported levels and defaults are [model-specific](https://ai.google.dev/gemini-api/docs/generate-content/thinking#thinking-levels):
 
 ```yaml
 providers:
-  - id: google:gemini-3-flash-preview
+  - id: google:gemini-3.8-flash
     config:
       generationConfig:
         thinkingConfig:
-          thinkingLevel: MEDIUM # MINIMAL, LOW, MEDIUM, or HIGH
+          thinkingLevel: MEDIUM # LOW, MEDIUM, or HIGH
 ```
 
-| Level   | Description                                                |
-| ------- | ---------------------------------------------------------- |
-| MINIMAL | Fewest tokens. Best for low-complexity tasks (Flash only). |
-| LOW     | Fewer tokens. Suitable for simpler tasks.                  |
-| MEDIUM  | Balanced approach for moderate complexity (Flash only).    |
-| HIGH    | More tokens for deep reasoning.                            |
+| Level   | Description                                                                       |
+| ------- | --------------------------------------------------------------------------------- |
+| MINIMAL | Fewest tokens. Not supported by Gemini 3.1 Pro, Gemini 3.8 Flash, or its aliases. |
+| LOW     | Fewer tokens. Suitable for simpler tasks.                                         |
+| MEDIUM  | Balanced approach for moderate complexity.                                        |
+| HIGH    | More tokens for deep reasoning.                                                   |
 
 Defaults vary by model: Gemini 3.8 Flash, 3.7 Flash, 3.6 Flash, and 3.5 Flash default to `MEDIUM`, Gemini 3.5 Flash-Lite defaults to `MINIMAL`, and Gemini 3.1 Pro defaults to `HIGH`.
 
@@ -855,7 +894,7 @@ prompts: |
   Caption this image.
 
 providers:
-  - id: google:gemini-2.5-flash
+  - id: google:gemini-3.8-flash
 
 tests:
   - vars:
@@ -887,7 +926,7 @@ Safety settings can be configured to control content filtering:
 
 ```yaml
 providers:
-  - id: google:gemini-2.5-pro
+  - id: google:gemini-3.8-flash
     config:
       safetySettings:
         - category: HARM_CATEGORY_DANGEROUS_CONTENT
@@ -900,7 +939,7 @@ Configure system-level instructions for the model:
 
 ```yaml
 providers:
-  - id: google:gemini-2.5-pro
+  - id: google:gemini-3.8-flash
     config:
       systemInstruction: 'You are a helpful assistant'
       # To load from a file instead, use:
@@ -911,21 +950,16 @@ System instructions support Nunjucks templates and can be loaded from a file.
 
 ### Role Mapping Configuration
 
-Gemini models require specific role names in chat messages. By default, Promptfoo uses the `model` role for compatibility with newer Gemini versions (2.5+). For older Gemini versions that expect the `assistant` role, you can disable this:
+The Gemini API uses the `model` role for assistant messages. Promptfoo maps `assistant` to `model` automatically:
 
 ```yaml
 providers:
-  # Default behavior - maps 'assistant' to 'model' (for Gemini 2.5+)
-  - id: google:gemini-2.5-flash
+  - id: google:gemini-3.8-flash
     config:
-      temperature: 0.7
-
-  # For older Gemini versions - preserve 'assistant' role
-  - id: google:gemini-2.5-pro
-    config:
-      useAssistantRole: true # Preserves 'assistant' role without mapping
-      temperature: 0.7
+      useAssistantRole: false # Default: maps 'assistant' to 'model'
 ```
+
+Set `useAssistantRole: true` only for a custom endpoint that explicitly accepts the `assistant` role; it does not match the Gemini API role contract.
 
 For more details on capabilities and configuration options, see the [Gemini API documentation](https://ai.google.dev/docs).
 
@@ -945,7 +979,7 @@ providers:
           thinkingLevel: MEDIUM
 ```
 
-Gemini 3.7 Flash remains supported with the same thinking levels and token pricing.
+The Gemini API redirects `gemini-3.7-flash` to this model. Use `gemini-3.8-flash` directly for new configurations.
 
 ### Gemini 3.6 Flash
 
@@ -1017,11 +1051,11 @@ providers:
 
 ### Gemini 3.5 Flash
 
-Gemini 3.5 Flash remains available for agentic and coding workloads:
+The Gemini API redirects `gemini-3.5-flash` to `gemini-3.6-flash`. Use the replacement ID directly:
 
 ```yaml
 providers:
-  - id: google:gemini-3.5-flash
+  - id: google:gemini-3.6-flash
     config:
       maxOutputTokens: 4096
       generationConfig:
@@ -1058,10 +1092,10 @@ providers:
       maxOutputTokens: 4096
       generationConfig:
         thinkingConfig:
-          thinkingLevel: HIGH # LOW or HIGH (Pro only supports these two levels)
+          thinkingLevel: HIGH # LOW, MEDIUM, or HIGH (default)
 ```
 
-Thinking levels for Gemini 3.1 Pro: LOW (faster, simpler tasks), HIGH (deep reasoning, default).
+Thinking levels for Gemini 3.1 Pro: LOW (faster, simpler tasks), MEDIUM (balanced), HIGH (deep reasoning, default).
 
 ### Gemini 2.5 Pro
 
@@ -1130,9 +1164,8 @@ defaultTest:
     provider:
       # Override text generation provider
       text:
-        id: google:gemini-2.5-flash
-        config:
-          temperature: 0.7
+        id: google:gemini-3.8-flash
+        config: {}
       # Override embedding provider for similarity comparisons
       embedding:
         id: google:embedding:gemini-embedding-2
@@ -1158,7 +1191,8 @@ tests:
     options:
       provider:
         text:
-          id: google:gemini-2.5-flash
+          id: google:gemini-3.8-flash
+          config: {}
         embedding:
           id: google:embedding:gemini-embedding-2
     assert:
@@ -1217,7 +1251,7 @@ You can constrain the model to output structured JSON responses in two ways:
 
 ```yaml
 providers:
-  - id: google:gemini-2.5-pro
+  - id: google:gemini-3.8-flash
     config:
       generationConfig:
         response_mime_type: 'application/json'
@@ -1239,7 +1273,7 @@ providers:
 
 ```yaml
 providers:
-  - id: google:gemini-2.5-pro
+  - id: google:gemini-3.8-flash
     config:
       # Can be inline schema or file path
       responseSchema: 'file://path/to/schema.json'
@@ -1257,7 +1291,7 @@ To enable Search grounding:
 
 ```yaml
 providers:
-  - id: google:gemini-2.5-flash
+  - id: google:gemini-3.8-flash
     config:
       tools:
         - googleSearch: {} # or google_search: {}
@@ -1269,11 +1303,11 @@ You can combine Search grounding with thinking capabilities for better reasoning
 
 ```yaml
 providers:
-  - id: google:gemini-2.5-pro
+  - id: google:gemini-3.8-flash
     config:
       generationConfig:
         thinkingConfig:
-          thinkingBudget: 1024
+          thinkingLevel: MEDIUM
       tools:
         - googleSearch: {}
 ```
@@ -1347,7 +1381,7 @@ To enable code execution:
 
 ```yaml
 providers:
-  - id: google:gemini-2.5-flash
+  - id: google:gemini-3.8-flash
     config:
       tools:
         - codeExecution: {}
@@ -1372,7 +1406,7 @@ To enable URL context:
 
 ```yaml
 providers:
-  - id: google:gemini-2.5-flash
+  - id: google:gemini-3.8-flash
     config:
       tools:
         - urlContext: {}
@@ -1441,15 +1475,15 @@ Access the Google Live API by specifying the model with the 'live' service type:
 
 ```yaml
 providers:
-  - id: 'google:live:gemini-3.1-flash-live-preview'
+  - id: 'google:live:gemini-3.8-live'
     config:
       generationConfig:
         response_modalities: ['audio']
         outputAudioTranscription: {}
-      timeoutMs: 10000
+      timeoutMs: 30000
 ```
 
-Gemini 3.1 Flash Live uses the `v1beta` WebSocket endpoint by default and produces native audio. If `response_modalities: ['text']` is configured, Promptfoo requests audio with output transcription so text-based assertions continue to work. Video must be supplied as individual `image/jpeg` or `image/png` frames, not as an inline video container such as `video/mp4`; Promptfoo paces multiple frames at one frame per second, bills those frames using the per-second video-input rate, and automatically terminates finite audio inputs. Promptfoo prices returned `IMAGE` and `DOCUMENT` input-token usage at the image rate and honors Gemini context-cache rates when the API reports cached-content usage.
+For legacy configurations, Gemini 3.1 Flash Live uses the `v1beta` WebSocket endpoint by default and produces native audio. If `response_modalities: ['text']` is configured, Promptfoo requests audio with output transcription so text-based assertions continue to work. Video must be supplied as individual `image/jpeg` or `image/png` frames, not as an inline video container such as `video/mp4`; Promptfoo paces multiple frames at one frame per second, bills those frames using the per-second video-input rate, and automatically terminates finite audio inputs. Promptfoo prices returned `IMAGE` and `DOCUMENT` input-token usage at the image rate and honors Gemini context-cache rates when the API reports cached-content usage.
 
 ### Gemini Robotics ER 2 Streaming
 
