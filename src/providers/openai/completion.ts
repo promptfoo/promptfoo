@@ -89,7 +89,7 @@ export class OpenAiCompletionProvider extends OpenAiGenericProvider {
       frequency_penalty:
         this.config.frequency_penalty ?? getEnvFloat('OPENAI_FREQUENCY_PENALTY', 0),
       best_of: this.config.best_of ?? getEnvInt('OPENAI_BEST_OF', 1),
-      ...(callApiOptions?.includeLogProbs ? { logprobs: callApiOptions.includeLogProbs } : {}),
+      ...(callApiOptions?.includeLogProbs ? { logprobs: 0 } : {}),
       ...(stop ? { stop } : {}),
       ...(effectivePassthrough || {}),
       ...(requestServiceTier === undefined ? {} : { service_tier: requestServiceTier }),
@@ -185,6 +185,10 @@ export class OpenAiCompletionProvider extends OpenAiGenericProvider {
         tokenUsage: getTokenUsage(data, cached),
         cached,
         latencyMs,
+        // With `echo`, the first prompt token has no log probability (`null`).
+        logProbs: data.choices[0].logprobs?.token_logprobs?.filter(
+          (logProb: number | null): logProb is number => typeof logProb === 'number',
+        ),
         cost: calculateOpenAIUsageCost(billingLookupModel, this.config, data.usage, {
           cachedResponse: cached,
           serviceTier: data.service_tier ?? body.service_tier,
