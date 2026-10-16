@@ -24,9 +24,9 @@ export function createScriptBasedProviderFactory(
 
       // Check file extension only if fileExtension is provided
       if (fileExtension && providerPath.startsWith('file://')) {
-        return (
-          providerPath.endsWith(`.${fileExtension}`) || providerPath.includes(`.${fileExtension}:`)
-        );
+        const lowerPath = providerPath.toLowerCase();
+        const lowerExtension = `.${fileExtension.toLowerCase()}`;
+        return lowerPath.endsWith(lowerExtension) || lowerPath.includes(`${lowerExtension}:`);
       }
 
       return false;
