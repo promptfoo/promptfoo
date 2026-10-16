@@ -300,6 +300,8 @@ providers:
 
 Use the model ID exactly as listed by your gateway after `openai:chat:`. `apiBaseUrl` includes the API prefix, such as `/v1`, but not `/chat/completions` or `/responses`. Promptfoo appends the endpoint path and preserves base URL query parameters.
 
+For a gateway's `/completions` endpoint, use `openai:completion:<model>` with the same `apiBaseUrl`. Set `config.passthrough.logprobs: 0` to return sampled-token log probabilities for the [`perplexity` and `perplexity-score` assertions](/docs/configuration/expected-outputs/deterministic/#perplexity).
+
 The gateway settings under `providers` do not configure the grader for model-graded assertions such as `llm-rubric`. [Set the grader](/docs/configuration/expected-outputs/model-graded/#overriding-the-llm-grader) in `defaultTest.options.provider` to use a model your gateway supports:
 
 ```yaml
