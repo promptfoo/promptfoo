@@ -195,7 +195,11 @@ export function resolveEvalImageOutputSource(image: ImageOutput): string | undef
     return image.data;
   }
 
-  return resolveImageSource(image);
+  return resolveImageSource(
+    image.mimeType?.startsWith('image/')
+      ? { ...image, format: image.mimeType.slice('image/'.length) }
+      : image,
+  );
 }
 
 function isImageLikeDataUri(text: string): boolean {

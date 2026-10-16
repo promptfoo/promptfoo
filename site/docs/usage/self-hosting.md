@@ -379,7 +379,7 @@ When configured correctly, your self-hosted server handles requests like:
 
 By default, promptfoo stores its SQLite database (`promptfoo.db`) in `/home/promptfoo/.promptfoo` _inside the container_. Ensure this directory is mapped to persistent storage using volumes (as shown in the Docker and Docker Compose examples) to save your evals across container restarts.
 
-By default, promptfoo externalizes large binary outputs (for example, images/audio) to the local filesystem under `/home/promptfoo/.promptfoo/blobs` and replaces inline base64 with lightweight references. To keep media inline (legacy behavior), set `PROMPTFOO_INLINE_MEDIA=true`. Make sure your volume mapping includes `/home/promptfoo/.promptfoo/blobs` so media persists across restarts.
+By default, promptfoo externalizes large binary outputs (for example, images/audio) to the local filesystem under `/home/promptfoo/.promptfoo/blobs` and replaces inline base64 with lightweight references. To keep media inline (legacy behavior), set `PROMPTFOO_INLINE_MEDIA=true`. Make sure your volume mapping includes `/home/promptfoo/.promptfoo/blobs` so media persists across restarts. Some provider formats remain inline, including [Bedrock Converse native base64 content and generated images](../providers/aws-bedrock.md#converse-api).
 
 `PROMPTFOO_MEDIA_PATH` applies only to legacy `storageRef` media, which defaults to `/home/promptfoo/.promptfoo/media`; it does not move the `blobs` directory. Set it before media storage is first used: that location stays fixed for the process.
 

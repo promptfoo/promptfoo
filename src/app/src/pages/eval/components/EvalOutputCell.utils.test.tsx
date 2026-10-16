@@ -239,6 +239,15 @@ describe('extractMarkdownImageSources', () => {
 });
 
 describe('resolveEvalImageOutputSource', () => {
+  it.each(['png', 'jpeg', 'webp', 'gif'])(
+    'uses the declared %s MIME type for base64 image output',
+    (format) => {
+      expect(resolveEvalImageOutputSource({ data: 'AQID', mimeType: `image/${format}` })).toBe(
+        `data:image/${format};base64,AQID`,
+      );
+    },
+  );
+
   it('returns HTTP URL from data string', () => {
     const image = { data: 'https://example.com/image.png', mimeType: 'image/png' };
     const result = resolveEvalImageOutputSource(image);
