@@ -140,6 +140,28 @@ async function printLogContent(logPath: string, options: PrintOptions): Promise<
   logger.info(output);
 }
 
+/** Reads a fixed byte range, retaining short reads without padding the content. */
+async function readLogBytes(
+  fileHandle: Awaited<ReturnType<typeof fs.open>>,
+  buffer: Buffer,
+  position: number,
+): Promise<number> {
+  let bytesRead = 0;
+  while (bytesRead < buffer.length) {
+    const result = await fileHandle.read(
+      buffer,
+      bytesRead,
+      buffer.length - bytesRead,
+      position + bytesRead,
+    );
+    if (result.bytesRead === 0) {
+      break;
+    }
+    bytesRead += result.bytesRead;
+  }
+  return bytesRead;
+}
+
 // Track active watchers for cleanup
 let activeWatcher: fsSync.FSWatcher | null = null;
 let cleanupHandler: (() => void) | null = null;
@@ -148,6 +170,10 @@ let cleanupHandler: (() => void) | null = null;
  * Follows a log file in real-time (like tail -f)
  */
 async function followLogFile(logPath: string, noColor: boolean, grep?: RegExp): Promise<void> {
+  // Only filtered output waits for complete lines; unfiltered output stays immediate.
+  let pendingContent: Buffer = Buffer.alloc(0);
+  let contentVersion = 0;
+
   // Get initial file size
   let position: number;
   try {
@@ -159,56 +185,134 @@ async function followLogFile(logPath: string, noColor: boolean, grep?: RegExp): 
 
   logger.info(chalk.gray(`Following ${path.basename(logPath)}... (Ctrl+C to stop)\n`));
 
-  // Print existing content first (last 20 lines)
+  // Print existing content first (last 20 lines).
   if (position > 0) {
-    const lastLines = (await readLastLines(logPath, 20)).filter((line) => !grep || grep.test(line));
+    let lastLines: string[];
+    if (grep) {
+      // Read one raw snapshot so its unfinished line and byte cursor stay aligned.
+      const fileHandle = await fs.open(logPath, 'r');
+      try {
+        const chunks: Buffer[] = [];
+        let readPosition = position;
+        let newlineCount = 0;
+        while (readPosition > 0 && newlineCount <= 20) {
+          const length = Math.min(readPosition, 64 * 1024);
+          readPosition -= length;
+          const buffer = Buffer.alloc(length);
+          const bytesRead = await readLogBytes(fileHandle, buffer, readPosition);
+          const chunk = buffer.subarray(0, bytesRead);
+          chunks.unshift(chunk);
+          for (const byte of chunk) {
+            if (byte === 10) {
+              newlineCount++;
+            }
+          }
+        }
+        const tail = Buffer.concat(chunks);
+        const lastNewline = tail.lastIndexOf(10);
+        pendingContent = Buffer.from(tail.subarray(lastNewline + 1));
+        lastLines = tail
+          .subarray(0, lastNewline + 1)
+          .toString('utf-8')
+          .split('\n');
+        lastLines.pop();
+        lastLines = lastLines.slice(pendingContent.length > 0 ? -19 : -20);
+        // Match readLastLines' readline handling for large files.
+        if (position >= 1024 * 1024) {
+          lastLines = lastLines.map((line) => line.replace(/\r$/, ''));
+        }
+        lastLines = lastLines.filter((line) => grep.test(line));
+      } finally {
+        await fileHandle.close();
+      }
+    } else {
+      lastLines = await readLastLines(logPath, 20);
+    }
     if (lastLines.length > 0) {
       logger.info(highlightLogLines(lastLines, noColor));
     }
-    // Re-read position after reading content to avoid race condition
-    const stats = await fs.stat(logPath);
-    position = stats.size;
+    if (!grep) {
+      // Preserve the unfiltered follower's existing position handling.
+      const stats = await fs.stat(logPath);
+      position = stats.size;
+    }
   }
 
   // Create watcher with debouncing to handle rapid file changes
   const watcher = fsSync.watch(logPath);
   activeWatcher = watcher;
 
-  const handleChange = debounce(async () => {
+  let reading = false;
+  let readPending = false;
+  const handleChange = debounce(async (): Promise<void> => {
+    if (grep && reading) {
+      readPending = true;
+      return;
+    }
+    reading = Boolean(grep);
+    const readVersion = contentVersion;
     try {
       const stats = await fs.stat(logPath);
       const newSize = stats.size;
 
-      if (newSize > position) {
-        // Read only the new content
-        const fileHandle = await fs.open(logPath, 'r');
-        try {
-          const buffer = Buffer.alloc(newSize - position);
-          await fileHandle.read(buffer, 0, newSize - position, position);
-
-          const newContent = buffer.toString('utf-8');
-          const newLines = newContent
-            .split('\n')
-            .filter((line) => line.length > 0 && (!grep || grep.test(line)));
-          if (newLines.length > 0) {
-            process.stdout.write(highlightLogLines(newLines, noColor) + '\n');
-          }
+      if (newSize <= position) {
+        if (newSize < position) {
+          // File was truncated/rotated.
+          logger.info(chalk.yellow('Log file was rotated, resetting position...'));
           position = newSize;
-        } finally {
-          await fileHandle.close();
+          pendingContent = Buffer.alloc(0);
+          contentVersion++;
         }
-      } else if (newSize < position) {
-        // File was truncated/rotated
-        logger.info(chalk.yellow('Log file was rotated, resetting position...'));
-        position = newSize;
+        return;
+      }
+
+      // Read only the new content
+      const fileHandle = await fs.open(logPath, 'r');
+      try {
+        const buffer = Buffer.alloc(newSize - position);
+        const bytesRead = grep
+          ? await readLogBytes(fileHandle, buffer, position)
+          : (await fileHandle.read(buffer, 0, newSize - position, position)).bytesRead;
+
+        if (grep && readVersion !== contentVersion) {
+          return;
+        }
+        let newContent = buffer.toString('utf-8');
+        if (grep) {
+          const content = Buffer.concat([pendingContent, buffer.subarray(0, bytesRead)]);
+          const lastNewline = content.lastIndexOf(10);
+          pendingContent = Buffer.from(content.subarray(lastNewline + 1));
+          newContent = content.subarray(0, lastNewline + 1).toString('utf-8');
+        }
+        const newLines = newContent
+          .split('\n')
+          .filter((line) => line.length > 0 && (!grep || grep.test(line)));
+        if (newLines.length > 0) {
+          process.stdout.write(highlightLogLines(newLines, noColor) + '\n');
+        }
+        position = grep ? position + bytesRead : newSize;
+      } finally {
+        await fileHandle.close();
       }
     } catch (error) {
       // File may have been rotated or deleted
       logger.debug(`Error reading log file: ${error instanceof Error ? error.message : error}`);
+    } finally {
+      reading = false;
+      if (readPending && activeWatcher === watcher) {
+        readPending = false;
+        handleChange();
+      }
     }
   }, 100);
 
-  watcher.on('change', handleChange);
+  watcher.on('change', (eventType) => {
+    if (grep && eventType === 'rename') {
+      pendingContent = Buffer.alloc(0);
+      contentVersion++;
+    }
+    handleChange();
+  });
 
   watcher.on('error', (error) => {
     logger.warn(`File watcher error: ${error}`);
@@ -217,6 +321,15 @@ async function followLogFile(logPath: string, noColor: boolean, grep?: RegExp): 
   // Cleanup function
   const cleanup = () => {
     handleChange.clear();
+    readPending = false;
+    contentVersion++;
+    if (grep && pendingContent.length > 0) {
+      const line = pendingContent.toString('utf-8');
+      pendingContent = Buffer.alloc(0);
+      if (grep.test(line)) {
+        process.stdout.write(highlightLogLines([line], noColor) + '\n');
+      }
+    }
     if (activeWatcher) {
       activeWatcher.close();
       activeWatcher = null;
@@ -236,6 +349,11 @@ async function followLogFile(logPath: string, noColor: boolean, grep?: RegExp): 
   // Register cleanup handlers
   process.once('SIGINT', cleanupHandler);
   process.once('SIGTERM', cleanupHandler);
+
+  if (grep) {
+    // Catch appends between the initial snapshot and installing the watcher.
+    handleChange();
+  }
 
   // Keep process alive until interrupted
   await new Promise<void>((resolve) => {

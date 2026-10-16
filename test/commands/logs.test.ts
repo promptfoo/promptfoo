@@ -84,12 +84,43 @@ describe('logs command', () => {
       vi.useRealTimers();
     });
 
-    async function startFollowing(grep?: string, initialLines: string[] = []) {
+    async function startFollowing(
+      grep?: string,
+      initialLines: string[] = [],
+      terminated = true,
+      initialBytes?: Buffer,
+      appendDuringRead?: string,
+      readLimit = Number.POSITIVE_INFINITY,
+    ) {
       const watcher = Object.assign(new EventEmitter(), { close: vi.fn() });
       vi.mocked(fsSync.watch).mockReturnValue(watcher as unknown as fsSync.FSWatcher);
       mockLogsUtil.findLogFile.mockReturnValue('/fixture.log');
-      const initialSize = Buffer.byteLength(initialLines.join('\n'));
-      mockFs.stat.mockResolvedValue({ size: initialSize, mtime: new Date() } as fsSync.Stats);
+      let content =
+        initialBytes ??
+        Buffer.from(initialLines.join('\n') + (initialLines.length && terminated ? '\n' : ''));
+      const initialSize = content.length;
+      function setContent(next: Buffer) {
+        content = next;
+        mockFs.stat.mockResolvedValue({ size: content.length, mtime: new Date() } as fsSync.Stats);
+        mockFs.open.mockResolvedValue({
+          read: vi.fn(async (buffer: Buffer, offset: number, length: number, position: number) => {
+            const bytesRead = content.copy(
+              buffer,
+              offset,
+              position,
+              position + Math.min(length, readLimit),
+            );
+            if (appendDuringRead !== undefined) {
+              const appended = appendDuringRead;
+              appendDuringRead = undefined;
+              setContent(Buffer.concat([content, Buffer.from(appended)]));
+            }
+            return { bytesRead, buffer };
+          }),
+          close: vi.fn().mockResolvedValue(undefined),
+        } as unknown as Awaited<ReturnType<typeof fs.open>>);
+      }
+      setContent(content);
       mockLogsUtil.readLastLines.mockResolvedValue(initialLines);
       const previous = new Set(process.listeners('SIGINT'));
       const following = program.parseAsync([
@@ -106,7 +137,16 @@ describe('logs command', () => {
         | (() => void)
         | undefined;
       expect(stop).toBeDefined();
-      return { watcher, following, initialSize };
+      mockFs.open.mockClear();
+      async function replace(next: string | Buffer, eventType = 'change') {
+        setContent(Buffer.from(next));
+        watcher.emit('change', eventType);
+        await vi.advanceTimersByTimeAsync(100);
+      }
+      async function append(next: string | Buffer) {
+        await replace(Buffer.concat([content, Buffer.from(next)]));
+      }
+      return { watcher, following, initialSize, append, replace };
     }
 
     it('coalesces file events and prints appended content once', async () => {
@@ -192,6 +232,265 @@ describe('logs command', () => {
         await following;
       },
     );
+
+    it.each([
+      { name: 'split pattern', initial: [], parts: ['[ERR', 'OR] failed\n'] },
+      { name: 'matching prefix', initial: [], parts: ['[ERROR]', ' failed\n'] },
+      { name: 'initial unfinished line', initial: ['[ERR'], parts: ['OR]', ' failed\n'] },
+    ])('buffers $name until its newline when filtering', async ({ initial, parts }) => {
+      const { following, append } = await startFollowing('ERROR', initial, false);
+      const output = vi.spyOn(process.stdout, 'write').mockReturnValue(true);
+      expect(logger.info).toHaveBeenCalledTimes(1);
+      await append(parts[0]);
+      expect(output).not.toHaveBeenCalled();
+      await append(parts[1]);
+      expect(output).toHaveBeenCalledExactlyOnceWith('[ERROR] failed\n');
+      stop?.();
+      await vi.advanceTimersByTimeAsync(100);
+      await following;
+      expect(output).toHaveBeenCalledOnce();
+    });
+
+    it('keeps split UTF-8 bytes intact when buffering a matching line', async () => {
+      const { following, append } = await startFollowing('café');
+      const output = vi.spyOn(process.stdout, 'write').mockReturnValue(true);
+      const content = Buffer.from('[ERROR] café\n');
+      await append(content.subarray(0, content.length - 2));
+      expect(output).not.toHaveBeenCalled();
+      await append(content.subarray(content.length - 2));
+      expect(output).toHaveBeenCalledExactlyOnceWith('[ERROR] café\n');
+      stop?.();
+      await vi.advanceTimersByTimeAsync(100);
+      await following;
+    });
+
+    it('preserves a UTF-8 character split across the initial snapshot', async () => {
+      const content = Buffer.from('[ERROR] café\n');
+      const { following, append } = await startFollowing(
+        'café',
+        [],
+        false,
+        content.subarray(0, content.length - 2),
+      );
+      const output = vi.spyOn(process.stdout, 'write').mockReturnValue(true);
+      await append(content.subarray(content.length - 2));
+      expect(output).toHaveBeenCalledExactlyOnceWith('[ERROR] café\n');
+      stop?.();
+      await vi.advanceTimersByTimeAsync(100);
+      await following;
+    });
+
+    it('reads bytes appended during the initial snapshot from the captured offset', async () => {
+      const { following, append } = await startFollowing(
+        'ERROR',
+        ['[ERR'],
+        false,
+        undefined,
+        'OR] initial\n',
+      );
+      const output = vi.spyOn(process.stdout, 'write').mockReturnValue(true);
+      await vi.advanceTimersByTimeAsync(100);
+      expect(output).toHaveBeenCalledExactlyOnceWith('[ERROR] initial\n');
+      await append('[ERROR] later\n');
+      expect(output.mock.calls).toEqual([['[ERROR] initial\n'], ['[ERROR] later\n']]);
+      stop?.();
+      await vi.advanceTimersByTimeAsync(100);
+      await following;
+    });
+
+    it.each([true, false])(
+      'keeps the initial 20-line limit (terminated: %s)',
+      async (terminated) => {
+        const lines = Array.from({ length: 25 }, (_, index) => `[ERROR] line ${index}`);
+        const { following } = await startFollowing('ERROR', lines, terminated);
+        expect(logger.info).toHaveBeenLastCalledWith(
+          lines.slice(-20, terminated ? undefined : -1).join('\n'),
+        );
+        const output = vi.spyOn(process.stdout, 'write').mockReturnValue(true);
+        stop?.();
+        await vi.advanceTimersByTimeAsync(100);
+        await following;
+        expect(output.mock.calls).toEqual(terminated ? [] : [['[ERROR] line 24\n']]);
+      },
+    );
+
+    it('handles short reads in both the initial snapshot and appended bytes', async () => {
+      const { following, append } = await startFollowing(
+        'ERROR',
+        ['[ERROR] initial', '[ERR'],
+        false,
+        undefined,
+        undefined,
+        3,
+      );
+      expect(logger.info).toHaveBeenLastCalledWith('[ERROR] initial');
+      const output = vi.spyOn(process.stdout, 'write').mockReturnValue(true);
+      await append('OR] appended\n');
+      expect(output).toHaveBeenCalledExactlyOnceWith('[ERROR] appended\n');
+      stop?.();
+      await vi.advanceTimersByTimeAsync(100);
+      await following;
+    });
+
+    it.each([false, true])('preserves initial CRLF handling (large file: %s)', async (large) => {
+      const lines = Array.from({ length: 25 }, (_, index) => `[ERROR] line ${index}`);
+      const content = Buffer.from(
+        (large ? `${'x'.repeat(1024 * 1024)}\r\n` : '') + lines.join('\r\n') + '\r\n',
+      );
+      const { following } = await startFollowing('ERROR', [], true, content);
+      expect(logger.info).toHaveBeenLastCalledWith(
+        lines
+          .slice(-20)
+          .map((line) => line + (large ? '' : '\r'))
+          .join('\n'),
+      );
+      stop?.();
+      await vi.advanceTimersByTimeAsync(100);
+      await following;
+    });
+
+    it('keeps immediate unfinished output without grep', async () => {
+      const { following, append } = await startFollowing(undefined, ['initial'], false);
+      expect(logger.info).toHaveBeenLastCalledWith('initial');
+      const output = vi.spyOn(process.stdout, 'write').mockReturnValue(true);
+      await append('[ERR');
+      expect(output).toHaveBeenCalledExactlyOnceWith('[ERR\n');
+      await append('OR] failed\n');
+      expect(output.mock.calls).toEqual([['[ERR\n'], ['OR] failed\n']]);
+      stop?.();
+      await vi.advanceTimersByTimeAsync(100);
+      await following;
+    });
+
+    it.each(['SIGINT', 'SIGTERM'] as const)(
+      'flushes a matching unfinished line only once on %s',
+      async (signal) => {
+        const { following, append } = await startFollowing('ERROR');
+        const output = vi.spyOn(process.stdout, 'write').mockReturnValue(true);
+        await append('[ERROR] unfinished');
+        expect(output).not.toHaveBeenCalled();
+        process.emit(signal);
+        stop?.();
+        await vi.advanceTimersByTimeAsync(100);
+        await following;
+        expect(output).toHaveBeenCalledExactlyOnceWith('[ERROR] unfinished\n');
+      },
+    );
+
+    it('does not flush an unmatched unfinished line', async () => {
+      const { following, append } = await startFollowing('ERROR');
+      const output = vi.spyOn(process.stdout, 'write').mockReturnValue(true);
+      await append('[INFO] unfinished');
+      stop?.();
+      await vi.advanceTimersByTimeAsync(100);
+      await following;
+      expect(output).not.toHaveBeenCalled();
+    });
+
+    it('discards buffered text when the file is truncated', async () => {
+      const { following, append, replace } = await startFollowing('ERROR');
+      const output = vi.spyOn(process.stdout, 'write').mockReturnValue(true);
+      await append('[ERR');
+      await replace('');
+      await append('OR] stale\n[ERROR] fresh\n');
+      stop?.();
+      await vi.advanceTimersByTimeAsync(100);
+      await following;
+      expect(output).toHaveBeenCalledExactlyOnceWith('[ERROR] fresh\n');
+    });
+
+    it('discards buffered text immediately on rename, including before cleanup', async () => {
+      const { watcher, following, append } = await startFollowing('ERROR');
+      const output = vi.spyOn(process.stdout, 'write').mockReturnValue(true);
+      await append('[ERROR] old file');
+      watcher.emit('change', 'rename');
+      stop?.();
+      await vi.advanceTimersByTimeAsync(100);
+      await following;
+      expect(output).not.toHaveBeenCalled();
+    });
+
+    it('prints complete initial lines and flushes only the unfinished tail on exit', async () => {
+      const { following } = await startFollowing(
+        'ERROR',
+        ['[ERROR] ready', '[ERROR] unfinished'],
+        false,
+      );
+      expect(logger.info).toHaveBeenLastCalledWith('[ERROR] ready');
+      const output = vi.spyOn(process.stdout, 'write').mockReturnValue(true);
+      stop?.();
+      await vi.advanceTimersByTimeAsync(100);
+      await following;
+      expect(output).toHaveBeenCalledExactlyOnceWith('[ERROR] unfinished\n');
+    });
+
+    it('coalesces changes during a filtered read without duplicating its pending bytes', async () => {
+      const { watcher, following } = await startFollowing('ERROR');
+      const output = vi.spyOn(process.stdout, 'write').mockReturnValue(true);
+      let content = Buffer.from('[ERR');
+      let finishRead: (() => void) | undefined;
+      const read = vi.fn((buffer: Buffer, offset: number, length: number, position: number) => {
+        const bytesRead = content.copy(buffer, offset, position, position + length);
+        if (read.mock.calls.length === 1) {
+          return new Promise((resolve) => {
+            finishRead = () => resolve({ bytesRead, buffer });
+          });
+        }
+        return Promise.resolve({ bytesRead, buffer });
+      });
+      mockFs.open.mockResolvedValue({
+        read,
+        close: vi.fn().mockResolvedValue(undefined),
+      } as unknown as Awaited<ReturnType<typeof fs.open>>);
+      mockFs.stat.mockResolvedValue({ size: content.length } as fsSync.Stats);
+      try {
+        watcher.emit('change');
+        await vi.advanceTimersByTimeAsync(100);
+        content = Buffer.from('[ERROR] failed\n');
+        mockFs.stat.mockResolvedValue({ size: content.length } as fsSync.Stats);
+        watcher.emit('change');
+        await vi.advanceTimersByTimeAsync(100);
+        expect(read).toHaveBeenCalledOnce();
+        finishRead?.();
+        await vi.advanceTimersByTimeAsync(100);
+        expect(read).toHaveBeenCalledTimes(2);
+        expect(read.mock.calls[1][3]).toBe(4);
+        expect(output).toHaveBeenCalledExactlyOnceWith('[ERROR] failed\n');
+      } finally {
+        finishRead?.();
+        stop?.();
+        await vi.advanceTimersByTimeAsync(100);
+        await following;
+      }
+    });
+
+    it('does not restore buffered content from an in-flight read after cleanup', async () => {
+      const { watcher, following, append } = await startFollowing('ERROR');
+      const output = vi.spyOn(process.stdout, 'write').mockReturnValue(true);
+      await append('[ERR');
+      let finishRead: (() => void) | undefined;
+      const content = Buffer.from('OR] stale\n');
+      const close = vi.fn().mockResolvedValue(undefined);
+      mockFs.stat.mockResolvedValue({ size: 4 + content.length } as fsSync.Stats);
+      const read = vi.fn((buffer: Buffer) => {
+        content.copy(buffer);
+        return new Promise((resolve) => {
+          finishRead = () => resolve({ bytesRead: content.length, buffer });
+        });
+      });
+      mockFs.open.mockResolvedValue({ read, close } as unknown as Awaited<
+        ReturnType<typeof fs.open>
+      >);
+      watcher.emit('change');
+      await vi.advanceTimersByTimeAsync(100);
+      expect(read).toHaveBeenCalledOnce();
+      stop?.();
+      finishRead?.();
+      await vi.advanceTimersByTimeAsync(100);
+      await following;
+      expect(output).not.toHaveBeenCalled();
+      expect(close).toHaveBeenCalledOnce();
+    });
 
     it('cancels pending file reads when interrupted', async () => {
       const { watcher, following } = await startFollowing();
