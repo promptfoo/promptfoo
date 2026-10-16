@@ -327,10 +327,7 @@ describe('getNunjucksEngine', () => {
     expect(engine.renderString('Hello {{ name }}', { name: 'World' })).toBe('Hello {{ name }}');
   });
 
-  it.each([
-    'should return a nunjucks environment when isGrader is true, regardless of PROMPTFOO_DISABLE_TEMPLATING',
-    'should use nunjucks when isGrader is true, even if PROMPTFOO_DISABLE_TEMPLATING is set',
-  ])('%s', () => {
+  it('should use nunjucks for graders when templating is disabled', () => {
     mockProcessEnv({ PROMPTFOO_DISABLE_TEMPLATING: 'true' });
     const engine = getNunjucksEngine({}, false, true);
     expect(engine).toBeInstanceOf(nunjucks.Environment);
@@ -426,9 +423,12 @@ describe('getNunjucksEngine', () => {
       cliState.config = initialConfig;
     });
 
-    it('should handle undefined cliState.config', verifyEnvironmentGlobals);
-
-    it('should handle undefined cliState.config.env', verifyEnvironmentGlobals);
+    it.each([
+      ['config', undefined],
+      ['config.env', { env: undefined }],
+    ] as const)('should handle undefined cliState.%s', (_name, config) => {
+      cliState.withConfig(config, verifyEnvironmentGlobals);
+    });
 
     it('should disable process.env but allow config env variables when PROMPTFOO_DISABLE_TEMPLATE_ENV_VARS is true', () => {
       mockProcessEnv({ TEST_VAR: 'test_value' });
