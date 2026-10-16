@@ -3,6 +3,7 @@ import { constants } from 'node:fs';
 import * as fs from 'node:fs/promises';
 import { homedir } from 'node:os';
 import path from 'node:path';
+import { setTimeout } from 'node:timers/promises';
 
 import { z } from 'zod';
 
@@ -85,7 +86,20 @@ export async function writeJson(file: string, value: unknown, replace = false): 
   try {
     await fs.writeFile(temporary, body, { flag: 'wx', mode: 0o600 });
     if (replace) {
-      await fs.rename(temporary, file);
+      // Windows can deny replacement while another hook is reading or renaming the
+      // destination. Retry briefly without unlinking the existing complete record.
+      for (let attempt = 0; ; attempt++) {
+        try {
+          await fs.rename(temporary, file);
+          break;
+        } catch (error) {
+          const code = (error as NodeJS.ErrnoException).code;
+          if (attempt >= 5 || !['EPERM', 'EACCES', 'EBUSY'].includes(code ?? '')) {
+            throw error;
+          }
+          await setTimeout(20 * (attempt + 1));
+        }
+      }
     } else {
       try {
         await fs.link(temporary, file);
