@@ -63,6 +63,14 @@ describe('scriptBasedProvider', () => {
       expect(factory.test('file://path/script.py')).toBe(false);
     });
 
+    it('should match file extensions case-insensitively', () => {
+      const factory = createScriptBasedProviderFactory('test', 'py', MockProvider as any);
+
+      expect(factory.test('file://path/provider.PY')).toBe(true);
+      expect(factory.test('file://path/provider.Py:call')).toBe(true);
+      expect(factory.test('file://path/provider.js')).toBe(false);
+    });
+
     it('should extract script path correctly when using prefix pattern', async () => {
       const factory = createScriptBasedProviderFactory('test', null, MockProvider as any);
       const provider = await factory.create('test:script.js', mockProviderOptions, mockContext);
