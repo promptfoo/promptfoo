@@ -131,6 +131,8 @@ assert.deepEqual(contracts.normalizeInputs({ text: 'prompt', image: { type: 'ima
 assert.equal(contracts.hasFunctionToolCallValidator({ validateFunctionToolCall() {} }), true);
 assert.equal(contracts.hasFunctionToolCallValidator({ validateFunctionToolCall: false }), false);
 assert.equal(contracts.UserSchemas.Login.Request, contracts.LoginRequestSchema);
+assert.equal(contracts.GeminiProviderOptionsInputSchema.safeParse({ id: 'google:gemini-2.5-flash', config: { temperature: 0 } }).success, true);
+assert.equal(contracts.GeminiProviderOptionsInputSchema.safeParse({ id: 'google:gemini-2.5-flash', config: { projectId: 'vertex-only' } }).success, false);
 assert.equal('TRACE_CREDENTIAL_PATH_SEGMENT' in contracts, false);
 `;
   fs.writeFileSync(

@@ -1,5 +1,6 @@
 import type { GoogleAuthOptions } from 'google-auth-library';
 
+import type { GoogleAiStudioConfigInput } from '../../contracts/providerConfig/google';
 import type { ClaudeEffort } from '../anthropic/types';
 import type { MCPConfig } from '../mcp/types';
 
@@ -178,7 +179,11 @@ export interface GoogleSpeechConfig {
   languageCode?: string;
 }
 
-export interface CompletionOptions {
+export interface CompletionOptions
+  extends Pick<
+    GoogleAiStudioConfigInput,
+    'temperature' | 'maxOutputTokens' | 'topP' | 'topK' | 'stopSequences'
+  > {
   apiKey?: string;
   apiKeyRequired?: boolean;
   apiHost?: string;
@@ -228,13 +233,8 @@ export interface CompletionOptions {
   context?: string;
   examples?: { input: string; output: string }[];
   safetySettings?: { category: string; threshold?: string; probability?: string }[];
-  stopSequences?: string[];
-  temperature?: number;
-  maxOutputTokens?: number;
   max_tokens?: number; // Alternative format for Claude models
-  topP?: number;
   top_p?: number; // Alternative format for Claude models
-  topK?: number;
   top_k?: number; // Alternative format for Claude models
   thinking?: ClaudeThinkingConfig; // Extended thinking for Claude models
   showThinking?: boolean; // Whether to include thinking output for Claude models
