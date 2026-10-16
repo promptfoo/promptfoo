@@ -12,6 +12,123 @@ import type { OpenAiCompletionOptions } from '../../../../src/providers/openai/t
 
 describe('OpenAiResponsesProvider MCP assertions', () => {
   describe('Enhanced OpenAI tools assertion with MCP support', () => {
+    it.each(
+      ['function_call', 'tool_use'].flatMap((type) =>
+        [
+          { name: 'get_weather', arguments: '{"location":42}', pass: false },
+          { name: 'unknown_function', arguments: '{"location":"Paris"}', pass: false },
+          { name: 'get_weather', arguments: 'not JSON', pass: false },
+          { name: 'get_weather', arguments: '{"location":"Paris"}', pass: true },
+          { name: 'get_weather', input: { location: 'Paris' }, pass: false },
+        ].map((call) => ({ type, ...call })),
+      ),
+    )('validates nested Responses calls after rendering or callbacks: %j', async (call) => {
+      for (const callbacks of [false, true]) {
+        vi.mocked(cache.fetchWithCache).mockResolvedValue(
+          createMockFetchResponse({
+            id: 'resp_nested',
+            status: 'completed',
+            model: 'gpt-4.1',
+            output: [
+              { type: 'mcp_call', name: 'read', output: 'MCP succeeded', status: 'completed' },
+              {
+                type: 'message',
+                role: 'assistant',
+                content: [
+                  { type: 'output_text', text: 'Checking weather.' },
+                  { ...call, call_id: 'call_nested' },
+                ],
+              },
+            ],
+          }),
+        );
+        const callback = vi.fn().mockResolvedValue('Callback completed');
+        const provider = new OpenAiResponsesProvider('gpt-4.1', {
+          config: {
+            apiKey: 'test-key',
+            tools: [
+              {
+                type: 'function',
+                function: {
+                  name: 'get_weather',
+                  parameters: {
+                    type: 'object',
+                    properties: { location: { type: 'string' } },
+                    required: ['location'],
+                  },
+                },
+              },
+            ],
+            ...(callbacks ? { functionToolCallbacks: { get_weather: callback } } : {}),
+          },
+        });
+        const providerResponse = await provider.callApi('Read and get the weather');
+        expect(providerResponse.error).toBeUndefined();
+        if (callbacks && call.name === 'get_weather') {
+          expect(callback).toHaveBeenCalledOnce();
+          expect(providerResponse.output).toContain('Callback completed');
+        }
+        for (const inverse of [false, true]) {
+          const result = await runAssertion({
+            prompt: 'Read and get the weather',
+            provider,
+            providerResponse,
+            assertion: {
+              type: inverse ? 'not-is-valid-openai-tools-call' : 'is-valid-openai-tools-call',
+            },
+            test: {},
+          });
+          const pass = inverse ? !call.pass : call.pass;
+          expect(result).toMatchObject({ pass, score: pass ? 1 : 0 });
+        }
+      }
+    });
+
+    it.each([{ apiKey: 'S3CRET' }, 'S3CRET invalid JSON'])(
+      'omits raw arguments from Responses assertion diagnostics: %j',
+      async (argumentsValue) => {
+        vi.mocked(cache.fetchWithCache).mockResolvedValue(
+          createMockFetchResponse({
+            id: 'resp_private',
+            status: 'completed',
+            model: 'gpt-4.1',
+            output: [
+              { type: 'mcp_call', name: 'read', output: 'MCP succeeded', status: 'completed' },
+              { type: 'function_call', name: 'get_weather', arguments: argumentsValue },
+            ],
+          }),
+        );
+        const provider = new OpenAiResponsesProvider('gpt-4.1', {
+          config: {
+            apiKey: 'test-key',
+            tools: [
+              {
+                type: 'function',
+                function: {
+                  name: 'get_weather',
+                  parameters: { type: 'object', properties: {} },
+                },
+              },
+            ],
+          },
+        });
+        const providerResponse = await provider.callApi('Read');
+        for (const inverse of [false, true]) {
+          const result = await runAssertion({
+            prompt: 'Read',
+            provider,
+            providerResponse,
+            assertion: {
+              type: inverse ? 'not-is-valid-openai-tools-call' : 'is-valid-openai-tools-call',
+            },
+            test: {},
+          });
+          expect(result).toMatchObject({ pass: inverse, score: inverse ? 1 : 0 });
+          expect(result.reason).not.toContain('S3CRET');
+        }
+      },
+    );
+
     it.each([
       { name: 'get_weather', arguments: '{"location":42}', pass: false },
       { name: 'unknown_function', arguments: '{"location":"Paris"}', pass: false },

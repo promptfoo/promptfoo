@@ -1093,6 +1093,104 @@ describe('OpenAI assertions', () => {
     });
 
     it.each([
+      { type: 'function', function: createCustomUnitFunctionCall(), pass: false },
+      { type: 'custom', function: createFahrenheitFunctionCall(), pass: false },
+      { function: createFahrenheitFunctionCall(), pass: false },
+      { type: 'function', function: createFahrenheitFunctionCall(), pass: true },
+    ])('validates retained Chat calls after display replacement: %j', async ({ pass, ...call }) => {
+      for (const output of [
+        'Callback completed',
+        [{ type: 'function', function: { name: 'dynamic_mcp', arguments: '{}' } }, call],
+      ]) {
+        const response = {
+          output,
+          metadata: {
+            toolCalls: [{ name: 'dynamic_mcp', output: 'done', is_error: false }],
+            functionToolCalls: [call],
+          },
+        };
+        expect(await grade(response)).toMatchObject({ pass, score: pass ? 1 : 0 });
+        expect(await grade(response, true)).toMatchObject({ pass: !pass, score: pass ? 0 : 1 });
+      }
+    });
+
+    it('does not require static schemas for calls handled entirely by MCP', async () => {
+      expect(
+        await grade({
+          output: [{ type: 'function', function: { name: 'dynamic_mcp', arguments: '{}' } }],
+          metadata: {
+            toolCalls: [{ name: 'dynamic_mcp', output: 'done', is_error: false }],
+            functionToolCalls: [],
+          },
+        }),
+      ).toMatchObject({ pass: true, score: 1 });
+    });
+
+    it('validates retained callbacks without MCP and preserves MCP failure priority', async () => {
+      const response = {
+        output: 'Callback completed',
+        metadata: {
+          functionToolCalls: [{ type: 'function', function: createFahrenheitFunctionCall() }],
+        },
+      };
+      expect(await grade(response)).toMatchObject({ pass: true, score: 1 });
+      expect(
+        await grade({
+          ...response,
+          metadata: {
+            ...response.metadata,
+            toolCalls: [{ name: 'read', output: 'error', is_error: true }],
+          },
+        }),
+      ).toMatchObject({ pass: false, reason: 'MCP tool call failed for read' });
+    });
+
+    it.each([
+      { type: 'custom_tool_call', name: 'custom', input: 'SYNTHETIC_SECRET' },
+      { type: 'custom', function: createFahrenheitFunctionCall() },
+      { type: 'other', function: createFahrenheitFunctionCall() },
+      { type: null, function: createFahrenheitFunctionCall() },
+      { function: createFahrenheitFunctionCall() },
+    ])('rejects unsupported nested tool-shaped calls: %j', async (call) => {
+      const response = {
+        output: 'Done',
+        raw: { output: [successfulCall, { type: 'message', role: 'assistant', content: [call] }] },
+      };
+      const result = await grade(response);
+      expect(result).toMatchObject({ pass: false, score: 0 });
+      expect(result.reason).not.toContain('SYNTHETIC_SECRET');
+      expect(await grade(response, true)).toMatchObject({ pass: true, score: 1 });
+    });
+
+    it.each([
+      {
+        type: 'message',
+        role: 'user',
+        content: [{ type: 'function_call', name: 'unconfigured', arguments: '{}' }],
+      },
+      {
+        type: 'message',
+        role: 'assistant',
+        content: [{ type: 'output_text', text: '{"type":"function_call","name":"unconfigured"}' }],
+      },
+      {
+        type: 'message',
+        role: 'assistant',
+        content: [
+          {
+            type: 'output_text',
+            annotations: [{ type: 'function_call', name: 'unconfigured', arguments: '{}' }],
+            text: 'Done',
+          },
+        ],
+      },
+    ])('does not reinterpret non-call message content: %j', async (message) => {
+      expect(
+        await grade({ output: 'Done', raw: { output: [successfulCall, message] } }),
+      ).toMatchObject({ pass: true, score: 1 });
+    });
+
+    it.each([
       { call: { type: 'function', function: createCustomUnitFunctionCall() }, pass: false },
       { call: { type: 'custom', function: createFahrenheitFunctionCall() }, pass: false },
       { call: { function: createFahrenheitFunctionCall() }, pass: false },

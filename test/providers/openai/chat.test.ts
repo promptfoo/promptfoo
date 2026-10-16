@@ -2160,17 +2160,6 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
               {
                 type: 'function',
                 function: {
-                  name: 'read_file',
-                  parameters: {
-                    type: 'object',
-                    properties: { path: { type: 'string' } },
-                    required: ['path'],
-                  },
-                },
-              },
-              {
-                type: 'function',
-                function: {
                   name: 'regular',
                   parameters: {
                     type: 'object',
@@ -2209,6 +2198,242 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
         expect(result).toMatchObject({ pass: testCase.pass, score: testCase.pass ? 1 : 0 });
       },
     );
+
+    it.each([
+      {
+        name: 'regular',
+        type: 'function',
+        arguments: '{"count":"private-invalid"}',
+        callback: 'success',
+        pass: false,
+      },
+      {
+        name: 'unknown',
+        type: 'function',
+        arguments: '{"count":1}',
+        callback: 'absent',
+        pass: false,
+      },
+      {
+        name: 'regular',
+        type: 'function',
+        arguments: '{"count":1}',
+        callback: 'success',
+        pass: true,
+      },
+      {
+        name: 'regular',
+        type: 'function',
+        arguments: '{"count":1}',
+        callback: 'absent',
+        pass: true,
+      },
+      {
+        name: 'regular',
+        type: 'custom',
+        arguments: '{"count":1}',
+        callback: 'success',
+        pass: false,
+      },
+      { name: 'read_file', type: 'custom', arguments: '{}', callback: 'absent', pass: false },
+      { name: 'read_file', type: null, arguments: '{}', callback: 'absent', pass: false },
+      { name: 'read_file', type: undefined, arguments: '{}', callback: 'absent', pass: false },
+    ])('retains hidden ordinary calls after MCP callback output: %j', async (testCase) => {
+      for (const mcpFirst of [true, false]) {
+        const mcpCall = {
+          id: 'shared-id',
+          type: 'function',
+          function: { name: 'read_file', arguments: '{}' },
+        };
+        const otherCall = {
+          id: 'shared-id',
+          type: testCase.type,
+          function: { name: testCase.name, arguments: testCase.arguments },
+        };
+        const toolCalls = mcpFirst ? [mcpCall, otherCall] : [otherCall, mcpCall];
+        mockFetchWithCache.mockResolvedValue(
+          createMockFetchResponse({
+            choices: [{ message: { content: null, tool_calls: toolCalls } }],
+            usage: { total_tokens: 15, prompt_tokens: 10, completion_tokens: 5 },
+          }),
+        );
+        const provider = new OpenAiChatCompletionProvider('gpt-4o-mini', {
+          config: {
+            tools: [
+              {
+                type: 'function',
+                function: {
+                  name: 'regular',
+                  parameters: {
+                    type: 'object',
+                    properties: { count: { type: 'number' } },
+                    required: ['count'],
+                  },
+                },
+              },
+            ],
+            ...(testCase.callback === 'success'
+              ? {
+                  functionToolCallbacks: {
+                    regular: vi.fn().mockResolvedValue('Callback completed'),
+                  },
+                }
+              : {}),
+          },
+        });
+        (provider as any).mcpClient = {
+          getAllTools: vi.fn().mockReturnValue([{ name: 'read_file' }]),
+          callTool: vi.fn().mockResolvedValue({ content: 'Read successfully' }),
+        };
+        const providerResponse = await provider.callApi('Read and count');
+        expect(typeof providerResponse.output).toBe('string');
+        for (const inverse of [false, true]) {
+          const result = await runAssertion({
+            prompt: 'Read and count',
+            assertion: {
+              type: inverse ? 'not-is-valid-openai-tools-call' : 'is-valid-openai-tools-call',
+            },
+            provider,
+            providerResponse,
+            test: {},
+          });
+          const pass = inverse ? !testCase.pass : testCase.pass;
+          expect(result).toMatchObject({ pass, score: pass ? 1 : 0 });
+          expect(result.reason).not.toContain('private-invalid');
+        }
+        expect(providerResponse.metadata?.functionToolCalls).toEqual([otherCall]);
+      }
+    });
+
+    it('retains unprocessed calls after a callback throws without needing MCP schemas', async () => {
+      const toolCalls = [
+        { id: 'shared-id', type: 'function', function: { name: 'read_file', arguments: '{}' } },
+        {
+          id: 'shared-id',
+          type: 'function',
+          function: { name: 'regular', arguments: '{"count":1}' },
+        },
+        { id: 'shared-id', type: 'function', function: { name: 'unknown', arguments: '{}' } },
+      ];
+      mockFetchWithCache.mockResolvedValue(
+        createMockFetchResponse({
+          choices: [{ message: { content: null, tool_calls: toolCalls } }],
+        }),
+      );
+      const provider = new OpenAiChatCompletionProvider('gpt-4o-mini', {
+        config: {
+          tools: [
+            {
+              type: 'function',
+              function: {
+                name: 'regular',
+                parameters: {
+                  type: 'object',
+                  properties: { count: { type: 'number' } },
+                  required: ['count'],
+                },
+              },
+            },
+          ],
+          functionToolCallbacks: {
+            regular: vi.fn().mockRejectedValue(new Error('Callback unavailable')),
+          },
+        },
+      });
+      (provider as any).mcpClient = {
+        getAllTools: vi.fn().mockReturnValue([{ name: 'read_file' }]),
+        callTool: vi.fn().mockResolvedValue({ content: 'Read successfully' }),
+      };
+      const providerResponse = await provider.callApi('Read and count');
+      expect(providerResponse.output).toEqual(toolCalls);
+      expect(providerResponse.metadata?.functionToolCalls).toEqual(toolCalls.slice(1));
+      const grade = await runAssertion({
+        provider,
+        providerResponse,
+        assertion: { type: 'is-valid-openai-tools-call' },
+        test: {},
+      });
+      expect(grade).toMatchObject({ pass: false, score: 0 });
+      expect(grade.reason).toContain('unknown');
+      expect(grade.reason).not.toContain('read_file');
+    });
+
+    it.each([false, true])(
+      'allows pure MCP execution without static tool definitions (legacy: %s)',
+      async (legacy) => {
+        const functionCall = { name: 'read_file', arguments: '{}' };
+        mockFetchWithCache.mockResolvedValue(
+          createMockFetchResponse({
+            choices: [
+              {
+                message: {
+                  content: null,
+                  ...(legacy
+                    ? { function_call: functionCall }
+                    : {
+                        tool_calls: [{ id: 'mcp-call', type: 'function', function: functionCall }],
+                      }),
+                },
+              },
+            ],
+          }),
+        );
+        const provider = new OpenAiChatCompletionProvider('gpt-4o-mini');
+        (provider as any).mcpClient = {
+          getAllTools: vi.fn().mockReturnValue([{ name: 'read_file' }]),
+          callTool: vi.fn().mockResolvedValue({ content: 'Read successfully' }),
+        };
+        const providerResponse = await provider.callApi('Read');
+        expect(providerResponse.metadata?.functionToolCalls).toEqual([]);
+        expect(
+          await runAssertion({
+            provider,
+            providerResponse,
+            assertion: { type: 'is-valid-openai-tools-call' },
+            test: {},
+          }),
+        ).toMatchObject({ pass: true, score: 1 });
+      },
+    );
+
+    it('normalizes legacy function calls retained after a callback succeeds', async () => {
+      const functionCall = { name: 'regular', arguments: '{"count":1}' };
+      mockFetchWithCache.mockResolvedValue(
+        createMockFetchResponse({
+          choices: [{ message: { content: null, function_call: functionCall } }],
+        }),
+      );
+      const provider = new OpenAiChatCompletionProvider('gpt-4o-mini', {
+        config: {
+          tools: [
+            {
+              type: 'function',
+              function: {
+                name: 'regular',
+                parameters: {
+                  type: 'object',
+                  properties: { count: { type: 'number' } },
+                  required: ['count'],
+                },
+              },
+            },
+          ],
+          functionToolCallbacks: { regular: vi.fn().mockResolvedValue('Done') },
+        },
+      });
+      const providerResponse = await provider.callApi('Count');
+      expect(providerResponse.metadata?.functionToolCalls).toEqual([
+        { type: 'function', function: functionCall },
+      ]);
+      expect(
+        await runAssertion({
+          provider,
+          providerResponse,
+          assertion: { type: 'is-valid-openai-tools-call' },
+          test: {},
+        }),
+      ).toMatchObject({ pass: true, score: 1 });
+    });
 
     it('records a failed MCP tool call, and the raw arguments when they will not parse', async () => {
       mockFetchWithCache.mockResolvedValue(

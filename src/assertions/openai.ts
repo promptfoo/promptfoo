@@ -7,15 +7,35 @@ import type { AssertionParams, GradingResult } from '../types/index';
 
 function collectRawToolCalls(responseItems: unknown[]) {
   return responseItems
+    .flatMap((item) => {
+      // Match the Responses processor's one-level assistant message traversal.
+      // Text, annotations, and content from other roles are not tool-call evidence.
+      if (
+        item !== null &&
+        typeof item === 'object' &&
+        'type' in item &&
+        item.type === 'message' &&
+        'role' in item &&
+        item.role === 'assistant' &&
+        'content' in item &&
+        Array.isArray(item.content)
+      ) {
+        return [item, ...item.content];
+      }
+      return [item];
+    })
     .filter(
       (item): item is Record<string, unknown> =>
         item !== null &&
         typeof item === 'object' &&
-        (('type' in item && (item.type === 'function_call' || item.type === 'custom_tool_call')) ||
+        (('type' in item &&
+          (item.type === 'function_call' ||
+            item.type === 'tool_use' ||
+            item.type === 'custom_tool_call')) ||
           'function' in item),
     )
     .map((item) => {
-      if (item.type === 'function_call') {
+      if (item.type === 'function_call' || item.type === 'tool_use') {
         return {
           type: 'function',
           function: { name: item.name, arguments: item.arguments },
@@ -44,6 +64,16 @@ export const handleIsValidOpenAiToolsCall = async ({
     ? providerResponse.raw.output
     : [];
   const rawToolCalls = collectRawToolCalls(responseItems);
+  const retainedToolCalls: unknown[] | undefined = Array.isArray(
+    providerResponse.metadata?.functionToolCalls,
+  )
+    ? providerResponse.metadata.functionToolCalls
+    : undefined;
+  // Chat callbacks can replace or omit ordinary calls from display output. The
+  // provider retains those calls separately from calls routed to MCP execution.
+  if (retainedToolCalls) {
+    output = retainedToolCalls;
+  }
   const hasOutputToolCalls =
     Array.isArray(output) || (output && typeof output === 'object' && 'tool_calls' in output);
   const mcpCalls = responseItems
@@ -82,7 +112,7 @@ export const handleIsValidOpenAiToolsCall = async ({
     }
     // Responses can render function calls or callback results as text. Successful
     // MCP execution must not bypass either raw or retained function-call checks.
-    if (rawToolCalls.length === 0 && !hasOutputToolCalls) {
+    if (rawToolCalls.length === 0 && (!hasOutputToolCalls || retainedToolCalls?.length === 0)) {
       return verdict(true, `MCP tool call succeeded for ${mcpCalls[0].name}`);
     }
   }
@@ -110,10 +140,7 @@ export const handleIsValidOpenAiToolsCall = async ({
         typeof toolCall?.function?.arguments !== 'string',
     )
   ) {
-    return verdict(
-      false,
-      `OpenAI did not return a valid-looking tools response: ${JSON.stringify(toolsOutput)}`,
-    );
+    return verdict(false, 'OpenAI did not return a valid-looking tools response');
   }
 
   let tools = (provider as OpenAiChatCompletionProvider).config?.tools;
