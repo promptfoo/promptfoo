@@ -800,7 +800,9 @@ export async function runAssertions({
 
         return assertion.assert.map((subAssert, j) => {
           return {
-            assertion: subAssert,
+            assertion: assertion.config
+              ? { ...subAssert, config: { ...assertion.config, ...subAssert.config } }
+              : subAssert,
             assertResult: subAssertResult,
             index: j,
           };
