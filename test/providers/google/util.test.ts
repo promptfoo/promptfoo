@@ -147,12 +147,14 @@ vi.mock('fs', async (importOriginal) => {
 });
 
 describe('util', () => {
-  it.each(['gemini-flash-latest', 'gemini-flash-lite-latest'])(
-    'uses the global Vertex endpoint by default for %s',
-    (modelId) => {
-      expect(getVertexModelDefaultRegion(modelId)).toBe('global');
-    },
-  );
+  it.each([
+    'gemini-4-argon',
+    'gemini-4-argon-cyber-permissive',
+    'gemini-flash-latest',
+    'gemini-flash-lite-latest',
+  ])('uses the global Vertex endpoint by default for %s', (modelId) => {
+    expect(getVertexModelDefaultRegion(modelId)).toBe('global');
+  });
 
   it.each(['llama-4-scout-17b-16e-instruct-maas', 'llama-4-maverick-17b-128e-instruct-maas'])(
     'uses the us-east5 Vertex endpoint by default for %s',
@@ -3416,6 +3418,8 @@ describe('util', () => {
       expect(removeDeprecatedGeminiGenerationParams('gemini-2.5-flash', config)).toBe(config);
     });
     it.each([
+      'gemini-4-argon',
+      'gemini-4-argon-cyber-permissive',
       'gemini-3.8-flash',
       'gemini-3.7-flash',
       'gemini-3.6-flash',
@@ -3456,6 +3460,14 @@ describe('util', () => {
 
     it.each([
       {
+        modelName: 'gemini-4-argon',
+        generationConfig: { thinkingConfig: { thinkingLevel: 'MINIMAL' } },
+      },
+      {
+        modelName: 'gemini-4-argon',
+        generationConfig: { thinking_config: { thinking_level: 'minimal' } },
+      },
+      {
         modelName: 'gemini-3.8-flash',
         generationConfig: { thinkingConfig: { thinkingLevel: 'MINIMAL' } },
       },
@@ -3489,6 +3501,18 @@ describe('util', () => {
     });
 
     it.each([
+      {
+        modelName: 'gemini-4-argon',
+        generationConfig: { thinkingConfig: { thinkingBudget: 1024 } },
+      },
+      {
+        modelName: 'gemini-4-argon',
+        generationConfig: { thinkingConfig: { thinkingBudget: 0 } },
+      },
+      {
+        modelName: 'gemini-4-argon-cyber-permissive',
+        generationConfig: { thinking_config: { thinking_budget: 1024 } },
+      },
       {
         modelName: 'gemini-3.8-flash',
         generationConfig: { thinkingConfig: { thinkingBudget: 1024 } },
@@ -3742,6 +3766,92 @@ describe('util', () => {
 
         expect(cost).toBeCloseTo((600 * 2.7 + 400 * 0.27 + 500 * 13.5) / 1e6, 12);
       });
+    });
+
+    describe('Gemini 4 Argon pricing', () => {
+      it('switches to standard rates when introductory pricing expires', () => {
+        const now = vi.spyOn(Date, 'now');
+        now.mockReturnValue(Date.UTC(2026, 10, 30, 23, 59, 59, 999));
+
+        expect(calculateGoogleCost('gemini-4-argon', {}, 1000, 500)).toBeCloseTo(0.007, 10);
+
+        now.mockReturnValue(Date.UTC(2026, 11, 1));
+
+        expect(calculateGoogleCost('gemini-4-argon', {}, 1000, 500)).toBeCloseTo(0.014, 10);
+      });
+
+      it('applies cached, priority, and flex rates', () => {
+        vi.spyOn(Date, 'now').mockReturnValue(Date.UTC(2026, 11, 1));
+        const costForTier = (serviceTier?: string) =>
+          calculateGoogleCost(
+            'gemini-4-argon',
+            serviceTier ? { service_tier: serviceTier } : {},
+            1000,
+            500,
+            false,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            400,
+          );
+
+        expect(costForTier()).toBeCloseTo((600 * 4 + 400 * 0.2 + 500 * 20) / 1e6, 12);
+        expect(costForTier('priority')).toBeCloseTo((600 * 7.2 + 400 * 0.36 + 500 * 36) / 1e6, 12);
+        expect(costForTier('flex')).toBeCloseTo((600 * 2 + 400 * 0.1 + 500 * 10) / 1e6, 12);
+      });
+
+      it.each([
+        { rates: 'introductory', now: Date.UTC(2026, 9, 14), global: 0.007, multiRegion: 0.0077 },
+        { rates: 'standard', now: Date.UTC(2026, 11, 1), global: 0.014, multiRegion: 0.0154 },
+      ])(
+        'applies the Vertex multi-region premium to $rates rates',
+        ({ now, global, multiRegion }) => {
+          vi.spyOn(Date, 'now').mockReturnValue(now);
+
+          expect(
+            calculateGoogleCost('gemini-4-argon', { region: 'global' }, 1000, 500, true),
+          ).toBeCloseTo(global, 10);
+          expect(
+            calculateGoogleCost('gemini-4-argon', { region: 'us' }, 1000, 500, true),
+          ).toBeCloseTo(multiRegion, 10);
+          expect(
+            calculateGoogleCost('gemini-4-argon', { region: 'eu' }, 1000, 500, true),
+          ).toBeCloseTo(multiRegion, 10);
+        },
+      );
+
+      it.each([
+        { period: 'during', now: Date.UTC(2026, 9, 14) },
+        { period: 'after', now: Date.UTC(2026, 11, 1) },
+      ])(
+        'prices Cyber Permissive at Vertex standard rates $period the Argon discount',
+        ({ now }) => {
+          vi.spyOn(Date, 'now').mockReturnValue(now);
+
+          expect(
+            calculateGoogleCost(
+              'gemini-4-argon-cyber-permissive',
+              { region: 'global' },
+              1000,
+              500,
+              true,
+            ),
+          ).toBeCloseTo(0.014, 10);
+          expect(
+            calculateGoogleCost(
+              'gemini-4-argon-cyber-permissive',
+              { region: 'us' },
+              1000,
+              500,
+              true,
+            ),
+          ).toBeCloseTo(0.0154, 10);
+          expect(
+            calculateGoogleCost('gemini-4-argon-cyber-permissive', {}, 1000, 500, false),
+          ).toBeUndefined();
+        },
+      );
     });
 
     it.each(['gemini-3.5-flash-lite', 'gemini-flash-lite-latest'])(
