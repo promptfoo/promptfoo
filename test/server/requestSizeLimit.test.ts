@@ -21,6 +21,14 @@ describe('server request size limit', () => {
     expect(getRequestSizeLimit()).toBe('10mb');
   });
 
+  it('accepts bare byte counts and spaced units', () => {
+    restoreEnv = mockProcessEnv({ PROMPTFOO_REQUEST_SIZE_LIMIT: '1048576' });
+    expect(getRequestSizeLimit()).toBe('1048576');
+    restoreEnv();
+    restoreEnv = mockProcessEnv({ PROMPTFOO_REQUEST_SIZE_LIMIT: '1 MB' });
+    expect(getRequestSizeLimit()).toBe('1 MB');
+  });
+
   it('falls back to the default for an empty value', () => {
     restoreEnv = mockProcessEnv({ PROMPTFOO_REQUEST_SIZE_LIMIT: '  ' });
     expect(getRequestSizeLimit()).toBe('100mb');
@@ -39,6 +47,8 @@ describe('server request size limit', () => {
       .set('Content-Type', 'application/json')
       .send(JSON.stringify({ data: 'x'.repeat(4096) }));
     expect(res.status).toBe(413);
+    expect(res.headers['content-type']).toMatch(/application\/json/);
+    expect(res.body).toEqual({ error: expect.any(String) });
   });
 
   it('rejects urlencoded bodies larger than the configured limit with 413', async () => {
@@ -49,6 +59,7 @@ describe('server request size limit', () => {
       .set('Content-Type', 'application/x-www-form-urlencoded')
       .send(`data=${'x'.repeat(4096)}`);
     expect(res.status).toBe(413);
+    expect(res.body).toEqual({ error: expect.any(String) });
   });
 
   it('accepts the same body under the default limit', async () => {

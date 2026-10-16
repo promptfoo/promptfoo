@@ -49,7 +49,7 @@ import { userRouter } from './routes/user';
 import versionRouter from './routes/version';
 import { promptCacheService } from './services/promptCacheService';
 import { replyValidationError, sendError } from './utils/errors';
-import type { Request, Response } from 'express';
+import type { NextFunction, Request, Response } from 'express';
 
 import type { Prompt, TestCase, TestSuite } from '../types/index';
 
@@ -65,7 +65,7 @@ const DEFAULT_REQUEST_SIZE_LIMIT = '100mb';
  * PROMPTFOO_REQUEST_SIZE_LIMIT (any value accepted by body-parser, e.g. "10mb").
  * Malformed values fall back to the default so an unbound limit is never applied.
  */
-const REQUEST_SIZE_LIMIT_PATTERN = /^\d+(?:\.\d+)?(?:b|kb|mb|gb|tb)$/i;
+const REQUEST_SIZE_LIMIT_PATTERN = /^\d+(?:\.\d+)?\s*(?:b|kb|mb|gb|tb)?$/i;
 
 export function getRequestSizeLimit(): string {
   const configured = getEnvString('PROMPTFOO_REQUEST_SIZE_LIMIT')?.trim();
@@ -73,9 +73,10 @@ export function getRequestSizeLimit(): string {
     return DEFAULT_REQUEST_SIZE_LIMIT;
   }
   if (!REQUEST_SIZE_LIMIT_PATTERN.test(configured)) {
-    logger.warn(
-      `Invalid PROMPTFOO_REQUEST_SIZE_LIMIT "${configured}"; using default ${DEFAULT_REQUEST_SIZE_LIMIT}`,
-    );
+    logger.warn('Invalid PROMPTFOO_REQUEST_SIZE_LIMIT; using default', {
+      configured,
+      fallback: DEFAULT_REQUEST_SIZE_LIMIT,
+    });
     return DEFAULT_REQUEST_SIZE_LIMIT;
   }
   return configured;
@@ -149,6 +150,19 @@ export function createApp() {
   const requestSizeLimit = getRequestSizeLimit();
   app.use(express.json({ limit: requestSizeLimit }));
   app.use(express.urlencoded({ limit: requestSizeLimit, extended: true }));
+  // body-parser forwards oversize bodies as `entity.too.large`; answer with the
+  // JSON error envelope instead of Express's default HTML error page.
+  app.use((err: unknown, _req: Request, res: Response, next: NextFunction): void => {
+    if (
+      typeof err === 'object' &&
+      err !== null &&
+      (err as { type?: unknown }).type === 'entity.too.large'
+    ) {
+      sendError(res, 413, 'Request body exceeds the configured size limit');
+      return;
+    }
+    next(err);
+  });
   app.get('/health', (_req, res) => {
     // Health probes must never 500 from a self-imposed schema check.
     res.status(200).json({ status: 'OK', version: VERSION });
