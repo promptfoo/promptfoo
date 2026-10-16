@@ -5,6 +5,28 @@ import { toolCallErrorVerdict, toolCallVerdict } from './functionToolCall';
 import type { OpenAiChatCompletionProvider } from '../providers/openai/chat';
 import type { AssertionParams, GradingResult } from '../types/index';
 
+function collectRawToolCalls(responseItems: unknown[]) {
+  return responseItems
+    .filter(
+      (item): item is Record<string, unknown> =>
+        item !== null &&
+        typeof item === 'object' &&
+        (('type' in item && (item.type === 'function_call' || item.type === 'custom_tool_call')) ||
+          'function' in item),
+    )
+    .map((item) => {
+      if (item.type === 'function_call') {
+        return {
+          type: 'function',
+          function: { name: item.name, arguments: item.arguments },
+        };
+      }
+      // Retain other tool-shaped calls for discriminator validation without
+      // including their payloads. Other Responses items are not function calls.
+      return { type: item.type };
+    });
+}
+
 export const handleIsValidOpenAiToolsCall = async ({
   assertion,
   inverse,
@@ -21,6 +43,9 @@ export const handleIsValidOpenAiToolsCall = async ({
   const responseItems: unknown[] = Array.isArray(providerResponse.raw?.output)
     ? providerResponse.raw.output
     : [];
+  const rawToolCalls = collectRawToolCalls(responseItems);
+  const hasOutputToolCalls =
+    Array.isArray(output) || (output && typeof output === 'object' && 'tool_calls' in output);
   const mcpCalls = responseItems
     .filter(
       (item): item is Record<string, unknown> =>
@@ -55,12 +80,9 @@ export const handleIsValidOpenAiToolsCall = async ({
       const toolName = typeof failedCall.name === 'string' ? failedCall.name : 'unknown';
       return verdict(false, `MCP tool call failed for ${toolName}`);
     }
-    // A callback can execute an MCP call, then fall back to the original tool
-    // calls when another callback fails. Those calls still need schema checks.
-    if (
-      !Array.isArray(output) &&
-      !(output && typeof output === 'object' && 'tool_calls' in output)
-    ) {
+    // Responses can render function calls or callback results as text. Successful
+    // MCP execution must not bypass either raw or retained function-call checks.
+    if (rawToolCalls.length === 0 && !hasOutputToolCalls) {
       return verdict(true, `MCP tool call succeeded for ${mcpCalls[0].name}`);
     }
   }
@@ -68,6 +90,11 @@ export const handleIsValidOpenAiToolsCall = async ({
   // Handle traditional OpenAI function/tool calls
   if (output && typeof output === 'object' && 'tool_calls' in output) {
     output = output.tool_calls as string | object;
+  }
+  if (Array.isArray(output)) {
+    output = [...output, ...rawToolCalls];
+  } else if (rawToolCalls.length > 0 && !hasOutputToolCalls) {
+    output = rawToolCalls;
   }
   const toolsOutput = output as {
     type: 'function';
@@ -113,13 +140,7 @@ export const handleIsValidOpenAiToolsCall = async ({
   }
   if (
     !Array.isArray(tools) ||
-    tools.some(
-      (tool) =>
-        !tool ||
-        typeof tool !== 'object' ||
-        typeof tool.type !== 'string' ||
-        (tool.type === 'function' && !('function' in tool)),
-    )
+    tools.some((tool) => !tool || typeof tool !== 'object' || typeof tool.type !== 'string')
   ) {
     return {
       pass: false,
@@ -129,14 +150,13 @@ export const handleIsValidOpenAiToolsCall = async ({
     };
   }
   try {
+    // Responses uses flat definitions; Chat Completions wraps them in `function`.
+    // Retain malformed wrapped definitions so the schema validator rejects them.
+    const functions = tools
+      .filter((tool) => tool.type === 'function')
+      .map((tool) => ('function' in tool ? tool.function : tool));
     toolsOutput.forEach((toolOutput) => {
-      validateFunctionCall(
-        toolOutput.function,
-        tools
-          .filter((tool) => tool.type === 'function' && 'function' in tool)
-          .map((tool) => tool.function),
-        test.vars,
-      );
+      validateFunctionCall(toolOutput.function, functions, test.vars);
     });
     return verdict(true, 'Assertion passed');
   } catch (err) {

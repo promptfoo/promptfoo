@@ -1119,6 +1119,91 @@ describe('OpenAI assertions', () => {
     );
 
     it.each([
+      {
+        rawCall: createCustomUnitFunctionCall(),
+        output: [{ type: 'function', function: createFahrenheitFunctionCall() }],
+        pass: false,
+      },
+      {
+        rawCall: createFahrenheitFunctionCall(),
+        output: [{ type: 'function', function: createCustomUnitFunctionCall() }],
+        pass: false,
+      },
+      {
+        rawCall: createFahrenheitFunctionCall(),
+        output: { tool_calls: [{ type: 'custom', function: createFahrenheitFunctionCall() }] },
+        pass: false,
+      },
+      {
+        rawCall: createFahrenheitFunctionCall(),
+        output: { tool_calls: null },
+        pass: false,
+      },
+      {
+        rawCall: { ...createFahrenheitFunctionCall(), arguments: {} },
+        output: 'Display text',
+        pass: false,
+      },
+      { rawCall: createFahrenheitFunctionCall(), output: 'Display text', pass: true },
+    ])('validates both raw and displayed function calls: %j', async ({ rawCall, output, pass }) => {
+      const response = {
+        output,
+        raw: { output: [successfulCall, { type: 'function_call', ...rawCall }] },
+      };
+      expect(await grade(response)).toMatchObject({ pass, score: pass ? 1 : 0 });
+      expect(await grade(response, true)).toMatchObject({ pass: !pass, score: pass ? 0 : 1 });
+    });
+
+    it('validates a raw Responses function call without an MCP call', async () => {
+      expect(
+        await grade({
+          output: 'Display text',
+          raw: { output: [{ type: 'function_call', ...createFahrenheitFunctionCall() }] },
+        }),
+      ).toMatchObject({ pass: true, score: 1 });
+    });
+
+    it.each([
+      { type: 'message', role: 'assistant', content: [] },
+      { type: 'reasoning', summary: [] },
+      { type: 'web_search_call', status: 'completed' },
+      { type: 'file_search_call', status: 'completed', queries: [] },
+      { type: 'code_interpreter_call', status: 'completed', outputs: [] },
+    ])('allows unrelated Responses items alongside successful MCP calls: %j', async (item) => {
+      expect(
+        await grade({ output: 'Done', raw: { output: [successfulCall, item] } }),
+      ).toMatchObject({ pass: true, score: 1 });
+    });
+
+    it.each([
+      undefined,
+      [],
+      [{ type: 'function', name: 'getCurrentTemperature' }],
+      [{ type: 'function', function: null }],
+      [{ type: 'function', name: 'getCurrentTemperature', parameters: { type: 'not-a-type' } }],
+    ])('keeps raw function schema configuration errors as failures: %j', async (tools) => {
+      const provider = createMockProvider({ config: { tools } });
+      for (const inverse of [false, true]) {
+        const result = await runAssertion({
+          prompt: 'Some prompt',
+          provider,
+          assertion: inverse ? createTypeConfig('not-is-valid-openai-tools-call') : toolsAssertion,
+          test: {},
+          providerResponse: {
+            output: 'Display text',
+            raw: {
+              output: [
+                successfulCall,
+                { type: 'function_call', ...createFahrenheitFunctionCall() },
+              ],
+            },
+          },
+        });
+        expect(result).toMatchObject({ pass: false, score: 0 });
+      }
+    });
+
+    it.each([
       { name: 'ask_question', input: {}, output: 'sensitive error', is_error: true },
       { name: 'ask_question', input: {}, output: 'result' },
       { name: 'ask_question', input: {}, is_error: false },

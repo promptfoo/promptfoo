@@ -8,8 +8,172 @@ import { runAssertion } from '../../../../src/assertions/index';
 import * as cache from '../../../../src/cache';
 import { OpenAiResponsesProvider } from '../../../../src/providers/openai/responses';
 
+import type { OpenAiCompletionOptions } from '../../../../src/providers/openai/types';
+
 describe('OpenAiResponsesProvider MCP assertions', () => {
   describe('Enhanced OpenAI tools assertion with MCP support', () => {
+    it.each([
+      { name: 'get_weather', arguments: '{"location":42}', pass: false },
+      { name: 'unknown_function', arguments: '{"location":"Paris"}', pass: false },
+      { name: 'get_weather', arguments: 'not JSON', pass: false },
+      { name: 'get_weather', arguments: '{"location":"Paris"}', pass: true },
+    ])('validates raw function calls alongside successful MCP calls: %j', async (call) => {
+      for (const flat of [true, false]) {
+        const definition = {
+          name: 'get_weather',
+          parameters: {
+            type: 'object',
+            properties: { location: { type: 'string' } },
+            required: ['location'],
+          },
+        };
+        const tools = [
+          {
+            type: 'mcp',
+            server_label: 'fixture',
+            server_url: 'https://example.com/mcp',
+            require_approval: 'never',
+          },
+          flat ? { type: 'function', ...definition } : { type: 'function', function: definition },
+        ] as OpenAiCompletionOptions['tools'];
+        vi.mocked(cache.fetchWithCache).mockResolvedValue(
+          createMockFetchResponse({
+            id: 'resp_mixed',
+            status: 'completed',
+            model: 'gpt-4.1',
+            output: [
+              {
+                type: 'mcp_call',
+                name: 'read',
+                status: 'completed',
+                output: 'MCP succeeded',
+                error: null,
+              },
+              {
+                type: 'function_call',
+                id: 'fc_fixture',
+                call_id: 'call_fixture',
+                name: call.name,
+                arguments: call.arguments,
+                status: 'completed',
+              },
+            ],
+          }),
+        );
+        const provider = new OpenAiResponsesProvider('gpt-4.1', {
+          config: { apiKey: 'test-key', tools },
+        });
+        const providerResponse = await provider.callApi('Read and get the weather');
+        expect(typeof providerResponse.output).toBe('string');
+        expect(providerResponse.output).toContain('MCP Tool Result');
+
+        for (const inverse of [false, true]) {
+          const result = await runAssertion({
+            prompt: 'Read and get the weather',
+            provider,
+            providerResponse,
+            assertion: {
+              type: inverse ? 'not-is-valid-openai-tools-call' : 'is-valid-openai-tools-call',
+            },
+            test: {},
+          });
+          const pass = inverse ? !call.pass : call.pass;
+          expect(result).toMatchObject({ pass, score: pass ? 1 : 0 });
+        }
+      }
+    });
+
+    it('checks raw function arguments even when a callback replaces their display output', async () => {
+      vi.mocked(cache.fetchWithCache).mockResolvedValue(
+        createMockFetchResponse({
+          id: 'resp_callback',
+          status: 'completed',
+          model: 'gpt-4.1',
+          output: [
+            { type: 'mcp_call', name: 'read', output: 'MCP succeeded', status: 'completed' },
+            {
+              type: 'function_call',
+              name: 'get_weather',
+              arguments: '{"location":42}',
+              call_id: 'call_fixture',
+            },
+          ],
+        }),
+      );
+      const callback = vi.fn().mockResolvedValue('Callback completed');
+      const provider = new OpenAiResponsesProvider('gpt-4.1', {
+        config: {
+          apiKey: 'test-key',
+          tools: [
+            {
+              type: 'function',
+              function: {
+                name: 'get_weather',
+                parameters: {
+                  type: 'object',
+                  properties: { location: { type: 'string' } },
+                  required: ['location'],
+                },
+              },
+            },
+          ],
+          functionToolCallbacks: { get_weather: callback },
+        },
+      });
+      const providerResponse = await provider.callApi('Read and get the weather');
+      expect(callback).toHaveBeenCalledOnce();
+      expect(providerResponse.output).toContain('Callback completed');
+      const result = await runAssertion({
+        prompt: 'Read and get the weather',
+        provider,
+        providerResponse,
+        assertion: { type: 'is-valid-openai-tools-call' },
+        test: {},
+      });
+      expect(result).toMatchObject({ pass: false, score: 0 });
+    });
+
+    it.each([
+      { type: 'custom_tool_call', name: 'custom', call_id: 'call_fixture', input: 'custom input' },
+      { type: 'custom', function: { name: 'get_weather', arguments: '{"location":"Paris"}' } },
+      { type: 'other', function: { name: 'get_weather', arguments: '{"location":"Paris"}' } },
+      { type: null, function: { name: 'get_weather', arguments: '{"location":"Paris"}' } },
+      { function: { name: 'get_weather', arguments: '{"location":"Paris"}' } },
+    ])('rejects unsupported raw calls alongside successful MCP calls: %j', async (customCall) => {
+      vi.mocked(cache.fetchWithCache).mockResolvedValue(
+        createMockFetchResponse({
+          id: 'resp_custom',
+          status: 'completed',
+          model: 'gpt-4.1',
+          output: [
+            { type: 'mcp_call', name: 'read', output: 'MCP succeeded', status: 'completed' },
+            customCall,
+          ],
+        }),
+      );
+      const provider = new OpenAiResponsesProvider('gpt-4.1', {
+        config: {
+          apiKey: 'test-key',
+          tools: [{ type: 'mcp', server_label: 'fixture', server_url: 'https://example.com/mcp' }],
+        },
+      });
+      const providerResponse = await provider.callApi('Read');
+      expect(typeof providerResponse.output).toBe('string');
+      expect(providerResponse.output).toContain('MCP Tool Result');
+      for (const inverse of [false, true]) {
+        const result = await runAssertion({
+          prompt: 'Read',
+          provider,
+          providerResponse,
+          assertion: {
+            type: inverse ? 'not-is-valid-openai-tools-call' : 'is-valid-openai-tools-call',
+          },
+          test: {},
+        });
+        expect(result).toMatchObject({ pass: inverse, score: inverse ? 1 : 0 });
+      }
+    });
+
     it('should validate MCP tool success correctly', async () => {
       const mockApiResponse = {
         id: 'resp_abc123',
