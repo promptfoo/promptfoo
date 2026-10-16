@@ -348,3 +348,71 @@ describe('AddProviderDialog layout', () => {
     expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ id: 'openinterpreter' }));
   });
 });
+
+describe('AddProviderDialog configured catalog', () => {
+  const catalog = [
+    { id: 'openai:gpt-4o-mini' },
+    {
+      id: 'http://llm-gateway.internal/v1',
+      label: 'Internal Gateway',
+      config: { method: 'POST', headers: { Authorization: 'Bearer x' } },
+    },
+  ];
+
+  it('lists only configured providers instead of the built-in selector', async () => {
+    render(
+      <AddProviderDialog open onClose={vi.fn()} onSave={vi.fn()} availableProviders={catalog} />,
+    );
+
+    expect(screen.getByText('Internal Gateway')).toBeInTheDocument();
+    expect(screen.getByText('openai:gpt-4o-mini')).toBeInTheDocument();
+    expect(screen.queryByText('provider type selector')).not.toBeInTheDocument();
+  });
+
+  it('saves the configured provider verbatim with id, label, and config', async () => {
+    const user = userEvent.setup();
+    const onSave = vi.fn();
+    const onClose = vi.fn();
+    render(
+      <AddProviderDialog open onClose={onClose} onSave={onSave} availableProviders={catalog} />,
+    );
+
+    await user.click(screen.getByRole('button', { name: /Internal Gateway/ }));
+
+    expect(onSave).toHaveBeenCalledWith({
+      id: 'http://llm-gateway.internal/v1',
+      label: 'Internal Gateway',
+      config: { method: 'POST', headers: { Authorization: 'Bearer x' } },
+    });
+    expect(onClose).toHaveBeenCalled();
+  });
+
+  it('replaces the provider from the catalog in edit mode without the config editor', async () => {
+    const user = userEvent.setup();
+    const onSave = vi.fn();
+    render(
+      <AddProviderDialog
+        open
+        onClose={vi.fn()}
+        onSave={onSave}
+        initialProvider={{ id: 'openai:gpt-4o-mini' }}
+        availableProviders={catalog}
+      />,
+    );
+
+    expect(screen.queryByTestId('provider-config-editor')).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /Internal Gateway/ }));
+
+    expect(onSave).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'http://llm-gateway.internal/v1' }),
+    );
+  });
+
+  it('shows an empty-catalog message when every entry was rejected server-side', () => {
+    render(<AddProviderDialog open onClose={vi.fn()} onSave={vi.fn()} availableProviders={[]} />);
+
+    expect(screen.getByText(/No configured providers are available/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Cancel' })).toBeInTheDocument();
+  });
+});
