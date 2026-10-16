@@ -2322,6 +2322,56 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
         pass: false,
       },
       {
+        label: 'same-name top-level arguments overriding invalid wrapped JSON',
+        call: {
+          type: 'function',
+          name: 'read_file',
+          arguments: '{}',
+          function: { name: 'read_file', arguments: 'S3CRET invalid JSON' },
+        },
+        pass: false,
+      },
+      {
+        label: 'top-level arguments overriding wrapped object arguments',
+        call: {
+          type: 'function',
+          name: 'read_file',
+          arguments: '{}',
+          function: { name: 'read_file', arguments: { marker: 'S3CRET' } },
+        },
+        pass: false,
+      },
+      {
+        label: 'top-level arguments overriding an empty wrapped string',
+        call: {
+          type: 'function',
+          name: 'read_file',
+          arguments: '{}',
+          function: { name: 'read_file', arguments: '' },
+        },
+        pass: false,
+      },
+      {
+        label: 'null wrapped arguments defaulting to an empty object',
+        call: { type: 'function', function: { name: 'read_file', arguments: null } },
+        pass: false,
+      },
+      {
+        label: 'missing wrapped arguments defaulting to an empty object',
+        call: { type: 'function', function: { name: 'read_file' } },
+        pass: false,
+      },
+      {
+        label: 'identical top-level and wrapped arguments',
+        call: {
+          type: 'function',
+          name: 'read_file',
+          arguments: '{}',
+          function: { name: 'read_file', arguments: '{}' },
+        },
+        pass: true,
+      },
+      {
         label: 'wrapped MCP call with object arguments',
         call: { type: 'function', function: { name: 'read_file', arguments: {} } },
         pass: true,
@@ -2369,6 +2419,7 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
         });
         const expectedPass = inverse ? !pass : pass;
         expect(result).toMatchObject({ pass: expectedPass, score: expectedPass ? 1 : 0 });
+        expect(result.reason).not.toContain('S3CRET');
       }
     });
 

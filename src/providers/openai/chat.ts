@@ -1200,17 +1200,18 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
             const mcpTools = this.mcpClient.getAllTools();
             const mcpTool = mcpTools.find((tool) => tool.name === functionName);
             if (mcpTool) {
+              const rawArgs = functionCall.arguments || functionCall.function?.arguments || '{}';
               // Exclude only this routed, correctly typed request. Reused names,
               // IDs, or top-level routing fields cannot hide a different call.
               const retainedCall = functionToolCalls?.[functionCallIndex];
               if (
                 retainedCall?.type === 'function' &&
                 typeof retainedCall.function.name === 'string' &&
-                retainedCall.function.name === functionName
+                retainedCall.function.name === functionName &&
+                retainedCall.function.arguments === rawArgs
               ) {
                 mcpFunctionCallIndexes.add(functionCallIndex);
               }
-              const rawArgs = functionCall.arguments || functionCall.function?.arguments || '{}';
               const toolCallId = functionCall.id ?? functionCall.call_id;
               // Declared outside the try so the catch below can still report the
               // arguments; parsing stays inside it, so malformed JSON keeps failing
