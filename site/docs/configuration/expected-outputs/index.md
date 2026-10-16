@@ -188,6 +188,8 @@ These metrics are model-assisted, and rely on LLMs or other machine learning mod
 
 See [Model-graded evals](/docs/configuration/expected-outputs/model-graded), [classification](/docs/configuration/expected-outputs/classifier), and [similarity](/docs/configuration/expected-outputs/similar) docs for more information.
 
+Failed assertions caused by [grader errors](/docs/configuration/expected-outputs/model-graded/#common-patterns-and-troubleshooting) are recorded as `ERROR`.
+
 | Assertion Type                                                                                       | Method                                                                           |
 | ---------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
 | [similar](/docs/configuration/expected-outputs/similar)                                              | Embeddings and cosine similarity are above a threshold                           |
