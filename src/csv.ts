@@ -162,9 +162,9 @@ export function testCaseFromCsvRow(row: CsvRow): TestCase {
   const options: TestCase['options'] = {};
   const metadata: Record<string, unknown> = {};
   // Keep numbered source columns separate from compacted assertion positions.
-  const assertionIndicesBySource = new Map<number, number>();
+  const assertionIndicesBySource = new Map<string, number>();
   const pendingAssertionConfigs: {
-    target: number | 'first';
+    target: string;
     key: string;
     value: number;
   }[] = [];
@@ -203,18 +203,10 @@ export function testCaseFromCsvRow(row: CsvRow): TestCase {
     if (key.startsWith('__expected')) {
       if (value.trim() !== '') {
         const indexMatch = key.match(/^__expected(\d+)$/);
-        const sourceIndex =
-          key === '__expected'
-            ? 0
-            : indexMatch
-              ? Number.parseInt(indexMatch[1], 10) - 1
-              : undefined;
+        // Keep source numbers as strings so large integers remain distinct.
+        const sourceIndex = key === '__expected' ? '1' : indexMatch?.[1].replace(/^0+/, '');
         // Numeric aliases such as __expected01 retain the first populated match.
-        if (
-          sourceIndex !== undefined &&
-          sourceIndex >= 0 &&
-          !assertionIndicesBySource.has(sourceIndex)
-        ) {
+        if (sourceIndex && !assertionIndicesBySource.has(sourceIndex)) {
           assertionIndicesBySource.set(sourceIndex, asserts.length);
         }
         asserts.push(assertionFromString(value.trim()));
@@ -264,19 +256,16 @@ export function testCaseFromCsvRow(row: CsvRow): TestCase {
 
         // Numbered configs identify source columns; the unnumbered form keeps
         // its existing first-populated-assertion behavior.
-        let targetIndex: number | 'first' | undefined;
+        let targetIndex: string | undefined;
         if (expectedKey === '__expected') {
           targetIndex = 'first';
         } else if (expectedKey.startsWith('__expected')) {
-          // Extract the numeric index (e.g., __expected1 -> 0, __expected2 -> 1)
           const indexMatch = expectedKey.match(/^__expected(\d+)$/);
           if (indexMatch) {
-            const oneBasedIndex = Number.parseInt(indexMatch[1], 10);
-            // Indices are 1-based (__expected1 -> 0). Reject 0 so it falls
-            // through to the "positive integer" error below instead of
-            // silently retaining an invalid config target.
-            if (oneBasedIndex >= 1) {
-              targetIndex = oneBasedIndex - 1;
+            const sourceIndex = indexMatch[1].replace(/^0+/, '');
+            // An all-zero suffix is invalid; other positive integers have no size limit.
+            if (sourceIndex) {
+              targetIndex = sourceIndex;
             }
           }
         }
