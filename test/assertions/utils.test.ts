@@ -146,6 +146,33 @@ describe('getFinalTest', () => {
     expect(result.vars).toEqual({ var1: 'value1' });
   });
 
+  it.each([false, true])(
+    'clones assertion definitions while preserving live providers (set: %s)',
+    (nested) => {
+      const provider = Object.assign(createMockProvider('circular'), {
+        client: {} as { self?: unknown },
+      });
+      provider.client.self = provider.client;
+      const assertion: Assertion = {
+        type: 'llm-rubric',
+        value: 'fixture',
+        config: { criterion: { value: 'original' } },
+        provider,
+      };
+      const test: TestCase = {
+        assert: nested ? [{ type: 'assert-set', assert: [assertion] }] : [assertion],
+      };
+      const result = getFinalTest(test, assertion);
+      const entry = result.assert![0];
+      const copied = entry.type === 'assert-set' ? entry.assert[0] : entry;
+      expect(copied.provider).toBe(provider);
+      expect(copied).not.toBe(assertion);
+      expect(result.assert).not.toBe(test.assert);
+      copied.config!.criterion.value = 'changed';
+      expect(assertion.config!.criterion.value).toBe('original');
+    },
+  );
+
   it('preserves enumerable variable metadata with independent cloned ownership', () => {
     const metadata = Symbol('loaded media metadata');
     const hidden = Symbol('non-enumerable metadata');
@@ -239,6 +266,40 @@ describe('getFinalTest', () => {
     const result = getFinalTest(testCase, assertion);
     expect(result.provider).toBe(directProvider);
     expect(result.options?.provider).toBe(assertionProvider);
+  });
+
+  it('does not stack-overflow when a reused grading provider holds a circular SDK client', () => {
+    // Repro for #10501: after grading-provider reuse, assertion.provider is the
+    // live target ApiProvider. Anthropic's SDK client has cycles
+    // (client.messages._client === client), and getFinalTest clones test.assert.
+    const client: { messages: { _client?: unknown } } = { messages: {} };
+    client.messages._client = client;
+
+    const circularProvider = Object.assign(createMockProvider('anthropic:messages:claude-haiku'), {
+      anthropic: client,
+    });
+
+    const testCase: TestCase = {
+      vars: { x: 'hello' },
+      assert: [
+        {
+          type: 'llm-rubric',
+          value: 'is this a reasonable response?',
+          provider: circularProvider,
+        },
+      ],
+    };
+
+    const assertion: Assertion = {
+      type: 'llm-rubric',
+      value: 'is this a reasonable response?',
+      provider: circularProvider,
+    };
+
+    const result = getFinalTest(testCase, assertion);
+    expect(result.options?.provider).toBe(circularProvider);
+    expect(result.vars).toEqual({ x: 'hello' });
+    expect(result.vars).not.toBe(testCase.vars);
   });
 });
 
