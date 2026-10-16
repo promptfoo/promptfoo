@@ -614,7 +614,7 @@ Legacy - please use is-valid-function-call instead. This ensures that any JSON L
 
 This requires each tool call to have `type: function` and match the schema specified in the provider’s `tools` configuration. Learn more about the [OpenAI provider](/docs/providers/openai/#tool-calling).
 
-**MCP Support**: This assertion validates MCP (Model Context Protocol) execution using structured `mcp_call` items in the provider’s raw Responses API response, or executed calls in `metadata.toolCalls` from Chat Completions. All recorded MCP calls must succeed; failed or incomplete calls fail the assertion. Any function calls retained in the output must also pass their type and schema checks. Display text such as "MCP Tool Result" is not execution evidence, even when embedded in JSON output.
+**MCP Support**: This assertion validates MCP (Model Context Protocol) execution using structured `mcp_call` items in the provider’s raw Responses API response, or executed calls in `metadata.toolCalls` from Chat Completions. All recorded MCP calls must succeed; failed or incomplete calls fail the assertion. Function calls in the output or raw Responses API items must also pass their type and schema checks, even when a callback replaces their displayed output. Display text such as "MCP Tool Result" is not execution evidence, even when embedded in JSON output.
 
 `not-is-valid-openai-tools-call` and `not-is-valid-function-call` invert the validation result. A configuration error, such as no tools configured, a tool schema that does not compile, or a provider that cannot validate function calls, still fails.
 
