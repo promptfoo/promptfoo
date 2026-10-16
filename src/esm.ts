@@ -262,9 +262,10 @@ export async function importModule(
 
     if (functionName) {
       logger.debug(`Returning named export: ${functionName}`);
-      // Preserve default-object members, but do not lose named ESM exports
-      // when a module also provides a default export.
-      const source = Object.prototype.hasOwnProperty.call(mod, functionName) ? mod : importedModule;
+      // Preserve normalized default members before checking a CJS wrapper or ESM namespace.
+      const source = [mod, importedModule?.default, importedModule].find(
+        (value) => value != null && Object.prototype.hasOwnProperty.call(value, functionName),
+      );
       return getOwnExport(source, functionName);
     }
     return mod;

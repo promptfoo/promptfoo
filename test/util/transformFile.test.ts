@@ -157,6 +157,74 @@ describe('JavaScript file transforms with real modules', () => {
     },
   );
 
+  it.each([
+    {
+      name: 'inline object members',
+      source: `
+        module.exports = {
+          default: () => 'default',
+          chosen: (output) => output.toUpperCase(),
+        };
+      `,
+    },
+    {
+      name: 'shorthand object members',
+      source: `
+        const defaultFn = () => 'default';
+        const chosen = (output) => output.toUpperCase();
+        module.exports = { default: defaultFn, chosen };
+      `,
+    },
+  ])('selects native CommonJS exports with $name', ({ source }) => {
+    // Native Node does not synthesize named exports for every CJS object literal.
+    const modulePath = path.join(tempDir, 'transform.cjs');
+    const conflictPath = path.join(tempDir, 'conflict.cjs');
+    const shadowPath = path.join(tempDir, 'shadow.cjs');
+    fs.writeFileSync(modulePath, source);
+    fs.writeFileSync(
+      conflictPath,
+      `module.exports = {
+        default: { chosen: () => 'default member' },
+        chosen: () => 'outer member',
+      };`,
+    );
+    fs.writeFileSync(
+      shadowPath,
+      `const defaultFn = () => 'default';
+      defaultFn.chosen = undefined;
+      module.exports = { default: defaultFn, chosen: () => 'outer member' };`,
+    );
+
+    const script = `
+      import assert from 'node:assert/strict';
+      import { importModule } from './src/esm.ts';
+      import { transform } from './src/util/transform.ts';
+      const modulePath = ${JSON.stringify(modulePath)};
+      const reference = 'file://' + modulePath;
+      const context = { vars: {} };
+      assert.equal(await transform(reference + ':chosen', 'hello', context), 'HELLO');
+      assert.equal(await transform(reference + ':default', 'hello', context), 'default');
+      assert.equal(await transform(reference, 'hello', context), 'default');
+      assert.equal(typeof await importModule(modulePath, 'chosen'), 'function');
+      assert.equal(typeof await importModule(modulePath, 'default'), 'function');
+      for (const name of ['missing', 'toString']) {
+        await assert.rejects(transform(reference + ':' + name, 'hello', context),
+          new RegExp('specified function "' + name + '"'));
+        assert.equal(await importModule(modulePath, name), undefined);
+      }
+      assert.equal(await transform('file://' + ${JSON.stringify(conflictPath)} + ':chosen',
+        'hello', context), 'default member');
+      assert.equal(await importModule(${JSON.stringify(shadowPath)}, 'chosen'), undefined);
+      await assert.rejects(transform('file://' + ${JSON.stringify(shadowPath)} + ':chosen',
+        'hello', context), /specified function "chosen"/);
+    `;
+    execFileSync(process.execPath, ['--import', 'tsx', '--input-type=module', '--eval', script], {
+      cwd: path.resolve(__dirname, '../..'),
+      env: { ...process.env, PROMPTFOO_CONFIG_DIR: path.join(tempDir, 'state') },
+      stdio: 'pipe',
+    });
+  });
+
   it('selects only own named functions through the native CommonJS VM fallback', () => {
     // Vitest transforms .js modules itself, so use native Node to exercise the fallback.
     fs.writeFileSync(path.join(tempDir, 'package.json'), '{"type":"module"}');
