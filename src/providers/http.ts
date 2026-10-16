@@ -36,6 +36,7 @@ import { renderVarsInObject } from '../util/index';
 import invariant from '../util/invariant';
 import { safeJsonStringify } from '../util/json';
 import { TOKEN_REFRESH_BUFFER_MS } from '../util/oauth';
+import { optionalPackageInstallHint } from '../util/packageImportErrors';
 import { safeResolve } from '../util/pathUtils';
 import {
   isSecretField,
@@ -449,7 +450,7 @@ export async function generateSignature(
         // Use eval to avoid TypeScript static analysis of the dynamic import
         const jksModule = await import('jks-js').catch(() => {
           throw new Error(
-            'JKS certificate support requires the "jks-js" package. Install it with: npm install jks-js',
+            `JKS certificate support requires the "jks-js" package. ${optionalPackageInstallHint('npm install promptfoo jks-js@^1.1.5')}`,
           );
         });
 
@@ -1591,7 +1592,7 @@ async function createHttpsAgent(
     try {
       const jksModule = await import('jks-js').catch(() => {
         throw new Error(
-          'JKS certificate support requires the "jks-js" package. Install it with: npm install jks-js',
+          `JKS certificate support requires the "jks-js" package. ${optionalPackageInstallHint('npm install promptfoo jks-js@^1.1.5')}`,
         );
       });
       const jks = jksModule as any;
