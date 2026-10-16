@@ -1195,6 +1195,9 @@ async function resolveLoadedConfig(
         cmdObj.assertions ? undefined : promptBasePaths,
       );
 
+  // References describe authored prompts, including prompts excluded from this run.
+  const authoredPrompts = parsedPrompts;
+
   // CLI values override the configured prompt filter, including an empty string.
   const promptFilter = cmdObj.filterPrompts ?? commandLineOptions?.filterPrompts;
   if (promptFilter) {
@@ -1339,7 +1342,7 @@ async function resolveLoadedConfig(
   // Validate that all prompt references in tests exist
   validateTestPromptReferences(
     testSuite.tests || [],
-    testSuite.prompts,
+    authoredPrompts,
     typeof testSuite.defaultTest === 'object' ? testSuite.defaultTest : undefined,
     { promptReferenceSources },
   );
