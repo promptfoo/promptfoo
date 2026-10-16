@@ -372,6 +372,143 @@ describe('runAssertions', () => {
     const prompt = 'Some prompt';
     const provider = new OpenAiChatCompletionProvider('gpt-4o-mini');
 
+    describe('shared config', () => {
+      it('passes set config to every child assertion', async () => {
+        const result = await runAssertions({
+          providerResponse: { output: 'ok' },
+          test: {
+            assert: [
+              {
+                type: 'assert-set',
+                config: { expected: 'ok' },
+                assert: [
+                  { type: 'javascript', value: 'context.config?.expected === output' },
+                  { type: 'javascript', value: 'context.config?.expected.length === 2' },
+                ],
+              },
+            ],
+          },
+        });
+
+        expect(result).toMatchObject({ pass: true, score: 1 });
+        expect(result.componentResults).toHaveLength(3);
+        expect(result.componentResults?.every((component) => component.pass)).toBe(true);
+      });
+
+      it('lets child config override shared keys while retaining other shared keys', async () => {
+        const sharedConfig = {
+          expected: 'parent',
+          shared: 'retained',
+          enabled: true,
+          limit: 5,
+          nested: { parent: true },
+        };
+        const childConfig = {
+          expected: 'child',
+          enabled: false,
+          limit: 0,
+          nested: { child: true },
+        };
+        const originalSharedConfig = structuredClone(sharedConfig);
+        const originalChildConfig = structuredClone(childConfig);
+        const result = await runAssertions({
+          providerResponse: { output: 'child' },
+          test: {
+            assert: [
+              {
+                type: 'assert-set',
+                config: sharedConfig,
+                assert: [
+                  {
+                    type: 'javascript',
+                    config: childConfig,
+                    value: `return context.config.expected === output &&
+                      context.config.shared === 'retained' &&
+                      context.config.enabled === false && context.config.limit === 0 &&
+                      context.config.nested.child === true &&
+                      context.config.nested.parent === undefined;`,
+                  },
+                ],
+              },
+            ],
+          },
+        });
+
+        expect(result).toMatchObject({ pass: true, score: 1 });
+        expect(sharedConfig).toEqual(originalSharedConfig);
+        expect(childConfig).toEqual(originalChildConfig);
+      });
+
+      it('isolates nested shared config from siblings and the source test', async () => {
+        const restoreEnv = mockProcessEnv({ PROMPTFOO_ASSERTIONS_MAX_CONCURRENCY: '1' });
+        const test: AtomicTestCase = {
+          assert: [
+            {
+              type: 'assert-set',
+              config: { nested: { expected: 'original' } },
+              assert: [
+                {
+                  type: 'javascript',
+                  value: 'context.config.nested.expected = "changed";\nreturn true;',
+                },
+                {
+                  type: 'javascript',
+                  value: 'context.config?.nested.expected === output',
+                },
+              ],
+            },
+          ],
+        };
+        const originalTest = structuredClone(test);
+        try {
+          const result = await runAssertions({
+            providerResponse: { output: 'original' },
+            test,
+          });
+
+          expect(result).toMatchObject({ pass: true, score: 1 });
+          expect(test).toEqual(originalTest);
+        } finally {
+          restoreEnv();
+        }
+      });
+
+      it.each([false, true])(
+        'preserves child config without shared config (in set: %s)',
+        async (inSet) => {
+          const assertion = {
+            type: 'javascript' as const,
+            config: { expected: 'ok' },
+            value: 'context.config.expected === output',
+          };
+          const result = await runAssertions({
+            providerResponse: { output: 'ok' },
+            test: {
+              assert: inSet ? [{ type: 'assert-set', assert: [assertion] }] : [assertion],
+            },
+          });
+
+          expect(result).toMatchObject({ pass: true, score: 1 });
+        },
+      );
+
+      it('keeps config absent when neither the set nor child defines it', async () => {
+        const result = await runAssertions({
+          providerResponse: { output: 'ok' },
+          test: {
+            assert: [
+              {
+                type: 'assert-set',
+                assert: [{ type: 'javascript', value: 'context.config === undefined' }],
+              },
+            ],
+          },
+        });
+
+        expect(result).toMatchObject({ pass: true, score: 1 });
+      });
+    });
+
     it('assert-set success', async () => {
       const output = 'Expected output';
       const test: AtomicTestCase = {
