@@ -124,23 +124,6 @@ async function getFailedTestCases(
     // Always also check local SQLite database
     const db = await getDb();
 
-    const targetResults = await db
-      .select()
-      .from(evalResultsTable)
-      .where(
-        and(
-          eq(evalResultsTable.success, 0 as any),
-          sql`json_valid(provider)`,
-          sql`json_extract(provider, '$.id') = ${targetId}`,
-        ),
-      )
-      .orderBy(desc(evalResultsTable.updatedAt))
-      .limit(1);
-
-    if (targetResults.length === 0) {
-      return [];
-    }
-
     const results = await db
       .select()
       .from(evalResultsTable)
