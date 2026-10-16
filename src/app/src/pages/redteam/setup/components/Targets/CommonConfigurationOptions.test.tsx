@@ -168,6 +168,20 @@ describe('CommonConfigurationOptions', () => {
     expect(screen.getByDisplayValue('100')).toBeInTheDocument();
   });
 
+  it('should link the Delay section to the fixed delay docs', () => {
+    renderWithProviders(
+      <CommonConfigurationOptions
+        {...defaultProps}
+        selectedTarget={{ ...defaultTarget, delay: 100 }}
+      />,
+    );
+
+    expect(screen.getByRole('link', { name: 'docs' })).toHaveAttribute(
+      'href',
+      'https://www.promptfoo.dev/docs/configuration/rate-limits/#fixed-delay',
+    );
+  });
+
   it('should call updateCustomTarget when delay is changed', async () => {
     const user = userEvent.setup();
     const updateCustomTarget = vi.fn();

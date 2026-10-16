@@ -114,6 +114,24 @@ describe('CustomTargetConfiguration', () => {
     },
   );
 
+  it('links SageMaker targets to the SageMaker provider docs', () => {
+    render(
+      <CustomTargetConfiguration
+        selectedTarget={{ id: 'sagemaker:my-endpoint', config: {} }}
+        updateCustomTarget={vi.fn()}
+        rawConfigJson="{}"
+        setRawConfigJson={vi.fn()}
+        bodyError={null}
+        providerType="sagemaker"
+      />,
+    );
+
+    expect(screen.getByRole('link', { name: 'documentation' })).toHaveAttribute(
+      'href',
+      'https://www.promptfoo.dev/docs/providers/sagemaker/',
+    );
+  });
+
   it('shows valid Open Interpreter target and configuration examples', async () => {
     const user = userEvent.setup();
 
