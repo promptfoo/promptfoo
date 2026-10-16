@@ -98,6 +98,7 @@ describe('Strategy IDs', () => {
     // Simple mapping for strategy ID to expected file name
     const expectedFileNameMap: Record<string, string> = {
       'arabic-presentation-forms': 'arabicPresentationForms.ts',
+      artprompt: 'artprompt.ts',
       base64: 'base64.ts',
       citation: 'citation.ts',
       crescendo: 'crescendo.ts',
