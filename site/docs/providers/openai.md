@@ -57,6 +57,24 @@ The expected outputs are `billing` and `technical`. Check the pass/fail results 
 
 If you keep your key in a local `.env` file, add `--env-file .env` to the command. Keep that file out of version control.
 
+For TypeScript or API authoring, `promptfoo/contracts` exports portable config schemas and types for explicit Chat Completions, Responses, Completions, and embedding routes:
+
+```typescript
+import {
+  OpenAiProviderOptionsInputSchema,
+  type OpenAiProviderOptionsInput,
+} from 'promptfoo/contracts';
+
+const provider = {
+  id: 'openai:responses:my-model',
+  config: { max_output_tokens: 2048 },
+} satisfies OpenAiProviderOptionsInput;
+
+const validation = OpenAiProviderOptionsInputSchema.safeParse(provider);
+```
+
+Each config schema also exports a matching `*InputJsonSchema` for JSON Schema consumers. These contracts check serializable authoring input without loading files, resolving credentials, applying runtime defaults, or executing callbacks. Use string callback code or `file://` references in authoring input. Existing runtime validation remains compatible with in-process functions; these contracts do not automatically change YAML editor validation or select an API for bare `openai:<model>` IDs.
+
 ## Models
 
 For GPT-5.6 and newer models, use `openai:<model>`, such as `openai:gpt-6-luna`. These IDs default to Responses. Add an endpoint prefix only to select a different API or make an API comparison explicit.

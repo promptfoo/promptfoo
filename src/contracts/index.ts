@@ -33,6 +33,26 @@ export {
   type McpServerParsed,
   McpServerSchema,
 } from './providerConfig/mcp.js';
+export {
+  type OpenAiChatConfigInput,
+  OpenAiChatConfigInputJsonSchema,
+  OpenAiChatConfigInputSchema,
+  type OpenAiCompletionConfigInput,
+  OpenAiCompletionConfigInputJsonSchema,
+  OpenAiCompletionConfigInputSchema,
+  type OpenAiEmbeddingConfigInput,
+  OpenAiEmbeddingConfigInputJsonSchema,
+  OpenAiEmbeddingConfigInputSchema,
+  type OpenAiProviderOptionsInput,
+  OpenAiProviderOptionsInputJsonSchema,
+  OpenAiProviderOptionsInputSchema,
+  type OpenAiResponsesConfigInput,
+  OpenAiResponsesConfigInputJsonSchema,
+  OpenAiResponsesConfigInputSchema,
+  type OpenAiSharedConfigInput,
+  OpenAiSharedConfigInputJsonSchema,
+  OpenAiSharedConfigInputSchema,
+} from './providerConfig/openai.js';
 export * from './providers.js';
 export * from './shared.js';
 export * from './transform.js';
