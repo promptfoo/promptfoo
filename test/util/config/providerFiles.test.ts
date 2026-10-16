@@ -6,6 +6,7 @@ import { pathToFileURL } from 'node:url';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import cliState from '../../../src/cliState';
 import { combineConfigs, resolveConfigs } from '../../../src/util/config/load';
+import { transform } from '../../../src/util/transform';
 
 describe('provider config files across config sources', () => {
   let tempDir: string;
@@ -223,6 +224,96 @@ describe('provider config files across config sources', () => {
     expect((await combineConfigs([config])).providers).toEqual(['file://provider.yaml']);
     const { testSuite } = await resolve([config]);
     expect(testSuite.providers.map((provider) => provider.label)).toEqual(['B']);
+  });
+
+  it.each([undefined, 'assets'])(
+    'scopes provider transforms to each source with basePath %s',
+    async (basePath) => {
+      const runtimeBasePath = path.join(tempDir, 'media');
+      const files: string[] = [];
+      const configs = ['a', 'b'].map((directory) => {
+        const configPath = writeConfig(directory, ['file://provider.json'], basePath);
+        const sourcePath = path.join(tempDir, directory, basePath ?? '');
+        fs.mkdirSync(sourcePath, { recursive: true });
+        const transformPath = path.join(sourcePath, 'transform.cjs');
+        fs.writeFileSync(
+          transformPath,
+          `module.exports = { chosen: output => '${directory}:' + output };`,
+        );
+        const providerPath = path.join(sourcePath, 'provider.json');
+        fs.writeFileSync(
+          providerPath,
+          JSON.stringify([
+            {
+              id: 'echo',
+              label: directory,
+              transform: 'file://transform.cjs:chosen',
+              config: { basePath: runtimeBasePath },
+            },
+            {
+              id: 'echo',
+              label: `${directory}-absolute`,
+              transform: `file://${transformPath}:chosen`,
+            },
+            { id: 'echo', label: `${directory}-inline`, transform: '"inline:" + output' },
+            { id: 'echo', label: `${directory}-plain` },
+          ]),
+        );
+        files.push(configPath, providerPath, transformPath);
+        return configPath;
+      });
+      const original = files.map((filename) => fs.readFileSync(filename, 'utf8'));
+
+      const single = await resolve([configs[1]]);
+      expect(single.testSuite.providers[0].transform).toBe('file://transform.cjs:chosen');
+      const { testSuite, config, basePath: combinedBasePath } = await resolve(configs);
+      expect(testSuite.providers.map((provider) => provider.label)).toEqual([
+        'a',
+        'a-absolute',
+        'a-inline',
+        'a-plain',
+        'b',
+        'b-absolute',
+        'b-inline',
+        'b-plain',
+      ]);
+      for (const [index, provider] of testSuite.providers.entries()) {
+        const directory = index < 4 ? 'a' : 'b';
+        if (index % 4 < 2) {
+          const providerTransform = provider.transform;
+          if (typeof providerTransform !== 'string') {
+            throw new Error('Expected a file transform');
+          }
+          expect(providerTransform).toBe(
+            `file://${path.join(tempDir, directory, basePath ?? '', 'transform.cjs')}:chosen`,
+          );
+          const output = await cliState.withBasePath(combinedBasePath, () =>
+            transform(providerTransform, 'hello', { vars: {} }),
+          );
+          expect(output).toBe(`${directory}:hello`);
+        } else {
+          expect(provider.transform).toBe(index % 4 === 2 ? '"inline:" + output' : undefined);
+        }
+        if (index % 4 === 0) {
+          expect(provider.config?.basePath).toBe(runtimeBasePath);
+        }
+      }
+      expect(config.providers).toEqual((await combineConfigs(configs)).providers);
+      expect(files.map((filename) => fs.readFileSync(filename, 'utf8'))).toEqual(original);
+    },
+  );
+
+  it('preserves function transforms on non-file providers', async () => {
+    const first = path.join(tempDir, 'config.mjs');
+    fs.writeFileSync(
+      first,
+      `export const transform = output => 'function:' + output;
+      export default { prompts: ['hello'], providers: [{ id: 'echo', transform }], tests: [] };`,
+    );
+    const second = writeConfig('b', ['echo']);
+    const input = await import(pathToFileURL(first).href);
+    const { testSuite } = await resolve([first, second]);
+    expect(testSuite.providers[0].transform).toBe(input.transform);
   });
 
   it('preserves non-file providers and does not mutate executable config inputs', async () => {

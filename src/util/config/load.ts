@@ -43,6 +43,7 @@ import { PromptSchema } from '../../validators/prompts';
 import { filterPrompts } from '../eval/filterPrompts';
 import { filterProviderConfigs, getProviderIdAndLabel } from '../eval/filterProviders';
 import { filterTests } from '../eval/filterTests';
+import { parseFileUrl } from '../functions/loadFunction';
 import { promptfooCommand } from '../promptfooCommand';
 import { loadProviderConfigsFromFile, normalizeProviderRef } from '../providerRef';
 import { preserveTracingCredentialReferences } from '../sanitizer';
@@ -1182,10 +1183,22 @@ async function resolveLoadedConfig(
     if (sourceBasePath === undefined || typeof provider !== 'string') {
       return [provider];
     }
-    return loadProviderConfigsFromFile(provider, sourceBasePath).map((fileProvider) => ({
-      ...fileProvider,
-      config: { basePath: sourceBasePath, ...fileProvider.config },
-    }));
+    return loadProviderConfigsFromFile(provider, sourceBasePath).map((fileProvider) => {
+      let transform = fileProvider.transform;
+      if (typeof transform === 'string' && transform.startsWith('file://')) {
+        const { filePath, functionName } = parseFileUrl(transform);
+        if (!path.isAbsolute(filePath)) {
+          transform = `file://${path.resolve(sourceBasePath, filePath)}${
+            functionName === undefined ? '' : `:${functionName}`
+          }`;
+        }
+      }
+      return {
+        ...fileProvider,
+        transform,
+        config: { basePath: sourceBasePath, ...fileProvider.config },
+      };
+    });
   });
   const resolvedProviderConfigs = resolveProviderConfigs(scopedProviderConfigs, { basePath });
 
