@@ -225,7 +225,7 @@ describe('JavaScript file transforms with real modules', () => {
     });
   });
 
-  it('selects only own named functions through the native CommonJS VM fallback', () => {
+  it('selects own named functions and the default function through the native CommonJS VM fallback', () => {
     // Vitest transforms .js modules itself, so use native Node to exercise the fallback.
     fs.writeFileSync(path.join(tempDir, 'package.json'), '{"type":"module"}');
     const modulePath = path.join(tempDir, 'transform.js');
@@ -240,21 +240,54 @@ describe('JavaScript file transforms with real modules', () => {
 
     const script = `
       import assert from 'node:assert/strict';
+      import fs from 'node:fs';
       import { importModule } from './src/esm.ts';
       import { transform } from './src/util/transform.ts';
       const modulePath = ${JSON.stringify(modulePath)};
       const reference = 'file://' + modulePath;
       const context = { vars: {} };
       assert.equal(await transform(reference + ':chosen', 'hello', context), 'HELLO');
+      assert.equal(await transform(reference + ':default', 'hello', context), 'default');
       assert.equal(await transform(reference, 'hello', context), 'default');
+      const [first, defaultExport] = await Promise.all([
+        importModule(modulePath, undefined, { cacheCjsFallback: true }),
+        importModule(modulePath, 'default', { cacheCjsFallback: true }),
+      ]);
+      assert.equal(defaultExport, first);
+      assert.equal(await importModule(modulePath, undefined, { cacheCjsFallback: true }), first);
+      assert.equal(await importModule(modulePath, 'default', { cacheCjsFallback: true }), first);
+      assert.equal(await importModule(modulePath, 'chosen', { cacheCjsFallback: true }), first.chosen);
       for (const name of ['missing', 'toString']) {
         await assert.rejects(transform(reference + ':' + name, 'hello', context),
           new RegExp('specified function "' + name + '"'));
         assert.equal(await importModule(modulePath, name, { cacheCjsFallback: true }), undefined);
       }
-      const first = await importModule(modulePath, undefined, { cacheCjsFallback: true });
-      assert.equal(await importModule(modulePath, undefined, { cacheCjsFallback: true }), first);
-      assert.equal(await importModule(modulePath, 'chosen', { cacheCjsFallback: true }), first.chosen);
+
+      for (const [name, source, expected] of [
+        ['own', "module.exports = () => 'body'; module.exports.default = () => 'own';", 'own'],
+        ['undefined', "module.exports = () => 'body'; module.exports.default = undefined;", undefined],
+        ['null', "module.exports = () => 'body'; module.exports.default = null;", null],
+        ['number', "module.exports = () => 'body'; module.exports.default = 42;", 42],
+        ['inherited', "module.exports = () => 'body'; Object.setPrototypeOf(module.exports, { default: () => 'inherited' });", 'body'],
+        ['wrapper', "module.exports = { default: () => 'wrapped' };", 'wrapped'],
+        ['object', "module.exports = { chosen: () => 'chosen' };", undefined],
+      ]) {
+        const file = modulePath.replace('transform.js', name + '.js');
+        fs.writeFileSync(file, "require('node:fs'); " + source);
+        for (const cacheCjsFallback of [false, true]) {
+          const selected = await importModule(file, 'default', { cacheCjsFallback });
+          if (typeof expected === 'string') {
+            assert.equal(typeof selected, 'function', name + ', cache=' + cacheCjsFallback);
+          }
+          assert.equal(typeof expected === 'string' ? selected() : selected, expected);
+        }
+        if (typeof expected === 'string') {
+          assert.equal(await transform('file://' + file + ':default', 'hello', context), expected);
+        } else {
+          await assert.rejects(transform('file://' + file + ':default', 'hello', context),
+            /specified function "default"/);
+        }
+      }
     `;
     execFileSync(process.execPath, ['--import', 'tsx', '--input-type=module', '--eval', script], {
       cwd: path.resolve(__dirname, '../..'),

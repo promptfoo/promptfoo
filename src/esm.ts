@@ -292,9 +292,20 @@ export async function importModule(
 
         if (functionName) {
           logger.debug(`Returning named export: ${functionName}`);
+          const selectExport = (value: unknown) => {
+            // Mirror a native CJS function's default export without overriding own members.
+            if (
+              functionName === 'default' &&
+              typeof value === 'function' &&
+              !Object.prototype.hasOwnProperty.call(value, functionName)
+            ) {
+              return value;
+            }
+            return getOwnExport(value, functionName);
+          };
           return options?.cacheCjsFallback
-            ? Promise.resolve(mod).then((value) => getOwnExport(value, functionName))
-            : getOwnExport(mod, functionName);
+            ? Promise.resolve(mod).then(selectExport)
+            : selectExport(mod);
         }
         return mod;
       } catch (cjsErr) {
