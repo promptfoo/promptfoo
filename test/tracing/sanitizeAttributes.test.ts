@@ -129,7 +129,7 @@ describe('sanitizeTraceAttributes', () => {
     });
   });
 
-  it('preserves numeric counters under the recognised usage namespaces', () => {
+  it('preserves numeric values under the recognised counter names', () => {
     expect(
       sanitizeTraceAttributes({
         'gen_ai.usage.input_tokens': 150,
@@ -138,6 +138,8 @@ describe('sanitizeTraceAttributes', () => {
         'llm.usage.completion_tokens': 85,
         'llm.token_count.completion': 85,
         'llm.token_count.prompt_details.cache_read': 20,
+        'llm.token_count.prompt_details.cache_write': 10,
+        'llm.token_count.completion_details.reasoning': 30,
         'ai.usage.inputTokens': 150,
         'ai.usage.outputTokens': 85,
         'ai.usage.totalTokens': 235,
@@ -150,6 +152,8 @@ describe('sanitizeTraceAttributes', () => {
       'llm.usage.completion_tokens': 85,
       'llm.token_count.completion': 85,
       'llm.token_count.prompt_details.cache_read': 20,
+      'llm.token_count.prompt_details.cache_write': 10,
+      'llm.token_count.completion_details.reasoning': 30,
       'ai.usage.inputTokens': 150,
       'ai.usage.outputTokens': 85,
       'ai.usage.totalTokens': 235,
@@ -157,13 +161,16 @@ describe('sanitizeTraceAttributes', () => {
     });
   });
 
-  it('redacts credential-like token keys inside the usage namespaces', () => {
+  it('redacts numeric token keys inside the usage namespaces unless they are listed', () => {
     expect(
       sanitizeTraceAttributes({
         'gen_ai.usage.access_tokens': 654321,
         'llm.usage.session_tokens': 123456,
         'llm.token_count.refresh_token': 42,
         'promptfoo.usage.bearer_tokens': 7,
+        'llm.token_count.pin_token': 123456,
+        'gen_ai.usage.mfa_tokens': 654321,
+        'llm.usage.verification_tokens': 112233,
         'gen_ai.usage.input_tokens': 150,
         'llm.token_count.prompt': 150,
       }),
@@ -172,6 +179,9 @@ describe('sanitizeTraceAttributes', () => {
       'llm.usage.session_tokens': '<redacted>',
       'llm.token_count.refresh_token': '<redacted>',
       'promptfoo.usage.bearer_tokens': '<redacted>',
+      'llm.token_count.pin_token': '<redacted>',
+      'gen_ai.usage.mfa_tokens': '<redacted>',
+      'llm.usage.verification_tokens': '<redacted>',
       'gen_ai.usage.input_tokens': 150,
       'llm.token_count.prompt': 150,
     });

@@ -6,9 +6,10 @@ export interface AttributeSanitizationOptions {
 
 // Match normalized names; the cookie pattern also covers set-cookie.
 const SENSITIVE_ATTRIBUTE_PATTERN = /authorization|cookie|token|apikey|secret|password|passphrase/;
-const NON_TOKEN_SENSITIVE_ATTRIBUTE_PATTERN =
-  /authorization|cookie|apikey|secret|password|passphrase/;
 
+// Token usage counters that stay readable when their value is a number. Only exact names are
+// listed: a key elsewhere in a span, such as `access_tokens` or `llm.token_count.pin_token`,
+// may hold a numeric credential and stays redacted.
 const SAFE_TOKEN_ATTRIBUTE_KEYS = new Set([
   'gen_ai.request.max_tokens',
   'gen_ai.usage.input_tokens',
@@ -44,67 +45,23 @@ const SAFE_TOKEN_ATTRIBUTE_KEYS = new Set([
   'ai.usage.totaltokens',
   'ai.usage.reasoningtokens',
   'ai.usage.cachedinputtokens',
+  // OpenInference (`llm.token_count.*`), used by Arize Phoenix instrumentors.
+  'llm.token_count.prompt',
+  'llm.token_count.completion',
+  'llm.token_count.total',
+  'llm.token_count.prompt_details.cache_read',
+  'llm.token_count.prompt_details.cache_write',
+  'llm.token_count.prompt_details.cache_input',
+  'llm.token_count.prompt_details.audio',
+  'llm.token_count.completion_details.reasoning',
+  'llm.token_count.completion_details.audio',
 ]);
 
-/**
- * Usage namespaces whose attributes are counters by definition. The exemption is bounded
- * to these prefixes so a key such as `access_tokens` or `sessionTokens` elsewhere in a
- * span is still treated as credential material.
- *
- * - `gen_ai.usage.*_tokens`, `llm.usage.*_tokens`, `promptfoo.usage.*_tokens`
- * - `llm.token_count.*` (OpenInference)
- */
-const SAFE_TOKEN_COUNTER_NAMESPACE_PATTERNS = [
-  /^(?:gen_ai|llm|promptfoo)\.usage\.[a-z0-9_.]*_tokens$/,
-  /^llm\.token_count\.[a-z0-9_.]+$/,
-];
-
-/**
- * Words that mark a token as credential material even inside a usage namespace, for
- * example `gen_ai.usage.access_tokens` or `llm.token_count.refresh_token`.
- */
-const CREDENTIAL_TOKEN_QUALIFIERS = [
-  'access',
-  'session',
-  'refresh',
-  'auth',
-  'bearer',
-  'id_token',
-  'csrf',
-  'otp',
-];
-
+// A count is a finite number. Any other value under a counter name could be a credential.
 function isTokenCountAttribute(lowerKey: string, value: unknown): boolean {
-  // A count is a finite number. Any other value under the same key could be a credential,
-  // including under a recognised usage key.
-  if (typeof value !== 'number' || !Number.isFinite(value)) {
-    return false;
-  }
-  if (SAFE_TOKEN_ATTRIBUTE_KEYS.has(lowerKey)) {
-    return true;
-  }
   return (
-    SAFE_TOKEN_COUNTER_NAMESPACE_PATTERNS.some((pattern) => pattern.test(lowerKey)) &&
-    !CREDENTIAL_TOKEN_QUALIFIERS.some((qualifier) => lowerKey.includes(qualifier))
+    SAFE_TOKEN_ATTRIBUTE_KEYS.has(lowerKey) && typeof value === 'number' && Number.isFinite(value)
   );
-}
-
-function isSensitiveAttributeKey(key: string, value: unknown): boolean {
-  const lowerKey = key.toLowerCase();
-  const normalizedKey = lowerKey.replace(/[^a-z0-9]/g, '');
-
-  if (!SENSITIVE_ATTRIBUTE_PATTERN.test(normalizedKey)) {
-    return false;
-  }
-
-  // Only the `token` marker can be waived, and only for a numeric value under a recognised
-  // usage-counter key. A key such as `api_key.token_count` also names credential material,
-  // so it stays redacted whatever its value.
-  if (NON_TOKEN_SENSITIVE_ATTRIBUTE_PATTERN.test(normalizedKey)) {
-    return true;
-  }
-
-  return !isTokenCountAttribute(lowerKey, value);
 }
 
 export function sanitizeTraceAttributes(
@@ -147,9 +104,15 @@ export function sanitizeTraceAttributes(
       sanitized[key] = '[REDACTED]';
       continue;
     }
-    if (sanitizeSensitiveAttributes && isSensitiveAttributeKey(key, value)) {
-      sanitized[key] = '<redacted>';
-      continue;
+    if (sanitizeSensitiveAttributes) {
+      const lowerKey = key.toLowerCase();
+      if (
+        !isTokenCountAttribute(lowerKey, value) &&
+        SENSITIVE_ATTRIBUTE_PATTERN.test(lowerKey.replace(/[^a-z0-9]/g, ''))
+      ) {
+        sanitized[key] = '<redacted>';
+        continue;
+      }
     }
     sanitized[key] = sanitizeValue(value);
   }
