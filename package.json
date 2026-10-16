@@ -136,28 +136,28 @@
       "undici": "$undici"
     },
     "@opentelemetry/exporter-trace-otlp-http": {
-      "@opentelemetry/core": "2.11.0"
+      "@opentelemetry/core": "2.12.0"
     },
     "@opentelemetry/otlp-exporter-base": {
-      "@opentelemetry/core": "2.11.0"
+      "@opentelemetry/core": "2.12.0"
     },
     "@opentelemetry/otlp-transformer": {
-      "@opentelemetry/core": "2.11.0"
+      "@opentelemetry/core": "2.12.0"
     },
     "@opentelemetry/resources": {
-      "@opentelemetry/core": "2.11.0"
+      "@opentelemetry/core": "2.12.0"
     },
     "@opentelemetry/sdk-logs": {
-      "@opentelemetry/core": "2.11.0"
+      "@opentelemetry/core": "2.12.0"
     },
     "@opentelemetry/sdk-metrics": {
-      "@opentelemetry/core": "2.11.0"
+      "@opentelemetry/core": "2.12.0"
     },
     "@opentelemetry/sdk-trace-base": {
-      "@opentelemetry/core": "2.11.0"
+      "@opentelemetry/core": "2.12.0"
     },
     "@opentelemetry/sdk-trace-node": {
-      "@opentelemetry/core": "2.11.0"
+      "@opentelemetry/core": "2.12.0"
     },
     "serialize-javascript": ">=7.1.2",
     "gaxios": "^8.0.0",
@@ -168,7 +168,7 @@
     "webpack-dev-server": {
       "express": "^4.22.2"
     },
-    "launch-editor": "2.14.1",
+    "launch-editor": "2.14.2",
     "engine.io": {
       ".": "6.6.11",
       "ws": "$ws"
@@ -200,7 +200,7 @@
     "ibm-cloud-sdk-core": "5.6.2"
   },
   "devDependencies": {
-    "@anthropic-ai/claude-agent-sdk": "0.3.290",
+    "@anthropic-ai/claude-agent-sdk": "0.3.291",
     "@asteasolutions/zod-to-openapi": "^9.1.0",
     "@aws-sdk/client-bedrock-agent-runtime": "^3.1045.0",
     "@aws-sdk/client-bedrock-runtime": "^3.1045.0",
@@ -294,12 +294,12 @@
     "@inquirer/select": "^5.1.0",
     "@libsql/client": "^0.18.0",
     "@opentelemetry/api": "^1.9.0",
-    "@opentelemetry/core": "2.11.0",
-    "@opentelemetry/exporter-trace-otlp-http": "^0.222.0",
+    "@opentelemetry/core": "2.12.0",
+    "@opentelemetry/exporter-trace-otlp-http": "^0.223.0",
     "@opentelemetry/resources": "^2.6.0",
     "@opentelemetry/sdk-trace-node": "^2.6.0",
     "@opentelemetry/semantic-conventions": "^1.40.0",
-    "acorn": "^8.18.0",
+    "acorn": "^8.19.0",
     "ai": "^6.0.286",
     "ajv": "^8.18.0",
     "ajv-formats": "^3.0.1",
