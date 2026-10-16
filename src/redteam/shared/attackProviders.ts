@@ -6,7 +6,7 @@
  *
  * Two categories:
  *
- * 1. **Multi-turn conversation** (hydra, goblin, crescendo, goat, custom):
+ * 1. **Multi-turn conversation** (hydra, goblin, crescendo, react-crescendo, goat, custom):
  *    - Target sees all previous messages (conversation context)
  *    - Uses hybrid format: text history + audio/image current turn
  *
@@ -34,6 +34,7 @@ export const ATTACK_PROVIDER_IDS = [
   'hydra', // jailbreak:hydra
   'goblin', // jailbreak:goblin
   'crescendo',
+  'react-crescendo',
   'goat',
   'custom',
   // Multi-attempt single-turn (direct transform, no history)

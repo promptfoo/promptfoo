@@ -85,6 +85,7 @@ export async function addLayerTestCases(
       const providerId = getAttackProviderFullId(stepObj.id);
       const shouldPersistGenerationProvider = [
         'promptfoo:redteam:crescendo',
+        'promptfoo:redteam:react-crescendo',
         'promptfoo:redteam:custom',
         'promptfoo:redteam:iterative',
         'promptfoo:redteam:iterative:meta',
@@ -192,6 +193,7 @@ function getMetricSuffix(stepId: string): string {
     hydra: 'Hydra',
     goblin: 'Goblin',
     crescendo: 'Crescendo',
+    'react-crescendo': 'ReactCrescendo',
     goat: 'GOAT',
     custom: 'Custom',
     // Multi-attempt single-turn strategies
