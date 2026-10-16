@@ -49,6 +49,12 @@ export async function prepareDirectory(directory: string): Promise<void> {
 }
 
 export async function readJson(file: string): Promise<unknown> {
+  // Windows does not expose O_NOFOLLOW. Reject links before opening on every platform;
+  // O_NOFOLLOW additionally closes the substitution race where the OS supports it.
+  const entry = await fs.lstat(file);
+  if (!entry.isFile() || entry.isSymbolicLink()) {
+    throw new Error('Online record must be a regular file, not a link');
+  }
   const handle = await fs.open(
     file,
     constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK,

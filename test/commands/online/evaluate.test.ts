@@ -1,3 +1,5 @@
+import path from 'node:path';
+
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { evaluateTurn, loadOnlineConfig } from '../../../src/commands/online/evaluate';
 import { evaluateWithSource } from '../../../src/evaluate';
@@ -68,8 +70,8 @@ describe('online grading', () => {
     expect(provider.id()).toBe('online:generic');
     expect(await provider.callApi('anything')).toEqual({ output: '' });
     expect(suite.outputPath).toEqual([
-      '/private/reports/event-id.json',
-      '/private/reports/event-id.html',
+      path.join('/private/reports', 'event-id.json'),
+      path.join('/private/reports', 'event-id.html'),
     ]);
   });
 });
