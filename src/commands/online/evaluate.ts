@@ -22,7 +22,7 @@ export async function loadOnlineConfig(configPath: string) {
     grading,
     env: config.env,
     description: config.description ?? 'Online Agent quality',
-    basePath: path.dirname(path.resolve(configPath)),
+    basePath: config.basePath ?? path.dirname(path.resolve(configPath)),
   };
 }
 

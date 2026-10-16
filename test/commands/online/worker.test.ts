@@ -1,10 +1,12 @@
 import * as fs from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import * as timers from 'node:timers/promises';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { captureEvent } from '../../../src/commands/online/capture';
 import { evaluateTurn, loadOnlineConfig } from '../../../src/commands/online/evaluate';
+import * as store from '../../../src/commands/online/store';
 import { readJson } from '../../../src/commands/online/store';
 import { runOnlineWorker } from '../../../src/commands/online/worker';
 import { createEmptyTokenUsage } from '../../../src/util/tokenUsageUtils';
@@ -14,6 +16,7 @@ vi.mock('../../../src/commands/online/evaluate', () => ({
   loadOnlineConfig: vi.fn(),
 }));
 vi.mock('../../../src/logger');
+vi.mock('node:timers/promises', { spy: true });
 let directory: string;
 const options = () => ({
   directory,
@@ -51,6 +54,29 @@ afterEach(async () => {
 });
 
 describe('online worker', () => {
+  it('reads retained receipts once per run while continuing to grade new arrivals', async () => {
+    const id = await queue();
+    await runOnlineWorker(options());
+    const reads = vi.spyOn(store, 'readJson');
+    const controller = new AbortController();
+    let polls = 0;
+    vi.mocked(timers.setTimeout).mockImplementation(async () => {
+      polls++;
+      if (polls === 1) {
+        await queue('new-turn');
+      }
+      if (polls === 3) {
+        controller.abort();
+      }
+    });
+    await runOnlineWorker({ ...options(), once: false, signal: controller.signal });
+    expect(polls).toBe(3);
+    expect(
+      reads.mock.calls.filter(([file]) => file === path.join(directory, 'results', `${id}.json`)),
+    ).toHaveLength(1);
+    expect(evaluateTurn).toHaveBeenCalledTimes(2);
+    expect(await fs.readdir(path.join(directory, 'results'))).toHaveLength(2);
+  });
   it('persists the eval receipt and does not regrade after restart', async () => {
     const id = await queue();
     await runOnlineWorker(options());

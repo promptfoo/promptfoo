@@ -28,6 +28,21 @@ const turn: CapturedTurn = {
 };
 
 describe('online grading', () => {
+  it('preserves the resolved asset base path and defaults to the config directory', async () => {
+    const defaultTest = { assert: [{ type: 'javascript' as const, value: 'file://grade.js' }] };
+    vi.mocked(readConfig).mockResolvedValue({
+      prompts: [],
+      defaultTest,
+      basePath: '/trusted/assets',
+    });
+    expect((await loadOnlineConfig('/trusted/config/grading.yaml')).basePath).toBe(
+      '/trusted/assets',
+    );
+    vi.mocked(readConfig).mockResolvedValue({ prompts: [], defaultTest });
+    expect((await loadOnlineConfig('/trusted/config/grading.yaml')).basePath).toBe(
+      path.dirname(path.resolve('/trusted/config/grading.yaml')),
+    );
+  });
   it('requires explicit assertions', async () => {
     vi.mocked(readConfig).mockResolvedValue({ prompts: [], defaultTest: { assert: [] } });
     await expect(loadOnlineConfig('/trusted/grading.yaml')).rejects.toThrow(

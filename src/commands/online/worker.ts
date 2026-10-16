@@ -62,6 +62,9 @@ export async function runOnlineWorker(options: {
     await lock.writeFile(JSON.stringify({ pid: process.pid }));
     const config = await loadOnlineConfig(options.configPath);
     const attemptId = randomUUID();
+    // Receipts are immutable for this worker run. Avoid reopening all retained history
+    // on every idle poll; a restart checks disk again and enables explicit error retries.
+    const processed = new Set<string>();
     logger.info(`Watching online Agent events in ${directory}`);
     do {
       const files = (await fs.readdir(events)).filter((file) => /^[a-f0-9]{64}\.json$/.test(file));
@@ -69,8 +72,12 @@ export async function runOnlineWorker(options: {
         if (options.signal?.aborted) {
           return;
         }
+        if (processed.has(file)) {
+          continue;
+        }
         const receiptPath = path.join(results, file);
         if (!(await shouldGrade(receiptPath, options.retryErrors, attemptId))) {
+          processed.add(file);
           continue;
         }
         const id = file.slice(0, -5);
@@ -107,6 +114,7 @@ export async function runOnlineWorker(options: {
             `Online event ${id} could not be graded; fix the configuration and use --retry-errors`,
           );
         }
+        processed.add(file);
       }
       if (options.once || options.signal?.aborted) {
         return;
