@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as cache from '../../../src/cache';
+import { GeminiProviderOptionsInputSchema } from '../../../src/contracts';
 import { loadApiProvider } from '../../../src/providers';
 import { AIStudioChatProvider } from '../../../src/providers/google/ai.studio';
 import { GoogleAuthManager } from '../../../src/providers/google/auth';
@@ -47,6 +48,9 @@ describe('Google provider factories', () => {
   it.each(['google:gemini-2.5-flash', 'palm:gemini-2.5-flash'])(
     'evaluates %s through AI Studio',
     async (id) => {
+      expect(
+        GeminiProviderOptionsInputSchema.safeParse({ id, config: { apiKey: 'test-key' } }).success,
+      ).toBe(true);
       const provider = await loadApiProvider(id, { options: { config: { apiKey: 'test-key' } } });
 
       expect(provider).toBeInstanceOf(AIStudioChatProvider);
