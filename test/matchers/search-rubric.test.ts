@@ -171,6 +171,8 @@ describe('matchesSearchRubric', () => {
         pass: false,
         score: 0,
         reason: 'Search rubric evaluation failed: search unavailable',
+        // Tagged so inverse-aware callers propagate the failure verbatim
+        // instead of flipping a transport error into a spurious pass.
         metadata: { graderError: true },
       }),
     );
@@ -230,7 +232,7 @@ describe('matchesSearchRubric', () => {
     mocks.loadApiProvider.mockResolvedValue(null);
 
     await expect(matchesSearchRubric('Confirm current facts', 'output', {})).rejects.toThrow(
-      'anthropic:messages:claude-sonnet-4-6',
+      'anthropic:messages:claude-sonnet-5',
     );
   });
 });

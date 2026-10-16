@@ -1,5 +1,5 @@
 import { getEnvString } from '../envars';
-import { isMissingPackageImportError } from '../util/packageImportErrors';
+import { loadLangfuseClient } from './langfuse-availability';
 import type { ChatPromptClient, LangfuseClient, TextPromptClient } from '@langfuse/client';
 
 import type { VarValue } from '../types';
@@ -33,19 +33,10 @@ function getLangfuseParams(): LangfuseParams {
 }
 
 async function createLangfuseClient(params: LangfuseParams): Promise<LangfuseClient> {
-  try {
+  return loadLangfuseClient(async () => {
     const { LangfuseClient } = await import('@langfuse/client');
     return new LangfuseClient(params);
-  } catch (err) {
-    // Only a missing @langfuse/client is fixed by installing it. Anything else, such as a missing
-    // dependency of an installed SDK, is more useful as the original error.
-    if (isMissingPackageImportError(err, '@langfuse/client')) {
-      throw new Error(
-        'The @langfuse/client package is required for Langfuse integration. Please install it with: npm install @langfuse/client',
-      );
-    }
-    throw err;
-  }
+  });
 }
 
 function getLangfuseState(): LangfuseClientState {

@@ -185,7 +185,7 @@ describe('langfuse integration', () => {
       const { getPrompt } = await import('../../src/integrations/langfuse');
 
       await expect(getPrompt('greeting', {}, 'text')).rejects.toThrow(
-        'The @langfuse/client package is required for Langfuse integration. Please install it with: npm install @langfuse/client',
+        'The @langfuse/client package is required for Langfuse prompt management. Install it with: npm install promptfoo @langfuse/client@^5.11.1',
       );
     });
 

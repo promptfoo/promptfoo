@@ -37,17 +37,11 @@ export function pluginMatchesStrategyTargets(
     return true; // If no targets specified, strategy applies to all plugins
   }
 
-  return targetPlugins.some((target) => {
-    // Direct match
-    if (target === pluginId) {
-      return true;
-    }
-
-    // Category match (e.g. 'harmful' matches 'harmful:hate')
-    if ((pluginId || '').startsWith(`${target}:`)) {
-      return true;
-    }
-
-    return false;
-  });
+  return targetPlugins.some(
+    (target) =>
+      // Direct match
+      target === pluginId ||
+      // Category match (e.g. 'harmful' matches 'harmful:hate')
+      (pluginId || '').startsWith(`${target}:`),
+  );
 }

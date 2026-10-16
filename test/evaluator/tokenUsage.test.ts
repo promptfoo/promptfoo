@@ -5,9 +5,19 @@ import { randomUUID } from 'crypto';
 import { expect, it, vi } from 'vitest';
 import { evaluate, runEval } from '../../src/evaluator';
 import Eval from '../../src/models/eval';
+import {
+  getGradingAssertionHash,
+  getGradingInputHash,
+} from '../../src/redteam/grading/storedResult';
 import { type ApiProvider, type TestSuite } from '../../src/types/index';
 import { mockApiProvider, mockGradingApiProviderPasses, toPrompt } from './helpers';
 import { describeEvaluator } from './lifecycle';
+
+const createCachedTargetResponse = () => ({
+  output: 'Cached target response',
+  cached: true,
+  tokenUsage: { total: 295, prompt: 201, completion: 94, numRequests: 1 },
+});
 
 describeEvaluator('evaluator token usage', () => {
   it('does not count deterministic assertions as grading-provider requests', async () => {
@@ -153,11 +163,7 @@ describeEvaluator('evaluator token usage', () => {
   it('preserves logical target and grading calls when both responses are cached', async () => {
     const cachedTargetProvider: ApiProvider = {
       id: vi.fn().mockReturnValue('cached-target-provider'),
-      callApi: vi.fn().mockResolvedValue({
-        output: 'Cached target response',
-        cached: true,
-        tokenUsage: { total: 295, prompt: 201, completion: 94, numRequests: 1 },
-      }),
+      callApi: vi.fn().mockResolvedValue(createCachedTargetResponse()),
     };
     const cachedGradingProvider: ApiProvider = {
       id: vi.fn().mockReturnValue('cached-grading-provider'),
@@ -465,11 +471,7 @@ describeEvaluator('evaluator token usage', () => {
   it('counts a fresh model grader without reported token usage as one probe', async () => {
     const cachedTargetProvider: ApiProvider = {
       id: vi.fn().mockReturnValue('cached-target-provider'),
-      callApi: vi.fn().mockResolvedValue({
-        output: 'Cached target response',
-        cached: true,
-        tokenUsage: { total: 295, prompt: 201, completion: 94, numRequests: 1 },
-      }),
+      callApi: vi.fn().mockResolvedValue(createCachedTargetResponse()),
     };
     const gradingProvider: ApiProvider = {
       id: vi.fn().mockReturnValue('fresh-grading-provider-without-usage'),
@@ -531,11 +533,7 @@ describeEvaluator('evaluator token usage', () => {
       .mockResolvedValue([freshComparison, { ...freshComparison }]);
     const cachedTargetProvider: ApiProvider = {
       id: vi.fn().mockReturnValue('cached-target-provider'),
-      callApi: vi.fn().mockResolvedValue({
-        output: 'Cached target response',
-        cached: true,
-        tokenUsage: { total: 295, prompt: 201, completion: 94, numRequests: 1 },
-      }),
+      callApi: vi.fn().mockResolvedValue(createCachedTargetResponse()),
     };
 
     try {
@@ -1016,7 +1014,7 @@ describeEvaluator('evaluator token usage', () => {
 
   it('combines internal judge calls with all stored red-team grading turns exactly once', async () => {
     const redteamProvider: ApiProvider = {
-      id: vi.fn().mockReturnValue('redteam-provider-with-stored-grades'),
+      id: vi.fn().mockReturnValue('promptfoo:redteam:hydra'),
       callApi: vi.fn().mockResolvedValue({
         output: 'Target response',
         metadata: {
@@ -1024,6 +1022,18 @@ describeEvaluator('evaluator token usage', () => {
             pass: true,
             score: 1,
             reason: 'Final grading turn passed',
+            assertion: { type: 'promptfoo:redteam:harmful:hate' },
+            metadata: {
+              redteamGradingAssertionHash: getGradingAssertionHash({
+                type: 'promptfoo:redteam:harmful:hate',
+              }),
+              redteamGradingInputHash: getGradingInputHash(
+                'Test prompt',
+                'Target response',
+                undefined,
+                'harmful:hate',
+              ),
+            },
             tokensUsed: {
               total: 60,
               prompt: 36,
@@ -1063,6 +1073,7 @@ describeEvaluator('evaluator token usage', () => {
     await evaluate(testSuite, evalRecord, {});
     const summary = await evalRecord.toEvaluateSummary();
 
+    expect(summary.results[0]).toMatchObject({ success: true });
     expect(summary.stats.tokenUsage).toMatchObject({
       total: 100,
       numRequests: 1,

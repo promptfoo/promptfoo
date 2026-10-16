@@ -4,14 +4,23 @@ import Eval from '../models/eval';
 import { generateTable, wrapTable } from '../table';
 import { getDatasetFromHash, getEvalFromId, getPromptFromHash } from '../util/database';
 import { printBorder, setupEnv } from '../util/index';
-import invariant from '../util/invariant';
 import type { Command } from 'commander';
 
 type CountMetrics = {
-  testPassCount?: number;
-  testFailCount?: number;
-  testErrorCount?: number;
+  testPassCount: number;
+  testFailCount: number;
+  testErrorCount: number;
 };
+
+function formatPassRate(metrics?: CountMetrics) {
+  return metrics && metrics.testPassCount + metrics.testFailCount + metrics.testErrorCount > 0
+    ? `${(
+        (metrics.testPassCount /
+          (metrics.testPassCount + metrics.testFailCount + metrics.testErrorCount)) *
+          100
+      ).toFixed(2)}%`
+    : '-';
+}
 
 function formatPassCount(metrics?: CountMetrics) {
   if (!metrics) {
@@ -53,29 +62,15 @@ export async function handlePrompt(id: string) {
       'Eval ID': evl.id.slice(0, 6),
       'Dataset ID': evl.datasetId.slice(0, 6),
       'Raw score': evl.metrics?.score?.toFixed(2) || '-',
-      'Pass rate':
-        evl.metrics &&
-        evl.metrics.testPassCount + evl.metrics.testFailCount + evl.metrics.testErrorCount > 0
-          ? `${(
-              (evl.metrics.testPassCount /
-                (evl.metrics.testPassCount +
-                  evl.metrics.testFailCount +
-                  evl.metrics.testErrorCount)) *
-                100
-            ).toFixed(2)}%`
-          : '-',
+      'Pass rate': formatPassRate(evl.metrics),
       'Pass count': formatPassCount(evl.metrics),
       'Fail count': formatFailCount(evl.metrics),
     });
   }
   logger.info(wrapTable(table) as string);
   printBorder();
-  logger.info(
-    `Run ${chalk.green('promptfoo show eval <id>')} to see details of a specific evaluation.`,
-  );
-  logger.info(
-    `Run ${chalk.green('promptfoo show dataset <id>')} to see details of a specific dataset.`,
-  );
+  printResourceHint('eval');
+  printResourceHint('dataset');
 }
 
 export async function handleEval(id: string) {
@@ -87,7 +82,6 @@ export async function handleEval(id: string) {
     return;
   }
   const table = await eval_.getTable();
-  invariant(table, 'Could not generate table');
   const { prompts, vars } = table.head;
 
   logger.info(generateTable(table, 100, 25));
@@ -135,40 +129,31 @@ export async function handleDataset(id: string) {
   printBorder();
 
   logger.info(`This dataset is used in the following evals:`);
-  const table = [];
-  for (const prompt of dataset.prompts
+  const table = dataset.prompts
     .sort((a, b) => b.evalId.localeCompare(a.evalId))
-    .slice(0, 10)) {
-    table.push({
+    .slice(0, 10)
+    .map((prompt) => ({
       'Eval ID': prompt.evalId.slice(0, 6),
       'Prompt ID': prompt.id.slice(0, 6),
       'Raw score': prompt.prompt.metrics?.score?.toFixed(2) || '-',
-      'Pass rate':
-        prompt.prompt.metrics &&
-        prompt.prompt.metrics.testPassCount +
-          prompt.prompt.metrics.testFailCount +
-          prompt.prompt.metrics.testErrorCount >
-          0
-          ? `${(
-              (prompt.prompt.metrics.testPassCount /
-                (prompt.prompt.metrics.testPassCount +
-                  prompt.prompt.metrics.testFailCount +
-                  prompt.prompt.metrics.testErrorCount)) *
-                100
-            ).toFixed(2)}%`
-          : '-',
+      'Pass rate': formatPassRate(prompt.prompt.metrics),
       'Pass count': formatPassCount(prompt.prompt.metrics),
       'Fail count': formatFailCount(prompt.prompt.metrics),
-    });
-  }
+    }));
   logger.info(wrapTable(table) as string);
   printBorder();
-  logger.info(
-    `Run ${chalk.green('promptfoo show prompt <id>')} to see details of a specific prompt.`,
-  );
-  logger.info(
-    `Run ${chalk.green('promptfoo show eval <id>')} to see details of a specific evaluation.`,
-  );
+  printResourceHint('prompt');
+  printResourceHint('eval');
+}
+
+function showLatestEval(latestEval: Eval | undefined) {
+  if (latestEval) {
+    return handleEval(latestEval.id);
+  }
+  logger.error('No eval found');
+  logger.info(`Run ${chalk.green('promptfoo eval')} to create one.`);
+  process.exitCode = 1;
+  return;
 }
 
 export async function showCommand(program: Command) {
@@ -180,14 +165,7 @@ export async function showCommand(program: Command) {
       setupEnv(cmdObj.envPath);
 
       if (!id) {
-        const latestEval = await Eval.latest();
-        if (latestEval) {
-          return handleEval(latestEval.id);
-        }
-        logger.error('No eval found');
-        logger.info(`Run ${chalk.green('promptfoo eval')} to create one.`);
-        process.exitCode = 1;
-        return;
+        return showLatestEval(await Eval.latest());
       }
 
       const evl = await getEvalFromId(id);
@@ -217,14 +195,7 @@ export async function showCommand(program: Command) {
     .description('Show details of a specific evaluation (defaults to most recent)')
     .action(async (id?: string) => {
       if (!id) {
-        const latestEval = await Eval.latest();
-        if (latestEval) {
-          return handleEval(latestEval.id);
-        }
-        logger.error('No eval found');
-        logger.info(`Run ${chalk.green('promptfoo eval')} to create one.`);
-        process.exitCode = 1;
-        return;
+        return showLatestEval(await Eval.latest());
       }
       return handleEval(id);
     });
@@ -238,4 +209,10 @@ export async function showCommand(program: Command) {
     .command('dataset <id>')
     .description('Show details of a specific dataset')
     .action(handleDataset);
+}
+
+export function printResourceHint(resource: 'eval' | 'prompt' | 'dataset') {
+  logger.info(
+    `Run ${chalk.green(`promptfoo show ${resource} <id>`)} to see details of a specific ${resource === 'eval' ? 'evaluation' : resource}.`,
+  );
 }

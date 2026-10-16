@@ -1,6 +1,5 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 
 import {
   buildEdgeBaseline,
@@ -17,7 +16,7 @@ import {
  * justification, changing) cross-layer coupling so the ratchet captures the
  * new, lower numbers.
  */
-const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const repoRoot = path.resolve(import.meta.dirname, '..');
 const config = readLayerConfig(repoRoot);
 const sourceScan = scanArchitectureSources(repoRoot, config);
 const edges = computeCrossLayerEdges(repoRoot, config, sourceScan);

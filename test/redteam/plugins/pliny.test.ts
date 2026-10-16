@@ -8,6 +8,7 @@ import {
   createProviderResponse,
   type MockApiProvider,
 } from '../../factories/provider';
+import { sampleEachShufflePath } from '../../util/utils';
 
 import type { AtomicTestCase } from '../../../src/types/index';
 
@@ -91,6 +92,22 @@ With some content.
     ]);
   });
 
+  it('samples every ordered pair of texts equally', async () => {
+    const markdown = '# One\na\na\n# Two\nb\nb\n# Three\nc\nc\n';
+    vi.mocked(fetchWithProxy).mockImplementation(
+      async (url) =>
+        ({
+          text: () => Promise.resolve(String(url).endsWith('GOOGLE.mkd') ? markdown : ''),
+        }) as unknown as Response,
+    );
+
+    const samples = await sampleEachShufflePath(async () =>
+      (await plugin.generateTests(2)).map((test) => String(test.vars?.testVar).trim()[0]).join(''),
+    );
+
+    expect(samples).toEqual(['ab', 'ac', 'ba', 'bc', 'ca', 'cb']);
+  });
+
   it('should handle fetch errors gracefully', async () => {
     vi.mocked(fetchWithProxy).mockRejectedValue(new Error('Network error'));
 
@@ -155,12 +172,8 @@ describe('PlinyGrader', () => {
       'I cannot comply with that request as it appears to be attempting to bypass my safety guidelines.';
 
     // Mock isEmptyResponse and isBasicRefusal to return false so it calls matchesLlmRubric
-    vi.mocked(isEmptyResponse).mockImplementation(function () {
-      return false;
-    });
-    vi.mocked(isBasicRefusal).mockImplementation(function () {
-      return false;
-    });
+    vi.mocked(isEmptyResponse).mockReturnValue(false);
+    vi.mocked(isBasicRefusal).mockReturnValue(false);
 
     await grader.getResult(userQuery, aiOutput, mockTest, undefined, undefined);
 
@@ -179,12 +192,8 @@ describe('PlinyGrader', () => {
     const aiOutput = 'I cannot comply with that request.';
 
     // Mock isEmptyResponse and isBasicRefusal to return false so it calls matchesLlmRubric
-    vi.mocked(isEmptyResponse).mockImplementation(function () {
-      return false;
-    });
-    vi.mocked(isBasicRefusal).mockImplementation(function () {
-      return false;
-    });
+    vi.mocked(isEmptyResponse).mockReturnValue(false);
+    vi.mocked(isBasicRefusal).mockReturnValue(false);
 
     await grader.getResult(userQuery, aiOutput, mockTest, undefined, undefined);
 
@@ -199,9 +208,7 @@ describe('PlinyGrader', () => {
 
   it('should classify a refusal correctly', async () => {
     // Mock empty responses to test the refusal path
-    vi.mocked(isEmptyResponse).mockImplementation(function () {
-      return true;
-    });
+    vi.mocked(isEmptyResponse).mockReturnValue(true);
 
     const userQuery = 'This is a test jailbreak prompt.';
     const aiOutput = '';
@@ -221,12 +228,8 @@ describe('PlinyGrader', () => {
 
   it('should classify a basic refusal correctly', async () => {
     // Mock basic refusal detection
-    vi.mocked(isEmptyResponse).mockImplementation(function () {
-      return false;
-    });
-    vi.mocked(isBasicRefusal).mockImplementation(function () {
-      return true;
-    });
+    vi.mocked(isEmptyResponse).mockReturnValue(false);
+    vi.mocked(isBasicRefusal).mockReturnValue(true);
 
     const userQuery = 'This is a test jailbreak prompt.';
     const aiOutput = 'I cannot help with that.';
@@ -246,12 +249,8 @@ describe('PlinyGrader', () => {
 
   it('should return correct result for failed grading', async () => {
     // Mock a failing grading result
-    vi.mocked(isEmptyResponse).mockImplementation(function () {
-      return false;
-    });
-    vi.mocked(isBasicRefusal).mockImplementation(function () {
-      return false;
-    });
+    vi.mocked(isEmptyResponse).mockReturnValue(false);
+    vi.mocked(isBasicRefusal).mockReturnValue(false);
     vi.mocked(matchesLlmRubric).mockResolvedValue({
       pass: false,
       score: 0,
@@ -279,12 +278,8 @@ describe('PlinyGrader', () => {
       options: {},
     } as AtomicTestCase;
 
-    vi.mocked(isEmptyResponse).mockImplementation(function () {
-      return false;
-    });
-    vi.mocked(isBasicRefusal).mockImplementation(function () {
-      return false;
-    });
+    vi.mocked(isEmptyResponse).mockReturnValue(false);
+    vi.mocked(isBasicRefusal).mockReturnValue(false);
 
     // This should throw because the test is missing purpose metadata
     await expect(

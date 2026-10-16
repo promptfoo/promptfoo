@@ -4,21 +4,10 @@ export interface AttributeSanitizationOptions {
   truncateValues?: boolean;
 }
 
-const SENSITIVE_ATTRIBUTE_KEYS = [
-  'authorization',
-  'cookie',
-  'set-cookie',
-  'token',
-  'api_key',
-  'apikey',
-  'secret',
-  'password',
-  'passphrase',
-];
-
-const NORMALIZED_SENSITIVE_ATTRIBUTE_KEYS = SENSITIVE_ATTRIBUTE_KEYS.map((key) =>
-  key.replace(/[^a-z0-9]/g, ''),
-);
+// Match normalized names; the cookie pattern also covers set-cookie.
+const SENSITIVE_ATTRIBUTE_PATTERN = /authorization|cookie|token|apikey|secret|password|passphrase/;
+const NON_TOKEN_SENSITIVE_ATTRIBUTE_PATTERN =
+  /authorization|cookie|apikey|secret|password|passphrase/;
 
 const SAFE_TOKEN_ATTRIBUTE_KEYS = new Set([
   'gen_ai.request.max_tokens',
@@ -85,8 +74,6 @@ const CREDENTIAL_TOKEN_QUALIFIERS = [
   'otp',
 ];
 
-const TOKEN_MARKER = 'token';
-
 function isTokenCountAttribute(lowerKey: string, value: unknown): boolean {
   // A count is a finite number. Any other value under the same key could be a credential,
   // including under a recognised usage key.
@@ -106,20 +93,14 @@ function isSensitiveAttributeKey(key: string, value: unknown): boolean {
   const lowerKey = key.toLowerCase();
   const normalizedKey = lowerKey.replace(/[^a-z0-9]/g, '');
 
-  const matchedMarkers = SENSITIVE_ATTRIBUTE_KEYS.filter(
-    (sensitiveKey, index) =>
-      lowerKey.includes(sensitiveKey) ||
-      normalizedKey.includes(NORMALIZED_SENSITIVE_ATTRIBUTE_KEYS[index]),
-  );
-
-  if (matchedMarkers.length === 0) {
+  if (!SENSITIVE_ATTRIBUTE_PATTERN.test(normalizedKey)) {
     return false;
   }
 
   // Only the `token` marker can be waived, and only for a numeric value under a recognised
   // usage-counter key. A key such as `api_key.token_count` also names credential material,
   // so it stays redacted whatever its value.
-  if (matchedMarkers.some((marker) => marker !== TOKEN_MARKER)) {
+  if (NON_TOKEN_SENSITIVE_ATTRIBUTE_PATTERN.test(normalizedKey)) {
     return true;
   }
 

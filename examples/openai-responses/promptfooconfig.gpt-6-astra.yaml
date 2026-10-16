@@ -8,7 +8,7 @@ prompts:
     Return the carrier and total cost as JSON.
 
 providers:
-  - id: openai:responses:gpt-6-astra
+  - id: openai:gpt-6-astra
     config:
       reasoning:
         effort: high

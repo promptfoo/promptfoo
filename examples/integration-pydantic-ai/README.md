@@ -4,6 +4,8 @@ This example demonstrates how to evaluate [PydanticAI](https://ai.pydantic.dev/)
 
 You can run this example with:
 
+On Windows (PowerShell), use `npx.cmd` instead of `npx` for the Promptfoo commands in this guide.
+
 ```bash
 npx promptfoo@latest init --example integration-pydantic-ai
 cd integration-pydantic-ai
@@ -11,12 +13,32 @@ cd integration-pydantic-ai
 
 ## Quick Start
 
+Requires Python 3.10 or later. The requirements use PydanticAI’s
+[slim OpenAI installation](https://pydantic.dev/docs/ai/overview/install/#slim-install),
+which installs only the model provider used by this example. PydanticAI 2.46 or
+newer manages the OpenAI SDK dependency; Pydantic is listed explicitly because
+the example defines its output schema with `BaseModel`.
+
+On macOS/Linux:
+
 ```bash
-cd integration-pydantic-ai
-pip install -r requirements.txt
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install -r requirements.txt
 export OPENAI_API_KEY=your_openai_api_key_here
-npx promptfoo@latest eval
+npx promptfoo@latest eval --no-cache
 npx promptfoo@latest view
+```
+
+On Windows (PowerShell):
+
+```powershell
+python -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
+$env:PROMPTFOO_PYTHON = (Resolve-Path .\.venv\Scripts\python.exe).Path
+$env:OPENAI_API_KEY = "your_openai_api_key_here"
+npx.cmd promptfoo@latest eval --no-cache
+npx.cmd promptfoo@latest view
 ```
 
 ## What This Shows

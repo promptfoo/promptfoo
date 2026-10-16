@@ -1,44 +1,34 @@
+from pathlib import Path
+
+from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_openai import ChatOpenAI
 
 
 def call_api(prompt, options, context):
-    """
-    A LangChain-based customer service agent for Acme Corp.
-    """
-    # Initialize the LLM
-    llm = ChatOpenAI(model_name="gpt-5-nano")
-
-    # Load system message
-    import os
-
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-    with open(os.path.join(script_dir, "system_message.txt"), "r") as f:
-        system_message = f.read()
-
-    # Create the prompt template using ChatPromptTemplate
-    prompt_template = ChatPromptTemplate.from_messages(
-        [("system", system_message), ("user", "{question}")]
-    )
-
-    # Create the chain using LCEL
-    chain = prompt_template | llm
-
+    """A LangChain-based customer service agent for Acme Corp."""
     try:
-        # Execute the chain
-        result = chain.invoke({"question": prompt})
+        llm = ChatOpenAI(model="gpt-5-nano")
+        system_message = Path(__file__).with_name("system_message.txt").read_text()
+        prompt_template = ChatPromptTemplate.from_messages(
+            [("system", system_message), ("user", "{question}")]
+        )
+        result = (prompt_template | llm).invoke({"question": prompt})
+        response = {"output": StrOutputParser().invoke(result)}
 
-        # Extract text output
-        output_text = result.content if hasattr(result, "content") else str(result)
-
-        # Calculate token usage
-        return {
-            "output": output_text,
-            "tokenUsage": {
-                "total": llm.get_num_tokens(prompt + output_text),
-                "prompt": llm.get_num_tokens(prompt),
-                "completion": llm.get_num_tokens(output_text),
-            },
-        }
-    except Exception as e:
-        return {"error": str(e), "output": None}
+        # Use the API's counts, including the system prompt and reasoning tokens.
+        # Local tokenization omits those and may download a tokenizer on first use.
+        if result.usage_metadata:
+            response["tokenUsage"] = {
+                "total": result.usage_metadata["total_tokens"],
+                "prompt": result.usage_metadata["input_tokens"],
+                "completion": result.usage_metadata["output_tokens"],
+            }
+            reasoning = result.usage_metadata.get("output_token_details", {}).get(
+                "reasoning"
+            )
+            if reasoning is not None:
+                response["tokenUsage"]["completionDetails"] = {"reasoning": reasoning}
+        return response
+    except Exception as error:  # noqa: BLE001 - Surface package failures in the result.
+        return {"error": str(error), "output": None}
