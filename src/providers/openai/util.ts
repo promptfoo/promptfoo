@@ -1488,7 +1488,7 @@ export function parseChatCompletionJsonOutput(
 export interface OpenAiFunction {
   name: string;
   description?: string;
-  parameters: {
+  parameters?: {
     type: 'object';
     properties: Record<string, any>;
     required?: string[];
@@ -1542,11 +1542,11 @@ export function validateFunctionCall(
         typeof definition !== 'object' ||
         typeof definition.name !== 'string' ||
         !definition.name.trim() ||
-        definition.parameters == null,
+        definition.parameters === null,
     )
   ) {
     throw new InvalidToolSchemaError(
-      'Expected each function to have a name and a parameters schema',
+      'Expected each function to have a name and a non-null parameters schema when provided',
     );
   }
   let functionArgs;
@@ -1556,12 +1556,17 @@ export function validateFunctionCall(
     throw new InvalidToolCallError((err as Error).message);
   }
   const functionName = functionCall.name;
-  const functionSchema = interpolatedFunctions?.find((f) => f.name === functionName)?.parameters;
-  if (!functionSchema) {
+  const functionDefinition = interpolatedFunctions.find((f) => f.name === functionName);
+  if (!functionDefinition) {
     throw new InvalidToolCallError(
       `Called "${functionName}", but there is no function with that name`,
     );
   }
+  const functionSchema = functionDefinition.parameters ?? {
+    type: 'object',
+    properties: {},
+    additionalProperties: false,
+  };
   let validate;
   try {
     validate = getAjv().compile(functionSchema);
