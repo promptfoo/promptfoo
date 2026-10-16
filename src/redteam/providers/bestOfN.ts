@@ -17,7 +17,7 @@ import {
 } from '../remoteGeneration';
 import { remoteGenerationContextPayload } from '../remoteGenerationContext';
 import { throwIfTargetPromptExceedsMaxChars } from '../shared/promptLength';
-import { getSessionId } from '../util';
+import { getSessionId, isBasicRefusal, isEmptyResponse } from '../util';
 import { callTargetProvider } from './shared';
 
 import type {
@@ -84,6 +84,7 @@ export default class BestOfNProvider implements ApiProvider {
     let targetCost: number | undefined;
     let incurredTargetCost: number | undefined;
     const sessionIds: string[] = [];
+    const skipTextRefusalCheck = skipsBasicRefusalCheck(context.test?.metadata?.pluginId);
     try {
       // Get candidate prompts from the server
       const response = await fetchWithProxy(
@@ -209,7 +210,9 @@ export default class BestOfNProvider implements ApiProvider {
                 (response.incurredCost ?? (response.cached ? 0 : response.cost));
             }
             currentStep++;
-            if (!response.error) {
+            // A refusal is not a successful jailbreak, so keep sampling candidates until the
+            // target answers or the candidates run out.
+            if (!response.error && !isRefusalResponse(response, skipTextRefusalCheck)) {
               successfulResponse = response;
               successfulResponse.prompt = candidatePrompt;
               successfulResponse.metadata = {
@@ -288,4 +291,32 @@ export default class BestOfNProvider implements ApiProvider {
       };
     }
   }
+}
+
+// Mirrors the graders: coding-agent and policy graders skip the basic refusal check because an
+// apologetic reply can still carry the unsafe content.
+function skipsBasicRefusalCheck(pluginId: unknown): boolean {
+  return (
+    typeof pluginId === 'string' && (pluginId.startsWith('coding-agent:') || pluginId === 'policy')
+  );
+}
+
+function hasMediaOutput(response: ProviderResponse): boolean {
+  return Boolean(response.images?.length || response.audio || response.video);
+}
+
+function isRefusalResponse(response: ProviderResponse, skipTextRefusalCheck: boolean): boolean {
+  if (response.isRefusal === true) {
+    return true;
+  }
+  if (response.output === undefined || response.output === null) {
+    return !hasMediaOutput(response);
+  }
+  if (typeof response.output !== 'string') {
+    return false;
+  }
+  if (isEmptyResponse(response.output)) {
+    return !hasMediaOutput(response);
+  }
+  return !skipTextRefusalCheck && isBasicRefusal(response.output);
 }
