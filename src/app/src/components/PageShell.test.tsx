@@ -48,23 +48,11 @@ describe('PageShell', () => {
     vi.clearAllMocks();
   });
 
-  it('should render navigation component', async () => {
+  it('renders navigation, update banner, and analytics tracker', async () => {
     renderPageShell();
     await waitFor(() => {
       expect(screen.getByTestId('navigation-mock')).toBeInTheDocument();
-    });
-  });
-
-  it('should render update banner', async () => {
-    renderPageShell();
-    await waitFor(() => {
       expect(screen.getByTestId('update-banner-mock')).toBeInTheDocument();
-    });
-  });
-
-  it('should render PostHog tracker', async () => {
-    renderPageShell();
-    await waitFor(() => {
       expect(screen.getByTestId('posthog-tracker-mock')).toBeInTheDocument();
     });
   });

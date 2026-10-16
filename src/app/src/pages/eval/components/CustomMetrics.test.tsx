@@ -302,26 +302,6 @@ describe('CustomMetrics', () => {
     expect(screen.getByTestId('metric-value-metric2')).toHaveTextContent('50.00% (20.00/40.00)');
   });
 
-  it('should include a comment to fix the missing key prop warning', () => {
-    expect(true).toBe(true);
-  });
-
-  it('correctly handles undefined metric values in lookup', () => {
-    const lookupWithUndefined: Record<string, number | undefined> = {
-      metric1: 10,
-      metric2: undefined,
-    };
-
-    const lookup = Object.fromEntries(
-      Object.entries(lookupWithUndefined).filter(([, value]) => value !== undefined),
-    ) as Record<string, number>;
-
-    renderWithProviders(<CustomMetrics lookup={lookup} />);
-
-    expect(screen.getByTestId('metric-name-metric1')).toBeInTheDocument();
-    expect(screen.queryByTestId('metric-name-metric2')).not.toBeInTheDocument();
-  });
-
   it('displays negative metric values correctly', () => {
     const lookup = {
       metric1: -10.5,

@@ -1,7 +1,5 @@
-import React from 'react';
-
 import { render, screen } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import VariableMarkdownCell from './VariableMarkdownCell';
 
 describe('VariableMarkdownCell', () => {
@@ -88,32 +86,6 @@ describe('VariableMarkdownCell', () => {
       expect(String(VariableMarkdownCell.$$typeof)).toContain('memo');
     });
 
-    it('does not re-render when parent re-renders with same props', () => {
-      const renderSpy = vi.fn();
-
-      // Create a test component that tracks renders
-      const TestComponent = React.memo(function TestComponent({
-        value,
-        maxTextLength,
-      }: {
-        value: string;
-        maxTextLength: number;
-      }) {
-        renderSpy();
-        return <VariableMarkdownCell value={value} maxTextLength={maxTextLength} />;
-      });
-
-      const { rerender } = render(<TestComponent value="test content" maxTextLength={100} />);
-
-      expect(renderSpy).toHaveBeenCalledTimes(1);
-
-      // Re-render with exact same props
-      rerender(<TestComponent value="test content" maxTextLength={100} />);
-
-      // Should still be 1 due to memoization
-      expect(renderSpy).toHaveBeenCalledTimes(1);
-    });
-
     it('re-renders when value prop changes', () => {
       const { rerender } = render(
         <VariableMarkdownCell value="original content" maxTextLength={100} />,
@@ -144,23 +116,6 @@ describe('VariableMarkdownCell', () => {
 
       // The full content should now be visible
       expect(updatedContent?.length).toBeGreaterThan(initialContent?.length || 0);
-    });
-  });
-
-  describe('error handling', () => {
-    it('renders fallback when markdown parsing fails', () => {
-      // Mock console.error to suppress error boundary output
-      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-
-      // Create a value that might cause issues but should still render as fallback
-      const problematicValue = 'Normal text content';
-
-      render(<VariableMarkdownCell value={problematicValue} maxTextLength={100} />);
-
-      // Should render the content (either as markdown or fallback)
-      expect(screen.getByText('Normal text content')).toBeInTheDocument();
-
-      consoleSpy.mockRestore();
     });
   });
 
