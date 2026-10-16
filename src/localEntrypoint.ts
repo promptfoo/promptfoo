@@ -16,7 +16,13 @@ if (requestsStructuredCodeScanOutput(process.argv.slice(2))) {
   Object.assign(process.env, { LOG_LEVEL: 'error', PROMPTFOO_LOG_TO_STDERR: 'true' });
 }
 
-process.argv[1] = fileURLToPath(new URL('./main.ts', import.meta.url));
-await import('./main.js');
+// Hook capture must not load project configuration, dotenv, telemetry or the database.
+if (process.argv[2] === 'online' && process.argv[3] === 'capture') {
+  const { runCapture } = await import('./commands/online/capture.js');
+  await runCapture(process.argv.slice(4));
+} else {
+  process.argv[1] = fileURLToPath(new URL('./main.ts', import.meta.url));
+  await import('./main.js');
+}
 
 export {};
