@@ -49,16 +49,16 @@ providers:
 
 ### Config Options
 
-| Option              | Type          | Default     | Description                                                                                                      |
-| ------------------- | ------------- | ----------- | ---------------------------------------------------------------------------------------------------------------- |
-| `url`               | string        | -           | Webhook URL (alternative to provider path)                                                                       |
-| `method`            | string        | `POST`      | `GET`, `HEAD`, `POST`, `PUT`, or `PATCH`; `GET` encodes body fields as query parameters and `HEAD` sends no body |
-| `headers`           | object        | -           | Additional request headers with Nunjucks templating                                                              |
-| `body`              | object/string | `{prompt}`  | Request/body-query template; object form is recommended for JSON requests                                        |
-| `transformResponse` | string        | -           | JavaScript expression to extract output                                                                          |
-| `sessionHeader`     | string        | -           | Request header name for the session ID                                                                           |
-| `sessionParser`     | string        | -           | JavaScript expression to extract a session ID                                                                    |
-| `sessionField`      | string        | `sessionId` | Body field name for a supplied session ID                                                                        |
+| Option              | Type          | Default     | Description                                                                                                   |
+| ------------------- | ------------- | ----------- | ------------------------------------------------------------------------------------------------------------- |
+| `url`               | string        | -           | Webhook URL (alternative to provider path)                                                                    |
+| `method`            | string        | `POST`      | `GET`, `HEAD`, `POST`, `PUT`, or `PATCH`; `GET` and `HEAD` send no body and encode fields as query parameters |
+| `headers`           | object        | -           | Additional request headers with Nunjucks templating                                                           |
+| `body`              | object/string | `{prompt}`  | Request/body-query template; object form is recommended for JSON requests                                     |
+| `transformResponse` | string        | -           | JavaScript expression to extract output                                                                       |
+| `sessionHeader`     | string        | -           | Request header name for the session ID                                                                        |
+| `sessionParser`     | string        | -           | JavaScript expression to extract a session ID                                                                 |
+| `sessionField`      | string        | `sessionId` | Body field name for a supplied session ID                                                                     |
 
 YAML method values are case-insensitive. TypeScript configurations using `N8nProviderConfig` use the uppercase names above.
 
