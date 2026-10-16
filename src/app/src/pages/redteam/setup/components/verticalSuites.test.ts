@@ -51,8 +51,15 @@ describe('VERTICAL_SUITES', () => {
 
   it('should have financial suite with Japan FIEA coverage', () => {
     const financialSuite = VERTICAL_SUITES.find((suite) => suite.id === 'financial');
-    expect(financialSuite?.complianceFrameworks).toEqual(['SEC', 'FINRA', 'SOX', 'Japan FIEA']);
+    expect(financialSuite?.complianceFrameworks).toEqual([
+      'SEC',
+      'FINRA',
+      'SOX',
+      'Japan FIEA',
+      'Korea Financial Consumer Protection Act',
+    ]);
     expect(financialSuite?.plugins).toContain('financial:japan-fiea-suitability');
+    expect(financialSuite?.plugins).toContain('financial:korea-consumer-protection');
     expect(
       financialSuite?.pluginGroups.find((group) => group.name === 'Compliance & Ethics')?.plugins,
     ).toContain('financial:japan-fiea-suitability');
