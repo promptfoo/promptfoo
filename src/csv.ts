@@ -159,9 +159,11 @@ const uniqueErrorMessages = new Set<string>();
 export function testCaseFromCsvRow(row: CsvRow): TestCase {
   const vars: Record<string, string> = {};
   const asserts: Assertion[] = [];
+  const assertionConfigIndices: (number | undefined)[] = [];
+  const numberedAssertionColumns = new Set<number>();
   const options: TestCase['options'] = {};
   const metadata: Record<string, unknown> = {};
-  // Map from assertion index (or '*' for all) to config properties
+  // Map from numbered column index (or '*' for the first assertion) to config properties
   const assertionConfigs: Record<string | number, Record<string, unknown>> = {};
   let providerOutput: string | Record<string, unknown> | undefined;
   let description: string | undefined;
@@ -196,7 +198,15 @@ export function testCaseFromCsvRow(row: CsvRow): TestCase {
       logger.warn(error);
     }
     if (key.startsWith('__expected')) {
+      const indexMatch = key.match(/^__expected(\d+)$/);
+      const configIndex = indexMatch ? Number.parseInt(indexMatch[1], 10) - 1 : undefined;
+      if (configIndex !== undefined) {
+        numberedAssertionColumns.add(configIndex);
+      }
       if (value.trim() !== '') {
+        // Configuration targets numbered column names, not positions after blank
+        // cells have been removed or columns have been reordered.
+        assertionConfigIndices.push(configIndex);
         asserts.push(assertionFromString(value.trim()));
       }
     } else if (key === '__prefix') {
@@ -245,7 +255,7 @@ export function testCaseFromCsvRow(row: CsvRow): TestCase {
         // Parse the expected key to determine which assertion(s) to target
         let targetIndex: number | undefined;
         if (expectedKey === '__expected') {
-          // There is only one expected assertion, so we target it directly.
+          // Legacy unnumbered configuration targets the first surviving assertion.
           targetIndex = 0;
         } else if (expectedKey.startsWith('__expected')) {
           // Extract the numeric index (e.g., __expected1 -> 0, __expected2 -> 1)
@@ -279,8 +289,9 @@ export function testCaseFromCsvRow(row: CsvRow): TestCase {
         }
 
         // Initialize config object for this index if it doesn't exist
-        if (!assertionConfigs[targetIndex]) {
-          assertionConfigs[targetIndex] = {};
+        const configIndex = expectedKey === '__expected' ? '*' : targetIndex;
+        if (!assertionConfigs[configIndex]) {
+          assertionConfigs[configIndex] = {};
         }
 
         const parsedValue = parseFiniteNumber(value);
@@ -291,7 +302,7 @@ export function testCaseFromCsvRow(row: CsvRow): TestCase {
           throw new Error(`Invalid numeric value for ${configKey}`);
         }
 
-        assertionConfigs[targetIndex][configKey] = parsedValue;
+        assertionConfigs[configIndex][configKey] = parsedValue;
       } else {
         logger.warn(
           `Invalid __config column format: "${key}". Expected format: __config:__expected:threshold or __config:__expected<N>:threshold`,
@@ -307,8 +318,13 @@ export function testCaseFromCsvRow(row: CsvRow): TestCase {
     const assert = asserts[i];
     assert.metric = metric;
 
-    // Apply index-specific configuration (if exists) - overrides global
-    const indexConfig = assertionConfigs[i];
+    // Preserve positional aliases for unnumbered assertions only when that
+    // numbered column is absent; otherwise its configuration belongs to it.
+    const configIndex =
+      assertionConfigIndices[i] ?? (numberedAssertionColumns.has(i) ? undefined : i);
+    const indexConfig =
+      (configIndex === undefined ? undefined : assertionConfigs[configIndex]) ??
+      (i === 0 ? assertionConfigs['*'] : undefined);
     if (indexConfig) {
       for (const [configKey, configValue] of Object.entries(indexConfig)) {
         (assert as Record<string, unknown>)[configKey] = configValue;
