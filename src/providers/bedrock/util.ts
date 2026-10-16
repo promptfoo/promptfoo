@@ -70,7 +70,7 @@ interface AmazonResponse {
   output?: {
     message?: {
       role: string;
-      content: {
+      content?: {
         text?: string;
         toolUse?: {
           name: string;
