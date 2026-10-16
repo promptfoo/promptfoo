@@ -1,4 +1,5 @@
 import { CODING_AGENT_COLLECTIONS, CODING_AGENT_PLUGINS } from './codingAgents';
+import { TEXT_MUTATION_STRATEGIES } from './strategies';
 
 import type { CodingAgentPlugin } from './codingAgents';
 
@@ -396,12 +397,14 @@ export const AGENTIC_EXEMPT_PLUGINS = [
 export const CANARY_BREAKING_STRATEGY_IDS = [
   'arabic-presentation-forms',
   'base64',
+  'bijection',
   'hex',
   'homoglyph',
   'leetspeak',
   'rot13',
   'multilingual',
   'math-prompt',
+  ...TEXT_MUTATION_STRATEGIES,
   'jailbreak:composite',
 ] as const;
 

@@ -74,6 +74,49 @@ describe('remoteMaterialization', () => {
     });
   });
 
+  it('preserves transformed text without replacing remote documents or benign fields', () => {
+    const inputs = {
+      document: {
+        description: 'Uploaded planning document',
+        type: 'docx',
+      },
+      user_message: 'Untrusted user message',
+      retrieved_context: {
+        description: 'Trusted support context',
+        config: { benign: true },
+      },
+    } satisfies Inputs;
+    const remoteDocument =
+      'data:application/vnd.openxmlformats-officedocument.wordprocessingml.document;base64,Zm9v';
+
+    const result = buildRemoteMaterializedInputVariables(
+      {
+        materializedVars: {
+          document: remoteDocument,
+          user_message: 'original attack',
+          retrieved_context: 'server-generated trusted context',
+        },
+      },
+      {
+        document: 'raw document',
+        user_message: 'transformed attack',
+        retrieved_context: 'original trusted context',
+      },
+      inputs,
+      {
+        document: 'unsafe raw document override',
+        user_message: 'transformed attack',
+        undeclared: 'unexpected override',
+      },
+    );
+
+    expect(result.vars).toEqual({
+      document: remoteDocument,
+      user_message: 'transformed attack',
+      retrieved_context: 'server-generated trusted context',
+    });
+  });
+
   it('falls back to parsed vars when the server only returns metadata', () => {
     const result = buildRemoteMaterializedInputVariables(
       {
