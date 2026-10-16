@@ -3,6 +3,7 @@ import * as os from 'os';
 import * as path from 'path';
 
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import * as cacheModule from '../../../src/cache';
 import cliState from '../../../src/cliState';
 import { processExecutableFile } from '../../../src/prompts/processors/executable';
 import { mockProcessEnv } from '../../util/utils';
@@ -81,6 +82,35 @@ describe('processExecutableFile', () => {
         '--empty=',
       ]);
     } finally {
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it('keys the cache by parser version so output cached for the old argv is not reused', async () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-executable-cache-'));
+    const scriptPath = path.join(tempDir, 'prompt.cjs');
+    const keys: string[] = [];
+    const cache = {
+      get: vi.fn(async (key: string) => {
+        keys.push(key);
+        return key.startsWith('exec-prompt:argv-v2:') ? undefined : 'stale output';
+      }),
+      set: vi.fn(),
+    };
+    vi.mocked(cacheModule.getCache).mockReturnValue(cache as never);
+    vi.mocked(cacheModule.isCacheEnabled).mockReturnValue(true);
+    try {
+      fs.writeFileSync(scriptPath, "process.stdout.write('fresh output');");
+      const [prompt] = await processExecutableFile(`"${process.execPath}" "${scriptPath}"`, {});
+      const output = await prompt.function!({ vars: {}, provider: mockProvider });
+      expect(output).toBe('fresh output');
+      expect(keys).toHaveLength(1);
+      expect(keys[0]).toMatch(/^exec-prompt:argv-v2:/);
+    } finally {
+      vi.mocked(cacheModule.getCache).mockImplementation(
+        () => ({ get: vi.fn(), set: vi.fn() }) as never,
+      );
+      vi.mocked(cacheModule.isCacheEnabled).mockReturnValue(false);
       fs.rmSync(tempDir, { recursive: true, force: true });
     }
   });

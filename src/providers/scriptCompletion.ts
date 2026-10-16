@@ -15,6 +15,9 @@ import type {
   ProviderResponse,
 } from '../types/index';
 
+/** Bump when `parseScriptParts` changes the argv it produces, so output cached for the old argv is not reused. */
+export const EXEC_CACHE_VERSION = 'argv-v2';
+
 const ANSI_ESCAPE = /\x1b(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])/g;
 
 export function stripText(text: string) {
@@ -97,7 +100,7 @@ export class ScriptCompletionProvider implements ApiProvider {
       logger.warn(`Could not find any valid files in the command: ${this.scriptPath}`);
     }
 
-    const cacheKey = `exec:${this.scriptPath}:${fileHashes.join(':')}:${prompt}:${JSON.stringify(this.options)}`;
+    const cacheKey = `exec:${EXEC_CACHE_VERSION}:${this.scriptPath}:${fileHashes.join(':')}:${prompt}:${JSON.stringify(this.options)}`;
 
     let cachedResult;
     if (fileHashes.length > 0 && isCacheEnabled()) {

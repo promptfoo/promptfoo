@@ -84,7 +84,7 @@ describe('parseScriptParts', () => {
   });
 
   it.each([
-    // Plain commands are unchanged (and so are the cache keys derived from them)
+    // Plain commands tokenize as before
     ['node script.js', ['node', 'script.js']],
     [
       'python3 inference.py --model gpt-4 -v',
@@ -365,9 +365,46 @@ describe('ScriptCompletionProvider', () => {
     expect(result.cached).toBe(true);
     expect(result).toEqual({ ...cachedResult, cached: true });
     expect(mockCache.get).toHaveBeenCalledWith(
-      'exec:node script.js:mock hash:mock hash:test prompt:undefined',
+      'exec:argv-v2:node script.js:mock hash:mock hash:test prompt:undefined',
     );
     expect(execFile).not.toHaveBeenCalled();
+  });
+
+  it('should not reuse output cached under the unversioned key', async () => {
+    const staleKey = 'exec:node script.js:mock hash:mock hash:test prompt:undefined';
+    const mockCache = {
+      get: vi.fn(async (key: string) =>
+        key === staleKey ? JSON.stringify({ output: 'stale output' }) : undefined,
+      ),
+      set: vi.fn(),
+    };
+    vi.spyOn(cacheModule, 'getCache').mockResolvedValue(mockCache as never);
+    vi.spyOn(cacheModule, 'isCacheEnabled').mockReturnValue(true);
+
+    existsSyncMock.mockReturnValue(true);
+    statSyncMock.mockReturnValue({ isFile: () => true } as fs.Stats);
+    readFileSyncMock.mockReturnValue('file content');
+    const mockHashUpdate = {
+      update: vi.fn().mockReturnThis(),
+      digest: vi.fn().mockReturnValue('mock hash'),
+    } as unknown as crypto.Hash;
+    vi.mocked(crypto.createHash).mockImplementation(function () {
+      return mockHashUpdate;
+    });
+    vi.mocked(execFile).mockImplementation(function (_cmd, _args, _options, callback) {
+      (callback as (error: Error | null, stdout: string | Buffer, stderr: string | Buffer) => void)(
+        null,
+        Buffer.from('fresh output'),
+        '',
+      );
+      return {} as any;
+    });
+
+    const result = await provider.callApi('test prompt');
+
+    expect(result.output).toBe('fresh output');
+    expect(result.cached).toBeUndefined();
+    expect(execFile).toHaveBeenCalledOnce();
   });
 
   it('should handle script execution errors', async () => {
