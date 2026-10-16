@@ -430,7 +430,7 @@ All assertion types can be used in `__expected`. The column supports exactly one
 
 ### Assertion string syntax
 
-The general format is `type:value` or `type(threshold):value`. Values without a prefix default to `equals`.
+The general format is `type:value` or `type(threshold):value`. Values without a prefix default to `equals`. Thresholds accept finite signed decimals and scientific notation, such as `similar(.8):Hello` or `cost(1e-5)`. Malformed or non-finite thresholds leave the whole assertion string as a literal `equals` value.
 
 | Syntax                       | Type            | Example                                     |
 | ---------------------------- | --------------- | ------------------------------------------- |
