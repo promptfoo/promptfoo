@@ -46,12 +46,14 @@ export const DEFAULT_BEDROCK_MANTLE_RESPONSES_REGION = 'us-east-1';
 
 /**
  * Mantle Regions that serve each OpenAI frontier model: the regional Mantle catalogs
- * (`GET /v1/models`, verified 2026-09-24) plus the GovCloud Regions from the AWS model cards.
+ * (`GET /v1/models`, verified 2026-09-24) and the AWS model cards.
  * AWS changes availability independently of promptfoo, so this table only picks the default
  * Region and explains Mantle 404s; configured Regions are always used as given.
  */
 const BEDROCK_OPENAI_MANTLE_REGIONS = new Map<string, readonly string[]>([
   ['openai.gpt-6-astra', ['us-west-2']],
+  // https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-openai-gpt-6-1-sol.html
+  ['openai.gpt-6.1-sol', ['us-east-1']],
   ['openai.gpt-6-sol', ['us-east-1']],
   ['openai.gpt-6-luna', ['us-east-1']],
   ['openai.gpt-5.6-sol', ['us-east-1', 'us-east-2']],
@@ -236,6 +238,13 @@ export class BedrockOpenAiResponsesProvider extends OpenAiResponsesProvider {
     context?: BedrockOpenAiResponsesBodyContext,
     callApiOptions?: BedrockOpenAiResponsesCallApiOptions,
   ) {
+    const config = { ...this.config, ...context?.prompt?.config };
+    if (config.serviceTier !== undefined || config.passthrough?.serviceTier !== undefined) {
+      throw new Error(
+        'Amazon Bedrock Responses uses service_tier. Replace serviceTier with service_tier ' +
+          'to select an inference tier.',
+      );
+    }
     const model = this.getRequestModelName(context);
     if (
       isBedrockOpenAiResponsesModel(model) !== isBedrockOpenAiResponsesModel(this.modelName) ||
@@ -264,10 +273,19 @@ export class BedrockOpenAiResponsesProvider extends OpenAiResponsesProvider {
       delete (result.body as Record<string, unknown>).service_tier;
       return result;
     }
-    if (serviceTier !== undefined && serviceTier !== 'default') {
+    const supportsUltrafast = model === 'openai.gpt-6.1-sol';
+    if (
+      serviceTier !== undefined &&
+      serviceTier !== 'default' &&
+      !(supportsUltrafast && serviceTier === 'ultrafast')
+    ) {
+      const supportedTiers = supportsUltrafast
+        ? 'the standard and ultrafast inference tiers'
+        : 'the standard inference tier';
+      const supportedValues = supportsUltrafast ? '"default" or "ultrafast"' : '"default"';
       throw new Error(
-        `Amazon Bedrock model "${model}" supports only the standard inference tier; ` +
-          `received "${serviceTier}". Remove service_tier/serviceTier or set service_tier to "default".`,
+        `Amazon Bedrock model "${model}" supports only ${supportedTiers}; ` +
+          `received "${serviceTier}". Remove service_tier or set service_tier to ${supportedValues}.`,
       );
     }
     return result;
@@ -279,8 +297,13 @@ export class BedrockOpenAiResponsesProvider extends OpenAiResponsesProvider {
     callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
     const result = await super.callApi(prompt, context, callApiOptions);
-    // Mantle reports an unavailable Region as "model does not exist" (HTTP 404).
-    if (result.metadata?.http?.status !== 404 || typeof result.error !== 'string') {
+    if (typeof result.error !== 'string') {
+      return result;
+    }
+    const status = result.metadata?.http?.status;
+    // Mantle can reject Ultrafast before checking model availability in an unlisted Region.
+    const isServiceTierError = status === 400 && /"param"\s*:\s*"service_tier"/.test(result.error);
+    if (status !== 404 && !isServiceTierError) {
       return result;
     }
     const region = getMantleEndpointRegion(new URL(this.getApiUrl()));

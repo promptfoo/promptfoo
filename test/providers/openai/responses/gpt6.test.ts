@@ -28,9 +28,10 @@ const responseData = {
 
 describe('GPT-6.1 Sol Responses with Ultrafast', () => {
   it.each([
-    { reported: 'ultrafast', cost: undefined },
-    { reported: undefined, cost: undefined },
+    { reported: 'ultrafast', cost: 0.018 },
+    { reported: undefined, cost: 0.018 },
     { reported: 'default', cost: 0.003 },
+    { reported: 'fast', cost: 0.006 },
   ])('forwards Ultrafast and bills the actual tier $reported', async ({ reported, cost }) => {
     vi.mocked(cache.fetchWithCache).mockResolvedValue({
       cached: false,
@@ -60,12 +61,45 @@ describe('GPT-6.1 Sol Responses with Ultrafast', () => {
     });
     expect(result.error).toBeUndefined();
     expect(result.output).toBe('Ready.');
-    if (cost === undefined) {
-      expect(result.cost).toBeUndefined();
-    } else {
-      expect(result.cost).toBeCloseTo(cost, 10);
-    }
+    expect(result.cost).toBeCloseTo(cost, 10);
   });
+
+  it.each(['us', 'eu'])(
+    'routes Sol Ultrafast to the %s residency endpoint and bills regional cache rates',
+    async (region) => {
+      vi.mocked(cache.fetchWithCache).mockResolvedValue({
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+        data: { ...responseData, model: 'gpt-6.1-sol', service_tier: 'ultrafast' },
+      });
+      const result = await new OpenAiResponsesProvider('gpt-6.1-sol', {
+        config: {
+          apiKey: 'test-key',
+          apiBaseUrl: `https://${region}.api.openai.com/v1`,
+          service_tier: 'ultrafast',
+        },
+      }).callApi('Say ready.');
+
+      const [url, options] = vi.mocked(cache.fetchWithCache).mock.calls[0];
+      expect(url).toBe(`https://${region}.api.openai.com/v1/responses`);
+      expect(JSON.parse(options?.body as string)).toMatchObject({
+        model: 'gpt-6.1-sol',
+        service_tier: 'ultrafast',
+      });
+      expect(result.error).toBeUndefined();
+      expect(result.output).toBe('Ready.');
+      expect(result.cost).toBeCloseTo(
+        ((1250 * 12 + 500 * 0.6 + 250 * 15 + 1000 * 60) / 1e6) * 1.1,
+        10,
+      );
+      expect(result.tokenUsage).toMatchObject({
+        prompt: 2000,
+        completion: 1000,
+        completionDetails: { cacheReadInputTokens: 500, cacheCreationInputTokens: 250 },
+      });
+    },
+  );
 
   it('surfaces a model or account rejection of Ultrafast from Responses', async () => {
     vi.mocked(cache.fetchWithCache).mockResolvedValue({
