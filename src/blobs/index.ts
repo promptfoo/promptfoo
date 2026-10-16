@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 
 import { and, eq, isNotNull, or } from 'drizzle-orm';
 import { getDb } from '../database';
-import { blobAssetsTable, blobReferencesTable } from '../database/tables';
+import { blobAssetsTable, blobReferencesTable, evalsTable } from '../database/tables';
 import logger from '../logger';
 import { FilesystemBlobStorageProvider } from './filesystemProvider';
 
@@ -167,6 +167,17 @@ export async function getShareAuthorizedBlob(
     return null;
   }
   return getBlobByHash(hash);
+}
+
+/** Whether an eval can own stored media. */
+export async function isEvalPersisted(evalId: string): Promise<boolean> {
+  const db = await getDb();
+  const row = await db
+    .select({ id: evalsTable.id })
+    .from(evalsTable)
+    .where(eq(evalsTable.id, evalId))
+    .get();
+  return Boolean(row);
 }
 
 export async function recordBlobReference(
