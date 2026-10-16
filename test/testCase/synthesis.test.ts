@@ -194,6 +194,7 @@ describe('synthesize', () => {
     generate: (persona: string, count: number, request: number) => VarMapping[],
   ) {
     const requests: string[] = [];
+    const responses = new Map<string, string>();
     const mockProvider = createMockProvider({
       callApi: vi.fn<ApiProvider['callApi']>().mockImplementation(async (prompt) => {
         if (prompt.includes('List up to')) {
@@ -205,7 +206,12 @@ describe('synthesize', () => {
           throw new Error('Unexpected generation prompt');
         }
         requests.push(`${persona}:${count}`);
-        return { output: JSON.stringify({ vars: generate(persona, count, requests.length) }) };
+        let output = responses.get(prompt);
+        if (output === undefined) {
+          output = JSON.stringify({ vars: generate(persona, count, requests.length) });
+          responses.set(prompt, output);
+        }
+        return { output };
       }),
     });
     vi.mocked(loadApiProvider).mockResolvedValue(mockProvider);
@@ -229,13 +235,19 @@ describe('synthesize', () => {
       expected: ['A:20', 'A:5', 'B:20', 'B:5'],
     },
     {
-      options: { numPersonas: 5, numTestCasesPerPersona: 1 },
+      options: { numPersonas: 5, numTestCasesPerPersona: 3 },
       personas: ['A', 'B'],
-      expected: ['A:1', 'B:1', 'A:1', 'B:1', 'A:1'],
+      seedCount: 100,
+      expected: ['A:3', 'B:3', 'A:3', 'B:3', 'A:3'],
+    },
+    {
+      options: { numPersonas: 1, numTestCasesPerPersona: 45 },
+      personas: ['A'],
+      expected: ['A:20', 'A:20', 'A:5'],
     },
   ])(
     'allocates persona quotas for $options with $personas',
-    async ({ options, personas, expected }) => {
+    async ({ options, personas, expected, seedCount = 0 }) => {
       const requests = mockGeneration(personas, (persona, count, request) =>
         Array.from({ length: count }, (_, index) => ({ persona, question: `${request}-${index}` })),
       );
@@ -243,7 +255,9 @@ describe('synthesize', () => {
         ...options,
         provider: 'mock-provider',
         prompts: ['Answer {{question}}'],
-        tests: [],
+        tests: Array.from({ length: seedCount }, (_, index) => ({
+          vars: { question: `seed-${index}` },
+        })),
       });
 
       expect(requests).toEqual(expected);
@@ -293,7 +307,8 @@ describe('synthesize', () => {
   });
 
   it('retains the global consecutive no-progress retry limit', async () => {
-    const requests = mockGeneration(['A', 'B'], () => []);
+    const generate = vi.fn(() => []);
+    const requests = mockGeneration(['A', 'B'], generate);
     const result = await synthesize({
       provider: 'mock-provider',
       prompts: ['Answer {{question}}'],
@@ -302,6 +317,7 @@ describe('synthesize', () => {
       numTestCasesPerPersona: 1,
     });
     expect(requests).toEqual(['A:1', 'A:1', 'A:1']);
+    expect(generate).toHaveBeenCalledTimes(1);
     expect(result).toEqual([]);
   });
 });

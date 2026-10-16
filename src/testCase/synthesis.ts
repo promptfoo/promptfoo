@@ -253,7 +253,7 @@ export async function synthesize({
       `Generating ${currentBatchSize} test cases for persona ${personaIndex + 1} of ${personas.length}...`,
     );
 
-    const personaPrompt = testCasesPrompt(
+    let personaPrompt = testCasesPrompt(
       prompts,
       persona,
       tests,
@@ -261,6 +261,9 @@ export async function synthesize({
       variables,
       instructions,
     );
+    if (currentTestCases.length > 0) {
+      personaPrompt += `\n\n${currentTestCases.length} unique test cases have already been generated. Generate ${currentBatchSize} additional distinct cases.`;
+    }
     logger.debug(`Generated persona prompt:\n${personaPrompt}`);
 
     const personaResponse = await providerModel.callApi(personaPrompt);
