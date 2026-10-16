@@ -42,6 +42,50 @@ describe.each([
     expect(record.__proto__).toEqual(['first', 'second']);
     expect(record.value).toEqual(['one', 'two']);
   });
+
+  it.each([
+    {
+      name: 'blank preceding assertion',
+      csv: '__expected1,__expected2,__config:__expected2:threshold\n,similar:target,0.99',
+      assertions: [['target', 0.99]],
+      threshold: 0.99,
+    },
+    {
+      name: 'reordered assertion columns',
+      csv: '__expected2,__expected1,__config:__expected2:threshold\nsimilar:target,similar:other,0.99',
+      assertions: [
+        ['target', 0.99],
+        ['other', 0.8],
+      ],
+      threshold: 0.99,
+    },
+    {
+      name: 'sparse numbered assertion with config first',
+      csv: '__config:__expected5:threshold,__expected5\n0.99,similar:target',
+      assertions: [['target', 0.99]],
+      threshold: 0.99,
+    },
+    {
+      name: 'missing named target',
+      csv: '__expected2,__config:__expected1:threshold\nsimilar:other,0.99',
+      assertions: [['other', 0.8]],
+      threshold: undefined,
+    },
+    {
+      name: 'empty named target',
+      csv: '__expected1,__expected2,__config:__expected1:threshold\n,similar:other,0.99',
+      assertions: [['other', 0.8]],
+      threshold: undefined,
+    },
+  ])('binds configs to source columns: $name', ({ csv, assertions, threshold }) => {
+    const [row] = parse<CsvRow>(csv, { columns: true });
+    const result = testCaseFromCsvRow(row);
+
+    expect(result.assert).toEqual(
+      assertions.map(([value, threshold]) => ({ type: 'similar', value, threshold })),
+    );
+    expect(result.metadata).toEqual(threshold === undefined ? undefined : { threshold });
+  });
 });
 
 describe('testCaseFromCsvRow', () => {
@@ -308,6 +352,65 @@ describe('testCaseFromCsvRow', () => {
   });
 
   describe('__config columns', () => {
+    it.each([
+      ['__expected1', '__expected01'],
+      ['__expected01', '__expected1'],
+      ['__expected', '__expected1'],
+      ['__expected2', '__expected'],
+    ])('preserves %s with config alias %s', (expectedKey, configKey) => {
+      const result = testCaseFromCsvRow({
+        [expectedKey]: 'similar:target',
+        [`__config:${configKey}:threshold`]: '0.9',
+      });
+
+      expect(result.assert).toEqual([{ type: 'similar', value: 'target', threshold: 0.9 }]);
+      expect(result.metadata).toEqual({ threshold: 0.9 });
+    });
+
+    it('configures only the first populated assertion when numeric aliases coexist', () => {
+      const result = testCaseFromCsvRow({
+        __expected001: '',
+        __expected01: 'similar:first',
+        __expected1: 'similar:second',
+        '__config:__expected1:threshold': '0.9',
+      });
+
+      expect(result.assert).toEqual([
+        { type: 'similar', value: 'first', threshold: 0.9 },
+        { type: 'similar', value: 'second', threshold: 0.8 },
+      ]);
+    });
+
+    it('keeps unnumbered config limited to the first populated assertion', () => {
+      const result = testCaseFromCsvRow({
+        __expected1: '',
+        __expected2: 'similar:first',
+        __expected3: 'similar:second',
+        '__config:__expected:threshold': '0',
+      });
+
+      expect(result.assert).toEqual([
+        { type: 'similar', value: 'first', threshold: 0 },
+        { type: 'similar', value: 'second', threshold: 0.8 },
+      ]);
+      expect(result.metadata).toEqual({ threshold: 0 });
+    });
+
+    it.each([
+      ['__expected', '__expected1'],
+      ['__expected1', '__expected'],
+      ['__expected01', '__expected1'],
+    ])('keeps the last config column when %s precedes %s', (first, last) => {
+      const result = testCaseFromCsvRow({
+        [`__config:${first}:threshold`]: '0.9',
+        __expected1: 'similar:target',
+        [`__config:${last}:threshold`]: '0.6',
+      });
+
+      expect(result.assert).toEqual([{ type: 'similar', value: 'target', threshold: 0.6 }]);
+      expect(result.metadata).toEqual({ threshold: 0.6 });
+    });
+
     it('applies threshold to single assertion using __config:__expected:threshold', () => {
       const row: CsvRow = {
         __expected1: 'similar:foo',
