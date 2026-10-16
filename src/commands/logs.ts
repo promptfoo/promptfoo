@@ -255,23 +255,26 @@ async function followLogFile(logPath: string, noColor: boolean, grep?: RegExp): 
       const stats = await fs.stat(logPath);
       const newSize = stats.size;
 
-      if (newSize <= position) {
-        if (newSize < position) {
-          // File was truncated/rotated.
-          logger.info(chalk.yellow('Log file was rotated, resetting position...'));
-          position = newSize;
-          pendingContent = Buffer.alloc(0);
-          contentVersion++;
-        }
+      if (newSize < position) {
+        // File was truncated/rotated.
+        logger.info(chalk.yellow('Log file was rotated, resetting position...'));
+        position = newSize;
+        pendingContent = Buffer.alloc(0);
+        contentVersion++;
         return;
       }
 
-      // Read only the new content
+      // Reread the unfinished fragment in case its bytes were overwritten in place.
+      const readPosition = grep ? position - pendingContent.length : position;
+      if (newSize === readPosition) {
+        return;
+      }
+
       const fileHandle = await fs.open(logPath, 'r');
       try {
-        const buffer = Buffer.alloc(newSize - position);
+        const buffer = Buffer.alloc(newSize - readPosition);
         const bytesRead = grep
-          ? await readLogBytes(fileHandle, buffer, position)
+          ? await readLogBytes(fileHandle, buffer, readPosition)
           : (await fileHandle.read(buffer, 0, newSize - position, position)).bytesRead;
 
         if (grep && readVersion !== contentVersion) {
@@ -279,7 +282,7 @@ async function followLogFile(logPath: string, noColor: boolean, grep?: RegExp): 
         }
         let newContent = buffer.toString('utf-8');
         if (grep) {
-          const content = Buffer.concat([pendingContent, buffer.subarray(0, bytesRead)]);
+          const content = buffer.subarray(0, bytesRead);
           const lastNewline = content.lastIndexOf(10);
           pendingContent = Buffer.from(content.subarray(lastNewline + 1));
           newContent = content.subarray(0, lastNewline + 1).toString('utf-8');
@@ -290,7 +293,7 @@ async function followLogFile(logPath: string, noColor: boolean, grep?: RegExp): 
         if (newLines.length > 0) {
           process.stdout.write(highlightLogLines(newLines, noColor) + '\n');
         }
-        position = grep ? position + bytesRead : newSize;
+        position = grep ? readPosition + bytesRead : newSize;
       } finally {
         await fileHandle.close();
       }
