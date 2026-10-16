@@ -29,6 +29,35 @@ describe('generateVarCombinations', () => {
     expect(generateVarCombinations(vars)).toEqual(expected);
   });
 
+  it('preserves order for large Cartesian products without spreading function arguments', () => {
+    const values = Array.from({ length: 60 }, (_, index) => String(index));
+    const vars = { first: values, second: values, third: values };
+    const result = generateVarCombinations(vars);
+
+    expect(result).toHaveLength(216_000);
+    expect(result[0]).toEqual({ first: '0', second: '0', third: '0' });
+    expect(result[59]).toEqual({ first: '0', second: '0', third: '59' });
+    expect(result[60]).toEqual({ first: '0', second: '1', third: '0' });
+    expect(result[3_600]).toEqual({ first: '1', second: '0', third: '0' });
+    expect(result.at(-1)).toEqual({ first: '59', second: '59', third: '59' });
+    expect(values).toEqual(Array.from({ length: 60 }, (_, index) => String(index)));
+  });
+
+  it('retains empty arrays and object values without expanding or copying them', () => {
+    const empty: string[] = [];
+    const object = { name: 'same object' };
+    const result = generateVarCombinations({ choice: ['a', 'b'], empty, object });
+
+    expect(result).toEqual([
+      { choice: 'a', empty: [], object },
+      { choice: 'b', empty: [], object },
+    ]);
+    for (const row of result) {
+      expect(row.empty).toBe(empty);
+      expect(row.object).toBe(object);
+    }
+  });
+
   it('should handle file paths and expand them into combinations', () => {
     const vars = { language: 'English', greeting: 'file:///path/to/greetings/*.txt' };
     vi.mocked(globSync).mockReturnValue(['greeting1.txt', 'greeting2.txt']);
