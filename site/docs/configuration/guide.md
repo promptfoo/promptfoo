@@ -722,6 +722,8 @@ When using the [Node.js package](/docs/usage/node-package#transform-functions), 
 
 Transform functions can be executed from external JavaScript or Python files. You can optionally specify a function name to use.
 
+When a JavaScript function name is specified, it must identify an exported function. A missing or non-function export causes an error instead of falling back to the default function.
+
 For JavaScript:
 
 ```yaml
