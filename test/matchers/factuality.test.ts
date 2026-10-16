@@ -184,6 +184,39 @@ describe('matchesFactuality', () => {
     });
   });
 
+  it('should use the configured superset score for a superset answer', async () => {
+    const input = 'Input text';
+    const expected = 'Expected output';
+    const output = 'Sample output';
+    // superset: 0 fails answers that add claims beyond the expert answer, even when subset passes.
+    const grading = {
+      factuality: {
+        subset: 1,
+        superset: 0,
+      },
+    };
+
+    const mockCallApi = vi.fn().mockResolvedValue({
+      output:
+        '{"category": "B", "reason": "The submitted answer is a superset of the expert answer and is fully consistent with it."}',
+      tokenUsage: { total: 10, prompt: 5, completion: 5 },
+    });
+
+    vi.spyOn(DefaultGradingProvider, 'callApi').mockImplementation(mockCallApi);
+
+    await expect(matchesFactuality(input, expected, output, grading)).resolves.toEqual({
+      pass: false,
+      reason:
+        'The submitted answer is a superset of the expert answer and is fully consistent with it.',
+      score: 0,
+      tokensUsed: expect.objectContaining({
+        total: expect.any(Number),
+        prompt: expect.any(Number),
+        completion: expect.any(Number),
+      }),
+    });
+  });
+
   it('should use category description as fallback when no reason is provided in JSON', async () => {
     const input = 'Input text';
     const expected = 'Expected output';
