@@ -84,11 +84,13 @@ describe('logs command', () => {
       vi.useRealTimers();
     });
 
-    async function startFollowing() {
+    async function startFollowing(grep?: string, initialLines: string[] = []) {
       const watcher = Object.assign(new EventEmitter(), { close: vi.fn() });
       vi.mocked(fsSync.watch).mockReturnValue(watcher as unknown as fsSync.FSWatcher);
       mockLogsUtil.findLogFile.mockReturnValue('/fixture.log');
-      mockFs.stat.mockResolvedValue({ size: 0, mtime: new Date() } as fsSync.Stats);
+      const initialSize = Buffer.byteLength(initialLines.join('\n'));
+      mockFs.stat.mockResolvedValue({ size: initialSize, mtime: new Date() } as fsSync.Stats);
+      mockLogsUtil.readLastLines.mockResolvedValue(initialLines);
       const previous = new Set(process.listeners('SIGINT'));
       const following = program.parseAsync([
         'node',
@@ -97,13 +99,14 @@ describe('logs command', () => {
         'fixture.log',
         '--follow',
         '--no-color',
+        ...(grep === undefined ? [] : ['--grep', grep]),
       ]);
       await vi.waitFor(() => expect(fsSync.watch).toHaveBeenCalledOnce());
       stop = process.listeners('SIGINT').find((listener) => !previous.has(listener)) as
         | (() => void)
         | undefined;
       expect(stop).toBeDefined();
-      return { watcher, following };
+      return { watcher, following, initialSize };
     }
 
     it('coalesces file events and prints appended content once', async () => {
@@ -129,6 +132,66 @@ describe('logs command', () => {
       await vi.advanceTimersByTimeAsync(100);
       await following;
     });
+
+    it.each([
+      {
+        name: 'case-insensitive regex',
+        grep: 'error|warn',
+        initial: ['[INFO] start', '[ERROR] initial failure'],
+        appended: '[INFO] next\n[WaRn] warning\n\n[error] appended failure\n',
+        expectedInitial: ['[ERROR] initial failure'],
+        expectedAppended: '[WaRn] warning\n[error] appended failure\n',
+      },
+      {
+        name: 'no matches',
+        grep: 'missing',
+        initial: ['[INFO] start'],
+        appended: '[INFO] next\n',
+        expectedInitial: [],
+        expectedAppended: '',
+      },
+      {
+        name: 'empty initial log',
+        grep: 'error',
+        initial: [],
+        appended: '[INFO] next\n[ERROR] appended failure\n',
+        expectedInitial: [],
+        expectedAppended: '[ERROR] appended failure\n',
+      },
+    ])(
+      'filters followed lines with $name',
+      async ({ grep, initial, appended, expectedInitial, expectedAppended }) => {
+        const { watcher, following, initialSize } = await startFollowing(grep, initial);
+        expect(
+          vi
+            .mocked(logger.info)
+            .mock.calls.slice(1)
+            .map(([message]) => message),
+        ).toEqual(expectedInitial.length ? [expectedInitial.join('\n')] : []);
+        const output = vi.spyOn(process.stdout, 'write').mockReturnValue(true);
+        const close = vi.fn().mockResolvedValue(undefined);
+        const content = Buffer.from(appended);
+        mockFs.stat.mockResolvedValue({ size: initialSize + content.length } as fsSync.Stats);
+        mockFs.open.mockResolvedValue({
+          read: vi.fn(async (buffer: Buffer) => {
+            content.copy(buffer);
+            return { bytesRead: content.length, buffer };
+          }),
+          close,
+        } as unknown as Awaited<ReturnType<typeof fs.open>>);
+        watcher.emit('change');
+        await vi.advanceTimersByTimeAsync(100);
+        expect(output.mock.calls).toEqual(expectedAppended ? [[expectedAppended]] : []);
+        expect(close).toHaveBeenCalledOnce();
+
+        watcher.emit('change');
+        await vi.advanceTimersByTimeAsync(100);
+        expect(mockFs.open).toHaveBeenCalledOnce();
+        stop?.();
+        await vi.advanceTimersByTimeAsync(100);
+        await following;
+      },
+    );
 
     it('cancels pending file reads when interrupted', async () => {
       const { watcher, following } = await startFollowing();

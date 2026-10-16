@@ -147,7 +147,7 @@ let cleanupHandler: (() => void) | null = null;
 /**
  * Follows a log file in real-time (like tail -f)
  */
-async function followLogFile(logPath: string, noColor: boolean): Promise<void> {
+async function followLogFile(logPath: string, noColor: boolean, grep?: RegExp): Promise<void> {
   // Get initial file size
   let position: number;
   try {
@@ -161,7 +161,7 @@ async function followLogFile(logPath: string, noColor: boolean): Promise<void> {
 
   // Print existing content first (last 20 lines)
   if (position > 0) {
-    const lastLines = await readLastLines(logPath, 20);
+    const lastLines = (await readLastLines(logPath, 20)).filter((line) => !grep || grep.test(line));
     if (lastLines.length > 0) {
       logger.info(highlightLogLines(lastLines, noColor));
     }
@@ -187,7 +187,9 @@ async function followLogFile(logPath: string, noColor: boolean): Promise<void> {
           await fileHandle.read(buffer, 0, newSize - position, position);
 
           const newContent = buffer.toString('utf-8');
-          const newLines = newContent.split('\n').filter((line) => line.length > 0);
+          const newLines = newContent
+            .split('\n')
+            .filter((line) => line.length > 0 && (!grep || grep.test(line)));
           if (newLines.length > 0) {
             process.stdout.write(highlightLogLines(newLines, noColor) + '\n');
           }
@@ -446,7 +448,7 @@ export function logsCommand(program: Command) {
 
           // Handle follow mode
           if (cmdObj.follow) {
-            await followLogFile(logPath, !cmdObj.color);
+            await followLogFile(logPath, !cmdObj.color, grepPattern);
             return;
           }
 
