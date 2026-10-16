@@ -12,6 +12,7 @@ import { geminiFormatAndSystemInstructions } from '../../src/providers/google/ut
 import { RateLimitRegistry } from '../../src/scheduler/rateLimitRegistry';
 import {
   type ApiProvider,
+  type AtomicTestCase,
   type CallApiContextParams,
   type Prompt,
   ResultFailureReason,
@@ -19,6 +20,7 @@ import {
 } from '../../src/types/index';
 import * as fileExtensions from '../../src/util/fileExtensions';
 import { sleep } from '../../src/util/time';
+import { mockProcessEnv } from '../util/utils';
 import { mockGradingApiProviderPasses, resetMockProviders } from './helpers';
 
 const createEmptyEvaluationConfig = () => ({
@@ -86,6 +88,65 @@ describe('runEval', () => {
     expect(result.prompt.label).toBe('test-label');
     expect(mockProvider.callApi).toHaveBeenCalledWith('Test prompt', expect.anything(), undefined);
   });
+
+  it('isolates locked grading criteria and variables from target-provider mutation', async () => {
+    const test: AtomicTestCase = {
+      vars: { expected: 'trusted' },
+      assert: [{ type: 'equals', value: '{{expected}}' }],
+    };
+    const provider: ApiProvider = {
+      id: () => 'mutating-provider',
+      callApi: vi.fn(async (_prompt, context) => {
+        (context!.test as AtomicTestCase).assert = [];
+        context!.vars.expected = 'attacker-controlled';
+        return { output: 'attacker-controlled' };
+      }),
+    };
+
+    const [result] = await runEval({
+      ...defaultOptions,
+      provider,
+      prompt: { raw: 'Test prompt', label: 'test-label' },
+      test,
+      lockIntegrity: { disableTemplating: false, disableVarExpansion: false },
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.gradingResult?.pass).toBe(false);
+    expect(test.assert).toEqual([{ type: 'equals', value: '{{expected}}' }]);
+    expect(test.vars).toEqual({ expected: 'trusted' });
+  });
+
+  it.each(['PROMPTFOO_DISABLE_TEMPLATING', 'PROMPTFOO_DISABLE_VAR_EXPANSION'] as const)(
+    'fails locked grading when a provider changes %s',
+    async (setting) => {
+      const restoreInitialEnv = mockProcessEnv({ [setting]: undefined });
+      let restoreProviderEnv = () => {};
+      const provider: ApiProvider = {
+        id: () => 'environment-mutating-provider',
+        callApi: vi.fn(async () => {
+          restoreProviderEnv = mockProcessEnv({ [setting]: 'true' });
+          return { output: 'trusted' };
+        }),
+      };
+
+      try {
+        const [result] = await runEval({
+          ...defaultOptions,
+          provider,
+          prompt: { raw: 'Test prompt', label: 'test-label' },
+          test: { assert: [{ type: 'equals', value: 'trusted' }] },
+          lockIntegrity: { disableTemplating: false, disableVarExpansion: false },
+        });
+
+        expect(result.success).toBe(false);
+        expect(result.error).toContain(`${setting} changed after verification`);
+      } finally {
+        restoreProviderEnv();
+        restoreInitialEnv();
+      }
+    },
+  );
 
   it('should expose eval runtime vars to prompt and provider rendering', async () => {
     await runEval({

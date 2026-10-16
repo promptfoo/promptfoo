@@ -271,6 +271,12 @@ export interface RunEvalOptions {
    * Queue used while deferred grading is active to group grader provider calls.
    */
   providerCallQueue?: ProviderCallQueueRef;
+
+  /** @internal Protects locked acceptance criteria from target-provider mutation. */
+  lockIntegrity?: {
+    disableTemplating: boolean;
+    disableVarExpansion: boolean;
+  };
 }
 
 export const EvaluateOptionsSchema = z.object({
