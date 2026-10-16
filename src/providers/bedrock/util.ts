@@ -91,10 +91,10 @@ interface AmazonResponse {
 }
 
 export function novaOutputFromMessage(response: AmazonResponse) {
-  const hasToolUse = response.output?.message?.content.some((block) => block.toolUse?.toolUseId);
+  const hasToolUse = response.output?.message?.content?.some((block) => block.toolUse?.toolUseId);
   if (hasToolUse) {
     return response.output?.message?.content
-      .map((block) => {
+      ?.map((block) => {
         if (block.text) {
           // Filter out text for tool use blocks.
           // Observed nova-lite wrapping tool use blocks with text blocks.
@@ -106,7 +106,7 @@ export function novaOutputFromMessage(response: AmazonResponse) {
       .join('\n\n');
   }
   return response.output?.message?.content
-    .map((block) => {
+    ?.map((block) => {
       return block.text;
     })
     .join('\n\n');
