@@ -1,9 +1,15 @@
 import OpenAI from 'openai';
 import logger from '../../logger';
 import { maybeLoadToolsFromExternalFile } from '../../util/index';
-import { sleep } from '../../util/time';
+import { sleep, sleepWithAbort } from '../../util/time';
 import { loadProviderCallbackFromFileUrl } from '../functionCallbackUtils';
-import { getRequestTimeoutMs, parseChatPrompt, toTitleCase } from '../shared';
+import {
+  getRequestTimeoutMs,
+  parseChatPrompt,
+  throwIfAborted,
+  toTitleCase,
+  waitForPromiseWithAbort,
+} from '../shared';
 import {
   buildChatSpanContext,
   extractProviderResponseAttributes,
@@ -49,7 +55,7 @@ type OpenAiAssistantOptions = OpenAiSharedOptions & {
 export class OpenAiAssistantProvider extends OpenAiGenericProvider {
   assistantId: string;
   assistantConfig: OpenAiAssistantOptions;
-  private loadedFunctionCallbacks: Record<string, Function> = {};
+  private loadedFunctionCallbacks: Record<string, Function> = Object.create(null);
 
   constructor(
     assistantId: string,
@@ -117,6 +123,8 @@ export class OpenAiAssistantProvider extends OpenAiGenericProvider {
     context?: CallbackContext,
     callId?: string,
   ): Promise<string> {
+    const signal = context?.abortSignal;
+    throwIfAborted(signal);
     try {
       // Check if we've already loaded this function
       let callback = this.loadedFunctionCallbacks[functionName];
@@ -128,7 +136,11 @@ export class OpenAiAssistantProvider extends OpenAiGenericProvider {
         if (callbackRef && typeof callbackRef === 'string') {
           const callbackStr: string = callbackRef;
           if (callbackStr.startsWith('file://')) {
-            callback = await this.loadExternalFunction(callbackStr);
+            callback = await waitForPromiseWithAbort(
+              this.loadExternalFunction(callbackStr),
+              signal,
+            );
+            throwIfAborted(signal);
           } else {
             callback = new Function('return ' + callbackStr)();
           }
@@ -160,10 +172,12 @@ export class OpenAiAssistantProvider extends OpenAiGenericProvider {
         parsedArgs = {};
       }
 
+      throwIfAborted(signal);
       const result = await withGenAIToolSpan(
         { name: functionName, arguments: parsedArgs, callId },
-        () => callback(parsedArgs, context),
+        () => waitForPromiseWithAbort(callback(parsedArgs, context), signal),
       );
+      throwIfAborted(signal);
 
       // Format the result
       if (result === undefined || result === null) {
@@ -179,6 +193,7 @@ export class OpenAiAssistantProvider extends OpenAiGenericProvider {
         return String(result);
       }
     } catch (error: any) {
+      throwIfAborted(signal);
       logger.error(`Error executing function '${functionName}': ${error.message || String(error)}`);
       return JSON.stringify({
         error: `Error in ${functionName}: ${error.message || String(error)}`,
@@ -210,8 +225,11 @@ export class OpenAiAssistantProvider extends OpenAiGenericProvider {
   private async callApiInternal(
     prompt: string,
     context?: CallApiContextParams,
-    _callApiOptions?: CallApiOptionsParams,
+    callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
+    const signal = callApiOptions?.abortSignal;
+    throwIfAborted(signal);
+    const requestOptions = { signal };
     if (!this.getApiKey()) {
       throw new Error(this.getMissingApiKeyErrorMessage());
     }
@@ -253,8 +271,10 @@ export class OpenAiAssistantProvider extends OpenAiGenericProvider {
       model: this.assistantConfig.modelName || undefined,
       instructions: this.assistantConfig.instructions || undefined,
       tools:
-        (await maybeLoadToolsFromExternalFile(this.assistantConfig.tools, context?.vars)) ||
-        undefined,
+        (await waitForPromiseWithAbort(
+          maybeLoadToolsFromExternalFile(this.assistantConfig.tools, context?.vars, signal),
+          signal,
+        )) || undefined,
       metadata: this.assistantConfig.metadata || undefined,
       temperature: this.assistantConfig.temperature ?? undefined,
       tool_choice: this.assistantConfig.toolChoice || undefined,
@@ -264,17 +284,29 @@ export class OpenAiAssistantProvider extends OpenAiGenericProvider {
       },
     };
 
+    throwIfAborted(signal);
     let run: OpenAI.Beta.Threads.Run;
     try {
-      run = await openai.beta.threads.createAndRun(body);
+      run = await openai.beta.threads.createAndRun(body, requestOptions);
     } catch (err) {
+      throwIfAborted(signal);
       return failApiCall(err);
     }
 
     while (true) {
-      const currentRun = await openai.beta.threads.runs.retrieve(run.id, {
-        thread_id: run.thread_id,
-      });
+      throwIfAborted(signal);
+      let currentRun: OpenAI.Beta.Threads.Run;
+      try {
+        currentRun = await openai.beta.threads.runs.retrieve(
+          run.id,
+          { thread_id: run.thread_id },
+          requestOptions,
+        );
+      } catch (err) {
+        throwIfAborted(signal);
+        throw err;
+      }
+      throwIfAborted(signal);
 
       if (currentRun.status === 'completed') {
         run = currentRun;
@@ -291,7 +323,10 @@ export class OpenAiAssistantProvider extends OpenAiGenericProvider {
           requiredAction.submit_tool_outputs.tool_calls.filter((toolCall) => {
             return (
               toolCall.type === 'function' &&
-              toolCall.function.name in (this.assistantConfig.functionToolCallbacks ?? {})
+              Object.prototype.hasOwnProperty.call(
+                this.assistantConfig.functionToolCallbacks ?? {},
+                toolCall.function.name,
+              )
             );
           });
         if (functionCallsWithCallbacks.length === 0) {
@@ -305,6 +340,7 @@ export class OpenAiAssistantProvider extends OpenAiGenericProvider {
           runId: currentRun.id,
           assistantId: this.assistantId,
           provider: 'openai',
+          ...(signal ? { abortSignal: signal } : {}),
         };
 
         logger.debug(
@@ -334,12 +370,15 @@ export class OpenAiAssistantProvider extends OpenAiGenericProvider {
             toolOutputs,
           )}`,
         );
+        throwIfAborted(signal);
         try {
-          run = await openai.beta.threads.runs.submitToolOutputs(currentRun.id, {
-            thread_id: currentRun.thread_id,
-            tool_outputs: toolOutputs,
-          });
+          run = await openai.beta.threads.runs.submitToolOutputs(
+            currentRun.id,
+            { thread_id: currentRun.thread_id, tool_outputs: toolOutputs },
+            requestOptions,
+          );
         } catch (err) {
+          throwIfAborted(signal);
           return failApiCall(err);
         }
         continue;
@@ -354,7 +393,12 @@ export class OpenAiAssistantProvider extends OpenAiGenericProvider {
         break;
       }
 
-      await sleep(1000);
+      try {
+        await (signal ? sleepWithAbort(1000, signal) : sleep(1000));
+      } catch (err) {
+        throwIfAborted(signal);
+        throw err;
+      }
     }
 
     if (run.status !== 'completed' && run.status !== 'requires_action') {
@@ -368,21 +412,25 @@ export class OpenAiAssistantProvider extends OpenAiGenericProvider {
       };
     }
 
+    throwIfAborted(signal);
     // Get run steps
     logger.debug(`Calling OpenAI API, getting thread run steps for ${run.thread_id}`);
     let steps;
     try {
-      steps = await openai.beta.threads.runs.steps.list(run.id, {
-        thread_id: run.thread_id,
-        order: 'asc',
-      });
+      steps = await openai.beta.threads.runs.steps.list(
+        run.id,
+        { thread_id: run.thread_id, order: 'asc' },
+        requestOptions,
+      );
     } catch (err) {
+      throwIfAborted(signal);
       return failApiCall(err);
     }
     logger.debug(`\tOpenAI thread run steps API response: ${JSON.stringify(steps)}`);
 
     const outputBlocks = [];
     for (const step of steps.data) {
+      throwIfAborted(signal);
       if (step.step_details.type === 'message_creation') {
         logger.debug(`Calling OpenAI API, getting message ${step.id}`);
         let message;
@@ -392,8 +440,10 @@ export class OpenAiAssistantProvider extends OpenAiGenericProvider {
             {
               thread_id: run.thread_id,
             },
+            requestOptions,
           );
         } catch (err) {
+          throwIfAborted(signal);
           return failApiCall(err);
         }
         logger.debug(`\tOpenAI thread run step message API response: ${JSON.stringify(message)}`);
@@ -430,6 +480,7 @@ export class OpenAiAssistantProvider extends OpenAiGenericProvider {
       }
     }
 
+    throwIfAborted(signal);
     return {
       output: outputBlocks.join('\n\n').trim(),
       tokenUsage: getTokenUsage(run, false),

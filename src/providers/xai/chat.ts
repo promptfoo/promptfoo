@@ -660,6 +660,19 @@ export function calculateXAICost(
     serviceTier?: XAIServiceTier;
   },
 ): number | undefined {
+  if (
+    typeof promptTokens !== 'number' ||
+    !Number.isFinite(promptTokens) ||
+    promptTokens < 0 ||
+    [completionTokens, reasoningTokens].some(
+      (tokens) =>
+        tokens !== undefined &&
+        (typeof tokens !== 'number' || !Number.isFinite(tokens) || tokens < 0),
+    )
+  ) {
+    return undefined;
+  }
+
   const completion = completionTokens ?? 0;
   // Default (Responses API / OpenAI convention): completion tokens already include
   // reasoning tokens; bill completion at the output rate and fall back to reasoning
@@ -670,9 +683,8 @@ export function calculateXAICost(
       ? completion
       : (reasoningTokens ?? 0);
   if (
-    promptTokens == null ||
-    billableOutputTokens < 0 ||
-    (promptTokens <= 0 && billableOutputTokens === 0)
+    !Number.isFinite(billableOutputTokens) ||
+    (promptTokens === 0 && billableOutputTokens === 0)
   ) {
     return undefined;
   }
