@@ -1,0 +1,35 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Bedrock text embedding similarity checks
+
+prompts:
+  - '{{text}}'
+
+providers:
+  - echo
+
+tests:
+  - description: Nova Multimodal Embeddings text path
+    vars:
+      text: A quiet garden with flowers.
+    assert:
+      - type: similar
+        value: A quiet garden with flowers.
+        threshold: 0.99
+        provider:
+          id: bedrock:embeddings:amazon.nova-2-multimodal-embeddings-v1:0
+          config:
+            region: us-east-1
+            embeddingPurpose: GENERIC_INDEX
+            embeddingDimension: 256
+            truncationMode: NONE
+  - description: Marengo 3 text path
+    vars:
+      text: A quiet garden with flowers.
+    assert:
+      - type: similar
+        value: A quiet garden with flowers.
+        threshold: 0.99
+        provider:
+          id: bedrock:embeddings:twelvelabs.marengo-embed-3-0-v1:0
+          config:
+            region: us-east-1
