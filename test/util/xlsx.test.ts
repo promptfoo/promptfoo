@@ -279,6 +279,30 @@ describe('parseXlsxFile', () => {
       },
     );
 
+    it.each(['Data#2026', 'Data#2026#Q1', '#Start', 'End#', '2#results'])(
+      'should preserve hash characters in sheet names: %s',
+      async (sheetName) => {
+        mockReadXlsxFile.mockResolvedValue([
+          createMockSheet('Data', [['input'], ['wrong sheet']]),
+          createMockSheet('Other', [['input'], ['wrong numeric selection']]),
+          createMockSheet(sheetName, [['input'], ['selected sheet']]),
+        ]);
+
+        expect(await parseXlsxFile(`test.xlsx#${sheetName}`)).toEqual([
+          { input: 'selected sheet' },
+        ]);
+        expect(mockReadXlsxFile).toHaveBeenCalledWith('test.xlsx');
+      },
+    );
+
+    it('should report the complete missing sheet name without selecting its prefix', async () => {
+      mockReadXlsxFile.mockResolvedValue([createMockSheet('Data', [['input'], ['wrong sheet']])]);
+
+      await expect(parseXlsxFile('test.xlsx#Data#missing')).rejects.toThrow(
+        'Sheet "Data#missing" not found. Available sheets: Data',
+      );
+    });
+
     it('should throw not-found for a digit-prefixed name instead of out-of-range', async () => {
       mockReadXlsxFile.mockResolvedValue([createMockSheet('Sheet1'), createMockSheet('Sheet2')]);
 
