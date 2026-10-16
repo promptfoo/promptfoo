@@ -6,23 +6,22 @@ import type { EvaluateOptions, EvaluateTestSuite } from '../types';
  * Run an evaluation test suite.
  *
  * This is the main entry point for programmatic evaluation. It executes all tests
- * against all providers, runs assertions, and returns a comprehensive summary.
+ * against all providers, runs assertions, and returns an eval record.
  *
  * @param testSuite Configuration containing prompts, providers, tests, and metadata
  * @param testSuite.prompts Array of prompts (strings or file paths)
  * @param testSuite.providers Array of provider configurations (e.g., 'openai:gpt-4')
  * @param testSuite.tests Array of test cases with variables and assertions
  * @param testSuite.sharing Optional sharing configuration
+ * @param testSuite.outputPath Export path(s); filename extensions select the formats
  * @param testSuite.writeLatestResults Whether to persist results to database
  *
  * @param options Optional evaluation settings
- * @param options.cache Whether to use cached provider responses (default: true)
- * @param options.outputPath File path(s) for saving results (JSON format)
- * @param options.maxConcurrency Max parallel provider calls (default: 10)
- * @param options.onTestComplete Callback invoked after each test completes
- * @param options.nunjucksFilters Custom Nunjucks template filters
+ * @param options.cache Set false to bypass cached provider responses for this call
+ * @param options.maxConcurrency Max parallel provider calls
+ * @param options.progressCallback Receives progress counts, row context and aggregate metrics
  *
- * @returns Eval record with persisted results and helper methods such as `toEvaluateSummary()`
+ * @returns Eval record with helpers such as toEvaluateSummary(); writeLatestResults persists it locally
  *
  * @example Basic usage
  * ```typescript
@@ -49,11 +48,11 @@ import type { EvaluateOptions, EvaluateTestSuite } from '../types';
  *   {
  *     prompts: ['prompts.txt'],
  *     providers: ['openai:gpt-5.6', 'anthropic:claude-opus-5'],
- *     tests: testCases
+ *     tests: testCases,
+ *     outputPath: 'eval-results.json',
  *   },
  *   {
  *     cache: false,
- *     outputPath: 'eval-results.json',
  *     maxConcurrency: 5
  *   }
  * );
