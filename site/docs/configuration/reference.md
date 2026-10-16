@@ -167,7 +167,7 @@ An assertion set groups multiple assertions and can define its own threshold, me
 
 ### CommandLineOptions
 
-Set default values for command-line options. These defaults will be used unless overridden by command-line arguments.
+Set default values for command-line options. These defaults will be used unless overridden by command-line arguments. For example, `commandLineOptions.filterPrompts` selects prompts by ID or label; `--filter-prompts` overrides it, and an empty CLI value (`--filter-prompts ""`) disables that configured filter.
 
 | Property                 | Type               | Description                                                                                                                                                                                         |
 | ------------------------ | ------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
