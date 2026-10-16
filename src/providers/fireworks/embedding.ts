@@ -1,9 +1,5 @@
 import { OpenAiEmbeddingProvider } from '../openai/embedding';
-import {
-  buildFireworksProviderConfig,
-  resolveFireworksApiKey,
-  resolveFireworksApiUrl,
-} from './shared';
+import { buildFireworksProviderConfig, resolveFireworksApiKey } from './shared';
 
 import type { ProviderOptions } from '../../types/providers';
 
@@ -32,9 +28,5 @@ export class FireworksEmbeddingProvider extends OpenAiEmbeddingProvider {
   // OpenAI-Organization is OpenAI-specific; it must not leak onto Fireworks calls.
   override getOrganization(): string | undefined {
     return undefined;
-  }
-
-  override getApiUrl(): string {
-    return resolveFireworksApiUrl(this.config);
   }
 }
