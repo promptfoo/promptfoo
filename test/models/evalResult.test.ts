@@ -1376,6 +1376,95 @@ describe('EvalResult', () => {
   describe('toEvaluateResult', () => {
     it.each(
       ['model', 'persisted', 'jsonl'].flatMap((boundary) =>
+        [false, true].map((strip) => ({ boundary, strip })),
+      ),
+    )(
+      'projects retained function calls at $boundary (strip: $strip)',
+      async ({ boundary, strip }) => {
+        const functionToolCalls = [
+          {
+            id: 'call-1',
+            type: 'function',
+            function: { name: 'lookup', arguments: '{"query":"private-retained-arguments"}' },
+          },
+        ];
+        const metadata = { functionToolCalls, note: 'ordinary metadata' };
+        const response = { output: 'Callback completed', metadata };
+        const input = createEvaluateResult({ response, metadata });
+        const original = structuredClone(input);
+        const flags = getStripFlags({ PROMPTFOO_STRIP_RESPONSE_OUTPUT: String(strip) });
+        let projected: EvaluateResult;
+        if (boundary === 'jsonl') {
+          projected = sanitizeResultForJsonlArtifact(input, flags);
+        } else {
+          const result = await EvalResult.createFromEvaluateResult(
+            'retained-call-projection',
+            input,
+            {
+              persist: boundary === 'persisted',
+            },
+          );
+          const loaded = result.persisted ? await EvalResult.findById(result.id) : result;
+          projected = loaded!.toEvaluateResult(flags);
+          expect(loaded?.response?.metadata?.functionToolCalls).toEqual(functionToolCalls);
+          expect(loaded?.metadata.functionToolCalls).toEqual(functionToolCalls);
+        }
+        const expectedMetadata = strip ? { note: 'ordinary metadata' } : metadata;
+        expect(projected.response).toEqual({
+          output: strip ? '[output stripped]' : 'Callback completed',
+          metadata: expectedMetadata,
+        });
+        expect(projected.metadata).toEqual(expectedMetadata);
+        if (strip) {
+          expect(JSON.stringify(projected)).not.toContain('private-retained-arguments');
+        }
+        expect(input).toEqual(original);
+      },
+    );
+
+    it.each(
+      ['model', 'persisted', 'jsonl'].flatMap((boundary) =>
+        [false, true].map((override) => ({ boundary, override })),
+      ),
+    )(
+      'preserves test-owned retained-call metadata at $boundary (override: $override)',
+      async ({ boundary, override }) => {
+        const testMetadata = { functionToolCalls: ['intentional user metadata'], note: 'keep' };
+        const responseMetadata = {
+          functionToolCalls: override
+            ? [{ type: 'function', function: { name: 'lookup', arguments: 'private-call' } }]
+            : testMetadata.functionToolCalls,
+        };
+        const input = createEvaluateResult({
+          testCase: createAtomicTestCase({ metadata: testMetadata }),
+          response: { output: 'Callback completed', metadata: responseMetadata },
+          metadata: { ...testMetadata, ...responseMetadata },
+        });
+        const flags = getStripFlags({ PROMPTFOO_STRIP_RESPONSE_OUTPUT: 'true' });
+        let projected: EvaluateResult;
+        if (boundary === 'jsonl') {
+          projected = sanitizeResultForJsonlArtifact(input, flags);
+        } else {
+          const result = await EvalResult.createFromEvaluateResult(
+            'retained-call-provenance',
+            input,
+            {
+              persist: boundary === 'persisted',
+            },
+          );
+          const loaded = result.persisted ? await EvalResult.findById(result.id) : result;
+          projected = loaded!.toEvaluateResult(flags);
+        }
+        expect(projected.testCase.metadata).toEqual(testMetadata);
+        expect(projected.metadata).toEqual(override ? { note: 'keep' } : testMetadata);
+        expect(projected.response?.metadata).toEqual({});
+        expect(input.response?.metadata).toEqual(responseMetadata);
+        expect(input.testCase.metadata).toEqual(testMetadata);
+      },
+    );
+
+    it.each(
+      ['model', 'persisted', 'jsonl'].flatMap((boundary) =>
         [false, true].flatMap((strip) =>
           [
             'native-conversation-text',
