@@ -1314,13 +1314,19 @@ function updateConversationHistory({
     return;
   }
 
+  // Retained tool calls are grading evidence, not conversation context. Keep them
+  // on the response for assertions without copying their arguments into later turns.
+  const metadata = response.metadata ? { ...response.metadata } : response.metadata;
+  if (metadata) {
+    delete metadata.functionToolCalls;
+  }
   const conversationLastInput = getConversationLastInput(renderedJson);
   conversations[conversationKey] = conversations[conversationKey] || [];
   conversations[conversationKey].push({
     prompt: renderedJson || renderedPrompt,
     input: conversationLastInput || renderedJson || renderedPrompt,
     output: response.conversationOutput ?? (response.output || ''),
-    metadata: response.metadata,
+    metadata,
   });
 }
 

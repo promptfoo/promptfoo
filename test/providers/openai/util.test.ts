@@ -1473,6 +1473,19 @@ describe('validateFunctionCall', () => {
     },
   };
 
+  it.each([{ apiKey: 'S3CRET' }, 'S3CRET invalid JSON'])(
+    'omits malformed argument payloads from errors: %j',
+    (argumentsValue) => {
+      try {
+        validateFunctionCall({ name: 'testFunction', arguments: argumentsValue }, [sampleFunction]);
+        expect.fail('Expected invalid arguments to fail');
+      } catch (error) {
+        expect(error).toMatchObject({ name: 'InvalidToolCallError' });
+        expect((error as Error).message).not.toContain('S3CRET');
+      }
+    },
+  );
+
   it('should validate valid function call', () => {
     const functionCall = {
       name: 'testFunction',

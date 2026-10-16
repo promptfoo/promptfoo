@@ -824,7 +824,7 @@ describe('createShareableUrl', () => {
     });
 
     it.each([false, true])(
-      'strips response media before blob handling (cloud: %s)',
+      'strips response media and retained function calls before blob handling (cloud: %s)',
       async (cloud) => {
         vi.mocked(cloudConfig.isEnabled).mockReturnValue(cloud);
         vi.mocked(envars.getEnvBool).mockImplementation((_key, defaultValue) =>
@@ -835,6 +835,12 @@ describe('createShareableUrl', () => {
         const dataUrl = 'data:image/png;base64,cHJpdmF0ZSBvdXRwdXQ=';
         const svgUrl = 'data:image/svg+xml,%3Csvg%3Eprivate%20output%3C%2Fsvg%3E';
         const preview = { samples: [outputUri, dataUrl, svgUrl], caption: 'data:ready' };
+        const functionToolCalls = [
+          {
+            type: 'function',
+            function: { name: 'lookup', arguments: 'private-retained-arguments' },
+          },
+        ];
         const conversationOutput = [
           { text: 'native-conversation-private', thoughtSignature: 'private-signature' },
           { inlineData: { mimeType: 'image/png', data: 'bmF0aXZlLXByaXZhdGU=' } },
@@ -846,6 +852,7 @@ describe('createShareableUrl', () => {
           metadata: {
             audio: { data: outputUri },
             blobUris: [outputUri],
+            functionToolCalls,
             preview,
             note: 'keep metadata',
           },
@@ -859,6 +866,7 @@ describe('createShareableUrl', () => {
             metadata: {
               blobUris: [outputUri],
               audio: { data: outputUri },
+              functionToolCalls,
               preview,
               note: 'keep metadata',
             },
@@ -889,6 +897,7 @@ describe('createShareableUrl', () => {
           expect(JSON.stringify(value)).not.toContain(dataUrl);
           expect(JSON.stringify(value)).not.toContain(svgUrl);
           expect(JSON.stringify(value)).not.toContain('native-conversation-private');
+          expect(JSON.stringify(value)).not.toContain('private-retained-arguments');
           expect(JSON.stringify(value)).not.toContain('bmF0aXZlLXByaXZhdGU=');
           expect(JSON.stringify(value)).toContain(inputUri);
         }
@@ -905,6 +914,8 @@ describe('createShareableUrl', () => {
         });
         expect(uploaded.metadata).toEqual(uploaded.response.metadata);
         expect(row.response.metadata.blobUris).toEqual([outputUri]);
+        expect(row.response.metadata.functionToolCalls).toBe(functionToolCalls);
+        expect(row.metadata.functionToolCalls).toBe(functionToolCalls);
       },
     );
 

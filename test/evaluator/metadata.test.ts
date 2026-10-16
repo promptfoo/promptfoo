@@ -12,6 +12,7 @@ import { evaluate } from '../../src/evaluator';
 import { runExtensionHook } from '../../src/evaluatorHelpers';
 import Eval from '../../src/models/eval';
 import { type ApiProvider, type EvaluateSummaryV3, type TestSuite } from '../../src/types/index';
+import { mockProcessEnv } from '../util/utils';
 import { mockApiProvider, toPrompt } from './helpers';
 import { describeEvaluator } from './lifecycle';
 
@@ -252,6 +253,116 @@ describeEvaluator('evaluator metadata', () => {
     expect(JSON.stringify(summary.results[1].prompt)).toContain('signed-image');
     expect(JSON.stringify(summary)).toContain('signed-image');
   });
+
+  it.each(
+    [false, true].flatMap((strip) =>
+      ['{{ _conversation | length }}', '{{ _conversation | dump }}'].map((historyTemplate) => ({
+        strip,
+        historyTemplate,
+      })),
+    ),
+  )(
+    'keeps retained grading calls out of conversation history (strip: $strip, prompt: $historyTemplate)',
+    async ({ strip, historyTemplate }) => {
+      const outputPath = path.join(os.tmpdir(), `promptfoo-history-${randomUUID()}.jsonl`);
+      const functionToolCalls = [
+        {
+          type: 'function',
+          function: { name: 'lookup', arguments: '{"query":"private-history-arguments"}' },
+        },
+      ];
+      const response = {
+        output: 'Callback completed',
+        metadata: { functionToolCalls, note: 'ordinary conversation metadata' },
+      };
+      const histories: unknown[] = [];
+      const provider: ApiProvider = {
+        id: () => 'retained-call-history',
+        config: {
+          tools: [
+            {
+              type: 'function',
+              function: {
+                name: 'lookup',
+                parameters: {
+                  type: 'object',
+                  properties: { query: { type: 'string' } },
+                  required: ['query'],
+                },
+              },
+            },
+          ],
+        },
+        callApi: vi.fn().mockImplementation(async (_prompt, context) => {
+          histories.push(structuredClone(context.vars._conversation));
+          return response;
+        }),
+      };
+      const env = {
+        PROMPTFOO_STRIP_RESPONSE_OUTPUT: String(strip),
+        PROMPTFOO_STRIP_TEST_VARS: 'false',
+        PROMPTFOO_STRIP_PROMPT_TEXT: 'false',
+      };
+      const suite: TestSuite = {
+        providers: [provider],
+        prompts: [toPrompt(`{{ step }} ${historyTemplate}`)],
+        tests: ['first', 'second'].map((step) => ({
+          vars: { step },
+          assert: [{ type: 'is-valid-openai-tools-call' }],
+        })),
+      };
+      const restoreEnv = mockProcessEnv(env);
+      try {
+        const record = await Eval.create({ env, outputPath }, suite.prompts, { id: randomUUID() });
+        await evaluate(suite, record, { maxConcurrency: 1 });
+        const reloaded = await Eval.findById(record.id);
+        const summary = await reloaded!.toEvaluateSummary();
+        const artifactText = fs.readFileSync(outputPath, 'utf8');
+        const artifactRows = artifactText
+          .split(/\r?\n/)
+          .filter(Boolean)
+          .map((line) => JSON.parse(line));
+
+        expect(summary.stats.successes).toBe(2);
+        expect(summary.stats.failures).toBe(0);
+        expect(artifactRows).toHaveLength(2);
+        expect(artifactRows.every((row) => row.success && row.score === 1)).toBe(true);
+        expect(histories[0]).toEqual([]);
+        expect(histories[1]).toEqual([
+          expect.objectContaining({
+            output: 'Callback completed',
+            metadata: { note: 'ordinary conversation metadata' },
+          }),
+        ]);
+        expect(JSON.stringify(histories)).not.toContain('private-history-arguments');
+        const secondPrompt = vi.mocked(provider.callApi).mock.calls[1][0];
+        expect(secondPrompt).not.toContain('private-history-arguments');
+        if (historyTemplate.includes('dump')) {
+          expect(secondPrompt).toContain('ordinary conversation metadata');
+        }
+        for (const rows of [summary.results, artifactRows]) {
+          expect(rows[0].response?.metadata?.note).toBe('ordinary conversation metadata');
+          expect(rows[0].response?.metadata?.functionToolCalls).toEqual(
+            strip ? undefined : functionToolCalls,
+          );
+        }
+        if (strip) {
+          expect(JSON.stringify(summary)).not.toContain('private-history-arguments');
+          expect(artifactText).not.toContain('private-history-arguments');
+        } else {
+          expect(JSON.stringify(summary)).toContain('private-history-arguments');
+          expect(artifactText).toContain('private-history-arguments');
+        }
+        expect(response.metadata).toEqual({
+          functionToolCalls,
+          note: 'ordinary conversation metadata',
+        });
+      } finally {
+        restoreEnv();
+        fs.rmSync(outputPath, { force: true });
+      }
+    },
+  );
 
   it('evaluate with _conversation variable', async () => {
     const mockApiProvider: ApiProvider = {

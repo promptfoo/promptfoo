@@ -1166,10 +1166,32 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       const functionCalls: any = message.function_call
         ? [message.function_call]
         : message.tool_calls;
+      // Callback output replaces the model's calls with text. Retain the original
+      // ordinary calls for schema assertions, including unknown/unprocessed calls.
+      const functionToolCalls =
+        Array.isArray(functionCalls) && (config.functionToolCallbacks || this.mcpClient)
+          ? functionCalls.map((call: any) => {
+              const payload = message.function_call ? call : call?.function;
+              return {
+                ...(!message.function_call && call?.id !== undefined ? { id: call.id } : {}),
+                type: message.function_call ? 'function' : call?.type,
+                function: { name: payload?.name, arguments: payload?.arguments },
+              };
+            })
+          : undefined;
+      const mcpFunctionCallIndexes = new Set<number>();
+      const getFunctionToolCallMetadata = () =>
+        functionToolCalls
+          ? {
+              functionToolCalls: functionToolCalls.filter(
+                (_, index) => !mcpFunctionCallIndexes.has(index),
+              ),
+            }
+          : {};
       if (functionCalls && (config.functionToolCallbacks || this.mcpClient)) {
         const results = [];
         let hasSuccessfulCallback = false;
-        for (const functionCall of functionCalls) {
+        for (const [functionCallIndex, functionCall] of functionCalls.entries()) {
           throwIfAborted(callApiOptions?.abortSignal);
           const functionName = functionCall.name || functionCall.function?.name;
 
@@ -1179,6 +1201,17 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
             const mcpTool = mcpTools.find((tool) => tool.name === functionName);
             if (mcpTool) {
               const rawArgs = functionCall.arguments || functionCall.function?.arguments || '{}';
+              // Exclude only this routed, correctly typed request. Reused names,
+              // IDs, or top-level routing fields cannot hide a different call.
+              const retainedCall = functionToolCalls?.[functionCallIndex];
+              if (
+                retainedCall?.type === 'function' &&
+                typeof retainedCall.function.name === 'string' &&
+                retainedCall.function.name === functionName &&
+                retainedCall.function.arguments === rawArgs
+              ) {
+                mcpFunctionCallIndexes.add(functionCallIndex);
+              }
               const toolCallId = functionCall.id ?? functionCall.call_id;
               // Declared outside the try so the catch below can still report the
               // arguments; parsing stays inside it, so malformed JSON keeps failing
@@ -1322,6 +1355,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
                 headers: responseHeaders ?? {},
               },
               ...(mcpToolCalls.length > 0 && { toolCalls: mcpToolCalls }),
+              ...getFunctionToolCallMetadata(),
             },
           };
         }
@@ -1361,6 +1395,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
               headers: responseHeaders ?? {},
             },
             ...(mcpToolCalls.length > 0 && { toolCalls: mcpToolCalls }),
+            ...getFunctionToolCallMetadata(),
           },
         };
       }
@@ -1389,6 +1424,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
             message.annotations.length > 0 && { annotations: message.annotations }),
           ...(citations.length > 0 && { citations }),
           ...(mcpToolCalls.length > 0 && { toolCalls: mcpToolCalls }),
+          ...getFunctionToolCallMetadata(),
         },
       };
     } catch (err) {

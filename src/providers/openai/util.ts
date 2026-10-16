@@ -1515,9 +1515,7 @@ export function validateFunctionCall(
     typeof functionCall.name !== 'string' ||
     typeof functionCall.arguments !== 'string'
   ) {
-    throw new InvalidToolCallError(
-      `OpenAI did not return a valid-looking function call: ${JSON.stringify(functionCall)}`,
-    );
+    throw new InvalidToolCallError('OpenAI did not return a valid-looking function call');
   }
 
   // Parse function call and validate it against schema
@@ -1552,8 +1550,8 @@ export function validateFunctionCall(
   let functionArgs;
   try {
     functionArgs = JSON.parse(functionCall.arguments);
-  } catch (err) {
-    throw new InvalidToolCallError((err as Error).message);
+  } catch {
+    throw new InvalidToolCallError('Function call arguments are not valid JSON');
   }
   const functionName = functionCall.name;
   const functionSchema = interpolatedFunctions?.find((f) => f.name === functionName)?.parameters;
