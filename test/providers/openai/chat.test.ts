@@ -2305,6 +2305,73 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
       }
     });
 
+    it.each([
+      {
+        label: 'top-level-only function envelope',
+        call: { type: 'function', name: 'read_file', arguments: '{}' },
+        pass: false,
+      },
+      {
+        label: 'top-level name overriding the wrapped function',
+        call: {
+          type: 'function',
+          name: 'read_file',
+          arguments: '{}',
+          function: { name: 'regular', arguments: '{"count":"wrong type"}' },
+        },
+        pass: false,
+      },
+      {
+        label: 'wrapped MCP call with object arguments',
+        call: { type: 'function', function: { name: 'read_file', arguments: {} } },
+        pass: true,
+      },
+    ])('retains malformed MCP routing envelopes: $label', async ({ call, pass }) => {
+      mockFetchWithCache.mockResolvedValue(
+        createMockFetchResponse({
+          choices: [{ message: { content: null, tool_calls: [call] } }],
+        }),
+      );
+      const provider = new OpenAiChatCompletionProvider('gpt-4o-mini', {
+        config: {
+          tools: [
+            {
+              type: 'function',
+              function: {
+                name: 'regular',
+                parameters: {
+                  type: 'object',
+                  properties: { count: { type: 'number' } },
+                  required: ['count'],
+                },
+              },
+            },
+          ],
+        },
+      });
+      const callTool = vi.fn().mockResolvedValue({ content: 'Read successfully' });
+      (provider as any).mcpClient = {
+        getAllTools: vi.fn().mockReturnValue([{ name: 'read_file' }]),
+        callTool,
+      };
+      const providerResponse = await provider.callApi('Read');
+      expect(callTool).toHaveBeenCalledExactlyOnceWith('read_file', {}, undefined);
+      expect(typeof providerResponse.output).toBe('string');
+      expect(providerResponse.metadata?.functionToolCalls).toHaveLength(pass ? 0 : 1);
+      for (const inverse of [false, true]) {
+        const result = await runAssertion({
+          provider,
+          providerResponse,
+          assertion: {
+            type: inverse ? 'not-is-valid-openai-tools-call' : 'is-valid-openai-tools-call',
+          },
+          test: {},
+        });
+        const expectedPass = inverse ? !pass : pass;
+        expect(result).toMatchObject({ pass: expectedPass, score: expectedPass ? 1 : 0 });
+      }
+    });
+
     it('retains unprocessed calls after a callback throws without needing MCP schemas', async () => {
       const toolCalls = [
         { id: 'shared-id', type: 'function', function: { name: 'read_file', arguments: '{}' } },

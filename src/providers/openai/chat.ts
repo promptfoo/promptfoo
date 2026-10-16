@@ -1200,9 +1200,14 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
             const mcpTools = this.mcpClient.getAllTools();
             const mcpTool = mcpTools.find((tool) => tool.name === functionName);
             if (mcpTool) {
-              // Exclude only this routed, correctly typed request. Reused names
-              // or IDs cannot hide a different call, and malformed types still fail.
-              if (functionToolCalls?.[functionCallIndex]?.type === 'function') {
+              // Exclude only this routed, correctly typed request. Reused names,
+              // IDs, or top-level routing fields cannot hide a different call.
+              const retainedCall = functionToolCalls?.[functionCallIndex];
+              if (
+                retainedCall?.type === 'function' &&
+                typeof retainedCall.function.name === 'string' &&
+                retainedCall.function.name === functionName
+              ) {
                 mcpFunctionCallIndexes.add(functionCallIndex);
               }
               const rawArgs = functionCall.arguments || functionCall.function?.arguments || '{}';
