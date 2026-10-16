@@ -409,6 +409,9 @@ export class GeminiImageProvider implements ApiProvider {
         } as RequestInit,
         getRequestTimeoutMs(),
         'json',
+        // Express has no non-secret principal identity for persistent cache keys.
+        // Keep bypassing the cache even when the caller requests reuse; hashing
+        // API keys into persistent keys does not satisfy the credential-cache policy.
         true,
       )) as { data: any; cached: boolean };
       const latencyMs = Date.now() - startTime;
