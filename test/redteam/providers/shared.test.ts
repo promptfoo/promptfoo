@@ -40,6 +40,7 @@ import type {
   CallApiContextParams,
   CallApiOptionsParams,
   Prompt,
+  TokenUsage,
 } from '../../../src/types/index';
 
 const createLimitedMessageContext = () => ({
@@ -1509,6 +1510,42 @@ describe('shared redteam provider utilities', () => {
         callApi.mockRestore();
       }
     });
+
+    it.each([0, 1])(
+      'retains failed unblocking request provenance (%i requests)',
+      async (requests) => {
+        mockProcessEnv({ PROMPTFOO_ENABLE_UNBLOCKING: 'true' });
+        mockedCheckServerFeatureSupport.mockResolvedValue(true);
+        const callApi = vi
+          .spyOn(PromptfooChatCompletionProvider.prototype, 'callApi')
+          .mockResolvedValue({
+            error: 'Unblocking analysis failed',
+            tokenUsage: { numRequests: requests },
+          });
+
+        try {
+          const usage: TokenUsage = { incurredTokenUsage: {} };
+          accumulateUnblockingTokenUsage(usage, {
+            attempted: true,
+            tokenUsage: { total: 5, numRequests: 1 },
+          });
+          const result = await tryUnblocking({
+            messages: [],
+            lastResponse: 'What industry are you in?',
+            goal: 'test-goal',
+          });
+          accumulateUnblockingTokenUsage(usage, result);
+
+          expect(usage.assertions).toMatchObject({ total: 5, numRequests: 2 });
+          expect(usage.incurredTokenUsage?.assertions).toMatchObject({
+            total: 5,
+            numRequests: 1 + requests,
+          });
+        } finally {
+          callApi.mockRestore();
+        }
+      },
+    );
 
     it('preserves analysis usage when the unblocking provider returns an error', async () => {
       mockProcessEnv({ PROMPTFOO_ENABLE_UNBLOCKING: 'true' });
