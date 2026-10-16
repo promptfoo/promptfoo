@@ -134,6 +134,11 @@ EXAMPLES = {
         (("tests", "test_*.py"), ("tests", "smoke_cli.py")),
         node=True,
     ),
+    "image-classification": Example(
+        "examples/eval-image-classification",
+        ("3.10", "3.14"),
+        ((".", "dataset_gen_test.py"),),
+    ),
     "f-score": Example(
         "examples/eval-f-score",
         ("3.10", "3.14"),
