@@ -2,6 +2,7 @@ import * as path from 'path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { runAssertion } from '../../src/assertions/index';
+import { buildScriptBody } from '../../src/assertions/scriptBody';
 import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
 import { runRuby } from '../../src/ruby/rubyUtils.js';
 import { runRubyCode } from '../../src/ruby/wrapper';
@@ -348,5 +349,17 @@ describe('Ruby assertions', () => {
     expect(result.pass).toBe(false);
     expect(result.reason).toContain("output.include?('{{secret}}')");
     expect(result.reason).not.toContain('sk-test-secret-123');
+  });
+
+  describe('buildScriptBody YAML block scalars', () => {
+    it('should prepend return for a one-line block scalar with trailing newline', () => {
+      expect(buildScriptBody('output.length > 10\n', '  ')).toBe('  return output.length > 10');
+    });
+
+    it('should not double return when the block already starts with return', () => {
+      expect(buildScriptBody('return output.length > 10\n', '  ')).toBe(
+        '  return output.length > 10',
+      );
+    });
   });
 });
