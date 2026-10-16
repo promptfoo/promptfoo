@@ -1002,8 +1002,28 @@ export async function runJsonGradingPrompt({
   evidenceBlock?: string;
 }): Promise<GradingResult> {
   const rubricPrompt = await loadRubricPrompt(grading.rubricPrompt, defaultPrompt);
-  const renderedPrompt = await renderLlmRubricPrompt(rubricPrompt, vars);
-  const finalPrompt = injectEvidenceBlockIntoPrompt(renderedPrompt, evidenceBlock);
+
+  // Expose evidence as a first-class template variable so custom rubrics can
+  // inject it explicitly (e.g. `{{ evidence }}` or `{% if evidence %}...{% endif %}`)
+  // instead of relying on the auto-append behaviour below.
+  const templateVars: Record<string, VarValue> = {
+    ...vars,
+    ...(evidenceBlock === undefined ? {} : { evidence: evidenceBlock }),
+  };
+
+  const renderedPrompt = await renderLlmRubricPrompt(rubricPrompt, templateVars);
+
+  // Only auto-inject the evidence block when the custom rubric did NOT already
+  // reference `evidence` — otherwise the block would appear twice. We check
+  // the rendered output because renderLlmRubricPrompt substitutes Nunjucks
+  // variables into both JSON prompts and legacy plaintext templates.
+  //
+  // When evidence is empty/undefined there's nothing to inject either way.
+  const evidenceAlreadyInlined =
+    evidenceBlock !== undefined && renderedPrompt.includes(evidenceBlock);
+  const finalPrompt = evidenceAlreadyInlined
+    ? renderedPrompt
+    : injectEvidenceBlockIntoPrompt(renderedPrompt, evidenceBlock);
 
   const defaultProviders = await getDefaultProviders();
   const defaultProvider =
