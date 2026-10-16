@@ -53,7 +53,7 @@ export function filterTraceSpans<T extends { name: string; attributes?: Record<s
 
 /**
  * Match a span name against a glob-like pattern.
- * Supports * (any characters) and ? (single character) wildcards.
+ * Supports * (any characters) and ? (single character) wildcards, including line breaks.
  *
  * @param spanName - The span name to match
  * @param pattern - The glob pattern to match against
@@ -66,6 +66,6 @@ export function matchesPattern(spanName: string, pattern: string): boolean {
     .replace(/\*/g, '.*') // Convert * to .*
     .replace(/\?/g, '.'); // Convert ? to .
 
-  const regex = new RegExp(`^${regexPattern}$`, 'i');
+  const regex = new RegExp(`^${regexPattern}$`, 'is');
   return regex.test(spanName);
 }
