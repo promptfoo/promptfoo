@@ -446,7 +446,7 @@ export async function readFilters(
 ): Promise<NunjucksFilterMap> {
   const ret: NunjucksFilterMap = {};
   for (const [name, filterPath] of Object.entries(filters)) {
-    const globPath = path.join(basePath, filterPath);
+    const globPath = path.isAbsolute(filterPath) ? filterPath : path.join(basePath, filterPath);
     const filePaths = globSync(globPath, {
       windowsPathsNoEscape: true,
     });
