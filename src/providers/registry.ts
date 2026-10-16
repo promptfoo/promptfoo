@@ -102,6 +102,7 @@ import {
   ReplicateModerationProvider,
   ReplicateProvider,
 } from './replicate';
+import { createRequestyProvider } from './requesty';
 import { RubyProvider } from './rubyCompletion';
 import { createScriptBasedProviderFactory } from './scriptBasedProvider';
 import { ScriptCompletionProvider } from './scriptCompletion';
@@ -1444,6 +1445,7 @@ export const providerMap: ProviderFactory[] = [
       );
     },
   },
+  configuredProviderFactory('requesty:', () => createRequestyProvider),
   {
     test: (providerPath: string) => providerPath.startsWith('modelslab:'),
     create: async (
