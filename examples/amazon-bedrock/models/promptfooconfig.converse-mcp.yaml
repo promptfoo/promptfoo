@@ -8,12 +8,11 @@ prompts:
     {{question}}
 
 providers:
-  - id: bedrock:converse:us.anthropic.claude-sonnet-4-6
-    label: Claude Sonnet 4.6 with MCP
+  - id: bedrock:converse:us.anthropic.claude-sonnet-5
+    label: Claude Sonnet 5 with MCP
     config:
       region: us-east-1
       maxTokens: 1024
-      temperature: 0
       mcp:
         enabled: true
         servers:

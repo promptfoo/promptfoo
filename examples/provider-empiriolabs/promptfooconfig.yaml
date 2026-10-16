@@ -7,14 +7,14 @@ prompts:
 
 providers:
   - id: openai:chat:qwen3-7-plus
-    label: Qwen 3.7 Plus via EmpirioLabs
+    label: Qwen 3.7 Plus via EmpirioLabs AI
     config:
       apiBaseUrl: https://api.empiriolabs.ai/v1
       apiKeyEnvar: EMPIRIOLABS_API_KEY
       max_tokens: 1000
 
-  - id: openai:chat:deepseek-v4-flash
-    label: DeepSeek V4 Flash via EmpirioLabs
+  - id: openai:chat:deepseek-v4-1-flash
+    label: DeepSeek V4.1 Flash via EmpirioLabs AI
     config:
       apiBaseUrl: https://api.empiriolabs.ai/v1
       apiKeyEnvar: EMPIRIOLABS_API_KEY

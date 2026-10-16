@@ -1,4 +1,4 @@
-# provider-empiriolabs (EmpirioLabs via OpenAI)
+# provider-empiriolabs (EmpirioLabs AI)
 
 This example compares two EmpirioLabs chat models through Promptfoo's generic OpenAI-compatible
 provider.

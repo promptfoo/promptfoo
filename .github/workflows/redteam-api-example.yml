@@ -1,0 +1,47 @@
+# The shared Examples runner currently assumes requirements.txt and Ubuntu.
+# Keep this pyproject/uvx integration separate to retain real Windows MCP coverage.
+name: Redteam API example
+
+on:
+  pull_request:
+    paths: &watched-paths
+      - 'examples/redteam-api-top-10/**'
+      - '.github/workflows/redteam-api-example.yml'
+  push:
+    branches: [main]
+    paths: *watched-paths
+
+permissions:
+  contents: read
+
+jobs:
+  mcp-client:
+    name: MCP client on ${{ matrix.os }} / Python ${{ matrix.python-version }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            python-version: '3.10'
+          - os: ubuntu-latest
+            python-version: '3.14'
+          - os: windows-latest
+            python-version: '3.14'
+    defaults:
+      run:
+        working-directory: examples/redteam-api-top-10
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install example and launcher
+        run: |
+          python -m pip install . uv==0.12.18
+          python -m pip check
+      - name: Exercise the real SQLite MCP server
+        run: python -m unittest discover -s tests -v

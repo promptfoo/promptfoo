@@ -4,7 +4,7 @@ import { TooltipProvider } from '@app/components/ui/tooltip';
 import { ToastProvider } from '@app/contexts/ToastContext';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter } from 'react-router';
 import { beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 import { useRecentlyUsedPlugins, useRedTeamConfig } from '../hooks/useRedTeamConfig';
 import Plugins from './Plugins';
@@ -76,7 +76,13 @@ vi.mock('./PluginsTab', async () => {
   );
 
   return {
-    default: ({ setSelectedPlugins }: { setSelectedPlugins: (plugins: Set<string>) => void }) => (
+    default: ({
+      setSelectedPlugins,
+      updatePluginConfig,
+    }: {
+      setSelectedPlugins: (plugins: Set<string>) => void;
+      updatePluginConfig: (plugin: string, config: Record<string, unknown>) => void;
+    }) => (
       <div>
         <button type="button" onClick={() => setSelectedPlugins(new Set(DEFAULT_PLUGINS))}>
           Recommended
@@ -86,6 +92,20 @@ vi.mock('./PluginsTab', async () => {
         </button>
         <button type="button" onClick={() => setSelectedPlugins(new Set(RAG_PLUGINS))}>
           RAG
+        </button>
+        <button
+          type="button"
+          onClick={() => setSelectedPlugins(new Set([...DEFAULT_PLUGINS, ...MINIMAL_TEST_PLUGINS]))}
+        >
+          Select all
+        </button>
+        <button
+          type="button"
+          onClick={() =>
+            updatePluginConfig('indirect-prompt-injection', { indirectInjectionVar: 'updated' })
+          }
+        >
+          Save plugin config
         </button>
         <button type="button" onClick={() => setSelectedPlugins(new Set())}>
           Select none
@@ -442,6 +462,27 @@ describe('Plugins - State Management Unit Tests', () => {
   });
 
   describe('setSelectedPlugins - bulk plugin selection', () => {
+    it.each(['Minimal Test', 'Select all'])(
+      'preserves plugin options without config during %s',
+      async (action) => {
+        const user = userEvent.setup();
+        const plugin = { id: 'harmful:self-harm', numTests: 17, severity: 'critical' };
+        const { useRedTeamConfig: realStore } = await vi.importActual<
+          typeof import('../hooks/useRedTeamConfig')
+        >('../hooks/useRedTeamConfig');
+        const initialState = realStore.getState();
+        try {
+          realStore.setState({ config: { ...initialState.config, plugins: [plugin] } });
+          mockUseRedTeamConfig.mockReturnValue(realStore.getState());
+          renderWithProviders(<Plugins onNext={mockOnNext} onBack={mockOnBack} />);
+          await user.click(screen.getByRole('button', { name: action }));
+          expect(realStore.getState().config.plugins).toEqual(expect.arrayContaining([plugin]));
+        } finally {
+          realStore.setState(initialState);
+        }
+      },
+    );
+
     it('should replace all regular plugins with new selection', async () => {
       const user = userEvent.setup();
       mockUseRedTeamConfig.mockReturnValue({
@@ -610,6 +651,36 @@ describe('Plugins - State Management Unit Tests', () => {
   });
 
   describe('updatePluginConfig - update config for individual plugin', () => {
+    it.each([undefined, {}, { indirectInjectionVar: 'old', systemPrompt: 'retained' }])(
+      'preserves plugin options when editing config %j',
+      async (config) => {
+        const user = userEvent.setup();
+        const plugin = {
+          id: 'indirect-prompt-injection',
+          numTests: 17,
+          severity: 'critical',
+          ...(config === undefined ? {} : { config }),
+        };
+        const other = { id: 'bola', numTests: 9, severity: 'low' };
+        const { useRedTeamConfig: realStore } = await vi.importActual<
+          typeof import('../hooks/useRedTeamConfig')
+        >('../hooks/useRedTeamConfig');
+        const initialState = realStore.getState();
+        try {
+          realStore.setState({ config: { ...initialState.config, plugins: [plugin, other] } });
+          mockUseRedTeamConfig.mockReturnValue(realStore.getState());
+          renderWithProviders(<Plugins onNext={mockOnNext} onBack={mockOnBack} />);
+          await user.click(screen.getByRole('button', { name: 'Save plugin config' }));
+          expect(realStore.getState().config.plugins).toEqual([
+            { ...plugin, config: { ...config, indirectInjectionVar: 'updated' } },
+            other,
+          ]);
+        } finally {
+          realStore.setState(initialState);
+        }
+      },
+    );
+
     it('should handle plugin with newly added config', async () => {
       mockUseRedTeamConfig.mockReturnValue({
         config: {

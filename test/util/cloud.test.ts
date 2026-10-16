@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, type MockInstance, vi } from 'vitest';
 import { cloudConfig } from '../../src/globalConfig/cloud';
+import * as globalConfigModule from '../../src/globalConfig/globalConfig';
+import logger, { winstonLogger } from '../../src/logger';
 import * as cloudModule from '../../src/util/cloud';
 import {
   ConfigPermissionError,
@@ -12,6 +14,7 @@ import {
   getProviderFromCloud,
   makeRequest,
   validateLinkedTargetId,
+  withCloudProviderResolver,
 } from '../../src/util/cloud';
 import { fetchWithProxy } from '../../src/util/fetch/index';
 import { checkServerFeatureSupport } from '../../src/util/server';
@@ -52,6 +55,83 @@ describe('cloud utils', () => {
   });
 
   describe('makeRequest', () => {
+    it('should omit credential-bearing error and cause details from failure logs', async () => {
+      mockCloudConfig.getApiHost.mockReturnValue('https://test-user:test-password@example.com');
+      const cause = new Error('Authorization: Bearer test-cause-credential');
+      const error = new Error(
+        'request to https://test-user:test-password@example.com failed: api_key=test-error-credential',
+        { cause },
+      );
+      mockFetchWithProxy.mockRejectedValue(error);
+      const logError = vi.spyOn(winstonLogger, 'error').mockImplementation(() => winstonLogger);
+
+      try {
+        await expect(makeRequest('test/path?api_key=test-query-credential', 'GET')).rejects.toBe(
+          error,
+        );
+        expect(error.cause).toBe(cause);
+        const output = JSON.stringify(logError.mock.calls);
+        expect(output).toContain('[Cloud] Failed to make request');
+        expect(output).toContain('example.com/api/v1/test/path');
+        expect(output).not.toContain('test-user');
+        expect(output).not.toContain('test-password');
+        expect(output).not.toContain('test-query-credential');
+        expect(output).not.toContain('test-error-credential');
+        expect(output).not.toContain('test-cause-credential');
+      } finally {
+        logError.mockRestore();
+      }
+    });
+
+    it('should return the original response without consuming it', async () => {
+      const response = new Response('cloud response');
+      mockFetchWithProxy.mockResolvedValue(response);
+
+      expect(await makeRequest('test/path', 'GET')).toBe(response);
+      expect(response.bodyUsed).toBe(false);
+    });
+
+    it.each([true, false])('should log and rethrow fetch failures (async: %s)', async (async) => {
+      const cause = new Error('connection refused');
+      const error = new Error('fetch failed', { cause });
+      const logError = vi.spyOn(logger, 'error').mockImplementation(() => logger);
+      if (async) {
+        mockFetchWithProxy.mockRejectedValue(error);
+      } else {
+        mockFetchWithProxy.mockImplementation(() => {
+          throw error;
+        });
+      }
+
+      try {
+        await expect(Promise.resolve().then(() => makeRequest('test/path', 'GET'))).rejects.toBe(
+          error,
+        );
+        expect(logError).toHaveBeenCalledWith('[Cloud] Failed to make request', {
+          url: 'https://api.example.com/api/v1/test/path',
+        });
+        expect(error.cause).toBe(cause);
+        expect(logError).toHaveBeenCalledTimes(1);
+      } finally {
+        logError.mockRestore();
+      }
+    });
+
+    it.each([null, undefined, 'network unavailable'])(
+      'should preserve non-Error promise rejections: %s',
+      async (error) => {
+        const logError = vi.spyOn(logger, 'error').mockImplementation(() => logger);
+        mockFetchWithProxy.mockRejectedValue(error);
+
+        try {
+          await expect(makeRequest('test/path', 'GET')).rejects.toBe(error);
+          expect(logError).toHaveBeenCalledTimes(1);
+        } finally {
+          logError.mockRestore();
+        }
+      },
+    );
+
     it('should make request with correct URL and headers', async () => {
       const path = 'test/path';
       const method = 'POST';
@@ -143,17 +223,26 @@ describe('cloud utils', () => {
     });
 
     it('should handle API host with trailing slash', async () => {
-      mockCloudConfig.getApiHost.mockReturnValue('https://api.example.com');
-
-      const path = 'test/path';
-      const method = 'GET';
-
-      await makeRequest(path, method);
-
-      expect(mockFetchWithProxy).toHaveBeenCalledWith(
-        'https://api.example.com/api/v1/test/path',
-        expect.any(Object),
+      const { CloudConfig } = await vi.importActual<typeof import('../../src/globalConfig/cloud')>(
+        '../../src/globalConfig/cloud',
       );
+      const readConfig = vi.spyOn(globalConfigModule, 'readGlobalConfig').mockReturnValue({
+        id: 'test-id',
+        cloud: { apiHost: 'https://api.example.com/' },
+      });
+      try {
+        const config = new CloudConfig();
+        mockCloudConfig.getApiHost.mockImplementation(() => config.getApiHost());
+
+        await makeRequest('test/path', 'GET');
+
+        expect(mockFetchWithProxy).toHaveBeenCalledWith(
+          'https://api.example.com/api/v1/test/path',
+          expect.any(Object),
+        );
+      } finally {
+        readConfig.mockRestore();
+      }
     });
 
     it('should handle path with leading slash', async () => {
@@ -256,12 +345,40 @@ describe('cloud utils', () => {
       );
     });
 
+    it('preserves supported provider overrides when parsing a cloud target', async () => {
+      const env = {
+        AZURE_AI_PROJECT_URL: 'https://project.example.invalid',
+        SNOWFLAKE_ACCOUNT_IDENTIFIER: 'provider-account',
+        GOOGLE_APPLICATION_CREDENTIALS: '/fixture/credentials.json',
+        PROMPTFOO_TRACING_ENABLED: 'false',
+        PROMPTFOO_MAX_CONCURRENCY: '3',
+      };
+      mockFetchWithProxy.mockResolvedValueOnce(Response.json({ config: { id: 'fixture', env } }));
+      expect((await getProviderFromCloud('fixture')).env).toEqual(env);
+    });
+
     it('should throw error when cloud config is not enabled', async () => {
       mockCloudConfig.isEnabled.mockReturnValue(false);
 
       await expect(getProviderFromCloud('test-provider')).rejects.toThrow(
         'Could not fetch Provider test-provider from cloud. Cloud config is not enabled.',
       );
+    });
+
+    it('keeps the existing HTTP environment normalization', async () => {
+      mockFetchWithProxy.mockResolvedValueOnce({
+        json: async () => ({
+          config: {
+            id: 'echo',
+            env: { OPENAI_API_BASE_URL: 'built-in', CUSTOM_TARGET_URL: 'custom' },
+          },
+        }),
+        ok: true,
+      } as Response);
+
+      const provider = await getProviderFromCloud('saved');
+
+      expect(provider.env).toEqual({ OPENAI_API_BASE_URL: 'built-in' });
     });
 
     it('should throw error when provider fetch fails', async () => {
@@ -291,6 +408,70 @@ describe('cloud utils', () => {
       await expect(getProviderFromCloud('test-provider')).rejects.toThrow(
         'Failed to fetch provider from cloud: test-provider.',
       );
+    });
+  });
+
+  describe('withCloudProviderResolver', () => {
+    it('retains custom environment keys from typed prepared options', async () => {
+      const env = Object.freeze({ CUSTOM_TARGET_URL: 'saved', OPENAI_API_BASE_URL: 'built-in' });
+      const provider = await withCloudProviderResolver(
+        () => ({ id: 'echo', env }),
+        () => getProviderFromCloud('saved'),
+      );
+
+      expect(provider.env).toEqual(env);
+      expect(mockFetchWithProxy).not.toHaveBeenCalled();
+    });
+
+    it('still validates built-in environment values from the resolver', async () => {
+      const resolver = vi.fn().mockResolvedValue({ id: 'echo', env: { OPENAI_API_KEY: 42 } });
+
+      await expect(
+        withCloudProviderResolver(resolver, () => getProviderFromCloud('saved')),
+      ).rejects.toThrow();
+      expect(mockFetchWithProxy).not.toHaveBeenCalled();
+    });
+
+    it('preserves the callback result and supplies normalized saved options without HTTP', async () => {
+      mockCloudConfig.isEnabled.mockReturnValue(false);
+      const resolver = vi.fn().mockResolvedValue({ id: 'echo', config: { prefix: 'saved' } });
+
+      expect(withCloudProviderResolver(resolver, () => 7)).toBe(7);
+      const result = await withCloudProviderResolver(resolver, () => getProviderFromCloud('saved'));
+
+      expect(result).toEqual({ id: 'echo', config: { prefix: 'saved' } });
+      expect(resolver).toHaveBeenCalledWith('saved', undefined);
+      expect(mockFetchWithProxy).not.toHaveBeenCalled();
+    });
+
+    it('restores the enclosing resolver after a nested operation succeeds or fails', async () => {
+      const outer = () => ({ id: 'echo', label: 'outer' });
+      const inner = () => ({ id: 'echo', label: 'inner' });
+      await withCloudProviderResolver(outer, async () => {
+        const nested = await withCloudProviderResolver(inner, () => getProviderFromCloud('saved'));
+        expect(nested.label).toBe('inner');
+        await expect(
+          withCloudProviderResolver(inner, async () => {
+            await getProviderFromCloud('saved');
+            throw new Error('operation failed');
+          }),
+        ).rejects.toThrow('operation failed');
+        expect((await getProviderFromCloud('saved')).label).toBe('outer');
+      });
+
+      mockCloudConfig.isEnabled.mockReturnValue(false);
+      await expect(getProviderFromCloud('saved')).rejects.toThrow('Cloud config is not enabled');
+    });
+
+    it('propagates resolver failures without falling back to HTTP', async () => {
+      const error = new Error('prepared provider unavailable');
+      await expect(
+        withCloudProviderResolver(
+          () => Promise.reject(error),
+          () => getProviderFromCloud('saved'),
+        ),
+      ).rejects.toBe(error);
+      expect(mockFetchWithProxy).not.toHaveBeenCalled();
     });
   });
 
@@ -1047,7 +1228,7 @@ describe('cloud utils', () => {
       expect(result.size).toBe(0);
 
       expect(mockFetchWithProxy).toHaveBeenCalledWith(
-        'https://api.example.com/api/v1/custom-policies/?&teamId=team-empty',
+        'https://api.example.com/api/v1/custom-policies/?teamId=team-empty',
         {
           method: 'GET',
           body: undefined,
@@ -1257,7 +1438,7 @@ describe('cloud utils', () => {
     });
 
     it('should handle team IDs with special characters', async () => {
-      const specialTeamId = 'team-123-@#$%';
+      const specialTeamId = 'team-123-@#$%&=';
 
       mockFetchWithProxy.mockResolvedValueOnce({
         ok: true,
@@ -1267,13 +1448,19 @@ describe('cloud utils', () => {
       await getPoliciesFromCloud(['policy-1'], specialTeamId);
 
       expect(mockFetchWithProxy).toHaveBeenCalledWith(
-        `https://api.example.com/api/v1/custom-policies/?id=policy-1&teamId=${specialTeamId}`,
+        'https://api.example.com/api/v1/custom-policies/?id=policy-1&teamId=team-123-%40%23%24%25%26%3D',
         {
           method: 'GET',
           body: undefined,
           headers: { Authorization: 'Bearer test-api-key', 'Content-Type': 'application/json' },
         },
       );
+
+      const requestUrl = new URL(String(mockFetchWithProxy.mock.calls[0][0]));
+      expect(requestUrl.searchParams.getAll('teamId')).toEqual([specialTeamId]);
+      expect(requestUrl.searchParams.getAll('id')).toEqual(['policy-1']);
+      expect([...requestUrl.searchParams.keys()]).toEqual(['id', 'teamId']);
+      expect(requestUrl.hash).toBe('');
     });
 
     it('should handle HTTP error with detailed message', async () => {
@@ -1411,6 +1598,265 @@ describe('cloud utils', () => {
     });
   });
 
+  describe('team resolution', () => {
+    const team = (id: string, organizationId: string, createdAt: string) => ({
+      id,
+      name: id,
+      slug: id,
+      organizationId,
+      createdAt,
+      updatedAt: createdAt,
+    });
+    type SavedTeams = Record<string, string>;
+
+    /** Models CloudConfig's per-organization team selections; `legacy` is the unscoped slot. */
+    const mockTeamState = (
+      organizationId: string | undefined,
+      saved: SavedTeams,
+      teams: ReturnType<typeof team>[] | Error,
+      tokenOrganization: string | Error | null = 'org-1',
+    ) => {
+      const slot = (id?: string) => id ?? 'legacy';
+      const state = { organizationId, saved: { ...saved } };
+      mockCloudConfig.getCurrentOrganizationId.mockImplementation(() => state.organizationId);
+      mockCloudConfig.setCurrentOrganization.mockImplementation((id) => {
+        state.organizationId = id;
+      });
+      mockCloudConfig.getCurrentTeamId.mockImplementation((id) => state.saved[slot(id)]);
+      mockCloudConfig.setCurrentTeamId.mockImplementation((teamId, id) => {
+        state.saved[slot(id)] = teamId;
+      });
+      mockFetchWithProxy.mockImplementation(async (url) => {
+        if (String(url).endsWith('/users/me')) {
+          return tokenOrganization instanceof Error
+            ? new Response(null, { status: 503 })
+            : Response.json({ organization: tokenOrganization ? { id: tokenOrganization } : null });
+        }
+        return teams instanceof Error
+          ? ({ ok: false, statusText: teams.message } as Response)
+          : ({ ok: true, json: () => Promise.resolve(teams) } as Response);
+      });
+      return state;
+    };
+
+    describe('resolveTeamId', () => {
+      it.each<{
+        scenario: string;
+        organizationId?: string;
+        saved: SavedTeams;
+        teams: ReturnType<typeof team>[] | Error;
+        tokenOrganization?: string | Error | null;
+        fallbackToDefault?: boolean;
+        expected: { team?: string; error?: string; saved: SavedTeams; organizationId?: string };
+      }>([
+        {
+          scenario: 'returns an accessible saved team without changing it',
+          organizationId: 'org-1',
+          saved: { 'org-1': 'selected' },
+          teams: [team('older', 'org-1', '2023'), team('selected', 'org-1', '2024')],
+          expected: { team: 'selected', saved: { 'org-1': 'selected' } },
+        },
+        {
+          scenario: 'keeps the saved team when the lookup fails',
+          organizationId: 'org-1',
+          saved: { 'org-1': 'selected' },
+          teams: new Error('Service Unavailable'),
+          expected: {
+            error: 'Failed to get user teams: Service Unavailable',
+            saved: { 'org-1': 'selected' },
+          },
+        },
+        {
+          scenario: 'replaces a stale team with the oldest team in the current organization',
+          organizationId: 'org-1',
+          saved: { 'org-1': 'removed', 'org-2': 'kept' },
+          teams: [
+            team('kept', 'org-2', '2021'),
+            team('newer', 'org-1', '2024'),
+            team('oldest', 'org-1', '2023'),
+          ],
+          expected: { team: 'oldest', saved: { 'org-1': 'oldest', 'org-2': 'kept' } },
+        },
+        {
+          scenario: 'treats a saved team from another organization as stale',
+          organizationId: 'org-1',
+          saved: { 'org-1': 'org-2-team' },
+          teams: [team('org-2-team', 'org-2', '2022'), team('org-1-team', 'org-1', '2023')],
+          expected: { team: 'org-1-team', saved: { 'org-1': 'org-1-team' } },
+        },
+        {
+          scenario: 'defaults to the current organization when nothing is saved',
+          organizationId: 'org-1',
+          saved: { 'org-2': 'kept' },
+          teams: [team('kept', 'org-2', '2021'), team('own', 'org-1', '2024')],
+          expected: { team: 'own', saved: { 'org-1': 'own', 'org-2': 'kept' } },
+        },
+        {
+          scenario: 'refuses to fall back into another organization',
+          organizationId: 'org-1',
+          saved: { 'org-1': 'removed', 'org-2': 'kept' },
+          teams: [team('kept', 'org-2', '2021'), team('oldest', 'org-2', '2020')],
+          expected: {
+            error:
+              "No accessible teams in organization 'org-1'. Log in with an API key for the organization you want to use:",
+            saved: { 'org-1': 'removed', 'org-2': 'kept' },
+          },
+        },
+        {
+          scenario: 'migrates a stale legacy selection only to the token organization',
+          saved: { legacy: 'removed' },
+          teams: [team('oldest', 'org-2', '2022'), team('own', 'org-1', '2024')],
+          expected: {
+            team: 'own',
+            saved: { legacy: 'removed', 'org-1': 'own' },
+            organizationId: 'org-1',
+          },
+        },
+        {
+          scenario: 'migrates an accessible legacy selection to the token organization',
+          saved: { legacy: 'selected' },
+          teams: [team('selected', 'org-1', '2024'), team('oldest', 'org-2', '2020')],
+          expected: {
+            team: 'selected',
+            saved: { legacy: 'selected', 'org-1': 'selected' },
+            organizationId: 'org-1',
+          },
+        },
+        {
+          scenario: 'does not change legacy state if the token organization lookup fails',
+          saved: { legacy: 'removed' },
+          teams: [team('other', 'org-2', '2022')],
+          tokenOrganization: new Error('Service Unavailable'),
+          expected: {
+            error: 'Could not determine the current organization',
+            saved: { legacy: 'removed' },
+          },
+        },
+        {
+          scenario:
+            'does not use a foreign team when a legacy user has no token-organization teams',
+          saved: { legacy: 'removed' },
+          teams: [team('other', 'org-2', '2022')],
+          expected: {
+            error: "No accessible teams in organization 'org-1'",
+            saved: { legacy: 'removed' },
+          },
+        },
+        {
+          scenario: 'does not replace a stale team when fallback is disabled',
+          organizationId: 'org-1',
+          saved: { 'org-1': 'removed' },
+          teams: [team('oldest', 'org-1', '2023')],
+          fallbackToDefault: false,
+          expected: {
+            error: 'No team specified and no default available',
+            saved: { 'org-1': 'removed' },
+          },
+        },
+      ])(
+        '$scenario',
+        async ({
+          organizationId,
+          saved,
+          teams,
+          tokenOrganization,
+          fallbackToDefault,
+          expected,
+        }) => {
+          const state = mockTeamState(organizationId, saved, teams, tokenOrganization);
+
+          const result = cloudModule.resolveTeamId(undefined, fallbackToDefault);
+
+          await (expected.error
+            ? expect(result).rejects.toThrow(expected.error)
+            : expect(result).resolves.toMatchObject({ id: expected.team }));
+          expect(state).toEqual({
+            organizationId: expected.organizationId ?? organizationId,
+            saved: expected.saved,
+          });
+        },
+      );
+    });
+
+    describe('resolveTeamFromIdentifier', () => {
+      const teams = [
+        team('other-default', 'org-2', '2022'),
+        team('own-default', 'org-1', '2023'),
+        team('elsewhere', 'org-2', '2024'),
+        { ...team('own-name', 'org-1', '2024'), name: 'other-id-name' },
+        { ...team('own-slug', 'org-1', '2024'), slug: 'other-id-slug' },
+        team('other-id-name', 'org-2', '2024'),
+        team('other-id-slug', 'org-2', '2024'),
+      ].map((t) => ({ ...t, name: t.id.endsWith('default') ? 'Default' : t.name }));
+
+      it.each([
+        ['prefers the current organization when names collide', 'default', 'own-default'],
+        ['still finds a team that exists only in another organization', 'elsewhere', 'elsewhere'],
+        ['matches an exact ID in any organization', 'other-default', 'other-default'],
+        [
+          'prefers an exact ID over a name in the current organization',
+          'other-id-name',
+          'other-id-name',
+        ],
+        [
+          'prefers an exact ID over a slug in the current organization',
+          'other-id-slug',
+          'other-id-slug',
+        ],
+      ])('%s', async (_scenario, identifier, expected) => {
+        mockTeamState('org-1', {}, teams);
+
+        await expect(cloudModule.resolveTeamFromIdentifier(identifier)).resolves.toMatchObject({
+          id: expected,
+        });
+      });
+    });
+  });
+
+  describe('getOrgContext', () => {
+    const tokenOrganization = { id: 'org-1', name: 'Token Organization' };
+
+    it.each([
+      ['org-2', 'org-2', 'Selected Team', 'org-2', 'Selected Team'],
+      ['org-2', 'org-1', 'Wrong Team', 'org-2', undefined],
+      ['org-1', 'org-1', 'Token Organization', 'Token Organization', undefined],
+      [undefined, 'org-1', 'Legacy Team', 'Token Organization', 'Legacy Team'],
+    ])(
+      'uses the effective organization %s and only its own team',
+      async (selected, teamOrg, teamName, organizationName, expectedTeamName) => {
+        mockCloudConfig.isEnabled.mockReturnValue(true);
+        mockCloudConfig.getCurrentOrganizationId.mockReturnValue(selected);
+        mockCloudConfig.getCurrentTeamId.mockImplementation((id) =>
+          id === (selected ?? tokenOrganization.id) ? 'team-id' : undefined,
+        );
+        mockFetchWithProxy
+          .mockResolvedValueOnce(Response.json({ organization: tokenOrganization }))
+          .mockResolvedValueOnce(
+            Response.json([{ id: 'team-id', name: teamName, organizationId: teamOrg }]),
+          );
+
+        await expect(cloudModule.getOrgContext()).resolves.toEqual({
+          organizationName,
+          teamName: expectedTeamName,
+        });
+        expect(mockCloudConfig.getCurrentTeamId).toHaveBeenCalledWith(
+          selected ?? tokenOrganization.id,
+        );
+      },
+    );
+
+    it('still names the selected organization when team lookup fails', async () => {
+      mockCloudConfig.isEnabled.mockReturnValue(true);
+      mockCloudConfig.getCurrentOrganizationId.mockReturnValue('org-2');
+      mockCloudConfig.getCurrentTeamId.mockReturnValue('team-id');
+      mockFetchWithProxy
+        .mockResolvedValueOnce(Response.json({ organization: tokenOrganization }))
+        .mockResolvedValueOnce(new Response(null, { status: 503 }));
+
+      await expect(cloudModule.getOrgContext()).resolves.toEqual({ organizationName: 'org-2' });
+    });
+  });
+
   describe('checkCloudPermissions', () => {
     beforeEach(() => {
       mockCloudConfig.isEnabled.mockReturnValue(true);
@@ -1526,6 +1972,69 @@ describe('cloud utils', () => {
       await expect(checkCloudPermissions({ providers: ['test-provider'] })).rejects.toThrow(
         'Permission denied: config unknown: Unknown error',
       );
+    });
+
+    it.each([
+      { body: null },
+      { body: false },
+      { body: 0 },
+      { body: 'Forbidden' },
+      { body: [] },
+      { body: [{ message: 'Forbidden' }] },
+      { body: { errors: [null] } },
+      { body: { errors: [false] } },
+      { body: { errors: [[]] } },
+      { body: { errors: [{}] } },
+      { body: { errors: [{ type: 'permission', id: 'denied', message: null }] } },
+    ])('rejects 403 responses with malformed error data: $body', async ({ body }) => {
+      mockFetchWithProxy.mockResolvedValueOnce(Response.json(body, { status: 403 }));
+
+      const result = checkCloudPermissions({ providers: ['test-provider'] });
+      await expect(result).rejects.toBeInstanceOf(ConfigPermissionError);
+      await expect(result).rejects.toThrow('Permission denied: config unknown: Unknown error');
+    });
+
+    it.each([
+      { body: {} },
+      { body: { errors: [] } },
+      { body: { errors: null } },
+      { body: { error: { message: 'Forbidden' } } },
+    ])('uses a fallback message for missing error details: $body', async ({ body }) => {
+      mockFetchWithProxy.mockResolvedValueOnce(Response.json(body, { status: 403 }));
+
+      const result = checkCloudPermissions({ providers: ['test-provider'] });
+      await expect(result).rejects.toBeInstanceOf(ConfigPermissionError);
+      await expect(result).rejects.toThrow(
+        'Permission denied: config unknown: Permission check failed',
+      );
+    });
+
+    it('preserves legacy and structured error messages in a 403 response', async () => {
+      mockFetchWithProxy.mockResolvedValueOnce(
+        Response.json(
+          {
+            errors: [
+              'Legacy error',
+              { type: 'permission', id: 'access_denied', message: 'Access denied' },
+            ],
+          },
+          { status: 403 },
+        ),
+      );
+
+      const result = checkCloudPermissions({ providers: ['test-provider'] });
+      await expect(result).rejects.toBeInstanceOf(ConfigPermissionError);
+      await expect(result).rejects.toThrow(
+        'Permission denied: config unknown: Legacy error, permission access_denied: Access denied',
+      );
+    });
+
+    it('continues for a non-403 response with malformed error data', async () => {
+      mockFetchWithProxy.mockResolvedValueOnce(Response.json(null, { status: 500 }));
+
+      await expect(
+        checkCloudPermissions({ providers: ['test-provider'] }),
+      ).resolves.toBeUndefined();
     });
 
     it('should log warning and continue for non-403 errors', async () => {

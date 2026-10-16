@@ -5,6 +5,7 @@ import {
   ReplicateModerationProvider,
   ReplicateProvider,
 } from '../../src/providers/replicate';
+import { createApiKeyOptions } from '../factories/literalFixtures';
 
 vi.mock('../../src/cache', async (importOriginal) => ({
   ...(await importOriginal()),
@@ -340,9 +341,10 @@ describe('Replicate moderation cancellation', () => {
   it('forwards cancellation to its prediction call', async () => {
     const controller = new AbortController();
     controller.abort(new Error('fixture abort'));
-    const result = new ReplicateModerationProvider('owner/model', {
-      config: { apiKey: 'fixture' },
-    }).callModerationApi('Hello', 'World', undefined, { abortSignal: controller.signal });
+    const result = new ReplicateModerationProvider(
+      'owner/model',
+      createApiKeyOptions('fixture'),
+    ).callModerationApi('Hello', 'World', undefined, { abortSignal: controller.signal });
     await expect(result).rejects.toMatchObject({ name: 'AbortError', message: 'fixture abort' });
     expect(fetchWithCache).not.toHaveBeenCalled();
   });
@@ -350,9 +352,7 @@ describe('Replicate moderation cancellation', () => {
   it('cancels moderation polling when call options carry a signal', async () => {
     vi.mocked(fetchWithCache).mockResolvedValue(reply('processing'));
     const controller = new AbortController();
-    const provider = new ReplicateModerationProvider('owner/model', {
-      config: { apiKey: 'fixture' },
-    });
+    const provider = new ReplicateModerationProvider('owner/model', createApiKeyOptions('fixture'));
     const result = provider
       .callModerationApi('Hello', 'World', undefined, {
         abortSignal: controller.signal,
@@ -375,9 +375,7 @@ describe('Replicate moderation cancellation', () => {
   it('preserves successful moderation with an explicit signal', async () => {
     vi.mocked(fetchWithCache).mockResolvedValue(reply('succeeded', 'safe'));
     const explicitSignal = new AbortController().signal;
-    const provider = new ReplicateModerationProvider('owner/model', {
-      config: { apiKey: 'fixture' },
-    });
+    const provider = new ReplicateModerationProvider('owner/model', createApiKeyOptions('fixture'));
     await expect(
       provider.callModerationApi('Hello', 'World', undefined, { abortSignal: explicitSignal }),
     ).resolves.toMatchObject({ flags: [] });
@@ -386,9 +384,7 @@ describe('Replicate moderation cancellation', () => {
 
   it('reports transport failures as API errors rather than malformed moderation', async () => {
     vi.mocked(fetchWithCache).mockRejectedValue(new Error('fixture transport failure'));
-    const provider = new ReplicateModerationProvider('owner/model', {
-      config: { apiKey: 'fixture' },
-    });
+    const provider = new ReplicateModerationProvider('owner/model', createApiKeyOptions('fixture'));
     await expect(provider.callModerationApi('Hello', 'World')).resolves.toMatchObject({
       error: 'API call error: Error: fixture transport failure',
     });
@@ -398,16 +394,12 @@ describe('Replicate moderation cancellation', () => {
     const error = new Error('transport aborted');
     error.name = 'AbortError';
     vi.mocked(fetchWithCache).mockRejectedValue(error);
-    const provider = new ReplicateModerationProvider('owner/model', {
-      config: { apiKey: 'fixture' },
-    });
+    const provider = new ReplicateModerationProvider('owner/model', createApiKeyOptions('fixture'));
     await expect(provider.callModerationApi('Hello', 'World')).rejects.toBe(error);
   });
 
   it('identifies a rejected prediction call as an API failure', async () => {
-    const provider = new ReplicateModerationProvider('owner/model', {
-      config: { apiKey: 'fixture' },
-    });
+    const provider = new ReplicateModerationProvider('owner/model', createApiKeyOptions('fixture'));
     vi.spyOn(provider, 'callApi').mockRejectedValue(new Error('fixture configuration failure'));
     await expect(provider.callModerationApi('Hello', 'World')).resolves.toEqual({
       error: 'API call error: Error: fixture configuration failure',
@@ -417,9 +409,10 @@ describe('Replicate moderation cancellation', () => {
   it('preserves moderation parsing on a successful signalled call', async () => {
     vi.mocked(fetchWithCache).mockResolvedValue(reply('succeeded', 'unsafe\nS1,S2'));
     const signal = new AbortController().signal;
-    const result = await new ReplicateModerationProvider('owner/model', {
-      config: { apiKey: 'fixture' },
-    }).callModerationApi('Hello', 'World', undefined, { abortSignal: signal });
+    const result = await new ReplicateModerationProvider(
+      'owner/model',
+      createApiKeyOptions('fixture'),
+    ).callModerationApi('Hello', 'World', undefined, { abortSignal: signal });
     expect(result.flags?.map((flag) => flag.code)).toEqual(['S1', 'S2']);
     expect(vi.mocked(fetchWithCache).mock.calls[0][1]?.signal).toBe(signal);
   });

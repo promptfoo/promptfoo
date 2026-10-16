@@ -28,7 +28,7 @@ import {
   SelectValue,
 } from '@app/components/ui/select';
 import { Switch } from '@app/components/ui/switch';
-import Prism from '@app/lib/prism';
+import { highlightJS } from '@app/lib/codeHighlight';
 import { cn } from '@app/lib/utils';
 import { callApi } from '@app/utils/api';
 import * as yaml from 'js-yaml';
@@ -76,18 +76,6 @@ interface GeneratedConfig {
     sessionParser?: string;
   };
 }
-
-const highlightJS = (code: string): string => {
-  try {
-    const grammar = Prism?.languages?.javascript;
-    if (!grammar) {
-      return code;
-    }
-    return Prism.highlight(code, grammar, 'javascript');
-  } catch {
-    return code;
-  }
-};
 
 const HttpEndpointConfiguration = ({
   selectedTarget,

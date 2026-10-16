@@ -1,19 +1,20 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: 'Advanced reasoning with Mistral Magistral models'
+description: 'Compare Mistral reasoning models'
 
 providers:
-  - id: mistral:magistral-medium-latest
-    label: magistral-medium
+  - id: mistral:mistral-medium-3-5
+    label: mistral-medium-3-5
     config:
+      reasoning_effort: high
       temperature: 0.7
       top_p: 0.95
       max_tokens: 40960
 
-  # The `magistral-small-latest` alias now resolves to Mistral Small 4, so use the
-  # canonical id. Small 4 solves these with chain-of-thought when prompted to.
+  # Use Small 4 with explicit reasoning instead of the deprecated Magistral snapshot.
   - id: mistral:mistral-small-latest
     label: mistral-small-4
     config:
+      reasoning_effort: high
       temperature: 0.7
       top_p: 0.95
       max_tokens: 40960
@@ -21,10 +22,12 @@ providers:
 prompts:
   - 'Think through this problem step by step: {{problem}}'
 
+defaultTest:
+  options:
+    provider: mistral:mistral-large-latest
+
 tests:
-  # Reasoning models keep their working in a separate (stripped) thinking chunk and format
-  # final answers with LaTeX, so correctness is graded with a model rubric rather than brittle
-  # substring matching.
+  # A model rubric accepts equivalent numeric answers and formatting.
   - vars:
       problem: 'A farmer has chickens and rabbits in a pen. There are 30 heads and 88 legs total. How many chickens and how many rabbits are there?'
     assert:

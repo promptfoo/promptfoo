@@ -7,7 +7,7 @@ import { Label } from '@app/components/ui/label';
 import { NumberInput } from '@app/components/ui/number-input';
 import { Switch } from '@app/components/ui/switch';
 import { Textarea } from '@app/components/ui/textarea';
-import Prism from '@app/lib/prism';
+import { highlightJS } from '@app/lib/codeHighlight';
 import { cn } from '@app/lib/utils';
 import dedent from 'dedent';
 import {
@@ -46,18 +46,6 @@ const hasRawWebSocketProtocolHeader = (headers: unknown): boolean => {
     typeof headers === 'object' &&
     Object.keys(headers).some((key) => key.toLowerCase() === 'sec-websocket-protocol')
   );
-};
-
-const highlightJS = (code: string): string => {
-  try {
-    const grammar = Prism?.languages?.javascript;
-    if (!grammar) {
-      return code;
-    }
-    return Prism.highlight(code, grammar, 'javascript');
-  } catch {
-    return code;
-  }
 };
 
 const WebSocketEndpointConfiguration = ({

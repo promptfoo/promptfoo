@@ -1,10 +1,11 @@
-import { createHash } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as fsPromises from 'node:fs/promises';
 import * as path from 'node:path';
+import { setTimeout as sleep } from 'node:timers/promises';
 
 import logger from '../logger';
 import { getConfigDirectoryPath } from '../util/config/manage';
+import { sha256 } from '../util/createHash';
 import { BLOB_SCHEME, DEFAULT_FILESYSTEM_SUBDIR } from './constants';
 
 import type {
@@ -21,12 +22,27 @@ interface FilesystemProviderConfig {
 
 const BLOB_HASH_REGEX = /^[a-f0-9]{64}$/i;
 
-function computeHash(data: Buffer): string {
-  return createHash('sha256').update(data).digest('hex');
-}
-
 function buildUri(hash: string): string {
   return `${BLOB_SCHEME}${hash}`;
+}
+
+async function publishFile(source: string, destination: string): Promise<void> {
+  for (let retry = 0; ; retry++) {
+    try {
+      await fsPromises.rename(source, destination);
+      return;
+    } catch (error) {
+      if (
+        process.platform !== 'win32' ||
+        retry === 5 ||
+        !['EPERM', 'EACCES', 'EBUSY'].includes((error as NodeJS.ErrnoException)?.code ?? '')
+      ) {
+        throw error;
+      }
+      // Windows can briefly lock a competing writer's destination. Keep replacement atomic.
+      await sleep(50 * (retry + 1));
+    }
+  }
 }
 
 export class FilesystemBlobStorageProvider implements BlobStorageProvider {
@@ -65,7 +81,7 @@ export class FilesystemBlobStorageProvider implements BlobStorageProvider {
     return targetPath;
   }
 
-  private hashToPath(hash: string): string {
+  getFilePath(hash: string): string {
     this.assertValidHash(hash);
 
     const dirRelative = path.join(hash.slice(0, 2), hash.slice(2, 4));
@@ -73,39 +89,33 @@ export class FilesystemBlobStorageProvider implements BlobStorageProvider {
     return this.resolvePathInBase(fileRelative);
   }
 
-  private async ensureHashDir(hash: string): Promise<void> {
-    this.assertValidHash(hash);
-
-    const dirRelative = path.join(hash.slice(0, 2), hash.slice(2, 4));
-    const dirPath = this.resolvePathInBase(dirRelative);
-    await fsPromises.mkdir(dirPath, { recursive: true });
-  }
-
   private metadataPath(filePath: string): string {
     return `${filePath}.meta.json`;
   }
 
   async store(data: Buffer, mimeType: string): Promise<BlobStoreResult> {
-    const hash = computeHash(data);
-    await this.ensureHashDir(hash);
-    const filePath = this.hashToPath(hash);
+    const hash = sha256(data);
+    const filePath = this.getFilePath(hash);
+    await fsPromises.mkdir(path.dirname(filePath), { recursive: true });
 
     // Check if file already exists (deduplication)
     try {
       await fsPromises.access(filePath);
       const meta = await this.readMetadata(filePath);
-      const ref = this.buildRef(
-        hash,
-        meta?.mimeType ?? mimeType,
-        meta?.sizeBytes ?? data.length,
-        meta?.provider ?? this.providerId,
-      );
-      return { ref, deduplicated: true };
+      if (meta && typeof meta.mimeType === 'string' && meta.mimeType.length > 0) {
+        const ref = this.buildRef(
+          hash,
+          meta.mimeType,
+          meta.sizeBytes ?? data.length,
+          meta.provider ?? this.providerId,
+        );
+        return { ref, deduplicated: true };
+      }
+      // A concurrent delete may remove metadata before staged bytes are published.
+      // Republish incomplete blobs instead of making missing metadata permanent.
     } catch {
       // File doesn't exist, proceed with storing
     }
-
-    await fsPromises.writeFile(filePath, data);
 
     const metadata: BlobMetadata = {
       mimeType,
@@ -114,7 +124,27 @@ export class FilesystemBlobStorageProvider implements BlobStorageProvider {
       provider: this.providerId,
       key: filePath,
     };
-    await fsPromises.writeFile(this.metadataPath(filePath), JSON.stringify(metadata, null, 2));
+    // Stage complete bytes and metadata before publishing either file.
+    // Each writer owns a staging directory on the same filesystem, including across processes.
+    const stagingDir = await fsPromises.mkdtemp(`${filePath}.`);
+    try {
+      const stagedData = path.join(stagingDir, 'data');
+      const stagedMetadata = path.join(stagingDir, 'metadata.json');
+      await fsPromises.writeFile(stagedData, data, { flag: 'wx' });
+      await fsPromises.writeFile(stagedMetadata, JSON.stringify(metadata, null, 2), {
+        flag: 'wx',
+      });
+      // Publish complete bytes first: a failed data rename must not change another writer's MIME.
+      await publishFile(stagedData, filePath);
+      await publishFile(stagedMetadata, this.metadataPath(filePath));
+    } finally {
+      try {
+        await fsPromises.rm(stagingDir, { recursive: true, force: true });
+      } catch (error) {
+        // Never mask the original write error or remove another writer's published files.
+        logger.warn('[BlobFS] Failed to remove staging directory', { error });
+      }
+    }
 
     return {
       ref: this.buildRef(hash, mimeType, data.length, this.providerId),
@@ -123,7 +153,7 @@ export class FilesystemBlobStorageProvider implements BlobStorageProvider {
   }
 
   async getByHash(hash: string): Promise<StoredBlob> {
-    const filePath = this.hashToPath(hash);
+    const filePath = this.getFilePath(hash);
 
     let data: Buffer;
     try {
@@ -149,7 +179,7 @@ export class FilesystemBlobStorageProvider implements BlobStorageProvider {
 
   async exists(hash: string): Promise<boolean> {
     try {
-      const filePath = this.hashToPath(hash);
+      const filePath = this.getFilePath(hash);
       await fsPromises.access(filePath);
       return true;
     } catch {
@@ -158,27 +188,22 @@ export class FilesystemBlobStorageProvider implements BlobStorageProvider {
   }
 
   async deleteByHash(hash: string): Promise<void> {
+    let filePath: string;
     try {
-      const filePath = this.hashToPath(hash);
-      const metaPath = this.metadataPath(filePath);
-
-      // Delete files (ignore ENOENT errors)
-      try {
-        await fsPromises.unlink(filePath);
-      } catch (error) {
-        if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
-          throw error;
-        }
-      }
-      try {
-        await fsPromises.unlink(metaPath);
-      } catch (error) {
-        if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
-          throw error;
-        }
-      }
+      filePath = this.getFilePath(hash);
     } catch {
-      // Ignore invalid hashes/path traversal attempts
+      // Invalid hashes and path traversal attempts remain a no-op.
+      return;
+    }
+
+    for (const targetPath of [filePath, this.metadataPath(filePath)]) {
+      try {
+        await fsPromises.unlink(targetPath);
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+          throw error;
+        }
+      }
     }
   }
 

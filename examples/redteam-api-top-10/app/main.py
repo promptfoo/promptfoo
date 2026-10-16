@@ -176,10 +176,10 @@ async def api_info():
                 "DELETE /chat/session/{id}": "Clear a session",
             },
             "auth": {
-                "POST /auth/token": "Generate JWT token for demo user",
+                "POST /auth/login": "Log in with demo credentials to obtain a JWT",
                 "POST /auth/validate": "Validate a token",
-                "GET /auth/demo-users": "List available demo users",
-                "GET /auth/demo-tokens": "Get JWT tokens for all demo users",
+                "GET /auth/me": "Get the authenticated user's profile",
+                "GET /auth/demo-credentials": "Get demo login credentials",
             },
             "mock_services": {
                 "GET /mock/shipping/track/{tracking}": "Track a package",
@@ -188,7 +188,7 @@ async def api_info():
             },
         },
         "demo_users": ["alice", "bob", "charlie", "diana", "eve"],
-        "hint": "In mock auth mode, use demo user names directly as tokens",
+        "hint": "Get credentials from /auth/demo-credentials, then POST them to /auth/login for a JWT",
     }
 
 

@@ -6,9 +6,10 @@ sidebar_position: 42
 
 # EmpirioLabs AI
 
-[EmpirioLabs](https://empiriolabs.ai/) exposes OpenAI-compatible chat, Responses, and embedding
-endpoints for models from multiple families. Promptfoo connects to those endpoints through its
-existing [OpenAI provider](/docs/providers/openai/) with a custom base URL; there is no separate
+[EmpirioLabs AI](https://empiriolabs.ai/) is a specialized AI inference and integration provider.
+Its catalog spans text, image, audio, video, transcription, embedding, reranking, research, and 3D
+models. Promptfoo connects to its chat, embedding, and transcription models through the existing
+[OpenAI provider](/docs/providers/openai/) with a custom base URL; there is no separate
 `empiriolabs:` provider prefix.
 
 ## Setup
@@ -35,14 +36,14 @@ prompts:
 
 providers:
   - id: openai:chat:qwen3-7-plus
-    label: Qwen 3.7 Plus via EmpirioLabs
+    label: Qwen 3.7 Plus via EmpirioLabs AI
     config:
       apiBaseUrl: https://api.empiriolabs.ai/v1
       apiKeyEnvar: EMPIRIOLABS_API_KEY
       max_tokens: 1000
 
-  - id: openai:chat:deepseek-v4-flash
-    label: DeepSeek V4 Flash via EmpirioLabs
+  - id: openai:chat:deepseek-v4-1-flash
+    label: DeepSeek V4.1 Flash via EmpirioLabs AI
     config:
       apiBaseUrl: https://api.empiriolabs.ai/v1
       apiKeyEnvar: EMPIRIOLABS_API_KEY
@@ -126,11 +127,11 @@ these model IDs. Check the current rate with
 
 EmpirioLabs models expose different reasoning and tool controls. Use `passthrough` for fields that
 are not part of Promptfoo's shared OpenAI configuration, and only send fields listed for the exact
-model. For example, DeepSeek V4 Flash accepts `reasoning_effort`:
+model. For example, DeepSeek V4.1 Flash accepts `reasoning_effort`:
 
 ```yaml
 providers:
-  - id: openai:chat:deepseek-v4-flash
+  - id: openai:chat:deepseek-v4-1-flash
     config:
       apiBaseUrl: https://api.empiriolabs.ai/v1
       apiKeyEnvar: EMPIRIOLABS_API_KEY
@@ -145,16 +146,16 @@ overrides for model IDs that are not in its built-in OpenAI pricing table:
 
 ```yaml
 providers:
-  - id: openai:chat:deepseek-v4-flash
+  - id: openai:chat:deepseek-v4-1-flash
     config:
       apiBaseUrl: https://api.empiriolabs.ai/v1
       apiKeyEnvar: EMPIRIOLABS_API_KEY
-      inputCost: 0.00000014
-      outputCost: 0.00000028
+      inputCost: 0.0000003
+      outputCost: 0.0000012
 ```
 
-The values above correspond to $0.14 input and $0.28 output per million tokens. Verify current rates
-with `GET https://api.empiriolabs.ai/v1/models/deepseek-v4-flash` before using cost as a release
+The values above correspond to $0.30 input and $1.20 output per million tokens. Verify current rates
+with `GET https://api.empiriolabs.ai/v1/models/deepseek-v4-1-flash` before using cost as a release
 gate.
 
 ## Example

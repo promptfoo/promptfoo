@@ -17,7 +17,7 @@ import { usePageMeta } from '@app/hooks/usePageMeta';
 import { cn } from '@app/lib/utils';
 import { useUserStore } from '@app/stores/userStore';
 import { callApi } from '@app/utils/api';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router';
 
 interface LoginState {
   success: boolean;

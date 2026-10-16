@@ -166,6 +166,15 @@ describe('OpenAI Provider', () => {
       expect(customProvider.getApiKey()).toBe('custom-key');
     });
 
+    it('prefers a provider-scoped custom key over the suite key', () => {
+      mockProcessEnv({ DASHSCOPE_API_KEY: 'suite-key' });
+      const scopedProvider = new OpenAiGenericProvider('test-model', {
+        config: { apiKeyEnvar: 'DASHSCOPE_API_KEY' },
+        env: { DASHSCOPE_API_KEY: 'provider-key' },
+      });
+      expect(scopedProvider.getApiKey()).toBe('provider-key');
+    });
+
     it('should not fall back to the OpenAI key when a custom env var is configured', () => {
       mockProcessEnv({ OPENAI_API_KEY: 'openai-key' });
       const customProvider = new OpenAiGenericProvider('test-model', {
@@ -173,16 +182,6 @@ describe('OpenAI Provider', () => {
       });
 
       expect(customProvider.getApiKey()).toBeUndefined();
-    });
-
-    it('should prefer provider env overrides for a custom API key variable', () => {
-      mockProcessEnv({ FIREWORKS_API_KEY: 'process-key' });
-      const customProvider = new OpenAiGenericProvider('test-model', {
-        config: { apiKeyEnvar: 'FIREWORKS_API_KEY' },
-        env: { FIREWORKS_API_KEY: 'provider-key' },
-      });
-
-      expect(customProvider.getApiKey()).toBe('provider-key');
     });
 
     it('should fall through to the env var when apiKey is an empty string', () => {
