@@ -21,16 +21,46 @@ export function stripText(text: string) {
   return text.replace(ANSI_ESCAPE, '');
 }
 
+/**
+ * Splits a command line into arguments, shell-style but without running a shell:
+ * - whitespace outside quotes separates arguments
+ * - `'...'` and `"..."` group text; adjacent segments join (`--a="b c"` -> `--a=b c`)
+ * - empty quotes are kept as empty arguments
+ * - backslashes are always literal (Windows paths like `"C:\dir\"` work), so a quote
+ *   can't be escaped: use the other quote style (`'say "hi"'`)
+ * - a quote with no closing match is kept as a literal character
+ */
 export function parseScriptParts(scriptPath: string): string[] {
-  const scriptPartsRegex = /[^\s"']+|"([^"]*)"|'([^']*)'/g;
-  let match;
-  const scriptParts = [];
+  const parts: string[] = [];
+  let current = '';
+  let inToken = false;
 
-  while ((match = scriptPartsRegex.exec(scriptPath)) !== null) {
-    scriptParts.push(match[1] || match[2] || match[0]);
+  for (let i = 0; i < scriptPath.length; i++) {
+    const char = scriptPath[i];
+    if (char === '"' || char === "'") {
+      const end = scriptPath.indexOf(char, i + 1);
+      if (end !== -1) {
+        current += scriptPath.slice(i + 1, end);
+        inToken = true;
+        i = end;
+        continue;
+      }
+    } else if (/\s/.test(char)) {
+      if (inToken) {
+        parts.push(current);
+        current = '';
+        inToken = false;
+      }
+      continue;
+    }
+    current += char;
+    inToken = true;
   }
 
-  return scriptParts;
+  if (inToken) {
+    parts.push(current);
+  }
+  return parts;
 }
 
 export function getFileHashes(scriptParts: string[]): string[] {
