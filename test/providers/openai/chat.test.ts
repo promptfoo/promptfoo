@@ -4,6 +4,7 @@ import path from 'path';
 
 import { trace } from '@opentelemetry/api';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { runAssertion } from '../../../src/assertions/index';
 import { handleIsRefusal } from '../../../src/assertions/refusal';
 import { disableCache, enableCache, fetchWithCache } from '../../../src/cache';
 import cliState from '../../../src/cliState';
@@ -2126,6 +2127,88 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
         },
       ]);
     });
+
+    it.each([
+      { type: 'function', arguments: '{"count":"wrong type"}', pass: false },
+      { type: 'custom', arguments: '{"count":1}', pass: false },
+      { type: 'function', arguments: '{"count":1}', pass: true },
+    ])(
+      'validates original calls after MCP success followed by callback failure: %j',
+      async (testCase) => {
+        const toolCalls = [
+          {
+            id: 'mcp_call',
+            type: 'function',
+            function: { name: 'read_file', arguments: '{"path":"README.md"}' },
+          },
+          {
+            id: 'regular_call',
+            type: testCase.type,
+            function: { name: 'regular', arguments: testCase.arguments },
+          },
+        ];
+        mockFetchWithCache.mockResolvedValue(
+          createMockFetchResponse({
+            choices: [{ message: { content: null, tool_calls: toolCalls } }],
+            usage: { total_tokens: 15, prompt_tokens: 10, completion_tokens: 5 },
+          }),
+        );
+        const callback = vi.fn().mockRejectedValue(new Error('Callback unavailable'));
+        const provider = new OpenAiChatCompletionProvider('gpt-4o-mini', {
+          config: {
+            tools: [
+              {
+                type: 'function',
+                function: {
+                  name: 'read_file',
+                  parameters: {
+                    type: 'object',
+                    properties: { path: { type: 'string' } },
+                    required: ['path'],
+                  },
+                },
+              },
+              {
+                type: 'function',
+                function: {
+                  name: 'regular',
+                  parameters: {
+                    type: 'object',
+                    properties: { count: { type: 'number' } },
+                    required: ['count'],
+                  },
+                },
+              },
+            ],
+            functionToolCallbacks: { regular: callback },
+          },
+        });
+        (provider as any).mcpClient = {
+          getAllTools: vi.fn().mockReturnValue([{ name: 'read_file' }]),
+          callTool: vi.fn().mockResolvedValue({ content: 'Read successfully' }),
+        };
+        const providerResponse = await provider.callApi('Read and count');
+        expect(callback).toHaveBeenCalledOnce();
+        expect(providerResponse.output).toEqual(toolCalls);
+        expect(providerResponse.metadata?.toolCalls).toEqual([
+          {
+            id: 'mcp_call',
+            name: 'read_file',
+            input: { path: 'README.md' },
+            output: 'Read successfully',
+            is_error: false,
+          },
+        ]);
+        const result = await runAssertion({
+          prompt: 'Read and count',
+          assertion: { type: 'is-valid-openai-tools-call' },
+          provider,
+          providerResponse,
+          test: {},
+        });
+        expect(result).toMatchObject({ pass: testCase.pass, score: testCase.pass ? 1 : 0 });
+      },
+    );
 
     it('records a failed MCP tool call, and the raw arguments when they will not parse', async () => {
       mockFetchWithCache.mockResolvedValue(

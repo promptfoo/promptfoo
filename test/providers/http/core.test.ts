@@ -423,6 +423,67 @@ describe('HttpProvider', () => {
       expect(result.output).toEqual({ result: 'received' });
     });
 
+    it.each([
+      { name: 'LF text', contentType: 'text/plain', body: '  first\nsecond \n', separator: '\n' },
+      {
+        name: 'whitespace-only text',
+        contentType: 'text/plain',
+        body: '\t \r\n \n',
+        separator: '\r\n',
+      },
+      {
+        name: 'JSON',
+        contentType: 'application/json',
+        body: ' \n {"value": "{{prompt}}"} \n',
+        separator: '\n',
+      },
+      {
+        name: 'URL-encoded form',
+        contentType: 'application/x-www-form-urlencoded',
+        body: 'key={{prompt}}  \n',
+        separator: '\r\n',
+      },
+      {
+        name: 'multipart form',
+        contentType: 'multipart/form-data; boundary=fixture',
+        body: '--fixture\r\nContent-Disposition: form-data; name="key"\r\n\r\n{{prompt}}\r\n--fixture--\r\n',
+        separator: '\r\n',
+      },
+      {
+        name: 'unspecified content type',
+        contentType: undefined,
+        body: '  {{prompt}}\r\nline two\n\n',
+        separator: '\n',
+      },
+    ])('should preserve raw $name body bytes', async ({ contentType, body, separator }) => {
+      const headers = ['POST /api/submit HTTP/1.1', 'Host: example.com'];
+      if (contentType) {
+        headers.push(`Content-Type: ${contentType}`);
+      }
+      const provider = new HttpProvider('http', {
+        config: { request: `${headers.join(separator)}${separator}${separator}${body}` },
+      });
+      vi.mocked(fetchWithCache).mockResolvedValueOnce(createMockFetchResponse('{}'));
+
+      await provider.callApi('fixture');
+
+      expect(vi.mocked(fetchWithCache).mock.calls[0][1]?.body).toBe(
+        body.replace('{{prompt}}', 'fixture'),
+      );
+    });
+
+    it.each([
+      'GET /api/data HTTP/1.1\r\nHost: example.com',
+      'GET /api/data HTTP/1.1\r\nHost: example.com\r\n\r\n',
+    ])('should omit the body for an empty raw request (%#)', async (request) => {
+      const provider = new HttpProvider('http', { config: { request } });
+      vi.mocked(fetchWithCache).mockResolvedValueOnce(createMockFetchResponse('{}'));
+
+      await provider.callApi('test');
+
+      expect(vi.mocked(fetchWithCache).mock.calls[0][1]).not.toHaveProperty('body');
+    });
+
     it('should handle a raw request with path parameter variable substitution', async () => {
       const rawRequest = dedent`
         GET /api/users/{{userId}}/profile HTTP/1.1
@@ -2929,20 +2990,25 @@ describe('extractBodyFromRawRequest', () => {
     expect(extractBodyFromRawRequest(rawRequest)).toBe('line1\r\n\r\nline2');
   });
 
-  it('should normalize mixed line endings', () => {
-    const rawRequest = 'POST /api/submit HTTP/1.1\nHost: example.com\n\nbody content';
-    expect(extractBodyFromRawRequest(rawRequest)).toBe('body content');
+  it('should preserve mixed line endings within the body', () => {
+    const rawRequest = 'POST /api/submit HTTP/1.1\nHost: example.com\r\n\nline1\nline2\r\n';
+    expect(extractBodyFromRawRequest(rawRequest)).toBe('line1\nline2\r\n');
   });
 
-  it('should trim leading and trailing whitespace from body', () => {
-    const rawRequest = dedent`
-      POST /api/submit HTTP/1.1
-      Host: example.com
-      Content-Type: application/json
+  it('should preserve leading and trailing whitespace from the body', () => {
+    const rawRequest =
+      'POST /api/submit HTTP/1.1\nHost: example.com\n\n \t body with whitespace \n';
+    expect(extractBodyFromRawRequest(rawRequest)).toBe(' \t body with whitespace \n');
+  });
 
-      body with whitespace
-    `;
-    expect(extractBodyFromRawRequest(rawRequest)).toBe('body with whitespace');
+  it('should ignore blank lines before the request line', () => {
+    const rawRequest = '\n\nPOST /api/submit HTTP/1.1\nHost: example.com\n\n body \n';
+    expect(extractBodyFromRawRequest(rawRequest)).toBe(' body \n');
+  });
+
+  it('should preserve a whitespace-only body', () => {
+    const rawRequest = 'POST /api/submit HTTP/1.1\r\nHost: example.com\r\n\r\n \t\r\n';
+    expect(extractBodyFromRawRequest(rawRequest)).toBe(' \t\r\n');
   });
 
   it('should handle special characters in body', () => {

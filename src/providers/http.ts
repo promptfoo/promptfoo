@@ -1217,20 +1217,20 @@ function parseRawRequest(input: string) {
 }
 
 /**
- * Extract the raw body from an HTTP request string.
- * Used when http-z parses the body into params (e.g., multipart/form-data, application/x-www-form-urlencoded)
- * instead of preserving the raw text.
+ * Extract the raw body without changing its whitespace or line endings.
+ * Parsing normalizes text bodies and converts form bodies into params, so the rendered
+ * request is the source of the bytes sent on the wire.
  */
 export function extractBodyFromRawRequest(rawRequest: string): string | undefined {
-  const adjusted = normalizeHttpLineEndings(rawRequest);
-
-  // Find header/body separator (blank line)
-  const separatorIndex = adjusted.indexOf('\r\n\r\n');
-  if (separatorIndex === -1) {
+  // Ignore padding before the request line, as the request parser does.
+  const request = rawRequest.trimStart();
+  // Accept CRLF, LF, and mixed header line endings without normalizing the body.
+  const separator = /\r?\n\r?\n/.exec(request);
+  if (!separator) {
     return undefined;
   }
 
-  const body = adjusted.slice(separatorIndex + 4).trim();
+  const body = request.slice(separator.index + separator[0].length);
   return body.length > 0 ? body : undefined;
 }
 
@@ -2850,18 +2850,8 @@ export class HttpProvider implements ApiProvider {
         const urlObj = new URL(url);
         urlObj.searchParams.append(renderedKeyName, renderedValue);
         url = urlObj.toString();
-        // Extract the path and query from the full URL
-        const urlPath = urlObj.pathname + urlObj.search;
-        // Update the request line with the new URL path
-        const requestLines = renderedRequest.split('\n');
-        const firstLine = requestLines[0];
-        const method = firstLine.split(' ')[0];
-        const protocol = firstLine.split(' ').slice(-1)[0];
-        requestLines[0] = `${method} ${urlPath} ${protocol}`;
-        // Re-parse with updated URL
-        const updatedRequest = requestLines.join('\n');
-        const reParsed = parseRawRequest(updatedRequest.trim());
-        Object.assign(parsedRequest, reParsed);
+        // Keep the parsed target in sync without replacing the augmented headers.
+        parsedRequest.url = urlObj.pathname + urlObj.search;
       } catch (err) {
         logger.warn(
           `[HTTP Provider]: Failed to add API key to query params in raw request: ${String(err)}`,
@@ -2869,16 +2859,8 @@ export class HttpProvider implements ApiProvider {
       }
     }
 
-    // Determine body content:
-    // - For JSON/text bodies, http-z provides body.text
-    // - For multipart/form-data and x-www-form-urlencoded, http-z parses into body.params
-    //   but we need the raw body text, so extract it from the rendered request
-    let bodyContent: string | undefined;
-    if (parsedRequest.body?.text) {
-      bodyContent = parsedRequest.body.text.trim();
-    } else if (parsedRequest.body?.params) {
-      bodyContent = extractBodyFromRawRequest(renderedRequest);
-    }
+    // Preserve the rendered body verbatim; parsing can trim or normalize its bytes.
+    const bodyContent = extractBodyFromRawRequest(renderedRequest);
 
     logger.debug(
       `[HTTP Provider]: Calling ${sanitizeUrl(url)} with raw request: ${parsedRequest.method}`,

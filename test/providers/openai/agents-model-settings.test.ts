@@ -22,6 +22,27 @@ describe('resolveModelSettings retry policies', () => {
     expect(typeof resolvePolicy(policy)).toBe('function');
   });
 
+  it.each([{ httpStatus: [429] }, { any: ['never'] }, { all: ['never'] }])(
+    'rejects inherited policy keys in %j',
+    (prototype) => {
+      const policy = Object.assign(Object.create(prototype), { unrelated: true });
+      expect(() => resolvePolicy(policy)).toThrow('Invalid OpenAI Agents retry policy');
+      expect(() => resolvePolicy({ any: [policy] })).toThrow('Invalid OpenAI Agents retry policy');
+    },
+  );
+
+  it('uses the sole own policy key even when another policy key is inherited', () => {
+    const policy = Object.assign(Object.create({ httpStatus: 'invalid inherited value' }), {
+      any: ['never'],
+    });
+    expect(typeof resolvePolicy(policy)).toBe('function');
+  });
+
+  it('accepts a policy with a null prototype', () => {
+    const policy = Object.assign(Object.create(null), { httpStatus: [429] });
+    expect(typeof resolvePolicy(policy)).toBe('function');
+  });
+
   it('leaves the policy unset when none is configured', () => {
     expect(resolvePolicy(undefined)).toBeUndefined();
   });

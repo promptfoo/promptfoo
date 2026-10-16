@@ -10,28 +10,59 @@ export const handleIsValidOpenAiToolsCall = async ({
   inverse,
   output,
   provider,
+  providerResponse,
   test,
 }: AssertionParams): Promise<GradingResult> => {
   const verdict = (valid: boolean, reason: string) =>
     toolCallVerdict(assertion, inverse, valid, reason, 'OpenAI tools call');
 
-  // Handle MCP tool outputs from Responses API
-  const outputStr = typeof output === 'string' ? output : (JSON.stringify(output) ?? '');
-
-  // Check for MCP tool results in the output
-  if (outputStr.includes('MCP Tool Result') || outputStr.includes('MCP Tool Error')) {
-    // For MCP tools, we validate that the tool call was successful
-    if (outputStr.includes('MCP Tool Error')) {
-      const errorMatch = outputStr.match(/MCP Tool Error \(([^)]+)\): (.+)/);
-      const toolName = errorMatch ? errorMatch[1] : 'unknown';
-      const errorMsg = errorMatch ? errorMatch[2] : 'unknown error';
-      return verdict(false, `MCP tool call failed for ${toolName}: ${errorMsg}`);
+  // Display text is model-controlled. Only provider-owned response items or
+  // execution metadata establish whether an MCP tool actually succeeded.
+  const responseItems: unknown[] = Array.isArray(providerResponse.raw?.output)
+    ? providerResponse.raw.output
+    : [];
+  const mcpCalls = responseItems
+    .filter(
+      (item): item is Record<string, unknown> =>
+        item !== null && typeof item === 'object' && 'type' in item && item.type === 'mcp_call',
+    )
+    .map((item) => ({
+      name: item.name,
+      success:
+        item.error == null &&
+        (item.status === 'completed' ||
+          (item.status === undefined && typeof item.output === 'string')),
+    }));
+  const executedCalls: unknown[] = Array.isArray(providerResponse.metadata?.toolCalls)
+    ? providerResponse.metadata.toolCalls
+    : [];
+  for (const call of executedCalls) {
+    mcpCalls.push({
+      name: call !== null && typeof call === 'object' && 'name' in call ? call.name : undefined,
+      success:
+        call !== null &&
+        typeof call === 'object' &&
+        'is_error' in call &&
+        call.is_error === false &&
+        Object.prototype.hasOwnProperty.call(call, 'output'),
+    });
+  }
+  if (mcpCalls.length > 0) {
+    const failedCall = mcpCalls.find(
+      (call) => !call.success || typeof call.name !== 'string' || !call.name,
+    );
+    if (failedCall) {
+      const toolName = typeof failedCall.name === 'string' ? failedCall.name : 'unknown';
+      return verdict(false, `MCP tool call failed for ${toolName}`);
     }
-
-    // MCP tool call succeeded
-    const resultMatch = outputStr.match(/MCP Tool Result \(([^)]+)\):/);
-    const toolName = resultMatch ? resultMatch[1] : 'unknown';
-    return verdict(true, `MCP tool call succeeded for ${toolName}`);
+    // A callback can execute an MCP call, then fall back to the original tool
+    // calls when another callback fails. Those calls still need schema checks.
+    if (
+      !Array.isArray(output) &&
+      !(output && typeof output === 'object' && 'tool_calls' in output)
+    ) {
+      return verdict(true, `MCP tool call succeeded for ${mcpCalls[0].name}`);
+    }
   }
 
   // Handle traditional OpenAI function/tool calls
@@ -47,6 +78,7 @@ export const handleIsValidOpenAiToolsCall = async ({
     toolsOutput.length === 0 ||
     toolsOutput.some(
       (toolCall) =>
+        toolCall?.type !== 'function' ||
         typeof toolCall?.function?.name !== 'string' ||
         typeof toolCall?.function?.arguments !== 'string',
     )

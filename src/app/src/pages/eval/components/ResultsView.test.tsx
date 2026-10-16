@@ -1,9 +1,11 @@
 import { mockWindowOpen } from '@app/tests/browserMocks';
+import { type TestTimers, useTestTimers } from '@app/tests/timers';
 import { callApi, updateEvalAuthor } from '@app/utils/api';
 import { renderWithProviders } from '@app/utils/testutils';
 import { act, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { MemoryRouter } from 'react-router';
+import { createMemoryRouter, MemoryRouter, useSearchParams } from 'react-router';
+import { RouterProvider } from 'react-router/dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import ResultsView from './ResultsView';
 import { useResultsViewSettingsStore, useTableStore } from './store';
@@ -224,7 +226,11 @@ vi.mock('./ShareModal', () => ({
 }));
 
 vi.mock('./ResultsTable', () => ({
-  default: () => <div data-testid="results-table">Results Table</div>,
+  default: ({ debouncedSearchText }: { debouncedSearchText: string }) => (
+    <div data-testid="results-table" data-search-text={debouncedSearchText}>
+      Results Table
+    </div>
+  ),
 }));
 
 vi.mock('./ResultsCharts', () => ({
@@ -1669,5 +1675,109 @@ describe('ResultsView Browser History', () => {
     expect(screen.getByText('Results Table')).toBeInTheDocument();
 
     expect(mockNavigate).not.toHaveBeenCalled();
+  });
+});
+
+describe('ResultsView URL search state', () => {
+  let timers: TestTimers;
+
+  beforeEach(async () => {
+    timers = useTestTimers();
+    resetResultsViewMocks();
+    const router = await vi.importActual<typeof import('react-router')>('react-router');
+    vi.mocked(useSearchParams).mockImplementation(router.useSearchParams);
+    vi.mocked(useTableStore).mockReturnValue(createTableStore());
+  });
+
+  afterEach(() => {
+    timers.restore();
+    vi.mocked(useSearchParams).mockReturnValue([
+      new URLSearchParams('filterMode=failures'),
+      vi.fn(),
+    ]);
+  });
+
+  async function interact(action: () => Promise<void>) {
+    await act(async () => {
+      const interaction = action();
+      await timers.advanceByAsync(0);
+      await interaction;
+    });
+  }
+
+  function renderSearch(search: string) {
+    const router = createMemoryRouter(
+      [
+        {
+          path: '*',
+          element: (
+            <ResultsView
+              recentEvals={mockRecentEvals}
+              onRecentEvalSelected={vi.fn()}
+              defaultEvalId="test-eval-id"
+            />
+          ),
+        },
+      ],
+      { initialEntries: [`/eval/test-eval-id?${search}`] },
+    );
+    renderWithProviders(<RouterProvider router={router} />);
+    return router;
+  }
+
+  it('synchronizes the input, table, and badge through URL changes and Back/Forward', async () => {
+    const router = renderSearch('search=first');
+    expect(screen.getByRole('searchbox')).toHaveValue('first');
+    expect(screen.getByTestId('results-table')).toHaveAttribute('data-search-text', 'first');
+
+    await act(() => router.navigate('?search=next'));
+    expect(screen.getByRole('searchbox')).toHaveValue('next');
+    expect(screen.getByTestId('results-table')).toHaveAttribute('data-search-text', 'next');
+    expect(screen.getByText('Search: next')).toBeInTheDocument();
+
+    await act(() => router.navigate(-1));
+    expect(screen.getByRole('searchbox')).toHaveValue('first');
+    expect(screen.getByTestId('results-table')).toHaveAttribute('data-search-text', 'first');
+
+    await act(() => router.navigate(1));
+    expect(screen.getByRole('searchbox')).toHaveValue('next');
+    expect(screen.getByTestId('results-table')).toHaveAttribute('data-search-text', 'next');
+    expect(mockNavigate).not.toHaveBeenCalled();
+    router.dispose();
+  });
+
+  it('clears URL-driven search and cancels pending typing when navigating to an unfiltered URL', async () => {
+    const router = renderSearch('search=first');
+    const user = userEvent.setup({ advanceTimers: timers.advanceBy });
+    await interact(() => user.clear(screen.getByRole('searchbox')));
+    await interact(() => user.type(screen.getByRole('searchbox'), 'pending'));
+
+    await act(() => router.navigate('/eval/test-eval-id'));
+    act(() => timers.advanceBy(300));
+
+    expect(screen.getByRole('searchbox')).toHaveValue('');
+    expect(screen.getByTestId('results-table')).toHaveAttribute('data-search-text', '');
+    expect(screen.queryByText(/^Search:/)).not.toBeInTheDocument();
+    expect(mockNavigate).not.toHaveBeenCalled();
+    router.dispose();
+  });
+
+  it('keeps pending typing when an unrelated URL parameter changes', async () => {
+    const router = renderSearch('search=first');
+    const user = userEvent.setup({ advanceTimers: timers.advanceBy });
+    await interact(() => user.clear(screen.getByRole('searchbox')));
+    await interact(() => user.type(screen.getByRole('searchbox'), 'typed'));
+
+    await act(() => router.navigate('?search=first&filterMode=failures'));
+    expect(screen.getByRole('searchbox')).toHaveValue('typed');
+    expect(screen.getByTestId('results-table')).toHaveAttribute('data-search-text', 'first');
+    act(() => timers.advanceBy(300));
+
+    expect(screen.getByTestId('results-table')).toHaveAttribute('data-search-text', 'typed');
+    expect(mockNavigate).toHaveBeenCalledWith(
+      { pathname: '/eval/test-eval-id', search: '?search=typed&filterMode=failures', hash: '' },
+      { replace: true },
+    );
+    router.dispose();
   });
 });
