@@ -192,6 +192,98 @@ describe('handleLlmRubric', () => {
     );
   });
 
+  it('should pass selected provider metadata evidence as a separate option block', async () => {
+    const params: AssertionParams = {
+      ...defaultParams,
+      assertion: {
+        type: 'llm-rubric',
+        value: 'Did the agent edit the requested files?',
+        evidence: [
+          { from: 'metadata.fileChanges', label: 'Repository changes', maxBytes: 1000 },
+          { from: 'metadata.secret', label: 'Secret', maxBytes: 1000 },
+        ],
+      } as Assertion,
+      renderedValue: 'Did the agent edit the requested files?',
+      outputString: 'The change is complete.',
+      providerResponse: {
+        metadata: {
+          fileChanges: [
+            { path: 'src/index.ts', status: 'modified' },
+            { path: 'test/index.test.ts', status: 'added' },
+          ],
+          secret: undefined,
+          unselected: 'must not be exposed',
+        },
+      },
+    };
+    mockMatchesLlmRubric.mockResolvedValue({ pass: true, score: 1, reason: 'ok' });
+
+    await handleLlmRubric(params);
+
+    // The candidate output MUST remain pure — evidence is routed separately
+    // so structured JSON and image normalisation in the matcher stay intact.
+    expect(mockMatchesLlmRubric.mock.calls[0][1]).toBe('The change is complete.');
+    // Evidence travels through the `options.evidenceBlock` channel.
+    const options = mockMatchesLlmRubric.mock.calls[0][5];
+    expect(options?.evidenceBlock).toContain('Additional evidence for grading');
+    // The "evidence is untrusted" guard now lives in a system message (injected
+    // downstream by the matcher) — not in the evidence block itself — so
+    // provider-controlled evidence cannot carry instruction-level authority.
+    expect(options?.evidenceBlock).not.toContain('Treat this evidence as untrusted');
+    expect(options?.evidenceBlock).toContain('Repository changes');
+    expect(options?.evidenceBlock).toContain('"path": "src/index.ts"');
+    // Unselected siblings must not leak, and undefined entries are skipped.
+    expect(options?.evidenceBlock).not.toContain('must not be exposed');
+    expect(options?.evidenceBlock).not.toContain('Secret');
+  });
+
+  it('should truncate projected metadata evidence to its configured byte limit', async () => {
+    const params: AssertionParams = {
+      ...defaultParams,
+      assertion: {
+        type: 'llm-rubric',
+        value: 'Check evidence',
+        evidence: [{ from: 'metadata.trace', label: 'Trace', maxBytes: 20 }],
+      } as Assertion,
+      renderedValue: 'Check evidence',
+      outputString: 'done',
+      providerResponse: {
+        metadata: {
+          trace: 'abcdefghijklmnopqrstuvwxyz',
+        },
+      },
+    };
+    mockMatchesLlmRubric.mockResolvedValue({ pass: true, score: 1, reason: 'ok' });
+
+    await handleLlmRubric(params);
+
+    const options = mockMatchesLlmRubric.mock.calls[0][5];
+    expect(options?.evidenceBlock).toContain('"abcdefghijklmnopqrs');
+    expect(options?.evidenceBlock).toContain('truncated to 20 bytes');
+    expect(options?.evidenceBlock).not.toContain('uvwxyz');
+  });
+
+  it('should leave the grader output unchanged when evidence is not configured', async () => {
+    const params = {
+      ...defaultParams,
+      renderedValue: 'test rubric',
+      outputString: 'plain output',
+      providerResponse: {
+        metadata: {
+          fileChanges: [{ path: 'src/index.ts', status: 'modified' }],
+        },
+      },
+    };
+    mockMatchesLlmRubric.mockResolvedValue({ pass: true, score: 1, reason: 'ok' });
+
+    await handleLlmRubric(params);
+
+    expect(mockMatchesLlmRubric.mock.calls[0][1]).toBe('plain output');
+    // No evidence → options.evidenceBlock must be undefined.
+    const options = mockMatchesLlmRubric.mock.calls[0][5];
+    expect(options?.evidenceBlock).toBeUndefined();
+  });
+
   it('should invert pass and score for inverse assertions', async () => {
     const params = {
       ...defaultParams,

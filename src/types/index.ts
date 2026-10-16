@@ -787,6 +787,156 @@ export const AssertionSetSchema = z.object({
 
 export type AssertionSet = z.infer<typeof AssertionSetSchema>;
 
+/**
+ * Validate an evidence path using a simple linear scan.
+ *
+ * Rules:
+ *   - Must start with exactly "metadata".
+ *   - Must contain at least one child segment after "metadata" (no `from: metadata`).
+ *   - Each segment after "metadata" is either a bare identifier (letters/digits/_/$/-)
+ *     or a non-negative integer index.
+ *   - No ReDoS-prone regex backtracking — the check is O(n) string walking.
+ *
+ * Returns undefined when valid, or an error message when invalid.
+ */
+// Error message shared by all segment-level validation failures.
+const EVIDENCE_PATH_ERR =
+  'evidence.from must select a provider metadata path like metadata.fileChanges';
+
+function isValidIdentStart(code: number): boolean {
+  return (
+    (code >= 65 && code <= 90) || // A-Z
+    (code >= 97 && code <= 122) || // a-z
+    code === 95 || // _
+    code === 36 || // $
+    code === 45 // -
+  );
+}
+
+function isValidIdentChar(code: number): boolean {
+  return (
+    (code >= 65 && code <= 90) || // A-Z
+    (code >= 97 && code <= 122) || // a-z
+    (code >= 48 && code <= 57) || // 0-9
+    code === 95 || // _
+    code === 36 || // $
+    code === 45 // -
+  );
+}
+
+/**
+ * Scan a single segment from `startIdx` in `path` and return either the
+ * next index (past the segment) plus a trailing-dot flag, or an error.
+ */
+function scanSegment(
+  path: string,
+  startIdx: number,
+): { next: number; isIndex: boolean; truncated: boolean; error?: string } {
+  const first = path.charCodeAt(startIdx);
+  const isIndex = first >= 48 && first <= 57; // '0'..'9'
+  if (!isIndex && !isValidIdentStart(first)) {
+    return { next: startIdx, isIndex, truncated: false, error: EVIDENCE_PATH_ERR };
+  }
+
+  let i = startIdx + 1;
+  const dotCode = '.'.charCodeAt(0);
+  while (i < path.length && path.charCodeAt(i) !== dotCode) {
+    const c = path.charCodeAt(i);
+    const ok = isIndex ? c >= 48 && c <= 57 : isValidIdentChar(c);
+    if (!ok) {
+      return { next: i, isIndex, truncated: false, error: EVIDENCE_PATH_ERR };
+    }
+    i++;
+  }
+
+  const seg = path.slice(startIdx, i);
+  if (seg.length === 0) {
+    return { next: i, isIndex, truncated: false, error: EVIDENCE_PATH_ERR };
+  }
+  if (isIndex && seg.length > 1 && seg.charCodeAt(0) === 48) {
+    // No leading zeros for numeric indices.
+    return { next: i, isIndex, truncated: false, error: EVIDENCE_PATH_ERR };
+  }
+
+  return { next: i, isIndex, truncated: i < path.length };
+}
+
+export function validateEvidencePath(path: string): string | undefined {
+  if (typeof path !== 'string') {
+    return 'evidence.from must be a string';
+  }
+  if (!path.startsWith('metadata')) {
+    return EVIDENCE_PATH_ERR;
+  }
+  // "metadata" alone is not allowed — it would project the entire metadata object
+  // and leak unselected sibling keys.
+  if (path.length === 'metadata'.length) {
+    return 'evidence.from must select at least one child under metadata (for example metadata.fileChanges, not metadata)';
+  }
+  if (path.charCodeAt('metadata'.length) !== '.'.charCodeAt(0)) {
+    return EVIDENCE_PATH_ERR;
+  }
+
+  // Walk segment-by-segment after the leading "metadata."
+  let i = 'metadata'.length + 1;
+  const lastIdx = path.length - 1;
+  while (i <= lastIdx) {
+    // Trailing dot — malformed.
+    if (i === lastIdx && path.charCodeAt(i) === '.'.charCodeAt(0)) {
+      return EVIDENCE_PATH_ERR;
+    }
+    const { next, truncated, error } = scanSegment(path, i);
+    if (error) {
+      return error;
+    }
+    i = next;
+    if (!truncated) {
+      // Segment consumed up to end-of-string — valid path, at least one segment
+      // was successfully parsed in this iteration.
+      return undefined;
+    }
+    // Skip past the dot for the next iteration.
+    i++;
+  }
+
+  // i > lastIdx: path ends with '.' or some other malformation.
+  return EVIDENCE_PATH_ERR;
+}
+
+// Non-backtracking regex for evidence path validation in the source schema.
+// Each segment alternative is mutually exclusive at every position:
+//   - identifier:  starts with a non-digit [A-Za-z_$-], followed by [A-Za-z0-9_$-]*
+//   - index-zero:  literal "0"
+//   - index-int:   [1-9][0-9]* (no leading zeros for multi-digit indices)
+// Because the three alternatives never overlap at the first character, there
+// is no exponential backtracking risk even on adversarial inputs. This regex
+// is what z.toJSONSchema translates into the published config-schema.json
+// pattern, so editors and Ajv consumers validate the same shape as runtime.
+const EVIDENCE_PATH_REGEX =
+  /^metadata\.([A-Za-z_$-][A-Za-z0-9_$-]*|0|[1-9][0-9]*)(\.([A-Za-z_$-][A-Za-z0-9_$-]*|0|[1-9][0-9]*))*$/;
+
+const AssertionEvidenceSchema = z.object({
+  from: z
+    .string()
+    .regex(
+      EVIDENCE_PATH_REGEX,
+      'evidence.from must select a provider metadata path like metadata.fileChanges',
+    )
+    .superRefine((val, ctx) => {
+      const err = validateEvidencePath(val);
+      if (err) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: err,
+        });
+      }
+    }),
+  label: z.string().optional(),
+  maxBytes: z.number().int().positive(),
+});
+
+export type AssertionEvidence = z.infer<typeof AssertionEvidenceSchema>;
+
 // TODO(ian): maybe Assertion should support {type: config} to make the yaml cleaner
 export const AssertionSchema = z.object({
   // Type of assertion
@@ -816,6 +966,9 @@ export const AssertionSchema = z.object({
 
   // Process the output before running the assertion
   transform: StringOrFunctionSchema.optional(),
+
+  // Project explicitly selected ProviderResponse metadata into native model graders.
+  evidence: z.array(AssertionEvidenceSchema).optional(),
 
   // Extract context from the output using a transform
   contextTransform: StringOrFunctionSchema.optional(),

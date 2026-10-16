@@ -188,6 +188,13 @@ export async function matchesLlmRubric(
     throwOnError?: boolean;
     preferRemote?: boolean;
     providerResponse?: ProviderResponse;
+    /**
+     * Optional supplementary evidence block (already bounded & escaped) to
+     * inject into the grader prompt as a separate context section. Must NOT
+     * be spliced into `llmOutput` — that would corrupt structured-json
+     * outputs and break the image-output normalisation below.
+     */
+    evidenceBlock?: string;
   },
   providerCallContext?: CallApiContextParams,
 ): Promise<GradingResult> {
@@ -205,6 +212,8 @@ export async function matchesLlmRubric(
     !grading.provider;
   const { imageOutputs } = materializeImageOutputsForGrading(options?.providerResponse?.images);
   const audio = options?.providerResponse?.audio;
+  // Output normalisation runs against the ORIGINAL llmOutput (no evidence
+  // prepended) so image/data-uri comparisons stay correct.
   const gradingOutput = getGradingOutputForImages(
     getGradingOutputForAudio(llmOutput, audio),
     imageOutputs,
@@ -221,6 +230,7 @@ export async function matchesLlmRubric(
         ...(await doRemoteGrading({
           task: 'llm-rubric',
           rubric,
+          evidence: options?.evidenceBlock,
           output: gradingOutput,
           vars: vars || {},
           ...(imageOutputs.length ? { images: imageOutputs } : {}),
@@ -247,6 +257,7 @@ export async function matchesLlmRubric(
       throwOnError: options?.throwOnError,
       images: imageOutputs,
       audio,
+      evidenceBlock: options?.evidenceBlock,
       vars: {
         ...(vars || {}),
         output: tryParse(gradingOutput),

@@ -36,6 +36,7 @@ import {
   type GradingResult,
   type TraceData,
   type VarValue,
+  validateEvidencePath,
 } from '../types/index';
 import { isJavascriptFile } from '../util/fileExtensions';
 import invariant from '../util/invariant';
@@ -440,6 +441,29 @@ async function runAssertionInternal({
   let output = originalOutput;
 
   invariant(assertion.type, `Assertion must have a type: ${JSON.stringify(assertion)}`);
+
+  // The programmatic `assertions.runAssertion` API bypasses Zod schema
+  // validation, so re-check evidence paths here to reject `from: metadata`
+  // (which would project every sibling including credentials) and any path
+  // with malformed segments before we sink into the llm-rubric handler.
+  if (assertion.evidence?.length) {
+    for (const item of assertion.evidence) {
+      const err = validateEvidencePath(item.from);
+      if (err) {
+        throw new Error(`Invalid llm-rubric evidence path: ${err}`);
+      }
+      if (
+        typeof item.maxBytes !== 'number' ||
+        !Number.isFinite(item.maxBytes) ||
+        !Number.isInteger(item.maxBytes) ||
+        item.maxBytes <= 0
+      ) {
+        throw new Error(
+          `Invalid llm-rubric evidence maxBytes: must be a positive finite integer, got ${item.maxBytes}`,
+        );
+      }
+    }
+  }
 
   if (assertion.transform) {
     output = await transform(assertion.transform, output, {
