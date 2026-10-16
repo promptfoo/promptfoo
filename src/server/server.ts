@@ -16,6 +16,7 @@ import {
   updateEvalIds,
 } from '../database/signal';
 import { getDirectory } from '../esm';
+import { getEnvString } from '../envars';
 import { cloudConfig } from '../globalConfig/cloud';
 import logger from '../logger';
 import { runDbMigrations } from '../migrate';
@@ -56,7 +57,17 @@ import type { Prompt, TestCase, TestSuite } from '../types/index';
 const JS_EXTENSIONS = new Set(['.js', '.mjs', '.cjs']);
 
 // Express middleware limits
-const REQUEST_SIZE_LIMIT = '100mb';
+const DEFAULT_REQUEST_SIZE_LIMIT = '100mb';
+
+/**
+ * Maximum JSON / urlencoded request body size accepted by the local server.
+ * Operators who expose the server beyond loopback can lower it with
+ * PROMPTFOO_REQUEST_SIZE_LIMIT (any value accepted by body-parser, e.g. "10mb").
+ */
+export function getRequestSizeLimit(): string {
+  const configured = getEnvString('PROMPTFOO_REQUEST_SIZE_LIMIT')?.trim();
+  return configured || DEFAULT_REQUEST_SIZE_LIMIT;
+}
 
 /**
  * Middleware to set proper MIME types for JavaScript files.
@@ -123,8 +134,9 @@ export function createApp() {
   app.use(cors());
   app.use(csrfProtection);
   app.use(compression());
-  app.use(express.json({ limit: REQUEST_SIZE_LIMIT }));
-  app.use(express.urlencoded({ limit: REQUEST_SIZE_LIMIT, extended: true }));
+  const requestSizeLimit = getRequestSizeLimit();
+  app.use(express.json({ limit: requestSizeLimit }));
+  app.use(express.urlencoded({ limit: requestSizeLimit, extended: true }));
   app.get('/health', (_req, res) => {
     // Health probes must never 500 from a self-imposed schema check.
     res.status(200).json({ status: 'OK', version: VERSION });
