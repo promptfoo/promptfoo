@@ -33,6 +33,8 @@ The Sequence Provider:
 4. Collects all responses
 5. Joins them together using the specified separator
 
+Set `separator: ''` to join responses without adding any characters between them.
+
 ## Usage Example
 
 This example sends three related prompts and runs assertions on their combined output:
