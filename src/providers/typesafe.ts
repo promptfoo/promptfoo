@@ -93,6 +93,32 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
+function hasMediaGradingContent(prompt: string): boolean {
+  try {
+    const messages: unknown = JSON.parse(prompt);
+    return (
+      Array.isArray(messages) &&
+      messages.some(
+        (message) =>
+          isPlainObject(message) &&
+          Array.isArray(message.content) &&
+          message.content.some(
+            (part) =>
+              isPlainObject(part) &&
+              ((typeof part.type === 'string' &&
+                ['image_url', 'input_image', 'image', 'input_audio'].includes(part.type)) ||
+                (isPlainObject(part.inlineData) &&
+                  typeof part.inlineData.mimeType === 'string' &&
+                  typeof part.inlineData.data === 'string')),
+          ),
+      )
+    );
+  } catch {
+    // Plain-text grading prompts have no structured attachments.
+    return false;
+  }
+}
+
 function isFiniteNumber(value: unknown): value is number {
   return typeof value === 'number' && Number.isFinite(value);
 }
@@ -205,6 +231,17 @@ export class TypeSafeProvider implements ApiProvider {
     // llm-rubric passes the rubric and the graded output as vars. Jev reads those directly
     // instead of the rendered grading prompt, which is written for a text-generation model.
     if (label === 'llm-rubric' && context?.vars?.rubric !== undefined) {
+      // Text-only formatting can omit audio; vars.output can be only a transcript or placeholder.
+      if (
+        context.gradingMedia?.hasImages ||
+        context.gradingMedia?.hasAudio ||
+        hasMediaGradingContent(prompt)
+      ) {
+        return {
+          error:
+            'TypeSafe `llm-rubric` supports text output only; media attachments are not supported.',
+        };
+      }
       return this.grade(context.vars.rubric, context.vars.output, config, bustCache, abortSignal);
     }
     if (label && UNSUPPORTED_GRADER_LABELS.includes(label)) {
