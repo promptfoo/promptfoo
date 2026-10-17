@@ -132,6 +132,17 @@ describe('checkForUpdates', () => {
     }
   });
 
+  it('should skip the update check when PROMPTFOO_NO_NETWORK is set (#11768 item 3)', async () => {
+    const restoreNoNetwork = mockProcessEnv({ PROMPTFOO_NO_NETWORK: 'true' });
+    try {
+      expect(await checkForUpdates()).toBe(false);
+      expect(fetchWithTimeout).not.toHaveBeenCalled();
+      expect(loggerInfoSpy).not.toHaveBeenCalled();
+    } finally {
+      restoreNoNetwork();
+    }
+  });
+
   it('should tell official-image users to pull a new image', async () => {
     const restoreDocker = mockProcessEnv({
       PROMPTFOO_OFFICIAL_DOCKER_IMAGE: 'true',
@@ -336,6 +347,19 @@ describe('checkModelAuditUpdates', () => {
       expect(fetchWithTimeout).not.toHaveBeenCalled();
     } finally {
       restoreDisableUpdate();
+    }
+  });
+
+  it('should return false when PROMPTFOO_NO_NETWORK is set (#11768 item 3)', async () => {
+    const restoreNoNetwork = mockProcessEnv({ PROMPTFOO_NO_NETWORK: 'true' });
+    try {
+      vi.mocked(fetchWithTimeout).mockReset();
+
+      const result = await checkModelAuditUpdates();
+      expect(result).toBeFalsy();
+      expect(fetchWithTimeout).not.toHaveBeenCalled();
+    } finally {
+      restoreNoNetwork();
     }
   });
 

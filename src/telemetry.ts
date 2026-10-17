@@ -16,7 +16,11 @@ let posthogClient: PostHog | null = null;
 let isShuttingDown = false;
 
 function getPostHogClient(): PostHog | null {
-  if (getEnvBool('PROMPTFOO_DISABLE_TELEMETRY') || getEnvBool('IS_TESTING')) {
+  if (
+    getEnvBool('PROMPTFOO_DISABLE_TELEMETRY') ||
+    getEnvBool('IS_TESTING') ||
+    getEnvBool('PROMPTFOO_NO_NETWORK')
+  ) {
     return null;
   }
 
@@ -104,7 +108,7 @@ export class Telemetry {
   }
 
   get disabled() {
-    return getEnvBool('PROMPTFOO_DISABLE_TELEMETRY');
+    return getEnvBool('PROMPTFOO_DISABLE_TELEMETRY') || getEnvBool('PROMPTFOO_NO_NETWORK');
   }
 
   private recordTelemetryDisabled() {
@@ -199,6 +203,10 @@ export class Telemetry {
    * This is a separate endpoint to save consent used only for redteam data synthesis for "harmful" plugins.
    */
   async saveConsent(email: string, metadata?: Record<string, string>): Promise<void> {
+    if (getEnvBool('PROMPTFOO_NO_NETWORK')) {
+      logger.debug('PROMPTFOO_NO_NETWORK is set: skipping license consent submission');
+      return;
+    }
     try {
       const response = await fetchWithTimeout(
         CONSENT_ENDPOINT,
