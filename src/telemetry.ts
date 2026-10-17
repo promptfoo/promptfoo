@@ -133,6 +133,13 @@ export class Telemetry {
   }
 
   private sendEvent(eventName: TelemetryEventTypes, properties: EventProperties): void {
+    if (getEnvBool('PROMPTFOO_NO_NETWORK')) {
+      // No-egress guarantee: no telemetry event may leave the process, not
+      // even the "telemetry disabled" marker. (The marker is still emitted
+      // under plain PROMPTFOO_DISABLE_TELEMETRY.)
+      logger.debug('PROMPTFOO_NO_NETWORK is set: dropping telemetry event', { eventName });
+      return;
+    }
     const ciFlag = isCI();
     const personProperties = this.getPersonProperties(ciFlag);
     const propertiesWithMetadata = {

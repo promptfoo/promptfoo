@@ -926,6 +926,16 @@ describe('Telemetry', () => {
       expect(telemetry.disabled).toBe(true);
     });
 
+    it('emits no telemetry request at all, not even the "telemetry disabled" marker', () => {
+      restoreEnv = mockProcessEnv({ PROMPTFOO_NO_NETWORK: 'true' });
+      vi.mocked(fetchWithProxy).mockClear();
+      const telemetry = new Telemetry();
+
+      telemetry.record('eval_ran', { foo: 'bar' });
+
+      expect(fetchWithProxy).not.toHaveBeenCalled();
+    });
+
     it('still submits consent when the flag is unset', async () => {
       restoreEnv = mockProcessEnv({ PROMPTFOO_NO_NETWORK: undefined });
       vi.mocked(fetchWithTimeout).mockResolvedValue({ ok: true } as any);
