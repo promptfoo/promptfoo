@@ -57,7 +57,7 @@ export async function createTransformResponse(
             : `try { return (${trimmedParser}); } catch(e) { throw new Error('Transform failed: ' + e.message + ' : ' + text + ' : ' + JSON.stringify(json) + ' : ' + JSON.stringify(context)); }`,
         );
         const processShim = getProcessShim();
-        const resp = transformFn(data || null, text, context || undefined, processShim);
+        const resp = transformFn(data ?? null, text, context || undefined, processShim);
 
         return normalizeResponseTransformResult(resp);
       } catch (err) {
