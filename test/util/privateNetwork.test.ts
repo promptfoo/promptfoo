@@ -37,18 +37,28 @@ describe('isPrivateIpAddress', () => {
     '127.0.0.2',
     '169.254.169.254',
     '169.254.0.1',
+    '0.0.0.0',
+    '100.64.0.1',
+    '100.100.100.200',
+    '100.127.255.255',
   ])('flags private IPv4 %s', (ip) => {
     expect(isPrivateIpAddress(ip)).toBe(true);
   });
 
-  it.each(['8.8.8.8', '1.1.1.1', '172.15.255.255', '172.32.0.1', '192.167.255.255', '11.0.0.1'])(
-    'allows public IPv4 %s',
-    (ip) => {
-      expect(isPrivateIpAddress(ip)).toBe(false);
-    },
-  );
+  it.each([
+    '8.8.8.8',
+    '1.1.1.1',
+    '172.15.255.255',
+    '172.32.0.1',
+    '192.167.255.255',
+    '11.0.0.1',
+    '100.63.255.255',
+    '100.128.0.1',
+  ])('allows public IPv4 %s', (ip) => {
+    expect(isPrivateIpAddress(ip)).toBe(false);
+  });
 
-  it.each(['::1', 'fe80::1', 'fe80::abcd', 'fc00::1', 'fd00::1234', '::ffff:10.0.0.1'])(
+  it.each(['::1', '::', 'fe80::1', 'fe80::abcd', 'fc00::1', 'fd00::1234', '::ffff:10.0.0.1'])(
     'flags private IPv6 %s',
     (ip) => {
       expect(isPrivateIpAddress(ip)).toBe(true);
@@ -86,6 +96,28 @@ describe('getCallerSuppliedBaseUrl', () => {
     expect(getCallerSuppliedBaseUrl({ id: 'https://example.com/v1' })).toBe(
       'https://example.com/v1',
     );
+  });
+
+  it('catches non-canonical http(s) provider ids accepted by the registry', () => {
+    // The registry accepts any `http:` prefix; Node canonicalizes these to
+    // loopback before HttpProvider fetches them.
+    expect(getCallerSuppliedBaseUrl({ id: 'http:127.0.0.1' })).toBe('http:127.0.0.1');
+    expect(getCallerSuppliedBaseUrl({ id: 'http:\\\\127.0.0.1\\x' })).toBe('http:\\\\127.0.0.1\\x');
+    expect(getCallerSuppliedBaseUrl({ id: 'HTTP://169.254.169.254/' })).toBe(
+      'HTTP://169.254.169.254/',
+    );
+  });
+
+  it('reads config.url (the HttpProvider request URL)', () => {
+    expect(
+      getCallerSuppliedBaseUrl({ id: 'http', config: { url: 'http://127.0.0.1:8080/hook' } }),
+    ).toBe('http://127.0.0.1:8080/hook');
+  });
+
+  it('resolves named providers with local default endpoints', () => {
+    expect(getCallerSuppliedBaseUrl({ id: 'ollama:chat:llama3' })).toBe('http://localhost:11434');
+    expect(getCallerSuppliedBaseUrl({ id: 'llama:chat' })).toBe('http://localhost:8080');
+    expect(getCallerSuppliedBaseUrl({ id: 'localai:chat' })).toBe('http://localhost:8080/v1');
   });
 
   it('returns undefined for named providers without overrides', () => {
@@ -147,6 +179,23 @@ describe('assertUrlResolvesPublic', () => {
     );
     expect(mockedLookup).not.toHaveBeenCalled();
   });
+
+  it('blocks shared-address space literals without touching DNS', async () => {
+    await expect(assertUrlResolvesPublic('http://100.100.100.200/')).rejects.toThrow(
+      PrivateRangeBlockedError,
+    );
+    expect(mockedLookup).not.toHaveBeenCalled();
+  });
+
+  it('blocks the unspecified address without touching DNS', async () => {
+    await expect(assertUrlResolvesPublic('http://0.0.0.0:8080/')).rejects.toThrow(
+      PrivateRangeBlockedError,
+    );
+    await expect(assertUrlResolvesPublic('http://[::]:8080/')).rejects.toThrow(
+      PrivateRangeBlockedError,
+    );
+    expect(mockedLookup).not.toHaveBeenCalled();
+  });
 });
 
 describe('assertProviderTargetPublic', () => {
@@ -191,5 +240,33 @@ describe('assertProviderTargetPublic', () => {
         config: { apiBaseUrl: 'http://192.168.1.5/v1' },
       }),
     ).rejects.toThrow(PrivateRangeBlockedError);
+  });
+
+  it('checks config.url (HttpProvider request URL) when the flag is set', async () => {
+    restoreEnv = mockProcessEnv({ PROMPTFOO_BLOCK_PRIVATE_RANGES: 'true' });
+    await expect(
+      assertProviderTargetPublic({
+        id: 'http',
+        config: { url: 'http://127.0.0.1:8080/hook' },
+      }),
+    ).rejects.toThrow(PrivateRangeBlockedError);
+    expect(mockedLookup).not.toHaveBeenCalled();
+  });
+
+  it('blocks non-canonical http: provider ids when the flag is set', async () => {
+    restoreEnv = mockProcessEnv({ PROMPTFOO_BLOCK_PRIVATE_RANGES: 'true' });
+    await expect(assertProviderTargetPublic({ id: 'http:127.0.0.1' })).rejects.toThrow(
+      PrivateRangeBlockedError,
+    );
+    expect(mockedLookup).not.toHaveBeenCalled();
+  });
+
+  it('blocks named providers with local default endpoints when the flag is set', async () => {
+    restoreEnv = mockProcessEnv({ PROMPTFOO_BLOCK_PRIVATE_RANGES: 'true' });
+    mockedLookup.mockResolvedValue([{ address: '127.0.0.1', family: 4 } as LookupAddress]);
+    await expect(assertProviderTargetPublic({ id: 'ollama:chat:llama3' })).rejects.toThrow(
+      PrivateRangeBlockedError,
+    );
+    expect(mockedLookup).toHaveBeenCalledWith('localhost', { all: true });
   });
 });

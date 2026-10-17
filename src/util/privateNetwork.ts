@@ -1,7 +1,7 @@
 import { lookup } from 'node:dns/promises';
 import { isIP } from 'node:net';
 
-import { getEnvBool } from '../envars';
+import { getEnvBool, getEnvString } from '../envars';
 import logger from '../logger';
 
 /**
@@ -16,9 +16,17 @@ import logger from '../logger';
  * resolved and rejected before any request is issued if every route to the
  * host stays inside private, loopback, or link-local space.
  *
- * Scope note: this intentionally covers only the server routes that fetch
- * caller-chosen URLs. Eval-time provider calls (e.g. a local Ollama at
- * 127.0.0.1) are unaffected so local development keeps working.
+ * Scope note: this covers the server routes that fetch caller-chosen URLs
+ * (`POST /api/providers/test`, `POST /api/providers/discover`,
+ * `POST /api/providers/test-session`). Eval-time provider calls (e.g. a local
+ * Ollama at 127.0.0.1) are unaffected so local development keeps working.
+ * Agentic browser navigation targets are out of scope: driving a browser to
+ * an arbitrary page is that provider's core function, not an endpoint to
+ * guard.
+ *
+ * Redirects: the preflight below validates the initial target, and the fetch
+ * layer (`fetchWithProxy`) re-validates every redirect destination while the
+ * flag is set, so a public URL cannot 302 into private space.
  *
  * DNS-rebinding caveat: the hostname is resolved once, before the request.
  * A record that flips between the check and the connection (rebind attack)
@@ -28,11 +36,13 @@ import logger from '../logger';
 
 // [start, end] as unsigned 32-bit ints, sorted for readability.
 const IPV4_PRIVATE_RANGES: Array<readonly [number, number]> = [
-  [0x0a000000, 0x0affffff], // 10.0.0.0/8      RFC1918
-  [0xac100000, 0xac1fffff], // 172.16.0.0/12   RFC1918
-  [0xc0a80000, 0xc0a8ffff], // 192.168.0.0/16  RFC1918
-  [0x7f000000, 0x7fffffff], // 127.0.0.0/8      loopback
-  [0xa9fe0000, 0xa9feffff], // 169.254.0.0/16  link-local (cloud metadata lives here)
+  [0x00000000, 0x00000000], // 0.0.0.0/32        unspecified (connects to a local listener on Node)
+  [0x0a000000, 0x0affffff], // 10.0.0.0/8        RFC1918
+  [0x64400000, 0x647fffff], // 100.64.0.0/10     RFC6598 shared address space (carrier/overlay nets)
+  [0xac100000, 0xac1fffff], // 172.16.0.0/12     RFC1918
+  [0xc0a80000, 0xc0a8ffff], // 192.168.0.0/16    RFC1918
+  [0x7f000000, 0x7fffffff], // 127.0.0.0/8       loopback
+  [0xa9fe0000, 0xa9feffff], // 169.254.0.0/16    link-local (cloud metadata lives here)
 ];
 
 function ipv4ToInt(ip: string): number | null {
@@ -109,6 +119,10 @@ function expandIPv6(ip: string): number[] | null {
 function isPrivateIPv6(bytes: number[]): boolean {
   // ::1 loopback
   if (bytes.slice(0, 15).every((b) => b === 0) && bytes[15] === 1) {
+    return true;
+  }
+  // :: unspecified (connects to a local listener on Node, like 0.0.0.0)
+  if (bytes.every((b) => b === 0)) {
     return true;
   }
   // fe80::/10 link-local
@@ -211,26 +225,90 @@ export async function assertUrlResolvesPublic(rawUrl: string): Promise<void> {
 
 interface ProviderTarget {
   id?: unknown;
-  config?: { apiBaseUrl?: unknown };
+  config?: { apiBaseUrl?: unknown; url?: unknown };
 }
 
 /**
- * Extract the caller-supplied base URL from provider options, if any. Covers
- * the two shapes that let a caller choose the fetch target: a bare
- * `http(s)://` provider id, and an explicit `config.apiBaseUrl`. Named
- * providers without an override resolve to their public defaults and need no
- * check.
+ * Named providers whose default endpoint is a local service. With the flag
+ * set and no explicit URL override, the effective default (the provider's env
+ * override, or the hardcoded local default) is validated instead of being
+ * trusted as "public by default" — e.g. `ollama:chat:llama3` would otherwise
+ * post to http://localhost:11434 unchecked.
+ */
+const LOCAL_DEFAULT_ENDPOINTS: Array<{
+  /** Matches the provider ids that default to this local endpoint. */
+  test: (id: string) => boolean;
+  /** The effective default base URL, honoring the provider's env override. */
+  baseUrl: () => string;
+}> = [
+  {
+    test: (id) => id.startsWith('ollama:'),
+    baseUrl: () => getEnvString('OLLAMA_BASE_URL') || 'http://localhost:11434',
+  },
+  {
+    test: (id) => id === 'llama' || id.startsWith('llama:'),
+    baseUrl: () => getEnvString('LLAMA_BASE_URL') || 'http://localhost:8080',
+  },
+  {
+    test: (id) => id.startsWith('localai:'),
+    baseUrl: () => getEnvString('LOCALAI_BASE_URL') || 'http://localhost:8080/v1',
+  },
+  {
+    test: (id) => id.startsWith('mlflow-gateway:'),
+    baseUrl: () => getEnvString('MLFLOW_GATEWAY_URL') || 'http://localhost:5000',
+  },
+  {
+    test: (id) => id.startsWith('helicone:'),
+    baseUrl: () => 'http://localhost:8080',
+  },
+  {
+    test: (id) => id.startsWith('docker:'),
+    baseUrl: () => getEnvString('DOCKER_MODEL_RUNNER_BASE_URL') || 'http://localhost:12434',
+  },
+];
+
+/**
+ * Extract the effective fetch target from provider options, if one can be
+ * determined. Covers every shape that lets a caller choose the fetch target:
+ *
+ * - an explicit `config.apiBaseUrl` or `config.url` override (the latter is
+ *   what `HttpProvider` actually requests for `{ id: 'http', ... }`),
+ * - a bare `http(s)` provider id — parsed with `URL` so the non-canonical
+ *   forms the provider registry accepts (`http:127.0.0.1`, backslash
+ *   variants) are caught too,
+ * - a named provider whose default endpoint is local (ollama, llama, ...),
+ *   validated against its effective default base URL.
+ *
+ * Named providers without an override or a local default resolve to their
+ * public defaults and need no check.
  */
 export function getCallerSuppliedBaseUrl(providerOptions: ProviderTarget): string | undefined {
-  const configUrl = providerOptions?.config?.apiBaseUrl;
-  if (typeof configUrl === 'string' && configUrl.length > 0) {
-    return configUrl;
+  const config = providerOptions?.config;
+  for (const key of ['apiBaseUrl', 'url'] as const) {
+    const configUrl = config?.[key];
+    if (typeof configUrl === 'string' && configUrl.length > 0) {
+      return configUrl;
+    }
   }
   const id = providerOptions?.id;
-  if (typeof id === 'string' && /^(https?):\/\//i.test(id)) {
-    return id;
+  if (typeof id !== 'string' || id.length === 0) {
+    return undefined;
   }
-  return undefined;
+  try {
+    const parsed = new URL(id);
+    if (parsed.protocol === 'http:' || parsed.protocol === 'https:') {
+      return id;
+    }
+  } catch {
+    // Not an absolute URL. The provider registry still accepts any `http:`-
+    // prefixed id, so treat it as an HTTP target and let
+    // assertUrlResolvesPublic fail closed on it.
+    if (/^https?:/i.test(id)) {
+      return id;
+    }
+  }
+  const localDefault = LOCAL_DEFAULT_ENDPOINTS.find(({ test }) => test(id));
+  return localDefault?.baseUrl();
 }
 
 /**

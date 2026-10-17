@@ -358,6 +358,22 @@ providersRouter.post('/test-session', async (req: Request, res: Response): Promi
   }
   const { provider: validatedProvider, sessionConfig, mainInputVariable } = bodyResult.data;
 
+  // SSRF guard for intentionally exposed servers: when PROMPTFOO_BLOCK_PRIVATE_RANGES
+  // is set, refuse caller-chosen private targets before any provider is loaded.
+  try {
+    await assertProviderTargetPublic(validatedProvider);
+  } catch (error) {
+    if (error instanceof PrivateRangeBlockedError) {
+      logger.warn('[POST /providers/test-session] Blocked private-range provider target');
+      res.status(400).json({
+        error:
+          'Refused: PROMPTFOO_BLOCK_PRIVATE_RANGES is set and the provider target resolves to a private, loopback, or link-local address.',
+      });
+      return;
+    }
+    throw error;
+  }
+
   try {
     const loadedProvider = await loadApiProvider(validatedProvider.id, {
       options: {
