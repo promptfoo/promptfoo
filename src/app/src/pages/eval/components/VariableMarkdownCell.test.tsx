@@ -62,6 +62,22 @@ describe('VariableMarkdownCell', () => {
       expect(screen.queryByRole('button')).not.toBeInTheDocument();
     });
 
+    it.each([
+      ['![request](data:text/plain,diagnostic "HTTP 500")', 'request'],
+      ['![](data:text/plain,diagnostic "HTTP 500")', 'HTTP 500'],
+      ['![request][image]\n\n[image]: data:text/plain,diagnostic "HTTP 500"', 'request'],
+    ])('preserves the title when an image source is filtered: %s', (value, label) => {
+      const onImageClick = vi.fn();
+      render(
+        <VariableMarkdownCell value={value} maxTextLength={200} onImageClick={onImageClick} />,
+      );
+
+      expect(screen.getByText(label)).toHaveAttribute('title', 'HTTP 500');
+      expect(screen.queryByRole('img')).not.toBeInTheDocument();
+      expect(screen.queryByRole('button')).not.toBeInTheDocument();
+      expect(onImageClick).not.toHaveBeenCalled();
+    });
+
     it('skips ordinary text parsing and parses image syntax once', () => {
       const extractSpy = vi.spyOn(markdownConfig, 'extractRenderableMarkdownImages');
 

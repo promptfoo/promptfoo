@@ -35,7 +35,7 @@ export default function MarkdownImage({
 }: MarkdownImageProps) {
   const isLinked = use(MarkdownLinkContext);
   if (!src) {
-    return alt ? <span>{alt}</span> : null;
+    return alt || title ? <span title={title}>{alt || title}</span> : null;
   }
 
   const image = (

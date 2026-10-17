@@ -20,6 +20,19 @@ describe('MarkdownImage', () => {
     expect(container).toBeEmptyDOMElement();
   });
 
+  it.each(['request screenshot', '', undefined])(
+    'preserves the title of a missing-source image with alt text %s',
+    (alt) => {
+      const onImageClick = vi.fn();
+      render(<MarkdownImage alt={alt} title="HTTP 500" onImageClick={onImageClick} />);
+
+      expect(screen.getByText(alt || 'HTTP 500')).toHaveAttribute('title', 'HTTP 500');
+      expect(screen.queryByRole('img')).not.toBeInTheDocument();
+      expect(screen.queryByRole('button')).not.toBeInTheDocument();
+      expect(onImageClick).not.toHaveBeenCalled();
+    },
+  );
+
   it('opens image previews with the keyboard', async () => {
     const user = userEvent.setup();
     const onImageClick = vi.fn();

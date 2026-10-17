@@ -73,7 +73,7 @@ const FailReasonCarousel = ({
   };
 
   const handleNext = () => {
-    setCurrentIndex((prevIndex) => (prevIndex < failReasons.length - 1 ? prevIndex + 1 : 0));
+    setCurrentIndex((prevIndex) => (prevIndex + 1) % failReasons.length);
   };
 
   return (

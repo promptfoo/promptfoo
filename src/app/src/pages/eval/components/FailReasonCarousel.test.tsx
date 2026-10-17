@@ -122,6 +122,43 @@ describe('FailReasonCarousel', () => {
     expect(screen.getByText('First reason')).toBeInTheDocument();
   });
 
+  it.each([false, true])(
+    'navigates from the displayed reason after the list shrinks with Markdown enabled=%s',
+    async (renderMarkdown) => {
+      const user = userEvent.setup();
+      const { rerender } = render(
+        <FailReasonCarousel
+          failReasons={['First reason', 'Second reason', 'Third reason']}
+          renderMarkdown={renderMarkdown}
+        />,
+      );
+
+      const [previousButton, nextButton] = screen.getAllByRole('button');
+      await user.click(nextButton);
+      await user.click(nextButton);
+      expect(screen.getByText('Third reason')).toBeInTheDocument();
+
+      rerender(
+        <FailReasonCarousel
+          failReasons={['First reason', 'Second reason']}
+          renderMarkdown={renderMarkdown}
+        />,
+      );
+      expect(screen.getByText('First reason')).toBeInTheDocument();
+      expect(screen.getByText('1/2')).toBeInTheDocument();
+
+      await user.click(nextButton);
+      expect(screen.getByText('Second reason')).toBeInTheDocument();
+      expect(screen.getByText('2/2')).toBeInTheDocument();
+      await user.click(nextButton);
+      expect(screen.getByText('First reason')).toBeInTheDocument();
+      await user.click(previousButton);
+      expect(screen.getByText('Second reason')).toBeInTheDocument();
+      await user.click(previousButton);
+      expect(screen.getByText('First reason')).toBeInTheDocument();
+    },
+  );
+
   it('preserves literal failure diagnostics when Markdown rendering is disabled', () => {
     const reason = `${String.raw`\d+\.\w+`}\n[diagnostic]: https://example.com`;
 
