@@ -2,7 +2,12 @@ import { matchesLlmRubric } from '../matchers/llmGrading';
 import invariant from '../util/invariant';
 import { finalizeGradedAssertion } from './ragDefaults';
 
-import type { AssertionEvidence, AssertionParams, GradingResult } from '../types/index';
+import type {
+  AssertionEvidence,
+  AssertionParams,
+  EvidenceEntry,
+  GradingResult,
+} from '../types/index';
 
 /**
  * Maximum depth for evidence value cloning. Prevents pathological objects
@@ -221,29 +226,6 @@ function serializeEvidenceValue(value: unknown): string {
   } catch {
     return String(value);
   }
-}
-
-/**
- * A single projected evidence entry. These are passed to the grader as a
- * structured `evidence` variable alongside the candidate `output`, so custom
- * rubric templates can reference them explicitly (e.g. `{{ evidence[0].value }}`
- * or `{% for e in evidence %}...{% endfor %}`).
- */
-export interface EvidenceEntry {
-  /** The `from` path that selected this entry (e.g. `metadata.fileChanges`). */
-  from: string;
-  /** Human-readable label, either from the assertion config or derived from `from`. */
-  label: string;
-  /**
-   * The projected, cycle-broken, depth-limited evidence value, serialised to
-   * a bounded string (see `maxBytes`). This is the literal text the grader
-   * will see; it is NOT re-parsed as structured data.
-   */
-  value: string;
-  /** True when the serialised value was truncated to fit `maxBytes`. */
-  truncated: boolean;
-  /** The configured byte limit that `value` respects. */
-  maxBytes: number;
 }
 
 /**

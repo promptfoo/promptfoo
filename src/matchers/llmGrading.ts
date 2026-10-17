@@ -29,10 +29,10 @@ import {
 } from './rubric';
 import { graderFail, normalizeMatcherTokenUsage, tryParse } from './shared';
 
-import type { EvidenceEntry } from '../assertions/llmRubric';
 import type {
   Assertion,
   CallApiContextParams,
+  EvidenceEntry,
   GradingConfig,
   GradingResult,
   ProviderResponse,

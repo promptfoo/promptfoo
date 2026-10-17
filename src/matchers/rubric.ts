@@ -16,11 +16,11 @@ import { loadYaml } from '../util/yamlLoad';
 import { callProviderWithContext, getAndCheckProvider } from './providers';
 import { graderFail, normalizeMatcherTokenUsage } from './shared';
 
-import type { EvidenceEntry } from '../assertions/llmRubric';
 import type {
   ApiProvider,
   Assertion,
   CallApiContextParams,
+  EvidenceEntry,
   GradingConfig,
   GradingResult,
   ImageOutput,

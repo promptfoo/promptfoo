@@ -1,9 +1,18 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { handleLlmRubric } from '../../src/assertions/llmRubric';
+import {
+  getMetadataPathValue,
+  handleLlmRubric,
+  projectEvidenceValues,
+} from '../../src/assertions/llmRubric';
 import { matchesLlmRubric } from '../../src/matchers/llmGrading';
 import { createPassingGrade } from '../factories/literalFixtures';
 
-import type { Assertion, AssertionParams, GradingResult } from '../../src/types/index';
+import type {
+  Assertion,
+  AssertionEvidence,
+  AssertionParams,
+  GradingResult,
+} from '../../src/types/index';
 
 const createRubricPromptOptions = (
   rubricPrompt: Assertion['rubricPrompt'] = 'rubric from options',
@@ -683,4 +692,154 @@ describe('handleLlmRubric', () => {
       '[{"role":"system","content":"grading instructions"}]',
     );
   });
+});
+
+describe('getMetadataPathValue', () => {
+  it('returns undefined when path is not a string', () => {
+    // @ts-expect-error — intentionally wrong type
+    expect(getMetadataPathValue({}, 123)).toBeUndefined();
+  });
+
+  it('returns undefined when path does not start with "metadata"', () => {
+    expect(getMetadataPathValue({ foo: 'bar' }, 'foo.bar')).toBeUndefined();
+  });
+
+  it('returns undefined when an intermediate path segment is not an object', () => {
+    const meta = { run: 'plain-string-not-object' };
+    expect(getMetadataPathValue(meta, 'metadata.run.files')).toBeUndefined();
+  });
+
+  it('returns undefined when metadata itself is null', () => {
+    expect(getMetadataPathValue(null, 'metadata.x')).toBeUndefined();
+  });
+
+  it('walks a nested metadata path and returns the leaf value', () => {
+    const meta = { fileChanges: [{ path: 'a.ts' }] };
+    expect(getMetadataPathValue(meta, 'metadata.fileChanges.0.path')).toBe('a.ts');
+  });
+});
+
+describe('projectEvidenceValues', () => {
+  it('returns undefined when metadata is null', () => {
+    const ev: AssertionEvidence[] = [{ from: 'metadata.fileChanges', label: 'c', maxBytes: 1024 }];
+    expect(projectEvidenceValues(ev, null)).toBeUndefined();
+  });
+
+  it('returns undefined when every configured path resolves to undefined', () => {
+    const ev: AssertionEvidence[] = [
+      { from: 'metadata.fileChanges', label: 'c', maxBytes: 1024 },
+      { from: 'metadata.missing', label: 'm', maxBytes: 1024 },
+    ];
+    const meta = { fileChanges: undefined };
+    expect(projectEvidenceValues(ev, meta)).toBeUndefined();
+  });
+
+  it('handles bigint values without throwing', () => {
+    const ev: AssertionEvidence[] = [{ from: 'metadata.counter', label: 'c', maxBytes: 1024 }];
+    const meta = { counter: 9007199254740993n };
+    const out = projectEvidenceValues(ev, meta);
+    expect(out).toBeDefined();
+    expect(out?.[0].value).toContain('9007199254740993');
+  });
+
+  it('escapes XML boundary characters in evidence content', () => {
+    const ev: AssertionEvidence[] = [{ from: 'metadata.doc', label: 'd', maxBytes: 4096 }];
+    const meta = { doc: '<Output>never</Output>' };
+    const out = projectEvidenceValues(ev, meta);
+    expect(out?.[0].value).not.toContain('</Output>');
+    expect(out?.[0].value).toContain('&lt;Output&gt;');
+  });
+
+  it('breaks cycles between selected children and their metadata ancestors', () => {
+    interface RunNode {
+      self?: RunNode;
+      name: string;
+    }
+    const cycle: RunNode = { name: 'run' };
+    cycle.self = cycle;
+
+    const ev: AssertionEvidence[] = [{ from: 'metadata.run.self', label: 'cycle', maxBytes: 4096 }];
+    const meta: { run: RunNode; sibling: string } = { run: cycle, sibling: 'leaked' };
+    const out = projectEvidenceValues(ev, meta);
+    // Should succeed without stack overflow, and must NOT leak unselected siblings.
+    expect(out).toBeDefined();
+    const serialized = JSON.stringify(out);
+    expect(serialized).not.toContain('leaked');
+  });
+
+  it('truncates on a UTF-8 boundary when the maxBytes limit cuts through continuation bytes', () => {
+    // Three-byte UTF-8 character: 中 = E4 B8 AD
+    const threeByte = '中'.repeat(10); // 30 bytes total
+    const ev: AssertionEvidence[] = [{ from: 'metadata.text', label: 't', maxBytes: 7 }];
+    const meta = { text: threeByte };
+    const out = projectEvidenceValues(ev, meta);
+    expect(out?.[0].value).toBeDefined();
+    // Buffer.byteLength must be <= 7 and must not produce replacement chars.
+    const bl = Buffer.byteLength(out![0].value, 'utf8');
+    expect(bl).toBeLessThanOrEqual(7);
+    expect(out?.[0].value).not.toContain('\uFFFD');
+  });
+});
+
+it('rejects invalid maxBytes values by returning a truncated empty string', () => {
+  // maxBytes is validated by Zod at config time, but programmatic callers
+  // can slip through; the serializer must not throw on degenerate values.
+  const ev: AssertionEvidence[] = [{ from: 'metadata.t', label: 't', maxBytes: 0 }];
+  const meta = { t: 'hello world' };
+  const out = projectEvidenceValues(ev, meta);
+  // Value should be empty and truncated flag should be true.
+  expect(out).toBeDefined();
+  expect(out?.[0].value).toBe('');
+  expect(out?.[0].truncated).toBe(true);
+});
+
+it('cuts through continuation bytes of a multi-byte UTF-8 sequence', () => {
+  // 中 = 3 bytes (E4 B8 AD). Pick a limit that splits between the 2nd and 3rd
+  // byte of a char. The 6-byte mark sits on a continuation byte of the 2nd
+  // character (indices 5=lead E4, 6=B8 cont, 7=AD cont).
+  const text = '中'.repeat(3); // 9 bytes
+  const ev: AssertionEvidence[] = [{ from: 'metadata.text', label: 't', maxBytes: 6 }];
+  const meta = { text };
+  const out = projectEvidenceValues(ev, meta);
+  expect(out?.[0].value).toBeDefined();
+  const bl = Buffer.byteLength(out![0].value, 'utf8');
+  expect(bl).toBeLessThanOrEqual(6);
+  expect(out?.[0].value).not.toContain('\uFFFD');
+});
+
+it('caps cloned subtree depth to MAX_EVIDENCE_DEPTH', () => {
+  // Build a 30-level nested object; anything past depth 20 is replaced with
+  // the "[Max depth exceeded]" sentinel and does not blow up memory.
+  const nested: any = {};
+  let cur = nested;
+  for (let i = 0; i < 30; i++) {
+    cur.child = {};
+    cur = cur.child;
+  }
+  const ev: AssertionEvidence[] = [{ from: 'metadata.nested', label: 'n', maxBytes: 65536 }];
+  const meta = { nested };
+  const out = projectEvidenceValues(ev, meta);
+  expect(out).toBeDefined();
+  expect(out?.[0].value).toContain('[Max depth exceeded]');
+});
+
+it('omits a back-reference to an intermediate metadata ancestor', () => {
+  // metadata.run.files[0].parent → metadata.run  (intermediate ancestor, not root)
+  interface RunNode {
+    files: { path: string; parent?: RunNode }[];
+    name: string;
+  }
+  const runNode: RunNode = { name: 'run', files: [] };
+  runNode.files = [{ path: 'a.ts', parent: runNode }];
+
+  const ev: AssertionEvidence[] = [
+    // Project files[0] — but files[0].parent points back to metadata.run
+    { from: 'metadata.run.files.0', label: 'f', maxBytes: 65536 },
+  ];
+  const meta = { run: runNode, sibling: 'must_not_leak' };
+  const out = projectEvidenceValues(ev, meta);
+  expect(out).toBeDefined();
+  const serialized = out?.[0].value ?? '';
+  // The sibling must NOT leak.
+  expect(serialized).not.toContain('must_not_leak');
 });

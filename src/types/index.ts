@@ -937,6 +937,33 @@ const AssertionEvidenceSchema = z.object({
 
 export type AssertionEvidence = z.infer<typeof AssertionEvidenceSchema>;
 
+/**
+ * A single projected evidence entry. These are passed to the grader as a
+ * structured `evidence` variable alongside the candidate `output`, so custom
+ * rubric templates can reference them explicitly (e.g. `{{ evidence[0].value }}`
+ * or `{% for e in evidence %}...{% endfor %}`).
+ *
+ * Lives here (instead of src/assertions/) because both src/assertions/ and
+ * src/matchers/ need the shape — placing it in assertions would pull a
+ * circular `matchers → assertions → matchers` dependency through madge.
+ */
+export interface EvidenceEntry {
+  /** The `from` path that selected this entry (e.g. `metadata.fileChanges`). */
+  from: string;
+  /** Human-readable label, either from the assertion config or derived from `from`. */
+  label: string;
+  /**
+   * The projected, cycle-broken, depth-limited evidence value, serialised to
+   * a bounded string (see `maxBytes`). This is the literal text the grader
+   * will see; it is NOT re-parsed as structured data.
+   */
+  value: string;
+  /** True when the serialised value was truncated to fit `maxBytes`. */
+  truncated: boolean;
+  /** The configured byte limit that `value` respects. */
+  maxBytes: number;
+}
+
 // TODO(ian): maybe Assertion should support {type: config} to make the yaml cleaner
 export const AssertionSchema = z.object({
   // Type of assertion
