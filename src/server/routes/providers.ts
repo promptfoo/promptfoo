@@ -13,6 +13,7 @@ import {
 import { neverGenerateRemote } from '../../redteam/remoteGeneration';
 import { ProviderSchemas } from '../../types/api/providers';
 import { fetchWithProxy } from '../../util/fetch/index';
+import { assertProviderTargetPublic, PrivateRangeBlockedError } from '../../util/privateNetwork';
 import { getAvailableProviders } from '../config/serverConfig';
 import { sendError } from '../utils/errors';
 import type { Request, Response } from 'express';
@@ -54,6 +55,22 @@ providersRouter.post('/test', async (req: Request, res: Response): Promise<void>
   }
 
   const { providerOptions } = bodyResult.data;
+
+  // SSRF guard for intentionally exposed servers: when PROMPTFOO_BLOCK_PRIVATE_RANGES
+  // is set, refuse caller-chosen private targets before any provider is loaded.
+  try {
+    await assertProviderTargetPublic(providerOptions);
+  } catch (error) {
+    if (error instanceof PrivateRangeBlockedError) {
+      logger.warn('[POST /providers/test] Blocked private-range provider target');
+      res.status(400).json({
+        error:
+          'Refused: PROMPTFOO_BLOCK_PRIVATE_RANGES is set and the provider target resolves to a private, loopback, or link-local address.',
+      });
+      return;
+    }
+    throw error;
+  }
 
   try {
     const loadedProvider = await loadApiProvider(providerOptions.id, {
@@ -110,6 +127,22 @@ providersRouter.post(
     if (neverGenerateRemote()) {
       res.status(400).json({ error: 'Requires remote generation be enabled.' });
       return;
+    }
+
+    // SSRF guard for intentionally exposed servers: when PROMPTFOO_BLOCK_PRIVATE_RANGES
+    // is set, refuse caller-chosen private targets before any provider is loaded.
+    try {
+      await assertProviderTargetPublic(providerOptions);
+    } catch (error) {
+      if (error instanceof PrivateRangeBlockedError) {
+        logger.warn('[POST /providers/discover] Blocked private-range provider target');
+        res.status(400).json({
+          error:
+            'Refused: PROMPTFOO_BLOCK_PRIVATE_RANGES is set and the provider target resolves to a private, loopback, or link-local address.',
+        });
+        return;
+      }
+      throw error;
     }
 
     try {
