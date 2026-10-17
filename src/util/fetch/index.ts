@@ -12,6 +12,11 @@ import { getRequestTimeoutMs } from '../../providers/shared';
 import { parseRateLimitHeaders } from '../../scheduler/headerParser';
 import invariant from '../../util/invariant';
 import { sleep } from '../../util/time';
+import {
+  assertUrlResolvesPublic,
+  isPrivateRangeBlockingEnabled,
+  PrivateRangeBlockedError,
+} from '../privateNetwork';
 import { sanitizeUrl, sanitizeUrlForLogging } from '../sanitizer';
 import { CloudAuthRedirectError } from './cloudAuthRedirects';
 import { createDecompressionInterceptor, stripDecompressionHeaders } from './decompress';
@@ -213,6 +218,136 @@ function getFetchUrlString(url: RequestInfo): string | undefined {
   return undefined;
 }
 
+const MAX_GUARDED_REDIRECT_HOPS = 5;
+
+// Credentials dropped when a guarded redirect crosses origins, mirroring what
+// fetch strips automatically in 'follow' mode.
+const CROSS_ORIGIN_REDIRECT_DROP_HEADERS = new Set([
+  'authorization',
+  'cookie',
+  'proxy-authorization',
+]);
+
+function isRedirectStatus(status: number): boolean {
+  return status === 301 || status === 302 || status === 303 || status === 307 || status === 308;
+}
+
+// Entity headers that must not survive a 301/302/303 downgrade to GET.
+const BODY_HEADERS = new Set([
+  'content-length',
+  'content-type',
+  'content-encoding',
+  'content-language',
+]);
+
+function stripHeadersByName(headers: Record<string, string>, names: Set<string>): void {
+  for (const name of Object.keys(headers)) {
+    if (names.has(name.toLowerCase())) {
+      delete headers[name];
+    }
+  }
+}
+
+/**
+ * Compute the request options for following a redirect hop, mirroring the
+ * fetch spec: 301/302/303 downgrade to GET with the body dropped (303 for any
+ * non-HEAD method), 307/308 preserve method and body, and credentials are
+ * dropped when crossing origins.
+ */
+function buildRedirectHopOptions(
+  status: number,
+  currentUrl: string,
+  nextUrl: string,
+  currentOptions: FetchOptions & { dispatcher?: any },
+): FetchOptions & { dispatcher?: any } {
+  const nextOptions: FetchOptions & { dispatcher?: any } = {
+    ...currentOptions,
+    headers: { ...headersInitToRecord(currentOptions.headers) },
+  };
+  const headers = nextOptions.headers as Record<string, string>;
+  const method = (nextOptions.method || 'GET').toUpperCase();
+  const downgradeToGet =
+    status === 303 ? method !== 'HEAD' : (status === 301 || status === 302) && method === 'POST';
+  if (downgradeToGet) {
+    nextOptions.method = 'GET';
+    delete nextOptions.body;
+    stripHeadersByName(headers, BODY_HEADERS);
+  }
+  if (new URL(nextUrl).origin !== new URL(currentUrl).origin) {
+    stripHeadersByName(headers, CROSS_ORIGIN_REDIRECT_DROP_HEADERS);
+  }
+  return nextOptions;
+}
+
+/**
+ * Follow redirects manually, re-validating every destination against the
+ * private-range guard. Used only when `PROMPTFOO_BLOCK_PRIVATE_RANGES` is set:
+ * the default `redirect: 'follow'` would let a publicly-resolving URL 302
+ * into link-local/cloud-metadata space after the preflight check passed.
+ *
+ * Redirect semantics mirror the fetch spec for the common cases (301/302/303
+ * downgrade to GET with the body dropped; 307/308 preserve method and body).
+ */
+async function fetchWithRedirectValidation(
+  initialUrl: string,
+  options: FetchOptions & { dispatcher?: any },
+  tlsOptions: ConnectionOptions,
+): Promise<Response> {
+  let currentUrl = initialUrl;
+  let currentOptions: FetchOptions & { dispatcher?: any } = {
+    ...options,
+    redirect: 'manual',
+  };
+  // `redirect: 'manual'` stops after the first 3xx, so recompute the
+  // dispatcher per hop: proxy selection depends on the hop's URL. A
+  // caller-supplied dispatcher (e.g. mTLS) is kept for every hop.
+  const callerDispatcher = options.dispatcher;
+
+  for (let hop = 0; hop <= MAX_GUARDED_REDIRECT_HOPS; hop++) {
+    if (!callerDispatcher) {
+      const hopProxyUrl = getProxyForUrl(currentUrl);
+      currentOptions.dispatcher = hopProxyUrl
+        ? getOrCreateProxyAgent(hopProxyUrl, tlsOptions)
+        : getOrCreateAgent(tlsOptions);
+    }
+
+    const response = await monkeyPatchFetch(currentUrl, currentOptions);
+    const location = response.headers.get('location');
+    if (!isRedirectStatus(response.status) || !location) {
+      return response;
+    }
+    // Release the redirect response's socket before following it.
+    await response.arrayBuffer().catch(() => undefined);
+
+    if (hop === MAX_GUARDED_REDIRECT_HOPS) {
+      throw new PrivateRangeBlockedError(
+        `PROMPTFOO_BLOCK_PRIVATE_RANGES is set: refusing to follow more than ${MAX_GUARDED_REDIRECT_HOPS} redirects from ${JSON.stringify(initialUrl)}`,
+      );
+    }
+
+    const nextUrl = new URL(location, currentUrl).toString();
+    // Fail closed: a public URL must not redirect into private space.
+    await assertUrlResolvesPublic(nextUrl);
+
+    const nextOptions = buildRedirectHopOptions(
+      response.status,
+      currentUrl,
+      nextUrl,
+      currentOptions,
+    );
+
+    logger.debug('[fetchWithProxy] Following guarded redirect', {
+      from: sanitizeUrl(currentUrl),
+      to: sanitizeUrl(nextUrl),
+    });
+    currentUrl = nextUrl;
+    currentOptions = nextOptions;
+  }
+
+  // Unreachable: the loop either returns a response or throws.
+  throw new Error('Unexpected end of redirect loop');
+}
+
 export async function fetchWithProxy(
   url: RequestInfo,
   options: FetchOptions = {},
@@ -326,6 +461,14 @@ export async function fetchWithProxy(
   const disableTransientRetries = resolveTransientRetryDisabled(options.disableTransientRetries);
   const maxTransientRetries = disableTransientRetries ? 0 : 3;
 
+  // With the private-range guard on, redirects are followed manually so every
+  // hop can be re-validated; otherwise a single automatic fetch is used.
+  const guardRedirects = isPrivateRangeBlockingEnabled();
+  const doSingleFetch = (options: FetchOptions & { dispatcher?: any }): Promise<Response> =>
+    guardRedirects
+      ? fetchWithRedirectValidation(finalUrlString, options, tlsOptions)
+      : monkeyPatchFetch(finalUrl, options);
+
   for (let attempt = 0; attempt <= maxTransientRetries; attempt++) {
     let attemptOptions = finalOptions;
     if (getAuthHeaders) {
@@ -338,7 +481,7 @@ export async function fetchWithProxy(
         ),
       };
     }
-    const response = await monkeyPatchFetch(finalUrl, attemptOptions);
+    const response = await doSingleFetch(attemptOptions);
 
     if (!disableTransientRetries && isTransientError(response) && attempt < maxTransientRetries) {
       const backoffMs = Math.pow(2, attempt) * 1000; // 1s, 2s, 4s
