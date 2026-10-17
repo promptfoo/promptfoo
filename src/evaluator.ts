@@ -21,7 +21,7 @@ import { DEFAULT_MAX_CONCURRENCY, FILE_METADATA_KEY } from './constants';
 import { getEnvBool, getEnvInt, getEvalTimeoutMs, getMaxEvalTimeMs, isCI } from './envars';
 import { collectFileMetadata, renderPrompt, runExtensionHook } from './evaluatorHelpers';
 import logger, { globalLogCallback, isDebugEnabled, setLogCallback } from './logger';
-import { selectMaxScore } from './matchers/comparison';
+import { isMetricSelectorAssertionType, selectMaxScore, selectMetric } from './matchers/comparison';
 import {
   getResultIndexKey,
   PROMPTFOO_METADATA_KEY,
@@ -2344,15 +2344,45 @@ function mergeSelectBestGradingResult(
   }
 }
 
-function mergeMaxScoreGradingResult(result: EvaluationStoreResult, gradingResult: GradingResult) {
-  const existingComponentResults = result.gradingResult?.componentResults || [];
+function mergeDeterministicComparisonGradingResult(
+  result: EvaluationStoreResult,
+  gradingResult: GradingResult,
+  comparisonAssertionKey?: string,
+  allowLegacyTypeMatch = true,
+): boolean {
+  const assertionType = gradingResult.assertion?.type;
+  const allComponentResults = result.gradingResult?.componentResults || [];
+  const matchesComparisonAssertion = (component: GradingResult) => {
+    const componentKey = component.metadata?.comparisonAssertionKey;
+    if (comparisonAssertionKey) {
+      return (
+        componentKey === comparisonAssertionKey ||
+        (allowLegacyTypeMatch &&
+          componentKey === undefined &&
+          component.assertion?.type === assertionType)
+      );
+    }
+    return component.assertion?.type === assertionType;
+  };
+  const alreadyFinalized = allComponentResults.some(matchesComparisonAssertion);
+  const existingComponentResults = allComponentResults.filter(
+    (component) => !matchesComparisonAssertion(component),
+  );
+  const keyedGradingResult = comparisonAssertionKey
+    ? {
+        ...gradingResult,
+        metadata: { ...gradingResult.metadata, comparisonAssertionKey },
+      }
+    : gradingResult;
   const existingGradingResult = result.gradingResult;
   const comparisonPassed = gradingResult.pass;
   const previousPass = existingGradingResult?.pass ?? result.success;
   const nextPass = previousPass && comparisonPassed;
-  const newScore = comparisonPassed
-    ? (existingGradingResult?.score ?? result.score)
-    : gradingResult.score;
+  const shouldApplyComparisonScore =
+    !comparisonPassed || (previousPass && existingComponentResults.length === 0);
+  const newScore = shouldApplyComparisonScore
+    ? gradingResult.score
+    : (existingGradingResult?.score ?? result.score);
 
   result.gradingResult = {
     ...(existingGradingResult || {}),
@@ -2362,19 +2392,18 @@ function mergeMaxScoreGradingResult(result: EvaluationStoreResult, gradingResult
       !comparisonPassed && previousPass
         ? gradingResult.reason
         : (existingGradingResult?.reason ?? ''),
-    componentResults: [...existingComponentResults, gradingResult],
+    componentResults: [...existingComponentResults, keyedGradingResult],
     namedScores: {
       ...(existingGradingResult?.namedScores || {}),
       ...gradingResult.namedScores,
     },
     tokensUsed: existingGradingResult?.tokensUsed || gradingResult.tokensUsed,
-    assertion: gradingResult.assertion,
+    assertion: keyedGradingResult.assertion,
   };
 
   result.success = nextPass;
-  if (!comparisonPassed) {
-    result.score = newScore;
-  }
+  result.score = newScore;
+  return alreadyFinalized;
 }
 
 async function runBeforeAllExtensions(testSuite: TestSuite): Promise<TestSuite> {
@@ -3420,10 +3449,29 @@ function isTracingEnabledForTest(testSuite: TestSuite, testCase: AtomicTestCase)
   return tracingEnabled;
 }
 
+type MetricSelectorRows = Map<number, Assertion[]>;
+
+function trackMetricSelectorRows(
+  rows: MetricSelectorRows,
+  assertions: AssertionOrSet[] | undefined,
+  testIdx: number,
+) {
+  if (!assertions?.some((assertion) => isMetricSelectorAssertionType(assertion.type))) {
+    return;
+  }
+  const selectors = assertions.filter((assertion): assertion is Assertion =>
+    isMetricSelectorAssertionType(assertion.type),
+  );
+  if (selectors?.length) {
+    rows.set(testIdx, selectors);
+  }
+}
+
 function markComparisonRows(
   runEvalOptions: RunEvalOptions[],
   rowsWithSelectBestAssertion: Set<number>,
   rowsWithMaxScoreAssertion: Set<number>,
+  metricSelectorRows: MetricSelectorRows,
 ) {
   for (const evalOption of runEvalOptions) {
     if (evalOption.test.assert?.some((a) => a.type === 'select-best')) {
@@ -3432,6 +3480,7 @@ function markComparisonRows(
     if (evalOption.test.assert?.some((a) => a.type === 'max-score')) {
       rowsWithMaxScoreAssertion.add(evalOption.testIdx);
     }
+    trackMetricSelectorRows(metricSelectorRows, evalOption.test.assert, evalOption.testIdx);
   }
 }
 
@@ -3753,6 +3802,7 @@ interface EvalProcessingContext {
   options: InternalEvaluateOptions;
   promptEvalCounts: number[];
   prompts: CompletedPrompt[];
+  metricSelectorRows: MetricSelectorRows;
   rowsWithMaxScoreAssertion: Set<number>;
   rowsWithSelectBestAssertion: Set<number>;
   runEvalOptionsLength: number;
@@ -3837,6 +3887,7 @@ function trackComparisonRowsForEvalStep(
   row: EvaluateResult,
   rowsWithSelectBestAssertion: Set<number>,
   rowsWithMaxScoreAssertion: Set<number>,
+  metricSelectorRows: MetricSelectorRows,
 ) {
   if (evalStep.test.assert?.some((a) => a.type === 'select-best')) {
     rowsWithSelectBestAssertion.add(row.testIdx);
@@ -3844,6 +3895,7 @@ function trackComparisonRowsForEvalStep(
   if (evalStep.test.assert?.some((a) => a.type === 'max-score')) {
     rowsWithMaxScoreAssertion.add(row.testIdx);
   }
+  trackMetricSelectorRows(metricSelectorRows, evalStep.test.assert, row.testIdx);
 }
 
 function createPromptEvalCounts(prompts: CompletedPrompt[]) {
@@ -4123,9 +4175,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     redteamProviderManager.setRateLimitRegistry(this.rateLimitRegistry);
   }
 
-  /**
-   * Updates metrics and stats after a comparison assertion (select-best or max-score).
-   */
+  /** Updates metrics and stats after a comparison assertion. */
   private updateComparisonStats(
     result: TResult,
     passed: boolean,
@@ -4142,7 +4192,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       if (tokensUsed) {
         updateAssertionMetrics(metrics, tokensUsed, { cached: gradingCached });
       }
-      if (!passed && result.score !== wasScore) {
+      if (result.score !== wasScore) {
         metrics.score += result.score - wasScore;
       }
     }
@@ -4481,6 +4531,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       row,
       context.rowsWithSelectBestAssertion,
       context.rowsWithMaxScoreAssertion,
+      context.metricSelectorRows,
     );
     for (const assert of evalStep.test.assert || []) {
       if (assert.type) {
@@ -4967,6 +5018,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     prompts,
     providerAbortSignal,
     repeatCacheContextByTestIdx,
+    metricSelectorRows,
     rowsWithMaxScoreAssertion,
     rowsWithSelectBestAssertion,
     runEvalOptions,
@@ -4978,11 +5030,17 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     prompts: CompletedPrompt[];
     providerAbortSignal?: AbortSignal;
     repeatCacheContextByTestIdx: Map<number, RepeatCacheContext>;
+    metricSelectorRows: MetricSelectorRows;
     rowsWithMaxScoreAssertion: Set<number>;
     rowsWithSelectBestAssertion: Set<number>;
     runEvalOptions: RunEvalOptions[];
   }) {
-    const compareRowsCount = rowsWithSelectBestAssertion.size + rowsWithMaxScoreAssertion.size;
+    const metricSelectorCount = [...metricSelectorRows.values()].reduce(
+      (count, assertions) => count + assertions.length,
+      0,
+    );
+    const compareRowsCount =
+      metricSelectorCount + rowsWithSelectBestAssertion.size + rowsWithMaxScoreAssertion.size;
     updateComparisonReporterTotals({
       ciProgressReporter,
       compareRowsCount,
@@ -4992,8 +5050,19 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
 
     const pendingSelectBest = new Set(rowsWithSelectBestAssertion);
     const pendingMaxScore = new Set(rowsWithMaxScoreAssertion);
+    const pendingMetricSelectors = new Map(metricSelectorRows);
     try {
+      const metricCompareCount = await this.processMetricSelectorAssertions({
+        ciProgressReporter,
+        isWebUI,
+        metricSelectorRows: pendingMetricSelectors,
+        progressBarManager,
+        prompts,
+        providerAbortSignal,
+        runEvalOptions,
+      });
       const compareCount = await this.processSelectBestAssertions({
+        compareCount: metricCompareCount,
         ciProgressReporter,
         compareRowsCount,
         isWebUI,
@@ -5021,7 +5090,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
         throw error;
       }
       await this.markComparisonRowsAborted(
-        new Set([...pendingSelectBest, ...pendingMaxScore]),
+        new Set([...pendingMetricSelectors.keys(), ...pendingSelectBest, ...pendingMaxScore]),
         prompts,
         error,
         providerAbortSignal,
@@ -5067,8 +5136,140 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     }
   }
 
+  private async processMetricSelectorAssertions({
+    ciProgressReporter,
+    isWebUI,
+    metricSelectorRows,
+    progressBarManager,
+    prompts,
+    providerAbortSignal,
+    runEvalOptions,
+  }: {
+    ciProgressReporter: CIProgressReporter | null;
+    isWebUI: boolean;
+    metricSelectorRows: MetricSelectorRows;
+    progressBarManager: ProgressBarManager | null;
+    prompts: CompletedPrompt[];
+    providerAbortSignal?: AbortSignal;
+    runEvalOptions: RunEvalOptions[];
+  }) {
+    let compareCount = 0;
+    for (const [testIdx] of metricSelectorRows) {
+      providerAbortSignal?.throwIfAborted();
+      const results = await this.getResultsToCompare(testIdx);
+      if (results.length === 0) {
+        logger.warn(`Expected results to be found for test index ${testIdx}`);
+        continue;
+      }
+
+      const assertions = results[0].testCase.assert
+        ?.map((assertion, assertionIndex) => ({ assertion, assertionIndex }))
+        .filter((entry): entry is { assertion: Assertion; assertionIndex: number } =>
+          isMetricSelectorAssertionType(entry.assertion.type),
+        );
+      if (!assertions?.length) {
+        continue;
+      }
+      if (assertions.length > 1) {
+        logger.warn(
+          `Test index ${testIdx} combines metric selectors; comparison verdicts are applied with AND semantics`,
+          { selectors: assertions.map(({ assertion }) => assertion.type) },
+        );
+      }
+
+      const assertionTypeCounts = new Map<string, number>();
+      for (const { assertion } of assertions) {
+        assertionTypeCounts.set(assertion.type, (assertionTypeCounts.get(assertion.type) ?? 0) + 1);
+      }
+
+      if (
+        cliState.resume &&
+        results.every((result) => {
+          if (getComparisonError(result)) {
+            return false;
+          }
+          if (result.failureReason === ResultFailureReason.ERROR) {
+            return true;
+          }
+          return assertions.every(({ assertion, assertionIndex }) =>
+            result.gradingResult?.componentResults?.some(
+              (component) =>
+                component.metadata?.comparisonAssertionKey === `${testIdx}:${assertionIndex}` ||
+                (assertionTypeCounts.get(assertion.type) === 1 &&
+                  component.metadata?.comparisonAssertionKey === undefined &&
+                  component.assertion?.type === assertion.type),
+            ),
+          );
+        })
+      ) {
+        metricSelectorRows.delete(testIdx);
+        continue;
+      }
+
+      // Resume must use the eligibility from before any selector ran. Earlier selectors
+      // can fail otherwise valid outputs, and cancellation temporarily marks rows as errors.
+      const candidates = results.map((result) => {
+        this.restoreComparisonResult(result, prompts[result.promptIdx]?.metrics);
+        const fields = result.metadata?.[PROMPTFOO_METADATA_KEY];
+        const savedSuccess = fields?.metricSelectorBaseSuccess;
+        const success =
+          cliState.resume && typeof savedSuccess === 'boolean' ? savedSuccess : result.success;
+        result.metadata = {
+          ...result.metadata,
+          [PROMPTFOO_METADATA_KEY]: {
+            ...fields,
+            metricSelectorBaseSuccess: success,
+          },
+        };
+        return { ...result, success };
+      });
+
+      // Calculate all selectors before applying any so they share the same eligibility state.
+      const pending = [];
+      for (const { assertion, assertionIndex } of assertions) {
+        pending.push({
+          assertion,
+          assertionIndex,
+          gradingResults: await selectMetric(candidates, assertion),
+        });
+      }
+
+      for (const { assertion, assertionIndex, gradingResults } of pending) {
+        providerAbortSignal?.throwIfAborted();
+        compareCount++;
+        if (isWebUI) {
+          logger.info(`Running ${assertion.type} comparison for test #${testIdx}...`);
+        }
+
+        for (let index = 0; index < results.length; index++) {
+          const result = results[index];
+          await this.applyDeterministicComparisonGradingResult({
+            gradingResult: { ...gradingResults[index], assertion },
+            comparisonAssertionKey: `${testIdx}:${assertionIndex}`,
+            allowLegacyTypeMatch: assertionTypeCounts.get(assertion.type) === 1,
+            metrics: prompts[result.promptIdx]?.metrics,
+            result,
+          });
+        }
+
+        updateComparisonReporterProgress({
+          ciProgressReporter,
+          compareCount,
+          isWebUI,
+          label: `${assertion.type} assertion for test #${testIdx}`,
+          progressBarManager,
+          promptRaw: results[0].prompt.raw,
+          runEvalOptions,
+        });
+      }
+      metricSelectorRows.delete(testIdx);
+    }
+    return compareCount;
+  }
+
   private async processSelectBestAssertions({
     ciProgressReporter,
+    compareCount,
     compareRowsCount,
     isWebUI,
     progressBarManager,
@@ -5079,6 +5280,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     runEvalOptions,
   }: {
     ciProgressReporter: CIProgressReporter | null;
+    compareCount: number;
     compareRowsCount: number;
     isWebUI: boolean;
     progressBarManager: ProgressBarManager | null;
@@ -5088,13 +5290,13 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     rowsWithSelectBestAssertion: Set<number>;
     runEvalOptions: RunEvalOptions[];
   }) {
-    let compareCount = 0;
+    let currentCompareCount = compareCount;
     for (const testIdx of rowsWithSelectBestAssertion) {
       providerAbortSignal?.throwIfAborted();
-      compareCount++;
+      currentCompareCount++;
       await this.processSelectBestAssertionForTest({
         ciProgressReporter,
-        compareCount,
+        compareCount: currentCompareCount,
         compareRowsCount,
         isWebUI,
         progressBarManager,
@@ -5106,7 +5308,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       });
       rowsWithSelectBestAssertion.delete(testIdx);
     }
-    return compareCount;
+    return currentCompareCount;
   }
 
   private async processSelectBestAssertionForTest({
@@ -5359,7 +5561,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     });
 
     for (let index = 0; index < resultsToCompare.length; index++) {
-      await this.applyMaxScoreGradingResult({
+      await this.applyDeterministicComparisonGradingResult({
         gradingResult: {
           ...maxScoreGradingResults[index],
           assertion: maxScoreAssertion,
@@ -5518,11 +5720,15 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     await this.finalizeComparisonGrading({ gradingResult, metrics, result, wasSuccess, wasScore });
   }
 
-  private async applyMaxScoreGradingResult({
+  private async applyDeterministicComparisonGradingResult({
+    allowLegacyTypeMatch,
+    comparisonAssertionKey,
     gradingResult,
     metrics,
     result,
   }: {
+    allowLegacyTypeMatch?: boolean;
+    comparisonAssertionKey?: string;
     gradingResult: GradingResult;
     metrics: CompletedPrompt['metrics'] | undefined;
     result: TResult;
@@ -5539,7 +5745,19 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     }
     const wasSuccess = result.success;
     const wasScore = result.score;
-    mergeMaxScoreGradingResult(result, gradingResult);
+    const alreadyFinalized = mergeDeterministicComparisonGradingResult(
+      result,
+      gradingResult,
+      comparisonAssertionKey,
+      allowLegacyTypeMatch,
+    );
+    if (alreadyFinalized) {
+      this.trackFinalJsonlResult(result);
+      if (this.store.persisted && !this.store.hasResultPersistenceFailure(result)) {
+        await this.store.saveResult(result);
+      }
+      return;
+    }
     await this.finalizeComparisonGrading({ gradingResult, metrics, result, wasSuccess, wasScore });
   }
 
@@ -5777,6 +5995,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     const assertionTypes = new Set<string>();
     const rowsWithSelectBestAssertion = new Set<number>();
     const rowsWithMaxScoreAssertion = new Set<number>();
+    const metricSelectorRows: MetricSelectorRows = new Map();
 
     const restorePromptColumns = Boolean(
       options.restorePromptColumns &&
@@ -5830,7 +6049,12 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       testSuite,
       tests,
     });
-    markComparisonRows(runEvalOptions, rowsWithSelectBestAssertion, rowsWithMaxScoreAssertion);
+    markComparisonRows(
+      runEvalOptions,
+      rowsWithSelectBestAssertion,
+      rowsWithMaxScoreAssertion,
+      metricSelectorRows,
+    );
     if (cliState.resume && this.store.persisted) {
       for (const step of runEvalOptions) {
         if (rowsWithSelectBestAssertion.has(step.testIdx)) {
@@ -5863,6 +6087,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       options,
       promptEvalCounts: createPromptEvalCounts(prompts),
       prompts,
+      metricSelectorRows,
       rowsWithMaxScoreAssertion,
       rowsWithSelectBestAssertion,
       runEvalOptionsLength: runEvalOptions.length,
@@ -5992,6 +6217,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
         prompts,
         providerAbortSignal,
         repeatCacheContextByTestIdx,
+        metricSelectorRows,
         rowsWithMaxScoreAssertion,
         rowsWithSelectBestAssertion,
         runEvalOptions,

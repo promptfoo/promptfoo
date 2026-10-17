@@ -305,7 +305,12 @@ describe('validateAssertions', () => {
       const tests: TestCase[] = [
         {
           vars: {},
-          assert: [{ type: 'select-best' }, { type: 'human' }],
+          assert: [
+            { type: 'select-best' },
+            { type: 'select-lowest-cost' },
+            { type: 'select-lowest-latency' },
+            { type: 'human' },
+          ],
         },
       ];
 
