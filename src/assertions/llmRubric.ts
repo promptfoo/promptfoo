@@ -5,6 +5,15 @@ import { finalizeGradedAssertion } from './ragDefaults';
 import type { AssertionEvidence, AssertionParams, GradingResult } from '../types/index';
 
 /**
+ * Maximum depth for evidence value cloning. Prevents pathological objects
+ * (e.g., deeply nested trees or list-of-lists-of-lists…) from consuming
+ * unbounded memory even when the byte-truncation step would eventually cut
+ * them short. The limit is generous enough for realistic metadata (tool
+ * traces, file-change summaries) but tight enough to bound local work.
+ */
+const MAX_EVIDENCE_DEPTH = 20;
+
+/**
  * Walk an evidence path (already validated by `validateEvidencePath`) and return
  * the value under metadata at that path. Returns `undefined` when the path does
  * not resolve.
@@ -48,7 +57,12 @@ export function getMetadataPathValue(metadata: unknown, path: string): unknown {
  * references (common in trace entries or summaries) while still eliding real
  * cycles.
  */
-function breakCyclesAgainstRoot<T>(value: T, root: object | null, path?: string): T {
+function breakCyclesAgainstRoot<T>(
+  value: T,
+  root: object | null,
+  path?: string,
+  maxDepth: number = MAX_EVIDENCE_DEPTH,
+): T {
   if (root === null || value === null || (typeof value !== 'object' && !Array.isArray(value))) {
     return value;
   }
@@ -109,12 +123,18 @@ function breakCyclesAgainstRoot<T>(value: T, root: object | null, path?: string)
   const endpointObj = value as unknown;
   const ancestorSet = new WeakSet<object>(ancestors.filter((a) => a !== endpointObj));
 
-  function clone(v: unknown, pathAncestors: object[] = []): unknown {
+  function clone(v: unknown, pathAncestors: object[] = [], depth: number = 0): unknown {
     if (v === null || v === undefined) {
       return v;
     }
     if (typeof v !== 'object') {
       return v;
+    }
+    // Bounded depth — replace anything past the limit with a sentinel so we
+    // can still serialise the outer structure without blowing up on nested
+    // monstrosities.
+    if (depth >= maxDepth) {
+      return '[Max depth exceeded]';
     }
     const obj = v as object;
     // Back-reference to a metadata-path ancestor — must be elided to prevent
@@ -129,69 +149,16 @@ function breakCyclesAgainstRoot<T>(value: T, root: object | null, path?: string)
     }
     const nextAncestors = [...pathAncestors, obj];
     if (Array.isArray(v)) {
-      return v.map((item) => clone(item, nextAncestors));
+      return v.map((item) => clone(item, nextAncestors, depth + 1));
     }
     const out: Record<string, unknown> = {};
     for (const [k, child] of Object.entries(v as Record<string, unknown>)) {
-      out[k] = clone(child, nextAncestors);
+      out[k] = clone(child, nextAncestors, depth + 1);
     }
     return out;
   }
 
   return clone(value) as T;
-}
-
-/**
- * Deep-clone a value while replacing actual cyclic references (where an
- * object points back to one of its own ancestors) with `[Circular]`.
- *
- * Repeated references to the same object in non-circular positions are
- * preserved — direct JavaScript providers can legitimately share objects
- * between trace entries or summaries, and we should not silently drop
- * those associations.
- */
-function safeClone(value: unknown, ancestors: object[] = []): unknown {
-  if (value === null || value === undefined) {
-    return value;
-  }
-  if (typeof value !== 'object') {
-    return value;
-  }
-
-  const obj = value as object;
-  // Is this object one of its own ancestors? If so, that's a real cycle.
-  if (ancestors.includes(obj)) {
-    return '[Circular]';
-  }
-
-  const nextAncestors = [...ancestors, obj];
-
-  if (Array.isArray(value)) {
-    return value.map((item) => safeClone(item, nextAncestors));
-  }
-  const out: Record<string, unknown> = {};
-  for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
-    out[k] = safeClone(v, nextAncestors);
-  }
-  return out;
-}
-
-function stringifyEvidenceValue(value: unknown) {
-  try {
-    const cloned = safeClone(value);
-    return JSON.stringify(
-      cloned,
-      (_key, nestedValue) => {
-        if (typeof nestedValue === 'bigint') {
-          return nestedValue.toString();
-        }
-        return nestedValue;
-      },
-      2,
-    );
-  } catch {
-    return String(value);
-  }
 }
 
 /**
@@ -231,68 +198,116 @@ function truncateToMaxBytes(value: string, maxBytes: number) {
 }
 
 /**
- * Escape characters inside an evidence block so they cannot be mistaken for
- * the surrounding block's XML markers or Markdown fence.
- *
- * We wrap evidence content in an XML-style `<evidence>` block and escape
- * embedded `<` / `>` / `&` characters, plus any literal fence delimiters that
- * might otherwise terminate a Markdown code fence unexpectedly.
+ * Escape characters inside evidence content that could break prompt XML/YAML
+ * boundaries. We escape `<`, `>`, and `&` so retrieved documents or tool
+ * traces cannot close <Output>, <Evidence>, or Markdown fence markers.
  */
 function escapeEvidenceContent(raw: string): string {
   return raw.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
-export function renderEvidenceBlock(
+/**
+ * Serialize a single evidence value to a compact JSON string suitable for
+ * the grader prompt. Replaces bigints with their string representation.
+ */
+function serializeEvidenceValue(value: unknown): string {
+  try {
+    return JSON.stringify(value, (_key, nestedValue) => {
+      if (typeof nestedValue === 'bigint') {
+        return nestedValue.toString();
+      }
+      return nestedValue;
+    });
+  } catch {
+    return String(value);
+  }
+}
+
+/**
+ * A single projected evidence entry. These are passed to the grader as a
+ * structured `evidence` variable alongside the candidate `output`, so custom
+ * rubric templates can reference them explicitly (e.g. `{{ evidence[0].value }}`
+ * or `{% for e in evidence %}...{% endfor %}`).
+ */
+export interface EvidenceEntry {
+  /** The `from` path that selected this entry (e.g. `metadata.fileChanges`). */
+  from: string;
+  /** Human-readable label, either from the assertion config or derived from `from`. */
+  label: string;
+  /**
+   * The projected, cycle-broken, depth-limited evidence value, serialised to
+   * a bounded string (see `maxBytes`). This is the literal text the grader
+   * will see; it is NOT re-parsed as structured data.
+   */
+  value: string;
+  /** True when the serialised value was truncated to fit `maxBytes`. */
+  truncated: boolean;
+  /** The configured byte limit that `value` respects. */
+  maxBytes: number;
+}
+
+/**
+ * Project assertion evidence entries from provider metadata.
+ *
+ * Each configured `from` path walks the metadata, breaks any back-references
+ * to metadata ancestors (preventing unselected siblings from leaking through
+ * cyclic pointers), clones with a depth limit, serialises to compact JSON,
+ * escapes XML boundary characters, and truncates to the configured byte limit.
+ *
+ * The resulting entries form a structured `evidence` variable for the grader
+ * — they are NOT appended to the candidate output and are NOT auto-injected
+ * into the prompt. Custom rubrics use Nunjucks `{{ evidence }}` (or the
+ * individual fields) to decide how to present them.
+ *
+ * Returns `undefined` when no evidence is configured, the metadata is absent,
+ * or every configured path resolves to `undefined`.
+ */
+export function projectEvidenceValues(
   evidence: AssertionEvidence[] | undefined,
   metadata: unknown,
-): string | undefined {
+): EvidenceEntry[] | undefined {
   if (!evidence?.length || metadata === undefined) {
     return undefined;
   }
 
-  const projected = evidence.flatMap((item) => {
-    const value = getMetadataPathValue(metadata, item.from);
-    if (value === undefined) {
-      return [];
+  const rootIsObject = metadata !== null && typeof metadata === 'object';
+  const rootObj = rootIsObject ? (metadata as object) : null;
+
+  const projected: EvidenceEntry[] = [];
+  for (const item of evidence) {
+    const rawValue = getMetadataPathValue(metadata, item.from);
+    if (rawValue === undefined) {
+      continue;
     }
 
-    // Break any back-reference from this subtree to the metadata root before we
-    // serialise — prevents sibling keys (including credentials) from leaking
+    // Break any back-reference from this subtree to the metadata root before
+    // we serialise — prevents sibling keys (including credentials) from leaking
     // through a selected child's parent pointer. Pass the validated path so
     // ancestors are collected correctly even when the selected endpoint IS a
     // cyclic ancestor (e.g. `metadata.self = metadata` with `from: metadata.self`).
-    const isolated = breakCyclesAgainstRoot(
-      value,
-      metadata !== null && typeof metadata === 'object' ? (metadata as object) : null,
-      item.from,
-    );
+    const isolated = breakCyclesAgainstRoot(rawValue, rootObj, item.from);
 
-    const serialized = stringifyEvidenceValue(isolated) ?? String(isolated);
-    // Escape before truncation so the displayed `maxBytes` limit bounds the
-    // final grader-facing content. Escaping `<`/`>`/`&` into 4-5 byte entities
-    // after truncation would otherwise let an HTML-rich payload exceed the
-    // requested limit (e.g. 65536 bytes of raw `<div>` would become ~256 KiB).
+    // Serialise → escape → truncate. Escape BEFORE truncation so the byte limit
+    // bounds the FINAL grader-facing content — an HTML-rich payload would
+    // otherwise expand 4-5× after truncation and exceed the requested limit.
+    const serialized = serializeEvidenceValue(isolated);
     const escaped = escapeEvidenceContent(serialized);
     const truncated = truncateToMaxBytes(escaped, item.maxBytes);
-    const label = item.label || item.from;
 
-    return [
-      [
-        `### ${label}`,
-        `Source: ${item.from}`,
-        `Limit: ${item.maxBytes} bytes${truncated.truncated ? ` (truncated to ${item.maxBytes} bytes)` : ''}`,
-        '<evidence>',
-        truncated.value,
-        '</evidence>',
-      ].join('\n'),
-    ];
-  });
+    projected.push({
+      from: item.from,
+      label: item.label || item.from,
+      value: truncated.value,
+      truncated: truncated.truncated,
+      maxBytes: item.maxBytes,
+    });
+  }
 
-  if (!projected.length) {
+  if (projected.length === 0) {
     return undefined;
   }
 
-  return ['---', 'Additional evidence for grading', ...projected].join('\n\n');
+  return projected;
 }
 
 export const handleLlmRubric = async ({
@@ -321,9 +336,9 @@ export const handleLlmRubric = async ({
   // Doing so would (a) break `tryParse` on structured JSON outputs so that
   // custom rubric templates with `{{output.field}}` stop working, and (b)
   // corrupt the image-output comparison inside getGradingOutputForImages.
-  // Instead, we pass the evidence block separately to the matcher so the
-  // grader can inject it after output normalisation.
-  const evidenceBlock = renderEvidenceBlock(assertion.evidence, providerResponse?.metadata);
+  // Instead, we project evidence as a structured entry and pass it separately
+  // to the matcher so the grader receives it as its own `evidence` variable.
+  const evidence = projectEvidenceValues(assertion.evidence, providerResponse?.metadata);
 
   // Only forward provider media to the matcher when (a) we have evidence
   // to inject or (b) there is no assertion transform. When `assertion.transform`
@@ -333,9 +348,9 @@ export const handleLlmRubric = async ({
   const hasMedia =
     !assertion.transform && (providerResponse?.images?.length || providerResponse?.audio);
   const matcherOptions =
-    evidenceBlock || hasMedia
+    evidence || hasMedia
       ? {
-          ...(evidenceBlock ? { evidenceBlock } : {}),
+          ...(evidence ? { evidence } : {}),
           ...(hasMedia ? { providerResponse } : {}),
         }
       : undefined;

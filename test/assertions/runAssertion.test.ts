@@ -3517,7 +3517,10 @@ describe('runAssertion', () => {
       const gradingPrompt = capturedPrompt.mock.calls[0]?.[0] as string;
       expect(gradingPrompt).toContain('transformed candidate output');
       expect(gradingPrompt).not.toContain('raw provider output');
-      expect(gradingPrompt).toContain('Additional evidence for grading');
+      // Evidence now flows through the structured {{ evidence }} template var
+      // in the default prompt — it appears inside <Evidence> tags alongside
+      // the candidate <Output> and <Rubric>.
+      expect(gradingPrompt).toContain('<Evidence>');
       expect(gradingPrompt).toContain('Repository changes');
       expect(gradingPrompt).toContain('src/index.ts');
       expect(gradingPrompt).not.toContain('must not be exposed');

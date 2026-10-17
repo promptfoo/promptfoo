@@ -29,6 +29,7 @@ import {
 } from './rubric';
 import { graderFail, normalizeMatcherTokenUsage, tryParse } from './shared';
 
+import type { EvidenceEntry } from '../assertions/llmRubric';
 import type {
   Assertion,
   CallApiContextParams,
@@ -189,12 +190,13 @@ export async function matchesLlmRubric(
     preferRemote?: boolean;
     providerResponse?: ProviderResponse;
     /**
-     * Optional supplementary evidence block (already bounded & escaped) to
-     * inject into the grader prompt as a separate context section. Must NOT
-     * be spliced into `llmOutput` — that would corrupt structured-json
-     * outputs and break the image-output normalisation below.
+     * Optional supplementary evidence entries (already bounded, cycle-broken,
+     * serialised, and byte-truncated). These are exposed to the grader as
+     * a structured `evidence` variable alongside the candidate `output` —
+     * they are NOT spliced into `llmOutput`, which would corrupt
+     * structured-json outputs and break image normalisation below.
      */
-    evidenceBlock?: string;
+    evidence?: EvidenceEntry[];
   },
   providerCallContext?: CallApiContextParams,
 ): Promise<GradingResult> {
@@ -230,7 +232,7 @@ export async function matchesLlmRubric(
         ...(await doRemoteGrading({
           task: 'llm-rubric',
           rubric,
-          evidence: options?.evidenceBlock,
+          evidence: options?.evidence ? JSON.stringify(options.evidence) : undefined,
           output: gradingOutput,
           vars: vars || {},
           ...(imageOutputs.length ? { images: imageOutputs } : {}),
@@ -257,7 +259,7 @@ export async function matchesLlmRubric(
       throwOnError: options?.throwOnError,
       images: imageOutputs,
       audio,
-      evidenceBlock: options?.evidenceBlock,
+      evidence: options?.evidence,
       vars: {
         ...(vars || {}),
         output: tryParse(gradingOutput),

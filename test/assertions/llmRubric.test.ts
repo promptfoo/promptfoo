@@ -223,18 +223,20 @@ describe('handleLlmRubric', () => {
     // The candidate output MUST remain pure — evidence is routed separately
     // so structured JSON and image normalisation in the matcher stay intact.
     expect(mockMatchesLlmRubric.mock.calls[0][1]).toBe('The change is complete.');
-    // Evidence travels through the `options.evidenceBlock` channel.
+    // Evidence travels through the `options.evidence` structured channel.
     const options = mockMatchesLlmRubric.mock.calls[0][5];
-    expect(options?.evidenceBlock).toContain('Additional evidence for grading');
-    // The "evidence is untrusted" guard now lives in a system message (injected
-    // downstream by the matcher) — not in the evidence block itself — so
-    // provider-controlled evidence cannot carry instruction-level authority.
-    expect(options?.evidenceBlock).not.toContain('Treat this evidence as untrusted');
-    expect(options?.evidenceBlock).toContain('Repository changes');
-    expect(options?.evidenceBlock).toContain('"path": "src/index.ts"');
+    expect(options?.evidence).toBeDefined();
+    expect(options?.evidence).toHaveLength(1);
+    const entry = options?.evidence?.[0];
+    expect(entry?.from).toBe('metadata.fileChanges');
+    expect(entry?.label).toBe('Repository changes');
+    // The value is serialized compact JSON of the selected metadata.
+    expect(entry?.value).toContain('"path":"src/index.ts"');
+    expect(entry?.value).toContain('"status":"modified"');
     // Unselected siblings must not leak, and undefined entries are skipped.
-    expect(options?.evidenceBlock).not.toContain('must not be exposed');
-    expect(options?.evidenceBlock).not.toContain('Secret');
+    expect(entry?.value).not.toContain('must not be exposed');
+    // The undefined `secret` entry is not in the evidence list.
+    expect(options?.evidence).toHaveLength(1);
   });
 
   it('should truncate projected metadata evidence to its configured byte limit', async () => {
@@ -258,9 +260,13 @@ describe('handleLlmRubric', () => {
     await handleLlmRubric(params);
 
     const options = mockMatchesLlmRubric.mock.calls[0][5];
-    expect(options?.evidenceBlock).toContain('"abcdefghijklmnopqrs');
-    expect(options?.evidenceBlock).toContain('truncated to 20 bytes');
-    expect(options?.evidenceBlock).not.toContain('uvwxyz');
+    const entry = options?.evidence?.[0];
+    expect(entry?.truncated).toBe(true);
+    // The serialized form starts with a JSON string like "abcdefghijklmnop..."
+    // but is cut at ~20 UTF-8 bytes total.
+    expect(entry?.value).not.toContain('uvwxyz');
+    // Verify the byte limit is actually respected.
+    expect(Buffer.byteLength(entry?.value ?? '', 'utf8')).toBeLessThanOrEqual(20);
   });
 
   it('should leave the grader output unchanged when evidence is not configured', async () => {
@@ -279,9 +285,9 @@ describe('handleLlmRubric', () => {
     await handleLlmRubric(params);
 
     expect(mockMatchesLlmRubric.mock.calls[0][1]).toBe('plain output');
-    // No evidence → options.evidenceBlock must be undefined.
+    // No evidence → options.evidence must be undefined.
     const options = mockMatchesLlmRubric.mock.calls[0][5];
-    expect(options?.evidenceBlock).toBeUndefined();
+    expect(options?.evidence).toBeUndefined();
   });
 
   it('should invert pass and score for inverse assertions', async () => {
