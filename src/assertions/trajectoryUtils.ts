@@ -1,3 +1,4 @@
+import { TRAJECTORY_STEP_TYPES } from '../contracts/trajectory';
 import {
   COMMAND_ATTRIBUTE_KEYS,
   getFirstStringAttribute,
@@ -7,7 +8,6 @@ import {
 } from '../tracing/toolAttributes';
 import { matchesPattern } from './traceUtils';
 
-import { TRAJECTORY_STEP_TYPES } from '../contracts/trajectory';
 import type { TraceData, TraceSpan } from '../types/tracing';
 
 export type TrajectoryStepType = (typeof TRAJECTORY_STEP_TYPES)[number];
@@ -459,8 +459,9 @@ export function matchesTrajectoryStepStatus(
   const status = matcher.status;
   const code = step.statusCode;
   const isSet = code !== undefined && code !== 0;
+  // Unset status (undefined or 0) only matches explicit status: 0.
   if (!isSet) {
-    return false;
+    return typeof status === 'number' && status === 0;
   }
 
   const statusMatches =
@@ -468,12 +469,14 @@ export function matchesTrajectoryStepStatus(
       ? code === status
       : status === 'success'
         ? code === 1 || (code >= 200 && code < 400)
-        : code === 2 || code >= 400;
+        : code === 2 || (code >= 400 && code < 600);
   if (!statusMatches) {
     return false;
   }
 
-  return matcher.message ? matchesPattern(step.statusMessage || '', matcher.message) : true;
+  return matcher.message === undefined
+    ? true
+    : matchesPattern(step.statusMessage || '', matcher.message);
 }
 
 export function formatTrajectoryStep(step: TrajectoryStep): string {
