@@ -1,7 +1,5 @@
+import request from 'supertest';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { createApp } from '../../../src/server/server';
-import { setupTestServer } from '../../util/testServer';
-import { mockProcessEnv } from '../../util/utils';
 
 vi.mock('../../../src/providers/index', () => ({
   loadApiProvider: vi.fn(),
@@ -17,16 +15,19 @@ vi.mock('../../../src/redteam/remoteGeneration', () => ({
   neverGenerateRemote: vi.fn(() => false),
 }));
 
-import { testProviderConnectivity } from '../../../src/node/testProvider';
+import { testProviderConnectivity, testProviderSession } from '../../../src/node/testProvider';
 import { loadApiProvider } from '../../../src/providers/index';
 import { doTargetPurposeDiscovery } from '../../../src/redteam/commands/discover';
+import { createApp } from '../../../src/server/server';
+import { mockProcessEnv } from '../../util/utils';
 
 const mockedLoadApiProvider = vi.mocked(loadApiProvider);
 const mockedTestProviderConnectivity = vi.mocked(testProviderConnectivity);
+const mockedTestProviderSession = vi.mocked(testProviderSession);
 const mockedDoTargetPurposeDiscovery = vi.mocked(doTargetPurposeDiscovery);
 
 describe('PROMPTFOO_BLOCK_PRIVATE_RANGES server guards (#11768 item 2)', () => {
-  const api = setupTestServer(createApp);
+  let app: ReturnType<typeof createApp>;
   let restoreEnv: () => void;
 
   beforeEach(() => {
@@ -35,12 +36,14 @@ describe('PROMPTFOO_BLOCK_PRIVATE_RANGES server guards (#11768 item 2)', () => {
       success: true,
       message: 'ok',
     });
+    mockedTestProviderSession.mockResolvedValue({ success: true, message: 'ok' } as never);
     mockedDoTargetPurposeDiscovery.mockResolvedValue({
       purpose: 'test purpose',
       limitations: null,
       user: null,
       tools: [],
     } as never);
+    app = createApp();
   });
 
   afterEach(() => {
@@ -54,7 +57,7 @@ describe('PROMPTFOO_BLOCK_PRIVATE_RANGES server guards (#11768 item 2)', () => {
     it('refuses a private target with 400 when the flag is set', async () => {
       restoreEnv = mockProcessEnv({ PROMPTFOO_BLOCK_PRIVATE_RANGES: 'true' });
 
-      const response = await api.post('/api/providers/test').send(body);
+      const response = await request(app).post('/api/providers/test').send(body);
 
       expect(response.status).toBe(400);
       expect(response.body.error).toContain('PROMPTFOO_BLOCK_PRIVATE_RANGES');
@@ -66,7 +69,7 @@ describe('PROMPTFOO_BLOCK_PRIVATE_RANGES server guards (#11768 item 2)', () => {
     it('refuses a config.apiBaseUrl private target when the flag is set', async () => {
       restoreEnv = mockProcessEnv({ PROMPTFOO_BLOCK_PRIVATE_RANGES: 'true' });
 
-      const response = await api
+      const response = await request(app)
         .post('/api/providers/test')
         .send({
           providerOptions: { id: 'openai:chat', config: { apiBaseUrl: 'http://10.1.2.3/v1' } },
@@ -76,10 +79,45 @@ describe('PROMPTFOO_BLOCK_PRIVATE_RANGES server guards (#11768 item 2)', () => {
       expect(mockedLoadApiProvider).not.toHaveBeenCalled();
     });
 
+    it('refuses a config.url private target (HttpProvider request URL) when the flag is set', async () => {
+      restoreEnv = mockProcessEnv({ PROMPTFOO_BLOCK_PRIVATE_RANGES: 'true' });
+
+      const response = await request(app)
+        .post('/api/providers/test')
+        .send({
+          providerOptions: { id: 'http', config: { url: 'http://127.0.0.1:8080/hook' } },
+        });
+
+      expect(response.status).toBe(400);
+      expect(mockedLoadApiProvider).not.toHaveBeenCalled();
+    });
+
+    it('refuses a non-canonical http: provider id when the flag is set', async () => {
+      restoreEnv = mockProcessEnv({ PROMPTFOO_BLOCK_PRIVATE_RANGES: 'true' });
+
+      const response = await request(app)
+        .post('/api/providers/test')
+        .send({ providerOptions: { id: 'http:127.0.0.1' } });
+
+      expect(response.status).toBe(400);
+      expect(mockedLoadApiProvider).not.toHaveBeenCalled();
+    });
+
+    it('refuses a named provider with a local default endpoint when the flag is set', async () => {
+      restoreEnv = mockProcessEnv({ PROMPTFOO_BLOCK_PRIVATE_RANGES: 'true' });
+
+      const response = await request(app)
+        .post('/api/providers/test')
+        .send({ providerOptions: { id: 'ollama:chat:llama3' } });
+
+      expect(response.status).toBe(400);
+      expect(mockedLoadApiProvider).not.toHaveBeenCalled();
+    });
+
     it('proceeds when the flag is unset (default local behavior)', async () => {
       restoreEnv = mockProcessEnv({ PROMPTFOO_BLOCK_PRIVATE_RANGES: undefined });
 
-      const response = await api.post('/api/providers/test').send(body);
+      const response = await request(app).post('/api/providers/test').send(body);
 
       expect(response.status).toBe(200);
       expect(mockedLoadApiProvider).toHaveBeenCalled();
@@ -88,7 +126,7 @@ describe('PROMPTFOO_BLOCK_PRIVATE_RANGES server guards (#11768 item 2)', () => {
     it('proceeds for named providers without overrides when the flag is set', async () => {
       restoreEnv = mockProcessEnv({ PROMPTFOO_BLOCK_PRIVATE_RANGES: 'true' });
 
-      const response = await api
+      const response = await request(app)
         .post('/api/providers/test')
         .send({ providerOptions: { id: 'openai:gpt-4o-mini' } });
 
@@ -103,7 +141,7 @@ describe('PROMPTFOO_BLOCK_PRIVATE_RANGES server guards (#11768 item 2)', () => {
     it('refuses a private target with 400 when the flag is set', async () => {
       restoreEnv = mockProcessEnv({ PROMPTFOO_BLOCK_PRIVATE_RANGES: 'true' });
 
-      const response = await api.post('/api/providers/discover').send(body);
+      const response = await request(app).post('/api/providers/discover').send(body);
 
       expect(response.status).toBe(400);
       expect(response.body.error).toContain('PROMPTFOO_BLOCK_PRIVATE_RANGES');
@@ -114,7 +152,31 @@ describe('PROMPTFOO_BLOCK_PRIVATE_RANGES server guards (#11768 item 2)', () => {
     it('proceeds when the flag is unset (default local behavior)', async () => {
       restoreEnv = mockProcessEnv({ PROMPTFOO_BLOCK_PRIVATE_RANGES: undefined });
 
-      const response = await api.post('/api/providers/discover').send(body);
+      const response = await request(app).post('/api/providers/discover').send(body);
+
+      expect(response.status).toBe(200);
+      expect(mockedLoadApiProvider).toHaveBeenCalled();
+    });
+  });
+
+  describe('POST /api/providers/test-session', () => {
+    const body = { provider: { id: 'http://169.254.169.254/v1' } };
+
+    it('refuses a private target with 400 when the flag is set', async () => {
+      restoreEnv = mockProcessEnv({ PROMPTFOO_BLOCK_PRIVATE_RANGES: 'true' });
+
+      const response = await request(app).post('/api/providers/test-session').send(body);
+
+      expect(response.status).toBe(400);
+      expect(response.body.error).toContain('PROMPTFOO_BLOCK_PRIVATE_RANGES');
+      expect(mockedLoadApiProvider).not.toHaveBeenCalled();
+      expect(mockedTestProviderSession).not.toHaveBeenCalled();
+    });
+
+    it('proceeds when the flag is unset (default local behavior)', async () => {
+      restoreEnv = mockProcessEnv({ PROMPTFOO_BLOCK_PRIVATE_RANGES: undefined });
+
+      const response = await request(app).post('/api/providers/test-session').send(body);
 
       expect(response.status).toBe(200);
       expect(mockedLoadApiProvider).toHaveBeenCalled();
