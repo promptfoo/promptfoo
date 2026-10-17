@@ -25,7 +25,12 @@ import PromptsSection from './PromptsSection';
 import { ProvidersListSection } from './ProvidersListSection';
 import { RunOptionsSection } from './RunOptionsSection';
 import { StepSection } from './StepSection';
-import { countTests, normalizePrompts, normalizeProviders } from './setupReadiness';
+import {
+  countTests,
+  getTrajectoryCountConfigError,
+  normalizePrompts,
+  normalizeProviders,
+} from './setupReadiness';
 import TestCasesSection from './TestCasesSection';
 import YamlEditor from './YamlEditor';
 import { validateYamlConfigDraft } from './yamlConfigValidation';
@@ -134,9 +139,13 @@ const EvaluateTestSuiteCreator = () => {
   );
 
   const testCount = React.useMemo(() => countTests(config.tests), [config.tests]);
+  const trajectoryCountError = getTrajectoryCountConfigError(config);
 
   const isReadyToRun =
-    normalizedProviders.length > 0 && normalizedPrompts.length > 0 && testCount > 0;
+    normalizedProviders.length > 0 &&
+    normalizedPrompts.length > 0 &&
+    testCount > 0 &&
+    !trajectoryCountError;
 
   const setupSteps: SetupStep[] = [
     {
@@ -159,7 +168,7 @@ const EvaluateTestSuiteCreator = () => {
       id: 3,
       label: 'Test Cases',
       title: 'Add Test Cases',
-      isComplete: testCount > 0,
+      isComplete: testCount > 0 && !trajectoryCountError,
       count: testCount,
       required: true,
     },
@@ -287,9 +296,10 @@ const EvaluateTestSuiteCreator = () => {
                       : `${completedRequiredStepCount} of ${requiredSteps.length} required steps complete`}
                   </h2>
                   <p className="text-sm text-muted-foreground">
-                    {isReadyToRun
-                      ? 'Providers, prompts, and test cases are ready. Review run options or start the evaluation.'
-                      : `Next up: ${nextRecommendedStep.title}.`}
+                    {trajectoryCountError ||
+                      (isReadyToRun
+                        ? 'Providers, prompts, and test cases are ready. Review run options or start the evaluation.'
+                        : `Next up: ${nextRecommendedStep.title}.`)}
                   </p>
                 </div>
 

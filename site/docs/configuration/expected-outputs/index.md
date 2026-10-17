@@ -175,6 +175,8 @@ Every test type can be negated by prepending `not-`. For example, `not-equals` o
 
 For tool-call validity assertions, `not-` inverts a validation verdict. Tool configuration errors and unexpected validator failures remain failures.
 
+For `trajectory:tool-used` and `trajectory:step-count`, invalid count bounds produce errors before negation. Bounds must be finite, non-negative integers, and a supplied `min` must not exceed a supplied `max`.
+
 When a `not-javascript` assertion returns a full grading result, its `reason` is preserved verbatim, including an empty string, for either inverted outcome. For `not-python` and `not-ruby`, a negated failure keeps its custom `reason`, falling back to a generic message if it is empty; a negated pass reports `Assertion passed`. All three preserve the script's score.
 
 The `search-rubric` and `not-search-rubric` assertions require a rubric value that renders to a string.
