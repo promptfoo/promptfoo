@@ -522,6 +522,27 @@ not valid json`,
     ]);
   });
 
+  it('should read unquoted YAML dates from Azure Blob Storage test sets as strings', async () => {
+    vi.mocked(readAzureBlobText).mockResolvedValue(dedent`
+      - vars:
+          day: 2024-01-02
+          at: 2024-01-02T10:00:00Z
+        metadata:
+          when: 2024-01-02
+        assert:
+          - type: contains
+            value: 2024-01-02
+    `);
+
+    const result = await readStandaloneTestsFile('az://account/container/tests.yaml');
+
+    expect(result[0]).toMatchObject({
+      vars: { day: '2024-01-02', at: '2024-01-02T10:00:00.000Z' },
+      metadata: { when: '2024-01-02' },
+      assert: [{ type: 'contains', value: '2024-01-02' }],
+    });
+  });
+
   it('should read YML test sets from Azure Blob Storage URIs', async () => {
     const blobUri = 'az://account/container/tests.yml';
     vi.mocked(readAzureBlobText).mockResolvedValue(dedent`

@@ -1,6 +1,6 @@
 import * as yaml from 'js-yaml';
 import { describe, expect, it } from 'vitest';
-import { loadYaml } from '../../src/util/yamlLoad';
+import { formatYamlTimestamp, loadYaml, stringifyYamlTimestamps } from '../../src/util/yamlLoad';
 
 describe('loadYaml', () => {
   it('parses plain YAML documents', () => {
@@ -141,5 +141,78 @@ describe('loadYaml', () => {
     expect(() => loadYaml('a: [unclosed', { filename: 'my-config.yaml' })).toThrow(
       /my-config\.yaml/,
     );
+  });
+
+  it('returns unquoted timestamps as Date objects', () => {
+    expect(loadYaml('{ d: 2024-01-02, t: 2024-01-02T10:00:00Z }')).toEqual({
+      d: new Date('2024-01-02T00:00:00.000Z'),
+      t: new Date('2024-01-02T10:00:00.000Z'),
+    });
+  });
+});
+
+describe('formatYamlTimestamp', () => {
+  it.each([
+    ['UTC midnight to a date', '2024-01-02T00:00:00.000Z', '2024-01-02'],
+    ['a date-only literal to a date', '2024-12-31', '2024-12-31'],
+    ['another instant to an ISO string', '2024-01-02T10:00:00Z', '2024-01-02T10:00:00.000Z'],
+    [
+      'one millisecond past midnight to an ISO string',
+      '2024-01-02T00:00:00.001Z',
+      '2024-01-02T00:00:00.001Z',
+    ],
+    ['an offset timestamp to UTC', '2024-01-02T00:00:00+05:30', '2024-01-01T18:30:00.000Z'],
+    ['a pre-1000 year to a padded date', '0050-06-15', '0050-06-15'],
+  ])('formats %s', (_name, literal, expected) => {
+    expect(formatYamlTimestamp(loadYaml(literal) as Date)).toBe(expected);
+  });
+
+  it('returns "Invalid Date" instead of throwing for an invalid date', () => {
+    expect(formatYamlTimestamp(new Date(Number.NaN))).toBe('Invalid Date');
+  });
+});
+
+describe('stringifyYamlTimestamps', () => {
+  it('replaces Dates anywhere in arrays and objects', () => {
+    const loaded = loadYaml(`
+vars:
+  d: 2024-01-02
+  list: [2024-01-03, { at: 2024-01-04T10:00:00Z }]
+  quoted: '2024-01-02'
+`);
+
+    expect(stringifyYamlTimestamps(loaded)).toEqual({
+      vars: {
+        d: '2024-01-02',
+        list: ['2024-01-03', { at: '2024-01-04T10:00:00.000Z' }],
+        quoted: '2024-01-02',
+      },
+    });
+  });
+
+  it('handles a top-level Date', () => {
+    expect(stringifyYamlTimestamps(loadYaml('2024-01-02'))).toBe('2024-01-02');
+  });
+
+  it('leaves other values untouched', () => {
+    const binary = loadYaml('!!binary SGVsbG8=');
+    const map = new Map([['a', new Date(0)]]);
+    const input = { s: 'text', n: 1, b: true, nil: null, binary, map };
+
+    const result = stringifyYamlTimestamps(input);
+
+    expect(result).toEqual(input);
+    expect(result.binary).toBe(binary);
+    expect(result.map).toBe(map);
+    expect(stringifyYamlTimestamps(undefined)).toBeUndefined();
+  });
+
+  it('does not mutate its input', () => {
+    const input = { d: new Date('2024-01-02T00:00:00Z'), list: [new Date(0)] };
+
+    stringifyYamlTimestamps(input);
+
+    expect(input.d).toBeInstanceOf(Date);
+    expect(input.list[0]).toBeInstanceOf(Date);
   });
 });
