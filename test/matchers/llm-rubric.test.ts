@@ -2850,6 +2850,64 @@ describe('matchesLlmRubric missing-verdict fail-closed semantics', () => {
     expect(result.reason).toContain('neither a pass verdict nor a finite numeric score');
   });
 
+  it.each([1, '1'])('treats numeric pass %j as a passing verdict', async (pass) => {
+    vi.spyOn(Grader, 'callApi').mockResolvedValue({
+      output: JSON.stringify({ pass, score: 1, reason: 'The reply meets the rubric.' }),
+      tokenUsage: { total: 10, prompt: 5, completion: 5 },
+    });
+
+    const result = await matchesLlmRubric('Expected output', 'Sample output', {
+      rubricPrompt: 'Grading prompt',
+      provider: Grader,
+    });
+
+    expect(result.pass).toBe(true);
+    expect(result.score).toBe(1);
+    expect(result.reason).toBe('The reply meets the rubric.');
+    expect(result.metadata?.graderError).toBeUndefined();
+  });
+
+  it.each([0, '0'])('keeps numeric pass %j as a failing verdict', async (pass) => {
+    vi.spyOn(Grader, 'callApi').mockResolvedValue({
+      output: JSON.stringify({ pass, score: 0, reason: 'The reply misses the rubric.' }),
+      tokenUsage: { total: 10, prompt: 5, completion: 5 },
+    });
+
+    const result = await matchesLlmRubric('Expected output', 'Sample output', {
+      rubricPrompt: 'Grading prompt',
+      provider: Grader,
+    });
+
+    expect(result.pass).toBe(false);
+    expect(result.score).toBe(0);
+    expect(result.reason).toBe('The reply misses the rubric.');
+    expect(result.metadata?.graderError).toBeUndefined();
+  });
+
+  it('fails numeric pass 1 when the score is below the threshold', async () => {
+    const assertion: Assertion = {
+      type: 'llm-rubric',
+      value: 'Grading prompt',
+      threshold: 0.8,
+    };
+    vi.spyOn(Grader, 'callApi').mockResolvedValue({
+      output: JSON.stringify({ pass: 1, score: 0.2, reason: 'Weak match' }),
+      tokenUsage: { total: 10, prompt: 5, completion: 5 },
+    });
+
+    const result = await matchesLlmRubric(
+      'Grading prompt',
+      'Sample output',
+      { rubricPrompt: 'Grading prompt', provider: Grader },
+      {},
+      assertion,
+    );
+
+    expect(result.pass).toBe(false);
+    expect(result.score).toBe(0.2);
+    expect(result.metadata?.graderError).toBeUndefined();
+  });
+
   it('derives pass from a positive score when pass is omitted', async () => {
     vi.spyOn(Grader, 'callApi').mockResolvedValue({
       output: JSON.stringify({ score: 1, reason: 'Strong match' }),
