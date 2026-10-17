@@ -1,3 +1,4 @@
+import { TRAJECTORY_STEP_TYPES } from '../contracts/trajectory';
 import {
   COMMAND_ATTRIBUTE_KEYS,
   getFirstStringAttribute,
@@ -9,12 +10,19 @@ import { matchesPattern } from './traceUtils';
 
 import type { TraceData, TraceSpan } from '../types/tracing';
 
-export type TrajectoryStepType = 'command' | 'message' | 'reasoning' | 'search' | 'span' | 'tool';
+export type TrajectoryStepType = (typeof TRAJECTORY_STEP_TYPES)[number];
 
 export interface TrajectoryStepMatcher {
   name?: string;
   pattern?: string;
   type?: TrajectoryStepType | TrajectoryStepType[];
+}
+
+export type TrajectoryStatusValue = 'success' | 'error' | number;
+
+export interface TrajectoryStepStatusMatcher extends TrajectoryStepMatcher {
+  status: TrajectoryStatusValue;
+  message?: string;
 }
 
 export interface TrajectoryStep {
@@ -438,6 +446,37 @@ export function matchesTrajectoryStep(
   }
 
   return step.aliases.some((alias) => matchesPattern(alias, matchPattern));
+}
+
+export function matchesTrajectoryStepStatus(
+  step: TrajectoryStep,
+  matcher: TrajectoryStepStatusMatcher,
+): boolean {
+  if (!matchesTrajectoryStep(step, matcher)) {
+    return false;
+  }
+
+  const status = matcher.status;
+  const code = step.statusCode;
+  const isSet = code !== undefined && code !== 0;
+  // Unset status (undefined or 0) only matches explicit status: 0.
+  if (!isSet) {
+    return typeof status === 'number' && status === 0;
+  }
+
+  const statusMatches =
+    typeof status === 'number'
+      ? code === status
+      : status === 'success'
+        ? code === 1 || (code >= 200 && code < 400)
+        : code === 2 || (code >= 400 && code < 600);
+  if (!statusMatches) {
+    return false;
+  }
+
+  return matcher.message === undefined
+    ? true
+    : matchesPattern(step.statusMessage || '', matcher.message);
 }
 
 export function formatTrajectoryStep(step: TrajectoryStep): string {
