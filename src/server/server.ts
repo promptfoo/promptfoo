@@ -65,7 +65,9 @@ const DEFAULT_REQUEST_SIZE_LIMIT = '100mb';
  * PROMPTFOO_REQUEST_SIZE_LIMIT (any value accepted by body-parser, e.g. "10mb").
  * Malformed values fall back to the default so an unbound limit is never applied.
  */
-const REQUEST_SIZE_LIMIT_PATTERN = /^\d+(?:\.\d+)?\s*(?:b|kb|mb|gb|tb)?$/i;
+// Cap magnitude so body-parser's bytes.parse cannot overflow to Infinity
+// (Number.MAX_VALUE ~ 1e308); an unbounded limit would skip raw-body's guard.
+const REQUEST_SIZE_LIMIT_PATTERN = /^\d{1,15}(?:\.\d{1,15})?\s*(?:b|kb|mb|gb|tb)?$/i;
 
 export function getRequestSizeLimit(): string {
   const configured = getEnvString('PROMPTFOO_REQUEST_SIZE_LIMIT')?.trim();
