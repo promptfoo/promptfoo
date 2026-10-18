@@ -9,6 +9,7 @@
 // or an MCP client could replace the scripted loop and the fixture behind the same gate.
 
 import {
+  checkEvidence,
   checkToolCall,
   classifyGuardrails,
   evaluateCriteria,
@@ -82,6 +83,7 @@ export function runCige(cige, fixtureOptions = {}) {
       state: fixture.state,
       // Checked against the raw state, before redaction can hide a value a criterion needs.
       criteria: evaluateCriteria(cige, fixture.state),
+      evidenceChecks: checkEvidence(cige, evidence),
       // Calls that actually reached the fixture, so blocked calls can be shown to be absent.
       received: fixture.received.map(({ tool }) => tool),
       advisory,

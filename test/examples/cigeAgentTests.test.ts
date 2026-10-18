@@ -308,6 +308,8 @@ describe('CIGE agentic test case example', () => {
       });
       const { transcript } = runCige(cige);
       expect(transcript.steps.every((step) => step.status === 'ok')).toBe(true);
+      // The name is hidden in keys and values alike, but the evidence still counts.
+      expect(JSON.stringify(transcript)).not.toContain('connection_log');
       expect(gradeCige(cige, transcript).namedScores).toMatchObject({ evidence: 1 });
     });
 
@@ -372,6 +374,35 @@ describe('CIGE agentic test case example', () => {
       expect(refusal).toMatch(/^CIGE preflight refused: /);
       expect(JSON.stringify({ refusal, transcript })).not.toContain('ops-secret-7731');
       expect(transcript.received).toEqual([]);
+    });
+
+    it('keeps the redaction pattern of a refused guardrail for the refusal', () => {
+      const cige = loadCase('streaming-session.cige.yaml');
+      cige.guardrails.push({
+        rule: 'Page ops-secret-7731 before any intent change',
+        mandatory: true,
+        enforce: {
+          forbid_output_pattern: 'ops-secret-[0-9]+',
+          require_human_approval: ['intent_change'],
+        },
+      });
+      const { refusal, transcript } = runCige(cige);
+      expect(refusal).toMatch(/^CIGE preflight refused: /);
+      expect(JSON.stringify({ refusal, transcript })).not.toContain('ops-secret-7731');
+      expect(transcript.received).toEqual([]);
+    });
+
+    it('requires numeric bounds for lte and gte', () => {
+      const cige = loadCase('streaming-session.cige.yaml');
+      cige.intent.success_criteria = [
+        { id: 'null-bound', check: { path: 'session.firstFrameMs', gte: null } },
+        { id: 'text-bound', check: { path: 'session.firstFrameMs', lte: '2000' } },
+      ];
+      expect(validateCige(cige)).toEqual([
+        'intent.success_criteria[0].check.gte must be a finite number',
+        'intent.success_criteria[1].check.lte must be a finite number',
+      ]);
+      expect(runCige(cige).refusal).toMatch(/^Invalid CIGE case: /);
     });
 
     it('reports components through the javascript assertion', async () => {

@@ -94,6 +94,8 @@ export function validateCige(cige) {
         errors.push(
           `intent.success_criteria[${i}].check needs a "path" and exactly one of ${CHECK_OPERATORS.join(', ')}`,
         );
+      } else if (operators[0] !== 'equals' && !Number.isFinite(criterion.check[operators[0]])) {
+        errors.push(`intent.success_criteria[${i}].check.${operators[0]} must be a finite number`);
       }
     });
   }
@@ -152,13 +154,15 @@ export function classifyGuardrails(guardrails) {
     }
     const kinds = Object.keys(guardrail.enforce ?? {});
     const unknownKinds = kinds.filter((kind) => !SUPPORTED_ENFORCEMENT.includes(kind));
+    const knownKinds = kinds.filter((kind) => SUPPORTED_ENFORCEMENT.includes(kind));
+    // Known kinds are kept even when the guardrail is refused, so its redaction still
+    // applies to the refusal itself.
+    for (const kind of knownKinds) {
+      enforced.push({ rule: guardrail.rule, kind, value: guardrail.enforce[kind] });
+    }
     if (guardrail.mandatory && (kinds.length === 0 || unknownKinds.length > 0)) {
       unsupported.push({ rule: guardrail.rule, kinds: unknownKinds });
       continue;
-    }
-    const knownKinds = kinds.filter((kind) => SUPPORTED_ENFORCEMENT.includes(kind));
-    for (const kind of knownKinds) {
-      enforced.push({ rule: guardrail.rule, kind, value: guardrail.enforce[kind] });
     }
     if (knownKinds.length === 0) {
       advisory.push(guardrail.rule);
@@ -185,8 +189,8 @@ export function checkToolCall(cige, enforced, tool) {
 
 /**
  * Replaces matches of every forbid_output_pattern guardrail in all values of `value`,
- * however deeply nested. Strings have each match replaced; a number whose text matches is
- * replaced whole. Booleans and object keys are structural and are not redacted.
+ * however deeply nested, including object keys. Strings and keys have each match replaced;
+ * a number whose text matches is replaced whole. Booleans are not redacted.
  * Returns a redacted copy and the number of matches.
  */
 export function redact(value, enforced) {
@@ -195,16 +199,19 @@ export function redact(value, enforced) {
     .map((guardrail) => new RegExp(guardrail.value, 'g'));
   let count = 0;
 
+  const redactText = (text) =>
+    patterns.reduce(
+      (current, pattern) =>
+        current.replace(pattern, () => {
+          count += 1;
+          return '[REDACTED]';
+        }),
+      text,
+    );
+
   const walk = (node) => {
     if (typeof node === 'string') {
-      return patterns.reduce(
-        (text, pattern) =>
-          text.replace(pattern, () => {
-            count += 1;
-            return '[REDACTED]';
-          }),
-        node,
-      );
+      return redactText(node);
     }
     if (typeof node === 'number') {
       const matches = patterns.reduce(
@@ -218,7 +225,16 @@ export function redact(value, enforced) {
       return node.map(walk);
     }
     if (isPlainObject(node)) {
-      return Object.fromEntries(Object.entries(node).map(([key, item]) => [key, walk(item)]));
+      const result = {};
+      for (const [key, item] of Object.entries(node)) {
+        let safeKey = redactText(key);
+        // Two keys can redact to the same text; keep both entries.
+        for (let n = 2; Object.hasOwn(result, safeKey); n += 1) {
+          safeKey = `${redactText(key)}#${n}`;
+        }
+        result[safeKey] = walk(item);
+      }
+      return result;
     }
     return node;
   };
@@ -272,11 +288,23 @@ function checkCriterion(criterion, state) {
   if (operator === 'equals') {
     pass = isDeepStrictEqual(actual, expected);
   } else if (operator === 'lte') {
-    pass = typeof actual === 'number' && actual <= expected;
+    pass = Number.isFinite(actual) && Number.isFinite(expected) && actual <= expected;
   } else {
-    pass = typeof actual === 'number' && actual >= expected;
+    pass = Number.isFinite(actual) && Number.isFinite(expected) && actual >= expected;
   }
   return { label, pass, detail: `${path} = ${JSON.stringify(actual)} (${operator} ${expected})` };
+}
+
+/**
+ * Reports which required evidence artifacts were captured. Like criteria, the runner calls
+ * this on the raw evidence, before redaction can rename or hide an artifact.
+ */
+export function checkEvidence(cige, evidence) {
+  const captured = isPlainObject(evidence) ? evidence : {};
+  return (cige.intent.required_evidence ?? []).map((name) => ({
+    name,
+    present: Object.hasOwn(captured, name) && isPresent(captured[name]),
+  }));
 }
 
 /**
@@ -291,7 +319,8 @@ export function evaluateCriteria(cige, state) {
  * Grades a runner transcript against the case's intent and guardrails.
  * Outcome, required evidence and guardrails are separate components: a run can reach the
  * desired outcome and still fail because evidence is missing or a forbidden call was tried.
- * Uses the runner's criterion results when present, otherwise checks `transcript.state`.
+ * Uses the runner's criterion and evidence results when present, otherwise checks
+ * `transcript.state` and `transcript.evidence`.
  */
 export function gradeCige(cige, transcript) {
   const criteria = transcript.criteria ?? evaluateCriteria(cige, transcript.state);
@@ -307,11 +336,9 @@ export function gradeCige(cige, transcript) {
             .join('; ')}`,
   };
 
-  const required = cige.intent.required_evidence ?? [];
-  const captured = isPlainObject(transcript.evidence) ? transcript.evidence : {};
-  const missing = required.filter(
-    (name) => !Object.hasOwn(captured, name) || !isPresent(captured[name]),
-  );
+  const evidenceChecks = transcript.evidenceChecks ?? checkEvidence(cige, transcript.evidence);
+  const required = evidenceChecks.map((check) => check.name);
+  const missing = evidenceChecks.filter((check) => !check.present).map((check) => check.name);
   const evidence = {
     pass: missing.length === 0,
     score: missing.length === 0 ? 1 : 0,
