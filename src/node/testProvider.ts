@@ -185,14 +185,18 @@ export async function testProviderConnectivity({
 
       const testAnalyzerResponseObj = await testAnalyzerResponse.json();
 
-      const errorMsg = result.error ?? result.response?.error ?? testAnalyzerResponseObj.error;
+      const providerError = result.error ?? result.response?.error;
+      const errorMsg = providerError ?? testAnalyzerResponseObj.error;
+      const analyzerReportedFailure =
+        !!testAnalyzerResponseObj.error || !!testAnalyzerResponseObj.changes_needed;
 
       return {
-        success: !testAnalyzerResponseObj.error && !testAnalyzerResponseObj.changes_needed,
+        success: !providerError && !analyzerReportedFailure,
         message:
+          (analyzerReportedFailure && testAnalyzerResponseObj.message) ||
+          (providerError && `Provider returned error: ${providerError}`) ||
           testAnalyzerResponseObj.message ||
           testAnalyzerResponseObj.error ||
-          errorMsg ||
           "Test successfully completed. We've verified that the provider is working correctly.",
         error: errorMsg
           ? errorMsg.substring(0, 100) + (errorMsg.length > 100 ? '...' : '')
