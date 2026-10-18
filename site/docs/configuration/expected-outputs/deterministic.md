@@ -1081,7 +1081,7 @@ assert:
 Perplexity requires the LLM API to output `logprobs`. Currently only more recent versions of OpenAI GPT and Azure OpenAI GPT APIs support this.
 :::
 
-Both `perplexity` and `perplexity-score` require non-positive numeric log probabilities. `NaN`, positive values, and non-numeric entries produce an error, including for `not-` assertions. Negative infinity is allowed for tokens with zero probability.
+Both `perplexity` and `perplexity-score` require non-positive numeric log probabilities. `NaN`, positive values, and missing or non-numeric entries produce an error, including for `not-` assertions. Negative infinity is allowed for tokens with zero probability.
 
 #### Comparing different outputs from the same LLM
 
