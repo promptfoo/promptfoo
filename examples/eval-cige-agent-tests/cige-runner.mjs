@@ -49,8 +49,10 @@ export function runCige(cige, fixtureOptions = {}) {
     steps.push({ index, tool, status: result.ok ? 'ok' : 'error', result });
   });
 
-  return {
-    transcript: {
+  // Final pass over everything emitted, so a forbidden value kept elsewhere (for example in
+  // the observed state) cannot leak around the per-step redaction.
+  const { value: transcript, count } = redact(
+    {
       status: 'completed',
       runner: 'scripted',
       steps,
@@ -59,11 +61,12 @@ export function runCige(cige, fixtureOptions = {}) {
       state: fixture.state,
       // Calls that actually reached the fixture, so blocked calls can be shown to be absent.
       received: fixture.received.map(({ tool }) => tool),
-      redactions,
       advisory,
       notImplemented,
     },
-  };
+    enforced,
+  );
+  return { transcript: { ...transcript, redactions: redactions + count } };
 }
 
 export default class CigeRunner {

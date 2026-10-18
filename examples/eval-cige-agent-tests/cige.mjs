@@ -141,27 +141,50 @@ export function checkToolCall(cige, enforced, tool) {
 }
 
 /**
- * Replaces matches of every forbid_output_pattern guardrail in a tool result.
+ * Replaces matches of every forbid_output_pattern guardrail in all string values of
+ * `value`, however deeply nested. Returns a redacted copy and the number of matches.
  */
 export function redact(value, enforced) {
-  let text = JSON.stringify(value);
+  const patterns = enforced
+    .filter((guardrail) => guardrail.kind === 'forbid_output_pattern')
+    .map((guardrail) => new RegExp(guardrail.value, 'g'));
   let count = 0;
-  for (const guardrail of enforced) {
-    if (guardrail.kind !== 'forbid_output_pattern') {
-      continue;
+
+  const walk = (node) => {
+    if (typeof node === 'string') {
+      return patterns.reduce(
+        (text, pattern) =>
+          text.replace(pattern, () => {
+            count += 1;
+            return '[REDACTED]';
+          }),
+        node,
+      );
     }
-    text = text.replace(new RegExp(guardrail.value, 'g'), () => {
-      count += 1;
-      return '[REDACTED]';
-    });
-  }
-  return { value: JSON.parse(text), count };
+    if (Array.isArray(node)) {
+      return node.map(walk);
+    }
+    if (isPlainObject(node)) {
+      return Object.fromEntries(Object.entries(node).map(([key, item]) => [key, walk(item)]));
+    }
+    return node;
+  };
+
+  return { value: walk(value), count };
 }
 
-function getPath(object, dottedPath) {
-  return dottedPath
-    .split('.')
-    .reduce((current, key) => (current == null ? undefined : current[key]), object);
+function resolvePath(object, dottedPath) {
+  let current = object;
+  for (const key of dottedPath.split('.')) {
+    if (!isPlainObject(current) && !Array.isArray(current)) {
+      return { found: false };
+    }
+    if (!Object.hasOwn(current, key)) {
+      return { found: false };
+    }
+    current = current[key];
+  }
+  return { found: true, value: current };
 }
 
 function isPresent(artifact) {
@@ -183,11 +206,15 @@ function checkCriterion(criterion, state) {
     return { label, pass: false, detail: 'unverifiable: no machine-checkable "check"' };
   }
   const { path, ...rest } = criterion.check;
-  const actual = getPath(state, path);
+  const { found, value: actual } = resolvePath(state, path);
+  if (!found) {
+    // A typo or changed state shape must not pass as `equals: null`.
+    return { label, pass: false, detail: `${path} not found in observed state` };
+  }
   const [operator, expected] = Object.entries(rest)[0];
   let pass;
   if (operator === 'equals') {
-    pass = JSON.stringify(actual ?? null) === JSON.stringify(expected);
+    pass = JSON.stringify(actual) === JSON.stringify(expected);
   } else if (operator === 'lte') {
     pass = typeof actual === 'number' && actual <= expected;
   } else {
@@ -231,7 +258,7 @@ export function gradeCige(cige, transcript) {
   const blocked = transcript.blocked ?? [];
   const guardrailVerdict =
     blocked.length === 0
-      ? `No guardrail violations; ${transcript.redactions ?? 0} value(s) redacted from tool output.`
+      ? `No guardrail violations; ${transcript.redactions ?? 0} value(s) redacted from the transcript.`
       : `Forbidden tool call attempted and blocked before dispatch: ${blocked
           .map((call) => `${call.tool} (${call.reasons.join('; ')})`)
           .join(', ')}.`;

@@ -5,6 +5,7 @@ import { pathToFileURL } from 'node:url';
 import { beforeAll, describe, expect, it } from 'vitest';
 import yaml from 'yaml';
 import { runAssertions } from '../../src/assertions';
+import cliState from '../../src/cliState';
 import { readTests } from '../../src/util/testCaseReader';
 
 import type { ApiProvider, GradingResult, TestCase } from '../../src/types';
@@ -197,23 +198,47 @@ describe('CIGE agentic test case example', () => {
       );
     });
 
+    it('redacts forbidden values everywhere in the emitted transcript', () => {
+      const cige = loadCase('streaming-session.cige.yaml');
+      // The session id is also kept in the observed state, not only in tool results.
+      cige.guardrails.push({
+        rule: 'Never expose session ids',
+        mandatory: true,
+        enforce: { forbid_output_pattern: 'sess-[0-9]+' },
+      });
+      const { transcript } = runCige(cige);
+      expect(JSON.stringify(transcript)).not.toMatch(/sess-[0-9]+/);
+      expect(transcript.redactions).toBeGreaterThan(1);
+    });
+
+    it('fails a check whose path is missing instead of treating it as null', () => {
+      const cige = loadCase('streaming-session.cige.yaml');
+      cige.intent.success_criteria = [
+        { id: 'typo', check: { path: 'session.errror', equals: null } },
+        { id: 'stored-null', check: { path: 'session.error', equals: null } },
+      ];
+      const result = gradeCige(cige, runCige(cige).transcript);
+      expect(result.pass).toBe(false);
+      expect(result.reason).toBe(
+        'Outcome criteria not met: typo (session.errror not found in observed state)',
+      );
+    });
+
     it('reports components through the javascript assertion', async () => {
       const cige = loadCase('streaming-session.cige.yaml');
       const { transcript } = runCige(cige, { connectionLogRetention: false });
-      const result = await runAssertions({
-        prompt: cige.intent.goal,
-        provider,
-        providerResponse: { output: transcript },
-        test: {
-          vars: { cige },
-          assert: [
-            {
-              type: 'javascript',
-              value: `file://${path.join(exampleDir, 'cige.mjs')}:assertIntent`,
-            },
-          ],
-        },
-      });
+      // Resolve the assertion relative to the example, exactly as promptfooconfig.yaml does.
+      const result = await cliState.withBasePath(exampleDir, () =>
+        runAssertions({
+          prompt: cige.intent.goal,
+          provider,
+          providerResponse: { output: transcript },
+          test: {
+            vars: { cige },
+            assert: [{ type: 'javascript', value: 'file://cige.mjs:assertIntent' }],
+          },
+        }),
+      );
       expect(result.pass).toBe(false);
       expect(result.namedScores).toEqual({ outcome: 1, evidence: 0, guardrails: 1 });
     });
