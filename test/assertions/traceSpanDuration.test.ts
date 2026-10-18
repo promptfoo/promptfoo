@@ -469,3 +469,42 @@ describe('handleTraceSpanDuration', () => {
     });
   });
 });
+
+describe('handleTraceSpanDuration with not- prefix', () => {
+  const negatedParams = (value: { max: number; pattern?: string }): AssertionParams => ({
+    ...defaultParams,
+    inverse: true,
+    assertion: { type: 'not-trace-span-duration', value },
+    renderedValue: value,
+    assertionValueContext: { ...defaultParams.assertionValueContext, trace: mockTraceData },
+  });
+
+  it('fails when all spans are within the threshold', () => {
+    const params = negatedParams({ max: 5000 });
+    expect(handleTraceSpanDuration(params)).toEqual({
+      pass: false,
+      score: 0,
+      reason:
+        'Expected trace-span-duration not to pass: All 5 spans matching pattern "*" completed within 5000ms (max: 3000ms)',
+      assertion: params.assertion,
+    });
+  });
+
+  it('passes when spans exceed the threshold', () => {
+    const result = handleTraceSpanDuration(negatedParams({ max: 1000 }));
+    expect(result.pass).toBe(true);
+    expect(result.score).toBe(1);
+    expect(result.reason).toContain('2 span(s) exceed duration threshold 1000ms');
+  });
+
+  it('fails when no spans match the pattern', () => {
+    const params = negatedParams({ max: 1000, pattern: 'missing.*' });
+    expect(handleTraceSpanDuration(params)).toEqual({
+      pass: false,
+      score: 0,
+      reason:
+        'Expected trace-span-duration not to pass: No spans found matching pattern "missing.*" with complete timing data',
+      assertion: params.assertion,
+    });
+  });
+});
