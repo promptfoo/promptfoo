@@ -1,4 +1,7 @@
+import { StrictMode } from 'react';
+
 import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { Chart } from 'chart.js';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import ResultsCharts from './ResultsCharts';
@@ -860,5 +863,171 @@ describe('ResultsCharts', () => {
 
     const canvasElements = container.querySelectorAll('canvas');
     expect(canvasElements.length).toBeGreaterThanOrEqual(3);
+  });
+});
+
+describe('active chart resource cleanup', () => {
+  const createTable = (metrics = false, empty = false) => ({
+    head: {
+      prompts: ['first', 'second'].map((provider) => ({
+        provider,
+        metrics: { namedScores: metrics ? { accuracy: 1, relevance: 2 } : {} },
+      })),
+      vars: [],
+    },
+    body: empty
+      ? []
+      : [
+          {
+            outputs: [
+              { score: 0.5, pass: true },
+              { score: 0.8, pass: true },
+            ],
+            vars: [],
+          },
+        ],
+  });
+
+  const createdCharts = () => vi.mocked(Chart).mock.results.map(({ value }) => value);
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(useTableStore).mockReturnValue({ table: createTable() });
+  });
+
+  it.each([false, true])('destroys every chart on unmount (metrics: %s)', (metrics) => {
+    vi.mocked(useTableStore).mockReturnValue({ table: createTable(metrics) });
+    const view = render(<ResultsCharts scores={[0.5, 0.8]} />);
+    expect(Chart).toHaveBeenCalledTimes(3);
+
+    view.unmount();
+
+    for (const chart of createdCharts()) {
+      expect(chart.destroy).toHaveBeenCalledOnce();
+    }
+  });
+
+  it('cleans both StrictMode lifetimes exactly once', () => {
+    const view = render(
+      <StrictMode>
+        <ResultsCharts scores={[0.5, 0.8]} />
+      </StrictMode>,
+    );
+    expect(Chart).toHaveBeenCalledTimes(6);
+
+    view.unmount();
+
+    for (const chart of createdCharts()) {
+      expect(chart.destroy).toHaveBeenCalledOnce();
+    }
+  });
+
+  it.each([false, true])(
+    'releases replaced charts and their final replacements (switch to metrics: %s)',
+    (metrics) => {
+      const view = render(<ResultsCharts scores={[0.5, 0.8]} />);
+      const initialCharts = createdCharts();
+      vi.mocked(useTableStore).mockReturnValue({ table: createTable(metrics) });
+
+      view.rerender(<ResultsCharts scores={[0.5, 0.8]} />);
+
+      expect(Chart).toHaveBeenCalledTimes(6);
+      for (const chart of initialCharts) {
+        expect(chart.destroy).toHaveBeenCalledOnce();
+      }
+      view.unmount();
+      for (const chart of createdCharts()) {
+        expect(chart.destroy).toHaveBeenCalledOnce();
+      }
+    },
+  );
+
+  it('releases charts when scores disappear without double-destroying them on recovery', () => {
+    const view = render(<ResultsCharts scores={[0.5, 0.8]} />);
+    const initialCharts = createdCharts();
+    vi.mocked(useTableStore).mockReturnValue({ table: createTable(false, true) });
+
+    view.rerender(<ResultsCharts scores={[]} />);
+
+    expect(Chart).toHaveBeenCalledTimes(4);
+    for (const chart of initialCharts) {
+      expect(chart.destroy).toHaveBeenCalledOnce();
+    }
+    vi.mocked(useTableStore).mockReturnValue({ table: createTable() });
+    view.rerender(<ResultsCharts scores={[0.5, 0.8]} />);
+    view.unmount();
+    for (const chart of createdCharts()) {
+      expect(chart.destroy).toHaveBeenCalledOnce();
+    }
+  });
+});
+
+describe('scatter prompt selection', () => {
+  function setPrompts(count: number) {
+    const table = {
+      head: {
+        prompts: Array.from({ length: count }, (_, index) => ({
+          provider: `provider-${index}`,
+          metrics: { namedScores: {} },
+        })),
+        vars: [],
+      },
+      body: [
+        {
+          outputs: Array.from({ length: count }, (_, index) => ({ score: 0.5 + index * 0.25 })),
+          vars: [],
+        },
+      ],
+    };
+    vi.mocked(useTableStore).mockReturnValue({ table, filteredMetrics: undefined });
+  }
+
+  function latestScatter() {
+    return vi
+      .mocked(Chart)
+      .mock.calls.map(([, config]) => config)
+      .reverse()
+      .find((config) => 'type' in config && config.type === 'scatter')!;
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('uses the available prompt on both axes for a single-prompt evaluation', async () => {
+    const user = userEvent.setup();
+    setPrompts(1);
+    const { container } = render(<ResultsCharts scores={[0.5]} />);
+    expect(latestScatter().data.datasets[0].data).toEqual([
+      expect.objectContaining({ x: 0.5, y: 0.5 }),
+    ]);
+    await user.click(container.querySelectorAll('canvas')[2]);
+    expect(screen.getAllByRole('combobox').map((select) => select.textContent)).toEqual([
+      'Prompt 1',
+      'Prompt 1',
+    ]);
+  });
+
+  it('uses an available axis after the prompt count shrinks', () => {
+    setPrompts(2);
+    const view = render(<ResultsCharts scores={[0.5, 0.75]} />);
+    expect(latestScatter().data.datasets[0].data).toEqual([
+      expect.objectContaining({ x: 0.5, y: 0.75 }),
+    ]);
+    setPrompts(1);
+    view.rerender(<ResultsCharts scores={[0.5]} />);
+    expect(latestScatter().data.datasets[0].data).toEqual([
+      expect.objectContaining({ x: 0.5, y: 0.5 }),
+    ]);
+  });
+
+  it('defaults to comparing two prompts when a second prompt becomes available', () => {
+    setPrompts(1);
+    const view = render(<ResultsCharts scores={[0.5]} />);
+    setPrompts(2);
+    view.rerender(<ResultsCharts scores={[0.5, 0.75]} />);
+    expect(latestScatter().data.datasets[0].data).toEqual([
+      expect.objectContaining({ x: 0.5, y: 0.75 }),
+    ]);
   });
 });
