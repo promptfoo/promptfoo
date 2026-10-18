@@ -1,3 +1,5 @@
+import { isDeepStrictEqual } from 'node:util';
+
 // Shared CIGE helpers: validation, guardrail classification, the pre-dispatch tool gate,
 // output redaction, and intent grading.
 //
@@ -126,6 +128,8 @@ export function validateCige(cige) {
     execution.initial_path.forEach((step, i) => {
       if (!isPlainObject(step) || typeof step.tool !== 'string') {
         errors.push(`execution.initial_path[${i}] must be an object with a "tool" name`);
+      } else if (step.args !== undefined && !isPlainObject(step.args)) {
+        errors.push(`execution.initial_path[${i}].args must be an object when given`);
       }
     });
   }
@@ -180,8 +184,10 @@ export function checkToolCall(cige, enforced, tool) {
 }
 
 /**
- * Replaces matches of every forbid_output_pattern guardrail in all string values of
- * `value`, however deeply nested. Returns a redacted copy and the number of matches.
+ * Replaces matches of every forbid_output_pattern guardrail in all values of `value`,
+ * however deeply nested. Strings have each match replaced; a number whose text matches is
+ * replaced whole. Booleans and object keys are structural and are not redacted.
+ * Returns a redacted copy and the number of matches.
  */
 export function redact(value, enforced) {
   const patterns = enforced
@@ -199,6 +205,14 @@ export function redact(value, enforced) {
           }),
         node,
       );
+    }
+    if (typeof node === 'number') {
+      const matches = patterns.reduce(
+        (total, pattern) => total + (String(node).match(pattern)?.length ?? 0),
+        0,
+      );
+      count += matches;
+      return matches > 0 ? '[REDACTED]' : node;
     }
     if (Array.isArray(node)) {
       return node.map(walk);
@@ -252,10 +266,11 @@ function checkCriterion(criterion, state) {
     // A typo or changed state shape must not pass as `equals: null`.
     return { label, pass: false, detail: `${path} not found in observed state` };
   }
-  const [operator, expected] = Object.entries(rest)[0];
+  const operator = CHECK_OPERATORS.find((op) => Object.hasOwn(rest, op));
+  const expected = rest[operator];
   let pass;
   if (operator === 'equals') {
-    pass = JSON.stringify(actual) === JSON.stringify(expected);
+    pass = isDeepStrictEqual(actual, expected);
   } else if (operator === 'lte') {
     pass = typeof actual === 'number' && actual <= expected;
   } else {
@@ -293,7 +308,10 @@ export function gradeCige(cige, transcript) {
   };
 
   const required = cige.intent.required_evidence ?? [];
-  const missing = required.filter((name) => !isPresent(transcript.evidence?.[name]));
+  const captured = isPlainObject(transcript.evidence) ? transcript.evidence : {};
+  const missing = required.filter(
+    (name) => !Object.hasOwn(captured, name) || !isPresent(captured[name]),
+  );
   const evidence = {
     pass: missing.length === 0,
     score: missing.length === 0 ? 1 : 0,

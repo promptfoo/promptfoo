@@ -287,6 +287,93 @@ describe('CIGE agentic test case example', () => {
       expect(gradeCige(cige, transcript).pass).toBe(false);
     });
 
+    it('redacts forbidden numbers as well as strings', () => {
+      const cige = loadCase('streaming-session.cige.yaml');
+      cige.guardrails.push({
+        rule: 'Never expose screenshot sizes',
+        mandatory: true,
+        enforce: { forbid_output_pattern: '48213' },
+      });
+      const { transcript } = runCige(cige);
+      expect(JSON.stringify(transcript)).not.toContain('48213');
+      expect(gradeCige(cige, transcript).pass).toBe(true);
+    });
+
+    it('keeps evidence when a forbidden pattern matches the artifact name', () => {
+      const cige = loadCase('streaming-session.cige.yaml');
+      cige.guardrails.push({
+        rule: 'Hide log artifact labels',
+        mandatory: true,
+        enforce: { forbid_output_pattern: 'connection_log' },
+      });
+      const { transcript } = runCige(cige);
+      expect(transcript.steps.every((step) => step.status === 'ok')).toBe(true);
+      expect(gradeCige(cige, transcript).namedScores).toMatchObject({ evidence: 1 });
+    });
+
+    it('does not credit inherited properties as evidence', () => {
+      const cige = loadCase('streaming-session.cige.yaml');
+      cige.intent.required_evidence = ['toString', 'constructor'];
+      const result = gradeCige(cige, runCige(cige).transcript);
+      expect(result.pass).toBe(false);
+      expect(result.reason).toMatch(/Required evidence missing: toString, constructor$/);
+    });
+
+    it('rejects non-object step args before any tool runs', () => {
+      const cige = loadCase('streaming-session.cige.yaml');
+      cige.execution.initial_path[1].args = null as never;
+      expect(validateCige(cige)).toEqual([
+        'execution.initial_path[1].args must be an object when given',
+      ]);
+      const { refusal, transcript } = runCige(cige);
+      expect(refusal).toMatch(/^Invalid CIGE case: /);
+      expect(transcript.received).toEqual([]);
+    });
+
+    it('uses the supported operator even when a check has extra keys', () => {
+      const cige = loadCase('streaming-session.cige.yaml');
+      cige.intent.success_criteria = [
+        {
+          id: 'connected',
+          check: { path: 'session.status', note: 'documentation only', equals: 'connected' },
+        },
+      ];
+      expect(validateCige(cige)).toEqual([]);
+      expect(gradeCige(cige, runCige(cige).transcript).pass).toBe(true);
+    });
+
+    it('compares objects structurally, independent of key order', () => {
+      const cige = loadCase('streaming-session.cige.yaml');
+      cige.intent.success_criteria = [
+        {
+          id: 'session',
+          check: {
+            path: 'session',
+            equals: { error: null, firstFrameMs: 840, status: 'connected', id: 'sess-1042' },
+          },
+        },
+      ];
+      expect(gradeCige(cige, runCige(cige).transcript).pass).toBe(true);
+    });
+
+    it('redacts preflight refusals too', () => {
+      const cige = loadCase('streaming-requires-approval.cige.yaml');
+      cige.guardrails.push({
+        rule: 'Escalate to ops-secret-7731 before changing intent',
+        mandatory: true,
+        enforce: { require_escalation: true },
+      });
+      cige.guardrails.push({
+        rule: 'Never expose escalation contacts',
+        mandatory: true,
+        enforce: { forbid_output_pattern: 'ops-secret-[0-9]+' },
+      });
+      const { refusal, transcript } = runCige(cige);
+      expect(refusal).toMatch(/^CIGE preflight refused: /);
+      expect(JSON.stringify({ refusal, transcript })).not.toContain('ops-secret-7731');
+      expect(transcript.received).toEqual([]);
+    });
+
     it('reports components through the javascript assertion', async () => {
       const cige = loadCase('streaming-session.cige.yaml');
       const { transcript } = runCige(cige, { connectionLogRetention: false });

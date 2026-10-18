@@ -34,12 +34,17 @@ export function runCige(cige, fixtureOptions = {}) {
   ).map(([field, key]) => `${field}.${key}`);
 
   if (unsupported.length > 0) {
-    return {
-      refusal: `CIGE preflight refused: this runner cannot enforce mandatory guardrail(s) ${unsupported
-        .map(({ rule, kinds }) => `"${rule}"${kinds.length > 0 ? ` (${kinds.join(', ')})` : ''}`)
-        .join(', ')}. No tool calls were made.`,
-      transcript: { status: 'refused', unsupported, received: [] },
-    };
+    // Refusals go through the same redaction as completed runs.
+    const { value } = redact(
+      {
+        refusal: `CIGE preflight refused: this runner cannot enforce mandatory guardrail(s) ${unsupported
+          .map(({ rule, kinds }) => `"${rule}"${kinds.length > 0 ? ` (${kinds.join(', ')})` : ''}`)
+          .join(', ')}. No tool calls were made.`,
+        transcript: { status: 'refused', unsupported, received: [] },
+      },
+      enforced,
+    );
+    return value;
   }
 
   const fixture = createStreamingFixture(fixtureOptions);
@@ -55,12 +60,14 @@ export function runCige(cige, fixtureOptions = {}) {
       steps.push({ index, tool, status: 'blocked', reason: gate.reasons.join('; ') });
       return;
     }
-    const { value: result, count } = redact(fixture.call(tool, args), enforced);
-    redactions += count;
-    if (result.ok && result.artifact) {
-      evidence[result.artifact] = result.data;
+    const raw = fixture.call(tool, args);
+    // Index evidence by the raw artifact name; the final pass redacts the emitted values.
+    if (raw.ok && raw.artifact) {
+      evidence[raw.artifact] = raw.data;
     }
-    steps.push({ index, tool, status: result.ok ? 'ok' : 'error', result });
+    const { value: result, count } = redact(raw, enforced);
+    redactions += count;
+    steps.push({ index, tool, status: raw.ok ? 'ok' : 'error', result });
   });
 
   // Final pass over everything emitted, so a forbidden value kept elsewhere (for example in
