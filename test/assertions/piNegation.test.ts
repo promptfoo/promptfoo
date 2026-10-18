@@ -55,4 +55,12 @@ describe('pi negation through assertion dispatch', () => {
       score: 1 - totalScore,
     });
   });
+
+  it('does not turn a scoring error into a pass', async () => {
+    vi.mocked(fetchWithCache).mockRejectedValue(new Error('connect ECONNREFUSED'));
+
+    for (const type of ['pi', 'not-pi'] as const) {
+      await expect(grade(type)).rejects.toThrow('Could not perform remote grading');
+    }
+  });
 });
