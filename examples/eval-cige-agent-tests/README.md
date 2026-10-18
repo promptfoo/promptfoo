@@ -50,7 +50,7 @@ CIGE defines the four top-level fields but no canonical subfields. This example 
 - `context.tools`: tool names the agent may call. Anything else is blocked.
 - `intent.success_criteria`: each criterion has a `check` with a `path` into the observed state and one of `equals`, `lte` or `gte`. A criterion without a `check` fails as unverifiable instead of passing silently.
 - `intent.required_evidence`: artifact names that must be captured and non-empty.
-- `guardrails`: a plain string is advisory. It is listed in the result but not enforced by the runner. An object can declare `enforce` with `deny_tools` or `forbid_output_pattern`. If a guardrail marked `mandatory: true` uses any other enforcement kind, the runner refuses to start.
+- `guardrails`: a plain string is advisory. It is listed in the result but not enforced by the runner. An object can declare `enforce` with `deny_tools` or `forbid_output_pattern`. If a guardrail marked `mandatory: true` uses any other enforcement kind, the runner refuses to start. A `forbid_output_pattern` regular expression is checked when the case is validated, and its matches are redacted from everything the runner returns. Success criteria are checked against the observed state before redaction, so hiding a value doesn't fail its criterion.
 - `execution.initial_path`: a list of `{ tool, args }` steps, treated as the suggested path.
 
 `context.reveal_policy` is accepted but not implemented here; the runner reports it under `notImplemented` in its output.

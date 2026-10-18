@@ -15,6 +15,33 @@ function isPlainObject(value) {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
+// Checks the values of supported enforcement kinds up front, so a bad pattern is rejected
+// before any tool runs rather than throwing mid-run after a side effect.
+function validateEnforcement(enforce, where) {
+  const errors = [];
+  if (
+    enforce.deny_tools !== undefined &&
+    (!Array.isArray(enforce.deny_tools) ||
+      !enforce.deny_tools.every((tool) => typeof tool === 'string'))
+  ) {
+    errors.push(`${where}.deny_tools must be a list of tool names`);
+  }
+  if (enforce.forbid_output_pattern !== undefined) {
+    if (typeof enforce.forbid_output_pattern === 'string') {
+      try {
+        new RegExp(enforce.forbid_output_pattern, 'g');
+      } catch (error) {
+        errors.push(
+          `${where}.forbid_output_pattern is not a valid regular expression: ${error.message}`,
+        );
+      }
+    } else {
+      errors.push(`${where}.forbid_output_pattern must be a regular expression string`);
+    }
+  }
+  return errors;
+}
+
 /**
  * Validates the four required fields and the subfields this example relies on.
  * Returns a list of problems; an empty list means the case is usable.
@@ -46,12 +73,22 @@ export function validateCige(cige) {
     errors.push('intent.success_criteria must be a non-empty list');
   } else {
     intent.success_criteria.forEach((criterion, i) => {
-      if (typeof criterion === 'string' || !isPlainObject(criterion?.check)) {
+      if (typeof criterion === 'string') {
         // Allowed, but it is graded as unverifiable rather than silently passed.
         return;
       }
-      const operators = CHECK_OPERATORS.filter((op) => op in criterion.check);
-      if (typeof criterion.check.path !== 'string' || operators.length !== 1) {
+      if (!isPlainObject(criterion)) {
+        errors.push(`intent.success_criteria[${i}] must be a string or an object`);
+        return;
+      }
+      if (criterion.check === undefined) {
+        // Same as a plain string: graded as unverifiable.
+        return;
+      }
+      const operators = isPlainObject(criterion.check)
+        ? CHECK_OPERATORS.filter((op) => op in criterion.check)
+        : [];
+      if (typeof criterion.check?.path !== 'string' || operators.length !== 1) {
         errors.push(
           `intent.success_criteria[${i}].check needs a "path" and exactly one of ${CHECK_OPERATORS.join(', ')}`,
         );
@@ -75,6 +112,8 @@ export function validateCige(cige) {
         errors.push(`guardrails[${i}] must be a string or an object with a "rule" string`);
       } else if (guardrail.enforce !== undefined && !isPlainObject(guardrail.enforce)) {
         errors.push(`guardrails[${i}].enforce must be an object`);
+      } else {
+        errors.push(...validateEnforcement(guardrail.enforce ?? {}, `guardrails[${i}].enforce`));
       }
     });
   } else {
@@ -201,8 +240,10 @@ function isPresent(artifact) {
 }
 
 function checkCriterion(criterion, state) {
-  const label = typeof criterion === 'string' ? criterion : (criterion.id ?? criterion.description);
-  if (typeof criterion === 'string' || !isPlainObject(criterion.check)) {
+  const label = isPlainObject(criterion)
+    ? (criterion.id ?? criterion.description)
+    : String(criterion);
+  if (!isPlainObject(criterion) || !isPlainObject(criterion.check)) {
     return { label, pass: false, detail: 'unverifiable: no machine-checkable "check"' };
   }
   const { path, ...rest } = criterion.check;
@@ -224,14 +265,21 @@ function checkCriterion(criterion, state) {
 }
 
 /**
+ * Checks each success criterion against an observed state. The runner calls this on the
+ * raw state before redaction, so a guardrail that hides a value cannot fail its criterion.
+ */
+export function evaluateCriteria(cige, state) {
+  return cige.intent.success_criteria.map((criterion) => checkCriterion(criterion, state));
+}
+
+/**
  * Grades a runner transcript against the case's intent and guardrails.
  * Outcome, required evidence and guardrails are separate components: a run can reach the
  * desired outcome and still fail because evidence is missing or a forbidden call was tried.
+ * Uses the runner's criterion results when present, otherwise checks `transcript.state`.
  */
 export function gradeCige(cige, transcript) {
-  const criteria = cige.intent.success_criteria.map((criterion) =>
-    checkCriterion(criterion, transcript.state),
-  );
+  const criteria = transcript.criteria ?? evaluateCriteria(cige, transcript.state);
   const failedCriteria = criteria.filter((criterion) => !criterion.pass);
   const outcome = {
     pass: failedCriteria.length === 0,

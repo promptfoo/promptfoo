@@ -23,6 +23,7 @@ type Transcript = {
   evidence: Record<string, unknown>;
   state: { deletedSessions: string[] };
   received: string[];
+  criteria?: unknown[];
   redactions: number;
   advisory: string[];
   notImplemented: string[];
@@ -38,12 +39,13 @@ let validateCige: (cige: unknown) => string[];
 let gradeCige: (cige: Cige, transcript: Transcript) => GradingResult;
 let runCige: (cige: Cige, fixtureOptions?: Record<string, unknown>) => RunResult;
 let cigeTests: (config: { cases: unknown[] }) => TestCase[];
+let CigeRunner: new () => ApiProvider;
 
 describe('CIGE agentic test case example', () => {
   beforeAll(async () => {
     const importExample = (file: string) => import(pathToFileURL(path.join(exampleDir, file)).href);
     ({ validateCige, gradeCige } = await importExample('cige.mjs'));
-    ({ runCige } = await importExample('cige-runner.mjs'));
+    ({ runCige, default: CigeRunner } = await importExample('cige-runner.mjs'));
     cigeTests = (await importExample('cige-tests.mjs')).default;
   });
 
@@ -222,6 +224,67 @@ describe('CIGE agentic test case example', () => {
       expect(result.reason).toBe(
         'Outcome criteria not met: typo (session.errror not found in observed state)',
       );
+    });
+
+    it('rejects an invalid redaction pattern before any tool runs', async () => {
+      const cige = loadCase('streaming-session.cige.yaml');
+      cige.guardrails.push({
+        rule: 'Broken pattern',
+        mandatory: true,
+        enforce: { forbid_output_pattern: '[' },
+      });
+      expect(validateCige(cige)).toEqual([
+        expect.stringMatching(
+          /^guardrails\[5\]\.enforce\.forbid_output_pattern is not a valid regular expression/,
+        ),
+      ]);
+      const { refusal, transcript } = runCige(cige);
+      expect(refusal).toMatch(/^Invalid CIGE case: /);
+      expect(transcript.received).toEqual([]);
+
+      const response = await new CigeRunner().callApi('', {
+        prompt: { raw: '', label: '' },
+        vars: { cige },
+      });
+      expect(response.error).toMatch(/not a valid regular expression/);
+      expect(response.output).toBeUndefined();
+    });
+
+    it('rejects null success criteria instead of crashing', () => {
+      const cige = loadCase('streaming-session.cige.yaml');
+      cige.intent.success_criteria.push(null);
+      expect(validateCige(cige)).toEqual([
+        'intent.success_criteria[3] must be a string or an object',
+      ]);
+      expect(runCige(cige).refusal).toMatch(/^Invalid CIGE case: /);
+    });
+
+    it('grades criteria on the raw state even when the value is redacted', () => {
+      const cige = loadCase('streaming-session.cige.yaml');
+      cige.intent.success_criteria.push({
+        id: 'signed-in-as-test-user',
+        check: { path: 'user', equals: 'test-enterprise-user' },
+      });
+      cige.guardrails.push({
+        rule: 'Never expose account names',
+        mandatory: true,
+        enforce: { forbid_output_pattern: 'test-enterprise-user' },
+      });
+      const { transcript } = runCige(cige);
+      expect(JSON.stringify(transcript)).not.toContain('test-enterprise-user');
+      expect(gradeCige(cige, transcript).namedScores).toEqual({
+        outcome: 1,
+        evidence: 1,
+        guardrails: 1,
+      });
+    });
+
+    it('checks transcript.state when a runner reports no criterion results', () => {
+      const cige = loadCase('streaming-session.cige.yaml');
+      const { criteria: _criteria, ...transcript } = runCige(cige).transcript;
+      expect(gradeCige(cige, transcript).pass).toBe(true);
+      transcript.state = { ...transcript.state, session: { status: 'idle' } } as never;
+      expect(gradeCige(cige, transcript).pass).toBe(false);
     });
 
     it('reports components through the javascript assertion', async () => {

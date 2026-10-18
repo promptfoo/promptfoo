@@ -8,12 +8,26 @@
 // The agent here is scripted: it follows execution.initial_path step by step. An LLM agent
 // or an MCP client could replace the scripted loop and the fixture behind the same gate.
 
-import { checkToolCall, classifyGuardrails, redact, validateCige } from './cige.mjs';
+import {
+  checkToolCall,
+  classifyGuardrails,
+  evaluateCriteria,
+  redact,
+  validateCige,
+} from './cige.mjs';
 import { createStreamingFixture } from './streaming-fixture.mjs';
 
 const NOT_IMPLEMENTED_FIELDS = [['context', 'reveal_policy']];
 
 export function runCige(cige, fixtureOptions = {}) {
+  // Validation also compiles every forbid_output_pattern, so nothing can throw mid-run.
+  const errors = validateCige(cige);
+  if (errors.length > 0) {
+    return {
+      refusal: `Invalid CIGE case: ${errors.join('; ')}`,
+      transcript: { status: 'invalid', errors, received: [] },
+    };
+  }
   const { enforced, advisory, unsupported } = classifyGuardrails(cige.guardrails);
   const notImplemented = NOT_IMPLEMENTED_FIELDS.filter(
     ([field, key]) => cige[field]?.[key] !== undefined,
@@ -59,6 +73,8 @@ export function runCige(cige, fixtureOptions = {}) {
       blocked,
       evidence,
       state: fixture.state,
+      // Checked against the raw state, before redaction can hide a value a criterion needs.
+      criteria: evaluateCriteria(cige, fixture.state),
       // Calls that actually reached the fixture, so blocked calls can be shown to be absent.
       received: fixture.received.map(({ tool }) => tool),
       advisory,
@@ -80,12 +96,7 @@ export default class CigeRunner {
   }
 
   async callApi(_prompt, context) {
-    const cige = context?.vars?.cige;
-    const errors = validateCige(cige);
-    if (errors.length > 0) {
-      return { error: `Invalid CIGE case: ${errors.join('; ')}` };
-    }
-    const { refusal, transcript } = runCige(cige, context.vars.fixture ?? {});
+    const { refusal, transcript } = runCige(context?.vars?.cige, context?.vars?.fixture ?? {});
     if (refusal) {
       return { error: refusal, metadata: { cige: transcript } };
     }
