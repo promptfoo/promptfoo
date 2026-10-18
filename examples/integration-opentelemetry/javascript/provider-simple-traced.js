@@ -1,5 +1,5 @@
 // provider-simple-traced.js
-// RAG/Agent provider with intricate OpenTelemetry tracing
+// Local retrieval simulation for site/docs/guides/trace-based-agent-evals.md.
 
 const { trace, context, SpanStatusCode } = require('@opentelemetry/api');
 const { BatchSpanProcessor, NodeTracerProvider } = require('@opentelemetry/sdk-trace-node');
@@ -7,11 +7,19 @@ const { OTLPTraceExporter } = require('@opentelemetry/exporter-trace-otlp-http')
 const { resourceFromAttributes } = require('@opentelemetry/resources');
 const { ATTR_SERVICE_NAME, ATTR_SERVICE_VERSION } = require('@opentelemetry/semantic-conventions');
 
-// Configure OTLP exporter
-const exporterUrl = process.env.OTEL_EXPORTER_OTLP_ENDPOINT || 'http://localhost:4318/v1/traces';
-console.log('[Provider] Configuring OTLP exporter with URL:', exporterUrl);
+const explanations = {
+  'quantum computing':
+    'Quantum computing uses qubits, superposition, interference, and entanglement. Unlike classical bits, qubits can represent combinations of states before measurement. Quantum algorithms use these properties to solve some problems, such as simulating quantum systems, more efficiently.',
+  'machine learning':
+    'Machine learning finds patterns in training data instead of relying on explicitly programmed rules. Training adjusts a model to improve its predictions; evaluation on separate data checks whether those patterns generalize. Common applications include classification, forecasting, and recommendations.',
+};
+
+// Let the SDK handle standard OTLP endpoint variables; default to the local receiver.
 const exporter = new OTLPTraceExporter({
-  url: exporterUrl,
+  url:
+    process.env.OTEL_EXPORTER_OTLP_ENDPOINT || process.env.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT
+      ? undefined
+      : 'http://127.0.0.1:4318/v1/traces',
 });
 
 // Use BatchSpanProcessor for better timing handling
@@ -32,31 +40,10 @@ const provider = new NodeTracerProvider({
 });
 provider.register();
 
-// Get a tracer
 const tracer = trace.getTracer('simple-traced-provider', '1.0.0');
 
-// Fixed helper function that properly manages span lifecycle
-async function runInSpan(spanOrName, attributesOrFn, maybeFn) {
-  let span;
-  let fn;
-  let attributes = {};
-
-  // Handle overloaded parameters
-  if (typeof spanOrName === 'string') {
-    // Called with (name, attributes, fn) or (name, fn)
-    if (typeof attributesOrFn === 'function') {
-      fn = attributesOrFn;
-    } else {
-      attributes = attributesOrFn || {};
-      fn = maybeFn;
-    }
-    span = tracer.startSpan(spanOrName, { attributes });
-  } else {
-    // Called with (span, fn) - original pattern
-    span = spanOrName;
-    fn = attributesOrFn;
-  }
-
+async function runInSpan(name, attributes, fn) {
+  const span = tracer.startSpan(name, { attributes });
   const ctx = trace.setSpan(context.active(), span);
 
   try {
@@ -75,7 +62,6 @@ async function runInSpan(spanOrName, attributesOrFn, maybeFn) {
   }
 }
 
-// Provider implementation
 class SimpleTracedProvider {
   id() {
     return 'simple-traced-provider';
@@ -117,13 +103,14 @@ class SimpleTracedProvider {
   }
 
   async _tracedCallApi(prompt, promptfooContext) {
-    // Use the improved runInSpan for the main workflow
-    return runInSpan(
+    const topic = prompt.toLowerCase().includes('quantum')
+      ? 'quantum computing'
+      : 'machine learning';
+    const result = await runInSpan(
       'rag_agent_workflow',
       {
         'promptfoo.evaluation_id': promptfooContext.evaluationId,
         'promptfoo.test_case_id': promptfooContext.testCaseId,
-        'prompt.text': prompt,
         'prompt.length': prompt.length,
         'agent.type': 'rag_assistant',
         'agent.version': '2.0',
@@ -154,7 +141,7 @@ class SimpleTracedProvider {
                 : prompt.toLowerCase().includes('explain')
                   ? 'explanation'
                   : 'general',
-              entities: ['quantum computing', 'classical computing'],
+              entities: topic === 'quantum computing' ? [topic, 'classical computing'] : [topic],
               complexity: 'medium',
             };
 
@@ -184,12 +171,8 @@ class SimpleTracedProvider {
                 `retrieve_document_${i}`,
                 {
                   'document.index': i,
-                  'search.query': userIntent.entities.join(' '),
+                  'search.query.length': userIntent.entities.join(' ').length,
                   'tool.name': 'search_corpus',
-                  'tool.arguments': JSON.stringify({
-                    query: userIntent.entities.join(' '),
-                    document_index: i,
-                  }),
                 },
                 async () => {
                   const docSpan = trace.getSpan(context.active());
@@ -276,7 +259,7 @@ class SimpleTracedProvider {
             ];
 
             for (const step of reasoningSteps) {
-              await runInSpan(`reasoning_${step.step}`, async () => {
+              await runInSpan(`reasoning_${step.step}`, {}, async () => {
                 const stepSpan = trace.getSpan(context.active());
                 await new Promise((resolve) => setTimeout(resolve, step.duration));
 
@@ -310,10 +293,7 @@ class SimpleTracedProvider {
             'generation.type': 'augmented_response',
             'model.name': 'gpt-4',
             'tool.name': 'compose_answer',
-            'tool.arguments': JSON.stringify({
-              citation_count: documents.length,
-              tone: 'explanatory',
-            }),
+            'document.count': documents.length,
           },
           async () => {
             const span = trace.getSpan(context.active());
@@ -322,13 +302,9 @@ class SimpleTracedProvider {
 
             response = {
               text:
-                `Based on my analysis of ${documents.length} technical documents, here's a comprehensive explanation:\n\n` +
-                `${userIntent.entities.join(' and ')} are fascinating topics in computer science. ` +
-                `After analyzing multiple sources including arxiv papers and textbooks, I can provide the following insights:\n\n` +
-                `1. Core Concepts: The fundamental principles involve...\n` +
-                `2. Key Differences: When comparing these technologies...\n` +
-                `3. Practical Applications: In real-world scenarios...\n\n` +
-                `This synthesis is based on recent research and established knowledge in the field.`,
+                `Based on my analysis of ${documents.length} technical documents, here's an explanation of ${topic}:\n\n` +
+                `${explanations[topic]}\n\n` +
+                `Citations: ${documents.map((d) => d.title).join(', ')}.`,
               citations: documents.map((d) => ({
                 id: d.id,
                 title: d.title,
@@ -368,15 +344,6 @@ class SimpleTracedProvider {
           reasoning_steps: 3,
         });
 
-        // Force flush to ensure spans are sent
-        try {
-          console.log('[Provider] Flushing spans...');
-          await spanProcessor.forceFlush();
-          console.log('[Provider] Spans exported successfully');
-        } catch (error) {
-          console.error('[Provider] Failed to flush spans:', error.message);
-        }
-
         return {
           output: response.text,
           tokenUsage: {
@@ -392,9 +359,20 @@ class SimpleTracedProvider {
         };
       },
     );
+
+    // Force flush after the root span has ended so parent and child spans are exported.
+    try {
+      console.log('[Provider] Flushing spans...');
+      await spanProcessor.forceFlush();
+      console.log('[Provider] Spans exported successfully');
+    } catch (error) {
+      console.error('[Provider] Failed to flush spans:', error.message);
+    }
+
+    return result;
   }
 
-  async _untracedCallApi(prompt, promptfooContext) {
+  async _untracedCallApi(prompt) {
     // Simple implementation without tracing
     await new Promise((resolve) => setTimeout(resolve, 100));
 
@@ -402,7 +380,7 @@ class SimpleTracedProvider {
       ? 'quantum computing'
       : 'machine learning';
     return {
-      output: `Here's a simple explanation of ${topic}: It's a fascinating field that involves...`,
+      output: explanations[topic],
       tokenUsage: {
         total: 50,
         prompt: 30,
