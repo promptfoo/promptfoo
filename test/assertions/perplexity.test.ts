@@ -120,6 +120,16 @@ describe.each([
     },
   );
 
+  it.each([1, 3])('rejects sparse log probabilities of length %s', (length) => {
+    const logProbs = new Array<number>(length).fill(-2, 1);
+
+    for (const inverse of [false, true]) {
+      expect(() => handle(params({ assertion, logProbs, inverse }))).toThrow(
+        'logProbs must contain only non-positive numbers',
+      );
+    }
+  });
+
   it('rejects NaN when no threshold is set', () => {
     expect(() => handle(params({ assertion: { type }, logProbs: [NaN] }))).toThrow(
       'logProbs must contain only non-positive numbers',

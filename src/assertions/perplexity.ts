@@ -1,10 +1,10 @@
 import type { AssertionParams, GradingResult } from '../types/index';
 
 function validateLogProbs(logProbs: number[]): void {
-  if (
-    logProbs.some((logProb) => typeof logProb !== 'number' || Number.isNaN(logProb) || logProb > 0)
-  ) {
-    throw new Error('Perplexity logProbs must contain only non-positive numbers');
+  for (const logProb of logProbs) {
+    if (typeof logProb !== 'number' || Number.isNaN(logProb) || logProb > 0) {
+      throw new Error('Perplexity logProbs must contain only non-positive numbers');
+    }
   }
 }
 
