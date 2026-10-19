@@ -12,6 +12,7 @@ import logger, { getLogLevel, setLogLevel } from '../../logger';
 import {
   CodeScanOutputFormat,
   CodeScanOutputFormatSchema,
+  type FileRecord,
   type PullRequestContext,
   type ScanResponse,
 } from '../../types/codeScan';
@@ -31,6 +32,36 @@ import { parseGitHubPr } from '../util/github';
 import { registerCleanupHandlers } from './cleanup';
 import { createSpinner, displayScanResults } from './output';
 import { buildScanRequest, executeScanRequestWithRetry } from './request';
+import type { SimpleGit } from 'simple-git';
+
+async function describeEmptyScan(
+  git: SimpleGit,
+  files: FileRecord[],
+  baseBranch: string,
+  compareRef: string,
+): Promise<string> {
+  const details = [`No files to scan in ${baseBranch}...${compareRef}.`];
+  const skipped = files.filter((file) => file.skipReason);
+  const reasons = [...new Set(skipped.map((file) => file.skipReason))].join(', ');
+  details.push(
+    files.length === 0
+      ? 'There are no net file changes in this range.'
+      : `${files.length} changed file(s) contain no scannable patches.`,
+  );
+  if (skipped.length) {
+    details.push(`${skipped.length} file(s) skipped: ${reasons}.`);
+  }
+  try {
+    const dirtyCount = (await git.status()).files.length;
+    if (dirtyCount) {
+      details.push(`${dirtyCount} uncommitted file(s) are not part of the scan.`);
+    }
+  } catch {
+    // Status is best-effort context; the compared range is still useful.
+  }
+  details.push('Commit relevant changes, or use --base/--compare to select another range.');
+  return details.join(' ');
+}
 
 /**
  * Options for executing a scan
@@ -246,15 +277,17 @@ export async function executeScan(repoPath: string, options: ScanOptions): Promi
 
     // Check if there are no files to scan
     if (includedFiles.length === 0) {
-      const msg = 'No files to scan';
-
-      // For non-text formats (JSON, SARIF), emit a structured empty response for programmatic consumption
-      if (outputFormat !== CodeScanOutputFormat.TEXT) {
-        displayResults({ success: true, comments: [], review: msg }, outputFormat);
-      } else if (spinner) {
-        spinner.succeed(msg);
+      // For non-text formats (JSON, SARIF), keep the stable machine-readable
+      // review string for programmatic consumption
+      if (outputFormat === CodeScanOutputFormat.TEXT) {
+        const msg = await describeEmptyScan(git, files, baseBranch, compareRef);
+        if (spinner) {
+          spinner.succeed(msg);
+        } else {
+          logger.info(msg);
+        }
       } else {
-        logger.info(msg);
+        displayResults({ success: true, comments: [], review: 'No files to scan' }, outputFormat);
       }
 
       // Exit with code 0 (success) when no files to scan

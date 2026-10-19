@@ -111,6 +111,8 @@ function getCacheInstance() {
           filename: newCacheFile,
         });
 
+        // Keep this instance on the Keyv major supported by cache-manager.
+        // Its ttl()/wrap() rely on v5 raw reads, and existing disk keys use the v5 prefix.
         const keyv = new Keyv({
           store,
           ttl: getCacheTtlMs(),
