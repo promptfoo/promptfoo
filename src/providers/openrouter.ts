@@ -484,7 +484,11 @@ export class OpenRouterProvider extends OpenAiChatCompletionProvider {
     let output: string | object = '';
     if (message.functionCall || (message.toolCalls && message.toolCalls.length > 0)) {
       // Tool calls always take priority and never include thinking
-      output = message.functionCall ?? message.toolCalls!;
+      output =
+        message.functionCall ??
+        message.toolCalls!.map((call) =>
+          call.type === undefined ? { ...call, type: 'function' } : call,
+        );
     } else if (message.structuredContent?.length) {
       // OpenRouter can return content as an array of parts (e.g. Gemini text
       // plus image); keep the parts intact instead of throwing on .trim().
