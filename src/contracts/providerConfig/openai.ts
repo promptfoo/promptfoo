@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { McpConfigInputSchema } from './mcp.js';
+import { McpClientConfigInputSchema } from './mcp.js';
 import {
   FileReferenceInputSchema,
   JsonObjectInputSchema,
@@ -402,7 +402,7 @@ const ChatFields = ConversationFields.extend({
     .describe(
       'Inline callback code or file:// references; functions are supported only in-process',
     ),
-  mcp: McpConfigInputSchema.extend({
+  mcp: McpClientConfigInputSchema.extend({
     enabled: z
       .boolean()
       .describe(
