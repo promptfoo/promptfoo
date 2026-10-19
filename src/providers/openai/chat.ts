@@ -516,7 +516,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       : undefined;
     const reasoningEffort =
       isReasoningModel && !isGPT6Model
-        ? (renderVarsInObject(config.reasoning_effort, context?.vars) as ReasoningEffort)
+        ? (renderVarsInObject(config.reasoning_effort, context?.vars ?? {}) as ReasoningEffort)
         : undefined;
 
     // --- MCP tool injection logic ---
@@ -605,7 +605,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       config.reasoning_effort &&
       (isReasoningModel || capabilityModelName.includes('gpt-oss'))
     ) {
-      body.reasoning_effort = renderVarsInObject(config.reasoning_effort, context?.vars);
+      body.reasoning_effort = renderVarsInObject(config.reasoning_effort, context?.vars ?? {});
     }
 
     if (config.reasoning && isOSeriesModel) {
@@ -634,7 +634,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     const gpt6Effort =
       isGPT6Model && !isOpenRouterGpt6
         ? getGpt6ChatReasoningEffort(this.config, context?.prompt?.config, (value) =>
-            renderVarsInObject(value, context?.vars),
+            renderVarsInObject(value, context?.vars ?? {}),
           )
         : undefined;
     if (isGPT6Model) {
