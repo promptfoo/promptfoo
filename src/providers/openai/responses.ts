@@ -1088,7 +1088,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
 
     const gpt6Reasoning = isGPT6Model
       ? getGpt6ResponsesReasoning(this.config, context?.prompt?.config, (value) =>
-          renderVarsInObject(value, context?.vars),
+          renderVarsInObject(value, context?.vars ?? {}),
         )
       : undefined;
     const renderedReasoning = isGPT6Model
@@ -1096,7 +1096,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       : prepareOpenAiReasoning(config.reasoning, context?.vars);
     const renderedReasoningEffort =
       isReasoningModel && !isGPT6Model
-        ? (renderVarsInObject(config.reasoning_effort, context?.vars) as ReasoningEffort)
+        ? (renderVarsInObject(config.reasoning_effort, context?.vars ?? {}) as ReasoningEffort)
         : undefined;
     const effectiveReasoningEffort = renderedReasoning?.effort ?? renderedReasoningEffort;
     const hasAzureReasoningEffort =
