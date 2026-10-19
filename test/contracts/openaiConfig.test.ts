@@ -654,3 +654,43 @@ describe('shared input definitions', () => {
     }
   });
 });
+
+describe('OpenAI local and provider-hosted MCP contracts', () => {
+  const chatJson = new Ajv({ strict: false }).compile(OpenAiChatConfigInputJsonSchema);
+  const responsesJson = new Ajv({ strict: false }).compile(OpenAiResponsesConfigInputJsonSchema);
+  it.each(['defaultArgs', 'transformResponse', 'responseParser', 'serverName'])(
+    'rejects standalone %s in nested Chat client config',
+    (field) => {
+      const input = {
+        mcp: {
+          enabled: true,
+          server: { command: 'fixture' },
+          [field]: field === 'defaultArgs' ? { session: 'ignored' } : 'ignored',
+        },
+      };
+      expect(OpenAiChatConfigInputSchema.safeParse(input).success).toBe(false);
+      expect(chatJson(input)).toBe(false);
+    },
+  );
+  it('keeps local MCP client setup distinct from Responses hosted tool definitions', () => {
+    const local = { mcp: { enabled: true, server: { command: 'fixture' }, tools: ['lookup'] } };
+    const hosted = {
+      tools: [
+        {
+          type: 'mcp',
+          server_label: 'fixture',
+          server_url: 'https://mcp.example.test',
+          require_approval: 'never',
+        },
+      ],
+    };
+    expect(OpenAiChatConfigInputSchema.parse(local)).toEqual(local);
+    expect(chatJson(local)).toBe(true);
+    expect(OpenAiResponsesConfigInputSchema.safeParse(local).success).toBe(false);
+    expect(responsesJson(local)).toBe(false);
+    expect(OpenAiResponsesConfigInputSchema.parse(hosted)).toEqual(hosted);
+    expect(responsesJson(hosted)).toBe(true);
+    expect(OpenAiChatConfigInputSchema.safeParse(hosted).success).toBe(false);
+    expect(chatJson(hosted)).toBe(false);
+  });
+});
