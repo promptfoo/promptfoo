@@ -175,7 +175,7 @@ const KNOWN_BAD_RELEASES = new Map([
   ['sharp', '<0.35.5'], // GHSA-wq5f-xc86-pv6w (bundled librsvg)
   ['simple-git', '<=3.36.0'], // GHSA-858h-whjf-mvg5
   ['smol-toml', '<=1.8.0'], // GHSA-r4xh-jqrq-34v2
-  ['undici', '<7.29.1 || >=8.0.0 <8.10.2'], // GHSA-3xpg-4rpp-hhhm and the 7.29.1/8.10.2 fixes
+  ['undici', '<7.30.1 || >=8.0.0 <8.10.2'], // 7.30.1 security fixes and GHSA-3xpg-4rpp-hhhm
   ['ws', '<5.2.5 || >=6.0.0 <6.2.4 || >=7.0.0 <7.5.11 || >=8.0.0 <8.21.0'], // GHSA-96hv-2xvq-fx4p
 ]);
 

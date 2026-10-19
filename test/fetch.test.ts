@@ -1147,6 +1147,7 @@ describe('fetchWithProxy', () => {
         };
         expect(interceptors.decompress).toHaveBeenCalledExactlyOnceWith({
           skipErrorResponses: false,
+          maxSize: 64 * 1024 * 1024,
         });
         expect(agent.compose).toHaveBeenCalledWith(decompressionInterceptor);
         expect(emitWarning).not.toHaveBeenCalled();
