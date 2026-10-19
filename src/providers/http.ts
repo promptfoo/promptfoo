@@ -1288,7 +1288,12 @@ function normalizeMultipartRequestTemplate(
   let opaqueLine = false;
   const output: { content: string; newline: string; preserveNewline?: boolean }[] = [];
 
-  const sourceAfter = (index: number, offset = 0, includeHeaders = false) => {
+  const sourceAfter = (
+    index: number,
+    offset = 0,
+    includeHeaders = false,
+    skipDelimiterNewline = false,
+  ) => {
     let source = '';
     for (const [relativeIndex, fragment] of fragments.slice(index).entries()) {
       const text = relativeIndex === 0 ? fragment.text.slice(offset) : fragment.text;
@@ -1296,13 +1301,16 @@ function normalizeMultipartRequestTemplate(
       if (includeHeaders) {
         // A separator may be followed by captured headers, but their payload
         // suffix cannot establish framing or a later source closing delimiter.
-        const separator = /\r?\n\r?\n/.exec(source);
+        const headers = skipDelimiterNewline ? source.replace(/^\r?\n/, '') : source;
+        const separator = /(?:^|\r?\n)\r?\n/.exec(headers);
         if (separator) {
-          return source.slice(0, separator.index);
+          // Retain the blank line as evidence of an empty header block. An
+          // absent suffix must not grant framing authority to captured data.
+          return headers.slice(0, separator.index + separator[0].length);
         }
       }
     }
-    return source;
+    return skipDelimiterNewline ? source.replace(/^\r?\n/, '') : source;
   };
 
   const matchDelimiter = (delimiter: string) => {
@@ -1329,9 +1337,25 @@ function normalizeMultipartRequestTemplate(
         .some((sourceLine) => sourceLine.replace(/[ \t]+$/, '') === delimiter);
     }
     const headerLines = followingSource.split(/\r?\n\r?\n/, 1)[0].split(/\r?\n/);
+    const nested = matched !== undefined && matched.index > 0;
+    if (headerLines[0] === '') {
+      return nested && /^\r?\n/.test(followingSource);
+    }
+    const headers: string[] = [];
+    for (const header of headerLines) {
+      if (/^[ \t]/.test(header) && headers.length > 0) {
+        // Unfold only the comparison view; emitted physical lines and their
+        // indentation remain unchanged apart from structural line endings.
+        headers[headers.length - 1] += ` ${header.replace(/^[ \t]+/, '')}`;
+      } else if (/^[^:\s]+:/.test(header)) {
+        headers.push(header);
+      } else {
+        return false;
+      }
+    }
     return (
-      headerLines.every((header) => /^[^:\s]+:/.test(header)) &&
-      headerLines.some((header) =>
+      nested ||
+      headers.some((header) =>
         /^content-disposition:.*\b(?:form-data|inline|attachment)\b/i.test(header),
       )
     );
@@ -1481,14 +1505,16 @@ function normalizeMultipartRequestTemplate(
     if (matched?.closing) {
       return sourceConfirmsBoundary(delimiter, sourceAfter(index + 1));
     }
-    if (!matched || (end >= 0 && !/^(?:\r?\n)*$/.test(candidate.slice(end + 1)))) {
+    if (!matched || (end >= 0 && !/^(?:\r?\n)*\r?$/.test(candidate.slice(end + 1)))) {
       return false;
     }
-    const followingSource = sourceAfter(index + 1, 0, true);
-    return sourceConfirmsBoundary(
-      delimiter,
-      end < 0 ? followingSource.replace(/^\r?\n/, '') : followingSource,
-    );
+    // Header framing may start in this capture, including half of a CRLF.
+    // Account for a buffered prefix or leading newlines when mapping back to it.
+    const followingSource =
+      end < 0
+        ? sourceAfter(index + 1, 0, true, true)
+        : sourceAfter(index, text.length - candidate.length + end + 1, true);
+    return sourceConfirmsBoundary(delimiter, followingSource);
   };
 
   for (const [index, fragment] of fragments.entries()) {

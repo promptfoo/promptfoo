@@ -1350,6 +1350,250 @@ describe('HttpProvider', () => {
       });
     });
 
+    describe('multipart header grammar', () => {
+      const payload = ' leading \nsecond\r\nthird \t';
+      const firstPart = '--outer\nContent-Disposition: form-data; name="first"\n\none\n';
+      const foldedHeaders = [
+        'Content-Disposition: form-data;\n name="second"',
+        'Content-Disposition: form-data;\n\tname="second"',
+        'Content-Disposition:\n form-data; name="second"',
+        'Content-Disposition: form-data;\n name="second";\n\tfilename="second.txt"',
+      ];
+      const crlf = (text: string) => text.replace(/\r?\n/g, '\r\n');
+      const send = async (body: string, vars: Record<string, Record<string, string>>) => {
+        const provider = new HttpProvider('http', {
+          config: {
+            request:
+              'POST / HTTP/1.1\nHost: example.com\nContent-Type: multipart/form-data; boundary=outer\n\n' +
+              body,
+          },
+        });
+        vi.mocked(fetchWithCache).mockResolvedValueOnce(createMockFetchResponse('{}'));
+        await provider.callApi('fixture', {
+          vars,
+          prompt: { raw: 'fixture', label: 'fixture' },
+        });
+        return vi.mocked(fetchWithCache).mock.calls[0][1]?.body as string;
+      };
+      const parseOuter = (body: string) =>
+        httpZ.parse(
+          'POST / HTTP/1.1\r\nHost: example.com\r\nContent-Type: multipart/form-data; boundary=outer\r\n\r\n' +
+            body,
+        ).body?.params ?? [];
+      const container = (body: string, subtype = 'mixed') =>
+        `--outer\nContent-Disposition: form-data; name="files"\nContent-Type: multipart/${subtype}; boundary=inner\n\n${body}\n--outer--\n`;
+
+      it.each(
+        foldedHeaders.flatMap((headers) =>
+          ['\n', '\r\n'].flatMap((newline) =>
+            [false, true].map((capturedHeaders) => ({ headers, newline, capturedHeaders })),
+          ),
+        ),
+      )(
+        'preserves folded disposition lines ($headers, $newline, $capturedHeaders)',
+        async ({ headers, newline, capturedHeaders }) => {
+          const source =
+            firstPart +
+            (capturedHeaders
+              ? '{{part.delimiter}}{{part.headers}}'
+              : `--{{part.boundary}}\n${headers}\n\n{{payload.text}}`) +
+            '\n--outer--\n';
+          const body = await send(source.replace(/\n/g, newline), {
+            part: {
+              boundary: 'outer',
+              delimiter: '--outer',
+              headers: `${newline}${headers.replace(/\n/g, newline)}${newline}${newline}${payload}`,
+            },
+            payload: { text: payload },
+          });
+          expect(body).toBe(
+            crlf(firstPart + '--outer\n' + headers + '\n\n') + payload + '\r\n--outer--\r\n',
+          );
+          expect(parseOuter(body)).toMatchObject([
+            { name: 'first', value: 'one' },
+            { name: 'second', value: payload },
+          ]);
+        },
+      );
+
+      it.each(
+        ['mixed', 'related', 'alternative'].flatMap((subtype) =>
+          [
+            'Content-Type: text/plain',
+            'Content-Type: text/plain\nContent-ID: <leaf>',
+            'Content-Transfer-Encoding: binary\nContent-Type: text/plain',
+          ].flatMap((headers) => ['\n', '\r\n'].map((newline) => ({ subtype, headers, newline }))),
+        ),
+      )(
+        'frames declared child headers without disposition ($subtype, $headers, $newline)',
+        async ({ subtype, headers, newline }) => {
+          const source = container(
+            `--{{part.boundary}}\n${headers}\n\n{{payload.text}}\n--inner--`,
+            subtype,
+          ).replace(/\n/g, newline);
+          const body = await send(source, {
+            part: { boundary: 'inner' },
+            payload: { text: payload },
+          });
+          const inner = crlf(`--inner\n${headers}\n\n`) + payload + '\r\n--inner--';
+          expect(body).toBe(crlf(container('PLACEHOLDER', subtype)).replace('PLACEHOLDER', inner));
+          // http-z parses only the outer MIME layer. The actual CLI receiver also
+          // uses Formidable to parse disposition-free children on the wire.
+          expect(parseOuter(body)[0].value).toBe(inner);
+        },
+      );
+
+      it.each(
+        ['', 'Content-ID: <leaf>', 'X-Trace: value', 'Content-Transfer-Encoding: binary'].flatMap(
+          (headers) =>
+            ['\n', '\r\n'].flatMap((newline) =>
+              [false, true].map((capturedHeaders) => ({ headers, newline, capturedHeaders })),
+            ),
+        ),
+      )(
+        'frames empty or ancillary child headers ($headers, $newline, $capturedHeaders)',
+        async ({ headers, newline, capturedHeaders }) => {
+          const headerBlock = headers ? `${headers}\n\n` : '\n';
+          const source = container(
+            (capturedHeaders
+              ? '{{part.delimiter}}{{part.content}}'
+              : `--{{part.boundary}}\n${headerBlock}{{payload.text}}`) + '\n--inner--',
+          ).replace(/\n/g, newline);
+          const body = await send(source, {
+            part: {
+              boundary: 'inner',
+              delimiter: '--inner',
+              content: `${newline}${headerBlock.replace(/\n/g, newline)}${payload}`,
+            },
+            payload: { text: payload },
+          });
+          const inner = crlf(`--inner\n${headerBlock}`) + payload + '\r\n--inner--';
+          expect(body).toBe(crlf(container('PLACEHOLDER')).replace('PLACEHOLDER', inner));
+          expect(parseOuter(body)[0].value).toBe(inner);
+        },
+      );
+
+      it.each([false, true])(
+        'recognizes an empty child header after a split CRLF (%s)',
+        async (capturedCR) => {
+          const body = await send(
+            container(
+              `--{{part.boundary}}${capturedCR ? '{{part.cr}}' : '\r'}{{part.lf}}\n{{payload.text}}\n--inner--`,
+            ),
+            { part: { boundary: 'inner', cr: '\r', lf: '\n' }, payload: { text: payload } },
+          );
+          const inner = '--inner\r\n\r\n' + payload + '\r\n--inner--';
+          expect(body).toBe(crlf(container('PLACEHOLDER')).replace('PLACEHOLDER', inner));
+          expect(parseOuter(body)[0].value).toBe(inner);
+        },
+      );
+
+      it.each(['', 'Content-ID: <second>'])(
+        'keeps later declared child parts separate (%s)',
+        async (headers) => {
+          const headerBlock = headers ? `${headers}\n\n` : '\n';
+          const first = '--inner\nContent-Type: text/plain\n\nfirst\n';
+          const body = await send(
+            container(first + `--{{part.boundary}}\n${headerBlock}{{payload.text}}\n--inner--`),
+            { part: { boundary: 'inner' }, payload: { text: payload } },
+          );
+          const inner = crlf(first + `--inner\n${headerBlock}`) + payload + '\r\n--inner--';
+          expect(body).toBe(crlf(container('PLACEHOLDER')).replace('PLACEHOLDER', inner));
+          expect(parseOuter(body)[0].value).toBe(inner);
+        },
+      );
+
+      it.each(['\n', '\r\n'])(
+        'keeps a whole captured headerless child opaque (%s)',
+        async (newline) => {
+          const captured = `--inner${newline}${newline}leaf${newline}--inner--`;
+          const body = await send(container('{{payload.text}}'), { payload: { text: captured } });
+          expect(body).toBe(crlf(container('PLACEHOLDER')).replace('PLACEHOLDER', captured));
+          expect(parseOuter(body)[0].value).toBe(captured);
+        },
+      );
+
+      const emptyHeaderCuts = ['\n', '\r\n'].flatMap((delimiterNewline) =>
+        ['\n', '\r\n'].flatMap((separatorNewline) =>
+          [true, false].flatMap((capturedPrefix) => {
+            const region = delimiterNewline + separatorNewline;
+            return Array.from({ length: region.length + 1 }, (_, cut) => ({
+              delimiterNewline,
+              separatorNewline,
+              capturedPrefix,
+              region,
+              cut,
+            }));
+          }),
+        ),
+      );
+      it.each(emptyHeaderCuts)(
+        'frames an empty-header cut (%j)',
+        async ({ region, cut, capturedPrefix }) => {
+          const prefix = `--inner${region.slice(0, cut)}`;
+          const suffix = region.slice(cut);
+          const body = await send(
+            container(
+              capturedPrefix
+                ? `{{part.chunk}}${suffix}leaf\n--inner--`
+                : `${prefix}{{part.chunk}}leaf\n--inner--`,
+            ),
+            { part: { chunk: capturedPrefix ? prefix : suffix } },
+          );
+          const inner = '--inner\r\n\r\nleaf\r\n--inner--';
+          expect(body).toBe(crlf(container('PLACEHOLDER')).replace('PLACEHOLDER', inner));
+          expect(parseOuter(body)[0].value).toBe(inner);
+        },
+      );
+
+      it.each(['\n', '\r\n'])(
+        'does not mistake missing headers for an empty block (%s)',
+        async (newline) => {
+          const captured = `--inner${newline}`;
+          const source = container('{{payload.text}}').replace('\n--outer--\n', '');
+          const body = await send(source, { payload: { text: captured } });
+          expect(body).toBe(crlf(source).replace('{{payload.text}}', captured));
+        },
+      );
+
+      it('keeps a folded header capture payload suffix opaque', async () => {
+        const injected = 'first\n--outer\nContent-Disposition: form-data; name="injected"\n\nextra';
+        const headers = foldedHeaders[0];
+        const body = await send(firstPart + '--ou{{part.content}}\n--outer--\n', {
+          part: { content: `ter\n${headers}\n\n${injected}` },
+        });
+        expect(body).toBe(
+          crlf(firstPart + '--outer\n' + headers + '\n\n') + injected + '\r\n--outer--\r\n',
+        );
+        expect(() => parseOuter(body)).toThrow();
+      });
+
+      it('does not promote a whole captured later part with folded headers', async () => {
+        const captured = `--outer\n${foldedHeaders[0]}\n\nsecond`;
+        const body = await send(firstPart + '{{payload.text}}\n--outer--\n', {
+          payload: { text: captured },
+        });
+        expect(body).toBe(
+          '--outer\r\nContent-Disposition: form-data; name="first"\r\n\r\none\n' +
+            captured +
+            '\r\n--outer--\r\n',
+        );
+        expect(() => parseOuter(body)).toThrow();
+      });
+
+      it.each([' orphan\nContent-Type: text/plain', 'Content-Type: text/plain\nbroken'])(
+        'does not admit an invalid child header block (%s)',
+        async (headers) => {
+          const body = await send(container(`--{{part.boundary}}\n${headers}\n\nleaf\n--inner--`), {
+            part: { boundary: 'inner' },
+          });
+          const inner = `--inner\n${headers}\n\nleaf\r\n--inner--`;
+          expect(body).toBe(crlf(container('PLACEHOLDER')).replace('PLACEHOLDER', inner));
+          expect(parseOuter(body)[0].value).toBe(inner);
+        },
+      );
+    });
+
     describe('declared nested multipart framing', () => {
       const containerHeaders =
         'Content-Disposition: form-data; name="files"\nContent-Type: multipart/mixed; boundary=inner';
