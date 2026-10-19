@@ -16,11 +16,17 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 
-# Pull the official mirror in CI while retaining the image name used by the example.
+# Both registries serve the same pinned official image. Preserve the example tag.
 DOCKER_IMAGE_MIRRORS = {
     "python:3.9-alpine": (
-        "public.ecr.aws/docker/library/python"
-        "@sha256:c99b6eb43b3ac4d750db3d6e8b22268d5ea9a99deead7218ce3deda7f2ca029c"
+        (
+            "public.ecr.aws/docker/library/python"
+            "@sha256:c99b6eb43b3ac4d750db3d6e8b22268d5ea9a99deead7218ce3deda7f2ca029c"
+        ),
+        (
+            "docker.io/library/python"
+            "@sha256:c99b6eb43b3ac4d750db3d6e8b22268d5ea9a99deead7218ce3deda7f2ca029c"
+        ),
     ),
 }
 
@@ -336,8 +342,22 @@ def run_example(name: str) -> None:
         if example.check_dependencies:
             run(str(python), "-m", "pip", "check")
         for image in example.docker_images:
-            source = DOCKER_IMAGE_MIRRORS.get(image, image)
-            pull_docker_image(source, env)
+            sources = DOCKER_IMAGE_MIRRORS.get(image, (image,))
+            for index, source in enumerate(sources):
+                try:
+                    pull_docker_image(source, env)
+                except subprocess.CalledProcessError as error:
+                    if (
+                        index == len(sources) - 1
+                        or "toomanyrequests" not in (error.stderr or "").lower()
+                    ):
+                        raise
+                    print(
+                        "Registry still throttled; trying the next pinned mirror",
+                        flush=True,
+                    )
+                else:
+                    break
             if source != image:
                 run("docker", "tag", source, image)
         for relative, pattern in example.suites:
