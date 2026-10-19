@@ -70,6 +70,7 @@ for index, case in enumerate(json.loads(sys.argv[2])):
     for key in ("OPENAI_API_KEY", "ANTHROPIC_API_KEY"):
         os.environ.pop(key, None)
     os.environ.update(case["credentials"])
+    print(f"crewai fixture: case {index} before example import", flush=True)
     spec = importlib.util.spec_from_file_location("recruitment_example", sys.argv[1])
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
@@ -143,7 +144,6 @@ describe('integration-crewai example', () => {
     // Import Python's standard library once for the suite. Repeated cold starts can
     // exceed the process deadline on busy Windows runners. Each case still imports
     // a fresh example module and resets its credentials and recorded calls.
-    // The child budget covers all eight cases and startup, not a provider timeout.
     const result = spawnSync(
       pythonPath,
       [
@@ -156,11 +156,11 @@ describe('integration-crewai example', () => {
         EXAMPLE_PATH,
         JSON.stringify(cases.map(({ settings, credentials }) => ({ settings, credentials }))),
       ],
-      { encoding: 'utf8', timeout: 10_000 },
+      { encoding: 'utf8', timeout: 5000 },
     );
     const lines = (result.stdout ?? '').split(/\r?\n/);
     const stagePattern =
-      /^crewai fixture: (?:script entry|imports complete|case \d+ (?:before|after) call_api|final output)$/;
+      /^crewai fixture: (?:script entry|imports complete|case \d+ (?:before (?:example import|call_api)|after call_api)|final output)$/;
     const stages =
       lines.filter((line) => stagePattern.test(line)).join(', ') || 'no stage recorded';
     if (result.error) {
