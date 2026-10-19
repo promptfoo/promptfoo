@@ -1389,7 +1389,7 @@ function normalizeMultipartRequestTemplate(
       const terminalNewline = /\r?\n$/.exec(line)?.[0];
       if (terminalNewline) {
         // Complete the physical line without interpreting any payload lines.
-        // Only a capture entered in headers can supply a framing newline;
+        // A capture supplying headers can also supply a framing newline;
         // independently inserted payload newlines remain byte-identical.
         output.push({
           content: line.slice(0, -terminalNewline.length),
@@ -1406,6 +1406,21 @@ function normalizeMultipartRequestTemplate(
   const isBoundaryFragment = (text: string, index: number) => {
     if (!boundary) {
       return false;
+    }
+    const terminator = text.match(/^\r?\n/)?.[0];
+    if (terminator && line) {
+      // A captured newline can finish a delimiter buffered by preceding source
+      // or captures. Keep an opaque trailing CR as data, as finishLine does.
+      const buffered = line + terminator.slice(0, -1);
+      const delimiter = (
+        structuralTail || terminator === '\r\n' ? buffered.replace(/\r$/, '') : buffered
+      ).replace(/[ \t]+$/, '');
+      if (delimiter === `--${boundary}--`) {
+        return sourceConfirmsBoundary(delimiter, sourceAfter(index + 1));
+      }
+      if (delimiter === `--${boundary}`) {
+        return sourceConfirmsBoundary(delimiter, sourceAfter(index, terminator.length, true));
+      }
     }
     const leadingNewlines = text.match(/^(?:\r?\n)*/)?.[0] ?? '';
     const candidate = leadingNewlines ? text.slice(leadingNewlines.length) : line + text;
@@ -1433,6 +1448,7 @@ function normalizeMultipartRequestTemplate(
 
   for (const [index, fragment] of fragments.entries()) {
     const initialState = state.section;
+    let captureContainsHeaders = initialState === 'partHeaders';
     if (
       fragment.interpolated &&
       (state.section === 'epilogue' ||
@@ -1449,14 +1465,17 @@ function normalizeMultipartRequestTemplate(
       }
       finishLine('\n', (includeHeaders) => sourceAfter(index, match.index + 1, includeHeaders));
       offset = match.index + 1;
+      if (initialState === 'payload' && state.section === 'partHeaders') {
+        captureContainsHeaders = true;
+      }
       // A header expression may also contain the start of a field value. Its
       // suffix remains opaque, unlike a whole body supplied before the first part.
-      if (fragment.interpolated && initialState === 'partHeaders' && state.section === 'payload') {
+      if (fragment.interpolated && captureContainsHeaders && state.section === 'payload') {
         break;
       }
     }
     const remainder = fragment.text.slice(offset);
-    if (fragment.interpolated && initialState === 'partHeaders' && state.section === 'payload') {
+    if (fragment.interpolated && captureContainsHeaders && state.section === 'payload') {
       appendOpaque(remainder, true);
     } else {
       line += remainder;

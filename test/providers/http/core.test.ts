@@ -1146,6 +1146,132 @@ describe('HttpProvider', () => {
       expect([...form.entries()]).toEqual(fields);
     });
 
+    describe('multipart delimiter chunk boundaries', () => {
+      const firstHeaders = 'Content-Disposition: form-data; name="first"';
+      const secondHeaders = 'Content-Disposition: form-data; name="second"';
+      const mixedPayload = ' leading \nmiddle\r\ntrailing \t';
+      const hostilePayload =
+        'prefix\n--fixture\nContent-Disposition: form-data; name="injected"\n\nshadow';
+      const body = (lines: Partial<Record<'first' | 'later' | 'closing', string>> = {}) =>
+        `${lines.first ?? '--fixture\n'}${firstHeaders}\n\none\n` +
+        `${lines.later ?? '--fixture\n'}${secondHeaders}\n\ntwo\n` +
+        `${lines.closing ?? '--fixture--\n'}`;
+
+      const checkBody = async (
+        source: string,
+        vars: { chunks: Record<string, string>; payload?: { text: string } },
+        second = 'two',
+        nativeReject = false,
+      ) => {
+        const provider = new HttpProvider('http', {
+          config: {
+            request:
+              'POST / HTTP/1.1\nHost: example.com\nContent-Type: multipart/form-data; boundary=fixture\n\n' +
+              source,
+          },
+        });
+        vi.mocked(fetchWithCache).mockResolvedValueOnce(createMockFetchResponse('{}'));
+        await provider.callApi('fixture', {
+          vars,
+          prompt: { raw: 'fixture', label: 'fixture' },
+        });
+        const sentBody = vi.mocked(fetchWithCache).mock.calls[0][1]?.body as string;
+        const parsed = new Response(sentBody, {
+          headers: { 'Content-Type': 'multipart/form-data; boundary=fixture' },
+        }).formData();
+        if (nativeReject) {
+          await expect(parsed).rejects.toThrow();
+        } else {
+          expect([...(await parsed).entries()]).toEqual([
+            ['first', 'one'],
+            ['second', second],
+          ]);
+        }
+        expect(sentBody).toBe(
+          `--fixture\r\n${firstHeaders}\r\n\r\none\r\n` +
+            `--fixture\r\n${secondHeaders}\r\n\r\n${second}\r\n--fixture--\r\n`,
+        );
+      };
+
+      it.each(
+        (['first', 'later', 'closing'] as const).flatMap((position) =>
+          [false, true].flatMap((capturedDelimiter) =>
+            [false, true].flatMap((capturedTerminator) =>
+              ['\n', '\r\n'].map((newline) => ({
+                position,
+                capturedDelimiter,
+                capturedTerminator,
+                newline,
+              })),
+            ),
+          ),
+        ),
+      )(
+        'parses $position delimiter chunks ($capturedDelimiter, $capturedTerminator, $newline)',
+        async ({ position, capturedDelimiter, capturedTerminator, newline }) => {
+          const delimiter = position === 'closing' ? '--fixture--' : '--fixture';
+          await checkBody(
+            body({
+              [position]:
+                (capturedDelimiter ? '{{chunks.delimiter}}' : delimiter) +
+                (capturedTerminator ? '{{chunks.newline}}' : newline),
+            }),
+            { chunks: { delimiter, newline } },
+          );
+        },
+      );
+
+      it.each(
+        [false, true].flatMap((capturedDelimiter) =>
+          ['\r{{chunks.lf}}', '{{chunks.cr}}\n', '{{chunks.cr}}{{chunks.lf}}'].map((ending) => ({
+            capturedDelimiter,
+            ending,
+          })),
+        ),
+      )(
+        'parses split CRLF ($capturedDelimiter, $ending)',
+        async ({ capturedDelimiter, ending }) => {
+          await checkBody(
+            body({ later: (capturedDelimiter ? '{{chunks.delimiter}}' : '--fixture') + ending }),
+            { chunks: { delimiter: '--fixture', cr: '\r', lf: '\n' } },
+          );
+        },
+      );
+
+      it.each([
+        'headers-separate-payload',
+        'headers-same-payload',
+        'headers-prefix-separate-payload',
+        'crlf-headers-same-payload',
+        'headers-separate-hostile-payload',
+        'headers-same-hostile-payload',
+      ])('bounds a captured terminator and %s', async (kind) => {
+        const hostile = kind.includes('hostile');
+        const payload = hostile ? hostilePayload : mixedPayload;
+        const newline = kind.startsWith('crlf') ? '\r\n' : '\n';
+        const prefix = kind.includes('prefix') ? 'prefix-inside\nnext\r\n' : '';
+        const sameCapture = kind.includes('same');
+        await checkBody(
+          `--fixture\n${firstHeaders}\n\none\n--fixture{{chunks.block}}` +
+            `${sameCapture ? '' : '{{payload.text}}'}\n--fixture--\n`,
+          {
+            chunks: {
+              block: `${newline}${secondHeaders}${newline}${newline}${sameCapture ? payload : prefix}`,
+            },
+            payload: { text: payload },
+          },
+          prefix + payload,
+          hostile,
+        );
+      });
+
+      it('keeps a first-part capture on its whole-body path', async () => {
+        await checkBody('--fixture{{chunks.remainder}}', {
+          chunks: { remainder: body().slice('--fixture'.length) },
+        });
+      });
+    });
+
     it.each(
       [false, true].flatMap((headerCapture) =>
         ['\n', '\r\n', '\r'].flatMap((terminalNewline) =>
@@ -1358,11 +1484,13 @@ describe('HttpProvider', () => {
 
     it.each(
       ['', '\n', '\r\n'].flatMap((newline) =>
-        [false, true].map((templated) => ({ newline, templated })),
+        (newline ? [false, true] : [false]).flatMap((separateTerminator) =>
+          [false, true].map((templated) => ({ newline, templated, separateTerminator })),
+        ),
       ),
     )(
-      'should preserve a closing-looking payload after header parsing ($newline, $templated)',
-      async ({ newline, templated }) => {
+      'should preserve a closing-looking payload after header parsing ($newline, $templated, $separateTerminator)',
+      async ({ newline, templated, separateTerminator }) => {
         // http-z rejects repeated closing delimiters before transport. Isolate
         // metadata header parsing here to verify the provider's raw body contract;
         // supported multipart cases above also exercise the real header parser.
@@ -1373,12 +1501,15 @@ describe('HttpProvider', () => {
         const payload = `--fixture--${newline}`;
         const provider = new HttpProvider('http', {
           config: {
-            request: `POST / HTTP/1.1\nHost: example.com\nContent-Type: multipart/form-data; boundary=fixture\n\n--fixture\nContent-Disposition: form-data; name="field"\n\nprefix\n{{payload.text}}\n${templated ? '{{close}}' : '--fixture--'}\n`,
+            request: `POST / HTTP/1.1\nHost: example.com\nContent-Type: multipart/form-data; boundary=fixture\n\n--fixture\nContent-Disposition: form-data; name="field"\n\nprefix\n{{payload.text}}${separateTerminator ? '{{payload.newline}}' : ''}\n${templated ? '{{close}}' : '--fixture--'}\n`,
           },
         });
         vi.mocked(fetchWithCache).mockResolvedValueOnce(createMockFetchResponse('{}'));
         await provider.callApi('fixture', {
-          vars: { payload: { text: payload }, close: '--fixture--' },
+          vars: {
+            payload: { text: separateTerminator ? '--fixture--' : payload, newline },
+            close: '--fixture--',
+          },
           prompt: { raw: 'fixture', label: 'fixture' },
         });
         const sentBody = vi.mocked(fetchWithCache).mock.calls[0][1]?.body as string;
