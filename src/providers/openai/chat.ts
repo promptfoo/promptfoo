@@ -176,7 +176,7 @@ function getOpenRouterPassthrough(config?: OpenAiChatConfig): OpenRouterPassthro
 
 function getOpenRouterReasoningControl(
   config?: OpenAiChatConfig,
-  vars?: CallApiContextParams['vars'],
+  vars: CallApiContextParams['vars'] = {},
 ) {
   const passthrough = getOpenRouterPassthrough(config);
   const efforts = [
@@ -530,7 +530,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     const reasoningEffort =
       resolvesReasoning && !isOpenRouterGpt6
         ? resolveChatReasoningEffort(this.config, context?.prompt?.config, (value) =>
-            renderVarsInObject(value, context?.vars),
+            renderVarsInObject(value, context?.vars ?? {}),
           )
         : undefined;
 

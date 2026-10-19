@@ -1083,7 +1083,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       isReasoningModel || !isLegacyOpenAiChatModel(this.getEffectiveModelName(config));
     const renderedReasoning = supportsReasoningConfig
       ? resolveResponsesReasoning(this.config, context?.prompt?.config, (value) =>
-          renderVarsInObject(value, context?.vars),
+          renderVarsInObject(value, context?.vars ?? {}),
         )
       : undefined;
     const effectiveReasoningEffort = renderedReasoning?.effort;

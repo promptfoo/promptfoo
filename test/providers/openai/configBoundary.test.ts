@@ -14,6 +14,7 @@ import { OpenAiResponsesProvider } from '../../../src/providers/openai/responses
 import { validateFunctionCall } from '../../../src/providers/openai/util';
 import { providerRegistry } from '../../../src/providers/providerRegistry';
 import { InvalidToolSchemaError } from '../../../src/providers/toolSchemaError';
+import { mockProcessEnv } from '../../util/utils';
 import { createMockFetchResponse } from '../mockProviderResponses';
 import type OpenAI from 'openai';
 
@@ -24,12 +25,15 @@ vi.mock('../../../src/cache', async (original) => ({
   fetchWithCache: vi.fn(),
 }));
 let directory: string;
+let restoreEnvironment: () => void;
 beforeEach(() => {
+  restoreEnvironment = mockProcessEnv({ CONSTRUCTOR_TEMPLATE_SECRET: 'fixture-sensitive-value' });
   directory = fs.mkdtempSync(path.join(os.tmpdir(), 'openai-config-boundary-'));
   vi.mocked(fetchWithCache).mockReset();
 });
 afterEach(async () => {
   await providerRegistry.shutdownAll();
+  restoreEnvironment();
   vi.restoreAllMocks();
   fs.rmSync(directory, { recursive: true, force: true });
 });
@@ -230,6 +234,105 @@ describe('portable config enters real OpenAI constructors', () => {
     const result = await provider.callApi('fixture');
     expect(result.error).toBeUndefined();
     expect(result.output).toBe('{"value":"unparsed"}');
+  });
+  it.each(['inline', 'file', 'file-array'] as const)(
+    'renders Chat definitions once with untrusted template text (%s)',
+    async (source) => {
+      const payload = '{{ env.CONSTRUCTOR_TEMPLATE_SECRET }}';
+      const tool = { type: 'function', function: { name: 'ping', description: '{{ payload }}' } };
+      const functions = [{ name: 'ping', description: '{{ payload }}' }];
+      const schema = { type: 'object', description: '{{ payload }}' };
+      const format = {
+        type: 'json_schema',
+        json_schema: {
+          name: 'fixture',
+          description: '{{ payload }}',
+          schema: source === 'file-array' ? fixture('schema.json', schema) : schema,
+        },
+      };
+      const toolRef = fixture('tools.json', [tool]);
+      const config = OpenAiChatConfigInputSchema.parse({
+        apiKey: 'fixture-key',
+        tools: source === 'inline' ? [tool] : source === 'file' ? toolRef : [toolRef],
+        functions: source === 'inline' ? functions : fixture('functions.json', functions),
+        response_format: source === 'inline' ? format : fixture('format.json', format),
+      });
+      const provider = new OpenAiChatCompletionProvider('gpt-4.1', { config });
+      const { body } = await provider.getOpenAiBody('fixture', context({ payload }));
+      expect(body).toMatchObject({
+        tools: [{ function: { description: payload } }],
+        functions: [{ description: payload }],
+        response_format: {
+          json_schema: { description: payload, schema: { description: payload } },
+        },
+      });
+      expect(JSON.stringify(body)).not.toContain('fixture-sensitive-value');
+    },
+  );
+  it.each(['inline', 'file', 'file-array'] as const)(
+    'renders Responses definitions once with untrusted template text (%s)',
+    async (source) => {
+      const payload = '{{ env.CONSTRUCTOR_TEMPLATE_SECRET }}';
+      const tool = { type: 'function', function: { name: 'ping', description: '{{ payload }}' } };
+      const schema = { type: 'object', description: '{{ payload }}' };
+      const format = {
+        type: 'json_schema',
+        json_schema: {
+          name: 'fixture',
+          schema: source === 'file-array' ? fixture('schema.json', schema) : schema,
+        },
+      };
+      const toolRef = fixture('tools.json', [tool]);
+      const config = OpenAiResponsesConfigInputSchema.parse({
+        apiKey: 'fixture-key',
+        tools: source === 'inline' ? [tool] : source === 'file' ? toolRef : [toolRef],
+        response_format: source === 'inline' ? format : fixture('format.json', format),
+      });
+      const provider = new OpenAiResponsesProvider('gpt-4.1', { config });
+      const { body } = await provider.getOpenAiBody('fixture', context({ payload }));
+      expect(body).toMatchObject({
+        tools: [{ description: payload }],
+        text: { format: { schema: { description: payload } } },
+      });
+      expect(JSON.stringify(body)).not.toContain('fixture-sensitive-value');
+    },
+  );
+  it.each(['root', 'nested'] as const)(
+    'evaluates %s reasoning callbacks without request vars',
+    async (form) => {
+      const root = vi.fn(() => ({ effort: 'high' as const }));
+      const nested = vi.fn(() => 'high' as const);
+      const provider = new OpenAiResponsesProvider('o3', {
+        config: {
+          apiKey: 'fixture-key',
+          reasoning: form === 'root' ? root : { effort: nested },
+        },
+      });
+      const { body } = await provider.getOpenAiBody('fixture');
+      expect(body.reasoning).toEqual({ effort: 'high' });
+      expect(form === 'root' ? root : nested).toHaveBeenCalledWith({ vars: {} });
+    },
+  );
+  it('evaluates Chat reasoning effort callbacks without request vars', async () => {
+    const effort = vi.fn(() => 'high' as const);
+    const provider = new OpenAiChatCompletionProvider('o3', {
+      config: { apiKey: 'fixture-key', reasoning_effort: effort },
+    });
+    const { body } = await provider.getOpenAiBody('fixture');
+    expect(body.reasoning_effort).toBe('high');
+    expect(effort).toHaveBeenCalledWith({ vars: {} });
+  });
+  it('evaluates OpenRouter reasoning callbacks without request vars', async () => {
+    const effort = vi.fn(() => 'high' as const);
+    const provider = new OpenAiChatCompletionProvider('gpt-6-sol', {
+      config: {
+        apiBaseUrl: 'https://openrouter.ai/api/v1',
+        reasoning_effort: effort,
+      },
+    });
+    const { body } = await provider.getOpenAiBody('fixture');
+    expect(body.reasoning_effort ?? body.reasoning?.effort).toBe('high');
+    expect(effort).toHaveBeenCalledWith({ vars: {} });
   });
   it('preserves explicit callable config and callback execution', async () => {
     const effort = vi.fn(() => 'high' as const);
