@@ -129,6 +129,44 @@ describe('filterTests', () => {
       expect(result.map((t: TestCase) => t.vars?.var1)).toEqual(['test1', 'test3']);
     });
 
+    it('should skip tests whose filtered metadata value is null', async () => {
+      // YAML loads a valueless key (`owner:` / `~`) as null, not undefined.
+      const testSuite = {
+        ...mockTestSuite,
+        tests: [
+          {
+            description: 'null-owner',
+            vars: { var1: 'null' },
+            assert: [],
+            metadata: { type: null },
+          },
+          ...mockTestSuite.tests!,
+        ],
+      };
+      const result = await filterTests(testSuite, { metadata: 'type=unit' });
+      expect(result.map((t: TestCase) => t.vars?.var1)).toEqual(['test1', 'test3']);
+    });
+
+    it('should skip null elements inside array metadata values', async () => {
+      const testSuite = {
+        ...mockTestSuite,
+        tests: [
+          {
+            description: 'null-array-element',
+            vars: { var1: 'null-in-array' },
+            assert: [],
+            metadata: { type: [null, 'integration'] },
+          },
+          ...mockTestSuite.tests!,
+        ],
+      };
+      const result = await filterTests(testSuite, { metadata: 'type=unit' });
+      expect(result.map((t: TestCase) => t.vars?.var1)).toEqual(['test1', 'test3']);
+      // The surviving non-null element still matches its own filter.
+      const integration = await filterTests(testSuite, { metadata: 'type=integration' });
+      expect(integration.map((t: TestCase) => t.vars?.var1)).toEqual(['null-in-array', 'test2']);
+    });
+
     describe('multiple metadata filters', () => {
       const multiMetadataTestSuite: TestSuite = {
         prompts: [],
