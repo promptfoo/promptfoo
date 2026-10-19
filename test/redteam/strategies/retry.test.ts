@@ -207,6 +207,124 @@ describe('addRetryTestCases', () => {
     expect(result).toHaveLength(0);
   });
 
+  it('should return cloud failures when the target has no local failures', async () => {
+    const { cloudConfig } = await import('../../../src/globalConfig/cloud');
+    const { makeRequest } = await import('../../../src/util/cloud');
+    vi.mocked(cloudConfig.isEnabled).mockReturnValue(true);
+    vi.mocked(makeRequest).mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          results: [
+            {
+              testCase: {
+                vars: { prompt: 'cloud failure' },
+                assert: [{ type: 'equals', value: 'expected', metric: 'Bias/base64' }],
+                metadata: {
+                  pluginId: 'bias:age',
+                  strategyId: 'base64',
+                  strategyConfig: { oldConfig: true },
+                },
+                provider: { id: 'old-target' },
+              },
+              response: {},
+              evalId: 'cloud-eval',
+            },
+          ],
+        }),
+      ),
+    );
+    const mockDb = {
+      select: vi.fn().mockReturnThis(),
+      from: vi.fn().mockReturnThis(),
+      where: vi.fn().mockReturnThis(),
+      orderBy: vi.fn().mockReturnThis(),
+      limit: vi.fn().mockResolvedValue([]),
+    };
+    const getDb = await getMockDb();
+    getDb.mockReturnValue(mockDb as any);
+
+    const result = await addRetryTestCases(
+      [{ vars: { prompt: 'seed' }, metadata: { pluginId: 'bias:age' } }],
+      'prompt',
+      { targetIds: ['new-target'], numTests: 3 },
+    );
+
+    expect(makeRequest).toHaveBeenCalledWith(
+      'results/failed-tests?pluginId=bias%3Aage&targetId=new-target&limit=3',
+      'GET',
+    );
+    expect(result).toEqual([
+      {
+        vars: { prompt: 'cloud failure' },
+        assert: [{ type: 'equals', value: 'expected', metric: 'Bias' }],
+        metadata: {
+          pluginId: 'bias:age',
+          strategyId: 'base64',
+          strategyConfig: undefined,
+          originalEvalId: 'cloud-eval',
+          retry: true,
+        },
+      },
+    ]);
+  });
+
+  it.each(['duplicate', 'empty', 'http-error', 'network-error'])(
+    'should retain local failures when cloud returns %s',
+    async (cloudResult) => {
+      const { cloudConfig } = await import('../../../src/globalConfig/cloud');
+      const { makeRequest } = await import('../../../src/util/cloud');
+      vi.mocked(cloudConfig.isEnabled).mockReturnValue(true);
+      const storedTestCase = {
+        vars: { prompt: 'stored failure' },
+        metadata: { pluginId: 'bias:age' },
+      };
+      if (cloudResult === 'network-error') {
+        vi.mocked(makeRequest).mockRejectedValue(new Error('Cloud unavailable'));
+      } else {
+        vi.mocked(makeRequest).mockResolvedValue(
+          new Response(
+            JSON.stringify({
+              results:
+                cloudResult === 'duplicate'
+                  ? [{ testCase: storedTestCase, response: {}, evalId: 'cloud-eval' }]
+                  : [],
+            }),
+            { status: cloudResult === 'http-error' ? 503 : 200 },
+          ),
+        );
+      }
+      const mockDb = {
+        select: vi.fn().mockReturnThis(),
+        from: vi.fn().mockReturnThis(),
+        where: vi.fn().mockReturnThis(),
+        orderBy: vi.fn().mockReturnThis(),
+        limit: vi.fn().mockResolvedValue([
+          {
+            testCase: JSON.stringify(storedTestCase),
+            response: JSON.stringify({}),
+            evalId: 'local-eval',
+          },
+        ]),
+      };
+      const getDb = await getMockDb();
+      getDb.mockReturnValue(mockDb as any);
+
+      const result = await addRetryTestCases(
+        [{ vars: { prompt: 'seed' }, metadata: { pluginId: 'bias:age' } }],
+        'prompt',
+        { targetIds: ['target'] },
+      );
+
+      expect(result).toHaveLength(1);
+      expect(result[0].vars).toEqual(storedTestCase.vars);
+      expect(result[0].metadata).toMatchObject({
+        pluginId: 'bias:age',
+        originalEvalId: cloudResult === 'duplicate' ? 'cloud-eval' : 'local-eval',
+        retry: true,
+      });
+    },
+  );
+
   it('should preserve provider with injectVar from stored test case', async () => {
     const storedTestCase = {
       vars: { prompt: 'test prompt' },
@@ -226,16 +344,13 @@ describe('addRetryTestCases', () => {
       from: vi.fn().mockReturnThis(),
       where: vi.fn().mockReturnThis(),
       orderBy: vi.fn().mockReturnThis(),
-      limit: vi
-        .fn()
-        .mockResolvedValueOnce([{ provider: JSON.stringify({ id: 'openai:gpt-4o-mini' }) }]) // targetResults
-        .mockResolvedValueOnce([
-          {
-            testCase: JSON.stringify(storedTestCase),
-            response: JSON.stringify({}),
-            evalId: 'eval-123',
-          },
-        ]),
+      limit: vi.fn().mockResolvedValueOnce([
+        {
+          testCase: JSON.stringify(storedTestCase),
+          response: JSON.stringify({}),
+          evalId: 'eval-123',
+        },
+      ]),
     };
     const getDb = await getMockDb();
     getDb.mockReturnValue(mockDb as any);
@@ -278,16 +393,13 @@ describe('addRetryTestCases', () => {
       from: vi.fn().mockReturnThis(),
       where: vi.fn().mockReturnThis(),
       orderBy: vi.fn().mockReturnThis(),
-      limit: vi
-        .fn()
-        .mockResolvedValueOnce([{ provider: JSON.stringify({ id: 'openai:gpt-4o-mini' }) }])
-        .mockResolvedValueOnce([
-          {
-            testCase: JSON.stringify(storedTestCase),
-            response: JSON.stringify({}),
-            evalId: 'eval-123',
-          },
-        ]),
+      limit: vi.fn().mockResolvedValueOnce([
+        {
+          testCase: JSON.stringify(storedTestCase),
+          response: JSON.stringify({}),
+          evalId: 'eval-123',
+        },
+      ]),
     };
     const getDb = await getMockDb();
     getDb.mockReturnValue(mockDb as any);
@@ -336,16 +448,13 @@ describe('addRetryTestCases', () => {
       from: vi.fn().mockReturnThis(),
       where: vi.fn().mockReturnThis(),
       orderBy: vi.fn().mockReturnThis(),
-      limit: vi
-        .fn()
-        .mockResolvedValueOnce([{ provider: JSON.stringify({ id: 'openai:gpt-4o-mini' }) }])
-        .mockResolvedValueOnce([
-          {
-            testCase: JSON.stringify(storedTestCase),
-            response: JSON.stringify(storedResponse),
-            evalId: 'eval-123',
-          },
-        ]),
+      limit: vi.fn().mockResolvedValueOnce([
+        {
+          testCase: JSON.stringify(storedTestCase),
+          response: JSON.stringify(storedResponse),
+          evalId: 'eval-123',
+        },
+      ]),
     };
     const getDb = await getMockDb();
     getDb.mockReturnValue(mockDb as any);
@@ -396,16 +505,13 @@ describe('addRetryTestCases', () => {
       from: vi.fn().mockReturnThis(),
       where: vi.fn().mockReturnThis(),
       orderBy: vi.fn().mockReturnThis(),
-      limit: vi
-        .fn()
-        .mockResolvedValueOnce([{ provider: JSON.stringify({ id: 'openai:gpt-4o-mini' }) }])
-        .mockResolvedValueOnce([
-          {
-            testCase: JSON.stringify(storedTestCase),
-            response: JSON.stringify(storedResponse),
-            evalId: 'eval-123',
-          },
-        ]),
+      limit: vi.fn().mockResolvedValueOnce([
+        {
+          testCase: JSON.stringify(storedTestCase),
+          response: JSON.stringify(storedResponse),
+          evalId: 'eval-123',
+        },
+      ]),
     };
     const getDb = await getMockDb();
     getDb.mockReturnValue(mockDb as any);
@@ -439,16 +545,13 @@ describe('addRetryTestCases', () => {
       from: vi.fn().mockReturnThis(),
       where: vi.fn().mockReturnThis(),
       orderBy: vi.fn().mockReturnThis(),
-      limit: vi
-        .fn()
-        .mockResolvedValueOnce([{ provider: JSON.stringify({ id: 'openai:gpt-4o-mini' }) }])
-        .mockResolvedValueOnce([
-          {
-            testCase: JSON.stringify(storedTestCase),
-            response: JSON.stringify({}),
-            evalId: 'eval-123',
-          },
-        ]),
+      limit: vi.fn().mockResolvedValueOnce([
+        {
+          testCase: JSON.stringify(storedTestCase),
+          response: JSON.stringify({}),
+          evalId: 'eval-123',
+        },
+      ]),
     };
     const getDb = await getMockDb();
     getDb.mockReturnValue(mockDb as any);
@@ -485,7 +588,6 @@ describe('addRetryTestCases', () => {
       limit: vi
         .fn()
         // First target
-        .mockResolvedValueOnce([{ provider: JSON.stringify({ id: 'openai:gpt-4o-mini' }) }])
         .mockResolvedValueOnce([
           {
             testCase: JSON.stringify(storedTestCase),
@@ -494,7 +596,6 @@ describe('addRetryTestCases', () => {
           },
         ])
         // Second target - returns the same test case
-        .mockResolvedValueOnce([{ provider: JSON.stringify({ id: 'openai:gpt-4o' }) }])
         .mockResolvedValueOnce([
           {
             testCase: JSON.stringify(storedTestCase),
