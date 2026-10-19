@@ -22,7 +22,6 @@ async function getLoadApiProvider() {
       return loadApiProviderFn;
     }
   } catch {}
-
   try {
     const pf = await import('../../src/providers/index.js');
     loadApiProviderFn = pf.loadApiProvider;
@@ -30,7 +29,6 @@ async function getLoadApiProvider() {
       return loadApiProviderFn;
     }
   } catch {}
-
   try {
     const pf = await import('../../dist/src/providers/index.js');
     loadApiProviderFn = pf.loadApiProvider;
@@ -38,7 +36,6 @@ async function getLoadApiProvider() {
       return loadApiProviderFn;
     }
   } catch {}
-
   throw new Error('Unable to resolve Promptfoo loadApiProvider.');
 }
 
@@ -52,25 +49,46 @@ function getEjentumKey(config, env = {}) {
   );
 }
 
-async function fetchScaffold(url, key, prompt, mode) {
+function getRequestTimeoutMs(config, env = {}) {
+  const configured = config.timeoutMs || config.requestTimeoutMs;
+  const envTimeout = env.REQUEST_TIMEOUT_MS || process.env.REQUEST_TIMEOUT_MS;
+  const parsed = Number(configured ?? envTimeout);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined;
+}
+
+async function fetchScaffold(url, key, prompt, mode, timeoutMs) {
   try {
-    const response = await fetch(url, {
+    const fetchOptions = {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${key}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({ query: prompt, mode }),
-    });
+    };
+
+    if (
+      typeof timeoutMs === 'number' &&
+      timeoutMs > 0 &&
+      typeof AbortSignal?.timeout === 'function'
+    ) {
+      fetchOptions.signal = AbortSignal.timeout(timeoutMs);
+    }
+
+    const response = await fetch(url, fetchOptions);
     const data = await response.json();
     if (!response.ok) {
-      return { error: `Ejentum API ${response.status}: ${JSON.stringify(data)}` };
+      return {
+        error: `Ejentum API ${response.status}: ${JSON.stringify(data)}`,
+      };
     }
     const scaffold =
       Array.isArray(data) && typeof data[0]?.[mode] === 'string' ? data[0][mode].trim() : '';
     return scaffold
       ? { scaffold }
-      : { error: `Ejentum API response did not include a non-empty "${mode}" scaffold.` };
+      : {
+          error: `Ejentum API response did not include a non-empty "${mode}" scaffold.`,
+        };
   } catch (err) {
     return { error: `Ejentum fetch failed: ${String(err)}` };
   }
@@ -86,10 +104,7 @@ function formatAugmentedPrompt(prompt, scaffold) {
     try {
       const parsed = JSON.parse(trimmed);
       if (Array.isArray(parsed)) {
-        return JSON.stringify([
-          { role: 'system', content: scaffoldInstruction },
-          ...parsed,
-        ]);
+        return JSON.stringify([{ role: 'system', content: scaffoldInstruction }, ...parsed]);
       }
     } catch {}
   }
@@ -107,6 +122,7 @@ class EjentumAugmentedProvider {
     this.providerId = options.id || `ejentum:${this.config.mode || 'reasoning'}`;
     this.underlyingProvider = options.underlyingProvider;
     this.loadApiProvider = options.loadApiProvider;
+    this.initPromise = null;
   }
 
   id() {
@@ -117,6 +133,10 @@ class EjentumAugmentedProvider {
     if (this.underlyingProvider) {
       return this.underlyingProvider;
     }
+    if (this.initPromise) {
+      return this.initPromise;
+    }
+
     const {
       mode: _mode,
       apiUrl: _apiUrl,
@@ -128,25 +148,36 @@ class EjentumAugmentedProvider {
 
     const loadApiProvider = this.loadApiProvider || (await getLoadApiProvider());
     const providerPath = model.startsWith('openai:') ? model : `openai:chat:${model}`;
-    this.underlyingProvider = await loadApiProvider(providerPath, {
-      options: {
-        config: forwardedConfig,
-        env: this.env,
-      },
-    });
-    return this.underlyingProvider;
+
+    this.initPromise = (async () => {
+      const provider = await loadApiProvider(providerPath, {
+        options: {
+          config: forwardedConfig,
+          env: this.env,
+        },
+      });
+      this.underlyingProvider = provider;
+      return provider;
+    })();
+
+    return this.initPromise;
   }
 
   async cleanup() {
-    if (this.underlyingProvider && typeof this.underlyingProvider.cleanup === 'function') {
-      await this.underlyingProvider.cleanup();
+    let provider = this.underlyingProvider;
+    if (!provider && this.initPromise) {
+      try {
+        provider = await this.initPromise;
+      } catch {}
+    }
+    if (provider && typeof provider.cleanup === 'function') {
+      await provider.cleanup();
     }
   }
 
   async callApi(prompt, context) {
     const config = { ...this.config, ...(context?.prompt?.config || {}) };
     const ejentumKey = getEjentumKey(config, this.env);
-
     if (!ejentumKey) {
       return {
         error: 'EJENTUM_API_KEY is not set. Get a key at https://ejentum.com/dashboard',
@@ -160,8 +191,10 @@ class EjentumAugmentedProvider {
       process.env.EJENTUM_API_URL ||
       DEFAULT_EJENTUM_URL;
 
-    // 1. Fetch cognitive scaffold from Ejentum
-    const scaffoldResult = await fetchScaffold(ejentumUrl, ejentumKey, prompt, mode);
+    const timeoutMs = getRequestTimeoutMs(config, this.env);
+
+    // 1. Fetch cognitive scaffold from Ejentum with timeout applied
+    const scaffoldResult = await fetchScaffold(ejentumUrl, ejentumKey, prompt, mode, timeoutMs);
     if (scaffoldResult.error) {
       return scaffoldResult;
     }
