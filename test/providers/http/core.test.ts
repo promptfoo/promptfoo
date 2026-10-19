@@ -487,6 +487,82 @@ describe('HttpProvider', () => {
       expect(vi.mocked(fetchWithCache).mock.calls[0][1]).not.toHaveProperty('body');
     });
 
+    it.each(
+      ['GET', 'HEAD'].flatMap((method) =>
+        [
+          { name: 'LF padding', body: '\n' },
+          { name: 'CRLF padding', body: '\r\n' },
+          { name: 'mixed whitespace padding', body: '\t \r\n \n' },
+          { name: 'conflicting POST config', body: '\r\n', configMethod: 'POST' },
+        ].map((fixture) => ({ ...fixture, method })),
+      ),
+    )(
+      'should send raw $method with $name as a bodyless request',
+      async ({ method, body, configMethod }) => {
+        const provider = new HttpProvider('http', {
+          config: {
+            request: `${method} / HTTP/1.1\r\nHost: example.com\r\n\r\n${body}`,
+            ...(configMethod ? { method: configMethod } : {}),
+          },
+        });
+        vi.mocked(fetchWithCache).mockImplementationOnce(async (url, options) => {
+          // Use native Fetch validation so an accidental GET/HEAD body fails here.
+          const request = new Request(url, options as RequestInit);
+          expect(request.method).toBe(method);
+          expect(request.body).toBeNull();
+          return createMockFetchResponse('{}');
+        });
+        const result = await provider.callApi('fixture', createDebugHttpContext());
+        expect(vi.mocked(fetchWithCache).mock.calls[0][1]).not.toHaveProperty('body');
+        expect(result.metadata?.finalRequestBody).toBeUndefined();
+      },
+    );
+
+    it.each(['GET', 'HEAD'].flatMap((method) => ['x', ' \tx\n'].map((body) => ({ method, body }))))(
+      'should retain the native rejection for a nonempty raw $method body ($body)',
+      async ({ method, body }) => {
+        const provider = new HttpProvider('http', {
+          config: { request: `${method} / HTTP/1.1\nHost: example.com\n\n${body}` },
+        });
+        vi.mocked(fetchWithCache).mockImplementationOnce(async (url, options) => {
+          new Request(url, options as RequestInit);
+          return createMockFetchResponse('{}');
+        });
+        await expect(provider.callApi('fixture')).rejects.toThrow(
+          /GET\/HEAD method cannot have body/,
+        );
+        expect(vi.mocked(fetchWithCache).mock.calls[0][1]?.body).toBe(body);
+      },
+    );
+
+    it.each([
+      ...['POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'].map((method) => ({
+        method,
+        configMethod: undefined,
+      })),
+      { method: 'POST', configMethod: 'GET' },
+      { method: 'POST', configMethod: 'HEAD' },
+    ])(
+      'should preserve whitespace body bytes for raw $method with config method $configMethod',
+      async ({ method, configMethod }) => {
+        const body = '\t \r\n \n';
+        const provider = new HttpProvider('http', {
+          config: {
+            request: `${method} / HTTP/1.1\r\nHost: example.com\r\nContent-Type: text/plain\r\n\r\n${body}`,
+            ...(configMethod ? { method: configMethod } : {}),
+          },
+        });
+        vi.mocked(fetchWithCache).mockImplementationOnce(async (url, options) => {
+          const request = new Request(url, options as RequestInit);
+          expect(request.method).toBe(method);
+          expect(await request.text()).toBe(body);
+          return createMockFetchResponse('{}');
+        });
+        await provider.callApi('fixture');
+        expect(vi.mocked(fetchWithCache).mock.calls[0][1]?.body).toBe(body);
+      },
+    );
+
     it('should handle a raw request with path parameter variable substitution', async () => {
       const rawRequest = dedent`
         GET /api/users/{{userId}}/profile HTTP/1.1

@@ -3052,8 +3052,13 @@ export class HttpProvider implements ApiProvider {
       }
     }
 
-    // Preserve the rendered body verbatim; parsing can trim or normalize its bytes.
-    const bodyContent = extractBodyFromRawRequest(renderedRequest);
+    // Preserve actual body bytes, while allowing trailing padding on bodyless raw requests.
+    // The request-line method controls transport even when config.method differs.
+    const rawBodyContent = extractBodyFromRawRequest(renderedRequest);
+    const bodyContent =
+      ['GET', 'HEAD'].includes(parsedRequest.method.toUpperCase()) && !rawBodyContent?.trim()
+        ? undefined
+        : rawBodyContent;
 
     logger.debug(
       `[HTTP Provider]: Calling ${sanitizeUrl(url)} with raw request: ${parsedRequest.method}`,
