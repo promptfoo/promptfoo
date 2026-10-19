@@ -1179,8 +1179,11 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
             ? []
             : [undefined]), // A malformed container must not become a valid singleton call.
       ];
+      // Empty native arrays leave text intact and must not override assertion transforms.
       const functionToolCalls =
-        Array.isArray(functionCalls) && (config.functionToolCallbacks || this.mcpClient)
+        Array.isArray(functionCalls) &&
+        functionCalls.length > 0 &&
+        (config.functionToolCallbacks || this.mcpClient)
           ? emittedCalls.map((call: any, index) => {
               const legacy = !!message.function_call && index === 0;
               const payload = legacy ? call : call?.function;

@@ -669,6 +669,14 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
                   : [call];
               }),
             };
+            if (allCalls.length === 0) {
+              // With no emitted calls, leave user-transformed output available to assertions.
+              toolCallMetadata = undefined;
+            } else if (toolCalls != null && !Array.isArray(toolCalls)) {
+              // Dispatch accepts singleton calls, but the modern response field
+              // must remain an array for validation, even beside executed MCP calls.
+              toolCallMetadata.functionToolCalls.push(null);
+            }
           } else {
             // No callbacks configured, return raw tool/function calls
             // A confirmed content-filter block is intentionally empty, not a

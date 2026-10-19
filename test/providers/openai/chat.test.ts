@@ -1842,6 +1842,65 @@ describe('OpenAI Provider', () => {
       expect(result.tokenUsage).toEqual({ total: 10, prompt: 5, completion: 5, numRequests: 1 });
     });
 
+    it.each(['callbacks', 'mcp', 'none'] as const)(
+      'validates transformed text when no native calls are emitted (%s)',
+      async (mode) => {
+        for (const toolCalls of [[], null, undefined]) {
+          for (const valid of [true, false]) {
+            const content = JSON.stringify([
+              {
+                type: 'function',
+                function: {
+                  name: 'external_function',
+                  arguments: JSON.stringify({ param: valid ? 'value' : 42 }),
+                },
+              },
+            ]);
+            mockFetchWithCache.mockResolvedValue(
+              createMockFetchResponse({
+                choices: [{ message: { content, tool_calls: toolCalls } }],
+              }),
+            );
+            const callback = vi.fn().mockResolvedValue('Callback output');
+            const callTool = vi.fn();
+            const provider = new OpenAiChatCompletionProvider('gpt-4o-mini', {
+              config: {
+                tools: [createExternalFunctionTool()],
+                ...(mode === 'callbacks'
+                  ? { functionToolCallbacks: { external_function: callback } }
+                  : {}),
+              },
+            });
+            if (mode === 'mcp') {
+              (provider as any).mcpClient = {
+                getAllTools: vi.fn().mockReturnValue([]),
+                callTool,
+              };
+            }
+
+            const providerResponse = await provider.callApi('Return a JSON call');
+            expect(providerResponse.output).toBe(content);
+            expect(providerResponse.metadata ?? {}).not.toHaveProperty('functionToolCalls');
+            expect(callback).not.toHaveBeenCalled();
+            expect(callTool).not.toHaveBeenCalled();
+            for (const inverse of [false, true]) {
+              const grade = await runAssertion({
+                provider,
+                providerResponse,
+                assertion: {
+                  type: inverse ? 'not-is-valid-openai-tools-call' : 'is-valid-openai-tools-call',
+                  transform: 'JSON.parse(output)',
+                },
+                test: {},
+              });
+              const pass = inverse ? !valid : valid;
+              expect(grade).toMatchObject({ pass, score: pass ? 1 : 0 });
+            }
+          }
+        }
+      },
+    );
+
     it('should handle OpenAI reasoning field with separate content correctly', async () => {
       const mockResponse = createMockFetchResponse({
         choices: [
