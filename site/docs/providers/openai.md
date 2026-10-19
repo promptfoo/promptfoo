@@ -259,11 +259,11 @@ Promptfoo omits `temperature` for models it recognizes as reasoning models, incl
 
 GPT-4.1, GPT-4o, GPT-3.5, and GPT Audio default to `temperature: 0` and an output limit of 1,024 tokens. For o-series and GPT-5/GPT-6 models, promptfoo uses `max_completion_tokens` with Chat Completions and does not set an output limit by default.
 
-If you connect to a model using a custom name such as `my-model`, promptfoo uses `max_completion_tokens` and sends `reasoning_effort` when you set it. It leaves the token limit and temperature unset unless you configure them. To set the token limit through an environment variable, use `OPENAI_MAX_COMPLETION_TOKENS`.
+For custom model names such as `my-model` on an OpenAI API endpoint, promptfoo uses `max_completion_tokens` and sends `reasoning_effort` when you set it. It leaves the token limit and temperature unset unless you configure them. Use `OPENAI_MAX_COMPLETION_TOKENS` to set the limit through an environment variable.
 
-For o-series, GPT-5/GPT-6, and custom model names such as `my-model`, you can also use `max_tokens`; promptfoo sends the value as `max_completion_tokens`. A limit set for an individual prompt overrides the provider's limit. If both fields appear in the same config, `max_completion_tokens` takes precedence. Values set in `passthrough` can override these settings; see the table below. For Responses, use `max_output_tokens`.
+For o-series, GPT-5/GPT-6, and custom model names on OpenAI API endpoints, you can also use `max_tokens`; promptfoo sends the value as `max_completion_tokens`. A limit set for an individual prompt overrides the provider's limit. If both fields appear in the same config, `max_completion_tokens` takes precedence. Values set in `passthrough` can override these settings; see the table below. For Responses, use `max_output_tokens`. For Chat requests that use `max_completion_tokens`, set either token-limit field to `null` to clear an inherited limit.
 
-If your custom endpoint requires `max_tokens`, set `useLegacyTokenCap: true`. This also sets the default temperature to 0 and the default output limit to 1,024 tokens. You can override those values in your config.
+For an unknown model on an OpenAI-compatible endpoint, promptfoo uses `max_tokens`, a default temperature of 0, and a default output limit of 1,024 tokens. Set `useLegacyTokenCap: false` to use `max_completion_tokens`, forward configured reasoning effort, and leave the limit and temperature unset. Set `useLegacyTokenCap: true` to use `max_tokens` and those defaults for an unknown alias on an OpenAI API endpoint.
 
 `omitDefaults: true` omits Promptfoo's default temperature and output limit. Explicit configuration and environment values still apply.
 
@@ -1117,7 +1117,7 @@ Prefer provider configuration when comparing different settings in the same eval
 | `PROMPTFOO_RETRY_5XX`          | Set to `true` to retry server errors                                                                                            |
 | `PROMPTFOO_DELAY_MS`           | Delay between calls in milliseconds; defaults to 0                                                                              |
 
-Reasoning Chat requests and unknown OpenAI Chat aliases ignore `OPENAI_MAX_TOKENS`, because their limit may also count reasoning tokens; set `OPENAI_MAX_COMPLETION_TOKENS` for them. GPT-6 Chat requests still fall back to `OPENAI_MAX_TOKENS` when `reasoning_effort` is `none`, when they go through OpenRouter, and on Azure.
+Reasoning Chat requests and unknown aliases on OpenAI API endpoints ignore `OPENAI_MAX_TOKENS`, because their limit may also count reasoning tokens; set `OPENAI_MAX_COMPLETION_TOKENS` for them. GPT-6 Chat requests still fall back to `OPENAI_MAX_TOKENS` when `reasoning_effort` is `none`, when they go through OpenRouter, and on Azure.
 
 Within endpoint environment settings, `OPENAI_API_HOST` is checked first. Provider `env` base URL overrides are checked before process base URL values. Explicit provider connection settings take precedence over these environment variables.
 
