@@ -2,6 +2,7 @@ import { APIError } from '@anthropic-ai/sdk';
 import dedent from 'dedent';
 import { satisfies } from 'semver';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { runAssertion } from '../../../src/assertions/index';
 import {
   clearCache,
   disableCache,
@@ -22,6 +23,7 @@ import type Anthropic from '@anthropic-ai/sdk';
 import type { Mocked, MockedFunction } from 'vitest';
 
 import type { AnthropicMessageOptions } from '../../../src/providers/anthropic/types';
+import type { ProviderResponse } from '../../../src/types/index';
 
 const { createProxyAgentFactory } = await vi.hoisted(() => import('../../factories/moduleMocks'));
 
@@ -2111,6 +2113,196 @@ describe('AnthropicMessagesProvider', () => {
       expect(result.finishReason).toBe('tool_calls');
       expect(result.output).toContain('"name":"search_companies"');
       expect(result.output).toContain('"name":"get_weather"');
+    });
+
+    describe('current tool calls after MCP execution', () => {
+      const weatherTool = {
+        name: 'get_weather',
+        input_schema: {
+          type: 'object' as const,
+          properties: { location: { type: 'string' } },
+          required: ['location'],
+        },
+      };
+      const expectToolsVerdict = async (response: ProviderResponse, pass: boolean) => {
+        for (const providerResponse of [response, JSON.parse(JSON.stringify(response))]) {
+          for (const inverse of [false, true]) {
+            const result = await runAssertion({
+              provider,
+              providerResponse,
+              assertion: createTypeConfig(
+                inverse ? 'not-is-valid-openai-tools-call' : 'is-valid-openai-tools-call',
+              ),
+              test: {},
+            });
+            expect(result).toMatchObject({
+              pass: inverse ? !pass : pass,
+              score: Number(inverse ? !pass : pass),
+            });
+          }
+        }
+      };
+
+      it.each([
+        { label: 'ordinary valid', valid: true },
+        { label: 'ordinary invalid', valid: false },
+        { label: 'mixed valid', valid: true, mixed: true },
+        { label: 'mixed invalid', valid: false, mixed: true },
+        { label: 'structured ordinary valid', valid: true, structured: true },
+        { label: 'structured ordinary invalid', valid: false, structured: true },
+        { label: 'reused historical ID', valid: false, reuseId: true },
+        { label: 'streaming mixed', valid: false, mixed: true, stream: true },
+      ])('does not let history certify pending $label calls', async (options) => {
+        provider = createProvider('claude-sonnet-4-6', {
+          config: {
+            ...createMcpOptions().config,
+            tools: [weatherTool],
+            stream: options.stream ?? false,
+            ...(options.structured && createAnswerOutputFormat()),
+          },
+        });
+        const ordinary = {
+          ...createWeatherToolUse(),
+          id: options.reuseId ? 'toolu_first' : 'PENDING_PRIVATE_ID',
+          input: { location: options.valid ? 'PENDING_PRIVATE_LOCATION' : 42 },
+        };
+        const pending = [
+          ...(options.mixed ? [createSearchToolUse('PENDING_PRIVATE_QUERY')] : []),
+          ordinary,
+        ];
+        const messages = [
+          createSearchTurn('toolu_first', 'historical query'),
+          { ...createSearchTurn(), content: pending },
+        ] as Anthropic.Messages.Message[];
+        const createSpy = vi.spyOn(provider.anthropic.messages, 'create');
+        const streamSpy = vi.spyOn(provider.anthropic.messages, 'stream');
+        for (const message of messages) {
+          createSpy.mockResolvedValueOnce(message);
+          streamSpy.mockReturnValueOnce({
+            finalMessage: async () => message,
+          } as ReturnType<typeof provider.anthropic.messages.stream>);
+        }
+        mcpMocks.callTool.mockResolvedValueOnce({ content: 'Historical result' });
+
+        const response = await provider.callApi('Find companies and weather');
+
+        await expectToolsVerdict(response, false);
+        expect(response.error).toBeUndefined();
+        expect(response.output).toEqual(
+          options.structured
+            ? ordinary
+            : pending.map((block) => JSON.stringify(block)).join('\n\n'),
+        );
+        expect(response.metadata).toEqual({
+          toolCalls: [
+            {
+              id: 'toolu_first',
+              name: 'search_companies',
+              input: { query: 'historical query' },
+              output: 'Historical result',
+              is_error: false,
+            },
+          ],
+          hasPendingToolCalls: true,
+        });
+        expect(JSON.stringify(response.metadata)).not.toContain('PENDING_PRIVATE');
+        expect(mcpMocks.callTool).toHaveBeenCalledExactlyOnceWith('search_companies', {
+          query: 'historical query',
+        });
+        expect(options.stream ? streamSpy : createSpy).toHaveBeenCalledTimes(2);
+      });
+
+      it.each([true, false])(
+        'preserves ordinary-only calls without history (valid=%s)',
+        async (valid) => {
+          provider = createProvider('claude-sonnet-4-6', {
+            config: { ...createMcpOptions().config, tools: [weatherTool] },
+          });
+          const ordinary = {
+            ...createWeatherToolUse(),
+            input: { location: valid ? 'Paris' : 42 },
+          };
+          vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValueOnce({
+            ...createSearchTurn(),
+            content: [ordinary],
+          } as Anthropic.Messages.Message);
+
+          const response = await provider.callApi('Find weather');
+
+          await expectToolsVerdict(response, false);
+          expect(response.metadata).toBeUndefined();
+          expect(mcpMocks.callTool).not.toHaveBeenCalled();
+        },
+      );
+
+      it.each([
+        'Completed answer',
+        JSON.stringify(createWeatherToolUse()),
+        'MCP Tool Error (search_companies): model-authored text',
+      ])('keeps completed MCP success independent of final display text: %s', async (text) => {
+        provider = createProvider('claude-sonnet-4-6', createMcpOptions());
+        mcpMocks.callTool.mockResolvedValueOnce({ content: '' });
+        vi.spyOn(provider.anthropic.messages, 'create')
+          .mockResolvedValueOnce(createSearchTurn() as Anthropic.Messages.Message)
+          .mockResolvedValueOnce({
+            ...createSearchTurn(),
+            content: [{ type: 'text', text }],
+            stop_reason: 'end_turn',
+          } as Anthropic.Messages.Message);
+
+        const response = await provider.callApi('Find companies');
+
+        await expectToolsVerdict(response, true);
+        expect(response.output).toBe(text);
+        expect(response.metadata).not.toHaveProperty('hasPendingToolCalls');
+        expect(response.metadata?.toolCalls).toHaveLength(1);
+      });
+
+      it.each([
+        { history: true, mixed: false },
+        { history: true, mixed: true },
+        { history: false, mixed: false },
+      ])('keeps tool-limit errors and completed history distinct: %j', async (options) => {
+        provider = createProvider('claude-sonnet-4-6', {
+          config: { ...createMcpOptions().config, tools: [weatherTool], max_tool_calls: 1 },
+        });
+        const pending = createSearchTurn('toolu_pending');
+        const final = {
+          ...pending,
+          content: [
+            ...pending.content,
+            ...(options.mixed ? [createWeatherToolUse()] : []),
+            ...(options.history ? [] : createSearchTurn('toolu_extra').content),
+          ],
+        } as Anthropic.Messages.Message;
+        const createSpy = vi.spyOn(provider.anthropic.messages, 'create');
+        if (options.history) {
+          createSpy.mockResolvedValueOnce(createSearchTurn() as Anthropic.Messages.Message);
+          mcpMocks.callTool.mockResolvedValueOnce({ content: 'Historical result' });
+        }
+        createSpy.mockResolvedValueOnce(final);
+
+        const response = await provider.callApi('Find companies and weather');
+
+        await expectToolsVerdict(response, false);
+        expect(response.error).toContain('exceeded max_tool_calls=1');
+        expect(response.output).toBeUndefined();
+        expect(mcpMocks.callTool).toHaveBeenCalledTimes(options.history ? 1 : 0);
+        expect(response.metadata?.hasPendingToolCalls).toBe(options.history ? true : undefined);
+        expect(response.metadata?.toolCalls).toEqual(
+          options.history
+            ? [
+                {
+                  id: 'toolu_first',
+                  name: 'search_companies',
+                  input: { query: 'clean energy' },
+                  output: 'Historical result',
+                  is_error: false,
+                },
+              ]
+            : undefined,
+        );
+      });
     });
 
     it('drops forced tool_choice on MCP continuation requests', async () => {

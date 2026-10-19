@@ -1197,7 +1197,16 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
 
       // Only attach the key when a tool actually ran: an always-present empty array
       // would break downstream filters that test `metadata?.toolCalls?.length > 0`.
-      const mcpMetadata = toolCalls.length > 0 ? { toolCalls } : undefined;
+      const mcpMetadata =
+        toolCalls.length > 0
+          ? {
+              toolCalls,
+              // Completed history can coexist with unresolved calls in the final turn.
+              ...(resolvedMessage.content.some((block) => block.type === 'tool_use') && {
+                hasPendingToolCalls: true,
+              }),
+            }
+          : undefined;
 
       if (error) {
         // max_tool_calls was exceeded — tokens were still spent across the loop,

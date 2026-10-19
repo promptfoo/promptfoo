@@ -168,7 +168,10 @@ export const handleIsValidOpenAiToolsCall = async ({
     }
     // Responses can render function calls or callback results as text. Successful
     // MCP execution must not bypass either raw or retained function-call checks.
+    // Native pending calls can also remain outside those formats. In that case,
+    // validate the current output instead of accepting completed history alone.
     if (
+      providerResponse.metadata?.hasPendingToolCalls !== true &&
       additionalToolCalls.length === 0 &&
       (!hasOutputToolCalls || retainedToolCalls?.length === 0)
     ) {

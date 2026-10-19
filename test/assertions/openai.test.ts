@@ -1092,6 +1092,93 @@ describe('OpenAI assertions', () => {
       ).toMatchObject({ pass: true, score: 1 });
     });
 
+    describe('completed history with pending current calls', () => {
+      const history = [{ name: 'ask_question', input: {}, output: '', is_error: false }];
+      const pendingCall = { type: 'tool_use', name: 'pending', input: { location: 42 } };
+
+      it.each([JSON.stringify(pendingCall), 'Text substituted by a transform', pendingCall])(
+        'does not use history alone to validate pending output: %j',
+        async (output) => {
+          const response = {
+            output,
+            metadata: { toolCalls: history, hasPendingToolCalls: true },
+          };
+          for (const candidate of [response, JSON.parse(JSON.stringify(response))]) {
+            expect(await grade(candidate)).toMatchObject({ pass: false, score: 0 });
+            expect(await grade(candidate, true)).toMatchObject({ pass: true, score: 1 });
+          }
+          expect(response.metadata.toolCalls).toEqual(history);
+        },
+      );
+
+      it.each([
+        { envelope: false, valid: true },
+        { envelope: false, valid: false },
+        { envelope: true, valid: true },
+        { envelope: true, valid: false },
+      ])('validates explicitly transformed calls: %j', async ({ envelope, valid }) => {
+        const call = {
+          type: 'function',
+          function: valid ? createFahrenheitFunctionCall() : createCustomUnitFunctionCall(),
+        };
+        const transformed = envelope ? { tool_calls: [call] } : [call];
+        const response = {
+          output: JSON.stringify(pendingCall),
+          metadata: { toolCalls: history, hasPendingToolCalls: true },
+        };
+        for (const inverse of [false, true]) {
+          const result = await runAssertion({
+            provider: mockProvider,
+            providerResponse: response,
+            assertion: {
+              type: inverse ? 'not-is-valid-openai-tools-call' : 'is-valid-openai-tools-call',
+              transform: `JSON.parse(${JSON.stringify(JSON.stringify(transformed))})`,
+            },
+            test: {},
+          });
+          expect(result).toMatchObject({
+            pass: inverse ? !valid : valid,
+            score: Number(inverse ? !valid : valid),
+          });
+        }
+        expect(response.output).toBe(JSON.stringify(pendingCall));
+      });
+
+      it.each([undefined, false])(
+        'keeps completed history valid with marker %s',
+        async (marker) => {
+          const response = {
+            output: JSON.stringify(pendingCall),
+            finishReason: 'tool_calls',
+            metadata: { toolCalls: history, hasPendingToolCalls: marker },
+          };
+          expect(await grade(response)).toMatchObject({ pass: true, score: 1 });
+          expect(await grade(response, true)).toMatchObject({ pass: false, score: 0 });
+        },
+      );
+
+      it('preserves failed execution priority over pending and valid transformed calls', async () => {
+        const response = {
+          output: [{ type: 'function', function: createFahrenheitFunctionCall() }],
+          metadata: {
+            toolCalls: [...history, { name: 'failed', output: 'PRIVATE_FAILURE', is_error: true }],
+            hasPendingToolCalls: true,
+          },
+        };
+        expect(await grade(response)).toMatchObject({
+          pass: false,
+          reason: 'MCP tool call failed for failed',
+        });
+        expect(await grade(response, true)).toMatchObject({ pass: true, score: 1 });
+      });
+
+      it('does not treat the pending indicator itself as execution evidence', async () => {
+        const response = { output: 'Done', metadata: { hasPendingToolCalls: true } };
+        expect(await grade(response)).toMatchObject({ pass: false, score: 0 });
+        expect(await grade(response, true)).toMatchObject({ pass: true, score: 1 });
+      });
+    });
+
     it.each([
       { type: 'function', function: createCustomUnitFunctionCall(), pass: false },
       { type: 'custom', function: createFahrenheitFunctionCall(), pass: false },
