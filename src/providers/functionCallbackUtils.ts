@@ -157,6 +157,7 @@ export class FunctionCallbackHandler {
     callbacks?: FunctionCallbackConfig,
     context?: any,
     onMcpToolCall?: (entry: Pick<McpToolCallEntry, 'name' | 'is_error'>) => void,
+    onFunctionCall?: (call: FunctionCall) => void,
   ): Promise<FunctionCallResult> {
     // Extract function information from various formats
     const functionInfo = this.extractFunctionInfo(call);
@@ -186,9 +187,11 @@ export class FunctionCallbackHandler {
 
     try {
       // Execute the callback
+      const args = functionInfo.arguments || '{}';
+      onFunctionCall?.({ name: functionInfo.name, arguments: args });
       const result = await this.executeCallback(
         functionInfo.name,
-        functionInfo.arguments || '{}',
+        args,
         callbacks,
         context,
         typeof call?.call_id === 'string'
@@ -241,6 +244,7 @@ export class FunctionCallbackHandler {
     options?: {
       returnRawOnError?: boolean;
       onMcpToolCall?: (entry: Pick<McpToolCallEntry, 'name' | 'is_error'>, index: number) => void;
+      onFunctionCall?: (call: FunctionCall, index: number) => void;
     },
   ): Promise<any> {
     if (!calls) {
@@ -252,8 +256,12 @@ export class FunctionCallbackHandler {
 
     const results = await Promise.all(
       callsArray.map((call, index) =>
-        this.processCall(call, callbacks, context, (entry) =>
-          options?.onMcpToolCall?.(entry, index),
+        this.processCall(
+          call,
+          callbacks,
+          context,
+          (entry) => options?.onMcpToolCall?.(entry, index),
+          (entry) => options?.onFunctionCall?.(entry, index),
         ),
       ),
     );

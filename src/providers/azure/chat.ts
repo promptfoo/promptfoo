@@ -39,6 +39,7 @@ import type {
   CallApiOptionsParams,
   ProviderResponse,
 } from '../../types/index';
+import type { FunctionCall } from '../functionCallbackTypes';
 import type { MCPClient } from '../mcp/client';
 import type { McpToolCallEntry } from '../mcp/types';
 import type { AzureChatResponsesOptions, AzureProviderOptions } from './types';
@@ -616,11 +617,13 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
             });
             const mcpCalls = new Map<number, Pick<McpToolCallEntry, 'name' | 'is_error'>>();
             const mcpCallIndexes = new Set<number>();
+            const callbackCalls = new Map<number, FunctionCall>();
             output = await this.functionCallbackHandler.processCalls(
               allCalls.length === 1 ? allCalls[0] : allCalls,
               config.functionToolCallbacks,
               undefined,
               {
+                onFunctionCall: (call, index) => callbackCalls.set(index, call),
                 onMcpToolCall: (entry, index) => {
                   mcpCalls.set(index, entry);
                   const call = allCalls[index];
@@ -652,7 +655,19 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
                   return entry ? [{ ...entry, output: null }] : [];
                 }),
               }),
-              functionToolCalls: retainedCalls.filter((_, index) => !mcpCallIndexes.has(index)),
+              functionToolCalls: retainedCalls.flatMap((call, index) => {
+                if (mcpCallIndexes.has(index)) {
+                  return [];
+                }
+                const routedCall = callbackCalls.get(index);
+                // Validate both representations when routing fields override the
+                // wrapped call; neither may hide invalid arguments in the other.
+                return routedCall &&
+                  (call.function.name !== routedCall.name ||
+                    call.function.arguments !== routedCall.arguments)
+                  ? [call, { type: 'function', function: routedCall }]
+                  : [call];
+              }),
             };
           } else {
             // No callbacks configured, return raw tool/function calls

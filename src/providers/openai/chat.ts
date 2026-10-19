@@ -77,6 +77,7 @@ import type {
   CallApiOptionsParams,
   ProviderResponse,
 } from '../../types/index';
+import type { FunctionCall } from '../functionCallbackTypes';
 import type { McpToolCallEntry } from '../mcp/types';
 import type { OpenAiCompletionOptions, ReasoningEffort } from './types';
 
@@ -1180,12 +1181,23 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
             })
           : undefined;
       const mcpFunctionCallIndexes = new Set<number>();
+      const callbackFunctionCalls = new Map<number, FunctionCall>();
       const getFunctionToolCallMetadata = () =>
         functionToolCalls
           ? {
-              functionToolCalls: functionToolCalls.filter(
-                (_, index) => !mcpFunctionCallIndexes.has(index),
-              ),
+              functionToolCalls: functionToolCalls.flatMap((call, index) => {
+                if (mcpFunctionCallIndexes.has(index)) {
+                  return [];
+                }
+                const routedCall = callbackFunctionCalls.get(index);
+                // Keep original shape checks while also validating the arguments
+                // actually selected for an ordinary callback.
+                return routedCall &&
+                  (call.function.name !== routedCall.name ||
+                    call.function.arguments !== routedCall.arguments)
+                  ? [call, { type: 'function', function: routedCall }]
+                  : [call];
+              }),
             }
           : {};
       if (functionCalls && (config.functionToolCallbacks || this.mcpClient)) {
@@ -1305,9 +1317,11 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
           if (config.functionToolCallbacks && config.functionToolCallbacks[functionName]) {
             try {
               throwIfAborted(callApiOptions?.abortSignal);
+              const args = functionCall.arguments || functionCall.function?.arguments;
+              callbackFunctionCalls.set(functionCallIndex, { name: functionName, arguments: args });
               const functionResult = await this.executeFunctionCallback(
                 functionName,
-                functionCall.arguments || functionCall.function?.arguments,
+                args,
                 config,
                 functionCall.call_id ?? functionCall.id,
                 callApiOptions?.abortSignal,

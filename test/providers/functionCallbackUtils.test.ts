@@ -454,6 +454,54 @@ describe('FunctionCallbackHandler', () => {
 
       expect(result).toBe(JSON.stringify(call));
     });
+
+    it('observes routed ordinary arguments by call index across concurrent invocations', async () => {
+      let finishFirst!: () => void;
+      const firstResult = new Promise<void>((resolve) => {
+        finishFirst = resolve;
+      });
+      const completed: string[] = [];
+      const callbacks = {
+        regular: vi.fn(async (args: string) => {
+          if (args === ' first ') {
+            await firstResult;
+          }
+          completed.push(args);
+          return `${args} result`;
+        }),
+      };
+      const observeBatch = vi.fn();
+      const observeOther = vi.fn();
+      const unknown = { name: 'unknown', arguments: 'not executed' };
+      const pending = handler.processCalls(
+        [
+          { id: 'shared-id', name: 'regular', arguments: ' first ' },
+          {
+            id: 'shared-id',
+            type: 'function',
+            function: { name: 'regular', arguments: 'second' },
+          },
+          unknown,
+        ],
+        callbacks,
+        undefined,
+        { onFunctionCall: observeBatch },
+      );
+      const other = await handler.processCalls({ name: 'regular' }, callbacks, undefined, {
+        onFunctionCall: observeOther,
+      });
+      expect(completed).toEqual(['second', '{}']);
+      finishFirst();
+
+      expect(await pending).toBe(` first  result\nsecond result\n${JSON.stringify(unknown)}`);
+      expect(other).toBe('{} result');
+      expect(completed).toEqual(['second', '{}', ' first ']);
+      expect(observeBatch.mock.calls).toEqual([
+        [{ name: 'regular', arguments: ' first ' }, 0],
+        [{ name: 'regular', arguments: 'second' }, 1],
+      ]);
+      expect(observeOther.mock.calls).toEqual([[{ name: 'regular', arguments: '{}' }, 0]]);
+    });
   });
 
   describe('executeCallback', () => {
