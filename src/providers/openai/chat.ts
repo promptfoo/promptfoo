@@ -12,12 +12,7 @@ import {
   preserveResponseHeadersObserverError,
 } from '../../util/fetch/responseHeadersObserver';
 import { FINISH_REASON_MAP, normalizeFinishReason } from '../../util/finishReason';
-import {
-  maybeLoadFromExternalFileWithVars,
-  maybeLoadResponseFormatFromExternalFile,
-  maybeLoadToolsFromExternalFile,
-  renderVarsInObject,
-} from '../../util/index';
+import { renderVarsInObject } from '../../util/index';
 import {
   executeProviderFunctionCallback,
   loadProviderCallbackFromFileUrl,
@@ -35,7 +30,6 @@ import {
   parseChatPrompt,
   throwIfAborted,
   transformToolChoice,
-  transformTools,
   waitForPromiseWithAbort,
 } from '../shared';
 import {
@@ -46,6 +40,13 @@ import {
 import { OpenAiGenericProvider } from './';
 import { calculateOpenAIUsageCost } from './billing';
 import { applyGpt6RequestRules, isGpt6Model } from './gpt6';
+import {
+  isOpenAiJsonSchemaFormat,
+  prepareOpenAiFunctions,
+  prepareOpenAiReasoning,
+  prepareOpenAiResponseFormat,
+  prepareOpenAiTools,
+} from './prepare';
 import { resolveChatReasoningEffort } from './reasoning';
 import { isLegacyOpenAiChatModel, resolveChatOutputCap } from './tokenCaps';
 import {
@@ -75,7 +76,8 @@ import type {
 } from '../../types/index';
 import type { ProviderOptions } from '../../types/providers';
 import type { McpToolCallEntry } from '../mcp/types';
-import type { OpenAiCompletionOptions, OpenAiRequestPolicy } from './types';
+import type { OpenAiBillingConfig, OpenAiChatConfig, OpenAiRequestBody } from './config';
+import type { OpenAiRequestPolicy } from './types';
 
 export type OpenAiChatCompletionCostData = Pick<
   OpenAI.Chat.Completions.ChatCompletion,
@@ -165,7 +167,7 @@ type OpenRouterPassthrough = {
   max_completion_tokens?: number | null;
 };
 
-function getOpenRouterPassthrough(config?: OpenAiCompletionOptions): OpenRouterPassthrough {
+function getOpenRouterPassthrough(config?: OpenAiChatConfig): OpenRouterPassthrough {
   const passthrough = config?.passthrough;
   return passthrough && typeof passthrough === 'object' && !Array.isArray(passthrough)
     ? (passthrough as OpenRouterPassthrough)
@@ -173,7 +175,7 @@ function getOpenRouterPassthrough(config?: OpenAiCompletionOptions): OpenRouterP
 }
 
 function getOpenRouterReasoningControl(
-  config?: OpenAiCompletionOptions,
+  config?: OpenAiChatConfig,
   vars?: CallApiContextParams['vars'],
 ) {
   const passthrough = getOpenRouterPassthrough(config);
@@ -210,8 +212,8 @@ function getOpenRouterReasoningControl(
 
 function reconcileOpenRouterReasoning(
   body: Record<string, unknown>,
-  providerConfig: OpenAiCompletionOptions,
-  promptConfig?: OpenAiCompletionOptions,
+  providerConfig: OpenAiChatConfig,
+  promptConfig?: OpenAiChatConfig,
   vars?: CallApiContextParams['vars'],
 ): void {
   const providerReasoning = getOpenRouterPassthrough(providerConfig).reasoning;
@@ -329,7 +331,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
 
   static OPENAI_CHAT_MODEL_NAMES = OPENAI_CHAT_MODELS.map((model) => model.id);
 
-  config: OpenAiCompletionOptions;
+  config: OpenAiChatConfig;
   private readonly requestPolicy: OpenAiRequestPolicy;
   private mcpClient: MCPClient | null = null;
   private initializationPromise: Promise<void> | null = null;
@@ -340,7 +342,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
 
   constructor(
     modelName: string,
-    options: Pick<ProviderOptions<OpenAiCompletionOptions>, 'config' | 'id' | 'env'> & {
+    options: Pick<ProviderOptions<OpenAiChatConfig>, 'config' | 'id' | 'env'> & {
       /** Select unknown-model request fields and defaults. Direct consumers retain compatibility. */
       requestPolicy?: OpenAiRequestPolicy;
     } = {},
@@ -437,7 +439,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
   private async executeFunctionCallback(
     functionName: string,
     args: string,
-    config: OpenAiCompletionOptions,
+    config: Pick<OpenAiChatConfig, 'functionToolCallbacks'>,
     callId?: string,
     abortSignal?: AbortSignal,
   ): Promise<string> {
@@ -458,10 +460,11 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
   ) {
     // Merge configs from the provider and the prompt
     const promptConfig = context?.prompt?.config;
-    const config = {
-      ...this.config,
-      ...promptConfig,
-    };
+    const mergedConfig: OpenAiChatConfig = { ...this.config, ...promptConfig };
+    const passthrough: Record<string, unknown> | undefined = mergedConfig.passthrough
+      ? { ...mergedConfig.passthrough }
+      : undefined;
+    const config = { ...mergedConfig, passthrough };
     const effectiveServiceTier = getOpenAiEffectiveServiceTier(this.config, promptConfig);
 
     const messages = parseChatPrompt(prompt, [{ role: 'user', content: prompt }]);
@@ -533,18 +536,16 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
 
     // --- MCP tool injection logic ---
     const mcpTools = this.mcpClient ? transformMCPToolsToOpenAi(this.mcpClient.getAllTools()) : [];
-    const loadedTools = config.tools
-      ? (await waitForPromiseWithAbort(
-          maybeLoadToolsFromExternalFile(config.tools, context?.vars, callApiOptions?.abortSignal),
-          callApiOptions?.abortSignal,
-        )) || []
-      : [];
+    const loadedTools =
+      (await prepareOpenAiTools(config.tools, context?.vars, callApiOptions?.abortSignal)) ?? [];
+    const functions = prepareOpenAiFunctions(config.functions, context?.vars);
+    const responseFormat = prepareOpenAiResponseFormat(config.response_format, context?.vars);
     // Transform tools to OpenAI format if needed
-    const fileTools = transformTools(loadedTools, 'openai') as typeof loadedTools;
+    const fileTools = loadedTools;
     const allTools = [...mcpTools, ...fileTools];
     // --- End MCP tool injection logic ---
 
-    const body = {
+    const bodyFields = {
       model: this.modelName,
       messages,
       seed: config.seed,
@@ -568,7 +569,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         : {}),
       ...(config.functions
         ? {
-            functions: maybeLoadFromExternalFileWithVars(config.functions, context?.vars),
+            functions,
           }
         : {}),
       ...(config.function_call ? { function_call: config.function_call } : {}),
@@ -579,10 +580,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       ...(config.tool_resources ? { tool_resources: config.tool_resources } : {}),
       ...(config.response_format
         ? {
-            response_format: maybeLoadResponseFormatFromExternalFile(
-              config.response_format,
-              context?.vars,
-            ),
+            response_format: responseFormat,
           }
         : {}),
       ...(callApiOptions?.includeLogProbs ? { logprobs: callApiOptions.includeLogProbs } : {}),
@@ -613,10 +611,11 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         : {}),
       ...((isGPT5Model || isGPT6Model) && config.verbosity ? { verbosity: config.verbosity } : {}),
     };
+    const body: OpenAiRequestBody<typeof bodyFields> = bodyFields;
     assertOpenAiApiModel(body.model, this.getApiUrl());
 
     if (config.reasoning && isOSeriesModel) {
-      body.reasoning = config.reasoning;
+      body.reasoning = prepareOpenAiReasoning(config.reasoning, context?.vars);
     }
 
     // Add other basic parameters
@@ -672,10 +671,18 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       isOpenRouter: isOpenRouterGpt6,
     });
 
-    return { body, config: { ...config, service_tier: effectiveServiceTier } };
+    return {
+      body,
+      config: {
+        ...config,
+        functions,
+        response_format: responseFormat,
+        service_tier: effectiveServiceTier,
+      },
+    };
   }
 
-  protected override getBillingModelName(config: OpenAiCompletionOptions): string {
+  protected override getBillingModelName(config: OpenAiBillingConfig): string {
     const passthroughModel = (config.passthrough as { model?: unknown } | undefined)?.model;
     return typeof passthroughModel === 'string'
       ? passthroughModel
@@ -694,7 +701,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
    */
   protected calculateResponseCost(
     data: OpenAiChatCompletionCostData,
-    config: OpenAiCompletionOptions,
+    config: OpenAiBillingConfig,
     cached: boolean,
   ): number | undefined {
     if (this.usesOpenRouter()) {
@@ -937,7 +944,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
               ? policy.message
               : getOpenAiPartialOutput(
                   policy.partialOutput,
-                  config.response_format?.type === 'json_schema',
+                  isOpenAiJsonSchemaFormat(body.response_format),
                 ),
           tokenUsage: data?.usage ? getTokenUsage(data, cached) : undefined,
           cached,
@@ -1140,7 +1147,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       );
 
       // Handle structured output
-      if (config.response_format?.type === 'json_schema' && typeof output === 'string') {
+      if (isOpenAiJsonSchemaFormat(body.response_format) && typeof output === 'string') {
         try {
           output = JSON.parse(output);
         } catch (error) {

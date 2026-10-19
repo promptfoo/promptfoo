@@ -547,7 +547,7 @@ tests:
         value: output.category === 'billing'
 ```
 
-The Responses provider parses valid JSON schema output into an object, so the assertion can read `output.category` directly. Refusals, incomplete responses, or invalid JSON may still produce a different output; check errors and failed assertions. For JSON mode without a schema, use `type: json_object` and explicitly ask for JSON in the prompt.
+Both Chat Completions and Responses parse valid JSON schema output into an object, so the assertion can read `output.category` directly. Refusals, incomplete responses, or invalid JSON may still produce a different output; check errors and failed assertions. For JSON mode without a schema, use `type: json_object` and explicitly ask for JSON in the prompt.
 
 ### External file references
 
@@ -575,7 +575,7 @@ Use the nested `json_schema` shape above for Chat Completions or a shared config
 }
 ```
 
-The schema itself can be a nested `file://` reference. File paths support Nunjucks variables, such as `file://./schemas/{{ schema_name }}.json`.
+The schema itself can be a nested `file://` reference. File paths support Nunjucks variables, such as `file://./schemas/{{ schema_name }}.json`. Files and templates are resolved for each request after prompt settings override provider settings, using that test's variables. The loaded format also controls how the response is parsed.
 
 <details>
 <summary>Prompt-level and per-test formats</summary>
