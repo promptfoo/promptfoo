@@ -9,11 +9,7 @@ import {
 import invariant from '../../util/invariant';
 import { FunctionCallbackHandler } from '../functionCallbackUtils';
 import { applyGpt6RequestRules, isGpt6Model } from '../openai/gpt6';
-import {
-  hasResponsesReasoningConfig,
-  isResponsesReasoningCleared,
-  resolveResponsesReasoning,
-} from '../openai/reasoning';
+import { applyResponsesReasoningClears, resolveResponsesReasoningState } from '../openai/reasoning';
 import { isLegacyOpenAiChatModel } from '../openai/tokenCaps';
 import { flattenResponseTool } from '../openai/util';
 import { ResponsesProcessor } from '../responses/index';
@@ -155,17 +151,17 @@ export class AzureResponsesProvider extends AzureGenericProvider<AzureResponsesO
     const supportsReasoningConfig =
       isReasoningModel ||
       (config.isReasoningModel !== false && !isLegacyOpenAiChatModel(capabilityModelName));
-    const renderedReasoning = supportsReasoningConfig
-      ? resolveResponsesReasoning(
+    const resolvedReasoning = supportsReasoningConfig
+      ? resolveResponsesReasoningState(
           this.config,
           context?.prompt?.config,
           (value) => renderVarsInObject(value, context?.vars),
           { includeEffort: !isFixedReasoningModel },
         )
       : undefined;
+    const renderedReasoning = resolvedReasoning?.reasoning;
     // Explicit clears also defer to the model's defaults rather than restoring client defaults.
-    const hasExplicitReasoning =
-      supportsReasoningConfig && hasResponsesReasoningConfig(this.config, context?.prompt?.config);
+    const hasExplicitReasoning = resolvedReasoning?.hasExplicitConfig === true;
     const maxOutputTokensDefault = config.omitDefaults
       ? getEnvString('OPENAI_MAX_TOKENS') === undefined
         ? undefined
@@ -289,8 +285,17 @@ export class AzureResponsesProvider extends AzureGenericProvider<AzureResponsesO
       } else {
         delete body.reasoning;
       }
-    } else if (isResponsesReasoningCleared(this.config, context?.prompt?.config)) {
-      delete body.reasoning;
+    } else {
+      const cleared = applyResponsesReasoningClears(
+        body.reasoning,
+        this.config,
+        context?.prompt?.config,
+      );
+      if (cleared === undefined) {
+        delete body.reasoning;
+      } else {
+        body.reasoning = cleared;
+      }
     }
 
     if (isFixedReasoningModel && body.reasoning && typeof body.reasoning === 'object') {

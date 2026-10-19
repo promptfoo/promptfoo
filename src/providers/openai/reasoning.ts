@@ -85,19 +85,6 @@ function getResponsesReasoning(
   return { options, effort, clearOptions: passthrough === null };
 }
 
-/** Inspect each config scope before shallow passthrough merging can hide an explicit clear. */
-export function hasResponsesReasoningConfig(
-  providerConfig: ReasoningConfig,
-  promptConfig: ReasoningConfig | undefined,
-): boolean {
-  return [providerConfig, promptConfig].some(
-    (config) =>
-      config?.reasoning !== undefined ||
-      config?.reasoning_effort !== undefined ||
-      getObject(config?.passthrough)?.reasoning !== undefined,
-  );
-}
-
 /** Honor literal full clears even when a model does not process typed reasoning options.
  * A prompt's raw object can replace a provider clear; a named null wins in its own scope.
  * Do not evaluate unsupported typed values or raw callbacks while detecting a clear.
@@ -118,13 +105,41 @@ export function isResponsesReasoningCleared(
   );
 }
 
-/** Merge Responses options across scopes, preserving explicit clears and rendering only selected effort. */
-export function resolveResponsesReasoning(
+/** Apply literal clear controls to raw legacy options without evaluating unsupported callbacks. */
+export function applyResponsesReasoningClears<T>(
+  value: T,
+  providerConfig: ReasoningConfig,
+  promptConfig: ReasoningConfig | undefined,
+): T | Record<string, unknown> | undefined {
+  if (isResponsesReasoningCleared(providerConfig, promptConfig)) {
+    return undefined;
+  }
+  const options = getObject(value);
+  if (!options) {
+    return value;
+  }
+  const effort = firstDefined(
+    getObject(promptConfig?.reasoning)?.effort,
+    getObject(getObject(promptConfig?.passthrough)?.reasoning)?.effort,
+    promptConfig?.reasoning_effort,
+    getObject(providerConfig.reasoning)?.effort,
+    getObject(getObject(providerConfig.passthrough)?.reasoning)?.effort,
+    providerConfig.reasoning_effort,
+  );
+  if (effort !== null && effort !== '') {
+    return value;
+  }
+  const { effort: _effort, ...remaining } = options;
+  return Object.keys(remaining).length ? remaining : undefined;
+}
+
+/** Resolve options and explicit clears together so callbacks are evaluated only once. */
+export function resolveResponsesReasoningState(
   providerConfig: ReasoningConfig,
   promptConfig: ReasoningConfig | undefined,
   render: (value: unknown) => unknown,
   settings: { includeEffort?: boolean } = {},
-): Record<string, unknown> | undefined {
+): { reasoning: Record<string, unknown> | undefined; hasExplicitConfig: boolean } {
   const includeEffort = settings.includeEffort !== false;
   const prompt = getResponsesReasoning(promptConfig, render, includeEffort);
   const provider = prompt.clearOptions
@@ -132,10 +147,34 @@ export function resolveResponsesReasoning(
     : getResponsesReasoning(providerConfig, render, includeEffort && prompt.effort === undefined);
   const options = { ...provider?.options, ...prompt.options };
   const effort = firstDefined(prompt.effort, provider?.effort);
-  if (effort === null || effort === '') {
+  const clearsEffort = effort === null || effort === '';
+  if (clearsEffort) {
     delete options.effort;
   } else if (effort !== undefined) {
     options.effort = effort;
   }
-  return Object.keys(options).length ? options : undefined;
+  for (const key of Object.keys(options)) {
+    if (options[key] === undefined) {
+      delete options[key];
+    }
+  }
+  const reasoning = Object.keys(options).length ? options : undefined;
+  return {
+    reasoning,
+    hasExplicitConfig:
+      reasoning !== undefined ||
+      clearsEffort ||
+      prompt.clearOptions ||
+      provider?.clearOptions === true,
+  };
+}
+
+/** Merge Responses options across scopes, preserving explicit clears and selected effort. */
+export function resolveResponsesReasoning(
+  providerConfig: ReasoningConfig,
+  promptConfig: ReasoningConfig | undefined,
+  render: (value: unknown) => unknown,
+  settings: { includeEffort?: boolean } = {},
+): Record<string, unknown> | undefined {
+  return resolveResponsesReasoningState(providerConfig, promptConfig, render, settings).reasoning;
 }

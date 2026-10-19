@@ -1,9 +1,10 @@
 import { describe, expect, expectTypeOf, it, vi } from 'vitest';
 import {
-  hasResponsesReasoningConfig,
+  applyResponsesReasoningClears,
   isResponsesReasoningCleared,
   resolveChatReasoningEffort,
   resolveResponsesReasoning,
+  resolveResponsesReasoningState,
 } from '../../../src/providers/openai/reasoning';
 
 import type { AzureResponsesOptions } from '../../../src/providers/azure/types';
@@ -214,15 +215,42 @@ describe('full reasoning clears without typed model support', () => {
   });
 });
 
-describe('reasoning settings before passthrough merging', () => {
+describe('resolved reasoning state', () => {
   it.each([
     [{}, undefined, false],
     [{ reasoning: null }, undefined, true],
     [{}, { reasoning_effort: null }, true],
     [{ passthrough: { reasoning: null } }, { passthrough: { unrelated: true } }, true],
     [{ passthrough: { reasoning: { effort: null } } }, { passthrough: {} }, true],
-    [{ passthrough: [] }, { passthrough: { unrelated: true } }, false],
-  ])('detects explicit settings in %j and %j', (provider, prompt, expected) => {
-    expect(hasResponsesReasoningConfig(provider, prompt)).toBe(expected);
+    [{ reasoning: { summary: 'auto' } }, undefined, true],
+    [{ reasoning: {} }, undefined, false],
+    [{ reasoning: { effort: undefined } }, undefined, false],
+  ])('uses resolved settings in %j and %j', (provider, prompt, expected) => {
+    expect(resolveResponsesReasoningState(provider, prompt, identity).hasExplicitConfig).toBe(
+      expected,
+    );
+  });
+});
+
+describe('legacy raw reasoning clears', () => {
+  it('preserves a higher-priority raw effort over an inherited partial clear', () => {
+    const raw = { effort: 'high', summary: 'auto' };
+    expect(
+      applyResponsesReasoningClears(
+        raw,
+        { reasoning: { effort: null } },
+        { passthrough: { reasoning: raw } },
+      ),
+    ).toBe(raw);
+  });
+  it('omits an empty raw object after a partial clear', () => {
+    expect(
+      applyResponsesReasoningClears({ effort: 'high' }, {}, { reasoning_effort: null }),
+    ).toBeUndefined();
+  });
+  it('preserves non-object raw values without evaluating them', () => {
+    const callback = vi.fn();
+    expect(applyResponsesReasoningClears(callback, {}, { reasoning_effort: null })).toBe(callback);
+    expect(callback).not.toHaveBeenCalled();
   });
 });

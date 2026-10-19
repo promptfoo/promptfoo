@@ -42,11 +42,7 @@ import {
   prepareOpenAiResponseFormat,
   prepareOpenAiTools,
 } from './prepare';
-import {
-  hasResponsesReasoningConfig,
-  isResponsesReasoningCleared,
-  resolveResponsesReasoning,
-} from './reasoning';
+import { applyResponsesReasoningClears, resolveResponsesReasoningState } from './reasoning';
 import { isLegacyOpenAiChatModel } from './tokenCaps';
 import {
   appendOpenAiApiPath,
@@ -1081,19 +1077,19 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     } = this.getDeploymentCapabilities(config);
     const supportsReasoningConfig =
       isReasoningModel || !isLegacyOpenAiChatModel(this.getEffectiveModelName(config));
-    const renderedReasoning = supportsReasoningConfig
-      ? resolveResponsesReasoning(this.config, context?.prompt?.config, (value) =>
+    const resolvedReasoning = supportsReasoningConfig
+      ? resolveResponsesReasoningState(this.config, context?.prompt?.config, (value) =>
           renderVarsInObject(value, context?.vars ?? {}),
         )
       : undefined;
+    const renderedReasoning = resolvedReasoning?.reasoning;
     const effectiveReasoningEffort = renderedReasoning?.effort;
     const hasAzureReasoningEffort =
       isAzureResponsesDeploymentWithReasoningConfig &&
       effectiveReasoningEffort !== undefined &&
       effectiveReasoningEffort !== 'none';
     // Explicit clears also defer to the model's defaults rather than restoring client defaults.
-    const hasExplicitReasoning =
-      supportsReasoningConfig && hasResponsesReasoningConfig(this.config, context?.prompt?.config);
+    const hasExplicitReasoning = resolvedReasoning?.hasExplicitConfig === true;
     const useUnknownReasoningDefaults =
       this.requestPolicy === 'openai' && !isReasoningModel && hasExplicitReasoning;
     const maxOutputTokensDefault = config.omitDefaults
@@ -1238,8 +1234,17 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       } else {
         delete body.reasoning;
       }
-    } else if (isResponsesReasoningCleared(this.config, context?.prompt?.config)) {
-      delete body.reasoning;
+    } else {
+      const cleared = applyResponsesReasoningClears(
+        body.reasoning,
+        this.config,
+        context?.prompt?.config,
+      );
+      if (cleared === undefined) {
+        delete body.reasoning;
+      } else {
+        body.reasoning = cleared;
+      }
     }
 
     // The Responses API uses max_output_tokens, never max_tokens; strip max_tokens if it

@@ -9,8 +9,11 @@ import { mockProcessEnv } from '../../util/utils';
 import type { OpenAiCompletionOptions } from '../../../src/providers/openai/types';
 import type { CallApiContextParams } from '../../../src/types';
 
-const context = (config: object): CallApiContextParams => ({
-  vars: { effort: 'low' },
+const context = (
+  config: object,
+  vars: CallApiContextParams['vars'] = { effort: 'low' },
+): CallApiContextParams => ({
+  vars,
   prompt: { raw: 'Hello', label: 'Hello', config },
 });
 
@@ -37,11 +40,12 @@ const responsesProviders = [
       model: string,
       config: Pick<OpenAiCompletionOptions, 'reasoning_effort' | 'reasoning' | 'passthrough'>,
       promptConfig: object,
+      vars: CallApiContextParams['vars'] = { effort: 'low' },
     ) =>
       (
         await new OpenAiResponsesProvider(model, { config, requestPolicy: 'openai' }).getOpenAiBody(
           'Hello',
-          context(promptConfig),
+          context(promptConfig, vars),
         )
       ).body,
   ],
@@ -51,10 +55,11 @@ const responsesProviders = [
       model: string,
       config: Pick<OpenAiCompletionOptions, 'reasoning_effort' | 'reasoning' | 'passthrough'>,
       promptConfig: object,
+      vars: CallApiContextParams['vars'] = { effort: 'low' },
     ) =>
       new AzureResponsesProvider(model, { config }).getAzureResponsesBody(
         'Hello',
-        context(promptConfig),
+        context(promptConfig, vars),
       ),
   ],
 ] as const;
@@ -162,6 +167,102 @@ describe('shared reasoning request configuration', () => {
         expect(providerConfig.reasoning).toEqual({ effort: 'high', summary: 'auto' });
       },
     );
+
+    it.each(['root', 'flat', 'raw', 'nested'] as const)(
+      'restores defaults when a %s reasoning callback returns undefined',
+      async (field) => {
+        const callback = vi.fn(() => undefined);
+        const promptConfig =
+          field === 'root'
+            ? { reasoning: callback }
+            : field === 'flat'
+              ? { reasoning_effort: callback }
+              : field === 'raw'
+                ? { passthrough: { reasoning: callback } }
+                : { reasoning: { effort: callback } };
+        const body = await getBody('internal-model', {}, promptConfig, {});
+        expect(body).not.toHaveProperty('reasoning');
+        expect(body.temperature).toBe(0);
+        expect(body.max_output_tokens).toBe(1024);
+        expect(callback).toHaveBeenCalledTimes(1);
+      },
+    );
+    it('restores defaults after an inherited raw callback returns undefined', async () => {
+      const callback = vi.fn(() => undefined);
+      const body = await getBody(
+        'internal-model',
+        { passthrough: { reasoning: callback } },
+        { passthrough: { unrelated: true } },
+        {},
+      );
+      expect(body).not.toHaveProperty('reasoning');
+      expect(body.temperature).toBe(0);
+      expect(body.max_output_tokens).toBe(1024);
+      expect(callback).toHaveBeenCalledTimes(1);
+    });
+    it.each(['root', 'flat', 'raw', 'nested'] as const)(
+      'keeps a resolved %s callback null as an explicit clear',
+      async (field) => {
+        const callback = vi.fn(() => null);
+        const promptConfig =
+          field === 'root'
+            ? { reasoning: callback }
+            : field === 'flat'
+              ? { reasoning_effort: callback }
+              : field === 'raw'
+                ? { passthrough: { reasoning: callback } }
+                : { reasoning: { effort: callback } };
+        const body = await getBody('internal-model', {}, promptConfig, {});
+        expect(body).not.toHaveProperty('reasoning');
+        expect(body).not.toHaveProperty('temperature');
+        expect(body).not.toHaveProperty('max_output_tokens');
+        expect(callback).toHaveBeenCalledTimes(1);
+      },
+    );
+    it('keeps inherited resolved reasoning when a prompt callback returns undefined', async () => {
+      const callback = vi.fn(() => undefined);
+      const body = await getBody(
+        'internal-model',
+        { passthrough: { reasoning: { effort: 'high', summary: 'auto' } } },
+        { reasoning: callback },
+        {},
+      );
+      expect(body.reasoning).toEqual({ effort: 'high', summary: 'auto' });
+      expect(body).not.toHaveProperty('temperature');
+      expect(callback).toHaveBeenCalledTimes(1);
+    });
+    it.each([
+      { reasoning: { effort: null } },
+      { reasoning_effort: null },
+      { reasoning: { effort: '' } },
+      { reasoning_effort: '' },
+    ])(
+      'applies a partial legacy effort clear %j without losing raw summary',
+      async (promptConfig) => {
+        const body = await getBody(
+          'gpt-4.1',
+          { passthrough: { reasoning: { effort: 'high', summary: 'auto' } } },
+          promptConfig,
+          {},
+        );
+        expect(body.reasoning).toEqual({ summary: 'auto' });
+        expect(body.temperature).toBe(0);
+        expect(body.max_output_tokens).toBe(1024);
+      },
+    );
+    it('removes unsupported raw effort callbacks on a literal partial clear without evaluating them', async () => {
+      const callback = vi.fn(() => {
+        throw new Error('unsupported callback');
+      });
+      const body = await getBody(
+        'gpt-4.1',
+        { passthrough: { reasoning: { effort: callback, summary: 'auto' } } },
+        { reasoning_effort: null },
+        {},
+      );
+      expect(body.reasoning).toEqual({ summary: 'auto' });
+      expect(callback).not.toHaveBeenCalled();
+    });
 
     it('does not add reasoning to a GPT-4.1 request', async () => {
       const body = await getBody('gpt-4.1', { reasoning_effort: 'high' }, {});
