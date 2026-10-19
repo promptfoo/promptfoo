@@ -322,6 +322,18 @@ describe('portable config enters real OpenAI constructors', () => {
     expect(body.reasoning_effort).toBe('high');
     expect(effort).toHaveBeenCalledWith({ vars: {} });
   });
+  it('evaluates OpenRouter reasoning callbacks without request vars', async () => {
+    const effort = vi.fn(() => 'high' as const);
+    const provider = new OpenAiChatCompletionProvider('gpt-6-sol', {
+      config: {
+        apiBaseUrl: 'https://openrouter.ai/api/v1',
+        reasoning_effort: effort,
+      },
+    });
+    const { body } = await provider.getOpenAiBody('fixture');
+    expect(body.reasoning_effort ?? body.reasoning?.effort).toBe('high');
+    expect(effort).toHaveBeenCalledWith({ vars: {} });
+  });
   it('preserves explicit callable config and callback execution', async () => {
     const effort = vi.fn(() => 'high' as const);
     const callback = vi.fn(async (args: string) => `callback:${args}`);

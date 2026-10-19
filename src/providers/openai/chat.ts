@@ -179,7 +179,7 @@ function getOpenRouterPassthrough(config?: OpenAiChatConfig): OpenRouterPassthro
 
 function getOpenRouterReasoningControl(
   config?: OpenAiChatConfig,
-  vars?: CallApiContextParams['vars'],
+  vars: CallApiContextParams['vars'] = {},
 ) {
   const passthrough = getOpenRouterPassthrough(config);
   const efforts = [
