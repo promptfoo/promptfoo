@@ -892,6 +892,185 @@ describe('HttpProvider', () => {
       expect(result.output).toEqual({ answer: 'hello there' });
     });
 
+    it.each(
+      ['mixed', 'related', 'alternative', 'form-data'].flatMap((subtype) =>
+        ['\n', '\r\n'].flatMap((newline) =>
+          [false, true].map((nestedPayload) => ({
+            subtype,
+            newline,
+            lineEnding: newline === '\n' ? 'LF' : 'CRLF',
+            nestedPayload,
+          })),
+        ),
+      ),
+    )(
+      'should preserve raw MIME multipart framing and payload ($subtype, $lineEnding, nested=$nestedPayload)',
+      async ({ subtype, newline, nestedPayload }) => {
+        const contentType = `multipart/${subtype}; boundary=fixture`;
+        const disposition =
+          subtype === 'form-data'
+            ? 'Content-Disposition: form-data; name="document"'
+            : 'Content-Disposition: attachment; filename="document.txt"';
+        const payload = nestedPayload ? ' leading \nsecond\r\nthird \t' : 'hello receiver';
+        const bodyLines = [
+          '--fixture',
+          disposition,
+          'Content-Type: text/plain',
+          '',
+          nestedPayload ? '{{payload.text}}' : '{{prompt}}',
+          '--fixture--',
+          '',
+        ];
+        const provider = new HttpProvider('http', {
+          config: {
+            request: [
+              'POST / HTTP/1.1',
+              'Host: example.com',
+              `Content-Type: ${contentType}`,
+              '',
+              ...bodyLines,
+            ].join(newline),
+          },
+        });
+        vi.mocked(fetchWithCache).mockResolvedValueOnce(createMockFetchResponse('{}'));
+        await provider.callApi(nestedPayload ? 'unused' : payload, {
+          vars: { payload: { text: payload } },
+          prompt: { raw: 'fixture', label: 'fixture' },
+        });
+        const sentBody = vi.mocked(fetchWithCache).mock.calls[0][1]?.body as string;
+        expect(sentBody).toBe(
+          [
+            '--fixture',
+            disposition,
+            'Content-Type: text/plain',
+            '',
+            payload,
+            '--fixture--',
+            '',
+          ].join('\r\n'),
+        );
+        // http-z supports these MIME subtypes; Response.formData only supports form-data.
+        const received = httpZ.parse(
+          `POST / HTTP/1.1\r\nHost: example.com\r\nContent-Type: ${contentType}\r\n\r\n${sentBody}`,
+        );
+        expect(received.body).toMatchObject({
+          contentType: `multipart/${subtype}`,
+          params: [
+            {
+              value: payload,
+              contentType: 'text/plain',
+              ...(subtype === 'form-data'
+                ? { name: 'document' }
+                : { type: 'attachment', fileName: 'document.txt' }),
+            },
+          ],
+        });
+        if (subtype === 'form-data') {
+          const form = await new Response(sentBody, {
+            headers: { 'Content-Type': contentType },
+          }).formData();
+          expect(form.get('document')).toBe(payload);
+        }
+      },
+    );
+
+    it.each(
+      ['mixed', 'related', 'alternative', 'form-data'].flatMap((subtype) =>
+        ['attachment', 'inline'].map((disposition) => ({ subtype, disposition })),
+      ),
+    )(
+      'should recognize captured MIME multipart headers ($subtype, $disposition)',
+      async ({ subtype, disposition }) => {
+        const contentType = `multipart/${subtype}; boundary=fixture`;
+        const firstHeaders =
+          'Content-Disposition: attachment; filename="first.txt"\nContent-Type: text/plain\n\n';
+        const secondHeaders = `Content-Disposition: ${disposition}; filename="second.txt"\nContent-Type: text/plain\n\n`;
+        const payload = ' leading \nsecond\r\nthird \t';
+        const provider = new HttpProvider('http', {
+          config: {
+            request:
+              `POST / HTTP/1.1\nHost: example.com\nContent-Type: ${contentType}\n\n` +
+              `--fixture\n${firstHeaders}one\n{{part.separator}}{{part.headers}}{{payload.text}}\n--fixture--\n`,
+          },
+        });
+        vi.mocked(fetchWithCache).mockResolvedValueOnce(createMockFetchResponse('{}'));
+        await provider.callApi('fixture', {
+          vars: {
+            part: { separator: '--fixture\n', headers: secondHeaders },
+            payload: { text: payload },
+          },
+          prompt: { raw: 'fixture', label: 'fixture' },
+        });
+        const sentBody = vi.mocked(fetchWithCache).mock.calls[0][1]?.body as string;
+        expect(sentBody).toBe(
+          `--fixture\r\n${firstHeaders.replace(/\n/g, '\r\n')}one\r\n` +
+            `--fixture\r\n${secondHeaders.replace(/\n/g, '\r\n')}${payload}\r\n--fixture--\r\n`,
+        );
+        const received = httpZ.parse(
+          `POST / HTTP/1.1\r\nHost: example.com\r\nContent-Type: ${contentType}\r\n\r\n${sentBody}`,
+        );
+        expect(received.body).toMatchObject({
+          contentType: `multipart/${subtype}`,
+          params: [
+            { value: 'one', type: 'attachment', fileName: 'first.txt', contentType: 'text/plain' },
+            {
+              value: payload,
+              type: disposition,
+              fileName: 'second.txt',
+              contentType: 'text/plain',
+            },
+          ],
+        });
+      },
+    );
+
+    it.each(['mixed', 'related', 'alternative'])(
+      'should keep captured MIME multipart boundary lookalikes opaque (%s)',
+      async (subtype) => {
+        const contentType = `multipart/${subtype}; boundary=fixture`;
+        const headers =
+          'Content-Disposition: attachment; filename="first.txt"\nContent-Type: text/plain\n\n';
+        const payload =
+          'first\n--fixture\nContent-Disposition: attachment; filename="injected.txt"\nContent-Type: text/plain\n\nextra';
+        const provider = new HttpProvider('http', {
+          config: {
+            request:
+              `POST / HTTP/1.1\nHost: example.com\nContent-Type: ${contentType}\n\n` +
+              `--fixture\n${headers}{{payload.text}}\n--fixture--\n`,
+          },
+        });
+        vi.mocked(fetchWithCache).mockResolvedValueOnce(createMockFetchResponse('{}'));
+        await provider.callApi('fixture', {
+          vars: { payload: { text: payload } },
+          prompt: { raw: 'fixture', label: 'fixture' },
+        });
+        const sentBody = vi.mocked(fetchWithCache).mock.calls[0][1]?.body as string;
+        expect(sentBody).toBe(
+          `--fixture\r\n${headers.replace(/\n/g, '\r\n')}${payload}\r\n--fixture--\r\n`,
+        );
+        expect(() =>
+          httpZ.parse(
+            `POST / HTTP/1.1\r\nHost: example.com\r\nContent-Type: ${contentType}\r\n\r\n${sentBody}`,
+          ),
+        ).toThrow();
+      },
+    );
+
+    it('should preserve unsupported raw MIME subtype body bytes', async () => {
+      const body =
+        '--fixture\nContent-Disposition: attachment; filename="document.txt"\n\n  text\n--fixture--\n';
+      const provider = new HttpProvider('http', {
+        config: {
+          request:
+            'POST / HTTP/1.1\nHost: example.com\nContent-Type: multipart/digest; boundary=fixture\n\n' +
+            body,
+        },
+      });
+      vi.mocked(fetchWithCache).mockResolvedValueOnce(createMockFetchResponse('{}'));
+      await provider.callApi('fixture');
+      expect(vi.mocked(fetchWithCache).mock.calls[0][1]?.body).toBe(body);
+    });
+
     it.each([
       'opening fragment',
       'opening CR plus source LF',

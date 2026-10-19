@@ -1312,7 +1312,9 @@ function normalizeMultipartRequestTemplate(
     const headerLines = followingSource.split(/\r?\n\r?\n/, 1)[0].split(/\r?\n/);
     return (
       headerLines.every((header) => /^[^:\s]+:/.test(header)) &&
-      headerLines.some((header) => /^content-disposition:.*\bform-data\b/i.test(header))
+      headerLines.some((header) =>
+        /^content-disposition:.*\b(?:form-data|inline|attachment)\b/i.test(header),
+      )
     );
   };
 
@@ -1324,8 +1326,10 @@ function normalizeMultipartRequestTemplate(
     requestHeaders += content + newline;
     if (!content && newline) {
       const contentType = requestHeaders.match(/^content-type:[ \t]*([^\r\n]*)/im)?.[1];
+      // Match the multipart subtypes supported by the raw request parser.
       boundary =
-        contentType && /^multipart\/form-data(?:\s*;|\s*$)/i.test(contentType)
+        contentType &&
+        /^multipart\/(?:form-data|mixed|related|alternative)(?:\s*;|\s*$)/i.test(contentType)
           ? getMultipartBoundary(contentType)
           : undefined;
       state.section = 'beforePart';
