@@ -15,6 +15,11 @@ import {
   OpenAiSharedConfigInputJsonSchema,
   OpenAiSharedConfigInputSchema,
 } from '../../src/contracts';
+import {
+  InputDefinitionObjectSchema,
+  InputsInputSchema,
+  InputsSchema,
+} from '../../src/contracts/shared';
 import { ProviderOptionsSchema } from '../../src/validators/providers';
 
 import type {
@@ -534,5 +539,124 @@ describe('OpenAI portable configuration contracts', () => {
     // @ts-expect-error Known config fields must retain their types.
     const invalid: ProviderOptions<OpenAiChatConfigInput> = { config: { temperature: 'warm' } };
     expect(invalid.config?.temperature).toBe('warm');
+  });
+});
+
+describe('shared input definitions', () => {
+  it('preserves input-type and placement relationships in inferred authoring types', () => {
+    type PortableInputs = z.input<typeof InputsInputSchema>;
+    const valid: PortableInputs = {
+      prompt: {
+        description: 'question',
+        type: 'docx',
+        config: { injectionPlacements: ['comment'] },
+      },
+    };
+    expect(InputsInputSchema.parse(valid)).toEqual(valid);
+    const invalid = {
+      prompt: {
+        description: 'question',
+        type: 'pdf',
+        config: { injectionPlacements: ['comment'] },
+      },
+    };
+    expectTypeOf<{
+      prompt: { description: string; type: 'pdf'; config: { injectionPlacements: ['comment'] } };
+    }>().not.toExtend<PortableInputs>();
+    expect(InputsInputSchema.safeParse(invalid).success).toBe(false);
+  });
+
+  const validate = new Ajv({ strict: false }).compile(
+    z.toJSONSchema(InputsInputSchema, {
+      target: 'draft-07',
+      io: 'input',
+      unrepresentable: 'throw',
+    }),
+  );
+  it.each([
+    { prompt: 'question' },
+    { prompt: { description: 'question' } },
+    ...['text', 'pdf', 'image', 'docx'].map((type) => ({
+      prompt: {
+        type,
+        description: 'question',
+        config: { injectionPlacements: ['body'], benign: true, inputPurpose: 'summarize' },
+      },
+    })),
+    {
+      prompt: {
+        type: 'text',
+        description: 'question',
+        config: { injectionPlacements: ['anything'] },
+      },
+    },
+    {
+      prompt: {
+        type: 'docx',
+        description: 'question',
+        config: { injectionPlacements: ['comment', 'footnote'] },
+      },
+    },
+  ])('accepts canonical inputs in both contracts: %j', (input) => {
+    expect(InputsSchema.safeParse(input).success).toBe(true);
+    expect(InputsInputSchema.parse(input)).toEqual(input);
+    expect(validate(input)).toBe(true);
+  });
+  it.each([
+    { 'invalid-name': 'question' },
+    { prompt: '' },
+    { prompt: { description: '' } },
+    { prompt: { type: 'audio', description: 'question' } },
+    { prompt: { description: 'question', config: { inputPurpose: '' } } },
+    { prompt: { description: 'question', config: { injectionPlacements: [] } } },
+    {
+      prompt: {
+        type: 'image',
+        description: 'question',
+        config: { injectionPlacements: ['comment'] },
+      },
+    },
+    {
+      prompt: {
+        type: 'pdf',
+        description: 'question',
+        config: { injectionPlacements: ['footnote'] },
+      },
+    },
+    {
+      prompt: {
+        type: 'docx',
+        description: 'question',
+        config: { injectionPlacements: ['unknown'] },
+      },
+    },
+  ])('rejects invalid canonical inputs in both contracts: %j', (input) => {
+    expect(InputsSchema.safeParse(input).success).toBe(false);
+    expect(InputsInputSchema.safeParse(input).success).toBe(false);
+    expect(validate(input)).toBe(false);
+  });
+  it('preserves runtime unknown-key stripping and placement diagnostics', () => {
+    const input = { description: 'question', extra: true, config: { benign: true, extra: true } };
+    expect(InputDefinitionObjectSchema.parse(input)).toEqual({
+      description: 'question',
+      config: { benign: true },
+    });
+    expect(InputsInputSchema.safeParse({ prompt: input }).success).toBe(false);
+    const result = InputDefinitionObjectSchema.safeParse({
+      description: 'question',
+      type: 'pdf',
+      config: { injectionPlacements: ['comment'] },
+    });
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.issues).toEqual([
+        expect.objectContaining({
+          code: 'custom',
+          path: ['config', 'injectionPlacements'],
+          message:
+            'Invalid PDF injection placements: comment. Expected one of: body, header, footer',
+        }),
+      ]);
+    }
   });
 });

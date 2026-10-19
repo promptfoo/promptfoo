@@ -21,6 +21,15 @@ export const AzureSharedConfigInputSchema = z.strictObject({
   azureTokenScope: z.string().optional(),
 });
 
+const AzureModelFields = z.strictObject({
+  modelName: z.string().optional(),
+  isReasoningModel: z.boolean().optional(),
+  o1: z
+    .boolean()
+    .optional()
+    .meta({ deprecated: true, description: 'Use isReasoningModel instead' }),
+});
+
 const ChatFields = OpenAiChatConfigInputSchema.pick({
   temperature: true,
   max_tokens: true,
@@ -42,39 +51,26 @@ const ChatFields = OpenAiChatConfigInputSchema.pick({
   omitDefaults: true,
 })
   .extend(AzureSharedConfigInputSchema.shape)
+  .extend(AzureModelFields.shape)
   .extend({
     deployment_id: z.string().optional(),
-    modelName: z.string().optional(),
     systemPrompt: z.string().optional(),
     dataSources: z.json().optional().describe('Azure retrieval data-source request payload'),
-    isReasoningModel: z.boolean().optional(),
     isClaudeOpus47OrLater: z.boolean().optional(),
-    o1: z
-      .boolean()
-      .optional()
-      .meta({ deprecated: true, description: 'Use isReasoningModel instead' }),
   });
 export const AzureChatConfigInputSchema = ChatFields.describe(
   'Serializable Azure Chat Completions configuration',
 );
-export const AzureResponsesConfigInputSchema = ChatFields.omit({
-  max_tokens: true,
-  max_completion_tokens: true,
-  stop: true,
-  frequency_penalty: true,
-  presence_penalty: true,
-  functions: true,
-  function_call: true,
-  mcp: true,
-  functionToolCallbacks: true,
-  seed: true,
-  systemPrompt: true,
-  dataSources: true,
-  deployment_id: true,
-  isClaudeOpus47OrLater: true,
-})
+export const AzureResponsesConfigInputSchema = AzureSharedConfigInputSchema.extend(
+  AzureModelFields.shape,
+)
   .extend(
     OpenAiResponsesConfigInputSchema.pick({
+      temperature: true,
+      top_p: true,
+      reasoning_effort: true,
+      passthrough: true,
+      omitDefaults: true,
       tools: true,
       tool_choice: true,
       reasoning: true,

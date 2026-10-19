@@ -26,11 +26,12 @@ const CacheControl = z.strictObject({
   ttl: z.enum(['5m', '1h']).optional(),
 });
 const CustomTool = z.strictObject({
-  type: z.literal('custom').optional(),
+  type: z.literal('custom').nullable().optional(),
   name: z.string(),
   description: z.string().optional(),
   input_schema: JsonObjectInputSchema,
   cache_control: CacheControl.nullable().optional(),
+  eager_input_streaming: z.boolean().nullable().optional(),
   strict: z.boolean().optional(),
   defer_loading: z.boolean().optional(),
   allowed_callers: z.array(z.string()).optional(),
@@ -61,10 +62,14 @@ const ServerTool = JsonObjectInputSchema.and(
     name: z.string().optional(),
   }),
 );
+// Toolsets expand into several tools on the server and intentionally have no name.
+const Toolset = JsonObjectInputSchema.and(
+  z.object({ type: z.enum(['browser_toolset_20260801', 'computer_toolset_20260801']) }),
+);
 const Tools = z.union([
   FileReferenceInputSchema,
   z.array(FileReferenceInputSchema),
-  z.array(z.union([CustomTool, BuiltInTool, ServerTool])),
+  z.array(z.union([CustomTool, BuiltInTool, ServerTool, Toolset])),
   z.array(OpenAiFunctionTool),
 ]);
 const Thinking = z.union([
