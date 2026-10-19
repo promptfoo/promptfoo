@@ -1280,7 +1280,10 @@ function normalizeMultipartRequestTemplate(
   } = { section: 'requestHeaders' };
   let requestHeaders = '';
   let boundary: string | undefined;
+  const boundaries: { value: string; opened: boolean }[] = [];
+  let partHeaders = '';
   let line = '';
+  let lineHasSource = false;
   let structuralTail = false;
   let opaqueLine = false;
   const output: { content: string; newline: string; preserveNewline?: boolean }[] = [];
@@ -1302,8 +1305,24 @@ function normalizeMultipartRequestTemplate(
     return source;
   };
 
+  const matchDelimiter = (delimiter: string) => {
+    // An ancestor delimiter also ends an unconsumed or opaque nested body.
+    for (let index = boundaries.length - 1; index >= 0; index--) {
+      const opening = `--${boundaries[index].value}`;
+      if (delimiter === opening || delimiter === `${opening}--`) {
+        return { index, closing: delimiter !== opening };
+      }
+    }
+    return undefined;
+  };
+
   const sourceConfirmsBoundary = (delimiter: string, followingSource: string) => {
-    if (delimiter === `--${boundary}--`) {
+    const matched = matchDelimiter(delimiter);
+    if (matched?.closing) {
+      // A declaration alone cannot promote a whole captured empty child body.
+      if (matched.index > 0 && !boundaries[matched.index].opened && !lineHasSource) {
+        return false;
+      }
       // A later source closer establishes an earlier captured lookalike as data.
       return !followingSource
         .split(/\r?\n/)
@@ -1318,6 +1337,15 @@ function normalizeMultipartRequestTemplate(
     );
   };
 
+  const declaredBoundary = (headers: string) => {
+    const contentType = headers.match(/^content-type:[ \t]*([^\r\n]*)/im)?.[1];
+    // Match the multipart subtypes supported by the raw request parser.
+    return contentType &&
+      /^multipart\/(?:form-data|mixed|related|alternative)(?:\s*;|\s*$)/i.test(contentType)
+      ? getMultipartBoundary(contentType)
+      : undefined;
+  };
+
   const finishRequestHeader = (content: string, newline: string) => {
     // Match the raw request parser's trimStart contract, including interpolated padding.
     if (!requestHeaders && !content.trim()) {
@@ -1325,13 +1353,10 @@ function normalizeMultipartRequestTemplate(
     }
     requestHeaders += content + newline;
     if (!content && newline) {
-      const contentType = requestHeaders.match(/^content-type:[ \t]*([^\r\n]*)/im)?.[1];
-      // Match the multipart subtypes supported by the raw request parser.
-      boundary =
-        contentType &&
-        /^multipart\/(?:form-data|mixed|related|alternative)(?:\s*;|\s*$)/i.test(contentType)
-          ? getMultipartBoundary(contentType)
-          : undefined;
+      boundary = declaredBoundary(requestHeaders);
+      if (boundary) {
+        boundaries.push({ value: boundary, opened: false });
+      }
       state.section = 'beforePart';
     }
     return newline ? '\r\n' : '';
@@ -1346,20 +1371,36 @@ function normalizeMultipartRequestTemplate(
       return newline;
     }
     const delimiter = content.replace(/[ \t]+$/, '');
+    const matched = matchDelimiter(delimiter);
     if (
-      (delimiter === `--${boundary}` || delimiter === `--${boundary}--`) &&
-      (!opaqueLine ||
-        sourceConfirmsBoundary(delimiter, followingSource(delimiter === `--${boundary}`)))
+      matched &&
+      (!opaqueLine || sourceConfirmsBoundary(delimiter, followingSource(!matched.closing)))
     ) {
       const previous = output[output.length - 1];
       if (previous?.newline && !previous.preserveNewline) {
         previous.newline = '\r\n';
       }
-      state.section = delimiter === `--${boundary}--` ? 'epilogue' : 'partHeaders';
+      boundaries.length = matched.index + 1;
+      partHeaders = '';
+      if (matched.closing && matched.index > 0) {
+        boundaries.pop();
+        state.section = 'payload';
+      } else {
+        if (!matched.closing) {
+          boundaries[matched.index].opened = true;
+        }
+        state.section = matched.closing ? 'epilogue' : 'partHeaders';
+      }
       return newline ? '\r\n' : '';
     }
     if (state.section === 'partHeaders') {
+      partHeaders += content + newline;
       if (!content && newline) {
+        const nestedBoundary = declaredBoundary(partHeaders);
+        if (nestedBoundary) {
+          boundaries.push({ value: nestedBoundary, opened: false });
+        }
+        // A MIME declaration does not give an inserted body source provenance.
         state.section = 'payload';
       }
       return newline ? '\r\n' : '';
@@ -1381,11 +1422,15 @@ function normalizeMultipartRequestTemplate(
     output.push({ content, newline });
     structuralTail = false;
     opaqueLine = false;
+    lineHasSource = false;
   };
 
   const appendOpaque = (text: string, headerSuffix = false) => {
     line += text;
     if (text) {
+      if (text.includes('\n')) {
+        lineHasSource = false;
+      }
       const terminalNewline = /\r?\n$/.exec(line)?.[0];
       if (terminalNewline) {
         // Complete the physical line without interpreting any payload lines.
@@ -1407,19 +1452,21 @@ function normalizeMultipartRequestTemplate(
     if (!boundary) {
       return false;
     }
-    const terminator = text.match(/^\r?\n/)?.[0];
-    if (terminator && line) {
-      // A captured newline can finish a delimiter buffered by preceding source
-      // or captures. Keep an opaque trailing CR as data, as finishLine does.
-      const buffered = line + terminator.slice(0, -1);
+    const newlineIndex = text.indexOf('\n');
+    if (line && newlineIndex >= 0 && (lineHasSource || /^\r?\n/.test(text))) {
+      // Source token text can continue across captured chunks. A previously
+      // admitted complete delimiter also allows a captured terminator. Inspect
+      // only this first line and keep an opaque trailing CR as finishLine does.
+      const buffered = line + text.slice(0, newlineIndex);
       const delimiter = (
-        structuralTail || terminator === '\r\n' ? buffered.replace(/\r$/, '') : buffered
+        structuralTail || newlineIndex > 0 ? buffered.replace(/\r$/, '') : buffered
       ).replace(/[ \t]+$/, '');
-      if (delimiter === `--${boundary}--`) {
+      const matched = matchDelimiter(delimiter);
+      if (matched?.closing) {
         return sourceConfirmsBoundary(delimiter, sourceAfter(index + 1));
       }
-      if (delimiter === `--${boundary}`) {
-        return sourceConfirmsBoundary(delimiter, sourceAfter(index, terminator.length, true));
+      if (matched) {
+        return sourceConfirmsBoundary(delimiter, sourceAfter(index, newlineIndex + 1, true));
       }
     }
     const leadingNewlines = text.match(/^(?:\r?\n)*/)?.[0] ?? '';
@@ -1430,13 +1477,11 @@ function normalizeMultipartRequestTemplate(
       .replace(/[ \t]+$/, '');
     // Only original source and single-line substitutions can establish a later
     // closer. Do not inspect embedded delimiter text in another payload value.
-    if (delimiter === `--${boundary}--`) {
+    const matched = matchDelimiter(delimiter);
+    if (matched?.closing) {
       return sourceConfirmsBoundary(delimiter, sourceAfter(index + 1));
     }
-    if (
-      delimiter !== `--${boundary}` ||
-      (end >= 0 && !/^(?:\r?\n)*$/.test(candidate.slice(end + 1)))
-    ) {
+    if (!matched || (end >= 0 && !/^(?:\r?\n)*$/.test(candidate.slice(end + 1)))) {
       return false;
     }
     const followingSource = sourceAfter(index + 1, 0, true);
@@ -1449,6 +1494,7 @@ function normalizeMultipartRequestTemplate(
   for (const [index, fragment] of fragments.entries()) {
     const initialState = state.section;
     let captureContainsHeaders = initialState === 'partHeaders';
+    let captureClosedChild = false;
     if (
       fragment.interpolated &&
       (state.section === 'epilogue' ||
@@ -1462,25 +1508,37 @@ function normalizeMultipartRequestTemplate(
       line += fragment.text.slice(offset, match.index);
       if (match.index > offset) {
         structuralTail = true;
+        lineHasSource ||= !fragment.interpolated;
       }
+      const depth = boundaries.length;
       finishLine('\n', (includeHeaders) => sourceAfter(index, match.index + 1, includeHeaders));
       offset = match.index + 1;
       if (initialState === 'payload' && state.section === 'partHeaders') {
         captureContainsHeaders = true;
       }
-      // A header expression may also contain the start of a field value. Its
-      // suffix remains opaque, unlike a whole body supplied before the first part.
-      if (fragment.interpolated && captureContainsHeaders && state.section === 'payload') {
+      captureClosedChild = initialState === 'payload' && boundaries.length < depth;
+      // Stop admitted captures at the field value or a child closer's epilogue.
+      // Whole containers supplied before the first part retain their traversal.
+      if (
+        fragment.interpolated &&
+        (captureContainsHeaders || captureClosedChild) &&
+        state.section === 'payload'
+      ) {
         break;
       }
     }
     const remainder = fragment.text.slice(offset);
-    if (fragment.interpolated && captureContainsHeaders && state.section === 'payload') {
-      appendOpaque(remainder, true);
+    if (
+      fragment.interpolated &&
+      (captureContainsHeaders || captureClosedChild) &&
+      state.section === 'payload'
+    ) {
+      appendOpaque(remainder, !captureClosedChild);
     } else {
       line += remainder;
       if (remainder) {
         structuralTail = true;
+        lineHasSource ||= !fragment.interpolated;
       }
     }
   }

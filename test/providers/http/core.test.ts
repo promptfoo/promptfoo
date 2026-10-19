@@ -1162,6 +1162,7 @@ describe('HttpProvider', () => {
         vars: { chunks: Record<string, string>; payload?: { text: string } },
         second = 'two',
         nativeReject = false,
+        expectedBody?: string,
       ) => {
         const provider = new HttpProvider('http', {
           config: {
@@ -1188,8 +1189,9 @@ describe('HttpProvider', () => {
           ]);
         }
         expect(sentBody).toBe(
-          `--fixture\r\n${firstHeaders}\r\n\r\none\r\n` +
-            `--fixture\r\n${secondHeaders}\r\n\r\n${second}\r\n--fixture--\r\n`,
+          expectedBody ??
+            `--fixture\r\n${firstHeaders}\r\n\r\none\r\n` +
+              `--fixture\r\n${secondHeaders}\r\n\r\n${second}\r\n--fixture--\r\n`,
         );
       };
 
@@ -1269,6 +1271,280 @@ describe('HttpProvider', () => {
         await checkBody('--fixture{{chunks.remainder}}', {
           chunks: { remainder: body().slice('--fixture'.length) },
         });
+      });
+
+      it.each(
+        Array.from({ length: '--fixture'.length + 1 }, (_, cut) =>
+          [false, true].flatMap((inverse) =>
+            ['\n', '\r\n'].map((newline) => ({ cut, inverse, newline })),
+          ),
+        ).flat(),
+      )(
+        'preserves delimiter token provenance at cut $cut ($inverse, $newline)',
+        async ({ cut, inverse, newline }) => {
+          const prefix = '--fixture'.slice(0, cut);
+          const suffix = '--fixture'.slice(cut);
+          const headers = `${secondHeaders}${newline}${newline}`;
+          const captured = `${suffix}${newline}${headers}${mixedPayload}`;
+          const opaque = !inverse && cut === 0;
+          await checkBody(
+            `--fixture\n${firstHeaders}\n\none\n` +
+              (inverse
+                ? `{{chunks.prefix}}${suffix}${newline}${headers}{{payload.text}}`
+                : `${prefix}{{chunks.suffix}}`) +
+              '\n--fixture--\n',
+            { chunks: { prefix, suffix: captured }, payload: { text: mixedPayload } },
+            mixedPayload,
+            opaque,
+            opaque
+              ? `--fixture\r\n${firstHeaders}\r\n\r\none\n${captured}\r\n--fixture--\r\n`
+              : undefined,
+          );
+        },
+      );
+
+      it.each(['--{{chunks.middle}}{{chunks.suffix}}', '{{chunks.prefix}}fix{{chunks.suffix}}'])(
+        'retains authored delimiter text across adjacent chunks (%s)',
+        async (opening) => {
+          await checkBody(
+            `--fixture\n${firstHeaders}\n\none\n${opening}\n--fixture--\n`,
+            {
+              chunks: {
+                prefix: '--',
+                middle: 'fix',
+                suffix: `ture\n${secondHeaders}\n\n${mixedPayload}`,
+              },
+            },
+            mixedPayload,
+          );
+        },
+      );
+
+      it.each(
+        [false, true].flatMap((completeDelimiter) =>
+          ['\n', '\r\n'].map((newline) => ({ completeDelimiter, newline })),
+        ),
+      )(
+        'distinguishes admitted framing from split opaque captures ($completeDelimiter, $newline)',
+        async ({ completeDelimiter, newline }) => {
+          const suffix = `${completeDelimiter ? '' : 'xture'}${newline}${secondHeaders}${newline}${newline}${mixedPayload}`;
+          await checkBody(
+            `--fixture\n${firstHeaders}\n\none\n{{chunks.prefix}}{{chunks.suffix}}\n--fixture--\n`,
+            { chunks: { prefix: completeDelimiter ? '--fixture' : '--fi', suffix } },
+            mixedPayload,
+            !completeDelimiter,
+            completeDelimiter
+              ? undefined
+              : `--fixture\r\n${firstHeaders}\r\n\r\none\n--fi${suffix}\r\n--fixture--\r\n`,
+          );
+        },
+      );
+
+      it('keeps a partial delimiter capture payload suffix opaque', async () => {
+        await checkBody(
+          `--fixture\n${firstHeaders}\n\none\n-{{chunks.suffix}}\n--fixture--\n`,
+          { chunks: { suffix: `-fixture\n${secondHeaders}\n\n${hostilePayload}` } },
+          hostilePayload,
+          true,
+        );
+      });
+    });
+
+    describe('declared nested multipart framing', () => {
+      const containerHeaders =
+        'Content-Disposition: form-data; name="files"\nContent-Type: multipart/mixed; boundary=inner';
+      const leafHeaders =
+        'Content-Disposition: attachment; filename="test.txt"\nContent-Type: text/plain';
+      const mixedPayload = ' leading \nsecond\r\nthird \t';
+      const innerBody = (payload: string, newline = '\n') =>
+        `--inner${newline}${leafHeaders.split('\n').join(newline)}${newline}${newline}${payload}${newline}--inner--`;
+      const outerBody = (payload: string, newline = '\n', headers = containerHeaders) =>
+        `--outer${newline}${headers.split('\n').join(newline)}${newline}${newline}${payload}${newline}--outer--${newline}`;
+      const send = async (
+        source: string,
+        vars: { payload?: { text: string }; part?: Record<string, string> } = {},
+      ) => {
+        const provider = new HttpProvider('http', {
+          config: {
+            request:
+              'POST / HTTP/1.1\nHost: example.com\nContent-Type: multipart/form-data; boundary=outer\n\n' +
+              source,
+          },
+        });
+        vi.mocked(fetchWithCache).mockResolvedValueOnce(createMockFetchResponse('{}'));
+        await provider.callApi('fixture', {
+          vars,
+          prompt: { raw: 'fixture', label: 'fixture' },
+        });
+        return vi.mocked(fetchWithCache).mock.calls[0][1]?.body as string;
+      };
+      // Both MIME layers use the installed strict parser; FormData does not
+      // recursively parse a multipart/mixed field value.
+      const parseParts = (body: string, boundary = 'outer') =>
+        httpZ.parse(
+          `POST / HTTP/1.1\r\nHost: example.com\r\nContent-Type: multipart/${boundary === 'outer' ? 'form-data' : 'mixed'}; boundary=${boundary}\r\n\r\n${body}`,
+        ).body?.params ?? [];
+
+      it.each(
+        ['\n', '\r\n'].flatMap((outerNewline) =>
+          ['\n', '\r\n'].flatMap((innerNewline) =>
+            [false, true].map((capturedLeaf) => ({ outerNewline, innerNewline, capturedLeaf })),
+          ),
+        ),
+      )(
+        'normalizes declared framing while preserving leaf bytes ($outerNewline, $innerNewline, $capturedLeaf)',
+        async ({ outerNewline, innerNewline, capturedLeaf }) => {
+          const payload = capturedLeaf ? mixedPayload : 'hello';
+          const sentBody = await send(
+            outerBody(
+              innerBody(capturedLeaf ? '{{payload.text}}' : payload, innerNewline),
+              outerNewline,
+            ),
+            { payload: { text: payload } },
+          );
+          expect(sentBody).toBe(outerBody(innerBody(payload, '\r\n'), '\r\n'));
+          const outerParts = parseParts(sentBody);
+          expect(outerParts).toHaveLength(1);
+          expect(parseParts(outerParts[0].value ?? '', 'inner')).toMatchObject([
+            { value: payload, fileName: 'test.txt', contentType: 'text/plain' },
+          ]);
+        },
+      );
+
+      it.each(['\n', '\r\n'])('keeps a whole captured nested body opaque (%s)', async (newline) => {
+        const payload = innerBody('hello', newline);
+        const sentBody = await send(outerBody('{{payload.text}}'), { payload: { text: payload } });
+        expect(sentBody).toBe(outerBody(payload, '\r\n'));
+        const outerParts = parseParts(sentBody);
+        expect(outerParts[0].value).toBe(payload);
+        if (newline === '\n') {
+          expect(() => parseParts(outerParts[0].value ?? '', 'inner')).toThrow();
+        } else {
+          expect(parseParts(outerParts[0].value ?? '', 'inner')[0].value).toBe('hello');
+        }
+      });
+
+      it.each(['\n', '\r\n'])(
+        'keeps an unopened child closing-looking body opaque (%s)',
+        async (newline) => {
+          const payload = `--inner--${newline}`;
+          const sentBody = await send(outerBody('{{payload.text}}'), {
+            payload: { text: payload },
+          });
+          expect(sentBody).toBe(outerBody(payload, '\r\n'));
+          expect(parseParts(sentBody)[0].value).toBe(payload);
+          expect(parseParts(payload, 'inner')).toEqual([]);
+        },
+      );
+
+      it('does not infer nested framing from a text payload', async () => {
+        const headers = containerHeaders.replace('multipart/mixed; boundary=inner', 'text/plain');
+        const payload = innerBody(mixedPayload);
+        const sentBody = await send(outerBody('{{payload.text}}', '\n', headers), {
+          payload: { text: payload },
+        });
+        expect(sentBody).toBe(outerBody(payload, '\r\n', headers));
+        expect(parseParts(sentBody)[0].value).toBe(payload);
+      });
+
+      it('recognizes an authored empty child closer', async () => {
+        const sentBody = await send(outerBody('--inner--'));
+        expect(sentBody).toBe(outerBody('--inner--', '\r\n'));
+        expect(parseParts(parseParts(sentBody)[0].value ?? '', 'inner')).toEqual([]);
+      });
+
+      it('keeps the remainder of a captured child closer opaque', async () => {
+        const epilogue =
+          'inner epilogue\n--outer\nContent-Disposition: form-data; name="injected"\n\nextra';
+        const sentBody = await send(
+          outerBody(innerBody('hello').replace('--inner--', '--in{{part.content}}')),
+          { part: { content: `ner--\n${epilogue}` } },
+        );
+        expect(sentBody).toBe(outerBody(innerBody('hello', '\r\n') + '\r\n' + epilogue, '\r\n'));
+        expect(() => parseParts(sentBody)).toThrow();
+      });
+
+      it('keeps a captured outer boundary lookalike opaque', async () => {
+        const headers = containerHeaders.replace('multipart/mixed; boundary=inner', 'text/plain');
+        const payload = 'first\n--outer\nContent-Disposition: form-data; name="injected"\n\nextra';
+        const sentBody = await send(outerBody('{{payload.text}}', '\n', headers), {
+          payload: { text: payload },
+        });
+        expect(sentBody).toBe(outerBody(payload, '\r\n', headers));
+        expect(() => parseParts(sentBody)).toThrow();
+      });
+
+      it('stops a captured header at its first blank despite a nested declaration', async () => {
+        const payload = innerBody('hello');
+        const sentBody = await send('--outer\n{{part.content}}\n--outer--\n', {
+          part: { content: `${containerHeaders}\n\n${payload}` },
+        });
+        expect(sentBody).toBe(outerBody(payload, '\r\n'));
+        expect(parseParts(sentBody)[0].value).toBe(payload);
+        expect(() => parseParts(payload, 'inner')).toThrow();
+      });
+
+      it('recognizes rendered nested headers and preserves a captured leaf header suffix', async () => {
+        const headers = containerHeaders.replace(
+          'multipart/mixed; boundary=inner',
+          '{{part.type}}',
+        );
+        const sentBody = await send(
+          outerBody('--inner\n{{part.content}}\n--inner--', '\n', headers),
+          {
+            part: {
+              type: 'multipart/mixed; boundary=inner',
+              content: `${leafHeaders}\n\n${mixedPayload}`,
+            },
+          },
+        );
+        expect(sentBody).toBe(outerBody(innerBody(mixedPayload, '\r\n'), '\r\n'));
+        expect(parseParts(parseParts(sentBody)[0].value ?? '', 'inner')[0].value).toBe(
+          mixedPayload,
+        );
+      });
+
+      it('completes an authored delimiter prefix in a declared child context', async () => {
+        const sentBody = await send(outerBody('--in{{part.content}}\n--inner--'), {
+          part: { content: `ner\n${leafHeaders}\n\n${mixedPayload}` },
+        });
+        expect(sentBody).toBe(outerBody(innerBody(mixedPayload, '\r\n'), '\r\n'));
+        expect(parseParts(parseParts(sentBody)[0].value ?? '', 'inner')[0].value).toBe(
+          mixedPayload,
+        );
+      });
+
+      it('restores the parent after a child closer and preserves its epilogue', async () => {
+        const epilogue = '\n inner epilogue\r\nkept \t';
+        const sibling =
+          'Content-Disposition: form-data; name="sibling"\nContent-Type: text/plain\n\nlast';
+        const source = outerBody(innerBody('hello') + epilogue).replace(
+          '--outer--',
+          `--outer\n${sibling}\n--outer--`,
+        );
+        const sentBody = await send(source);
+        expect(sentBody).toBe(
+          outerBody(innerBody('hello', '\r\n') + '\r\n' + epilogue.slice(1), '\r\n').replace(
+            '--outer--',
+            `--outer\r\n${sibling.split('\n').join('\r\n')}\r\n--outer--`,
+          ),
+        );
+        const outerParts = parseParts(sentBody);
+        expect(outerParts).toHaveLength(2);
+        expect(outerParts[1].value).toBe('last');
+        expect(parseParts(outerParts[0].value ?? '', 'inner')[0].value).toBe('hello');
+      });
+
+      it('tracks multiple declared nested boundaries', async () => {
+        const middleHeaders =
+          'Content-Disposition: attachment; filename="nested"\nContent-Type: multipart/mixed; boundary=deep';
+        const deepBody =
+          '--deep\nContent-Disposition: attachment; filename="leaf.txt"\n\nhello\n--deep--';
+        const nested = `--inner\n${middleHeaders}\n\n${deepBody}\n--inner--`;
+        const sentBody = await send(outerBody(nested));
+        expect(sentBody).toBe(outerBody(nested, '\n').split('\n').join('\r\n'));
+        const innerParts = parseParts(parseParts(sentBody)[0].value ?? '', 'inner');
+        expect(parseParts(innerParts[0].value ?? '', 'deep')[0].value).toBe('hello');
       });
     });
 
