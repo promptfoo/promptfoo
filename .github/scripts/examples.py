@@ -166,7 +166,8 @@ EXAMPLES = {
             ("../../.github/scripts/tests/google_adk", "test_litellm.py"),
         ),
         node=True,
-        extra_requirements=("litellm>=1.101,<2",),
+        # LiteLLM imports MCP types for ordinary function-tool completions too.
+        extra_requirements=("litellm[mcp]>=1.101,<2",),
     ),
 }
 
