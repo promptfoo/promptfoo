@@ -249,6 +249,10 @@ function renderRawRequestWithNunjucks(template: string, vars: Record<string, any
   // Protect literal Nunjucks syntax in the source by raw-wrapping
   // and then re-enabling only variable tags.
   const VAR_TOKEN = '__PF_VAR__';
+  const renderId = crypto.randomUUID().replaceAll('-', '');
+  const captureFilter = `__pf_capture_${renderId}`;
+  const valuePrefix = `__PF_RENDERED_${renderId}_`;
+  const values: string[] = [];
   let working = template;
 
   // 1) Temporarily replace all {{...}} occurrences with placeholders
@@ -264,12 +268,26 @@ function renderRawRequestWithNunjucks(template: string, vars: Record<string, any
   // 3) Re-enable variables by inserting endraw/raw around each placeholder
   working = working.replace(new RegExp(`${VAR_TOKEN}(\\d+)__`, 'g'), (_m, g1) => {
     const original = placeholders[Number(g1)];
-    return `{% endraw %}${original}{% raw %}`;
+    const [, open, expression, close] = original.match(/^(\{\{-?)([\s\S]*?)(-?\}\})$/)!;
+    return `{% endraw %}${open} (${expression}) | ${captureFilter} ${close}{% raw %}`;
   });
 
-  // 4) Render with Nunjucks normally
-  const nunjucks = getNunjucksEngine();
-  return nunjucks.renderString(working, vars);
+  // Capture each expression once, leaving its output opaque while multipart
+  // framing is normalized. Nunjucks still applies its normal whitespace controls.
+  const nunjucks = getNunjucksEngine({
+    [captureFilter]: (value: unknown) => {
+      const index = values.push(value == null ? '' : '' + value) - 1;
+      return `${valuePrefix}${index}__`;
+    },
+  });
+  const restore = (input: string) =>
+    input.replace(
+      new RegExp(`${valuePrefix}(\\d+)__`, 'g'),
+      (_match, index) => values[Number(index)],
+    );
+  const rendered = nunjucks.renderString(working, vars);
+  // One restoration pass leaves marker-like text inside injected values untouched.
+  return restore(normalizeMultipartRequestTemplate(rendered, restore));
 }
 
 // This function is used to encode the URL in the first line of a raw request
@@ -1249,6 +1267,58 @@ function getHeaderValue(
 function getMultipartBoundary(contentType: string): string | undefined {
   const boundaryMatch = contentType.match(/boundary=(?:"([^"]+)"|([^;]+))/i);
   return boundaryMatch?.[1] ?? boundaryMatch?.[2]?.trim();
+}
+
+function normalizeMultipartRequestTemplate(
+  template: string,
+  restore: (input: string) => string,
+): string {
+  const body = extractBodyFromRawRequest(template);
+  if (!body) {
+    return template;
+  }
+  const headers = template.slice(0, template.length - body.length);
+  const contentType = restore(headers).match(/^content-type:[ \t]*([^\r\n]*)/im)?.[1];
+  const boundary =
+    contentType && /^multipart\/form-data(?:\s*;|\s*$)/i.test(contentType)
+      ? getMultipartBoundary(contentType)
+      : undefined;
+  if (!boundary) {
+    return template;
+  }
+
+  // YAML block strings use LF. Captured values remain opaque so only authored
+  // framing is normalized; literal and injected part payloads keep their bytes.
+  const lines = body.split(/(?<=\n)/);
+  let inPartHeaders = false;
+  for (let index = 0; index < lines.length; index++) {
+    const line = lines[index];
+    const content = line.replace(/\r?\n$/, '');
+    const delimiter = content.startsWith('--')
+      ? restore(content).replace(/[ \t]+$/, '')
+      : undefined;
+    if (
+      delimiter &&
+      !/[\r\n]/.test(delimiter) &&
+      (delimiter === `--${boundary}` || delimiter === `--${boundary}--`)
+    ) {
+      if (index > 0) {
+        // The newline immediately before a boundary belongs to its framing.
+        lines[index - 1] = lines[index - 1].replace(/\r?\n$/, '\r\n');
+      }
+      lines[index] = line.replace(/\r?\n$/, '\r\n');
+      if (delimiter === `--${boundary}--`) {
+        break;
+      }
+      inPartHeaders = true;
+    } else if (inPartHeaders) {
+      lines[index] = line.replace(/\r?\n$/, '\r\n');
+      if (content === '') {
+        inPartHeaders = false;
+      }
+    }
+  }
+  return headers + lines.join('');
 }
 
 function sanitizeMultipartFallbackBody(body: string): string {

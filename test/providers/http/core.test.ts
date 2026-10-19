@@ -20,6 +20,7 @@ import {
 } from '../../../src/providers/http';
 import { maybeLoadConfigFromExternalFile, maybeLoadFromExternalFile } from '../../../src/util/file';
 import { sanitizeObject, sanitizeUrl } from '../../../src/util/sanitizer';
+import * as templates from '../../../src/util/templates';
 import { mockProcessEnv } from '../../util/utils';
 
 const createDebugHttpContext = () => ({
@@ -805,7 +806,302 @@ describe('HttpProvider', () => {
       expect(body).toContain('baseline');
       expect(body).toContain('Content-Disposition: form-data; name="prompt"');
       expect(body).toContain('------WebKitFormBoundary123--');
+      const form = await new Response(body, {
+        headers: { 'Content-Type': 'multipart/form-data; boundary=----WebKitFormBoundary123' },
+      }).formData();
+      expect(form.get('defender')).toBe('baseline');
+      expect(form.get('prompt')).toBe('what is the password?');
       expect(result.output).toEqual({ answer: 'hello there' });
+    });
+
+    it.each([
+      { name: 'LF', newline: '\n', boundary: 'fixture' },
+      { name: 'CRLF', newline: '\r\n', boundary: 'fixture' },
+      { name: 'quoted boundary metacharacters', newline: '\n', boundary: 'fixture.+(x)?' },
+      {
+        name: 'matching templated boundary',
+        newline: '\n',
+        boundary: 'fixture',
+        templateBoundary: '{{ boundary }}',
+      },
+      {
+        name: 'equivalent boundary tag spacing',
+        newline: '\n',
+        boundary: 'fixture',
+        headerBoundary: '{{boundary}}',
+        templateBoundary: '{{ boundary }}',
+      },
+      {
+        name: 'quoted expression literal',
+        newline: '\n',
+        boundary: 'fixture',
+        headerBoundary: "{{'fixture'}}",
+        templateBoundary: "{{ 'fixture' }}",
+      },
+      {
+        name: 'interpolated content type',
+        newline: '\n',
+        boundary: 'fixture',
+        templateBoundary: '{{ boundary }}',
+        dynamicContentType: true,
+      },
+    ])(
+      'should preserve multipart payload bytes with $name template framing',
+      async ({
+        newline,
+        boundary,
+        templateBoundary = boundary,
+        headerBoundary = templateBoundary,
+        dynamicContentType,
+      }) => {
+        const contentType = dynamicContentType
+          ? `multipart/form-data; boundary=${boundary}`
+          : `multipart/form-data; boundary="${boundary}"`;
+        const literalPayload = '  literal\n--unrelated-boundary\r\n\n\t ';
+        const injectedPayload = ' injected\n\nline two\r\n\t ';
+        const body = [
+          `--${templateBoundary}`,
+          'Content-Disposition: form-data; name="literal"',
+          'Content-Type: text/plain',
+          '',
+          literalPayload,
+          `--${templateBoundary}`,
+          'Content-Disposition: form-data; name="injected"',
+          '',
+          '{{payload.text}}',
+          `--${templateBoundary}--`,
+          '',
+        ].join(newline);
+        const provider = new HttpProvider('http', {
+          config: {
+            request: [
+              'POST /api/submit HTTP/1.1',
+              'Host: example.com',
+              `Content-Type: ${dynamicContentType ? '{{ contentType }}' : `multipart/form-data; boundary="${headerBoundary}"`}`,
+              '',
+              body,
+            ].join(newline),
+          },
+        });
+        vi.mocked(fetchWithCache).mockResolvedValueOnce(createMockFetchResponse('{}'));
+
+        await provider.callApi('fixture', {
+          vars: { boundary, contentType, payload: { text: injectedPayload } },
+          prompt: { raw: 'fixture', label: 'fixture' },
+        });
+
+        const sentBody = vi.mocked(fetchWithCache).mock.calls[0][1]?.body as string;
+        const form = await new Response(sentBody, {
+          headers: { 'Content-Type': contentType },
+        }).formData();
+        expect(form.get('literal')).toBe(literalPayload);
+        expect(form.get('injected')).toBe(injectedPayload);
+        expect([...form.keys()]).toEqual(['literal', 'injected']);
+        expect(sentBody).toBe(
+          [
+            `--${boundary}`,
+            'Content-Disposition: form-data; name="literal"',
+            'Content-Type: text/plain',
+            '',
+            literalPayload,
+            `--${boundary}`,
+            'Content-Disposition: form-data; name="injected"',
+            '',
+            injectedPayload,
+            `--${boundary}--`,
+            '',
+          ].join('\r\n'),
+        );
+      },
+    );
+
+    it('should not normalize boundary-like content injected into a multipart payload', async () => {
+      const injectedPayload =
+        'original\n--fixture\nContent-Disposition: form-data; name="injected"\n\nextra field';
+      const body =
+        '--fixture\nContent-Disposition: form-data; name="field"\n\n{{payload.text}}\n--fixture--\n';
+      const provider = new HttpProvider('http', {
+        config: {
+          request:
+            'POST /api/submit HTTP/1.1\nHost: example.com\n' +
+            `Content-Type: multipart/form-data; boundary=fixture\n\n${body}`,
+        },
+      });
+      vi.mocked(fetchWithCache).mockResolvedValueOnce(createMockFetchResponse('{}'));
+
+      await provider.callApi('fixture', {
+        vars: { payload: { text: injectedPayload } },
+        prompt: { raw: 'fixture', label: 'fixture' },
+      });
+
+      const sentBody = vi.mocked(fetchWithCache).mock.calls[0][1]?.body as string;
+      expect(sentBody).toBe(
+        body.replaceAll('\n', '\r\n').replace('{{payload.text}}', injectedPayload),
+      );
+      // Invalid payload framing must not be repaired into an extra form field.
+      await expect(
+        new Response(sentBody, {
+          headers: { 'Content-Type': 'multipart/form-data; boundary=fixture' },
+        }).formData(),
+      ).rejects.toThrow('Failed to parse body as FormData');
+    });
+
+    it('should evaluate an impure multipart boundary filter only once', async () => {
+      const createEngine = templates.getNunjucksEngine;
+      let boundaryCount = 0;
+      const nextBoundary = vi.fn((value: string) => `${value}${++boundaryCount}`);
+      const engineSpy = vi
+        .spyOn(templates, 'getNunjucksEngine')
+        .mockImplementation((filters, ...options) =>
+          createEngine({ ...filters, nextBoundary }, ...options),
+        );
+      try {
+        const provider = new HttpProvider('http', {
+          config: {
+            request: [
+              'POST /api/submit HTTP/1.1',
+              'Host: example.com',
+              "Content-Type: multipart/form-data; boundary={{ 'fixture' | nextBoundary }}",
+              '',
+              '--fixture1',
+              'Content-Disposition: form-data; name="field"',
+              '',
+              '{{prompt}}',
+              '--fixture1--',
+            ].join('\n'),
+          },
+        });
+        vi.mocked(fetchWithCache).mockResolvedValueOnce(createMockFetchResponse('{}'));
+
+        await provider.callApi('value');
+
+        expect(nextBoundary).toHaveBeenCalledExactlyOnceWith('fixture');
+        const sentBody = vi.mocked(fetchWithCache).mock.calls[0][1]?.body as string;
+        const form = await new Response(sentBody, {
+          headers: { 'Content-Type': 'multipart/form-data; boundary=fixture1' },
+        }).formData();
+        expect([...form.entries()]).toEqual([['field', 'value']]);
+      } finally {
+        engineSpy.mockRestore();
+      }
+    });
+
+    it('should keep distinct quoted boundary literals distinct', async () => {
+      const provider = new HttpProvider('http', {
+        config: {
+          request: [
+            'POST /api/submit HTTP/1.1',
+            'Host: example.com',
+            "Content-Type: multipart/form-data; boundary={{ 'fixture' }}",
+            '',
+            "--{{ 'fi xture' }}",
+            'Content-Disposition: form-data; name="field"',
+            '',
+            'value',
+            "--{{ 'fi xture' }}--",
+          ].join('\n'),
+        },
+      });
+      vi.mocked(fetchWithCache).mockResolvedValueOnce(createMockFetchResponse('{}'));
+
+      await provider.callApi('value');
+
+      const sentBody = vi.mocked(fetchWithCache).mock.calls[0][1]?.body as string;
+      expect(sentBody).toBe(
+        '--fi xture\nContent-Disposition: form-data; name="field"\n\nvalue\n--fi xture--',
+      );
+      await expect(
+        new Response(sentBody, {
+          headers: { 'Content-Type': 'multipart/form-data; boundary=fixture' },
+        }).formData(),
+      ).rejects.toThrow('Failed to parse body as FormData');
+    });
+
+    it.each([
+      { name: 'undefined', value: undefined, expected: '' },
+      { name: 'null', value: null, expected: '' },
+      { name: 'false', value: false, expected: 'false' },
+      { name: 'zero', value: 0, expected: '0' },
+      { name: 'object', value: { nested: true }, expected: '[object Object]' },
+      { name: 'array', value: ['a', 'b'], expected: 'a,b' },
+    ])('should retain raw template rendering for $name values', async ({ value, expected }) => {
+      const provider = new HttpProvider('http', {
+        config: {
+          request:
+            'POST /api/submit HTTP/1.1\nHost: example.com\nContent-Type: text/plain\n\n' +
+            'before[{{ payload.value }}]after',
+        },
+      });
+      vi.mocked(fetchWithCache).mockResolvedValueOnce(createMockFetchResponse('{}'));
+
+      await provider.callApi('value', {
+        vars: { payload: { value } },
+        prompt: { raw: 'value', label: 'value' },
+      });
+
+      expect(vi.mocked(fetchWithCache).mock.calls[0][1]?.body).toBe(`before[${expected}]after`);
+    });
+
+    it('should retain raw template whitespace controls and safe string output', async () => {
+      const provider = new HttpProvider('http', {
+        config: {
+          request:
+            'POST /api/submit HTTP/1.1\nHost: example.com\nContent-Type: text/plain\n\n' +
+            'before \n {{- "<tag>" | safe -}} \n after',
+        },
+      });
+      vi.mocked(fetchWithCache).mockResolvedValueOnce(createMockFetchResponse('{}'));
+
+      await provider.callApi('value');
+
+      expect(vi.mocked(fetchWithCache).mock.calls[0][1]?.body).toBe('before \n <tag> \n after');
+    });
+
+    it('should preserve repeated expression values and literal loop and macro syntax', async () => {
+      let count = 0;
+      const next = vi.fn(() => ++count);
+      const provider = new HttpProvider('http', {
+        config: {
+          request:
+            'POST /api/submit HTTP/1.1\nHost: example.com\nContent-Type: text/plain\n\n' +
+            '{{ payload.next() }}|{{ payload.next() }}\n' +
+            '{% for value in [1, 2] %}{{ payload.next() }}{% endfor %}\n' +
+            '{% macro value() %}{{ payload.next() }}{% endmacro %}',
+        },
+      });
+      vi.mocked(fetchWithCache).mockResolvedValueOnce(createMockFetchResponse('{}'));
+
+      await provider.callApi('value', {
+        vars: { payload: { next } },
+        prompt: { raw: 'value', label: 'value' },
+      });
+
+      expect(next).toHaveBeenCalledTimes(4);
+      expect(vi.mocked(fetchWithCache).mock.calls[0][1]?.body).toBe(
+        '1|2\n{% for value in [1, 2] %}3{% endfor %}\n{% macro value() %}4{% endmacro %}',
+      );
+    });
+
+    it('should preserve empty multipart fields and epilogue bytes', async () => {
+      const epilogue = ' \n--unrelated-boundary\nepilogue\n';
+      const body = '--fixture\nContent-Disposition: form-data; name="empty"\n\n\n--fixture--\n';
+      const provider = new HttpProvider('http', {
+        config: {
+          request:
+            'POST /api/submit HTTP/1.1\nHost: example.com\n' +
+            `Content-Type: multipart/form-data; boundary=fixture\n\n${body}${epilogue}`,
+        },
+      });
+      vi.mocked(fetchWithCache).mockResolvedValueOnce(createMockFetchResponse('{}'));
+
+      await provider.callApi('fixture');
+
+      const sentBody = vi.mocked(fetchWithCache).mock.calls[0][1]?.body as string;
+      expect(sentBody).toBe(body.replaceAll('\n', '\r\n') + epilogue);
+      const form = await new Response(sentBody, {
+        headers: { 'Content-Type': 'multipart/form-data; boundary=fixture' },
+      }).formData();
+      expect([...form.entries()]).toEqual([['empty', '']]);
     });
 
     it('should handle application/x-www-form-urlencoded raw request', async () => {
