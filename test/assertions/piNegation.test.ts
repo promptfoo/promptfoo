@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { runAssertion } from '../../src/assertions/index';
 import { fetchWithCache } from '../../src/cache';
 import { createMockFetchResponse } from '../providers/mockProviderResponses';
+import { mockProcessEnv } from '../util/utils';
 
 import type { Assertion } from '../../src/types/index';
 
@@ -28,12 +29,14 @@ async function grade(type: Assertion['type'], threshold?: number) {
   });
 }
 
+let restoreEnv: () => void;
+
 beforeEach(() => {
-  vi.stubEnv('WITHPI_API_KEY', 'test-key');
+  restoreEnv = mockProcessEnv({ WITHPI_API_KEY: 'test-key' });
 });
 
 afterEach(() => {
-  vi.unstubAllEnvs();
+  restoreEnv();
   vi.resetAllMocks();
 });
 
@@ -56,8 +59,30 @@ describe('pi negation through assertion dispatch', () => {
     });
   });
 
-  it('does not turn a scoring error into a pass', async () => {
-    vi.mocked(fetchWithCache).mockRejectedValue(new Error('connect ECONNREFUSED'));
+  it.each([
+    {
+      name: 'a network failure',
+      mock: () => vi.mocked(fetchWithCache).mockRejectedValue(new Error('connect ECONNREFUSED')),
+    },
+    {
+      name: 'an HTTP error response',
+      mock: () =>
+        vi
+          .mocked(fetchWithCache)
+          .mockResolvedValue(
+            createMockFetchResponse(
+              { detail: 'Invalid API key' },
+              { status: 401, statusText: 'Unauthorized' },
+            ),
+          ),
+    },
+    {
+      name: 'a response without a numeric score',
+      mock: () =>
+        vi.mocked(fetchWithCache).mockResolvedValue(createMockFetchResponse({ total_score: null })),
+    },
+  ])('does not turn $name into a pass', async ({ mock }) => {
+    mock();
 
     for (const type of ['pi', 'not-pi'] as const) {
       await expect(grade(type)).rejects.toThrow('Could not perform remote grading');

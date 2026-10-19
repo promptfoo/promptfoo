@@ -49,7 +49,7 @@ export async function doRemoteScoringWithPi(
     if (apiKey) {
       const body = JSON.stringify(payload);
       logger.debug(`Performing remote scoring with pi: ${body}`);
-      const { data } = await fetchWithCache<WithPiGradingResult>(
+      const { data, status, statusText } = await fetchWithCache<WithPiGradingResult>(
         WITHPI_API_URL,
         {
           method: 'POST',
@@ -61,6 +61,13 @@ export async function doRemoteScoringWithPi(
         },
         getRequestTimeoutMs(),
       );
+      // An error body or a malformed score must not reach a verdict that not-pi would invert.
+      if (status !== 200) {
+        throw new Error(`Pi scoring failed with status ${status}: ${statusText}`);
+      }
+      if (!Number.isFinite(data?.total_score)) {
+        throw new Error('Pi scoring response has no numeric total_score');
+      }
       return convertPiResultToGradingResult(data, passThreshold);
     } else {
       throw new Error(
