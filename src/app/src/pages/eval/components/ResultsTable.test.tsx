@@ -1593,6 +1593,32 @@ describe('ResultsTable Row Navigation', () => {
     );
   });
 
+  it.each(['', '&rowId=invalid'])(
+    'resets pagination for an incoming searched details hash without a usable rowId (%s)',
+    async (rowQuery) => {
+      // Keep the result count unchanged: a changed count independently resets pagination.
+      const mockFetchEvalData = setupDeepLinkedTable('/?search=Weather&rowId=51', vi.fn(), 120);
+      const { rerender } = renderWithProviders(
+        <ResultsTable {...defaultProps} debouncedSearchText="Weather" />,
+      );
+      await waitFor(createNextPageExpectation(mockFetchEvalData));
+      mockFetchEvalData.mockClear();
+
+      const url = `/?search=next${rowQuery}#details-row-1-prompt-1`;
+      window.history.pushState({}, '', url);
+      rerender(<ResultsTable {...defaultProps} debouncedSearchText="next" />);
+
+      await waitFor(() => {
+        expect(mockFetchEvalData).toHaveBeenLastCalledWith(
+          '123',
+          expect.objectContaining({ pageIndex: 0, searchText: 'next' }),
+        );
+      });
+      expect(window.location.search + window.location.hash).toBe(url.slice(1));
+      expect(mockNavigate).not.toHaveBeenCalled();
+    },
+  );
+
   // Regression test: the details hash encodes a row's GLOBAL test index, while
   // pagination operates on filtered-table positions. When a filter or search is active
   // and only the hash is present (no `rowId`), the global index must NOT be used to
