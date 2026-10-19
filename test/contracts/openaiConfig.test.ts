@@ -537,6 +537,29 @@ describe('OpenAI portable configuration contracts', () => {
 });
 
 describe('shared input definitions', () => {
+  it('preserves input-type and placement relationships in inferred authoring types', () => {
+    type PortableInputs = z.input<typeof InputsInputSchema>;
+    const valid: PortableInputs = {
+      prompt: {
+        description: 'question',
+        type: 'docx',
+        config: { injectionPlacements: ['comment'] },
+      },
+    };
+    expect(InputsInputSchema.parse(valid)).toEqual(valid);
+    const invalid = {
+      prompt: {
+        description: 'question',
+        type: 'pdf',
+        config: { injectionPlacements: ['comment'] },
+      },
+    };
+    expectTypeOf<{
+      prompt: { description: string; type: 'pdf'; config: { injectionPlacements: ['comment'] } };
+    }>().not.toExtend<PortableInputs>();
+    expect(InputsInputSchema.safeParse(invalid).success).toBe(false);
+  });
+
   const validate = new Ajv({ strict: false }).compile(
     z.toJSONSchema(InputsInputSchema, {
       target: 'draft-07',
