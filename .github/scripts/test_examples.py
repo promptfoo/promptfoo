@@ -456,16 +456,104 @@ class RunnerTests(unittest.TestCase):
                 self.assertEqual(command[4], "test_*.py")
             self.assertTrue(all(call.kwargs["check"] for call in run.call_args_list))
 
-    def test_docker_pull_or_tag_failure_stops_before_example_tests(self):
-        for operation in ("pull", "tag"):
+    def test_throttled_mirror_falls_back_to_same_digest_and_runs_both_suites(self):
+        def throttle_ecr(command, **_kwargs):
+            if command[:2] == ("docker", "pull") and command[2].startswith(
+                "public.ecr.aws/"
+            ):
+                raise subprocess.CalledProcessError(
+                    1, command, stderr="toomanyrequests: Data limit exceeded\n"
+                )
+            return subprocess.CompletedProcess(command, 0, stderr="")
 
-            def fail_docker(command, operation=operation, **_kwargs):
-                if command[:2] == ("docker", operation):
-                    raise subprocess.CalledProcessError(1, command)
+        with (
+            patch(
+                "examples.sys.version_info", types.SimpleNamespace(major=3, minor=10)
+            ),
+            patch("examples.Path.is_file", return_value=True),
+            patch("examples.venv.EnvBuilder.create"),
+            patch("examples.subprocess.run", side_effect=throttle_ecr) as run,
+            patch("examples.time.sleep") as sleep,
+        ):
+            run_example("docker-sandbox")
+        commands = [invocation.args[0] for invocation in run.call_args_list]
+        pulls = [command for command in commands if command[:2] == ("docker", "pull")]
+        self.assertEqual(len(pulls), 5)
+        self.assertEqual(pulls[:4], [pulls[0]] * 4)
+        digest = pulls[0][2].split("@sha256:")[1]
+        self.assertEqual(pulls[4][2], f"docker.io/library/python@sha256:{digest}")
+        self.assertIn(("docker", "tag", pulls[4][2], "python:3.9-alpine"), commands)
+        self.assertEqual(
+            [
+                command[-1]
+                for command in commands
+                if command[1:3] == (str(SCRIPT), "test")
+            ],
+            ["test_*.py", "test_*.py"],
+        )
+        self.assertEqual(
+            sleep.call_args_list, [mock_call(10), mock_call(30), mock_call(60)]
+        )
+
+    def test_failed_fallback_stops_before_tagging_or_example_execution(self):
+        for fallback_error, expected_pulls in (
+            ("toomanyrequests: Data limit exceeded", 8),
+            ("manifest unknown", 5),
+        ):
+
+            def fail_pull(command, fallback_error=fallback_error, **_kwargs):
+                if command[:2] == ("docker", "pull"):
+                    stderr = (
+                        "toomanyrequests: Data limit exceeded"
+                        if command[2].startswith("public.ecr.aws/")
+                        else fallback_error
+                    )
+                    raise subprocess.CalledProcessError(1, command, stderr=stderr)
                 return subprocess.CompletedProcess(command, 0, stderr="")
 
             with (
-                self.subTest(operation=operation),
+                self.subTest(fallback_error=fallback_error),
+                patch(
+                    "examples.sys.version_info",
+                    types.SimpleNamespace(major=3, minor=10),
+                ),
+                patch("examples.Path.is_file", return_value=True),
+                patch("examples.venv.EnvBuilder.create"),
+                patch("examples.subprocess.run", side_effect=fail_pull) as run,
+                patch("examples.time.sleep"),
+                self.assertRaises(subprocess.CalledProcessError) as raised,
+            ):
+                run_example("docker-sandbox")
+            commands = [invocation.args[0] for invocation in run.call_args_list]
+            self.assertEqual(len(commands), 2 + expected_pulls)
+            self.assertEqual(raised.exception.stderr, fallback_error)
+            self.assertTrue(
+                raised.exception.cmd[2].startswith("docker.io/library/python@sha256:")
+            )
+            self.assertFalse(
+                any(command[:2] == ("docker", "tag") for command in commands)
+            )
+            self.assertFalse(
+                any(command[1:3] == (str(SCRIPT), "test") for command in commands)
+            )
+
+    def test_docker_pull_or_tag_failure_stops_before_example_tests(self):
+        for operation, stderr in itertools.product(
+            ("pull", "tag"),
+            (None, "manifest unknown", "unauthorized: authentication required"),
+        ):
+
+            def fail_docker(
+                command, operation=operation, failure_stderr=stderr, **_kwargs
+            ):
+                if command[:2] == ("docker", operation):
+                    raise subprocess.CalledProcessError(
+                        1, command, stderr=failure_stderr
+                    )
+                return subprocess.CompletedProcess(command, 0, stderr="")
+
+            with (
+                self.subTest(operation=operation, stderr=stderr),
                 patch(
                     "examples.sys.version_info",
                     types.SimpleNamespace(major=3, minor=10),
@@ -478,6 +566,9 @@ class RunnerTests(unittest.TestCase):
                 run_example("docker-sandbox")
             commands = [call.args[0] for call in run.call_args_list]
             self.assertEqual(commands[-1][:2], ("docker", operation))
+            self.assertEqual(
+                sum(command[:2] == ("docker", "pull") for command in commands), 1
+            )
             self.assertFalse(
                 any(command[1:3] == (str(SCRIPT), "test") for command in commands)
             )
