@@ -1169,13 +1169,24 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         : message.tool_calls;
       // Callback output replaces the model's calls with text. Retain the original
       // ordinary calls for schema assertions, including unknown/unprocessed calls.
+      // Legacy stays first so execution indexes still identify the routed calls,
+      // while modern calls emitted alongside it remain available for validation.
+      const emittedCalls = [
+        ...(message.function_call ? [message.function_call] : []),
+        ...(Array.isArray(message.tool_calls)
+          ? message.tool_calls
+          : message.tool_calls == null
+            ? []
+            : [undefined]), // A malformed container must not become a valid singleton call.
+      ];
       const functionToolCalls =
         Array.isArray(functionCalls) && (config.functionToolCallbacks || this.mcpClient)
-          ? functionCalls.map((call: any) => {
-              const payload = message.function_call ? call : call?.function;
+          ? emittedCalls.map((call: any, index) => {
+              const legacy = !!message.function_call && index === 0;
+              const payload = legacy ? call : call?.function;
               return {
-                ...(!message.function_call && call?.id !== undefined ? { id: call.id } : {}),
-                type: message.function_call ? 'function' : call?.type,
+                ...(!legacy && call?.id !== undefined ? { id: call.id } : {}),
+                type: legacy ? 'function' : call?.type,
                 function: { name: payload?.name, arguments: payload?.arguments },
               };
             })

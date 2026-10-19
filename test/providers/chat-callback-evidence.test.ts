@@ -61,9 +61,11 @@ describe.each(['openai', 'azure'] as const)('%s ordinary callback evidence', (fa
     return callbacks;
   };
 
-  const respond = (calls: unknown[]) => {
+  const respond = (calls: unknown, legacy?: unknown) => {
     vi.mocked(fetchWithCache).mockResolvedValueOnce(
-      createMockFetchResponse({ choices: [{ message: { content: null, tool_calls: calls } }] }),
+      createMockFetchResponse({
+        choices: [{ message: { content: null, tool_calls: calls, function_call: legacy } }],
+      }),
     );
   };
 
@@ -194,38 +196,186 @@ describe.each(['openai', 'azure'] as const)('%s ordinary callback evidence', (fa
     await expectVerdicts(response, family === 'openai');
   });
 
-  it('keeps supplemental private arguments out of stripped exports and conversation metadata', async () => {
+  const modern = (args: unknown = valid, type: unknown = 'function') => ({
+    id: 'shared-id',
+    type,
+    function: { name: 'alternate', arguments: args },
+  });
+  it.each([
+    { label: 'schema-invalid modern arguments', calls: [modern(invalid)], args: [invalid] },
+    {
+      label: 'malformed modern JSON',
+      calls: [modern('{private-invalid')],
+      args: ['{private-invalid'],
+    },
+    { label: 'nonstring modern arguments', calls: [modern({ count: 1 })], args: [{ count: 1 }] },
+    { label: 'unsupported modern type', calls: [modern(valid, 'custom')], args: [] },
+    { label: 'missing modern type', calls: [{ function: modern().function }], args: [] },
+    { label: 'null modern entry', calls: [null], args: [] },
+    {
+      label: 'later invalid modern call with a reused ID',
+      calls: [modern(), modern(invalid)],
+      args: [valid, invalid],
+    },
+    { label: 'all valid calls', calls: [modern()], args: [valid], pass: true },
+    { label: 'invalid legacy arguments', calls: [modern()], args: [valid], legacyArgs: invalid },
+  ])('retains both legacy and $label', async ({ calls, args, pass, legacyArgs = valid }) => {
     const callbacks = createProvider();
-    respond([{ type: 'function', name: 'regular', arguments: invalid, function: wrapped() }]);
-    const conversations: EvalConversations = {};
+    const legacy = wrapped(legacyArgs);
+    respond(calls, legacy);
 
-    const [result] = await runEval({
-      provider,
-      prompt: { raw: 'Count', label: 'Callback privacy' },
-      test: { assert: [{ type: 'not-is-valid-openai-tools-call' }] },
-      delay: 0,
-      testIdx: 0,
-      promptIdx: 0,
-      repeatIndex: 0,
-      isRedteam: false,
-      conversations,
-      registers: {},
+    const response = await provider.callApi('Count');
+
+    expect(callbacks.regular).toHaveBeenCalledOnce();
+    expect(callbacks.regular.mock.calls[0][0]).toBe(legacyArgs);
+    expect(callbacks.alternate.mock.calls.map(([value]) => value)).toEqual(
+      family === 'openai' ? [] : args,
+    );
+    if (family === 'openai') {
+      expect(response.output).toBe('Done');
+    }
+    await expectVerdicts(response, !!pass);
+    const retainedModern = calls.map((call) => ({
+      ...(call && 'id' in call ? { id: call.id } : {}),
+      type: call && 'type' in call ? call.type : undefined,
+      function: { name: call?.function.name, arguments: call?.function.arguments },
+    }));
+    const retainedLegacy = { type: 'function', function: legacy };
+    expect(response.metadata?.functionToolCalls).toEqual(
+      family === 'openai'
+        ? [retainedLegacy, ...retainedModern]
+        : [...retainedModern, retainedLegacy],
+    );
+  });
+
+  if (family === 'openai') {
+    it.each([modern(), 'invalid container', 1, false])(
+      'retains invalid non-array modern containers beside a legacy call: %j',
+      async (calls) => {
+        const callbacks = createProvider();
+        respond(calls, wrapped());
+        const response = await provider.callApi('Count');
+
+        expect(callbacks.regular.mock.calls[0][0]).toBe(valid);
+        expect(callbacks.alternate).not.toHaveBeenCalled();
+        expect(response.output).toBe('Done');
+        await expectVerdicts(response, false);
+        expect(response.metadata?.functionToolCalls).toHaveLength(2);
+      },
+    );
+
+    it.each([{ calls: undefined }, { calls: null }, { calls: [] }])(
+      'keeps absent modern calls absent: %j',
+      async ({ calls }) => {
+        const callbacks = createProvider();
+        respond(calls, wrapped());
+        const response = await provider.callApi('Count');
+
+        expect(callbacks.regular.mock.calls[0][0]).toBe(valid);
+        expect(response.metadata?.functionToolCalls).toEqual([
+          { type: 'function', function: wrapped() },
+        ]);
+        await expectVerdicts(response, true);
+      },
+    );
+
+    it('retains modern evidence when the legacy callback throws', async () => {
+      const callbacks = createProvider();
+      callbacks.regular.mockRejectedValue(new Error('Callback unavailable'));
+      respond([modern(invalid)], wrapped());
+      const response = await provider.callApi('Count');
+
+      expect(callbacks.regular.mock.calls[0][0]).toBe(valid);
+      expect(callbacks.alternate).not.toHaveBeenCalled();
+      expect(response.output).toEqual(wrapped());
+      await expectVerdicts(response, false);
     });
 
-    expect(callbacks.regular.mock.calls[0][0]).toBe(invalid);
-    expect(result.success).toBe(true);
-    expect(JSON.stringify(result.gradingResult)).not.toContain('private-invalid');
-    const turns = Object.values(conversations).flat();
-    expect(turns).toHaveLength(1);
-    expect(JSON.stringify(turns)).not.toContain('private-invalid');
-    expect(turns[0].metadata).not.toHaveProperty('functionToolCalls');
-    for (const strip of [false, true]) {
-      const projected = sanitizeResultForJsonlArtifact(
-        result,
-        getStripFlags({ PROMPTFOO_STRIP_RESPONSE_OUTPUT: String(strip) }),
+    it.each([valid, invalid])(
+      'retains a same-name modern call after legacy MCP execution: %s',
+      async (args) => {
+        const callbacks = createProvider();
+        const mcp = {
+          getAllTools: vi.fn().mockReturnValue([{ name: 'regular' }]),
+          callTool: vi.fn().mockResolvedValue({ content: 'Executed legacy' }),
+          cleanup: vi.fn().mockResolvedValue(undefined),
+        };
+        (provider as any).mcpClient = mcp;
+        const call = { id: 'shared-id', type: 'function', function: wrapped(args) };
+        respond([call], { ...wrapped(), id: 'shared-id' });
+        const response = await provider.callApi('Count');
+
+        expect(mcp.callTool).toHaveBeenCalledExactlyOnceWith('regular', { count: 1 }, undefined);
+        expect(callbacks.regular).not.toHaveBeenCalled();
+        expect(response.metadata?.functionToolCalls).toEqual([call]);
+        await expectVerdicts(response, args === valid);
+      },
+    );
+
+    it.each([null, false, ''])(
+      'preserves modern MCP indexes with absent legacy %j',
+      async (legacy) => {
+        createProvider();
+        const mcp = {
+          getAllTools: vi.fn().mockReturnValue([{ name: 'regular' }]),
+          callTool: vi.fn().mockResolvedValue({ content: 'Executed modern' }),
+          cleanup: vi.fn().mockResolvedValue(undefined),
+        };
+        (provider as any).mcpClient = mcp;
+        respond([{ type: 'function', function: wrapped() }], legacy);
+        const response = await provider.callApi('Count');
+
+        expect(mcp.callTool).toHaveBeenCalledExactlyOnceWith('regular', { count: 1 }, undefined);
+        expect(response.metadata?.functionToolCalls).toEqual([]);
+        await expectVerdicts(response, true);
+      },
+    );
+  }
+
+  it.each(['routed', 'dual'] as const)(
+    'keeps private %s arguments out of stripped exports and conversation metadata',
+    async (shape) => {
+      const callbacks = createProvider();
+      respond(
+        [
+          shape === 'dual'
+            ? { type: 'function', function: wrapped(invalid) }
+            : { type: 'function', name: 'regular', arguments: invalid, function: wrapped() },
+        ],
+        shape === 'dual' ? wrapped() : undefined,
       );
-      expect(projected.success).toBe(true);
-      expect(JSON.stringify(projected).includes('private-invalid')).toBe(!strip);
-    }
-  });
+      const conversations: EvalConversations = {};
+
+      const [result] = await runEval({
+        provider,
+        prompt: { raw: 'Count', label: 'Callback privacy' },
+        test: { assert: [{ type: 'not-is-valid-openai-tools-call' }] },
+        delay: 0,
+        testIdx: 0,
+        promptIdx: 0,
+        repeatIndex: 0,
+        isRedteam: false,
+        conversations,
+        registers: {},
+      });
+
+      expect(callbacks.regular.mock.calls[0][0]).toBe(
+        shape === 'dual' && family === 'openai' ? valid : invalid,
+      );
+      expect(result.success).toBe(true);
+      expect(JSON.stringify(result.gradingResult)).not.toContain('private-invalid');
+      const turns = Object.values(conversations).flat();
+      expect(turns).toHaveLength(1);
+      expect(JSON.stringify(turns)).not.toContain('private-invalid');
+      expect(turns[0].metadata).not.toHaveProperty('functionToolCalls');
+      for (const strip of [false, true]) {
+        const projected = sanitizeResultForJsonlArtifact(
+          result,
+          getStripFlags({ PROMPTFOO_STRIP_RESPONSE_OUTPUT: String(strip) }),
+        );
+        expect(projected.success).toBe(true);
+        expect(JSON.stringify(projected).includes('private-invalid')).toBe(!strip);
+      }
+    },
+  );
 });
