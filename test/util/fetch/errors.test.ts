@@ -263,6 +263,22 @@ describe('extractRateLimitErrorCode', () => {
     ).toBe('credit_balance_exhausted');
   });
 
+  it('reads a definitive billing code from gateway metadata', () => {
+    expect(
+      extractRateLimitErrorCode({
+        error: { metadata: { provider_code: 'credit_balance_exhausted' } },
+      }),
+    ).toBe('credit_balance_exhausted');
+    expect(
+      extractRateLimitErrorCode({
+        error: {
+          code: 'rate_limit_exceeded',
+          metadata: { provider_code: 'credit_balance_exhausted' },
+        },
+      }),
+    ).toBe('credit_balance_exhausted');
+  });
+
   it('keeps error.code when error.type is also present', () => {
     expect(
       extractRateLimitErrorCode({

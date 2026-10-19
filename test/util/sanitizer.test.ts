@@ -1,11 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+  isCredentialHeader,
   isSecretEnvVarName,
   looksLikeSecret,
   preserveTracingCredentialReferences,
   redactAzureBlobSasTokens,
   restoreAzureBlobSasTokens,
   sanitizeBody,
+  sanitizeConfigForOutput,
   sanitizeHeaders,
   sanitizeObject,
   sanitizeQueryParams,
@@ -14,6 +16,7 @@ import {
   sanitizeUrl,
   sanitizeUrlEncodedString,
   sanitizeUrlForLogging,
+  stripProviderPromptSelectors,
 } from '../../src/util/sanitizer';
 
 let consoleErrorSpy: ReturnType<typeof vi.spyOn>;
@@ -38,6 +41,135 @@ describe('sanitizeRuntimeOptions', () => {
         providerFilter: 'selected-target',
       }),
     ).toEqual({ providerFilter: 'selected-target' });
+  });
+});
+
+function headerCaseVariants(name: string): Set<string> {
+  const mixed = name.replace(/[a-z]/gi, (letter, index) =>
+    index % 2 === 0 ? letter.toLowerCase() : letter.toUpperCase(),
+  );
+  return new Set([
+    name,
+    name.toLowerCase(),
+    name.toUpperCase(),
+    mixed,
+    mixed.replace(/key$/i, 'Key'),
+  ]);
+}
+
+describe('isCredentialHeader', () => {
+  it.each([
+    'Ocp-Apim-Subscription-Key',
+    'ocp-apim-subscription-key',
+    'X-Subscription-Key',
+    'subscription_key',
+    'subscriptionKey',
+    'OcpApimSubscriptionKey',
+    'X-Functions-Key',
+    'X-Arbitrary-Vendor-Key',
+    'arbitraryVendorKey',
+    'X-Session',
+    'x-session',
+    'X-Session-Id',
+    'X-SessionId',
+    'xSession',
+    'xsession',
+    'XSESSION',
+    'xSeSsIoN',
+    'vendorSession',
+    'vendorSessionId',
+    'vendorsessionid',
+    'VENDORSESSIONID',
+    'vEnDoRsEsSiOnId',
+    'vendor_session_id',
+    'X-Session-Access',
+    'vendorSessionAccess',
+    'vendorsessionaccess',
+    'VENDORSESSIONACCESS',
+    'vEnDoRsEsSiOnAcCeSs',
+    'X-Gateway-Authentication',
+    'X-Gateway-Token',
+    'X-Gateway-Cookie',
+    'GatewayToken',
+    'GatewayTokenV2',
+    'GatewayAuthentication',
+    'GatewaySecret',
+    'GatewayPassword',
+    'GatewayCredentials',
+    'GatewayCookie',
+    'GatewayApiKeyV2',
+    'X-Goog-Iap-Jwt-Assertion',
+    'GatewayJwtV2',
+    '_oauth2_proxy',
+  ])('recognizes credential headers under %s regardless of value shape', (name) => {
+    for (const variant of headerCaseVariants(name)) {
+      expect(isCredentialHeader(variant, 'short'), variant).toBe(true);
+      expect(isCredentialHeader(variant, '9be880e3-e5dc-4be7-8739-a4b587fdfb13'), variant).toBe(
+        true,
+      );
+    }
+  });
+
+  it.each([
+    'X-Subscription-Id',
+    'X-Subscription-Tier',
+    'X-Subscription-Region',
+    'X-Correlation-Id',
+    'Idempotency-Key',
+    'Cache-Key',
+    'X-Routing-Key',
+    'X-Partition-Key',
+    'X-Public-Key',
+    'Sec-WebSocket-Key',
+    'idempotencyKey',
+    'xPublicKey',
+    'secWebSocketKey',
+    'X-Session-Timeout',
+    'X-Session-Type',
+    'X-Session-Mode',
+    'X-Session-Id-Mode',
+    'xsessiontimeout',
+    'XSESSIONTYPE',
+    'xSeSsIoNmOdE',
+    'vendorsessionidmode',
+    'VENDORSESSIONACCESSMODE',
+    'vEnDoRsEsSiOnAcCeSsMoDe',
+    'vendorSessionTimeout',
+    'vendorSessionType',
+    'vendorSessionMode',
+    'X-Access-Region',
+    'X-Session-Access-Mode',
+  ])('preserves ordinary metadata under %s', (name) => {
+    for (const variant of headerCaseVariants(name)) {
+      expect(isCredentialHeader(variant, 'us'), variant).toBe(false);
+      expect(isCredentialHeader(variant, '0123456789abcdef0123456789abcdef'), variant).toBe(false);
+      expect(isCredentialHeader(variant, '9be880e3-e5dc-4be7-8739-a4b587fdfb13'), variant).toBe(
+        false,
+      );
+    }
+  });
+  // HTTP cannot distinguish Monkey/MonKey or Author/AuthOr; credential inference is conservative.
+  it.each(['X-Monkey', 'X-MonKey', 'x-monkey', 'X-MONKEY', 'X-Author', 'X-AuthOr', 'x-author'])(
+    'treats ambiguous credential name %s consistently',
+    (name) => {
+      expect(isCredentialHeader(name, 'short')).toBe(true);
+    },
+  );
+});
+
+describe('credential values under public key-role headers', () => {
+  it.each([
+    'Idempotency-Key',
+    'Cache-Key',
+    'X-Routing-Key',
+    'X-Partition-Key',
+    'X-Public-Key',
+    'Sec-WebSocket-Key',
+  ])('still detects credential value evidence under %s', (name) => {
+    for (const variant of headerCaseVariants(name)) {
+      expect(isCredentialHeader(variant, 'Bearer short-credential'), variant).toBe(true);
+      expect(isCredentialHeader(variant, 'sk-abcdefghijklmnopqrstuvw'), variant).toBe(true);
+    }
   });
 });
 
@@ -66,6 +198,395 @@ describe('looksLikeSecret', () => {
 
     expect(looksLikeSecret(value)).toBe(true);
     expect(looksLikeSecret(`${value}.`)).toBe(false);
+  });
+});
+
+describe('stripProviderPromptSelectors', () => {
+  it.each([
+    {},
+    {
+      label: 'ordinary map label',
+      config: { prompts: ['ordinary map configuration'] },
+      prompts: ['ordinary map setting'],
+    },
+  ])('projects only known grading slots in mixed type maps: %s', (metadata) => {
+    const provider = {
+      id: 'echo',
+      prompts: ['ordinary selector'],
+      config: { prompts: ['ordinary provider payload'] },
+    };
+    const application = { prompts: ['ordinary application payload'] };
+    const map = {
+      text: provider,
+      embedding: 'echo',
+      classification: provider,
+      moderation: provider,
+      application,
+      ...metadata,
+    };
+    const projected = stripProviderPromptSelectors(map);
+    const expectedProvider = { id: 'echo', config: provider.config };
+    expect(projected).toEqual({
+      ...map,
+      text: expectedProvider,
+      classification: expectedProvider,
+      moderation: expectedProvider,
+    });
+    expect(projected.application).toBe(application);
+    expect(map.text).toBe(provider);
+    expect(provider.prompts).toEqual(['ordinary selector']);
+  });
+
+  it.each([{ value: 'echo' }, { value: null }, { value: ['echo'] }])(
+    'preserves a provider serializer non-record result: $value',
+    ({ value }) => {
+      const provider = { id: () => 'echo', toJSON: () => value };
+      expect(stripProviderPromptSelectors(provider)).toEqual(value);
+    },
+  );
+
+  it('uses canonical failure output for a provider serializer error', () => {
+    const error = new Error('Ordinary serialization failure');
+    const provider = {
+      id: () => 'echo',
+      runtimeOnly: 'ordinary working state',
+      toJSON: () => {
+        throw error;
+      },
+    };
+    expect(stripProviderPromptSelectors(provider)).toBe(
+      '[unable to serialize, circular reference is too complex to analyze]',
+    );
+    expect(provider.runtimeOnly).toBe('ordinary working state');
+  });
+});
+
+describe('sanitizeConfigForOutput', () => {
+  it.each([
+    { prompts: 'private literal' },
+    { prompts: ['private literal'] },
+    { prompts: [{ raw: 'private literal', label: 'public label' }] },
+    { prompts: { 'private literal': 'public label' } },
+  ])('omits config prompt sources when prompt stripping is enabled: $prompts', (config) => {
+    expect(
+      sanitizeConfigForOutput(config, { shouldStripPromptText: true }).prompts,
+    ).toBeUndefined();
+    expect(sanitizeConfigForOutput(config, { shouldStripPromptText: false }).prompts).toEqual(
+      config.prompts,
+    );
+    expect(JSON.stringify(config)).toContain('private literal');
+  });
+
+  it.each([
+    { providers: { id: 'echo', prompts: ['ordinary selector'] } },
+    { providers: [{ id: 'echo', prompts: ['ordinary selector'] }] },
+    { providers: [{ echo: { prompts: ['ordinary selector'] } }] },
+    { providers: [{ id: () => 'echo', callApi: vi.fn(), prompts: ['ordinary selector'] }] },
+  ])('omits provider selectors only from prompt-redacted config: $providers', (config) => {
+    // A top-level runtime provider is serialized as a single options object too.
+    const providerPromptMap = { echo: ['ordinary selector'] };
+    const input = {
+      ...(config as Parameters<typeof sanitizeConfigForOutput>[0]),
+      providerPromptMap,
+      metadata: { prompts: ['ordinary metadata'] },
+    };
+    const stripped = sanitizeConfigForOutput(input, { shouldStripPromptText: true });
+    expect(JSON.stringify(stripped)).not.toContain('ordinary selector');
+    expect(stripped.metadata).toEqual(input.metadata);
+    expect(stripped).not.toHaveProperty('providerPromptMap');
+    expect(sanitizeConfigForOutput(input)).toMatchObject({ providerPromptMap });
+    expect(input.providerPromptMap).toEqual(providerPromptMap);
+    expect(JSON.stringify(sanitizeConfigForOutput(input))).toContain('ordinary selector');
+    expect(JSON.stringify(input)).toContain('ordinary selector');
+  });
+
+  it.each([true, false])('projects nested provider selectors in config (strip: %s)', (strip) => {
+    const provider = {
+      id: 'echo',
+      prompts: ['ordinary nested selector'],
+      config: { prompts: ['ordinary provider configuration'] },
+    };
+    const test = {
+      provider,
+      options: {
+        provider: {
+          text: provider,
+          embedding: provider,
+          label: 'ordinary map label',
+          config: { prompts: ['ordinary map configuration'] },
+          application: { prompts: ['ordinary application payload'] },
+        },
+      },
+      assert: [
+        {
+          type: 'assert-set' as const,
+          assert: [{ type: 'equals' as const, value: 'ok', provider }],
+        },
+      ],
+      metadata: { prompts: ['ordinary metadata'] },
+    };
+    const config = {
+      tests: [test],
+      defaultTest: test,
+      scenarios: [{ config: [test], tests: [test] }],
+    };
+    const before = structuredClone(config);
+    const output = sanitizeConfigForOutput(config, { shouldStripPromptText: strip });
+
+    expect(JSON.stringify(output).includes('ordinary nested selector')).toBe(!strip);
+    const projectedTest = {
+      metadata: test.metadata,
+      provider: { config: provider.config },
+      options: {
+        provider: {
+          text: { config: provider.config },
+          label: 'ordinary map label',
+          config: { prompts: ['ordinary map configuration'] },
+          application: { prompts: ['ordinary application payload'] },
+        },
+      },
+    };
+    expect(output).toMatchObject({
+      tests: [projectedTest],
+      defaultTest: projectedTest,
+      scenarios: [{ config: [projectedTest], tests: [projectedTest] }],
+    });
+    expect(config).toEqual(before);
+  });
+
+  it.each([true, false])(
+    'projects live grading maps before output serialization (strip: %s)',
+    (strip) => {
+      const provider = {
+        id: () => 'echo',
+        callApi: vi.fn(),
+        prompts: ['ordinary live selector'],
+        config: { prompts: ['ordinary provider payload'] },
+      };
+      const application = { prompts: ['ordinary application payload'] };
+      const map = {
+        text: provider,
+        embedding: provider,
+        classification: provider,
+        moderation: provider,
+        label: 'ordinary map label',
+        config: { prompts: ['ordinary map configuration'] },
+        prompts: ['ordinary map setting'],
+        application,
+      };
+      const test = {
+        options: { provider: map },
+        assert: [
+          { type: 'assert-set' as const, assert: [{ type: 'equals' as const, provider: map }] },
+        ],
+      };
+      const config = {
+        tests: [test],
+        defaultTest: test,
+        scenarios: [{ config: [test], tests: [test] }],
+      };
+      const before = JSON.stringify(config);
+      const projectedProvider = {
+        config: provider.config,
+        ...(!strip && { prompts: provider.prompts }),
+      };
+      const projectedMap = {
+        ...map,
+        text: projectedProvider,
+        embedding: projectedProvider,
+        classification: projectedProvider,
+        moderation: projectedProvider,
+      };
+      const projectedTest = {
+        options: { provider: projectedMap },
+        assert: [{ type: 'assert-set', assert: [{ type: 'equals', provider: projectedMap }] }],
+      };
+
+      expect(sanitizeConfigForOutput(config, { shouldStripPromptText: strip })).toEqual({
+        tests: [projectedTest],
+        defaultTest: projectedTest,
+        scenarios: [{ config: [projectedTest], tests: [projectedTest] }],
+      });
+      expect(JSON.stringify(config)).toBe(before);
+      expect(map.text).toBe(provider);
+      expect(map.application).toBe(application);
+      expect(provider.id()).toBe('echo');
+      expect(provider.callApi).not.toHaveBeenCalled();
+    },
+  );
+
+  it('preserves application prompts on serialized provider options without selectors', () => {
+    const provider = { label: 'grader', config: { prompts: ['ordinary application payload'] } };
+    // A persisted runtime provider can have no id after its method is serialized away.
+    const config = { defaultTest: { options: { provider } } } as Parameters<
+      typeof sanitizeConfigForOutput
+    >[0];
+    const output = sanitizeConfigForOutput(config, { shouldStripPromptText: true });
+    expect(output.defaultTest).toEqual({ options: { provider } });
+    expect(config.defaultTest).toEqual({ options: { provider } });
+  });
+
+  it('preserves the local replay directory even when it resembles an opaque token', () => {
+    const basePath = `/home/${'nested/'.repeat(15)}project`;
+    expect(sanitizeConfigForOutput({ basePath }).basePath).toBe(basePath);
+  });
+
+  it.each([false, true])(
+    'preserves imported provider origins in every test location (strip metadata: %s)',
+    (stripMetadata) => {
+      const providerBasePath = `/home/${'nested/'.repeat(15)}project/tests`;
+      const test = {
+        provider: 'python:provider.py',
+        metadata: { note: 'private-note', __promptfoo: { providerBasePath } },
+      };
+      const config = {
+        tests: [test],
+        defaultTest: test,
+        scenarios: [{ config: [test], tests: [test] }],
+      };
+      const output = sanitizeConfigForOutput(config, { shouldStripMetadata: stripMetadata });
+      const expected = {
+        ...test,
+        metadata: {
+          ...(!stripMetadata && { note: 'private-note' }),
+          __promptfoo: { providerBasePath },
+        },
+      };
+      expect(output.tests).toEqual([expected]);
+      expect(output.defaultTest).toEqual(expected);
+      expect(output.scenarios).toEqual([{ config: [expected], tests: [expected] }]);
+      expect(config.tests[0].metadata.note).toBe('private-note');
+      expect(sanitizeObject(providerBasePath)).toBe('[REDACTED]');
+    },
+  );
+
+  it('keeps redaction and remote safety for untrusted origin metadata', () => {
+    const secret = `sk-${'a'.repeat(32)}`;
+    const remotePath = `/home/${'nested/'.repeat(15)}remote`;
+    const config = {
+      tests: [
+        { metadata: { apiKey: secret, __promptfoo: { providerBasePath: secret } } },
+        { metadata: { __promptfoo: { remote: true, providerBasePath: remotePath } } },
+      ],
+    };
+    const output = sanitizeConfigForOutput(config);
+    expect(JSON.stringify(output)).not.toContain(secret);
+    expect(JSON.stringify(output)).not.toContain(remotePath);
+    const stripped = sanitizeConfigForOutput(config, { shouldStripMetadata: true });
+    expect(Array.isArray(stripped.tests) && stripped.tests[1]).toEqual({
+      metadata: { __promptfoo: { remote: true } },
+    });
+  });
+
+  it('limits general URL redaction to config output, preserving saved test inputs', () => {
+    const url = 'https://cdn.example/doc?X-Amz-Signature=short-secret&q=hello world';
+    const vars = { image: url, noteUrl: 'see https://shop.example/?token=abc for details' };
+    expect(sanitizeObject(vars)).toEqual(vars);
+    expect(sanitizeObject(url)).toBe(url);
+    expect(sanitizeObject({ url }).url).not.toContain('short-secret');
+    const output = sanitizeConfigForOutput({ tests: [{ vars }] });
+    expect(JSON.stringify(output)).not.toContain('short-secret');
+    expect(vars.image).toBe(url);
+  });
+
+  it('keeps distinct URL map entries when their redacted keys collide', () => {
+    const redacted = 'https://example.com/?token=%5BREDACTED%5D';
+    const values = {
+      'https://example.com/?token=first-private-value': 'first',
+      'https://example.com/?token=second-private-value': 'second',
+      [redacted]: 'original',
+      [redacted + '#1']: 'original-fragment',
+    };
+    const output = sanitizeObject(values, { sanitizeUrls: true });
+    expect(Object.values(output).sort()).toEqual(Object.values(values).sort());
+    expect(output[redacted]).toBe('original');
+    expect(output[redacted + '#1']).toBe('original-fragment');
+    expect(JSON.stringify(output)).not.toContain('private-value');
+  });
+
+  it.each([
+    [
+      'https://alice:first-private-value@gw.example',
+      'https://alice:second-private-value@gw.example',
+    ],
+    ['http://a b?apiKey=first-private-value', 'http://c d?apiKey=second-private-value'],
+  ])('keeps colliding userinfo or malformed URL keys: %s', (a, b) => {
+    const output = sanitizeConfigForOutput({
+      providers: [{ [a]: { label: 'first' }, [b]: { label: 'second' } }],
+    });
+    expect(Array.isArray(output.providers) && Object.values(output.providers[0])).toEqual([
+      { label: 'first' },
+      { label: 'second' },
+    ]);
+    expect(JSON.stringify(output)).not.toContain('private-value');
+  });
+
+  it('strips saved test data while preserving remote-row safety and local replay data', () => {
+    const test = {
+      vars: { input: 'private test vars' },
+      metadata: { note: 'private metadata', __promptfoo: { remote: true } },
+      providerOutput: 'private recorded output',
+      assert: [{ type: 'equals' as const, value: 'answer' }],
+    };
+    const config = {
+      tests: [test],
+      defaultTest: test,
+      scenarios: [{ config: [test], tests: [test] }],
+    };
+    const output = sanitizeConfigForOutput(config, {
+      shouldStripTestVars: true,
+      shouldStripMetadata: true,
+      shouldStripResponseOutput: true,
+    });
+    expect(JSON.stringify(output)).not.toContain('private');
+    expect(output.tests).toEqual([
+      { metadata: { __promptfoo: { remote: true } }, assert: test.assert },
+    ]);
+    expect(config.tests[0]).toBe(test);
+    expect(config.tests[0].vars.input).toBe('private test vars');
+  });
+
+  it.each(['https', 'http', 'ws', 'wss'])(
+    'redacts credentials in %s provider IDs and map keys without changing safe IDs',
+    (scheme) => {
+      const url = `${scheme}://gateway.example/v1?tenantClientSecret=short-value`;
+      const safeUrl = 'HTTPS://Safe.Example/v1?oauth=true&useSession=false&sameSiteCookie=lax';
+      const config = { providers: [url, { id: url }, { [url]: {} }, { id: safeUrl }] };
+      const output = sanitizeConfigForOutput(config);
+      expect(output.providers).toEqual([
+        `${scheme}://gateway.example/v1?tenantClientSecret=%5BREDACTED%5D`,
+        { id: `${scheme}://gateway.example/v1?tenantClientSecret=%5BREDACTED%5D` },
+        { [`${scheme}://gateway.example/v1?tenantClientSecret=%5BREDACTED%5D`]: {} },
+        { id: safeUrl },
+      ]);
+      expect(JSON.stringify(output)).not.toContain('short-value');
+      expect(JSON.stringify(config)).toContain('short-value');
+    },
+  );
+
+  it('retains safe tracing env aliases while removing their literal source credential', () => {
+    const config = {
+      env: {
+        LANGFUSE_SECRET_KEY: '{{ env.ACTUAL_SECRET }}',
+        ACTUAL_SECRET: 'private-value',
+      },
+      tracing: {
+        enabled: true,
+        provider: {
+          id: 'langfuse' as const,
+          endpoint: 'https://cloud.langfuse.com',
+          auth: { username: 'public-key', password: '{{ env.LANGFUSE_SECRET_KEY }}' },
+        },
+      },
+    };
+    const output = sanitizeConfigForOutput(config);
+    expect(output.env).toEqual({ LANGFUSE_SECRET_KEY: '{{ env.ACTUAL_SECRET }}' });
+    expect(output.tracing?.provider?.auth).toEqual({
+      username: 'public-key',
+      password: '{{ env.LANGFUSE_SECRET_KEY }}',
+    });
+    expect(JSON.stringify(output)).not.toContain('private-value');
+    expect(config.env.ACTUAL_SECRET).toBe('private-value');
   });
 });
 
@@ -262,6 +783,79 @@ describe('isSecretEnvVarName', () => {
 
 describe('sanitizeObject', () => {
   describe('environment variable maps', () => {
+    it.each([
+      'url',
+      'apiBaseUrl',
+      'gatewayUrl',
+      'baseUrl',
+      'endpoint',
+      'apiHost',
+      'HTTPS_PROXY',
+      'MONGODB_URI',
+    ])('redacts URL credentials in %s', (key) => {
+      for (const value of [
+        'https://user:short-password@host/v1?token=short-token',
+        '/api?token=short-token',
+      ]) {
+        const input = { [key]: value };
+        const result = sanitizeObject(input, { sanitizeUrls: true });
+        const envResult = sanitizeObject({ env: input }, { sanitizeUrls: true });
+        expect(JSON.stringify([result, envResult])).not.toContain('short-password');
+        expect(JSON.stringify([result, envResult])).not.toContain('short-token');
+        expect(input[key]).toBe(value);
+      }
+    });
+
+    it.each([
+      'http://localhost:1975',
+      'HTTPS://GW.Example.COM/v1',
+      'https://gw.example/v1?design=blue&assignment=a1',
+      '127.0.0.1:11434',
+      'my-resource.openai.azure.com/openai',
+      '{{ env.GATEWAY_URL }}',
+    ])('preserves non-secret URL field %s without warnings', (value) => {
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      try {
+        const input = { apiBaseUrl: value, env: { OLLAMA_BASE_URL: value } };
+        expect(sanitizeObject(input)).toEqual(input);
+        expect(warn).not.toHaveBeenCalled();
+      } finally {
+        warn.mockRestore();
+      }
+    });
+
+    it.each([
+      { api_key: 'short-secret' },
+      { baseUrl: 'https://gw.example/v1', api_key: 'short-secret' },
+    ])('redacts JSON-shaped URL values %j', (data) => {
+      const value = JSON.stringify(data);
+      const result = sanitizeObject({ url: value, apiBaseUrl: value, env: { GATEWAY_URL: value } });
+      for (const sanitized of [result.url, result.apiBaseUrl, result.env.GATEWAY_URL]) {
+        expect(JSON.parse(sanitized)).toEqual({ ...data, api_key: '[REDACTED]' });
+      }
+    });
+
+    it('redacts credentials in gateway URLs without changing the runtime config', () => {
+      const url = 'https://gateway-user:gateway-password@gateway.example/v1?token=short-secret';
+      const config = {
+        env: { ENVOY_API_BASE_URL: url, SECRET_URL: url },
+        providers: [{ config: { apiBaseUrl: url } }],
+      };
+
+      const result = sanitizeObject(config, {
+        maxDepth: Number.POSITIVE_INFINITY,
+        sanitizeUrls: true,
+      });
+
+      expect(result.env.ENVOY_API_BASE_URL).toBe(
+        'https://***:***@gateway.example/v1?token=%5BREDACTED%5D',
+      );
+      expect(result.env.SECRET_URL).toBe('[REDACTED]');
+      expect(result.providers[0].config.apiBaseUrl).toBe(result.env.ENVOY_API_BASE_URL);
+      expect(config.env.ENVOY_API_BASE_URL).toBe(url);
+      expect(config.providers[0].config.apiBaseUrl).toBe(url);
+    });
+
     it('redacts credential-named variables inside an env map', () => {
       // Regression: `env` is handed verbatim to a subprocess, so it is where a config
       // legitimately carries credentials. Exact-name matching against SECRET_FIELD_NAMES
@@ -370,6 +964,21 @@ describe('sanitizeObject', () => {
       expect(parsed).toEqual({ password: '[REDACTED]', data: 'public' });
     });
 
+    it('redacts a JSON-encoded secret string', () => {
+      const secret = 'sk-proj-abcdefghijklmnopqrstuvwxyz1234567890';
+      expect(sanitizeObject(JSON.stringify(secret))).toBe('"[REDACTED]"');
+    });
+
+    it('bounds nested JSON-encoded string sanitization', () => {
+      const nested = Array.from({ length: 10 }, () => '"').reduce(
+        (value) => JSON.stringify(value),
+        'sk-proj-abcdefghijklmnopqrstuvwxyz1234567890',
+      );
+      const sanitized = sanitizeObject(nested, { maxDepth: 3 });
+      expect(sanitized).not.toContain('sk-proj-');
+      expect(sanitized).toContain('[REDACTED]');
+    });
+
     it('should return invalid JSON strings unchanged', () => {
       const invalidJson = '{invalid json}';
       expect(sanitizeObject(invalidJson)).toBe(invalidJson);
@@ -441,6 +1050,64 @@ describe('sanitizeObject', () => {
           'inline test case',
           'az://account/container/b.yaml?sp=r&sig=secret-b',
           'az://account/container/a.yaml?sp=r&sig=secret-a',
+        ],
+      });
+    });
+
+    it.each(['strings', 'objects', 'nested'])(
+      'preserves unchanged ambiguous SAS %s arrays',
+      (shape) => {
+        const uris = [
+          'az://account/container/a.yaml?sp=r&sig=secret-a',
+          'az://account/container/a.yaml?sp=r&sig=secret-b',
+        ];
+        const stored = {
+          tests:
+            shape === 'strings'
+              ? uris
+              : uris.map((uri, index) =>
+                  shape === 'objects'
+                    ? { label: String(index), uri }
+                    : { label: String(index), files: [uri] },
+                ),
+        };
+        expect(restoreAzureBlobSasTokens(redactAzureBlobSasTokens(stored), stored)).toEqual(stored);
+      },
+    );
+
+    it('does not restore ambiguous nested SAS tokens after their parent entries change', () => {
+      const stored = {
+        tests: [
+          { label: 'first', files: ['az://account/container/a.yaml?sp=r&sig=secret-a'] },
+          { label: 'second', files: ['az://account/container/a.yaml?sp=r&sig=secret-b'] },
+        ],
+      };
+      const incoming = redactAzureBlobSasTokens({ tests: [...stored.tests].reverse() });
+      expect(restoreAzureBlobSasTokens(incoming, stored)).toEqual(incoming);
+    });
+
+    it('does not restore ambiguous signatures for the same Azure Blob URI', () => {
+      const redacted = 'az://account/container/a.yaml?sp=r&sig=%5BREDACTED%5D';
+      const stored = {
+        tests: [
+          { label: 'first', uri: 'az://account/container/a.yaml?sp=r&sig=secret-a' },
+          { label: 'second', uri: 'az://account/container/a.yaml?sp=r&sig=secret-b' },
+        ],
+      };
+      expect(
+        restoreAzureBlobSasTokens(
+          {
+            tests: [
+              { label: 'second', uri: redacted },
+              { label: 'first', uri: redacted },
+            ],
+          },
+          stored,
+        ),
+      ).toEqual({
+        tests: [
+          { label: 'second', uri: redacted },
+          { label: 'first', uri: redacted },
         ],
       });
     });
@@ -1309,7 +1976,17 @@ describe('sanitizeObject', () => {
       });
 
       const result = sanitizeObject(input, { throwOnError: false });
-      expect(result).toEqual(input);
+      expect(result).toBe('[REDACTED]');
+    });
+
+    it('does not return raw input when an enumerable getter throws', () => {
+      const input = {
+        password: 'secret-value',
+        get broken() {
+          throw new Error('Getter failed');
+        },
+      };
+      expect(sanitizeObject(input)).toBe('[REDACTED]');
     });
 
     it('should throw errors when throwOnError is true', () => {
@@ -1848,6 +2525,204 @@ describe('legacy sanitizer aliases', () => {
 });
 
 describe('sanitizeUrl', () => {
+  describe('subscription-key parameters', () => {
+    it.each([
+      'subscription-key',
+      'subscription_key',
+      'SUBSCRIPTION-KEY',
+      'subscriptionKey',
+      'Ocp-Apim-Subscription-Key',
+      'OcpApimSubscriptionKey',
+      'subscription%2Dkey',
+      '%73ubscription-key',
+      'Ocp%2DApim%2DSubscription%2DKey',
+    ])('redacts %s in form bodies and diagnostic URLs', (key) => {
+      for (const credential of ['short', '0123456789abcdef0123456789abcdef']) {
+        const pair = `${key}=${credential}`;
+        expect(sanitizeUrlEncodedString(`tenant=public&${pair}`)).toBe(
+          `tenant=public&${key}=%5BREDACTED%5D`,
+        );
+        const url = `https://gateway.example/v1?tenant=public&${pair}`;
+        for (const sanitized of [sanitizeUrl(url), sanitizeUrlForLogging(url)]) {
+          const params = new URL(sanitized).searchParams;
+          expect(params.get(decodeURIComponent(key))).toBe('[REDACTED]');
+          expect(params.get('tenant')).toBe('public');
+        }
+        expect(sanitizeUrlForLogging(`http://[::1?${pair}`)).toBe('[REDACTED]');
+      }
+    });
+
+    it('redacts percent-encoded subscription credential values', () => {
+      const pair = 'subscription-key=%30%31%32%33%34%35%36%37%38%39abcdef0123456789abcdef';
+      expect(sanitizeUrlEncodedString(pair)).toBe('subscription-key=%5BREDACTED%5D');
+      expect(sanitizeUrlForLogging(`https://gateway.example/v1?${pair}`)).toBe(
+        'https://gateway.example/v1?subscription-key=%5BREDACTED%5D',
+      );
+    });
+
+    it('preserves subscription metadata and public key roles', () => {
+      const query =
+        'subscription_id=tenant-a&subscription_type=basic&subscriptionEnabled=true&subscriptionKeyType=header&subscriptionKeyEnabled=true&includeSubscriptionKey=false&publicKey=0123456789abcdef0123456789abcdef&idempotencyKey=request-123';
+      const url = `https://gateway.example/v1?${query}`;
+      expect(sanitizeUrlEncodedString(query)).toBe(query);
+      expect(sanitizeUrl(url)).toBe(url);
+      expect(sanitizeUrlForLogging(url)).toBe(url);
+    });
+
+    it('preserves pure subscription-key templates while redacting adjacent literal credentials', () => {
+      const template = 'subscription-key={{ env.GATEWAY_SUBSCRIPTION_KEY }}';
+      expect(sanitizeUrlEncodedString(template)).toBe(template);
+      const url = `https://gateway.example/{{ path }}?${template}`;
+      expect(sanitizeUrl(url)).toBe(url);
+      expect(sanitizeUrlEncodedString(`${template}&subscriptionKey=short`)).toBe(
+        `${template}&subscriptionKey=%5BREDACTED%5D`,
+      );
+      expect(sanitizeUrlEncodedString('subscription-key=literal{{ suffix }}')).toBe(
+        'subscription-key=%5BREDACTED%5D',
+      );
+    });
+  });
+
+  it.each([
+    'api_key_2',
+    'apikey1',
+    'apikeyv2',
+    'apiKey2Value',
+    'apiKeyV2Value',
+    'tenantClientSecret2Value',
+    'tenant_client_secret_v2_value',
+    'apiKeyForTenant',
+    'tenantApiKeyV2',
+    'user_api_key_2',
+    'tokenValue',
+    'tokenvalue',
+    'clientsecretvalue',
+    'passwordhash',
+    'passwordencrypted',
+    'authToken2',
+    'secretKeyValue',
+    'passwordHash',
+    'password1',
+    'passwordEncrypted',
+    'signatureValue',
+    'sigValue',
+  ])('redacts credential parameter %s with a trailing qualifier', (key) => {
+    const pair = `${key}=abc`;
+    expect(sanitizeUrl(`https://gateway.example/?${pair}`)).toContain('%5BREDACTED%5D');
+    expect(sanitizeUrlEncodedString(pair)).toBe(`${key}=%5BREDACTED%5D`);
+  });
+
+  it('redacts credential URLs inside JSON query and form values', () => {
+    const value = JSON.stringify({
+      endpoint: 'https://inner.example/?tenantClientSecret=short-value',
+      redirect: '/callback?access_token=short-value',
+      alternatives: ['/callback#access_token=short-value'],
+      '/callback?access_token=short-value': 'public',
+      path: '/some benign path',
+    });
+    const pair = `payload=${encodeURIComponent(value)}`;
+    for (const result of [
+      sanitizeUrl(`https://outer.example/?${pair}`),
+      sanitizeUrlEncodedString(pair),
+    ]) {
+      const payload = new URLSearchParams(result.split('?').pop()).get('payload');
+      expect(JSON.parse(payload!).endpoint).toBe(
+        'https://inner.example/?tenantClientSecret=%5BREDACTED%5D',
+      );
+      expect(JSON.parse(payload!)).toMatchObject({
+        redirect: '/callback?access_token=%5BREDACTED%5D',
+        alternatives: ['/callback#access_token=%5BREDACTED%5D'],
+        '/callback?access_token=%5BREDACTED%5D': 'public',
+        path: '/some benign path',
+      });
+    }
+  });
+
+  it('preserves tokenizer settings and pagination cursors in form bodies', () => {
+    const body =
+      'stop_token=###&eos_token=</s>&pageToken=CAESBk1vcmU&nextPageToken=abc&MAX_TOKEN=4096';
+    expect(sanitizeUrlEncodedString(body)).toBe(body);
+    expect(sanitizeObject({ body }).body).toBe(body);
+    expect(sanitizeUrlEncodedString('access_token=short-secret&refresh_token=short-secret')).toBe(
+      'access_token=%5BREDACTED%5D&refresh_token=%5BREDACTED%5D',
+    );
+  });
+
+  it.each(['https://gateway.example/v1', '/v1'])(
+    'redacts JSON credentials in query parameters of %s',
+    (base) => {
+      const payload = encodeURIComponent(JSON.stringify({ auth: { password: 'short-secret' } }));
+      expect(sanitizeUrl(`${base}?payload=${payload}`)).toBe(
+        `${base}?payload=${encodeURIComponent(JSON.stringify({ auth: '[REDACTED]' }))}`,
+      );
+      const safe = `${base}?filter=${encodeURIComponent('{ "limit": 10 }')}`;
+      expect(sanitizeUrl(safe)).toBe(safe);
+    },
+  );
+
+  it.each(['auth[tenantClientSecret]', 'auth%5BtenantClientSecret%5D'])(
+    'redacts bracketed parameter %s in URLs and templates',
+    (key) => {
+      for (const prefix of ['https://gateway.example/v1', '/v1', '{{ base }}/v1']) {
+        const result = sanitizeUrl(`${prefix}?${key}=short-value`);
+        expect(result).not.toContain('short-value');
+        expect(result).toContain('%5BREDACTED%5D');
+      }
+    },
+  );
+
+  it.each([
+    'googleApiKey',
+    'customer_api_key',
+    'vendor-api-key',
+    'databasePassword',
+    'googleAccessToken',
+    'tenantClientSecret',
+    'tenantSignature',
+    'tenantAuthorization',
+    'vendorSessionId',
+    'vendorPrivateKey',
+    'vendorAccessKeyId',
+  ])('redacts short credentials in the namespaced %s parameter', (key) => {
+    const value = 'short-credential';
+    const encoded = `${key}=${value}`;
+    expect(new URL(sanitizeUrl(`https://example.com/?${encoded}`)).searchParams.get(key)).toBe(
+      '[REDACTED]',
+    );
+    expect(sanitizeUrl(`/api?${encoded}`)).toBe(`/api?${key}=%5BREDACTED%5D`);
+    expect(sanitizeUrl(`invalid url?${encoded}`)).toBe('[REDACTED]');
+    expect(sanitizeUrl(`{{ base }}/api?${encoded}`)).toBe(`{{ base }}/api?${key}=%5BREDACTED%5D`);
+    expect(sanitizeUrl(`https://example.com/#${encoded}`)).toBe(
+      `https://example.com/#${key}=%5BREDACTED%5D`,
+    );
+  });
+
+  it('preserves query names that describe limits or key metadata', () => {
+    const url =
+      'HTTPS://Safe.Example?tokens_available=10&monkey=yes&api_key_version=2&googleApiKeys=3&signatureVersion=2&tokenizer=bpe&secretsEnabled=true&authType=oauth&oauth=true&useSession=false&sameSiteCookie=lax';
+    expect(sanitizeUrl(url)).toBe(url);
+  });
+
+  it('preserves boolean request controls while redacting credential values', () => {
+    const controls =
+      'includeCredentials=false&requireAuthorization=true&with_credentials=false&includecredentials=false&IncludeCredentials=true';
+    for (const base of ['https://example.com/?', '/api?', '{{ base }}/api?', 'invalid url?']) {
+      expect(sanitizeUrl(base + controls)).toBe(base + controls);
+    }
+    expect(sanitizeUrl('https://example.com/#' + controls)).toBe(
+      'https://example.com/#' + controls,
+    );
+    expect(sanitizeUrl('https://example.com/?includeCredentials=short-private-value')).toContain(
+      'includeCredentials=%5BREDACTED%5D',
+    );
+    expect(sanitizeUrl('https://example.com/?authorization=false')).toContain(
+      'authorization=%5BREDACTED%5D',
+    );
+    expect(sanitizeUrl('https://example.com/?includeCredentials[password]=false')).toContain(
+      'includeCredentials%5Bpassword%5D=%5BREDACTED%5D',
+    );
+  });
+
   describe('invalid inputs', () => {
     it('should handle non-string inputs', () => {
       expect(sanitizeUrl(null as any)).toBeNull();
@@ -1951,8 +2826,11 @@ describe('sanitizeUrl', () => {
       expect(sanitizeUrl(url)).toBe('{{ api_base }}/api?token=%5BREDACTED%5D&user_id=42');
     });
 
-    it('should fail closed for templated URLs with userinfo credentials', () => {
-      const url = 'https://user:pass@{{ host }}/api';
+    it.each([
+      'https://user:pass@{{ host }}/api',
+      'https://short-api-key@gateway.example/{{ vars.path }}',
+      'wss://short-api-key@{{ host }}/api',
+    ])('should fail closed for templated URLs with userinfo credentials: %s', (url) => {
       expect(sanitizeUrl(url)).toBe('[REDACTED]');
     });
 
@@ -1988,7 +2866,7 @@ describe('sanitizeUrl', () => {
     it('should handle empty username/password', () => {
       const url = 'https://:@example.com/api';
       const result = sanitizeUrl(url);
-      expect(result).toBe('https://example.com/api');
+      expect(result).toBe(url);
     });
 
     it('should preserve URL without auth', () => {
@@ -2306,11 +3184,10 @@ describe('sanitizeUrl', () => {
       );
     });
 
-    it('should sanitize parameters containing sensitive words', () => {
+    it('redacts credential words without matching plural non-secret fields', () => {
       const url = 'https://example.com/api?tokens_available=100&secret_santa=john';
       const result = sanitizeUrl(url);
-      // The regex in sanitizeUrl is broad and matches substrings, so these will be redacted
-      expect(result).toContain('tokens_available=%5BREDACTED%5D');
+      expect(result).toContain('tokens_available=100');
       expect(result).toContain('secret_santa=%5BREDACTED%5D');
     });
   });
@@ -2367,15 +3244,7 @@ describe('sanitizeUrl', () => {
       const result = sanitizeUrl(invalidUrl);
       // No credential indicators, so the original is preserved for debuggability.
       expect(result).toBe(invalidUrl);
-      expect(consoleWarnSpy).toHaveBeenCalled();
-    });
-
-    it('should log warning on URL parsing failure', () => {
-      const invalidUrl = 'totally-invalid-url';
-      sanitizeUrl(invalidUrl);
-      expect(consoleWarnSpy).toHaveBeenCalledWith(
-        expect.stringContaining('Failed to sanitize URL'),
-      );
+      expect(consoleWarnSpy).not.toHaveBeenCalled();
     });
   });
 });

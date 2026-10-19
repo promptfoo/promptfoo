@@ -1,6 +1,6 @@
 # integration-vercel/ai-gateway (Vercel AI Gateway Example)
 
-This example demonstrates how to use [Vercel AI Gateway](https://vercel.com/docs/ai-sdk/ai-gateway) to access multiple AI providers through a unified API.
+This example demonstrates how to use [Vercel AI Gateway](https://vercel.com/docs/ai-gateway) to access multiple AI providers through a unified API.
 
 ## Prerequisites
 
@@ -36,7 +36,7 @@ The configuration compares responses from three different providers, all accesse
 - **Anthropic** (claude-haiku-4.5)
 - **Google** (gemini-2.5-flash)
 
-Each provider answers questions about technical topics, and the assertions verify that responses contain relevant keywords.
+Each provider answers questions about technical topics. Assertions verify that responses contain relevant keywords and finish naturally rather than hitting the token limit. Increase `maxTokens` if a model needs more tokens to finish.
 
 ## Documentation
 

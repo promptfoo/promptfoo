@@ -44,6 +44,10 @@ The Iterative Jailbreaks strategy works by:
 3. Repeating this process for a configurable number of iterations
 4. Selecting the most effective prompt variation discovered
 
+If the plugin grader detects a vulnerability, the strategy stops before asking the judge for another rating. The result reports that turn's prompt and output and keeps the turn in `redteamHistory`, so a judge failure cannot replace the finding with a later passing result.
+
+That final turn has no `redteamHistory[].score`. The `highestScore` metadata covers only turns the judge rated and remains `0` if none were rated. Use the plugin grader's verdict to interpret pass/fail.
+
 :::warning
 This strategy is medium cost since it makes multiple API calls per test. We recommend running it on a smaller number of tests and plugins before running a full test.
 :::

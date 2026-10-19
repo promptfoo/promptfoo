@@ -60,9 +60,17 @@ class SwagMCPClient:
         # Use uvx (published package) by default, or custom script if configured
         if USE_UVX_SQLITE:
             configs["sqlite"] = {
-                "type": "uvx",
-                "package": "mcp-server-sqlite",
-                "args": ["--db-path", str(SWAG_DB_PATH)],
+                # The archived reference server uses MCP v1 APIs. Keep its uvx
+                # environment separate from the application's MCP v2 client.
+                "type": "stdio",
+                "command": "uvx",
+                "args": [
+                    "--with",
+                    "mcp>=1.30,<2",
+                    "mcp-server-sqlite==2025.4.25",
+                    "--db-path",
+                    str(SWAG_DB_PATH),
+                ],
             }
         elif SQLITE_MCP_SERVER and SQLITE_MCP_SERVER.exists():
             configs["sqlite"] = {
@@ -175,7 +183,7 @@ class SwagMCPClient:
                     {
                         "name": tool.name,
                         "description": tool.description,
-                        "input_schema": tool.inputSchema,
+                        "input_schema": tool.input_schema,
                     }
                 )
                 tool_to_server[tool.name] = server_name

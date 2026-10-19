@@ -134,42 +134,6 @@
   line-height: 1.4;
 }
 
-.controls {
-  margin-bottom: 24px;
-}
-
-.controls h5 {
-  margin: 0 0 16px;
-  font-size: 1rem;
-  color: #111827;
-}
-
-.transitionButtons {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 12px;
-}
-
-.transitionButton {
-  padding: 8px 16px;
-  border: 1px solid var(--state-color);
-  border-radius: 6px;
-  background: white;
-  color: var(--state-color);
-  cursor: pointer;
-  transition: all 0.2s;
-  font-size: 0.875rem;
-}
-
-.transitionButton:hover {
-  background: color-mix(in srgb, var(--state-color) 10%, white);
-}
-
-.transitionButton:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
 .taskDetails {
   display: grid;
   gap: 24px;
@@ -352,7 +316,6 @@ html[data-theme='dark'] .simulator {
 }
 
 html[data-theme='dark'] .stateVisualizer h5,
-html[data-theme='dark'] .controls h5,
 html[data-theme='dark'] .section h5 {
   color: var(--ifm-color-white);
 }
@@ -374,12 +337,9 @@ html[data-theme='dark'] .stateDescription {
   color: var(--ifm-color-emphasis-600);
 }
 
+/* Keep this rule: production CSS minification uses it to preserve the homepage's dark card cascade. */
 html[data-theme='dark'] .transitionButton {
   background: var(--ifm-card-background-color);
-}
-
-html[data-theme='dark'] .transitionButton:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--state-color) 15%, var(--ifm-card-background-color));
 }
 
 html[data-theme='dark'] .section {

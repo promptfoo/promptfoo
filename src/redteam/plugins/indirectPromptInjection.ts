@@ -57,7 +57,9 @@ export class IndirectPromptInjectionGrader extends RedteamGraderBase {
     return {
       action: 'replace-prompt',
       type: 'datamark',
-      value: `${systemPrompt}\n\n${prompt.replace(userInput, datamarkedPrompt)}`,
+      // A replacer function inserts the datamarked text literally. A bare string would let
+      // `$&` in the injection payload re-expand to the undatamarked match.
+      value: `${systemPrompt}\n\n${prompt.replace(userInput, () => datamarkedPrompt)}`,
     };
   }
 
