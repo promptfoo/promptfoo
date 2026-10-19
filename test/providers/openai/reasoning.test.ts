@@ -1,5 +1,6 @@
 import { describe, expect, expectTypeOf, it, vi } from 'vitest';
 import {
+  isResponsesReasoningCleared,
   resolveChatReasoningEffort,
   resolveResponsesReasoning,
 } from '../../../src/providers/openai/reasoning';
@@ -191,4 +192,23 @@ describe('reasoning configuration', () => {
       ).toThrow('Responses reasoning must be an object or null');
     },
   );
+});
+
+describe('full reasoning clears without typed model support', () => {
+  it.each([
+    [{}, undefined, false],
+    [{ reasoning: null }, undefined, true],
+    [{ passthrough: { reasoning: null } }, undefined, true],
+    [{}, { reasoning: null, passthrough: { reasoning: { summary: 'auto' } } }, true],
+    [
+      { passthrough: { reasoning: { summary: 'auto' } } },
+      { passthrough: { reasoning: null } },
+      true,
+    ],
+    [{ reasoning: null }, { passthrough: { reasoning: { summary: 'auto' } } }, false],
+    [{}, { passthrough: null }, false],
+    [{ passthrough: [] }, { passthrough: 'invalid' }, false],
+  ])('detects literal clears for %j and %j', (provider, prompt, expected) => {
+    expect(isResponsesReasoningCleared(provider, prompt)).toBe(expected);
+  });
 });

@@ -41,7 +41,7 @@ import {
   usesAzureOpenAiBilling,
 } from './billing';
 import { applyGpt6RequestRules, getGpt6Variant, isGpt6Model } from './gpt6';
-import { resolveResponsesReasoning } from './reasoning';
+import { isResponsesReasoningCleared, resolveResponsesReasoning } from './reasoning';
 import { isLegacyOpenAiChatModel } from './tokenCaps';
 import {
   appendOpenAiApiPath,
@@ -1241,6 +1241,8 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       } else {
         delete body.reasoning;
       }
+    } else if (isResponsesReasoningCleared(this.config, context?.prompt?.config)) {
+      delete body.reasoning;
     }
 
     // The Responses API uses max_output_tokens, never max_tokens; strip max_tokens if it

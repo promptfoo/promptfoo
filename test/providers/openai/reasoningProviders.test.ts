@@ -168,6 +168,42 @@ describe('shared reasoning request configuration', () => {
       expect(body).not.toHaveProperty('reasoning');
     });
 
+    it.each([
+      [{ passthrough: { reasoning: { effort: 'low', summary: 'auto' } } }, { reasoning: null }],
+      [{ reasoning: null, passthrough: { reasoning: { summary: 'auto' } } }, {}],
+      [{ passthrough: { reasoning: { summary: 'auto' } } }, { passthrough: { reasoning: null } }],
+    ])(
+      'clears inherited raw reasoning on a GPT-4.1 request: %j, %j',
+      async (providerConfig, promptConfig) => {
+        const body = await getBody('gpt-4.1', providerConfig, promptConfig);
+        expect(body).not.toHaveProperty('reasoning');
+        expect(body.temperature).toBe(0);
+        expect(body.max_output_tokens).toBe(1024);
+      },
+    );
+
+    it('preserves a higher-priority raw value over a provider clear on GPT-4.1', async () => {
+      const body = await getBody(
+        'gpt-4.1',
+        { reasoning: null },
+        { passthrough: { reasoning: { summary: 'auto' } } },
+      );
+      expect(body.reasoning).toEqual({ summary: 'auto' });
+    });
+
+    it('keeps raw reasoning and ignores unsupported typed callbacks on GPT-4.1', async () => {
+      const unsupported = vi.fn(() => {
+        throw new Error('unsupported reasoning callback');
+      });
+      const body = await getBody(
+        'gpt-4.1',
+        { passthrough: { reasoning: { summary: 'auto' } } },
+        { reasoning: unsupported },
+      );
+      expect(body.reasoning).toEqual({ summary: 'auto' });
+      expect(unsupported).not.toHaveBeenCalled();
+    });
+
     it('leaves automatic temperature and token limits unset when an internal alias uses reasoning', async () => {
       const body = await getBody('internal-model', {}, { reasoning_effort: 'low' });
       expect(body.reasoning).toEqual({ effort: 'low' });

@@ -9,7 +9,7 @@ import {
 import invariant from '../../util/invariant';
 import { FunctionCallbackHandler } from '../functionCallbackUtils';
 import { applyGpt6RequestRules, isGpt6Model } from '../openai/gpt6';
-import { resolveResponsesReasoning } from '../openai/reasoning';
+import { isResponsesReasoningCleared, resolveResponsesReasoning } from '../openai/reasoning';
 import { isLegacyOpenAiChatModel } from '../openai/tokenCaps';
 import { flattenResponseTool } from '../openai/util';
 import { ResponsesProcessor } from '../responses/index';
@@ -289,6 +289,8 @@ export class AzureResponsesProvider extends AzureGenericProvider<AzureResponsesO
       } else {
         delete body.reasoning;
       }
+    } else if (isResponsesReasoningCleared(this.config, context?.prompt?.config)) {
+      delete body.reasoning;
     }
 
     if (isFixedReasoningModel && body.reasoning && typeof body.reasoning === 'object') {

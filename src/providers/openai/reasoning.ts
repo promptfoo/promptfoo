@@ -85,6 +85,26 @@ function getResponsesReasoning(
   return { options, effort, clearOptions: passthrough === null };
 }
 
+/** Honor literal full clears even when a model does not process typed reasoning options.
+ * A prompt's raw object can replace a provider clear; a named null wins in its own scope.
+ * Do not evaluate unsupported typed values or raw callbacks while detecting a clear.
+ */
+export function isResponsesReasoningCleared(
+  providerConfig: ReasoningConfig,
+  promptConfig: ReasoningConfig | undefined,
+): boolean {
+  if (promptConfig?.reasoning === null) {
+    return true;
+  }
+  const promptPassthrough = getObject(promptConfig?.passthrough)?.reasoning;
+  if (promptPassthrough !== undefined) {
+    return promptPassthrough === null;
+  }
+  return (
+    providerConfig.reasoning === null || getObject(providerConfig.passthrough)?.reasoning === null
+  );
+}
+
 /** Merge Responses options across scopes, preserving explicit clears and rendering only selected effort. */
 export function resolveResponsesReasoning(
   providerConfig: ReasoningConfig,
