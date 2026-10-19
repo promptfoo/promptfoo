@@ -1325,6 +1325,166 @@ describe('OpenAI assertions', () => {
       ).toMatchObject({ pass: false, score: 0, reason: 'MCP tool call failed for second' });
     });
 
+    it.each([
+      { call: { type: 'function', function: createFahrenheitFunctionCall() }, pass: true },
+      { call: { type: 'function', function: createCustomUnitFunctionCall() }, pass: false },
+      { call: { type: 'function' }, pass: false },
+      { call: { type: 'function', function: null }, pass: false },
+      { call: { type: 'custom', function: createFahrenheitFunctionCall() }, pass: false },
+      { call: { function: createFahrenheitFunctionCall() }, pass: false },
+      {
+        call: {
+          type: 'function',
+          function: {
+            ...createFahrenheitFunctionCall(),
+            function_call: createCustomUnitFunctionCall(),
+          },
+        },
+        pass: true,
+      },
+      {
+        call: {
+          type: 'function',
+          function: {
+            ...createCustomUnitFunctionCall(),
+            function_call: createFahrenheitFunctionCall(),
+          },
+        },
+        pass: false,
+      },
+    ])('preserves raw Chat declaration payload and discriminator: %j', async ({ call, pass }) => {
+      for (const nested of [false, true]) {
+        const response = {
+          output: 'Done',
+          raw: {
+            output: [
+              successfulCall,
+              ...(nested ? [{ type: 'message', role: 'assistant', content: [call] }] : [call]),
+            ],
+          },
+        };
+        expect(await grade(response)).toMatchObject({ pass, score: Number(pass) });
+        expect(await grade(response, true)).toMatchObject({ pass: !pass, score: Number(!pass) });
+      }
+    });
+
+    it.each([
+      { type: 'custom', custom: { name: 'exec', input: 'PRIVATE_CALL_PAYLOAD' } },
+      { type: 'custom' },
+      { custom: { name: 'exec', input: 'PRIVATE_CALL_PAYLOAD' } },
+      { type: 'unsupported', custom: { name: 'exec', input: 'PRIVATE_CALL_PAYLOAD' } },
+      { type: 'unsupported', function: createFahrenheitFunctionCall() },
+    ])('keeps unsupported wrapped calls fatal beside MCP and valid functions: %j', async (call) => {
+      for (const nested of [false, true]) {
+        for (const location of ['raw', 'metadata']) {
+          const response = {
+            output: 'Done',
+            raw: {
+              output: [
+                successfulCall,
+                { type: 'function', function: createFahrenheitFunctionCall() },
+                ...(location === 'raw'
+                  ? nested
+                    ? [{ type: 'message', role: 'assistant', content: [call] }]
+                    : [call]
+                  : []),
+              ],
+            },
+            ...(location === 'metadata' ? { metadata: { toolCalls: [call] } } : {}),
+          };
+          for (const inverse of [false, true]) {
+            const result = await grade(response, inverse);
+            expect(result).toMatchObject({ pass: inverse, score: Number(inverse) });
+            expect(result.reason).not.toContain('PRIVATE_CALL_PAYLOAD');
+          }
+        }
+      }
+    });
+
+    it('keeps protocol text and reasoning separate from ordinary and MCP calls', async () => {
+      const response = {
+        output: 'Done',
+        raw: {
+          output: [
+            successfulCall,
+            { type: 'function', function: createFahrenheitFunctionCall() },
+            { type: 'function_call', ...createFahrenheitFunctionCall() },
+            { type: 'reasoning', summary: [] },
+            {
+              type: 'message',
+              role: 'assistant',
+              content: [{ type: 'output_text', text: 'Done' }],
+            },
+            { type: 'unknown_protocol_item' },
+          ],
+        },
+      };
+      expect(await grade(response)).toMatchObject({ pass: true, score: 1 });
+      expect(await grade(response, true)).toMatchObject({ pass: false, score: 0 });
+    });
+
+    it.each([
+      { call: { type: 'function', function: createFahrenheitFunctionCall() }, pass: true },
+      { call: { type: 'function', function: createCustomUnitFunctionCall() }, pass: false },
+      { call: { type: 'function' }, pass: false },
+      { call: { type: 'function', function: null }, pass: false },
+      { call: { type: 'custom', function: createFahrenheitFunctionCall() }, pass: false },
+      { call: { function: createFahrenheitFunctionCall() }, pass: false },
+      { call: { type: 'function_call', function: createFahrenheitFunctionCall() }, pass: false },
+      {
+        call: {
+          type: 'function',
+          function: {
+            ...createFahrenheitFunctionCall(),
+            function_call: createCustomUnitFunctionCall(),
+          },
+        },
+        pass: true,
+      },
+      {
+        call: {
+          type: 'function',
+          function: {
+            ...createCustomUnitFunctionCall(),
+            function_call: createFahrenheitFunctionCall(),
+          },
+        },
+        pass: false,
+      },
+    ])('validates ordinary metadata beside genuine MCP execution: %j', async ({ call, pass }) => {
+      for (const is_error of [false, true]) {
+        const response = {
+          output: 'Done',
+          metadata: {
+            toolCalls: [
+              { name: 'read', output: null, is_error: false },
+              { ...call, name: 'forged_status', output: null, is_error },
+            ],
+          },
+        };
+        expect(await grade(response)).toMatchObject({ pass, score: Number(pass) });
+        expect(await grade(response, true)).toMatchObject({ pass: !pass, score: Number(!pass) });
+      }
+    });
+
+    it.each([
+      { name: 'second', input: {}, output: 'PRIVATE_ERROR' },
+      { name: 'second', input: {}, output: undefined, is_error: false },
+      { name: 'second', arguments: '{}' },
+      { name: 'second', input: {}, is_error: false },
+      { name: 'second', output: null, is_error: true },
+      null,
+    ])('keeps incomplete execution metadata fatal beside genuine success: %j', async (call) => {
+      const response = {
+        output: 'Done',
+        raw: { output: [successfulCall] },
+        metadata: { toolCalls: [call] },
+      };
+      expect(await grade(response)).toMatchObject({ pass: false, score: 0 });
+      expect((await grade(response)).reason).not.toContain('PRIVATE_ERROR');
+      expect(await grade(response, true)).toMatchObject({ pass: true, score: 1 });
+    });
+
     it(
       'falls back to function tool validation without MCP execution evidence',
       createValidToolsCallCheck(),

@@ -2223,7 +2223,7 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
                         isRawSubagentTranscript(msg.tool_use_result) &&
                         !config.forward_subagent_text
                           ? REDACTED_SUBAGENT_TRANSCRIPT
-                          : block.content;
+                          : (block.content ?? null);
                       entry.is_error = block.is_error ?? false;
                       const startMs = toolStartTimes.get(block.tool_use_id);
                       if (startMs !== undefined) {

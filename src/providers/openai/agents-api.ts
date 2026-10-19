@@ -988,6 +988,7 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
           ? 'unavailable for aggregate subagent usage'
           : 'model tokens only; excludes tools and sandbox charges',
         ...toolActivity,
+        ...(toolActivity.toolCalls.length ? { toolCallsSource: 'activity' } : {}),
         ...usageMetadata,
         ...subagentUsageMetadata,
       });

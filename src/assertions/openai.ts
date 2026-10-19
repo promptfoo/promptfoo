@@ -5,7 +5,36 @@ import { toolCallErrorVerdict, toolCallVerdict } from './functionToolCall';
 import type { OpenAiChatCompletionProvider } from '../providers/openai/chat';
 import type { AssertionParams, GradingResult } from '../types/index';
 
-function collectRawToolCalls(responseItems: unknown[]) {
+function isWrappedToolCall(item: unknown): item is Record<string, unknown> {
+  return (
+    item !== null &&
+    typeof item === 'object' &&
+    (('type' in item && (item.type === 'function' || item.type === 'custom')) ||
+      'function' in item ||
+      'custom' in item)
+  );
+}
+
+function retainWrappedToolCall(item: unknown) {
+  if (!isWrappedToolCall(item)) {
+    return item;
+  }
+  const call = item.function;
+  // The validator also accepts legacy function_call envelopes. Retain only the
+  // selected wrapper fields so an embedded alias cannot replace their values.
+  return {
+    type: item.type,
+    function:
+      call !== null && typeof call === 'object'
+        ? {
+            name: 'name' in call ? call.name : undefined,
+            arguments: 'arguments' in call ? call.arguments : undefined,
+          }
+        : call,
+  };
+}
+
+function collectRawToolCalls(responseItems: unknown[], declarationsOnly: boolean) {
   return responseItems
     .flatMap((item) => {
       // Match the Responses processor's one-level assistant message traversal.
@@ -31,8 +60,9 @@ function collectRawToolCalls(responseItems: unknown[]) {
         (('type' in item &&
           (item.type === 'function_call' ||
             item.type === 'tool_use' ||
-            item.type === 'custom_tool_call')) ||
-          'function' in item),
+            item.type === 'custom_tool_call' ||
+            (declarationsOnly && item.type === 'mcp_call'))) ||
+          isWrappedToolCall(item)),
     )
     .map((item) => {
       if (item.type === 'function_call' || item.type === 'tool_use') {
@@ -40,6 +70,9 @@ function collectRawToolCalls(responseItems: unknown[]) {
           type: 'function',
           function: { name: item.name, arguments: item.arguments },
         };
+      }
+      if (item.type === 'function') {
+        return { type: item.type, function: item.function };
       }
       // Retain other tool-shaped calls for discriminator validation without
       // including their payloads. Other Responses items are not function calls.
@@ -63,7 +96,24 @@ export const handleIsValidOpenAiToolsCall = async ({
   const responseItems: unknown[] = Array.isArray(providerResponse.raw?.output)
     ? providerResponse.raw.output
     : [];
-  const rawToolCalls = collectRawToolCalls(responseItems);
+  const metadataToolCalls: unknown[] = Array.isArray(providerResponse.metadata?.toolCalls)
+    ? providerResponse.metadata.toolCalls
+    : [];
+  const toolCallsSource = providerResponse.metadata?.toolCallsSource;
+  const declarationsOnly = toolCallsSource === 'declaration' || toolCallsSource === 'activity';
+  // Some providers forward requested calls or activity summaries in toolCalls.
+  // Their producer identifies that origin for metadata and raw output alike;
+  // neither establishes MCP execution.
+  const metadataDeclarations =
+    toolCallsSource === 'activity'
+      ? []
+      : metadataToolCalls.filter(
+          (call) => toolCallsSource === 'declaration' || isWrappedToolCall(call),
+        );
+  const additionalToolCalls = [
+    ...collectRawToolCalls(responseItems, declarationsOnly),
+    ...metadataDeclarations,
+  ].map(retainWrappedToolCall);
   const retainedToolCalls: unknown[] | undefined = Array.isArray(
     providerResponse.metadata?.functionToolCalls,
   )
@@ -79,7 +129,11 @@ export const handleIsValidOpenAiToolsCall = async ({
   const mcpCalls = responseItems
     .filter(
       (item): item is Record<string, unknown> =>
-        item !== null && typeof item === 'object' && 'type' in item && item.type === 'mcp_call',
+        !declarationsOnly &&
+        item !== null &&
+        typeof item === 'object' &&
+        'type' in item &&
+        item.type === 'mcp_call',
     )
     .map((item) => ({
       name: item.name,
@@ -88,10 +142,10 @@ export const handleIsValidOpenAiToolsCall = async ({
         (item.status === 'completed' ||
           (item.status === undefined && typeof item.output === 'string')),
     }));
-  const executedCalls: unknown[] = Array.isArray(providerResponse.metadata?.toolCalls)
-    ? providerResponse.metadata.toolCalls
-    : [];
-  for (const call of executedCalls) {
+  for (const call of metadataToolCalls) {
+    if (declarationsOnly || isWrappedToolCall(call)) {
+      continue;
+    }
     mcpCalls.push({
       name: call !== null && typeof call === 'object' && 'name' in call ? call.name : undefined,
       success:
@@ -99,6 +153,8 @@ export const handleIsValidOpenAiToolsCall = async ({
         typeof call === 'object' &&
         'is_error' in call &&
         call.is_error === false &&
+        'output' in call &&
+        call.output !== undefined &&
         Object.prototype.hasOwnProperty.call(call, 'output'),
     });
   }
@@ -112,7 +168,10 @@ export const handleIsValidOpenAiToolsCall = async ({
     }
     // Responses can render function calls or callback results as text. Successful
     // MCP execution must not bypass either raw or retained function-call checks.
-    if (rawToolCalls.length === 0 && (!hasOutputToolCalls || retainedToolCalls?.length === 0)) {
+    if (
+      additionalToolCalls.length === 0 &&
+      (!hasOutputToolCalls || retainedToolCalls?.length === 0)
+    ) {
       return verdict(true, `MCP tool call succeeded for ${mcpCalls[0].name}`);
     }
   }
@@ -122,9 +181,9 @@ export const handleIsValidOpenAiToolsCall = async ({
     output = output.tool_calls as string | object;
   }
   if (Array.isArray(output)) {
-    output = [...output, ...rawToolCalls];
-  } else if (rawToolCalls.length > 0 && !hasOutputToolCalls) {
-    output = rawToolCalls;
+    output = [...output, ...additionalToolCalls];
+  } else if (additionalToolCalls.length > 0 && !hasOutputToolCalls) {
+    output = additionalToolCalls;
   }
   const toolsOutput = output as {
     type: 'function';
