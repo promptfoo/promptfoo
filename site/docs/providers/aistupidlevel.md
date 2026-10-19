@@ -1,7 +1,8 @@
 ---
 title: AI Stupid Level
 sidebar_label: AI Stupid Level
-description: Evaluate AI Stupid Level's benchmark-based routing modes in promptfoo using the OpenAI-compatible provider, with your own provider keys.
+description: Evaluate AI Stupid Level's benchmark-based routing modes in promptfoo with the OpenAI-compatible provider, using your own provider keys and a single router key.
+sidebar_position: 42
 ---
 
 # AI Stupid Level
