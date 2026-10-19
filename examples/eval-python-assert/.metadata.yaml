@@ -1,0 +1,5 @@
+title: 'Python Assertions'
+description: 'Test LLM outputs using external and inline Python assertion functions with custom scoring'
+tags:
+  - Evaluation
+  - Python

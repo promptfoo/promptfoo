@@ -1,0 +1,4 @@
+title: 'Guardrails Evaluation Template'
+description: 'Comprehensive 42-plugin test suite for evaluating guardrails against prompt injection, jailbreaking, harmful content, and PII leakage'
+tags:
+  - Red Teaming

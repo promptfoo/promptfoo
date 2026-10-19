@@ -1,0 +1,4 @@
+title: 'Custom Nunjucks Template Filters'
+description: 'Defining custom Nunjucks filters in JavaScript to transform variables within prompt templates'
+tags:
+  - Configuration

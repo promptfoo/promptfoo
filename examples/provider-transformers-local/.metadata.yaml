@@ -1,0 +1,4 @@
+title: 'Local Evaluation with Transformers.js'
+description: 'Run fully local text generation and embeddings with ONNX models, no API keys required'
+tags:
+  - Providers
