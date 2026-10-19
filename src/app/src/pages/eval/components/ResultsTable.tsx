@@ -1911,10 +1911,22 @@ function ResultsTable({
     if (
       previousControls.failureFilter === failureFilter &&
       previousControls.filterMode === filterMode &&
-      previousControls.debouncedSearchText === debouncedSearchText &&
       previousControls.appliedFiltersString === appliedFiltersString
     ) {
-      return;
+      if (previousControls.debouncedSearchText === debouncedSearchText) {
+        return;
+      }
+
+      const url = new URL(window.location.href);
+      // URL navigation can update search and a destination row together. Local
+      // search edits already remove the old target in ResultsView before updating
+      // the URL, so leave an incoming target for the row-jump effect below.
+      if (
+        (url.searchParams.get('search') || '') === (debouncedSearchText || '') &&
+        (url.searchParams.has('rowId') || parseEvalOutputPromptHash(url.hash) !== null)
+      ) {
+        return;
+      }
     }
 
     clearRowDeepLink();

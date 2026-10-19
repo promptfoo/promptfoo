@@ -1547,6 +1547,52 @@ describe('ResultsTable Row Navigation', () => {
     );
   });
 
+  it.each([
+    ['weather', '/?search=weather&rowId=51#details-row-51-prompt-1'],
+    ['', '/#details-row-51-prompt-1'],
+  ])('preserves an incoming deep link when URL search changes to %j', async (search, url) => {
+    const mockFetchEvalData = setupDeepLinkedTable('/?search=Weather');
+    const { rerender } = renderWithProviders(
+      <ResultsTable {...defaultProps} debouncedSearchText="Weather" />,
+    );
+
+    window.history.pushState({}, '', url);
+    rerender(<ResultsTable {...defaultProps} debouncedSearchText={search} />);
+
+    await waitFor(createNextPageExpectation(mockFetchEvalData, true));
+    expect(window.location.search + window.location.hash).toBe(url.slice(1));
+    expect(mockNavigate).not.toHaveBeenCalled();
+    expect(mockFetchEvalData).toHaveBeenLastCalledWith(
+      '123',
+      expect.objectContaining({ pageIndex: 1, searchText: search }),
+    );
+  });
+
+  it('clears the old deep link and resets pagination for a local search edit', async () => {
+    const mockFetchEvalData = setupDeepLinkedTable(
+      '/?search=Weather&rowId=51#details-row-51-prompt-1',
+    );
+    const { rerender } = renderWithProviders(
+      <ResultsTable {...defaultProps} debouncedSearchText="Weather" />,
+    );
+    await waitFor(createNextPageExpectation(mockFetchEvalData));
+    mockFetchEvalData.mockClear();
+
+    rerender(<ResultsTable {...defaultProps} debouncedSearchText="local edit" />);
+
+    await waitFor(() => {
+      expect(mockFetchEvalData).toHaveBeenLastCalledWith(
+        '123',
+        expect.objectContaining({ pageIndex: 0, searchText: 'local edit' }),
+      );
+    });
+    expect(window.location.hash).toBe('');
+    expect(mockNavigate).toHaveBeenCalledWith(
+      expect.objectContaining({ search: '?search=Weather', hash: '' }),
+      { replace: true },
+    );
+  });
+
   // Regression test: the details hash encodes a row's GLOBAL test index, while
   // pagination operates on filtered-table positions. When a filter or search is active
   // and only the hash is present (no `rowId`), the global index must NOT be used to
