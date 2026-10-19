@@ -69,6 +69,29 @@ function stripMediaReferences(value: unknown): unknown {
   return value;
 }
 
+// Interrupted strategies retain completed provider responses for execution evidence.
+// Project only their retained calls; arbitrary user metadata is not a response snapshot.
+function projectCompletedTargetResponses(value: unknown): unknown {
+  if (!Array.isArray(value)) {
+    return value;
+  }
+  return value.map((item) => {
+    const snapshot = asRecord(item);
+    const response = asRecord(snapshot?.response);
+    const responseMetadata = asRecord(response?.metadata);
+    if (!snapshot || !response || !responseMetadata) {
+      return item;
+    }
+    const { functionToolCalls: _calls, ...metadata } = responseMetadata;
+    if (metadata.completedTargetResponses !== undefined) {
+      metadata.completedTargetResponses = projectCompletedTargetResponses(
+        metadata.completedTargetResponses,
+      );
+    }
+    return { ...snapshot, response: { ...response, metadata } };
+  });
+}
+
 function projectOutputMetadata<T>(
   metadata: T,
   stripOutput: boolean,
@@ -86,9 +109,19 @@ function projectOutputMetadata<T>(
       ) {
         return [[key, value]];
       }
-      return key === 'audio' || key === 'blobUris' || key === 'functionToolCalls'
-        ? []
-        : [[key, stripMediaReferences(sanitizeForDb(value))]];
+      if (
+        key === 'audio' ||
+        key === 'blobUris' ||
+        (key === 'functionToolCalls' && isDeepStrictEqual(value, responseMetadata[key]))
+      ) {
+        return [];
+      }
+      const sanitizedValue = sanitizeForDb(value);
+      const projectedValue =
+        key === 'completedTargetResponses' && isDeepStrictEqual(value, responseMetadata[key])
+          ? projectCompletedTargetResponses(sanitizedValue)
+          : sanitizedValue;
+      return [[key, stripMediaReferences(projectedValue)]];
     }),
   ) as T;
 }

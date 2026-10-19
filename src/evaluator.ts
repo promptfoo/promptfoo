@@ -594,7 +594,7 @@ function logGroupedGradingStatus({
   }
 }
 
-// Hooks can replace response metadata after provider headers and retained tool calls have
+// Hooks can replace response metadata after provider headers and retained response evidence have
 // been copied into result metadata. Reconcile unchanged provider-owned copies so stale
 // credentials or tool arguments cannot outlive the response metadata used to redact them.
 function synchronizeProviderMetadata(
@@ -605,13 +605,13 @@ function synchronizeProviderMetadata(
   testMetadata: AtomicTestCase['metadata'],
 ) {
   let metadata = hookMetadata;
-  for (const key of ['headers', 'functionToolCalls']) {
+  for (const key of ['headers', 'functionToolCalls', 'completedTargetResponses']) {
     const originalValue = originalMetadata?.[key];
     if (
       originalValue === undefined ||
       !isDeepStrictEqual(originalValue, originalResponseMetadata?.[key]) ||
       !isDeepStrictEqual(hookMetadata?.[key], originalValue) ||
-      (key === 'functionToolCalls' && isDeepStrictEqual(originalValue, testMetadata?.[key]))
+      (key !== 'headers' && isDeepStrictEqual(originalValue, testMetadata?.[key]))
     ) {
       continue;
     }
@@ -4414,11 +4414,14 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       if (context.testSuite.extensions?.length) {
         try {
           const originalMetadata = row.metadata;
-          // Tool calls are shared with result metadata. Snapshot them so a hook that
-          // edits their arguments in place owns that change, even if it replaces response metadata.
+          // Retained responses are shared with result metadata. Snapshot them so a hook's
+          // in-place edits remain identifiable even if it replaces response metadata.
           const originalResponseMetadata = row.response?.metadata && {
             ...row.response.metadata,
             functionToolCalls: structuredClone(row.response.metadata.functionToolCalls),
+            completedTargetResponses: structuredClone(
+              row.response.metadata.completedTargetResponses,
+            ),
           };
           const afterEachOut = await runExtensionHook(context.testSuite.extensions, 'afterEach', {
             test: evalStep.test,

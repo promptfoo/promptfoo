@@ -642,15 +642,24 @@ describeEvaluator('evaluator metadata', () => {
   });
 
   it.each(
-    ['provider-removed', 'provider-replaced', 'test-owned', 'hook-owned', 'hook-mutated'].flatMap(
-      (ownership) =>
+    ['functionToolCalls', 'completedTargetResponses'].flatMap((field) =>
+      [
+        'provider-removed',
+        'provider-replaced',
+        'test-owned',
+        'hook-owned',
+        'hook-mutated',
+        'hook-owned-retained',
+        'hook-roundtrip',
+      ].flatMap((ownership) =>
         [false, true].flatMap((persisted) =>
-          [false, true].map((strip) => ({ ownership, persisted, strip })),
+          [false, true].map((strip) => ({ field, ownership, persisted, strip })),
         ),
+      ),
     ),
   )(
-    'reconciles retained calls after real hooks ($ownership, persisted: $persisted, strip: $strip)',
-    async ({ ownership, persisted, strip }) => {
+    'reconciles retained $field after real hooks ($ownership, persisted: $persisted, strip: $strip)',
+    async ({ field, ownership, persisted, strip }) => {
       const outputPath = path.join(os.tmpdir(), `promptfoo-hook-metadata-${randomUUID()}.jsonl`);
       const functionToolCalls = [
         {
@@ -661,16 +670,27 @@ describeEvaluator('evaluator metadata', () => {
       const replacementCalls = [
         { type: 'function', function: { name: 'lookup', arguments: '{"query":"public"}' } },
       ];
+      const snapshot = (calls: typeof functionToolCalls) => [
+        {
+          prompt: 'Target prompt',
+          response: { output: 'Callback completed', metadata: { functionToolCalls: calls } },
+        },
+      ];
+      const providerValue =
+        field === 'functionToolCalls' ? functionToolCalls : snapshot(functionToolCalls);
+      const replacementValue =
+        field === 'functionToolCalls' ? replacementCalls : snapshot(replacementCalls);
       const hookCalls = ['intentional hook metadata'];
+      const retainsProvider = ['hook-owned-retained', 'hook-roundtrip'].includes(ownership);
       const testMetadata = {
         note: 'intentional test metadata',
-        ...(ownership === 'test-owned' && { functionToolCalls }),
+        ...(ownership === 'test-owned' && { [field]: providerValue }),
       };
       const provider: ApiProvider = {
         id: () => 'hook-metadata-provider',
         callApi: vi.fn().mockResolvedValue({
           output: 'Callback completed',
-          metadata: { functionToolCalls },
+          metadata: { [field]: providerValue },
         }),
       };
       const actualHelpers = await vi.importActual<typeof import('../../src/evaluatorHelpers')>(
@@ -679,17 +699,28 @@ describeEvaluator('evaluator metadata', () => {
       vi.mocked(runExtensionHook).mockImplementation(actualHelpers.runExtensionHook);
       vi.mocked(transform).mockImplementationOnce(async (_code, input) => {
         const context = input as AfterEachExtensionHookContext;
+        if (ownership === 'hook-roundtrip') {
+          return JSON.parse(JSON.stringify(context));
+        }
+        if (ownership === 'hook-owned-retained') {
+          context.result.metadata = { ...context.result.metadata, [field]: hookCalls };
+          return context;
+        }
         // Returned metadata is shallow-merged by the real runner. Replacing it in place
         // exercises the hook path that removes the provider's original metadata.
         context.result.response!.metadata = {
           hook_note: 'ordinary hook metadata',
-          ...(ownership === 'provider-replaced' && { functionToolCalls: replacementCalls }),
+          ...(ownership === 'provider-replaced' && { [field]: replacementValue }),
         };
         if (ownership === 'hook-owned') {
-          context.result.metadata = { ...context.result.metadata, functionToolCalls: hookCalls };
+          context.result.metadata = { ...context.result.metadata, [field]: hookCalls };
         } else if (ownership === 'hook-mutated') {
-          context.result.metadata!.functionToolCalls[0].function.arguments =
-            replacementCalls[0].function.arguments;
+          const retainedCalls =
+            field === 'functionToolCalls'
+              ? context.result.metadata!.functionToolCalls
+              : context.result.metadata!.completedTargetResponses[0].response.metadata
+                  .functionToolCalls;
+          retainedCalls[0].function.arguments = replacementCalls[0].function.arguments;
         }
         return context;
       });
@@ -713,36 +744,51 @@ describeEvaluator('evaluator metadata', () => {
           .split(/\r?\n/)
           .filter(Boolean)
           .map((line) => JSON.parse(line));
-        const expectedCalls =
-          ownership === 'test-owned'
-            ? functionToolCalls
-            : ownership === 'hook-owned'
-              ? hookCalls
-              : ownership === 'provider-replaced' || ownership === 'hook-mutated'
-                ? replacementCalls
-                : undefined;
+        const expectedValues: Record<string, unknown> = {
+          'test-owned': providerValue,
+          'hook-owned': hookCalls,
+          'provider-replaced': replacementValue,
+          'hook-mutated': replacementValue,
+          'hook-owned-retained': hookCalls,
+          'hook-roundtrip': providerValue,
+        };
+        const expectedCalls = expectedValues[ownership];
+        const strippedValue =
+          field === 'functionToolCalls'
+            ? undefined
+            : [
+                {
+                  prompt: 'Target prompt',
+                  response: { output: 'Callback completed', metadata: {} },
+                },
+              ];
         const projectedCalls =
-          strip && ownership === 'provider-replaced' ? undefined : expectedCalls;
+          strip && (ownership === 'provider-replaced' || ownership === 'hook-roundtrip')
+            ? strippedValue
+            : expectedCalls;
+        const responseValue = retainsProvider ? providerValue : replacementValue;
+        const projectedResponseValue = strip ? strippedValue : responseValue;
 
         expect(summary.stats.successes).toBe(1);
         expect(artifactRows).toHaveLength(1);
-        expect(loaded!.results[0].metadata.functionToolCalls).toEqual(expectedCalls);
+        expect(loaded!.results[0].metadata[field]).toEqual(expectedCalls);
         for (const result of [summary.results[0], artifactRows[0]]) {
           expect(result).toMatchObject({ success: true, score: 1 });
-          expect(result.metadata?.functionToolCalls).toEqual(projectedCalls);
+          expect(result.metadata?.[field]).toEqual(projectedCalls);
           expect(result.metadata?.note).toBe('intentional test metadata');
           expect(result.testCase.metadata).toEqual(testMetadata);
           expect(result.response?.metadata).toEqual({
-            hook_note: 'ordinary hook metadata',
-            ...(!strip &&
-              ownership === 'provider-replaced' && { functionToolCalls: replacementCalls }),
+            ...(!retainsProvider && { hook_note: 'ordinary hook metadata' }),
+            ...((ownership === 'provider-replaced' || retainsProvider) &&
+              projectedResponseValue !== undefined && { [field]: projectedResponseValue }),
           });
           expect(result.response?.output).toBe(strip ? '[output stripped]' : 'Callback completed');
         }
-        if (ownership !== 'test-owned') {
-          expect(JSON.stringify(summary)).not.toContain('private-hook-arguments');
-          expect(artifactText).not.toContain('private-hook-arguments');
-        }
+        const retainsPrivateArguments = ownership === 'test-owned' || (!strip && retainsProvider);
+        expect(JSON.stringify(summary).includes('private-hook-arguments')).toBe(
+          retainsPrivateArguments,
+        );
+        expect(artifactText.includes('private-hook-arguments')).toBe(retainsPrivateArguments);
       } finally {
         restoreEnv();
         fs.rmSync(outputPath, { force: true });

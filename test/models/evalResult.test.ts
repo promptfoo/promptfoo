@@ -1379,6 +1379,136 @@ describe('EvalResult', () => {
         [false, true].map((strip) => ({ boundary, strip })),
       ),
     )(
+      'projects retained calls inside completed target snapshots at $boundary (strip: $strip)',
+      async ({ boundary, strip }) => {
+        const functionToolCalls = [
+          {
+            type: 'function',
+            function: { name: 'lookup', arguments: '{"query":"private-snapshot-arguments"}' },
+          },
+        ];
+        const target = {
+          output: 'Callback completed',
+          raw: { note: 'existing raw snapshot' },
+          tokenUsage: { total: 3 },
+          metadata: { functionToolCalls, note: 'ordinary target metadata' },
+        };
+        const snapshots = [
+          { prompt: 'First target prompt', response: target },
+          {
+            prompt: 'Nested strategy prompt',
+            response: {
+              ...target,
+              metadata: {
+                ...target.metadata,
+                completedTargetResponses: [{ prompt: 'Nested target prompt', response: target }],
+              },
+            },
+          },
+          null,
+          { response: 'ordinary user value' },
+        ];
+        const metadata = {
+          completedTargetResponses: snapshots,
+          application: {
+            response: { metadata: { functionToolCalls: ['intentional user value'] } },
+          },
+        };
+        const input = createEvaluateResult({
+          response: { output: 'Callback completed', metadata },
+          metadata,
+        });
+        const original = structuredClone(input);
+        const flags = getStripFlags({ PROMPTFOO_STRIP_RESPONSE_OUTPUT: String(strip) });
+        let projected: EvaluateResult;
+        if (boundary === 'jsonl') {
+          projected = sanitizeResultForJsonlArtifact(input, flags);
+        } else {
+          const result = await EvalResult.createFromEvaluateResult('snapshot-projection', input, {
+            persist: boundary === 'persisted',
+          });
+          const loaded = result.persisted ? await EvalResult.findById(result.id) : result;
+          projected = loaded!.toEvaluateResult(flags);
+          expect(loaded!.response?.metadata?.completedTargetResponses).toEqual(snapshots);
+          expect(loaded!.metadata.completedTargetResponses).toEqual(snapshots);
+        }
+        const projectedTarget = { ...target, metadata: { note: 'ordinary target metadata' } };
+        const expected = strip
+          ? {
+              ...metadata,
+              completedTargetResponses: [
+                { prompt: 'First target prompt', response: projectedTarget },
+                {
+                  prompt: 'Nested strategy prompt',
+                  response: {
+                    ...projectedTarget,
+                    metadata: {
+                      ...projectedTarget.metadata,
+                      completedTargetResponses: [
+                        { prompt: 'Nested target prompt', response: projectedTarget },
+                      ],
+                    },
+                  },
+                },
+                null,
+                { response: 'ordinary user value' },
+              ],
+            }
+          : metadata;
+        expect(projected.response?.metadata).toEqual(expected);
+        expect(projected.metadata).toEqual(expected);
+        expect(JSON.stringify(projected).includes('private-snapshot-arguments')).toBe(!strip);
+        expect(input).toEqual(original);
+      },
+    );
+
+    it.each(['test-owned', 'hook-owned'])(
+      'preserves %s completed snapshots when stripping provider output',
+      async (ownership) => {
+        const providerSnapshots = [
+          {
+            prompt: 'Provider prompt',
+            response: {
+              output: 'Callback completed',
+              metadata: { functionToolCalls: ['provider call arguments'] },
+            },
+          },
+        ];
+        const userSnapshots =
+          ownership === 'test-owned'
+            ? providerSnapshots
+            : [{ response: { metadata: { functionToolCalls: ['intentional hook value'] } } }];
+        const input = createEvaluateResult({
+          testCase: createAtomicTestCase({
+            metadata: ownership === 'test-owned' ? { completedTargetResponses: userSnapshots } : {},
+          }),
+          response: {
+            output: 'Callback completed',
+            metadata: { completedTargetResponses: providerSnapshots },
+          },
+          metadata: { completedTargetResponses: userSnapshots },
+        });
+        const flags = getStripFlags({ PROMPTFOO_STRIP_RESPONSE_OUTPUT: 'true' });
+        const model = await EvalResult.createFromEvaluateResult('snapshot-ownership', input, {
+          persist: false,
+        });
+        for (const projected of [
+          model.toEvaluateResult(flags),
+          sanitizeResultForJsonlArtifact(input, flags),
+        ]) {
+          expect(projected.metadata?.completedTargetResponses).toEqual(userSnapshots);
+          expect(projected.response?.metadata?.completedTargetResponses).toEqual([
+            { prompt: 'Provider prompt', response: { output: 'Callback completed', metadata: {} } },
+          ]);
+        }
+      },
+    );
+
+    it.each(
+      ['model', 'persisted', 'jsonl'].flatMap((boundary) =>
+        [false, true].map((strip) => ({ boundary, strip })),
+      ),
+    )(
       'projects retained function calls at $boundary (strip: $strip)',
       async ({ boundary, strip }) => {
         const functionToolCalls = [
