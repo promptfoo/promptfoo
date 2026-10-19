@@ -9,9 +9,10 @@ import * as path from 'path';
 import { expect, it, vi } from 'vitest';
 import { FILE_METADATA_KEY } from '../../src/constants';
 import { evaluate } from '../../src/evaluator';
-import { runExtensionHook } from '../../src/evaluatorHelpers';
+import { type AfterEachExtensionHookContext, runExtensionHook } from '../../src/evaluatorHelpers';
 import Eval from '../../src/models/eval';
 import { type ApiProvider, type EvaluateSummaryV3, type TestSuite } from '../../src/types/index';
+import { transform } from '../../src/util/transform';
 import { mockProcessEnv } from '../util/utils';
 import { mockApiProvider, toPrompt } from './helpers';
 import { describeEvaluator } from './lifecycle';
@@ -639,6 +640,115 @@ describeEvaluator('evaluator metadata', () => {
     expect(summary.results[0].success).toBe(true);
     expect(summary.stats.successes).toBe(1);
   });
+
+  it.each(
+    ['provider-removed', 'provider-replaced', 'test-owned', 'hook-owned', 'hook-mutated'].flatMap(
+      (ownership) =>
+        [false, true].flatMap((persisted) =>
+          [false, true].map((strip) => ({ ownership, persisted, strip })),
+        ),
+    ),
+  )(
+    'reconciles retained calls after real hooks ($ownership, persisted: $persisted, strip: $strip)',
+    async ({ ownership, persisted, strip }) => {
+      const outputPath = path.join(os.tmpdir(), `promptfoo-hook-metadata-${randomUUID()}.jsonl`);
+      const functionToolCalls = [
+        {
+          type: 'function',
+          function: { name: 'lookup', arguments: '{"query":"private-hook-arguments"}' },
+        },
+      ];
+      const replacementCalls = [
+        { type: 'function', function: { name: 'lookup', arguments: '{"query":"public"}' } },
+      ];
+      const hookCalls = ['intentional hook metadata'];
+      const testMetadata = {
+        note: 'intentional test metadata',
+        ...(ownership === 'test-owned' && { functionToolCalls }),
+      };
+      const provider: ApiProvider = {
+        id: () => 'hook-metadata-provider',
+        callApi: vi.fn().mockResolvedValue({
+          output: 'Callback completed',
+          metadata: { functionToolCalls },
+        }),
+      };
+      const actualHelpers = await vi.importActual<typeof import('../../src/evaluatorHelpers')>(
+        '../../src/evaluatorHelpers',
+      );
+      vi.mocked(runExtensionHook).mockImplementation(actualHelpers.runExtensionHook);
+      vi.mocked(transform).mockImplementationOnce(async (_code, input) => {
+        const context = input as AfterEachExtensionHookContext;
+        // Returned metadata is shallow-merged by the real runner. Replacing it in place
+        // exercises the hook path that removes the provider's original metadata.
+        context.result.response!.metadata = {
+          hook_note: 'ordinary hook metadata',
+          ...(ownership === 'provider-replaced' && { functionToolCalls: replacementCalls }),
+        };
+        if (ownership === 'hook-owned') {
+          context.result.metadata = { ...context.result.metadata, functionToolCalls: hookCalls };
+        } else if (ownership === 'hook-mutated') {
+          context.result.metadata!.functionToolCalls[0].function.arguments =
+            replacementCalls[0].function.arguments;
+        }
+        return context;
+      });
+      const suite: TestSuite = {
+        providers: [provider],
+        prompts: [toPrompt('Test prompt')],
+        tests: [{ metadata: testMetadata }],
+        extensions: ['file://hooks.js:afterEach'],
+      };
+      const env = { PROMPTFOO_STRIP_RESPONSE_OUTPUT: String(strip) };
+      const restoreEnv = mockProcessEnv(env);
+      try {
+        const record = persisted
+          ? await Eval.create({ env, outputPath }, suite.prompts, { id: randomUUID() })
+          : new Eval({ env, outputPath });
+        await evaluate(suite, record, {});
+        const loaded = persisted ? await Eval.findById(record.id) : record;
+        const summary = await loaded!.toEvaluateSummary();
+        const artifactText = fs.readFileSync(outputPath, 'utf8');
+        const artifactRows = artifactText
+          .split(/\r?\n/)
+          .filter(Boolean)
+          .map((line) => JSON.parse(line));
+        const expectedCalls =
+          ownership === 'test-owned'
+            ? functionToolCalls
+            : ownership === 'hook-owned'
+              ? hookCalls
+              : ownership === 'provider-replaced' || ownership === 'hook-mutated'
+                ? replacementCalls
+                : undefined;
+        const projectedCalls =
+          strip && ownership === 'provider-replaced' ? undefined : expectedCalls;
+
+        expect(summary.stats.successes).toBe(1);
+        expect(artifactRows).toHaveLength(1);
+        expect(loaded!.results[0].metadata.functionToolCalls).toEqual(expectedCalls);
+        for (const result of [summary.results[0], artifactRows[0]]) {
+          expect(result).toMatchObject({ success: true, score: 1 });
+          expect(result.metadata?.functionToolCalls).toEqual(projectedCalls);
+          expect(result.metadata?.note).toBe('intentional test metadata');
+          expect(result.testCase.metadata).toEqual(testMetadata);
+          expect(result.response?.metadata).toEqual({
+            hook_note: 'ordinary hook metadata',
+            ...(!strip &&
+              ownership === 'provider-replaced' && { functionToolCalls: replacementCalls }),
+          });
+          expect(result.response?.output).toBe(strip ? '[output stripped]' : 'Callback completed');
+        }
+        if (ownership !== 'test-owned') {
+          expect(JSON.stringify(summary)).not.toContain('private-hook-arguments');
+          expect(artifactText).not.toContain('private-hook-arguments');
+        }
+      } finally {
+        restoreEnv();
+        fs.rmSync(outputPath, { force: true });
+      }
+    },
+  );
 
   it('drops stale provider headers when afterEach replaces response metadata', async () => {
     const outputPath = path.join(os.tmpdir(), `promptfoo-evaluator-${randomUUID()}.jsonl`);

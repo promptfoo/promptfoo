@@ -594,31 +594,35 @@ function logGroupedGradingStatus({
   }
 }
 
-// When an afterEach hook replaces response.metadata, a legacy top-level metadata.headers that
-// was copied from the OLD transport headers becomes stale — and would persist as stale (and
-// possibly sensitive) headers. Only re-sync when the original top-level headers provably came
-// from the original transport (deep-equal) and the hook left that top-level copy unchanged;
-// otherwise the hook owns metadata.headers and we leave it alone.
-function synchronizeLegacyTransportHeaders(
+// Hooks can replace response metadata after provider headers and retained tool calls have
+// been copied into result metadata. Reconcile unchanged provider-owned copies so stale
+// credentials or tool arguments cannot outlive the response metadata used to redact them.
+function synchronizeProviderMetadata(
   originalMetadata: Record<string, unknown> | undefined,
   originalResponseMetadata: Record<string, unknown> | undefined,
   hookMetadata: Record<string, unknown> | undefined,
   hookResponseMetadata: Record<string, unknown> | undefined,
+  testMetadata: AtomicTestCase['metadata'],
 ) {
-  const originalHeaders = originalMetadata?.headers;
-  if (
-    originalHeaders === undefined ||
-    !isDeepStrictEqual(originalHeaders, originalResponseMetadata?.headers) ||
-    !isDeepStrictEqual(hookMetadata?.headers, originalHeaders)
-  ) {
-    return hookMetadata;
-  }
+  let metadata = hookMetadata;
+  for (const key of ['headers', 'functionToolCalls']) {
+    const originalValue = originalMetadata?.[key];
+    if (
+      originalValue === undefined ||
+      !isDeepStrictEqual(originalValue, originalResponseMetadata?.[key]) ||
+      !isDeepStrictEqual(hookMetadata?.[key], originalValue) ||
+      (key === 'functionToolCalls' && isDeepStrictEqual(originalValue, testMetadata?.[key]))
+    ) {
+      continue;
+    }
 
-  const { headers: _staleHeaders, ...metadataWithoutHeaders } = hookMetadata ?? {};
-  if (hookResponseMetadata?.headers === undefined) {
-    return metadataWithoutHeaders;
+    const { [key]: _staleValue, ...metadataWithoutValue } = metadata ?? {};
+    metadata =
+      hookResponseMetadata?.[key] === undefined
+        ? metadataWithoutValue
+        : { ...metadataWithoutValue, [key]: hookResponseMetadata[key] };
   }
-  return { ...metadataWithoutHeaders, headers: hookResponseMetadata.headers };
+  return metadata;
 }
 
 function applyGradingResult(row: EvaluateResult, checkResult: GradingResult) {
@@ -4410,7 +4414,12 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       if (context.testSuite.extensions?.length) {
         try {
           const originalMetadata = row.metadata;
-          const originalResponseMetadata = row.response?.metadata;
+          // Tool calls are shared with result metadata. Snapshot them so a hook that
+          // edits their arguments in place owns that change, even if it replaces response metadata.
+          const originalResponseMetadata = row.response?.metadata && {
+            ...row.response.metadata,
+            functionToolCalls: structuredClone(row.response.metadata.functionToolCalls),
+          };
           const afterEachOut = await runExtensionHook(context.testSuite.extensions, 'afterEach', {
             test: evalStep.test,
             result: {
@@ -4425,13 +4434,12 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
           // runExtensionHook sanitizes namedScores via filterFiniteScores;
           // re-sanitize here to also catch in-place mutations that bypass the merge.
           row.namedScores = filterFiniteScores(afterEachOut.result.namedScores);
-          // If a hook replaced response.metadata, a legacy top-level metadata.headers copied
-          // from the old transport would otherwise persist as stale credentials. Re-sync it.
-          row.metadata = synchronizeLegacyTransportHeaders(
+          row.metadata = synchronizeProviderMetadata(
             originalMetadata,
             originalResponseMetadata,
             afterEachOut.result.metadata,
             afterEachOut.result.response?.metadata,
+            row.testCase.metadata,
           );
           if (row.response && afterEachOut.result.response) {
             row.response.metadata = afterEachOut.result.response.metadata;
