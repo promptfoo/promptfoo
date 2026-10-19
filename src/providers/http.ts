@@ -274,12 +274,11 @@ function renderRawRequestWithNunjucks(template: string, vars: Record<string, any
 
   // Capture each expression once, leaving its output opaque while multipart
   // framing is normalized. Nunjucks still applies its normal whitespace controls.
-  const nunjucks = getNunjucksEngine({
-    [captureFilter]: (value: unknown) => {
-      const index = values.push(value == null ? '' : '' + value) - 1;
-      return `${valuePrefix}${index}__`;
-    },
-  });
+  const capture = (value: unknown) => {
+    const index = values.push(value == null ? '' : '' + value) - 1;
+    return `${valuePrefix}${index}__`;
+  };
+  const nunjucks = getNunjucksEngine({ [captureFilter]: capture });
   const restore = (input: string) =>
     input.replace(
       new RegExp(`${valuePrefix}(\\d+)__`, 'g'),
@@ -287,7 +286,7 @@ function renderRawRequestWithNunjucks(template: string, vars: Record<string, any
     );
   const rendered = nunjucks.renderString(working, vars);
   // One restoration pass leaves marker-like text inside injected values untouched.
-  return restore(normalizeMultipartRequestTemplate(rendered, restore));
+  return restore(normalizeMultipartRequestTemplate(rendered, restore, capture));
 }
 
 // This function is used to encode the URL in the first line of a raw request
@@ -1272,13 +1271,60 @@ function getMultipartBoundary(contentType: string): string | undefined {
 function normalizeMultipartRequestTemplate(
   template: string,
   restore: (input: string) => string,
+  capture: (input: string) => string,
 ): string {
-  const body = extractBodyFromRawRequest(template);
+  const normalizeHeaderLine = (line: string) => {
+    const resolved = restore(line);
+    const separator = resolved.match(/(?:^|\r?\n)\r?\n/);
+    const headerEnd = separator ? separator.index! + separator[0].length : resolved.length;
+    const header = resolved.slice(0, headerEnd);
+    const remainder = resolved.slice(headerEnd);
+    const sourceNewline = line.match(/\r?\n$/)?.[0] ?? '';
+    const remainderNewline =
+      separator && headerEnd <= resolved.length - sourceNewline.length ? sourceNewline : '';
+    return {
+      header,
+      normalized: capture(header.replace(/\r?\n/g, '\r\n')),
+      // Re-capture expanded text so marker-like payload bytes are never restored twice.
+      // Keep an authored payload EOL outside the capture for a following boundary.
+      remainder: remainder
+        ? capture(remainder.slice(0, remainder.length - remainderNewline.length)) + remainderNewline
+        : '',
+      complete: Boolean(separator),
+    };
+  };
+
+  let headers = '';
+  let headerText = '';
+  let body = '';
+  let offset = 0;
+  for (let line of template.split(/(?<=\n)/)) {
+    offset += line.length;
+    if (!headerText) {
+      // Raw request parsing ignores leading padding, including interpolated whitespace.
+      const resolved = restore(line);
+      const trimmed = resolved.trimStart();
+      if (trimmed !== resolved) {
+        headers += capture(resolved.slice(0, resolved.length - trimmed.length));
+        if (!trimmed) {
+          continue;
+        }
+        const sourceNewline = line.match(/\r?\n$/)?.[0] ?? '';
+        line = capture(trimmed.slice(0, trimmed.length - sourceNewline.length)) + sourceNewline;
+      }
+    }
+    const normalized = normalizeHeaderLine(line);
+    headers += normalized.normalized;
+    headerText += normalized.header;
+    if (normalized.complete) {
+      body = normalized.remainder + template.slice(offset);
+      break;
+    }
+  }
   if (!body) {
     return template;
   }
-  const headers = template.slice(0, template.length - body.length);
-  const contentType = restore(headers).match(/^content-type:[ \t]*([^\r\n]*)/im)?.[1];
+  const contentType = headerText.match(/^content-type:[ \t]*([^\r\n]*)/im)?.[1];
   const boundary =
     contentType && /^multipart\/form-data(?:\s*;|\s*$)/i.test(contentType)
       ? getMultipartBoundary(contentType)
@@ -1287,16 +1333,15 @@ function normalizeMultipartRequestTemplate(
     return template;
   }
 
-  // YAML block strings use LF. Captured values remain opaque so only authored
-  // framing is normalized; literal and injected part payloads keep their bytes.
+  // YAML block strings use LF. Normalize multipart framing while keeping literal
+  // and injected part payloads opaque so their bytes remain unchanged.
   const lines = body.split(/(?<=\n)/);
   let inPartHeaders = false;
   for (let index = 0; index < lines.length; index++) {
     const line = lines[index];
     const content = line.replace(/\r?\n$/, '');
-    const delimiter = content.startsWith('--')
-      ? restore(content).replace(/[ \t]+$/, '')
-      : undefined;
+    const resolvedContent = restore(content);
+    const delimiter = resolvedContent.replace(/[ \t]+$/, '');
     if (
       delimiter &&
       !/[\r\n]/.test(delimiter) &&
@@ -1312,10 +1357,9 @@ function normalizeMultipartRequestTemplate(
       }
       inPartHeaders = true;
     } else if (inPartHeaders) {
-      lines[index] = line.replace(/\r?\n$/, '\r\n');
-      if (content === '') {
-        inPartHeaders = false;
-      }
+      const normalized = normalizeHeaderLine(line);
+      lines[index] = normalized.normalized + normalized.remainder;
+      inPartHeaders = !normalized.complete;
     }
   }
   return headers + lines.join('');
