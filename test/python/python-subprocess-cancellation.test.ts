@@ -68,12 +68,19 @@ describe('runPython real invocation cancellation', () => {
       resolveEntry = resolve;
       rejectEntry = reject;
     });
-    const watcher = fs.watch(directory, (_event, filename) => {
-      if (String(filename) === 'started' && fs.existsSync(marker)) {
+    // Observe the marker itself: filesystem notifications can be dropped or omit the filename.
+    const entryPoll = setInterval(() => {
+      if (fs.existsSync(marker)) {
         resolveEntry();
       }
-    });
-    const watchdog = setTimeout(() => rejectEntry(new Error('Python loader did not enter')), 4000);
+    }, 20);
+    const watchdog = setTimeout(() => {
+      if (fs.existsSync(marker)) {
+        resolveEntry();
+      } else {
+        rejectEntry(new Error('Python loader did not enter'));
+      }
+    }, 4000);
     let abortTimer: ReturnType<typeof setTimeout> | undefined;
     const calls: Promise<unknown>[] = [];
     try {
@@ -88,7 +95,7 @@ describe('runPython real invocation cancellation', () => {
         }),
       ]);
       clearTimeout(watchdog);
-      watcher.close();
+      clearInterval(entryPoll);
       expect(observed.children).toHaveLength(1);
       const owned = observed.children[0];
       const ownFiles = path.dirname(owned.shell.command[owned.shell.command.length - 1]);
@@ -120,7 +127,7 @@ describe('runPython real invocation cancellation', () => {
       expect(fs.existsSync(ownFiles)).toBe(false);
     } finally {
       caller.abort(reason);
-      watcher.close();
+      clearInterval(entryPoll);
       clearTimeout(watchdog);
       clearTimeout(abortTimer);
       for (const { shell } of observed.children) {
