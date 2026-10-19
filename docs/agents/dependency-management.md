@@ -52,7 +52,7 @@ Major updates require careful evaluation:
 
 ## Workspaces
 
-The root `mermaid` override keeps Docusaurus diagrams on version 11. Mermaid 12 raises the browser floor to Safari 17.4 and changes default diagram layouts and styling; upgrading it requires an explicit site compatibility review.
+The root `mermaid` override selects version 12. The site explicitly uses `layout: dagre` and `look: classic` to preserve its existing diagrams' layout and appearance. Mermaid's browser floor is newer than some site targets, so validate new diagram types against the site's Browserslist targets before adopting them.
 
 The project uses npm workspaces. Updates must be checked in all three locations:
 

@@ -114,6 +114,13 @@ const config: Config = {
 
   themeConfig: {
     image: 'img/thumbnail.png',
+    mermaid: {
+      options: {
+        // Mermaid 12 defaults to ELK and the neo look.
+        layout: 'dagre',
+        look: 'classic',
+      },
+    },
     colorMode: {
       defaultMode: 'light',
       disableSwitch: false,
