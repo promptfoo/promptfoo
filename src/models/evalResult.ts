@@ -1022,6 +1022,37 @@ export function sanitizeResultForJsonlArtifact<T extends object>(
   } as T;
 }
 
+// Response processing and hooks can replace metadata after provider headers and response evidence have
+// been copied into result metadata. Reconcile unchanged provider-owned copies so stale
+// credentials or tool arguments cannot outlive the response metadata used to redact them.
+export function synchronizeProviderMetadata(
+  originalMetadata: Record<string, unknown> | undefined,
+  originalResponseMetadata: Record<string, unknown> | undefined,
+  updatedMetadata: Record<string, unknown> | undefined,
+  updatedResponseMetadata: Record<string, unknown> | undefined,
+  testMetadata: AtomicTestCase['metadata'],
+): EvaluateResult['metadata'] {
+  let metadata = updatedMetadata;
+  for (const key of ['headers', 'functionToolCalls', 'completedTargetResponses']) {
+    const originalValue = originalMetadata?.[key];
+    if (
+      originalValue === undefined ||
+      !isDeepStrictEqual(originalValue, originalResponseMetadata?.[key]) ||
+      !isDeepStrictEqual(updatedMetadata?.[key], originalValue) ||
+      (key !== 'headers' && isDeepStrictEqual(originalValue, testMetadata?.[key]))
+    ) {
+      continue;
+    }
+
+    const { [key]: _staleValue, ...metadataWithoutValue } = metadata ?? {};
+    metadata =
+      updatedResponseMetadata?.[key] === undefined
+        ? metadataWithoutValue
+        : { ...metadataWithoutValue, [key]: updatedResponseMetadata[key] };
+  }
+  return metadata;
+}
+
 export default class EvalResult {
   static async createFromEvaluateResult(
     evalId: string,
@@ -1086,7 +1117,15 @@ export default class EvalResult {
       provider: sanitizeProvider(provider),
       latencyMs,
       cost,
-      metadata: sanitizeForDb(persistedMetadata),
+      metadata: sanitizeForDb(
+        synchronizeProviderMetadata(
+          persistedMetadata,
+          result.response?.metadata,
+          persistedMetadata,
+          processedResponse?.metadata,
+          testCase.metadata,
+        ),
+      ),
       failureReason,
     };
     if (persist) {
@@ -1122,6 +1161,13 @@ export default class EvalResult {
       processedResults.push({
         ...serializeResultProviderRefs(result),
         response: processedResponse ?? undefined,
+        metadata: synchronizeProviderMetadata(
+          result.metadata,
+          result.response?.metadata,
+          result.metadata,
+          processedResponse?.metadata,
+          result.testCase.metadata,
+        ),
       });
     }
 

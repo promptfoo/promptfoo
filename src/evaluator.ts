@@ -26,6 +26,7 @@ import {
   getResultIndexKey,
   PROMPTFOO_METADATA_KEY,
   sanitizeResultForJsonlArtifact,
+  synchronizeProviderMetadata,
 } from './models/evalResult';
 import { generateIdFromPrompt } from './models/prompt';
 import { nodeEvaluatorRuntime } from './node/evaluatorRuntime';
@@ -592,37 +593,6 @@ function logGroupedGradingStatus({
       `Serial grading grouping disabled because ${reasons.join(' and ')}; model-graded judges may reload between rows.`,
     );
   }
-}
-
-// Hooks can replace response metadata after provider headers and retained response evidence have
-// been copied into result metadata. Reconcile unchanged provider-owned copies so stale
-// credentials or tool arguments cannot outlive the response metadata used to redact them.
-function synchronizeProviderMetadata(
-  originalMetadata: Record<string, unknown> | undefined,
-  originalResponseMetadata: Record<string, unknown> | undefined,
-  hookMetadata: Record<string, unknown> | undefined,
-  hookResponseMetadata: Record<string, unknown> | undefined,
-  testMetadata: AtomicTestCase['metadata'],
-) {
-  let metadata = hookMetadata;
-  for (const key of ['headers', 'functionToolCalls', 'completedTargetResponses']) {
-    const originalValue = originalMetadata?.[key];
-    if (
-      originalValue === undefined ||
-      !isDeepStrictEqual(originalValue, originalResponseMetadata?.[key]) ||
-      !isDeepStrictEqual(hookMetadata?.[key], originalValue) ||
-      (key !== 'headers' && isDeepStrictEqual(originalValue, testMetadata?.[key]))
-    ) {
-      continue;
-    }
-
-    const { [key]: _staleValue, ...metadataWithoutValue } = metadata ?? {};
-    metadata =
-      hookResponseMetadata?.[key] === undefined
-        ? metadataWithoutValue
-        : { ...metadataWithoutValue, [key]: hookResponseMetadata[key] };
-  }
-  return metadata;
 }
 
 function applyGradingResult(row: EvaluateResult, checkResult: GradingResult) {
@@ -1588,6 +1558,13 @@ async function gradeRunEvalResponse({
     testIdx,
     vars,
   });
+  ret.metadata = synchronizeProviderMetadata(
+    ret.metadata,
+    response.metadata,
+    ret.metadata,
+    processedResponse.metadata,
+    test.metadata,
+  );
   const traceId = getTraceId(traceContext);
   if (
     traceId &&

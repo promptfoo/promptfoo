@@ -1,6 +1,10 @@
+import { randomUUID } from 'node:crypto';
+
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { getBlobByHash } from '../../src/blobs';
 import logger from '../../src/logger';
 import { runDbMigrations } from '../../src/migrate';
+import Eval from '../../src/models/eval';
 import EvalResult, {
   getStripFlags,
   projectPrompt,
@@ -19,6 +23,7 @@ import {
   type ProviderOptions,
   ResultFailureReason,
 } from '../../src/types/index';
+import { sha256 } from '../../src/util/createHash';
 import {
   getCachedStandaloneEvals,
   getStandaloneEvalCacheKey,
@@ -43,6 +48,38 @@ const createUserTraceMetadataFixture = () => ({
     retained: 'user-metadata',
   },
 });
+
+function withSnapshotOwnership(input: EvaluateResult, ownership: string): EvaluateResult {
+  switch (ownership) {
+    case 'clone-result':
+      return structuredClone(input);
+    case 'json-result':
+      return JSON.parse(JSON.stringify(input));
+    case 'clone-metadata':
+      return { ...input, metadata: structuredClone(input.metadata) };
+    case 'json-metadata':
+      return { ...input, metadata: JSON.parse(JSON.stringify(input.metadata)) };
+    case 'test-owned':
+      return {
+        ...input,
+        testCase: { ...input.testCase, metadata: structuredClone(input.metadata) },
+      };
+    case 'hook-calls': {
+      const metadata = structuredClone(input.metadata!);
+      metadata.completedTargetResponses[0].response.metadata.functionToolCalls = [
+        'intentional hook calls',
+      ];
+      return { ...input, metadata };
+    }
+    case 'hook-prompt': {
+      const metadata = structuredClone(input.metadata!);
+      metadata.completedTargetResponses[0].prompt = 'Intentional hook prompt';
+      return { ...input, metadata };
+    }
+    default:
+      return input;
+  }
+}
 
 describe('EvalResult', () => {
   beforeAll(async () => {
@@ -1374,6 +1411,108 @@ describe('EvalResult', () => {
   });
 
   describe('toEvaluateResult', () => {
+    it.each(
+      [
+        { media: 'none', size: 0, ownership: 'provider' },
+        { media: 'image/png', size: 16, ownership: 'provider' },
+        { media: 'image/png', size: 2048, ownership: 'provider' },
+        { media: 'audio/wav', size: 2048, ownership: 'provider' },
+        ...[
+          'clone-result',
+          'json-result',
+          'clone-metadata',
+          'json-metadata',
+          'test-owned',
+          'hook-calls',
+          'hook-prompt',
+        ].map((ownership) => ({ media: 'image/png', size: 2048, ownership })),
+      ].flatMap((variant) =>
+        ['memory', 'single', 'batch'].flatMap((boundary) =>
+          [false, true].map((strip) => ({ ...variant, boundary, strip })),
+        ),
+      ),
+    )(
+      'preserves ownership through media extraction at $boundary ($media/$size, $ownership, strip: $strip)',
+      async ({ media, size, ownership, boundary, strip }) => {
+        const bytes = Buffer.alloc(size, 0x61);
+        const output = size
+          ? `data:${media};base64,${bytes.toString('base64')}`
+          : 'Callback completed';
+        const functionToolCalls = [
+          {
+            type: 'function',
+            function: { name: 'lookup', arguments: '{"query":"private-media-arguments"}' },
+          },
+        ];
+        const target = { output, metadata: { functionToolCalls } };
+        const snapshots = [
+          {
+            prompt: 'Target prompt',
+            response: {
+              ...target,
+              metadata: {
+                ...target.metadata,
+                completedTargetResponses: [{ prompt: 'Nested target prompt', response: target }],
+              },
+            },
+          },
+        ];
+        let input = createEvaluateResult({
+          response: {
+            output,
+            metadata: { functionToolCalls, completedTargetResponses: snapshots },
+          },
+          metadata: { functionToolCalls, completedTargetResponses: snapshots },
+        });
+        input = withSnapshotOwnership(input, ownership);
+        const original = structuredClone(input);
+        const evaluation = await Eval.create({}, [input.prompt], { id: randomUUID() });
+        const saved =
+          boundary === 'batch'
+            ? (await EvalResult.createManyFromEvaluateResult([input], evaluation.id))[0]
+            : await EvalResult.createFromEvaluateResult(evaluation.id, input, {
+                persist: boundary === 'single',
+              });
+        const loaded = saved.persisted ? await EvalResult.findById(saved.id) : saved;
+        const canonical = loaded!.response!.metadata!.completedTargetResponses;
+        expect(canonical[0].response.output).toBe(
+          size >= 1024 ? `promptfoo://blob/${sha256(bytes)}` : output,
+        );
+        if (size >= 1024) {
+          expect((await getBlobByHash(sha256(bytes))).data).toEqual(bytes);
+        }
+        const userOwned = ['test-owned', 'hook-calls', 'hook-prompt'].includes(ownership);
+        expect(loaded!.metadata.completedTargetResponses).toEqual(
+          userOwned ? input.metadata!.completedTargetResponses : canonical,
+        );
+        expect(JSON.stringify(loaded!.response)).toContain('private-media-arguments');
+        expect(JSON.stringify(loaded!.metadata)).toContain('private-media-arguments');
+        const flags = getStripFlags({ PROMPTFOO_STRIP_RESPONSE_OUTPUT: String(strip) });
+        for (const projected of [
+          loaded!.toEvaluateResult(flags),
+          sanitizeResultForJsonlArtifact(loaded!, flags),
+        ]) {
+          const projectedSnapshot = projected.metadata!.completedTargetResponses[0];
+          expect(JSON.stringify(projected.response).includes('private-media-arguments')).toBe(
+            !strip,
+          );
+          expect(JSON.stringify(projected.metadata).includes('private-media-arguments')).toBe(
+            !strip || userOwned,
+          );
+          expect(projectedSnapshot.prompt).toBe(input.metadata!.completedTargetResponses[0].prompt);
+          if (ownership === 'hook-calls') {
+            expect(projectedSnapshot.response.metadata.functionToolCalls).toEqual([
+              'intentional hook calls',
+            ]);
+          }
+          if (ownership === 'test-owned') {
+            expect(projected.metadata).toEqual(input.metadata);
+          }
+        }
+        expect(input).toEqual(original);
+      },
+    );
+
     it.each(
       ['model', 'persisted', 'jsonl'].flatMap((boundary) =>
         [false, true].map((strip) => ({ boundary, strip })),

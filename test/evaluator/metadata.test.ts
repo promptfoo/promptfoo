@@ -796,6 +796,126 @@ describeEvaluator('evaluator metadata', () => {
     },
   );
 
+  it.each(
+    ['image/png', 'audio/wav'].flatMap((media) =>
+      [false, true].flatMap((strip) =>
+        ['unchanged', 'clone', 'json', 'hook-owned'].map((ownership) => ({
+          media,
+          strip,
+          ownership,
+        })),
+      ),
+    ),
+  )(
+    'keeps copied snapshot ownership after evaluator media extraction ($media, $ownership, strip: $strip)',
+    async ({ media, ownership, strip }) => {
+      const outputPath = path.join(os.tmpdir(), `promptfoo-media-ownership-${randomUUID()}.jsonl`);
+      const functionToolCalls = [
+        {
+          type: 'function',
+          function: { name: 'lookup', arguments: '{"query":"private-normal-media-arguments"}' },
+        },
+      ];
+      const response = {
+        output: 'Callback completed',
+        metadata: {
+          functionToolCalls,
+          completedTargetResponses: [
+            {
+              prompt: 'Target prompt',
+              response: {
+                output: `data:${media};base64,${Buffer.alloc(2048, 0x61).toString('base64')}`,
+                metadata: { functionToolCalls },
+              },
+            },
+          ],
+        },
+      };
+      const original = structuredClone(response);
+      const provider: ApiProvider = {
+        id: () => 'media-ownership-provider',
+        config: {
+          tools: [
+            {
+              type: 'function',
+              function: {
+                name: 'lookup',
+                parameters: {
+                  type: 'object',
+                  properties: { query: { type: 'string' } },
+                  required: ['query'],
+                },
+              },
+            },
+          ],
+        },
+        callApi: vi.fn().mockResolvedValue(response),
+      };
+      const actualHelpers = await vi.importActual<typeof import('../../src/evaluatorHelpers')>(
+        '../../src/evaluatorHelpers',
+      );
+      vi.mocked(runExtensionHook).mockImplementation(actualHelpers.runExtensionHook);
+      let hookCompletions = 0;
+      vi.mocked(transform).mockImplementationOnce(async (_code, input) => {
+        const context = input as AfterEachExtensionHookContext;
+        if (ownership === 'clone') {
+          const cloned = structuredClone(context);
+          hookCompletions++;
+          return cloned;
+        }
+        if (ownership === 'json') {
+          const cloned = JSON.parse(JSON.stringify(context));
+          hookCompletions++;
+          return cloned;
+        }
+        if (ownership === 'hook-owned') {
+          context.result.metadata!.completedTargetResponses = [
+            { response: { metadata: { functionToolCalls: ['intentional hook calls'] } } },
+          ];
+        }
+        hookCompletions++;
+        return context;
+      });
+      const suite: TestSuite = {
+        providers: [provider],
+        prompts: [toPrompt('Test prompt')],
+        tests: [{ assert: [{ type: 'is-valid-openai-tools-call' }] }],
+        extensions: ['file://hooks.js:afterEach'],
+      };
+      const env = { PROMPTFOO_STRIP_RESPONSE_OUTPUT: String(strip) };
+      const restoreEnv = mockProcessEnv(env);
+      try {
+        const record = await Eval.create({ env, outputPath }, suite.prompts, { id: randomUUID() });
+        await evaluate(suite, record, {});
+        const loaded = await Eval.findById(record.id);
+        const summary = await loaded!.toEvaluateSummary();
+        const artifactText = fs.readFileSync(outputPath, 'utf8');
+        const rows = artifactText
+          .trim()
+          .split(/\r?\n/)
+          .map((line) => JSON.parse(line));
+        expect(summary.stats.successes).toBe(1);
+        expect(hookCompletions).toBe(1);
+        expect(loaded!.results[0].response?.metadata?.functionToolCalls).toEqual(functionToolCalls);
+        expect(rows).toHaveLength(1);
+        for (const result of [summary.results[0], rows[0]]) {
+          expect(result).toMatchObject({ success: true, score: 1 });
+          expect(JSON.stringify(result).includes('private-normal-media-arguments')).toBe(!strip);
+          if (ownership === 'hook-owned') {
+            expect(
+              result.metadata?.completedTargetResponses[0].response.metadata.functionToolCalls,
+            ).toEqual(['intentional hook calls']);
+          }
+        }
+        expect(artifactText.includes('private-normal-media-arguments')).toBe(!strip);
+        expect(response).toEqual(original);
+      } finally {
+        restoreEnv();
+        fs.rmSync(outputPath, { force: true });
+      }
+    },
+  );
+
   it('drops stale provider headers when afterEach replaces response metadata', async () => {
     const outputPath = path.join(os.tmpdir(), `promptfoo-evaluator-${randomUUID()}.jsonl`);
     const mockExtension = 'file://test-extension.js:afterEach';
