@@ -336,32 +336,24 @@ const ServiceTier = z
   .enum(['auto', 'default', 'fast', 'flex', 'priority', 'premium', 'ultrafast', 'scale'])
   .nullable();
 
-const TextFields = OpenAiSharedConfigInputSchema.extend({
+const TextRequestFields = OpenAiSharedConfigInputSchema.extend({
   model: z.string().optional().describe('Model used when the provider ID omits a model name'),
   temperature: z.number().optional(),
-  max_tokens: z.number().optional(),
   top_p: z.number().optional(),
-  frequency_penalty: z.number().optional(),
-  presence_penalty: z.number().optional(),
-  best_of: z.number().optional(),
-  stop: z.union([z.string(), z.array(z.string())]).optional(),
-  seed: z.number().optional(),
   service_tier: ServiceTier.optional(),
   passthrough: JsonObjectInputSchema.optional().describe(
     'Additional request fields passed to the API',
   ),
 });
-const ChatFields = TextFields.omit({ best_of: true }).extend({
-  max_completion_tokens: z.number().optional(),
-  functions: z.union([FileReferenceInputSchema, z.array(ChatFunctionDefinition)]).optional(),
-  function_call: z
-    .union([z.enum(['none', 'auto']), z.strictObject({ name: z.string() })])
-    .optional(),
-  tools: ChatTools.optional(),
-  tool_choice: ChatToolChoice.optional(),
-  tool_resources: JsonObjectInputSchema.optional(),
-  response_format: ChatResponseFormat.optional(),
-  showThinking: z.boolean().optional(),
+const CompletionFields = TextRequestFields.extend({
+  max_tokens: z.number().optional(),
+  frequency_penalty: z.number().optional(),
+  presence_penalty: z.number().optional(),
+  best_of: z.number().optional(),
+  stop: z.union([z.string(), z.array(z.string())]).optional(),
+  seed: z.number().optional(),
+});
+const ConversationFields = TextRequestFields.extend({
   reasoning_effort: z.union([ReasoningEffort, Template]).nullable().optional(),
   reasoning: Reasoning.optional(),
   verbosity: z.enum(['low', 'medium', 'high']).optional(),
@@ -374,6 +366,27 @@ const ChatFields = TextFields.omit({ best_of: true }).extend({
     .optional(),
   prompt_cache_retention: z.enum(['in_memory', '24h']).nullable().optional(),
   safety_identifier: z.string().optional(),
+  user: z.string().optional(),
+  metadata: z.record(z.string(), z.string()).optional(),
+  store: z.boolean().optional(),
+  omitDefaults: z.boolean().optional(),
+});
+const ChatFields = ConversationFields.extend({
+  max_tokens: CompletionFields.shape.max_tokens,
+  frequency_penalty: CompletionFields.shape.frequency_penalty,
+  presence_penalty: CompletionFields.shape.presence_penalty,
+  stop: CompletionFields.shape.stop,
+  seed: CompletionFields.shape.seed,
+  max_completion_tokens: z.number().optional(),
+  functions: z.union([FileReferenceInputSchema, z.array(ChatFunctionDefinition)]).optional(),
+  function_call: z
+    .union([z.enum(['none', 'auto']), z.strictObject({ name: z.string() })])
+    .optional(),
+  tools: ChatTools.optional(),
+  tool_choice: ChatToolChoice.optional(),
+  tool_resources: JsonObjectInputSchema.optional(),
+  response_format: ChatResponseFormat.optional(),
+  showThinking: z.boolean().optional(),
   modalities: z.array(z.string()).optional(),
   audio: z
     .strictObject({
@@ -383,10 +396,6 @@ const ChatFields = TextFields.omit({ best_of: true }).extend({
       voice: z.string().optional(),
     })
     .optional(),
-  user: z.string().optional(),
-  metadata: z.record(z.string(), z.string()).optional(),
-  store: z.boolean().optional(),
-  omitDefaults: z.boolean().optional(),
   functionToolCallbacks: z
     .record(z.string(), z.string())
     .optional()
@@ -402,49 +411,32 @@ const ChatFields = TextFields.omit({ best_of: true }).extend({
   }).optional(),
 });
 
-export const OpenAiCompletionConfigInputSchema = TextFields.describe(
+export const OpenAiCompletionConfigInputSchema = CompletionFields.describe(
   'Serializable legacy OpenAI Completions configuration',
 );
 export const OpenAiChatConfigInputSchema = ChatFields.describe(
   'Serializable OpenAI Chat Completions configuration',
 );
-export const OpenAiResponsesConfigInputSchema = ChatFields.omit({
-  max_tokens: true,
-  max_completion_tokens: true,
-  stop: true,
-  frequency_penalty: true,
-  presence_penalty: true,
-  functions: true,
-  function_call: true,
-  tool_resources: true,
-  modalities: true,
-  audio: true,
-  mcp: true,
-  functionToolCallbacks: true,
-  seed: true,
-  showThinking: true,
-})
-  .extend({
-    tools: ResponsesTools.optional(),
-    tool_choice: ToolChoice.optional(),
-    response_format: ResponsesResponseFormat.optional(),
-    instructions: z.string().optional(),
-    max_output_tokens: z.number().int().min(16).optional(),
-    max_tool_calls: z.number().optional(),
-    access_programs: z
-      .strictObject({ cyber: z.enum(['standard', 'daybreak_blue', 'daybreak_red']).optional() })
-      .optional(),
-    include: z.array(z.string()).nullable().optional(),
-    parallel_tool_calls: z.boolean().optional(),
-    previous_response_id: z.string().optional(),
-    stream: z.boolean().optional(),
-    truncation: z.enum(['auto', 'disabled']).optional(),
-    background: z.boolean().optional(),
-    webhook_url: z.string().optional(),
-  })
-  .describe(
-    'Serializable OpenAI Responses configuration; use max_output_tokens for the output limit',
-  );
+export const OpenAiResponsesConfigInputSchema = ConversationFields.extend({
+  tools: ResponsesTools.optional(),
+  tool_choice: ToolChoice.optional(),
+  response_format: ResponsesResponseFormat.optional(),
+  instructions: z.string().optional(),
+  max_output_tokens: z.number().int().min(16).optional(),
+  max_tool_calls: z.number().optional(),
+  access_programs: z
+    .strictObject({ cyber: z.enum(['standard', 'daybreak_blue', 'daybreak_red']).optional() })
+    .optional(),
+  include: z.array(z.string()).nullable().optional(),
+  parallel_tool_calls: z.boolean().optional(),
+  previous_response_id: z.string().optional(),
+  stream: z.boolean().optional(),
+  truncation: z.enum(['auto', 'disabled']).optional(),
+  background: z.boolean().optional(),
+  webhook_url: z.string().optional(),
+}).describe(
+  'Serializable OpenAI Responses configuration; use max_output_tokens for the output limit',
+);
 export const OpenAiEmbeddingConfigInputSchema = OpenAiSharedConfigInputSchema.extend({
   model: z.string().optional(),
   passthrough: JsonObjectInputSchema.optional().describe(
