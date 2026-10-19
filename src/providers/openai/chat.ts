@@ -67,6 +67,7 @@ import {
   normalizeOpenAiBillingModelName,
   normalizeOpenAiServiceTierForWire,
   OPENAI_CHAT_MODELS,
+  validateChatCompletionMessage,
   validateFunctionCall,
 } from './util';
 import type OpenAI from 'openai';
@@ -1108,7 +1109,22 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         };
       }
       throwIfAborted(callApiOptions?.abortSignal);
-      const message = data.choices[0].message;
+      const rawMessage = data.choices[0].message;
+      // OpenRouter may omit the type on complete function calls. Normalize the
+      // local message before execution and validation, without changing cached data.
+      const message =
+        this.usesOpenRouter() && Array.isArray(rawMessage.tool_calls)
+          ? {
+              ...rawMessage,
+              tool_calls: rawMessage.tool_calls.map((call: unknown) => {
+                const validated = validateChatCompletionMessage({ tool_calls: [call] })
+                  ?.toolCalls?.[0];
+                return validated && validated.type === undefined
+                  ? { ...validated, type: 'function' }
+                  : call;
+              }),
+            }
+          : rawMessage;
       const finishReason = normalizeFinishReason(data.choices[0].finish_reason);
       const cost = this.calculateResponseCost(data, config, cached);
       const providerMetadata = this.getProviderResponseMetadata(data);

@@ -1901,6 +1901,283 @@ describe('OpenAI Provider', () => {
       },
     );
 
+    describe('OpenRouter tool-call normalization', () => {
+      const args = '{ "param": "line\\nbreak" }\n';
+      const call = {
+        id: 'call_external',
+        function: { name: 'external_function', arguments: args },
+      };
+
+      async function expectToolGrades(
+        provider: OpenAiChatCompletionProvider,
+        providerResponse: ProviderResponse,
+        valid: boolean,
+      ) {
+        for (const inverse of [false, true]) {
+          const pass = inverse ? !valid : valid;
+          expect(
+            await runAssertion({
+              provider,
+              providerResponse,
+              assertion: {
+                type: inverse ? 'not-is-valid-openai-tools-call' : 'is-valid-openai-tools-call',
+              },
+              test: {},
+            }),
+          ).toMatchObject({ pass, score: pass ? 1 : 0 });
+        }
+      }
+
+      it.each(
+        ['generic', 'dedicated'].flatMap((route) =>
+          [undefined, 'function'].map((type) => ({ route, type })),
+        ),
+      )(
+        'preserves supported calls and immutable cache replays through $route (type: $type)',
+        async ({ route, type }) => {
+          const options = {
+            config: {
+              ...createOpenRouterOptions().config,
+              apiKey: 'test-key',
+              tools: [createExternalFunctionTool()],
+            },
+          };
+          const provider =
+            route === 'generic'
+              ? new OpenAiChatCompletionProvider('openai/gpt-4o-mini', options)
+              : new OpenRouterProvider('openai/gpt-4o-mini', options);
+          for (const content of [null, 'Calling the tool']) {
+            const wireCall = Object.freeze({
+              ...call,
+              ...(type === undefined ? {} : { type }),
+              function: Object.freeze({ ...call.function }),
+            });
+            const message = Object.freeze({ content, tool_calls: Object.freeze([wireCall]) });
+            const data = Object.freeze({
+              choices: Object.freeze([Object.freeze({ message })]),
+            });
+            const original = JSON.stringify(data);
+            for (const cached of [false, true]) {
+              mockFetchWithCache.mockResolvedValue(createMockFetchResponse(data, { cached }));
+              const response = await provider.callApi('Use the external function');
+              const normalized = { ...wireCall, type: 'function' };
+              expect(response.error).toBeUndefined();
+              expect(response.cached).toBe(cached);
+              expect(response.output).toEqual(
+                route === 'generic' && content
+                  ? { content, tool_calls: [normalized] }
+                  : [normalized],
+              );
+              expect(response.metadata?.toolCalls).toBeUndefined();
+              await expectToolGrades(provider, response, true);
+              expect(JSON.stringify(data)).toBe(original);
+              expect(Object.hasOwn(wireCall, 'type')).toBe(type !== undefined);
+            }
+          }
+          expect(mockFetchWithCache).toHaveBeenCalledTimes(4);
+        },
+      );
+
+      it.each([
+        ...['custom', 'unknown', null, '', false, 0].map((type) => ({
+          label: `explicit type ${JSON.stringify(type)}`,
+          invalid: { ...call, type },
+          normalized: false,
+        })),
+        { label: 'missing id', invalid: { function: call.function }, normalized: false },
+        { label: 'numeric id', invalid: { ...call, id: 1 }, normalized: false },
+        { label: 'missing payload', invalid: { id: call.id }, normalized: false },
+        { label: 'null entry', invalid: null, normalized: false },
+        ...[
+          { label: 'missing name', payload: { arguments: args }, normalized: false },
+          { label: 'blank name', payload: { name: ' ', arguments: args }, normalized: false },
+          { label: 'missing arguments', payload: { name: 'external_function' }, normalized: false },
+          {
+            label: 'object arguments',
+            payload: { name: 'external_function', arguments: { param: 'value' } },
+            normalized: false,
+          },
+          {
+            label: 'bad JSON',
+            payload: { ...call.function, arguments: '{' },
+            normalized: true,
+          },
+          {
+            label: 'invalid schema',
+            payload: { ...call.function, arguments: '{"param":42}' },
+            normalized: true,
+          },
+          {
+            label: 'unknown function',
+            payload: { name: 'unknown', arguments: args },
+            normalized: true,
+          },
+        ].map(({ label, payload, normalized }) => ({
+          label,
+          invalid: { ...call, function: payload },
+          normalized,
+        })),
+        {
+          label: 'valid custom payload',
+          invalid: {
+            id: call.id,
+            type: 'custom',
+            custom: { name: 'external_function', input: args },
+          },
+          normalized: false,
+        },
+      ])('retains $label alone and beside a valid omitted-type call', async (row) => {
+        const provider = new OpenAiChatCompletionProvider('openai/gpt-4o-mini', {
+          config: { ...createOpenRouterOptions().config, tools: [createExternalFunctionTool()] },
+        });
+        for (const mixed of [false, true]) {
+          const toolCalls = [...(mixed ? [call] : []), row.invalid];
+          const data = { choices: [{ message: { content: null, tool_calls: toolCalls } }] };
+          const original = JSON.stringify(data);
+          mockFetchWithCache.mockResolvedValue(createMockFetchResponse(data));
+          const response = await provider.callApi('Use the external function');
+          expect(response.error).toBeUndefined();
+          expect(response.output).toEqual([
+            ...(mixed ? [{ ...call, type: 'function' }] : []),
+            row.normalized ? { ...row.invalid, type: 'function' } : row.invalid,
+          ]);
+          await expectToolGrades(provider, response, false);
+          expect(JSON.stringify(data)).toBe(original);
+        }
+      });
+
+      it.each([
+        { apiBaseUrl: undefined, id: undefined, valid: false },
+        { apiBaseUrl: 'https://gateway.example.test/v1', id: undefined, valid: false },
+        { apiBaseUrl: 'https://openrouter.ai.example.test/api/v1', id: undefined, valid: false },
+        {
+          apiBaseUrl: 'https://gateway.example.test/openrouter.ai/v1',
+          id: undefined,
+          valid: false,
+        },
+        { apiBaseUrl: 'https://openrouter.ai/api/v1', id: 'custom-provider-label', valid: true },
+      ])('keeps endpoint classification independent of a custom label: %j', async (row) => {
+        const provider = new OpenAiChatCompletionProvider('openai/gpt-4o-mini', {
+          id: row.id,
+          config: { apiBaseUrl: row.apiBaseUrl, tools: [createExternalFunctionTool()] },
+        });
+        mockFetchWithCache.mockResolvedValue(
+          createMockFetchResponse({
+            choices: [{ message: { content: null, tool_calls: [call] } }],
+          }),
+        );
+        const response = await provider.callApi('Use the external function');
+        expect(response.output).toEqual([row.valid ? { ...call, type: 'function' } : call]);
+        if (row.id) {
+          expect(provider.id()).toBe(row.id);
+        }
+        await expectToolGrades(provider, response, row.valid);
+      });
+
+      it.each([
+        { type: undefined, arguments: args, valid: true },
+        { type: 'function', arguments: args, valid: true },
+        { type: undefined, arguments: '{"param":42}', valid: false },
+        { type: 'custom', arguments: args, valid: false },
+      ])('keeps callback bytes and retained validation aligned: %j', async (row) => {
+        const callback = vi.fn().mockResolvedValue('Callback completed');
+        const provider = new OpenAiChatCompletionProvider('openai/gpt-4o-mini', {
+          config: {
+            ...createOpenRouterOptions().config,
+            tools: [createExternalFunctionTool()],
+            functionToolCallbacks: { external_function: callback },
+          },
+        });
+        const wireCall = {
+          ...call,
+          type: row.type,
+          function: { ...call.function, arguments: row.arguments },
+        };
+        mockFetchWithCache.mockResolvedValue(
+          createMockFetchResponse({
+            choices: [{ message: { content: null, tool_calls: [wireCall] } }],
+          }),
+        );
+        const response = await provider.callApi('Use the external function');
+        expect(callback).toHaveBeenCalledExactlyOnceWith(row.arguments);
+        expect(response.output).toBe('Callback completed');
+        expect(response.metadata?.functionToolCalls).toEqual([
+          { ...wireCall, type: row.type ?? 'function' },
+        ]);
+        expect(response.metadata?.toolCalls).toBeUndefined();
+        expect(wireCall.type).toBe(row.type);
+        await expectToolGrades(provider, response, row.valid);
+      });
+
+      it.each([
+        { isError: false, mixed: false, valid: true },
+        { isError: true, mixed: false, valid: false },
+        { isError: false, mixed: true, valid: false },
+      ])('preserves actual MCP evidence with omitted types: %j', async (row) => {
+        const callback = vi.fn().mockResolvedValue('Callback completed');
+        const provider = new OpenAiChatCompletionProvider('openai/gpt-4o-mini', {
+          config: {
+            ...createOpenRouterOptions().config,
+            ...(row.mixed
+              ? {
+                  tools: [createExternalFunctionTool()],
+                  functionToolCallbacks: { external_function: callback },
+                }
+              : {}),
+          },
+        });
+        const mcpCall = {
+          id: 'mcp_call',
+          function: { name: 'read_file', arguments: '{ "path": "README.md" }' },
+        };
+        const ordinaryCall = { ...call, function: { ...call.function, arguments: '{"param":42}' } };
+        const callTool = vi
+          .fn()
+          .mockResolvedValue({ content: 'Tool output', isError: row.isError });
+        (provider as any).mcpClient = {
+          getAllTools: vi.fn().mockReturnValue([{ name: 'read_file' }]),
+          callTool,
+        };
+        mockFetchWithCache.mockResolvedValue(
+          createMockFetchResponse({
+            choices: [
+              {
+                message: {
+                  content: null,
+                  tool_calls: [mcpCall, ...(row.mixed ? [ordinaryCall] : [])],
+                },
+              },
+            ],
+          }),
+        );
+        const response = await provider.callApi('Read the file');
+        expect(callTool).toHaveBeenCalledExactlyOnceWith(
+          'read_file',
+          { path: 'README.md' },
+          undefined,
+        );
+        expect(callback).toHaveBeenCalledTimes(row.mixed ? 1 : 0);
+        if (row.mixed) {
+          expect(callback).toHaveBeenCalledWith(ordinaryCall.function.arguments);
+        }
+        expect(response.metadata?.functionToolCalls).toEqual(
+          row.mixed ? [{ ...ordinaryCall, type: 'function' }] : [],
+        );
+        expect(response.metadata?.toolCalls).toEqual([
+          {
+            id: mcpCall.id,
+            name: 'read_file',
+            input: { path: 'README.md' },
+            output: 'Tool output',
+            is_error: row.isError,
+          },
+        ]);
+        expect(mcpCall).not.toHaveProperty('type');
+        expect(ordinaryCall).not.toHaveProperty('type');
+        await expectToolGrades(provider, response, row.valid);
+      });
+    });
+
     it('should handle OpenAI reasoning field with separate content correctly', async () => {
       const mockResponse = createMockFetchResponse({
         choices: [
