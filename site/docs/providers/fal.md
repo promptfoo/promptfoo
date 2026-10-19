@@ -10,6 +10,8 @@ keywords: [fal.ai, image generation, AI images, flux, imagen, ideogram, promptfo
 The `fal` provider calls the [fal.ai](https://fal.ai) inference API through the
 [fal-js](https://github.com/fal-ai/fal-js) client.
 
+For direct provider calls, `context.bustCache: true` skips cache reads and writes. An explicit `bustCache: false` takes precedence over the legacy `context.debug` flag; globally disabled caching remains disabled.
+
 ## Setup
 
 1. **Install the fal client**:
