@@ -8,6 +8,8 @@ description: Configure IBM watsonx.ai text and chat models for LLM testing
 [IBM watsonx.ai](https://www.ibm.com/watsonx) exposes foundation models through text generation
 and chat APIs. Model availability varies by region and account.
 
+Text-generation responses can omit IBM's optional `model_version` field; generated text and token usage remain available.
+
 ## Supported Models
 
 IBM watsonx.ai provides foundation models through its inference API. The promptfoo WatsonX provider supports **text generation and chat models** that can be called directly via API.
