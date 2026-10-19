@@ -249,7 +249,7 @@ function renderRawRequestWithNunjucks(template: string, vars: Record<string, any
   // Protect literal Nunjucks syntax in the source by raw-wrapping
   // and then re-enabling only variable tags.
   const VAR_TOKEN = '__PF_VAR__';
-  const renderId = crypto.randomUUID().replaceAll('-', '');
+  const renderId = crypto.randomUUID().replace(/-/g, '');
   const captureFilter = `__pf_capture_${renderId}`;
   const valuePrefix = `__PF_RENDERED_${renderId}_`;
   const values: string[] = [];
