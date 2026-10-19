@@ -222,7 +222,7 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
       config.isClaudeOpus47OrLater ||
       grokSamplingRestricted ||
       looksLikeClaudeModelId(capabilityModelName.replace(/^.*-claude-/, 'claude-')) ||
-      /(?:^|[-/])(?:llama|deepseek|kimi|grok|phi|mistral|ministral|codestral|cohere|jamba|jais|falcon\d*|mai-code|gpt-oss)(?:[-._/]|$)/.test(
+      /(?:^|[-/])(?:llama|deepseek|kimi|grok|phi|mistral|ministral|codestral|pixtral|cohere|command-(?:a|r)|jamba|jais|falcon\d*|mai-code|gpt-oss|gpt-35-turbo)(?:[-._/]|$)/.test(
         capabilityModelName,
       );
     const useOpenAiAliasPolicy =

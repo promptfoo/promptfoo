@@ -41,7 +41,11 @@ import {
   usesAzureOpenAiBilling,
 } from './billing';
 import { applyGpt6RequestRules, getGpt6Variant, isGpt6Model } from './gpt6';
-import { isResponsesReasoningCleared, resolveResponsesReasoning } from './reasoning';
+import {
+  hasResponsesReasoningConfig,
+  isResponsesReasoningCleared,
+  resolveResponsesReasoning,
+} from './reasoning';
 import { isLegacyOpenAiChatModel } from './tokenCaps';
 import {
   appendOpenAiApiPath,
@@ -1086,11 +1090,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       effectiveReasoningEffort !== 'none';
     // Explicit clears also defer to the model's defaults rather than restoring client defaults.
     const hasExplicitReasoning =
-      supportsReasoningConfig &&
-      (renderedReasoning !== undefined ||
-        config.reasoning !== undefined ||
-        config.reasoning_effort !== undefined ||
-        config.passthrough?.reasoning !== undefined);
+      supportsReasoningConfig && hasResponsesReasoningConfig(this.config, context?.prompt?.config);
     const useUnknownReasoningDefaults =
       this.requestPolicy === 'openai' && !isReasoningModel && hasExplicitReasoning;
     const maxOutputTokensDefault = config.omitDefaults

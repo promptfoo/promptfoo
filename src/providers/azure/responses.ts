@@ -9,7 +9,11 @@ import {
 import invariant from '../../util/invariant';
 import { FunctionCallbackHandler } from '../functionCallbackUtils';
 import { applyGpt6RequestRules, isGpt6Model } from '../openai/gpt6';
-import { isResponsesReasoningCleared, resolveResponsesReasoning } from '../openai/reasoning';
+import {
+  hasResponsesReasoningConfig,
+  isResponsesReasoningCleared,
+  resolveResponsesReasoning,
+} from '../openai/reasoning';
 import { isLegacyOpenAiChatModel } from '../openai/tokenCaps';
 import { flattenResponseTool } from '../openai/util';
 import { ResponsesProcessor } from '../responses/index';
@@ -161,11 +165,7 @@ export class AzureResponsesProvider extends AzureGenericProvider<AzureResponsesO
       : undefined;
     // Explicit clears also defer to the model's defaults rather than restoring client defaults.
     const hasExplicitReasoning =
-      supportsReasoningConfig &&
-      (renderedReasoning !== undefined ||
-        config.reasoning !== undefined ||
-        config.reasoning_effort !== undefined ||
-        config.passthrough?.reasoning !== undefined);
+      supportsReasoningConfig && hasResponsesReasoningConfig(this.config, context?.prompt?.config);
     const maxOutputTokensDefault = config.omitDefaults
       ? getEnvString('OPENAI_MAX_TOKENS') === undefined
         ? undefined

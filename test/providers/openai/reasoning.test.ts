@@ -1,5 +1,6 @@
 import { describe, expect, expectTypeOf, it, vi } from 'vitest';
 import {
+  hasResponsesReasoningConfig,
   isResponsesReasoningCleared,
   resolveChatReasoningEffort,
   resolveResponsesReasoning,
@@ -210,5 +211,18 @@ describe('full reasoning clears without typed model support', () => {
     [{ passthrough: [] }, { passthrough: 'invalid' }, false],
   ])('detects literal clears for %j and %j', (provider, prompt, expected) => {
     expect(isResponsesReasoningCleared(provider, prompt)).toBe(expected);
+  });
+});
+
+describe('reasoning settings before passthrough merging', () => {
+  it.each([
+    [{}, undefined, false],
+    [{ reasoning: null }, undefined, true],
+    [{}, { reasoning_effort: null }, true],
+    [{ passthrough: { reasoning: null } }, { passthrough: { unrelated: true } }, true],
+    [{ passthrough: { reasoning: { effort: null } } }, { passthrough: {} }, true],
+    [{ passthrough: [] }, { passthrough: { unrelated: true } }, false],
+  ])('detects explicit settings in %j and %j', (provider, prompt, expected) => {
+    expect(hasResponsesReasoningConfig(provider, prompt)).toBe(expected);
   });
 });

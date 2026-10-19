@@ -204,6 +204,21 @@ describe('shared reasoning request configuration', () => {
       expect(unsupported).not.toHaveBeenCalled();
     });
 
+    it.each([null, { effort: null }])(
+      'keeps provider raw clears when a prompt sets unrelated passthrough: %j',
+      async (reasoning) => {
+        const body = await getBody(
+          'internal-model',
+          { passthrough: { reasoning } },
+          { passthrough: { unrelated: true } },
+        );
+        expect(body).not.toHaveProperty('reasoning');
+        expect(body).not.toHaveProperty('temperature');
+        expect(body).not.toHaveProperty('max_output_tokens');
+        expect(body.unrelated).toBe(true);
+      },
+    );
+
     it('leaves automatic temperature and token limits unset when an internal alias uses reasoning', async () => {
       const body = await getBody('internal-model', {}, { reasoning_effort: 'low' });
       expect(body.reasoning).toEqual({ effort: 'low' });

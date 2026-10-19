@@ -151,12 +151,22 @@ describe('explicit request policies', () => {
     'cohere-command-r',
     'jais-30b-chat',
     'falcon3-7b-instruct',
+    'gpt-35-turbo',
+    'prod-gpt-35-turbo-0125',
+    'Pixtral-Large-2411',
+    'command-r-plus-08-2024',
+    'command-a-03-2025',
   ])('preserves compatible Azure model defaults for %s', async (modelName) => {
-    const { body } = await new AzureChatCompletionProvider('deployment', {
-      config: { modelName },
-    }).getOpenAiBody('Hello');
+    const provider = new AzureChatCompletionProvider('deployment', { config: { modelName } });
+    const { body } = await provider.getOpenAiBody('Hello');
     expect(body).toMatchObject({ max_tokens: 1024, temperature: 0 });
     expect(body).not.toHaveProperty('max_completion_tokens');
+    const { body: explicit } = await provider.getOpenAiBody('Hello', {
+      vars: {},
+      prompt: { raw: 'Hello', label: 'Hello', config: { max_tokens: 73 } },
+    });
+    expect(explicit).toMatchObject({ max_tokens: 73, temperature: 0 });
+    expect(explicit).not.toHaveProperty('max_completion_tokens');
   });
 });
 
