@@ -20,7 +20,7 @@ const chatProviders = [
     (
       model: string,
       config: Pick<OpenAiCompletionOptions, 'reasoning_effort' | 'reasoning' | 'passthrough'>,
-    ) => new OpenAiChatCompletionProvider(model, { config }),
+    ) => new OpenAiChatCompletionProvider(model, { config, requestPolicy: 'openai' }),
   ],
   [
     'Azure',
@@ -39,7 +39,7 @@ const responsesProviders = [
       promptConfig: object,
     ) =>
       (
-        await new OpenAiResponsesProvider(model, { config }).getOpenAiBody(
+        await new OpenAiResponsesProvider(model, { config, requestPolicy: 'openai' }).getOpenAiBody(
           'Hello',
           context(promptConfig),
         )

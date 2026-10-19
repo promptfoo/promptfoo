@@ -62,7 +62,7 @@ export function createCometApiProvider(
   if (type === 'chat') {
     return new OpenAiChatCompletionProvider(modelName, {
       ...openaiOptions,
-      useOpenAiDefaultsForUnknownModels: false,
+      requestPolicy: 'compatible',
     });
   } else if (type === 'completion') {
     return new OpenAiCompletionProvider(modelName, openaiOptions);
@@ -76,6 +76,6 @@ export function createCometApiProvider(
   const defaultModel = splits.slice(1).join(':');
   return new OpenAiChatCompletionProvider(defaultModel, {
     ...openaiOptions,
-    useOpenAiDefaultsForUnknownModels: false,
+    requestPolicy: 'compatible',
   });
 }

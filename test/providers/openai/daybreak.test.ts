@@ -61,9 +61,10 @@ describe.each([
   );
 
   it.each(['gpt-4.1', 'gpt-daybreak-red-latest-custom', 'custom-gpt-daybreak-blue-latest'])(
-    'keeps standard-model defaults for %s',
+    'keeps native endpoint defaults for %s',
     async (model) => {
       const { body } = await new Provider(model, {
+        requestPolicy: 'openai',
         config: { reasoning_effort: 'high' },
       }).getOpenAiBody('Hello');
 

@@ -111,7 +111,7 @@ class LiteLLMChatProvider extends LiteLLMProviderWrapper {
   constructor(modelName: string, options: ProviderOptions) {
     const provider = new OpenAiChatCompletionProvider(modelName, {
       ...options,
-      useOpenAiDefaultsForUnknownModels: false,
+      requestPolicy: 'compatible',
     });
     super(provider, 'chat', options.id);
     // Bind getApiKey if it exists

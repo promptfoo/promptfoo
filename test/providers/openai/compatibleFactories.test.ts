@@ -52,10 +52,10 @@ describe('compatible provider factory token limits', () => {
     const body = JSON.parse(vi.mocked(fetchWithCache).mock.calls[0][1]?.body as string);
     expect(body.max_tokens).toBe(73);
     expect(body).not.toHaveProperty('max_completion_tokens');
-    expect(body).not.toHaveProperty('useOpenAiDefaultsForUnknownModels');
+    expect(body).not.toHaveProperty('requestPolicy');
   });
 
-  it('keeps OpenAI defaults for a native OpenAI alias behind a custom endpoint', async () => {
+  it('preserves compatible defaults for an opaque alias behind a custom endpoint', async () => {
     const provider = await loadApiProvider('openai:chat:internal-model', {
       options: {
         id: 'custom-label',
@@ -68,7 +68,8 @@ describe('compatible provider factory token limits', () => {
     });
     await provider.callApi('Hello');
     const body = JSON.parse(vi.mocked(fetchWithCache).mock.calls[0][1]?.body as string);
-    expect(body.max_completion_tokens).toBe(73);
-    expect(body).not.toHaveProperty('max_tokens');
+    expect(body.max_tokens).toBe(73);
+    expect(body.temperature).toBe(0);
+    expect(body).not.toHaveProperty('max_completion_tokens');
   });
 });

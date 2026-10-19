@@ -70,7 +70,7 @@ import type {
 } from '../../types/index';
 import type { ProviderOptions } from '../../types/providers';
 import type { FetchOptions } from '../../util/fetch/types';
-import type { OpenAiCompletionOptions } from './types';
+import type { OpenAiCompletionOptions, OpenAiRequestPolicy } from './types';
 
 // OpenAI SDK has APIError class for exceptions, but not a type for error responses
 // in the JSON body. This interface represents the structure when the API returns
@@ -798,12 +798,16 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
   ].filter((model) => !RETIRED_OPENAI_MODEL_IDS.has(model));
 
   config: OpenAiCompletionOptions;
+  private readonly requestPolicy: OpenAiRequestPolicy;
 
   constructor(
     modelName: string,
-    options: Pick<ProviderOptions<OpenAiCompletionOptions>, 'config' | 'id' | 'env'> = {},
+    options: Pick<ProviderOptions<OpenAiCompletionOptions>, 'config' | 'id' | 'env'> & {
+      requestPolicy?: OpenAiRequestPolicy;
+    } = {},
   ) {
     super(modelName, options);
+    this.requestPolicy = options.requestPolicy ?? 'compatible';
     this.config = options.config ? { ...options.config } : {};
 
     // Initialize the shared response processor
@@ -1087,6 +1091,8 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
         config.reasoning !== undefined ||
         config.reasoning_effort !== undefined ||
         config.passthrough?.reasoning !== undefined);
+    const useUnknownReasoningDefaults =
+      this.requestPolicy === 'openai' && !isReasoningModel && hasExplicitReasoning;
     const maxOutputTokensDefault = config.omitDefaults
       ? getEnvString('OPENAI_MAX_TOKENS') === undefined
         ? undefined
@@ -1096,12 +1102,12 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       getEnvInt('OPENAI_MAX_COMPLETION_TOKENS') ?? getEnvInt('OPENAI_MAX_TOKENS');
     const maxOutputTokens =
       config.max_output_tokens ??
-      (isReasoningModel || hasExplicitReasoning
+      (isReasoningModel || useUnknownReasoningDefaults
         ? reasoningMaxOutputTokensDefault
         : maxOutputTokensDefault);
 
     const temperatureDefault =
-      config.omitDefaults || isGPT6Model || hasExplicitReasoning
+      config.omitDefaults || isGPT6Model || useUnknownReasoningDefaults
         ? getEnvString('OPENAI_TEMPERATURE') === undefined
           ? undefined
           : getEnvFloat('OPENAI_TEMPERATURE')

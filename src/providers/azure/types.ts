@@ -43,7 +43,7 @@ export interface AzureCompletionOptions {
    * (Opus 4.7/4.8/5, Sonnet 5, and Fable/Mythos 5 all reject temperature/top_p/top_k).
    */
   isClaudeOpus47OrLater?: boolean;
-  max_completion_tokens?: number; // Maximum number of tokens to generate for reasoning models
+  max_completion_tokens?: number | null; // Maximum number of tokens to generate for reasoning models
 
   // Azure cognitive services params
   deployment_id?: string;
@@ -63,7 +63,7 @@ export interface AzureCompletionOptions {
   // OpenAI params
   /** Output vector size for embeddings from text-embedding-3 and later models. */
   dimensions?: number;
-  max_tokens?: number;
+  max_tokens?: number | null;
   temperature?: number;
   top_p?: number;
   frequency_penalty?: number;

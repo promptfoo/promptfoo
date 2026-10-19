@@ -376,7 +376,7 @@ function getAnthropicPassthroughConfig(config?: CloudflareGatewayConfig): Anthro
 
   return {
     ...(apiKey !== undefined && { apiKey }),
-    ...(max_tokens !== undefined && { max_tokens }),
+    ...(max_tokens != null && { max_tokens }),
     ...(temperature !== undefined && { temperature }),
     ...(top_p !== undefined && { top_p }),
     ...(top_k !== undefined && { top_k }),

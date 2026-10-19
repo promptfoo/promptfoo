@@ -133,12 +133,15 @@ export interface OpenAiPromptCacheOptions {
   ttl?: '30m';
 }
 
+/** Unknown aliases use native OpenAI request fields or established compatible defaults. */
+export type OpenAiRequestPolicy = 'openai' | 'compatible';
+
 export type OpenAiCompletionOptions = OpenAiSharedOptions & {
-  /** Retain max_tokens and legacy defaults for an unknown Chat model alias. */
+  /** True retains max_tokens and default settings; false opts custom aliases into modern fields. */
   useLegacyTokenCap?: boolean;
   temperature?: number;
-  max_completion_tokens?: number;
-  max_tokens?: number;
+  max_completion_tokens?: number | null;
+  max_tokens?: number | null;
   top_p?: number;
   frequency_penalty?: number;
   presence_penalty?: number;

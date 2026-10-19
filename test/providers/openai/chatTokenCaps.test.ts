@@ -40,6 +40,7 @@ describe('Chat output cap compatibility', () => {
           [{ max_tokens: 40 }, { passthrough: { max_completion_tokens: null } }, undefined],
         ] as const) {
           const { body } = await new OpenAiChatCompletionProvider(model, {
+            requestPolicy: 'openai',
             config: providerConfig,
           }).getOpenAiBody('Say ready.', {
             vars: {},
@@ -57,7 +58,7 @@ describe('Chat output cap compatibility', () => {
   it.each(['internal-eval-model', 'gpt-7-preview', 'openai/internal-eval-model'])(
     'uses model defaults and forwards configured effort for unknown OpenAI alias %s',
     async (model) => {
-      const provider = new OpenAiChatCompletionProvider(model);
+      const provider = new OpenAiChatCompletionProvider(model, { requestPolicy: 'openai' });
       const { body: defaults } = await provider.getOpenAiBody('Say ready.');
       for (const field of [
         'max_tokens',
@@ -86,6 +87,7 @@ describe('Chat output cap compatibility', () => {
 
   it('checks the final passthrough model when choosing the request surface', async () => {
     const { body } = await new OpenAiChatCompletionProvider('gpt-4o', {
+      requestPolicy: 'openai',
       config: { max_tokens: 4096, reasoning_effort: 'high' },
     }).getOpenAiBody('Say ready.', {
       vars: {},
@@ -109,7 +111,9 @@ describe('Chat output cap compatibility', () => {
     async (model) => {
       const reset = mockProcessEnv({ OPENAI_MAX_TOKENS: '16' });
       try {
-        const { body } = await new OpenAiChatCompletionProvider(model).getOpenAiBody('Say ready.');
+        const { body } = await new OpenAiChatCompletionProvider(model, {
+          requestPolicy: 'openai',
+        }).getOpenAiBody('Say ready.');
         expect(body).not.toHaveProperty('max_tokens');
         expect(body).not.toHaveProperty('max_completion_tokens');
       } finally {
@@ -128,6 +132,7 @@ describe('Chat output cap compatibility', () => {
     'ft:gpt-4.1:org:internal-alias:id',
   ])('preserves the existing request defaults for legacy family %s', async (model) => {
     const { body } = await new OpenAiChatCompletionProvider(model, {
+      requestPolicy: 'openai',
       config: { reasoning_effort: 'high' },
     }).getOpenAiBody('Say ready.');
     expect(body).toMatchObject({ max_tokens: 1024, temperature: 0 });
@@ -137,6 +142,7 @@ describe('Chat output cap compatibility', () => {
 
   it('does not infer legacy capabilities from a fine-tune experiment name', async () => {
     const { body } = await new OpenAiChatCompletionProvider('ft:internal-alias:org:gpt-4.1:id', {
+      requestPolicy: 'openai',
       config: { max_tokens: 4096 },
     }).getOpenAiBody('Say ready.');
     expect(body.max_completion_tokens).toBe(4096);
@@ -170,6 +176,7 @@ describe('Chat output cap compatibility', () => {
 
   it('allows an unknown OpenAI-compatible alias to opt into legacy caps', async () => {
     const { body } = await new OpenAiChatCompletionProvider('older-private-model', {
+      requestPolicy: 'openai',
       config: { useLegacyTokenCap: true, max_tokens: 128, reasoning_effort: 'high' },
     }).getOpenAiBody('Say ready.');
     expect(body).toMatchObject({ max_tokens: 128, temperature: 0 });
@@ -189,7 +196,7 @@ describe('Chat output cap compatibility', () => {
       });
       try {
         for (const provider of [
-          new OpenAiChatCompletionProvider('internal-alias'),
+          new OpenAiChatCompletionProvider('internal-alias', { requestPolicy: 'openai' }),
           new AzureChatCompletionProvider('internal-deployment'),
         ]) {
           const { body } = await provider.getOpenAiBody('Say ready.');
@@ -210,6 +217,7 @@ describe('Chat output cap compatibility', () => {
 
   it('preserves the legacy request defaults for the ChatGPT GPT-4o alias', async () => {
     const { body } = await new OpenAiChatCompletionProvider('chatgpt-4o-latest', {
+      requestPolicy: 'openai',
       config: { apiBaseUrl: 'https://proxy.example.test/v1', max_tokens: 128 },
     }).getOpenAiBody('Say ready.');
     expect(body).toMatchObject({ max_tokens: 128, temperature: 0 });
@@ -223,6 +231,7 @@ describe('Chat output cap compatibility', () => {
     'uses the provider endpoint for cap precedence despite prompt URL %s to %s',
     async (providerUrl, promptUrl, expected) => {
       const { body } = await new OpenAiChatCompletionProvider('o3', {
+        requestPolicy: 'openai',
         config: {
           apiBaseUrl: providerUrl,
           max_completion_tokens: 50,

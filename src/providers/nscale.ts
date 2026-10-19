@@ -60,7 +60,7 @@ export function createNscaleProvider(
     return withNscaleCredentials(
       new OpenAiChatCompletionProvider(modelName, {
         ...nscaleConfig,
-        useOpenAiDefaultsForUnknownModels: false,
+        requestPolicy: 'compatible',
       }),
     );
   } else if (splits[1] === 'completion') {
@@ -81,7 +81,7 @@ export function createNscaleProvider(
     return withNscaleCredentials(
       new OpenAiChatCompletionProvider(modelName, {
         ...nscaleConfig,
-        useOpenAiDefaultsForUnknownModels: false,
+        requestPolicy: 'compatible',
       }),
     );
   }

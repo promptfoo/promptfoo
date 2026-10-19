@@ -352,7 +352,8 @@ const TextFields = OpenAiSharedConfigInputSchema.extend({
   ),
 });
 const ChatFields = TextFields.omit({ best_of: true }).extend({
-  max_completion_tokens: z.number().optional(),
+  max_tokens: z.number().nullable().optional(),
+  max_completion_tokens: z.number().nullable().optional(),
   functions: z.union([FileReferenceInputSchema, z.array(ChatFunctionDefinition)]).optional(),
   function_call: z
     .union([z.enum(['none', 'auto']), z.strictObject({ name: z.string() })])
