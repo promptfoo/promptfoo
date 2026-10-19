@@ -56,6 +56,9 @@ export {
   HttpAuthInputSchema,
 } from './providerConfig/httpAuth.js';
 export {
+  type McpClientConfigInput,
+  McpClientConfigInputJsonSchema,
+  McpClientConfigInputSchema,
   type McpConfig,
   type McpConfigInput,
   McpConfigInputJsonSchema,

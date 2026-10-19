@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { McpConfigInputSchema } from './mcp.js';
+import { McpClientConfigInputSchema } from './mcp.js';
 import {
   FileReferenceInputSchema,
   JsonObjectInputSchema,
@@ -116,7 +116,7 @@ export const AnthropicMessagesConfigInputSchema = AnthropicSharedConfigInputSche
   tool_choice: ToolChoice.optional(),
   beta: z.array(z.string()).optional(),
   showThinking: z.boolean().optional(),
-  mcp: McpConfigInputSchema.extend({
+  mcp: McpClientConfigInputSchema.extend({
     enabled: z.boolean().describe('Set true to initialize MCP tools'),
   }).optional(),
   max_tool_calls: z.number().optional(),

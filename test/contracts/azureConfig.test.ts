@@ -256,3 +256,34 @@ describe('Azure portable configuration contracts', () => {
     }>().not.toExtend<AzureProviderOptionsInput>();
   });
 });
+
+describe('nested MCP client contract', () => {
+  const validate = new Ajv({ strict: false }).compile(AzureChatConfigInputJsonSchema);
+  it.each(['defaultArgs', 'transformResponse', 'responseParser', 'serverName'])(
+    'rejects standalone %s inside model MCP settings',
+    (field) => {
+      const config = {
+        mcp: {
+          enabled: true,
+          server: { command: 'fixture' },
+          [field]: field === 'defaultArgs' ? { session: 'ignored' } : 'ignored',
+        },
+      };
+      expect(AzureChatConfigInputSchema.safeParse(config).success).toBe(false);
+      expect(validate(config)).toBe(false);
+    },
+  );
+  it('accepts supported connection, timeout and tool-filter settings', () => {
+    const config = {
+      mcp: {
+        enabled: true,
+        server: { command: 'fixture' },
+        timeout: 0,
+        tools: ['lookup'],
+        exclude_tools: ['delete'],
+      },
+    };
+    expect(AzureChatConfigInputSchema.parse(config)).toEqual(config);
+    expect(validate(config)).toBe(true);
+  });
+});

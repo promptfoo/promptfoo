@@ -135,6 +135,10 @@ assert.equal(contracts.OpenAiProviderOptionsInputSchema.safeParse({ id: 'openai:
 assert.equal(contracts.OpenAiProviderOptionsInputSchema.safeParse({ id: 'openai:chat:test', config: { temperature: 'warm' } }).success, false);
 assert.equal(contracts.AzureProviderOptionsInputSchema.safeParse({ id: 'azureopenai:chat:deployment', config: { temperature: 0 } }).success, true);
 assert.equal(contracts.AnthropicProviderOptionsInputSchema.safeParse({ id: 'anthropic:messages:test', config: { thinking: { type: 'enabled' } } }).success, false);
+assert.deepEqual(contracts.McpClientConfigInputSchema.parse({server: {command: 'fixture'}}), {server: {command: 'fixture'}});
+assert.equal(contracts.McpClientConfigInputSchema.safeParse({defaultArgs: {session: 'ignored'}}).success, false);
+assert.equal(contracts.McpConfigInputSchema.safeParse({defaultArgs: {session: 'supported'}}).success, true);
+assert.equal(contracts.McpConfigInputSchema.safeParse({defaultArgs: {callback() {}}}).success, false);
 assert.equal('TRACE_CREDENTIAL_PATH_SEGMENT' in contracts, false);
 `;
   fs.writeFileSync(
@@ -163,7 +167,13 @@ contracts.GetUserResponseSchema.parse(user);
 const invalid: contracts.Prompt = { raw: 3, label: 'bad' };
 // @ts-expect-error Provider output images retain the BlobRef contract.
 const invalidBlob: contracts.BlobRef = { ...blob, hash: 3 };
-void [response, invalid, invalidBlob, openai, invalidOpenai, azure, anthropic, invalidAnthropic];
+const mcpClient: contracts.McpClientConfigInput = { server: { command: 'fixture' }, timeout: 1000 };
+const mcpProvider: contracts.McpConfigInput = { ...mcpClient, defaultArgs: { nested: [true, null, 1] } };
+// @ts-expect-error Client input does not expose standalone provider defaults.
+const invalidClient: contracts.McpClientConfigInput = { defaultArgs: {session: 'ignored'} };
+// @ts-expect-error Portable tool arguments must be JSON values.
+const invalidDefaults: contracts.McpConfigInput = { defaultArgs: { callback() {} } };
+void [response, invalid, invalidBlob, openai, invalidOpenai, azure, anthropic, invalidAnthropic, mcpClient, mcpProvider, invalidClient, invalidDefaults];
 `;
   fs.writeFileSync(
     path.join(consumer, 'types.mts'),
