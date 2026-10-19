@@ -584,7 +584,7 @@ class RunnerTests(unittest.TestCase):
         ):
             run_example("google-adk-litellm")
         calls = run.call_args_list
-        self.assertIn("litellm>=1.101,<2", calls[0].args[0])
+        self.assertIn("litellm[mcp]>=1.101,<2", calls[0].args[0])
         self.assertIn("-r", calls[0].args[0])
         self.assertEqual(calls[1].args[0][1:], ("-m", "pip", "check"))
         self.assertEqual(calls[2].args[0][-1], "*_test.py")
