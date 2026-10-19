@@ -967,6 +967,172 @@ describe('HttpProvider', () => {
       expect([...form.entries()]).toEqual(fields);
     });
 
+    it.each(
+      [false, true].flatMap((headerCapture) =>
+        ['\n', '\r\n', '\r'].flatMap((terminalNewline) =>
+          (terminalNewline === '\r' ? [true] : [false, true]).flatMap((sourceSeparator) =>
+            [false, true].map((capturedDelimiter) => ({
+              headerCapture,
+              terminalNewline,
+              sourceSeparator,
+              capturedDelimiter,
+            })),
+          ),
+        ),
+      ),
+    )(
+      'should preserve terminal capture provenance ($headerCapture, $terminalNewline, $sourceSeparator, $capturedDelimiter)',
+      async ({ headerCapture, terminalNewline, sourceSeparator, capturedDelimiter }) => {
+        const headers = 'Content-Disposition: form-data; name="first"\n\n';
+        const secondHeaders = 'Content-Disposition: form-data; name="second"\n\n';
+        const payload = '  one\nmixed\r\n\t ';
+        const source =
+          `--fixture\n${headerCapture ? '{{part.content}}' : `${headers}{{payload.text}}`}` +
+          `${sourceSeparator ? '\n' : ''}${capturedDelimiter ? '{{part.separator}}' : '--fixture\n'}` +
+          `${secondHeaders}two\n--fixture--\n`;
+        const provider = new HttpProvider('http', {
+          config: {
+            request: `POST / HTTP/1.1\nHost: example.com\nContent-Type: multipart/form-data; boundary=fixture\n\n${source}`,
+          },
+        });
+        vi.mocked(fetchWithCache).mockResolvedValueOnce(createMockFetchResponse('{}'));
+        await provider.callApi('fixture', {
+          vars: {
+            part: { content: headers + payload + terminalNewline, separator: '--fixture\n' },
+            payload: { text: payload + terminalNewline },
+          },
+          prompt: { raw: 'fixture', label: 'fixture' },
+        });
+        const sentBody = vi.mocked(fetchWithCache).mock.calls[0][1]?.body as string;
+        const separator = sourceSeparator
+          ? `${terminalNewline}\r\n`
+          : headerCapture
+            ? '\r\n'
+            : terminalNewline;
+        expect(sentBody).toBe(
+          `--fixture\r\n${headers.replace(/\n/g, '\r\n')}${payload}${separator}` +
+            `--fixture\r\n${secondHeaders.replace(/\n/g, '\r\n')}two\r\n--fixture--\r\n`,
+        );
+        const parsed = new Response(sentBody, {
+          headers: { 'Content-Type': 'multipart/form-data; boundary=fixture' },
+        }).formData();
+        // An established payload's terminal LF stays data, even when that leaves
+        // invalid framing. A capture entered in headers can supply framing itself.
+        if (!headerCapture && !sourceSeparator && terminalNewline === '\n') {
+          await expect(parsed).rejects.toThrow();
+        } else {
+          expect([...(await parsed).entries()]).toEqual([
+            ['first', payload + (sourceSeparator ? terminalNewline : '')],
+            ['second', 'two'],
+          ]);
+        }
+      },
+    );
+
+    it.each(
+      [false, true].flatMap((capturedDelimiter) =>
+        [false, true].flatMap((capturedHeaders) =>
+          ['\n', '\r\n'].map((newline) => ({ capturedDelimiter, capturedHeaders, newline })),
+        ),
+      ),
+    )(
+      'should recognize adjacent multipart framing ($capturedDelimiter, $capturedHeaders, $newline)',
+      async ({ capturedDelimiter, capturedHeaders, newline }) => {
+        const firstHeaders = 'Content-Disposition: form-data; name="first"\n\n';
+        const headerLines = [
+          'Content-Disposition: form-data; name="second"',
+          'Content-Type: text/plain',
+          '',
+          '',
+        ];
+        const headers = headerLines.join(newline);
+        const payload = '  two\nmixed\r\n\t ';
+        const source =
+          `--fixture\n${firstHeaders}one\n` +
+          `${capturedDelimiter ? '{{part.separator}}' : `--fixture${newline}`}` +
+          `${capturedHeaders ? '{{part.headers}}' : headers}{{payload.text}}\n--fixture--\n`;
+        const provider = new HttpProvider('http', {
+          config: {
+            request: `POST / HTTP/1.1\nHost: example.com\nContent-Type: multipart/form-data; boundary=fixture\n\n${source}`,
+          },
+        });
+        vi.mocked(fetchWithCache).mockResolvedValueOnce(createMockFetchResponse('{}'));
+        await provider.callApi('fixture', {
+          vars: { part: { separator: `--fixture${newline}`, headers }, payload: { text: payload } },
+          prompt: { raw: 'fixture', label: 'fixture' },
+        });
+        const sentBody = vi.mocked(fetchWithCache).mock.calls[0][1]?.body as string;
+        expect(sentBody).toBe(
+          `--fixture\r\n${firstHeaders.replace(/\n/g, '\r\n')}one\r\n--fixture\r\n` +
+            `${headerLines.join('\r\n')}${payload}\r\n--fixture--\r\n`,
+        );
+        const form = await new Response(sentBody, {
+          headers: { 'Content-Type': 'multipart/form-data; boundary=fixture' },
+        }).formData();
+        expect([...form.entries()]).toEqual([
+          ['first', 'one'],
+          ['second', payload],
+        ]);
+      },
+    );
+
+    it.each([
+      {
+        name: 'blank separator across captures',
+        source: '{{part.headers}}{{part.blank}}{{payload.text}}',
+      },
+      { name: 'blank separator completed by source', source: '{{part.headers}}\n{{payload.text}}' },
+      { name: 'header and payload in one capture', source: '{{part.content}}' },
+      { name: 'opaque suffix in header capture', source: '{{part.content}}', hostile: true },
+      {
+        name: 'opaque separate payload capture',
+        source: '{{part.headers}}\n{{payload.text}}',
+        hostile: true,
+      },
+    ])('should bound adjacent header lookahead with $name', async ({ source, hostile }) => {
+      const headers = 'Content-Disposition: form-data; name="second"\nContent-Type: text/plain\n';
+      const payload = hostile
+        ? 'two\n--fixture\nContent-Disposition: form-data; name="injected"\n\nextra'
+        : '  two\nmixed\r\n\t ';
+      const provider = new HttpProvider('http', {
+        config: {
+          request:
+            'POST / HTTP/1.1\nHost: example.com\nContent-Type: multipart/form-data; boundary=fixture\n\n' +
+            '--fixture\nContent-Disposition: form-data; name="first"\n\none\n' +
+            `{{part.separator}}${source}\n--fixture--\n`,
+        },
+      });
+      vi.mocked(fetchWithCache).mockResolvedValueOnce(createMockFetchResponse('{}'));
+      await provider.callApi('fixture', {
+        vars: {
+          part: {
+            separator: '--fixture\n',
+            headers,
+            blank: '\n',
+            content: `${headers}\n${payload}`,
+          },
+          payload: { text: payload },
+        },
+        prompt: { raw: 'fixture', label: 'fixture' },
+      });
+      const sentBody = vi.mocked(fetchWithCache).mock.calls[0][1]?.body as string;
+      expect(sentBody).toBe(
+        '--fixture\r\nContent-Disposition: form-data; name="first"\r\n\r\none\r\n' +
+          `--fixture\r\n${headers.replace(/\n/g, '\r\n')}\r\n${payload}\r\n--fixture--\r\n`,
+      );
+      const parsed = new Response(sentBody, {
+        headers: { 'Content-Type': 'multipart/form-data; boundary=fixture' },
+      }).formData();
+      if (hostile) {
+        await expect(parsed).rejects.toThrow();
+      } else {
+        expect([...(await parsed).entries()]).toEqual([
+          ['first', 'one'],
+          ['second', payload],
+        ]);
+      }
+    });
+
     it.each([
       { name: 'adjacent opening and header captures', prefix: '{{part.open}}{{part.headers}}' },
       {

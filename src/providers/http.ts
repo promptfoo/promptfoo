@@ -1283,16 +1283,24 @@ function normalizeMultipartRequestTemplate(
   let line = '';
   let structuralTail = false;
   let opaqueLine = false;
-  const output: { content: string; newline: string }[] = [];
+  const output: { content: string; newline: string; preserveNewline?: boolean }[] = [];
 
-  const sourceAfter = (index: number, offset = 0) =>
-    fragments
-      .slice(index)
-      .map((fragment, relativeIndex) => {
-        const text = relativeIndex === 0 ? fragment.text.slice(offset) : fragment.text;
-        return fragment.interpolated && /[\r\n]/.test(text) ? '\0' : text;
-      })
-      .join('');
+  const sourceAfter = (index: number, offset = 0, includeHeaders = false) => {
+    let source = '';
+    for (const [relativeIndex, fragment] of fragments.slice(index).entries()) {
+      const text = relativeIndex === 0 ? fragment.text.slice(offset) : fragment.text;
+      source += !includeHeaders && fragment.interpolated && /[\r\n]/.test(text) ? '\0' : text;
+      if (includeHeaders) {
+        // A separator may be followed by captured headers, but their payload
+        // suffix cannot establish framing or a later source closing delimiter.
+        const separator = /\r?\n\r?\n/.exec(source);
+        if (separator) {
+          return source.slice(0, separator.index);
+        }
+      }
+    }
+    return source;
+  };
 
   const sourceConfirmsBoundary = (delimiter: string, followingSource: string) => {
     if (delimiter === `--${boundary}--`) {
@@ -1325,17 +1333,22 @@ function normalizeMultipartRequestTemplate(
     return newline ? '\r\n' : '';
   };
 
-  const finishPartLine = (content: string, newline: string, followingSource: () => string) => {
+  const finishPartLine = (
+    content: string,
+    newline: string,
+    followingSource: (includeHeaders?: boolean) => string,
+  ) => {
     if (!boundary || state.section === 'epilogue') {
       return newline;
     }
     const delimiter = content.replace(/[ \t]+$/, '');
     if (
       (delimiter === `--${boundary}` || delimiter === `--${boundary}--`) &&
-      (!opaqueLine || sourceConfirmsBoundary(delimiter, followingSource()))
+      (!opaqueLine ||
+        sourceConfirmsBoundary(delimiter, followingSource(delimiter === `--${boundary}`)))
     ) {
       const previous = output[output.length - 1];
-      if (previous?.newline) {
+      if (previous?.newline && !previous.preserveNewline) {
         previous.newline = '\r\n';
       }
       state.section = delimiter === `--${boundary}--` ? 'epilogue' : 'partHeaders';
@@ -1350,7 +1363,7 @@ function normalizeMultipartRequestTemplate(
     return newline;
   };
 
-  const finishLine = (newline: string, followingSource: () => string) => {
+  const finishLine = (newline: string, followingSource: (includeHeaders?: boolean) => string) => {
     let content = line;
     line = '';
     if (newline && structuralTail && content.endsWith('\r')) {
@@ -1366,11 +1379,23 @@ function normalizeMultipartRequestTemplate(
     opaqueLine = false;
   };
 
-  const appendOpaque = (text: string) => {
+  const appendOpaque = (text: string, headerSuffix = false) => {
     line += text;
     if (text) {
+      const terminalNewline = /\r?\n$/.exec(line)?.[0];
+      if (terminalNewline) {
+        // Complete the physical line without interpreting any payload lines.
+        // Only a capture entered in headers can supply a framing newline;
+        // independently inserted payload newlines remain byte-identical.
+        output.push({
+          content: line.slice(0, -terminalNewline.length),
+          newline: terminalNewline,
+          preserveNewline: !headerSuffix,
+        });
+        line = '';
+      }
       structuralTail = false;
-      opaqueLine = true;
+      opaqueLine = Boolean(line);
     }
   };
 
@@ -1384,8 +1409,8 @@ function normalizeMultipartRequestTemplate(
     const delimiter = (end < 0 ? candidate : candidate.slice(0, end))
       .replace(/\r$/, '')
       .replace(/[ \t]+$/, '');
-    // Only original source and single-line substitutions can establish later
-    // framing. Do not inspect embedded delimiter text in another payload value.
+    // Only original source and single-line substitutions can establish a later
+    // closer. Do not inspect embedded delimiter text in another payload value.
     if (delimiter === `--${boundary}--`) {
       return sourceConfirmsBoundary(delimiter, sourceAfter(index + 1));
     }
@@ -1395,7 +1420,7 @@ function normalizeMultipartRequestTemplate(
     ) {
       return false;
     }
-    const followingSource = sourceAfter(index + 1);
+    const followingSource = sourceAfter(index + 1, 0, true);
     return sourceConfirmsBoundary(
       delimiter,
       end < 0 ? followingSource.replace(/^\r?\n/, '') : followingSource,
@@ -1418,7 +1443,7 @@ function normalizeMultipartRequestTemplate(
       if (match.index > offset) {
         structuralTail = true;
       }
-      finishLine('\n', () => sourceAfter(index, match.index + 1));
+      finishLine('\n', (includeHeaders) => sourceAfter(index, match.index + 1, includeHeaders));
       offset = match.index + 1;
       // A header expression may also contain the start of a field value. Its
       // suffix remains opaque, unlike a whole body supplied before the first part.
@@ -1428,7 +1453,7 @@ function normalizeMultipartRequestTemplate(
     }
     const remainder = fragment.text.slice(offset);
     if (fragment.interpolated && initialState === 'partHeaders' && state.section === 'payload') {
-      appendOpaque(remainder);
+      appendOpaque(remainder, true);
     } else {
       line += remainder;
       if (remainder) {
