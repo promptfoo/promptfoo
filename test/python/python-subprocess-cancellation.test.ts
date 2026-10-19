@@ -7,7 +7,19 @@ import { runPython } from '../../src/python/pythonUtils';
 import type { PythonShell } from 'python-shell';
 
 const observed = vi.hoisted(() => ({
-  children: [] as { shell: PythonShell; closed: Promise<void> }[],
+  startedAt: 0,
+  children: [] as {
+    shell: PythonShell;
+    closed: Promise<void>;
+    lifecycle: {
+      constructedAtMs: number;
+      spawnedAtMs?: number;
+      exitedAtMs?: number;
+      closedAtMs?: number;
+      stdoutBytes: number;
+      stderrBytes: number;
+    };
+  }[],
 }));
 
 // Keep the installed constructor, script wrapper, child, streams and result files real.
@@ -19,10 +31,31 @@ vi.mock('python-shell', async (importOriginal) => {
     PythonShell: class extends actual.PythonShell {
       constructor(...args: ConstructorParameters<typeof actual.PythonShell>) {
         super(...args);
+        const elapsed = () => Date.now() - observed.startedAt;
+        const lifecycle = {
+          constructedAtMs: elapsed(),
+          stdoutBytes: 0,
+          stderrBytes: 0,
+        } as (typeof observed.children)[number]['lifecycle'];
+        this.childProcess.once('spawn', () => {
+          lifecycle.spawnedAtMs = elapsed();
+        });
+        this.childProcess.once('exit', () => {
+          lifecycle.exitedAtMs = elapsed();
+        });
+        this.childProcess.stdout?.on('data', (chunk: Buffer) => {
+          lifecycle.stdoutBytes += chunk.byteLength;
+        });
+        this.childProcess.stderr?.on('data', (chunk: Buffer) => {
+          lifecycle.stderrBytes += chunk.byteLength;
+        });
         const closed = new Promise<void>((resolve) =>
-          this.childProcess.once('close', () => resolve()),
+          this.childProcess.once('close', () => {
+            lifecycle.closedAtMs = elapsed();
+            resolve();
+          }),
         );
-        observed.children.push({ shell: this, closed });
+        observed.children.push({ shell: this, closed, lifecycle });
       }
     },
   };
@@ -34,6 +67,7 @@ vi.mock('../../src/logger', () => ({
 
 describe('runPython real invocation cancellation', () => {
   beforeEach(() => {
+    observed.startedAt = Date.now();
     observed.children.length = 0;
     vi.clearAllMocks();
   });
@@ -78,7 +112,19 @@ describe('runPython real invocation cancellation', () => {
       if (fs.existsSync(marker)) {
         resolveEntry();
       } else {
-        rejectEntry(new Error('Python loader did not enter'));
+        // Snapshot before cleanup changes the child's state. No shell means preparation
+        // has not reached PythonShell; it does not distinguish validation from file I/O.
+        const startup = {
+          elapsedMs: Date.now() - observed.startedAt,
+          phase: observed.children.length ? 'child-created' : 'before-child-creation',
+          children: observed.children.map(({ shell, lifecycle }) => ({
+            ...lifecycle,
+            pid: shell.childProcess.pid,
+            exitCode: shell.childProcess.exitCode,
+            signalCode: shell.childProcess.signalCode,
+          })),
+        };
+        rejectEntry(new Error(`Python loader did not enter: ${JSON.stringify(startup)}`));
       }
     }, 4000);
     let abortTimer: ReturnType<typeof setTimeout> | undefined;
@@ -90,8 +136,8 @@ describe('runPython real invocation cancellation', () => {
       calls.push(pending);
       await Promise.race([
         entered,
-        pending.then(() => {
-          throw new Error('Loader exited before its entry marker');
+        pending.then((result) => {
+          throw new Error('Loader exited before its entry marker', { cause: result });
         }),
       ]);
       clearTimeout(watchdog);
