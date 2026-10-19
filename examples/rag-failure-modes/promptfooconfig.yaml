@@ -1,0 +1,165 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: RAG failure mode eval examples
+
+prompts:
+  - '{{answer}}'
+
+providers:
+  - id: echo
+
+tests:
+  - description: Missing retrieved context should be detected
+    vars:
+      query: What is the company's laptop replacement policy?
+      context: |
+        The travel policy covers airfare reimbursement and hotel booking rules.
+      answer: The retrieved travel policy does not answer laptop replacement timing.
+    assert:
+      - type: javascript
+        value: |
+          return context.vars.context.includes('equipment-policy.md#laptops')
+            && context.vars.context.includes('laptop replacement every three years');
+
+  - description: Irrelevant retrieved context should be flagged
+    vars:
+      query: What is the PTO carryover limit?
+      context: |
+        The equipment policy describes laptop replacement timelines and monitor reimbursement.
+      answer: I found equipment reimbursement guidance, not PTO carryover policy details.
+    assert:
+      - type: javascript
+        value: |
+          return context.vars.context.includes('pto-policy.md#carryover')
+            && context.vars.context.includes('Employees may carry over up to 5 PTO days.');
+
+  - description: Answer should not ignore available context
+    vars:
+      query: What is the laptop replacement policy?
+      context: |
+        Source: equipment-policy.md#laptops
+        Employees are eligible for a laptop replacement every three years.
+      answer: According to equipment-policy.md#laptops, employees are eligible for a laptop replacement every three years.
+    assert:
+      - type: javascript
+        value: |
+          const supportedClaim = 'employees are eligible for a laptop replacement every three years';
+          const normalized = output.toLowerCase();
+          const deniedClaims = [
+            `not true that ${supportedClaim}`,
+            `false that ${supportedClaim}`,
+            `incorrect that ${supportedClaim}`,
+            `untrue that ${supportedClaim}`,
+            `denies that ${supportedClaim}`,
+            `rejects that ${supportedClaim}`,
+            'employees are not eligible for a laptop replacement every three years',
+            'employees are never eligible for a laptop replacement every three years',
+          ];
+          return normalized.includes(supportedClaim)
+            && deniedClaims.every((claim) => !normalized.includes(claim));
+      - type: contains
+        value: 'equipment-policy.md#laptops'
+
+  - description: Answer should not overclaim beyond context
+    vars:
+      query: Can employees get a standing desk reimbursed?
+      context: |
+        Source: equipment-policy.md#home-office
+        Employees may request reimbursement for ergonomic home-office equipment with manager approval.
+      answer: Employees may request ergonomic home-office equipment reimbursement with manager approval.
+    assert:
+      - type: javascript
+        value: |
+          const unsupportedGuarantee = /\b(?:guarantee(?:d|s)?|always|automatically|unconditionally)\b[\s\S]*\bstanding desk\b|\bstanding desk\b[\s\S]*\b(?:guarantee(?:d|s)?|always|automatically|unconditionally)\b/i;
+          return !unsupportedGuarantee.test(output);
+      - type: contains
+        value: 'manager approval'
+
+  - description: Fabricated citation should be caught
+    vars:
+      query: What is the laptop replacement policy?
+      context: |
+        Source: equipment-policy.md#laptops
+        Employees are eligible for a laptop replacement every three years.
+      answer: equipment-policy.md#laptops says employees are eligible for a laptop replacement every three years.
+    assert:
+      - type: javascript
+        value: |
+          const sources = new Set(
+            Array.from(context.vars.context.matchAll(/^Source:\s*(\S+)\s*$/gim), (match) => match[1]),
+          );
+          const citations = output.match(/[\w./-]+\.md#[\w./-]+/gi) || [];
+          return citations.length > 0 && citations.every((citation) => sources.has(citation));
+
+  - description: Source metadata should be preserved
+    vars:
+      query: What is the laptop replacement policy?
+      context: |
+        Source: equipment-policy.md#laptops
+        Page: 4
+        Employees are eligible for a laptop replacement every three years.
+      answer: 'equipment-policy.md#laptops, Page: 4, says employees are eligible for a laptop replacement every three years.'
+    assert:
+      - type: javascript
+        value: |
+          const source = context.vars.context.match(/^Source:\s*(\S+)\s*$/im)?.[1];
+          const citedSources = output.match(/[\w./-]+\.md#[\w./-]+/gi) || [];
+          return source !== undefined
+            && citedSources.length > 0
+            && citedSources.every((citation) => citation === source);
+      - type: javascript
+        value: |
+          const page = context.vars.context.match(/^Page:\s*(\d+)\s*$/im)?.[1];
+          const citedPages = Array.from(output.matchAll(/\bPage:\s*(\d+)\b/gi), (match) => match[1]);
+          return page !== undefined
+            && citedPages.length > 0
+            && citedPages.every((citation) => citation === page);
+
+  - description: Conflicting context should be surfaced
+    vars:
+      query: How many PTO days can be carried over?
+      context: |
+        Source: pto-policy.md#carryover
+        Employees may carry over up to 5 PTO days.
+
+        Source: employee-handbook.md#pto
+        PTO days cannot be carried over into the next year.
+      answer: pto-policy.md#carryover allows up to 5 carryover days, while employee-handbook.md#pto says PTO cannot be carried over, so the sources conflict.
+    assert:
+      - type: javascript
+        value: |
+          const sources = Array.from(
+            context.vars.context.matchAll(/^Source:\s*(\S+)\s*$/gim),
+            (match) => match[1],
+          );
+          const citations = output.match(/[\w./-]+\.md#[\w./-]+/gi) || [];
+          return sources.every((source) => citations.includes(source))
+            && citations.every((citation) => sources.includes(citation));
+      - type: javascript
+        value: |
+          const acknowledgesConflict =
+            /\b(?:sources?|policies|documents?)\s+(?:conflict|disagree|contradict)\b/i.test(output)
+            || /\b(?:conflict|disagreement|contradiction)\s+between\s+(?:the\s+)?(?:sources?|policies|documents?)\b/i.test(output);
+          const dismissesConflict =
+            /\b(?:no|not|without)\s+(?:real\s+|actual\s+)?(?:conflict|disagreement|contradiction)\b/i.test(output)
+            || /\b(?:conflict|disagreement|contradiction)\s+(?:is|was)\s+(?:a\s+)?(?:misunderstanding|absent|resolved)\b/i.test(output)
+            || /\b(?:sources?|policies|documents?)\s+(?:conflict|disagree|contradict)\b.{0,16}\b(?:no|not|false|mistaken|agree)\b/i.test(output);
+          return acknowledgesConflict && !dismissesConflict;
+
+  - description: Model should not refuse when sufficient context exists
+    vars:
+      query: What is the laptop replacement policy?
+      context: |
+        Source: equipment-policy.md#laptops
+        Employees are eligible for a laptop replacement every three years.
+      answer: Employees are eligible for a laptop replacement every three years.
+    assert:
+      - type: javascript
+        value: |
+          const refusalPatterns = [
+            /\bi\s+(?:do not|don't|cannot|can't)\s+(?:know|(?:provide\s+)?(?:an?\s+)?answer)\b/i,
+            /\b(?:not enough|insufficient)\s+information\b/i,
+            /\b(?:unable to|cannot|can't)\s+(?:provide\s+)?(?:an?\s+)?(?:answer|determine)\b/i,
+          ];
+          return refusalPatterns.every((pattern) => !pattern.test(output));
+      - type: icontains
+        value: 'employees are eligible for a laptop replacement every three years'
