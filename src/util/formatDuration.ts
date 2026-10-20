@@ -4,6 +4,10 @@
  * @returns Formatted string like "2h 5m 30s" or "45s" depending on duration
  */
 export function formatDuration(seconds: number): string {
+  if (!Number.isFinite(seconds) || seconds < 0) {
+    return '0s';
+  }
+
   const totalSeconds = Math.floor(seconds);
 
   if (totalSeconds < 60) {
