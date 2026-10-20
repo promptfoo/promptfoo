@@ -1169,7 +1169,8 @@ Use independent generations with comparable grading and a fixed number of trials
 per question. Every scheduled question and repeat index must be present. Cohorts
 with errors, cached target responses or grading, duplicate/missing indices, or
 unequal repeat counts have an `unavailableReason` instead of posterior moments.
-Runs with redteam, comparison assertions, `_conversation`, `storeOutputAs`, or
+Runs with precomputed `providerOutput`, redteam, comparison assertions (including
+inside assertion sets), `_conversation`, `storeOutputAs`, or
 persistent browser sessions are unsupported. This binary variant
 uses a uniform prior without prior observations or rubric weights. The saved
 schedule in `metadata.bayesAtNPlan` supports restored and resumed evals; older
@@ -1178,8 +1179,16 @@ results without that schedule do not get posterior estimates.
 Exports made with `PROMPTFOO_STRIP_GRADING_RESULT` retain the computed summary but
 omit the saved schedule. Imported copies cannot recompute Bayes@N without the
 original grader-cache evidence, and cannot resume a Bayes@N run. Resume requires
-the original saved schedule and unchanged question identities, provider/prompt
-columns, and repeat counts. Use `eval --retry-errors` to retry execution errors in
+the original saved schedule with tagged `sha256:` input hashes, unchanged rendered
+questions and grading inputs, provider/prompt columns, and repeat counts. Older
+schedules without valid tagged hashes can still produce summaries but cannot
+resume. Each trial's prompt
+and file variables are prepared before generation and reused during execution;
+`beforeEach` hooks must preserve those inputs. Keep prompt and grading code,
+provider configuration, dependencies, and external state fixed across resume.
+Use plain data objects for vars and grading options; maps, sets, and cyclic data
+are unsupported.
+Use `eval --retry-errors` to retry execution errors in
 the latest eval; the dedicated `retry` command does not support Bayes@N. A fresh
 evaluation clears the previous schedule before building its own.
 
