@@ -112,13 +112,19 @@ describe('importCommand', () => {
             promptIdx: 0,
             provider: { id: 'test-provider' },
             repetitions: 1,
+            inputHash: `sha256:${'ab'.repeat(32)}`,
           },
         ],
       };
       const source = await Eval.create(
         {
           env: { PROMPTFOO_STRIP_GRADING_RESULT: String(strip) },
-          metadata: { bayesAtNPlan: plan },
+          metadata: {
+            bayesAtNPlan: plan,
+            apiKey: 'adjacent-secret',
+            opaqueCredential: 'c'.repeat(64),
+            label: 'retained',
+          },
         },
         [],
         { id: 'bayes-export-source' },
@@ -144,6 +150,11 @@ describe('importCommand', () => {
         }),
       );
       const exported = await createOutputData(source, null);
+      expect(exported.config.metadata).toMatchObject({
+        apiKey: '[REDACTED]',
+        opaqueCredential: '[REDACTED]',
+        label: 'retained',
+      });
       const summary = exported.results as EvaluateSummaryV3;
       if (cached) {
         expect(summary.repeatStability?.bayesAtN?.[0].unavailableReason).toContain('cached');

@@ -1,4 +1,9 @@
+import fs from 'fs';
+import os from 'os';
+import path from 'path';
+
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import cliState from '../src/cliState';
 import { evaluate } from '../src/evaluator';
 import logger from '../src/logger';
 import Eval from '../src/models/eval';
@@ -66,6 +71,35 @@ const makeSuite = (overrides: Partial<TestSuite>): TestSuite => ({
 });
 
 describe('Transformation integration (real transform)', () => {
+  it('binds Bayes@N file inputs to their effective MIME type', async () => {
+    const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'bayes-mime-'));
+    const audio = path.join(directory, 'clip.m4a');
+    const video = path.join(directory, 'clip.mp4');
+    const bytes = Buffer.from([0, 0, 0, 24, 102, 116, 121, 112, 105, 115, 111, 109]);
+    fs.writeFileSync(audio, bytes);
+    fs.writeFileSync(video, bytes);
+    const callApi = vi.fn(async () => ({ output: 'answer' }));
+    const suite = (file: string): TestSuite => ({
+      providers: [
+        { id: () => 'mime-target', getAudioInputFormat: () => 'google', callApi } as ApiProvider,
+      ],
+      prompts: [{ raw: '{{media}}', label: 'media' }],
+      tests: [{ vars: { media: `file://${file}` }, options: { disableVarExpansion: true } }],
+    });
+    try {
+      const record = new Eval({});
+      await evaluate(suite(audio), record, { bayesAtN: true, repeat: 2, cache: false });
+      cliState.resume = true;
+      await expect(
+        evaluate(suite(video), record, { bayesAtN: true, repeat: 2, cache: false }),
+      ).rejects.toThrow('original questions, grading inputs');
+      expect(callApi).toHaveBeenCalledTimes(2);
+    } finally {
+      cliState.resume = false;
+      fs.rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
   beforeEach(() => {
     vi.clearAllMocks();
   });

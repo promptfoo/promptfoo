@@ -21,6 +21,7 @@ function fixture(rows: boolean[][]) {
     results.map((result) => ({
       ...result,
       provider: { id: () => 'provider' },
+      inputHash: `sha256:${'a'.repeat(64)}`,
       evaluateOptions: { repeat: rows[Number(result.repeatGroupId!.split('-')[1])].length },
     })),
   );
