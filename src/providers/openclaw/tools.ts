@@ -44,6 +44,15 @@ export class OpenClawToolInvokeProvider implements ApiProvider {
     return `openclaw:tools:${this.toolName}`;
   }
 
+  get hasSharedSession(): boolean {
+    return Boolean(
+      this.openclawConfig.session_key ||
+        Object.entries(this.openclawConfig.headers ?? {}).some(
+          ([name, value]) => name.toLowerCase() === 'x-openclaw-session-key' && Boolean(value),
+        ),
+    );
+  }
+
   toString(): string {
     return `[OpenClaw Tool Provider ${this.toolName}]`;
   }

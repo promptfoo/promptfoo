@@ -26,6 +26,7 @@ import {
   copyBayesAtNInput,
   createBayesAtNPlan,
   hasBayesAtNComparison,
+  hasBayesAtNSharedSession,
   hashBayesAtNInputs,
   readResumeBayesAtNPlan,
   validateBayesAtNRepeat,
@@ -728,6 +729,7 @@ interface RenderedRunEvalPrompt {
 interface PreparedBayesAtNInput {
   sourceHash: string;
   inputHash: string;
+  inputFiles: Map<string, string>;
   state: RunEvalState;
   rendered: RenderedRunEvalPrompt;
 }
@@ -758,6 +760,7 @@ const bayesAtNFunctionSources = new WeakMap<Function, string>();
 
 function hashRunEvalInputs(
   step: Pick<RunEvalOptions, 'prompt' | 'provider' | 'test' | 'nunjucksFilters'>,
+  inputFiles?: Map<string, string>,
 ) {
   return hashBayesAtNInputs(step, {
     fileHash: (reference) => {
@@ -767,6 +770,30 @@ function hashRunEvalInputs(
         .digest('hex');
     },
     functionSource: (fn) => bayesAtNFunctionSources.get(fn),
+    providerFiles: inputFiles
+      ? (provider, target) => {
+          const inputProvider = provider as ApiProvider | undefined;
+          if (typeof inputProvider?.getInputFilePaths !== 'function') {
+            return [];
+          }
+          return inputProvider
+            .getInputFilePaths({
+              prompt: {
+                ...step.prompt,
+                config: target
+                  ? mergeProviderPromptConfig(step.prompt.config, step.test.options)
+                  : undefined,
+              },
+              vars: step.test.vars ?? {},
+            })
+            .map((filePath) => {
+              invariant(path.isAbsolute(filePath), 'Provider input file paths must be absolute');
+              const hash = createHash('sha256').update(fs.readFileSync(filePath)).digest('hex');
+              inputFiles.set(filePath, hash);
+              return [filePath, hash];
+            });
+        }
+      : undefined,
     mimeTypes: getPromptVarMimeTypes(step.test.vars ?? {}),
   });
 }
@@ -4450,7 +4477,20 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       test: evalStep.test,
     });
     evalStep.test = beforeEachOut.test;
-    if (bayesAtNInput && hashRunEvalInputs(evalStep) !== bayesAtNInput.sourceHash) {
+    if (
+      bayesAtNInput &&
+      hasBayesAtNSharedSession({ ...evalStep, prompt: bayesAtNInput.rendered.setup.prompt })
+    ) {
+      throw new Error('Bayes@N does not support shared provider sessions');
+    }
+    if (
+      bayesAtNInput &&
+      (hashRunEvalInputs(evalStep) !== bayesAtNInput.sourceHash ||
+        [...bayesAtNInput.inputFiles].some(
+          ([filePath, hash]) =>
+            createHash('sha256').update(fs.readFileSync(filePath)).digest('hex') !== hash,
+        ))
+    ) {
       throw new Error('Bayes@N requires unchanged question and grading inputs after beforeEach');
     }
 
@@ -5957,12 +5997,11 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
           (step) =>
             promptUsesConversationVariable(step.prompt) ||
             step.test.options?.storeOutputAs ||
-            (step.provider.id() === 'browser-provider' &&
-              step.provider.config?.persistSession === true),
+            hasBayesAtNSharedSession(step),
         )
       ) {
         throw new Error(
-          'Bayes@N does not support conversation history, output registers, or persistent browser sessions',
+          'Bayes@N does not support conversation history, output registers, or shared provider sessions',
         );
       }
       const preparedInputs = new Map<string, PreparedBayesAtNInput>();
@@ -5991,15 +6030,23 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
           vars: state.vars,
         });
         checkAbort();
-        const inputHash = hashRunEvalInputs({
-          ...step,
-          prompt: { ...state.promptForRender, ...rendered.setup.prompt },
-          test: { ...step.test, vars: omitEvalRuntimeVars(state.vars) },
-        });
+        if (hasBayesAtNSharedSession({ ...step, prompt: rendered.setup.prompt })) {
+          throw new Error('Bayes@N does not support shared provider sessions');
+        }
+        const inputFiles = new Map<string, string>();
+        const inputHash = hashRunEvalInputs(
+          {
+            ...step,
+            prompt: { ...state.promptForRender, ...rendered.setup.prompt },
+            test: { ...step.test, vars: omitEvalRuntimeVars(state.vars) },
+          },
+          inputFiles,
+        );
         const shared = preparedInputs.get(inputHash);
         const prepared = {
           sourceHash,
           inputHash,
+          inputFiles,
           state: shared ? { ...shared.state, fileMetadata: state.fileMetadata } : state,
           rendered: shared?.rendered ?? rendered,
         };

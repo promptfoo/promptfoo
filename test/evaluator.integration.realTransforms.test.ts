@@ -2,11 +2,16 @@ import fs from 'fs';
 import os from 'os';
 import path from 'path';
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import cliState from '../src/cliState';
 import { evaluate } from '../src/evaluator';
+import { runExtensionHook } from '../src/evaluatorHelpers';
 import logger from '../src/logger';
+import { runDbMigrations } from '../src/migrate';
 import Eval from '../src/models/eval';
+import { GoogleVideoProvider } from '../src/providers/google/video';
+import { OpenClawAgentProvider } from '../src/providers/openclaw/agent';
+import { OpenClawToolInvokeProvider } from '../src/providers/openclaw/tools';
 
 import type { ApiProvider, TestSuite } from '../src/types/index';
 
@@ -71,6 +76,252 @@ const makeSuite = (overrides: Partial<TestSuite>): TestSuite => ({
 });
 
 describe('Transformation integration (real transform)', () => {
+  beforeAll(async () => {
+    await runDbMigrations();
+  });
+
+  it.each(['agent', 'tool'].flatMap((kind) => [false, true].map((shared) => ({ kind, shared }))))(
+    'checks the native OpenClaw $kind configuration (shared=$shared)',
+    async ({ kind, shared }) => {
+      const options = {
+        config: { gateway_url: 'http://127.0.0.1:18789', ...(shared && { session_key: 'shared' }) },
+      };
+      const provider =
+        kind === 'agent'
+          ? new OpenClawAgentProvider('main', options)
+          : new OpenClawToolInvokeProvider('session_status', options);
+      const callApi = vi.spyOn(provider, 'callApi').mockResolvedValue({ output: 'answer' });
+      const run = evaluate(
+        {
+          providers: [provider],
+          prompts: [{ raw: 'question', label: 'openclaw' }],
+          tests: [{}],
+        },
+        new Eval({}),
+        { bayesAtN: true, repeat: 2, cache: false },
+      );
+      if (shared) {
+        await expect(run).rejects.toThrow('shared provider sessions');
+        expect(callApi).not.toHaveBeenCalled();
+      } else {
+        await run;
+        expect(callApi).toHaveBeenCalledTimes(2);
+        options.config.session_key = 'shared-after-construction';
+        await expect(
+          evaluate(
+            {
+              providers: [provider],
+              prompts: [{ raw: 'question', label: 'openclaw' }],
+              tests: [{}],
+            },
+            new Eval({}),
+            { bayesAtN: true, repeat: 2, cache: false },
+          ),
+        ).rejects.toThrow('shared provider sessions');
+        expect(callApi).toHaveBeenCalledTimes(2);
+      }
+    },
+  );
+
+  it('rejects a native OpenClaw tool pinned through a session header', async () => {
+    const provider = new OpenClawToolInvokeProvider('session_status', {
+      config: {
+        gateway_url: 'http://127.0.0.1:18789',
+        headers: { 'X-OpenClaw-Session-Key': 'shared' },
+      },
+    });
+    const callApi = vi.spyOn(provider, 'callApi').mockResolvedValue({ output: 'answer' });
+    await expect(
+      evaluate(
+        {
+          providers: [provider],
+          prompts: [{ raw: 'question', label: 'openclaw' }],
+          tests: [{}],
+        },
+        new Eval({}),
+        { bayesAtN: true, repeat: 2, cache: false },
+      ),
+    ).rejects.toThrow('shared provider sessions');
+    expect(callApi).not.toHaveBeenCalled();
+  });
+
+  it('rejects a native session activated by beforeEach after input preparation', async () => {
+    const config = { gateway_url: 'http://127.0.0.1:18789', session_key: '' };
+    const provider = new OpenClawAgentProvider('main', { config });
+    const callApi = vi.spyOn(provider, 'callApi').mockResolvedValue({ output: 'answer' });
+    vi.mocked(runExtensionHook).mockImplementation(async (_extensions, hook, context) => {
+      if (hook === 'beforeEach') {
+        config.session_key = 'shared-after-preparation';
+      }
+      return context;
+    });
+    try {
+      await expect(
+        evaluate(
+          {
+            providers: [provider],
+            prompts: [{ raw: 'question', label: 'openclaw' }],
+            tests: [{}],
+            extensions: ['test-hook'],
+          },
+          new Eval({}),
+          { bayesAtN: true, repeat: 2, cache: false },
+        ),
+      ).rejects.toThrow('shared provider sessions');
+      expect(callApi).not.toHaveBeenCalled();
+    } finally {
+      vi.mocked(runExtensionHook).mockImplementation(
+        async (_extensions, _hook, context) => context,
+      );
+    }
+  });
+
+  it.each([
+    'provider',
+    'prompt',
+    'test options',
+    'prompt function',
+    'target override',
+    'grader',
+    'typed grader',
+    'nested grader',
+  ])('binds Bayes@N to native provider input file bytes from %s', async (owner) => {
+    const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'bayes-provider-file-'));
+    const file = path.join(directory, 'image.png');
+    fs.writeFileSync(file, 'original image');
+    const config = { basePath: directory, image: 'file://image.png' };
+    const isGrader = owner.includes('grader');
+    const provider = new GoogleVideoProvider('veo-3.1-generate-preview', {
+      id: 'aliased-video',
+      config:
+        owner === 'provider' || isGrader
+          ? config
+          : owner === 'prompt function'
+            ? { image: 'file://missing-overridden-provider-input.png' }
+            : {},
+    });
+    const callApi = vi.spyOn(provider, 'callApi').mockResolvedValue({ output: 'answer' });
+    const unusedProvider = new GoogleVideoProvider('veo-3.1-generate-preview', {
+      id: 'unused-target',
+      config: { image: 'file://missing-unused' },
+    });
+    vi.spyOn(unusedProvider, 'callApi').mockResolvedValue({ output: 'answer' });
+    const targetCallApi = isGrader ? vi.fn(async () => ({ output: 'answer' })) : callApi;
+    const suite = (): TestSuite => ({
+      providers: isGrader
+        ? [{ id: () => 'graded-target', callApi: targetCallApi }]
+        : owner === 'target override'
+          ? [unusedProvider]
+          : [provider],
+      prompts: [
+        {
+          raw: 'question',
+          label: 'video',
+          ...(owner === 'prompt' && { config }),
+          ...(owner === 'prompt function' && {
+            function: async () => ({ prompt: 'question', config }),
+          }),
+        },
+      ],
+      tests: [
+        {
+          ...(owner === 'target override' && { provider }),
+          ...((owner === 'test options' || owner === 'target override') && { options: config }),
+          ...((owner === 'grader' || owner === 'typed grader') && {
+            options: { provider: owner === 'grader' ? provider : { text: provider } },
+          }),
+          ...(owner === 'nested grader' && {
+            assert: [{ type: 'assert-set', assert: [{ type: 'llm-rubric', provider }] }],
+          }),
+        },
+      ],
+    });
+    try {
+      // cliState.basePath deliberately differs from the native media owner.
+      const priorBasePath = cliState.basePath;
+      cliState.basePath = path.join(directory, 'unused-cli-base');
+      const record = await Eval.create({}, suite().prompts, { id: randomUUID() });
+      await evaluate(suite(), record, { bayesAtN: true, repeat: 2, cache: false });
+      const plan = structuredClone(record.config.metadata?.bayesAtNPlan);
+      const summary = await record.getRepeatStability();
+      fs.writeFileSync(file, 'changed image');
+      cliState.resume = true;
+      await expect(
+        evaluate(suite(), record, { bayesAtN: true, repeat: 2, cache: false }),
+      ).rejects.toThrow('original questions, grading inputs');
+      expect(record.config.metadata?.bayesAtNPlan).toEqual(plan);
+      expect(targetCallApi).toHaveBeenCalledTimes(2);
+      fs.writeFileSync(file, 'original image');
+      await evaluate(suite(), record, { bayesAtN: true, repeat: 2, cache: false });
+      expect(targetCallApi).toHaveBeenCalledTimes(2);
+      expect(await record.getRepeatStability()).toEqual(summary);
+      cliState.basePath = priorBasePath;
+    } finally {
+      cliState.resume = false;
+      cliState.basePath = '';
+      fs.rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
+  it('rejects changes to prompt-function provider files in beforeEach', async () => {
+    const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'bayes-provider-hook-'));
+    const file = path.join(directory, 'image.png');
+    fs.writeFileSync(file, 'original image');
+    const provider = new GoogleVideoProvider('veo-3.1-generate-preview');
+    const callApi = vi.spyOn(provider, 'callApi').mockResolvedValue({ output: 'answer' });
+    vi.mocked(runExtensionHook).mockImplementation(async (_extensions, hook, context) => {
+      if (hook === 'beforeEach') {
+        fs.writeFileSync(file, 'changed image');
+      }
+      return context;
+    });
+    try {
+      await expect(
+        evaluate(
+          {
+            providers: [provider],
+            prompts: [
+              {
+                raw: 'question',
+                label: 'video',
+                function: async () => ({
+                  prompt: 'question',
+                  config: { basePath: directory, image: 'file://image.png' },
+                }),
+              },
+            ],
+            tests: [{}],
+            extensions: ['test-hook'],
+          },
+          new Eval({}),
+          { bayesAtN: true, repeat: 2, cache: false },
+        ),
+      ).rejects.toThrow('unchanged question and grading inputs after beforeEach');
+      expect(callApi).not.toHaveBeenCalled();
+    } finally {
+      vi.mocked(runExtensionHook).mockImplementation(
+        async (_extensions, _hook, context) => context,
+      );
+      fs.rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
+  it('keeps custom provider literal file-like config inert without a native file declaration', async () => {
+    const callApi = vi.fn(async () => ({ output: 'answer' }));
+    await evaluate(
+      {
+        providers: [
+          { id: () => 'literal-config', config: { image: 'file://not-local/literal' }, callApi },
+        ],
+        prompts: [{ raw: 'question', label: 'literal' }],
+        tests: [{}],
+      },
+      new Eval({}),
+      { bayesAtN: true, repeat: 2, cache: false },
+    );
+    expect(callApi).toHaveBeenCalledTimes(2);
+  });
+
   it('binds Bayes@N file inputs to their effective MIME type', async () => {
     const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'bayes-mime-'));
     const audio = path.join(directory, 'clip.m4a');
@@ -374,3 +625,5 @@ describe('Transformation integration (real transform)', () => {
     },
   );
 });
+
+import { randomUUID } from 'crypto';

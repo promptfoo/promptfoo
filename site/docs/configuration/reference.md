@@ -1170,11 +1170,23 @@ per question. Every scheduled question and repeat index must be present. Cohorts
 with errors, cached target responses or grading, duplicate/missing indices, or
 unequal repeat counts have an `unavailableReason` instead of posterior moments.
 Runs with precomputed `providerOutput`, redteam, comparison assertions (including
-inside assertion sets), `_conversation`, `storeOutputAs`, or
-persistent browser sessions are unsupported. This binary variant
+inside assertion sets), `_conversation`, `storeOutputAs`, or shared provider
+sessions are unsupported. This binary variant
 uses a uniform prior without prior observations or rubric weights. The saved
 schedule in `metadata.bayesAtNPlan` supports restored and resumed evals; older
 results without that schedule do not get posterior estimates.
+
+Shared-session option names are reserved in Bayes@N, including with custom
+provider IDs: `persistSession`, `session_id`, `persist_sessions`, `thread_id`,
+`persist_threads`, `resume`, `continue`, `sessionId`, `session_key`, and `session`.
+The same restriction applies to `runOptions.session`, OpenClaw's session-key
+header, and Claude's session-related `extra_args` flags. Target overrides and
+configured graders are checked too. Providers reporting `hasSharedSession: true`
+are rejected. Remove shared-session modes from base
+provider configuration even if a per-test option disables them, since some
+providers read only their base configuration. Saving a fresh Claude session with
+`persist_session` or creating a fresh OpenCode child with `parent_session_id`
+is allowed.
 
 Exports made with `PROMPTFOO_STRIP_GRADING_RESULT` retain the computed summary but
 omit the saved schedule. Imported copies cannot recompute Bayes@N without the
@@ -1186,6 +1198,14 @@ resume. Each trial's prompt
 and file variables are prepared before generation and reused during execution;
 `beforeEach` hooks must preserve those inputs. Keep prompt and grading code,
 provider configuration, dependencies, and external state fixed across resume.
+Loaded providers can declare native generation input files with the synchronous
+`getInputFilePaths(context)` hook, which returns absolute paths without side effects.
+Bayes@N hashes those files and checks them again after `beforeEach`. Google Video
+implements this hook for images, frames, reference images, and source video files,
+using the same aliases and owning base paths as generation. These hashes apply
+to loaded target and grader instances; other external provider dependencies must
+remain fixed. If a provider declares files, an older schedule without their content
+hashes needs a fresh evaluation.
 Use plain data objects for vars and grading options; maps, sets, and cyclic data
 are unsupported.
 Use `eval --retry-errors` to retry execution errors in

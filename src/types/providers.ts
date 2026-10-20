@@ -158,6 +158,14 @@ export interface ApiProvider extends MinimalApiProvider {
   getSessionId?: () => string;
   /** Native audio input content format accepted by this provider and its configured model. */
   getAudioInputFormat?: () => 'openai' | 'google' | undefined;
+  /** True when configured calls reuse conversation history; Bayes@N rejects this mode. */
+  readonly hasSharedSession?: boolean;
+  /**
+   * Absolute paths of files read as generation inputs for this call. Must be
+   * synchronous and free of side effects; Bayes@N fingerprints their contents
+   * before generation. Omit credentials and output files.
+   */
+  getInputFilePaths?: (context?: Pick<CallApiContextParams, 'prompt' | 'vars'>) => string[];
   inputs?: Inputs;
   label?: ProviderLabel;
   /** Effective prompt selectors after provider configuration has been resolved. */

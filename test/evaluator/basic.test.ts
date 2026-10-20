@@ -577,6 +577,141 @@ describeEvaluator('evaluator basic flows', () => {
     },
   );
 
+  it.each([
+    { session_id: 'shared' },
+    { persist_sessions: true },
+    { thread_id: 'shared' },
+    { persist_threads: true },
+    { continue: true },
+    { resume: 'shared' },
+    { sessionId: 'shared' },
+    { session_key: 'shared' },
+    { session: { type: 'memory' } },
+    { runOptions: { session: { type: 'memory' } } },
+    { headers: { 'X-OpenClaw-Session-Key': 'shared' } },
+    ...['resume', 'r', 'continue', 'c', 'session-id', 'fork-session'].map((key) => ({
+      extra_args: { [key]: null },
+    })),
+  ])('rejects shared session config with a custom provider ID: %j', async (config) => {
+    const callApi = vi.fn(async () => ({ output: 'answer' }));
+    const record = new Eval({});
+    await expect(
+      evaluate(
+        {
+          providers: [{ id: () => 'aliased-agent', config, callApi }],
+          prompts: [toPrompt('question')],
+          tests: [{}],
+        },
+        record,
+        { bayesAtN: true, repeat: 2, cache: false },
+      ),
+    ).rejects.toThrow('shared provider sessions');
+    expect(callApi).not.toHaveBeenCalled();
+    expect(record.config.metadata?.bayesAtNPlan).toBeUndefined();
+  });
+
+  it.each([
+    'prompt config',
+    'test options',
+    'prompt function',
+    'target override',
+    'grader',
+    'typed grader',
+    'nested grader',
+  ])('rejects shared sessions from effective %s', async (location) => {
+    const callApi = vi.fn(async () => ({ output: 'answer' }));
+    const shared = { id: () => 'aliased-agent', config: { session_id: 'shared' }, callApi };
+    const test: NonNullable<TestSuite['tests']>[number] = {};
+    if (location === 'test options') {
+      test.options = { session_id: 'shared' };
+    } else if (location === 'target override') {
+      test.provider = shared;
+    } else if (location === 'grader' || location === 'typed grader') {
+      test.options = { provider: location === 'grader' ? shared : { text: shared } };
+    } else if (location === 'nested grader') {
+      test.assert = [{ type: 'assert-set', assert: [{ type: 'llm-rubric', provider: shared }] }];
+    }
+    await expect(
+      evaluate(
+        {
+          providers: [{ id: () => 'fresh-target', callApi }],
+          prompts: [
+            {
+              ...toPrompt('question'),
+              ...(location === 'prompt config' && { config: shared.config }),
+              ...(location === 'prompt function' && {
+                function: async () => ({ prompt: 'question', config: shared.config }),
+              }),
+            },
+          ],
+          tests: [test],
+        },
+        new Eval({}),
+        { bayesAtN: true, repeat: 2, cache: false },
+      ),
+    ).rejects.toThrow('shared provider sessions');
+    expect(callApi).not.toHaveBeenCalled();
+  });
+
+  it('allows fresh sessions and explicitly disabled persistence', async () => {
+    const callApi = vi.fn(async () => ({ output: 'answer' }));
+    await evaluate(
+      {
+        providers: [
+          {
+            id: () => 'fresh-agent',
+            config: {
+              persist_session: true,
+              parent_session_id: 'fixed-parent',
+              persist_sessions: false,
+              thread_id: '',
+              persistSession: false,
+            },
+            callApi,
+          },
+        ],
+        prompts: [toPrompt('question')],
+        tests: [{ options: { persist_sessions: false } }],
+      },
+      new Eval({}),
+      { bayesAtN: true, repeat: 2, cache: false },
+    );
+    expect(callApi).toHaveBeenCalledTimes(2);
+  });
+
+  it.each(['persistSession', 'session', 'sessionId'])(
+    'does not mask base %s with a per-test false value',
+    async (key) => {
+      const callApi = vi.fn(async () => ({ output: 'answer' }));
+      await expect(
+        evaluate(
+          {
+            providers: [{ id: () => 'aliased-agent', config: { [key]: 'shared' }, callApi }],
+            prompts: [toPrompt('question')],
+            tests: [{ options: { [key]: false } }],
+          },
+          new Eval({}),
+          { bayesAtN: true, repeat: 2, cache: false },
+        ),
+      ).rejects.toThrow('shared provider sessions');
+      expect(callApi).not.toHaveBeenCalled();
+    },
+  );
+
+  it('keeps shared session configurations available when Bayes@N is disabled', async () => {
+    const callApi = vi.fn(async () => ({ output: 'answer' }));
+    await evaluate(
+      {
+        providers: [{ id: () => 'opencode:sdk', config: { persist_sessions: true }, callApi }],
+        prompts: [toPrompt('question')],
+        tests: [{}],
+      },
+      new Eval({}),
+      { repeat: 2, cache: false },
+    );
+    expect(callApi).toHaveBeenCalledTimes(2);
+  });
+
   it.each([0, -1, 1.5, NaN, Infinity, Number.MAX_SAFE_INTEGER + 1])(
     'rejects invalid Bayes@N repeat counts before scheduling: %s',
     async (repeat) => {

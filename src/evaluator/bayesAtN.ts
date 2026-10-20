@@ -56,7 +56,112 @@ interface PlannedStep {
 interface InputSources {
   fileHash: (reference: string) => string;
   functionSource: (fn: Function) => string | undefined;
+  providerFiles?: (provider: unknown, target: boolean) => [string, string][];
   mimeTypes?: Record<string, string>;
+}
+
+function hasSharedSession(config: Record<string, unknown>): boolean {
+  const sharedKeys = [
+    'persistSession',
+    'session_id',
+    'persist_sessions',
+    'thread_id',
+    'persist_threads',
+    'resume',
+    'continue',
+    'sessionId',
+    'session_key',
+    'session',
+  ];
+  if (sharedKeys.some((key) => Boolean(config[key]))) {
+    return true;
+  }
+  const extraArgs = config.extra_args;
+  if (
+    extraArgs &&
+    typeof extraArgs === 'object' &&
+    ['resume', 'r', 'continue', 'c', 'session-id', 'fork-session'].some((key) =>
+      Object.prototype.hasOwnProperty.call(extraArgs, key),
+    )
+  ) {
+    return true;
+  }
+  const runOptions = config.runOptions;
+  if (
+    runOptions &&
+    typeof runOptions === 'object' &&
+    'session' in runOptions &&
+    runOptions.session
+  ) {
+    return true;
+  }
+  const headers = config.headers;
+  return Boolean(
+    headers &&
+      typeof headers === 'object' &&
+      Object.entries(headers).some(
+        ([key, value]) => key.toLowerCase() === 'x-openclaw-session-key' && Boolean(value),
+      ),
+  );
+}
+
+function isInputProvider(provider: unknown): provider is InputStep['provider'] {
+  return Boolean(
+    provider &&
+      typeof provider === 'object' &&
+      'id' in provider &&
+      typeof provider.id === 'function' &&
+      'callApi' in provider,
+  );
+}
+
+const providerTypes = ['text', 'embedding', 'classification', 'moderation'] as const;
+
+export function hasBayesAtNSharedSession(step: InputStep): boolean {
+  const seenProviders = new Set<object>();
+  const hasSharedProvider = (provider: unknown, target = false): boolean => {
+    if (!provider || typeof provider !== 'object' || seenProviders.has(provider)) {
+      return false;
+    }
+    seenProviders.add(provider);
+    if ('hasSharedSession' in provider && provider.hasSharedSession === true) {
+      return true;
+    }
+    if ('id' in provider || 'config' in provider) {
+      const config =
+        'config' in provider ? ((provider.config as Record<string, unknown>) ?? {}) : {};
+      return (
+        hasSharedSession(config) ||
+        hasSharedSession({
+          ...config,
+          ...(target && {
+            ...(step.prompt.config as Record<string, unknown>),
+            ...step.test.options,
+          }),
+        })
+      );
+    }
+    return providerTypes.some(
+      (type) => type in provider && hasSharedProvider(provider[type as keyof typeof provider]),
+    );
+  };
+  // These option names are reserved for shared sessions in Bayes@N, including
+  // custom provider IDs. Saving a fresh session (persist_session) is allowed.
+  const activeProvider = isInputProvider(step.test.provider) ? step.test.provider : step.provider;
+  if (
+    hasSharedProvider(activeProvider, true) ||
+    (!isInputProvider(step.test.provider) && hasSharedProvider(step.test.provider)) ||
+    hasSharedProvider(step.test.options?.provider)
+  ) {
+    return true;
+  }
+  const hasSharedGrader = (assertions: InputAssertion[] = []): boolean =>
+    assertions.some((assertion) =>
+      assertion.type === 'assert-set'
+        ? hasSharedGrader(assertion.assert)
+        : hasSharedProvider(assertion.provider),
+    );
+  return hasSharedGrader(step.test.assert);
 }
 
 export function copyBayesAtNInput<T>(value: T): T {
@@ -148,6 +253,8 @@ export function hashBayesAtNInputs(step: InputStep, sources: InputSources): stri
   delete metadata.evaluationId;
   delete metadata.tracingEnabled;
   const files = new Set<string>();
+  const providerFiles = new Map<string, string>();
+  const seenProviderMaps = new Set<object>();
   const addFile = (value: unknown): void => {
     if (Array.isArray(value)) {
       value.forEach(addFile);
@@ -157,14 +264,27 @@ export function hashBayesAtNInputs(step: InputStep, sources: InputSources): stri
       files.add(value);
     }
   };
-  const addProvider = (provider: unknown) => {
+  const addProvider = (provider: unknown, target = false, collectInputs = true) => {
     addFile(provider);
+    for (const [filePath, hash] of collectInputs
+      ? (sources.providerFiles?.(provider, target) ?? [])
+      : []) {
+      providerFiles.set(filePath, hash);
+    }
     if (provider && typeof provider === 'object') {
       if ('id' in provider) {
         addFile(provider.id);
       }
       if ('transform' in provider) {
         addFile(provider.transform);
+      }
+      if (!('id' in provider) && !('config' in provider) && !seenProviderMaps.has(provider)) {
+        seenProviderMaps.add(provider);
+        for (const type of providerTypes) {
+          if (type in provider) {
+            addProvider(provider[type as keyof typeof provider]);
+          }
+        }
       }
     }
   };
@@ -180,8 +300,8 @@ export function hashBayesAtNInputs(step: InputStep, sources: InputSources): stri
     }
   };
   addAssertions(step.test.assert);
-  addProvider(step.provider);
-  addProvider(step.test.provider);
+  addProvider(step.provider, true, !isInputProvider(step.test.provider));
+  addProvider(step.test.provider, isInputProvider(step.test.provider));
   addProvider(step.test.options?.provider);
   addFile(step.test.options?.transform);
   addFile(step.test.options?.postprocess);
@@ -205,6 +325,7 @@ export function hashBayesAtNInputs(step: InputStep, sources: InputSources): stri
               test: { ...step.test, metadata },
               filters: step.nunjucksFilters,
               files: [...files].sort().map((reference) => [reference, sources.fileHash(reference)]),
+              ...(providerFiles.size > 0 && { providerFiles: [...providerFiles].sort() }),
               mimeTypes: sources.mimeTypes,
             },
             sources,

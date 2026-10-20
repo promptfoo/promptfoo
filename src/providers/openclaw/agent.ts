@@ -159,6 +159,10 @@ export class OpenClawAgentProvider implements ApiProvider {
     return this.agentId ? `openclaw:agent:${this.agentId}` : 'openclaw:agent';
   }
 
+  get hasSharedSession(): boolean {
+    return Boolean(this.openclawConfig.session_key?.trim());
+  }
+
   toString(): string {
     return `[OpenClaw Agent Provider ${this.agentId ?? 'default'}]`;
   }
