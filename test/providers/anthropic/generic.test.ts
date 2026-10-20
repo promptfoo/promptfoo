@@ -1,5 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { getEnvOverridesProvider, setEnvOverridesProvider } from '../../../src/envOverrides';
 import logger from '../../../src/logger';
 import { AnthropicGenericProvider } from '../../../src/providers/anthropic/generic';
 import { AnthropicMessagesProvider } from '../../../src/providers/anthropic/messages';
@@ -31,6 +32,43 @@ vi.mock('proxy-agent', async (importOriginal) => {
 
 describe('AnthropicGenericProvider', () => {
   describe('constructor', () => {
+    it.each([
+      [undefined, 'provider-value'],
+      ['X-Scoped-Header: explicit-value', 'explicit-value'],
+      ['', null],
+    ])(
+      'resolves provider-only custom headers with explicit override %j',
+      async (headers, expected) => {
+        const restoreEnv = mockProcessEnv({
+          ANTHROPIC_CUSTOM_HEADERS: 'X-Ambient-Secret: inherited-secret',
+        });
+        const previousProvider = getEnvOverridesProvider();
+        setEnvOverridesProvider(
+          (layer) => ({
+            ANTHROPIC_CUSTOM_HEADERS: `X-Scoped-Header: ${layer}-value`,
+          }),
+          { providerLayer: true },
+        );
+        try {
+          const provider = new AnthropicGenericProvider('fixture', {
+            config: { apiKey: 'test-key', apiBaseUrl: 'https://third-party.example' },
+            env: headers === undefined ? undefined : { ANTHROPIC_CUSTOM_HEADERS: headers },
+          });
+          const { req } = await (provider.anthropic as any).buildRequest({
+            method: 'post',
+            path: '/v1/messages',
+            body: { model: 'fixture', max_tokens: 1, messages: [] },
+          });
+          expect(req.headers.get('x-scoped-header')).toBe(expected);
+          expect(req.headers.has('x-ambient-secret')).toBe(false);
+          expect(req.headers.get('x-api-key')).toBe('test-key');
+        } finally {
+          setEnvOverridesProvider(previousProvider);
+          restoreEnv();
+        }
+      },
+    );
+
     it('should initialize with the given model name', () => {
       const provider = new AnthropicGenericProvider('claude-3-5-sonnet-20241022');
       expect(provider.modelName).toBe('claude-3-5-sonnet-20241022');
