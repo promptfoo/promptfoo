@@ -2170,36 +2170,50 @@ Third line`;
       expect(call?.inferenceConfig?.temperature).toBe(0);
     });
 
-    it('preserves sampling and thinking for numbered Claude inference-profile aliases', async () => {
-      const provider = new AwsBedrockConverseProvider(
-        'arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/claude-prod-5',
-        {
+    it.each(
+      ['claude-prod-5', 'claude-haiku-5-5', 'anthropic.claude-opus-5-5'].flatMap((profileName) =>
+        ['direct', 'additional'].map((thinkingSource) => ({ profileName, thinkingSource })),
+      ),
+    )(
+      'preserves opaque profile $profileName settings from $thinkingSource fields',
+      async ({ profileName, thinkingSource }) => {
+        const modelId = `arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/${profileName}`;
+        const thinking = { type: 'enabled', budget_tokens: 8192 } as const;
+        const additionalModelRequestFields = { temperature: 0.5, top_p: 0.9, top_k: 50 };
+        const provider = new AwsBedrockConverseProvider(modelId, {
           config: {
             region: 'us-east-1',
             max_tokens: 10000,
             temperature: 0.5,
             topP: 0.9,
-            thinking: { type: 'enabled', budget_tokens: 8192 },
+            tools: [{ name: 'lookup', input_schema: { type: 'object', properties: {} } }],
+            toolChoice: { tool: { name: 'lookup' } },
+            ...(thinkingSource === 'direct'
+              ? { thinking, additionalModelRequestFields }
+              : { additionalModelRequestFields: { ...additionalModelRequestFields, thinking } }),
           },
-        },
-      );
+        });
 
-      mockSend.mockResolvedValueOnce(createMockConverseResponse('Test'));
+        mockSend.mockResolvedValueOnce(createMockConverseResponse('Test'));
 
-      await provider.callApi('Test');
+        await provider.callApi('Test');
 
-      const { ConverseCommand } = (await import(
-        '@aws-sdk/client-bedrock-runtime'
-      )) as unknown as MockBedrockModule;
-      expect(ConverseCommand).toHaveBeenLastCalledWith(
-        expect.objectContaining({
-          inferenceConfig: expect.objectContaining({ temperature: 0.5, topP: 0.9 }),
-          additionalModelRequestFields: {
-            thinking: { type: 'enabled', budget_tokens: 8192 },
-          },
-        }),
-      );
-    });
+        const { ConverseCommand } = (await import(
+          '@aws-sdk/client-bedrock-runtime'
+        )) as unknown as MockBedrockModule;
+        expect(ConverseCommand).toHaveBeenLastCalledWith(
+          expect.objectContaining({
+            modelId,
+            inferenceConfig: expect.objectContaining({ temperature: 0.5, topP: 0.9 }),
+            additionalModelRequestFields: {
+              ...additionalModelRequestFields,
+              thinking,
+            },
+            toolConfig: expect.objectContaining({ toolChoice: { tool: { name: 'lookup' } } }),
+          }),
+        );
+      },
+    );
   });
 
   describe('performance and service tier configuration', () => {
@@ -3648,6 +3662,7 @@ Third line`;
       const streamEvents = [
         { contentBlockDelta: { contentBlockIndex: 0, delta: { text: 'Hello ' } } },
         { contentBlockDelta: { contentBlockIndex: 0, delta: { text: 'World' } } },
+        { contentBlockStop: { contentBlockIndex: 0 } },
         { messageStop: { stopReason: 'end_turn' } },
         { metadata: { usage: { inputTokens: 10, outputTokens: 5 } } },
       ];
@@ -3670,6 +3685,7 @@ Third line`;
       });
       const streamEvents = [
         { contentBlockDelta: { contentBlockIndex: 0, delta: { text: 'Hello' } } },
+        { contentBlockStop: { contentBlockIndex: 0 } },
         { messageStop: { stopReason: 'end_turn' } },
         {
           metadata: {
@@ -3696,6 +3712,7 @@ Third line`;
       });
       const streamEvents = [
         { contentBlockDelta: { contentBlockIndex: 0, delta: { text: 'Hello' } } },
+        { contentBlockStop: { contentBlockIndex: 0 } },
         { messageStop: { stopReason: 'end_turn' } },
         {
           metadata: {
@@ -3759,6 +3776,7 @@ Third line`;
             },
           },
         },
+        { contentBlockStop: { contentBlockIndex: 0 } },
         { messageStop: { stopReason: 'tool_use' } },
         { metadata: { usage: { inputTokens: 20, outputTokens: 15 } } },
       ];
@@ -3793,6 +3811,7 @@ Third line`;
             delta: { toolUse: { input: '{"resourceType":"docs"}' } },
           },
         },
+        { contentBlockStop: { contentBlockIndex: 0 } },
         { messageStop: { stopReason: 'tool_use' } },
         { metadata: { usage: { inputTokens: 20, outputTokens: 15 } } },
       ];
@@ -3825,7 +3844,9 @@ Third line`;
       const streamEvents = [
         createToolUseStartedEvent(),
         { contentBlockDelta: { contentBlockIndex: 0, delta: { toolUse: { input: '{}' } } } },
+        { contentBlockStop: { contentBlockIndex: 0 } },
         { messageStop: { stopReason: 'tool_use' } },
+        { metadata: { usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 } } },
       ];
 
       mockSend.mockResolvedValueOnce({
@@ -3852,7 +3873,9 @@ Third line`;
       const streamEvents = [
         createToolUseStartedEvent(),
         { contentBlockDelta: { contentBlockIndex: 0, delta: { toolUse: { input: '{}' } } } },
+        { contentBlockStop: { contentBlockIndex: 0 } },
         { messageStop: { stopReason: 'tool_use' } },
+        { metadata: { usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 } } },
       ];
 
       mockSend.mockResolvedValueOnce({ stream: createMockStream(streamEvents) });
@@ -3873,7 +3896,9 @@ Third line`;
       const streamEvents = [
         createToolUseStartedEvent(),
         { contentBlockDelta: { contentBlockIndex: 0, delta: { toolUse: { input: '{broken' } } } },
+        { contentBlockStop: { contentBlockIndex: 0 } },
         { messageStop: { stopReason: 'tool_use' } },
+        { metadata: { usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 } } },
       ];
 
       mockSend.mockResolvedValueOnce({ stream: createMockStream(streamEvents) });
@@ -3900,7 +3925,10 @@ Third line`;
           },
         },
         { contentBlockDelta: { contentBlockIndex: 1, delta: { toolUse: { input: '{}' } } } },
+        { contentBlockStop: { contentBlockIndex: 0 } },
+        { contentBlockStop: { contentBlockIndex: 1 } },
         { messageStop: { stopReason: 'tool_use' } },
+        { metadata: { usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 } } },
       ];
 
       mockSend.mockResolvedValueOnce({
@@ -3948,6 +3976,8 @@ Third line`;
             delta: { toolUse: { input: '{"city":"NYC"}' } },
           },
         },
+        { contentBlockStop: { contentBlockIndex: 0 } },
+        { contentBlockStop: { contentBlockIndex: 1 } },
         { messageStop: { stopReason: 'tool_use' } },
         { metadata: { usage: { inputTokens: 30, outputTokens: 25 } } },
       ];
@@ -3988,6 +4018,8 @@ Third line`;
             delta: { toolUse: { input: '{"loc":"LA"}' } },
           },
         },
+        { contentBlockStop: { contentBlockIndex: 0 } },
+        { contentBlockStop: { contentBlockIndex: 1 } },
         { messageStop: { stopReason: 'tool_use' } },
         { metadata: { usage: { inputTokens: 15, outputTokens: 10 } } },
       ];
@@ -4018,6 +4050,8 @@ Third line`;
           },
         },
         { contentBlockDelta: { contentBlockIndex: 1, delta: { text: 'The answer is 42.' } } },
+        { contentBlockStop: { contentBlockIndex: 0 } },
+        { contentBlockStop: { contentBlockIndex: 1 } },
         { messageStop: { stopReason: 'end_turn' } },
         { metadata: { usage: { inputTokens: 20, outputTokens: 30 } } },
       ];
