@@ -45,6 +45,7 @@ Here is the main structure of the promptfoo configuration file:
 | tracing                         | TracingConfig                                                                                                                                         | No                             | [OpenTelemetry tracing](/docs/tracing) configuration                                                                                                                                                                            |
 | evaluateOptions.maxConcurrency  | number                                                                                                                                                | No                             | Maximum number of concurrent requests. Defaults to 4                                                                                                                                                                            |
 | evaluateOptions.repeat          | number                                                                                                                                                | No                             | Number of times to run each test case. Defaults to 1                                                                                                                                                                            |
+| evaluateOptions.bayesAtN        | boolean                                                                                                                                               | No                             | Report binary Bayes@N posterior mean and standard deviation for each provider/prompt. Defaults to false. See [EvaluateOptions](#evaluateoptions).                                                                               |
 | evaluateOptions.delay           | number                                                                                                                                                | No                             | Force the test runner to wait after each API call (milliseconds). Defaults to 0                                                                                                                                                 |
 | evaluateOptions.showProgressBar | boolean                                                                                                                                               | No                             | Whether to display the progress bar                                                                                                                                                                                             |
 | evaluateOptions.cache           | boolean                                                                                                                                               | No                             | Whether to use disk [cache](/docs/configuration/caching) for results (default: true)                                                                                                                                            |
@@ -1132,6 +1133,7 @@ interface EvaluateOptions {
   interactiveProviders?: boolean;
   maxConcurrency?: number;
   repeat?: number;
+  bayesAtN?: boolean;
   showProgressBar?: boolean;
   timeoutMs?: number;
   maxEvalTimeMs?: number;
@@ -1149,6 +1151,37 @@ interface EvaluateOptions {
 ```
 
 ## Evaluation outputs
+
+Set `evaluateOptions: { repeat: 10, bayesAtN: true, cache: false }` to report
+[Bayes@N](https://arxiv.org/abs/2510.04265v4) for repeated pass/fail outcomes. The CLI
+shows the posterior mean and posterior standard deviation on the 0–1 scale. JSON
+exports include them in `results.repeatStability.bayesAtN`, with `questions` (M),
+`trials` (N), `promptIdx`, and provider identity for each cohort.
+
+Each original test/expanded variable combination is one question. For a question
+with s passes in N trials, the posterior is Beta(s + 1, N − s + 1). The reported
+mean averages the question posterior means; `posteriorStd` is the square root of
+their summed variances divided by M. It describes uncertainty about the average
+latent pass probability on this fixed question set. Existing Wilson intervals
+remain separate. Only final boolean pass/fail grades enter the posterior.
+
+Use independent generations with comparable grading and a fixed number of trials
+per question. Every scheduled question and repeat index must be present. Cohorts
+with errors, cached target responses or grading, duplicate/missing indices, or
+unequal repeat counts have an `unavailableReason` instead of posterior moments.
+Runs with redteam, comparison assertions, `_conversation`, `storeOutputAs`, or
+persistent browser sessions are unsupported. This binary variant
+uses a uniform prior without prior observations or rubric weights. The saved
+schedule in `metadata.bayesAtNPlan` supports restored and resumed evals; older
+results without that schedule do not get posterior estimates.
+
+Exports made with `PROMPTFOO_STRIP_GRADING_RESULT` retain the computed summary but
+omit the saved schedule. Imported copies cannot recompute Bayes@N without the
+original grader-cache evidence, and cannot resume a Bayes@N run. Resume requires
+the original saved schedule and unchanged question identities, provider/prompt
+columns, and repeat counts. Use `eval --retry-errors` to retry execution errors in
+the latest eval; the dedicated `retry` command does not support Bayes@N. A fresh
+evaluation clears the previous schedule before building its own.
 
 ### EvaluateTable
 
