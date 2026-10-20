@@ -19,6 +19,12 @@ import { getCache, isCacheEnabled, withCacheEnabled, withCacheNamespace } from '
 import cliState from './cliState';
 import { DEFAULT_MAX_CONCURRENCY, FILE_METADATA_KEY } from './constants';
 import { getEnvBool, getEnvInt, getEvalTimeoutMs, getMaxEvalTimeMs, isCI } from './envars';
+import {
+  createBayesAtNPlan,
+  readResumeBayesAtNPlan,
+  validateBayesAtNRepeat,
+  validateResumeBayesAtNPlan,
+} from './evaluator/bayesAtN';
 import { collectFileMetadata, renderPrompt, runExtensionHook } from './evaluatorHelpers';
 import logger, { globalLogCallback, isDebugEnabled, setLogCallback } from './logger';
 import { selectMaxScore } from './matchers/comparison';
@@ -3144,6 +3150,10 @@ function appendRunEvalOptionsForTestCase({
       ? [testCase.vars]
       : generateVarCombinations(testCase.vars || {});
 
+  if (options.bayesAtN) {
+    validateBayesAtNRepeat(options.repeat);
+    validateBayesAtNRepeat(testCase.options?.repeat);
+  }
   const globalRepeat = normalizeRepeatCount(options.repeat);
   const testRepeat = normalizeRepeatCount(testCase.options?.repeat, globalRepeat);
   const effectiveOptions = {
@@ -3164,7 +3174,9 @@ function appendRunEvalOptionsForTestCase({
         rateLimitRegistry,
         registers,
         repeatGroupId:
-          testRepeat > 1 ? `test-${testCaseIndex}-vars-${varCombinationIndex}` : undefined,
+          testRepeat > 1 || options.bayesAtN
+            ? `test-${testCaseIndex}-vars-${varCombinationIndex}`
+            : undefined,
         repeatIndex,
         runEvalOptions,
         testCase,
@@ -5747,6 +5759,22 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     const { options } = this;
     let { testSuite } = this;
 
+    const storedBayesPlan = this.store.config.metadata?.bayesAtNPlan;
+    if (cliState.resume && storedBayesPlan !== undefined && !options.bayesAtN) {
+      throw new Error('Resuming a Bayes@N evaluation requires evaluateOptions.bayesAtN');
+    }
+    const resumeBayesPlan =
+      cliState.resume && options.bayesAtN ? readResumeBayesAtNPlan(storedBayesPlan) : undefined;
+    if (!cliState.resume && this.store.config.metadata) {
+      // A new evaluation must schedule its own trials, even when its config came from an export.
+      const metadata = { ...this.store.config.metadata };
+      delete metadata.bayesAtNPlan;
+      this.store.config.metadata = metadata;
+      if (storedBayesPlan !== undefined && this.store.persisted) {
+        await this.store.save();
+      }
+    }
+
     const processedIndices = new Set<number>();
 
     const targetErrorAbortController = new AbortController();
@@ -5831,6 +5859,41 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       tests,
     });
     markComparisonRows(runEvalOptions, rowsWithSelectBestAssertion, rowsWithMaxScoreAssertion);
+    if (options.bayesAtN) {
+      if (
+        options.isRedteam ||
+        testSuite.redteam ||
+        rowsWithSelectBestAssertion.size ||
+        rowsWithMaxScoreAssertion.size
+      ) {
+        throw new Error('Bayes@N does not support redteam runs or comparison assertions');
+      }
+      if (
+        runEvalOptions.some(
+          (step) =>
+            promptUsesConversationVariable(step.prompt) ||
+            step.test.options?.storeOutputAs ||
+            (step.provider.id() === 'browser-provider' &&
+              step.provider.config?.persistSession === true),
+        )
+      ) {
+        throw new Error(
+          'Bayes@N does not support conversation history, output registers, or persistent browser sessions',
+        );
+      }
+      const currentPlan = createBayesAtNPlan(runEvalOptions);
+      if (resumeBayesPlan) {
+        validateResumeBayesAtNPlan(resumeBayesPlan, currentPlan);
+      }
+      this.store.config.metadata = {
+        ...this.store.config.metadata,
+        bayesAtNPlan: resumeBayesPlan ?? currentPlan,
+      };
+      // Save the full question set before resume removes already completed steps.
+      if (this.store.persisted) {
+        await this.store.save();
+      }
+    }
     if (cliState.resume && this.store.persisted) {
       for (const step of runEvalOptions) {
         if (rowsWithSelectBestAssertion.has(step.testIdx)) {

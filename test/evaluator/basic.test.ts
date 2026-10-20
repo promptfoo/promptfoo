@@ -4,6 +4,7 @@ import { randomUUID } from 'crypto';
 import fs from 'fs';
 
 import { expect, it, vi } from 'vitest';
+import cliState from '../../src/cliState';
 import { evaluate } from '../../src/evaluator';
 import Eval from '../../src/models/eval';
 import { type EvaluateSummaryV3, type TestSuite } from '../../src/types/index';
@@ -15,6 +16,258 @@ const createVariableTest = () => ({
   vars: { var1: 'value1', var2: 'value2' },
 });
 describeEvaluator('evaluator basic flows', () => {
+  it.each([undefined, {}, { version: 1, groups: [] }, { version: 2, groups: [] }])(
+    'rejects Bayes@N resume without a valid original plan: %j',
+    async (bayesAtNPlan) => {
+      const callApi = vi.fn(async () => ({ output: 'answer' }));
+      const testSuite: TestSuite = {
+        providers: [{ id: () => 'resume-target', callApi }],
+        prompts: [toPrompt('question')],
+        tests: [{}],
+      };
+      cliState.resume = true;
+      await expect(
+        evaluate(testSuite, new Eval({ metadata: { bayesAtNPlan } }), { bayesAtN: true }),
+      ).rejects.toThrow('original valid sampling plan');
+      expect(callApi).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(['question removed', 'repeat changed', 'Bayes disabled'])(
+    'preserves the original Bayes@N experiment on resume: %s',
+    async (change) => {
+      const callApi = vi.fn(async () => ({ output: 'answer' }));
+      const testSuite: TestSuite = {
+        providers: [{ id: () => 'resume-target', callApi }],
+        prompts: [toPrompt('question')],
+        tests: [{}, {}],
+      };
+      const record = new Eval({});
+      await evaluate(testSuite, record, { bayesAtN: true, repeat: 2, cache: false });
+      const originalPlan = structuredClone(record.config.metadata?.bayesAtNPlan);
+      callApi.mockClear();
+      cliState.resume = true;
+      if (change === 'question removed') {
+        testSuite.tests = [{}];
+      }
+      await expect(
+        evaluate(testSuite, record, {
+          bayesAtN: change !== 'Bayes disabled',
+          repeat: change === 'repeat changed' ? 3 : 2,
+          cache: false,
+        }),
+      ).rejects.toThrow(
+        change === 'Bayes disabled' ? 'requires evaluateOptions.bayesAtN' : 'original questions',
+      );
+      expect(callApi).not.toHaveBeenCalled();
+      expect(record.config.metadata?.bayesAtNPlan).toEqual(originalPlan);
+    },
+  );
+
+  it.each([
+    { enabled: false, persisted: false },
+    { enabled: true, persisted: false },
+    { enabled: false, persisted: true },
+    { enabled: true, persisted: true },
+  ])(
+    'replaces stale Bayes@N plans for a new run (enabled=$enabled, persisted=$persisted)',
+    async ({ enabled, persisted }) => {
+      let record: Eval;
+      let observedPlan: unknown;
+      const testSuite: TestSuite = {
+        providers: [
+          {
+            id: () => 'fresh-target',
+            callApi: async () => {
+              if (persisted) {
+                const stored = (await Eval.findById(record.id))!;
+                observedPlan = stored.config.metadata?.bayesAtNPlan;
+              }
+              return { output: 'answer' };
+            },
+          },
+        ],
+        prompts: [toPrompt('question')],
+        tests: [{}],
+      };
+      const metadata = { bayesAtNPlan: { stale: true }, label: 'retained' };
+      record = persisted
+        ? await Eval.create({ metadata }, testSuite.prompts, { id: randomUUID() })
+        : new Eval({ metadata });
+      await evaluate(testSuite, record, { bayesAtN: enabled, cache: false });
+      if (persisted) {
+        expect(observedPlan).toEqual(record.config.metadata?.bayesAtNPlan);
+        expect(observedPlan).not.toEqual({ stale: true });
+      }
+      expect(record.config.metadata?.label).toBe('retained');
+      expect(metadata.bayesAtNPlan).toEqual({ stale: true });
+      expect((await record.getRepeatStability())?.bayesAtN?.[0].mean).toBe(
+        enabled ? 2 / 3 : undefined,
+      );
+      if (enabled) {
+        expect(record.config.metadata?.bayesAtNPlan).toMatchObject({ version: 1 });
+      } else {
+        expect(record.config.metadata?.bayesAtNPlan).toBeUndefined();
+      }
+    },
+  );
+
+  it('rejects Bayes@N when the runtime marks a run as redteam', async () => {
+    const callApi = vi.fn(async () => ({ output: 'answer' }));
+    const testSuite: TestSuite = {
+      providers: [{ id: () => 'redteam-target', callApi }],
+      prompts: [toPrompt('question')],
+      tests: [{}],
+    };
+    await expect(
+      evaluate(testSuite, new Eval({}), {
+        bayesAtN: true,
+        isRedteam: true,
+      }),
+    ).rejects.toThrow('Bayes@N does not support redteam runs');
+    expect(callApi).not.toHaveBeenCalled();
+  });
+
+  it.each(['conversation', 'output register', 'persistent browser session'])(
+    'rejects Bayes@N for state shared across trials: %s',
+    async (feature) => {
+      const callApi = vi.fn(async () => ({ output: 'answer' }));
+      const testSuite: TestSuite = {
+        providers: [
+          {
+            id: () => (feature === 'persistent browser session' ? 'browser-provider' : 'stateful'),
+            config: { persistSession: feature === 'persistent browser session' },
+            callApi,
+          },
+        ],
+        prompts: [toPrompt(feature === 'conversation' ? '{{_conversation}} question' : 'question')],
+        tests: [
+          { options: { storeOutputAs: feature === 'output register' ? 'answer' : undefined } },
+        ],
+      };
+      await expect(
+        evaluate(testSuite, new Eval({}), {
+          bayesAtN: true,
+          repeat: 2,
+          maxConcurrency: 1,
+        }),
+      ).rejects.toThrow('Bayes@N does not support conversation history');
+      expect(callApi).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([0, -1, 1.5, NaN, Infinity, Number.MAX_SAFE_INTEGER + 1])(
+    'rejects invalid Bayes@N repeat counts before scheduling: %s',
+    async (repeat) => {
+      const callApi = vi.fn(async () => ({ output: 'answer' }));
+      const testSuite: TestSuite = {
+        providers: [{ id: () => 'repeat-validation', callApi }],
+        prompts: [toPrompt('question')],
+        tests: [{}],
+      };
+      await expect(evaluate(testSuite, new Eval({}), { bayesAtN: true, repeat })).rejects.toThrow(
+        'positive safe integer repeat count',
+      );
+      testSuite.tests = [{ options: { repeat } }];
+      await expect(evaluate(testSuite, new Eval({}), { bayesAtN: true })).rejects.toThrow(
+        'positive safe integer repeat count',
+      );
+      expect(callApi).not.toHaveBeenCalled();
+    },
+  );
+
+  it('rejects an empty Bayes@N schedule', async () => {
+    const testSuite: TestSuite = {
+      providers: [],
+      prompts: [toPrompt('question')],
+      tests: [{}],
+    };
+    await expect(evaluate(testSuite, new Eval({}), { bayesAtN: true })).rejects.toThrow(
+      'at least one scheduled question',
+    );
+  });
+
+  it.each([false, true])(
+    'exports Bayes@N through the normal evaluator (persisted=%s)',
+    async (persisted) => {
+      const providers = ['first-provider', 'second-provider'].map((id) => ({
+        id: () => id,
+        callApi: vi.fn(async (prompt: string) => ({ output: prompt })),
+      }));
+      const testSuite: TestSuite = {
+        providers,
+        prompts: [toPrompt('{{answer}}')],
+        tests: [
+          { vars: { answer: ['wrong', 'right'] }, assert: [{ type: 'equals', value: 'right' }] },
+        ],
+      };
+      const evalRecord = persisted
+        ? await Eval.create({}, testSuite.prompts, { id: randomUUID() })
+        : new Eval({});
+      await evaluate(testSuite, evalRecord, { repeat: 2, bayesAtN: true, cache: false });
+      const summary = (await evalRecord.toEvaluateSummary()) as EvaluateSummaryV3;
+      expect(summary.results).toHaveLength(8);
+      expect(summary.repeatStability?.bayesAtN).toHaveLength(2);
+      for (const cohort of summary.repeatStability!.bayesAtN!) {
+        expect(cohort).toMatchObject({ questions: 2, trials: 2, mean: 1 / 2 });
+        expect(cohort.posteriorStd).toBeCloseTo(Math.sqrt(3 / 160), 14);
+      }
+      expect(await evalRecord.getObservedRepeatStability()).toEqual(summary.repeatStability);
+      if (persisted) {
+        const restored = (await Eval.findById(evalRecord.id))!;
+        expect(await restored.getRepeatStability()).toEqual(summary.repeatStability);
+        cliState.resume = true;
+        await evaluate(testSuite, restored, { repeat: 2, bayesAtN: true, cache: false });
+        expect(await restored.getRepeatStability()).toEqual(summary.repeatStability);
+        expect(providers[0].callApi).toHaveBeenCalledTimes(4);
+      }
+    },
+  );
+
+  it('keeps question identities when Bayes@N uses one trial', async () => {
+    const testSuite: TestSuite = {
+      providers: [{ id: () => 'single-trial', callApi: async () => ({ output: 'right' }) }],
+      prompts: [toPrompt('question')],
+      tests: [{ assert: [{ type: 'equals', value: 'right' }] }],
+    };
+    const evalRecord = new Eval({});
+    await evaluate(testSuite, evalRecord, { bayesAtN: true, cache: false });
+    const summary = (await evalRecord.toEvaluateSummary()) as EvaluateSummaryV3;
+    expect(summary.results[0]).toMatchObject({ repeatIndex: 0, repeatGroupId: 'test-0-vars-0' });
+    expect(summary.repeatStability?.bayesAtN?.[0]).toMatchObject({
+      questions: 1,
+      trials: 1,
+      mean: 2 / 3,
+    });
+  });
+
+  it('reports an unavailable posterior for per-test repeat overrides with unequal N', async () => {
+    const testSuite: TestSuite = {
+      providers: [{ id: () => 'ragged', callApi: async () => ({ output: 'right' }) }],
+      prompts: [toPrompt('question')],
+      tests: [{ options: { repeat: 2 } }, { options: { repeat: 3 } }],
+    };
+    const evalRecord = new Eval({});
+    await evaluate(testSuite, evalRecord, { bayesAtN: true, cache: false });
+    expect((await evalRecord.getRepeatStability())?.bayesAtN?.[0]).toMatchObject({
+      questions: 2,
+      unavailableReason: 'Questions have different repeat counts',
+    });
+  });
+
+  it('rejects Bayes@N for comparison grading before calling providers', async () => {
+    const callApi = vi.fn(async () => ({ output: 'right' }));
+    const testSuite: TestSuite = {
+      providers: [{ id: () => 'comparison', callApi }],
+      prompts: [toPrompt('question')],
+      tests: [{ assert: [{ type: 'max-score' }] }],
+    };
+    await expect(evaluate(testSuite, new Eval({}), { bayesAtN: true })).rejects.toThrow(
+      'Bayes@N does not support',
+    );
+    expect(callApi).not.toHaveBeenCalled();
+  });
+
   it('reports final comparison verdicts for repeated tests', async () => {
     const provider = {
       id: () => 'repeated-comparison',

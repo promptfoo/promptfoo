@@ -1953,6 +1953,7 @@ describe('evalCommand', () => {
     ] as any;
     resumeEval.runtimeOptions = {
       repeat: 2,
+      bayesAtN: true,
       cache: false,
       maxConcurrency: 2,
       delay: 0,
@@ -1976,7 +1977,12 @@ describe('evalCommand', () => {
     vi.mocked(evaluate).mockImplementationOnce(async (testSuite, evalRecord, options) => {
       expect(testSuite.prompts).toEqual([authored]);
       expect(options).toEqual(
-        expect.objectContaining({ repeat: 2, cache: false, restorePromptColumns: true }),
+        expect.objectContaining({
+          repeat: 2,
+          bayesAtN: true,
+          cache: false,
+          restorePromptColumns: true,
+        }),
       );
       return evalRecord as Eval;
     });

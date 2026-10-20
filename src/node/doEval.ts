@@ -603,18 +603,24 @@ async function doEvalWithEnv(
         config.evaluateOptions ||
         {}) as InternalEvaluateOptions;
       repeat =
-        Number.isSafeInteger(persisted.repeat || 0) && (persisted.repeat as number) > 0
-          ? (persisted.repeat as number)
-          : 1;
+        persisted.bayesAtN && persisted.repeat !== undefined
+          ? persisted.repeat
+          : Number.isSafeInteger(persisted.repeat || 0) && (persisted.repeat as number) > 0
+            ? (persisted.repeat as number)
+            : 1;
       cache = persisted.cache ?? true;
       maxConcurrency = (persisted.maxConcurrency as number | undefined) ?? DEFAULT_MAX_CONCURRENCY;
       delay = (persisted.delay as number | undefined) ?? 0;
     } else {
       // Misc settings with proper CLI vs config priority
       // CLI values explicitly provided by user should override config, but defaults should not
-      const iterations =
-        cmdObj.repeat ?? commandLineOptions?.repeat ?? evaluateOptions.repeat ?? Number.NaN;
-      repeat = Number.isSafeInteger(iterations) && iterations > 0 ? iterations : 1;
+      const iterations = cmdObj.repeat ?? commandLineOptions?.repeat ?? evaluateOptions.repeat;
+      repeat =
+        evaluateOptions.bayesAtN && iterations !== undefined
+          ? iterations
+          : iterations !== undefined && Number.isSafeInteger(iterations) && iterations > 0
+            ? iterations
+            : 1;
       cache = cmdObj.cache ?? commandLineOptions?.cache ?? evaluateOptions.cache ?? true;
       maxConcurrency =
         cmdObj.maxConcurrency ??
@@ -770,6 +776,9 @@ async function doEvalWithEnv(
     } = evaluateOptions as InternalEvaluateOptions & { providerFilter?: unknown };
     const options: InternalEvaluateOptions = {
       ...safeEvaluateOptions,
+      bayesAtN: resumeEval
+        ? (resumeRuntimeOptions?.bayesAtN ?? config.evaluateOptions?.bayesAtN)
+        : safeEvaluateOptions.bayesAtN,
       showProgressBar:
         getLogLevel() === 'debug'
           ? false

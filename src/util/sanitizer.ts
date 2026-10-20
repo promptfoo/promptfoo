@@ -796,6 +796,7 @@ export function sanitizeConfigForOutput(
     shouldStripTestVars?: boolean;
     shouldStripMetadata?: boolean;
     shouldStripResponseOutput?: boolean;
+    shouldStripGradingResult?: boolean;
   } = {},
 ): Partial<UnifiedConfig> {
   const safe = sanitizeTracingConfigForPersistence(config);
@@ -825,6 +826,10 @@ export function sanitizeConfigForOutput(
     throwOnError: true,
     maxDepth: Number.POSITIVE_INFINITY,
   }) as Partial<UnifiedConfig>;
+  if (options.shouldStripGradingResult && sanitized.metadata) {
+    // Imported results cannot verify grader-cache evidence after grading is stripped.
+    delete sanitized.metadata.bayesAtNPlan;
+  }
   if (basePath !== undefined) {
     sanitized.basePath = basePath;
   }
