@@ -824,7 +824,7 @@ describe('createShareableUrl', () => {
     });
 
     it.each([false, true])(
-      'strips response media before blob handling (cloud: %s)',
+      'strips response media and retained function calls before blob handling (cloud: %s)',
       async (cloud) => {
         vi.mocked(cloudConfig.isEnabled).mockReturnValue(cloud);
         vi.mocked(envars.getEnvBool).mockImplementation((_key, defaultValue) =>
@@ -835,6 +835,21 @@ describe('createShareableUrl', () => {
         const dataUrl = 'data:image/png;base64,cHJpdmF0ZSBvdXRwdXQ=';
         const svgUrl = 'data:image/svg+xml,%3Csvg%3Eprivate%20output%3C%2Fsvg%3E';
         const preview = { samples: [outputUri, dataUrl, svgUrl], caption: 'data:ready' };
+        const functionToolCalls = [
+          {
+            type: 'function',
+            function: { name: 'lookup', arguments: 'private-retained-arguments' },
+          },
+        ];
+        const completedTargetResponses = [
+          {
+            prompt: 'Retained target prompt',
+            response: {
+              output: 'Callback completed',
+              metadata: { functionToolCalls, note: 'ordinary snapshot metadata' },
+            },
+          },
+        ];
         const conversationOutput = [
           { text: 'native-conversation-private', thoughtSignature: 'private-signature' },
           { inlineData: { mimeType: 'image/png', data: 'bmF0aXZlLXByaXZhdGU=' } },
@@ -846,6 +861,8 @@ describe('createShareableUrl', () => {
           metadata: {
             audio: { data: outputUri },
             blobUris: [outputUri],
+            functionToolCalls,
+            completedTargetResponses,
             preview,
             note: 'keep metadata',
           },
@@ -859,6 +876,8 @@ describe('createShareableUrl', () => {
             metadata: {
               blobUris: [outputUri],
               audio: { data: outputUri },
+              functionToolCalls,
+              completedTargetResponses,
               preview,
               note: 'keep metadata',
             },
@@ -889,6 +908,7 @@ describe('createShareableUrl', () => {
           expect(JSON.stringify(value)).not.toContain(dataUrl);
           expect(JSON.stringify(value)).not.toContain(svgUrl);
           expect(JSON.stringify(value)).not.toContain('native-conversation-private');
+          expect(JSON.stringify(value)).not.toContain('private-retained-arguments');
           expect(JSON.stringify(value)).not.toContain('bmF0aXZlLXByaXZhdGU=');
           expect(JSON.stringify(value)).toContain(inputUri);
         }
@@ -897,6 +917,15 @@ describe('createShareableUrl', () => {
           output: '[output stripped]',
           metadata: {
             note: 'keep metadata',
+            completedTargetResponses: [
+              {
+                prompt: 'Retained target prompt',
+                response: {
+                  output: 'Callback completed',
+                  metadata: { note: 'ordinary snapshot metadata' },
+                },
+              },
+            ],
             preview: {
               samples: ['[output stripped]', '[output stripped]', '[output stripped]'],
               caption: 'data:ready',
@@ -905,6 +934,50 @@ describe('createShareableUrl', () => {
         });
         expect(uploaded.metadata).toEqual(uploaded.response.metadata);
         expect(row.response.metadata.blobUris).toEqual([outputUri]);
+        expect(row.response.metadata.functionToolCalls).toBe(functionToolCalls);
+        expect(row.metadata.functionToolCalls).toBe(functionToolCalls);
+        expect(row.response.metadata.completedTargetResponses).toBe(completedTargetResponses);
+        expect(row.metadata.completedTargetResponses).toBe(completedTargetResponses);
+      },
+    );
+
+    it.each([false, true])(
+      'preserves distinct hook metadata alongside retained provider calls (strip: %s)',
+      async (strip) => {
+        const providerCalls = [
+          {
+            type: 'function',
+            function: { name: 'lookup', arguments: 'private-provider-arguments' },
+          },
+        ];
+        const hookCalls = ['intentional hook metadata'];
+        const row = {
+          id: 'hook-metadata-row',
+          testCase: {},
+          metadata: { functionToolCalls: hookCalls },
+          response: {
+            output: 'Callback completed',
+            metadata: { functionToolCalls: providerCalls },
+          },
+        };
+        mockEval.config = { env: { PROMPTFOO_STRIP_RESPONSE_OUTPUT: String(strip) } };
+        mockEval.fetchResultsBatched = vi.fn().mockImplementation(async function* () {
+          yield [row];
+        });
+        mockFetch
+          .mockResolvedValueOnce({ ok: true, json: async () => ({ id: mockEval.id }) })
+          .mockResolvedValueOnce({ ok: true, json: async () => ({}) });
+
+        await createShareableUrl(mockEval as Eval);
+
+        const [uploaded] = JSON.parse(mockFetch.mock.calls[1][1].body);
+        expect(uploaded.metadata.functionToolCalls).toEqual(hookCalls);
+        expect(uploaded.response.metadata.functionToolCalls).toEqual(
+          strip ? undefined : providerCalls,
+        );
+        expect(JSON.stringify(uploaded).includes('private-provider-arguments')).toBe(!strip);
+        expect(row.metadata.functionToolCalls).toBe(hookCalls);
+        expect(row.response.metadata.functionToolCalls).toBe(providerCalls);
       },
     );
 

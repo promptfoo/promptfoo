@@ -59,7 +59,8 @@ function resolveRetryPolicy(
     throw invalidRetryPolicy();
   }
 
-  if ('httpStatus' in policy) {
+  const policyKey = Object.keys(policy)[0];
+  if (policyKey === 'httpStatus' && 'httpStatus' in policy) {
     if (
       !Array.isArray(policy.httpStatus) ||
       policy.httpStatus.length === 0 ||
@@ -72,11 +73,11 @@ function resolveRetryPolicy(
     return retryPolicies.httpStatus(policy.httpStatus);
   }
 
-  if ('any' in policy) {
+  if (policyKey === 'any' && 'any' in policy) {
     return retryPolicies.any(...resolveNestedRetryPolicies(policy.any));
   }
 
-  if ('all' in policy) {
+  if (policyKey === 'all' && 'all' in policy) {
     return retryPolicies.all(...resolveNestedRetryPolicies(policy.all));
   }
 

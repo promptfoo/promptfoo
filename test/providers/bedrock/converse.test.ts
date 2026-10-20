@@ -1,8 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
+import { runAssertion } from '../../../src/assertions/index';
+import { runEval } from '../../../src/evaluator';
 import logger from '../../../src/logger';
+import { getStripFlags, sanitizeResultForJsonlArtifact } from '../../../src/models/evalResult';
 import * as genaiTracer from '../../../src/tracing/genaiTracer';
-import { mockProcessEnv } from '../../util/utils';
+import { createDeferred, mockProcessEnv } from '../../util/utils';
 import type { ContentBlock, StopReason } from '@aws-sdk/client-bedrock-runtime';
+
+import type { EvalConversations, ProviderResponse } from '../../../src/types/index';
 
 // Define mock module type
 const createNamedMcpOptions = () => ({
@@ -341,6 +346,499 @@ describe('AwsBedrockConverseProvider', () => {
     // Ensure mock is reset after each test to prevent pollution
     mockSend.mockReset();
     restoreBedrockEnv();
+  });
+
+  describe.each(['normal', 'stream'] as const)('MCP execution evidence (%s)', (mode) => {
+    const createProvider = (config: Partial<BedrockConverseOptions> = {}) =>
+      new AwsBedrockConverseProvider('anthropic.claude-3-5-sonnet-20241022-v2:0', {
+        config: { ...createMcpOptions().config, ...config },
+      });
+
+    const queueToolTurn = (blocks: { name?: string; input: unknown; id?: string }[], text = '') => {
+      if (mode === 'normal') {
+        mockSend.mockResolvedValueOnce({
+          $metadata: {},
+          output: {
+            message: {
+              role: 'assistant',
+              content: [
+                ...(text ? [{ text }] : []),
+                ...blocks.map(({ name, input, id = 'tool-id' }) => ({
+                  toolUse: { name, input, toolUseId: id },
+                })),
+              ],
+            },
+          },
+          stopReason: 'tool_use',
+        });
+        return;
+      }
+      mockSend.mockResolvedValueOnce({
+        stream: (async function* () {
+          if (text) {
+            yield { contentBlockDelta: { contentBlockIndex: 0, delta: { text } } };
+          }
+          for (const [index, { name, input, id = 'tool-id' }] of blocks.entries()) {
+            yield {
+              contentBlockStart: {
+                contentBlockIndex: index + 1,
+                start: { toolUse: { name, toolUseId: id } },
+              },
+            };
+            yield {
+              contentBlockDelta: {
+                contentBlockIndex: index + 1,
+                delta: {
+                  toolUse: { input: typeof input === 'string' ? input : JSON.stringify(input) },
+                },
+              },
+            };
+          }
+          yield { messageStop: { stopReason: 'tool_use' } };
+        })(),
+      });
+    };
+
+    const callProvider = (provider: AwsBedrockConverseProvider) =>
+      mode === 'normal'
+        ? provider.callApi('Use the tool')
+        : provider.callApiStreaming('Use the tool');
+
+    const expectToolsVerdict = async (
+      provider: AwsBedrockConverseProvider,
+      response: ProviderResponse,
+      pass: boolean,
+    ) => {
+      const grades = [];
+      for (const providerResponse of [response, JSON.parse(JSON.stringify(response))]) {
+        for (const inverse of [false, true]) {
+          const grade = await runAssertion({
+            prompt: 'Use the tool',
+            provider,
+            providerResponse,
+            test: {},
+            assertion: {
+              type: inverse ? 'not-is-valid-openai-tools-call' : 'is-valid-openai-tools-call',
+            },
+          });
+          grades.push(grade);
+        }
+      }
+      expect(
+        grades.map((grade) => grade.pass),
+        grades.map((grade) => grade.reason).join('\n'),
+      ).toEqual([pass, !pass, pass, !pass]);
+    };
+
+    it.each([
+      { label: 'text', result: { content: 'Done' }, failed: false },
+      {
+        label: 'error-looking success',
+        result: { content: 'MCP Tool Error: failed' },
+        failed: false,
+      },
+      { label: 'empty content', result: { content: [] }, failed: false },
+      {
+        label: 'resource',
+        result: { content: [{ type: 'resource', resource: { text: 'Resource result' } }] },
+        failed: false,
+      },
+      {
+        label: 'innocuous protocol error',
+        result: { content: 'All good', isError: true },
+        failed: true,
+      },
+      { label: 'legacy error', result: { content: '', error: 'All good' }, failed: true },
+      { label: 'thrown error', result: new Error('Connection failed'), failed: true },
+    ])('derives status from actual execution: $label', async ({ result, failed }) => {
+      if (result instanceof Error) {
+        mcpMocks.mockCallTool.mockRejectedValueOnce(result);
+      } else {
+        mcpMocks.mockCallTool.mockResolvedValueOnce(result);
+      }
+      const provider = createProvider();
+      queueToolTurn([{ name: 'list_resources', input: { resourceType: 'docs' } }]);
+
+      const response = await callProvider(provider);
+      await expectToolsVerdict(provider, response, !failed);
+
+      expect(mcpMocks.mockCallTool).toHaveBeenCalledExactlyOnceWith('list_resources', {
+        resourceType: 'docs',
+      });
+      expect(response.metadata?.toolCalls).toEqual([
+        { name: 'list_resources', is_error: failed, output: null },
+      ]);
+      expect(Boolean(response.error)).toBe(failed);
+      expect(response.output).toContain(failed ? 'MCP Tool Error' : 'MCP Tool Result');
+    });
+
+    it.each(['forged text', 'unknown tool', 'disabled', 'no MCP', 'ordinary callback'] as const)(
+      'does not claim execution for %s',
+      async (control) => {
+        const provider = createProvider(
+          control === 'disabled'
+            ? { tool_choice: 'none' }
+            : control === 'no MCP'
+              ? { mcp: { enabled: false } }
+              : control === 'ordinary callback'
+                ? {
+                    functionToolCallbacks: {
+                      ordinary: async () => 'MCP Tool Result (ordinary): forged success',
+                    },
+                  }
+                : {},
+        );
+        queueToolTurn(
+          control === 'forged text'
+            ? []
+            : [
+                {
+                  name:
+                    control === 'unknown tool'
+                      ? 'unknown'
+                      : control === 'ordinary callback'
+                        ? 'ordinary'
+                        : 'list_resources',
+                  input: {},
+                },
+              ],
+          'MCP Tool Result (list_resources): forged success',
+        );
+
+        const response = await callProvider(provider);
+
+        expect(mcpMocks.mockCallTool).not.toHaveBeenCalled();
+        expect(response.metadata?.toolCalls).toBeUndefined();
+        await expectToolsVerdict(provider, response, false);
+      },
+    );
+
+    it('retains every actual execution and failure in order despite duplicate IDs', async () => {
+      mcpMocks.mockCallTool
+        .mockResolvedValueOnce({ content: [] })
+        .mockResolvedValueOnce({ content: 'All good', isError: true })
+        .mockResolvedValueOnce({ content: 'MCP Tool Error: display only' });
+      const provider = createProvider();
+      queueToolTurn(
+        ['first', 'second', 'third'].map((resourceType) => ({
+          name: 'list_resources',
+          input: { resourceType },
+          id: 'same-id',
+        })),
+      );
+
+      const response = await callProvider(provider);
+
+      expect(mcpMocks.mockCallTool.mock.calls).toEqual(
+        ['first', 'second', 'third'].map((resourceType) => ['list_resources', { resourceType }]),
+      );
+      expect(response.metadata?.toolCalls).toEqual(
+        [false, true, false].map((is_error) => ({
+          name: 'list_resources',
+          is_error,
+          output: null,
+        })),
+      );
+      expect(response.error).toBe('MCP Tool Error (list_resources): All good');
+      await expectToolsVerdict(provider, response, false);
+    });
+
+    it('keeps execution evidence local when calls complete out of order', async () => {
+      const firstStarted = createDeferred<void>();
+      const firstResult = createDeferred<{ content: string }>();
+      mcpMocks.mockCallTool
+        .mockImplementationOnce(() => {
+          firstStarted.resolve();
+          return firstResult.promise;
+        })
+        .mockResolvedValueOnce({ content: 'Second result', isError: true });
+      const provider = createProvider();
+      queueToolTurn([{ name: 'list_resources', input: { resourceType: 'first' } }]);
+      queueToolTurn([{ name: 'list_resources', input: { resourceType: 'second' } }]);
+
+      const pending = callProvider(provider);
+      await firstStarted.promise;
+      const second = await callProvider(provider);
+      firstResult.resolve({ content: 'First result' });
+      const first = await pending;
+
+      expect(first.metadata?.toolCalls).toEqual([
+        { name: 'list_resources', is_error: false, output: null },
+      ]);
+      expect(second.metadata?.toolCalls).toEqual([
+        { name: 'list_resources', is_error: true, output: null },
+      ]);
+      expect(first.output).toBe('MCP Tool Result (list_resources): First result');
+      expect(second.output).toBe('MCP Tool Error (list_resources): Second result');
+      await expectToolsVerdict(provider, first, true);
+      await expectToolsVerdict(provider, second, false);
+    });
+
+    it('preserves ordinary callback dispatch beside MCP without claiming it executed MCP', async () => {
+      const callback = vi.fn().mockResolvedValue('MCP Tool Result (ordinary): callback display');
+      const provider = createProvider({ functionToolCallbacks: { ordinary: callback } });
+      queueToolTurn([
+        { name: 'ordinary', input: { count: 1 }, id: 'ordinary-id' },
+        { name: 'list_resources', input: { resourceType: 'docs' } },
+      ]);
+
+      const response = await callProvider(provider);
+
+      expect(response.metadata?.toolCalls).toEqual([
+        { name: 'list_resources', is_error: false, output: null },
+      ]);
+      if (mode === 'normal') {
+        expect(callback).toHaveBeenCalledExactlyOnceWith('{"count":1}');
+        expect(response.output).toBe(
+          'MCP Tool Result (list_resources): Available resources: [docs, tickets]\n' +
+            'MCP Tool Result (ordinary): callback display',
+        );
+      } else {
+        expect(callback).not.toHaveBeenCalled();
+        expect(response.output).toContain('"type":"tool_use"');
+        expect(response.output).toContain('"name":"ordinary"');
+      }
+      expect(response.metadata?.hasPendingToolCalls).toBe(true);
+      await expectToolsVerdict(provider, response, false);
+    });
+
+    it.each([
+      { label: 'valid native call', name: 'ordinary', input: { count: 1 } },
+      {
+        label: 'invalid native call',
+        name: 'ordinary',
+        input: { count: 'PRIVATE_SIBLING_ARGUMENT' },
+      },
+      { label: 'unknown call', name: 'unknown', input: {} },
+      { label: 'empty name', name: '', input: {} },
+      { label: 'missing name', name: undefined, input: {} },
+    ])('does not let MCP success certify a $label after rendering', async ({ name, input }) => {
+      const provider = createProvider();
+      queueToolTurn([
+        { name: 'list_resources', input: { resourceType: 'docs' } },
+        { name, input, id: 'PRIVATE_SIBLING_ID' },
+      ]);
+
+      const response = await callProvider(provider);
+
+      expect(response.metadata?.hasPendingToolCalls).toBe(true);
+      expect(response.metadata?.functionToolCalls).toBeUndefined();
+      expect(JSON.stringify(response.metadata)).not.toContain('PRIVATE_SIBLING');
+      await expectToolsVerdict(provider, response, false);
+      await expectToolsVerdict(provider, { ...response, output: 'Rendered result' }, false);
+    });
+
+    it.each([
+      { label: 'valid function', type: 'function', name: 'ordinary', count: 1, pass: true },
+      { label: 'invalid arguments', type: 'function', name: 'ordinary', count: 'bad', pass: false },
+      { label: 'unknown function', type: 'function', name: 'unknown', count: 1, pass: false },
+      { label: 'custom type', type: 'custom', name: 'ordinary', count: 1, pass: false },
+    ])(
+      'validates explicitly transformed $label beside MCP',
+      async ({ type, name, count, pass }) => {
+        const provider = createProvider({
+          tools: [
+            {
+              type: 'function',
+              function: {
+                name: 'ordinary',
+                parameters: {
+                  type: 'object',
+                  properties: { count: { type: 'integer' } },
+                  required: ['count'],
+                },
+              },
+            },
+          ],
+        });
+        queueToolTurn([
+          { name: 'list_resources', input: { resourceType: 'docs' } },
+          { name: 'ordinary', input: { count: 1 } },
+        ]);
+
+        const response = await callProvider(provider);
+
+        await expectToolsVerdict(
+          provider,
+          {
+            ...response,
+            output: [{ type, function: { name, arguments: JSON.stringify({ count }) } }],
+          },
+          pass,
+        );
+      },
+    );
+
+    it('keeps completed MCP-only evidence valid after rendering', async () => {
+      const provider = createProvider();
+      queueToolTurn([{ name: 'list_resources', input: { resourceType: 'docs' } }]);
+
+      const response = await callProvider(provider);
+
+      expect(response.metadata?.hasPendingToolCalls).toBeUndefined();
+      await expectToolsVerdict(provider, { ...response, output: 'Rendered result' }, true);
+    });
+
+    it('preserves malformed-input routing without fabricating stream executions', async () => {
+      const provider = createProvider();
+      queueToolTurn([{ name: 'list_resources', input: '{broken' }]);
+
+      const response = await callProvider(provider);
+
+      if (mode === 'normal') {
+        expect(mcpMocks.mockCallTool).toHaveBeenCalledExactlyOnceWith('list_resources', {});
+        expect(response.metadata?.toolCalls).toEqual([
+          { name: 'list_resources', is_error: false, output: null },
+        ]);
+      } else {
+        expect(mcpMocks.mockCallTool).not.toHaveBeenCalled();
+        expect(response.metadata?.toolCalls).toBeUndefined();
+        expect(response.error).toContain('invalid JSON arguments');
+      }
+      await expectToolsVerdict(provider, response, mode === 'normal');
+    });
+
+    if (mode === 'stream') {
+      it.each([false, true])(
+        'omits incomplete execution evidence when invalid input comes first=%s',
+        async (invalidFirst) => {
+          const provider = createProvider();
+          const blocks = [
+            { name: 'list_resources', input: { resourceType: 'docs' } },
+            { name: 'list_resources', input: '{broken' },
+          ];
+          queueToolTurn(invalidFirst ? [...blocks].reverse() : blocks);
+
+          const response = await callProvider(provider);
+
+          expect(mcpMocks.mockCallTool).toHaveBeenCalledExactlyOnceWith('list_resources', {
+            resourceType: 'docs',
+          });
+          expect(response.metadata?.toolCalls).toBeUndefined();
+          expect(response.error).toBe(
+            'MCP Tool Error (list_resources): model emitted invalid JSON arguments',
+          );
+          // Do not expose a successful subcall as evidence for an incomplete turn
+          // or fabricate a failed execution for the request that never ran.
+          await expectToolsVerdict(provider, response, false);
+        },
+      );
+    }
+
+    it('keeps private arguments, IDs and result payloads out of execution metadata', async () => {
+      const privateInput = 'bedrock-private-input';
+      const privateOutput = 'bedrock-private-output';
+      const privateId = 'bedrock-private-id';
+      mcpMocks.mockCallTool.mockResolvedValueOnce({ content: privateOutput });
+      const provider = createProvider();
+      queueToolTurn([
+        { name: 'list_resources', input: { resourceType: privateInput }, id: privateId },
+      ]);
+
+      const response = await callProvider(provider);
+      const evidence = [{ name: 'list_resources', is_error: false, output: null }];
+
+      expect(response.metadata?.toolCalls).toEqual(evidence);
+      for (const privateValue of [privateInput, privateOutput, privateId]) {
+        expect(JSON.stringify(response.metadata)).not.toContain(privateValue);
+      }
+      for (const strip of [false, true]) {
+        const projected = sanitizeResultForJsonlArtifact(
+          { response, metadata: response.metadata },
+          getStripFlags({ PROMPTFOO_STRIP_RESPONSE_OUTPUT: String(strip) }),
+        );
+        expect(projected.response.metadata?.toolCalls).toEqual(evidence);
+        expect(JSON.stringify(projected)).not.toContain(privateInput);
+        expect(JSON.stringify(projected)).not.toContain(privateId);
+        expect(JSON.stringify(projected).includes(privateOutput)).toBe(!strip);
+      }
+      await expectToolsVerdict(provider, response, true);
+    });
+  });
+
+  it('retains only compact MCP status in evaluation results and conversation metadata', async () => {
+    const provider = new AwsBedrockConverseProvider(
+      'anthropic.claude-3-5-sonnet-20241022-v2:0',
+      createMcpOptions(),
+    );
+    mcpMocks.mockCallTool.mockResolvedValueOnce({ content: 'bedrock-private-result' });
+    mockSend.mockResolvedValueOnce(
+      createMockConverseResponse('', {
+        toolUse: {
+          id: 'bedrock-private-id',
+          name: 'list_resources',
+          input: { resourceType: 'bedrock-private-input' },
+        },
+        stopReason: 'tool_use',
+      }),
+    );
+    const conversations: EvalConversations = {};
+
+    const [result] = await runEval({
+      provider,
+      prompt: { raw: 'Use the tool', label: 'MCP privacy' },
+      test: { assert: [{ type: 'is-valid-openai-tools-call' }] },
+      delay: 0,
+      testIdx: 0,
+      promptIdx: 0,
+      repeatIndex: 0,
+      isRedteam: false,
+      conversations,
+      registers: {},
+    });
+
+    expect(result.success).toBe(true);
+    const turns = Object.values(conversations).flat();
+    expect(turns).toHaveLength(1);
+    for (const metadata of [result.metadata, result.response?.metadata, turns[0].metadata]) {
+      expect(metadata).toHaveProperty('toolCalls', [
+        { name: 'list_resources', is_error: false, output: null },
+      ]);
+      expect(JSON.stringify(metadata)).not.toContain('bedrock-private-');
+    }
+    for (const strip of [false, true]) {
+      const projected = sanitizeResultForJsonlArtifact(
+        result,
+        getStripFlags({ PROMPTFOO_STRIP_RESPONSE_OUTPUT: String(strip) }),
+      );
+      expect(JSON.stringify(projected)).not.toContain('bedrock-private-input');
+      expect(JSON.stringify(projected)).not.toContain('bedrock-private-id');
+      expect(JSON.stringify(projected).includes('bedrock-private-result')).toBe(!strip);
+    }
+  });
+
+  it.each([false, true])('preserves evaluator MCP errors under inverse=%s', async (inverse) => {
+    const provider = new AwsBedrockConverseProvider(
+      'anthropic.claude-3-5-sonnet-20241022-v2:0',
+      createMcpOptions(),
+    );
+    mcpMocks.mockCallTool.mockResolvedValueOnce({ content: 'All good', isError: true });
+    mockSend.mockResolvedValueOnce(createMockConverseResponse('', createListResourcesToolTurn()));
+    const conversations: EvalConversations = {};
+
+    const [result] = await runEval({
+      provider,
+      prompt: { raw: 'Use the tool', label: 'MCP error' },
+      test: {
+        assert: [
+          { type: inverse ? 'not-is-valid-openai-tools-call' : 'is-valid-openai-tools-call' },
+        ],
+      },
+      delay: 0,
+      testIdx: 0,
+      promptIdx: 0,
+      repeatIndex: 0,
+      isRedteam: false,
+      conversations,
+      registers: {},
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.error).toContain('MCP Tool Error (list_resources): All good');
+    expect(result.response?.metadata?.toolCalls).toEqual([
+      { name: 'list_resources', is_error: true, output: null },
+    ]);
+    expect(Object.values(conversations).flat()).toHaveLength(0);
   });
 
   describe('constructor', () => {

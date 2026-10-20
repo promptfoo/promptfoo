@@ -454,6 +454,54 @@ describe('FunctionCallbackHandler', () => {
 
       expect(result).toBe(JSON.stringify(call));
     });
+
+    it('observes routed ordinary arguments by call index across concurrent invocations', async () => {
+      let finishFirst!: () => void;
+      const firstResult = new Promise<void>((resolve) => {
+        finishFirst = resolve;
+      });
+      const completed: string[] = [];
+      const callbacks = {
+        regular: vi.fn(async (args: string) => {
+          if (args === ' first ') {
+            await firstResult;
+          }
+          completed.push(args);
+          return `${args} result`;
+        }),
+      };
+      const observeBatch = vi.fn();
+      const observeOther = vi.fn();
+      const unknown = { name: 'unknown', arguments: 'not executed' };
+      const pending = handler.processCalls(
+        [
+          { id: 'shared-id', name: 'regular', arguments: ' first ' },
+          {
+            id: 'shared-id',
+            type: 'function',
+            function: { name: 'regular', arguments: 'second' },
+          },
+          unknown,
+        ],
+        callbacks,
+        undefined,
+        { onFunctionCall: observeBatch },
+      );
+      const other = await handler.processCalls({ name: 'regular' }, callbacks, undefined, {
+        onFunctionCall: observeOther,
+      });
+      expect(completed).toEqual(['second', '{}']);
+      finishFirst();
+
+      expect(await pending).toBe(` first  result\nsecond result\n${JSON.stringify(unknown)}`);
+      expect(other).toBe('{} result');
+      expect(completed).toEqual(['second', '{}', ' first ']);
+      expect(observeBatch.mock.calls).toEqual([
+        [{ name: 'regular', arguments: ' first ' }, 0],
+        [{ name: 'regular', arguments: 'second' }, 1],
+      ]);
+      expect(observeOther.mock.calls).toEqual([[{ name: 'regular', arguments: '{}' }, 0]]);
+    });
   });
 
   describe('executeCallback', () => {
@@ -1026,6 +1074,51 @@ describe('FunctionCallbackHandler', () => {
         output: 'MCP Tool Result (direct_args_tool): success with direct args',
         isError: false,
       });
+    });
+
+    it('observes concurrent MCP results by original call index without reordering output', async () => {
+      mockMCPClient.getAllTools.mockReturnValue([{ name: 'read_file' }]);
+      let finishFirst!: (value: { content: string }) => void;
+      const firstResult = new Promise<{ content: string }>((resolve) => {
+        finishFirst = resolve;
+      });
+      mockMCPClient.callTool
+        .mockReturnValueOnce(firstResult)
+        .mockResolvedValueOnce({ content: 'second result' });
+      const observe = vi.fn((_entry, index) => {
+        if (index === 1) {
+          finishFirst({ content: 'first result' });
+        }
+      });
+      const calls = [1, 2].map((number) => ({
+        id: 'shared-id',
+        type: 'function',
+        function: { name: 'read_file', arguments: JSON.stringify({ number }) },
+      }));
+
+      const output = await handler.processCalls(calls, undefined, undefined, {
+        onMcpToolCall: observe,
+      });
+
+      expect(output).toBe(
+        'MCP Tool Result (read_file): first result\nMCP Tool Result (read_file): second result',
+      );
+      expect(observe.mock.calls).toEqual([
+        [
+          {
+            name: 'read_file',
+            is_error: false,
+          },
+          1,
+        ],
+        [
+          {
+            name: 'read_file',
+            is_error: false,
+          },
+          0,
+        ],
+      ]);
     });
   });
 });

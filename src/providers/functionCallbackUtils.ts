@@ -17,6 +17,7 @@ import type {
   ToolCall,
 } from './functionCallbackTypes';
 import type { MCPClient } from './mcp/client';
+import type { McpToolCallEntry } from './mcp/types';
 
 /**
  * Resolve a `file://` callback reference through the shared path-traversal guard,
@@ -155,6 +156,8 @@ export class FunctionCallbackHandler {
     call: FunctionCall | ToolCall | any,
     callbacks?: FunctionCallbackConfig,
     context?: any,
+    onMcpToolCall?: (entry: Pick<McpToolCallEntry, 'name' | 'is_error'>) => void,
+    onFunctionCall?: (call: FunctionCall) => void,
   ): Promise<FunctionCallResult> {
     // Extract function information from various formats
     const functionInfo = this.extractFunctionInfo(call);
@@ -168,7 +171,9 @@ export class FunctionCallbackHandler {
       }
 
       if (this.mcpToolNames.has(functionInfo.name)) {
-        return await this.executeMcpTool(functionInfo.name, functionInfo.arguments);
+        const result = await this.executeMcpTool(functionInfo.name, functionInfo.arguments);
+        onMcpToolCall?.({ name: functionInfo.name, is_error: result.isError });
+        return result;
       }
     }
 
@@ -182,9 +187,11 @@ export class FunctionCallbackHandler {
 
     try {
       // Execute the callback
+      const args = functionInfo.arguments || '{}';
+      onFunctionCall?.({ name: functionInfo.name, arguments: args });
       const result = await this.executeCallback(
         functionInfo.name,
-        functionInfo.arguments || '{}',
+        args,
         callbacks,
         context,
         typeof call?.call_id === 'string'
@@ -234,7 +241,11 @@ export class FunctionCallbackHandler {
     calls: any,
     callbacks?: FunctionCallbackConfig,
     context?: any,
-    _options?: { returnRawOnError?: boolean },
+    options?: {
+      returnRawOnError?: boolean;
+      onMcpToolCall?: (entry: Pick<McpToolCallEntry, 'name' | 'is_error'>, index: number) => void;
+      onFunctionCall?: (call: FunctionCall, index: number) => void;
+    },
   ): Promise<any> {
     if (!calls) {
       return calls;
@@ -244,7 +255,15 @@ export class FunctionCallbackHandler {
     const callsArray = isArray ? calls : [calls];
 
     const results = await Promise.all(
-      callsArray.map((call) => this.processCall(call, callbacks, context)),
+      callsArray.map((call, index) =>
+        this.processCall(
+          call,
+          callbacks,
+          context,
+          (entry) => options?.onMcpToolCall?.(entry, index),
+          (entry) => options?.onFunctionCall?.(entry, index),
+        ),
+      ),
     );
 
     // If any callback succeeded, return processed results

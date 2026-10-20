@@ -39,7 +39,9 @@ import type {
   CallApiOptionsParams,
   ProviderResponse,
 } from '../../types/index';
+import type { FunctionCall } from '../functionCallbackTypes';
 import type { MCPClient } from '../mcp/client';
+import type { McpToolCallEntry } from '../mcp/types';
 import type { AzureChatResponsesOptions, AzureProviderOptions } from './types';
 
 export class AzureChatCompletionProvider extends AzureGenericProvider {
@@ -532,6 +534,7 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
     let flaggedOutput = false;
     let isRefusal = false;
     let output = '';
+    let toolCallMetadata: ProviderResponse['metadata'];
     let logProbs: any;
     let finishReason: string;
 
@@ -593,7 +596,7 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
             (this.mcpClient && (toolCalls || functionCall))
           ) {
             // Combine all calls into a single array for processing
-            const allCalls = [];
+            const allCalls: any[] = [];
             if (toolCalls) {
               allCalls.push(...(Array.isArray(toolCalls) ? toolCalls : [toolCalls]));
             }
@@ -601,10 +604,79 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
               allCalls.push(functionCall);
             }
 
+            // Callback text replaces the model's calls. Retain ordinary calls for
+            // schema checks and collect MCP evidence from actual execution.
+            const retainedCalls = allCalls.map((call, index) => {
+              const legacy = !!functionCall && index === allCalls.length - 1;
+              const payload = legacy ? call : call?.function;
+              return {
+                ...(!legacy && call?.id !== undefined ? { id: call.id } : {}),
+                type: legacy ? 'function' : call?.type,
+                function: { name: payload?.name, arguments: payload?.arguments },
+              };
+            });
+            const mcpCalls = new Map<number, Pick<McpToolCallEntry, 'name' | 'is_error'>>();
+            const mcpCallIndexes = new Set<number>();
+            const callbackCalls = new Map<number, FunctionCall>();
             output = await this.functionCallbackHandler.processCalls(
               allCalls.length === 1 ? allCalls[0] : allCalls,
               config.functionToolCallbacks,
+              undefined,
+              {
+                onFunctionCall: (call, index) => callbackCalls.set(index, call),
+                onMcpToolCall: (entry, index) => {
+                  mcpCalls.set(index, entry);
+                  const call = allCalls[index];
+                  const retained = retainedCalls[index];
+                  const rawArgs =
+                    (typeof call?.name === 'string' && call.name
+                      ? call.arguments
+                      : call?.function?.arguments) || '{}';
+                  // Routing fields and reused IDs must not conceal a different
+                  // or malformed ordinary call in the same response.
+                  if (
+                    retained.type === 'function' &&
+                    typeof retained.function.name === 'string' &&
+                    retained.function.name === entry.name &&
+                    retained.function.arguments === rawArgs
+                  ) {
+                    mcpCallIndexes.add(index);
+                  }
+                },
+              },
             );
+            toolCallMetadata = {
+              ...(mcpCalls.size > 0 && {
+                toolCalls: allCalls.flatMap((_, index) => {
+                  const entry = mcpCalls.get(index);
+                  // Assertions need execution status, not MCP payloads. Explicit
+                  // null keeps that evidence serializable without adding private
+                  // arguments, IDs, or results to exports or conversation metadata.
+                  return entry ? [{ ...entry, output: null }] : [];
+                }),
+              }),
+              functionToolCalls: retainedCalls.flatMap((call, index) => {
+                if (mcpCallIndexes.has(index)) {
+                  return [];
+                }
+                const routedCall = callbackCalls.get(index);
+                // Validate both representations when routing fields override the
+                // wrapped call; neither may hide invalid arguments in the other.
+                return routedCall &&
+                  (call.function.name !== routedCall.name ||
+                    call.function.arguments !== routedCall.arguments)
+                  ? [call, { type: 'function', function: routedCall }]
+                  : [call];
+              }),
+            };
+            if (allCalls.length === 0) {
+              // With no emitted calls, leave user-transformed output available to assertions.
+              toolCallMetadata = undefined;
+            } else if (toolCalls != null && !Array.isArray(toolCalls)) {
+              // Dispatch accepts singleton calls, but the modern response field
+              // must remain an array for validation, even beside executed MCP calls.
+              toolCallMetadata.functionToolCalls.push(null);
+            }
           } else {
             // No callbacks configured, return raw tool/function calls
             // A confirmed content-filter block is intentionally empty, not a
@@ -654,6 +726,7 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
         cached,
         latencyMs,
         logProbs,
+        ...(toolCallMetadata && { metadata: toolCallMetadata }),
         finishReason,
         ...(isRefusal ? { isRefusal: true } : {}),
         cost: calculateAzureCost(

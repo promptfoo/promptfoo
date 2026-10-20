@@ -249,6 +249,10 @@ function renderRawRequestWithNunjucks(template: string, vars: Record<string, any
   // Protect literal Nunjucks syntax in the source by raw-wrapping
   // and then re-enabling only variable tags.
   const VAR_TOKEN = '__PF_VAR__';
+  const renderId = crypto.randomUUID().replace(/-/g, '');
+  const captureFilter = `__pf_capture_${renderId}`;
+  const valuePrefix = `__PF_RENDERED_${renderId}_`;
+  const values: string[] = [];
   let working = template;
 
   // 1) Temporarily replace all {{...}} occurrences with placeholders
@@ -264,12 +268,29 @@ function renderRawRequestWithNunjucks(template: string, vars: Record<string, any
   // 3) Re-enable variables by inserting endraw/raw around each placeholder
   working = working.replace(new RegExp(`${VAR_TOKEN}(\\d+)__`, 'g'), (_m, g1) => {
     const original = placeholders[Number(g1)];
-    return `{% endraw %}${original}{% raw %}`;
+    const [, open, expression, close] = original.match(/^(\{\{-?)([\s\S]*?)(-?\}\})$/)!;
+    return `{% endraw %}${open} (${expression}) | ${captureFilter} ${close}{% raw %}`;
   });
 
-  // 4) Render with Nunjucks normally
-  const nunjucks = getNunjucksEngine();
-  return nunjucks.renderString(working, vars);
+  // Capture each expression once, leaving its output opaque while multipart
+  // framing is normalized. Nunjucks still applies its normal whitespace controls.
+  const capture = (value: unknown) => {
+    const index = values.push(value == null ? '' : '' + value) - 1;
+    return `${valuePrefix}${index}__`;
+  };
+  const nunjucks = getNunjucksEngine({ [captureFilter]: capture });
+  const rendered = nunjucks.renderString(working, vars);
+  const fragments: { text: string; interpolated: boolean }[] = [];
+  let offset = 0;
+  // Tokenize only the rendered template. Marker-like bytes inside captured values
+  // are data and must never be interpreted in a second restoration pass.
+  for (const match of rendered.matchAll(new RegExp(`${valuePrefix}(\\d+)__`, 'g'))) {
+    fragments.push({ text: rendered.slice(offset, match.index), interpolated: false });
+    fragments.push({ text: values[Number(match[1])], interpolated: true });
+    offset = match.index + match[0].length;
+  }
+  fragments.push({ text: rendered.slice(offset), interpolated: false });
+  return normalizeMultipartRequestTemplate(fragments);
 }
 
 // This function is used to encode the URL in the first line of a raw request
@@ -1217,20 +1238,20 @@ function parseRawRequest(input: string) {
 }
 
 /**
- * Extract the raw body from an HTTP request string.
- * Used when http-z parses the body into params (e.g., multipart/form-data, application/x-www-form-urlencoded)
- * instead of preserving the raw text.
+ * Extract the raw body without changing its whitespace or line endings.
+ * Parsing normalizes text bodies and converts form bodies into params, so the rendered
+ * request is the source of the bytes sent on the wire.
  */
 export function extractBodyFromRawRequest(rawRequest: string): string | undefined {
-  const adjusted = normalizeHttpLineEndings(rawRequest);
-
-  // Find header/body separator (blank line)
-  const separatorIndex = adjusted.indexOf('\r\n\r\n');
-  if (separatorIndex === -1) {
+  // Ignore padding before the request line, as the request parser does.
+  const request = rawRequest.trimStart();
+  // Accept CRLF, LF, and mixed header line endings without normalizing the body.
+  const separator = /\r?\n\r?\n/.exec(request);
+  if (!separator) {
     return undefined;
   }
 
-  const body = adjusted.slice(separatorIndex + 4).trim();
+  const body = request.slice(separator.index + separator[0].length);
   return body.length > 0 ? body : undefined;
 }
 
@@ -1249,6 +1270,321 @@ function getHeaderValue(
 function getMultipartBoundary(contentType: string): string | undefined {
   const boundaryMatch = contentType.match(/boundary=(?:"([^"]+)"|([^;]+))/i);
   return boundaryMatch?.[1] ?? boundaryMatch?.[2]?.trim();
+}
+
+function normalizeMultipartRequestTemplate(
+  fragments: { text: string; interpolated: boolean }[],
+): string {
+  const state: {
+    section: 'requestHeaders' | 'beforePart' | 'partHeaders' | 'payload' | 'epilogue';
+  } = { section: 'requestHeaders' };
+  let requestHeaders = '';
+  let boundary: string | undefined;
+  const boundaries: { value: string; opened: boolean }[] = [];
+  let partHeaders = '';
+  let line = '';
+  let lineHasSource = false;
+  let structuralTail = false;
+  let opaqueLine = false;
+  const output: { content: string; newline: string; preserveNewline?: boolean }[] = [];
+
+  const sourceAfter = (
+    index: number,
+    offset = 0,
+    includeHeaders = false,
+    skipDelimiterNewline = false,
+  ) => {
+    let source = '';
+    for (const [relativeIndex, fragment] of fragments.slice(index).entries()) {
+      const text = relativeIndex === 0 ? fragment.text.slice(offset) : fragment.text;
+      source += !includeHeaders && fragment.interpolated && /[\r\n]/.test(text) ? '\0' : text;
+      if (includeHeaders) {
+        // A separator may be followed by captured headers, but their payload
+        // suffix cannot establish framing or a later source closing delimiter.
+        const headers = skipDelimiterNewline ? source.replace(/^\r?\n/, '') : source;
+        const separator = /(?:^|\r?\n)\r?\n/.exec(headers);
+        if (separator) {
+          // Retain the blank line as evidence of an empty header block. An
+          // absent suffix must not grant framing authority to captured data.
+          return headers.slice(0, separator.index + separator[0].length);
+        }
+      }
+    }
+    return skipDelimiterNewline ? source.replace(/^\r?\n/, '') : source;
+  };
+
+  const matchDelimiter = (delimiter: string) => {
+    // An ancestor delimiter also ends an unconsumed or opaque nested body.
+    for (let index = boundaries.length - 1; index >= 0; index--) {
+      const opening = `--${boundaries[index].value}`;
+      if (delimiter === opening || delimiter === `${opening}--`) {
+        return { index, closing: delimiter !== opening };
+      }
+    }
+    return undefined;
+  };
+
+  // Unfold only inspection text, preserving emitted physical lines and payloads.
+  const unfoldHeaders = (headers: string) => headers.replace(/\r?\n[ \t]+/g, ' ');
+
+  const sourceConfirmsBoundary = (delimiter: string, followingSource: string) => {
+    const matched = matchDelimiter(delimiter);
+    if (matched?.closing) {
+      // A declaration alone cannot promote a whole captured empty child body.
+      if (matched.index > 0 && !boundaries[matched.index].opened && !lineHasSource) {
+        return false;
+      }
+      // A later source closer establishes an earlier captured lookalike as data.
+      return !followingSource
+        .split(/\r?\n/)
+        .some((sourceLine) => sourceLine.replace(/[ \t]+$/, '') === delimiter);
+    }
+    const headerLines = unfoldHeaders(followingSource.split(/\r?\n\r?\n/, 1)[0]).split(/\r?\n/);
+    const nested = matched !== undefined && matched.index > 0;
+    if (headerLines[0] === '') {
+      return nested && /^\r?\n/.test(followingSource);
+    }
+    const headers: string[] = [];
+    for (const header of headerLines) {
+      if (/^[^:\s]+:/.test(header)) {
+        headers.push(header);
+      } else {
+        return false;
+      }
+    }
+    return (
+      nested ||
+      headers.some((header) =>
+        /^content-disposition:.*\b(?:form-data|inline|attachment)\b/i.test(header),
+      )
+    );
+  };
+
+  const declaredBoundary = (headers: string) => {
+    const contentType = unfoldHeaders(headers).match(/^content-type:[ \t]*([^\r\n]*)/im)?.[1];
+    // Match the multipart subtypes supported by the raw request parser.
+    if (
+      !contentType ||
+      !/^multipart\/(?:form-data|mixed|related|alternative)(?:\s*;|\s*$)/i.test(contentType)
+    ) {
+      return undefined;
+    }
+    // Parameter whitespace is syntax; quoted values must remain distinct.
+    const boundaryParameter = contentType
+      .match(/(?:[^;"]|"(?:\\.|[^"\\])*")+/g)
+      ?.find((parameter) => /^[ \t]*boundary[ \t]*=/i.test(parameter));
+    return boundaryParameter
+      ? getMultipartBoundary(
+          boundaryParameter.replace(/^[ \t]*boundary[ \t]*=[ \t]*/i, 'boundary='),
+        )
+      : undefined;
+  };
+
+  const finishRequestHeader = (content: string, newline: string) => {
+    // Match the raw request parser's trimStart contract, including interpolated padding.
+    if (!requestHeaders && !content.trim()) {
+      return newline;
+    }
+    requestHeaders += content + newline;
+    if (!content && newline) {
+      boundary = declaredBoundary(requestHeaders);
+      if (boundary) {
+        boundaries.push({ value: boundary, opened: false });
+      }
+      state.section = 'beforePart';
+    }
+    return newline ? '\r\n' : '';
+  };
+
+  const finishPartLine = (
+    content: string,
+    newline: string,
+    followingSource: (includeHeaders?: boolean) => string,
+  ) => {
+    if (!boundary || state.section === 'epilogue') {
+      return newline;
+    }
+    const delimiter = content.replace(/[ \t]+$/, '');
+    const matched = matchDelimiter(delimiter);
+    if (
+      matched &&
+      (!opaqueLine || sourceConfirmsBoundary(delimiter, followingSource(!matched.closing)))
+    ) {
+      const previous = output[output.length - 1];
+      if (previous?.newline && !previous.preserveNewline) {
+        previous.newline = '\r\n';
+      }
+      boundaries.length = matched.index + 1;
+      partHeaders = '';
+      if (matched.closing && matched.index > 0) {
+        boundaries.pop();
+        state.section = 'payload';
+      } else {
+        if (!matched.closing) {
+          boundaries[matched.index].opened = true;
+        }
+        state.section = matched.closing ? 'epilogue' : 'partHeaders';
+      }
+      return newline ? '\r\n' : '';
+    }
+    if (state.section === 'partHeaders') {
+      partHeaders += content + newline;
+      if (!content && newline) {
+        const nestedBoundary = declaredBoundary(partHeaders);
+        if (nestedBoundary) {
+          boundaries.push({ value: nestedBoundary, opened: false });
+        }
+        // A MIME declaration does not give an inserted body source provenance.
+        state.section = 'payload';
+      }
+      return newline ? '\r\n' : '';
+    }
+    return newline;
+  };
+
+  const finishLine = (newline: string, followingSource: (includeHeaders?: boolean) => string) => {
+    let content = line;
+    line = '';
+    if (newline && structuralTail && content.endsWith('\r')) {
+      content = content.slice(0, -1);
+      newline = '\r\n';
+    }
+    newline =
+      state.section === 'requestHeaders'
+        ? finishRequestHeader(content, newline)
+        : finishPartLine(content, newline, followingSource);
+    output.push({ content, newline });
+    structuralTail = false;
+    opaqueLine = false;
+    lineHasSource = false;
+  };
+
+  const appendOpaque = (text: string, headerSuffix = false) => {
+    line += text;
+    if (text) {
+      if (text.includes('\n')) {
+        lineHasSource = false;
+      }
+      const terminalNewline = /\r?\n$/.exec(line)?.[0];
+      if (terminalNewline) {
+        // Complete the physical line without interpreting any payload lines.
+        // A capture supplying headers can also supply a framing newline;
+        // independently inserted payload newlines remain byte-identical.
+        output.push({
+          content: line.slice(0, -terminalNewline.length),
+          newline: terminalNewline,
+          preserveNewline: !headerSuffix,
+        });
+        line = '';
+      }
+      structuralTail = false;
+      opaqueLine = Boolean(line);
+    }
+  };
+
+  const isBoundaryFragment = (text: string, index: number) => {
+    if (!boundary) {
+      return false;
+    }
+    const newlineIndex = text.indexOf('\n');
+    if (line && newlineIndex >= 0 && (lineHasSource || /^\r?\n/.test(text))) {
+      // Source token text can continue across captured chunks. A previously
+      // admitted complete delimiter also allows a captured terminator. Inspect
+      // only this first line and keep an opaque trailing CR as finishLine does.
+      const buffered = line + text.slice(0, newlineIndex);
+      const delimiter = (
+        structuralTail || newlineIndex > 0 ? buffered.replace(/\r$/, '') : buffered
+      ).replace(/[ \t]+$/, '');
+      const matched = matchDelimiter(delimiter);
+      if (matched?.closing) {
+        return sourceConfirmsBoundary(delimiter, sourceAfter(index + 1));
+      }
+      if (matched) {
+        return sourceConfirmsBoundary(delimiter, sourceAfter(index, newlineIndex + 1, true));
+      }
+    }
+    const leadingNewlines = text.match(/^(?:\r?\n)*/)?.[0] ?? '';
+    const candidate = leadingNewlines ? text.slice(leadingNewlines.length) : line + text;
+    const end = candidate.indexOf('\n');
+    const delimiter = (end < 0 ? candidate : candidate.slice(0, end))
+      .replace(/\r$/, '')
+      .replace(/[ \t]+$/, '');
+    // Only original source and single-line substitutions can establish a later
+    // closer. Do not inspect embedded delimiter text in another payload value.
+    const matched = matchDelimiter(delimiter);
+    if (matched?.closing) {
+      return sourceConfirmsBoundary(delimiter, sourceAfter(index + 1));
+    }
+    if (!matched || (end >= 0 && !/^(?:\r?\n)*\r?$/.test(candidate.slice(end + 1)))) {
+      return false;
+    }
+    // Header framing may start in this capture, including half of a CRLF.
+    // Account for a buffered prefix or leading newlines when mapping back to it.
+    const followingSource =
+      end < 0
+        ? sourceAfter(index + 1, 0, true, true)
+        : sourceAfter(index, text.length - candidate.length + end + 1, true);
+    return sourceConfirmsBoundary(delimiter, followingSource);
+  };
+
+  for (const [index, fragment] of fragments.entries()) {
+    const initialState = state.section;
+    let captureContainsHeaders = initialState === 'partHeaders';
+    let captureClosedChild = false;
+    if (
+      fragment.interpolated &&
+      (state.section === 'epilogue' ||
+        (state.section === 'payload' && !isBoundaryFragment(fragment.text, index)))
+    ) {
+      appendOpaque(fragment.text);
+      continue;
+    }
+    let offset = 0;
+    for (const match of fragment.text.matchAll(/\n/g)) {
+      line += fragment.text.slice(offset, match.index);
+      if (match.index > offset) {
+        structuralTail = true;
+        lineHasSource ||= !fragment.interpolated;
+      }
+      const depth = boundaries.length;
+      finishLine('\n', (includeHeaders) => sourceAfter(index, match.index + 1, includeHeaders));
+      offset = match.index + 1;
+      if (initialState === 'payload' && state.section === 'partHeaders') {
+        captureContainsHeaders = true;
+      }
+      captureClosedChild = initialState === 'payload' && boundaries.length < depth;
+      // Stop admitted captures at the field value or a child closer's epilogue.
+      // Whole containers supplied before the first part retain their traversal.
+      if (
+        fragment.interpolated &&
+        (captureContainsHeaders || captureClosedChild) &&
+        state.section === 'payload'
+      ) {
+        break;
+      }
+    }
+    const remainder = fragment.text.slice(offset);
+    if (
+      fragment.interpolated &&
+      (captureContainsHeaders || captureClosedChild) &&
+      state.section === 'payload'
+    ) {
+      appendOpaque(remainder, !captureClosedChild);
+    } else {
+      line += remainder;
+      if (remainder) {
+        structuralTail = true;
+        lineHasSource ||= !fragment.interpolated;
+      }
+    }
+  }
+  if (line) {
+    finishLine('', () => '');
+  }
+  // Other content types retain the original bytes, including request whitespace.
+  return boundary
+    ? output.map(({ content, newline }) => content + newline).join('')
+    : fragments.map(({ text }) => text).join('');
 }
 
 function sanitizeMultipartFallbackBody(body: string): string {
@@ -1272,14 +1608,13 @@ function getMultipartPartFieldName(headerBlock: string): string | undefined {
 }
 
 function sanitizeMultipartPartBody(part: string): string {
-  const separator = part.includes('\r\n\r\n') ? '\r\n\r\n' : '\n\n';
-  const separatorIndex = part.indexOf(separator);
-  if (separatorIndex === -1) {
+  const separator = /\r?\n\r?\n/.exec(part);
+  if (!separator) {
     return sanitizeMultipartFallbackBody(part);
   }
 
-  const headerBlock = part.slice(0, separatorIndex);
-  const bodyStartIndex = separatorIndex + separator.length;
+  const headerBlock = part.slice(0, separator.index);
+  const bodyStartIndex = separator.index + separator[0].length;
   const body = part.slice(bodyStartIndex);
   const fieldName = getMultipartPartFieldName(headerBlock);
   const trailingNewline = body.match(/(\r?\n)$/)?.[1] ?? '';
@@ -2850,18 +3185,8 @@ export class HttpProvider implements ApiProvider {
         const urlObj = new URL(url);
         urlObj.searchParams.append(renderedKeyName, renderedValue);
         url = urlObj.toString();
-        // Extract the path and query from the full URL
-        const urlPath = urlObj.pathname + urlObj.search;
-        // Update the request line with the new URL path
-        const requestLines = renderedRequest.split('\n');
-        const firstLine = requestLines[0];
-        const method = firstLine.split(' ')[0];
-        const protocol = firstLine.split(' ').slice(-1)[0];
-        requestLines[0] = `${method} ${urlPath} ${protocol}`;
-        // Re-parse with updated URL
-        const updatedRequest = requestLines.join('\n');
-        const reParsed = parseRawRequest(updatedRequest.trim());
-        Object.assign(parsedRequest, reParsed);
+        // Keep the parsed target in sync without replacing the augmented headers.
+        parsedRequest.url = urlObj.pathname + urlObj.search;
       } catch (err) {
         logger.warn(
           `[HTTP Provider]: Failed to add API key to query params in raw request: ${String(err)}`,
@@ -2869,16 +3194,13 @@ export class HttpProvider implements ApiProvider {
       }
     }
 
-    // Determine body content:
-    // - For JSON/text bodies, http-z provides body.text
-    // - For multipart/form-data and x-www-form-urlencoded, http-z parses into body.params
-    //   but we need the raw body text, so extract it from the rendered request
-    let bodyContent: string | undefined;
-    if (parsedRequest.body?.text) {
-      bodyContent = parsedRequest.body.text.trim();
-    } else if (parsedRequest.body?.params) {
-      bodyContent = extractBodyFromRawRequest(renderedRequest);
-    }
+    // Preserve actual body bytes, while allowing trailing padding on bodyless raw requests.
+    // The request-line method controls transport even when config.method differs.
+    const rawBodyContent = extractBodyFromRawRequest(renderedRequest);
+    const bodyContent =
+      ['GET', 'HEAD'].includes(parsedRequest.method.toUpperCase()) && !rawBodyContent?.trim()
+        ? undefined
+        : rawBodyContent;
 
     logger.debug(
       `[HTTP Provider]: Calling ${sanitizeUrl(url)} with raw request: ${parsedRequest.method}`,

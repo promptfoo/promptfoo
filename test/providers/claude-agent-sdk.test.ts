@@ -5,6 +5,7 @@ import fs from 'fs';
 
 import { trace as otelTrace, SpanStatusCode } from '@opentelemetry/api';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { runAssertion } from '../../src/assertions/index';
 import { clearCache, disableCache, enableCache, getCache, isCacheEnabled } from '../../src/cache';
 import cliState from '../../src/cliState';
 import { getDirectory, importModule, resolvePackageEntryPoint } from '../../src/esm';
@@ -6194,6 +6195,108 @@ describe('ClaudeCodeSDKProvider', () => {
     });
 
     describe('tool call tracking', () => {
+      it.each([
+        {
+          label: 'orphan request',
+          matched: false,
+          content: undefined,
+          pass: false,
+          isError: false,
+        },
+        { label: 'omitted content', matched: true, pass: true, isError: false },
+        {
+          label: 'undefined content',
+          matched: true,
+          content: undefined,
+          pass: true,
+          isError: false,
+        },
+        { label: 'empty text', matched: true, content: '', pass: true, isError: false },
+        { label: 'empty blocks', matched: true, content: [], pass: true, isError: false },
+        { label: 'text result', matched: true, content: 'done', pass: true, isError: false },
+        {
+          label: 'failed result',
+          matched: true,
+          content: 'PRIVATE_RESULT',
+          pass: false,
+          isError: true,
+        },
+      ])('grades $label consistently before and after serialization', async (scenario) => {
+        const messages: Partial<SDKMessage>[] = [
+          {
+            type: 'assistant',
+            parent_tool_use_id: null,
+            message: createMockBetaMessage([
+              {
+                type: 'tool_use',
+                id: 'observed-call',
+                name: 'Read',
+                input: { path: 'PRIVATE_INPUT' },
+              },
+            ]),
+            session_id: 'test-session',
+          },
+        ];
+        if (scenario.matched) {
+          messages.push({
+            type: 'user',
+            parent_tool_use_id: null,
+            message: {
+              role: 'user',
+              content: [
+                {
+                  type: 'tool_result',
+                  tool_use_id: 'observed-call',
+                  ...('content' in scenario ? { content: scenario.content } : {}),
+                  is_error: scenario.isError,
+                },
+              ],
+            },
+            session_id: 'test-session',
+          });
+        }
+        messages.push({
+          type: 'result',
+          subtype: 'success',
+          session_id: 'test-session',
+          uuid: '12345678-1234-1234-1234-123456789abc',
+          result: 'ok',
+          usage: createMockUsage(1, 1),
+          total_cost_usd: 0,
+          duration_ms: 1,
+          duration_api_ms: 1,
+          is_error: false,
+          num_turns: 1,
+          permission_denials: [],
+        });
+        mockQuery.mockReturnValue(createMockQuery(messages));
+        const provider = new ClaudeCodeSDKProvider(createAnthropicEnvOptions());
+        const response = await provider.callApi('Read a file');
+        expect(response.error).toBeUndefined();
+        expect(response.output).toBe('ok');
+        expect(response.metadata?.toolCalls).toHaveLength(1);
+        expect(response.metadata?.toolCalls[0].output).toEqual(
+          scenario.matched ? (scenario.content ?? null) : undefined,
+        );
+        const serialized = JSON.stringify(response);
+        for (const providerResponse of [response, JSON.parse(serialized)]) {
+          for (const inverse of [false, true]) {
+            const grade = await runAssertion({
+              provider,
+              providerResponse,
+              assertion: {
+                type: inverse ? 'not-is-valid-openai-tools-call' : 'is-valid-openai-tools-call',
+              },
+              test: {},
+            });
+            const pass = inverse ? !scenario.pass : scenario.pass;
+            expect(grade, grade.reason).toMatchObject({ pass, score: Number(pass) });
+            expect(grade.reason).not.toContain('PRIVATE_');
+          }
+        }
+        expect(JSON.stringify(response)).toBe(serialized);
+      });
+
       it.each([
         { forwardSubagentText: false, wrappedWithMetadata: false },
         { forwardSubagentText: true, wrappedWithMetadata: false },

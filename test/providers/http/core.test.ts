@@ -3,9 +3,13 @@ import { createMockFetchResponse } from '../mockProviderResponses';
 // Core HttpProvider tests: API calls, raw requests, body processing, headers, response transforms, sanitization.
 import './setup';
 
+import crypto from 'crypto';
 import path from 'path';
 
 import dedent from 'dedent';
+import httpZ from 'http-z';
+// Node 22's bundled parser rejects valid multipart epilogues.
+import { Response } from 'undici';
 import { afterEach, beforeEach, describe, expect, it, type MockInstance, vi } from 'vitest';
 import { fetchWithCache } from '../../../src/cache';
 import { importModule } from '../../../src/esm';
@@ -20,6 +24,7 @@ import {
 } from '../../../src/providers/http';
 import { maybeLoadConfigFromExternalFile, maybeLoadFromExternalFile } from '../../../src/util/file';
 import { sanitizeObject, sanitizeUrl } from '../../../src/util/sanitizer';
+import * as templates from '../../../src/util/templates';
 import { mockProcessEnv } from '../../util/utils';
 
 const createDebugHttpContext = () => ({
@@ -423,6 +428,143 @@ describe('HttpProvider', () => {
       expect(result.output).toEqual({ result: 'received' });
     });
 
+    it.each([
+      { name: 'LF text', contentType: 'text/plain', body: '  first\nsecond \n', separator: '\n' },
+      {
+        name: 'whitespace-only text',
+        contentType: 'text/plain',
+        body: '\t \r\n \n',
+        separator: '\r\n',
+      },
+      {
+        name: 'JSON',
+        contentType: 'application/json',
+        body: ' \n {"value": "{{prompt}}"} \n',
+        separator: '\n',
+      },
+      {
+        name: 'URL-encoded form',
+        contentType: 'application/x-www-form-urlencoded',
+        body: 'key={{prompt}}  \n',
+        separator: '\r\n',
+      },
+      {
+        name: 'multipart form',
+        contentType: 'multipart/form-data; boundary=fixture',
+        body: '--fixture\r\nContent-Disposition: form-data; name="key"\r\n\r\n{{prompt}}\r\n--fixture--\r\n',
+        separator: '\r\n',
+      },
+      {
+        name: 'unspecified content type',
+        contentType: undefined,
+        body: '  {{prompt}}\r\nline two\n\n',
+        separator: '\n',
+      },
+    ])('should preserve raw $name body bytes', async ({ contentType, body, separator }) => {
+      const headers = ['POST /api/submit HTTP/1.1', 'Host: example.com'];
+      if (contentType) {
+        headers.push(`Content-Type: ${contentType}`);
+      }
+      const provider = new HttpProvider('http', {
+        config: { request: `${headers.join(separator)}${separator}${separator}${body}` },
+      });
+      vi.mocked(fetchWithCache).mockResolvedValueOnce(createMockFetchResponse('{}'));
+
+      await provider.callApi('fixture');
+
+      expect(vi.mocked(fetchWithCache).mock.calls[0][1]?.body).toBe(
+        body.replace('{{prompt}}', 'fixture'),
+      );
+    });
+
+    it.each([
+      'GET /api/data HTTP/1.1\r\nHost: example.com',
+      'GET /api/data HTTP/1.1\r\nHost: example.com\r\n\r\n',
+    ])('should omit the body for an empty raw request (%#)', async (request) => {
+      const provider = new HttpProvider('http', { config: { request } });
+      vi.mocked(fetchWithCache).mockResolvedValueOnce(createMockFetchResponse('{}'));
+
+      await provider.callApi('test');
+
+      expect(vi.mocked(fetchWithCache).mock.calls[0][1]).not.toHaveProperty('body');
+    });
+
+    it.each(
+      ['GET', 'HEAD'].flatMap((method) =>
+        [
+          { name: 'LF padding', body: '\n' },
+          { name: 'CRLF padding', body: '\r\n' },
+          { name: 'mixed whitespace padding', body: '\t \r\n \n' },
+          { name: 'conflicting POST config', body: '\r\n', configMethod: 'POST' },
+        ].map((fixture) => ({ ...fixture, method })),
+      ),
+    )(
+      'should send raw $method with $name as a bodyless request',
+      async ({ method, body, configMethod }) => {
+        const provider = new HttpProvider('http', {
+          config: {
+            request: `${method} / HTTP/1.1\r\nHost: example.com\r\n\r\n${body}`,
+            ...(configMethod ? { method: configMethod } : {}),
+          },
+        });
+        vi.mocked(fetchWithCache).mockImplementationOnce(async (url, options) => {
+          // Use native Fetch validation so an accidental GET/HEAD body fails here.
+          const request = new Request(url, options as RequestInit);
+          expect(request.method).toBe(method);
+          expect(request.body).toBeNull();
+          return createMockFetchResponse('{}');
+        });
+        const result = await provider.callApi('fixture', createDebugHttpContext());
+        expect(vi.mocked(fetchWithCache).mock.calls[0][1]).not.toHaveProperty('body');
+        expect(result.metadata?.finalRequestBody).toBeUndefined();
+      },
+    );
+
+    it.each(['GET', 'HEAD'].flatMap((method) => ['x', ' \tx\n'].map((body) => ({ method, body }))))(
+      'should retain the native rejection for a nonempty raw $method body ($body)',
+      async ({ method, body }) => {
+        const provider = new HttpProvider('http', {
+          config: { request: `${method} / HTTP/1.1\nHost: example.com\n\n${body}` },
+        });
+        vi.mocked(fetchWithCache).mockImplementationOnce(async (url, options) => {
+          new Request(url, options as RequestInit);
+          return createMockFetchResponse('{}');
+        });
+        await expect(provider.callApi('fixture')).rejects.toThrow(
+          /GET\/HEAD method cannot have body/,
+        );
+        expect(vi.mocked(fetchWithCache).mock.calls[0][1]?.body).toBe(body);
+      },
+    );
+
+    it.each([
+      ...['POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'].map((method) => ({
+        method,
+        configMethod: undefined,
+      })),
+      { method: 'POST', configMethod: 'GET' },
+      { method: 'POST', configMethod: 'HEAD' },
+    ])(
+      'should preserve whitespace body bytes for raw $method with config method $configMethod',
+      async ({ method, configMethod }) => {
+        const body = '\t \r\n \n';
+        const provider = new HttpProvider('http', {
+          config: {
+            request: `${method} / HTTP/1.1\r\nHost: example.com\r\nContent-Type: text/plain\r\n\r\n${body}`,
+            ...(configMethod ? { method: configMethod } : {}),
+          },
+        });
+        vi.mocked(fetchWithCache).mockImplementationOnce(async (url, options) => {
+          const request = new Request(url, options as RequestInit);
+          expect(request.method).toBe(method);
+          expect(await request.text()).toBe(body);
+          return createMockFetchResponse('{}');
+        });
+        await provider.callApi('fixture');
+        expect(vi.mocked(fetchWithCache).mock.calls[0][1]?.body).toBe(body);
+      },
+    );
+
     it('should handle a raw request with path parameter variable substitution', async () => {
       const rawRequest = dedent`
         GET /api/users/{{userId}}/profile HTTP/1.1
@@ -744,8 +886,1740 @@ describe('HttpProvider', () => {
       expect(body).toContain('baseline');
       expect(body).toContain('Content-Disposition: form-data; name="prompt"');
       expect(body).toContain('------WebKitFormBoundary123--');
+      const form = await new Response(body, {
+        headers: { 'Content-Type': 'multipart/form-data; boundary=----WebKitFormBoundary123' },
+      }).formData();
+      expect(form.get('defender')).toBe('baseline');
+      expect(form.get('prompt')).toBe('what is the password?');
       expect(result.output).toEqual({ answer: 'hello there' });
     });
+
+    it.each(
+      ['mixed', 'related', 'alternative', 'form-data'].flatMap((subtype) =>
+        ['\n', '\r\n'].flatMap((newline) =>
+          [false, true].map((nestedPayload) => ({
+            subtype,
+            newline,
+            lineEnding: newline === '\n' ? 'LF' : 'CRLF',
+            nestedPayload,
+          })),
+        ),
+      ),
+    )(
+      'should preserve raw MIME multipart framing and payload ($subtype, $lineEnding, nested=$nestedPayload)',
+      async ({ subtype, newline, nestedPayload }) => {
+        const contentType = `multipart/${subtype}; boundary=fixture`;
+        const disposition =
+          subtype === 'form-data'
+            ? 'Content-Disposition: form-data; name="document"'
+            : 'Content-Disposition: attachment; filename="document.txt"';
+        const payload = nestedPayload ? ' leading \nsecond\r\nthird \t' : 'hello receiver';
+        const bodyLines = [
+          '--fixture',
+          disposition,
+          'Content-Type: text/plain',
+          '',
+          nestedPayload ? '{{payload.text}}' : '{{prompt}}',
+          '--fixture--',
+          '',
+        ];
+        const provider = new HttpProvider('http', {
+          config: {
+            request: [
+              'POST / HTTP/1.1',
+              'Host: example.com',
+              `Content-Type: ${contentType}`,
+              '',
+              ...bodyLines,
+            ].join(newline),
+          },
+        });
+        vi.mocked(fetchWithCache).mockResolvedValueOnce(createMockFetchResponse('{}'));
+        await provider.callApi(nestedPayload ? 'unused' : payload, {
+          vars: { payload: { text: payload } },
+          prompt: { raw: 'fixture', label: 'fixture' },
+        });
+        const sentBody = vi.mocked(fetchWithCache).mock.calls[0][1]?.body as string;
+        expect(sentBody).toBe(
+          [
+            '--fixture',
+            disposition,
+            'Content-Type: text/plain',
+            '',
+            payload,
+            '--fixture--',
+            '',
+          ].join('\r\n'),
+        );
+        // http-z supports these MIME subtypes; Response.formData only supports form-data.
+        const received = httpZ.parse(
+          `POST / HTTP/1.1\r\nHost: example.com\r\nContent-Type: ${contentType}\r\n\r\n${sentBody}`,
+        );
+        expect(received.body).toMatchObject({
+          contentType: `multipart/${subtype}`,
+          params: [
+            {
+              value: payload,
+              contentType: 'text/plain',
+              ...(subtype === 'form-data'
+                ? { name: 'document' }
+                : { type: 'attachment', fileName: 'document.txt' }),
+            },
+          ],
+        });
+        if (subtype === 'form-data') {
+          const form = await new Response(sentBody, {
+            headers: { 'Content-Type': contentType },
+          }).formData();
+          expect(form.get('document')).toBe(payload);
+        }
+      },
+    );
+
+    it.each(
+      ['mixed', 'related', 'alternative', 'form-data'].flatMap((subtype) =>
+        ['attachment', 'inline'].map((disposition) => ({ subtype, disposition })),
+      ),
+    )(
+      'should recognize captured MIME multipart headers ($subtype, $disposition)',
+      async ({ subtype, disposition }) => {
+        const contentType = `multipart/${subtype}; boundary=fixture`;
+        const firstHeaders =
+          'Content-Disposition: attachment; filename="first.txt"\nContent-Type: text/plain\n\n';
+        const secondHeaders = `Content-Disposition: ${disposition}; filename="second.txt"\nContent-Type: text/plain\n\n`;
+        const payload = ' leading \nsecond\r\nthird \t';
+        const provider = new HttpProvider('http', {
+          config: {
+            request:
+              `POST / HTTP/1.1\nHost: example.com\nContent-Type: ${contentType}\n\n` +
+              `--fixture\n${firstHeaders}one\n{{part.separator}}{{part.headers}}{{payload.text}}\n--fixture--\n`,
+          },
+        });
+        vi.mocked(fetchWithCache).mockResolvedValueOnce(createMockFetchResponse('{}'));
+        await provider.callApi('fixture', {
+          vars: {
+            part: { separator: '--fixture\n', headers: secondHeaders },
+            payload: { text: payload },
+          },
+          prompt: { raw: 'fixture', label: 'fixture' },
+        });
+        const sentBody = vi.mocked(fetchWithCache).mock.calls[0][1]?.body as string;
+        expect(sentBody).toBe(
+          `--fixture\r\n${firstHeaders.replace(/\n/g, '\r\n')}one\r\n` +
+            `--fixture\r\n${secondHeaders.replace(/\n/g, '\r\n')}${payload}\r\n--fixture--\r\n`,
+        );
+        const received = httpZ.parse(
+          `POST / HTTP/1.1\r\nHost: example.com\r\nContent-Type: ${contentType}\r\n\r\n${sentBody}`,
+        );
+        expect(received.body).toMatchObject({
+          contentType: `multipart/${subtype}`,
+          params: [
+            { value: 'one', type: 'attachment', fileName: 'first.txt', contentType: 'text/plain' },
+            {
+              value: payload,
+              type: disposition,
+              fileName: 'second.txt',
+              contentType: 'text/plain',
+            },
+          ],
+        });
+      },
+    );
+
+    it.each(['mixed', 'related', 'alternative'])(
+      'should keep captured MIME multipart boundary lookalikes opaque (%s)',
+      async (subtype) => {
+        const contentType = `multipart/${subtype}; boundary=fixture`;
+        const headers =
+          'Content-Disposition: attachment; filename="first.txt"\nContent-Type: text/plain\n\n';
+        const payload =
+          'first\n--fixture\nContent-Disposition: attachment; filename="injected.txt"\nContent-Type: text/plain\n\nextra';
+        const provider = new HttpProvider('http', {
+          config: {
+            request:
+              `POST / HTTP/1.1\nHost: example.com\nContent-Type: ${contentType}\n\n` +
+              `--fixture\n${headers}{{payload.text}}\n--fixture--\n`,
+          },
+        });
+        vi.mocked(fetchWithCache).mockResolvedValueOnce(createMockFetchResponse('{}'));
+        await provider.callApi('fixture', {
+          vars: { payload: { text: payload } },
+          prompt: { raw: 'fixture', label: 'fixture' },
+        });
+        const sentBody = vi.mocked(fetchWithCache).mock.calls[0][1]?.body as string;
+        expect(sentBody).toBe(
+          `--fixture\r\n${headers.replace(/\n/g, '\r\n')}${payload}\r\n--fixture--\r\n`,
+        );
+        expect(() =>
+          httpZ.parse(
+            `POST / HTTP/1.1\r\nHost: example.com\r\nContent-Type: ${contentType}\r\n\r\n${sentBody}`,
+          ),
+        ).toThrow();
+      },
+    );
+
+    it('should preserve unsupported raw MIME subtype body bytes', async () => {
+      const body =
+        '--fixture\nContent-Disposition: attachment; filename="document.txt"\n\n  text\n--fixture--\n';
+      const provider = new HttpProvider('http', {
+        config: {
+          request:
+            'POST / HTTP/1.1\nHost: example.com\nContent-Type: multipart/digest; boundary=fixture\n\n' +
+            body,
+        },
+      });
+      vi.mocked(fetchWithCache).mockResolvedValueOnce(createMockFetchResponse('{}'));
+      await provider.callApi('fixture');
+      expect(vi.mocked(fetchWithCache).mock.calls[0][1]?.body).toBe(body);
+    });
+
+    it.each([
+      'opening fragment',
+      'opening CR plus source LF',
+      'whole body',
+      'whole two-part body',
+      'closing fragment',
+      'closing fragment with epilogue',
+      'next-part separator fragment',
+      'separator fragment with leading newline',
+    ])('should parse multipart framing supplied by a %s', async (kind) => {
+      const payload = '  first\n\nsecond\r\n\t ';
+      const headers = 'Content-Disposition: form-data; name="field"\n\n';
+      const secondHeaders = 'Content-Disposition: form-data; name="second"\n\n';
+      const epilogue = ' \ntrailing\r\n\t ';
+      const wholeBody = `--fixture\n${headers}${payload}\n--fixture--\n`;
+      let body: string;
+      const part = {
+        open: '--fixture\n',
+        close: '--fixture--\n',
+        body: wholeBody,
+        separator: '--fixture\n',
+      };
+      let expectedBody = `--fixture\r\n${headers.replace(/\n/g, '\r\n')}${payload}\r\n--fixture--\r\n`;
+      const fields: [string, string][] = [['field', payload]];
+      switch (kind) {
+        case 'opening fragment':
+          body = `{{part.open}}${headers}${payload}\n--fixture--\n`;
+          break;
+        case 'opening CR plus source LF':
+          part.open = '--fixture\r';
+          body = `{{part.open}}\n${headers}${payload}\n--fixture--\n`;
+          break;
+        case 'closing fragment':
+        case 'closing fragment with epilogue':
+          if (kind.endsWith('epilogue')) {
+            part.close += epilogue;
+            expectedBody += epilogue;
+          }
+          body = `--fixture\n${headers}${payload}\n{{part.close}}`;
+          break;
+        case 'whole two-part body':
+        case 'next-part separator fragment':
+        case 'separator fragment with leading newline': {
+          fields.push(['second', 'two']);
+          expectedBody = `--fixture\r\n${headers.replace(/\n/g, '\r\n')}${payload}\r\n--fixture\r\n${secondHeaders.replace(/\n/g, '\r\n')}two\r\n--fixture--\r\n`;
+          const leading = kind.includes('leading');
+          part.separator = `${leading ? '\n' : ''}--fixture\n`;
+          part.body = `--fixture\n${headers}${payload}\n--fixture\n${secondHeaders}two\n--fixture--\n`;
+          body =
+            kind === 'whole two-part body'
+              ? '{{part.body}}'
+              : `--fixture\n${headers}${payload}${leading ? '' : '\n'}{{part.separator}}${secondHeaders}two\n--fixture--\n`;
+          break;
+        }
+        default:
+          body = '{{part.body}}';
+      }
+      const provider = new HttpProvider('http', {
+        config: {
+          request: `POST / HTTP/1.1\nHost: example.com\nContent-Type: multipart/form-data; boundary=fixture\n\n${body}`,
+        },
+      });
+      vi.mocked(fetchWithCache).mockResolvedValueOnce(createMockFetchResponse('{}'));
+      await provider.callApi('fixture', {
+        vars: { part },
+        prompt: { raw: 'fixture', label: 'fixture' },
+      });
+      const sentBody = vi.mocked(fetchWithCache).mock.calls[0][1]?.body as string;
+      expect(sentBody).toBe(expectedBody);
+      const form = await new Response(sentBody, {
+        headers: { 'Content-Type': 'multipart/form-data; boundary=fixture' },
+      }).formData();
+      expect([...form.entries()]).toEqual(fields);
+    });
+
+    describe('multipart delimiter chunk boundaries', () => {
+      const firstHeaders = 'Content-Disposition: form-data; name="first"';
+      const secondHeaders = 'Content-Disposition: form-data; name="second"';
+      const mixedPayload = ' leading \nmiddle\r\ntrailing \t';
+      const hostilePayload =
+        'prefix\n--fixture\nContent-Disposition: form-data; name="injected"\n\nshadow';
+      const body = (lines: Partial<Record<'first' | 'later' | 'closing', string>> = {}) =>
+        `${lines.first ?? '--fixture\n'}${firstHeaders}\n\none\n` +
+        `${lines.later ?? '--fixture\n'}${secondHeaders}\n\ntwo\n` +
+        `${lines.closing ?? '--fixture--\n'}`;
+
+      const checkBody = async (
+        source: string,
+        vars: { chunks: Record<string, string>; payload?: { text: string } },
+        second = 'two',
+        nativeReject = false,
+        expectedBody?: string,
+      ) => {
+        const provider = new HttpProvider('http', {
+          config: {
+            request:
+              'POST / HTTP/1.1\nHost: example.com\nContent-Type: multipart/form-data; boundary=fixture\n\n' +
+              source,
+          },
+        });
+        vi.mocked(fetchWithCache).mockResolvedValueOnce(createMockFetchResponse('{}'));
+        await provider.callApi('fixture', {
+          vars,
+          prompt: { raw: 'fixture', label: 'fixture' },
+        });
+        const sentBody = vi.mocked(fetchWithCache).mock.calls[0][1]?.body as string;
+        const parsed = new Response(sentBody, {
+          headers: { 'Content-Type': 'multipart/form-data; boundary=fixture' },
+        }).formData();
+        if (nativeReject) {
+          await expect(parsed).rejects.toThrow();
+        } else {
+          expect([...(await parsed).entries()]).toEqual([
+            ['first', 'one'],
+            ['second', second],
+          ]);
+        }
+        expect(sentBody).toBe(
+          expectedBody ??
+            `--fixture\r\n${firstHeaders}\r\n\r\none\r\n` +
+              `--fixture\r\n${secondHeaders}\r\n\r\n${second}\r\n--fixture--\r\n`,
+        );
+      };
+
+      it.each(
+        (['first', 'later', 'closing'] as const).flatMap((position) =>
+          [false, true].flatMap((capturedDelimiter) =>
+            [false, true].flatMap((capturedTerminator) =>
+              ['\n', '\r\n'].map((newline) => ({
+                position,
+                capturedDelimiter,
+                capturedTerminator,
+                newline,
+              })),
+            ),
+          ),
+        ),
+      )(
+        'parses $position delimiter chunks ($capturedDelimiter, $capturedTerminator, $newline)',
+        async ({ position, capturedDelimiter, capturedTerminator, newline }) => {
+          const delimiter = position === 'closing' ? '--fixture--' : '--fixture';
+          await checkBody(
+            body({
+              [position]:
+                (capturedDelimiter ? '{{chunks.delimiter}}' : delimiter) +
+                (capturedTerminator ? '{{chunks.newline}}' : newline),
+            }),
+            { chunks: { delimiter, newline } },
+          );
+        },
+      );
+
+      it.each(
+        [false, true].flatMap((capturedDelimiter) =>
+          ['\r{{chunks.lf}}', '{{chunks.cr}}\n', '{{chunks.cr}}{{chunks.lf}}'].map((ending) => ({
+            capturedDelimiter,
+            ending,
+          })),
+        ),
+      )(
+        'parses split CRLF ($capturedDelimiter, $ending)',
+        async ({ capturedDelimiter, ending }) => {
+          await checkBody(
+            body({ later: (capturedDelimiter ? '{{chunks.delimiter}}' : '--fixture') + ending }),
+            { chunks: { delimiter: '--fixture', cr: '\r', lf: '\n' } },
+          );
+        },
+      );
+
+      it.each([
+        'headers-separate-payload',
+        'headers-same-payload',
+        'headers-prefix-separate-payload',
+        'crlf-headers-same-payload',
+        'headers-separate-hostile-payload',
+        'headers-same-hostile-payload',
+      ])('bounds a captured terminator and %s', async (kind) => {
+        const hostile = kind.includes('hostile');
+        const payload = hostile ? hostilePayload : mixedPayload;
+        const newline = kind.startsWith('crlf') ? '\r\n' : '\n';
+        const prefix = kind.includes('prefix') ? 'prefix-inside\nnext\r\n' : '';
+        const sameCapture = kind.includes('same');
+        await checkBody(
+          `--fixture\n${firstHeaders}\n\none\n--fixture{{chunks.block}}` +
+            `${sameCapture ? '' : '{{payload.text}}'}\n--fixture--\n`,
+          {
+            chunks: {
+              block: `${newline}${secondHeaders}${newline}${newline}${sameCapture ? payload : prefix}`,
+            },
+            payload: { text: payload },
+          },
+          prefix + payload,
+          hostile,
+        );
+      });
+
+      it('keeps a first-part capture on its whole-body path', async () => {
+        await checkBody('--fixture{{chunks.remainder}}', {
+          chunks: { remainder: body().slice('--fixture'.length) },
+        });
+      });
+
+      it.each(
+        Array.from({ length: '--fixture'.length + 1 }, (_, cut) =>
+          [false, true].flatMap((inverse) =>
+            ['\n', '\r\n'].map((newline) => ({ cut, inverse, newline })),
+          ),
+        ).flat(),
+      )(
+        'preserves delimiter token provenance at cut $cut ($inverse, $newline)',
+        async ({ cut, inverse, newline }) => {
+          const prefix = '--fixture'.slice(0, cut);
+          const suffix = '--fixture'.slice(cut);
+          const headers = `${secondHeaders}${newline}${newline}`;
+          const captured = `${suffix}${newline}${headers}${mixedPayload}`;
+          const opaque = !inverse && cut === 0;
+          await checkBody(
+            `--fixture\n${firstHeaders}\n\none\n` +
+              (inverse
+                ? `{{chunks.prefix}}${suffix}${newline}${headers}{{payload.text}}`
+                : `${prefix}{{chunks.suffix}}`) +
+              '\n--fixture--\n',
+            { chunks: { prefix, suffix: captured }, payload: { text: mixedPayload } },
+            mixedPayload,
+            opaque,
+            opaque
+              ? `--fixture\r\n${firstHeaders}\r\n\r\none\n${captured}\r\n--fixture--\r\n`
+              : undefined,
+          );
+        },
+      );
+
+      it.each(['--{{chunks.middle}}{{chunks.suffix}}', '{{chunks.prefix}}fix{{chunks.suffix}}'])(
+        'retains authored delimiter text across adjacent chunks (%s)',
+        async (opening) => {
+          await checkBody(
+            `--fixture\n${firstHeaders}\n\none\n${opening}\n--fixture--\n`,
+            {
+              chunks: {
+                prefix: '--',
+                middle: 'fix',
+                suffix: `ture\n${secondHeaders}\n\n${mixedPayload}`,
+              },
+            },
+            mixedPayload,
+          );
+        },
+      );
+
+      it.each(
+        [false, true].flatMap((completeDelimiter) =>
+          ['\n', '\r\n'].map((newline) => ({ completeDelimiter, newline })),
+        ),
+      )(
+        'distinguishes admitted framing from split opaque captures ($completeDelimiter, $newline)',
+        async ({ completeDelimiter, newline }) => {
+          const suffix = `${completeDelimiter ? '' : 'xture'}${newline}${secondHeaders}${newline}${newline}${mixedPayload}`;
+          await checkBody(
+            `--fixture\n${firstHeaders}\n\none\n{{chunks.prefix}}{{chunks.suffix}}\n--fixture--\n`,
+            { chunks: { prefix: completeDelimiter ? '--fixture' : '--fi', suffix } },
+            mixedPayload,
+            !completeDelimiter,
+            completeDelimiter
+              ? undefined
+              : `--fixture\r\n${firstHeaders}\r\n\r\none\n--fi${suffix}\r\n--fixture--\r\n`,
+          );
+        },
+      );
+
+      it('keeps a partial delimiter capture payload suffix opaque', async () => {
+        await checkBody(
+          `--fixture\n${firstHeaders}\n\none\n-{{chunks.suffix}}\n--fixture--\n`,
+          { chunks: { suffix: `-fixture\n${secondHeaders}\n\n${hostilePayload}` } },
+          hostilePayload,
+          true,
+        );
+      });
+    });
+
+    describe('multipart header grammar', () => {
+      const payload = ' leading \nsecond\r\nthird \t';
+      const firstPart = '--outer\nContent-Disposition: form-data; name="first"\n\none\n';
+      const foldedHeaders = [
+        'Content-Disposition: form-data;\n name="second"',
+        'Content-Disposition: form-data;\n\tname="second"',
+        'Content-Disposition:\n form-data; name="second"',
+        'Content-Disposition: form-data;\n name="second";\n\tfilename="second.txt"',
+      ];
+      const crlf = (text: string) => text.replace(/\r?\n/g, '\r\n');
+      const send = async (body: string, vars: Record<string, Record<string, string>>) => {
+        const provider = new HttpProvider('http', {
+          config: {
+            request:
+              'POST / HTTP/1.1\nHost: example.com\nContent-Type: multipart/form-data; boundary=outer\n\n' +
+              body,
+          },
+        });
+        vi.mocked(fetchWithCache).mockResolvedValueOnce(createMockFetchResponse('{}'));
+        await provider.callApi('fixture', {
+          vars,
+          prompt: { raw: 'fixture', label: 'fixture' },
+        });
+        return vi.mocked(fetchWithCache).mock.calls[0][1]?.body as string;
+      };
+      const parseOuter = (body: string) =>
+        httpZ.parse(
+          'POST / HTTP/1.1\r\nHost: example.com\r\nContent-Type: multipart/form-data; boundary=outer\r\n\r\n' +
+            body,
+        ).body?.params ?? [];
+      const container = (body: string, subtype = 'mixed') =>
+        `--outer\nContent-Disposition: form-data; name="files"\nContent-Type: multipart/${subtype}; boundary=inner\n\n${body}\n--outer--\n`;
+
+      it.each(
+        foldedHeaders.flatMap((headers) =>
+          ['\n', '\r\n'].flatMap((newline) =>
+            [false, true].map((capturedHeaders) => ({ headers, newline, capturedHeaders })),
+          ),
+        ),
+      )(
+        'preserves folded disposition lines ($headers, $newline, $capturedHeaders)',
+        async ({ headers, newline, capturedHeaders }) => {
+          const source =
+            firstPart +
+            (capturedHeaders
+              ? '{{part.delimiter}}{{part.headers}}'
+              : `--{{part.boundary}}\n${headers}\n\n{{payload.text}}`) +
+            '\n--outer--\n';
+          const body = await send(source.replace(/\n/g, newline), {
+            part: {
+              boundary: 'outer',
+              delimiter: '--outer',
+              headers: `${newline}${headers.replace(/\n/g, newline)}${newline}${newline}${payload}`,
+            },
+            payload: { text: payload },
+          });
+          expect(body).toBe(
+            crlf(firstPart + '--outer\n' + headers + '\n\n') + payload + '\r\n--outer--\r\n',
+          );
+          expect(parseOuter(body)).toMatchObject([
+            { name: 'first', value: 'one' },
+            { name: 'second', value: payload },
+          ]);
+        },
+      );
+
+      it.each(
+        ['mixed', 'related', 'alternative'].flatMap((subtype) =>
+          [
+            'Content-Type: text/plain',
+            'Content-Type: text/plain\nContent-ID: <leaf>',
+            'Content-Transfer-Encoding: binary\nContent-Type: text/plain',
+          ].flatMap((headers) => ['\n', '\r\n'].map((newline) => ({ subtype, headers, newline }))),
+        ),
+      )(
+        'frames declared child headers without disposition ($subtype, $headers, $newline)',
+        async ({ subtype, headers, newline }) => {
+          const source = container(
+            `--{{part.boundary}}\n${headers}\n\n{{payload.text}}\n--inner--`,
+            subtype,
+          ).replace(/\n/g, newline);
+          const body = await send(source, {
+            part: { boundary: 'inner' },
+            payload: { text: payload },
+          });
+          const inner = crlf(`--inner\n${headers}\n\n`) + payload + '\r\n--inner--';
+          expect(body).toBe(crlf(container('PLACEHOLDER', subtype)).replace('PLACEHOLDER', inner));
+          // http-z parses only the outer MIME layer. The actual CLI receiver also
+          // uses Formidable to parse disposition-free children on the wire.
+          expect(parseOuter(body)[0].value).toBe(inner);
+        },
+      );
+
+      it.each(
+        ['', 'Content-ID: <leaf>', 'X-Trace: value', 'Content-Transfer-Encoding: binary'].flatMap(
+          (headers) =>
+            ['\n', '\r\n'].flatMap((newline) =>
+              [false, true].map((capturedHeaders) => ({ headers, newline, capturedHeaders })),
+            ),
+        ),
+      )(
+        'frames empty or ancillary child headers ($headers, $newline, $capturedHeaders)',
+        async ({ headers, newline, capturedHeaders }) => {
+          const headerBlock = headers ? `${headers}\n\n` : '\n';
+          const source = container(
+            (capturedHeaders
+              ? '{{part.delimiter}}{{part.content}}'
+              : `--{{part.boundary}}\n${headerBlock}{{payload.text}}`) + '\n--inner--',
+          ).replace(/\n/g, newline);
+          const body = await send(source, {
+            part: {
+              boundary: 'inner',
+              delimiter: '--inner',
+              content: `${newline}${headerBlock.replace(/\n/g, newline)}${payload}`,
+            },
+            payload: { text: payload },
+          });
+          const inner = crlf(`--inner\n${headerBlock}`) + payload + '\r\n--inner--';
+          expect(body).toBe(crlf(container('PLACEHOLDER')).replace('PLACEHOLDER', inner));
+          expect(parseOuter(body)[0].value).toBe(inner);
+        },
+      );
+
+      it.each([false, true])(
+        'recognizes an empty child header after a split CRLF (%s)',
+        async (capturedCR) => {
+          const body = await send(
+            container(
+              `--{{part.boundary}}${capturedCR ? '{{part.cr}}' : '\r'}{{part.lf}}\n{{payload.text}}\n--inner--`,
+            ),
+            { part: { boundary: 'inner', cr: '\r', lf: '\n' }, payload: { text: payload } },
+          );
+          const inner = '--inner\r\n\r\n' + payload + '\r\n--inner--';
+          expect(body).toBe(crlf(container('PLACEHOLDER')).replace('PLACEHOLDER', inner));
+          expect(parseOuter(body)[0].value).toBe(inner);
+        },
+      );
+
+      it.each(['', 'Content-ID: <second>'])(
+        'keeps later declared child parts separate (%s)',
+        async (headers) => {
+          const headerBlock = headers ? `${headers}\n\n` : '\n';
+          const first = '--inner\nContent-Type: text/plain\n\nfirst\n';
+          const body = await send(
+            container(first + `--{{part.boundary}}\n${headerBlock}{{payload.text}}\n--inner--`),
+            { part: { boundary: 'inner' }, payload: { text: payload } },
+          );
+          const inner = crlf(first + `--inner\n${headerBlock}`) + payload + '\r\n--inner--';
+          expect(body).toBe(crlf(container('PLACEHOLDER')).replace('PLACEHOLDER', inner));
+          expect(parseOuter(body)[0].value).toBe(inner);
+        },
+      );
+
+      it.each(['\n', '\r\n'])(
+        'keeps a whole captured headerless child opaque (%s)',
+        async (newline) => {
+          const captured = `--inner${newline}${newline}leaf${newline}--inner--`;
+          const body = await send(container('{{payload.text}}'), { payload: { text: captured } });
+          expect(body).toBe(crlf(container('PLACEHOLDER')).replace('PLACEHOLDER', captured));
+          expect(parseOuter(body)[0].value).toBe(captured);
+        },
+      );
+
+      const emptyHeaderCuts = ['\n', '\r\n'].flatMap((delimiterNewline) =>
+        ['\n', '\r\n'].flatMap((separatorNewline) =>
+          [true, false].flatMap((capturedPrefix) => {
+            const region = delimiterNewline + separatorNewline;
+            return Array.from({ length: region.length + 1 }, (_, cut) => ({
+              delimiterNewline,
+              separatorNewline,
+              capturedPrefix,
+              region,
+              cut,
+            }));
+          }),
+        ),
+      );
+      it.each(emptyHeaderCuts)(
+        'frames an empty-header cut (%j)',
+        async ({ region, cut, capturedPrefix }) => {
+          const prefix = `--inner${region.slice(0, cut)}`;
+          const suffix = region.slice(cut);
+          const body = await send(
+            container(
+              capturedPrefix
+                ? `{{part.chunk}}${suffix}leaf\n--inner--`
+                : `${prefix}{{part.chunk}}leaf\n--inner--`,
+            ),
+            { part: { chunk: capturedPrefix ? prefix : suffix } },
+          );
+          const inner = '--inner\r\n\r\nleaf\r\n--inner--';
+          expect(body).toBe(crlf(container('PLACEHOLDER')).replace('PLACEHOLDER', inner));
+          expect(parseOuter(body)[0].value).toBe(inner);
+        },
+      );
+
+      it.each(['\n', '\r\n'])(
+        'does not mistake missing headers for an empty block (%s)',
+        async (newline) => {
+          const captured = `--inner${newline}`;
+          const source = container('{{payload.text}}').replace('\n--outer--\n', '');
+          const body = await send(source, { payload: { text: captured } });
+          expect(body).toBe(crlf(source).replace('{{payload.text}}', captured));
+        },
+      );
+
+      it('keeps a folded header capture payload suffix opaque', async () => {
+        const injected = 'first\n--outer\nContent-Disposition: form-data; name="injected"\n\nextra';
+        const headers = foldedHeaders[0];
+        const body = await send(firstPart + '--ou{{part.content}}\n--outer--\n', {
+          part: { content: `ter\n${headers}\n\n${injected}` },
+        });
+        expect(body).toBe(
+          crlf(firstPart + '--outer\n' + headers + '\n\n') + injected + '\r\n--outer--\r\n',
+        );
+        expect(() => parseOuter(body)).toThrow();
+      });
+
+      it('does not promote a whole captured later part with folded headers', async () => {
+        const captured = `--outer\n${foldedHeaders[0]}\n\nsecond`;
+        const body = await send(firstPart + '{{payload.text}}\n--outer--\n', {
+          payload: { text: captured },
+        });
+        expect(body).toBe(
+          '--outer\r\nContent-Disposition: form-data; name="first"\r\n\r\none\n' +
+            captured +
+            '\r\n--outer--\r\n',
+        );
+        expect(() => parseOuter(body)).toThrow();
+      });
+
+      it.each([' orphan\nContent-Type: text/plain', 'Content-Type: text/plain\nbroken'])(
+        'does not admit an invalid child header block (%s)',
+        async (headers) => {
+          const body = await send(container(`--{{part.boundary}}\n${headers}\n\nleaf\n--inner--`), {
+            part: { boundary: 'inner' },
+          });
+          const inner = `--inner\n${headers}\n\nleaf\r\n--inner--`;
+          expect(body).toBe(crlf(container('PLACEHOLDER')).replace('PLACEHOLDER', inner));
+          expect(parseOuter(body)[0].value).toBe(inner);
+        },
+      );
+    });
+
+    describe('declared nested multipart framing', () => {
+      const containerHeaders =
+        'Content-Disposition: form-data; name="files"\nContent-Type: multipart/mixed; boundary=inner';
+      const leafHeaders =
+        'Content-Disposition: attachment; filename="test.txt"\nContent-Type: text/plain';
+      const mixedPayload = ' leading \nsecond\r\nthird \t';
+      const innerBody = (payload: string, newline = '\n') =>
+        `--inner${newline}${leafHeaders.split('\n').join(newline)}${newline}${newline}${payload}${newline}--inner--`;
+      const outerBody = (payload: string, newline = '\n', headers = containerHeaders) =>
+        `--outer${newline}${headers.split('\n').join(newline)}${newline}${newline}${payload}${newline}--outer--${newline}`;
+      const send = async (
+        source: string,
+        vars: { payload?: { text: string }; part?: Record<string, string> } = {},
+      ) => {
+        const provider = new HttpProvider('http', {
+          config: {
+            request:
+              'POST / HTTP/1.1\nHost: example.com\nContent-Type: multipart/form-data; boundary=outer\n\n' +
+              source,
+          },
+        });
+        vi.mocked(fetchWithCache).mockResolvedValueOnce(createMockFetchResponse('{}'));
+        await provider.callApi('fixture', {
+          vars,
+          prompt: { raw: 'fixture', label: 'fixture' },
+        });
+        return vi.mocked(fetchWithCache).mock.calls[0][1]?.body as string;
+      };
+      // Both MIME layers use the installed strict parser; FormData does not
+      // recursively parse a multipart/mixed field value.
+      const parseParts = (body: string, boundary = 'outer') =>
+        httpZ.parse(
+          `POST / HTTP/1.1\r\nHost: example.com\r\nContent-Type: multipart/${boundary === 'outer' ? 'form-data' : 'mixed'}; boundary="${boundary}"\r\n\r\n${body}`,
+        ).body?.params ?? [];
+
+      const checkFoldedBoundary = async (contentType: string, newline: string, child = 'inner') => {
+        const middleHeaders = 'Content-Disposition: attachment; filename="nested"\n' + contentType;
+        const topHeaders = containerHeaders.replace('boundary=inner', 'boundary=middle');
+        const childBody = (payload: string, lineEnding: string) =>
+          innerBody(payload, lineEnding).replace(/--inner/g, `--${child}`);
+        const source = outerBody(
+          `--middle\n${middleHeaders}\n\n${childBody('{{payload.text}}', '\n')}\n--middle--`,
+          '\n',
+          topHeaders,
+        ).replace(/\n/g, newline);
+        const sentBody = await send(source, { payload: { text: mixedPayload } });
+        const expectedMiddle =
+          `--middle\r\n${middleHeaders.replace(/\n/g, '\r\n')}\r\n\r\n` +
+          childBody(mixedPayload, '\r\n') +
+          '\r\n--middle--';
+        expect(sentBody).toBe(outerBody(expectedMiddle, '\r\n', topHeaders));
+
+        const middle = parseParts(sentBody)[0].value ?? '';
+        const separator = middle.indexOf('\r\n\r\n');
+        // Model a receiver that supports MIME header folding without changing
+        // any nested body bytes before the strict multipart parser sees them.
+        const unfoldedMiddle =
+          middle.slice(0, separator).replace(/\r\n[ \t]+/g, ' ') + middle.slice(separator);
+        const nested = parseParts(unfoldedMiddle, 'middle')[0];
+        expect(nested.value).toBe(childBody(mixedPayload, '\r\n'));
+        // http-z excludes spaces even in quoted boundaries. Those controls
+        // assert distinct wire bytes above, without claiming a supported parse.
+        if (child.includes(' ')) {
+          return;
+        }
+        expect(parseParts(nested.value ?? '', child)).toMatchObject([
+          { value: mixedPayload, fileName: 'test.txt', contentType: 'text/plain' },
+        ]);
+      };
+
+      it.each(
+        [
+          'Content-Type:\n multipart/mixed; boundary=inner',
+          'Content-Type: multipart/mixed;\n boundary=inner',
+          'Content-Type: multipart/mixed; boundary\n =inner',
+          'Content-Type: multipart/mixed; boundary=\n inner',
+        ].flatMap((contentType) =>
+          [' ', '\t'].flatMap((indentation) =>
+            ['\n', '\r\n'].map((newline) => ({ contentType, indentation, newline })),
+          ),
+        ),
+      )(
+        'inspects folded nested content types without rewriting physical headers ($contentType, $indentation, $newline)',
+        async ({ contentType, indentation, newline }) => {
+          await checkFoldedBoundary(contentType.replace(/\n /g, `\n${indentation}`), newline);
+        },
+      );
+
+      it.each(['inner', 'in ner', 'in  ner'])(
+        'keeps quoted boundary values distinct from parameter syntax (%s)',
+        async (boundary) => {
+          await checkFoldedBoundary(
+            'Content-Type: multipart/mixed;\n note="before; boundary = wrong";\n' +
+              ` boundary=\n "${boundary}"`,
+            '\n',
+            boundary,
+          );
+        },
+      );
+
+      it.each(
+        ['\n', '\r\n'].flatMap((outerNewline) =>
+          ['\n', '\r\n'].flatMap((innerNewline) =>
+            [false, true].map((capturedLeaf) => ({ outerNewline, innerNewline, capturedLeaf })),
+          ),
+        ),
+      )(
+        'normalizes declared framing while preserving leaf bytes ($outerNewline, $innerNewline, $capturedLeaf)',
+        async ({ outerNewline, innerNewline, capturedLeaf }) => {
+          const payload = capturedLeaf ? mixedPayload : 'hello';
+          const sentBody = await send(
+            outerBody(
+              innerBody(capturedLeaf ? '{{payload.text}}' : payload, innerNewline),
+              outerNewline,
+            ),
+            { payload: { text: payload } },
+          );
+          expect(sentBody).toBe(outerBody(innerBody(payload, '\r\n'), '\r\n'));
+          const outerParts = parseParts(sentBody);
+          expect(outerParts).toHaveLength(1);
+          expect(parseParts(outerParts[0].value ?? '', 'inner')).toMatchObject([
+            { value: payload, fileName: 'test.txt', contentType: 'text/plain' },
+          ]);
+        },
+      );
+
+      it.each(['\n', '\r\n'])('keeps a whole captured nested body opaque (%s)', async (newline) => {
+        const payload = innerBody('hello', newline);
+        const sentBody = await send(outerBody('{{payload.text}}'), { payload: { text: payload } });
+        expect(sentBody).toBe(outerBody(payload, '\r\n'));
+        const outerParts = parseParts(sentBody);
+        expect(outerParts[0].value).toBe(payload);
+        if (newline === '\n') {
+          expect(() => parseParts(outerParts[0].value ?? '', 'inner')).toThrow();
+        } else {
+          expect(parseParts(outerParts[0].value ?? '', 'inner')[0].value).toBe('hello');
+        }
+      });
+
+      it.each(['\n', '\r\n'])(
+        'keeps an unopened child closing-looking body opaque (%s)',
+        async (newline) => {
+          const payload = `--inner--${newline}`;
+          const sentBody = await send(outerBody('{{payload.text}}'), {
+            payload: { text: payload },
+          });
+          expect(sentBody).toBe(outerBody(payload, '\r\n'));
+          expect(parseParts(sentBody)[0].value).toBe(payload);
+          expect(parseParts(payload, 'inner')).toEqual([]);
+        },
+      );
+
+      it('does not infer nested framing from a text payload', async () => {
+        const headers = containerHeaders.replace('multipart/mixed; boundary=inner', 'text/plain');
+        const payload = innerBody(mixedPayload);
+        const sentBody = await send(outerBody('{{payload.text}}', '\n', headers), {
+          payload: { text: payload },
+        });
+        expect(sentBody).toBe(outerBody(payload, '\r\n', headers));
+        expect(parseParts(sentBody)[0].value).toBe(payload);
+      });
+
+      it('recognizes an authored empty child closer', async () => {
+        const sentBody = await send(outerBody('--inner--'));
+        expect(sentBody).toBe(outerBody('--inner--', '\r\n'));
+        expect(parseParts(parseParts(sentBody)[0].value ?? '', 'inner')).toEqual([]);
+      });
+
+      it('keeps the remainder of a captured child closer opaque', async () => {
+        const epilogue =
+          'inner epilogue\n--outer\nContent-Disposition: form-data; name="injected"\n\nextra';
+        const sentBody = await send(
+          outerBody(innerBody('hello').replace('--inner--', '--in{{part.content}}')),
+          { part: { content: `ner--\n${epilogue}` } },
+        );
+        expect(sentBody).toBe(outerBody(innerBody('hello', '\r\n') + '\r\n' + epilogue, '\r\n'));
+        expect(() => parseParts(sentBody)).toThrow();
+      });
+
+      it('keeps a captured outer boundary lookalike opaque', async () => {
+        const headers = containerHeaders.replace('multipart/mixed; boundary=inner', 'text/plain');
+        const payload = 'first\n--outer\nContent-Disposition: form-data; name="injected"\n\nextra';
+        const sentBody = await send(outerBody('{{payload.text}}', '\n', headers), {
+          payload: { text: payload },
+        });
+        expect(sentBody).toBe(outerBody(payload, '\r\n', headers));
+        expect(() => parseParts(sentBody)).toThrow();
+      });
+
+      it('stops a captured header at its first blank despite a nested declaration', async () => {
+        const payload = innerBody('hello');
+        const sentBody = await send('--outer\n{{part.content}}\n--outer--\n', {
+          part: { content: `${containerHeaders}\n\n${payload}` },
+        });
+        expect(sentBody).toBe(outerBody(payload, '\r\n'));
+        expect(parseParts(sentBody)[0].value).toBe(payload);
+        expect(() => parseParts(payload, 'inner')).toThrow();
+      });
+
+      it('recognizes rendered nested headers and preserves a captured leaf header suffix', async () => {
+        const headers = containerHeaders.replace(
+          'multipart/mixed; boundary=inner',
+          '{{part.type}}',
+        );
+        const sentBody = await send(
+          outerBody('--inner\n{{part.content}}\n--inner--', '\n', headers),
+          {
+            part: {
+              type: 'multipart/mixed; boundary=inner',
+              content: `${leafHeaders}\n\n${mixedPayload}`,
+            },
+          },
+        );
+        expect(sentBody).toBe(outerBody(innerBody(mixedPayload, '\r\n'), '\r\n'));
+        expect(parseParts(parseParts(sentBody)[0].value ?? '', 'inner')[0].value).toBe(
+          mixedPayload,
+        );
+      });
+
+      it('completes an authored delimiter prefix in a declared child context', async () => {
+        const sentBody = await send(outerBody('--in{{part.content}}\n--inner--'), {
+          part: { content: `ner\n${leafHeaders}\n\n${mixedPayload}` },
+        });
+        expect(sentBody).toBe(outerBody(innerBody(mixedPayload, '\r\n'), '\r\n'));
+        expect(parseParts(parseParts(sentBody)[0].value ?? '', 'inner')[0].value).toBe(
+          mixedPayload,
+        );
+      });
+
+      it('restores the parent after a child closer and preserves its epilogue', async () => {
+        const epilogue = '\n inner epilogue\r\nkept \t';
+        const sibling =
+          'Content-Disposition: form-data; name="sibling"\nContent-Type: text/plain\n\nlast';
+        const source = outerBody(innerBody('hello') + epilogue).replace(
+          '--outer--',
+          `--outer\n${sibling}\n--outer--`,
+        );
+        const sentBody = await send(source);
+        expect(sentBody).toBe(
+          outerBody(innerBody('hello', '\r\n') + '\r\n' + epilogue.slice(1), '\r\n').replace(
+            '--outer--',
+            `--outer\r\n${sibling.split('\n').join('\r\n')}\r\n--outer--`,
+          ),
+        );
+        const outerParts = parseParts(sentBody);
+        expect(outerParts).toHaveLength(2);
+        expect(outerParts[1].value).toBe('last');
+        expect(parseParts(outerParts[0].value ?? '', 'inner')[0].value).toBe('hello');
+      });
+
+      it('tracks multiple declared nested boundaries', async () => {
+        const middleHeaders =
+          'Content-Disposition: attachment; filename="nested"\nContent-Type: multipart/mixed; boundary=deep';
+        const deepBody =
+          '--deep\nContent-Disposition: attachment; filename="leaf.txt"\n\nhello\n--deep--';
+        const nested = `--inner\n${middleHeaders}\n\n${deepBody}\n--inner--`;
+        const sentBody = await send(outerBody(nested));
+        expect(sentBody).toBe(outerBody(nested, '\n').split('\n').join('\r\n'));
+        const innerParts = parseParts(parseParts(sentBody)[0].value ?? '', 'inner');
+        expect(parseParts(innerParts[0].value ?? '', 'deep')[0].value).toBe('hello');
+      });
+    });
+
+    it.each(
+      [false, true].flatMap((headerCapture) =>
+        ['\n', '\r\n', '\r'].flatMap((terminalNewline) =>
+          (terminalNewline === '\r' ? [true] : [false, true]).flatMap((sourceSeparator) =>
+            [false, true].map((capturedDelimiter) => ({
+              headerCapture,
+              terminalNewline,
+              sourceSeparator,
+              capturedDelimiter,
+            })),
+          ),
+        ),
+      ),
+    )(
+      'should preserve terminal capture provenance ($headerCapture, $terminalNewline, $sourceSeparator, $capturedDelimiter)',
+      async ({ headerCapture, terminalNewline, sourceSeparator, capturedDelimiter }) => {
+        const headers = 'Content-Disposition: form-data; name="first"\n\n';
+        const secondHeaders = 'Content-Disposition: form-data; name="second"\n\n';
+        const payload = '  one\nmixed\r\n\t ';
+        const source =
+          `--fixture\n${headerCapture ? '{{part.content}}' : `${headers}{{payload.text}}`}` +
+          `${sourceSeparator ? '\n' : ''}${capturedDelimiter ? '{{part.separator}}' : '--fixture\n'}` +
+          `${secondHeaders}two\n--fixture--\n`;
+        const provider = new HttpProvider('http', {
+          config: {
+            request: `POST / HTTP/1.1\nHost: example.com\nContent-Type: multipart/form-data; boundary=fixture\n\n${source}`,
+          },
+        });
+        vi.mocked(fetchWithCache).mockResolvedValueOnce(createMockFetchResponse('{}'));
+        await provider.callApi('fixture', {
+          vars: {
+            part: { content: headers + payload + terminalNewline, separator: '--fixture\n' },
+            payload: { text: payload + terminalNewline },
+          },
+          prompt: { raw: 'fixture', label: 'fixture' },
+        });
+        const sentBody = vi.mocked(fetchWithCache).mock.calls[0][1]?.body as string;
+        const separator = sourceSeparator
+          ? `${terminalNewline}\r\n`
+          : headerCapture
+            ? '\r\n'
+            : terminalNewline;
+        expect(sentBody).toBe(
+          `--fixture\r\n${headers.replace(/\n/g, '\r\n')}${payload}${separator}` +
+            `--fixture\r\n${secondHeaders.replace(/\n/g, '\r\n')}two\r\n--fixture--\r\n`,
+        );
+        const parsed = new Response(sentBody, {
+          headers: { 'Content-Type': 'multipart/form-data; boundary=fixture' },
+        }).formData();
+        // An established payload's terminal LF stays data, even when that leaves
+        // invalid framing. A capture entered in headers can supply framing itself.
+        if (!headerCapture && !sourceSeparator && terminalNewline === '\n') {
+          await expect(parsed).rejects.toThrow();
+        } else {
+          expect([...(await parsed).entries()]).toEqual([
+            ['first', payload + (sourceSeparator ? terminalNewline : '')],
+            ['second', 'two'],
+          ]);
+        }
+      },
+    );
+
+    it.each(
+      [false, true].flatMap((capturedDelimiter) =>
+        [false, true].flatMap((capturedHeaders) =>
+          ['\n', '\r\n'].map((newline) => ({ capturedDelimiter, capturedHeaders, newline })),
+        ),
+      ),
+    )(
+      'should recognize adjacent multipart framing ($capturedDelimiter, $capturedHeaders, $newline)',
+      async ({ capturedDelimiter, capturedHeaders, newline }) => {
+        const firstHeaders = 'Content-Disposition: form-data; name="first"\n\n';
+        const headerLines = [
+          'Content-Disposition: form-data; name="second"',
+          'Content-Type: text/plain',
+          '',
+          '',
+        ];
+        const headers = headerLines.join(newline);
+        const payload = '  two\nmixed\r\n\t ';
+        const source =
+          `--fixture\n${firstHeaders}one\n` +
+          `${capturedDelimiter ? '{{part.separator}}' : `--fixture${newline}`}` +
+          `${capturedHeaders ? '{{part.headers}}' : headers}{{payload.text}}\n--fixture--\n`;
+        const provider = new HttpProvider('http', {
+          config: {
+            request: `POST / HTTP/1.1\nHost: example.com\nContent-Type: multipart/form-data; boundary=fixture\n\n${source}`,
+          },
+        });
+        vi.mocked(fetchWithCache).mockResolvedValueOnce(createMockFetchResponse('{}'));
+        await provider.callApi('fixture', {
+          vars: { part: { separator: `--fixture${newline}`, headers }, payload: { text: payload } },
+          prompt: { raw: 'fixture', label: 'fixture' },
+        });
+        const sentBody = vi.mocked(fetchWithCache).mock.calls[0][1]?.body as string;
+        expect(sentBody).toBe(
+          `--fixture\r\n${firstHeaders.replace(/\n/g, '\r\n')}one\r\n--fixture\r\n` +
+            `${headerLines.join('\r\n')}${payload}\r\n--fixture--\r\n`,
+        );
+        const form = await new Response(sentBody, {
+          headers: { 'Content-Type': 'multipart/form-data; boundary=fixture' },
+        }).formData();
+        expect([...form.entries()]).toEqual([
+          ['first', 'one'],
+          ['second', payload],
+        ]);
+      },
+    );
+
+    it.each([
+      {
+        name: 'blank separator across captures',
+        source: '{{part.headers}}{{part.blank}}{{payload.text}}',
+      },
+      { name: 'blank separator completed by source', source: '{{part.headers}}\n{{payload.text}}' },
+      { name: 'header and payload in one capture', source: '{{part.content}}' },
+      { name: 'opaque suffix in header capture', source: '{{part.content}}', hostile: true },
+      {
+        name: 'opaque separate payload capture',
+        source: '{{part.headers}}\n{{payload.text}}',
+        hostile: true,
+      },
+    ])('should bound adjacent header lookahead with $name', async ({ source, hostile }) => {
+      const headers = 'Content-Disposition: form-data; name="second"\nContent-Type: text/plain\n';
+      const payload = hostile
+        ? 'two\n--fixture\nContent-Disposition: form-data; name="injected"\n\nextra'
+        : '  two\nmixed\r\n\t ';
+      const provider = new HttpProvider('http', {
+        config: {
+          request:
+            'POST / HTTP/1.1\nHost: example.com\nContent-Type: multipart/form-data; boundary=fixture\n\n' +
+            '--fixture\nContent-Disposition: form-data; name="first"\n\none\n' +
+            `{{part.separator}}${source}\n--fixture--\n`,
+        },
+      });
+      vi.mocked(fetchWithCache).mockResolvedValueOnce(createMockFetchResponse('{}'));
+      await provider.callApi('fixture', {
+        vars: {
+          part: {
+            separator: '--fixture\n',
+            headers,
+            blank: '\n',
+            content: `${headers}\n${payload}`,
+          },
+          payload: { text: payload },
+        },
+        prompt: { raw: 'fixture', label: 'fixture' },
+      });
+      const sentBody = vi.mocked(fetchWithCache).mock.calls[0][1]?.body as string;
+      expect(sentBody).toBe(
+        '--fixture\r\nContent-Disposition: form-data; name="first"\r\n\r\none\r\n' +
+          `--fixture\r\n${headers.replace(/\n/g, '\r\n')}\r\n${payload}\r\n--fixture--\r\n`,
+      );
+      const parsed = new Response(sentBody, {
+        headers: { 'Content-Type': 'multipart/form-data; boundary=fixture' },
+      }).formData();
+      if (hostile) {
+        await expect(parsed).rejects.toThrow();
+      } else {
+        expect([...(await parsed).entries()]).toEqual([
+          ['first', 'one'],
+          ['second', payload],
+        ]);
+      }
+    });
+
+    it.each([
+      { name: 'adjacent opening and header captures', prefix: '{{part.open}}{{part.headers}}' },
+      {
+        name: 'outer header and part prefix capture',
+        prefix: '{{part.requestPrefix}}',
+        wholeRequest: true,
+      },
+      { name: 'header capture', prefix: '--fixture\n{{part.headers}}' },
+    ])(
+      'should keep later payload captures opaque after a $name',
+      async ({ prefix, wholeRequest }) => {
+        const payload = 'first\n--fixture\nContent-Disposition: form-data; name="extra"\n\nsecond';
+        const requestHeaders =
+          'POST / HTTP/1.1\nHost: example.com\nContent-Type: multipart/form-data; boundary=fixture\n\n';
+        const headers = 'Content-Disposition: form-data; name="field"\n\n';
+        const provider = new HttpProvider('http', {
+          config: {
+            request: `${wholeRequest ? '' : requestHeaders}${prefix}{{payload.text}}\n--fixture--\n`,
+          },
+        });
+        vi.mocked(fetchWithCache).mockResolvedValueOnce(createMockFetchResponse('{}'));
+        await provider.callApi('fixture', {
+          vars: {
+            part: {
+              open: '--fixture\n',
+              headers,
+              requestPrefix: `${requestHeaders}--fixture\n${headers}`,
+            },
+            payload: { text: payload },
+          },
+          prompt: { raw: 'fixture', label: 'fixture' },
+        });
+        const sentBody = vi.mocked(fetchWithCache).mock.calls[0][1]?.body as string;
+        expect(sentBody).toBe(
+          `--fixture\r\n${headers.replace(/\n/g, '\r\n')}${payload}\r\n--fixture--\r\n`,
+        );
+        await expect(
+          new Response(sentBody, {
+            headers: { 'Content-Type': 'multipart/form-data; boundary=fixture' },
+          }).formData(),
+        ).rejects.toThrow();
+      },
+    );
+
+    it.each(
+      ['', '\n', '\r\n'].flatMap((newline) =>
+        (newline ? [false, true] : [false]).flatMap((separateTerminator) =>
+          [false, true].map((templated) => ({ newline, templated, separateTerminator })),
+        ),
+      ),
+    )(
+      'should preserve a closing-looking payload after header parsing ($newline, $templated, $separateTerminator)',
+      async ({ newline, templated, separateTerminator }) => {
+        // http-z rejects repeated closing delimiters before transport. Isolate
+        // metadata header parsing here to verify the provider's raw body contract;
+        // supported multipart cases above also exercise the real header parser.
+        const parsedHeaders = httpZ.parse(
+          'POST / HTTP/1.1\r\nHost: example.com\r\nContent-Type: multipart/form-data; boundary=fixture\r\n\r\n',
+        );
+        const parseSpy = vi.spyOn(httpZ, 'parse').mockReturnValueOnce(parsedHeaders);
+        const payload = `--fixture--${newline}`;
+        const provider = new HttpProvider('http', {
+          config: {
+            request: `POST / HTTP/1.1\nHost: example.com\nContent-Type: multipart/form-data; boundary=fixture\n\n--fixture\nContent-Disposition: form-data; name="field"\n\nprefix\n{{payload.text}}${separateTerminator ? '{{payload.newline}}' : ''}\n${templated ? '{{close}}' : '--fixture--'}\n`,
+          },
+        });
+        vi.mocked(fetchWithCache).mockResolvedValueOnce(createMockFetchResponse('{}'));
+        await provider.callApi('fixture', {
+          vars: {
+            payload: { text: separateTerminator ? '--fixture--' : payload, newline },
+            close: '--fixture--',
+          },
+          prompt: { raw: 'fixture', label: 'fixture' },
+        });
+        const sentBody = vi.mocked(fetchWithCache).mock.calls[0][1]?.body as string;
+        expect(sentBody).toBe(
+          `--fixture\r\nContent-Disposition: form-data; name="field"\r\n\r\nprefix\n${payload}\r\n--fixture--\r\n`,
+        );
+        parseSpy.mockRestore();
+      },
+    );
+
+    it.each([
+      { name: 'LF', newline: '\n', boundary: 'fixture' },
+      { name: 'CRLF', newline: '\r\n', boundary: 'fixture' },
+      {
+        name: 'literal leading request padding',
+        newline: '\n',
+        boundary: 'fixture',
+        requestPrefix: '\n \t\r\n',
+      },
+      {
+        name: 'interpolated leading request padding',
+        newline: '\n',
+        boundary: 'fixture',
+        requestPrefix: '{{requestPadding.value}}',
+      },
+      {
+        name: 'empty expression leading request padding',
+        newline: '\n',
+        boundary: 'fixture',
+        requestPrefix: '{{empty}}\n',
+      },
+      { name: 'quoted boundary metacharacters', newline: '\n', boundary: 'fixture.+(x)?' },
+      {
+        name: 'matching templated boundary',
+        newline: '\n',
+        boundary: 'fixture',
+        templateBoundary: '{{ boundary }}',
+      },
+      {
+        name: 'equivalent boundary tag spacing',
+        newline: '\n',
+        boundary: 'fixture',
+        headerBoundary: '{{boundary}}',
+        templateBoundary: '{{ boundary }}',
+      },
+      {
+        name: 'quoted expression literal',
+        newline: '\n',
+        boundary: 'fixture',
+        headerBoundary: "{{'fixture'}}",
+        templateBoundary: "{{ 'fixture' }}",
+      },
+      {
+        name: 'interpolated content type',
+        newline: '\n',
+        boundary: 'fixture',
+        templateBoundary: '{{ boundary }}',
+        dynamicContentType: true,
+      },
+      {
+        name: 'whole-expression delimiters',
+        newline: '\n',
+        boundary: 'fixture',
+        openingDelimiter: '{{ "--" + boundary }}',
+        closingDelimiter: '{{ "--" + boundary + "--" }}',
+      },
+      {
+        name: 'whole-variable delimiters and content type',
+        newline: '\n',
+        boundary: 'fixture',
+        openingDelimiter: '{{ delimiter }}',
+        closingDelimiter: '{{ closeDelimiter }}',
+        dynamicContentType: true,
+      },
+      {
+        name: 'whole-variable delimiter with literal closing suffix',
+        newline: '\n',
+        boundary: 'fixture',
+        openingDelimiter: '{{ delimiter }}',
+        closingDelimiter: '{{ delimiter }}--',
+      },
+      {
+        name: 'CRLF whole-expression delimiters',
+        newline: '\r\n',
+        boundary: 'fixture',
+        openingDelimiter: '{{ "--" + boundary }}',
+        closingDelimiter: '{{ "--" + boundary + "--" }}',
+      },
+      {
+        name: 'empty interpolated header separator',
+        newline: '\n',
+        boundary: 'fixture',
+        headerSeparator: '{{ empty }}',
+      },
+    ])(
+      'should preserve multipart payload bytes with $name template framing',
+      async ({
+        newline,
+        boundary,
+        templateBoundary = boundary,
+        headerBoundary = templateBoundary,
+        dynamicContentType,
+        openingDelimiter = `--${templateBoundary}`,
+        closingDelimiter = `--${templateBoundary}--`,
+        headerSeparator = '',
+        requestPrefix = '',
+      }) => {
+        const contentType = dynamicContentType
+          ? `multipart/form-data; boundary=${boundary}`
+          : `multipart/form-data; boundary="${boundary}"`;
+        const literalPayload = '  literal\n--unrelated-boundary\r\n\n\t ';
+        const injectedPayload = ' injected\n\nline two\r\n\t ';
+        const body = [
+          openingDelimiter,
+          'Content-Disposition: form-data; name="literal"',
+          'Content-Type: text/plain',
+          headerSeparator,
+          literalPayload,
+          openingDelimiter,
+          'Content-Disposition: form-data; name="injected"',
+          headerSeparator,
+          '{{payload.text}}',
+          closingDelimiter,
+          '',
+        ].join(newline);
+        const provider = new HttpProvider('http', {
+          config: {
+            request:
+              requestPrefix +
+              [
+                'POST /api/submit HTTP/1.1',
+                'Host: example.com',
+                `Content-Type: ${dynamicContentType ? '{{ contentType }}' : `multipart/form-data; boundary="${headerBoundary}"`}`,
+                '',
+                body,
+              ].join(newline),
+          },
+        });
+        vi.mocked(fetchWithCache).mockResolvedValueOnce(createMockFetchResponse('{}'));
+
+        await provider.callApi('fixture', {
+          vars: {
+            boundary,
+            contentType,
+            delimiter: `--${boundary}`,
+            closeDelimiter: `--${boundary}--`,
+            empty: '',
+            requestPadding: { value: '\n \t\r\n  ' },
+            payload: { text: injectedPayload },
+          },
+          prompt: { raw: 'fixture', label: 'fixture' },
+        });
+
+        const sentBody = vi.mocked(fetchWithCache).mock.calls[0][1]?.body as string;
+        const form = await new Response(sentBody, {
+          headers: { 'Content-Type': contentType },
+        }).formData();
+        expect(form.get('literal')).toBe(literalPayload);
+        expect(form.get('injected')).toBe(injectedPayload);
+        expect([...form.keys()]).toEqual(['literal', 'injected']);
+        expect(sentBody).toBe(
+          [
+            `--${boundary}`,
+            'Content-Disposition: form-data; name="literal"',
+            'Content-Type: text/plain',
+            '',
+            literalPayload,
+            `--${boundary}`,
+            'Content-Disposition: form-data; name="injected"',
+            '',
+            injectedPayload,
+            `--${boundary}--`,
+            '',
+          ].join('\r\n'),
+        );
+      },
+    );
+
+    it.each([
+      { name: 'LF headers', source: '{{part.headers}}\n\n{{payload.text}}' },
+      {
+        name: 'CRLF headers',
+        source: '{{part.headers}}\n\n{{payload.text}}',
+        headerNewline: '\r\n',
+      },
+      { name: 'headers and payload in one expression', source: '{{part.content}}' },
+      {
+        name: 'separator across adjacent expressions',
+        source: '{{part.headersWithLineEnding}}{{part.payloadWithLineEnding}}',
+      },
+      {
+        name: 'separator completed by source newline',
+        source: '{{part.headersWithLineEnding}}\n{{payload.text}}',
+      },
+      {
+        name: 'header CR completed by source LF',
+        source: '{{part.headersWithCarriageReturn}}\n\n{{payload.text}}',
+      },
+      {
+        name: 'separator CR completed by source LF',
+        source: '{{part.headersWithBlankCarriageReturn}}\n{{payload.text}}',
+      },
+      {
+        name: 'literal payload after an expression containing the separator',
+        source: '{{part.content}}\nliteral\ncontinuation',
+        payloadSuffix: '\nliteral\ncontinuation',
+      },
+    ])(
+      'should normalize interpolated multipart $name without rewriting payload bytes',
+      async ({ source, headerNewline = '\n', payloadSuffix = '' }) => {
+        const uuid = '00000000-0000-4000-8000-000000000000';
+        const uuidSpy = vi.spyOn(crypto, 'randomUUID').mockReturnValue(uuid);
+        const payload =
+          '  first\n\n--unrelated-boundary\r\n__PF_RENDERED_00000000000040008000000000000000_0__\n\t ';
+        const headerLines = [
+          'Content-Disposition: form-data; name="field"',
+          'Content-Type: text/plain',
+        ];
+        const headers = headerLines.join(headerNewline);
+        const provider = new HttpProvider('http', {
+          config: {
+            request: [
+              'POST /api/submit HTTP/1.1',
+              'Host: example.com',
+              'Content-Type: multipart/form-data; boundary=fixture',
+              '',
+              '--fixture',
+              source,
+              '--fixture--',
+              '',
+            ].join('\n'),
+          },
+        });
+        vi.mocked(fetchWithCache).mockResolvedValueOnce(createMockFetchResponse('{}'));
+
+        try {
+          await provider.callApi('fixture', {
+            vars: {
+              part: {
+                headers,
+                content: `${headers}\n\n${payload}`,
+                headersWithLineEnding: `${headers}\n`,
+                payloadWithLineEnding: `\n${payload}`,
+                headersWithCarriageReturn: `${headers}\r`,
+                headersWithBlankCarriageReturn: `${headers}\n\r`,
+              },
+              payload: { text: payload },
+            },
+            prompt: { raw: 'fixture', label: 'fixture' },
+          });
+
+          const sentBody = vi.mocked(fetchWithCache).mock.calls[0][1]?.body as string;
+          const form = await new Response(sentBody, {
+            headers: { 'Content-Type': 'multipart/form-data; boundary=fixture' },
+          }).formData();
+          expect([...form.entries()]).toEqual([['field', payload + payloadSuffix]]);
+          expect(sentBody).toBe(
+            ['--fixture', ...headerLines, '', payload + payloadSuffix, '--fixture--', ''].join(
+              '\r\n',
+            ),
+          );
+        } finally {
+          uuidSpy.mockRestore();
+        }
+      },
+    );
+
+    it.each([
+      {
+        name: 'empty outer separator',
+        source: 'Content-Type: multipart/form-data; boundary=fixture\n{{empty}}\n',
+      },
+      { name: 'outer separator inside a fragment', source: '{{request.headersAndSeparator}}' },
+      {
+        name: 'outer separator split across fragment and source newline',
+        source: '{{request.headersWithLineEnding}}\n',
+      },
+      {
+        name: 'outer separator CR split across fragment and source LF',
+        source: '{{request.headersWithBlankCarriageReturn}}\n',
+      },
+      {
+        name: 'outer headers and body in one fragment',
+        source: '{{request.headersAndBody}}',
+        bodyInsideFragment: true,
+      },
+    ])(
+      'should preserve multipart payload bytes with $name',
+      async ({ source, bodyInsideFragment }) => {
+        const payload = '  first\n\nsecond\r\n\t ';
+        const bodyPrefix =
+          '--fixture\r\nContent-Disposition: form-data; name="field"\r\n\r\n' + payload;
+        const contentType = 'Content-Type: multipart/form-data; boundary=fixture';
+        const body = bodyInsideFragment
+          ? ''
+          : '--fixture\nContent-Disposition: form-data; name="field"\n\n{{payload.text}}';
+        const provider = new HttpProvider('http', {
+          config: {
+            request:
+              'POST /api/submit HTTP/1.1\nHost: example.com\n' + source + body + '\n--fixture--\n',
+          },
+        });
+        vi.mocked(fetchWithCache).mockResolvedValueOnce(createMockFetchResponse('{}'));
+
+        await provider.callApi('fixture', {
+          vars: {
+            empty: '',
+            request: {
+              headersAndSeparator: `${contentType}\nX-Fixture: true\n\n`,
+              headersWithLineEnding: `${contentType}\n`,
+              headersWithBlankCarriageReturn: `${contentType}\n\r`,
+              headersAndBody: `${contentType}\n\n${bodyPrefix}`,
+            },
+            payload: { text: payload },
+          },
+          prompt: { raw: 'fixture', label: 'fixture' },
+        });
+
+        const sentBody = vi.mocked(fetchWithCache).mock.calls[0][1]?.body as string;
+        const form = await new Response(sentBody, {
+          headers: { 'Content-Type': 'multipart/form-data; boundary=fixture' },
+        }).formData();
+        expect([...form.entries()]).toEqual([['field', payload]]);
+        expect(sentBody).toBe(`${bodyPrefix}\r\n--fixture--\r\n`);
+      },
+    );
+
+    it('should not normalize boundary-like content injected into a multipart payload', async () => {
+      const injectedPayload =
+        'original\n--fixture\nContent-Disposition: form-data; name="injected"\n\nextra field';
+      const body =
+        '--fixture\nContent-Disposition: form-data; name="field"\n\n{{payload.text}}\n--fixture--\n';
+      const provider = new HttpProvider('http', {
+        config: {
+          request:
+            'POST /api/submit HTTP/1.1\nHost: example.com\n' +
+            `Content-Type: multipart/form-data; boundary=fixture\n\n${body}`,
+        },
+      });
+      vi.mocked(fetchWithCache).mockResolvedValueOnce(createMockFetchResponse('{}'));
+
+      await provider.callApi('fixture', {
+        vars: { payload: { text: injectedPayload } },
+        prompt: { raw: 'fixture', label: 'fixture' },
+      });
+
+      const sentBody = vi.mocked(fetchWithCache).mock.calls[0][1]?.body as string;
+      expect(sentBody).toBe(
+        body.replaceAll('\n', '\r\n').replace('{{payload.text}}', injectedPayload),
+      );
+      // Invalid payload framing must not be repaired into an extra form field.
+      await expect(
+        new Response(sentBody, {
+          headers: { 'Content-Type': 'multipart/form-data; boundary=fixture' },
+        }).formData(),
+      ).rejects.toThrow('Failed to parse body as FormData');
+    });
+
+    it('should evaluate an impure multipart boundary filter only once', async () => {
+      const createEngine = templates.getNunjucksEngine;
+      let boundaryCount = 0;
+      const nextBoundary = vi.fn((value: string) => `${value}${++boundaryCount}`);
+      const engineSpy = vi
+        .spyOn(templates, 'getNunjucksEngine')
+        .mockImplementation((filters, ...options) =>
+          createEngine({ ...filters, nextBoundary }, ...options),
+        );
+      try {
+        const provider = new HttpProvider('http', {
+          config: {
+            request: [
+              'POST /api/submit HTTP/1.1',
+              'Host: example.com',
+              "Content-Type: multipart/form-data; boundary={{ 'fixture' | nextBoundary }}",
+              '',
+              '--fixture1',
+              'Content-Disposition: form-data; name="field"',
+              '',
+              '{{prompt}}',
+              '--fixture1--',
+            ].join('\n'),
+          },
+        });
+        vi.mocked(fetchWithCache).mockResolvedValueOnce(createMockFetchResponse('{}'));
+
+        await provider.callApi('value');
+
+        expect(nextBoundary).toHaveBeenCalledExactlyOnceWith('fixture');
+        const sentBody = vi.mocked(fetchWithCache).mock.calls[0][1]?.body as string;
+        const form = await new Response(sentBody, {
+          headers: { 'Content-Type': 'multipart/form-data; boundary=fixture1' },
+        }).formData();
+        expect([...form.entries()]).toEqual([['field', 'value']]);
+      } finally {
+        engineSpy.mockRestore();
+      }
+    });
+
+    it('should keep distinct quoted boundary literals distinct', async () => {
+      const provider = new HttpProvider('http', {
+        config: {
+          request: [
+            'POST /api/submit HTTP/1.1',
+            'Host: example.com',
+            "Content-Type: multipart/form-data; boundary={{ 'fixture' }}",
+            '',
+            "--{{ 'fi xture' }}",
+            'Content-Disposition: form-data; name="field"',
+            '',
+            'value',
+            "--{{ 'fi xture' }}--",
+          ].join('\n'),
+        },
+      });
+      vi.mocked(fetchWithCache).mockResolvedValueOnce(createMockFetchResponse('{}'));
+
+      await provider.callApi('value');
+
+      const sentBody = vi.mocked(fetchWithCache).mock.calls[0][1]?.body as string;
+      expect(sentBody).toBe(
+        '--fi xture\nContent-Disposition: form-data; name="field"\n\nvalue\n--fi xture--',
+      );
+      await expect(
+        new Response(sentBody, {
+          headers: { 'Content-Type': 'multipart/form-data; boundary=fixture' },
+        }).formData(),
+      ).rejects.toThrow('Failed to parse body as FormData');
+    });
+
+    it.each([
+      { name: 'undefined', value: undefined, expected: '' },
+      { name: 'null', value: null, expected: '' },
+      { name: 'false', value: false, expected: 'false' },
+      { name: 'zero', value: 0, expected: '0' },
+      { name: 'object', value: { nested: true }, expected: '[object Object]' },
+      { name: 'array', value: ['a', 'b'], expected: 'a,b' },
+    ])('should retain raw template rendering for $name values', async ({ value, expected }) => {
+      const provider = new HttpProvider('http', {
+        config: {
+          request:
+            'POST /api/submit HTTP/1.1\nHost: example.com\nContent-Type: text/plain\n\n' +
+            'before[{{ payload.value }}]after',
+        },
+      });
+      vi.mocked(fetchWithCache).mockResolvedValueOnce(createMockFetchResponse('{}'));
+
+      await provider.callApi('value', {
+        vars: { payload: { value } },
+        prompt: { raw: 'value', label: 'value' },
+      });
+
+      expect(vi.mocked(fetchWithCache).mock.calls[0][1]?.body).toBe(`before[${expected}]after`);
+    });
+
+    it('should retain raw template whitespace controls and safe string output', async () => {
+      const provider = new HttpProvider('http', {
+        config: {
+          request:
+            'POST /api/submit HTTP/1.1\nHost: example.com\nContent-Type: text/plain\n\n' +
+            'before \n {{- "<tag>" | safe -}} \n after',
+        },
+      });
+      vi.mocked(fetchWithCache).mockResolvedValueOnce(createMockFetchResponse('{}'));
+
+      await provider.callApi('value');
+
+      expect(vi.mocked(fetchWithCache).mock.calls[0][1]?.body).toBe('before \n <tag> \n after');
+    });
+
+    it('should preserve repeated expression values and literal loop and macro syntax', async () => {
+      let count = 0;
+      const next = vi.fn(() => ++count);
+      const provider = new HttpProvider('http', {
+        config: {
+          request:
+            'POST /api/submit HTTP/1.1\nHost: example.com\nContent-Type: text/plain\n\n' +
+            '{{ payload.next() }}|{{ payload.next() }}\n' +
+            '{% for value in [1, 2] %}{{ payload.next() }}{% endfor %}\n' +
+            '{% macro value() %}{{ payload.next() }}{% endmacro %}',
+        },
+      });
+      vi.mocked(fetchWithCache).mockResolvedValueOnce(createMockFetchResponse('{}'));
+
+      await provider.callApi('value', {
+        vars: { payload: { next } },
+        prompt: { raw: 'value', label: 'value' },
+      });
+
+      expect(next).toHaveBeenCalledTimes(4);
+      expect(vi.mocked(fetchWithCache).mock.calls[0][1]?.body).toBe(
+        '1|2\n{% for value in [1, 2] %}3{% endfor %}\n{% macro value() %}4{% endmacro %}',
+      );
+    });
+
+    it.each(['--fixture--', '{{ "--" + boundary + "--" }}'])(
+      'should preserve empty multipart fields and epilogue bytes after %s',
+      async (closingDelimiter) => {
+        const epilogue = ' \n--unrelated-boundary\nepilogue\n';
+        const body = `--fixture\nContent-Disposition: form-data; name="empty"\n\n\n${closingDelimiter}\n`;
+        const provider = new HttpProvider('http', {
+          config: {
+            request:
+              'POST /api/submit HTTP/1.1\nHost: example.com\n' +
+              `Content-Type: multipart/form-data; boundary=fixture\n\n${body}${epilogue}`,
+          },
+        });
+        vi.mocked(fetchWithCache).mockResolvedValueOnce(createMockFetchResponse('{}'));
+
+        await provider.callApi('fixture', {
+          vars: { boundary: 'fixture' },
+          prompt: { raw: 'fixture', label: 'fixture' },
+        });
+
+        const sentBody = vi.mocked(fetchWithCache).mock.calls[0][1]?.body as string;
+        expect(sentBody).toBe(
+          body.replace(closingDelimiter, '--fixture--').replaceAll('\n', '\r\n') + epilogue,
+        );
+        const form = await new Response(sentBody, {
+          headers: { 'Content-Type': 'multipart/form-data; boundary=fixture' },
+        }).formData();
+        expect([...form.entries()]).toEqual([['empty', '']]);
+      },
+    );
 
     it('should handle application/x-www-form-urlencoded raw request', async () => {
       const rawRequest = dedent`
@@ -2059,6 +3933,46 @@ describe('HttpProvider', () => {
       expect(result.metadata?.finalRequestBody).not.toContain(opaqueToken);
     });
 
+    it.each(
+      [
+        { separator: '\n\n', valueSuffix: '' },
+        { separator: '\r\n\r\n', valueSuffix: '' },
+        { separator: '\n\r\n', valueSuffix: '' },
+        { separator: '\r\n\n', valueSuffix: '' },
+        { separator: '\n\n', valueSuffix: '\r\n\r\nsecret-tail' },
+        { separator: '\n\r\n', valueSuffix: '\r\n\r\nsecret-tail' },
+        { separator: '\r\n\n', valueSuffix: '\r\n\r\nsecret-tail' },
+      ].flatMap((fixture) => [false, true].map((transform) => ({ ...fixture, transform }))),
+    )(
+      'should redact the first multipart separator in metadata and logs ($separator, $valueSuffix, $transform)',
+      async ({ separator, valueSuffix, transform }) => {
+        const secret = 'demo-password-729';
+        const rawRequest = `POST /inner HTTP/1.1\nHost: example.com\nContent-Type: multipart/form-data; boundary=fixture\n\n--fixture\nContent-Disposition: form-data; name="password"${separator}${secret}${valueSuffix}\n--fixture\nContent-Disposition: form-data; name="username"\n\nalice\n--fixture--\n`;
+        const provider = new HttpProvider('http', {
+          config: {
+            request:
+              'POST /outer HTTP/1.1\nHost: example.com\nContent-Type: text/plain\n\n{{prompt}}',
+            ...(transform ? { transformRequest: () => rawRequest } : {}),
+          },
+        });
+        debugSpy = vi.spyOn(logger, 'debug');
+        vi.mocked(fetchWithCache).mockResolvedValueOnce(createMockFetchResponse('{}'));
+        const result = await provider.callApi(
+          transform ? 'fixture' : rawRequest,
+          createDebugHttpContext(),
+        );
+        expect(vi.mocked(fetchWithCache).mock.calls[0][1]?.body).toBe(
+          JSON.stringify(rawRequest).slice(1, -1),
+        );
+        expect(result.metadata?.transformedRequest).toContain('alice');
+        expect(result.metadata?.transformedRequest).toContain('[REDACTED]');
+        expect(result.metadata?.transformedRequest).not.toContain(secret);
+        expect(result.metadata?.transformedRequest).not.toContain('secret-tail');
+        expect(JSON.stringify(debugSpy.mock.calls)).not.toContain(secret);
+        expect(JSON.stringify(debugSpy.mock.calls)).not.toContain('secret-tail');
+      },
+    );
+
     it('should redact malformed multipart raw request bodies without throwing', async () => {
       const rawRequest = dedent`
         POST /upload HTTP/1.1
@@ -2929,20 +4843,25 @@ describe('extractBodyFromRawRequest', () => {
     expect(extractBodyFromRawRequest(rawRequest)).toBe('line1\r\n\r\nline2');
   });
 
-  it('should normalize mixed line endings', () => {
-    const rawRequest = 'POST /api/submit HTTP/1.1\nHost: example.com\n\nbody content';
-    expect(extractBodyFromRawRequest(rawRequest)).toBe('body content');
+  it('should preserve mixed line endings within the body', () => {
+    const rawRequest = 'POST /api/submit HTTP/1.1\nHost: example.com\r\n\nline1\nline2\r\n';
+    expect(extractBodyFromRawRequest(rawRequest)).toBe('line1\nline2\r\n');
   });
 
-  it('should trim leading and trailing whitespace from body', () => {
-    const rawRequest = dedent`
-      POST /api/submit HTTP/1.1
-      Host: example.com
-      Content-Type: application/json
+  it('should preserve leading and trailing whitespace from the body', () => {
+    const rawRequest =
+      'POST /api/submit HTTP/1.1\nHost: example.com\n\n \t body with whitespace \n';
+    expect(extractBodyFromRawRequest(rawRequest)).toBe(' \t body with whitespace \n');
+  });
 
-      body with whitespace
-    `;
-    expect(extractBodyFromRawRequest(rawRequest)).toBe('body with whitespace');
+  it('should ignore blank lines before the request line', () => {
+    const rawRequest = '\n\nPOST /api/submit HTTP/1.1\nHost: example.com\n\n body \n';
+    expect(extractBodyFromRawRequest(rawRequest)).toBe(' body \n');
+  });
+
+  it('should preserve a whitespace-only body', () => {
+    const rawRequest = 'POST /api/submit HTTP/1.1\r\nHost: example.com\r\n\r\n \t\r\n';
+    expect(extractBodyFromRawRequest(rawRequest)).toBe(' \t\r\n');
   });
 
   it('should handle special characters in body', () => {
