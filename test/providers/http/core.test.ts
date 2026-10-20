@@ -1628,8 +1628,73 @@ describe('HttpProvider', () => {
       // recursively parse a multipart/mixed field value.
       const parseParts = (body: string, boundary = 'outer') =>
         httpZ.parse(
-          `POST / HTTP/1.1\r\nHost: example.com\r\nContent-Type: multipart/${boundary === 'outer' ? 'form-data' : 'mixed'}; boundary=${boundary}\r\n\r\n${body}`,
+          `POST / HTTP/1.1\r\nHost: example.com\r\nContent-Type: multipart/${boundary === 'outer' ? 'form-data' : 'mixed'}; boundary="${boundary}"\r\n\r\n${body}`,
         ).body?.params ?? [];
+
+      const checkFoldedBoundary = async (contentType: string, newline: string, child = 'inner') => {
+        const middleHeaders = 'Content-Disposition: attachment; filename="nested"\n' + contentType;
+        const topHeaders = containerHeaders.replace('boundary=inner', 'boundary=middle');
+        const childBody = (payload: string, lineEnding: string) =>
+          innerBody(payload, lineEnding).replace(/--inner/g, `--${child}`);
+        const source = outerBody(
+          `--middle\n${middleHeaders}\n\n${childBody('{{payload.text}}', '\n')}\n--middle--`,
+          '\n',
+          topHeaders,
+        ).replace(/\n/g, newline);
+        const sentBody = await send(source, { payload: { text: mixedPayload } });
+        const expectedMiddle =
+          `--middle\r\n${middleHeaders.replace(/\n/g, '\r\n')}\r\n\r\n` +
+          childBody(mixedPayload, '\r\n') +
+          '\r\n--middle--';
+        expect(sentBody).toBe(outerBody(expectedMiddle, '\r\n', topHeaders));
+
+        const middle = parseParts(sentBody)[0].value ?? '';
+        const separator = middle.indexOf('\r\n\r\n');
+        // Model a receiver that supports MIME header folding without changing
+        // any nested body bytes before the strict multipart parser sees them.
+        const unfoldedMiddle =
+          middle.slice(0, separator).replace(/\r\n[ \t]+/g, ' ') + middle.slice(separator);
+        const nested = parseParts(unfoldedMiddle, 'middle')[0];
+        expect(nested.value).toBe(childBody(mixedPayload, '\r\n'));
+        // http-z excludes spaces even in quoted boundaries. Those controls
+        // assert distinct wire bytes above, without claiming a supported parse.
+        if (child.includes(' ')) {
+          return;
+        }
+        expect(parseParts(nested.value ?? '', child)).toMatchObject([
+          { value: mixedPayload, fileName: 'test.txt', contentType: 'text/plain' },
+        ]);
+      };
+
+      it.each(
+        [
+          'Content-Type:\n multipart/mixed; boundary=inner',
+          'Content-Type: multipart/mixed;\n boundary=inner',
+          'Content-Type: multipart/mixed; boundary\n =inner',
+          'Content-Type: multipart/mixed; boundary=\n inner',
+        ].flatMap((contentType) =>
+          [' ', '\t'].flatMap((indentation) =>
+            ['\n', '\r\n'].map((newline) => ({ contentType, indentation, newline })),
+          ),
+        ),
+      )(
+        'inspects folded nested content types without rewriting physical headers ($contentType, $indentation, $newline)',
+        async ({ contentType, indentation, newline }) => {
+          await checkFoldedBoundary(contentType.replace(/\n /g, `\n${indentation}`), newline);
+        },
+      );
+
+      it.each(['inner', 'in ner', 'in  ner'])(
+        'keeps quoted boundary values distinct from parameter syntax (%s)',
+        async (boundary) => {
+          await checkFoldedBoundary(
+            'Content-Type: multipart/mixed;\n note="before; boundary = wrong";\n' +
+              ` boundary=\n "${boundary}"`,
+            '\n',
+            boundary,
+          );
+        },
+      );
 
       it.each(
         ['\n', '\r\n'].flatMap((outerNewline) =>

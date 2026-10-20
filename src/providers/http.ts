@@ -1324,6 +1324,9 @@ function normalizeMultipartRequestTemplate(
     return undefined;
   };
 
+  // Unfold only inspection text, preserving emitted physical lines and payloads.
+  const unfoldHeaders = (headers: string) => headers.replace(/\r?\n[ \t]+/g, ' ');
+
   const sourceConfirmsBoundary = (delimiter: string, followingSource: string) => {
     const matched = matchDelimiter(delimiter);
     if (matched?.closing) {
@@ -1336,18 +1339,14 @@ function normalizeMultipartRequestTemplate(
         .split(/\r?\n/)
         .some((sourceLine) => sourceLine.replace(/[ \t]+$/, '') === delimiter);
     }
-    const headerLines = followingSource.split(/\r?\n\r?\n/, 1)[0].split(/\r?\n/);
+    const headerLines = unfoldHeaders(followingSource.split(/\r?\n\r?\n/, 1)[0]).split(/\r?\n/);
     const nested = matched !== undefined && matched.index > 0;
     if (headerLines[0] === '') {
       return nested && /^\r?\n/.test(followingSource);
     }
     const headers: string[] = [];
     for (const header of headerLines) {
-      if (/^[ \t]/.test(header) && headers.length > 0) {
-        // Unfold only the comparison view; emitted physical lines and their
-        // indentation remain unchanged apart from structural line endings.
-        headers[headers.length - 1] += ` ${header.replace(/^[ \t]+/, '')}`;
-      } else if (/^[^:\s]+:/.test(header)) {
+      if (/^[^:\s]+:/.test(header)) {
         headers.push(header);
       } else {
         return false;
@@ -1362,11 +1361,22 @@ function normalizeMultipartRequestTemplate(
   };
 
   const declaredBoundary = (headers: string) => {
-    const contentType = headers.match(/^content-type:[ \t]*([^\r\n]*)/im)?.[1];
+    const contentType = unfoldHeaders(headers).match(/^content-type:[ \t]*([^\r\n]*)/im)?.[1];
     // Match the multipart subtypes supported by the raw request parser.
-    return contentType &&
-      /^multipart\/(?:form-data|mixed|related|alternative)(?:\s*;|\s*$)/i.test(contentType)
-      ? getMultipartBoundary(contentType)
+    if (
+      !contentType ||
+      !/^multipart\/(?:form-data|mixed|related|alternative)(?:\s*;|\s*$)/i.test(contentType)
+    ) {
+      return undefined;
+    }
+    // Parameter whitespace is syntax; quoted values must remain distinct.
+    const boundaryParameter = contentType
+      .match(/(?:[^;"]|"(?:\\.|[^"\\])*")+/g)
+      ?.find((parameter) => /^[ \t]*boundary[ \t]*=/i.test(parameter));
+    return boundaryParameter
+      ? getMultipartBoundary(
+          boundaryParameter.replace(/^[ \t]*boundary[ \t]*=[ \t]*/i, 'boundary='),
+        )
       : undefined;
   };
 
