@@ -8,6 +8,8 @@ import path from 'path';
 
 import dedent from 'dedent';
 import httpZ from 'http-z';
+// Node 22's bundled parser rejects valid multipart epilogues.
+import { Response } from 'undici';
 import { afterEach, beforeEach, describe, expect, it, type MockInstance, vi } from 'vitest';
 import { fetchWithCache } from '../../../src/cache';
 import { importModule } from '../../../src/esm';
