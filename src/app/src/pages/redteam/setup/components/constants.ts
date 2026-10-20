@@ -2,7 +2,8 @@ import type { RedteamUITarget } from '../types';
 
 export const DEFAULT_OPENAI_TARGET_ID = 'openai:gpt-6-sol';
 export const DEFAULT_BEDROCK_TARGET_ID = 'bedrock:responses:openai.gpt-5.6-sol';
-export const OPENAI_TARGET_PLACEHOLDER = 'openai:gpt-6-sol, openai:gpt-6-luna, openai:gpt-6-astra';
+export const OPENAI_TARGET_PLACEHOLDER =
+  'openai:gpt-6.1-sol, openai:gpt-6-luna, openai:gpt-6-astra';
 export const DEFAULT_GOOGLE_TARGET_ID = 'google:gemini-3.8-flash';
 export const DEFAULT_VERTEX_TARGET_ID = 'vertex:gemini-3.8-flash';
 
@@ -12,6 +13,7 @@ export const predefinedTargets: RedteamUITarget[] = [
   { value: 'websocket', label: 'WebSocket Endpoint' },
   { value: 'browser', label: 'Web Browser Automation' },
   { value: 'openai:gpt-6-astra', label: 'OpenAI GPT-6 Astra' },
+  { value: 'openai:gpt-6.1-sol', label: 'OpenAI GPT-6.1 Sol' },
   { value: DEFAULT_OPENAI_TARGET_ID, label: 'OpenAI GPT-6 Sol' },
   { value: 'openai:gpt-6-luna', label: 'OpenAI GPT-6 Luna' },
   { value: 'openai:gpt-5.6', label: 'OpenAI GPT-5.6 (Sol alias)' },
@@ -43,11 +45,26 @@ export const predefinedTargets: RedteamUITarget[] = [
   { value: 'google:gemini-3.7-flash', label: 'Google Gemini 3.7 Flash' },
   { value: 'google:gemini-3.6-flash', label: 'Google Gemini 3.6 Flash' },
   { value: 'google:gemini-3.5-flash-lite', label: 'Google Gemini 3.5 Flash-Lite' },
-  { value: DEFAULT_VERTEX_TARGET_ID, label: 'Google Vertex AI Gemini 3.8 Flash' },
-  { value: 'vertex:gemini-3.7-flash', label: 'Google Vertex AI Gemini 3.7 Flash' },
-  { value: 'vertex:gemini-3.6-flash', label: 'Google Vertex AI Gemini 3.6 Flash' },
-  { value: 'vertex:gemini-3.5-flash-lite', label: 'Google Vertex AI Gemini 3.5 Flash-Lite' },
-  { value: 'vertex:gemini-3.1-pro-preview', label: 'Google Vertex AI Gemini 3.1 Pro' },
+  {
+    value: DEFAULT_VERTEX_TARGET_ID,
+    label: 'Google Vertex AI Gemini 3.8 Flash',
+  },
+  {
+    value: 'vertex:gemini-3.7-flash',
+    label: 'Google Vertex AI Gemini 3.7 Flash',
+  },
+  {
+    value: 'vertex:gemini-3.6-flash',
+    label: 'Google Vertex AI Gemini 3.6 Flash',
+  },
+  {
+    value: 'vertex:gemini-3.5-flash-lite',
+    label: 'Google Vertex AI Gemini 3.5 Flash-Lite',
+  },
+  {
+    value: 'vertex:gemini-3.1-pro-preview',
+    label: 'Google Vertex AI Gemini 3.1 Pro',
+  },
   { value: 'vertex:gemini-2.5-pro', label: 'Google Vertex AI Gemini 2.5 Pro' },
 ];
 

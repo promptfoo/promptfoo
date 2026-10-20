@@ -1,3 +1,5 @@
+import { AsyncLocalStorage } from 'node:async_hooks';
+
 import dedent from 'dedent';
 import { CLOUD_PROVIDER_PREFIX } from '../constants';
 import { cloudConfig } from '../globalConfig/cloud';
@@ -17,6 +19,37 @@ import type { ProviderOptions } from '../types/providers';
 const PERMISSION_CHECK_SERVER_FEATURE_NAME = 'config-permission-check-endpoint';
 const PERMISSION_CHECK_SERVER_FEATURE_DATE = '2025-09-03T14:49:11Z';
 
+type CloudProviderOptions = ProviderOptions & { id: string };
+type CloudProviderResolver = (
+  id: string,
+  localOptions?: ProviderOptions,
+) => CloudProviderOptions | Promise<CloudProviderOptions>;
+
+const cloudProviderResolver = new AsyncLocalStorage<CloudProviderResolver>();
+
+/**
+ * Supplies saved providers for a host-managed operation without putting their settings
+ * through suite rendering. Native loading still merges and renders per-entry options.
+ *
+ * The resolver replaces HTTP lookup for this async scope, including nested calls. It must
+ * throw for unavailable providers. Omitted options indicate a lookup only; an options
+ * object indicates a native load. Treat options and returned settings as read-only, and
+ * do not depend on lookup order: the same provider can be loaded with different options.
+ * Consumed by promptfoo-cloud through source imports, not the public package entry point.
+ */
+export function withCloudProviderResolver<T>(
+  resolver: CloudProviderResolver,
+  callback: () => T,
+): T {
+  return cloudProviderResolver.run(resolver, callback);
+}
+
+function parseCloudProvider(id: string, config: unknown): ProviderOptions & { id: string } {
+  const provider = ProviderOptionsSchema.parse(config);
+  invariant(provider.id, `Provider ${id} has no id`);
+  return { ...provider, id: provider.id };
+}
+
 /**
  * Makes an authenticated HTTP request to the PromptFoo Cloud API.
  * @param path - The API endpoint path (with or without leading slash)
@@ -25,20 +58,18 @@ const PERMISSION_CHECK_SERVER_FEATURE_DATE = '2025-09-03T14:49:11Z';
  * @returns Promise resolving to the fetch Response object
  * @throws Error if the request fails due to network or other issues
  */
-export function makeRequest(path: string, method: string, body?: any): Promise<Response> {
+export async function makeRequest(path: string, method: string, body?: any): Promise<Response> {
   const apiHost = cloudConfig.getApiHost();
   const url = `${apiHost}/api/v1/${path.startsWith('/') ? path.slice(1) : path}`;
   try {
-    return fetchWithProxy(url, {
+    return await fetchWithProxy(url, {
       method,
       body: JSON.stringify(body),
       headers: { ...(cloudConfig.getAuthHeaders() ?? {}), 'Content-Type': 'application/json' },
     });
   } catch (e) {
-    logger.error(`[Cloud] Failed to make request to ${url}: ${e}`);
-    if ((e as any).cause) {
-      logger.error(`Cause: ${(e as any).cause}`);
-    }
+    // Transport diagnostics can embed credentials; preserve them only in the thrown error.
+    logger.error('[Cloud] Failed to make request', { url });
     throw e;
   }
 }
@@ -46,10 +77,20 @@ export function makeRequest(path: string, method: string, body?: any): Promise<R
 /**
  * Fetches a provider configuration from PromptFoo Cloud by its ID.
  * @param id - The unique identifier of the cloud provider
+ * @param localOptions - Per-entry options for a native load; omitted for lookup only
  * @returns Promise resolving to provider options with guaranteed id field
  * @throws Error if cloud is not enabled, provider not found, or request fails
  */
-export async function getProviderFromCloud(id: string): Promise<ProviderOptions & { id: string }> {
+export async function getProviderFromCloud(
+  id: string,
+  localOptions?: ProviderOptions,
+): Promise<ProviderOptions & { id: string }> {
+  const resolver = cloudProviderResolver.getStore();
+  if (resolver) {
+    const prepared = await resolver(id, localOptions);
+    // The HTTP schema strips custom env keys; typed host options must retain them.
+    return { ...parseCloudProvider(id, prepared), ...(prepared.env && { env: prepared.env }) };
+  }
   if (!cloudConfig.isEnabled()) {
     throw new Error(
       `Could not fetch Provider ${id} from cloud. Cloud config is not enabled. Please run \`promptfoo auth login\` to login.`,
@@ -68,10 +109,7 @@ export async function getProviderFromCloud(id: string): Promise<ProviderOptions 
     const body = await response.json();
     logger.debug(`Provider fetched from cloud: ${id}`);
 
-    const provider = ProviderOptionsSchema.parse(body.config);
-    // The provider options schema has ID field as optional but we know it's required for cloud providers
-    invariant(provider.id, `Provider ${id} has no id in ${body.config}`);
-    return { ...provider, id: provider.id };
+    return parseCloudProvider(id, body.config);
   } catch (e) {
     logger.error(`Failed to fetch provider from cloud: ${id}.`);
     logger.error(String(e));
@@ -684,24 +722,37 @@ export async function checkCloudPermissions(config: Partial<UnifiedConfig>): Pro
     });
 
     if (!response.ok) {
-      const errorData = await response.json().catch(() => ({ errors: ['Unknown error'] }));
-      const errors: { type: string; id: string; message: string }[] = Array.isArray(
-        errorData.errors,
-      )
-        ? errorData.errors.map((error: any) => {
-            // Handle both new structured error format and legacy string format
-            if (typeof error === 'string') {
-              return { type: 'config', id: 'unknown', message: error };
-            }
-            return error;
-          })
-        : [
-            {
-              type: 'config',
-              id: 'unknown',
-              message: errorData.error || 'Permission check failed',
-            },
-          ];
+      const body: unknown = await response.json().catch(() => null);
+      const errorData: Record<string, unknown> = isRecord(body)
+        ? body
+        : { errors: ['Unknown error'] };
+      const errors: { type: string; id: string; message: string }[] =
+        Array.isArray(errorData.errors) && errorData.errors.length > 0
+          ? errorData.errors.map((error: unknown) => {
+              // Handle both new structured error format and legacy string format
+              if (typeof error === 'string') {
+                return { type: 'config', id: 'unknown', message: error };
+              }
+              if (
+                isRecord(error) &&
+                typeof error.type === 'string' &&
+                typeof error.id === 'string' &&
+                typeof error.message === 'string'
+              ) {
+                return { type: error.type, id: error.id, message: error.message };
+              }
+              return { type: 'config', id: 'unknown', message: 'Unknown error' };
+            })
+          : [
+              {
+                type: 'config',
+                id: 'unknown',
+                message:
+                  typeof errorData.error === 'string' && errorData.error
+                    ? errorData.error
+                    : 'Permission check failed',
+              },
+            ];
 
       if (response.status === 403) {
         throw new ConfigPermissionError(
@@ -783,15 +834,13 @@ export async function getPoliciesFromCloud(ids: string[], teamId: string): Promi
     );
   }
   try {
-    // Encode the ids as search params
+    // Encode policy and team IDs as search params.
     const searchParams = new URLSearchParams();
     ids.forEach((id) => {
       searchParams.append('id', id);
     });
-    const response = await makeRequest(
-      `/custom-policies/?${searchParams.toString()}&teamId=${teamId}`,
-      'GET',
-    );
+    searchParams.append('teamId', teamId);
+    const response = await makeRequest(`/custom-policies/?${searchParams.toString()}`, 'GET');
 
     if (!response.ok) {
       const errorMessage = await response.text();

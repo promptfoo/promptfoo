@@ -5,6 +5,7 @@ import CloseIcon from '@mui/icons-material/Close';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutlineOutlined';
 import RemoveIcon from '@mui/icons-material/Remove';
+import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import CircularProgress from '@mui/material/CircularProgress';
@@ -16,10 +17,28 @@ import { useCartContext } from './CartProvider';
 import { useCopyToClipboard } from './useCopyToClipboard';
 import { formatPrice, getAttributeName, getCheckoutUrl } from './useFourthwall';
 
+import type { FourthwallCartItem } from './types';
+
 export function CartDrawer() {
-  const { cart, isCartOpen, closeCart, removeFromCart, updateQuantity, isLoading, couponCode } =
-    useCartContext();
+  const {
+    cart,
+    isCartOpen,
+    closeCart,
+    removeFromCart,
+    updateQuantity,
+    isLoading,
+    couponCode,
+    error,
+  } = useCartContext();
   const { copied: copiedInDrawer, handleCopy: handleCopyInDrawer } = useCopyToClipboard(couponCode);
+
+  const groups = new Map<string, FourthwallCartItem[]>();
+  for (const item of cart?.items ?? []) {
+    const key = item.groupedBy?.groupedId ?? item.variant.id;
+    const items = groups.get(key) ?? [];
+    items.push(item);
+    groups.set(key, items);
+  }
 
   const handleCheckout = () => {
     if (cart?.id) {
@@ -75,6 +94,12 @@ export function CartDrawer() {
           <CloseIcon />
         </IconButton>
       </Box>
+
+      {error && (
+        <Alert severity="error" sx={{ mx: 2 }}>
+          {error}
+        </Alert>
+      )}
 
       {/* Cart items */}
       <Box
@@ -133,14 +158,17 @@ export function CartDrawer() {
               pointerEvents: isLoading ? 'none' : 'auto',
             }}
           >
-            {cart.items.map((item) => {
+            {Array.from(groups.entries()).map(([key, items]) => {
+              const item = items[0];
               // Get image from variant first, then product, with fallbacks
               const image = item.variant?.images?.[0] || item.variant?.product?.images?.[0] || null;
-              const productName = item.variant?.product?.name || item.variant?.name || 'Product';
+              const productName = items
+                .map((entry) => entry.variant?.product?.name || entry.variant?.name || 'Product')
+                .join(' + ');
 
               return (
                 <Box
-                  key={item.variant.id}
+                  key={key}
                   sx={{
                     display: 'flex',
                     gap: 2,
@@ -184,24 +212,28 @@ export function CartDrawer() {
                       {productName}
                     </Typography>
 
-                    {/* Variant attributes */}
-                    {item.variant?.attributes &&
-                      Object.entries(item.variant.attributes).length > 0 && (
-                        <Typography
-                          variant="caption"
-                          sx={{ color: 'text.secondary', display: 'block' }}
-                        >
-                          {Object.entries(item.variant.attributes)
-                            .filter(([key]) => key !== 'description')
-                            .map(([_, value]) => getAttributeName(value))
-                            .join(' / ')}
-                        </Typography>
-                      )}
-
-                    {item.variant?.unitPrice && (
-                      <Typography variant="body2" sx={{ mt: 0.5 }}>
-                        {formatPrice(item.variant.unitPrice)}
+                    {items.map((entry) => (
+                      <Typography
+                        key={entry.variant.id}
+                        variant="caption"
+                        sx={{ color: 'text.secondary', display: 'block' }}
+                      >
+                        {Object.entries(entry.variant.attributes ?? {})
+                          .filter(([key]) => key !== 'description')
+                          .map(([, value]) => getAttributeName(value))
+                          .join(' / ')}
                       </Typography>
+                    ))}
+                    {item.groupedBy ? (
+                      <Typography variant="caption" sx={{ display: 'block', mt: 0.5 }}>
+                        Bundle pricing applied at checkout
+                      </Typography>
+                    ) : (
+                      item.variant?.unitPrice && (
+                        <Typography variant="body2" sx={{ mt: 0.5 }}>
+                          {formatPrice(item.variant.unitPrice)}
+                        </Typography>
+                      )
                     )}
 
                     {/* Quantity controls */}
@@ -217,7 +249,7 @@ export function CartDrawer() {
                         size="small"
                         onClick={() => {
                           if (item.quantity > 1) {
-                            updateQuantity(item.variant.id, item.quantity - 1);
+                            void updateQuantity(item, item.quantity - 1).catch(() => {});
                           }
                         }}
                         disabled={isLoading || item.quantity <= 1}
@@ -240,8 +272,8 @@ export function CartDrawer() {
 
                       <IconButton
                         size="small"
-                        onClick={() => updateQuantity(item.variant.id, item.quantity + 1)}
-                        disabled={isLoading}
+                        onClick={() => void updateQuantity(item, item.quantity + 1).catch(() => {})}
+                        disabled={isLoading || item.quantity >= 99}
                         sx={{
                           border: '1px solid var(--ifm-color-emphasis-300)',
                           borderRadius: '4px',
@@ -257,7 +289,7 @@ export function CartDrawer() {
 
                       <IconButton
                         size="small"
-                        onClick={() => removeFromCart(item.variant.id)}
+                        onClick={() => void removeFromCart(item).catch(() => {})}
                         disabled={isLoading}
                         sx={{
                           ml: 'auto',

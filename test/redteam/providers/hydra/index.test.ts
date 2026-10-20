@@ -1,4 +1,5 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, it, Mock, vi } from 'vitest';
+import { runAssertions } from '../../../../src/assertions/index';
 import * as blobExtractor from '../../../../src/blobs/extractor';
 import * as evaluatorHelpers from '../../../../src/evaluatorHelpers';
 import { PromptfooChatCompletionProvider } from '../../../../src/providers/promptfoo';
@@ -11,13 +12,33 @@ import {
   neverGenerateRemote,
   shouldGenerateRemote,
 } from '../../../../src/redteam/remoteGeneration';
+import { isProviderResponseRateLimited } from '../../../../src/scheduler/types';
+import { isResponseHeadersObserverErrorResponse } from '../../../../src/util/fetch/responseHeadersObserver';
 import {
   createMockProvider,
   createProviderResponse,
   type MockApiProvider,
 } from '../../../factories/provider';
+import { createMockTracingOptions } from '../../../factories/tracing';
+import { createSelectedObserverErrorResponse } from '../../../util/selectedObserverError';
+import { createSelectedToolErrorTarget } from '../../../util/selectedToolErrorTarget';
 
-import type { CallApiContextParams, GradingResult } from '../../../../src/types/index';
+import type {
+  AtomicTestCase,
+  CallApiContextParams,
+  GradingResult,
+} from '../../../../src/types/index';
+
+const createDocumentInputVars = (): ConstructorParameters<typeof HydraProvider>[0]['inputs'] => ({
+  document: {
+    description: 'Uploaded planning document',
+    type: 'docx',
+  },
+  question: {
+    description: 'Benign analyst question',
+    type: 'text',
+  },
+});
 
 // Import HydraProvider dynamically after mocks are set up
 let HydraProvider: typeof import('../../../../src/redteam/providers/hydra/index').HydraProvider;
@@ -28,19 +49,7 @@ const mockGetSessionId = vi.hoisted(() => vi.fn());
 const mockIsBasicRefusal = vi.hoisted(() => vi.fn());
 
 // Tracing mocks
-const mockResolveTracingOptions = vi.hoisted(() =>
-  vi.fn(() => ({
-    enabled: false,
-    includeInAttack: true,
-    includeInGrading: true,
-    includeInternalSpans: false,
-    maxSpans: 50,
-    maxDepth: 5,
-    maxRetries: 3,
-    retryDelayMs: 500,
-    sanitizeAttributes: true,
-  })),
-);
+const mockResolveTracingOptions = vi.hoisted(() => vi.fn(() => createMockTracingOptions(false)));
 const mockFetchTraceContext = vi.hoisted(() => vi.fn());
 const mockFormatTraceSummary = vi.hoisted(() => vi.fn(() => 'Trace summary'));
 const mockFormatTraceForMetadata = vi.hoisted(() => vi.fn(() => ({ traceId: 'test-trace-id' })));
@@ -158,9 +167,7 @@ describe('HydraProvider', () => {
     mockGetGraderById.mockImplementation(function () {
       return mockGrader;
     });
-    vi.mocked(shouldGenerateRemote).mockImplementation(function () {
-      return true;
-    });
+    vi.mocked(shouldGenerateRemote).mockReturnValue(true);
     vi.mocked(neverGenerateRemote).mockReset();
     vi.mocked(neverGenerateRemote).mockReturnValue(false);
     vi.mocked(evaluatorHelpers.renderPrompt).mockResolvedValue('rendered prompt');
@@ -217,9 +224,7 @@ describe('HydraProvider', () => {
     });
 
     it('should throw the implicit-disabled error when remote generation is unavailable for this config', () => {
-      vi.mocked(shouldGenerateRemote).mockImplementation(function () {
-        return false;
-      });
+      vi.mocked(shouldGenerateRemote).mockReturnValue(false);
       vi.mocked(neverGenerateRemote).mockReturnValue(false);
 
       expect(() => {
@@ -230,9 +235,7 @@ describe('HydraProvider', () => {
     });
 
     it('should throw the explicit-disabled error when a disable flag is set', () => {
-      vi.mocked(shouldGenerateRemote).mockImplementation(function () {
-        return false;
-      });
+      vi.mocked(shouldGenerateRemote).mockReturnValue(false);
       vi.mocked(neverGenerateRemote).mockReturnValue(true);
 
       expect(() => {
@@ -240,19 +243,6 @@ describe('HydraProvider', () => {
       }).toThrow(
         /jailbreak:hydra strategy requires remote generation, which has been explicitly disabled\. To enable it, unset (PROMPTFOO_DISABLE_REMOTE_GENERATION|PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION)/,
       );
-    });
-
-    it('should warn when backtracking is enabled in stateful mode', () => {
-      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
-
-      new HydraProvider({
-        injectVar: 'input',
-        stateful: true,
-        maxBacktracks: 5,
-      });
-
-      // Logger.warn should have been called
-      warnSpy.mockRestore();
     });
 
     it('should create agent provider with correct config', () => {
@@ -441,6 +431,132 @@ describe('HydraProvider', () => {
         message: 'Successful attack message',
         response: 'Here is how to do harmful thing',
       });
+    });
+
+    it.each(
+      [true, false].flatMap((pass) =>
+        [false, true].flatMap((freshGradingFails) =>
+          ['hydra', 'goblin'].map((strategy) => ({ pass, freshGradingFails, strategy })),
+        ),
+      ),
+    )(
+      'preserves the next valid verdict or final grading error: %j',
+      async ({ pass, freshGradingFails, strategy }) => {
+        mockAgentProvider.callApi.mockResolvedValue({
+          output: 'Successful attack message',
+          tokenUsage: { total: 100, prompt: 50, completion: 50 },
+        });
+
+        mockTargetProvider.callApi.mockResolvedValue({
+          output: 'Here is how to do harmful thing',
+          tokenUsage: { total: 50, prompt: 25, completion: 25 },
+        });
+
+        const getResult = vi
+          .fn()
+          .mockResolvedValueOnce({
+            grade: {
+              pass: false,
+              score: 0,
+              reason: 'Grading provider returned 503',
+              metadata: { graderError: true },
+            },
+          })
+          .mockResolvedValueOnce({ grade: { pass, score: pass ? 1 : 0, reason: 'Valid verdict' } })
+          .mockRejectedValue(new Error('Final grading failed'));
+        mockGetGraderById.mockReturnValue({ getResult } as any);
+
+        const Provider =
+          strategy === 'goblin'
+            ? (await import('../../../../src/redteam/providers/goblin/index')).GoblinProvider
+            : HydraProvider;
+        const provider = new Provider({
+          injectVar: 'input',
+          maxTurns: 2,
+        });
+
+        const context: CallApiContextParams = {
+          originalProvider: mockTargetProvider,
+          vars: { input: 'test goal' },
+          prompt: { raw: 'test prompt', label: 'test' },
+          test: {
+            assert: [
+              {
+                type: 'promptfoo:redteam:pii',
+                ...(freshGradingFails && { transform: (output: unknown) => output }),
+              },
+            ],
+            metadata: { goal: 'test goal', pluginId: 'pii', strategyId: `jailbreak:${strategy}` },
+            provider: `promptfoo:redteam:${strategy}`,
+          } as any,
+        };
+
+        const result = await provider.callApi('', context);
+
+        expect(result.metadata?.redteamHistory[0]).toMatchObject({
+          graderPassed: undefined,
+          graderError: 'Grading provider returned 503',
+        });
+        const grading = runAssertions({
+          prompt: 'test prompt',
+          test: context.test!,
+          providerResponse: result,
+        });
+        if (freshGradingFails) {
+          await expect(grading).rejects.toThrow('Final grading failed');
+        } else {
+          expect((await grading).componentResults?.[0].metadata?.gradingIncomplete).toBe(true);
+        }
+        expect(result.metadata).toHaveProperty(`${strategy}Result`, !pass);
+        expect(result.metadata?.successfulAttacks ?? []).toHaveLength(pass ? 0 : 1);
+        expect(getResult).toHaveBeenCalledTimes(freshGradingFails ? 3 : 2);
+        expect(mockTargetProvider.callApi).toHaveBeenCalledTimes(2);
+        expect(JSON.parse(mockAgentProvider.callApi.mock.calls[1][0])).not.toHaveProperty(
+          'lastGraderResult',
+        );
+      },
+    );
+
+    it.each(
+      [1, 2].flatMap((turns) => ['hydra', 'goblin'].map((strategy) => ({ turns, strategy }))),
+    )('resolves only the last tagged-prompt grading error: %j', async ({ turns, strategy }) => {
+      mockAgentProvider.callApi.mockResolvedValue({ output: '<Prompt>attack</Prompt>' });
+      mockTargetProvider.callApi.mockResolvedValue({ output: 'Target response' });
+      let calls = 0;
+      const getResult = vi.fn(async () => ({
+        grade:
+          ++calls <= turns
+            ? { pass: false, score: 0, reason: 'Outage', metadata: { graderError: true } }
+            : { pass: true, score: 1, reason: 'Recovered' },
+      }));
+      mockGetGraderById.mockReturnValue({ getResult });
+      const Provider =
+        strategy === 'goblin'
+          ? (await import('../../../../src/redteam/providers/goblin/index')).GoblinProvider
+          : HydraProvider;
+      const provider = new Provider({ injectVar: 'input', maxTurns: turns });
+      const test: AtomicTestCase = {
+        assert: [{ type: 'promptfoo:redteam:pii', transform: (output) => output }],
+        metadata: { pluginId: 'pii', strategyId: `jailbreak:${strategy}` },
+        provider: `promptfoo:redteam:${strategy}`,
+      };
+      const context: CallApiContextParams = {
+        originalProvider: mockTargetProvider,
+        vars: { input: 'test goal' },
+        prompt: { raw: '{{input}}', label: 'test' },
+        test,
+      };
+      const result = await provider.callApi('', context);
+      expect(result.metadata?.redteamHistory[0].prompt).toBe('<Prompt>attack</Prompt>');
+      expect(result.metadata?.redteamFinalPrompt).toBe('attack');
+      const grading = await runAssertions({
+        prompt: 'test',
+        test: context.test!,
+        providerResponse: result,
+      });
+      expect(getResult).toHaveBeenCalledTimes(turns + 1);
+      expect(grading).toMatchObject({ pass: true, score: 1 });
+      expect(Boolean(grading.componentResults?.[0].metadata?.gradingIncomplete)).toBe(turns > 1);
     });
 
     it('should handle multiple turns until max turns reached', async () => {
@@ -1136,6 +1252,300 @@ describe('HydraProvider', () => {
       // Should skip turn with empty message
       expect(result.metadata?.hydraRoundsCompleted).toBe(1);
     });
+  });
+
+  describe.each([
+    {
+      strategyName: 'Hydra',
+      strategyId: 'hydra',
+      providerId: 'promptfoo:redteam:hydra',
+      taskId: 'hydra-decision',
+      metadataPrefix: 'hydra',
+    },
+    {
+      strategyName: 'Goblin',
+      strategyId: 'goblin',
+      providerId: 'promptfoo:redteam:goblin',
+      taskId: 'goblin-decision',
+      metadataPrefix: 'goblin',
+    },
+  ] as const)('$strategyName selected target error provenance', (providerOptions) => {
+    beforeEach(() => {
+      mockAgentProvider.callApi.mockResolvedValue({
+        output: 'Say hello',
+        tokenUsage: { total: 3, prompt: 2, completion: 1, numRequests: 1 },
+      });
+    });
+
+    it('finalizes a completed target error before canceled trace, next turn, or learnings', async () => {
+      const fixture = createSelectedToolErrorTarget();
+      mockAgentProvider.callApi.mockImplementation(async (_prompt, _context, options) => {
+        options?.abortSignal?.throwIfAborted();
+        return { output: 'Say hello' };
+      });
+      mockResolveTracingOptions.mockReturnValue({
+        enabled: true,
+        includeInAttack: true,
+        includeInGrading: true,
+        includeInternalSpans: false,
+        maxSpans: 50,
+        maxDepth: 5,
+        maxRetries: 3,
+        retryDelayMs: 500,
+        sanitizeAttributes: true,
+      });
+      mockFetchTraceContext.mockImplementation(async (_traceId, options) => {
+        options?.abortSignal?.throwIfAborted();
+        return null;
+      });
+      try {
+        const provider = new HydraProvider({ injectVar: 'input', maxTurns: 2 }, providerOptions);
+        const result = await fixture.run(() =>
+          provider.callApi(
+            '',
+            {
+              originalProvider: fixture.target,
+              vars: { input: 'Say hello' },
+              prompt: { raw: '{{input}}', label: 'greeting' },
+              traceparent: '00-0123456789abcdef0123456789abcdef-0123456789abcdef-01',
+              test: { metadata: { scanId: 'fixture-scan' } },
+            },
+            { abortSignal: fixture.controller.signal },
+          ),
+        );
+        await fixture.expectSelected(result);
+        expect(mockAgentProvider.callApi).toHaveBeenCalledOnce();
+        expect(mockGrader.getResult).not.toHaveBeenCalled();
+        expect(mockFetchTraceContext).not.toHaveBeenCalled();
+      } finally {
+        await fixture.cleanup();
+      }
+    });
+
+    it.each(['tool', 'http', 'target-local', undefined] as const)(
+      'projects only the selected tool marker from target origin %s',
+      async (errorOrigin) => {
+        // Preserve the external provider payload, including unknown markers.
+        const originMetadata: Record<string, unknown> = errorOrigin ? { errorOrigin } : {};
+        mockTargetProvider.callApi.mockResolvedValue({
+          error: 'Lookup service returned 429 rate limit',
+          tokenUsage: { total: 5, prompt: 2, completion: 3, numRequests: 1 },
+          metadata: {
+            ...originMetadata,
+            http: {
+              status: 429,
+              statusText: 'Too Many Requests',
+              headers: { 'retry-after': '60' },
+            },
+            rateLimit: { retryAfterMs: 60000 },
+            targetOnly: 'private target metadata',
+          },
+        });
+        const provider = new HydraProvider({ injectVar: 'input', maxTurns: 1 }, providerOptions);
+
+        const result = await provider.callApi('', {
+          originalProvider: mockTargetProvider,
+          vars: { input: 'Say hello' },
+          prompt: { raw: '{{input}}', label: 'greeting' },
+        });
+
+        expect(mockTargetProvider.callApi).toHaveBeenCalledTimes(1);
+        expect(JSON.parse(mockTargetProvider.callApi.mock.calls[0][0])).toEqual([
+          { role: 'user', content: 'Say hello' },
+        ]);
+        expect(result.error).toBe('Lookup service returned 429 rate limit');
+        if (errorOrigin === 'tool') {
+          expect(result.metadata).toHaveProperty('errorOrigin', 'tool');
+        } else {
+          expect(result.metadata).not.toHaveProperty('errorOrigin');
+        }
+        expect(result.metadata).not.toHaveProperty('http');
+        expect(result.metadata).not.toHaveProperty('rateLimit');
+        expect(result.metadata).not.toHaveProperty('targetOnly');
+        expect(result.metadata).toHaveProperty(
+          `${providerOptions.metadataPrefix}RoundsCompleted`,
+          1,
+        );
+        expect(result.metadata.redteamHistory).toEqual([]);
+        expect(result.tokenUsage).toMatchObject({ total: 5, numRequests: 1 });
+        expect(mockGrader.getResult).not.toHaveBeenCalled();
+      },
+    );
+
+    it('preserves selected caller-observer provenance on the returned target error', async () => {
+      const targetResponse = createSelectedObserverErrorResponse({
+        tokenUsage: { total: 5, prompt: 2, completion: 3, numRequests: 1 },
+        metadata: { targetOnly: 'private target metadata' },
+      });
+      expect(isResponseHeadersObserverErrorResponse(targetResponse)).toBe(true);
+      mockTargetProvider.callApi.mockResolvedValue(targetResponse);
+      const provider = new HydraProvider({ injectVar: 'input', maxTurns: 1 }, providerOptions);
+
+      const result = await provider.callApi('', {
+        originalProvider: mockTargetProvider,
+        vars: { input: 'Say hello' },
+        prompt: { raw: '{{input}}', label: 'greeting' },
+      });
+
+      expect(mockTargetProvider.callApi).toHaveBeenCalledOnce();
+      expect(result.error).toBe('metrics rate limit exceeded');
+      expect(isResponseHeadersObserverErrorResponse(result)).toBe(true);
+      expect(isProviderResponseRateLimited(result, undefined)).toBe(false);
+      expect(result.metadata).not.toHaveProperty('targetOnly');
+      expect(result.metadata).not.toHaveProperty('errorOrigin');
+      expect(result.metadata.redteamHistory).toEqual([]);
+      expect(result.metadata).toHaveProperty(`${providerOptions.metadataPrefix}RoundsCompleted`, 1);
+      expect(result.tokenUsage).toMatchObject({ total: 5, numRequests: 1 });
+      expect(mockGrader.getResult).not.toHaveBeenCalled();
+    });
+
+    it('clears selected caller-observer provenance when a later target response succeeds', async () => {
+      const priorResponse = createSelectedObserverErrorResponse({});
+      expect(isResponseHeadersObserverErrorResponse(priorResponse)).toBe(true);
+      mockTargetProvider.callApi
+        .mockResolvedValueOnce(priorResponse)
+        .mockResolvedValueOnce({ output: 'Hello' });
+      const provider = new HydraProvider({ injectVar: 'input', maxTurns: 2 }, providerOptions);
+
+      const result = await provider.callApi('', {
+        originalProvider: mockTargetProvider,
+        vars: { input: 'Say hello' },
+        prompt: { raw: '{{input}}', label: 'greeting' },
+      });
+
+      expect(mockTargetProvider.callApi).toHaveBeenCalledTimes(2);
+      expect(result.output).toBe('Hello');
+      expect(result).not.toHaveProperty('error');
+      expect(isResponseHeadersObserverErrorResponse(result)).toBe(false);
+      expect(isProviderResponseRateLimited(result, undefined)).toBe(false);
+      expect(result.metadata.redteamHistory).toHaveLength(1);
+      expect(result.metadata).toHaveProperty(`${providerOptions.metadataPrefix}RoundsCompleted`, 2);
+      expect(result.tokenUsage?.numRequests).toBe(2);
+    });
+
+    it.each(['agent error', 'local no-probe error'] as const)(
+      'keeps selected caller-observer provenance off %s in the zero-probe builder contract',
+      async (selectedError) => {
+        // Matching diagnostic text must not transfer the prior target's provenance.
+        const agentError = 'metrics rate limit exceeded';
+        if (selectedError === 'agent error') {
+          mockAgentProvider.callApi
+            .mockResolvedValueOnce({ output: 'Say hello' })
+            .mockResolvedValueOnce({ error: agentError });
+        }
+        const priorResponse = createSelectedObserverErrorResponse({
+          tokenUsage: { numRequests: 0 },
+        });
+        expect(isResponseHeadersObserverErrorResponse(priorResponse)).toBe(true);
+        mockTargetProvider.callApi.mockResolvedValue(priorResponse);
+        const provider = new HydraProvider(
+          { injectVar: 'input', maxTurns: selectedError === 'agent error' ? 2 : 1 },
+          providerOptions,
+        );
+
+        const result = await provider.callApi('', {
+          originalProvider: mockTargetProvider,
+          vars: { input: 'Say hello' },
+          prompt: { raw: '{{input}}', label: 'greeting' },
+        });
+
+        expect(mockTargetProvider.callApi).toHaveBeenCalledOnce();
+        // The live scan sends one learning update after its attack decisions.
+        expect(mockAgentProvider.callApi).toHaveBeenCalledTimes(
+          selectedError === 'agent error' ? 3 : 2,
+        );
+        expect(
+          mockAgentProvider.callApi.mock.calls.map(([, context]) => context?.prompt.label),
+        ).toEqual([
+          ...Array(selectedError === 'agent error' ? 2 : 1).fill(
+            `${providerOptions.metadataPrefix}-agent`,
+          ),
+          `${providerOptions.metadataPrefix}-learning-update`,
+        ]);
+        expect(result.error).toBe(
+          selectedError === 'agent error'
+            ? agentError
+            : `${providerOptions.strategyName} did not execute any target probes`,
+        );
+        expect(isResponseHeadersObserverErrorResponse(result)).toBe(false);
+        expect(isProviderResponseRateLimited(result, undefined)).toBe(
+          selectedError === 'agent error',
+        );
+        expect(result.metadata.redteamHistory).toEqual([]);
+        expect(result.metadata).toHaveProperty(
+          `${providerOptions.metadataPrefix}RoundsCompleted`,
+          1,
+        );
+        expect(result.tokenUsage?.numRequests).toBe(0);
+      },
+    );
+
+    it('clears the prior tool marker when a later successful target response is selected', async () => {
+      mockTargetProvider.callApi
+        .mockResolvedValueOnce({
+          error: 'Lookup service returned 429 rate limit',
+          metadata: { errorOrigin: 'tool' },
+        })
+        .mockResolvedValueOnce({ output: 'Hello' });
+      const provider = new HydraProvider({ injectVar: 'input', maxTurns: 2 }, providerOptions);
+
+      const result = await provider.callApi('', {
+        originalProvider: mockTargetProvider,
+        vars: { input: 'Say hello' },
+        prompt: { raw: '{{input}}', label: 'greeting' },
+      });
+
+      expect(mockTargetProvider.callApi).toHaveBeenCalledTimes(2);
+      expect(result.output).toBe('Hello');
+      expect(result).not.toHaveProperty('error');
+      expect(result.metadata).not.toHaveProperty('errorOrigin');
+      expect(result.metadata.redteamHistory).toHaveLength(1);
+      expect(result.metadata).toHaveProperty(`${providerOptions.metadataPrefix}RoundsCompleted`, 2);
+      expect(result.tokenUsage?.numRequests).toBe(2);
+    });
+
+    it.each(['agent error', 'local no-probe error'] as const)(
+      'keeps %s independent of a prior target marker in the zero-probe builder contract',
+      async (selectedError) => {
+        const agentError = 'Agent decision service unavailable';
+        if (selectedError === 'agent error') {
+          mockAgentProvider.callApi
+            .mockResolvedValueOnce({ output: 'Say hello' })
+            .mockResolvedValueOnce({ error: agentError });
+        }
+        // A target may explicitly report no executed probes. This exercises the
+        // builder's fail-closed selection, not a completed Chat cancellation.
+        mockTargetProvider.callApi.mockResolvedValue({
+          error: 'Lookup service returned 429 rate limit',
+          tokenUsage: { numRequests: 0 },
+          metadata: { errorOrigin: 'tool' },
+        });
+        const provider = new HydraProvider(
+          { injectVar: 'input', maxTurns: selectedError === 'agent error' ? 2 : 1 },
+          providerOptions,
+        );
+
+        const result = await provider.callApi('', {
+          originalProvider: mockTargetProvider,
+          vars: { input: 'Say hello' },
+          prompt: { raw: '{{input}}', label: 'greeting' },
+        });
+
+        expect(mockTargetProvider.callApi).toHaveBeenCalledTimes(1);
+        expect(result.error).toBe(
+          selectedError === 'agent error'
+            ? agentError
+            : `${providerOptions.strategyName} did not execute any target probes`,
+        );
+        expect(result.metadata).not.toHaveProperty('errorOrigin');
+        expect(result.metadata.redteamHistory).toEqual([]);
+        expect(result.metadata).toHaveProperty(
+          `${providerOptions.metadataPrefix}RoundsCompleted`,
+          1,
+        );
+        expect(result.tokenUsage?.numRequests).toBe(0);
+      },
+    );
   });
 
   describe('callApi() - conversation history', () => {
@@ -1871,16 +2281,7 @@ describe('HydraProvider', () => {
 
       const provider = new HydraProvider({
         injectVar: 'input',
-        inputs: {
-          document: {
-            description: 'Uploaded planning document',
-            type: 'docx',
-          },
-          question: {
-            description: 'Benign analyst question',
-            type: 'text',
-          },
-        },
+        inputs: createDocumentInputVars(),
         maxTurns: 1,
       });
 
@@ -1935,16 +2336,7 @@ describe('HydraProvider', () => {
 
       const provider = new HydraProvider({
         injectVar: 'input',
-        inputs: {
-          document: {
-            description: 'Uploaded planning document',
-            type: 'docx',
-          },
-          question: {
-            description: 'Benign analyst question',
-            type: 'text',
-          },
-        },
+        inputs: createDocumentInputVars(),
         maxTurns: 1,
         stateful: true,
       });
@@ -1998,16 +2390,7 @@ describe('HydraProvider', () => {
 
       const provider = new HydraProvider({
         injectVar: 'input',
-        inputs: {
-          document: {
-            description: 'Uploaded planning document',
-            type: 'docx',
-          },
-          question: {
-            description: 'Benign analyst question',
-            type: 'text',
-          },
-        },
+        inputs: createDocumentInputVars(),
         maxTurns: 1,
         stateful: true,
       });
@@ -2440,17 +2823,7 @@ describe('HydraProvider', () => {
 
     it('should fetch trace context when tracing is enabled', async () => {
       // Enable tracing
-      mockResolveTracingOptions.mockReturnValue({
-        enabled: true,
-        includeInAttack: true,
-        includeInGrading: true,
-        includeInternalSpans: false,
-        maxSpans: 50,
-        maxDepth: 5,
-        maxRetries: 3,
-        retryDelayMs: 500,
-        sanitizeAttributes: true,
-      });
+      mockResolveTracingOptions.mockReturnValue(createMockTracingOptions());
 
       // Mock trace context
       mockFetchTraceContext.mockResolvedValue({
@@ -2500,17 +2873,7 @@ describe('HydraProvider', () => {
     });
 
     it('skips trace retrieval when a Hydra target response came from cache', async () => {
-      mockResolveTracingOptions.mockReturnValue({
-        enabled: true,
-        includeInAttack: true,
-        includeInGrading: true,
-        includeInternalSpans: false,
-        maxSpans: 50,
-        maxDepth: 5,
-        maxRetries: 3,
-        retryDelayMs: 500,
-        sanitizeAttributes: true,
-      });
+      mockResolveTracingOptions.mockReturnValue(createMockTracingOptions());
       mockAgentProvider.callApi.mockResolvedValue({
         output: 'Attack message',
         tokenUsage: { total: 100, prompt: 50, completion: 50 },
@@ -2540,17 +2903,7 @@ describe('HydraProvider', () => {
 
     it('should NOT fetch trace context when traceparent is missing', async () => {
       // Enable tracing
-      mockResolveTracingOptions.mockReturnValue({
-        enabled: true,
-        includeInAttack: true,
-        includeInGrading: true,
-        includeInternalSpans: false,
-        maxSpans: 50,
-        maxDepth: 5,
-        maxRetries: 3,
-        retryDelayMs: 500,
-        sanitizeAttributes: true,
-      });
+      mockResolveTracingOptions.mockReturnValue(createMockTracingOptions());
 
       mockAgentProvider.callApi.mockResolvedValue({
         output: 'Attack message',
@@ -2588,17 +2941,7 @@ describe('HydraProvider', () => {
 
     it('should call formatTraceSummary when tracing is enabled and trace is fetched', async () => {
       // Enable tracing
-      mockResolveTracingOptions.mockReturnValue({
-        enabled: true,
-        includeInAttack: true,
-        includeInGrading: true,
-        includeInternalSpans: false,
-        maxSpans: 50,
-        maxDepth: 5,
-        maxRetries: 3,
-        retryDelayMs: 500,
-        sanitizeAttributes: true,
-      });
+      mockResolveTracingOptions.mockReturnValue(createMockTracingOptions());
 
       mockFetchTraceContext.mockResolvedValue({
         traceId: 'test-trace-id',
@@ -2640,17 +2983,7 @@ describe('HydraProvider', () => {
 
     it('should call formatTraceForMetadata when trace is stored in metadata', async () => {
       // Enable tracing
-      mockResolveTracingOptions.mockReturnValue({
-        enabled: true,
-        includeInAttack: true,
-        includeInGrading: true,
-        includeInternalSpans: false,
-        maxSpans: 50,
-        maxDepth: 5,
-        maxRetries: 3,
-        retryDelayMs: 500,
-        sanitizeAttributes: true,
-      });
+      mockResolveTracingOptions.mockReturnValue(createMockTracingOptions());
 
       mockFetchTraceContext.mockResolvedValue({
         traceId: 'test-trace-id',
@@ -2692,17 +3025,7 @@ describe('HydraProvider', () => {
 
     it('should handle fetchTraceContext returning null gracefully', async () => {
       // Enable tracing
-      mockResolveTracingOptions.mockReturnValue({
-        enabled: true,
-        includeInAttack: true,
-        includeInGrading: true,
-        includeInternalSpans: false,
-        maxSpans: 50,
-        maxDepth: 5,
-        maxRetries: 3,
-        retryDelayMs: 500,
-        sanitizeAttributes: true,
-      });
+      mockResolveTracingOptions.mockReturnValue(createMockTracingOptions());
 
       // Return null (no trace found)
       mockFetchTraceContext.mockResolvedValue(null);
@@ -2742,17 +3065,7 @@ describe('HydraProvider', () => {
 
     it('should include trace data in redteamHistory entries when tracing is enabled', async () => {
       // Enable tracing
-      mockResolveTracingOptions.mockReturnValue({
-        enabled: true,
-        includeInAttack: true,
-        includeInGrading: true,
-        includeInternalSpans: false,
-        maxSpans: 50,
-        maxDepth: 5,
-        maxRetries: 3,
-        retryDelayMs: 500,
-        sanitizeAttributes: true,
-      });
+      mockResolveTracingOptions.mockReturnValue(createMockTracingOptions());
 
       mockFetchTraceContext.mockResolvedValue({
         traceId: 'test-trace-id',

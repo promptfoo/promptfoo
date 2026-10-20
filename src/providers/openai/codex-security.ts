@@ -39,7 +39,7 @@ export const CODEX_SECURITY_OPERATIONS = [
   'validation',
 ] as const;
 
-const MINIMUM_CODEX_SECURITY_SDK_VERSION = '0.1.31';
+const MINIMUM_CODEX_SECURITY_SDK_VERSION = '0.2.0';
 
 const ReasoningEffortSchema = z.enum(['minimal', 'low', 'medium', 'high', 'xhigh', 'max', 'ultra']);
 
@@ -126,6 +126,29 @@ interface ScanObservers {
   warnings: string[];
 }
 
+/**
+ * Preserve the SDK 0.1.31 credential masking at this provider's diagnostic boundary.
+ * Findings and model output are intentionally unaffected.
+ * Adapted from openai/codex-security sdk/typescript/src/errors.ts at npm-v0.1.31
+ * (Apache-2.0; see src/external/APACHE_LICENSE).
+ */
+function safeSdkDiagnostic(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error);
+  const recognizableCredential =
+    /(?:\b(?:sk-(?:proj-)?|github_pat_|gh[pousr]_|npm_)\S+|\b(?:bearer|basic|token)(?:\s|%20|\+)+\S+|:\/\/[^\s/@]+@|-----BEGIN [A-Z ]*PRIVATE KEY(?: BLOCK)?-----)/iu.test(
+      message,
+    );
+  const assignments = message.matchAll(
+    /(?<![\w%.-])[\w%.-]+(?:\\*["']|\]|%5d)*\s*(?:[:=]|%3[ad])/giu,
+  );
+  const sensitiveField = Array.from(assignments).some(([field]) =>
+    /(?:api(?:[_-]|%5f|%2d)?key|access(?:[_-]|%5f|%2d)?key|private(?:[_-]|%5f|%2d)?key|authorization|auth(?!or)|token|secret|credential|signature|sig(?=[^A-Za-z0-9]|value|data|token|secret|credential|password|header|field|id|key|$)|password|passwd)/iu.test(
+      field,
+    ),
+  );
+  return recognizableCredential || sensitiveField ? '[redacted]' : message;
+}
+
 function configError(error: z.ZodError): Error {
   const details = error.issues
     .map((issue) => `${issue.path.join('.') || 'config'}: ${issue.message}`)
@@ -163,17 +186,17 @@ async function loadCodexSecurity(): Promise<CodexSecurityModule> {
     try {
       const module = (await importModule(entryPoint)) as CodexSecurityModule;
       const version = typeof module.VERSION === 'string' ? module.VERSION : 'unknown';
-      if (!semverSatisfies(version, `>=${MINIMUM_CODEX_SECURITY_SDK_VERSION}`)) {
+      if (!semverSatisfies(version, `^${MINIMUM_CODEX_SECURITY_SDK_VERSION}`)) {
         incompatibleVersions.add(version);
         logger.warn(
-          `[CodexSecurity] Ignoring @openai/codex-security ${version}; version ${MINIMUM_CODEX_SECURITY_SDK_VERSION} or newer is required for updated plugin archive extraction, finding validation, and deep-scan usage accounting.`,
+          `[CodexSecurity] Ignoring @openai/codex-security ${version}; a compatible version ^${MINIMUM_CODEX_SECURITY_SDK_VERSION} is required for patched TOML parsing, updated plugin archive extraction, and deep-scan usage accounting.`,
         );
         continue;
       }
 
       return module;
     } catch (error) {
-      logger.debug('[CodexSecurity] Failed to load SDK', { error });
+      logger.debug('[CodexSecurity] Failed to load SDK', { error: safeSdkDiagnostic(error) });
       importFailed = true;
     }
   }
@@ -184,7 +207,8 @@ async function loadCodexSecurity(): Promise<CodexSecurityModule> {
 
       Promptfoo and the SDK require a supported even-numbered Node.js release: ^22.22.0, ^24.0.0, or ^26.0.0.
       Reinstall them together with:
-        npm install promptfoo @openai/codex-security
+        npm install promptfoo @openai/codex-security@^${MINIMUM_CODEX_SECURITY_SDK_VERSION}
+      If Promptfoo is installed globally with npm, add -g to that command. With pnpm, Yarn or Bun, use its global install instead.
 
       See https://www.promptfoo.dev/docs/providers/openai-codex-security/`,
     );
@@ -194,9 +218,10 @@ async function loadCodexSecurity(): Promise<CodexSecurityModule> {
     throw new Error(
       dedent`The installed @openai/codex-security package is incompatible (${Array.from(incompatibleVersions).join(', ')}).
 
-      Version ${MINIMUM_CODEX_SECURITY_SDK_VERSION} or newer is required for updated plugin archive extraction, finding validation, and accurate deep-worker cost tracking.
+      A compatible version ^${MINIMUM_CODEX_SECURITY_SDK_VERSION} is required for patched TOML parsing, updated plugin archive extraction, and accurate deep-worker cost tracking.
       Install the compatible SDK alongside Promptfoo with:
         npm install promptfoo @openai/codex-security@^${MINIMUM_CODEX_SECURITY_SDK_VERSION}
+      If Promptfoo is installed globally with npm, add -g to that command. With pnpm, Yarn or Bun, use its global install instead.
 
       See https://www.promptfoo.dev/docs/providers/openai-codex-security/`,
     );
@@ -206,7 +231,8 @@ async function loadCodexSecurity(): Promise<CodexSecurityModule> {
     dedent`The @openai/codex-security package is required but not installed.
 
     Install it alongside Promptfoo with:
-      npm install promptfoo @openai/codex-security
+      npm install promptfoo @openai/codex-security@^${MINIMUM_CODEX_SECURITY_SDK_VERSION}
+    If Promptfoo is installed globally with npm, add -g to that command. With pnpm, Yarn or Bun, use its global install instead.
 
     Requires Node.js ^22.22.0, ^24.0.0, or ^26.0.0.
     See https://www.promptfoo.dev/docs/providers/openai-codex-security/`,
@@ -260,6 +286,8 @@ function getTokenUsage(result?: ScanResult, observedCost?: ScanCost): TokenUsage
 }
 
 export class OpenAICodexSecurityProvider implements ApiProvider {
+  private cleanupGeneration = 0;
+
   readonly config: OpenAICodexSecurityConfig;
   readonly env?: EnvOverrides;
 
@@ -288,22 +316,22 @@ export class OpenAICodexSecurityProvider implements ApiProvider {
   }
 
   async cleanup(): Promise<void> {
+    this.cleanupGeneration++;
+    providerRegistry.unregister(this);
     const clients = Array.from(this.activeClients);
     this.activeClients.clear();
     const results = await Promise.allSettled(clients.map((client) => client.close()));
     for (const result of results) {
       if (result.status === 'rejected') {
-        logger.warn('[CodexSecurity] Error while closing SDK client', { error: result.reason });
+        logger.warn('[CodexSecurity] Error while closing SDK client', {
+          error: safeSdkDiagnostic(result.reason),
+        });
       }
     }
   }
 
   async shutdown(): Promise<void> {
-    try {
-      await this.cleanup();
-    } finally {
-      providerRegistry.unregister(this);
-    }
+    await this.cleanup();
   }
 
   async callApi(
@@ -311,6 +339,7 @@ export class OpenAICodexSecurityProvider implements ApiProvider {
     context?: CallApiContextParams,
     callOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
+    const cleanupGeneration = this.cleanupGeneration;
     const observers: ScanObservers = { warnings: [] };
 
     try {
@@ -340,6 +369,9 @@ export class OpenAICodexSecurityProvider implements ApiProvider {
       }
 
       const module = await loadCodexSecurity();
+      if (cleanupGeneration !== this.cleanupGeneration) {
+        return { error: 'Codex Security operation was interrupted by cleanup.' };
+      }
       const effort = config.model_reasoning_effort ?? config.reasoning_effort;
       const codexOverrides = {
         ...config.codex_overrides,
@@ -356,6 +388,7 @@ export class OpenAICodexSecurityProvider implements ApiProvider {
           : {}),
         ...(Object.keys(codexOverrides).length > 0 ? { codexOverrides } : {}),
       });
+      providerRegistry.register(this);
       this.activeClients.add(client);
 
       try {
@@ -374,11 +407,14 @@ export class OpenAICodexSecurityProvider implements ApiProvider {
           callOptions,
         );
       } finally {
-        this.activeClients.delete(client);
-        try {
-          await client.close();
-        } catch (error) {
-          logger.warn('[CodexSecurity] Error while closing SDK client', { error });
+        if (this.activeClients.delete(client)) {
+          try {
+            await client.close();
+          } catch (error) {
+            logger.warn('[CodexSecurity] Error while closing SDK client', {
+              error: safeSdkDiagnostic(error),
+            });
+          }
         }
       }
     } catch (error) {
@@ -386,7 +422,7 @@ export class OpenAICodexSecurityProvider implements ApiProvider {
       const tokenUsage = observedCost ? getTokenUsage(undefined, observedCost) : undefined;
 
       return {
-        error: `Codex Security operation failed: ${error instanceof Error ? error.message : String(error)}`,
+        error: `Codex Security operation failed: ${safeSdkDiagnostic(error)}`,
         ...(observedCost ? { cost: observedCost.estimatedUsd } : {}),
         ...(tokenUsage ? { tokenUsage } : {}),
       };
@@ -499,7 +535,7 @@ export class OpenAICodexSecurityProvider implements ApiProvider {
         observers.progress = progress;
       },
       onWarning: (warning) => {
-        observers.warnings.push(warning);
+        observers.warnings.push(safeSdkDiagnostic(warning));
       },
     };
   }

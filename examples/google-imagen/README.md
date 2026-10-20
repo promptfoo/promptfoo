@@ -70,7 +70,7 @@ The default config uses `google:gemini-3.1-flash-image` at 1K resolution. `promp
 - `google:gemini-3.1-flash-lite-image` - 1K only; no Google Search grounding.
 - `google:gemini-3.1-flash-image` - Supports 1K, 2K, and 4K output.
 - `google:gemini-3-pro-image` - Supports 1K, 2K, and 4K output.
-- `google:gemini-2.5-flash-image` - Legacy comparison until its [October 2, 2026 native shutdown](https://ai.google.dev/gemini-api/docs/deprecations); use 3.1 Flash Image for new configs. Does not support `imageSize`.
+- `google:gemini-2.5-flash-image` - Legacy comparison until its [earliest March 15, 2027 native shutdown](https://ai.google.dev/gemini-api/docs/deprecations); does not support `imageSize`.
 
 Use the stable IDs above. Google shut down the `gemini-3.1-flash-image-preview` and `gemini-3-pro-image-preview` aliases on [June 25, 2026](https://ai.google.dev/gemini-api/docs/deprecations). Check [current native pricing](https://ai.google.dev/gemini-api/docs/pricing) for the model and resolution you select; Vertex has separate pricing and availability.
 

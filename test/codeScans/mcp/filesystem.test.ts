@@ -1,5 +1,6 @@
 import { EventEmitter } from 'events';
 import path from 'path';
+import { pathToFileURL } from 'url';
 import type { ChildProcess } from 'child_process';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -7,13 +8,10 @@ import { mockProcessEnv } from '../../util/utils';
 
 const mocks = vi.hoisted(() => ({
   execFile: vi.fn(),
-  realpathSync: vi.fn(),
+  realpath: vi.fn(),
+  exists: vi.fn(),
+  resolve: vi.fn(),
   spawn: vi.fn(),
-}));
-
-vi.mock('fs', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('fs')>()),
-  realpathSync: mocks.realpathSync,
 }));
 
 vi.mock('child_process', async (importOriginal) => {
@@ -22,6 +20,20 @@ vi.mock('child_process', async (importOriginal) => {
     ...actual,
     execFile: mocks.execFile,
     spawn: mocks.spawn,
+  };
+});
+
+vi.mock('fs', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('fs')>();
+  return { ...actual, realpathSync: mocks.realpath, existsSync: mocks.exists };
+});
+
+vi.mock('module', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('module')>();
+  return {
+    ...actual,
+    createRequire: (url: string | URL) =>
+      Object.assign(actual.createRequire(url), { resolve: mocks.resolve }),
   };
 });
 
@@ -34,7 +46,7 @@ import {
 class FakeChildProcess extends EventEmitter {
   exitCode: number | null = null;
   killed = false;
-  kill = vi.fn();
+  kill = vi.fn().mockReturnValue(true);
   pid = 1234;
   signalCode: NodeJS.Signals | null = null;
   stderr = new EventEmitter();
@@ -51,7 +63,6 @@ describe('filesystem MCP server management', () => {
   beforeEach(() => {
     vi.useFakeTimers();
     vi.resetAllMocks();
-    mocks.realpathSync.mockImplementation((file) => file);
     restoreEnv = mockProcessEnv(originalEnv, { clear: true });
   });
 
@@ -59,24 +70,6 @@ describe('filesystem MCP server management', () => {
     restoreEnv();
     vi.useRealTimers();
     vi.clearAllMocks();
-  });
-
-  it('strips npm before config when spawning the filesystem MCP server', () => {
-    const restoreNpmConfig = mockProcessEnv({
-      NPM_CONFIG_BEFORE: '2026-03-29T00:00:00.000Z',
-      npm_config_before: '2026-03-29T00:00:00.000Z',
-    });
-    try {
-      mocks.spawn.mockReturnValue(createFakeProcess());
-
-      startFilesystemMcpServer(process.cwd());
-
-      const spawnOptions = mocks.spawn.mock.calls[0]?.[2];
-      expect(spawnOptions?.env?.NPM_CONFIG_BEFORE).toBeUndefined();
-      expect(spawnOptions?.env?.npm_config_before).toBeUndefined();
-    } finally {
-      restoreNpmConfig();
-    }
   });
 
   it('resolves when the filesystem MCP server prints its ready marker', async () => {
@@ -147,140 +140,196 @@ describe('filesystem MCP server management', () => {
 });
 
 describe('filesystem MCP launcher', () => {
-  const { execPath, platform } = process;
-  const nodeDir = path.resolve('/nodejs');
-  const npmDir = path.resolve('/npm-global');
   const rootDir = path.resolve('/repo');
-  const npxCli = (dir: string) => path.join(dir, 'node_modules', 'npm', 'bin', 'npx-cli.js');
-  const npxArgs = ['-y', '@modelcontextprotocol/server-filesystem', rootDir];
+  const serverEntry = path.resolve(
+    '/promptfoo/node_modules/@modelcontextprotocol/server-filesystem/dist/index.js',
+  );
   let restoreEnv: () => void;
+  const originalPnp = process.versions.pnp;
 
   beforeEach(() => {
     vi.resetAllMocks();
+    delete process.versions.pnp;
+    mocks.resolve.mockReturnValue(serverEntry);
+    mocks.realpath.mockImplementation((file: string) => file);
+    mocks.exists.mockReturnValue(true);
     mocks.spawn.mockReturnValue(createFakeProcess());
-    mocks.realpathSync.mockImplementation((file) => file);
-    Object.defineProperty(process, 'platform', { value: 'win32' });
-    Object.defineProperty(process, 'execPath', { value: path.join(nodeDir, 'node.exe') });
-    restoreEnv = mockProcessEnv({ PATH: ['', 'relative', npmDir].join(path.delimiter) });
+    restoreEnv = mockProcessEnv(
+      {
+        HOME: '/home/runner',
+        Path: '/usr/bin',
+        SystemRoot: 'C:\\Windows',
+        GITHUB_TOKEN: 'test-token',
+        PROMPTFOO_API_KEY: 'test-key',
+        NODE_OPTIONS: '--require=/untrusted/preload.cjs --import=/untrusted/loader.mjs',
+        npm_config_before: '2026-03-29T00:00:00.000Z',
+        NPM_CONFIG_BEFORE: '2026-03-29T00:00:00.000Z',
+        Npm_Config_Before: '2026-03-29T00:00:00.000Z',
+      },
+      { clear: true },
+    );
   });
 
   afterEach(() => {
-    Object.defineProperty(process, 'platform', { value: platform });
-    Object.defineProperty(process, 'execPath', { value: execPath });
     restoreEnv();
+    if (originalPnp === undefined) {
+      delete process.versions.pnp;
+    } else {
+      process.versions.pnp = originalPnp;
+    }
   });
 
-  it('prefers the npx entrypoint installed with Node over PATH on Windows', () => {
+  it('runs the installed server with the current Node executable', () => {
     startFilesystemMcpServer(rootDir);
 
+    expect(mocks.resolve).toHaveBeenCalledWith(
+      '@modelcontextprotocol/server-filesystem/dist/index.js',
+    );
     expect(mocks.spawn).toHaveBeenCalledWith(
       process.execPath,
-      [npxCli(nodeDir), ...npxArgs],
-      expect.objectContaining({ cwd: path.dirname(npxCli(nodeDir)) }),
+      [serverEntry, rootDir],
+      expect.objectContaining({ cwd: path.dirname(serverEntry) }),
     );
   });
 
-  it('falls back to npm on an absolute PATH entry on Windows', () => {
-    // Empty and relative entries resolve against the cwd and must be skipped.
-    mocks.realpathSync.mockImplementation((file) => {
-      if (file === npxCli(nodeDir)) {
-        throw new Error('ENOENT');
-      }
-      return file;
+  it('passes only a minimal environment to the server', () => {
+    startFilesystemMcpServer(rootDir);
+
+    expect(mocks.spawn.mock.calls[0]?.[2]?.env).toEqual({
+      HOME: '/home/runner',
+      Path: '/usr/bin',
+      SystemRoot: 'C:\\Windows',
     });
-
-    startFilesystemMcpServer(rootDir);
-
-    expect(mocks.spawn).toHaveBeenCalledWith(
-      process.execPath,
-      [npxCli(npmDir), ...npxArgs],
-      expect.objectContaining({ cwd: path.dirname(npxCli(npmDir)) }),
-    );
-    expect(mocks.realpathSync.mock.calls.map(([file]) => file)).toEqual([
-      rootDir,
-      npxCli(nodeDir),
-      npxCli(npmDir),
-    ]);
   });
 
   it.each([
-    ['a repository PATH entry', rootDir, rootDir],
-    ['a PATH entry resolving into the repository', npmDir, rootDir],
-    ['a canonical repository alias', npmDir, path.resolve('/actual-repo')],
-  ])('rejects %s on Windows', (_name, candidateDir, canonicalRoot) => {
-    const restorePath = mockProcessEnv({ PATH: candidateDir });
-    mocks.realpathSync.mockImplementation((file) => {
-      if (file === rootDir) {
-        return canonicalRoot;
-      }
-      if (file === npxCli(candidateDir)) {
-        return npxCli(canonicalRoot);
-      }
-      throw new Error('ENOENT');
-    });
+    ['--max-old-space-size=4096 --require=/untrusted/preload.cjs', '4096'],
+    ['--import=/untrusted/loader.mjs --max_old_space_size 128', '128'],
+    ['--max-old-space-size=64 --max_old_space_size=96 --require=/untrusted/preload.cjs', '96'],
+  ])('preserves only the numeric heap limit from %s', (nodeOptions, heapLimit) => {
+    const restore = mockProcessEnv({ NODE_OPTIONS: nodeOptions });
     try {
-      expect(() => startFilesystemMcpServer(rootDir)).toThrow(
-        'npx not found outside the scanned repository',
+      startFilesystemMcpServer(rootDir);
+      expect(mocks.spawn).toHaveBeenCalledWith(
+        process.execPath,
+        [`--max-old-space-size=${heapLimit}`, serverEntry, rootDir],
+        expect.anything(),
       );
-      expect(mocks.spawn).not.toHaveBeenCalled();
+      expect(mocks.spawn.mock.calls[0][2].env).not.toHaveProperty('NODE_OPTIONS');
     } finally {
-      restorePath();
+      restore();
     }
   });
 
-  it('uses canonical npm paths outside the repository while preserving the MCP root', () => {
-    const canonicalNpx = npxCli(path.resolve('/repo-sibling'));
-    mocks.realpathSync.mockImplementation((file) =>
-      file === npxCli(nodeDir) ? canonicalNpx : file,
-    );
+  it.each(['0', '-1', '4g', '4.5', '64--require=/untrusted/preload.cjs'])(
+    'does not forward an invalid heap limit %s',
+    (heapLimit) => {
+      const restore = mockProcessEnv({ NODE_OPTIONS: `--max-old-space-size=${heapLimit}` });
+      try {
+        startFilesystemMcpServer(rootDir);
+        expect(mocks.spawn).toHaveBeenCalledWith(
+          process.execPath,
+          [serverEntry, rootDir],
+          expect.anything(),
+        );
+        expect(mocks.spawn.mock.calls[0][2].env).not.toHaveProperty('NODE_OPTIONS');
+      } finally {
+        restore();
+      }
+    },
+  );
 
+  it.each(['entry', 'symlink', 'root-symlink'])(
+    'rejects a server inside the scanned repository (%s)',
+    (mode) => {
+      const inside = path.join(rootDir, 'node_modules/server/index.js');
+      if (mode === 'entry') {
+        mocks.resolve.mockReturnValue(inside);
+      } else if (mode === 'symlink') {
+        mocks.realpath.mockImplementation((file: string) => (file === serverEntry ? inside : file));
+      } else {
+        mocks.realpath.mockImplementation((file: string) =>
+          file === rootDir ? path.dirname(serverEntry) : file,
+        );
+      }
+      expect(() => startFilesystemMcpServer(rootDir)).toThrow(
+        'installed outside the scanned repository',
+      );
+      expect(mocks.spawn).not.toHaveBeenCalled();
+    },
+  );
+
+  it('allows a sibling installation with the same directory prefix', () => {
+    const siblingEntry = path.join(`${rootDir}-tools`, 'index.js');
+    mocks.resolve.mockReturnValue(siblingEntry);
     startFilesystemMcpServer(rootDir);
-
     expect(mocks.spawn).toHaveBeenCalledWith(
       process.execPath,
-      [canonicalNpx, ...npxArgs],
-      expect.objectContaining({ cwd: path.dirname(canonicalNpx) }),
+      [siblingEntry, rootDir],
+      expect.anything(),
     );
   });
 
-  it('fails before spawning when npm cannot be found on Windows', () => {
-    mocks.realpathSync.mockImplementation((file) => {
-      if (file === rootDir) {
-        return file;
-      }
-      throw new Error('ENOENT');
-    });
+  it('passes only trusted Yarn PnP loaders to the Node child', () => {
+    process.versions.pnp = '3';
+    const pnpLoader = path.resolve('/promptfoo/.pnp.cjs');
+    const esmLoader = path.resolve('/promptfoo/.pnp.loader.mjs');
+    mocks.resolve.mockImplementation((name: string) =>
+      name === 'pnpapi' ? pnpLoader : serverEntry,
+    );
+    startFilesystemMcpServer(rootDir);
+    expect(mocks.spawn).toHaveBeenCalledWith(
+      process.execPath,
+      [
+        '--require',
+        pnpLoader,
+        '--experimental-loader',
+        pathToFileURL(esmLoader).href,
+        serverEntry,
+        rootDir,
+      ],
+      expect.objectContaining({ cwd: path.dirname(pnpLoader) }),
+    );
+    expect(mocks.spawn.mock.calls[0][2].env).not.toHaveProperty('NODE_OPTIONS');
+  });
 
-    expect(() => startFilesystemMcpServer(rootDir)).toThrow('npx not found');
+  it.each(['pnp', 'esm'])('rejects a Yarn %s loader resolving inside the repository', (loader) => {
+    process.versions.pnp = '3';
+    const pnpLoader = path.resolve('/promptfoo/.pnp.cjs');
+    const esmLoader = path.resolve('/promptfoo/.pnp.loader.mjs');
+    mocks.resolve.mockImplementation((name: string) =>
+      name === 'pnpapi' ? pnpLoader : serverEntry,
+    );
+    mocks.realpath.mockImplementation((file: string) =>
+      file === (loader === 'pnp' ? pnpLoader : esmLoader)
+        ? path.join(rootDir, path.basename(file))
+        : file,
+    );
+    expect(() => startFilesystemMcpServer(rootDir)).toThrow(
+      'installed outside the scanned repository',
+    );
     expect(mocks.spawn).not.toHaveBeenCalled();
   });
 
-  it('prefers the running Node directory for downstream Windows shims', () => {
-    const inheritedPath = [rootDir, npmDir].join(path.delimiter);
-    const restorePath = mockProcessEnv({ PATH: inheritedPath, Path: inheritedPath });
-    try {
-      startFilesystemMcpServer(rootDir);
-
-      const env = mocks.spawn.mock.calls[0]?.[2].env;
-      expect(env.PATH).toBe([nodeDir, inheritedPath].join(path.delimiter));
-      expect(Object.keys(env).filter((key) => key.toLowerCase() === 'path')).toEqual(['PATH']);
-    } finally {
-      restorePath();
-    }
+  it('explains how to enable the missing Yarn ESM loader', () => {
+    process.versions.pnp = '3';
+    mocks.resolve.mockImplementation((name: string) =>
+      name === 'pnpapi' ? path.resolve('/promptfoo/.pnp.cjs') : serverEntry,
+    );
+    mocks.exists.mockReturnValue(false);
+    expect(() => startFilesystemMcpServer(rootDir)).toThrow('Enable pnpEnableEsmLoader');
+    expect(mocks.spawn).not.toHaveBeenCalled();
   });
 
-  it('runs npx directly on other platforms', () => {
-    Object.defineProperty(process, 'platform', { value: 'linux' });
+  it('fails before spawning when the server package is not installed', () => {
+    mocks.resolve.mockImplementation(() => {
+      throw new Error("Cannot find module '@modelcontextprotocol/server-filesystem/dist/index.js'");
+    });
 
-    startFilesystemMcpServer(rootDir);
-
-    expect(mocks.spawn).toHaveBeenCalledWith(
-      'npx',
-      npxArgs,
-      expect.objectContaining({ cwd: rootDir }),
+    expect(() => startFilesystemMcpServer(rootDir)).toThrow(
+      'The @modelcontextprotocol/server-filesystem package is required',
     );
-    expect(mocks.realpathSync).not.toHaveBeenCalled();
-    expect(mocks.spawn.mock.calls[0]?.[2].env.PATH).toBe(process.env.PATH);
+    expect(mocks.spawn).not.toHaveBeenCalled();
   });
 });
 
@@ -302,7 +351,7 @@ describe('filesystem MCP cleanup', () => {
     vi.useRealTimers();
   });
 
-  it('waits for Windows process-tree termination even if npm exits first', async () => {
+  it('waits for Windows process-tree termination even if the server exits first', async () => {
     const child = createFakeProcess();
     const stopped = stopFilesystemMcpServer(child);
     let settled = false;
@@ -361,14 +410,154 @@ describe('filesystem MCP cleanup', () => {
     expect(mocks.execFile).not.toHaveBeenCalled();
     child.emit('exit', 0, null);
     await expect(stopped).resolves.toBeUndefined();
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(child.kill).toHaveBeenCalledTimes(1);
+    expect(child.listenerCount('exit')).toBe(0);
+    expect(child.listenerCount('error')).toBe(0);
+    expect(vi.getTimerCount()).toBe(0);
   });
 
-  it('preserves the POSIX force-kill timeout', async () => {
+  it('waits for POSIX exit after sending SIGKILL', async () => {
     Object.defineProperty(process, 'platform', { value: 'linux' });
     const child = createFakeProcess();
     const stopped = stopFilesystemMcpServer(child);
+    const onStopped = vi.fn();
+    void stopped.then(onStopped);
+
     await vi.advanceTimersByTimeAsync(5000);
-    await expect(stopped).resolves.toBeUndefined();
     expect(child.kill).toHaveBeenLastCalledWith('SIGKILL');
+    expect(onStopped).not.toHaveBeenCalled();
+
+    child.emit('exit', null, 'SIGKILL');
+    await expect(stopped).resolves.toBeUndefined();
+    expect(onStopped).toHaveBeenCalledOnce();
+    expect(child.listenerCount('exit')).toBe(0);
+    expect(child.listenerCount('error')).toBe(0);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('arms the exit deadline only after sending SIGKILL', async () => {
+    Object.defineProperty(process, 'platform', { value: 'linux' });
+    const child = createFakeProcess();
+    const stopped = stopFilesystemMcpServer(child);
+    expect(vi.getTimerCount()).toBe(1);
+
+    // Suspending the host must not consume the post-SIGKILL confirmation window.
+    vi.setSystemTime(Date.now() + 60000);
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(child.kill).toHaveBeenLastCalledWith('SIGKILL');
+    expect(vi.getTimerCount()).toBe(1);
+    await vi.advanceTimersByTimeAsync(4999);
+    child.emit('exit', null, 'SIGKILL');
+    await expect(stopped).resolves.toBeUndefined();
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('waits for a previously signaled POSIX process that is still running', async () => {
+    Object.defineProperty(process, 'platform', { value: 'linux' });
+    const child = createFakeProcess();
+    Object.defineProperty(child, 'killed', { value: true });
+    const stopped = stopFilesystemMcpServer(child);
+    const onStopped = vi.fn();
+    void stopped.then(onStopped);
+
+    await vi.advanceTimersByTimeAsync(0);
+    expect(onStopped).not.toHaveBeenCalled();
+    child.emit('exit', null, 'SIGTERM');
+    await expect(stopped).resolves.toBeUndefined();
+  });
+
+  it('rejects when POSIX termination cannot be confirmed after SIGKILL', async () => {
+    Object.defineProperty(process, 'platform', { value: 'linux' });
+    const child = createFakeProcess();
+    const onStopped = vi.fn();
+    const stopped = stopFilesystemMcpServer(child);
+    void stopped.then(onStopped, onStopped);
+
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(child.kill).toHaveBeenLastCalledWith('SIGKILL');
+    expect(onStopped).not.toHaveBeenCalled();
+
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(onStopped).toHaveBeenCalledOnce();
+    await expect(stopped).rejects.toThrow('Timed out waiting for process 1234 to exit');
+    expect(child.listenerCount('exit')).toBe(0);
+    expect(child.listenerCount('error')).toBe(0);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it.each(['SIGTERM', 'SIGKILL'] as const)(
+    'waits for an already-dead child exit notification after %s returns false',
+    async (failedSignal) => {
+      Object.defineProperty(process, 'platform', { value: 'linux' });
+      const child = createFakeProcess();
+      vi.mocked(child.kill).mockImplementation((signal) => signal !== failedSignal);
+      const settled = vi.fn();
+      const stopped = stopFilesystemMcpServer(child);
+      void stopped.then(settled, settled);
+      await vi.advanceTimersByTimeAsync(failedSignal === 'SIGKILL' ? 5000 : 0);
+      expect(child.kill).toHaveBeenLastCalledWith(failedSignal);
+      expect(settled).not.toHaveBeenCalled();
+
+      child.emit('exit', 0, null);
+      await expect(stopped).resolves.toBeUndefined();
+      expect(settled).toHaveBeenCalledOnce();
+      expect(child.listenerCount('exit')).toBe(0);
+      expect(child.listenerCount('error')).toBe(0);
+      expect(vi.getTimerCount()).toBe(0);
+    },
+  );
+
+  it('bounds the exit wait when both signals return false without confirming exit', async () => {
+    Object.defineProperty(process, 'platform', { value: 'linux' });
+    const child = createFakeProcess();
+    vi.mocked(child.kill).mockReturnValue(false);
+    const settled = vi.fn();
+    const stopped = stopFilesystemMcpServer(child);
+    void stopped.then(settled, settled);
+    await vi.advanceTimersByTimeAsync(10000);
+    expect(settled).toHaveBeenCalledOnce();
+    await expect(stopped).rejects.toThrow('Timed out waiting for process 1234 to exit');
+    expect(child.kill).toHaveBeenCalledWith('SIGTERM');
+    expect(child.kill).toHaveBeenCalledWith('SIGKILL');
+    expect(child.listenerCount('exit')).toBe(0);
+    expect(child.listenerCount('error')).toBe(0);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it.each([
+    ['SIGTERM', 'throw'],
+    ['SIGTERM', 'error'],
+    ['SIGKILL', 'throw'],
+    ['SIGKILL', 'error'],
+  ] as const)('rejects and cleans up when %s fails via %s', async (failedSignal, failure) => {
+    Object.defineProperty(process, 'platform', { value: 'linux' });
+    const child = createFakeProcess();
+    const existingExitListener = vi.fn();
+    const existingErrorListener = vi.fn();
+    child.on('exit', existingExitListener);
+    child.on('error', existingErrorListener);
+    vi.mocked(child.kill).mockImplementation((signal) => {
+      if (signal !== failedSignal) {
+        return true;
+      }
+      if (failure === 'throw') {
+        throw new Error('Access denied');
+      }
+      if (failure === 'error') {
+        child.emit('error', new Error('Access denied'));
+      }
+      return false;
+    });
+
+    const stopped = stopFilesystemMcpServer(child);
+    const expectation = expect(stopped).rejects.toThrow('Failed to stop filesystem MCP server');
+    if (failedSignal === 'SIGKILL') {
+      await vi.advanceTimersByTimeAsync(5000);
+    }
+    await expectation;
+    expect(child.listeners('exit')).toEqual([existingExitListener]);
+    expect(child.listeners('error')).toEqual([existingErrorListener]);
+    expect(vi.getTimerCount()).toBe(0);
   });
 });

@@ -83,6 +83,8 @@ export interface ProviderResponse {
   prompt?: string | ChatMessage[];
   raw?: string | any;
   output?: string | any;
+  /** Native output used for conversation history when display output has been normalized. */
+  conversationOutput?: string | object;
   /**
    * Input materialization metadata returned by a remote Promptfoo server.
    */
@@ -130,7 +132,7 @@ export interface ProviderResponse {
     spritesheet?: string; // Storage ref URL for spritesheet (Sora)
     model?: string; // Model used (e.g., 'sora-2', 'veo-3.1-generate-preview')
     aspectRatio?: string; // '16:9' or '9:16' (Veo)
-    resolution?: string; // '720p' or '1080p' (Veo)
+    resolution?: string; // '720p', '1080p', or '4k' (Veo)
   };
   images?: ImageOutput[];
 }
@@ -156,11 +158,19 @@ export interface ProviderSimilarityResponse {
 }
 
 export interface ProviderClassificationResponse {
+  cached?: boolean;
   error?: string;
   classification?: Record<string, number>;
+  tokenUsage?: Partial<TokenUsage>;
+}
+
+/** An invalid model call, which can satisfy a negated tool-call validity assertion. */
+export class InvalidToolCallError extends Error {
+  override name = 'InvalidToolCallError';
 }
 
 export interface FunctionToolCallValidator {
+  /** Throw InvalidToolCallError for invalid output. Other errors remain assertion failures. */
   validateFunctionToolCall(output: string | object, vars?: Record<string, VarValue>): void;
 }
 

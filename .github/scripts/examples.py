@@ -8,12 +8,27 @@ import shlex
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 import venv
 from dataclasses import dataclass
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
+
+# Both registries serve the same pinned official image. Preserve the example tag.
+DOCKER_IMAGE_MIRRORS = {
+    "python:3.9-alpine": (
+        (
+            "public.ecr.aws/docker/library/python"
+            "@sha256:c99b6eb43b3ac4d750db3d6e8b22268d5ea9a99deead7218ce3deda7f2ca029c"
+        ),
+        (
+            "docker.io/library/python"
+            "@sha256:c99b6eb43b3ac4d750db3d6e8b22268d5ea9a99deead7218ce3deda7f2ca029c"
+        ),
+    ),
+}
 
 
 @dataclass(frozen=True)
@@ -37,6 +52,11 @@ EXAMPLES = {
         ((".", "test_*.py"), ("tests", "test_*.py")),
         node=True,
         docker_images=("python:3.9-alpine",),
+    ),
+    "e2b": Example(
+        "examples/integration-e2b",
+        ("3.10", "3.14"),
+        ((".", "*_test.py"),),
     ),
     "python-provider-upgrade": Example(
         "examples/provider-python",
@@ -146,7 +166,8 @@ EXAMPLES = {
             ("../../.github/scripts/tests/google_adk", "test_litellm.py"),
         ),
         node=True,
-        extra_requirements=("litellm>=1.101,<2",),
+        # LiteLLM imports MCP types for ordinary function-tool completions too.
+        extra_requirements=("litellm[mcp]>=1.101,<2",),
     ),
 }
 
@@ -246,6 +267,38 @@ def check_gate(selection: str, selected: str, tests: str) -> None:
         )
 
 
+def pull_docker_image(image: str, env: dict[str, str]) -> None:
+    """Retry registry throttling without retrying example execution."""
+    command = ("docker", "pull", image)
+    delays = (10, 30, 60)
+    for attempt in range(len(delays) + 1):
+        print(f"+ {shlex.join(command)}", flush=True)
+        try:
+            result = subprocess.run(
+                command,
+                cwd=ROOT,
+                env=env,
+                check=True,
+                text=True,
+                stderr=subprocess.PIPE,
+            )
+        except subprocess.CalledProcessError as error:
+            if error.stderr:
+                print(error.stderr, file=sys.stderr, end="", flush=True)
+            if (
+                attempt == len(delays)
+                or "toomanyrequests" not in (error.stderr or "").lower()
+            ):
+                raise
+            delay = delays[attempt]
+            print(f"Registry throttled Docker pull; retrying in {delay}s", flush=True)
+            time.sleep(delay)
+        else:
+            if result.stderr:
+                print(result.stderr, file=sys.stderr, end="", flush=True)
+            return
+
+
 def run_example(name: str) -> None:
     validate_registry()
     example = EXAMPLES[name]
@@ -290,7 +343,24 @@ def run_example(name: str) -> None:
         if example.check_dependencies:
             run(str(python), "-m", "pip", "check")
         for image in example.docker_images:
-            run("docker", "pull", image)
+            sources = DOCKER_IMAGE_MIRRORS.get(image, (image,))
+            for index, source in enumerate(sources):
+                try:
+                    pull_docker_image(source, env)
+                except subprocess.CalledProcessError as error:
+                    if (
+                        index == len(sources) - 1
+                        or "toomanyrequests" not in (error.stderr or "").lower()
+                    ):
+                        raise
+                    print(
+                        "Registry still throttled; trying the next pinned mirror",
+                        flush=True,
+                    )
+                else:
+                    break
+            if source != image:
+                run("docker", "tag", source, image)
         for relative, pattern in example.suites:
             run(
                 str(python),

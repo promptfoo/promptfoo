@@ -392,7 +392,24 @@ promptfoo eval --filter-metadata tags=ai
 
 # Multiple filters use AND logic (tests must match ALL conditions)
 promptfoo eval --filter-metadata category=math --filter-metadata difficulty=easy
+
+# Comma-separated values use OR logic within one key
+promptfoo eval --filter-metadata category=math,science
 ```
+
+Each value uses case-sensitive substring matching, including for array metadata. Repeated flags use AND even for the same key. Whitespace is significant. Commas separate alternatives, and leading, trailing, or consecutive commas are invalid. To match a value that contains a comma, escape it as `\,`:
+
+```bash
+promptfoo eval --filter-metadata 'title=Hello\, world'
+```
+
+Other backslashes are literal, so a value such as `C:\data` needs no escaping. Only when a value ends with a backslash and another alternative follows, double that backslash. This matches `C:\data\` or `D:\data`:
+
+```bash
+promptfoo eval --filter-metadata 'path=C:\data\\,D:\data'
+```
+
+Quote the argument, as in these examples, so that the shell passes the backslashes on.
 
 ### JSON in CSV
 
@@ -588,7 +605,13 @@ tests:
       shared: file://../shared/context.json
 ```
 
-Nested `file://` references inside test and vars files keep the owning config's base directory. With multiple configs, each config's tests use its base directory; configured providers and deferred grader references use the first config's base directory. Explicit `--tests` and `--vars` paths resolve from the working directory.
+Rows in YAML test files, or JSON/JSONL files supplied in a `tests` array or glob, resolve bare `vars:` paths and globs from the tests file's directory. For example, `vars: ../vars/*.yaml` in `tests/cases.yaml` loads files from the adjacent `vars` directory. Watch mode observes those same files.
+
+Row-provider scripts, including bare paths, `python:provider.py`, and `file://provider.py:call_api`, also resolve from the tests file's directory. Provider configuration files such as `provider: file://provider.yaml` are read from the owning config's directory; script IDs inside them resolve from the tests file's directory. Saved evaluations retain that provider directory. Inline `file://` vars keep the owning config's directory. A single non-YAML test path, such as `tests: file://tests/cases.json`, or a `{ path, config }` source also keeps bare vars-file paths and row providers relative to the config directory.
+
+A bare test-file entry inside an imported tests file resolves beside the declaring file. Vars and provider paths inside that referenced row use the referenced file's directory.
+
+With multiple configs, each config's tests use its base directory; suite-level providers and deferred grader references use the first config's base directory. Explicit `--tests` and `--vars` paths resolve from the working directory.
 
 CLI evaluations save parsed test rows, external defaults, and an absolute base directory. Resume and retry reuse those rows, including generated and remote datasets. Run a new evaluation to pick up changed test sources. An unmatched test-source glob warns and adds no rows; a missing literal test file is an error.
 
