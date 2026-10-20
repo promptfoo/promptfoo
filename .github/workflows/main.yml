@@ -47,9 +47,10 @@ jobs:
           build_matrix='{"node":["22.22","26.x"]}'
 
           if [[ "$EVENT_NAME" == "pull_request" ]]; then
-            # PRs: add 1 macOS version only
+            # PRs: include the Node 24 Windows shard that runs Python process tests.
             extra_entries='
-              ,{"node":"22.22","os":"macOS-latest","shard":""}
+              ,{"node":"22.22","os":"macOS-latest","shard":""},
+              {"node":"24.x","os":"windows-2025-vs2026","shard":1}
             '
           else
             # Main/dispatch: add all macOS versions + remaining Windows shards
