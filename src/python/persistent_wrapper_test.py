@@ -89,6 +89,36 @@ class TestLoadUserModule(unittest.TestCase):
                 persistent_wrapper.load_user_module("/some/path.py")
             self.assertIn("Cannot load module", str(context.exception))
 
+    def test_loads_actual_mixed_case_file(self) -> None:
+        """An actual mixed-case source file is loaded with SourceFileLoader."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            script_path = os.path.join(temp_dir, "provider.PY")
+            with open(script_path, "w", encoding="utf-8") as f:
+                f.write("def test_func(x):\n    return x * 3\n")
+
+            module = persistent_wrapper.load_user_module(script_path)
+            self.assertEqual(module.test_func(4), 12)
+
+    def test_normalizes_mixed_case_reference(self) -> None:
+        """A mixed-case reference can resolve an existing lowercase source file."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            lowercase_path = os.path.join(temp_dir, "provider.py")
+            with open(lowercase_path, "w", encoding="utf-8") as f:
+                f.write("def test_func(x):\n    return x + 1\n")
+
+            module = persistent_wrapper.load_user_module(lowercase_path[:-3] + ".PY")
+            self.assertEqual(module.test_func(1), 2)
+
+    def test_rejects_non_python_source(self) -> None:
+        """Only Python source extensions may be loaded as executable modules."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            text_path = os.path.join(temp_dir, "provider.txt")
+            with open(text_path, "w", encoding="utf-8") as f:
+                f.write("def test_func(x):\n    return x\n")
+
+            with self.assertRaises(ImportError):
+                persistent_wrapper.load_user_module(text_path)
+
     def test_adds_script_dir_to_path(self) -> None:
         """Tests that script directory is added to sys.path."""
         with tempfile.NamedTemporaryFile(mode="w", suffix=".py", delete=False) as f:
