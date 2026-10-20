@@ -1,13 +1,19 @@
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+
 import Ajv from 'ajv';
 import { afterEach, beforeEach, describe, expect, expectTypeOf, it, vi } from 'vitest';
 import * as cache from '../../src/cache';
 import {
   AnthropicMessagesConfigInputJsonSchema,
   AnthropicMessagesConfigInputSchema,
+  AzureChatConfigInputSchema,
   AzureResponsesConfigInputJsonSchema,
   AzureResponsesConfigInputSchema,
 } from '../../src/contracts';
 import { AnthropicMessagesProvider } from '../../src/providers/anthropic/messages';
+import { AzureChatCompletionProvider } from '../../src/providers/azure/chat';
 import { AzureResponsesProvider } from '../../src/providers/azure/responses';
 import { mockProcessEnv } from '../util/utils';
 import type Anthropic from '@anthropic-ai/sdk';
@@ -119,4 +125,94 @@ describe('portable inputs reach native request construction', () => {
     expect(AnthropicMessagesConfigInputSchema.safeParse(config).success).toBe(false);
     expect(validateAnthropic(config)).toBe(false);
   });
+});
+
+it('passes complete parsed authoring types into every provider constructor', async () => {
+  const anthropic = new AnthropicMessagesProvider('claude-3-5-sonnet-20241022', {
+    config: AnthropicMessagesConfigInputSchema.parse({ temperature: 0 }),
+  });
+  const chat = new AzureChatCompletionProvider('deployment', {
+    config: AzureChatConfigInputSchema.parse({ temperature: 0 }),
+  });
+  const responses = new AzureResponsesProvider('deployment', {
+    config: AzureResponsesConfigInputSchema.parse({ temperature: 0 }),
+  });
+  expect(anthropic.config.temperature).toBe(0);
+  expect((await chat.getOpenAiBody('Hello')).body.temperature).toBe(0);
+  expect((await responses.getAzureResponsesBody('Hello')).temperature).toBe(0);
+});
+
+it('loads parsed Anthropic tool and output-format references before the SDK boundary', async () => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'anthropic-contract-'));
+  try {
+    fs.writeFileSync(
+      path.join(directory, 'tools.json'),
+      JSON.stringify([{ type: 'function', function: { name: 'ping' } }]),
+    );
+    const format = {
+      type: 'json_schema',
+      schema: { type: 'object', properties: { value: { type: 'string' } } },
+    };
+    fs.writeFileSync(path.join(directory, 'format.json'), JSON.stringify(format));
+    const config = AnthropicMessagesConfigInputSchema.parse({
+      apiKey: 'test-key',
+      tools: `file://${directory}/tools.json`,
+      output_format: `file://${directory}/format.json`,
+    });
+    const provider = new AnthropicMessagesProvider('claude-3-5-sonnet-20241022', { config });
+    const send = vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValue({
+      content: [{ type: 'text', text: '{"value":"ok"}' }],
+      stop_reason: 'end_turn',
+      usage: { input_tokens: 1, output_tokens: 1 },
+    } as Anthropic.Messages.Message);
+    const result = await provider.callApi('Hello');
+    expect(result.error).toBeUndefined();
+    expect(send.mock.calls[0][0]).toMatchObject({
+      tools: [{ name: 'ping', input_schema: { type: 'object', properties: {} } }],
+      output_config: { format },
+    });
+  } finally {
+    fs.rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+it('renders parsed Azure authoring fields without narrowing to SDK wire types', async () => {
+  const chat = new AzureChatCompletionProvider('gpt-4.1', {
+    config: AzureChatConfigInputSchema.parse({ functions: [{ name: 'ping' }], stop: 'END' }),
+  });
+  expect((await chat.getOpenAiBody('Hello')).body).toMatchObject({
+    functions: [{ name: 'ping' }],
+    stop: 'END',
+  });
+  const responses = new AzureResponsesProvider('gpt-6', {
+    config: AzureResponsesConfigInputSchema.parse({ reasoning: { summary: '{{ summary }}' } }),
+  });
+  expect(
+    await responses.getAzureResponsesBody('Hello', {
+      vars: { summary: 'auto' },
+      prompt: { raw: 'Hello', label: 'Hello' },
+    }),
+  ).toMatchObject({ reasoning: { summary: 'auto' } });
+});
+
+// Characterization only: these inherited request semantics need a separate behavior change.
+it('documents that Anthropic model selection still comes from the provider ID', async () => {
+  const config = AnthropicMessagesConfigInputSchema.parse({
+    apiKey: 'test-key',
+    model: 'different-model',
+  });
+  const provider = new AnthropicMessagesProvider('claude-3-5-sonnet-20241022', { config });
+  const send = vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValue({
+    content: [{ type: 'text', text: 'ok' }],
+    stop_reason: 'end_turn',
+    usage: { input_tokens: 1, output_tokens: 1 },
+  } as Anthropic.Messages.Message);
+  await provider.callApi('Hello');
+  expect(send.mock.calls[0][0].model).toBe('claude-3-5-sonnet-20241022');
+});
+
+it('documents that Azure Responses still omits a zero tool-call limit', async () => {
+  const config = AzureResponsesConfigInputSchema.parse({ max_tool_calls: 0 });
+  const provider = new AzureResponsesProvider('gpt-4.1', { config });
+  expect(await provider.getAzureResponsesBody('Hello')).not.toHaveProperty('max_tool_calls');
 });

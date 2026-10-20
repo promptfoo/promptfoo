@@ -7,6 +7,10 @@ import {
   resolveResponsesReasoningState,
 } from '../../../src/providers/openai/reasoning';
 
+import type {
+  AzureChatConfigInput,
+  AzureResponsesConfigInput,
+} from '../../../src/contracts/providerConfig/azure';
 import type { AzureResponsesOptions } from '../../../src/providers/azure/types';
 import type {
   GPT5Reasoning,
@@ -24,10 +28,10 @@ describe('reasoning configuration', () => {
       ReasoningEffort | undefined
     >();
     expectTypeOf<AzureResponsesOptions['reasoning_effort']>().toEqualTypeOf<
-      ReasoningEffort | undefined
+      AzureChatConfigInput['reasoning_effort']
     >();
     expectTypeOf<AzureResponsesOptions['reasoning']>().toEqualTypeOf<
-      Reasoning | null | undefined
+      AzureResponsesConfigInput['reasoning']
     >();
     expectTypeOf<GPT5ReasoningEffort>().toExtend<ReasoningEffort>();
     expectTypeOf<GPT5Reasoning>().toExtend<Reasoning>();

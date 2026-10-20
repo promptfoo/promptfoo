@@ -21,7 +21,7 @@ const ResponseFormat = z.looseObject({
     .looseObject({
       name: z.string().optional(),
       schema: z.record(z.string(), z.unknown()).optional(),
-      strict: z.boolean().optional(),
+      strict: z.boolean().nullable().optional(),
     })
     .optional(),
 });
