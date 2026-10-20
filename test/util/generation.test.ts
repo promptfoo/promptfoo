@@ -106,6 +106,26 @@ describe('sampleArray', () => {
     expect(result).toEqual([]);
   });
 
+  it.each([0, -1, -Infinity, NaN])(
+    'should return no items without shuffling for count %p',
+    (n) => {
+      const array = [1, 2, 3, 4, 5];
+      const random = vi.spyOn(Math, 'random');
+
+      expect(sampleArray(array, n)).toEqual([]);
+      expect(random).not.toHaveBeenCalled();
+      expect(array).toEqual([1, 2, 3, 4, 5]);
+    },
+  );
+
+  it('should return all items when n is Infinity', () => {
+    const array = [1, 2, 3];
+    const result = sampleArray(array, Infinity);
+
+    expect(result).toHaveLength(3);
+    expect(result).toEqual(expect.arrayContaining(array));
+  });
+
   it('should return a new array, not modifying the original', () => {
     const array = [1, 2, 3, 4, 5];
     const originalArray = [...array];
