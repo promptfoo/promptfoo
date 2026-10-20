@@ -694,3 +694,66 @@ describe('OpenAI local and provider-hosted MCP contracts', () => {
     expect(chatJson(hosted)).toBe(false);
   });
 });
+
+describe('hosted MCP portable compatibility', () => {
+  const validate = new Ajv({ strict: false }).compile(OpenAiResponsesConfigInputJsonSchema);
+  const base = { type: 'mcp', server_label: 'fixture' };
+
+  it.each([
+    { server_url: 'https://fixture.example.test/mcp' },
+    { connector_id: 'connector_googledrive' },
+    { tunnel_id: 'tunnel_fixture' },
+  ])('preserves deferred tools and explicit nulls with selector %j', (selector) => {
+    for (const defer_loading of [true, false]) {
+      const config = {
+        tools: [
+          {
+            ...base,
+            ...selector,
+            defer_loading,
+            allowed_tools: null,
+            headers: null,
+            require_approval: null,
+          },
+        ],
+      };
+      expect(OpenAiResponsesConfigInputSchema.parse(config)).toEqual(config);
+      expect(validate(config)).toBe(true);
+    }
+    const omitted = { tools: [{ ...base, ...selector }] };
+    expect(OpenAiResponsesConfigInputSchema.parse(omitted)).toEqual(omitted);
+    expect(validate(omitted)).toBe(true);
+  });
+
+  it.each([
+    { defer_loading: 'true' },
+    { allowed_tools: 1 },
+    { headers: { Authorization: 123 } },
+    { require_approval: 'sometimes' },
+    { future_field: true },
+  ])('rejects malformed or unknown typed fields: %j', (fields) => {
+    const config = {
+      tools: [{ ...base, server_url: 'https://fixture.example.test/mcp', ...fields }],
+    };
+    expect(OpenAiResponsesConfigInputSchema.safeParse(config).success).toBe(false);
+    expect(validate(config)).toBe(false);
+  });
+
+  it('requires a connection selector and preserves explicit passthrough extensions', () => {
+    expect(OpenAiResponsesConfigInputSchema.safeParse({ tools: [base] }).success).toBe(false);
+    expect(validate({ tools: [base] })).toBe(false);
+    const config = {
+      passthrough: {
+        tools: [
+          {
+            ...base,
+            server_url: 'https://fixture.example.test/mcp',
+            future_field: { nested: true },
+          },
+        ],
+      },
+    };
+    expect(OpenAiResponsesConfigInputSchema.parse(config)).toEqual(config);
+    expect(validate(config)).toBe(true);
+  });
+});

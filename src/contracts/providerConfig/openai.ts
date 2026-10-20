@@ -71,7 +71,8 @@ const McpToolFields = z.strictObject({
   tunnel_id: z.string().optional(),
   authorization: z.string().optional(),
   server_description: z.string().optional(),
-  headers: z.record(z.string(), z.string()).optional(),
+  defer_loading: z.boolean().optional(),
+  headers: z.record(z.string(), z.string()).nullable().optional(),
   allowed_tools: z
     .union([
       z.array(z.string()),
@@ -80,6 +81,7 @@ const McpToolFields = z.strictObject({
         read_only: z.boolean().optional(),
       }),
     ])
+    .nullable()
     .optional(),
   require_approval: z
     .union([
@@ -99,6 +101,7 @@ const McpToolFields = z.strictObject({
           .optional(),
       }),
     ])
+    .nullable()
     .optional(),
 });
 const McpTool = z.union([
