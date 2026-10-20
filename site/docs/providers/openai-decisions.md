@@ -198,3 +198,5 @@ npx promptfoo@latest init --example openai-decisions
 cd openai-decisions
 npx promptfoo@latest eval --no-cache -o results.json
 ```
+
+For shared value and confidence checks across decision providers, see [numeric assertions](/docs/configuration/expected-outputs/numeric/) and the [decision-assertions example](https://github.com/promptfoo/promptfoo/tree/main/examples/decision-assertions).
