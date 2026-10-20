@@ -1116,6 +1116,34 @@ async function runOptionalSdkChecks(
   }
 }
 
+async function runOptionalJksChecks(
+  consumerDir: string,
+  configDir: string,
+  npmEnv: NodeJS.ProcessEnv,
+  withOptionalDependencies: boolean,
+): Promise<void> {
+  const runChecks = async (state: string) => {
+    for (const format of ['esm', 'cjs']) {
+      console.log(
+        await runAsync(process.execPath, ['optional-jks.mjs', format, state], consumerDir, {
+          NODE_PATH: '',
+          NO_PROXY: '127.0.0.1,localhost',
+          no_proxy: '127.0.0.1,localhost',
+          PROMPTFOO_CONFIG_DIR: configDir,
+          PROMPTFOO_CACHE_ENABLED: 'false',
+          PROMPTFOO_DISABLE_TELEMETRY: '1',
+          PROMPTFOO_DISABLE_UPDATE: 'true',
+        }),
+      );
+    }
+  };
+  await runChecks('missing');
+  if (withOptionalDependencies) {
+    installConsumerPackages('install JKS support', ['jks-js@^1.1.5'], consumerDir, npmEnv);
+    await runChecks('installed');
+  }
+}
+
 async function runOptionalWatsonXChecks(
   consumerDir: string,
   configDir: string,
@@ -1562,6 +1590,9 @@ async function main(): Promise<void> {
         );
       }
     }
+    await timeAsyncPhase('check optional JKS support', () =>
+      runOptionalJksChecks(consumerDir, configDir, consumerNpmEnv, values.profile === 'default'),
+    );
     await timeAsyncPhase('optional coding SDKs', () =>
       runInstalledCodingSdkEval(
         consumerDir,
