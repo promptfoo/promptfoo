@@ -43,7 +43,9 @@ import { PromptSchema } from '../../validators/prompts';
 import { filterPrompts } from '../eval/filterPrompts';
 import { filterProviderConfigs, getProviderIdAndLabel } from '../eval/filterProviders';
 import { filterTests } from '../eval/filterTests';
+import { parseFileUrl } from '../functions/loadFunction';
 import { promptfooCommand } from '../promptfooCommand';
+import { loadProviderConfigsFromFile, normalizeProviderRef } from '../providerRef';
 import { preserveTracingCredentialReferences } from '../sanitizer';
 import {
   isRemoteTestsReference,
@@ -574,9 +576,12 @@ async function readTestSources(
 }
 
 /** Combines declarative config and keeps each test source's directory for loading and watch. */
-async function prepareCombinedConfig(
-  configPaths: string[],
-): Promise<{ config: UnifiedConfig; testSources: TestSource[]; promptBasePaths: string[] }> {
+async function prepareCombinedConfig(configPaths: string[]): Promise<{
+  config: UnifiedConfig;
+  testSources: TestSource[];
+  promptBasePaths: string[];
+  providerBasePaths: ReadonlyMap<string, string>;
+}> {
   const configSources: { config: UnifiedConfig; basePath: string }[] = [];
   for (const configPath of configPaths) {
     const resolvedPath = path.resolve(process.cwd(), configPath);
@@ -598,25 +603,46 @@ async function prepareCombinedConfig(
 
   const configs = configSources.map(({ config }) => config);
   const combinedEnv = configs.reduce((env, config) => ({ ...env, ...config.env }), {});
+  const resolveConfigPath = (basePath: string, reference: string): string => {
+    if (reference.includes('{{')) {
+      reference = cliState.withEnv(combinedEnv, () => renderEnvOnlyInObject(reference));
+    }
+    if (reference.includes('{{') || isRemoteTestsReference(reference)) {
+      return reference;
+    }
+    const prefix = reference.startsWith('file://') ? 'file://' : '';
+    return prefix + path.resolve(basePath, reference.slice(prefix.length));
+  };
+
   const providers: UnifiedConfig['providers'] = [];
+  const providerBasePaths = new Map<string, string>();
   const seenProviders = new Set<unknown>();
   const functionIds = new Map<Function, number>();
-  configs.forEach((config) => {
+  configSources.forEach(({ config, basePath }) => {
     invariant(
       typeof config.providers !== 'function',
       'Providers cannot be a function for multiple configs',
     );
-    if (typeof config.providers === 'string') {
-      if (!seenProviders.has(config.providers)) {
-        providers.push(config.providers);
-        seenProviders.add(config.providers);
-      }
-    } else if (Array.isArray(config.providers)) {
-      config.providers.forEach((provider) => {
-        const key = providerDedupeKey(provider, functionIds);
+    const configProviders =
+      typeof config.providers === 'string' ? [config.providers] : config.providers;
+    if (Array.isArray(configProviders)) {
+      configProviders.forEach((provider) => {
+        const descriptor =
+          configSources.length > 1 && typeof provider === 'string'
+            ? normalizeProviderRef(provider)
+            : undefined;
+        const scopedProvider =
+          descriptor?.kind === 'file' &&
+          !path.isAbsolute(descriptor.loadProviderPath.slice('file://'.length))
+            ? resolveConfigPath(basePath, descriptor.loadProviderPath)
+            : provider;
+        const key = providerDedupeKey(scopedProvider, functionIds);
         if (!seenProviders.has(key)) {
-          providers.push(provider);
+          providers.push(scopedProvider);
           seenProviders.add(key);
+          if (descriptor?.kind === 'file' && typeof scopedProvider === 'string') {
+            providerBasePaths.set(scopedProvider, basePath);
+          }
         }
       });
     }
@@ -668,17 +694,6 @@ async function prepareCombinedConfig(
 
   let prompts: UnifiedConfig['prompts'] = configsAreStringOrArray ? [] : {};
   const promptBasePaths = new Map<string | Prompt, string>();
-
-  const resolveConfigPath = (basePath: string, reference: string): string => {
-    if (reference.includes('{{')) {
-      reference = cliState.withEnv(combinedEnv, () => renderEnvOnlyInObject(reference));
-    }
-    if (reference.includes('{{') || isRemoteTestsReference(reference)) {
-      return reference;
-    }
-    const prefix = reference.startsWith('file://') ? 'file://' : '';
-    return prefix + path.resolve(basePath, reference.slice(prefix.length));
-  };
 
   const resolveNestedFileReferences = (basePath: string, value: unknown): unknown => {
     if (typeof value === 'string') {
@@ -911,6 +926,7 @@ async function prepareCombinedConfig(
 
   return {
     config: combinedConfig,
+    providerBasePaths,
     promptBasePaths: (Array.isArray(prompts) ? prompts : Object.keys(prompts)).map(
       (prompt) => promptBasePaths.get(prompt as string | Prompt) ?? configSources[0].basePath,
     ),
@@ -940,6 +956,7 @@ export async function resolveConfigs(
   let fileConfig: Partial<UnifiedConfig> = {};
   let testSources: TestSource[] | undefined;
   let promptBasePaths: string[] | undefined;
+  let providerBasePaths: ReadonlyMap<string, string> | undefined;
   let defaultConfig = _defaultConfig;
   const configPaths = cmdObj.config;
   let promptReferenceSources: PromptReferenceSource[] = [];
@@ -947,6 +964,7 @@ export async function resolveConfigs(
     const prepared = await prepareCombinedConfig(configPaths);
     fileConfig = prepared.config;
     promptBasePaths = prepared.promptBasePaths;
+    providerBasePaths = prepared.providerBasePaths;
     testSources = cmdObj.tests || cmdObj.vars || cmdObj.assertions ? [] : prepared.testSources;
     promptReferenceSources = await readPromptReferenceSources(configPaths);
     // The user has provided a config file, so we do not want to use the default config.
@@ -963,6 +981,7 @@ export async function resolveConfigs(
           type,
           testSources,
           promptBasePaths,
+          providerBasePaths,
         ),
       ),
     ),
@@ -1000,6 +1019,7 @@ async function resolveLoadedConfig(
   type?: 'DatasetGeneration' | 'AssertionGeneration',
   testSources?: TestSource[],
   promptBasePaths?: string[],
+  providerBasePaths?: ReadonlyMap<string, string>,
 ) {
   const configPaths = cmdObj.config;
   // Standalone assertion mode
@@ -1157,7 +1177,30 @@ async function resolveLoadedConfig(
   // 1. Loading per-instance `prompts` filters from external files (#1307)
   // 2. Filtering by resolved provider ids/labels (not just file paths)
   // 3. Avoiding double file I/O (files are read once here, not again in loadApiProviders)
-  const resolvedProviderConfigs = resolveProviderConfigs(config.providers, { basePath });
+  const scopedProviderConfigs = config.providers.flatMap((provider) => {
+    const sourceBasePath =
+      typeof provider === 'string' ? providerBasePaths?.get(provider) : undefined;
+    if (sourceBasePath === undefined || typeof provider !== 'string') {
+      return [provider];
+    }
+    return loadProviderConfigsFromFile(provider, sourceBasePath).map((fileProvider) => {
+      let transform = fileProvider.transform;
+      if (typeof transform === 'string' && transform.startsWith('file://')) {
+        const { filePath, functionName } = parseFileUrl(transform);
+        if (!path.isAbsolute(filePath)) {
+          transform = `file://${path.resolve(sourceBasePath, filePath)}${
+            functionName === undefined ? '' : `:${functionName}`
+          }`;
+        }
+      }
+      return {
+        ...fileProvider,
+        transform,
+        config: { basePath: sourceBasePath, ...fileProvider.config },
+      };
+    });
+  });
+  const resolvedProviderConfigs = resolveProviderConfigs(scopedProviderConfigs, { basePath });
 
   // When --providers flag is used, match CLI tokens against resolved providers
   // (after file:// expansion) so that file-based provider configs are also matched.
