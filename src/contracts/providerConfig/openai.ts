@@ -283,7 +283,7 @@ const NestedResponseFormat = z.strictObject({
   json_schema: z.strictObject({
     name: z.string(),
     description: z.string().optional(),
-    strict: z.boolean().optional(),
+    strict: z.boolean().nullable().optional(),
     schema: SchemaDocument,
   }),
 });

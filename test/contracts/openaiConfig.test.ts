@@ -757,3 +757,27 @@ describe('hosted MCP portable compatibility', () => {
     expect(validate(config)).toBe(true);
   });
 });
+
+it('preserves nullable Chat response-format strictness in both portable schemas', () => {
+  const config = {
+    response_format: {
+      type: 'json_schema',
+      json_schema: {
+        name: 'result',
+        schema: schemaDocument,
+        strict: null,
+      },
+    },
+  };
+  expect(OpenAiChatConfigInputSchema.parse(config)).toEqual(config);
+  const validate = new Ajv({ strict: false }).compile(OpenAiChatConfigInputJsonSchema);
+  expect(validate(config)).toBe(true);
+  const invalid = {
+    response_format: {
+      ...config.response_format,
+      json_schema: { ...config.response_format.json_schema, strict: 'false' },
+    },
+  };
+  expect(OpenAiChatConfigInputSchema.safeParse(invalid).success).toBe(false);
+  expect(validate(invalid)).toBe(false);
+});

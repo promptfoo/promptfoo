@@ -449,3 +449,28 @@ describe('hosted MCP request serialization', () => {
     expect(JSON.parse(JSON.stringify(body)).tools).toEqual(tools);
   });
 });
+
+it.each(['inline', 'file'] as const)(
+  'preserves %s Chat response-format strict:null through callApi',
+  async (source) => {
+    const format = {
+      type: 'json_schema',
+      json_schema: {
+        name: 'result',
+        strict: null,
+        schema: { type: 'object', properties: { value: { type: 'string' } } },
+      },
+    };
+    const config = OpenAiChatConfigInputSchema.parse({
+      apiKey: 'fixture-key',
+      response_format: source === 'file' ? fixture('nullable-format.json', format) : format,
+    });
+    const provider = new OpenAiChatCompletionProvider('gpt-4.1', { config });
+    vi.mocked(fetchWithCache).mockResolvedValue(chatResponse('{"value":"ok"}'));
+    const result = await provider.callApi('fixture');
+    expect(result.error).toBeUndefined();
+    expect(result.output).toEqual({ value: 'ok' });
+    const request = JSON.parse(vi.mocked(fetchWithCache).mock.calls[0][1]?.body as string);
+    expect(request.response_format).toEqual(format);
+  },
+);
