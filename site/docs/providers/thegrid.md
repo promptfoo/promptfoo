@@ -100,13 +100,13 @@ The Grid AI is market-priced, so a per-token rate moves and `/v1/models` can ser
 
 ## Troubleshooting
 
-| Symptom                                    | Fix                                                                                                                      |
-| ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------ |
+| Symptom                                       | Fix                                                                                                                      |
+| --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
 | Promptfoo calls OpenAI instead of The Grid AI | Set `apiBaseUrl` on the provider. `OPENAI_API_HOST` and `OPENAI_API_BASE_URL` both take priority over `OPENAI_BASE_URL`. |
-| `401` mentioning `THEGRID_API_KEY_NOT_SET` | `THEGRID_API_KEY` is unset or blank. The sentinel did its job; export a real key.                                        |
-| Empty or truncated output                  | Reasoning tokens consumed the budget. Raise `max_tokens`.                                                                |
-| Judge returns `Could not extract JSON`     | Set `showThinking: false` on the judge provider.                                                                         |
-| Cost shows as unknown                      | Expected; see Cost reporting above.                                                                                      |
+| `401` mentioning `THEGRID_API_KEY_NOT_SET`    | `THEGRID_API_KEY` is unset or blank. The sentinel did its job; export a real key.                                        |
+| Empty or truncated output                     | Reasoning tokens consumed the budget. Raise `max_tokens`.                                                                |
+| Judge returns `Could not extract JSON`        | Set `showThinking: false` on the judge provider.                                                                         |
+| Cost shows as unknown                         | Expected; see Cost reporting above.                                                                                      |
 
 ## See also
 
