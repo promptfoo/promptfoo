@@ -614,6 +614,8 @@ Legacy - please use is-valid-function-call instead. This ensures that any JSON L
 
 This ensures that any JSON LLM output adheres to the schema specified in the `tools` configuration of the provider. Learn more about the [OpenAI provider](/docs/providers/openai/#tool-calling).
 
+OpenAI function definitions can omit `parameters` for functions that take no arguments. The function-call and tools-call assertions require an empty argument object (`{}`) for those functions.
+
 **MCP Support**: This assertion also validates MCP (Model Context Protocol) tool calls when using OpenAI's Responses API. It will:
 
 - Pass if MCP tool calls succeed (output contains "MCP Tool Result")

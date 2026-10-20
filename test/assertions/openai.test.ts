@@ -1240,6 +1240,42 @@ describe('OpenAI assertions', () => {
         providerResponse: { output },
       });
 
+    describe.each(['is-valid-function-call', 'is-valid-openai-tools-call'] as const)(
+      '%s with omitted parameters',
+      (type) => {
+        it.each([
+          { call: toolCall, valid: true },
+          { call: { name: 'ping', arguments: '{}' }, valid: true },
+          { call: { name: 'ping', arguments: '{"unexpected":true}' }, valid: false },
+          { call: { name: 'ping', arguments: 'null' }, valid: false },
+          { call: { name: 'ping', arguments: '[]' }, valid: false },
+          { call: { name: 'unknown', arguments: '{}' }, valid: false },
+        ])('grades $call with an available parameterless function', async ({ call, valid }) => {
+          const functions: OpenAiTool['function'][] = [
+            createTemperatureFunction(),
+            { name: 'ping' },
+          ];
+          const provider = new OpenAiChatCompletionProvider('test-provider', {
+            config: {
+              functions,
+              tools: functions.map((definition) => ({ type: 'function', function: definition })),
+            },
+          });
+          const output =
+            type === 'is-valid-function-call' ? call : [{ type: 'function', function: call }];
+
+          await expect(run(type, output, provider)).resolves.toMatchObject({
+            pass: valid,
+            score: valid ? 1 : 0,
+          });
+          await expect(run(`not-${type}`, output, provider)).resolves.toMatchObject({
+            pass: !valid,
+            score: valid ? 0 : 1,
+          });
+        });
+      },
+    );
+
     it.each([
       ['not-is-valid-openai-tools-call', 'It is sunny.', true, 'Assertion passed'],
       [
@@ -1331,7 +1367,7 @@ describe('OpenAI assertions', () => {
       });
     });
 
-    it.each([null, {}, { name: 42 }, { name: 'getCurrentTemperature' }])(
+    it.each([null, {}, { name: 42 }, { name: 'getCurrentTemperature', parameters: null }])(
       'keeps malformed function definitions from passing negation: %j',
       async (definition) => {
         const provider = new OpenAiChatCompletionProvider('test-provider', {

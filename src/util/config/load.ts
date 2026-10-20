@@ -218,7 +218,7 @@ export async function dereferenceConfig(rawConfig: UnifiedConfig): Promise<Unifi
     parametersList: { parameters?: object }[],
   ) => {
     functions.forEach((func, index) => {
-      if (parametersList[index]?.parameters) {
+      if (parametersList[index]?.parameters !== undefined) {
         func.parameters = parametersList[index].parameters;
       }
     });
