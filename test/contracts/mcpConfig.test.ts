@@ -1,7 +1,12 @@
+import childProcess from 'node:child_process';
+import fs from 'node:fs';
+
 import Ajv from 'ajv';
-import { describe, expect, expectTypeOf, it, vi } from 'vitest';
+import { afterEach, describe, expect, expectTypeOf, it, vi } from 'vitest';
 import { z } from 'zod';
 import {
+  McpClientConfigInputJsonSchema,
+  McpClientConfigInputSchema,
   McpConfigInputJsonSchema,
   McpConfigInputSchema,
   McpConfigSchema,
@@ -9,12 +14,15 @@ import {
 } from '../../src/contracts';
 
 import type {
+  McpClientConfigInput,
   McpConfig,
   McpConfigInput,
   McpConfigParsed,
   McpServerInput,
 } from '../../src/contracts';
 import type { MCPConfig } from '../../src/providers/mcp/types';
+
+afterEach(() => vi.restoreAllMocks());
 
 const oauth = { type: 'oauth', clientId: '{{ CLIENT_ID }}', clientSecret: '{{ CLIENT_SECRET }}' };
 const valid: unknown[] = [
@@ -283,5 +291,144 @@ describe('MCP configuration contracts', () => {
     expectTypeOf<{
       server: { url: string; auth: { type: 'api_key' } };
     }>().not.toExtend<McpConfigInput>();
+  });
+});
+
+describe('MCP client and standalone authoring boundaries', () => {
+  const clientJson = new Ajv({ strict: true }).compile(McpClientConfigInputJsonSchema);
+  const providerJson = new Ajv({ strict: true }).compile(McpConfigInputJsonSchema);
+
+  it('composes standalone fields from the closed client contract', () => {
+    expect(Object.keys(McpClientConfigInputSchema.shape).sort()).toEqual(
+      [
+        'debug',
+        'enabled',
+        'exclude_tools',
+        'maxTotalTimeout',
+        'pingOnConnect',
+        'resetTimeoutOnProgress',
+        'server',
+        'servers',
+        'timeout',
+        'tools',
+        'verbose',
+      ].sort(),
+    );
+    const client = {
+      servers: [{ command: 'fixture', args: ['--mode', 'test'] }],
+      timeout: 0,
+      tools: ['lookup'],
+      exclude_tools: ['delete'],
+      debug: false,
+    };
+    expect(McpClientConfigInputSchema.parse(client)).toEqual(client);
+    expect(clientJson(client)).toBe(true);
+    expect(McpConfigInputSchema.parse(client)).toEqual(client);
+    expect(providerJson(client)).toBe(true);
+    expect(McpClientConfigInputSchema.parse({})).toEqual({});
+  });
+
+  it.each([
+    { defaultArgs: { session: 'standalone' } },
+    { transformResponse: '({ output: content })' },
+    { responseParser: 'file://parser.js' },
+    { serverName: 'metadata' },
+  ])('keeps provider-owned fields out of client config: %j', (input) => {
+    expect(McpClientConfigInputSchema.safeParse(input).success).toBe(false);
+    expect(clientJson(input)).toBe(false);
+    expect(McpConfigInputSchema.parse(input)).toEqual(input);
+    expect(providerJson(input)).toBe(true);
+  });
+
+  it('preserves arbitrary JSON defaults without coercion', () => {
+    const input = {
+      defaultArgs: {
+        session: 'id',
+        count: 0,
+        enabled: false,
+        nested: [null, { items: [1, 'x', true] }],
+      },
+    };
+    expect(McpConfigInputSchema.parse(input)).toEqual(input);
+    expect(providerJson(input)).toBe(true);
+    expect(JSON.parse(JSON.stringify(McpConfigInputSchema.parse(input)))).toEqual(input);
+  });
+
+  it.each([
+    ['bigint', 1n],
+    ['function', () => 'unused'],
+    ['undefined', undefined],
+    ['symbol', Symbol('unused')],
+    ['NaN', Number.NaN],
+    ['infinity', Number.POSITIVE_INFINITY],
+  ])(
+    'rejects non-JSON defaults in authoring while preserving runtime compatibility: %s',
+    (_name, value) => {
+      const input = { defaultArgs: { nested: { value } } };
+      expect(McpConfigInputSchema.safeParse(input).success).toBe(false);
+      expect(providerJson(input)).toBe(false);
+      expect(McpConfigSchema.parse(input).defaultArgs).toEqual(input.defaultArgs);
+    },
+  );
+
+  it('parses without loading files, starting processes, fetching credentials, or resolving templates', () => {
+    const read = vi.spyOn(fs, 'readFileSync').mockImplementation(() => {
+      throw new Error('unexpected read');
+    });
+    const spawn = vi.spyOn(childProcess, 'spawn').mockImplementation(() => {
+      throw new Error('unexpected spawn');
+    });
+    const fetch = vi.spyOn(globalThis, 'fetch').mockImplementation(() => {
+      throw new Error('unexpected fetch');
+    });
+    const client = {
+      server: {
+        command: 'must-not-run',
+        path: './must-not-read.py',
+        url: 'https://must-not-fetch.example.test',
+        auth: {
+          type: 'oauth' as const,
+          clientId: '{{ env.CLIENT_ID }}',
+          clientSecret: '{{ env.CLIENT_SECRET }}',
+        },
+      },
+    };
+    expect(McpClientConfigInputSchema.parse(client)).toEqual(client);
+    const provider = {
+      ...client,
+      transformResponse: 'file://must-not-read.mjs',
+      defaultArgs: { key: '{{ env.SECRET }}' },
+    };
+    expect(McpConfigInputSchema.parse(provider)).toEqual(provider);
+    expect(McpConfigSchema.parse(provider).transformResponse).toBe(provider.transformResponse);
+    expect(read).not.toHaveBeenCalled();
+    expect(spawn).not.toHaveBeenCalled();
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it('infers portable client/default types and preserves the runtime alias', () => {
+    expectTypeOf<McpClientConfigInput>().toEqualTypeOf<
+      z.input<typeof McpClientConfigInputSchema>
+    >();
+    expectTypeOf<
+      Extract<
+        keyof McpClientConfigInput,
+        'defaultArgs' | 'responseParser' | 'transformResponse' | 'serverName'
+      >
+    >().toBeNever();
+    expectTypeOf<{ defaultArgs: { value: bigint } }>().not.toExtend<McpConfigInput>();
+    expectTypeOf<{ defaultArgs: { value: () => void } }>().not.toExtend<McpConfigInput>();
+    expectTypeOf<MCPConfig>().toEqualTypeOf<McpConfig>();
+    expectTypeOf<McpConfig['defaultArgs']>().toEqualTypeOf<Record<string, unknown> | undefined>();
+  });
+
+  it('exports the client JSON Schema without unrepresentable fallbacks', () => {
+    expect(
+      z.toJSONSchema(McpClientConfigInputSchema, {
+        target: 'draft-07',
+        io: 'input',
+        unrepresentable: 'throw',
+      }),
+    ).toEqual(McpClientConfigInputJsonSchema);
   });
 });
