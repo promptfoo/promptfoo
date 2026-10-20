@@ -1086,7 +1086,7 @@ describe('HttpProvider', () => {
       const secondHeaders = 'Content-Disposition: form-data; name="second"\n\n';
       const epilogue = ' \ntrailing\r\n\t ';
       const wholeBody = `--fixture\n${headers}${payload}\n--fixture--\n`;
-      let body = wholeBody;
+      let body: string;
       const part = {
         open: '--fixture\n',
         close: '--fixture--\n',
