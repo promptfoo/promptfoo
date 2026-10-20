@@ -27,6 +27,15 @@ describe('ellipsize', () => {
     expect(ellipsize('hello', -5)).toBe('');
   });
 
+  it('does not split emoji surrogate pairs at truncation boundaries', () => {
+    expect(ellipsize('😀hello', 1)).toBe('');
+    expect(ellipsize('😀hello', 2)).toBe('😀');
+    expect(ellipsize('😀hello', 4)).toBe('...');
+    expect(ellipsize('😀hello', 5)).toBe('😀...');
+    expect(ellipsize('A😀BCDE', 5)).toBe('A...');
+    expect(ellipsize('A😀BCDE', 6)).toBe('A😀...');
+  });
+
   it('should handle empty string', () => {
     expect(ellipsize('', 5)).toBe('');
   });
