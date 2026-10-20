@@ -423,9 +423,9 @@ describe('getNunjucksEngine', () => {
         expect(getProcessEnv().ANTHROPIC_API_KEY).toBeUndefined();
         const engine = getNunjucksEngine();
         expect(
-          engine.renderString('leak {{ env.OPENAI_API_KEY }} {{ env["ANTHROPIC_API_KEY"] }}'),
+          engine.renderString('leak {{ env.OPENAI_API_KEY }} {{ env["ANTHROPIC_API_KEY"] }}', {}),
         ).toBe('leak caller-owned-key ');
-        expect(engine.renderString('{{ env.PROMPTFOO_AUTHOR }}')).toBe('caller');
+        expect(engine.renderString('{{ env.PROMPTFOO_AUTHOR }}', {})).toBe('caller');
         expect(Object.keys(engine.getGlobal('env')).sort()).toEqual([
           'OPENAI_API_KEY',
           'PROMPTFOO_AUTHOR',
