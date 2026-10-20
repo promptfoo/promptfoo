@@ -389,6 +389,7 @@ export class PromptfooChatCompletionProvider implements ApiProvider {
             typeof data?.error === 'string' && data.error
               ? data.error
               : `API call error: ${String(err)}`,
+          metadata: { rateLimitKind: err.kind },
           ...(data?.isRefusal === true ? { isRefusal: true } : {}),
           ...(parsedTokenUsage.success ? { tokenUsage: parsedTokenUsage.data } : {}),
         };

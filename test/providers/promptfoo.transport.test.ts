@@ -5,6 +5,7 @@ import {
   PromptfooChatCompletionProvider,
   PromptfooHarmfulCompletionProvider,
 } from '../../src/providers/promptfoo';
+import { isProviderResponseRateLimited } from '../../src/scheduler/types';
 import { clearAgentCache, fetchWithRetries } from '../../src/util/fetch/index';
 import { mockProcessEnv, PROXY_ENV_KEYS } from '../util/utils';
 
@@ -261,6 +262,7 @@ describe('chat completion rate-limit responses through the transport', () => {
         error: hasRemoteError
           ? 'Remote request limit reached'
           : 'API call error: HttpRateLimitError: Rate limit exceeded: HTTP 429 Too Many Requests',
+        metadata: { rateLimitKind: 'rate_limit' },
         isRefusal: true,
         tokenUsage,
       });
@@ -287,11 +289,48 @@ describe('chat completion rate-limit responses through the transport', () => {
     expect(fetch).toHaveBeenCalledTimes(1);
     expect(result).toEqual({
       error: 'Remote credits exhausted',
+      metadata: { rateLimitKind: 'quota' },
       isRefusal: true,
       tokenUsage,
     });
     expect(result.output).toBeUndefined();
   });
+
+  it.each([
+    {
+      kind: 'rate_limit',
+      error: 'Please try later',
+      code: 'rate_limit_exceeded',
+      retryable: true,
+      attempts: 5,
+    },
+    {
+      kind: 'quota',
+      error: 'Rate limit reached: credits exhausted',
+      code: 'credit_balance_exhausted',
+      retryable: false,
+      attempts: 1,
+    },
+  ])(
+    'preserves scheduler classification for $kind regardless of remote error wording',
+    async ({ kind, error, code, retryable, attempts }) => {
+      vi.mocked(fetch).mockImplementation(async () => {
+        return new Response(JSON.stringify({ error, code, tokenUsage }), {
+          status: 429,
+          headers: { 'Retry-After': '1' },
+        });
+      });
+
+      const pending = provider.callApi('test prompt');
+      await vi.runAllTimersAsync();
+      const result = await pending;
+
+      expect(fetch).toHaveBeenCalledTimes(attempts);
+      expect(result.error).toBe(error);
+      expect(isProviderResponseRateLimited(result, undefined)).toBe(retryable);
+      expect(result.metadata).toMatchObject({ rateLimitKind: kind });
+    },
+  );
 
   it('returns the eventual successful result after a transient 429', async () => {
     vi.mocked(fetch)
