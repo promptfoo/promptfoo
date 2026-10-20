@@ -6,6 +6,8 @@ Compare OpenAI Codex SDK, Claude Agent SDK, and OpenCode SDK on a security audit
 
 ```bash
 npx promptfoo@latest init --example compare-agentic-sdks
+cd compare-agentic-sdks
+npm install promptfoo @openai/codex-sdk@^0.156.1 @anthropic-ai/claude-agent-sdk@^0.3.273
 npx promptfoo eval
 npx promptfoo view
 ```
@@ -41,7 +43,7 @@ The vulnerable code lives in the [test-codebase](./test-codebase/) directory.
 
 **Codex SDK** returns structured JSON matching the schema. Fast, predictable, good for automation. OpenAI only.
 
-**Claude Agent SDK** uses file system tools to explore, returns natural language. More flexible, shows reasoning. Anthropic only.
+**Claude Agent SDK** uses file system tools to explore, returns natural language. More flexible, shows reasoning. Runs on the Anthropic API, Amazon Bedrock, or Google Vertex.
 
 **OpenCode SDK** uses file system tools similar to Claude Agent SDK, but supports 75+ LLM providers including Anthropic, OpenAI, Google, Ollama (local), and more.
 

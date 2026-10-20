@@ -11,9 +11,9 @@ import {
   type MockInstance,
   vi,
 } from 'vitest';
+import { createLoggerModule } from './factories/logger';
 import { mockProcessEnv } from './util/utils';
-import type { Logger } from 'winston';
-import type Transport from 'winston-transport';
+import type { Logger, transport as Transport } from 'winston';
 
 // Create hoisted mocks
 const { mockGetEnvString, mockGetEnvBool, mockGetConfigDirectoryPath, fsMock, mockLogger } =
@@ -134,6 +134,11 @@ describe('logger', () => {
     mockGetEnvBool.mockImplementation((_, defaultValue) => defaultValue);
     mockGetConfigDirectoryPath.mockReset();
     mockGetConfigDirectoryPath.mockReturnValue('/mock/config');
+    winstonMock.transports.File.mockReset().mockImplementation(function (this: {
+      write: ReturnType<typeof vi.fn>;
+    }) {
+      this.write = vi.fn();
+    });
     for (const fn of Object.values(fsMock)) {
       (fn as Mock).mockReset();
     }
@@ -826,9 +831,6 @@ describe('logger', () => {
       expect(logger.getLoggerShuttingDown()).toBe(true);
       // Verify winstonLogger.end() was called for proper stream draining
       expect(mockLogger.end).toHaveBeenCalled();
-      // Verify error handler was attached for "write after end" protection
-      expect(mockTransport.on).toHaveBeenCalledWith('error', expect.any(Function));
-      expect(mockTransport.off).toHaveBeenCalledWith('error', expect.any(Function));
       logger.setLoggerShuttingDown(false);
     });
 
@@ -867,47 +869,6 @@ describe('logger', () => {
       // Should not throw
       await expect(logger.closeLogger()).resolves.not.toThrow();
 
-      logger.setLoggerShuttingDown(false);
-    });
-
-    it('should catch write after end errors during shutdown', async () => {
-      const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-      let errorHandler: ((err: Error) => void) | undefined;
-
-      const mockTransport = {
-        filename: '/mock/path/test.log',
-        once: vi.fn((event: string, callback: () => void) => {
-          if (event === 'finish') {
-            setImmediate(callback);
-          }
-        }),
-        on: vi.fn((event: string, handler: (err: Error) => void) => {
-          if (event === 'error') {
-            errorHandler = handler;
-          }
-        }),
-        off: vi.fn(),
-        end: vi.fn(),
-      };
-
-      Object.setPrototypeOf(mockTransport, winstonMock.transports.File.prototype);
-
-      mockLogger.transports.length = 0;
-      mockLogger.transports.push(mockTransport as any);
-
-      const closePromise = logger.closeLogger();
-
-      // Simulate "write after end" error during shutdown
-      if (errorHandler) {
-        errorHandler(new Error('write after end'));
-      }
-
-      await closePromise;
-
-      // The error should be silently handled, not logged to console
-      expect(consoleErrorSpy).not.toHaveBeenCalled();
-
-      consoleErrorSpy.mockRestore();
       logger.setLoggerShuttingDown(false);
     });
 
@@ -1328,20 +1289,10 @@ describe('logger', () => {
   });
 
   describe('setStructuredLogging with custom logger', () => {
-    let customLogger: {
-      debug: ReturnType<typeof vi.fn>;
-      info: ReturnType<typeof vi.fn>;
-      warn: ReturnType<typeof vi.fn>;
-      error: ReturnType<typeof vi.fn>;
-    };
+    let customLogger: ReturnType<typeof createLoggerModule>['default'];
 
     beforeEach(() => {
-      customLogger = {
-        debug: vi.fn(),
-        info: vi.fn(),
-        warn: vi.fn(),
-        error: vi.fn(),
-      };
+      customLogger = createLoggerModule().default;
       // Set custom logger to bypass default createLogMethod wrappers
       logger.setLogger(customLogger);
     });
@@ -1379,6 +1330,22 @@ describe('logger', () => {
       expect(call).toContain('123');
     });
 
+    it.each(['debug', 'info', 'warn', 'error'] as const)(
+      'preserves the caller message for custom %s logging',
+      (level) => {
+        logger.setStructuredLogging(true);
+        const context = { message: 'Context message', requestId: 'request-123' };
+
+        logger.default[level]('Caller message', context);
+
+        expect(customLogger[level]).toHaveBeenCalledWith({
+          message: 'Caller message',
+          requestId: 'request-123',
+        });
+        expect(context.message).toBe('Context message');
+      },
+    );
+
     it('should include all context fields in structured output', () => {
       logger.setStructuredLogging(true);
 
@@ -1411,20 +1378,10 @@ describe('logger', () => {
   });
 
   describe('setLogger', () => {
-    let customLogger: {
-      debug: ReturnType<typeof vi.fn>;
-      info: ReturnType<typeof vi.fn>;
-      warn: ReturnType<typeof vi.fn>;
-      error: ReturnType<typeof vi.fn>;
-    };
+    let customLogger: ReturnType<typeof createLoggerModule>['default'];
 
     beforeEach(() => {
-      customLogger = {
-        debug: vi.fn(),
-        info: vi.fn(),
-        warn: vi.fn(),
-        error: vi.fn(),
-      };
+      customLogger = createLoggerModule().default;
     });
 
     afterEach(() => {
@@ -1470,12 +1427,7 @@ describe('logger', () => {
 
     it('should work with winston-style loggers that accept objects', () => {
       // Simulate a winston-style logger that handles object arguments
-      const winstonStyleLogger = {
-        debug: vi.fn(),
-        info: vi.fn(),
-        warn: vi.fn(),
-        error: vi.fn(),
-      };
+      const winstonStyleLogger = createLoggerModule().default;
 
       logger.setLogger(winstonStyleLogger);
       logger.setStructuredLogging(true);
@@ -1491,12 +1443,7 @@ describe('logger', () => {
 
   describe('logRequestResponse with structured logging', () => {
     let mockResponse: Partial<Response>;
-    let customLogger: {
-      debug: ReturnType<typeof vi.fn>;
-      info: ReturnType<typeof vi.fn>;
-      warn: ReturnType<typeof vi.fn>;
-      error: ReturnType<typeof vi.fn>;
-    };
+    let customLogger: ReturnType<typeof createLoggerModule>['default'];
 
     beforeEach(() => {
       mockResponse = {
@@ -1507,12 +1454,7 @@ describe('logger', () => {
           text: vi.fn().mockResolvedValue('{"success": true}'),
         }),
       };
-      customLogger = {
-        debug: vi.fn(),
-        info: vi.fn(),
-        warn: vi.fn(),
-        error: vi.fn(),
-      };
+      customLogger = createLoggerModule().default;
       // Set custom logger to test structured logging behavior
       logger.setLogger(customLogger);
     });

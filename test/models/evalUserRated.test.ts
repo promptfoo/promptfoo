@@ -5,8 +5,10 @@ import { runDbMigrations } from '../../src/migrate';
 import { queryTestIndicesOptimized } from '../../src/models/evalPerformance';
 import { ResultFailureReason } from '../../src/types/index';
 import EvalFactory from '../factories/evalFactory';
+import { createFilterTestResult } from '../factories/evalFilter';
+import { clearEvalTables } from '../util/evalDb';
 
-import type { EvaluateResult, GradingResult } from '../../src/types/index';
+import type { GradingResult } from '../../src/types/index';
 
 /**
  * Helper to create a GradingResult with a human rating assertion.
@@ -63,15 +65,8 @@ describe('User-Rated Filter Feature', () => {
     await runDbMigrations();
   });
 
-  beforeEach(async () => {
-    // Clear all tables before each test
-    const db = getDb();
-    await db.run('DELETE FROM eval_results');
-    await db.run('DELETE FROM evals_to_datasets');
-    await db.run('DELETE FROM evals_to_prompts');
-    await db.run('DELETE FROM evals_to_tags');
-    await db.run('DELETE FROM evals');
-  });
+  // Clear eval tables before each test
+  beforeEach(() => clearEvalTables());
 
   describe('Eval.queryTestIndices user-rated filter', () => {
     it('should return only user-rated results when filterMode is user-rated', async () => {
@@ -87,28 +82,16 @@ describe('User-Rated Filter Feature', () => {
       ];
 
       for (const result of results) {
-        await eval_.addResult({
-          description: `test-${result.testIdx}`,
-          promptIdx: 0,
-          testIdx: result.testIdx,
-          testCase: { vars: { test: `value${result.testIdx}` } },
-          promptId: 'test-prompt',
-          provider: { id: 'test-provider', label: 'test-label' },
-          prompt: { raw: 'Test prompt', label: 'Test prompt' },
-          vars: { test: `value${result.testIdx}` },
-          response: { output: `Response ${result.testIdx}` },
-          error: null,
-          failureReason: result.pass ? ResultFailureReason.NONE : ResultFailureReason.ASSERT,
-          success: result.pass,
-          score: result.pass ? 1 : 0,
-          latencyMs: 100,
-          gradingResult: result.hasHumanRating
-            ? createHumanRatedGradingResult(result.pass, result.pass ? 1 : 0, 'User rated')
-            : createRegularGradingResult(result.pass, result.pass ? 1 : 0),
-          namedScores: {},
-          cost: 0.007,
-          metadata: {},
-        } as EvaluateResult);
+        await eval_.addResult(
+          createFilterTestResult(result.testIdx, {
+            failureReason: result.pass ? ResultFailureReason.NONE : ResultFailureReason.ASSERT,
+            success: result.pass,
+            score: result.pass ? 1 : 0,
+            gradingResult: result.hasHumanRating
+              ? createHumanRatedGradingResult(result.pass, result.pass ? 1 : 0, 'User rated')
+              : createRegularGradingResult(result.pass, result.pass ? 1 : 0),
+          }),
+        );
       }
 
       // Test user-rated filter
@@ -151,26 +134,11 @@ describe('User-Rated Filter Feature', () => {
 
       // Add 10 user-rated results
       for (let i = 0; i < 10; i++) {
-        await eval_.addResult({
-          description: `test-${i}`,
-          promptIdx: 0,
-          testIdx: i,
-          testCase: { vars: { test: `value${i}` } },
-          promptId: 'test-prompt',
-          provider: { id: 'test-provider', label: 'test-label' },
-          prompt: { raw: 'Test prompt', label: 'Test prompt' },
-          vars: { test: `value${i}` },
-          response: { output: `Response ${i}` },
-          error: null,
-          failureReason: ResultFailureReason.NONE,
-          success: true,
-          score: 1,
-          latencyMs: 100,
-          gradingResult: createHumanRatedGradingResult(true, 1, `User rated item ${i}`),
-          namedScores: {},
-          cost: 0.007,
-          metadata: {},
-        } as EvaluateResult);
+        await eval_.addResult(
+          createFilterTestResult(i, {
+            gradingResult: createHumanRatedGradingResult(true, 1, `User rated item ${i}`),
+          }),
+        );
       }
 
       // Test pagination
@@ -204,28 +172,14 @@ describe('User-Rated Filter Feature', () => {
       ];
 
       for (const data of testData) {
-        await eval_.addResult({
-          description: `test-${data.testIdx}`,
-          promptIdx: 0,
-          testIdx: data.testIdx,
-          testCase: { vars: { test: `value${data.testIdx}` } },
-          promptId: 'test-prompt',
-          provider: { id: 'test-provider', label: 'test-label' },
-          prompt: { raw: 'Test prompt', label: 'Test prompt' },
-          vars: { test: `value${data.testIdx}` },
-          response: { output: data.output },
-          error: null,
-          failureReason: ResultFailureReason.NONE,
-          success: true,
-          score: 1,
-          latencyMs: 100,
-          gradingResult: data.hasHumanRating
-            ? createHumanRatedGradingResult(true, 1, 'User rated')
-            : createRegularGradingResult(true, 1),
-          namedScores: {},
-          cost: 0.007,
-          metadata: {},
-        } as EvaluateResult);
+        await eval_.addResult(
+          createFilterTestResult(data.testIdx, {
+            response: { output: data.output },
+            gradingResult: data.hasHumanRating
+              ? createHumanRatedGradingResult(true, 1, 'User rated')
+              : createRegularGradingResult(true, 1),
+          }),
+        );
       }
 
       // Search for "needle" with user-rated filter
@@ -241,7 +195,7 @@ describe('User-Rated Filter Feature', () => {
 
     it('should handle malformed grading results gracefully', async () => {
       const eval_ = await EvalFactory.create({ numResults: 0 });
-      const db = getDb();
+      const db = await getDb();
 
       // Insert a result with null grading_result
       await db.run(`
@@ -286,7 +240,7 @@ describe('User-Rated Filter Feature', () => {
 
     it('should distinguish human assertions from other assertion types', async () => {
       const eval_ = await EvalFactory.create({ numResults: 0 });
-      const db = getDb();
+      const db = await getDb();
 
       // Result with 'human' assertion type (should match)
       await db.run(`
@@ -354,28 +308,13 @@ describe('User-Rated Filter Feature', () => {
       ];
 
       for (const result of results) {
-        await eval_.addResult({
-          description: `test-${result.testIdx}`,
-          promptIdx: 0,
-          testIdx: result.testIdx,
-          testCase: { vars: { test: `value${result.testIdx}` } },
-          promptId: 'test-prompt',
-          provider: { id: 'test-provider', label: 'test-label' },
-          prompt: { raw: 'Test prompt', label: 'Test prompt' },
-          vars: { test: `value${result.testIdx}` },
-          response: { output: `Response ${result.testIdx}` },
-          error: null,
-          failureReason: ResultFailureReason.NONE,
-          success: true,
-          score: 1,
-          latencyMs: 100,
-          gradingResult: result.hasHumanRating
-            ? createHumanRatedGradingResult(true, 1, 'User rated')
-            : createRegularGradingResult(true, 1),
-          namedScores: {},
-          cost: 0.007,
-          metadata: {},
-        } as EvaluateResult);
+        await eval_.addResult(
+          createFilterTestResult(result.testIdx, {
+            gradingResult: result.hasHumanRating
+              ? createHumanRatedGradingResult(true, 1, 'User rated')
+              : createRegularGradingResult(true, 1),
+          }),
+        );
       }
 
       const { testIndices, filteredCount } = await queryTestIndicesOptimized(eval_.id, {
@@ -392,28 +331,13 @@ describe('User-Rated Filter Feature', () => {
       // Add 100 results, every 5th one is user-rated
       for (let i = 0; i < 100; i++) {
         const hasHumanRating = i % 5 === 0;
-        await eval_.addResult({
-          description: `test-${i}`,
-          promptIdx: 0,
-          testIdx: i,
-          testCase: { vars: { test: `value${i}` } },
-          promptId: 'test-prompt',
-          provider: { id: 'test-provider', label: 'test-label' },
-          prompt: { raw: 'Test prompt', label: 'Test prompt' },
-          vars: { test: `value${i}` },
-          response: { output: `Response ${i}` },
-          error: null,
-          failureReason: ResultFailureReason.NONE,
-          success: true,
-          score: 1,
-          latencyMs: 100,
-          gradingResult: hasHumanRating
-            ? createHumanRatedGradingResult(true, 1, `User rated ${i}`)
-            : createRegularGradingResult(true, 1),
-          namedScores: {},
-          cost: 0.007,
-          metadata: {},
-        } as EvaluateResult);
+        await eval_.addResult(
+          createFilterTestResult(i, {
+            gradingResult: hasHumanRating
+              ? createHumanRatedGradingResult(true, 1, `User rated ${i}`)
+              : createRegularGradingResult(true, 1),
+          }),
+        );
       }
 
       const startTime = Date.now();
@@ -439,28 +363,13 @@ describe('User-Rated Filter Feature', () => {
       // Add mixed results
       for (let i = 0; i < 6; i++) {
         const hasHumanRating = i % 2 === 0;
-        await eval_.addResult({
-          description: `test-${i}`,
-          promptIdx: 0,
-          testIdx: i,
-          testCase: { vars: { test: `value${i}` } },
-          promptId: 'test-prompt',
-          provider: { id: 'test-provider', label: 'test-label' },
-          prompt: { raw: 'Test prompt', label: 'Test prompt' },
-          vars: { test: `value${i}` },
-          response: { output: `Response ${i}` },
-          error: null,
-          failureReason: ResultFailureReason.NONE,
-          success: true,
-          score: 1,
-          latencyMs: 100,
-          gradingResult: hasHumanRating
-            ? createHumanRatedGradingResult(true, 1, `User rated ${i}`)
-            : createRegularGradingResult(true, 1),
-          namedScores: {},
-          cost: 0.007,
-          metadata: {},
-        } as EvaluateResult);
+        await eval_.addResult(
+          createFilterTestResult(i, {
+            gradingResult: hasHumanRating
+              ? createHumanRatedGradingResult(true, 1, `User rated ${i}`)
+              : createRegularGradingResult(true, 1),
+          }),
+        );
       }
 
       const result = await eval_.getTablePage({
@@ -491,7 +400,7 @@ describe('User-Rated Filter Feature', () => {
   describe('Edge cases and error handling', () => {
     it('should handle results with null componentResults', async () => {
       const eval_ = await EvalFactory.create({ numResults: 0 });
-      const db = getDb();
+      const db = await getDb();
 
       // Insert result with grading_result but null componentResults
       await db.run(`
@@ -514,7 +423,7 @@ describe('User-Rated Filter Feature', () => {
 
     it('should handle results with multiple componentResults including human', async () => {
       const eval_ = await EvalFactory.create({ numResults: 0 });
-      const db = getDb();
+      const db = await getDb();
 
       // Result with multiple componentResults, one of which is human
       await db.run(`
@@ -544,26 +453,11 @@ describe('User-Rated Filter Feature', () => {
 
       // Add some user-rated results
       for (let i = 0; i < 10; i++) {
-        await eval_.addResult({
-          description: `test-${i}`,
-          promptIdx: 0,
-          testIdx: i,
-          testCase: { vars: { test: `value${i}` } },
-          promptId: 'test-prompt',
-          provider: { id: 'test-provider', label: 'test-label' },
-          prompt: { raw: 'Test prompt', label: 'Test prompt' },
-          vars: { test: `value${i}` },
-          response: { output: `Response ${i}` },
-          error: null,
-          failureReason: ResultFailureReason.NONE,
-          success: true,
-          score: 1,
-          latencyMs: 100,
-          gradingResult: createHumanRatedGradingResult(true, 1, `User rated ${i}`),
-          namedScores: {},
-          cost: 0.007,
-          metadata: {},
-        } as EvaluateResult);
+        await eval_.addResult(
+          createFilterTestResult(i, {
+            gradingResult: createHumanRatedGradingResult(true, 1, `User rated ${i}`),
+          }),
+        );
       }
 
       // Run multiple queries concurrently
@@ -585,26 +479,15 @@ describe('User-Rated Filter Feature', () => {
       const eval_ = await EvalFactory.create({ numResults: 0 });
 
       // Add a user-rated result
-      await eval_.addResult({
-        description: 'test-safe',
-        promptIdx: 0,
-        testIdx: 0,
-        testCase: { vars: { test: 'value' } },
-        promptId: 'test-prompt',
-        provider: { id: 'test-provider', label: 'test-label' },
-        prompt: { raw: 'Test prompt', label: 'Test prompt' },
-        vars: { test: 'value' },
-        response: { output: 'Safe response' },
-        error: null,
-        failureReason: ResultFailureReason.NONE,
-        success: true,
-        score: 1,
-        latencyMs: 100,
-        gradingResult: createHumanRatedGradingResult(true, 1, 'User rated'),
-        namedScores: {},
-        cost: 0.007,
-        metadata: {},
-      } as EvaluateResult);
+      await eval_.addResult(
+        createFilterTestResult(0, {
+          description: 'test-safe',
+          testCase: { vars: { test: 'value' } },
+          vars: { test: 'value' },
+          response: { output: 'Safe response' },
+          gradingResult: createHumanRatedGradingResult(true, 1, 'User rated'),
+        }),
+      );
 
       // Try SQL injection in search query
       const maliciousSearch = "'; DROP TABLE eval_results; --";

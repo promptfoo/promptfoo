@@ -3,13 +3,13 @@ import {
   ATTACK_PROVIDER_IDS,
   getAttackProviderFullId,
   isAttackProvider,
-  isMultiTurnStrategy,
 } from '../../../src/redteam/shared/attackProviders';
 
 describe('attackProviders', () => {
   describe('ATTACK_PROVIDER_IDS', () => {
     it('should contain all expected multi-turn attack providers', () => {
       expect(ATTACK_PROVIDER_IDS).toContain('hydra');
+      expect(ATTACK_PROVIDER_IDS).toContain('goblin');
       expect(ATTACK_PROVIDER_IDS).toContain('crescendo');
       expect(ATTACK_PROVIDER_IDS).toContain('goat');
       expect(ATTACK_PROVIDER_IDS).toContain('custom');
@@ -32,6 +32,12 @@ describe('attackProviders', () => {
         expect(isAttackProvider('hydra')).toBe(true);
         expect(isAttackProvider('jailbreak:hydra')).toBe(true);
         expect(isAttackProvider('promptfoo:redteam:hydra')).toBe(true);
+      });
+
+      it('should return true for goblin variants', () => {
+        expect(isAttackProvider('goblin')).toBe(true);
+        expect(isAttackProvider('jailbreak:goblin')).toBe(true);
+        expect(isAttackProvider('promptfoo:redteam:goblin')).toBe(true);
       });
 
       it('should return true for crescendo variants', () => {
@@ -121,6 +127,10 @@ describe('attackProviders', () => {
       it('should convert jailbreak:hydra to promptfoo:redteam:hydra', () => {
         expect(getAttackProviderFullId('jailbreak:hydra')).toBe('promptfoo:redteam:hydra');
       });
+
+      it('should convert jailbreak:goblin to promptfoo:redteam:goblin', () => {
+        expect(getAttackProviderFullId('jailbreak:goblin')).toBe('promptfoo:redteam:goblin');
+      });
     });
 
     describe('custom variants', () => {
@@ -136,27 +146,10 @@ describe('attackProviders', () => {
     describe('short IDs', () => {
       it('should convert short IDs to full IDs', () => {
         expect(getAttackProviderFullId('hydra')).toBe('promptfoo:redteam:hydra');
+        expect(getAttackProviderFullId('goblin')).toBe('promptfoo:redteam:goblin');
         expect(getAttackProviderFullId('crescendo')).toBe('promptfoo:redteam:crescendo');
         expect(getAttackProviderFullId('goat')).toBe('promptfoo:redteam:goat');
       });
-    });
-  });
-
-  describe('isMultiTurnStrategy', () => {
-    it('should return true for multi-turn strategies', () => {
-      expect(isMultiTurnStrategy('hydra')).toBe(true);
-      expect(isMultiTurnStrategy('crescendo')).toBe(true);
-      expect(isMultiTurnStrategy('goat')).toBe(true);
-    });
-
-    it('should handle various ID formats', () => {
-      expect(isMultiTurnStrategy('jailbreak:hydra')).toBe(true);
-      expect(isMultiTurnStrategy('promptfoo:redteam:hydra')).toBe(true);
-    });
-
-    it('should return false for non-multi-turn strategies', () => {
-      expect(isMultiTurnStrategy('base64')).toBe(false);
-      expect(isMultiTurnStrategy('basic')).toBe(false);
     });
   });
 });

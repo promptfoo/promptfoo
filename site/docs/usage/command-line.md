@@ -41,6 +41,7 @@ The `promptfoo` command line utility includes these command groups:
   - `logs [file]`
   - `logs list`
 - `mcp` - Start a Model Context Protocol (MCP) server to expose promptfoo tools to AI agents and development environments.
+- `optimize` - Improve one configured prompt against one configured provider.
 - `scan-model` - Scan ML models for security vulnerabilities.
 - `show [id]` - Show details of a specific resource (eval, prompt, or dataset).
 - `delete <id>` - Delete an eval by ID; accepts `latest` or `all`.
@@ -49,7 +50,7 @@ The `promptfoo` command line utility includes these command groups:
   - `validate config`
   - `validate target`
 - `feedback <message>` - Send feedback to the Promptfoo developers.
-- `import <filepath>` - Import an eval file from JSON format.
+- `import <filepath>` - Import a Promptfoo eval JSON export or OpenAI Evals dashboard JSONL export.
 - `export` - Export eval records or logs.
   - `export eval <evalId>`
   - `export logs`
@@ -94,53 +95,64 @@ promptfoo eval --env-file .env,.env.local
 
 All specified files must exist or an error is thrown.
 
+Without `--env-file`, promptfoo loads `.env` from the current directory if it exists, and values already set in your shell take precedence over the file. Three environment variables change that default: `DOTENV_PATH` names a different file, `DOTENV_OVERRIDE=true` lets the file override your shell, and `DOTENV_ENCODING` sets its encoding. The older `DOTENV_CONFIG_PATH`, `DOTENV_CONFIG_OVERRIDE`, and `DOTENV_CONFIG_ENCODING` names are used when the newer one is unset. Files passed with `--env-file` are loaded afterwards and always override both.
+
 ## `promptfoo eval`
 
 By default the `eval` command will read the `promptfooconfig.yaml` configuration file in your current directory. But, if you're looking to override certain parameters you can supply optional arguments:
 
-| Option                               | Description                                                                                              |
-| ------------------------------------ | -------------------------------------------------------------------------------------------------------- |
-| `-a, --assertions <path>`            | Path to assertions file                                                                                  |
-| `-c, --config <paths...>`            | Path to configuration file(s). Automatically loads promptfooconfig.yaml                                  |
-| `--delay <number>`                   | Delay between each test (in milliseconds)                                                                |
-| `--description <description>`        | Description of the eval run                                                                              |
-| `--filter-failing <path or id>`      | Filter tests that failed in a previous eval (by file path or eval ID)                                    |
-| `--filter-failing-only <path or id>` | Filter tests that had assertion failures in a previous eval, excluding errors                            |
-| `--filter-errors-only <path or id>`  | Filter tests that resulted in errors in a previous eval                                                  |
-| `-n, --filter-first-n <number>`      | Only run the first N tests                                                                               |
-| `--filter-range <start:end>`         | Only run tests whose zero-based index is in the range. The end index is exclusive.                       |
-| `--filter-sample <number>`           | Only run a random sample of N tests                                                                      |
-| `--filter-metadata <key=value>`      | Only run tests whose metadata matches the key=value pair. Can be specified multiple times for AND logic. |
-| `--filter-pattern <pattern>`         | Only run tests whose description matches the regex pattern                                               |
-| `--filter-prompts <pattern>`         | Only run tests with prompts whose id or label matches the regex pattern                                  |
-| `--filter-providers <providers>`     | Only run tests with these providers (regex match on provider `id` or `label`)                            |
-| `--filter-targets <targets>`         | Only run tests with these targets (alias for --filter-providers)                                         |
-| `--grader <provider>`                | Model that will grade outputs                                                                            |
-| `-j, --max-concurrency <number>`     | Maximum number of concurrent API calls                                                                   |
-| `--model-outputs <path>`             | Path to JSON containing list of LLM output strings                                                       |
-| `--no-cache`                         | Do not read or write results to disk cache                                                               |
-| `--no-progress-bar`                  | Do not show progress bar                                                                                 |
-| `--no-table`                         | Do not output table in CLI                                                                               |
-| `--no-write`                         | Do not write results to promptfoo directory                                                              |
-| `--resume [evalId]`                  | Resume a paused/incomplete eval. If `evalId` is omitted, resumes latest                                  |
-| `--retry-errors`                     | Retry all ERROR results from the latest eval                                                             |
-| `-o, --output <paths...>`            | Path(s) to output file (csv, txt, json, jsonl, yaml, yml, html, xml, junit.xml)                          |
-| `-p, --prompts <paths...>`           | Paths to prompt files (.txt)                                                                             |
-| `--prompt-prefix <path>`             | Prefix prepended to every prompt                                                                         |
-| `--prompt-suffix <path>`             | Suffix appended to every prompt                                                                          |
-| `-r, --providers <name or path...>`  | Provider names or paths to custom API caller modules                                                     |
-| `--remote`                           | Force remote inference wherever possible (used for red teams)                                            |
-| `--repeat <number>`                  | Number of times to run each test                                                                         |
-| `--share`                            | Create a shareable URL                                                                                   |
-| `--no-share`                         | Do not create a shareable URL, this overrides the config file                                            |
-| `--suggest-prompts <number>`         | Generate N new prompts and append them to the prompt list                                                |
-| `--table`                            | Output table in CLI                                                                                      |
-| `--table-cell-max-length <number>`   | Truncate console table cells to this length                                                              |
-| `-t, --tests <path>`                 | Path to CSV with test cases                                                                              |
-| `--var <key=value>`                  | Set a variable in key=value format                                                                       |
-| `-v, --vars <path>`                  | Path to CSV with test cases (alias for --tests)                                                          |
-| `-w, --watch`                        | Watch for changes in config and re-run                                                                   |
-| `-x, --extension <paths...>`         | Extension hooks to run, such as `file://handler.js:afterAll`                                             |
+| Option                               | Description                                                                                                                                                                           |
+| ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `-a, --assertions <path>`            | Path to assertions file                                                                                                                                                               |
+| `-c, --config <paths...>`            | Path to configuration file(s). Automatically loads promptfooconfig.yaml                                                                                                               |
+| `--delay <number>`                   | Delay between each test (in milliseconds)                                                                                                                                             |
+| `--description <description>`        | Description of the eval run                                                                                                                                                           |
+| `--filter-failing <path or id>`      | Filter tests that failed in a previous eval (by file path or eval ID)                                                                                                                 |
+| `--filter-failing-only <path or id>` | Filter tests that had assertion failures in a previous eval, excluding errors                                                                                                         |
+| `--filter-errors-only <path or id>`  | Filter tests that resulted in errors in a previous eval                                                                                                                               |
+| `-n, --filter-first-n <number>`      | Only run the first N tests                                                                                                                                                            |
+| `--filter-range <start:end>`         | Only run tests whose zero-based index is in the range. The end index is exclusive.                                                                                                    |
+| `--filter-sample <number>`           | Only run a random sample of N tests                                                                                                                                                   |
+| `--filter-sample-seed <number>`      | Numeric seed used to make `--filter-sample` select the same tests on repeated runs                                                                                                    |
+| `--filter-metadata <key=value>`      | Filter tests by metadata substring. Commas separate OR values (`\,` is a comma); repeated flags use AND.                                                                              |
+| `--filter-pattern <pattern>`         | Only run tests whose description matches the regex pattern                                                                                                                            |
+| `--filter-prompts <pattern>`         | Only run tests with prompts whose id or label matches the regex pattern                                                                                                               |
+| `--filter-providers <providers>`     | Only run tests with these providers (regex match on provider `id` or `label`)                                                                                                         |
+| `--filter-targets <targets>`         | Only run tests with these targets (alias for --filter-providers)                                                                                                                      |
+| `--grader <provider>`                | Model that will grade outputs                                                                                                                                                         |
+| `-j, --max-concurrency <number>`     | Maximum number of concurrent API calls                                                                                                                                                |
+| `--model-outputs <path>`             | Path to JSON containing list of LLM output strings                                                                                                                                    |
+| `--safe-mode`                        | Reject inline JavaScript assertions and shared transforms. [Limited guard, not a sandbox](/docs/configuration/expected-outputs/javascript#restrict-inline-assertions-and-transforms). |
+| `--no-cache`                         | Do not read or write results to disk cache                                                                                                                                            |
+| `--no-progress-bar`                  | Do not show progress bar                                                                                                                                                              |
+| `--no-table`                         | Do not output table in CLI                                                                                                                                                            |
+| `--no-write`                         | Do not write results to promptfoo directory                                                                                                                                           |
+| `--resume [evalId]`                  | Resume a paused/incomplete eval. If `evalId` is omitted, resumes latest                                                                                                               |
+| `--retry-errors`                     | Retry all ERROR results from the latest eval                                                                                                                                          |
+| `-o, --output <paths...>`            | Path(s) to output file (csv, txt, json, jsonl, yaml, yml, html, xml, junit.xml)                                                                                                       |
+| `-p, --prompts <paths...>`           | Paths to prompt files (.txt)                                                                                                                                                          |
+| `--prompt-prefix <path>`             | Prefix prepended to every prompt                                                                                                                                                      |
+| `--prompt-suffix <path>`             | Suffix appended to every prompt                                                                                                                                                       |
+| `-r, --providers <name or path...>`  | Provider names or paths to custom API caller modules                                                                                                                                  |
+| `--remote`                           | Force remote inference wherever possible (used for red teams)                                                                                                                         |
+| `--repeat <number>`                  | Number of times to run each test                                                                                                                                                      |
+| `--share`                            | Create a shareable URL                                                                                                                                                                |
+| `--no-share`                         | Do not create a shareable URL, this overrides the config file                                                                                                                         |
+| `--suggest-prompts <number>`         | Generate N new prompts and append them to the prompt list                                                                                                                             |
+| `--tag <key=value>`                  | Set an eval tag. Can be specified multiple times; CLI tags override config tags.                                                                                                      |
+| `--table`                            | Output table in CLI                                                                                                                                                                   |
+| `--table-cell-max-length <number>`   | Truncate console table cells to this length                                                                                                                                           |
+| `-t, --tests <path>`                 | Path to CSV with test cases                                                                                                                                                           |
+| `--var <key=value>`                  | Set a variable in key=value format                                                                                                                                                    |
+| `-v, --vars <path>`                  | Path to CSV with test cases (alias for --tests)                                                                                                                                       |
+| `-w, --watch`                        | Watch for changes in config and re-run                                                                                                                                                |
+| `-x, --extension <paths...>`         | Extension hooks to run, such as `file://handler.js:afterAll`                                                                                                                          |
+
+Use `--tag` for run-specific eval tags that should not change `promptfooconfig.yaml`:
+
+```sh
+promptfoo eval --tag env=ci --tag run-id=$CI_RUN_ID
+```
 
 For export examples and format-specific guidance, see [output formats](/docs/configuration/outputs).
 
@@ -159,6 +171,35 @@ When resuming an eval, promptfoo reuses the range saved with the original run so
 
 The `eval` command will return exit code `100` when there is at least 1 test case failure or when the pass rate is below the threshold set by `PROMPTFOO_PASS_RATE_THRESHOLD`. It will return exit code `1` for any other error. The exit code for failed tests can be overridden with environment variable `PROMPTFOO_FAILED_TEST_EXIT_CODE`.
 
+## `promptfoo optimize`
+
+Improve one configured prompt against one configured provider. The optimizer runs a baseline eval, proposes prompt candidates from observed failures and prior scores, evaluates those candidates, and prints the strongest prompt it found.
+
+```sh
+promptfoo optimize
+promptfoo optimize -c path/to/promptfooconfig.yaml
+promptfoo optimize --prompt-index 1 --provider-index 0
+promptfoo optimize --validation-split 0.2
+```
+
+The default config is loaded implicitly when `-c` is omitted. Optimization
+targets one resolved prompt/provider pair at a time.
+
+| Option                          | Description                                                                                                  | Default                |
+| ------------------------------- | ------------------------------------------------------------------------------------------------------------ | ---------------------- |
+| `-c, --config <path>`           | Path to the configuration file                                                                               | `promptfooconfig.yaml` |
+| `--prompt-index <index>`        | Zero-based resolved prompt index to optimize                                                                 | `0`                    |
+| `--provider-index <index>`      | Zero-based resolved provider index to optimize against                                                       | `0`                    |
+| `--validation-split <fraction>` | Hold out up to half of the configured test cases for validation scoring while search uses the remaining set. | none                   |
+
+When `--validation-split` is omitted, optimization uses the full eval set and
+may overfit to the configured cases.
+Validation splitting requires explicit `tests`; configs that use `scenarios`
+must be expanded into explicit test cases first.
+
+See [Prompt Optimization](/docs/usage/prompt-optimization) for workflow guidance,
+target selection details, and validation split recommendations.
+
 ### Pause and Resume
 
 ```sh
@@ -167,6 +208,7 @@ promptfoo eval --resume <evalId>   # resumes a specific eval
 ```
 
 - On resume, promptfoo reuses the original run's effective runtime options (e.g., `--delay`, `--no-cache`, `--max-concurrency`, `--repeat`), skips completed test/prompt pairs, ignores CLI flags that change test ordering to keep indices aligned, and disables watch mode.
+- If a red-team strategy is interrupted after completing a target request, promptfoo retains its output and usage as an interrupted error result. Resume skips that result to avoid repeating completed target actions. Use `--retry-errors` to explicitly run the case again.
 
 ### Retry Errors
 
@@ -438,19 +480,24 @@ Unlike `--filter-errors-only` which creates a new eval, `promptfoo retry` update
 
 ## `promptfoo import <filepath>`
 
-Import an eval file from JSON format.
+Import a Promptfoo eval file from JSON format, or import an OpenAI Evals dashboard
+`eval_items_*.jsonl` export.
 
 | Option     | Description                                                                          |
 | ---------- | ------------------------------------------------------------------------------------ |
 | `--new-id` | Generate a new eval ID instead of preserving the original (creates a duplicate eval) |
 | `--force`  | Replace an existing eval with the same ID                                            |
 
-When importing an eval, the following data is preserved from the export:
+When importing a Promptfoo eval export, the following data is preserved:
 
 - **Eval ID** - Preserved by default. Use `--new-id` to generate a new ID, or `--force` to replace an existing eval.
 - **Timestamp** - The original creation timestamp is always preserved (even with `--new-id` or `--force`)
 - **Author** - The original author is always preserved (even with `--new-id` or `--force`)
-- **Config, results, and all test data** - Fully preserved
+- **Config, results, prompts, variables, runtime options, and durations** - Preserved for current exports. Config secrets are redacted during export.
+- **Traces** - Preserved for current exports with sensitive trace attributes redacted by the trace store.
+- **Referenced blob media** - Restored when the export includes embedded media assets. Create a portable export with `promptfoo export eval <evalId> --include-media`.
+
+Older exports that do not include newer parity fields still import normally. Local relationships such as tags, dataset links, cache entries, and share state are not reconstructed from an eval export.
 
 If an eval with the same ID already exists, the import will fail with an error unless you specify `--new-id` (to create a duplicate with a new ID) or `--force` (to replace the existing eval).
 
@@ -467,6 +514,33 @@ promptfoo import --new-id my-eval.json
 promptfoo import --force my-eval.json
 ```
 
+OpenAI Evals dashboard exports such as `eval_items_*.jsonl` are imported as historical
+Promptfoo eval records. Promptfoo keeps each OpenAI source item under `vars.item` and
+preserves raw source item data, grader values, available pass/fail states, and grader
+samples in imported result metadata. When the export includes OpenAI `sample` data,
+Promptfoo also preserves it and surfaces available model output, errors, and token usage on
+the imported result. Grader rows with scores but no pass/fail states stay score-only:
+Promptfoo preserves the grader scores without turning the missing pass state into a failed
+assertion. If an export includes multiple OpenAI runs, Promptfoo imports them as prompt
+columns in one eval and aligns them on both the OpenAI data-source index and source item
+content. Rows with the same run-local index but different source items stay separate.
+
+For source fidelity, imported results keep the raw dashboard output-item row with its
+dashboard field names at `metadata.openai.outputItem`. The stored Promptfoo config records
+the dashboard import format and imported run IDs in `metadata.openaiEvalsImport`.
+
+The dashboard JSONL contains output-item rows, not the OpenAI eval definition, data-source
+config, run config, or testing-criteria definitions. It only keeps grader results keyed by
+grader name. The import is for historical results; it does not infer Promptfoo assertions
+or reconstruct a runnable Promptfoo config from the OpenAI eval.
+
+This import path supports the dashboard JSONL export, not the OpenAI API output-items list
+response.
+
+```sh
+promptfoo import eval_items_OutputDataItemStatusParam.ALL.jsonl
+```
+
 ## `promptfoo export`
 
 Export eval records or logs.
@@ -475,9 +549,16 @@ Export eval records or logs.
 
 Export an eval record to JSON format. To export the most recent, use `latest`.
 
-| Option                    | Description                                 |
-| ------------------------- | ------------------------------------------- |
-| `-o, --output <filepath>` | File to write. Writes to stdout by default. |
+| Option                    | Description                                             |
+| ------------------------- | ------------------------------------------------------- |
+| `-o, --output <filepath>` | File to write. Writes to stdout by default.             |
+| `--include-media`         | Embed referenced blob media bytes for portable imports. |
+
+Exports always redact config secrets before writing. Media bytes are opt-in because they can make the export much larger and may contain sensitive user content. Without `--include-media`, blob references remain in the exported results and resolve only when the target Promptfoo data directory already has the referenced blobs.
+
+:::warning
+Eval exports can still contain user data in prompts, outputs, variables, traces, and opt-in media. Inspect an export before sharing it.
+:::
 
 ### `promptfoo export logs`
 
@@ -578,14 +659,19 @@ Manage authentication for cloud features.
 
 ### `promptfoo auth login`
 
-Login to the promptfoo cloud.
+Log in to Promptfoo Cloud.
 
-| Option                | Description                                                                |
-| --------------------- | -------------------------------------------------------------------------- |
-| `-o, --org <orgId>`   | The organization ID to log in to                                           |
-| `-h, --host <host>`   | The host of the promptfoo instance (API URL if different from the app URL) |
-| `-k, --api-key <key>` | Log in using an API key                                                    |
-| `-t, --team <team>`   | Team name, slug, or ID to use after login                                  |
+Promptfoo Cloud API keys are scoped to one organization. To switch organizations, log in with an API key from the organization you want to use. `--org` and `--team` apply only with `--api-key`.
+
+| Option                      | Description                                                                |
+| --------------------------- | -------------------------------------------------------------------------- |
+| `-o, --org <orgId>`         | The organization ID to log in to                                           |
+| `-h, --host <host>`         | The host of the promptfoo instance (API URL if different from the app URL) |
+| `-k, --api-key <key>`       | Log in using an API key                                                    |
+| `-t, --team <team>`         | Team name, slug, or ID to use after login                                  |
+| `--auth-header-name <name>` | Header carrying the Cloud API token when logging in with `--api-key`       |
+
+For gateways that reserve `Authorization`, use `--auth-header-name X-Promptfoo-Api-Key` or `PROMPTFOO_CLOUD_AUTH_HEADER`. The value remains `Bearer <token>`. Precedence is the login flag, saved setting, environment variable, then `Authorization`. A successful login saves the header name; changing `--host` does not reset it. Pass `--auth-header-name Authorization` to reset it. See [gateway configuration](/docs/usage/sharing.md#enterprise-sharing).
 
 After login, if you have multiple teams, you can switch between them using the `teams` subcommand.
 
@@ -602,6 +688,7 @@ Display current authentication status including user, organization, and active t
 - User email
 - Organization name
 - Current team (if logged in to a multi-team organization)
+- API URL and effective auth header name (shown even without a saved login or if the account lookup fails)
 - App URL
 
 Example:
@@ -613,6 +700,8 @@ promptfoo auth whoami
 Output:
 
 ```
+API URL: https://api.promptfoo.app
+Auth header: Authorization
 Currently logged in as:
 User: user@company.com
 Organization: Acme Corp
@@ -634,7 +723,7 @@ Manage team switching for organizations with multiple teams.
 
 #### `promptfoo auth teams list`
 
-List all teams you have access to in the current organization.
+List the teams accessible to your API key.
 
 #### `promptfoo auth teams current`
 
@@ -662,6 +751,8 @@ promptfoo auth teams set team_12345
 ```
 
 Your team selection is remembered across CLI sessions and applies to all promptfoo operations including evals and red team testing.
+
+If your saved team is no longer accessible, promptfoo falls back to the oldest team in your current organization. It never switches organizations on its own. To use another organization, run `promptfoo auth login --api-key <apiKey>` with a key from that organization.
 
 #### Team Selection Across Organizations
 
@@ -819,21 +910,30 @@ Start browser UI and open to red team setup.
 
 Run the complete red teaming process (init, generate, and evaluate).
 
-| Option                                             | Description                                                             | Default              |
-| -------------------------------------------------- | ----------------------------------------------------------------------- | -------------------- |
-| `-c, --config [path]`                              | Path to configuration file                                              | promptfooconfig.yaml |
-| `-o, --output [path]`                              | Path to output file for generated tests                                 | redteam.yaml         |
-| `-d, --description <text>`                         | Custom description/name for this scan run                               |                      |
-| `--no-cache`                                       | Do not read or write results to disk cache                              | false                |
-| `-j, --max-concurrency <number>`                   | Maximum number of concurrent API calls                                  |                      |
-| `--delay <number>`                                 | Delay in milliseconds between API calls                                 |                      |
-| `--remote`                                         | Force remote inference wherever possible                                | false                |
-| `--force`                                          | Force generation even if no changes are detected                        | false                |
-| `--no-progress-bar`                                | Do not show progress bar                                                |                      |
-| `--strict`                                         | Fail if any plugins fail to generate test cases                         | false                |
-| `--filter-prompts <pattern>`                       | Only run tests with prompts whose id or label matches the regex pattern |                      |
-| `--filter-providers, --filter-targets <providers>` | Only run tests with these providers (regex match)                       |                      |
-| `-t, --target <id>`                                | Cloud provider target ID to run the scan on                             |                      |
+| Option                                             | Description                                                                      | Default              |
+| -------------------------------------------------- | -------------------------------------------------------------------------------- | -------------------- |
+| `-c, --config [path]`                              | Path to configuration file                                                       | promptfooconfig.yaml |
+| `-o, --output [path]`                              | Path to output file for generated tests                                          | redteam.yaml         |
+| `-d, --description <text>`                         | Custom description/name for this scan run                                        |                      |
+| `--tag <key=value>`                                | Set an eval tag. Can be specified multiple times; CLI tags override config tags. |                      |
+| `--no-cache`                                       | Do not read or write results to disk cache                                       | false                |
+| `-j, --max-concurrency <number>`                   | Maximum number of concurrent API calls                                           |                      |
+| `--delay <number>`                                 | Delay in milliseconds between API calls                                          |                      |
+| `--remote`                                         | Force remote inference wherever possible                                         | false                |
+| `--force`                                          | Force generation even if no changes are detected                                 | false                |
+| `--no-progress-bar`                                | Do not show progress bar                                                         |                      |
+| `--strict`                                         | Fail if any plugins fail to generate test cases                                  | false                |
+| `--filter-prompts <pattern>`                       | Only run tests with prompts whose id or label matches the regex pattern          |                      |
+| `--filter-providers, --filter-targets <providers>` | Only run tests with these providers (regex match)                                |                      |
+| `-t, --target <id>`                                | Cloud provider target ID to run the scan on                                      |                      |
+
+Use `--tag` to attach CI/CD context to the evaluation result without changing the
+scan template or generated `redteam.yaml`. CLI tags override matching tags from the
+configuration and are included when the eval is shared.
+
+```sh
+promptfoo redteam run --tag ci.run-id=$CI_RUN_ID --tag git.sha=$GIT_COMMIT
+```
 
 ## `promptfoo redteam discover`
 
@@ -913,7 +1013,8 @@ Generate poisoned documents for RAG testing.
 
 ## `promptfoo redteam eval`
 
-Works the same as [`promptfoo eval`](#promptfoo-eval), but defaults to loading `redteam.yaml`.
+Works the same as [`promptfoo eval`](#promptfoo-eval), including repeatable `--tag`
+options for run-specific labels, but defaults to loading `redteam.yaml`.
 
 ## `promptfoo redteam report`
 
@@ -983,7 +1084,7 @@ These general-purpose environment variables are supported:
 | Name                                          | Description                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      | Default                       |
 | --------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------- |
 | `FORCE_COLOR`                                 | Set to 0 to disable terminal colors for printed outputs                                                                                                                                                                                                                                                                                                                                                                                                                                                          |                               |
-| `PROMPTFOO_ASSERTIONS_MAX_CONCURRENCY`        | How many assertions to run at a time                                                                                                                                                                                                                                                                                                                                                                                                                                                                             | 3                             |
+| `PROMPTFOO_ASSERTIONS_MAX_CONCURRENCY`        | Maximum number of assertions to run at once per test case (minimum 1).                                                                                                                                                                                                                                                                                                                                                                                                                                           | 3                             |
 | `PROMPTFOO_CACHE_ENABLED`                     | Enable LLM request/response caching                                                                                                                                                                                                                                                                                                                                                                                                                                                                              | `true`                        |
 | `PROMPTFOO_CACHE_PATH`                        | Directory for the disk cache. Defaults to a `cache` directory under `PROMPTFOO_CONFIG_DIR`                                                                                                                                                                                                                                                                                                                                                                                                                       | `~/.promptfoo/cache`          |
 | `PROMPTFOO_CACHE_TTL`                         | Cache TTL in seconds                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             | `1209600`                     |
@@ -999,13 +1100,16 @@ These general-purpose environment variables are supported:
 | `PROMPTFOO_DISABLE_REF_PARSER`                | Prevents JSON schema dereferencing                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |                               |
 | `PROMPTFOO_DISABLE_REMOTE_GENERATION`         | Disables supported Promptfoo-hosted generation fallbacks within its documented scope, including red team target/provider setup helpers that rely on remote generation. This is not a network egress firewall and does not disable explicitly configured providers, graders, telemetry, account/license checks, sharing, Cloud sync, red team target/provider test requests, or red team target/provider setup helpers that do not rely on remote generation. Example: `PROMPTFOO_DISABLE_REMOTE_GENERATION=true` | `false`                       |
 | `PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION` | Disables supported Promptfoo-hosted red team generation paths, including red team target/provider setup helpers that rely on remote generation, while leaving non-red-team hosted generation, red team target/provider test requests, red team target/provider setup helpers that do not rely on remote generation, sharing, telemetry, account, and Cloud-backed controls unchanged. Example: `PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION=true`                                                                | `false`                       |
-| `PROMPTFOO_DISABLE_TEMPLATE_ENV_VARS`         | Disables OS environment variables in templates. When true, only config `env:` variables are available in templates.                                                                                                                                                                                                                                                                                                                                                                                              | `false` (true in self-hosted) |
-| `PROMPTFOO_DISABLE_TEMPLATING`                | Disables Nunjucks template processing                                                                                                                                                                                                                                                                                                                                                                                                                                                                            | `false`                       |
+| `PROMPTFOO_DISABLE_TEMPLATE_ENV_VARS`         | Disables OS environment variables in templates. When true, only config `env:` variables are available in templates, file paths, and tracing settings. Suite settings cannot re-enable access disabled by the process.                                                                                                                                                                                                                                                                                            | `false` (true in self-hosted) |
+| `PROMPTFOO_DISABLE_TEMPLATING`                | Disables Nunjucks processing for config values and prompts, including when set in config `env:`. Grader templates remain enabled.                                                                                                                                                                                                                                                                                                                                                                                | `false`                       |
+| `PROMPTFOO_DISABLE_UPDATE`                    | Disables automatic update availability checks.                                                                                                                                                                                                                                                                                                                                                                                                                                                                   | `false`                       |
 | `PROMPTFOO_DISABLE_VAR_EXPANSION`             | Prevents Array-type vars from being expanded into multiple test cases                                                                                                                                                                                                                                                                                                                                                                                                                                            |                               |
 | `PROMPTFOO_FAILED_TEST_EXIT_CODE`             | Override the exit code when there is at least 1 test case failure or when the pass rate is below PROMPTFOO_PASS_RATE_THRESHOLD                                                                                                                                                                                                                                                                                                                                                                                   | 100                           |
 | `PROMPTFOO_LOG_DIR`                           | Directory to write log files (both debug and error logs). Overrides the default `~/.promptfoo/logs` directory.                                                                                                                                                                                                                                                                                                                                                                                                   | `~/.promptfoo/logs`           |
 | `PROMPTFOO_PASS_RATE_THRESHOLD`               | Set a minimum pass rate threshold (as a percentage). If not set, defaults to 100% (no failures allowed)                                                                                                                                                                                                                                                                                                                                                                                                          | 100                           |
+| `PROMPTFOO_PROMPT_SEPARATOR`                  | Separator for [multiple prompts](/docs/configuration/prompts#multiple-prompts-in-one-file) in a `.txt` file.                                                                                                                                                                                                                                                                                                                                                                                                     | `---`                         |
 | `PROMPTFOO_REQUIRE_JSON_PROMPTS`              | By default the chat completion provider will wrap non-JSON messages in a single user message. Setting this envar to true disables that behavior.                                                                                                                                                                                                                                                                                                                                                                 |                               |
+| `PROMPTFOO_SAFE_MODE`                         | Reject inline JavaScript assertions and shared transforms. [Does not sandbox configurations](/docs/configuration/expected-outputs/javascript#restrict-inline-assertions-and-transforms).                                                                                                                                                                                                                                                                                                                         | `false`                       |
 | `PROMPTFOO_SHARE_CHUNK_SIZE`                  | Number of results to send in each chunk. This is used to estimate the size of the results and to determine the number of chunks to send.                                                                                                                                                                                                                                                                                                                                                                         |                               |
 | `PROMPTFOO_EVAL_TIMEOUT_MS`                   | Timeout in milliseconds for each individual test case/provider API call. When reached, that specific test is marked as an error.                                                                                                                                                                                                                                                                                                                                                                                 |                               |
 | `PROMPTFOO_MAX_EVAL_TIME_MS`                  | Maximum total runtime in milliseconds for the entire eval process. When reached, all remaining tests are marked as errors and the eval ends.                                                                                                                                                                                                                                                                                                                                                                     |                               |
@@ -1014,6 +1118,8 @@ These general-purpose environment variables are supported:
 | `PROMPTFOO_STRIP_PROMPT_TEXT`                 | Strip prompt text from results to reduce memory usage                                                                                                                                                                                                                                                                                                                                                                                                                                                            | false                         |
 | `PROMPTFOO_STRIP_RESPONSE_OUTPUT`             | Strip model response outputs from results to reduce memory usage                                                                                                                                                                                                                                                                                                                                                                                                                                                 | false                         |
 | `PROMPTFOO_STRIP_TEST_VARS`                   | Strip test variables from results to reduce memory usage                                                                                                                                                                                                                                                                                                                                                                                                                                                         | false                         |
+| `PROMPTFOO_OFFICIAL_DOCKER_IMAGE`             | Internal marker for upstream official-image update guidance. Official Promptfoo builds set this automatically, and derived images inherit it. The inherited guidance includes the extra rebuild step; set it to `false` in a derived image for tailored custom-image guidance.                                                                                                                                                                                                                                   | `false`                       |
+| `PROMPTFOO_RUNNING_IN_DOCKER`                 | Internal marker for container-aware update guidance. The Promptfoo Dockerfile sets this automatically. Other custom Dockerfiles that bake Promptfoo into an image must set it to `true` to receive rebuild-and-redeploy guidance instead of package-manager commands.                                                                                                                                                                                                                                            | `false`                       |
 | `PROMPTFOO_SELF_HOSTED`                       | Enables self-hosted mode. When true, disables OS environment variables in templates (only config `env:` values available), disables telemetry, and modifies other behaviors for controlled environments                                                                                                                                                                                                                                                                                                          | `false`                       |
 
 :::tip

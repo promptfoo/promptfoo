@@ -1,9 +1,9 @@
 import fs from 'fs';
 import path from 'path';
 
-import yaml from 'js-yaml';
 import { maybeLoadConfigFromExternalFile } from './file';
 import invariant from './invariant';
+import { loadYaml } from './yamlLoad';
 
 import type { ProviderOptions, ProviderOptionsMap } from '../types/providers';
 
@@ -133,6 +133,8 @@ export function isProviderConfigFileReference(providerPath: string): boolean {
 
 /**
  * Reads a provider config file and normalizes single-provider and multi-provider files.
+ * An explicit base path also scopes nested configuration files; otherwise their
+ * caller scope is retained.
  * Returns a `wasArray` flag so callers can detect multi-provider files that require
  * `loadApiProviders` instead of `loadApiProvider`.
  */
@@ -147,13 +149,13 @@ export function readProviderConfigFile(
 
   let rawContent: unknown;
   try {
-    rawContent = yaml.load(fs.readFileSync(resolvedPath, 'utf8'));
+    rawContent = loadYaml(fs.readFileSync(resolvedPath, 'utf8'));
   } catch (err) {
     throw new Error(
       `Failed to load provider config ${relativePath}: ${err instanceof Error ? err.message : err}`,
     );
   }
-  const fileContent = maybeLoadConfigFromExternalFile(rawContent) as
+  const fileContent = maybeLoadConfigFromExternalFile(rawContent, undefined, basePath) as
     | ProviderOptions
     | ProviderOptions[];
   invariant(fileContent, `Provider config ${relativePath} is undefined`);

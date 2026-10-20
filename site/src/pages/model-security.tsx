@@ -342,7 +342,7 @@ export default function ModelSecurity(): React.ReactElement {
       description="Complete AI model security platform that protects your entire AI pipeline - from model files to deployed systems - with a unified security assessment workflow."
     >
       <Head>
-        <meta property="og:image" content="https://www.promptfoo.dev/img/meta/model-security.png" />
+        <meta property="og:image" content="https://www.promptfoo.dev/img/meta/homepage.png" />
         <meta name="twitter:card" content="summary_large_image" />
       </Head>
       <div className={styles.pageContainer}>

@@ -2,8 +2,10 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { Alert, AlertContent, AlertDescription } from '@app/components/ui/alert';
 import { useTelemetry } from '@app/hooks/useTelemetry';
+import { isPlainObject } from '@app/utils/isPlainObject';
 import { AlertTriangle, Info } from 'lucide-react';
 import { DEFAULT_HTTP_TARGET, useRedTeamConfig } from '../../hooks/useRedTeamConfig';
+import { useRedTeamTargetConfigValidation } from '../../hooks/useRedTeamTargetConfigValidation';
 import PageWrapper from '../PageWrapper';
 import Prompts from '../Prompts';
 import ProviderConfigEditor from './ProviderConfigEditor';
@@ -17,16 +19,19 @@ interface TargetConfigurationProps {
 }
 
 const requiresPrompt = (target: ProviderOptions) => {
-  return target.id !== 'http' && target.id !== 'websocket' && target.id !== 'browser';
+  return !(
+    target.id === 'a2a' ||
+    target.id.startsWith('a2a:') ||
+    ['http', 'websocket', 'browser'].includes(target.id)
+  );
 };
 
 export default function TargetConfiguration({ onNext, onBack }: TargetConfigurationProps) {
   const { config, updateConfig, providerType } = useRedTeamConfig();
-  const [selectedTarget, setSelectedTarget] = useState<ProviderOptions>(
-    config.target || DEFAULT_HTTP_TARGET,
-  );
+  const { targetConfigError } = useRedTeamTargetConfigValidation();
+  const selectedTarget: ProviderOptions = config.target || DEFAULT_HTTP_TARGET;
   const [providerError, setProviderError] = useState<string | null>(null);
-  const [promptRequired, setPromptRequired] = useState(requiresPrompt(selectedTarget));
+  const promptRequired = requiresPrompt(selectedTarget);
   const [validationErrors, setValidationErrors] = useState<string | null>(null);
   const [shouldValidate, setShouldValidate] = useState<boolean>(false);
 
@@ -42,13 +47,8 @@ export default function TargetConfiguration({ onNext, onBack }: TargetConfigurat
     recordEvent('webui_page_view', { page: 'redteam_config_target_configuration' });
   }, []);
 
-  useEffect(() => {
-    updateConfig('target', selectedTarget);
-    setPromptRequired(requiresPrompt(selectedTarget));
-  }, [selectedTarget, updateConfig]);
-
   const handleProviderChange = (provider: ProviderOptions) => {
-    setSelectedTarget(provider);
+    updateConfig('target', provider);
     recordEvent('feature_used', {
       feature: 'redteam_config_target_configured',
       target: provider.id,
@@ -62,7 +62,12 @@ export default function TargetConfiguration({ onNext, onBack }: TargetConfigurat
   };
 
   const isProviderValid = () => {
-    return selectedTarget.label && !providerError;
+    return (
+      selectedTarget.label &&
+      !providerError &&
+      !targetConfigError &&
+      isPlainObject(selectedTarget.config)
+    );
   };
 
   const getNextButtonTooltip = () => {
@@ -71,6 +76,12 @@ export default function TargetConfiguration({ onNext, onBack }: TargetConfigurat
     }
     if (providerError) {
       return providerError;
+    }
+    if (targetConfigError) {
+      return targetConfigError;
+    }
+    if (!isPlainObject(selectedTarget.config)) {
+      return 'Configuration must be a JSON object';
     }
     if (validationErrors) {
       return validationErrors;

@@ -33,7 +33,7 @@ Here's an example of what the red team report looks like:
 
 Before you begin, ensure you have:
 
-- **Node.js 20+**: [Download Node.js](https://nodejs.org/en/download/)
+- **Node.js `>=22.22.0`** (Node.js 24 LTS recommended): [Download Node.js](https://nodejs.org/en/download/)
 - **Ollama**: Install Ollama from [ollama.ai](https://ollama.ai)
 - **Promptfoo**: No prior installation needed; we'll use `npx` to run commands
 
@@ -82,7 +82,7 @@ targets:
     label: llama3.2-redteam
     config:
       temperature: 0.7
-      max_tokens: 150
+      num_predict: 150
 
 redteam:
   purpose: 'The system is a helpful chatbot assistant that answers questions and helps with tasks.'

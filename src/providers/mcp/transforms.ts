@@ -1,5 +1,4 @@
 import logger from '../../logger';
-import { safeJsonStringify } from '../../util/json';
 import { getProcessShim } from '../../util/processShim';
 import { normalizeResponseTransformResult } from '../transformResult';
 
@@ -28,9 +27,10 @@ export function createTransformResponse(
         const response = await parser(result, content, context);
         return normalizeResponseTransformResult(response);
       } catch (error) {
-        logger.error(
-          `[MCP Provider] Error in response transform function: ${String(error)}. Result: ${safeJsonStringify(result)}. Content: ${content}. Context: ${safeJsonStringify(context)}.`,
-        );
+        logger.error('[MCP Provider] Error in response transform function', {
+          error: String(error),
+          toolName: context.toolName,
+        });
         throw error;
       }
     };
@@ -55,15 +55,16 @@ export function createTransformResponse(
           'context',
           'process',
           isFunctionExpression
-            ? `try { return (${trimmedParser})(result, content, context); } catch(e) { throw new Error('Transform failed: ' + e.message + ' : ' + content + ' : ' + JSON.stringify(result) + ' : ' + JSON.stringify(context)); }`
-            : `try { return (${trimmedParser}); } catch(e) { throw new Error('Transform failed: ' + e.message + ' : ' + content + ' : ' + JSON.stringify(result) + ' : ' + JSON.stringify(context)); }`,
+            ? `return (${trimmedParser})(result, content, context);`
+            : `return (${trimmedParser});`,
         );
         const response = await transformFn(result, content, context, getProcessShim());
         return normalizeResponseTransformResult(response);
       } catch (error) {
-        logger.error(
-          `[MCP Provider] Error in response transform: ${String(error)}. Result: ${safeJsonStringify(result)}. Content: ${content}. Context: ${safeJsonStringify(context)}.`,
-        );
+        logger.error('[MCP Provider] Error in response transform', {
+          error: String(error),
+          toolName: context.toolName,
+        });
         throw new Error(`Failed to transform MCP response: ${String(error)}`);
       }
     };

@@ -20,13 +20,19 @@ The example tests across multiple Gemini and Gemma models:
 
 - **Gemma 4 31B IT** - Open model with strong reasoning, coding, and agentic capabilities
 - **Gemma 4 26B A4B IT** - Smaller open Gemma 4 model for lower-latency reasoning and coding evals
-- **Gemini 2.5 Pro** - Latest stable model with enhanced reasoning, coding, and multimodal understanding
-- **Gemini 2.5 Flash** - Latest stable Flash model with enhanced reasoning and thinking capabilities
-- **Gemini 2.5 Flash-Lite** - Most cost-efficient and fastest 2.5 model, optimized for high-volume, latency-sensitive tasks
-- Gemini 2.0 Flash
-- Gemini 2.0 Flash Thinking
-- Gemini 1.5 Flash
-- Gemini 1.5 Pro - Standard model for complex reasoning, used with both structured JSON output and function calling capabilities
+- **Gemini 3.8 Flash** - Latest Flash model for coding and agentic workflows
+- **Gemini 3.6 Flash** - Previous-generation Flash model for coding and multi-step tasks
+- **Gemini 3.5 Flash-Lite** - Low-latency model for high-volume agentic tasks
+- **Gemini 3.1 Pro** - Frontier model with improved reasoning and multimodal understanding
+- **Gemini 3 Flash** - Frontier Flash model with strong reasoning at lower latency
+- **Gemini 3.1 Flash-Lite** - Low-latency, cost-efficient model for high-volume tasks
+- **gemini-embedding-001** - Embedding model used for similarity-based assertions
+
+Gemini 3.8 Flash, 3.6 Flash, and 3.5 Flash-Lite use `thinkingLevel` instead of
+deprecated `temperature`, `topP`, or `topK` controls. Gemini 3.8 Flash does not
+support `MINIMAL` thinking.
+
+The Gemini API redirects 3.7 Flash to 3.8 Flash and 3.5 Flash to 3.6 Flash. This comparison uses the replacement IDs, with 3.8 Flash for structured output, function calling, and system instructions. Check the [Gemini API lifecycle](https://ai.google.dev/gemini-api/docs/deprecations) before adding legacy models.
 
 ## System Instructions from File
 
@@ -34,7 +40,7 @@ This example also demonstrates how to load system instructions from an external 
 
 ```yaml
 providers:
-  - id: google:gemini-2.5-pro
+  - id: google:gemini-3.8-flash
     label: gemini-with-system-instruction-file
     config:
       systemInstruction: file://system-instruction.txt

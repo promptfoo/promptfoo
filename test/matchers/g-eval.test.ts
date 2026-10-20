@@ -1,6 +1,18 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { matchesGEval } from '../../src/matchers/llmGrading';
+import { resolveProvider } from '../../src/providers';
+import { createLiteLLMProvider } from '../../src/providers/litellm';
 import { DefaultGradingProvider } from '../../src/providers/openai/defaults';
+
+const createClarityStepsResponse = () => ({
+  output: '{"steps": ["Check clarity"]}',
+  tokenUsage: { total: 3, prompt: 1, completion: 2 },
+});
+
+const createWritingStepsResponse = () => ({
+  output: '{"steps": ["Check clarity", "Evaluate coherence", "Assess grammar"]}',
+  tokenUsage: { total: 10, prompt: 5, completion: 5 },
+});
 
 describe('matchesGEval', () => {
   let originalCallApi: typeof DefaultGradingProvider.callApi;
@@ -10,10 +22,7 @@ describe('matchesGEval', () => {
 
     vi.spyOn(DefaultGradingProvider, 'callApi').mockImplementation(async (prompt) => {
       if (prompt.includes('generate 3-4 concise evaluation steps')) {
-        return {
-          output: '{"steps": ["Check clarity", "Evaluate coherence", "Assess grammar"]}',
-          tokenUsage: { total: 10, prompt: 5, completion: 5 },
-        };
+        return createWritingStepsResponse();
       } else {
         return {
           output: '{"score": 8, "reason": "The response is well-structured and clear"}',
@@ -123,13 +132,80 @@ describe('matchesGEval', () => {
     DefaultGradingProvider.callApi = originalCallApi;
   });
 
+  it('passes LiteLLM provider context through both G-Eval phases', async () => {
+    const criteria = 'Reward factual grounding and completeness';
+    const configuredLiteLLM = createLiteLLMProvider('litellm:gemini-pro', {
+      config: {
+        config: {
+          apiBaseUrl: 'http://litellm-regression.local:4000',
+          apiKey: 'test-litellm-key',
+          temperature: 0,
+        },
+      },
+    });
+
+    const resolvedProvider = await resolveProvider('litellm:gemini-pro', {
+      [configuredLiteLLM.id()]: configuredLiteLLM,
+    });
+    expect(resolvedProvider).toBe(configuredLiteLLM);
+    expect(configuredLiteLLM.config.apiBaseUrl).toBe('http://litellm-regression.local:4000');
+
+    const litellmCallApi = vi
+      .fn()
+      .mockImplementationOnce(async () => ({
+        output: '{"steps": ["Check factual alignment", "Check completeness"]}',
+        tokenUsage: { total: 11, prompt: 6, completion: 5 },
+      }))
+      .mockImplementationOnce(async () => ({
+        output: '{"score": 8, "reason": "The answer is grounded and complete"}',
+        tokenUsage: { total: 13, prompt: 7, completion: 6 },
+      }));
+    resolvedProvider.callApi = litellmCallApi;
+
+    const result = await matchesGEval(
+      criteria,
+      'Question: what is the capital of France?',
+      'Paris is the capital of France.',
+      0.7,
+      { provider: resolvedProvider },
+    );
+
+    expect(result).toEqual({
+      pass: true,
+      score: 0.8,
+      reason: 'The answer is grounded and complete',
+      tokensUsed: expect.objectContaining({ total: 24, prompt: 13, completion: 11 }),
+    });
+    expect(DefaultGradingProvider.callApi).not.toHaveBeenCalled();
+    expect(litellmCallApi).toHaveBeenCalledTimes(2);
+    expect(litellmCallApi).toHaveBeenNthCalledWith(
+      1,
+      expect.stringContaining('generate 3-4 concise evaluation steps'),
+      expect.objectContaining({
+        prompt: expect.objectContaining({ label: 'g-eval-steps' }),
+        vars: { criteria },
+      }),
+    );
+    expect(litellmCallApi).toHaveBeenNthCalledWith(
+      2,
+      expect.stringContaining('Check factual alignment'),
+      expect.objectContaining({
+        prompt: expect.objectContaining({ label: 'g-eval' }),
+        vars: expect.objectContaining({
+          criteria,
+          input: 'Question: what is the capital of France?',
+          maxScore: '10',
+          output: 'Paris is the capital of France.',
+        }),
+      }),
+    );
+    expect(litellmCallApi.mock.calls[1][1].vars.steps).toContain('Check completeness');
+  });
+
   it('should fail when score is below threshold', async () => {
     vi.spyOn(DefaultGradingProvider, 'callApi')
       .mockImplementationOnce(async () => {
-        return {
-          output: '{"steps": ["Check clarity", "Evaluate coherence", "Assess grammar"]}',
-          tokenUsage: { total: 10, prompt: 5, completion: 5 },
-        };
+        return createWritingStepsResponse();
       })
       .mockImplementationOnce(async () => {
         return {
@@ -175,6 +251,28 @@ describe('matchesGEval', () => {
     expect(DefaultGradingProvider.callApi).toHaveBeenCalledTimes(1);
   });
 
+  it('reports the LiteLLM grader and phase when step generation returns no output', async () => {
+    const provider = createLiteLLMProvider('litellm:gemini-pro', {});
+    provider.callApi = vi.fn().mockResolvedValueOnce({
+      output: '',
+      tokenUsage: { total: 3, prompt: 1, completion: 2 },
+    });
+
+    const result = await matchesGEval('Evaluate coherence', 'Test input', 'Test output', 0.7, {
+      provider,
+    });
+
+    expect(result).toEqual({
+      pass: false,
+      score: 0,
+      reason: 'G-Eval step-generation call to litellm:gemini-pro returned no output',
+      tokensUsed: expect.objectContaining({ total: 3, prompt: 1, completion: 2 }),
+      metadata: { graderError: true },
+    });
+    expect(DefaultGradingProvider.callApi).not.toHaveBeenCalled();
+    expect(provider.callApi).toHaveBeenCalledTimes(1);
+  });
+
   it('should fail clearly when the evaluation steps shape is invalid', async () => {
     vi.spyOn(DefaultGradingProvider, 'callApi').mockResolvedValueOnce({
       output: '{"steps":"Check clarity"}',
@@ -199,10 +297,7 @@ describe('matchesGEval', () => {
 
   it('should return provider errors from the evaluation call', async () => {
     vi.spyOn(DefaultGradingProvider, 'callApi')
-      .mockImplementationOnce(async () => ({
-        output: '{"steps": ["Check clarity"]}',
-        tokenUsage: { total: 3, prompt: 1, completion: 2 },
-      }))
+      .mockImplementationOnce(async () => createClarityStepsResponse())
       .mockImplementationOnce(async () => ({
         error: 'evaluation provider unavailable',
         tokenUsage: { total: 4, prompt: 2, completion: 2 },
@@ -223,12 +318,33 @@ describe('matchesGEval', () => {
     });
   });
 
+  it('reports the LiteLLM grader and phase when evaluation returns no output', async () => {
+    const provider = createLiteLLMProvider('litellm:gemini-pro', {});
+    provider.callApi = vi
+      .fn()
+      .mockResolvedValueOnce(createClarityStepsResponse())
+      .mockResolvedValueOnce({
+        tokenUsage: { total: 4, prompt: 2, completion: 2 },
+      });
+
+    const result = await matchesGEval('Evaluate coherence', 'Test input', 'Test output', 0.7, {
+      provider,
+    });
+
+    expect(result).toEqual({
+      pass: false,
+      score: 0,
+      reason: 'G-Eval evaluation call to litellm:gemini-pro returned no output',
+      tokensUsed: expect.objectContaining({ total: 7, prompt: 3, completion: 4 }),
+      metadata: { graderError: true },
+    });
+    expect(DefaultGradingProvider.callApi).not.toHaveBeenCalled();
+    expect(provider.callApi).toHaveBeenCalledTimes(2);
+  });
+
   it('should fail clearly when the evaluation result is not a string', async () => {
     vi.spyOn(DefaultGradingProvider, 'callApi')
-      .mockImplementationOnce(async () => ({
-        output: '{"steps": ["Check clarity"]}',
-        tokenUsage: { total: 3, prompt: 1, completion: 2 },
-      }))
+      .mockImplementationOnce(async () => createClarityStepsResponse())
       .mockImplementationOnce(async () => ({
         output: { score: 8, reason: 'object output' },
         tokenUsage: { total: 4, prompt: 2, completion: 2 },
@@ -252,10 +368,7 @@ describe('matchesGEval', () => {
     ['blank string score', '{"score": "", "reason": "blank score"}', '""'],
   ])('should fail clearly when the evaluation score is %s', async (_, output, scoreLabel) => {
     vi.spyOn(DefaultGradingProvider, 'callApi')
-      .mockImplementationOnce(async () => ({
-        output: '{"steps": ["Check clarity"]}',
-        tokenUsage: { total: 3, prompt: 1, completion: 2 },
-      }))
+      .mockImplementationOnce(async () => createClarityStepsResponse())
       .mockImplementationOnce(async () => ({
         output,
         tokenUsage: { total: 4, prompt: 2, completion: 2 },
@@ -276,10 +389,7 @@ describe('matchesGEval', () => {
 
   it('should fail clearly when the evaluation score is outside the expected range', async () => {
     vi.spyOn(DefaultGradingProvider, 'callApi')
-      .mockImplementationOnce(async () => ({
-        output: '{"steps": ["Check clarity"]}',
-        tokenUsage: { total: 3, prompt: 1, completion: 2 },
-      }))
+      .mockImplementationOnce(async () => createClarityStepsResponse())
       .mockImplementationOnce(async () => ({
         output: '{"score": 11, "reason": "too high"}',
         tokenUsage: { total: 4, prompt: 2, completion: 2 },
@@ -300,10 +410,7 @@ describe('matchesGEval', () => {
 
   it('should fail clearly when the evaluation reason is missing', async () => {
     vi.spyOn(DefaultGradingProvider, 'callApi')
-      .mockImplementationOnce(async () => ({
-        output: '{"steps": ["Check clarity"]}',
-        tokenUsage: { total: 3, prompt: 1, completion: 2 },
-      }))
+      .mockImplementationOnce(async () => createClarityStepsResponse())
       .mockImplementationOnce(async () => ({
         output: '{"score": 8}',
         tokenUsage: { total: 4, prompt: 2, completion: 2 },
@@ -329,10 +436,7 @@ describe('matchesGEval', () => {
     ['whitespace-only reason', '{"score": 8, "reason": "   "}', '"   "'],
   ])('should fail clearly when the evaluation reason is %s', async (_, output, reasonLabel) => {
     vi.spyOn(DefaultGradingProvider, 'callApi')
-      .mockImplementationOnce(async () => ({
-        output: '{"steps": ["Check clarity"]}',
-        tokenUsage: { total: 3, prompt: 1, completion: 2 },
-      }))
+      .mockImplementationOnce(async () => createClarityStepsResponse())
       .mockImplementationOnce(async () => ({
         output,
         tokenUsage: { total: 4, prompt: 2, completion: 2 },
@@ -407,10 +511,7 @@ describe('matchesGEval', () => {
     // locks in that a valid numeric string still produces a real grade so a
     // future tightening doesn't silently reject all string scores.
     vi.spyOn(DefaultGradingProvider, 'callApi')
-      .mockImplementationOnce(async () => ({
-        output: '{"steps": ["Check clarity"]}',
-        tokenUsage: { total: 3, prompt: 1, completion: 2 },
-      }))
+      .mockImplementationOnce(async () => createClarityStepsResponse())
       .mockImplementationOnce(async () => ({
         output: '{"score": "  7  ", "reason": "fine"}',
         tokenUsage: { total: 4, prompt: 2, completion: 2 },
@@ -429,10 +530,7 @@ describe('matchesGEval', () => {
     ['upper bound exactly (10)', '{"score": 10, "reason": "perfect"}', 1],
   ])('should accept score at the %s', async (_, output, expectedScore) => {
     vi.spyOn(DefaultGradingProvider, 'callApi')
-      .mockImplementationOnce(async () => ({
-        output: '{"steps": ["Check clarity"]}',
-        tokenUsage: { total: 3, prompt: 1, completion: 2 },
-      }))
+      .mockImplementationOnce(async () => createClarityStepsResponse())
       .mockImplementationOnce(async () => ({
         output,
         tokenUsage: { total: 4, prompt: 2, completion: 2 },
@@ -446,10 +544,7 @@ describe('matchesGEval', () => {
 
   it('should fail clearly when the evaluation score is negative', async () => {
     vi.spyOn(DefaultGradingProvider, 'callApi')
-      .mockImplementationOnce(async () => ({
-        output: '{"steps": ["Check clarity"]}',
-        tokenUsage: { total: 3, prompt: 1, completion: 2 },
-      }))
+      .mockImplementationOnce(async () => createClarityStepsResponse())
       .mockImplementationOnce(async () => ({
         output: '{"score": -1, "reason": "too low"}',
         tokenUsage: { total: 4, prompt: 2, completion: 2 },

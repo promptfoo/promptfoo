@@ -1,19 +1,112 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import cliState from '../../../src/cliState';
 import {
   applyQueryParams,
   discoverTokenEndpoint,
   getAuthHeaders,
   getAuthQueryParams,
+  getMcpErrorMessage,
+  getOAuthTokenWithExpiry,
+  isMcpErrorResult,
   isMcpToolNameFilter,
+  normalizeMcpToolContent,
+  renderAuthVars,
 } from '../../../src/providers/mcp/util';
 
-import type { MCPServerConfig } from '../../../src/providers/mcp/types';
+import type {
+  MCPOAuthClientCredentialsAuth,
+  MCPServerConfig,
+} from '../../../src/providers/mcp/types';
+
+const createClientCredentialsServer = () => ({
+  auth: {
+    type: 'oauth' as const,
+    grantType: 'client_credentials' as const,
+    clientId: 'id',
+    clientSecret: 'secret',
+    tokenUrl: 'https://auth.example.com/token',
+  },
+});
 
 // Mock fetchWithProxy for discovery tests
 const mockFetch = vi.fn();
-vi.mock('../../../src/util/fetch', () => ({
+
+it('resolves MCP auth from file defaults unless explicit vars replace them', () => {
+  const server: MCPServerConfig = { auth: { type: 'bearer', token: '{{MCP_TOKEN}}' } };
+  cliState.withEnvFileOverrides({ MCP_TOKEN: 'file-token' }, () => {
+    expect(renderAuthVars(server).auth).toEqual({ type: 'bearer', token: 'file-token' });
+    expect(renderAuthVars(server, { MCP_TOKEN: 'explicit-token' }).auth).toEqual({
+      type: 'bearer',
+      token: 'explicit-token',
+    });
+  });
+});
+vi.mock('../../../src/util/fetch/index', () => ({
   fetchWithProxy: (...args: unknown[]) => mockFetch(...args),
 }));
+
+describe('normalizeMcpToolContent', () => {
+  it.each([
+    { name: 'null', content: null, expected: '' },
+    { name: 'undefined', content: undefined, expected: '' },
+    { name: 'literal text', content: '{{secret}}', expected: '{{secret}}' },
+    { name: 'number', content: 42, expected: '42' },
+    { name: 'object', content: { text: 'whole object' }, expected: '{"text":"whole object"}' },
+    { name: 'empty array', content: [], expected: '' },
+    {
+      name: 'mixed blocks and property precedence',
+      content: [
+        'literal',
+        { text: 0, json: 'ignored', data: 'ignored' },
+        { text: false },
+        { text: '', data: 'ignored' },
+        { text: null, json: { count: 2 }, data: 'ignored' },
+        { data: ['value'] },
+        { resource: { uri: 'file:///literal.txt' } },
+        null,
+        undefined,
+      ],
+      expected:
+        'literal\n0\nfalse\n\n{"count":2}\n["value"]\n{"resource":{"uri":"file:///literal.txt"}}\nnull\nundefined',
+    },
+    {
+      name: 'undefined property values and sparse entries',
+      content: [{ json: undefined, data: 'ignored' }, , { data: undefined }],
+      expected: '\n\n',
+    },
+  ])('renders $name without changing content semantics', ({ content, expected }) => {
+    expect(normalizeMcpToolContent(content)).toBe(expected);
+  });
+
+  it('only reports unknown object blocks, before serializing each block', () => {
+    const events: string[] = [];
+    const unknown = {
+      toJSON: () => {
+        events.push('serialize');
+        return 'serialized';
+      },
+    };
+    const onUnknownContent = vi.fn(() => {
+      events.push('diagnostic');
+    });
+
+    expect(
+      normalizeMcpToolContent(
+        [{ text: 'known' }, { json: 1 }, { data: 2 }, unknown, 'plain', 3],
+        onUnknownContent,
+      ),
+    ).toBe('known\n1\n2\n"serialized"\nplain\n3');
+    expect(onUnknownContent).toHaveBeenCalledExactlyOnceWith(unknown);
+    expect(events).toEqual(['diagnostic', 'serialize']);
+  });
+
+  it('preserves serialization failures for the provider error handler', () => {
+    const cyclic: { self?: unknown } = {};
+    cyclic.self = cyclic;
+    expect(() => normalizeMcpToolContent([{ json: cyclic }])).toThrow(TypeError);
+    expect(() => normalizeMcpToolContent([{ data: 1n }])).toThrow(TypeError);
+  });
+});
 
 describe('isMcpToolNameFilter', () => {
   it('identifies plain tool names as MCP filters', () => {
@@ -25,6 +118,40 @@ describe('isMcpToolNameFilter', () => {
     expect(isMcpToolNameFilter('file://tools.json')).toBe(false);
     expect(isMcpToolNameFilter(['file://tools.json'])).toBe(false);
     expect(isMcpToolNameFilter([{ type: 'function', function: { name: 'lookup' } }])).toBe(false);
+  });
+});
+
+describe('isMcpErrorResult', () => {
+  it('flags results with a thrown SDK error', () => {
+    expect(isMcpErrorResult({ content: '', error: 'connection lost' })).toBe(true);
+  });
+
+  it('flags results with a protocol-level isError flag', () => {
+    expect(isMcpErrorResult({ content: 'Path traversal not allowed', isError: true })).toBe(true);
+  });
+
+  it('does not flag successful results', () => {
+    expect(isMcpErrorResult({ content: 'ok' })).toBe(false);
+  });
+});
+
+describe('getMcpErrorMessage', () => {
+  it('prefers the thrown-error message', () => {
+    expect(getMcpErrorMessage({ content: 'ignored', error: 'connection lost' })).toBe(
+      'connection lost',
+    );
+  });
+
+  it('falls back to the tool error content', () => {
+    expect(getMcpErrorMessage({ content: 'Path traversal not allowed', isError: true })).toBe(
+      'Path traversal not allowed',
+    );
+  });
+
+  it('falls back to a generic message when an error result has no content', () => {
+    expect(getMcpErrorMessage({ content: '', isError: true })).toBe(
+      'Tool returned an error result',
+    );
   });
 });
 
@@ -82,30 +209,14 @@ describe('getAuthHeaders', () => {
   });
 
   it('should return oauth bearer token when provided', () => {
-    const server: MCPServerConfig = {
-      auth: {
-        type: 'oauth',
-        grantType: 'client_credentials',
-        clientId: 'id',
-        clientSecret: 'secret',
-        tokenUrl: 'https://auth.example.com/token',
-      },
-    };
+    const server: MCPServerConfig = createClientCredentialsServer();
     expect(getAuthHeaders(server, 'oauth-token-123')).toEqual({
       Authorization: 'Bearer oauth-token-123',
     });
   });
 
   it('should return empty object for oauth without token', () => {
-    const server: MCPServerConfig = {
-      auth: {
-        type: 'oauth',
-        grantType: 'client_credentials',
-        clientId: 'id',
-        clientSecret: 'secret',
-        tokenUrl: 'https://auth.example.com/token',
-      },
-    };
+    const server: MCPServerConfig = createClientCredentialsServer();
     expect(getAuthHeaders(server)).toEqual({});
   });
 
@@ -179,6 +290,26 @@ describe('applyQueryParams', () => {
 });
 
 describe('discoverTokenEndpoint', () => {
+  it.each(['/realms/test/', '/realms/test///'])(
+    'normalizes trailing slashes in discovery: %s',
+    async (path) => {
+      mockFetch.mockResolvedValueOnce({ ok: false, status: 404 });
+      mockFetch.mockResolvedValueOnce({ ok: false, status: 404 });
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ token_endpoint: 'https://trailing.example.com/token' }),
+      });
+      await expect(discoverTokenEndpoint(`https://trailing.example.com${path}`)).resolves.toBe(
+        'https://trailing.example.com/token',
+      );
+      expect(mockFetch.mock.calls.map(([url]) => url)).toEqual([
+        'https://trailing.example.com/realms/test/.well-known/oauth-authorization-server',
+        'https://trailing.example.com/.well-known/oauth-authorization-server/realms/test',
+        'https://trailing.example.com/.well-known/oauth-authorization-server',
+      ]);
+    },
+  );
+
   beforeEach(() => {
     mockFetch.mockReset();
   });
@@ -191,15 +322,16 @@ describe('discoverTokenEndpoint', () => {
     mockFetch.mockResolvedValueOnce({
       ok: true,
       json: async () => ({
-        token_endpoint: 'https://auth.example.com/oauth/token',
+        token_endpoint: 'https://mcp.example.com/oauth/token',
         authorization_endpoint: 'https://auth.example.com/oauth/authorize',
       }),
     });
 
     const result = await discoverTokenEndpoint('https://mcp.example.com');
-    expect(result).toBe('https://auth.example.com/oauth/token');
+    expect(result).toBe('https://mcp.example.com/oauth/token');
     expect(mockFetch).toHaveBeenCalledWith(
       'https://mcp.example.com/.well-known/oauth-authorization-server',
+      { redirect: 'error' },
     );
   });
 
@@ -211,26 +343,29 @@ describe('discoverTokenEndpoint', () => {
     // Third attempt (root) succeeds
     mockFetch.mockResolvedValueOnce({
       ok: true,
-      json: async () => ({ token_endpoint: 'https://auth.example.com/token' }),
+      json: async () => ({ token_endpoint: 'https://example.com/token' }),
     });
 
     const result = await discoverTokenEndpoint('https://example.com/realms/test');
-    expect(result).toBe('https://auth.example.com/token');
+    expect(result).toBe('https://example.com/token');
 
     // Should have tried path-appended first
     expect(mockFetch).toHaveBeenNthCalledWith(
       1,
       'https://example.com/realms/test/.well-known/oauth-authorization-server',
+      { redirect: 'error' },
     );
     // Then RFC 8414 path-aware
     expect(mockFetch).toHaveBeenNthCalledWith(
       2,
       'https://example.com/.well-known/oauth-authorization-server/realms/test',
+      { redirect: 'error' },
     );
     // Then root
     expect(mockFetch).toHaveBeenNthCalledWith(
       3,
       'https://example.com/.well-known/oauth-authorization-server',
+      { redirect: 'error' },
     );
   });
 
@@ -268,49 +403,27 @@ describe('discoverTokenEndpoint', () => {
     );
   });
 
-  it('should ignore empty token endpoints during discovery', async () => {
-    mockFetch.mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({ token_endpoint: '' }),
-    });
-    mockFetch.mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({ token_endpoint: 'https://auth.example.com/token' }),
-    });
+  // Each case uses its own server URL: a cached endpoint would pass without validating.
+  it.each([
+    ['empty', ''],
+    ['malformed', 'not a url'],
+    ['non-HTTP', 'ftp://skip.example.com/token'],
+    ['cross-origin', 'https://unrelated.example.net/token'],
+    ['scheme-mismatched', 'http://skip.example.com/token'],
+    ['port-mismatched', 'https://skip.example.com:8443/token'],
+    ['credentialed', 'https://user:password@skip.example.com/token'],
+  ])('skips a %s token endpoint and keeps discovering', async (kind, tokenEndpoint) => {
+    mockFetch
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ token_endpoint: tokenEndpoint }) })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ token_endpoint: 'https://skip.example.com/token' }),
+      });
 
-    await expect(discoverTokenEndpoint('https://example.com/path')).resolves.toBe(
-      'https://auth.example.com/token',
+    await expect(discoverTokenEndpoint(`https://skip.example.com/${kind}`)).resolves.toBe(
+      'https://skip.example.com/token',
     );
-  });
-
-  it('should ignore malformed token endpoints during discovery', async () => {
-    mockFetch.mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({ token_endpoint: 'not a url' }),
-    });
-    mockFetch.mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({ token_endpoint: 'https://auth.example.com/token' }),
-    });
-
-    await expect(discoverTokenEndpoint('https://example.com/path')).resolves.toBe(
-      'https://auth.example.com/token',
-    );
-  });
-
-  it('should ignore token endpoints with unsupported protocols during discovery', async () => {
-    mockFetch.mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({ token_endpoint: 'ftp://auth.example.com/token' }),
-    });
-    mockFetch.mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({ token_endpoint: 'https://auth.example.com/token' }),
-    });
-
-    await expect(discoverTokenEndpoint('https://example.com/path')).resolves.toBe(
-      'https://auth.example.com/token',
-    );
+    expect(mockFetch).toHaveBeenCalledTimes(2);
   });
 
   it('should handle network errors gracefully', async () => {
@@ -319,5 +432,290 @@ describe('discoverTokenEndpoint', () => {
     await expect(discoverTokenEndpoint('https://example.com')).rejects.toThrow(
       /Failed to discover OAuth token endpoint/,
     );
+  });
+});
+
+describe('getOAuthTokenWithExpiry', () => {
+  it('rejects redirects while discovering and exchanging credentials', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ token_endpoint: 'https://redirect-policy.example.com/token' }),
+    });
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ access_token: 'fixture-token', expires_in: 3600 }),
+    });
+    await getOAuthTokenWithExpiry(
+      {
+        type: 'oauth',
+        grantType: 'client_credentials',
+        clientId: 'fixture',
+        clientSecret: 'fixture-secret',
+      },
+      'https://redirect-policy.example.com/mcp',
+    );
+    expect(mockFetch).toHaveBeenNthCalledWith(
+      1,
+      'https://redirect-policy.example.com/mcp/.well-known/oauth-authorization-server',
+      { redirect: 'error' },
+    );
+    expect(mockFetch).toHaveBeenNthCalledWith(
+      2,
+      'https://redirect-policy.example.com/token',
+      expect.objectContaining({ method: 'POST', redirect: 'error' }),
+    );
+  });
+
+  it('replaces only the rejected token and shares in-flight token requests', async () => {
+    let issued = 0;
+    let releaseToken!: () => void;
+    const tokenGate = new Promise<void>((resolve) => (releaseToken = resolve));
+    mockFetch.mockImplementation(async () => {
+      await tokenGate;
+      issued += 1;
+      return {
+        ok: true,
+        json: async () => ({ access_token: `token-${issued}`, expires_in: 3600 }),
+      };
+    });
+    const auth: MCPOAuthClientCredentialsAuth = {
+      type: 'oauth',
+      grantType: 'client_credentials',
+      clientId: 'rejected-token-client',
+      clientSecret: 'secret',
+      tokenUrl: 'https://rejected-token.example.com/token',
+    };
+    const accessToken = async (rejectedToken?: string) =>
+      (await getOAuthTokenWithExpiry(auth, undefined, rejectedToken)).accessToken;
+
+    const concurrent = Promise.all([accessToken(), accessToken(), accessToken()]);
+    releaseToken();
+    await expect(concurrent).resolves.toEqual(['token-1', 'token-1', 'token-1']);
+    await expect(accessToken('stale-token')).resolves.toBe('token-1');
+    await expect(Promise.all([accessToken('token-1'), accessToken('token-1')])).resolves.toEqual([
+      'token-2',
+      'token-2',
+    ]);
+    await expect(accessToken('token-1')).resolves.toBe('token-2');
+    expect(mockFetch).toHaveBeenCalledTimes(2);
+
+    mockFetch.mockRejectedValueOnce(new Error('token endpoint down'));
+    await expect(accessToken('token-2')).rejects.toThrow('token endpoint down');
+    await expect(accessToken('token-2')).resolves.toBe('token-3');
+  });
+
+  it.each([
+    [30, 15_000],
+    [60, 30_000],
+    [3600, 3_540_000],
+  ])('reuses a %is token until its refresh window', async (expiresIn, refreshAfterMs) => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-09-29T00:00:00Z'));
+    let issued = 0;
+    mockFetch.mockImplementation(async () => ({
+      ok: true,
+      json: async () => ({ access_token: `token-${++issued}`, expires_in: expiresIn }),
+    }));
+    const auth: MCPOAuthClientCredentialsAuth = {
+      type: 'oauth',
+      grantType: 'client_credentials',
+      clientId: `short-lived-${expiresIn}`,
+      clientSecret: 'fixture-secret',
+      tokenUrl: `https://short-lived.example.com/token/${expiresIn}`,
+    };
+    try {
+      const token = await getOAuthTokenWithExpiry(auth);
+      await expect(getOAuthTokenWithExpiry(auth)).resolves.toEqual(token);
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+
+      vi.advanceTimersByTime(refreshAfterMs - 1);
+      await expect(getOAuthTokenWithExpiry(auth)).resolves.toEqual(token);
+      vi.advanceTimersByTime(1);
+      const refreshed = await Promise.all([
+        getOAuthTokenWithExpiry(auth),
+        getOAuthTokenWithExpiry(auth),
+      ]);
+      expect(refreshed.map(({ accessToken }) => accessToken)).toEqual(['token-2', 'token-2']);
+      expect(mockFetch).toHaveBeenCalledTimes(2);
+      await expect(getOAuthTokenWithExpiry(auth, undefined, 'token-1')).resolves.toEqual(
+        refreshed[0],
+      );
+      await expect(getOAuthTokenWithExpiry(auth, undefined, 'token-2')).resolves.toMatchObject({
+        accessToken: 'token-3',
+      });
+      expect(mockFetch).toHaveBeenCalledTimes(3);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('normalizes string scopes for the request and cache key', async () => {
+    mockFetch.mockResolvedValue({
+      ok: true,
+      json: async () => ({ access_token: 'scope-token', expires_in: 3600 }),
+    });
+    const auth: MCPOAuthClientCredentialsAuth = {
+      type: 'oauth',
+      grantType: 'client_credentials',
+      clientId: 'scope-client',
+      clientSecret: 'secret',
+      tokenUrl: 'https://scope-auth.example.com/token',
+      scopes: ' read  write ',
+    };
+
+    const token = await getOAuthTokenWithExpiry(auth);
+    const cached = await getOAuthTokenWithExpiry({ ...auth, scopes: ['read', 'write'] });
+
+    expect(token.accessToken).toBe('scope-token');
+    expect(cached).toEqual(token);
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+    const request = mockFetch.mock.calls[0][1];
+    expect(new URLSearchParams(request.body).get('scope')).toBe('read write');
+  });
+
+  beforeEach(() => {
+    mockFetch.mockReset();
+  });
+
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('scopes cached tokens by the discovered token endpoint', async () => {
+    mockFetch.mockImplementation(async (url: string) => {
+      const parsedUrl = new URL(url);
+      if (parsedUrl.pathname.endsWith('/.well-known/oauth-authorization-server')) {
+        return {
+          ok: true,
+          json: async () => ({
+            token_endpoint:
+              parsedUrl.hostname === 'agent-a.example.com'
+                ? 'https://agent-a.example.com/oauth/token'
+                : 'https://agent-b.example.com/oauth/token',
+          }),
+        };
+      }
+
+      if (url === 'https://agent-a.example.com/oauth/token') {
+        return {
+          ok: true,
+          json: async () => ({ access_token: 'token-a', expires_in: 3600 }),
+        };
+      }
+
+      if (url === 'https://agent-b.example.com/oauth/token') {
+        return {
+          ok: true,
+          json: async () => ({ access_token: 'token-b', expires_in: 3600 }),
+        };
+      }
+
+      throw new Error(`Unexpected URL: ${url}`);
+    });
+
+    const auth: MCPOAuthClientCredentialsAuth = {
+      type: 'oauth',
+      grantType: 'client_credentials',
+      clientId: 'shared-client',
+      clientSecret: 'secret',
+    };
+
+    const firstToken = await getOAuthTokenWithExpiry(auth, 'https://agent-a.example.com/a2a');
+    const secondToken = await getOAuthTokenWithExpiry(auth, 'https://agent-b.example.com/a2a');
+
+    expect(firstToken.accessToken).toBe('token-a');
+    expect(secondToken.accessToken).toBe('token-b');
+    expect(
+      mockFetch.mock.calls
+        .map(([url]) => String(url))
+        .filter((url) => url.includes('/oauth/token')),
+    ).toEqual([
+      'https://agent-a.example.com/oauth/token',
+      'https://agent-b.example.com/oauth/token',
+    ]);
+  });
+});
+
+describe('OAuth cancellation ownership', () => {
+  beforeEach(() => {
+    mockFetch.mockReset();
+  });
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('keeps a token fetch alive while another waiter remains', async () => {
+    let complete!: (value: unknown) => void;
+    let fetchSignal!: AbortSignal;
+    mockFetch.mockImplementation((_url, init) => {
+      fetchSignal = init.signal;
+      return new Promise((resolve, reject) => {
+        complete = resolve;
+        fetchSignal.addEventListener('abort', () => reject(fetchSignal.reason), { once: true });
+      });
+    });
+    const auth: MCPOAuthClientCredentialsAuth = {
+      type: 'oauth',
+      grantType: 'client_credentials',
+      clientId: 'fixture',
+      clientSecret: 'fixture-secret',
+      tokenUrl: 'https://shared-cancel.example.test/token',
+    };
+    const controller = new AbortController();
+    const first = getOAuthTokenWithExpiry(auth, undefined, undefined, controller.signal);
+    const rejected = expect(first).rejects.toThrow();
+    const second = getOAuthTokenWithExpiry(auth);
+    controller.abort();
+    await rejected;
+    expect(fetchSignal.aborted).toBe(false);
+    complete({ ok: true, json: async () => ({ access_token: 'kept', expires_in: 3600 }) });
+    await expect(second).resolves.toMatchObject({ accessToken: 'kept' });
+    expect(mockFetch).toHaveBeenCalledOnce();
+  });
+
+  it('aborts the fetch after the last waiter leaves and permits a fresh request', async () => {
+    let fetchSignal!: AbortSignal;
+    mockFetch.mockImplementationOnce((_url, init) => {
+      fetchSignal = init.signal;
+      return new Promise((_resolve, reject) =>
+        fetchSignal.addEventListener('abort', () => reject(fetchSignal.reason), { once: true }),
+      );
+    });
+    const auth: MCPOAuthClientCredentialsAuth = {
+      type: 'oauth',
+      grantType: 'client_credentials',
+      clientId: 'fixture',
+      clientSecret: 'fixture-secret',
+      tokenUrl: 'https://last-cancel.example.test/token',
+    };
+    const controller = new AbortController();
+    const first = getOAuthTokenWithExpiry(auth, undefined, undefined, controller.signal);
+    const rejected = expect(first).rejects.toThrow();
+    controller.abort();
+    await rejected;
+    expect(fetchSignal.aborted).toBe(true);
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ access_token: 'fresh', expires_in: 3600 }),
+    });
+    await expect(getOAuthTokenWithExpiry(auth)).resolves.toMatchObject({ accessToken: 'fresh' });
+  });
+
+  it('does not continue discovery after cancellation', async () => {
+    mockFetch.mockImplementationOnce(
+      (_url, init) =>
+        new Promise((_resolve, reject) =>
+          init.signal.addEventListener('abort', () => reject(init.signal.reason), { once: true }),
+        ),
+    );
+    const controller = new AbortController();
+    const pending = discoverTokenEndpoint(
+      'https://discovery-cancel.example.test/mcp',
+      controller.signal,
+    );
+    const rejected = expect(pending).rejects.toThrow();
+    controller.abort();
+    await rejected;
+    expect(mockFetch).toHaveBeenCalledOnce();
   });
 });

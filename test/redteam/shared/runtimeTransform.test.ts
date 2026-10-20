@@ -4,6 +4,16 @@ import { applyRuntimeTransforms } from '../../../src/redteam/shared/runtimeTrans
 import type { Strategy } from '../../../src/redteam/strategies/types';
 import type { TestCaseWithPlugin } from '../../../src/types';
 
+async function createRawAudioTests(testCases: TestCaseWithPlugin[]) {
+  return testCases.map((tc) => ({
+    ...tc,
+    vars: {
+      ...tc.vars,
+      input: 'SGVsbG9SYXdBdWRpbw==',
+    },
+  }));
+}
+
 describe('runtimeTransform', () => {
   const mockBase64Strategy: Strategy = {
     id: 'base64',
@@ -46,15 +56,7 @@ describe('runtimeTransform', () => {
 
   const mockRawAudioStrategy: Strategy = {
     id: 'audio-raw',
-    action: vi.fn(async (testCases: TestCaseWithPlugin[]) =>
-      testCases.map((tc) => ({
-        ...tc,
-        vars: {
-          ...tc.vars,
-          input: 'SGVsbG9SYXdBdWRpbw==', // Raw base64 without data URL
-        },
-      })),
-    ),
+    action: vi.fn(/* Raw base64 without data URL */ createRawAudioTests),
   };
 
   const mockStrategies: Strategy[] = [
@@ -93,6 +95,39 @@ describe('runtimeTransform', () => {
       expect(result.prompt).toBe('aGVsbG8='); // base64('hello')
       expect(result.originalPrompt).toBe('hello');
       expect(mockBase64Strategy.action).toHaveBeenCalledTimes(1);
+    });
+
+    it('preserves auxiliary model usage without persisting internal accounting metadata', async () => {
+      const trackedStrategy: Strategy = {
+        id: 'tracked',
+        action: vi.fn(async (testCases) =>
+          testCases.map((testCase: TestCaseWithPlugin) => ({
+            ...testCase,
+            vars: { ...testCase.vars, input: 'transformed' },
+            metadata: {
+              ...testCase.metadata,
+              runtimeTokenUsage: {
+                total: 18,
+                prompt: 12,
+                completion: 6,
+                numRequests: 2,
+                completionDetails: { reasoning: 3 },
+              },
+            },
+          })),
+        ),
+      };
+
+      const result = await applyRuntimeTransforms('hello', 'input', ['tracked'], [trackedStrategy]);
+
+      expect(result.tokenUsage).toMatchObject({
+        total: 18,
+        prompt: 12,
+        completion: 6,
+        numRequests: 2,
+        completionDetails: { reasoning: 3 },
+      });
+      expect(result.metadata).not.toHaveProperty('runtimeTokenUsage');
     });
 
     it('should apply multiple transform layers in order', async () => {
@@ -135,15 +170,7 @@ describe('runtimeTransform', () => {
       // Create a strategy that mimics returning raw base64 audio
       const rawAudioStrategy: Strategy = {
         id: 'audio',
-        action: vi.fn(async (testCases: TestCaseWithPlugin[]) =>
-          testCases.map((tc) => ({
-            ...tc,
-            vars: {
-              ...tc.vars,
-              input: 'SGVsbG9SYXdBdWRpbw==', // Raw base64 without data URL prefix
-            },
-          })),
-        ),
+        action: vi.fn(/* Raw base64 without data URL prefix */ createRawAudioTests),
       };
 
       const strategies = [rawAudioStrategy];
@@ -169,6 +196,21 @@ describe('runtimeTransform', () => {
         'input',
         expect.objectContaining({ someOption: true }),
       );
+    });
+
+    it('should pass target context to per-turn layer strategies', async () => {
+      const result = await applyRuntimeTransforms('hello', 'input', ['base64'], mockStrategies, {
+        targetId: 'cloud-target-123',
+      });
+
+      expect(mockBase64Strategy.action).toHaveBeenCalledWith(
+        expect.any(Array),
+        'input',
+        expect.objectContaining({ targetId: 'cloud-target-123' }),
+      );
+
+      expect(result.prompt).toBe('aGVsbG8=');
+      expect(result.originalPrompt).toBe('hello');
     });
 
     it('should skip unknown strategies with warning', async () => {
@@ -198,6 +240,42 @@ describe('runtimeTransform', () => {
       expect(result.error).toContain('Transform failing failed');
       expect(result.prompt).toBe('hello'); // Returns original prompt on error
       expect(result.originalPrompt).toBe('hello');
+    });
+
+    it('preserves prior model usage when a later transform fails', async () => {
+      const trackedStrategy: Strategy = {
+        id: 'tracked',
+        action: vi.fn(async (testCases) =>
+          testCases.map((testCase: TestCaseWithPlugin) => ({
+            ...testCase,
+            metadata: {
+              ...testCase.metadata,
+              runtimeTokenUsage: { total: 18, prompt: 12, completion: 6, numRequests: 1 },
+            },
+          })),
+        ),
+      };
+      const failingStrategy: Strategy = {
+        id: 'failing',
+        action: vi.fn(async () => {
+          throw new Error('Transform failed');
+        }),
+      };
+
+      const result = await applyRuntimeTransforms(
+        'hello',
+        'input',
+        ['tracked', 'failing'],
+        [trackedStrategy, failingStrategy],
+      );
+
+      expect(result.error).toContain('Transform failing failed');
+      expect(result.tokenUsage).toMatchObject({
+        total: 18,
+        prompt: 12,
+        completion: 6,
+        numRequests: 1,
+      });
     });
 
     it('should preserve pluginId in metadata during transforms', async () => {

@@ -6,11 +6,11 @@ This directory contains examples for using Azure AI services with promptfoo, inc
 
 ### Azure OpenAI
 
-| Example                           | Description                         |
-| --------------------------------- | ----------------------------------- |
-| [openai](./openai/)               | Azure OpenAI chat and vision models |
-| [assistant](./assistant/)         | Azure OpenAI Assistants with tools  |
-| [foundry-agent](./foundry-agent/) | Azure AI Foundry Agents             |
+| Example                           | Description                                     |
+| --------------------------------- | ----------------------------------------------- |
+| [openai](./openai/)               | Azure OpenAI chat and vision models             |
+| [assistant](./assistant/)         | Archived Azure OpenAI Assistants configurations |
+| [foundry-agent](./foundry-agent/) | Azure AI Foundry Agents                         |
 
 ### Third-Party Models (Azure AI Foundry)
 
@@ -28,7 +28,7 @@ This directory contains examples for using Azure AI services with promptfoo, inc
 # Azure OpenAI basic example
 npx promptfoo@latest init --example azure/openai
 
-# Azure Assistants with tools
+# Download archived Azure Assistants configurations
 npx promptfoo@latest init --example azure/assistant
 
 # Azure AI Foundry Agents

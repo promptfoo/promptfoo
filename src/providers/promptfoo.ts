@@ -3,23 +3,27 @@ import { VERSION } from '../constants';
 import { getUserEmail } from '../globalConfig/accounts';
 import logger from '../logger';
 import {
+  getRemoteGenerationHeaders,
   getRemoteGenerationUrl,
   getRemoteGenerationUrlForUnaligned,
   neverGenerateRemote,
   neverGenerateRemoteForRegularEvals,
+  providerRemoteGenerationContextPayload,
 } from '../redteam/remoteGeneration';
 import { getRemoteMaterializationContextFromVars } from '../redteam/remoteMaterialization';
+import { BaseTokenUsageSchema } from '../types/shared';
 import { fetchWithRetries } from '../util/fetch/index';
 import { getRequestTimeoutMs } from './shared';
 
-import type { EnvOverrides } from '../types/env';
 import type {
   ApiProvider,
   CallApiContextParams,
   CallApiOptionsParams,
+  EnvOverrides,
   Inputs,
   PluginConfig,
   ProviderResponse,
+  RemoteGenerationContext,
   TokenUsage,
 } from '../types/index';
 
@@ -28,6 +32,8 @@ interface PromptfooHarmfulCompletionOptions {
   n: number;
   purpose: string;
   config?: PluginConfig;
+  targetId?: string;
+  redteamGenerationContext?: RemoteGenerationContext;
 }
 
 function getHarmfulGenerationLogMetadata(body: {
@@ -84,12 +90,18 @@ export class PromptfooHarmfulCompletionProvider implements ApiProvider {
   n: number;
   purpose: string;
   config?: PluginConfig;
+  targetId?: string;
+  redteamGenerationContext?: RemoteGenerationContext;
 
   constructor(options: PromptfooHarmfulCompletionOptions) {
     this.harmCategory = options.harmCategory;
     this.n = options.n;
     this.purpose = options.purpose;
     this.config = options.config;
+    this.targetId = options.targetId;
+    this.redteamGenerationContext =
+      options.redteamGenerationContext ??
+      (options.targetId ? { providerTargetIds: [], cloudTargetId: options.targetId } : undefined);
   }
 
   id(): string {
@@ -127,6 +139,7 @@ export class PromptfooHarmfulCompletionProvider implements ApiProvider {
       purpose: this.purpose,
       version: VERSION,
       config: this.config,
+      ...providerRemoteGenerationContextPayload(this.redteamGenerationContext ?? this.targetId),
     };
 
     try {
@@ -139,9 +152,7 @@ export class PromptfooHarmfulCompletionProvider implements ApiProvider {
         getRemoteGenerationUrlForUnaligned(),
         {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
+          headers: { ...getRemoteGenerationHeaders(), 'x-promptfoo-silent': 'true' },
           body: JSON.stringify(body),
           ...(callApiOptions?.abortSignal && { signal: callApiOptions.abortSignal }),
         },
@@ -156,8 +167,18 @@ export class PromptfooHarmfulCompletionProvider implements ApiProvider {
           statusTextLength: response.statusText.length,
           responseBodyLength: responseBody.length,
         });
+        let tokenUsage: TokenUsage | undefined;
+        try {
+          const parsed = BaseTokenUsageSchema.safeParse(JSON.parse(responseBody)?.tokenUsage);
+          if (parsed.success) {
+            tokenUsage = parsed.data;
+          }
+        } catch {
+          // Non-JSON responses do not carry structured token usage.
+        }
         return {
           error: `[HarmfulCompletionProvider] API call failed with status ${response.status}`,
+          ...(tokenUsage ? { tokenUsage } : {}),
         };
       }
 
@@ -172,6 +193,7 @@ export class PromptfooHarmfulCompletionProvider implements ApiProvider {
 
       return {
         output: validOutputs,
+        ...(data.tokenUsage ? { tokenUsage: data.tokenUsage as TokenUsage } : {}),
       };
     } catch (err) {
       // Re-throw abort errors to properly cancel the operation
@@ -182,8 +204,14 @@ export class PromptfooHarmfulCompletionProvider implements ApiProvider {
         '[HarmfulCompletionProvider] Error generating harmful content',
         getErrorMetadata(err),
       );
+      const parsedTokenUsage =
+        err && typeof err === 'object' && 'tokenUsage' in err
+          ? BaseTokenUsageSchema.safeParse(err.tokenUsage)
+          : undefined;
+      const tokenUsage = parsedTokenUsage?.success ? parsedTokenUsage.data : undefined;
       return {
         error: '[HarmfulCompletionProvider] Error generating harmful content',
+        ...(tokenUsage ? { tokenUsage } : {}),
       };
     }
   }
@@ -194,6 +222,9 @@ interface PromptfooChatCompletionOptions {
   id?: string;
   jsonOnly: boolean;
   preferSmallModel: boolean;
+  /** Cloud target database ID used to resolve the owning team for remote tasks. */
+  targetId?: string;
+  redteamGenerationContext?: RemoteGenerationContext;
   task:
     | 'crescendo'
     | 'goat'
@@ -204,6 +235,7 @@ interface PromptfooChatCompletionOptions {
     | 'blocking-question-analysis'
     | 'meta-agent-decision'
     | 'hydra-decision'
+    | 'goblin-decision'
     | 'voice-crescendo'
     | 'voice-crescendo-eval';
   /**
@@ -259,6 +291,9 @@ export class PromptfooChatCompletionProvider implements ApiProvider {
       step: context?.prompt.label,
       task: this.options.task,
       email: getUserEmail(),
+      ...providerRemoteGenerationContextPayload(
+        this.options.redteamGenerationContext ?? this.options.targetId,
+      ),
       // Pass inputs schema for multi-input mode
       ...(this.options.inputs && { inputs: this.options.inputs }),
       ...(materializationContext ? { materializationContext } : {}),
@@ -269,9 +304,7 @@ export class PromptfooChatCompletionProvider implements ApiProvider {
         getRemoteGenerationUrl(),
         {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
+          headers: getRemoteGenerationHeaders(),
           body: JSON.stringify(body),
           ...(callApiOptions?.abortSignal && { signal: callApiOptions.abortSignal }),
         },
@@ -280,12 +313,54 @@ export class PromptfooChatCompletionProvider implements ApiProvider {
 
       const data = await response.json();
 
+      // Only Cloud's explicit upstream request classification can stop Meta iterations.
+      // Missing results and unstructured error text may be refusals or transient failures.
+      if (
+        this.options.task === 'meta-agent-decision' &&
+        response.status === 400 &&
+        data.providerError?.status === 400 &&
+        data.providerError?.type === 'invalid_request_error' &&
+        data.providerError?.code === 'invalid_json'
+      ) {
+        return {
+          error:
+            'Meta-agent request failed: the upstream provider rejected the coordination request as invalid JSON (invalid_json).',
+          metadata: {
+            remoteGenerationError: {
+              status: 400,
+              type: 'invalid_request_error',
+              code: 'invalid_json',
+            },
+          },
+          ...(data.tokenUsage ? { tokenUsage: data.tokenUsage } : {}),
+        };
+      }
+
+      // Remote provider failures can use HTTP 200; an error takes precedence over stale output.
+      if (typeof data.error === 'string' && data.error) {
+        return {
+          error: data.error,
+          ...(data.isRefusal === true ? { isRefusal: true } : {}),
+          ...(data.tokenUsage ? { tokenUsage: data.tokenUsage } : {}),
+        };
+      }
+
+      if (!response.ok) {
+        return {
+          error: `API call failed with status ${response.status}`,
+          ...(data.isRefusal === true ? { isRefusal: true } : {}),
+          ...(data.tokenUsage ? { tokenUsage: data.tokenUsage } : {}),
+        };
+      }
+
       if (!data.result) {
         logger.debug(
           `Error from promptfoo completion provider. Status: ${response.status} ${response.statusText} ${JSON.stringify(data)} `,
         );
         return {
           error: 'LLM did not return a result, likely refusal',
+          ...(data.isRefusal === true ? { isRefusal: true } : {}),
+          ...(data.tokenUsage ? { tokenUsage: data.tokenUsage } : {}),
         };
       }
 
@@ -294,6 +369,7 @@ export class PromptfooChatCompletionProvider implements ApiProvider {
         materializationHandled: data.materializationHandled,
         materializedVars: data.materializedVars,
         output: data.result,
+        ...(data.isRefusal === true ? { isRefusal: true } : {}),
         tokenUsage: data.tokenUsage,
       };
     } catch (err) {
@@ -312,6 +388,9 @@ interface PromptfooAgentOptions {
   env?: EnvOverrides;
   id?: string;
   instructions?: string;
+  /** Cloud target database ID used to resolve the owning team for remote tasks. */
+  targetId?: string;
+  redteamGenerationContext?: RemoteGenerationContext;
 }
 
 // Task ID constants for simulated user provider
@@ -370,26 +449,28 @@ export class PromptfooSimulatedUserProvider implements ApiProvider {
 
           Learn more: ${docsUrl}
         `,
+        tokenUsage: { numRequests: 0 },
       };
     }
 
-    const messages = JSON.parse(prompt);
-    const body = {
-      task: this.taskId,
-      instructions: this.options.instructions,
-      history: messages,
-      email: getUserEmail(),
-      version: VERSION,
-    };
-
     try {
+      const messages = JSON.parse(prompt);
+      const body = {
+        task: this.taskId,
+        instructions: this.options.instructions,
+        history: messages,
+        email: getUserEmail(),
+        version: VERSION,
+        ...providerRemoteGenerationContextPayload(
+          this.options.redteamGenerationContext ?? this.options.targetId,
+        ),
+      };
+
       const response = await fetchWithRetries(
         getRemoteGenerationUrl(),
         {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
+          headers: getRemoteGenerationHeaders(),
           body: JSON.stringify(body),
           ...(callApiOptions?.abortSignal && { signal: callApiOptions.abortSignal }),
         },

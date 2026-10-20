@@ -2,15 +2,14 @@ name: Validate Renovate Config
 
 on:
   pull_request:
-    paths:
+    paths: &watched-paths
       - 'renovate.json'
+      - '.nvmrc'
       - '.github/workflows/validate-renovate-config.yml'
   push:
     branches:
       - main
-    paths:
-      - 'renovate.json'
-      - '.github/workflows/validate-renovate-config.yml'
+    paths: *watched-paths
 
 permissions:
   contents: read
@@ -22,7 +21,20 @@ jobs:
     timeout-minutes: 5
     steps:
       - name: Checkout repository
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
+        with:
+          node-version-file: '.nvmrc'
+
+      - name: Install Renovate validation tools
+        run: >-
+          npm install --prefix "$RUNNER_TEMP/renovate-tool"
+          --no-package-lock --no-audit --no-fund
+          --registry=https://registry.npmjs.org/ renovate@44.90.0
 
       - name: Validate renovate.json
-        run: npx --yes --package renovate -- renovate-config-validator
+        run: node "$RUNNER_TEMP/renovate-tool/node_modules/renovate/dist/config-validator.js"

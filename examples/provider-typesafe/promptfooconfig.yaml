@@ -1,0 +1,66 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Grade and classify outputs with TypeSafe Jev
+
+# The echo provider returns each canned reply unchanged, so Jev grades fixed
+# outputs and the example needs only TYPESAFE_API_KEY.
+prompts:
+  - '{{reply}}'
+
+providers:
+  - echo
+
+defaultTest:
+  options:
+    # Each llm-rubric becomes a yes/no (Noul) question about the output.
+    provider: typesafe:jev-latest
+
+tests:
+  - description: Apologizes and fixes the problem
+    vars:
+      reply: I'm sorry your order arrived damaged. A replacement ships today at no cost to you.
+    assert:
+      - type: llm-rubric
+        value: The reply apologizes to the customer
+      - type: llm-rubric
+        value: The reply offers a replacement or a refund
+      # With `levels`, the rubric becomes a Score question scaled to 0–1.
+      - type: llm-rubric
+        value: How well does the reply resolve the customer's problem?
+        provider:
+          id: typesafe:jev-latest
+          config:
+            threshold: 0.75
+            levels:
+              - Ignores the customer's problem
+              - Acknowledges the problem but offers no fix
+              - Acknowledges the problem and offers a concrete fix
+      # classifier asks a Choice question and checks one label's probability.
+      - type: classifier
+        value: resolution
+        threshold: 0.8
+        provider:
+          id: typesafe:jev-latest
+          config:
+            instructions: What is this support reply doing?
+            labels:
+              resolution: Resolves the issue or offers a concrete fix
+              deflection: Redirects the customer without helping
+              question: Asks the customer for more information
+
+  - description: Deflects without helping
+    vars:
+      reply: Please review our shipping policy on the website.
+    assert:
+      - type: not-llm-rubric
+        value: The reply offers a replacement or a refund
+      - type: classifier
+        value: deflection
+        threshold: 0.8
+        provider:
+          id: typesafe:jev-latest
+          config:
+            instructions: What is this support reply doing?
+            labels:
+              resolution: Resolves the issue or offers a concrete fix
+              deflection: Redirects the customer without helping
+              question: Asks the customer for more information

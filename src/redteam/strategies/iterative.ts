@@ -1,5 +1,6 @@
+import { createAdaptiveMultiTurnStrategy } from './hydra';
+
 import type { TestCase } from '../../types/index';
-import type { Inputs } from '../../types/shared';
 
 export function addIterativeJailbreaks(
   testCases: TestCase[],
@@ -28,32 +29,9 @@ export function addIterativeJailbreaks(
         ? 'jailbreak:tree'
         : 'jailbreak:meta';
 
-  return testCases.map((testCase) => {
-    const originalText = String(testCase.vars![injectVar]);
-    // Get inputs from plugin config if available
-    const pluginConfig = testCase.metadata?.pluginConfig as Record<string, unknown> | undefined;
-    const inputs = pluginConfig?.inputs as Inputs | undefined;
-
-    return {
-      ...testCase,
-      provider: {
-        id: providerName,
-        config: {
-          injectVar,
-          ...config,
-          // Pass inputs from plugin config to iterative provider
-          ...(inputs && { inputs }),
-        },
-      },
-      assert: testCase.assert?.map((assertion) => ({
-        ...assertion,
-        metric: `${assertion.metric}/${metricSuffix}`,
-      })),
-      metadata: {
-        ...testCase.metadata,
-        strategyId,
-        originalText,
-      },
-    };
-  });
+  return createAdaptiveMultiTurnStrategy({ providerName, metricSuffix, strategyId }, false)(
+    testCases,
+    injectVar,
+    config,
+  );
 }

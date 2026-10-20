@@ -1,13 +1,118 @@
-import yaml from 'js-yaml';
 import { getEnvBool, getEnvInt } from '../envars';
+import { getCallerAbortError } from '../util/fetch/requestSignal';
+import { loadYaml } from '../util/yamlLoad';
 
-import type { ApiProvider } from '../types/index';
+import type {
+  ApiProvider,
+  CallApiContextParams,
+  ProviderEmbeddingResponse,
+  ProviderResponse,
+} from '../types/index';
+
+/** An explicit bustCache setting takes precedence over the legacy debug fallback. */
+export function shouldBustProviderCache(
+  context?: Pick<CallApiContextParams, 'bustCache' | 'debug'>,
+): boolean {
+  return context?.bustCache ?? context?.debug ?? false;
+}
+
+/**
+ * Mark cached responses without changing reported usage or cost. The evaluator
+ * uses the cache marker to calculate incurred usage; missing counts stay unknown.
+ */
+export function withResponseCacheMetadata<T extends ProviderResponse | ProviderEmbeddingResponse>(
+  response: T,
+  cached: boolean,
+): Omit<T, 'cached' | 'tokenUsage'> & Pick<ProviderResponse, 'tokenUsage'> & { cached: boolean } {
+  if (!cached || !response.tokenUsage) {
+    return { ...response, cached };
+  }
+  const base: Omit<T, 'cached' | 'tokenUsage'> = response;
+  const { cached: reportedCached, ...usage } = response.tokenUsage;
+  const providerCached =
+    usage.completionDetails?.cacheReadInputTokens ??
+    (response.cached === true ? undefined : reportedCached);
+  return {
+    ...base,
+    cached,
+    tokenUsage: {
+      ...usage,
+      ...(providerCached !== undefined && {
+        completionDetails: { ...usage.completionDetails, cacheReadInputTokens: providerCached },
+      }),
+      ...(usage.total !== undefined && { cached: usage.total }),
+      numRequests: 0,
+      incurredTokenUsage: {},
+    },
+  };
+}
+
+export function throwIfAborted(signal?: AbortSignal | null): void {
+  if (signal?.aborted) {
+    throw getCallerAbortError(signal);
+  }
+}
+
+/** Stop only this caller's wait; shared work keeps running and its rejection is observed. */
+export function waitForPromiseWithAbort<T>(
+  promise: PromiseLike<T>,
+  signal?: AbortSignal | null,
+): Promise<T> {
+  if (!signal) {
+    return Promise.resolve(promise);
+  }
+  return new Promise<T>((resolve, reject) => {
+    const onAbort = () => {
+      signal.removeEventListener('abort', onAbort);
+      reject(getCallerAbortError(signal));
+    };
+    signal.addEventListener('abort', onAbort, { once: true });
+    Promise.resolve(promise).then(
+      (value) => {
+        signal.removeEventListener('abort', onAbort);
+        resolve(value);
+      },
+      (error: unknown) => {
+        signal.removeEventListener('abort', onAbort);
+        reject(error);
+      },
+    );
+    if (signal.aborted) {
+      onAbort();
+    }
+  });
+}
+
+/** Returns the complete model suffix after the given number of provider/type segments. */
+export function modelNameFromProviderPath(providerPath: string, segments: number): string {
+  return providerPath.split(':').slice(segments).join(':');
+}
 
 /**
  * The default timeout for API requests in milliseconds.
  */
 export function getRequestTimeoutMs(): number {
   return getEnvInt('REQUEST_TIMEOUT_MS', 300_000);
+}
+
+/** Read a simple eval variable without evaluating template expressions. */
+export function resolveDirectTestVariable(value: unknown, vars?: Record<string, unknown>): unknown {
+  if (typeof value !== 'string' || getEnvBool('PROMPTFOO_DISABLE_TEMPLATING')) {
+    return value;
+  }
+  const variable = /^\{\{\s*([A-Za-z_]\w*)\s*\}\}$/.exec(value)?.[1];
+  return variable && vars && Object.prototype.hasOwnProperty.call(vars, variable)
+    ? vars[variable]
+    : value;
+}
+
+/** Match OpenAI-compatible output-limit environment precedence. */
+export function getOpenAIChatOutputLimitFromEnv(): number | undefined {
+  return getOpenAICompletionTokenLimitFromEnv() ?? getEnvInt('OPENAI_MAX_TOKENS');
+}
+
+export function getOpenAICompletionTokenLimitFromEnv(): number | undefined {
+  return getEnvInt('OPENAI_MAX_COMPLETION_TOKENS');
 }
 
 /**
@@ -40,6 +145,10 @@ export interface ProviderConfig {
   audioCost?: number;
   audioInputCost?: number;
   audioOutputCost?: number;
+  videoOutputCost?: number;
+  imageInputCost?: number;
+  service_tier?: string | null;
+  passthrough?: object;
 }
 
 /**
@@ -84,6 +193,17 @@ export function calculateCost(
 }
 
 /**
+ * Clamp reported cached prompt tokens to [0, promptTokens] for cost billing.
+ *
+ * Providers occasionally report cached token counts that exceed prompt tokens
+ * (rounding) or values that are negative or non-finite; billing those raw would
+ * produce negative or NaN costs.
+ */
+export function clampCachedTokens(cachedTokens: number | undefined, promptTokens: number): number {
+  return Number.isFinite(cachedTokens) ? Math.min(Math.max(cachedTokens!, 0), promptTokens) : 0;
+}
+
+/**
  * Checks if a string looks like it's attempting to be JSON.
  * This helps distinguish between actual JSON attempts and plain text that happens to start/end with brackets.
  */
@@ -109,10 +229,6 @@ function looksLikeJson(prompt: string): boolean {
     ) {
       return true;
     }
-    // If it's just whitespace or empty, it might be JSON
-    if (afterBracket.length === 0 || /^\s+$/.test(afterBracket)) {
-      return true;
-    }
     // Otherwise, it's likely plain text (e.g., [INST]...[/INST])
     return false;
   }
@@ -134,7 +250,7 @@ export function parseChatPrompt<T>(prompt: string, defaultValue: T): T {
   if (trimmedPrompt.startsWith('- role:')) {
     try {
       // Try YAML - some legacy OpenAI prompts are YAML :(
-      return yaml.load(prompt) as T;
+      return loadYaml(prompt) as T;
     } catch (err) {
       throw new Error(`Chat Completion prompt is not a valid YAML string: ${err}\n\n${prompt}`);
     }

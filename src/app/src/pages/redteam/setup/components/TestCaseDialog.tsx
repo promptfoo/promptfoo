@@ -34,6 +34,7 @@ import {
   type Strategy,
 } from '@promptfoo/redteam/constants';
 import { ExternalLink, Info, Sparkles } from 'lucide-react';
+import { useRedTeamTargetConfigValidation } from '../hooks/useRedTeamTargetConfigValidation';
 import {
   getPluginDocumentationUrl,
   hasSpecificPluginDocumentation,
@@ -266,6 +267,7 @@ export const TestCaseGenerateButton: React.FC<{
     data: { status: apiHealthStatus },
   } = useApiHealth();
   const isRemoteDisabled = apiHealthStatus !== 'connected';
+  const { targetConfigError } = useRedTeamTargetConfigValidation();
 
   // Tooltip component uses controlled state in order to imperatively close it when the Test Case
   // Generation dialog is rendered (by default it will remain open even after the dialog is closed).
@@ -276,6 +278,7 @@ export const TestCaseGenerateButton: React.FC<{
 
   const iconSize = size === 'small' ? 'h-4 w-4' : 'h-5 w-5';
   const buttonLabel =
+    targetConfigError ||
     tooltipTitle ||
     (isRemoteDisabled ? 'Requires Promptfoo Cloud connection' : 'Generate a test case');
 
@@ -291,7 +294,7 @@ export const TestCaseGenerateButton: React.FC<{
             hideTooltip();
             onClick();
           }}
-          disabled={disabled || isRemoteDisabled}
+          disabled={disabled || isRemoteDisabled || Boolean(targetConfigError)}
           className="text-muted-foreground hover:text-foreground"
           onMouseEnter={showTooltip}
           onMouseLeave={hideTooltip}
@@ -300,9 +303,10 @@ export const TestCaseGenerateButton: React.FC<{
         </Button>
       </TooltipTrigger>
       <TooltipContent>
-        {isRemoteDisabled
-          ? 'Requires Promptfoo Cloud connection'
-          : tooltipTitle || 'Generate test case'}
+        {targetConfigError ||
+          (isRemoteDisabled
+            ? 'Requires Promptfoo Cloud connection'
+            : tooltipTitle || 'Generate test case')}
       </TooltipContent>
     </Tooltip>
   );

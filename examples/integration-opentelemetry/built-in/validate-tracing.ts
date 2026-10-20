@@ -7,7 +7,7 @@
  * by making provider calls and verifying spans are created with the
  * expected attributes.
  *
- * Usage:
+ * Usage from a Promptfoo source checkout, with dependencies installed:
  *   npx tsx examples/integration-opentelemetry/built-in/validate-tracing.ts
  *
  * Prerequisites:
@@ -15,19 +15,21 @@
  *   - Or modify the providers array to use a different provider
  */
 
-import { InMemorySpanExporter, SimpleSpanProcessor } from '@opentelemetry/sdk-trace-base';
-import { NodeTracerProvider } from '@opentelemetry/sdk-trace-node';
+import {
+  InMemorySpanExporter,
+  NodeTracerProvider,
+  SimpleSpanProcessor,
+} from '@opentelemetry/sdk-trace-node';
+import { disableCache } from '../../../src/cache';
+import { OpenAiResponsesProvider } from '../../../src/providers/openai/responses';
+import { GenAIAttributes, PromptfooAttributes } from '../../../src/tracing/genaiTracer';
 
-// Set up OTEL before importing providers
+// Set up OTEL before making provider calls.
 const memoryExporter = new InMemorySpanExporter();
 const tracerProvider = new NodeTracerProvider({
   spanProcessors: [new SimpleSpanProcessor(memoryExporter)],
 });
 tracerProvider.register();
-
-// Now import providers (after OTEL is set up)
-import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
-import { GenAIAttributes, PromptfooAttributes } from '../../src/tracing/genaiTracer';
 
 interface ValidationResult {
   name: string;
@@ -93,11 +95,11 @@ async function validateProvider(
     const span = spans[0];
 
     // Validate GenAI attributes
-    const system = span.attributes[GenAIAttributes.SYSTEM];
+    const providerIdentity = span.attributes[GenAIAttributes.PROVIDER_NAME];
     results.push({
-      name: `${providerName}: gen_ai.system`,
-      passed: !!system,
-      message: system ? `Value: ${system}` : 'Missing attribute',
+      name: `${providerName}: gen_ai.provider.name`,
+      passed: !!providerIdentity,
+      message: providerIdentity ? `Value: ${providerIdentity}` : 'Missing attribute',
     });
 
     const opName = span.attributes[GenAIAttributes.OPERATION_NAME];
@@ -152,6 +154,7 @@ async function validateProvider(
 }
 
 async function main() {
+  disableCache();
   console.log('═══════════════════════════════════════════════════════════════');
   console.log('  OTEL Tracing Validation Script');
   console.log('═══════════════════════════════════════════════════════════════');
@@ -161,14 +164,18 @@ async function main() {
 
   // Test OpenAI if API key is available
   if (process.env.OPENAI_API_KEY) {
-    const openaiProvider = new OpenAiChatCompletionProvider('gpt-4o-mini', {
-      config: { temperature: 0, max_tokens: 10 },
+    const openaiProvider = new OpenAiResponsesProvider('gpt-6-luna', {
+      config: { reasoning: { effort: 'none' }, temperature: 0, max_output_tokens: 50 },
     });
 
     const openaiResults = await validateProvider('OpenAI', openaiProvider, prompt);
     allResults.push(...openaiResults);
   } else {
-    console.log('\n⚠️  OPENAI_API_KEY not set, skipping OpenAI validation');
+    allResults.push({
+      name: 'OpenAI: API key',
+      passed: false,
+      message: 'Set OPENAI_API_KEY to run tracing validation.',
+    });
   }
 
   // Add more providers here as needed
@@ -206,4 +213,7 @@ async function main() {
   process.exit(failed > 0 ? 1 : 0);
 }
 
-main().catch(console.error);
+main().catch((error) => {
+  console.error(error);
+  process.exitCode = 1;
+});

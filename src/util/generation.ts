@@ -58,7 +58,12 @@ export async function retryWithDeduplication<T>(
  */
 export function sampleArray<T>(array: T[], n: number): T[] {
   logger.debug(`Sampling ${n} items from array of length ${array.length}`);
-  const shuffled = array.slice().sort(() => 0.5 - Math.random());
+  // Fisher-Yates shuffle.
+  const shuffled = array.slice();
+  for (let i = shuffled.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+  }
   return shuffled.slice(0, Math.min(n, array.length));
 }
 

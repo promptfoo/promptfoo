@@ -4,11 +4,93 @@ import path from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
+  extractModuleReferences,
   extractModuleSpecifiers,
+  findUnclassifiedFiles,
   findViolations,
+  getExternalModuleName,
+  getLayerForFile,
+  getSourceFiles,
   type LayerConfig,
+  readLayerConfig,
   resolveInternalModule,
 } from '../../scripts/architectureUtils';
+
+describe('extractModuleReferences', () => {
+  it('separates explicit types, mixed/side-effect imports, loads, and resolution', () => {
+    const source = `import type { A } from 'a';
+import { type B } from 'b';
+import { type C, D } from 'c';
+import 'side';
+export type * from 'types';
+export { type E } from 'e';
+export { type F, G } from 'f';
+import type H = require('h');
+type I = import('i').I;
+import('later');
+require('now');
+require.resolve('path');`;
+    expect(
+      extractModuleReferences(source, 'fixture.ts').map(({ specifier, kind, line }) => [
+        specifier,
+        kind,
+        line,
+      ]),
+    ).toEqual([
+      ['a', 'type', 1],
+      ['b', 'type', 2],
+      ['c', 'value', 3],
+      ['side', 'value', 4],
+      ['types', 'type', 5],
+      ['e', 'type', 6],
+      ['f', 'value', 7],
+      ['h', 'type', 8],
+      ['i', 'type', 9],
+      ['later', 'deferred', 10],
+      ['now', 'value', 11],
+      ['path', 'resolution', 12],
+    ]);
+    expect(extractModuleSpecifiers(source, 'fixture.ts')).toHaveLength(12);
+  });
+
+  it('counts all JavaScript line terminators with CRLF as one line', () => {
+    const source =
+      "import 'a';\r\nimport 'b';\rimport 'c';\u2028import 'd';\u2029import 'e';\nimport 'f';";
+    expect(extractModuleReferences(source, 'fixture.ts').map(({ line }) => line)).toEqual([
+      1, 2, 3, 4, 5, 6,
+    ]);
+  });
+
+  it('uses UTF-16 offsets after long Unicode prefixes and across every line terminator', () => {
+    const prefix = `/* ${'é漢😀'.repeat(1000)} */`;
+    const source =
+      `${prefix} import 'same-line';\r\nimport 'crlf';\rimport 'cr';` +
+      "\u2028import 'line-separator';\u2029import 'paragraph-separator';\nimport 'lf';";
+    expect(extractModuleReferences(source, 'fixture.ts').map(({ line }) => line)).toEqual([
+      1, 2, 3, 4, 5, 6,
+    ]);
+  });
+
+  it('surfaces computed loaders without inventing literal dependencies', () => {
+    const source =
+      "import(target); require(target); require.resolve(target); import(`fixed`); // import('fake')";
+    expect(
+      extractModuleReferences(source, 'fixture.ts').map(({ specifier, kind }) => [specifier, kind]),
+    ).toEqual([
+      [undefined, 'deferred'],
+      [undefined, 'value'],
+      [undefined, 'resolution'],
+      ['fixed', 'deferred'],
+    ]);
+    expect(extractModuleSpecifiers(source, 'fixture.ts')).toEqual(['fixed']);
+  });
+
+  it('fails on invalid syntax instead of reporting a partial graph', () => {
+    expect(() => extractModuleReferences('import {', 'broken.ts')).toThrow(
+      'Could not parse broken.ts',
+    );
+  });
+});
 
 describe('extractModuleSpecifiers', () => {
   it('collects static ESM and CommonJS module specifiers', () => {
@@ -27,6 +109,29 @@ describe('extractModuleSpecifiers', () => {
       'dynamic-import',
       'cjs-require',
       'cjs-resolve',
+    ]);
+  });
+
+  it('collects TypeScript-specific module specifiers without reading strings or comments', () => {
+    const source = `
+      import legacy = require('legacy-module');
+      type Imported = import('type-module').Imported;
+      export * from 'exported-module';
+      import(\`./dynamic-template.js\`);
+      require(\`template-package\`);
+      require.resolve(\`resolved-template-package\`);
+      import(\`./\${name}.js\`);
+      const text = "require('ignored-module')";
+      // import('ignored-comment')
+    `;
+
+    expect(extractModuleSpecifiers(source, 'fixture.ts')).toEqual([
+      'legacy-module',
+      'type-module',
+      'exported-module',
+      './dynamic-template.js',
+      'template-package',
+      'resolved-template-package',
     ]);
   });
 });
@@ -97,8 +202,52 @@ describe('resolveInternalModule', () => {
       );
     });
 
+    it('resolves declaration-only runtime imports for report reach', () => {
+      write('src/types.d.ts');
+      write('src/module.d.mts');
+
+      expect(resolveInternalModule(repoRoot, 'src/index.ts', './types.js')).toBe('src/types.d.ts');
+      expect(resolveInternalModule(repoRoot, 'src/index.ts', './module')).toBe('src/module.d.mts');
+    });
+
+    it.each([
+      ['.ts', '.d.ts'],
+      ['.tsx', '.d.ts'],
+      ['.mts', '.d.mts'],
+      ['.cts', '.d.cts'],
+    ])('prefers %s implementations over %s declarations', (implementation, declaration) => {
+      write(`src/module${implementation}`);
+      write(`src/module${declaration}`);
+      expect(resolveInternalModule(repoRoot, 'src/index.ts', './module')).toBe(
+        `src/module${implementation}`,
+      );
+    });
+
+    it.each(['.d.ts', '.d.mts', '.d.cts'])(
+      'resolves declaration-only directories with index%s',
+      (extension) => {
+        write(`src/types/index${extension}`);
+        expect(resolveInternalModule(repoRoot, 'src/index.ts', './types')).toBe(
+          `src/types/index${extension}`,
+        );
+      },
+    );
+
+    it('prefers directory implementations over declaration indexes', () => {
+      write('src/types/index.ts');
+      write('src/types/index.d.ts');
+      expect(resolveInternalModule(repoRoot, 'src/index.ts', './types')).toBe('src/types/index.ts');
+    });
+
     it('returns undefined for non-existent internal paths', () => {
       expect(resolveInternalModule(repoRoot, 'src/foo.ts', './missing')).toBeUndefined();
+    });
+
+    it('returns undefined for non-source relative imports', () => {
+      write('package.json', '{}');
+      expect(resolveInternalModule(repoRoot, 'src/app/vite.config.ts', '../../package.json')).toBe(
+        undefined,
+      );
     });
 
     it('returns undefined for external (non-relative, non-src) specifiers', () => {
@@ -107,11 +256,319 @@ describe('resolveInternalModule', () => {
       expect(resolveInternalModule(repoRoot, 'src/foo.ts', 'node:fs')).toBeUndefined();
     });
 
+    it('resolves configured source aliases', () => {
+      write('src/core/util.ts');
+      expect(
+        resolveInternalModule(repoRoot, 'src/app/component.tsx', '@promptfoo/core/util', {
+          '@promptfoo': 'src',
+        }),
+      ).toBe('src/core/util.ts');
+    });
+
+    it('resolves exact configured source aliases', () => {
+      write('src/index.ts');
+      expect(
+        resolveInternalModule(repoRoot, 'src/app/component.tsx', '@promptfoo', {
+          '@promptfoo': 'src',
+        }),
+      ).toBe('src/index.ts');
+    });
+
+    it('prefers the longest configured source alias', () => {
+      write('src/app/foo.ts');
+      write('src/app/src/foo.ts');
+      expect(
+        resolveInternalModule(repoRoot, 'src/app/component.tsx', '@promptfoo/app/foo', {
+          '@promptfoo': 'src',
+          '@promptfoo/app': 'src/app/src',
+        }),
+      ).toBe('src/app/src/foo.ts');
+    });
+
     it('prefers a file over a directory when both could match', () => {
       write('src/index.ts', '// file');
       write('src/index/index.ts', '// directory');
       expect(resolveInternalModule(repoRoot, 'src/foo.ts', '../src/index')).toBe('src/index.ts');
     });
+  });
+});
+
+describe('getSourceFiles', () => {
+  let repoRoot: string;
+
+  beforeEach(() => {
+    repoRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'getsourcefiles-'));
+  });
+
+  afterEach(() => {
+    fs.rmSync(repoRoot, { recursive: true, force: true });
+  });
+
+  function write(relativePath: string, contents = ''): void {
+    const absolute = path.join(repoRoot, relativePath);
+    fs.mkdirSync(path.dirname(absolute), { recursive: true });
+    fs.writeFileSync(absolute, contents);
+  }
+
+  it('ignores nested node_modules and configured roots', () => {
+    write('src/core/a.ts');
+    write('src/core/types.d.ts');
+    write('src/core/module.d.mts');
+    write('src/core/common.d.cts');
+    write('src/app/node_modules/pkg/index.ts');
+    write('src/__mocks__/database.ts');
+
+    expect(getSourceFiles(repoRoot, true, ['src/__mocks__'])).toEqual(['src/core/a.ts']);
+  });
+});
+
+describe('readLayerConfig', () => {
+  let repoRoot: string;
+
+  beforeEach(() => {
+    repoRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'readlayerconfig-'));
+    fs.mkdirSync(path.join(repoRoot, 'architecture'), { recursive: true });
+    fs.mkdirSync(path.join(repoRoot, 'src/core'), { recursive: true });
+    fs.writeFileSync(path.join(repoRoot, 'src/index.ts'), '');
+  });
+
+  afterEach(() => {
+    fs.rmSync(repoRoot, { recursive: true, force: true });
+  });
+
+  function writeConfig(config: unknown): void {
+    fs.writeFileSync(path.join(repoRoot, 'architecture/layers.json'), JSON.stringify(config));
+  }
+
+  function coreLayer(overrides: Partial<LayerConfig['layers'][number]> = {}) {
+    return {
+      name: 'core',
+      roots: ['src/core'],
+      allowedDependencies: [],
+      ...overrides,
+    };
+  }
+
+  it('rejects configs that omit the layers array', () => {
+    writeConfig({ publicFacade: 'src/index.ts' });
+
+    expect(() => readLayerConfig(repoRoot)).toThrow('must define a layers array.');
+  });
+
+  it('rejects configs that omit an existing public facade', () => {
+    writeConfig({ layers: [coreLayer()] });
+
+    expect(() => readLayerConfig(repoRoot)).toThrow(
+      'must define an existing publicFacade file path.',
+    );
+  });
+
+  it('rejects public facades that are directories', () => {
+    writeConfig({ publicFacade: 'src', layers: [coreLayer()] });
+
+    expect(() => readLayerConfig(repoRoot)).toThrow(
+      'must define an existing publicFacade file path.',
+    );
+  });
+
+  it('rejects duplicate or unknown leaf layers', () => {
+    writeConfig({
+      publicFacade: 'src/index.ts',
+      leafLayers: ['core', 'core'],
+      layers: [coreLayer()],
+    });
+    expect(() => readLayerConfig(repoRoot)).toThrow(
+      'leafLayers must be unique, known layer names.',
+    );
+
+    writeConfig({ publicFacade: 'src/index.ts', leafLayers: ['missing'], layers: [coreLayer()] });
+    expect(() => readLayerConfig(repoRoot)).toThrow(
+      'leafLayers must be unique, known layer names.',
+    );
+  });
+
+  it('rejects leaf layers that are not an array', () => {
+    writeConfig({ publicFacade: 'src/index.ts', leafLayers: 'core', layers: [coreLayer()] });
+
+    expect(() => readLayerConfig(repoRoot)).toThrow(
+      'leafLayers must be an array of unique layer names.',
+    );
+  });
+
+  it('rejects duplicate layer names', () => {
+    writeConfig({ publicFacade: 'src/index.ts', layers: [coreLayer(), coreLayer()] });
+
+    expect(() => readLayerConfig(repoRoot)).toThrow('contains duplicate layer "core".');
+  });
+
+  it('rejects layers without names', () => {
+    writeConfig({
+      publicFacade: 'src/index.ts',
+      layers: [{ roots: ['src/core'], allowedDependencies: [] }],
+    });
+
+    expect(() => readLayerConfig(repoRoot)).toThrow('contains a layer without a name.');
+  });
+
+  it('rejects layers that omit roots', () => {
+    writeConfig({ publicFacade: 'src/index.ts', layers: [coreLayer({ roots: [] })] });
+
+    expect(() => readLayerConfig(repoRoot)).toThrow(
+      'Architecture layer "core" must declare roots.',
+    );
+  });
+
+  it('rejects an invalid allowedExternal entry', () => {
+    writeConfig({
+      publicFacade: 'src/index.ts',
+      layers: [coreLayer({ allowedExternal: ['zod', ''] })],
+    });
+
+    expect(() => readLayerConfig(repoRoot)).toThrow(
+      'Architecture layer "core" contains an invalid allowedExternal entry.',
+    );
+  });
+
+  it('rejects directory entries in allowed import paths', () => {
+    writeConfig({
+      publicFacade: 'src/index.ts',
+      layers: [coreLayer({ allowedImportPaths: ['src/core'] })],
+    });
+
+    expect(() => readLayerConfig(repoRoot)).toThrow(
+      'Architecture layer "core" contains an invalid allowedImportPaths entry.',
+    );
+  });
+
+  it('rejects missing layer roots', () => {
+    writeConfig({
+      publicFacade: 'src/index.ts',
+      layers: [coreLayer({ roots: ['src/missing'] })],
+    });
+
+    expect(() => readLayerConfig(repoRoot)).toThrow(
+      'Architecture layer "core" root "src/missing" does not exist.',
+    );
+  });
+
+  it('rejects layers that omit allowed dependencies', () => {
+    fs.writeFileSync(
+      path.join(repoRoot, 'architecture/layers.json'),
+      JSON.stringify({
+        publicFacade: 'src/index.ts',
+        layers: [{ name: 'core', roots: ['src/core'] }],
+      }),
+    );
+
+    expect(() => readLayerConfig(repoRoot)).toThrow(
+      'Architecture layer "core" must declare allowedDependencies.',
+    );
+  });
+
+  it('rejects dependencies on unknown layers', () => {
+    fs.writeFileSync(
+      path.join(repoRoot, 'architecture/layers.json'),
+      JSON.stringify({
+        publicFacade: 'src/index.ts',
+        layers: [{ name: 'core', roots: ['src/core'], allowedDependencies: ['missing'] }],
+      }),
+    );
+
+    expect(() => readLayerConfig(repoRoot)).toThrow(
+      'Architecture layer "core" allows unknown dependency "missing".',
+    );
+  });
+
+  it('rejects aliases that point to missing paths', () => {
+    fs.writeFileSync(
+      path.join(repoRoot, 'architecture/layers.json'),
+      JSON.stringify({
+        publicFacade: 'src/index.ts',
+        aliases: { '@missing': 'src/missing' },
+        layers: [{ name: 'core', roots: ['src/core'], allowedDependencies: [] }],
+      }),
+    );
+
+    expect(() => readLayerConfig(repoRoot)).toThrow(
+      'Architecture alias "@missing" points to missing path "src/missing".',
+    );
+  });
+
+  it('rejects overlapping layer roots', () => {
+    fs.mkdirSync(path.join(repoRoot, 'src/core/nested'), { recursive: true });
+    fs.writeFileSync(
+      path.join(repoRoot, 'architecture/layers.json'),
+      JSON.stringify({
+        publicFacade: 'src/index.ts',
+        layers: [
+          { name: 'core', roots: ['src/core'], allowedDependencies: [] },
+          { name: 'nested', roots: ['src/core/nested'], allowedDependencies: [] },
+        ],
+      }),
+    );
+
+    expect(() => readLayerConfig(repoRoot)).toThrow(
+      'Architecture roots "src/core" (core) and "src/core/nested" (nested) overlap.',
+    );
+  });
+});
+
+describe('getExternalModuleName', () => {
+  it('names npm packages and scoped packages by their package root', () => {
+    expect(getExternalModuleName('zod')).toBe('zod');
+    expect(getExternalModuleName('zod/v4')).toBe('zod');
+    expect(getExternalModuleName('@scoped/pkg/sub')).toBe('@scoped/pkg');
+  });
+
+  it('names Node builtins with the node: prefix stripped', () => {
+    expect(getExternalModuleName('node:fs')).toBe('fs');
+    expect(getExternalModuleName('fs/promises')).toBe('fs');
+  });
+
+  it('returns undefined for relative, absolute, and subpath-import specifiers', () => {
+    expect(getExternalModuleName('./shared.js')).toBeUndefined();
+    expect(getExternalModuleName('../prompts')).toBeUndefined();
+    expect(getExternalModuleName('/abs/path')).toBeUndefined();
+    expect(getExternalModuleName('#internal')).toBeUndefined();
+  });
+});
+
+describe('production layer config', () => {
+  it('classifies the public contracts entrypoint as leaf-safe', () => {
+    expect(getLayerForFile('src/contracts.ts', readLayerConfig(process.cwd()))).toBe('contracts');
+  });
+
+  it('allows core logic to consume leaf-safe contracts', () => {
+    const config = readLayerConfig(process.cwd());
+    const coreLayer = config.layers.find((layer) => layer.name === 'core');
+
+    expect(coreLayer?.allowedDependencies).toContain('contracts');
+  });
+
+  it('allows transitional runtime shims to consume leaf-safe contracts', () => {
+    const config = readLayerConfig(process.cwd());
+    const legacyRuntimeLayer = config.layers.find((layer) => layer.name === 'legacy-runtime');
+
+    expect(legacyRuntimeLayer?.allowedDependencies).toContain('contracts');
+  });
+
+  it('classifies evaluator runtime ports as transitional runtime modules', () => {
+    expect(getLayerForFile('src/evaluator/runtime.ts', readLayerConfig(process.cwd()))).toBe(
+      'legacy-runtime',
+    );
+  });
+
+  it('classifies the evaluator runtime adapter as a node module', () => {
+    expect(getLayerForFile('src/node/evaluatorRuntime.ts', readLayerConfig(process.cwd()))).toBe(
+      'node',
+    );
+  });
+
+  it('keeps the contracts leaf layer free of disallowed external dependencies', () => {
+    const leafExternal = findViolations(process.cwd(), readLayerConfig(process.cwd())).filter(
+      (violation) => violation.kind === 'leaf-external',
+    );
+    expect(leafExternal).toEqual([]);
   });
 });
 
@@ -137,9 +594,30 @@ describe('findViolations', () => {
       publicFacade: 'src/index.ts',
       leafLayers,
       layers: [
-        { name: 'facade', roots: ['src/index.ts'] },
-        { name: 'leaf', roots: ['src/leaf'] },
-        { name: 'core', roots: ['src/core'] },
+        { name: 'facade', roots: ['src/index.ts'], allowedDependencies: [] },
+        { name: 'leaf', roots: ['src/leaf'], allowedDependencies: [], allowedExternal: ['zod'] },
+        { name: 'core', roots: ['src/core'], allowedDependencies: [] },
+      ],
+    };
+  }
+
+  function configWithLayerRules(): LayerConfig {
+    return {
+      publicFacade: 'src/index.ts',
+      aliases: {
+        '@promptfoo': 'src',
+      },
+      ignoredRoots: ['src/__mocks__'],
+      layers: [
+        { name: 'facade', roots: ['src/index.ts'], allowedDependencies: [] },
+        {
+          name: 'app',
+          roots: ['src/app'],
+          allowedDependencies: ['shared'],
+          allowedImportPaths: ['src/shared/allowed.ts'],
+        },
+        { name: 'core', roots: ['src/core'], allowedDependencies: [] },
+        { name: 'shared', roots: ['src/shared'], allowedDependencies: [] },
       ],
     };
   }
@@ -165,6 +643,35 @@ describe('findViolations', () => {
       imported: 'src/core/util.ts',
       importedLayer: 'core',
     });
+  });
+
+  it('flags a leaf-layer file importing a non-allowlisted external package or builtin', () => {
+    write('src/index.ts');
+    write('src/leaf/a.ts', "import fs from 'node:fs';\nimport _ from 'lodash';");
+
+    const violations = findViolations(repoRoot, configWithLeaf());
+    expect(violations.map((v) => v.specifier).sort()).toEqual(['lodash', 'node:fs']);
+    expect(violations.every((v) => v.kind === 'leaf-external')).toBe(true);
+    expect(violations[0]).toMatchObject({ importerLayer: 'leaf', importedLayer: 'external' });
+  });
+
+  it('allows allowlisted externals (ignoring the node: prefix) from a leaf layer', () => {
+    write('src/index.ts');
+    write('src/leaf/a.ts', "import { z } from 'zod';\nimport fs from 'node:fs';");
+
+    // allowedExternal uses the bare name; "node:fs" must match an "fs" allowlist entry.
+    const config = configWithLeaf();
+    config.layers.find((layer) => layer.name === 'leaf')!.allowedExternal = ['zod', 'fs'];
+
+    expect(findViolations(repoRoot, config)).toEqual([]);
+  });
+
+  it('does not apply external allowlisting to non-leaf layers', () => {
+    write('src/index.ts');
+    write('src/core/a.ts', "import fs from 'node:fs';\nimport _ from 'lodash';");
+
+    // 'core' is not a leaf layer, so external imports are unconstrained.
+    expect(findViolations(repoRoot, configWithLeaf())).toEqual([]);
   });
 
   it('does not flag intra-leaf imports', () => {
@@ -197,12 +704,20 @@ describe('findViolations', () => {
     expect(kinds).toEqual(['facade', 'leaf']);
   });
 
-  it('returns empty when leafLayers is unset (only facade rule applies)', () => {
+  it('still applies layer dependency rules when leafLayers is unset', () => {
     write('src/index.ts');
     write('src/leaf/a.ts', "import { x } from '../core/util';");
     write('src/core/util.ts', 'export const x = 1;');
 
-    expect(findViolations(repoRoot, configWithLeaf([]))).toEqual([]);
+    expect(findViolations(repoRoot, configWithLeaf([]))).toMatchObject([
+      {
+        kind: 'layer',
+        importer: 'src/leaf/a.ts',
+        importerLayer: 'leaf',
+        imported: 'src/core/util.ts',
+        importedLayer: 'core',
+      },
+    ]);
   });
 
   it('flags baseUrl-style src/... imports out of a leaf layer', () => {
@@ -221,5 +736,146 @@ describe('findViolations', () => {
     write('src/core/util.ts', 'export const x = 1;');
 
     expect(findViolations(repoRoot, configWithLeaf())).toEqual([]);
+  });
+
+  it('flags dependencies that are not explicitly allowed by the importing layer', () => {
+    write('src/index.ts');
+    write('src/shared/util.ts', 'export const x = 1;');
+    write('src/core/a.ts', "import { x } from '../shared/util';");
+
+    expect(findViolations(repoRoot, configWithLayerRules())).toMatchObject([
+      {
+        kind: 'layer',
+        importer: 'src/core/a.ts',
+        importerLayer: 'core',
+        imported: 'src/shared/util.ts',
+        importedLayer: 'shared',
+      },
+    ]);
+  });
+
+  it('reports a layer violation without a duplicate path violation', () => {
+    write('src/index.ts');
+    write('src/shared/not-allowed.ts', 'export const x = 1;');
+    write('src/app/a.ts', "import { x } from '@promptfoo/shared/not-allowed';");
+
+    const config = configWithLayerRules();
+    config.layers[1].allowedDependencies = [];
+
+    expect(findViolations(repoRoot, config)).toEqual([
+      {
+        kind: 'layer',
+        importer: 'src/app/a.ts',
+        importerLayer: 'app',
+        specifier: '@promptfoo/shared/not-allowed',
+        imported: 'src/shared/not-allowed.ts',
+        importedLayer: 'shared',
+      },
+    ]);
+  });
+
+  it('allows explicitly configured layer dependencies', () => {
+    write('src/index.ts');
+    write('src/shared/allowed.ts', 'export const x = 1;');
+    write('src/app/a.ts', "import { x } from '@promptfoo/shared/allowed';");
+
+    expect(findViolations(repoRoot, configWithLayerRules())).toEqual([]);
+  });
+
+  it('allows configured layer dependencies without path allowlists', () => {
+    write('src/index.ts');
+    write('src/shared/allowed.ts', 'export const x = 1;');
+    write('src/core/a.ts', "import { x } from '../shared/allowed';");
+
+    const config = configWithLayerRules();
+    config.layers[2].allowedDependencies = ['shared'];
+
+    expect(findViolations(repoRoot, config)).toEqual([]);
+  });
+
+  it('flags new imports outside a restricted layer path allowlist', () => {
+    write('src/index.ts');
+    write('src/shared/not-allowed.ts', 'export const x = 1;');
+    write('src/app/a.ts', "import { x } from '@promptfoo/shared/not-allowed';");
+
+    expect(findViolations(repoRoot, configWithLayerRules())).toMatchObject([
+      {
+        kind: 'path',
+        importer: 'src/app/a.ts',
+        importerLayer: 'app',
+        imported: 'src/shared/not-allowed.ts',
+        importedLayer: 'shared',
+      },
+    ]);
+  });
+
+  it('does not treat restricted layer directory entries as broad allowlist roots', () => {
+    write('src/index.ts');
+    write('src/shared/new-file.ts', 'export const x = 1;');
+    write('src/app/a.ts', "import { x } from '@promptfoo/shared/new-file';");
+
+    const config = configWithLayerRules();
+    config.layers[1].allowedImportPaths = ['src/shared'];
+
+    expect(findViolations(repoRoot, config)).toMatchObject([
+      {
+        kind: 'path',
+        importer: 'src/app/a.ts',
+        importerLayer: 'app',
+        imported: 'src/shared/new-file.ts',
+        importedLayer: 'shared',
+      },
+    ]);
+  });
+
+  it('flags restricted layer dependencies referenced through inline import types', () => {
+    write('src/index.ts');
+    write('src/shared/not-allowed.ts', 'export interface X {}');
+    write('src/app/a.ts', "export type X = import('@promptfoo/shared/not-allowed').X;");
+
+    expect(findViolations(repoRoot, configWithLayerRules())).toMatchObject([
+      {
+        kind: 'path',
+        importer: 'src/app/a.ts',
+        importerLayer: 'app',
+        imported: 'src/shared/not-allowed.ts',
+        importedLayer: 'shared',
+      },
+    ]);
+  });
+
+  it('flags restricted layer dependencies referenced through dynamic imports and exports', () => {
+    write('src/index.ts');
+    write('src/shared/not-allowed.ts', 'export const x = 1;');
+    write(
+      'src/app/a.ts',
+      `
+        export { x } from '@promptfoo/shared/not-allowed';
+        import('@promptfoo/shared/not-allowed');
+      `,
+    );
+
+    expect(findViolations(repoRoot, configWithLayerRules())).toHaveLength(2);
+    expect(findViolations(repoRoot, configWithLayerRules())).toMatchObject([
+      {
+        kind: 'path',
+        importer: 'src/app/a.ts',
+        imported: 'src/shared/not-allowed.ts',
+      },
+      {
+        kind: 'path',
+        importer: 'src/app/a.ts',
+        imported: 'src/shared/not-allowed.ts',
+      },
+    ]);
+  });
+
+  it('reports unclassified source files outside configured ignored roots', () => {
+    write('src/index.ts');
+    write('src/core/a.ts');
+    write('src/missing/a.ts');
+    write('src/__mocks__/database.ts');
+
+    expect(findUnclassifiedFiles(repoRoot, configWithLayerRules())).toEqual(['src/missing/a.ts']);
   });
 });

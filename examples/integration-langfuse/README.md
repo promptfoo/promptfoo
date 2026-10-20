@@ -13,10 +13,10 @@ Labels allow you to:
 
 ## Setup
 
-1. **Install dependencies:**
+1. **Install promptfoo and the optional Langfuse SDK together in your project:**
 
    ```bash
-   npm install langfuse
+   npm install promptfoo @langfuse/client@^5.11.1
    ```
 
 2. **Set environment variables:**
@@ -45,7 +45,7 @@ cd integration-langfuse
 ## Running the example
 
 ```bash
-npx promptfoo@latest eval
+npx promptfoo eval
 ```
 
 ## Expected outputs

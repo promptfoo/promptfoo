@@ -10,6 +10,7 @@ import {
   poisonDocument,
 } from '../../../src/redteam/commands/poison';
 import { getRemoteGenerationUrl } from '../../../src/redteam/remoteGeneration';
+import { mockProcessEnv } from '../../util/utils';
 
 const mockFsReadFileSync = vi.hoisted(() => vi.fn());
 const mockFsExistsSync = vi.hoisted(() => vi.fn());
@@ -122,6 +123,28 @@ describe('poison command', () => {
   });
 
   describe('generatePoisonedDocument', () => {
+    it.each(['PROMPTFOO_DISABLE_REMOTE_GENERATION', 'PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION'])(
+      'should not send document contents when %s is enabled',
+      async (flag) => {
+        const restoreEnv = mockProcessEnv({
+          PROMPTFOO_DISABLE_REMOTE_GENERATION: undefined,
+          PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION: undefined,
+          [flag]: 'true',
+        });
+        const fetchSpy = vi.spyOn(global, 'fetch');
+
+        try {
+          await expect(generatePoisonedDocument('sensitive document')).rejects.toThrow(
+            'RAG poisoning requires remote generation, which has been explicitly disabled',
+          );
+          expect(fetchSpy).not.toHaveBeenCalled();
+        } finally {
+          fetchSpy.mockRestore();
+          restoreEnv();
+        }
+      },
+    );
+
     it('should call remote API and return response', async () => {
       const mockResponse = {
         ok: true,
@@ -194,15 +217,11 @@ describe('poison command', () => {
         dir: null,
       };
 
-      vi.mocked(fs.readFileSync).mockImplementation(function () {
-        return 'test content';
-      });
+      vi.mocked(fs.readFileSync).mockReturnValue('test content');
       vi.mocked(path.relative).mockImplementation(function (_from, _to) {
         return 'test.txt';
       });
-      vi.mocked(path.dirname).mockImplementation(function () {
-        return 'output-dir';
-      });
+      vi.mocked(path.dirname).mockReturnValue('output-dir');
       vi.mocked(path.join).mockImplementation(function (...args) {
         return args.join('/');
       });
@@ -287,6 +306,30 @@ describe('poison command', () => {
   });
 
   describe('doPoisonDocuments', () => {
+    it.each(['PROMPTFOO_DISABLE_REMOTE_GENERATION', 'PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION'])(
+      'should fail before touching the filesystem when %s is enabled',
+      async (flag) => {
+        const restoreEnv = mockProcessEnv({
+          PROMPTFOO_DISABLE_REMOTE_GENERATION: undefined,
+          PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION: undefined,
+          [flag]: 'true',
+        });
+        const fetchSpy = vi.spyOn(global, 'fetch');
+
+        try {
+          await expect(doPoisonDocuments({ documents: ['sensitive document'] })).rejects.toThrow(
+            'RAG poisoning requires remote generation, which has been explicitly disabled',
+          );
+          expect(fs.mkdirSync).not.toHaveBeenCalled();
+          expect(fs.writeFileSync).not.toHaveBeenCalled();
+          expect(fetchSpy).not.toHaveBeenCalled();
+        } finally {
+          fetchSpy.mockRestore();
+          restoreEnv();
+        }
+      },
+    );
+
     it('should process multiple documents', async () => {
       const options = {
         documents: ['test.txt', 'test content'],
@@ -307,9 +350,7 @@ describe('poison command', () => {
       vi.mocked(path.relative).mockImplementation(function (_from, _to) {
         return 'test.txt';
       });
-      vi.mocked(path.dirname).mockImplementation(function () {
-        return 'output-dir';
-      });
+      vi.mocked(path.dirname).mockReturnValue('output-dir');
       vi.mocked(path.join).mockImplementation(function (...args) {
         return args.join('/');
       });
@@ -347,9 +388,7 @@ describe('poison command', () => {
         outputDir: 'output-dir',
       };
 
-      vi.mocked(fs.existsSync).mockImplementation(function () {
-        return true;
-      });
+      vi.mocked(fs.existsSync).mockReturnValue(true);
       vi.mocked(fs.statSync)
         .mockImplementationOnce(function () {
           return {
@@ -369,9 +408,7 @@ describe('poison command', () => {
       vi.mocked(path.relative).mockImplementation(function (_from, _to) {
         return 'file1.txt';
       });
-      vi.mocked(path.dirname).mockImplementation(function () {
-        return 'output-dir';
-      });
+      vi.mocked(path.dirname).mockReturnValue('output-dir');
 
       const mockPoisonResponse = {
         poisonedDocument: 'poisoned content',

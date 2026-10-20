@@ -5,6 +5,8 @@
  * code paths that bypass the main evaluator.
  */
 
+import { composeResponseHeadersObservers } from '../util/fetch/responseHeadersObserver';
+import { isSafeCost, isSafeTokenCount } from '../util/numeric';
 import { parseRetryAfter } from './headerParser';
 import {
   getProviderResponseHeaders,
@@ -17,6 +19,7 @@ import type {
   CallApiContextParams,
   CallApiOptionsParams,
   ProviderResponse,
+  TokenUsage,
 } from '../types/providers';
 import type { RateLimitRegistry } from './rateLimitRegistry';
 
@@ -32,6 +35,52 @@ const WRAPPED_SYMBOL = Symbol.for('promptfoo.rateLimitWrapped');
  */
 type WrappedApiProvider = ApiProvider & { [WRAPPED_SYMBOL]: boolean };
 
+const TOKEN_USAGE_FIELDS = ['prompt', 'completion', 'cached', 'total'] as const;
+const COMPLETION_DETAIL_FIELDS = [
+  'reasoning',
+  'acceptedPrediction',
+  'rejectedPrediction',
+  'cacheReadInputTokens',
+  'cacheCreationInputTokens',
+] as const;
+
+function addSafeTokenMetric(current: number | undefined, value: unknown): number | undefined {
+  if (!isSafeTokenCount(value)) {
+    return undefined;
+  }
+  const total = (current ?? 0) + value;
+  return Number.isSafeInteger(total) ? total : undefined;
+}
+
+function accumulateRetryTokenUsage(target: Partial<TokenUsage>, response: ProviderResponse): void {
+  const usage = response.tokenUsage;
+  for (const field of TOKEN_USAGE_FIELDS) {
+    const total = addSafeTokenMetric(target[field], usage?.[field]);
+    if (total !== undefined) {
+      target[field] = total;
+    }
+  }
+
+  for (const field of COMPLETION_DETAIL_FIELDS) {
+    const value = usage?.completionDetails?.[field];
+    const total = addSafeTokenMetric(target.completionDetails?.[field], value);
+    if (total !== undefined) {
+      target.completionDetails ??= {};
+      target.completionDetails[field] = total;
+    }
+  }
+
+  const requests = response.cached
+    ? 0
+    : isSafeTokenCount(usage?.numRequests)
+      ? usage.numRequests
+      : 1;
+  const totalRequests = addSafeTokenMetric(target.numRequests, requests);
+  if (totalRequests !== undefined) {
+    target.numRequests = totalRequests;
+  }
+}
+
 /**
  * Check if a provider is already wrapped with rate limiting.
  */
@@ -43,11 +92,29 @@ export function isRateLimitWrapped(provider: ApiProvider): boolean {
  * Create rate limit detection options for ProviderResponse.
  * Shared between providerWrapper and evaluator for consistency.
  */
-export function createProviderRateLimitOptions(): RateLimitExecuteOptions<ProviderResponse> {
+export function createProviderRateLimitOptions(
+  abortSignal?: AbortSignal,
+): RateLimitExecuteOptions<ProviderResponse> {
   return {
-    getHeaders: getProviderResponseHeaders,
+    ...(abortSignal && { abortSignal }),
+    // Provider errors are values carrying output, usage and HTTP metadata.
+    // Keep that evidence when the scheduler has no retries left.
+    onRateLimitExhausted: (result, error) =>
+      result.error ? result : { ...result, error: error.message },
+    // Non-retryable rate limits must not feed the shared
+    // rate-limit state either: a billing 429 that also carries
+    // `x-ratelimit-remaining-*: 0` and a reset timestamp would otherwise
+    // park every queued and subsequent call until that reset instead of
+    // letting them fail fast.
+    getHeaders: (result: ProviderResponse | undefined) =>
+      result?.metadata?.rateLimitRetryable === false || result?.metadata?.rateLimitKind === 'quota'
+        ? undefined
+        : getProviderResponseHeaders(result),
     isRateLimited: isProviderResponseRateLimited,
     getRetryAfter: (result: ProviderResponse | undefined, error: Error | undefined) => {
+      if (result?.metadata?.rateLimitRetryable === false) {
+        return undefined;
+      }
       const rawHeaders = getProviderResponseHeaders(result);
       if (rawHeaders) {
         // Normalize header keys to lowercase for consistent access
@@ -57,8 +124,8 @@ export function createProviderRateLimitOptions(): RateLimitExecuteOptions<Provid
         }
         // Check retry-after-ms first (milliseconds)
         if (headers['retry-after-ms']) {
-          const ms = parseInt(headers['retry-after-ms'], 10);
-          if (!isNaN(ms) && ms >= 0) {
+          const ms = Number.parseInt(headers['retry-after-ms'], 10);
+          if (Number.isFinite(ms) && ms >= 0) {
             return ms;
           }
         }
@@ -73,9 +140,35 @@ export function createProviderRateLimitOptions(): RateLimitExecuteOptions<Provid
       // Try to extract from error message (some providers include it)
       const match = error?.message?.match(/\bretry after (\d+)\b/i);
       if (match) {
-        return parseInt(match[1], 10) * 1000;
+        const retryAfterMs = Number.parseInt(match[1], 10) * 1000;
+        return Number.isFinite(retryAfterMs) ? retryAfterMs : undefined;
       }
       return undefined;
+    },
+    isRetryableResult: (result) => {
+      return result.metadata?.retryableErrorKind === 'transient_availability';
+    },
+    finalizeResult: (result, retryResults) => {
+      if (retryResults.length === 0) {
+        return result;
+      }
+      const tokenUsage: Partial<TokenUsage> = {};
+      let combinedCost = 0;
+      let hasCost = false;
+      for (const response of [...retryResults, result]) {
+        accumulateRetryTokenUsage(tokenUsage, response);
+        if (isSafeCost(response.cost)) {
+          combinedCost += response.cost;
+          hasCost = true;
+        }
+      }
+      const resultWithoutCost = { ...result };
+      delete resultWithoutCost.cost;
+      return {
+        ...resultWithoutCost,
+        tokenUsage,
+        ...(hasCost && Number.isFinite(combinedCost) && { cost: combinedCost }),
+      };
     },
   };
 }
@@ -112,8 +205,21 @@ export function wrapProviderWithRateLimiting(
     ): Promise<ProviderResponse> => {
       return registry.execute(
         provider,
-        () => originalCallApi(prompt, context, options),
-        createProviderRateLimitOptions(),
+        (onResponseHeaders) =>
+          originalCallApi(
+            prompt,
+            context,
+            onResponseHeaders
+              ? {
+                  ...options,
+                  onResponseHeaders: composeResponseHeadersObservers(
+                    onResponseHeaders,
+                    options?.onResponseHeaders,
+                  ),
+                }
+              : options,
+          ),
+        createProviderRateLimitOptions(options?.abortSignal),
       );
     },
   };

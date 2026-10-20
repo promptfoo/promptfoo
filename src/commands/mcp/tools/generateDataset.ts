@@ -43,7 +43,7 @@ export function registerGenerateDatasetTool(server: McpServer) {
         .describe(
           dedent`
             AI provider to use for generation.
-            Examples: "openai:gpt-4o", "anthropic:claude-3-sonnet"
+            Examples: "openai:gpt-5.6", "anthropic:claude-sonnet-5"
             Defaults to configured default provider.
           `,
         ),
@@ -132,10 +132,7 @@ export function registerGenerateDatasetTool(server: McpServer) {
           return createToolResponse(
             'generate_dataset',
             false,
-            {
-              originalError: errorMessage,
-              suggestion: 'Check that the provider is properly configured with valid credentials',
-            },
+            undefined,
             'Failed to load AI provider for dataset generation',
           );
         }
@@ -144,10 +141,7 @@ export function registerGenerateDatasetTool(server: McpServer) {
           return createToolResponse(
             'generate_dataset',
             false,
-            {
-              originalError: errorMessage,
-              suggestion: 'Try reducing numSamples or wait before retrying',
-            },
+            undefined,
             'Rate limit exceeded while generating dataset',
           );
         }
@@ -156,11 +150,7 @@ export function registerGenerateDatasetTool(server: McpServer) {
           return createToolResponse(
             'generate_dataset',
             false,
-            {
-              originalError: errorMessage,
-              suggestion:
-                'Ensure your provider API keys are correctly configured and the provider is reachable',
-            },
+            undefined,
             'Dataset generation timed out',
           );
         }

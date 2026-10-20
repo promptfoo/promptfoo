@@ -1,12 +1,40 @@
+import { context, propagation } from '@opentelemetry/api';
 import cliState from '../cliState';
-import { getEnvBool, getEnvString } from '../envars';
+import { type EnvVarKey, getEnvBool, getEnvString } from '../envars';
 import { isLoggedIntoCloud } from '../globalConfig/accounts';
 import { CloudConfig } from '../globalConfig/cloud';
 import { hasCodexDefaultCredentials } from '../providers/openai/codexDefaults';
+import { remoteGenerationContextPayload as buildRemoteGenerationContextPayload } from './remoteGenerationContext';
+
+export { remoteGenerationContextPayload } from './remoteGenerationContext';
+export { getCloudTargetIdFromProviders } from './remoteGenerationContextFromProviders';
 
 interface ShouldGenerateRemoteOptions {
   canUseCodexDefaultProvider?: boolean;
   requireEmbeddingProvider?: boolean;
+}
+
+// Provider implementations already depend on this module. Re-exporting the leaf helper here
+// avoids introducing a providers -> redteam context dependency solely for payload construction.
+export function providerRemoteGenerationContextPayload(contextOrCloudTargetId?: unknown): {
+  targetId?: string;
+} {
+  return buildRemoteGenerationContextPayload(contextOrCloudTargetId);
+}
+
+function resolveRemoteEndpoint(envName: EnvVarKey, path: string): string {
+  // Check env var first
+  const envUrl = getEnvString(envName);
+  if (envUrl) {
+    return envUrl;
+  }
+  // If logged into cloud use that url + the task path
+  const cloudConfig = new CloudConfig();
+  if (cloudConfig.isEnabled()) {
+    return cloudConfig.getApiHost() + path;
+  }
+  // otherwise use the default
+  return 'https://api.promptfoo.app' + path;
 }
 
 /**
@@ -15,18 +43,30 @@ interface ShouldGenerateRemoteOptions {
  * @returns The remote generation URL
  */
 export function getRemoteGenerationUrl(): string {
-  // Check env var first
-  const envUrl = getEnvString('PROMPTFOO_REMOTE_GENERATION_URL');
-  if (envUrl) {
-    return envUrl;
-  }
-  // If logged into cloud use that url + /task
-  const cloudConfig = new CloudConfig();
-  if (cloudConfig.isEnabled()) {
-    return cloudConfig.getApiHost() + '/api/v1/task';
-  }
-  // otherwise use the default
-  return 'https://api.promptfoo.app/api/v1/task';
+  return resolveRemoteEndpoint('PROMPTFOO_REMOTE_GENERATION_URL', '/api/v1/task');
+}
+
+/**
+ * Builds headers for a remote-generation request.
+ *
+ * Authentication is injected centrally at the fetch layer (monkeyPatchFetch, mirrored
+ * in cache.ts for cache-key parity) and only when the request URL's origin matches the
+ * configured Promptfoo Cloud host (cloudConfig.getApiHost(), incl. on-prem). Keeping
+ * this helper auth-free prevents cloud credentials from leaking to custom
+ * remote-generation endpoints.
+ */
+export function getRemoteGenerationHeaders(
+  extraHeaders?: Record<string, string>,
+): Record<string, string> {
+  const propagatedHeaders: Record<string, string> = {};
+  propagation.inject(context.active(), propagatedHeaders);
+
+  return {
+    'Content-Type': 'application/json',
+    ...(propagatedHeaders.traceparent ? { traceparent: propagatedHeaders.traceparent } : {}),
+    ...(propagatedHeaders.tracestate ? { tracestate: propagatedHeaders.tracestate } : {}),
+    ...extraHeaders,
+  };
 }
 
 /**
@@ -158,16 +198,5 @@ export function shouldGenerateRemote(options?: ShouldGenerateRemoteOptions): boo
  * @returns The unaligned inference URL
  */
 export function getRemoteGenerationUrlForUnaligned(): string {
-  // Check env var first
-  const envUrl = getEnvString('PROMPTFOO_UNALIGNED_INFERENCE_ENDPOINT');
-  if (envUrl) {
-    return envUrl;
-  }
-  // If logged into cloud use that url + /task
-  const cloudConfig = new CloudConfig();
-  if (cloudConfig.isEnabled()) {
-    return cloudConfig.getApiHost() + '/api/v1/task/harmful';
-  }
-  // otherwise use the default
-  return 'https://api.promptfoo.app/api/v1/task/harmful';
+  return resolveRemoteEndpoint('PROMPTFOO_UNALIGNED_INFERENCE_ENDPOINT', '/api/v1/task/harmful');
 }

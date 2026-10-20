@@ -1,5 +1,6 @@
-import { render, screen, waitFor } from '@testing-library/react';
-import { MemoryRouter } from 'react-router-dom';
+import { render, screen, waitFor, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { MemoryRouter } from 'react-router';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import DatasetsPage from './page';
 
@@ -53,5 +54,36 @@ describe('DatasetsPage', () => {
     await waitFor(() => {
       expect(screen.getByText('Failed to load datasets. Please try again.')).toBeInTheDocument();
     });
+  });
+
+  // Regression for https://github.com/promptfoo/promptfoo/issues/2248:
+  // sorted rows beyond the first ten must open their own dataset.
+  it.each([
+    ['id-014', 'dataset 14', 1],
+    ['id-004', 'dataset 4', 11],
+    ['id-000', 'dataset 0', 15],
+  ])('opens %s from its sorted row', async (id, prompt, rowNumber) => {
+    const data = Array.from({ length: 15 }, (_, i) => ({
+      id: `id-${String(i).padStart(3, '0')}`,
+      recentEvalDate: new Date(2024, 0, i + 1).toISOString(),
+      recentEvalId: `eval-${i}`,
+      testCases: [{ vars: { prompt: `dataset ${i}` } }],
+      prompts: [],
+      count: 1,
+    }));
+    callApiMock.mockResolvedValueOnce({ ok: true, json: async () => ({ data }) });
+    const user = userEvent.setup();
+    render(
+      <MemoryRouter>
+        <DatasetsPage />
+      </MemoryRouter>,
+    );
+    await screen.findByText('id-014');
+    const rows = within(screen.getByRole('table')).getAllByRole('row');
+    expect(rows[rowNumber]).toHaveTextContent(id);
+    await user.click(within(rows[rowNumber]).getByText(id));
+    const dialog = await screen.findByRole('dialog');
+    expect(within(dialog).getByText(id)).toBeInTheDocument();
+    expect(dialog.querySelector('pre')?.textContent).toBe(`- vars:\n    prompt: ${prompt}\n`);
   });
 });

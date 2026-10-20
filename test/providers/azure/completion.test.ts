@@ -3,6 +3,18 @@ import { fetchWithCache } from '../../../src/cache';
 import { AzureCompletionProvider } from '../../../src/providers/azure/completion';
 import { mockProcessEnv } from '../../util/utils';
 
+const createAzureHostConfig = () => ({
+  config: { apiHost: 'test.azure.com' },
+});
+
+const createCompletionResponse = () => ({
+  data: {
+    choices: [{ text: 'hello' }],
+    usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
+  },
+  cached: false,
+});
+
 vi.mock('../../../src/cache', async (importOriginal) => {
   return {
     ...(await importOriginal()),
@@ -39,13 +51,7 @@ describe('AzureCompletionProvider', () => {
   });
 
   it('should handle basic completion with caching', async () => {
-    vi.mocked(fetchWithCache).mockResolvedValueOnce({
-      data: {
-        choices: [{ text: 'hello' }],
-        usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
-      },
-      cached: false,
-    } as any);
+    vi.mocked(fetchWithCache).mockResolvedValueOnce(createCompletionResponse() as any);
 
     vi.mocked(fetchWithCache).mockResolvedValueOnce({
       data: {
@@ -55,9 +61,7 @@ describe('AzureCompletionProvider', () => {
       cached: true,
     } as any);
 
-    const provider = new AzureCompletionProvider('test', {
-      config: { apiHost: 'test.azure.com' },
-    });
+    const provider = new AzureCompletionProvider('test', createAzureHostConfig());
     setAuthHeaders(provider);
 
     const result1 = await provider.callApi('test prompt');
@@ -70,13 +74,7 @@ describe('AzureCompletionProvider', () => {
   });
 
   it('should pass custom headers from config to fetchWithCache', async () => {
-    vi.mocked(fetchWithCache).mockResolvedValueOnce({
-      data: {
-        choices: [{ text: 'hello' }],
-        usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
-      },
-      cached: false,
-    } as any);
+    vi.mocked(fetchWithCache).mockResolvedValueOnce(createCompletionResponse() as any);
 
     const customHeaders = {
       'X-Test-Header': 'test-value',
@@ -110,6 +108,30 @@ describe('AzureCompletionProvider', () => {
     );
   });
 
+  it('reports API prompt-cache usage for a fresh completion response', async () => {
+    vi.mocked(fetchWithCache).mockResolvedValueOnce({
+      data: {
+        choices: [{ text: 'hello' }],
+        usage: {
+          total_tokens: 3_000,
+          prompt_tokens: 2_000,
+          prompt_tokens_details: { cached_tokens: 500 },
+          completion_tokens: 1_000,
+        },
+      },
+      cached: false,
+    } as any);
+    const provider = new AzureCompletionProvider('gpt-5.6', {
+      config: { apiHost: 'test.azure.com', apiKey: 'test-key' },
+    });
+    setAuthHeaders(provider);
+
+    const result = await provider.callApi('test prompt');
+
+    expect(result.tokenUsage).toMatchObject({ prompt: 2_000, completion: 1_000, cached: 500 });
+    expect(result.cost).toBeCloseTo((1_500 * 5 + 500 * 0.5 + 1_000 * 30) / 1e6, 12);
+  });
+
   it('should handle content filter response', async () => {
     vi.mocked(fetchWithCache).mockResolvedValueOnce({
       data: {
@@ -119,9 +141,7 @@ describe('AzureCompletionProvider', () => {
       cached: false,
     } as any);
 
-    const provider = new AzureCompletionProvider('test', {
-      config: { apiHost: 'test.azure.com' },
-    });
+    const provider = new AzureCompletionProvider('test', createAzureHostConfig());
     setAuthHeaders(provider);
 
     const result = await provider.callApi('test prompt');
@@ -130,12 +150,43 @@ describe('AzureCompletionProvider', () => {
     );
   });
 
+  it('returns graceful output instead of crashing on an empty choices array', async () => {
+    vi.mocked(fetchWithCache).mockResolvedValueOnce({
+      data: {
+        choices: [],
+        usage: { total_tokens: 5, prompt_tokens: 5, completion_tokens: 0 },
+      },
+      cached: false,
+    } as any);
+
+    const provider = new AzureCompletionProvider('test', createAzureHostConfig());
+    setAuthHeaders(provider);
+
+    const result = await provider.callApi('test prompt');
+    expect(result.error).toBeUndefined();
+    expect(result.output).toBe('');
+  });
+
+  it('returns graceful output when the response has no choices field', async () => {
+    vi.mocked(fetchWithCache).mockResolvedValueOnce({
+      data: {
+        usage: { total_tokens: 5, prompt_tokens: 5, completion_tokens: 0 },
+      },
+      cached: false,
+    } as any);
+
+    const provider = new AzureCompletionProvider('test', createAzureHostConfig());
+    setAuthHeaders(provider);
+
+    const result = await provider.callApi('test prompt');
+    expect(result.error).toBeUndefined();
+    expect(result.output).toBe('');
+  });
+
   it('should handle API errors', async () => {
     vi.mocked(fetchWithCache).mockRejectedValueOnce(new Error('API Error'));
 
-    const provider = new AzureCompletionProvider('test', {
-      config: { apiHost: 'test.azure.com' },
-    });
+    const provider = new AzureCompletionProvider('test', createAzureHostConfig());
     setAuthHeaders(provider);
 
     const result = await provider.callApi('test prompt');
@@ -163,9 +214,7 @@ describe('AzureCompletionProvider', () => {
       cached: false,
     } as any);
 
-    const provider = new AzureCompletionProvider('test', {
-      config: { apiHost: 'test.azure.com' },
-    });
+    const provider = new AzureCompletionProvider('test', createAzureHostConfig());
     setAuthHeaders(provider);
 
     const result = await provider.callApi('test prompt');
@@ -175,9 +224,7 @@ describe('AzureCompletionProvider', () => {
   it('should handle invalid OPENAI_STOP env var', async () => {
     mockProcessEnv({ OPENAI_STOP: '{invalid json}' });
 
-    const provider = new AzureCompletionProvider('test', {
-      config: { apiHost: 'test.azure.com' },
-    });
+    const provider = new AzureCompletionProvider('test', createAzureHostConfig());
     setAuthHeaders(provider);
 
     await expect(provider.callApi('test')).rejects.toThrow(
@@ -196,9 +243,7 @@ describe('AzureCompletionProvider', () => {
       cached: false,
     } as any);
 
-    const provider = new AzureCompletionProvider('test', {
-      config: { apiHost: 'test.azure.com' },
-    });
+    const provider = new AzureCompletionProvider('test', createAzureHostConfig());
     setAuthHeaders(provider);
 
     const result = await provider.callApi('test prompt');
@@ -212,9 +257,7 @@ describe('AzureCompletionProvider', () => {
       cached: false,
     } as any);
 
-    const provider = new AzureCompletionProvider('test', {
-      config: { apiHost: 'test.azure.com' },
-    });
+    const provider = new AzureCompletionProvider('test', createAzureHostConfig());
     setAuthHeaders(provider);
 
     const result = await provider.callApi('test prompt');

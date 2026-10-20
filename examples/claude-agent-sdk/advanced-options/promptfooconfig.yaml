@@ -35,6 +35,13 @@ providers:
       setting_sources:
         - user
 
+  # Test 5: With custom subagent depth and concurrency limits
+  - id: anthropic:claude-agent-sdk
+    label: 'SDK with subagent limits'
+    config:
+      max_subagent_spawn_depth: 5
+      max_concurrent_subagents: 40
+
 tests:
   - vars: {}
     assert:

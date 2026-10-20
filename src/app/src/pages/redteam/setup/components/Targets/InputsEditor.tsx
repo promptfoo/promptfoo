@@ -24,7 +24,7 @@ import {
   type Inputs,
   type InputType,
   normalizeInputDefinition,
-} from '@promptfoo/types';
+} from '@promptfoo/contracts';
 import { ChevronDown, Plus, Trash2 } from 'lucide-react';
 
 interface InputsEditorProps {

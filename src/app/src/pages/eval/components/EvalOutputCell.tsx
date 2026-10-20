@@ -2,22 +2,18 @@ import React, { useCallback, useId, useMemo } from 'react';
 
 import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
 import useCloudConfig from '@app/hooks/useCloudConfig';
-import { useEvalOperations } from '@app/hooks/useEvalOperations';
 import { useShiftKey } from '@app/hooks/useShiftKey';
 import { formatDuration } from '@app/utils/date';
+import { fetchTraces, replayEvaluation } from '@app/utils/evalOperations';
 import {
   normalizeMediaText,
   resolveAudioSource,
   resolveImageSource,
   resolveVideoSource,
 } from '@app/utils/media';
-import { getActualPrompt } from '@app/utils/providerResponse';
-import {
-  type EvaluateTableOutput,
-  type GradingResult,
-  type ImageOutput,
-  ResultFailureReason,
-} from '@promptfoo/types';
+import { type EvaluateTableOutput, type GradingResult, type ImageOutput } from '@promptfoo/types';
+import { ResultFailureReason } from '@promptfoo/types/results';
+import { getActualPrompt } from '@promptfoo/util/providerResponse';
 import { diffJson, diffSentences, diffWords } from 'diff';
 import {
   Check,
@@ -29,6 +25,7 @@ import {
   Star,
   ThumbsDown,
   ThumbsUp,
+  X,
 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import logger from '../../../../../logger';
@@ -41,7 +38,13 @@ import SetScoreDialog from './SetScoreDialog';
 import { useResultsViewSettingsStore, useTableStore } from './store';
 import CommentDialog from './TableCommentDialog';
 import TruncatedText from './TruncatedText';
-import { getHumanRating } from './utils';
+import {
+  buildEvalOutputPromptHash,
+  getHumanRating,
+  parseEvalOutputPromptHash,
+  setEvalDetailsHash,
+  useEvalDetailsHash,
+} from './utils';
 
 type CSSPropertiesWithCustomVars = React.CSSProperties & {
   [key: `--${string}`]: string | number;
@@ -100,7 +103,8 @@ export function isImageProvider(provider: string | undefined): boolean {
  * - 'openai:video:sora-2' (OpenAI Sora)
  * - 'openai:video:sora-2-pro' (OpenAI Sora Pro)
  * - 'google:video:veo-3.1-generate-preview' (Google Veo)
- * - 'google:video:veo-2-generate' (Google Veo 2)
+ * - 'vertex:video:veo-3.1-generate-001' (Google Veo on Vertex AI)
+ * - 'google:video:veo-3.1-fast-generate-preview' (Google Veo Fast)
  * Used to skip truncation for video content.
  */
 export function isVideoProvider(provider: string | undefined): boolean {
@@ -1024,6 +1028,7 @@ function renderOutputActions({
   copied,
   linked,
   isHighlighted,
+  isRedteam,
   activeRating,
   openPrompt,
   output,
@@ -1035,8 +1040,6 @@ function renderOutputActions({
   cloudConfig,
   addFilter,
   resetFilters,
-  replayEvaluation,
-  fetchTraces,
   handleCopy,
   handleToggleHighlight,
   handleRowShareLink,
@@ -1051,6 +1054,7 @@ function renderOutputActions({
   copied: boolean;
   linked: boolean;
   isHighlighted: boolean;
+  isRedteam: boolean;
   activeRating: boolean | null;
   openPrompt: boolean;
   output: EvaluateTableOutput;
@@ -1062,8 +1066,6 @@ function renderOutputActions({
   cloudConfig: ReturnType<typeof useCloudConfig>['data'];
   addFilter: ReturnType<typeof useTableStore.getState>['addFilter'];
   resetFilters: ReturnType<typeof useTableStore.getState>['resetFilters'];
-  replayEvaluation: ReturnType<typeof useEvalOperations>['replayEvaluation'];
-  fetchTraces: ReturnType<typeof useEvalOperations>['fetchTraces'];
   handleCopy: () => void;
   handleToggleHighlight: () => void;
   handleRowShareLink: () => void;
@@ -1074,6 +1076,9 @@ function renderOutputActions({
   handlePromptClose: () => void;
   setActionsHovered: (hovered: boolean) => void;
 }): React.ReactNode {
+  const passActionLabel = isRedteam ? 'Mark as safe' : 'Mark test passed';
+  const failActionLabel = isRedteam ? 'Mark as vulnerable' : 'Mark test failed';
+
   return (
     <div
       className="cell-actions"
@@ -1089,11 +1094,26 @@ function renderOutputActions({
                 className="action p-1 rounded hover:bg-muted transition-colors"
                 onClick={handleCopy}
                 onMouseDown={(e) => e.preventDefault()}
+                aria-label="Copy output to clipboard"
               >
                 {copied ? <Check className="size-4" /> : <ClipboardCopy className="size-4" />}
               </button>
             </TooltipTrigger>
             <TooltipContent>Copy output to clipboard</TooltipContent>
+          </Tooltip>
+          <Tooltip disableHoverableContent>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                className="action p-1 rounded hover:bg-muted transition-colors"
+                onClick={handleRowShareLink}
+                onMouseDown={(e) => e.preventDefault()}
+                aria-label="Copy link to output"
+              >
+                {linked ? <Check className="size-4" /> : <Link className="size-4" />}
+              </button>
+            </TooltipTrigger>
+            <TooltipContent>Copy link to output</TooltipContent>
           </Tooltip>
           <Tooltip disableHoverableContent>
             <TooltipTrigger asChild>
@@ -1112,20 +1132,6 @@ function renderOutputActions({
             </TooltipTrigger>
             <TooltipContent>Toggle test highlight</TooltipContent>
           </Tooltip>
-          <Tooltip disableHoverableContent>
-            <TooltipTrigger asChild>
-              <button
-                type="button"
-                className="action p-1 rounded hover:bg-muted transition-colors"
-                onClick={handleRowShareLink}
-                onMouseDown={(e) => e.preventDefault()}
-                aria-label="Copy link to output"
-              >
-                {linked ? <Check className="size-4" /> : <Link className="size-4" />}
-              </button>
-            </TooltipTrigger>
-            <TooltipContent>Copy link to output</TooltipContent>
-          </Tooltip>
         </>
       )}
       <Tooltip disableHoverableContent>
@@ -1135,15 +1141,19 @@ function renderOutputActions({
             className={`action p-1 rounded hover:bg-muted transition-colors ${activeRating === true ? 'active text-emerald-600 dark:text-emerald-400' : ''}`}
             onClick={() => handleRating(true)}
             aria-pressed={activeRating === true}
-            aria-label="Mark test passed"
+            aria-label={passActionLabel}
           >
-            <ThumbsUp
-              className={`size-4 ${activeRating === true ? 'stroke-emerald-700 dark:stroke-emerald-300' : ''}`}
-              fill={activeRating === true ? 'currentColor' : 'none'}
-            />
+            {isRedteam ? (
+              <Check className="size-4" />
+            ) : (
+              <ThumbsUp
+                className={`size-4 ${activeRating === true ? 'stroke-emerald-700 dark:stroke-emerald-300' : ''}`}
+                fill={activeRating === true ? 'currentColor' : 'none'}
+              />
+            )}
           </button>
         </TooltipTrigger>
-        <TooltipContent>Mark test passed (score 1.0)</TooltipContent>
+        <TooltipContent>{passActionLabel} (score 1.0)</TooltipContent>
       </Tooltip>
       <Tooltip disableHoverableContent>
         <TooltipTrigger asChild>
@@ -1152,15 +1162,19 @@ function renderOutputActions({
             className={`action p-1 rounded hover:bg-muted transition-colors ${activeRating === false ? 'active text-red-600 dark:text-red-400' : ''}`}
             onClick={() => handleRating(false)}
             aria-pressed={activeRating === false}
-            aria-label="Mark test failed"
+            aria-label={failActionLabel}
           >
-            <ThumbsDown
-              className={`size-4 ${activeRating === false ? 'stroke-red-700 dark:stroke-red-300' : ''}`}
-              fill={activeRating === false ? 'currentColor' : 'none'}
-            />
+            {isRedteam ? (
+              <X className="size-4" />
+            ) : (
+              <ThumbsDown
+                className={`size-4 ${activeRating === false ? 'stroke-red-700 dark:stroke-red-300' : ''}`}
+                fill={activeRating === false ? 'currentColor' : 'none'}
+              />
+            )}
           </button>
         </TooltipTrigger>
-        <TooltipContent>Mark test failed (score 0.0)</TooltipContent>
+        <TooltipContent>{failActionLabel} (score 0.0)</TooltipContent>
       </Tooltip>
       <Tooltip disableHoverableContent>
         <TooltipTrigger asChild>
@@ -1235,8 +1249,10 @@ export interface EvalOutputCellProps {
   output: EvaluateTableOutput;
   maxTextLength: number;
   rowIndex: number;
+  rowPositionIndex?: number;
   promptIndex: number;
   showStats: boolean;
+  isRedteam?: boolean;
   onRating: (isPass?: boolean | null, score?: number, comment?: string) => void;
   evaluationId?: string;
   testCaseId?: string;
@@ -1264,12 +1280,14 @@ function EvalOutputCell({
   output,
   maxTextLength,
   rowIndex,
+  rowPositionIndex = rowIndex,
   promptIndex,
   onRating,
   firstOutput,
   showDiffs,
   searchText,
   showStats,
+  isRedteam = false,
   evaluationId,
   testCaseId,
 }: EvalOutputCellProps & {
@@ -1291,9 +1309,9 @@ function EvalOutputCell({
 
   const { shouldHighlightSearchText, addFilter, resetFilters } = useTableStore();
   const { data: cloudConfig } = useCloudConfig();
-  const { replayEvaluation, fetchTraces } = useEvalOperations();
 
   const [openPrompt, setOpen] = React.useState(false);
+  const locationHash = useEvalDetailsHash();
   const [activeRating, setActiveRating] = React.useState<boolean | null>(
     getHumanRating(output)?.pass ?? null,
   );
@@ -1304,11 +1322,27 @@ function EvalOutputCell({
     setActiveRating(humanRating ?? null);
   }, [output]);
 
+  React.useEffect(() => {
+    const hashTarget = parseEvalOutputPromptHash(locationHash);
+    if (!hashTarget) {
+      setOpen(false);
+      return;
+    }
+
+    setOpen(hashTarget.rowIndex === rowIndex && hashTarget.promptIndex === promptIndex);
+  }, [locationHash, rowIndex, promptIndex]);
+
+  const promptDetailsHash = buildEvalOutputPromptHash(rowIndex, promptIndex);
+
   const handlePromptOpen = () => {
     setOpen(true);
+    setEvalDetailsHash(promptDetailsHash, rowPositionIndex);
   };
   const handlePromptClose = () => {
     setOpen(false);
+    if (locationHash === promptDetailsHash) {
+      setEvalDetailsHash('');
+    }
   };
 
   const [lightboxOpen, setLightboxOpen] = React.useState(false);
@@ -1487,7 +1521,10 @@ function EvalOutputCell({
 
   const handleRowShareLink = () => {
     const url = new URL(window.location.href);
-    url.searchParams.set('rowId', String(rowIndex + 1));
+    // Keep `rowId` as the filtered result position so pagination can reopen the
+    // right page, while the hash keeps the stable test/prompt identity for the dialog.
+    url.searchParams.set('rowId', String(rowPositionIndex + 1));
+    url.hash = buildEvalOutputPromptHash(rowIndex, promptIndex);
 
     navigator.clipboard
       .writeText(url.toString())
@@ -1575,7 +1612,10 @@ function EvalOutputCell({
         <TruncatedText
           text={node || normalizedText}
           maxLength={
-            renderMarkdown && (isImageProvider(output.provider) || isVideoProvider(output.provider))
+            renderMarkdown &&
+            (output.images?.length ||
+              isImageProvider(output.provider) ||
+              isVideoProvider(output.provider))
               ? 0
               : maxTextLength
           }
@@ -1598,6 +1638,7 @@ function EvalOutputCell({
         copied,
         linked,
         isHighlighted: commentIsHighlighted,
+        isRedteam,
         activeRating,
         openPrompt,
         output,
@@ -1609,8 +1650,6 @@ function EvalOutputCell({
         cloudConfig,
         addFilter,
         resetFilters,
-        replayEvaluation,
-        fetchTraces,
         handleCopy,
         handleToggleHighlight,
         handleRowShareLink,

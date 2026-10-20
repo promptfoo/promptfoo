@@ -3,7 +3,9 @@ import os from 'os';
 import path from 'path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import cliState from '../../../src/cliState';
 import { providerRegistry } from '../../../src/providers/providerRegistry';
+import { getPackageVersion } from '../../../src/util/packageVersion';
 import { createDeferred, mockProcessEnv } from '../../util/utils';
 
 import type { OpenAICodexSDKProvider } from '../../../src/providers/openai/codex-sdk';
@@ -45,6 +47,8 @@ vi.mock('../../../src/esm', async (importOriginal) => ({
   resolvePackageEntryPoint: mockResolvePackageEntryPoint,
 }));
 
+vi.mock('../../../src/util/packageVersion', () => ({ getPackageVersion: vi.fn() }));
+
 describe('Codex default providers', () => {
   let codexHome: string;
   let originalCodexApiKey: string | undefined;
@@ -52,7 +56,8 @@ describe('Codex default providers', () => {
   let originalOpenAiApiKey: string | undefined;
 
   beforeEach(async () => {
-    vi.clearAllMocks();
+    vi.resetAllMocks();
+    vi.mocked(getPackageVersion).mockReturnValue('0.156.1');
     mockGetDirectory.mockReset();
     mockResolvePackageEntryPoint.mockReset();
     mockGetDirectory.mockReturnValue(process.cwd());
@@ -140,6 +145,54 @@ describe('Codex default providers', () => {
     );
 
     expect(hasCodexDefaultCredentials()).toBe(false);
+  });
+
+  it.each(['0.154.0', '0.157.0', 'invalid', null])(
+    'does not select an incompatible SDK (%s) for implicit grading',
+    async (version) => {
+      mockProcessEnv({ CODEX_API_KEY: 'fixture-key' });
+      vi.mocked(getPackageVersion).mockReturnValue(version);
+      const { hasCodexDefaultCredentials } = await import(
+        '../../../src/providers/openai/codexDefaults'
+      );
+      expect(hasCodexDefaultCredentials()).toBe(false);
+    },
+  );
+
+  it('treats unreadable SDK metadata as unavailable for implicit grading', async () => {
+    mockProcessEnv({ CODEX_API_KEY: 'fixture-key' });
+    vi.mocked(getPackageVersion).mockImplementation(() => {
+      throw new SyntaxError('fixture metadata');
+    });
+    const { hasCodexDefaultCredentials } = await import(
+      '../../../src/providers/openai/codexDefaults'
+    );
+    expect(hasCodexDefaultCredentials()).toBe(false);
+  });
+
+  it('checks the config-directory SDK that explicit provider calls would load', async () => {
+    const previousBasePath = cliState.basePath;
+    cliState.basePath = codexHome;
+    try {
+      mockProcessEnv({ CODEX_API_KEY: 'fixture-key' });
+      mockResolvePackageEntryPoint.mockImplementation((_name, baseDir) =>
+        baseDir === codexHome ? '/fixture/config/index.js' : '/fixture/global/index.js',
+      );
+      vi.mocked(getPackageVersion).mockImplementation((_name, entryPoint) =>
+        entryPoint === '/fixture/config/index.js' ? '0.154.0' : '0.156.1',
+      );
+      const { hasCodexDefaultCredentials } = await import(
+        '../../../src/providers/openai/codexDefaults'
+      );
+      expect(hasCodexDefaultCredentials()).toBe(false);
+      expect(getPackageVersion).toHaveBeenCalledWith(
+        '@openai/codex-sdk',
+        '/fixture/config/index.js',
+      );
+      expect(mockResolvePackageEntryPoint).toHaveBeenCalledTimes(1);
+    } finally {
+      cliState.basePath = previousBasePath;
+    }
   });
 
   it('creates reusable Codex text and web-search providers with a read-only sandbox', async () => {
@@ -254,6 +307,64 @@ describe('Codex default providers', () => {
     expect((secondProviders.gradingProvider as OpenAICodexSDKProvider).getApiKey()).toBe(
       'second-codex-key',
     );
+  });
+
+  it.each(['provider', 'evaluation', 'file'] as const)(
+    'partitions bundles by the %s credential before lower-scope aliases',
+    async (scope) => {
+      const { getCodexDefaultProviders } = await import(
+        '../../../src/providers/openai/codexDefaults'
+      );
+      mockProcessEnv({ OPENAI_API_KEY: 'host-key' });
+      const get = (key: string) => {
+        const env = { CODEX_API_KEY: key };
+        if (scope === 'provider') {
+          return getCodexDefaultProviders(env);
+        }
+        return scope === 'evaluation'
+          ? cliState.withEnv(env, () => getCodexDefaultProviders())
+          : cliState.withEnvFileOverrides(env, () => getCodexDefaultProviders());
+      };
+      const first = get('first-key');
+      const second = get('second-key');
+      expect(second).not.toBe(first);
+      expect(get('first-key')).toBe(first);
+      expect((first.gradingProvider as OpenAICodexSDKProvider).apiKey).toBe('first-key');
+      expect((second.gradingProvider as OpenAICodexSDKProvider).apiKey).toBe('second-key');
+    },
+  );
+
+  it('does not select masked host credentials or reuse their bundle', async () => {
+    const { getCodexDefaultProviders, hasCodexDefaultCredentials } = await import(
+      '../../../src/providers/openai/codexDefaults'
+    );
+    mockProcessEnv({ OPENAI_API_KEY: 'host-key', CODEX_API_KEY: 'host-fallback' });
+    const host = getCodexDefaultProviders();
+    const masked = { OPENAI_API_KEY: '', CODEX_API_KEY: '' };
+    expect(hasCodexDefaultCredentials(masked)).toBe(false);
+    const withoutCredentials = getCodexDefaultProviders(masked);
+    expect(withoutCredentials).not.toBe(host);
+    expect(
+      (withoutCredentials.gradingProvider as OpenAICodexSDKProvider).getApiKey(),
+    ).toBeUndefined();
+  });
+
+  it('does not select an explicitly masked host Codex home', async () => {
+    const { getCodexDefaultProviders, hasCodexDefaultCredentials } = await import(
+      '../../../src/providers/openai/codexDefaults'
+    );
+    fs.writeFileSync(path.join(codexHome, 'auth.json'), '{"ok":true}');
+    const homedir = vi.spyOn(os, 'homedir').mockReturnValue(path.join(codexHome, 'empty-home'));
+    try {
+      expect(hasCodexDefaultCredentials()).toBe(true);
+      expect(hasCodexDefaultCredentials({ CODEX_HOME: '' })).toBe(false);
+      const host = getCodexDefaultProviders();
+      const masked = getCodexDefaultProviders({ CODEX_HOME: '' });
+      expect(masked).not.toBe(host);
+      expect(masked.gradingProvider.config?.cli_env?.CODEX_HOME).toBeUndefined();
+    } finally {
+      homedir.mockRestore();
+    }
   });
 
   it('evicts and shuts down idle least-recently-used cached providers when credentials rotate', async () => {
@@ -473,15 +584,21 @@ describe('Codex default providers', () => {
       '../../../src/providers/openai/codexDefaults'
     );
 
-    mockProcessEnv({ OPENAI_API_KEY: 'shared-openai-key' });
-
-    const first = getCodexDefaultProviders({ CODEX_API_KEY: 'codex-A' });
-    const second = getCodexDefaultProviders({ CODEX_API_KEY: 'codex-B' });
+    const first = getCodexDefaultProviders({
+      OPENAI_API_KEY: 'shared-openai-key',
+      CODEX_API_KEY: 'codex-A',
+    });
+    const second = getCodexDefaultProviders({
+      OPENAI_API_KEY: 'shared-openai-key',
+      CODEX_API_KEY: 'codex-B',
+    });
     expect(second).toBe(first);
 
     // Rotating the OPENAI key (the resolved credential) does invalidate the cache.
-    mockProcessEnv({ OPENAI_API_KEY: 'rotated-openai-key' });
-    const third = getCodexDefaultProviders({ CODEX_API_KEY: 'codex-A' });
+    const third = getCodexDefaultProviders({
+      OPENAI_API_KEY: 'rotated-openai-key',
+      CODEX_API_KEY: 'codex-A',
+    });
     expect(third).not.toBe(first);
   });
 

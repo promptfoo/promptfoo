@@ -1,4 +1,5 @@
 import { render, screen } from '@testing-library/react';
+import { Chart } from 'chart.js';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import ResultsCharts from './ResultsCharts';
 import { useTableStore } from './store';
@@ -35,14 +36,6 @@ vi.mock('chart.js', () => {
 // Mock the store
 vi.mock('./store', () => ({
   useTableStore: vi.fn(),
-}));
-
-// Mock API calls
-vi.mock('@app/utils/api', () => ({
-  callApi: vi.fn(),
-  fetchUserEmail: vi.fn(() => Promise.resolve('test@example.com')),
-  fetchUserId: vi.fn(() => Promise.resolve('test-user-id')),
-  updateEvalAuthor: vi.fn(() => Promise.resolve({})),
 }));
 
 describe('ResultsCharts', () => {
@@ -240,7 +233,7 @@ describe('ResultsCharts', () => {
     }).not.toThrow();
   });
 
-  it('should render without errors when scores array has a single data point', () => {
+  it.each([2, -2])('counts uniform custom scores of %s in a single histogram bin', (score) => {
     const mockTable = {
       head: {
         prompts: [
@@ -249,15 +242,13 @@ describe('ResultsCharts', () => {
         ],
         vars: [],
       },
-      body: [
-        {
-          outputs: [
-            { score: 0.8, pass: true, text: 'valid output' },
-            { score: 0.8, pass: true, text: 'valid output' },
-          ],
-          vars: [],
-        },
-      ],
+      body: Array.from({ length: 3 }, () => ({
+        outputs: [
+          { score, pass: score > 0, text: 'valid output' },
+          { score, pass: score > 0, text: 'valid output' },
+        ],
+        vars: [],
+      })),
     };
 
     const scores = calculateScores(mockTable);
@@ -272,7 +263,12 @@ describe('ResultsCharts', () => {
 
     const { container } = render(<ResultsCharts {...defaultProps} scores={scores} />);
 
-    expect(() => render(<ResultsCharts {...defaultProps} scores={scores} />)).not.toThrow();
+    const histogram = vi
+      .mocked(Chart)
+      .mock.calls.map(([, config]) => config)
+      .find((config) => config.options?.plugins?.title?.text === 'Score Distribution');
+    expect(histogram?.data.labels).toEqual([score]);
+    expect(histogram?.data.datasets.map((dataset) => dataset.data)).toEqual([[3], [3]]);
 
     const canvasElements = container.querySelectorAll('canvas');
     expect(canvasElements.length).toBeGreaterThan(0);
@@ -355,9 +351,71 @@ describe('ResultsCharts', () => {
       expect(() => {
         render(<ResultsCharts {...defaultProps} scores={scores} />);
       }).not.toThrow();
+
+      const scatterConfig = vi
+        .mocked(Chart)
+        .mock.calls.map(([, config]) => config)
+        .find((config) => 'type' in config && config.type === 'scatter');
+      expect(scatterConfig?.data?.datasets[0].data).toEqual([]);
     });
 
-    it('handles empty recentEvals array gracefully', () => {
+    it('uses the source row when rendering scatter tooltips after filtering points', () => {
+      const mockTableWithSkippedRow = {
+        head: {
+          prompts: [{ provider: 'test-provider-1' }, { provider: 'test-provider-2' }],
+          vars: [],
+        },
+        body: [
+          {
+            outputs: [
+              { score: Number.NaN, pass: false, text: 'wrong first output' },
+              { score: 0.1, pass: false, text: 'wrong second output' },
+            ],
+            vars: [],
+          },
+          {
+            outputs: [
+              { score: 0.6, pass: true, text: 'right first output' },
+              { score: 0.8, pass: true, text: 'right second output' },
+            ],
+            vars: [],
+          },
+        ],
+      };
+
+      const scores = calculateScores(mockTableWithSkippedRow);
+
+      vi.mocked(useTableStore).mockReturnValue({
+        table: mockTableWithSkippedRow,
+        evalId: 'test-eval',
+        config: { description: 'test config' },
+        setTable: vi.fn(),
+        fetchEvalData: vi.fn(),
+      });
+
+      render(<ResultsCharts {...defaultProps} scores={scores} />);
+
+      const scatterConfig = vi
+        .mocked(Chart)
+        .mock.calls.map(([, config]) => config)
+        .find((config) => 'type' in config && config.type === 'scatter');
+      const scatterData = scatterConfig?.data?.datasets[0].data as
+        | Array<{ x: number; y: number; rowIndex: number }>
+        | undefined;
+      const tooltipLabel = scatterConfig?.options?.plugins?.tooltip?.callbacks?.label as
+        | ((context: { dataIndex: number; raw?: unknown }) => string)
+        | undefined;
+
+      expect(scatterData).toEqual([expect.objectContaining({ x: 0.6, y: 0.8, rowIndex: 1 })]);
+      expect(
+        tooltipLabel?.({
+          dataIndex: 0,
+          raw: scatterData?.[0],
+        }),
+      ).toContain('right first output');
+    });
+
+    it('renders only three equal-width charts when the evaluation has a description', () => {
       const mockTable = {
         head: {
           prompts: [{ provider: 'test-provider-1' }, { provider: 'test-provider-2' }],
@@ -396,9 +454,11 @@ describe('ResultsCharts', () => {
 
       const { container } = render(<ResultsCharts {...defaultProps} scores={scores} />);
 
-      expect(container).toBeDefined();
-
-      expect(screen.queryByText('PerformanceOverTimeChart')).toBeNull();
+      const canvases = container.querySelectorAll('canvas');
+      expect(canvases).toHaveLength(3);
+      for (const canvas of canvases) {
+        expect(canvas.parentElement).toHaveStyle({ width: '33%' });
+      }
     });
   });
 
@@ -569,6 +629,195 @@ describe('ResultsCharts', () => {
       // Should render charts (the specific chart type logic is tested indirectly)
       const canvasElements = container.querySelectorAll('canvas');
       expect(canvasElements.length).toBeGreaterThanOrEqual(3);
+    });
+
+    it('should render finite metric chart values if named scores are all zero', () => {
+      const mockTableWithZeroNamedScores = {
+        head: {
+          prompts: [
+            {
+              provider: 'test-provider-1',
+              metrics: {
+                namedScores: {
+                  accuracy: 0,
+                  precision: 0,
+                },
+              },
+            },
+            {
+              provider: 'test-provider-2',
+              metrics: {
+                namedScores: {
+                  accuracy: 0,
+                  precision: 0,
+                },
+              },
+            },
+          ],
+          vars: [],
+        },
+        body: [
+          {
+            outputs: [
+              { score: 0.7, pass: true, text: 'test 1' },
+              { score: 0.8, pass: true, text: 'test 2' },
+            ],
+            vars: [],
+          },
+        ],
+      };
+
+      const scores = calculateScores(mockTableWithZeroNamedScores);
+
+      vi.mocked(useTableStore).mockReturnValue({
+        table: mockTableWithZeroNamedScores,
+        evalId: 'test-eval',
+        config: { description: 'test config' },
+        setTable: vi.fn(),
+        fetchEvalData: vi.fn(),
+      });
+
+      render(<ResultsCharts {...defaultProps} scores={scores} />);
+
+      const chartCalls = vi.mocked(Chart).mock.calls;
+      const metricChartConfig = chartCalls
+        .map(([, config]) => config)
+        .find((config) => {
+          const labels = config.data?.labels;
+          return Array.isArray(labels) && labels.includes('accuracy');
+        });
+
+      expect(metricChartConfig).toBeDefined();
+      const values = metricChartConfig!.data!.datasets.flatMap((dataset) => dataset.data ?? []);
+      expect(values).toHaveLength(4);
+      expect(values.every((value) => typeof value === 'number' && Number.isFinite(value))).toBe(
+        true,
+      );
+      expect(values).toEqual([0, 0, 0, 0]);
+    });
+
+    it('should preserve relative metric chart values if named scores are all negative', () => {
+      const mockTableWithNegativeNamedScores = {
+        head: {
+          prompts: [
+            {
+              provider: 'test-provider-1',
+              metrics: {
+                namedScores: {
+                  penalty: -0.8,
+                  risk: -0.5,
+                },
+              },
+            },
+            {
+              provider: 'test-provider-2',
+              metrics: {
+                namedScores: {
+                  penalty: -0.2,
+                  risk: -0.1,
+                },
+              },
+            },
+          ],
+          vars: [],
+        },
+        body: [
+          {
+            outputs: [
+              { score: 0.7, pass: true, text: 'test 1' },
+              { score: 0.8, pass: true, text: 'test 2' },
+            ],
+            vars: [],
+          },
+        ],
+      };
+
+      const scores = calculateScores(mockTableWithNegativeNamedScores);
+
+      vi.mocked(useTableStore).mockReturnValue({
+        table: mockTableWithNegativeNamedScores,
+        evalId: 'test-eval',
+        config: { description: 'test config' },
+        setTable: vi.fn(),
+        fetchEvalData: vi.fn(),
+      });
+
+      render(<ResultsCharts {...defaultProps} scores={scores} />);
+
+      const chartCalls = vi.mocked(Chart).mock.calls;
+      const metricChartConfig = chartCalls
+        .map(([, config]) => config)
+        .find((config) => {
+          const labels = config.data?.labels;
+          return Array.isArray(labels) && labels.includes('penalty');
+        });
+
+      expect(metricChartConfig).toBeDefined();
+      const values = metricChartConfig!.data!.datasets.flatMap((dataset) => dataset.data ?? []);
+      expect(values).toEqual([-1, -1, -0.25, -0.2]);
+    });
+
+    it('should normalize each named metric independently when one metric is all zero', () => {
+      // `accuracy` is all zero (exercises the zero-max guard), while `precision` and
+      // `coverage` have different maxima. Per-key normalization divides each metric by
+      // its own max; a regression to a single global max would yield different ratios.
+      const mockTable = {
+        head: {
+          prompts: [
+            {
+              provider: 'test-provider-1',
+              metrics: {
+                namedScores: { accuracy: 0, precision: 0.4, coverage: 0.1 },
+              },
+            },
+            {
+              provider: 'test-provider-2',
+              metrics: {
+                namedScores: { accuracy: 0, precision: 0.8, coverage: 0.2 },
+              },
+            },
+          ],
+          vars: [],
+        },
+        body: [
+          {
+            outputs: [
+              { score: 0.7, pass: true, text: 'test 1' },
+              { score: 0.8, pass: true, text: 'test 2' },
+            ],
+            vars: [],
+          },
+        ],
+      };
+
+      const scores = calculateScores(mockTable);
+
+      vi.mocked(useTableStore).mockReturnValue({
+        table: mockTable,
+        evalId: 'test-eval',
+        config: { description: 'test config' },
+        setTable: vi.fn(),
+        fetchEvalData: vi.fn(),
+      });
+
+      render(<ResultsCharts {...defaultProps} scores={scores} />);
+
+      const chartCalls = vi.mocked(Chart).mock.calls;
+      const metricChartConfig = chartCalls
+        .map(([, config]) => config)
+        .find((config) => {
+          const labels = config.data?.labels;
+          return Array.isArray(labels) && labels.includes('accuracy');
+        });
+
+      expect(metricChartConfig).toBeDefined();
+      const values = metricChartConfig!.data!.datasets.flatMap((dataset) => dataset.data ?? []);
+      expect(values.every((value) => typeof value === 'number' && Number.isFinite(value))).toBe(
+        true,
+      );
+      // datasets are [provider-1, provider-2]; keys are [accuracy, precision, coverage].
+      // accuracy -> 0 (zero max), precision -> value / 0.8, coverage -> value / 0.2.
+      expect(values).toEqual([0, 0.5, 0.5, 0, 1, 1]);
     });
   });
 

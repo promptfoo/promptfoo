@@ -1,12 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { Severity } from '../../src/redteam/constants';
-import {
-  calculatePluginRiskScore,
-  calculateSystemRiskScore,
-  formatRiskScore,
-  getRiskColor,
-  getStrategyMetadata,
-} from '../../src/redteam/riskScoring';
+import { calculatePluginRiskScore, getStrategyMetadata } from '../../src/redteam/riskScoring';
 
 describe('Risk Scoring', () => {
   describe('getStrategyMetadata', () => {
@@ -28,6 +22,14 @@ describe('Risk Scoring', () => {
       const unknownMeta = getStrategyMetadata('unknown-strategy');
       expect(unknownMeta.humanExploitable).toBe(true);
       expect(unknownMeta.humanComplexity).toBe('medium');
+    });
+
+    it('should score jailbreak-templates identically to its deprecated prompt-injection alias', () => {
+      const canonicalMeta = getStrategyMetadata('jailbreak-templates');
+      expect(canonicalMeta.humanExploitable).toBe(true);
+      expect(canonicalMeta.humanComplexity).toBe('low');
+
+      expect(getStrategyMetadata('prompt-injection')).toEqual(canonicalMeta);
     });
   });
 
@@ -200,118 +202,6 @@ describe('Risk Scoring', () => {
       expect(result.level).toBe('low');
       expect(result.score).toBeGreaterThanOrEqual(0.1);
       expect(result.score).toBeLessThan(4.0);
-    });
-  });
-
-  describe('calculateSystemRiskScore', () => {
-    it('should calculate system risk from multiple plugins', () => {
-      const pluginScores = [
-        calculatePluginRiskScore('plugin1', Severity.Critical, [
-          { strategy: 'basic', results: { total: 10, passed: 8, failed: 2 } },
-        ]),
-        calculatePluginRiskScore('plugin2', Severity.Medium, [
-          { strategy: 'jailbreak', results: { total: 10, passed: 3, failed: 7 } },
-        ]),
-        calculatePluginRiskScore('plugin3', Severity.Low, [
-          { strategy: 'crescendo', results: { total: 10, passed: 1, failed: 9 } },
-        ]),
-      ];
-
-      const systemScore = calculateSystemRiskScore(pluginScores);
-
-      expect(systemScore.level).toBe('critical');
-      expect(systemScore.plugins).toHaveLength(3);
-      expect(systemScore.distribution.critical).toBeGreaterThanOrEqual(1);
-    });
-
-    it('should handle empty plugin list', () => {
-      const systemScore = calculateSystemRiskScore([]);
-
-      expect(systemScore.level).toBe('low');
-      expect(systemScore.score).toBe(0);
-      expect(systemScore.plugins).toHaveLength(0);
-    });
-
-    it('should apply distribution penalty for multiple high-risk vulnerabilities', () => {
-      const singleCritical = calculateSystemRiskScore([
-        calculatePluginRiskScore('plugin1', Severity.Critical, [
-          { strategy: 'basic', results: { total: 10, passed: 8, failed: 2 } },
-        ]),
-      ]);
-
-      const multipleCritical = calculateSystemRiskScore([
-        calculatePluginRiskScore('plugin1', Severity.Critical, [
-          { strategy: 'basic', results: { total: 10, passed: 8, failed: 2 } },
-        ]),
-        calculatePluginRiskScore('plugin2', Severity.Critical, [
-          { strategy: 'basic', results: { total: 10, passed: 8, failed: 2 } },
-        ]),
-        calculatePluginRiskScore('plugin3', Severity.Critical, [
-          { strategy: 'basic', results: { total: 10, passed: 8, failed: 2 } },
-        ]),
-      ]);
-
-      expect(multipleCritical.score).toBeGreaterThanOrEqual(singleCritical.score);
-    });
-
-    it('should include informational in distribution count', () => {
-      const pluginScores = [
-        calculatePluginRiskScore('plugin1', Severity.Informational, [
-          { strategy: 'basic', results: { total: 10, passed: 5, failed: 5 } },
-        ]),
-        calculatePluginRiskScore('plugin2', Severity.Informational, [
-          { strategy: 'basic', results: { total: 10, passed: 8, failed: 2 } },
-        ]),
-        calculatePluginRiskScore('plugin3', Severity.Low, [
-          { strategy: 'basic', results: { total: 10, passed: 3, failed: 7 } },
-        ]),
-      ];
-
-      const systemScore = calculateSystemRiskScore(pluginScores);
-
-      expect(systemScore.distribution.informational).toBe(2);
-      expect(systemScore.distribution.low).toBe(0);
-      expect(systemScore.distribution.medium).toBe(1);
-    });
-  });
-
-  describe('formatRiskScore', () => {
-    it('should format risk scores correctly', () => {
-      const criticalScore = {
-        score: 9.5,
-        level: 'critical' as const,
-        components: {
-          impact: 10,
-          exploitability: 10,
-          humanFactor: 1.5,
-          strategyWeight: 1.5,
-        },
-      };
-
-      expect(formatRiskScore(criticalScore)).toBe('CRITICAL (9.50/10)');
-
-      const lowScore = {
-        score: 1.2,
-        level: 'low' as const,
-        components: {
-          impact: 2.5,
-          exploitability: 2,
-          humanFactor: 1.0,
-          strategyWeight: 1.0,
-        },
-      };
-
-      expect(formatRiskScore(lowScore)).toBe('LOW (1.20/10)');
-    });
-  });
-
-  describe('getRiskColor', () => {
-    it('should return correct colors for risk levels', () => {
-      expect(getRiskColor('critical')).toBe('#8B0000');
-      expect(getRiskColor('high')).toBe('#FF0000');
-      expect(getRiskColor('medium')).toBe('#FFA500');
-      expect(getRiskColor('low')).toBe('#32CD32');
-      expect(getRiskColor('informational')).toBe('#1976d2');
     });
   });
 });

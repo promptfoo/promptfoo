@@ -130,7 +130,7 @@ flowchart TD
 
 **Must not depend on**
 
-- `fs`, `better-sqlite3`, Express, provider SDKs, CLI libraries, server code
+- `fs`, `@libsql/client`, Express, provider SDKs, CLI libraries, server code
 
 **Why it exists**
 
@@ -179,7 +179,7 @@ flowchart TD
 
 - `@promptfoo/core`
 - `@promptfoo/schema`
-- Node-only dependencies such as `better-sqlite3`, `glob`, `chokidar`, `dotenv`
+- Node-only dependencies such as `@libsql/client`, `glob`, `chokidar`, `dotenv`
 
 **Why it exists**
 
@@ -407,7 +407,7 @@ ownership report:
 
 ```text
 dependency                owner                  direct users       transitive size
-better-sqlite3             @promptfoo/node        node               ...
+@libsql/client             @promptfoo/node        node               ...
 express                    @promptfoo/view-server view-server        ...
 @anthropic-ai/sdk          provider-anthropic     provider package   ...
 ```

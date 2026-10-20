@@ -791,18 +791,6 @@ export function materializeInputValue(
   }
 }
 
-export function materializeInputVariables(
-  variables: Record<string, string>,
-  inputs: Inputs,
-): Record<string, string> {
-  return Object.fromEntries(
-    Object.entries(variables).map(([key, value]) => {
-      const definition = inputs[key];
-      return [key, definition ? materializeInputValue(value, definition) : value];
-    }),
-  );
-}
-
 export async function materializeInputVariablesWithMetadata(
   variables: Record<string, string>,
   inputs: Inputs,

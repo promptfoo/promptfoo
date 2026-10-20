@@ -18,6 +18,7 @@ const mockProvider = createMockProvider({
 
 const defaultParams = {
   baseType: 'contains' as const,
+  inverse: false,
   assertionValueContext: {
     vars: {},
     test: {} as AtomicTestCase,
@@ -38,7 +39,6 @@ describe('handleContains', () => {
       assertion: { type: 'contains', value: 'world' },
       renderedValue: 'world' as AssertionValue,
       outputString: 'hello world',
-      inverse: false,
     };
 
     const result = handleContains(params);
@@ -56,7 +56,6 @@ describe('handleContains', () => {
       assertion: { type: 'contains', value: 'universe' },
       renderedValue: 'universe' as AssertionValue,
       outputString: 'hello world',
-      inverse: false,
     };
 
     const result = handleContains(params);
@@ -64,24 +63,6 @@ describe('handleContains', () => {
       pass: false,
       score: 0,
       reason: 'Expected output to contain "universe"',
-      assertion: params.assertion,
-    });
-  });
-
-  it('should handle number values', () => {
-    const params: AssertionParams = {
-      ...defaultParams,
-      assertion: { type: 'contains', value: '42' },
-      renderedValue: '42' as AssertionValue,
-      outputString: 'The answer is 42',
-      inverse: false,
-    };
-
-    const result = handleContains(params);
-    expect(result).toEqual({
-      pass: true,
-      score: 1,
-      reason: 'Assertion passed',
       assertion: params.assertion,
     });
   });
@@ -111,7 +92,6 @@ describe('handleContains', () => {
       renderedValue: 'unused' as AssertionValue,
       valueFromScript: 'world' as AssertionValue,
       outputString: 'hello world',
-      inverse: false,
     };
 
     const result = handleContains(params);
@@ -129,7 +109,6 @@ describe('handleContains', () => {
       assertion: { type: 'contains' },
       renderedValue: undefined,
       outputString: 'hello world',
-      inverse: false,
     };
 
     expect(() => handleContains(params)).toThrow(
@@ -145,7 +124,6 @@ describe('handleIContains', () => {
       assertion: { type: 'icontains', value: 'WORLD' },
       renderedValue: 'WORLD' as AssertionValue,
       outputString: 'hello world',
-      inverse: false,
     };
 
     const result = handleIContains(params);
@@ -163,7 +141,6 @@ describe('handleIContains', () => {
       assertion: { type: 'icontains', value: 'WoRlD' },
       renderedValue: 'WoRlD' as AssertionValue,
       outputString: 'Hello WORLD',
-      inverse: false,
     };
 
     const result = handleIContains(params);
@@ -176,6 +153,64 @@ describe('handleIContains', () => {
   });
 });
 
+describe.each([
+  ['contains', handleContains],
+  ['icontains', handleIContains],
+] as const)('%s numeric values', (type, handler) => {
+  it.each([
+    {
+      outputString: 'There are 0 errors',
+      pass: true,
+      reason: 'Assertion passed',
+    },
+    {
+      outputString: 'no digits here',
+      pass: false,
+      reason: 'Expected output to contain "0"',
+    },
+  ])('should return pass=$pass for 0', ({ outputString, pass, reason }) => {
+    const params: AssertionParams = {
+      ...defaultParams,
+      baseType: type,
+      assertion: { type, value: 0 },
+      renderedValue: 0,
+      outputString,
+    };
+
+    expect(handler(params)).toEqual({
+      pass,
+      score: pass ? 1 : 0,
+      reason,
+      assertion: params.assertion,
+    });
+  });
+
+  it('should reject NaN', () => {
+    const params: AssertionParams = {
+      ...defaultParams,
+      baseType: type,
+      assertion: { type, value: Number.NaN },
+      renderedValue: Number.NaN,
+      outputString: 'NaN',
+    };
+
+    expect(() => handler(params)).toThrow(
+      `"${type}" assertion type must have a string or number value`,
+    );
+  });
+
+  it.each([Infinity, -Infinity])('supports %s', (value) => {
+    expect(
+      handler({
+        ...defaultParams,
+        assertion: { type },
+        renderedValue: value,
+        outputString: String(value),
+      }).pass,
+    ).toBe(true);
+  });
+});
+
 describe('handleContainsAny', () => {
   it('should pass when output contains any of the expected strings', () => {
     const params: AssertionParams = {
@@ -183,7 +218,6 @@ describe('handleContainsAny', () => {
       assertion: { type: 'contains-any', value: ['world', 'universe'] },
       renderedValue: ['world', 'universe'] as AssertionValue,
       outputString: 'hello world',
-      inverse: false,
     };
 
     const result = handleContainsAny(params);
@@ -201,7 +235,6 @@ describe('handleContainsAny', () => {
       assertion: { type: 'contains-any', value: 'world,universe' },
       renderedValue: 'world,universe' as AssertionValue,
       outputString: 'hello world',
-      inverse: false,
     };
 
     const result = handleContainsAny(params);
@@ -219,7 +252,6 @@ describe('handleContainsAny', () => {
       assertion: { type: 'contains-any', value: '"hello, world",universe' },
       renderedValue: '"hello, world",universe' as AssertionValue,
       outputString: 'hello, world',
-      inverse: false,
     };
 
     const result = handleContainsAny(params);
@@ -240,7 +272,6 @@ describe('handleContainsAny', () => {
       },
       renderedValue: '"hello, dear world", "goodbye, universe", simple' as AssertionValue,
       outputString: 'hello, dear world is here',
-      inverse: false,
     };
 
     const result = handleContainsAny(params);
@@ -258,7 +289,6 @@ describe('handleContainsAny', () => {
       assertion: { type: 'contains-any', value: '"",' },
       renderedValue: '"",' as AssertionValue,
       outputString: '',
-      inverse: false,
     };
 
     const result = handleContainsAny(params);
@@ -276,7 +306,6 @@ describe('handleContainsAny', () => {
       assertion: { type: 'contains-any', value: '"hello, world"\t,foo' },
       renderedValue: '"hello, world"\t,foo' as AssertionValue,
       outputString: 'zzz',
-      inverse: false,
     };
 
     const result = handleContainsAny(params);
@@ -289,7 +318,6 @@ describe('handleContainsAny', () => {
       assertion: { type: 'contains-any', value: '"hello, world"\t,\t"foo"' },
       renderedValue: '"hello, world"\t,\t"foo"' as AssertionValue,
       outputString: 'foo',
-      inverse: false,
     };
 
     const result = handleContainsAny(params);
@@ -303,7 +331,6 @@ describe('handleContainsAny', () => {
       assertion: { type: 'contains-any', value: '"a""b",c' },
       renderedValue: '"a""b",c' as AssertionValue,
       outputString: 'a"b',
-      inverse: false,
     };
 
     const result = handleContainsAny(params);
@@ -317,7 +344,6 @@ describe('handleContainsAny', () => {
       assertion: { type: 'contains-any', value: '"a""b",c' },
       renderedValue: '"a""b",c' as AssertionValue,
       outputString: 'b',
-      inverse: false,
     };
 
     const result = handleContainsAny(params);
@@ -330,7 +356,6 @@ describe('handleContainsAny', () => {
       assertion: { type: 'contains-any', value: '"hello\\"world,test", "another,test"' },
       renderedValue: '"hello\\"world,test", "another,test"' as AssertionValue,
       outputString: 'hello"world,test',
-      inverse: false,
     };
 
     const result = handleContainsAny(params);
@@ -348,7 +373,6 @@ describe('handleContainsAny', () => {
       assertion: { type: 'contains-any', value: '""' },
       renderedValue: '""' as AssertionValue,
       outputString: 'test',
-      inverse: false,
     };
 
     const result = handleContainsAny(params);
@@ -366,7 +390,6 @@ describe('handleContainsAny', () => {
       assertion: { type: 'contains-any', value: '"test"' },
       renderedValue: '"test"' as AssertionValue,
       outputString: 'test',
-      inverse: false,
     };
 
     const result = handleContainsAny(params);
@@ -384,7 +407,6 @@ describe('handleContainsAny', () => {
       assertion: { type: 'contains-any', value: '"test\\test"' },
       renderedValue: '"test\\test"' as AssertionValue,
       outputString: 'test\\test',
-      inverse: false,
     };
 
     const result = handleContainsAny(params);
@@ -403,7 +425,6 @@ describe('handleContainsAny', () => {
       assertion: { type: 'contains-any', value: '"test\\\\test"' },
       renderedValue: '"test\\\\test"' as AssertionValue,
       outputString: 'test\\test',
-      inverse: false,
     };
 
     const result = handleContainsAny(params);
@@ -422,7 +443,6 @@ describe('handleContainsAny', () => {
       assertion: { type: 'contains-any', value: '"hello\\"world,test", "another,test"' },
       renderedValue: '"hello\\"world,test", "another,test"' as AssertionValue,
       outputString: 'another,test',
-      inverse: false,
     };
 
     const result = handleContainsAny(params);
@@ -435,7 +455,6 @@ describe('handleContainsAny', () => {
       assertion: { type: 'contains-any', value: '"hello\\"world,test", "another,test"' },
       renderedValue: '"hello\\"world,test", "another,test"' as AssertionValue,
       outputString: 'something completely different',
-      inverse: false,
     };
 
     const result = handleContainsAny(params);
@@ -448,7 +467,6 @@ describe('handleContainsAny', () => {
       assertion: { type: 'contains-any', value: '"test' },
       renderedValue: '"test' as AssertionValue,
       outputString: 'test',
-      inverse: false,
     };
 
     expect(() => handleContainsAny(params)).toThrow(
@@ -462,7 +480,6 @@ describe('handleContainsAny', () => {
       assertion: { type: 'contains-any', value: '"hello"world' },
       renderedValue: '"hello"world' as AssertionValue,
       outputString: 'hello world',
-      inverse: false,
     };
 
     expect(() => handleContainsAny(params)).toThrow(
@@ -476,7 +493,6 @@ describe('handleContainsAny', () => {
       assertion: { type: 'contains-any', value: '"hello" world' },
       renderedValue: '"hello" world' as AssertionValue,
       outputString: 'hello world',
-      inverse: false,
     };
 
     expect(() => handleContainsAny(params)).toThrow(
@@ -495,7 +511,6 @@ describe('handleIContainsAny', () => {
       },
       renderedValue: '"hello\\"world,test", "another,test"' as AssertionValue,
       outputString: 'ANOTHER,TEST',
-      inverse: false,
     };
 
     const result = handleIContainsAny(params);
@@ -508,7 +523,6 @@ describe('handleIContainsAny', () => {
       assertion: { type: 'icontains-any', value: '"hello, world",universe' },
       renderedValue: '"hello, world",universe' as AssertionValue,
       outputString: 'HELLO, WORLD',
-      inverse: false,
     };
 
     const result = handleIContainsAny(params);
@@ -521,7 +535,6 @@ describe('handleIContainsAny', () => {
       assertion: { type: 'icontains-any', value: ['WORLD', 'UNIVERSE'] },
       renderedValue: ['WORLD', 'UNIVERSE'] as AssertionValue,
       outputString: 'hello world',
-      inverse: false,
     };
 
     const result = handleIContainsAny(params);
@@ -533,185 +546,86 @@ describe('handleIContainsAny', () => {
     });
   });
 
-  it('should handle comma-separated string input case-insensitively', () => {
-    const params: AssertionParams = {
-      ...defaultParams,
-      assertion: { type: 'icontains-any', value: 'WORLD,UNIVERSE' },
-      renderedValue: 'WORLD,UNIVERSE' as AssertionValue,
+  for (const { name, value, outputString, pass, reason = 'Assertion passed' } of [
+    {
+      name: 'should handle comma-separated string input case-insensitively',
+      value: 'WORLD,UNIVERSE',
       outputString: 'hello world',
-      inverse: false,
-    };
-
-    const result = handleIContainsAny(params);
-    expect(result).toEqual({
       pass: true,
-      score: 1,
-      reason: 'Assertion passed',
-      assertion: params.assertion,
-    });
-  });
-
-  it('should handle string input with multiple commas and spaces', () => {
-    const params: AssertionParams = {
-      ...defaultParams,
-      assertion: { type: 'icontains-any', value: 'HELLO,  WORLD  ,  UNIVERSE' },
-      renderedValue: 'HELLO,  WORLD  ,  UNIVERSE' as AssertionValue,
+    },
+    {
+      name: 'should handle string input with multiple commas and spaces',
+      value: 'HELLO,  WORLD  ,  UNIVERSE',
       outputString: 'hello',
-      inverse: false,
-    };
-
-    const result = handleIContainsAny(params);
-    expect(result).toEqual({
       pass: true,
-      score: 1,
-      reason: 'Assertion passed',
-      assertion: params.assertion,
-    });
-  });
-
-  it('should ignore empty entries in comma-separated list', () => {
-    const params: AssertionParams = {
-      ...defaultParams,
-      assertion: { type: 'icontains-any', value: ',WORLD,,' },
-      renderedValue: ',WORLD,,' as AssertionValue,
+    },
+    {
+      name: 'should ignore empty entries in comma-separated list',
+      value: ',WORLD,,',
       outputString: '',
-      inverse: false,
-    };
-
-    const result = handleIContainsAny(params);
-    expect(result).toEqual({
       pass: false,
-      score: 0,
       reason: 'Expected output to contain one of "WORLD"',
-      assertion: params.assertion,
-    });
-  });
-
-  it('should preserve quoted empty strings in comma-separated list', () => {
-    const params: AssertionParams = {
-      ...defaultParams,
-      assertion: { type: 'icontains-any', value: '"",WORLD' },
-      renderedValue: '"",WORLD' as AssertionValue,
+    },
+    {
+      name: 'should preserve quoted empty strings in comma-separated list',
+      value: '"",WORLD',
       outputString: '',
-      inverse: false,
-    };
-
-    const result = handleIContainsAny(params);
-    expect(result).toEqual({
       pass: true,
-      score: 1,
-      reason: 'Assertion passed',
-      assertion: params.assertion,
-    });
-  });
-
-  it('should handle string value with spaces', () => {
-    const params: AssertionParams = {
-      ...defaultParams,
-      assertion: { type: 'icontains-any', value: '  HELLO  ' },
-      renderedValue: '  HELLO  ' as AssertionValue,
+    },
+    {
+      name: 'should handle string value with spaces',
+      value: '  HELLO  ',
       outputString: 'hello',
-      inverse: false,
-    };
-
-    const result = handleIContainsAny(params);
-    expect(result).toEqual({
       pass: true,
-      score: 1,
-      reason: 'Assertion passed',
-      assertion: params.assertion,
-    });
-  });
-
-  it('should handle string value with multiple spaces between commas', () => {
-    const params: AssertionParams = {
-      ...defaultParams,
-      assertion: { type: 'icontains-any', value: 'HELLO  ,  WORLD' },
-      renderedValue: 'HELLO  ,  WORLD' as AssertionValue,
+    },
+    {
+      name: 'should handle string value with multiple spaces between commas',
+      value: 'HELLO  ,  WORLD',
       outputString: 'hello',
-      inverse: false,
-    };
-
-    const result = handleIContainsAny(params);
-    expect(result).toEqual({
       pass: true,
-      score: 1,
-      reason: 'Assertion passed',
-      assertion: params.assertion,
-    });
-  });
-
-  it('should handle string value with multiple spaces and special characters', () => {
-    const params: AssertionParams = {
-      ...defaultParams,
-      assertion: { type: 'icontains-any', value: '  HELLO  ,  WORLD  ' },
-      renderedValue: '  HELLO  ,  WORLD  ' as AssertionValue,
+    },
+    {
+      name: 'should handle string value with multiple spaces and special characters',
+      value: '  HELLO  ,  WORLD  ',
       outputString: 'hello',
-      inverse: false,
-    };
-
-    const result = handleIContainsAny(params);
-    expect(result).toEqual({
       pass: true,
-      score: 1,
-      reason: 'Assertion passed',
-      assertion: params.assertion,
-    });
-  });
-
-  it('should handle string value with multiple spaces and commas', () => {
-    const params: AssertionParams = {
-      ...defaultParams,
-      assertion: { type: 'icontains-any', value: '  HELLO  ,  ,  WORLD  ' },
-      renderedValue: '  HELLO  ,  ,  WORLD  ' as AssertionValue,
+    },
+    {
+      name: 'should handle string value with multiple spaces and commas',
+      value: '  HELLO  ,  ,  WORLD  ',
       outputString: 'hello',
-      inverse: false,
-    };
-
-    const result = handleIContainsAny(params);
-    expect(result).toEqual({
       pass: true,
-      score: 1,
-      reason: 'Assertion passed',
-      assertion: params.assertion,
-    });
-  });
-
-  it('should handle string value with multiple consecutive commas', () => {
-    const params: AssertionParams = {
-      ...defaultParams,
-      assertion: { type: 'icontains-any', value: 'HELLO,,,,WORLD' },
-      renderedValue: 'HELLO,,,,WORLD' as AssertionValue,
+    },
+    {
+      name: 'should handle string value with multiple consecutive commas',
+      value: 'HELLO,,,,WORLD',
       outputString: 'hello',
-      inverse: false,
-    };
-
-    const result = handleIContainsAny(params);
-    expect(result).toEqual({
       pass: true,
-      score: 1,
-      reason: 'Assertion passed',
-      assertion: params.assertion,
-    });
-  });
-
-  it('should handle string value with only spaces and commas', () => {
-    const params: AssertionParams = {
-      ...defaultParams,
-      assertion: { type: 'icontains-any', value: '  ,  ,  ' },
-      renderedValue: '  ,  ,  ' as AssertionValue,
+    },
+    {
+      name: 'should handle string value with only spaces and commas',
+      value: '  ,  ,  ',
       outputString: '',
-      inverse: false,
-    };
-
-    const result = handleIContainsAny(params);
-    expect(result).toEqual({
       pass: false,
-      score: 0,
       reason: 'Expected output to contain one of ""',
-      assertion: params.assertion,
+    },
+  ]) {
+    it(name, () => {
+      const params: AssertionParams = {
+        ...defaultParams,
+        assertion: { type: 'icontains-any', value },
+        renderedValue: value,
+        outputString,
+      };
+
+      expect(handleIContainsAny(params)).toEqual({
+        pass,
+        score: pass ? 1 : 0,
+        reason,
+        assertion: params.assertion,
+      });
     });
-  });
+  }
 });
 
 describe('handleContainsAll', () => {
@@ -721,7 +635,6 @@ describe('handleContainsAll', () => {
       assertion: { type: 'contains-all', value: '"hello, world","foo"' },
       renderedValue: '"hello, world","foo"' as AssertionValue,
       outputString: 'hello, world and foo',
-      inverse: false,
     };
 
     const result = handleContainsAll(params);
@@ -734,7 +647,6 @@ describe('handleContainsAll', () => {
       assertion: { type: 'contains-all', value: '"hello, world","bar"' },
       renderedValue: '"hello, world","bar"' as AssertionValue,
       outputString: 'hello, world and foo',
-      inverse: false,
     };
 
     const result = handleContainsAll(params);
@@ -747,7 +659,6 @@ describe('handleContainsAll', () => {
       assertion: { type: 'contains-all', value: 'hello' },
       renderedValue: 'hello' as AssertionValue,
       outputString: 'hello world',
-      inverse: false,
     };
 
     const result = handleContainsAll(params);
@@ -763,7 +674,6 @@ describe('handleContainsAll', () => {
       },
       renderedValue: '"say \\"hello\\"", "another,phrase"' as AssertionValue,
       outputString: 'say "hello" and another,phrase here',
-      inverse: false,
     };
 
     const result = handleContainsAll(params);
@@ -779,7 +689,6 @@ describe('handleContainsAll', () => {
       },
       renderedValue: '"say \\"hello\\"", "missing,value"' as AssertionValue,
       outputString: 'say "hello" only',
-      inverse: false,
     };
 
     const result = handleContainsAll(params);
@@ -792,7 +701,6 @@ describe('handleContainsAll', () => {
       assertion: { type: 'contains-all', value: ['hello', 'world'] },
       renderedValue: ['hello', 'world'] as AssertionValue,
       outputString: 'hello world',
-      inverse: false,
     };
 
     const result = handleContainsAll(params);
@@ -810,7 +718,6 @@ describe('handleContainsAll', () => {
       assertion: { type: 'contains-all', value: ['hello', 'world', 'universe'] },
       renderedValue: ['hello', 'world', 'universe'] as AssertionValue,
       outputString: 'hello world',
-      inverse: false,
     };
 
     const result = handleContainsAll(params);
@@ -833,7 +740,6 @@ describe('handleIContainsAll', () => {
       },
       renderedValue: '"say \\"hello\\"", "another,phrase"' as AssertionValue,
       outputString: 'SAY "HELLO" AND ANOTHER,PHRASE HERE',
-      inverse: false,
     };
 
     const result = handleIContainsAll(params);
@@ -846,7 +752,6 @@ describe('handleIContainsAll', () => {
       assertion: { type: 'icontains-all', value: '"Hello, World","Foo"' },
       renderedValue: '"Hello, World","Foo"' as AssertionValue,
       outputString: 'HELLO, WORLD AND FOO',
-      inverse: false,
     };
 
     const result = handleIContainsAll(params);
@@ -859,7 +764,6 @@ describe('handleIContainsAll', () => {
       assertion: { type: 'icontains-all', value: '""' },
       renderedValue: '""' as AssertionValue,
       outputString: 'hello',
-      inverse: false,
     };
 
     const result = handleIContainsAll(params);
@@ -872,7 +776,6 @@ describe('handleIContainsAll', () => {
       assertion: { type: 'icontains-all', value: ['HELLO', 'WORLD'] },
       renderedValue: ['HELLO', 'WORLD'] as AssertionValue,
       outputString: 'hello world',
-      inverse: false,
     };
 
     const result = handleIContainsAll(params);
@@ -890,7 +793,6 @@ describe('handleIContainsAll', () => {
       assertion: { type: 'icontains-all', value: ['HELLO', 'WORLD', 'UNIVERSE'] },
       renderedValue: ['HELLO', 'WORLD', 'UNIVERSE'] as AssertionValue,
       outputString: 'hello world',
-      inverse: false,
     };
 
     const result = handleIContainsAll(params);
@@ -908,7 +810,6 @@ describe('handleIContainsAll', () => {
       assertion: { type: 'icontains-all', value: ['HeLLo', 'WoRLD'] },
       renderedValue: ['HeLLo', 'WoRLD'] as AssertionValue,
       outputString: 'HELLO world',
-      inverse: false,
     };
 
     const result = handleIContainsAll(params);
@@ -919,4 +820,61 @@ describe('handleIContainsAll', () => {
       assertion: params.assertion,
     });
   });
+});
+
+it.each(
+  [handleContainsAny, handleIContainsAny].map((handler) => ({ name: handler.name, handler })),
+)('$name short-circuits and formats only failures', ({ handler }) => {
+  let coercions = 0;
+  let joins = 0;
+  const values = [
+    'hello',
+    {
+      toString: () => {
+        coercions++;
+        throw new Error('Unexpected coercion');
+      },
+    },
+  ];
+  values.join = () => {
+    joins++;
+    throw new Error('Failure formatting');
+  };
+  const params: AssertionParams = {
+    ...defaultParams,
+    assertion: { type: 'contains-any' },
+    valueFromScript: values,
+    outputString: 'hello',
+  };
+  expect(handler(params).pass).toBe(true);
+  expect(joins).toBe(0);
+  expect(() => handler({ ...params, inverse: true })).toThrow('Failure formatting');
+  expect(joins).toBe(1);
+  expect(coercions).toBe(0);
+});
+
+it.each(
+  [handleContainsAll, handleIContainsAll].map((handler) => ({ name: handler.name, handler })),
+)('$name preserves sparse-array visits and missing order', ({ handler }) => {
+  const visits: string[] = [];
+  const tracked = (value: string) => ({
+    toString: () => {
+      visits.push(value);
+      return value;
+    },
+  });
+  const values = [, tracked('first'), , 'hello', tracked('last')];
+  const params: AssertionParams = {
+    ...defaultParams,
+    assertion: { type: 'contains-all' },
+    valueFromScript: values,
+    outputString: 'hello',
+  };
+  expect(handler(params).reason).toBe(
+    'Expected output to contain all of [, first, , hello, last]. Missing: [first, last]',
+  );
+  expect(visits).toEqual(['first', 'last', 'first', 'last', 'first', 'last']);
+  visits.length = 0;
+  expect(handler({ ...params, inverse: true }).reason).toBe('Assertion passed');
+  expect(visits).toEqual(['first', 'last']);
 });

@@ -96,11 +96,11 @@ redteam:
   strategies:
     - jailbreak # tries typical jailbreak prompts
     - jailbreak:composite # layered jailbreaks
-    - prompt-injection # misc prompt injection techniques
+    - jailbreak-templates # static jailbreak templates
   plugins:
-    - indirect-prompt-injection # test untrusted context injection
+    - id: indirect-prompt-injection # test untrusted context injection
       config:
-        injectVar: email
+        indirectInjectionVar: email
     - pii:direct # detect direct disclosure of PII
     - harmful:privacy # flag potential privacy violations in output
 ```

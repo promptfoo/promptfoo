@@ -4,23 +4,27 @@ import { runDbMigrations } from '../../src/migrate';
 import { queryTestIndicesOptimized } from '../../src/models/evalPerformance';
 import { ResultFailureReason } from '../../src/types/index';
 import EvalFactory from '../factories/evalFactory';
+import { createFilterTestResult } from '../factories/evalFilter';
+import { clearEvalTables } from '../util/evalDb';
 
-import type { EvaluateResult } from '../../src/types/index';
+const createPageOptions = (offset: number) => ({
+  filterMode: 'highlights' as const,
+  offset,
+  limit: 5,
+});
+
+const createUnfilteredHighlightOptions = () => ({
+  filterMode: 'highlights' as const,
+  filters: [],
+});
 
 describe('Highlights Filter Feature', () => {
   beforeAll(async () => {
     await runDbMigrations();
   });
 
-  beforeEach(async () => {
-    // Clear all tables before each test
-    const db = getDb();
-    await db.run('DELETE FROM eval_results');
-    await db.run('DELETE FROM evals_to_datasets');
-    await db.run('DELETE FROM evals_to_prompts');
-    await db.run('DELETE FROM evals_to_tags');
-    await db.run('DELETE FROM evals');
-  });
+  // Clear eval tables before each test
+  beforeEach(() => clearEvalTables());
 
   describe('Eval.queryTestIndices highlights filter', () => {
     it('should return only highlighted results when filterMode is highlights', async () => {
@@ -37,34 +41,19 @@ describe('Highlights Filter Feature', () => {
       ];
 
       for (const result of results) {
-        await eval_.addResult({
-          description: `test-${result.testIdx}`,
-          promptIdx: 0,
-          testIdx: result.testIdx,
-          testCase: { vars: { test: `value${result.testIdx}` } },
-          promptId: 'test-prompt',
-          provider: { id: 'test-provider', label: 'test-label' },
-          prompt: { raw: 'Test prompt', label: 'Test prompt' },
-          vars: { test: `value${result.testIdx}` },
-          response: { output: `Response ${result.testIdx}` },
-          error: null,
-          failureReason: ResultFailureReason.NONE,
-          success: true,
-          score: 1,
-          latencyMs: 100,
-          gradingResult: {
-            pass: true,
-            score: 1,
-            reason: 'Test passed',
-            comment: result.comment,
-            namedScores: {},
-            tokensUsed: { total: 10, prompt: 5, completion: 5 },
-            componentResults: [],
-          },
-          namedScores: {},
-          cost: 0.007,
-          metadata: {},
-        } as EvaluateResult);
+        await eval_.addResult(
+          createFilterTestResult(result.testIdx, {
+            gradingResult: {
+              pass: true,
+              score: 1,
+              reason: 'Test passed',
+              comment: result.comment,
+              namedScores: {},
+              tokensUsed: { total: 10, prompt: 5, completion: 5 },
+              componentResults: [],
+            },
+          }),
+        );
       }
 
       // Test highlights filter
@@ -107,48 +96,25 @@ describe('Highlights Filter Feature', () => {
 
       // Add 10 highlighted results
       for (let i = 0; i < 10; i++) {
-        await eval_.addResult({
-          description: `test-${i}`,
-          promptIdx: 0,
-          testIdx: i,
-          testCase: { vars: { test: `value${i}` } },
-          promptId: 'test-prompt',
-          provider: { id: 'test-provider', label: 'test-label' },
-          prompt: { raw: 'Test prompt', label: 'Test prompt' },
-          vars: { test: `value${i}` },
-          response: { output: `Response ${i}` },
-          error: null,
-          failureReason: ResultFailureReason.NONE,
-          success: true,
-          score: 1,
-          latencyMs: 100,
-          gradingResult: {
-            pass: true,
-            score: 1,
-            reason: 'Test passed',
-            comment: `!highlight Important item ${i}`,
-            namedScores: {},
-            tokensUsed: { total: 10, prompt: 5, completion: 5 },
-            componentResults: [],
-          },
-          namedScores: {},
-          cost: 0.007,
-          metadata: {},
-        } as EvaluateResult);
+        await eval_.addResult(
+          createFilterTestResult(i, {
+            gradingResult: {
+              pass: true,
+              score: 1,
+              reason: 'Test passed',
+              comment: `!highlight Important item ${i}`,
+              namedScores: {},
+              tokensUsed: { total: 10, prompt: 5, completion: 5 },
+              componentResults: [],
+            },
+          }),
+        );
       }
 
       // Test pagination
-      const page1 = await (eval_ as any).queryTestIndices({
-        filterMode: 'highlights',
-        offset: 0,
-        limit: 5,
-      });
+      const page1 = await (eval_ as any).queryTestIndices(createPageOptions(0));
 
-      const page2 = await (eval_ as any).queryTestIndices({
-        filterMode: 'highlights',
-        offset: 5,
-        limit: 5,
-      });
+      const page2 = await (eval_ as any).queryTestIndices(createPageOptions(5));
 
       expect(page1.filteredCount).toBe(10);
       expect(page1.testIndices).toEqual([0, 1, 2, 3, 4]);
@@ -168,34 +134,20 @@ describe('Highlights Filter Feature', () => {
       ];
 
       for (const data of testData) {
-        await eval_.addResult({
-          description: `test-${data.testIdx}`,
-          promptIdx: 0,
-          testIdx: data.testIdx,
-          testCase: { vars: { test: `value${data.testIdx}` } },
-          promptId: 'test-prompt',
-          provider: { id: 'test-provider', label: 'test-label' },
-          prompt: { raw: 'Test prompt', label: 'Test prompt' },
-          vars: { test: `value${data.testIdx}` },
-          response: { output: data.output },
-          error: null,
-          failureReason: ResultFailureReason.NONE,
-          success: true,
-          score: 1,
-          latencyMs: 100,
-          gradingResult: {
-            pass: true,
-            score: 1,
-            reason: 'Test passed',
-            comment: data.comment,
-            namedScores: {},
-            tokensUsed: { total: 10, prompt: 5, completion: 5 },
-            componentResults: [],
-          },
-          namedScores: {},
-          cost: 0.007,
-          metadata: {},
-        } as EvaluateResult);
+        await eval_.addResult(
+          createFilterTestResult(data.testIdx, {
+            response: { output: data.output },
+            gradingResult: {
+              pass: true,
+              score: 1,
+              reason: 'Test passed',
+              comment: data.comment,
+              namedScores: {},
+              tokensUsed: { total: 10, prompt: 5, completion: 5 },
+              componentResults: [],
+            },
+          }),
+        );
       }
 
       // Search for "needle" with highlights filter
@@ -211,7 +163,7 @@ describe('Highlights Filter Feature', () => {
 
     it('should handle malformed grading results gracefully', async () => {
       const eval_ = await EvalFactory.create({ numResults: 0 });
-      const db = getDb();
+      const db = await getDb();
 
       // Insert a result with null grading_result
       await db.run(`
@@ -265,34 +217,22 @@ describe('Highlights Filter Feature', () => {
       ];
 
       for (const data of testData) {
-        await eval_.addResult({
-          description: `test-${data.testIdx}`,
-          promptIdx: 0,
-          testIdx: data.testIdx,
-          testCase: { vars: { test: `value${data.testIdx}` } },
-          promptId: 'test-prompt',
-          provider: { id: 'test-provider', label: 'test-label' },
-          prompt: { raw: 'Test prompt', label: 'Test prompt' },
-          vars: { test: `value${data.testIdx}` },
-          response: { output: `Response ${data.testIdx}` },
-          error: null,
-          failureReason: data.success ? ResultFailureReason.NONE : ResultFailureReason.ASSERT,
-          success: data.success,
-          score: data.success ? 1 : 0,
-          latencyMs: 100,
-          gradingResult: {
-            pass: data.success,
+        await eval_.addResult(
+          createFilterTestResult(data.testIdx, {
+            failureReason: data.success ? ResultFailureReason.NONE : ResultFailureReason.ASSERT,
+            success: data.success,
             score: data.success ? 1 : 0,
-            reason: data.success ? 'Test passed' : 'Test failed',
-            comment: data.comment,
-            namedScores: {},
-            tokensUsed: { total: 10, prompt: 5, completion: 5 },
-            componentResults: [],
-          },
-          namedScores: {},
-          cost: 0.007,
-          metadata: {},
-        } as EvaluateResult);
+            gradingResult: {
+              pass: data.success,
+              score: data.success ? 1 : 0,
+              reason: data.success ? 'Test passed' : 'Test failed',
+              comment: data.comment,
+              namedScores: {},
+              tokensUsed: { total: 10, prompt: 5, completion: 5 },
+              componentResults: [],
+            },
+          }),
+        );
       }
 
       // Test highlights filter alone
@@ -326,34 +266,19 @@ describe('Highlights Filter Feature', () => {
       ];
 
       for (const result of results) {
-        await eval_.addResult({
-          description: `test-${result.testIdx}`,
-          promptIdx: 0,
-          testIdx: result.testIdx,
-          testCase: { vars: { test: `value${result.testIdx}` } },
-          promptId: 'test-prompt',
-          provider: { id: 'test-provider', label: 'test-label' },
-          prompt: { raw: 'Test prompt', label: 'Test prompt' },
-          vars: { test: `value${result.testIdx}` },
-          response: { output: `Response ${result.testIdx}` },
-          error: null,
-          failureReason: ResultFailureReason.NONE,
-          success: true,
-          score: 1,
-          latencyMs: 100,
-          gradingResult: {
-            pass: true,
-            score: 1,
-            reason: 'Test passed',
-            comment: result.comment,
-            namedScores: {},
-            tokensUsed: { total: 10, prompt: 5, completion: 5 },
-            componentResults: [],
-          },
-          namedScores: {},
-          cost: 0.007,
-          metadata: {},
-        } as EvaluateResult);
+        await eval_.addResult(
+          createFilterTestResult(result.testIdx, {
+            gradingResult: {
+              pass: true,
+              score: 1,
+              reason: 'Test passed',
+              comment: result.comment,
+              namedScores: {},
+              tokensUsed: { total: 10, prompt: 5, completion: 5 },
+              componentResults: [],
+            },
+          }),
+        );
       }
 
       const { testIndices, filteredCount } = await queryTestIndicesOptimized(eval_.id, {
@@ -370,34 +295,19 @@ describe('Highlights Filter Feature', () => {
       // Add 100 results, every 5th one is highlighted
       for (let i = 0; i < 100; i++) {
         const isHighlighted = i % 5 === 0;
-        await eval_.addResult({
-          description: `test-${i}`,
-          promptIdx: 0,
-          testIdx: i,
-          testCase: { vars: { test: `value${i}` } },
-          promptId: 'test-prompt',
-          provider: { id: 'test-provider', label: 'test-label' },
-          prompt: { raw: 'Test prompt', label: 'Test prompt' },
-          vars: { test: `value${i}` },
-          response: { output: `Response ${i}` },
-          error: null,
-          failureReason: ResultFailureReason.NONE,
-          success: true,
-          score: 1,
-          latencyMs: 100,
-          gradingResult: {
-            pass: true,
-            score: 1,
-            reason: 'Test passed',
-            comment: isHighlighted ? `!highlight Item ${i}` : `Regular item ${i}`,
-            namedScores: {},
-            tokensUsed: { total: 10, prompt: 5, completion: 5 },
-            componentResults: [],
-          },
-          namedScores: {},
-          cost: 0.007,
-          metadata: {},
-        } as EvaluateResult);
+        await eval_.addResult(
+          createFilterTestResult(i, {
+            gradingResult: {
+              pass: true,
+              score: 1,
+              reason: 'Test passed',
+              comment: isHighlighted ? `!highlight Item ${i}` : `Regular item ${i}`,
+              namedScores: {},
+              tokensUsed: { total: 10, prompt: 5, completion: 5 },
+              componentResults: [],
+            },
+          }),
+        );
       }
 
       const startTime = Date.now();
@@ -426,34 +336,20 @@ describe('Highlights Filter Feature', () => {
       ];
 
       for (const data of testData) {
-        await eval_.addResult({
-          description: `test-${data.testIdx}`,
-          promptIdx: 0,
-          testIdx: data.testIdx,
-          testCase: { vars: { test: `value${data.testIdx}` } },
-          promptId: 'test-prompt',
-          provider: { id: 'test-provider', label: 'test-label' },
-          prompt: { raw: 'Test prompt', label: 'Test prompt' },
-          vars: { test: `value${data.testIdx}` },
-          response: { output: data.output },
-          error: null,
-          failureReason: ResultFailureReason.NONE,
-          success: true,
-          score: 1,
-          latencyMs: 100,
-          gradingResult: {
-            pass: true,
-            score: 1,
-            reason: 'Test passed',
-            comment: data.comment,
-            namedScores: {},
-            tokensUsed: { total: 10, prompt: 5, completion: 5 },
-            componentResults: [],
-          },
-          namedScores: {},
-          cost: 0.007,
-          metadata: {},
-        } as EvaluateResult);
+        await eval_.addResult(
+          createFilterTestResult(data.testIdx, {
+            response: { output: data.output },
+            gradingResult: {
+              pass: true,
+              score: 1,
+              reason: 'Test passed',
+              comment: data.comment,
+              namedScores: {},
+              tokensUsed: { total: 10, prompt: 5, completion: 5 },
+              componentResults: [],
+            },
+          }),
+        );
       }
 
       // Test 1: With highlights filter and no filters array, search should apply
@@ -483,48 +379,25 @@ describe('Highlights Filter Feature', () => {
 
       // Add 15 highlighted results
       for (let i = 0; i < 15; i++) {
-        await eval_.addResult({
-          description: `test-${i}`,
-          promptIdx: 0,
-          testIdx: i,
-          testCase: { vars: { test: `value${i}` } },
-          promptId: 'test-prompt',
-          provider: { id: 'test-provider', label: 'test-label' },
-          prompt: { raw: 'Test prompt', label: 'Test prompt' },
-          vars: { test: `value${i}` },
-          response: { output: `Response ${i}` },
-          error: null,
-          failureReason: ResultFailureReason.NONE,
-          success: true,
-          score: 1,
-          latencyMs: 100,
-          gradingResult: {
-            pass: true,
-            score: 1,
-            reason: 'Test passed',
-            comment: `!highlight Important ${i}`,
-            namedScores: {},
-            tokensUsed: { total: 10, prompt: 5, completion: 5 },
-            componentResults: [],
-          },
-          namedScores: {},
-          cost: 0.007,
-          metadata: {},
-        } as EvaluateResult);
+        await eval_.addResult(
+          createFilterTestResult(i, {
+            gradingResult: {
+              pass: true,
+              score: 1,
+              reason: 'Test passed',
+              comment: `!highlight Important ${i}`,
+              namedScores: {},
+              tokensUsed: { total: 10, prompt: 5, completion: 5 },
+              componentResults: [],
+            },
+          }),
+        );
       }
 
       // Get three pages
-      const page1 = await queryTestIndicesOptimized(eval_.id, {
-        filterMode: 'highlights',
-        offset: 0,
-        limit: 5,
-      });
+      const page1 = await queryTestIndicesOptimized(eval_.id, createPageOptions(0));
 
-      const page2 = await queryTestIndicesOptimized(eval_.id, {
-        filterMode: 'highlights',
-        offset: 5,
-        limit: 5,
-      });
+      const page2 = await queryTestIndicesOptimized(eval_.id, createPageOptions(5));
 
       const page3 = await queryTestIndicesOptimized(eval_.id, {
         filterMode: 'highlights',
@@ -561,34 +434,23 @@ describe('Highlights Filter Feature', () => {
       const eval_ = await EvalFactory.create({ numResults: 0 });
 
       // Add a highlighted result
-      await eval_.addResult({
-        description: 'test-safe',
-        promptIdx: 0,
-        testIdx: 0,
-        testCase: { vars: { test: 'value' } },
-        promptId: 'test-prompt',
-        provider: { id: 'test-provider', label: 'test-label' },
-        prompt: { raw: 'Test prompt', label: 'Test prompt' },
-        vars: { test: 'value' },
-        response: { output: 'Safe response without injection text' },
-        error: null,
-        failureReason: ResultFailureReason.NONE,
-        success: true,
-        score: 1,
-        latencyMs: 100,
-        gradingResult: {
-          pass: true,
-          score: 1,
-          reason: 'Test passed',
-          comment: '!highlight Safe result',
-          namedScores: {},
-          tokensUsed: { total: 10, prompt: 5, completion: 5 },
-          componentResults: [],
-        },
-        namedScores: {},
-        cost: 0.007,
-        metadata: {},
-      } as EvaluateResult);
+      await eval_.addResult(
+        createFilterTestResult(0, {
+          description: 'test-safe',
+          testCase: { vars: { test: 'value' } },
+          vars: { test: 'value' },
+          response: { output: 'Safe response without injection text' },
+          gradingResult: {
+            pass: true,
+            score: 1,
+            reason: 'Test passed',
+            comment: '!highlight Safe result',
+            namedScores: {},
+            tokensUsed: { total: 10, prompt: 5, completion: 5 },
+            componentResults: [],
+          },
+        }),
+      );
 
       // Try SQL injection in search query
       const maliciousSearch = "'; DROP TABLE eval_results; --";
@@ -618,40 +480,22 @@ describe('Highlights Filter Feature', () => {
       // Add mixed results
       for (let i = 0; i < 6; i++) {
         const isHighlighted = i % 2 === 0;
-        await eval_.addResult({
-          description: `test-${i}`,
-          promptIdx: 0,
-          testIdx: i,
-          testCase: { vars: { test: `value${i}` } },
-          promptId: 'test-prompt',
-          provider: { id: 'test-provider', label: 'test-label' },
-          prompt: { raw: 'Test prompt', label: 'Test prompt' },
-          vars: { test: `value${i}` },
-          response: { output: `Response ${i}` },
-          error: null,
-          failureReason: ResultFailureReason.NONE,
-          success: true,
-          score: 1,
-          latencyMs: 100,
-          gradingResult: {
-            pass: true,
-            score: 1,
-            reason: 'Test passed',
-            comment: isHighlighted ? `!highlight Important ${i}` : `Regular ${i}`,
-            namedScores: {},
-            tokensUsed: { total: 10, prompt: 5, completion: 5 },
-            componentResults: [],
-          },
-          namedScores: {},
-          cost: 0.007,
-          metadata: {},
-        } as EvaluateResult);
+        await eval_.addResult(
+          createFilterTestResult(i, {
+            gradingResult: {
+              pass: true,
+              score: 1,
+              reason: 'Test passed',
+              comment: isHighlighted ? `!highlight Important ${i}` : `Regular ${i}`,
+              namedScores: {},
+              tokensUsed: { total: 10, prompt: 5, completion: 5 },
+              componentResults: [],
+            },
+          }),
+        );
       }
 
-      const result = await eval_.getTablePage({
-        filterMode: 'highlights',
-        filters: [],
-      });
+      const result = await eval_.getTablePage(createUnfilteredHighlightOptions());
 
       // Should have 3 highlighted results (0, 2, 4)
       expect(result.filteredCount).toBe(3);
@@ -678,10 +522,7 @@ describe('Highlights Filter Feature', () => {
       });
 
       const allResults = await eval_.getTablePage({ filters: [] });
-      const highlightedResults = await eval_.getTablePage({
-        filterMode: 'highlights',
-        filters: [],
-      });
+      const highlightedResults = await eval_.getTablePage(createUnfilteredHighlightOptions());
 
       // Total count should remain the same
       expect(highlightedResults.totalCount).toBe(allResults.totalCount);
@@ -697,7 +538,7 @@ describe('Highlights Filter Feature', () => {
   describe('Edge cases and error handling', () => {
     it('should handle results with undefined comment field', async () => {
       const eval_ = await EvalFactory.create({ numResults: 0 });
-      const db = getDb();
+      const db = await getDb();
 
       // Insert result with grading_result but no comment field
       await db.run(`
@@ -730,34 +571,19 @@ describe('Highlights Filter Feature', () => {
       ];
 
       for (const data of specialComments) {
-        await eval_.addResult({
-          description: `test-${data.testIdx}`,
-          promptIdx: 0,
-          testIdx: data.testIdx,
-          testCase: { vars: { test: `value${data.testIdx}` } },
-          promptId: 'test-prompt',
-          provider: { id: 'test-provider', label: 'test-label' },
-          prompt: { raw: 'Test prompt', label: 'Test prompt' },
-          vars: { test: `value${data.testIdx}` },
-          response: { output: `Response ${data.testIdx}` },
-          error: null,
-          failureReason: ResultFailureReason.NONE,
-          success: true,
-          score: 1,
-          latencyMs: 100,
-          gradingResult: {
-            pass: true,
-            score: 1,
-            reason: 'Test passed',
-            comment: data.comment,
-            namedScores: {},
-            tokensUsed: { total: 10, prompt: 5, completion: 5 },
-            componentResults: [],
-          },
-          namedScores: {},
-          cost: 0.007,
-          metadata: {},
-        } as EvaluateResult);
+        await eval_.addResult(
+          createFilterTestResult(data.testIdx, {
+            gradingResult: {
+              pass: true,
+              score: 1,
+              reason: 'Test passed',
+              comment: data.comment,
+              namedScores: {},
+              tokensUsed: { total: 10, prompt: 5, completion: 5 },
+              componentResults: [],
+            },
+          }),
+        );
       }
 
       const { testIndices, filteredCount } = await (eval_ as any).queryTestIndices({

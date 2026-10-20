@@ -1,9 +1,46 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import logger from '../../src/logger';
 import { TokenUsageTracker } from '../../src/util/tokenUsage';
 
 import type { TokenUsage } from '../../src/types/shared';
 
 describe('TokenUsageTracker', () => {
+  it('redacts URL credentials in provider ids when logging tracked usage', () => {
+    // The debug message string is the only redaction layer for provider ids —
+    // logger sanitizes context objects, never message strings.
+    const debugSpy = vi.spyOn(logger, 'debug').mockImplementation(() => logger);
+    try {
+      TokenUsageTracker.getInstance().trackUsage(
+        'https://api.example.com/v1?api_key=sk-12345678901234567890 (HttpProvider)',
+        { total: 1 },
+      );
+      const messages = debugSpy.mock.calls.map((call) => String(call[0])).join('\n');
+      expect(messages).toContain('api_key=%5BREDACTED%5D');
+      expect(messages).toContain('(HttpProvider)');
+      expect(messages).not.toContain('sk-12345678901234567890');
+    } finally {
+      debugSpy.mockRestore();
+      TokenUsageTracker.getInstance().resetAllUsage();
+    }
+  });
+
+  it('redacts URL credentials when logging response usage', () => {
+    const debugSpy = vi.spyOn(logger, 'debug').mockImplementation(() => logger);
+    try {
+      TokenUsageTracker.getInstance().trackResponseUsage(
+        'https://api.example.com/v1?api_key=sk-12345678901234567890 (HttpProvider)',
+        { tokenUsage: { total: 1 } },
+      );
+      const messages = debugSpy.mock.calls.map((call) => String(call[0])).join('\n');
+      expect(messages).toContain('api_key=%5BREDACTED%5D');
+      expect(messages).toContain('(HttpProvider)');
+      expect(messages).not.toContain('sk-12345678901234567890');
+    } finally {
+      debugSpy.mockRestore();
+      TokenUsageTracker.getInstance().resetAllUsage();
+    }
+  });
+
   let tracker: TokenUsageTracker;
 
   beforeEach(() => {
@@ -67,6 +104,184 @@ describe('TokenUsageTracker', () => {
       expect.objectContaining({ numRequests: 1 }),
     );
   });
+
+  it('protects tracked usage and future aggregation from edits to a provider snapshot', () => {
+    const usage: TokenUsage = {
+      total: 100,
+      completionDetails: { reasoning: 20 },
+      assertions: { total: 30, completionDetails: { reasoning: 5 } },
+      attacker: { total: 40, completionDetails: { reasoning: 6 } },
+      generation: { total: 50, completionDetails: { reasoning: 7 } },
+      incurredTokenUsage: {
+        total: 60,
+        completionDetails: { reasoning: 8 },
+        assertions: { total: 10, completionDetails: { reasoning: 2 } },
+        attacker: { total: 15, completionDetails: { reasoning: 3 } },
+        generation: { total: 20, completionDetails: { reasoning: 4 } },
+      },
+    };
+    tracker.trackUsage('test-provider', usage);
+
+    const snapshot = tracker.getProviderUsage('test-provider')!;
+    snapshot.total = 999;
+    snapshot.completionDetails!.reasoning = 999;
+    for (const breakdown of [snapshot.assertions, snapshot.attacker, snapshot.generation]) {
+      breakdown!.total = 999;
+      breakdown!.completionDetails!.reasoning = 999;
+    }
+    snapshot.incurredTokenUsage!.total = 999;
+    snapshot.incurredTokenUsage!.completionDetails!.reasoning = 999;
+    for (const breakdown of [
+      snapshot.incurredTokenUsage!.assertions,
+      snapshot.incurredTokenUsage!.attacker,
+      snapshot.incurredTokenUsage!.generation,
+    ]) {
+      breakdown!.total = 999;
+      breakdown!.completionDetails!.reasoning = 999;
+    }
+
+    expect(tracker.getProviderUsage('test-provider')).toMatchObject(usage);
+    expect(tracker.getTotalUsage()).toMatchObject(usage);
+
+    tracker.trackUsage('test-provider', usage);
+    const expected: TokenUsage = {
+      total: 200,
+      completionDetails: { reasoning: 40 },
+      assertions: { total: 60, completionDetails: { reasoning: 10 } },
+      attacker: { total: 80, completionDetails: { reasoning: 12 } },
+      generation: { total: 100, completionDetails: { reasoning: 14 } },
+      incurredTokenUsage: {
+        total: 120,
+        completionDetails: { reasoning: 16 },
+        assertions: { total: 20, completionDetails: { reasoning: 4 } },
+        attacker: { total: 30, completionDetails: { reasoning: 6 } },
+        generation: { total: 40, completionDetails: { reasoning: 8 } },
+      },
+    };
+    expect(tracker.getProviderUsage('test-provider')).toMatchObject(expected);
+    expect(tracker.getTotalUsage()).toMatchObject(expected);
+  });
+
+  it('keeps a provider snapshot unchanged after tracking more usage', () => {
+    const usage: TokenUsage = {
+      total: 10,
+      assertions: { total: 5, completionDetails: { reasoning: 2 } },
+      incurredTokenUsage: { total: 10, assertions: { total: 5 } },
+    };
+    tracker.trackUsage('test-provider', usage);
+    const snapshot = tracker.getProviderUsage('test-provider');
+
+    tracker.trackUsage('test-provider', usage);
+
+    expect(snapshot).toMatchObject(usage);
+    expect(tracker.getProviderUsage('test-provider')).toMatchObject({
+      total: 20,
+      assertions: { total: 10, completionDetails: { reasoning: 4 } },
+      incurredTokenUsage: { total: 20, assertions: { total: 10 } },
+    });
+  });
+
+  it('should infer one request from a response that omits numRequests', () => {
+    tracker.trackResponseUsage('test-provider', {
+      tokenUsage: {
+        total: 7,
+        prompt: 3,
+        completion: 4,
+        cached: 0,
+      },
+    });
+
+    expect(tracker.getProviderUsage('test-provider')).toMatchObject({
+      total: 7,
+      prompt: 3,
+      completion: 4,
+      cached: 0,
+      numRequests: 1,
+    });
+  });
+
+  it('tracks a cached provider response without repeating its historical usage', () => {
+    tracker.trackResponseUsage('cached-provider', {
+      cached: true,
+      tokenUsage: {
+        total: 100,
+        prompt: 60,
+        completion: 40,
+        cached: 10,
+        numRequests: 1,
+      },
+    });
+
+    expect(tracker.getProviderUsage('cached-provider')).toMatchObject({
+      total: 0,
+      prompt: 0,
+      completion: 0,
+      cached: 100,
+      numRequests: 0,
+    });
+  });
+
+  it('combines fresh provider usage with cache-hit visibility without charging the replay', () => {
+    tracker.trackResponseUsage('mixed-provider', {
+      tokenUsage: { total: 25, prompt: 15, completion: 10, cached: 5, numRequests: 1 },
+    });
+    tracker.trackResponseUsage('mixed-provider', {
+      cached: true,
+      tokenUsage: { total: 40, prompt: 25, completion: 15, cached: 0, numRequests: 1 },
+    });
+
+    expect(tracker.getProviderUsage('mixed-provider')).toMatchObject({
+      total: 25,
+      prompt: 15,
+      completion: 10,
+      cached: 45,
+      numRequests: 1,
+    });
+  });
+
+  it('does not create provider usage for an absent response', () => {
+    tracker.trackResponseUsage('test-provider', undefined);
+
+    expect(tracker.getProviderUsage('test-provider')).toBeUndefined();
+  });
+
+  it('does not corrupt provider usage when a response token getter throws', () => {
+    const response = {
+      tokenUsage: Object.defineProperty({}, 'total', {
+        enumerable: true,
+        get() {
+          throw new Error('usage getter failed');
+        },
+      }),
+    };
+
+    expect(() => tracker.trackResponseUsage('test-provider', response)).not.toThrow();
+    expect(tracker.getProviderUsage('test-provider')).toMatchObject({
+      total: 0,
+      prompt: 0,
+      completion: 0,
+      numRequests: 1,
+    });
+  });
+
+  it.each([Number.NaN, Infinity, -Infinity])(
+    'preserves known usage when a later response reports %s tokens',
+    (total) => {
+      tracker.trackResponseUsage('test-provider', {
+        tokenUsage: { total: 5, prompt: 2, completion: 3 },
+      });
+      tracker.trackResponseUsage('test-provider', {
+        tokenUsage: { total, prompt: 3, completion: 4 },
+      });
+
+      expect(tracker.getProviderUsage('test-provider')).toMatchObject({
+        total: 5,
+        prompt: 2,
+        completion: 3,
+        numRequests: 2,
+      });
+    },
+  );
 
   it('should merge token usage for the same provider', () => {
     const usage1: TokenUsage = {

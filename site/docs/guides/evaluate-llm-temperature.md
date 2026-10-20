@@ -34,6 +34,12 @@ Before setting up an evaluation, create a new directory and a `promptfooconfig.y
 
 Here's an example configuration that compares the outputs of Claude Sonnet 4.6 at a low temperature (0.2) and a high temperature (0.9):
 
+:::note
+
+Claude Sonnet 5 and newer Opus and Fable models do not support `temperature`, `top_p`, or `top_k`; Promptfoo omits these parameters with a warning. Their `effort` setting controls reasoning depth, not sampling randomness. These examples use Claude Sonnet 4.6, which accepts temperature settings when thinking is disabled.
+
+:::
+
 ```yaml title="promptfooconfig.yaml"
 prompts:
   - 'Respond to the following instruction: {{message}}'
@@ -130,5 +136,9 @@ promptfoo eval --repeat 3
 ```
 
 The above command runs the LLM three times for each test case, helping you get a more complete sample of how it performs at a given temperature.
+
+The completion summary flags repeated groups that contain both passing and failing results. JSON exports include the full summary under `results.repeatStability`, grouped by test case, expanded variables, provider, and prompt. Pass rates exclude errors; groups with no scored results have no pass rate.
+
+For groups with scored results and no cached target or grader responses, the summary includes a Wilson 95% confidence interval. Interpreting it as a model pass-rate estimate assumes independent runs with the same success probability. Shared conversation history or changing external state can violate that assumption, even with `--no-cache`.
 
 By default, each repeat index has its own cache entry, so re-running the same eval can replay repeat 0, repeat 1, and repeat 2 independently. If you want fresh generations on every run while sampling temperature, add `--no-cache`.

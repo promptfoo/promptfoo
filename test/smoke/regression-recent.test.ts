@@ -84,7 +84,23 @@ describe('Recent Bug Regression Tests', () => {
         const content = fs.readFileSync(outputPath, 'utf-8');
         const parsed = JSON.parse(content);
 
-        expect(parsed.results.results[0].success).toBe(true);
+        const results = parsed.results.results as Array<{
+          response: { output: string };
+          success: boolean;
+          gradingResult: { componentResults: Array<{ pass: boolean }> };
+        }>;
+        const expectedOutputs = ['DynamicValue', 'PythonScriptValue', 'RubyScriptValue'];
+
+        expect(results).toHaveLength(expectedOutputs.length);
+        expect(new Set(results.map((result) => result.response.output))).toEqual(
+          new Set(expectedOutputs),
+        );
+
+        for (const result of results) {
+          expect(result.success).toBe(true);
+          expect(result.gradingResult.componentResults).toHaveLength(1);
+          expect(result.gradingResult.componentResults[0].pass).toBe(true);
+        }
       });
     });
 
@@ -214,6 +230,35 @@ describe('Recent Bug Regression Tests', () => {
         const parsed = JSON.parse(content);
 
         expect(parsed.results.results[0].success).toBe(true);
+      });
+    });
+
+    describe('#9383 - multiple CallApiFunction providers collapsed by dedupe', () => {
+      it('preserves every function provider when combineConfigs dedupes', () => {
+        // Bug #9383: JSON.stringify(fn) returns undefined, so combineConfigs dedupe
+        // collapsed every function provider into a single entry. The eval should
+        // produce one result row per function provider (a, b, c).
+        const configPath = path.join(FIXTURES_DIR, 'configs/function-providers-9383.ts');
+        const outputPath = path.join(OUTPUT_DIR, 'function-providers-9383-output.json');
+
+        const { exitCode, stderr } = runCli([
+          'eval',
+          '-c',
+          configPath,
+          '-o',
+          outputPath,
+          '--no-cache',
+        ]);
+
+        expect(exitCode).toBe(0);
+        expect(stderr).not.toContain('Error');
+
+        const parsed = JSON.parse(fs.readFileSync(outputPath, 'utf-8'));
+        const outputs = parsed.results.results.map((r: { response: { output: string } }) =>
+          r.response.output.trim(),
+        );
+
+        expect(outputs).toEqual(['a: hi', 'b: hi', 'c: hi']);
       });
     });
   });

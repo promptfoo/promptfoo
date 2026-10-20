@@ -1,16 +1,8 @@
-import { TooltipProvider } from '@app/components/ui/tooltip';
-import { act, render, screen } from '@testing-library/react';
+import { renderWithProviders } from '@app/utils/testutils';
+import { act, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import StrategyConfigDialog from './StrategyConfigDialog';
-
-const AllProviders = ({ children }: { children: React.ReactNode }) => (
-  <TooltipProvider>{children}</TooltipProvider>
-);
-
-const renderWithProviders = (ui: React.ReactElement) => {
-  return render(ui, { wrapper: AllProviders });
-};
 
 describe('StrategyConfigDialog', () => {
   const mockOnSave = vi.fn();
@@ -619,6 +611,28 @@ describe('StrategyConfigDialog', () => {
       name: /Use target-managed session memory/,
     });
     expect(statefulSwitch).not.toBeChecked();
+  });
+
+  it("should render Goblin configuration fields when strategy is 'jailbreak:goblin'", () => {
+    renderWithProviders(
+      <StrategyConfigDialog
+        open={true}
+        strategy="jailbreak:goblin"
+        config={{}}
+        onClose={mockOnClose}
+        onSave={mockOnSave}
+        strategyData={{
+          id: 'jailbreak:goblin',
+          name: 'Goblin',
+          description:
+            'Multi-turn jailbreak strategy focused on encoding techniques, math, and logic problems',
+        }}
+      />,
+    );
+
+    expect(screen.getByText('Configure Goblin')).toBeInTheDocument();
+    expect(screen.getByText(/Goblin tracks its own attack history/)).toBeInTheDocument();
+    expect(screen.getByLabelText('Max Turns')).toHaveValue(10);
   });
 
   it("should save updated Hydra configuration when strategy is 'jailbreak:hydra'", async () => {

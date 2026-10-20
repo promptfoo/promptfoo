@@ -62,15 +62,32 @@ tests:
       difficulty: easy
 ```
 
+### Repeating an Individual Test
+
+Set `options.repeat` to a positive integer to run one test case multiple times:
+
+```yaml title="promptfooconfig.yaml"
+tests:
+  - description: 'Sample a nondeterministic response'
+    vars:
+      question: 'Write a short greeting'
+    options:
+      repeat: 3
+```
+
+The per-test value overrides `--repeat`, `commandLineOptions.repeat`, or
+`evaluateOptions.repeat` for that test. Other tests continue to use the global repeat count.
+Repeat indexes use separate cache entries; add `--no-cache` when every run must call the provider.
+
 ### Filtering Tests by Provider
 
 Control which providers run specific tests using the `providers` field. This allows you to run different test suites against different models in a single evaluation:
 
 ```yaml
 providers:
-  - id: openai:gpt-3.5-turbo
+  - id: openai:gpt-6-luna
     label: fast-model
-  - id: openai:gpt-4
+  - id: openai:gpt-6-sol
     label: smart-model
 
 tests:
@@ -95,12 +112,12 @@ tests:
 
 **Matching syntax:**
 
-| Pattern        | Matches                                                              |
-| -------------- | -------------------------------------------------------------------- |
-| `fast-model`   | Exact label match                                                    |
-| `openai:gpt-4` | Exact provider ID match                                              |
-| `openai:*`     | Wildcard - any provider starting with `openai:`                      |
-| `openai`       | Legacy prefix - matches `openai:gpt-4`, `openai:gpt-3.5-turbo`, etc. |
+| Pattern            | Matches                                                               |
+| ------------------ | --------------------------------------------------------------------- |
+| `fast-model`       | Exact label match                                                     |
+| `openai:gpt-6-sol` | Exact provider ID match                                               |
+| `openai:*`         | Wildcard - any provider starting with `openai:`                       |
+| `openai`           | Legacy prefix - matches `openai:gpt-6-sol`, `openai:gpt-6-luna`, etc. |
 
 **Apply to all tests using `defaultTest`:**
 
@@ -139,7 +156,7 @@ prompts:
     raw: 'You are a creative writer. Answer: {{question}}'
 
 providers:
-  - openai:gpt-4o-mini
+  - openai:gpt-6-luna
 
 tests:
   # This test only runs with the Factual Assistant prompt
@@ -310,7 +327,7 @@ question,__expected1,__expected2,__expected3
 ```
 
 :::note
-**contains-any** and **contains-all** expect comma-delimited values inside the `__expected` column.
+**contains-any**, **icontains-any**, **contains-all**, and **icontains-all** expect comma-delimited values inside the `__expected` column. Surrounding whitespace around each value is trimmed.
 
 ```csv title="test_cases.csv"
 translated_text,__expected
@@ -318,6 +335,17 @@ translated_text,__expected
 ```
 
 If you write `"contains-any: <b> </span>"`, promptfoo treats `<b> </span>` as a single search term rather than two separate tags.
+
+To match a value that itself contains a comma, wrap that value in double quotes. Because the assertion is inside a quoted CSV cell, write each of those wrapping quotes twice:
+
+```csv title="test_cases.csv"
+text,__expected
+"1,000 items in stock","contains-all: ""1,000"",in stock"
+```
+
+Here `"1,000"` is a single search term (the comma is preserved), while `in stock` is a second term. These quoting rules apply to `__expected` columns in CSV, XLSX, and Google Sheets. JSON and JSONL test files should use the structured `assert` object form instead.
+
+At the assertion-string level, escape a literal double quote inside a quoted value as `\"` or `""`. In a CSV file, remember to apply CSV escaping as well by doubling every double quote in the cell.
 :::
 
 ### Special CSV Columns
@@ -364,7 +392,24 @@ promptfoo eval --filter-metadata tags=ai
 
 # Multiple filters use AND logic (tests must match ALL conditions)
 promptfoo eval --filter-metadata category=math --filter-metadata difficulty=easy
+
+# Comma-separated values use OR logic within one key
+promptfoo eval --filter-metadata category=math,science
 ```
+
+Each value uses case-sensitive substring matching, including for array metadata. Repeated flags use AND even for the same key. Whitespace is significant. Commas separate alternatives, and leading, trailing, or consecutive commas are invalid. To match a value that contains a comma, escape it as `\,`:
+
+```bash
+promptfoo eval --filter-metadata 'title=Hello\, world'
+```
+
+Other backslashes are literal, so a value such as `C:\data` needs no escaping. Only when a value ends with a backslash and another alternative follows, double that backslash. This matches `C:\data\` or `D:\data`:
+
+```bash
+promptfoo eval --filter-metadata 'path=C:\data\\,D:\data'
+```
+
+Quote the argument, as in these examples, so that the shell passes the backslashes on.
 
 ### JSON in CSV
 
@@ -545,7 +590,7 @@ tests:
 
 ### Path Resolution
 
-`file://` paths are resolved relative to your **config file's directory**, not the current working directory. This ensures consistent behavior regardless of where you run `promptfoo` from:
+`file://` paths resolve from your **config file's directory** by default. Set `basePath` to use another directory; a relative `basePath` resolves from the config file's directory. The web editor does not accept `basePath`; use inline content there or run the config with the CLI. For example:
 
 ```yaml title="src/tests/promptfooconfig.yaml"
 tests:
@@ -559,6 +604,18 @@ tests:
       # Parent directory - resolved as src/shared/context.json
       shared: file://../shared/context.json
 ```
+
+Rows in YAML test files, or JSON/JSONL files supplied in a `tests` array or glob, resolve bare `vars:` paths and globs from the tests file's directory. For example, `vars: ../vars/*.yaml` in `tests/cases.yaml` loads files from the adjacent `vars` directory. Watch mode observes those same files.
+
+Row-provider scripts, including bare paths, `python:provider.py`, and `file://provider.py:call_api`, also resolve from the tests file's directory. Provider configuration files such as `provider: file://provider.yaml` are read from the owning config's directory; script IDs inside them resolve from the tests file's directory. Saved evaluations retain that provider directory. Inline `file://` vars keep the owning config's directory. A single non-YAML test path, such as `tests: file://tests/cases.json`, or a `{ path, config }` source also keeps bare vars-file paths and row providers relative to the config directory.
+
+A bare test-file entry inside an imported tests file resolves beside the declaring file. Vars and provider paths inside that referenced row use the referenced file's directory.
+
+With multiple configs, each config's tests use its base directory; suite-level providers and deferred grader references use the first config's base directory. Explicit `--tests` and `--vars` paths resolve from the working directory.
+
+CLI evaluations save parsed test rows, external defaults, and an absolute base directory. Resume and retry reuse those rows, including generated and remote datasets. Run a new evaluation to pick up changed test sources. An unmatched test-source glob warns and adds no rows; a missing literal test file is an error.
+
+Functions and provider instances returned by JavaScript or TypeScript test generators work in the current run but cannot be restored from saved evaluations. Promptfoo warns when a generator returns them. Use `file://` references for scoring functions and other executable test fields when you need resume or retry.
 
 Without the `file://` prefix, values are passed as plain strings to your provider.
 
@@ -717,6 +774,28 @@ See [Google Sheets integration](/docs/integrations/google-sheets) for details on
 ### SharePoint
 
 See [SharePoint integration](/docs/integrations/sharepoint) for details on loading test data from Microsoft SharePoint document libraries.
+
+### Azure Blob Storage
+
+Promptfoo can read test sets directly from Azure Blob Storage:
+
+```yaml
+tests: az://myaccount/evals/tests.json
+```
+
+Use `az://<account>/<container>/<blob>`. Promptfoo supports CSV, JSON, JSONL, YAML, and YML test-set blobs. Blob names may keep the original extension and append a suffix, such as `tests.json.<sha256>`.
+
+Authentication uses the first available option:
+
+1. A SAS query string on the URI, such as `az://myaccount/evals/tests.json?<sas-token>`
+2. `AZURE_STORAGE_CONNECTION_STRING`
+3. Azure identity credentials through `DefaultAzureCredential`, such as Azure CLI login, managed identity, or service principal environment variables
+
+When using `AZURE_STORAGE_CONNECTION_STRING`, the storage account comes from the connection string. Keep the `az://` account segment aligned with that account so the URI remains self-describing; Promptfoo rejects clearly mismatched `AccountName` values. Query strings are interpreted as SAS tokens and must include `sig`.
+
+SAS query strings and `DefaultAzureCredential` use the standard public Azure Blob endpoint for the named account. For Azure Government, Azure operated by 21Vianet, or custom blob endpoints, use `AZURE_STORAGE_CONNECTION_STRING` with the appropriate `EndpointSuffix` or explicit `BlobEndpoint`.
+
+Blob-hosted YAML, JSON, and JSONL files are treated as remote test-case data. Promptfoo does not expand local file references or provider references found inside those blob contents.
 
 ### HuggingFace Datasets
 

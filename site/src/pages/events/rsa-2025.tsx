@@ -2,23 +2,14 @@ import React from 'react';
 
 import Head from '@docusaurus/Head';
 import Link from '@docusaurus/Link';
+import { CalendarIcon, LocationIcon } from '@site/src/components/Events/EventIcons';
 import { useForcedTheme } from '@site/src/hooks/useForcedTheme';
 import Layout from '@theme/Layout';
+import { scrollToEventSection as handleSmoothScroll } from '../../utils/eventScroll';
 import styles from './rsa-2025.module.css';
 
 export default function RSA2025(): React.ReactElement {
   useForcedTheme('dark');
-
-  const handleSmoothScroll = (e: React.MouseEvent<HTMLAnchorElement>, targetId: string) => {
-    e.preventDefault();
-    const element = document.querySelector(targetId);
-    if (element) {
-      const offset = 80;
-      const elementPosition = element.getBoundingClientRect().top;
-      const offsetPosition = elementPosition + window.pageYOffset - offset;
-      window.scrollTo({ top: offsetPosition, behavior: 'smooth' });
-    }
-  };
 
   return (
     <Layout
@@ -73,31 +64,11 @@ export default function RSA2025(): React.ReactElement {
 
             <div className={styles.eventDetails}>
               <div className={styles.detail}>
-                <svg className={styles.icon} viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
-                  />
-                </svg>
+                <CalendarIcon className={styles.icon} />
                 <span>April 28 - May 1, 2025</span>
               </div>
               <div className={styles.detail}>
-                <svg className={styles.icon} viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"
-                  />
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"
-                  />
-                </svg>
+                <LocationIcon className={styles.icon} />
                 <span>Moscone Center, San Francisco</span>
               </div>
             </div>
@@ -211,14 +182,14 @@ export default function RSA2025(): React.ReactElement {
         <section className={styles.ctaSection}>
           <div className={styles.container}>
             <div className={styles.ctaContent}>
-              <h2 className={styles.ctaTitle}>See You at RSA 2026</h2>
+              <h2 className={styles.ctaTitle}>We Were Back for RSA 2026</h2>
               <p className={styles.ctaText}>
-                We'll be back at RSA Conference 2026. Check out our plans and stay connected for
-                updates on booth location and demos.
+                Promptfoo returned to RSA Conference 2026 in March. See what we showed on the floor,
+                or get in touch for a walkthrough.
               </p>
               <div className={styles.ctaButtons}>
                 <Link to="/events/rsa-2026" className={styles.primaryCta}>
-                  RSA 2026 Details
+                  RSA 2026 Recap
                 </Link>
                 <Link to="/contact" className={styles.secondaryCta}>
                   Get in Touch

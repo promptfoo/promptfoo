@@ -46,15 +46,14 @@ defaultTest: file://configs/default-test.yaml
 
 ```yaml title="configs/providers.yaml"
 # Providers configuration
-- id: gpt-5.2
-  provider: openai:gpt-5.2
+- id: openai:gpt-5.2
+  label: gpt-5.2
   config:
     temperature: 0.7
     max_tokens: 1000
-- id: claude-sonnet
-  provider: anthropic:claude-sonnet-4-5-20250929
+- id: anthropic:claude-sonnet-5
+  label: claude-sonnet
   config:
-    temperature: 0.7
     max_tokens: 1000
 ```
 
@@ -117,16 +116,15 @@ env: file://configs/env-prod.yaml
 
 ```yaml title="configs/providers-prod.yaml"
 # Production providers with rate limiting
-- id: gpt-5.2-prod
-  provider: openai:gpt-5.2
+- id: openai:gpt-5.2
+  label: gpt-5.2-prod
   config:
     temperature: 0.1
     max_tokens: 500
     requestsPerMinute: 100
-- id: claude-sonnet-prod
-  provider: anthropic:claude-sonnet-4-5-20250929
+- id: anthropic:claude-sonnet-5
+  label: claude-sonnet-prod
   config:
-    temperature: 0.1
     max_tokens: 500
     requestsPerMinute: 50
 ```
@@ -192,7 +190,7 @@ Use JavaScript configurations for complex logic:
 const baseConfig = {
   description: 'Dynamic configuration example',
   prompts: ['file://prompts/base-prompt.txt'],
-  providers: ['openai:gpt-5.2', 'anthropic:claude-sonnet-4-5-20250929'],
+  providers: ['openai:gpt-5.2', 'anthropic:claude-sonnet-5'],
 };
 
 // Generate test cases programmatically
@@ -243,7 +241,7 @@ import type { UnifiedConfig } from 'promptfoo';
 const config: UnifiedConfig = {
   description: 'My evaluation suite',
   prompts: ['Tell me about {{topic}} in {{style}}'],
-  providers: ['openai:gpt-5.2', 'anthropic:claude-sonnet-4-5-20250929'],
+  providers: ['openai:gpt-5.2', 'anthropic:claude-sonnet-5'],
   tests: [
     {
       vars: {
@@ -339,7 +337,7 @@ if (isQuickTest) {
   module.exports = {
     ...baseConfig,
     providers: [
-      'openai:gpt-5.1-mini', // Faster, cheaper for quick testing
+      'openai:gpt-5.4-mini', // Faster, cheaper for quick testing
     ],
     tests: 'file://tests/quick/', // Smaller test suite
     env: {
@@ -352,11 +350,7 @@ if (isQuickTest) {
 if (isComprehensive) {
   module.exports = {
     ...baseConfig,
-    providers: [
-      'openai:gpt-5.2',
-      'anthropic:claude-sonnet-4-5-20250929',
-      'google:gemini-2.5-flash',
-    ],
+    providers: ['openai:gpt-5.2', 'anthropic:claude-sonnet-5', 'google:gemini-2.5-flash'],
     tests: 'file://tests/comprehensive/', // Full test suite
     env: {
       LOG_LEVEL: 'info',

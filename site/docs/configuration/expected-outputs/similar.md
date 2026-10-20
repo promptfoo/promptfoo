@@ -9,6 +9,10 @@ The `similar` assertion checks if an embedding of the LLM's output
 is semantically similar to the expected value,
 using a configurable similarity or distance metric with a threshold.
 
+Thresholds use the raw metric value. For cosine similarity and dot product, the assertion score is that value, or `1 - similarity` for `not-similar`. Negative scores and scores above 1 are preserved.
+
+A non-finite result (`NaN` or infinity) fails the assertion with score 0.
+
 By default, embeddings are computed via OpenAI's `text-embedding-3-large` model.
 
 Example:
@@ -31,6 +35,8 @@ assert:
       - file://my_expected_output.txt
     threshold: 0.8
 ```
+
+The negated `not-similar` assertion is the logical inverse: with an array of values it passes only when the output is dissimilar to **every** value (and fails as soon as it is too similar to any one of them). This is the natural way to assert that an output does not resemble any item in a list of forbidden or canned answers.
 
 ## Similarity Metrics
 
@@ -57,7 +63,7 @@ assert:
 
 ### Dot Product
 
-Computes the dot product of two vectors. Range: unbounded, but typically 0 to 1 for normalized embeddings (higher is more similar).
+Computes the dot product of two vectors. Range: unbounded (higher is more similar). For unit-normalized embeddings, it equals cosine similarity and ranges from -1 to 1.
 
 ```yaml
 assert:
@@ -66,7 +72,7 @@ assert:
     threshold: 0.8
 ```
 
-**When to use:** Useful when you want to match the metric used in your production vector database (many use dot product for performance). For normalized embeddings, dot product is nearly equivalent to cosine similarity.
+**When to use:** Useful when you want to match the metric used in your production vector database (many use dot product for performance).
 
 ### Euclidean Distance
 
@@ -81,7 +87,21 @@ assert:
 
 **When to use:** When you care about both the angle and magnitude differences between vectors. Note that the threshold represents the _maximum_ distance (not minimum similarity), so lower values are stricter.
 
-**Important:** For euclidean distance, the threshold semantics are inverted - it represents the _maximum_ acceptable distance rather than minimum similarity.
+The assertion score is `1 / (1 + distance)`, or `1 - 1 / (1 + distance)` for `not-similar:euclidean`. The threshold still uses the raw distance.
+
+:::note
+[Weighted averaging](/docs/configuration/expected-outputs#weighted-assertions) does not put different metrics on a common scale. To record similarity for analysis without affecting the test's score or pass/fail result, give it a named metric and zero weight:
+
+```yaml
+assert:
+  - type: similar
+    value: 'The expected output'
+    metric: raw_cosine
+    weight: 0
+```
+
+The named metric retains the signed cosine value. Use [custom assertion scoring](/docs/configuration/expected-outputs#custom-assertion-scoring) when you want to transform or combine metrics on an explicitly chosen scale.
+:::
 
 ## Overriding the provider
 

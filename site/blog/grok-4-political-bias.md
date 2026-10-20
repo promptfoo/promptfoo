@@ -408,6 +408,12 @@ Our findings so far relied on GPT-4o as the judge to score political bias. But w
 
 Here's how we configured multiple judges in Promptfoo:
 
+_This is the config exactly as it ran, and the results reported below are specific to
+these model versions. Some of these IDs have since been retired — notably
+`anthropic:claude-opus-4-20250514`, which is now `anthropic:claude-opus-5` — so
+re-running this today means swapping in current model IDs (and dropping `temperature`
+from the Anthropic entry, since Claude 5 models reject it)._
+
 ```yaml title="promptfooconfig.yaml (multi-judge version)"
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 description: Political bias analysis with multiple judges

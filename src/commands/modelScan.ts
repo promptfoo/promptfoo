@@ -15,17 +15,21 @@ import { cloudConfig } from '../globalConfig/cloud';
 import logger from '../logger';
 import ModelAudit from '../models/modelAudit';
 import { createShareableModelAuditUrl, isModelAuditSharingEnabled } from '../share';
-import { checkModelAuditUpdates, getModelAuditCurrentVersion } from '../updates';
+import { checkModelAuditUpdates } from '../updates';
 import {
   getHuggingFaceMetadata,
   isHuggingFaceModel,
   parseHuggingFaceModel,
 } from '../util/huggingfaceMetadata';
-import { DEPRECATED_OPTIONS_MAP, parseModelAuditArgs } from '../util/modelAuditCliParser';
+import { parseModelAuditArgs } from '../util/modelAuditCliParser';
+import { checkModelAuditInstalled } from '../util/modelAuditInstall';
 import { getModelAuditVerdict, parseCompleteModelAuditResults } from '../util/modelAuditResults';
 import type { Command } from 'commander';
 
 import type { ModelAuditIssue, ModelAuditScanResults } from '../types/modelAudit';
+
+// Preserve the existing deep-import surface while the implementation lives in the node layer.
+export { checkModelAuditInstalled };
 
 // ============================================================================
 // Types
@@ -109,17 +113,6 @@ export function supportsCliUiWithOutput(version: string | null): boolean {
 }
 
 /**
- * Check if modelaudit is installed and get its version.
- */
-export async function checkModelAuditInstalled(): Promise<{
-  installed: boolean;
-  version: string | null;
-}> {
-  const version = await getModelAuditCurrentVersion();
-  return { installed: version !== null, version };
-}
-
-/**
  * Determine if scan results contain any non-clean findings.
  */
 function hasFindingsInResults(results: ModelAuditScanResults): boolean {
@@ -167,51 +160,6 @@ function logProcessError(result: Pick<SpawnResult, 'code' | 'signal'>): number |
 }
 
 /**
- * Determine if a model should be re-scanned based on version changes.
- */
-function shouldRescan(
-  existingVersion: string | null | undefined,
-  currentVersion: string | null,
-): boolean {
-  if (!currentVersion) {
-    return false;
-  }
-  if (!existingVersion) {
-    return true;
-  }
-  return existingVersion !== currentVersion;
-}
-
-/**
- * Warn about deprecated CLI options.
- */
-function warnDeprecatedOptions(options: Record<string, unknown>): void {
-  const deprecatedOptionsUsed = Object.keys(options).filter((opt) => {
-    const fullOption = `--${opt.replace(/([A-Z])/g, '-$1').toLowerCase()}`;
-    return DEPRECATED_OPTIONS_MAP[fullOption] !== undefined;
-  });
-
-  for (const opt of deprecatedOptionsUsed) {
-    const fullOption = `--${opt.replace(/([A-Z])/g, '-$1').toLowerCase()}`;
-    const replacement = DEPRECATED_OPTIONS_MAP[fullOption];
-
-    if (replacement) {
-      logger.warn(`⚠️  Warning: '${fullOption}' is deprecated. Use '${replacement}' instead.`);
-    } else if (fullOption === '--jfrog-api-token') {
-      logger.warn(`⚠️  Warning: '${fullOption}' is deprecated. Set JFROG_API_TOKEN env var.`);
-    } else if (fullOption === '--jfrog-access-token') {
-      logger.warn(`⚠️  Warning: '${fullOption}' is deprecated. Set JFROG_ACCESS_TOKEN env var.`);
-    } else if (fullOption === '--registry-uri') {
-      logger.warn(
-        `⚠️  Warning: '${fullOption}' is deprecated. Set JFROG_URL or MLFLOW_TRACKING_URI env var.`,
-      );
-    } else {
-      logger.warn(`⚠️  Warning: '${fullOption}' is deprecated and has been removed.`);
-    }
-  }
-}
-
-/**
  * Spawn modelaudit with proper signal handling and Promise wrapper.
  * Returns stdout/stderr content when capturing output, or empty strings for inherited stdio.
  *
@@ -225,8 +173,6 @@ function spawnModelAudit(
   options: {
     captureOutput: boolean;
     env: NodeJS.ProcessEnv;
-    onStdout?: (data: string) => void;
-    onStderr?: (data: string) => void;
   },
 ): Promise<SpawnResult> {
   return new Promise((resolve, reject) => {
@@ -260,13 +206,11 @@ function spawnModelAudit(
       childProcess.stdout?.on('data', (data: Buffer) => {
         const str = data.toString();
         stdout += str;
-        options.onStdout?.(str);
       });
 
       childProcess.stderr?.on('data', (data: Buffer) => {
         const str = data.toString();
         stderr += str;
-        options.onStderr?.(str);
       });
     }
 
@@ -320,10 +264,7 @@ function hasPersistedScannerSelection(metadata: ModelAudit['metadata']): boolean
  * Parse CLI options through Zod, logging validation errors to the CLI.
  * Returns null when validation fails (and sets process.exitCode to 1).
  */
-function buildCliArgs(
-  paths: string[],
-  cliOptions: Record<string, unknown>,
-): { args: string[]; unsupportedOptions: string[] } | null {
+function buildCliArgs(paths: string[], cliOptions: Record<string, unknown>): string[] | null {
   try {
     return parseModelAuditArgs(paths, cliOptions);
   } catch (error) {
@@ -372,26 +313,25 @@ async function runPassthroughModelAudit(
 }
 
 /**
- * Check for existing scan and determine if re-scan is needed.
- * Returns the existing audit if found and re-scan should happen.
+ * Find an existing audit to update and capture its pre-scan revision.
+ * Scans always run; the lookup only selects the persistence context.
  */
 async function checkExistingScan(
   paths: string[],
   options: ScanOptions,
   currentScannerVersion: string | null,
 ): Promise<{
-  shouldSkip: boolean;
   existingAudit: ModelAudit | null;
   huggingFaceRevision?: HuggingFaceRevisionSnapshot;
 }> {
   if (paths.length !== 1 || !isHuggingFaceModel(paths[0])) {
-    return { shouldSkip: false, existingAudit: null };
+    return { existingAudit: null };
   }
 
   try {
     const metadata = await getHuggingFaceMetadata(paths[0]);
     if (!metadata) {
-      return { shouldSkip: false, existingAudit: null };
+      return { existingAudit: null };
     }
 
     const parsed = parseHuggingFaceModel(paths[0]);
@@ -404,41 +344,31 @@ async function checkExistingScan(
     };
 
     if (!existing) {
-      return { shouldSkip: false, existingAudit: null, huggingFaceRevision };
+      return { existingAudit: null, huggingFaceRevision };
     }
 
     if (hasScannerSelectionOptions(options)) {
       logger.debug('Re-scanning with scanner selection options');
-      return { shouldSkip: false, existingAudit: existing, huggingFaceRevision };
-    }
-
-    if (hasPersistedScannerSelection(existing.metadata)) {
+    } else if (hasPersistedScannerSelection(existing.metadata)) {
       logger.debug('Re-scanning because cached revision used scanner selection options');
-      return { shouldSkip: false, existingAudit: existing, huggingFaceRevision };
-    }
-
-    // Force flag - re-scan but update existing record
-    if (options.force) {
+    } else if (options.force) {
+      // Force flag - re-scan but update existing record
       logger.debug(`Re-scanning (--force): ${modelId}`);
-      return { shouldSkip: false, existingAudit: existing, huggingFaceRevision };
-    }
-
-    // Version changed - re-scan
-    if (shouldRescan(existing.scannerVersion, currentScannerVersion)) {
+    } else if (currentScannerVersion && existing.scannerVersion !== currentScannerVersion) {
+      // Version changed - re-scan
       const reason = existing.scannerVersion
         ? `modelaudit upgraded from ${existing.scannerVersion} to ${currentScannerVersion}`
         : `previous scan missing version info (now using ${currentScannerVersion})`;
       logger.debug(`Re-scanning: ${reason}`);
-      return { shouldSkip: false, existingAudit: existing, huggingFaceRevision };
+    } else {
+      // HuggingFace aliases are mutable. Without a pinned revision handed to the scanner,
+      // a cached alias match is not strong enough evidence to skip a fresh scan safely.
+      logger.debug(`Re-scanning mutable HuggingFace alias: ${modelId}`);
     }
-
-    // HuggingFace aliases are mutable. Without a pinned revision handed to the scanner,
-    // a cached alias match is not strong enough evidence to skip a fresh scan safely.
-    logger.debug(`Re-scanning mutable HuggingFace alias: ${modelId}`);
-    return { shouldSkip: false, existingAudit: existing, huggingFaceRevision };
+    return { existingAudit: existing, huggingFaceRevision };
   } catch (error) {
     logger.debug(`Failed to check for existing scan: ${error}`);
-    return { shouldSkip: false, existingAudit: null };
+    return { existingAudit: null };
   }
 }
 
@@ -939,9 +869,6 @@ export function modelScanCommand(program: Command): void {
         return;
       }
 
-      // Warn about deprecated options
-      warnDeprecatedOptions(options as Record<string, unknown>);
-
       // Check modelaudit installation
       const { installed, version: currentScannerVersion } = await checkModelAuditInstalled();
       if (!installed) {
@@ -964,53 +891,37 @@ export function modelScanCommand(program: Command): void {
       };
 
       if (options.listScanners) {
-        const parsed = buildCliArgs(paths || [], {
+        const args = buildCliArgs(paths || [], {
           ...options,
           format: options.format || 'text',
           output: options.output,
           timeout: undefined,
         });
-        if (!parsed) {
+        if (!args) {
           return;
         }
-        await runPassthroughModelAudit(parsed.args, delegationEnv);
+        await runPassthroughModelAudit(args, delegationEnv);
         return;
       }
 
       // Determine if we should save to database
       const saveToDatabase = options.write === undefined || options.write === true;
 
-      // Check for existing scan (skip or get audit to update)
-      let existingAuditToUpdate: ModelAudit | null = null;
-      let huggingFaceRevision: HuggingFaceRevisionSnapshot | undefined;
-      if (saveToDatabase) {
-        const {
-          shouldSkip,
-          existingAudit,
-          huggingFaceRevision: scannedRevision,
-        } = await checkExistingScan(paths, options, currentScannerVersion);
-        if (shouldSkip) {
-          process.exitCode = 0;
-          return;
-        }
-        existingAuditToUpdate = existingAudit;
-        huggingFaceRevision = scannedRevision;
-      }
+      // Look up the audit to update and its pre-scan revision.
+      const { existingAudit: existingAuditToUpdate, huggingFaceRevision } = saveToDatabase
+        ? await checkExistingScan(paths, options, currentScannerVersion)
+        : { existingAudit: null, huggingFaceRevision: undefined };
 
       // Parse CLI arguments
       const outputFormat = saveToDatabase ? 'json' : options.format || 'text';
-      const parsed = buildCliArgs(paths, {
+      const args = buildCliArgs(paths, {
         ...options,
         format: outputFormat,
         output: options.output && !saveToDatabase ? options.output : undefined,
         timeout: options.timeout ? parseInt(options.timeout, 10) : undefined,
       });
-      if (!parsed) {
+      if (!args) {
         return;
-      }
-      const args = parsed.args;
-      if (parsed.unsupportedOptions.length > 0) {
-        logger.warn(`Unsupported options detected: ${parsed.unsupportedOptions.join(', ')}`);
       }
 
       if (saveToDatabase || outputFormat === 'text') {

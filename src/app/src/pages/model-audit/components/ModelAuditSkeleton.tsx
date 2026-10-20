@@ -71,45 +71,6 @@ export function ResultPageSkeleton() {
 }
 
 /**
- * Skeleton loader for the scan history DataGrid.
- */
-export function HistoryTableSkeleton() {
-  return (
-    <div>
-      {/* Toolbar skeleton */}
-      <div className="flex justify-between p-2 border-b border-border">
-        <div className="flex gap-2">
-          <Skeleton className="h-8 w-24" />
-          <Skeleton className="h-8 w-20" />
-          <Skeleton className="h-8 w-16" />
-        </div>
-        <Skeleton className="h-8 w-48" />
-      </div>
-
-      {/* Table header skeleton */}
-      <div className="flex gap-4 p-4 border-b border-border">
-        <Skeleton className="h-4 w-1/4" />
-        <Skeleton className="h-4 w-3/10" />
-        <Skeleton className="h-4 w-1/6" />
-        <Skeleton className="h-4 w-1/6" />
-        <Skeleton className="h-4 w-1/10" />
-      </div>
-
-      {/* Table rows skeleton */}
-      {[1, 2, 3, 4, 5].map((i) => (
-        <div key={i} className="flex gap-4 p-4 border-b border-border">
-          <Skeleton className="h-4 w-1/4" />
-          <Skeleton className="h-4 w-3/10" />
-          <Skeleton className="h-6 w-16" />
-          <Skeleton className="h-4 w-1/6" />
-          <Skeleton className="size-8 rounded-full" />
-        </div>
-      ))}
-    </div>
-  );
-}
-
-/**
  * Skeleton loader for the latest scan page empty state check.
  */
 export function LatestScanSkeleton() {

@@ -563,3 +563,16 @@
   --ifm-navbar-background-color: #000;
   --ifm-footer-background-color: #000;
 }
+
+/* Respect reduced-motion: this page runs several continuous background
+   animations that are decorative only. */
+@media (prefers-reduced-motion: reduce) {
+  .defconPage,
+  .defconPage *,
+  .defconPage *::before,
+  .defconPage *::after {
+    animation: none !important;
+    transition: none !important;
+    scroll-behavior: auto !important;
+  }
+}

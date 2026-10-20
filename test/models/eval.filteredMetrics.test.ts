@@ -1,3 +1,5 @@
+import { createMixedResultOptions, createPassFailOptions } from '../factories/literalFixtures';
+import { clearEvalTables } from '../util/evalDb';
 /**
  * CRITICAL TEST: WHERE clause consistency between pagination and metrics.
  *
@@ -14,20 +16,27 @@ import { getDb } from '../../src/database/index';
 import { runDbMigrations } from '../../src/migrate';
 import EvalFactory from '../factories/evalFactory';
 
+const createSourceFilter = () => ({
+  logicOperator: 'and',
+  type: 'metadata',
+  operator: 'equals',
+  field: 'source',
+  value: 'unit',
+});
+
+const createNamedScoreOptions = () => ({
+  numResults: 10,
+  resultTypes: ['success' as const, 'failure' as const],
+  withNamedScores: true,
+});
+
 describe('Filtered Metrics - WHERE Clause Consistency', () => {
   beforeAll(async () => {
     await runDbMigrations();
   });
 
-  beforeEach(async () => {
-    // Clear all tables before each test
-    const db = getDb();
-    await db.run('DELETE FROM eval_results');
-    await db.run('DELETE FROM evals_to_datasets');
-    await db.run('DELETE FROM evals_to_prompts');
-    await db.run('DELETE FROM evals_to_tags');
-    await db.run('DELETE FROM evals');
-  });
+  // Clear eval tables before each test
+  beforeEach(() => clearEvalTables());
 
   afterEach(() => {
     vi.resetAllMocks();
@@ -41,10 +50,7 @@ describe('Filtered Metrics - WHERE Clause Consistency', () => {
    */
   describe('CRITICAL: Row count consistency', () => {
     it('should return same row count for pagination and metrics with no filters', async () => {
-      const eval_ = await EvalFactory.create({
-        numResults: 20,
-        resultTypes: ['success', 'error', 'failure'],
-      });
+      const eval_ = await EvalFactory.create(createMixedResultOptions(20));
 
       const { testIndices } = await (eval_ as any).queryTestIndices({});
       const metrics = await eval_.getFilteredMetrics({});
@@ -58,10 +64,7 @@ describe('Filtered Metrics - WHERE Clause Consistency', () => {
     });
 
     it('should return same row count for pagination and metrics with filterMode=errors', async () => {
-      const eval_ = await EvalFactory.create({
-        numResults: 20,
-        resultTypes: ['success', 'error', 'failure'],
-      });
+      const eval_ = await EvalFactory.create(createMixedResultOptions(20));
 
       const { testIndices } = await (eval_ as any).queryTestIndices({ filterMode: 'errors' });
       const metrics = await eval_.getFilteredMetrics({ filterMode: 'errors' });
@@ -76,10 +79,7 @@ describe('Filtered Metrics - WHERE Clause Consistency', () => {
     });
 
     it('should return same row count for pagination and metrics with filterMode=failures', async () => {
-      const eval_ = await EvalFactory.create({
-        numResults: 20,
-        resultTypes: ['success', 'error', 'failure'],
-      });
+      const eval_ = await EvalFactory.create(createMixedResultOptions(20));
 
       const { testIndices } = await (eval_ as any).queryTestIndices({ filterMode: 'failures' });
       const metrics = await eval_.getFilteredMetrics({ filterMode: 'failures' });
@@ -94,10 +94,7 @@ describe('Filtered Metrics - WHERE Clause Consistency', () => {
     });
 
     it('should return same row count for pagination and metrics with filterMode=passes', async () => {
-      const eval_ = await EvalFactory.create({
-        numResults: 20,
-        resultTypes: ['success', 'error', 'failure'],
-      });
+      const eval_ = await EvalFactory.create(createMixedResultOptions(20));
 
       const { testIndices } = await (eval_ as any).queryTestIndices({ filterMode: 'passes' });
       const metrics = await eval_.getFilteredMetrics({ filterMode: 'passes' });
@@ -153,26 +150,15 @@ describe('Filtered Metrics - WHERE Clause Consistency', () => {
     });
 
     it('should return same row count for pagination and metrics with metadata filter', async () => {
-      const eval_ = await EvalFactory.create({
-        numResults: 10,
-        resultTypes: ['success', 'failure'],
-      });
+      const eval_ = await EvalFactory.create(createPassFailOptions(10));
 
       // Add metadata to some rows
-      const db = getDb();
+      const db = await getDb();
       await db.run(
         `UPDATE eval_results SET metadata = json('{"source":"unit"}') WHERE eval_id = '${eval_.id}' AND test_idx IN (1, 3, 5)`,
       );
 
-      const filters = [
-        JSON.stringify({
-          logicOperator: 'and',
-          type: 'metadata',
-          operator: 'equals',
-          field: 'source',
-          value: 'unit',
-        }),
-      ];
+      const filters = [JSON.stringify(createSourceFilter())];
 
       const { testIndices } = await (eval_ as any).queryTestIndices({ filters });
       const metrics = await eval_.getFilteredMetrics({ filters });
@@ -187,12 +173,9 @@ describe('Filtered Metrics - WHERE Clause Consistency', () => {
     });
 
     it('should return same row count for pagination and metrics with plugin filter', async () => {
-      const eval_ = await EvalFactory.create({
-        numResults: 10,
-        resultTypes: ['success', 'failure'],
-      });
+      const eval_ = await EvalFactory.create(createPassFailOptions(10));
 
-      const db = getDb();
+      const db = await getDb();
       await db.run(
         `UPDATE eval_results SET metadata = json('{"pluginId":"harmful:harassment"}') WHERE eval_id = '${eval_.id}' AND test_idx IN (2, 4, 6)`,
       );
@@ -219,12 +202,9 @@ describe('Filtered Metrics - WHERE Clause Consistency', () => {
     });
 
     it('should return same row count for pagination and metrics with strategy filter', async () => {
-      const eval_ = await EvalFactory.create({
-        numResults: 10,
-        resultTypes: ['success', 'failure'],
-      });
+      const eval_ = await EvalFactory.create(createPassFailOptions(10));
 
-      const db = getDb();
+      const db = await getDb();
       await db.run(
         `UPDATE eval_results SET metadata = json('{"strategyId":"jailbreak"}') WHERE eval_id = '${eval_.id}' AND test_idx IN (1, 2, 3)`,
       );
@@ -251,12 +231,9 @@ describe('Filtered Metrics - WHERE Clause Consistency', () => {
     });
 
     it('should return same row count for pagination and metrics with severity filter', async () => {
-      const eval_ = await EvalFactory.create({
-        numResults: 10,
-        resultTypes: ['success', 'failure'],
-      });
+      const eval_ = await EvalFactory.create(createPassFailOptions(10));
 
-      const db = getDb();
+      const db = await getDb();
       await db.run(
         `UPDATE eval_results SET metadata = json('{"severity":"high"}') WHERE eval_id = '${eval_.id}' AND test_idx IN (0, 5)`,
       );
@@ -283,11 +260,7 @@ describe('Filtered Metrics - WHERE Clause Consistency', () => {
     });
 
     it('should return same row count for pagination and metrics with metric filter', async () => {
-      const eval_ = await EvalFactory.create({
-        numResults: 10,
-        resultTypes: ['success', 'failure'],
-        withNamedScores: true,
-      });
+      const eval_ = await EvalFactory.create(createNamedScoreOptions());
 
       const filters = [
         JSON.stringify({
@@ -319,20 +292,12 @@ describe('Filtered Metrics - WHERE Clause Consistency', () => {
         searchableContent: 'searchable',
       });
 
-      const db = getDb();
+      const db = await getDb();
       await db.run(
         `UPDATE eval_results SET metadata = json('{"source":"unit","severity":"high"}') WHERE eval_id = '${eval_.id}' AND test_idx IN (3, 6, 9)`,
       );
 
-      const filters = [
-        JSON.stringify({
-          logicOperator: 'and',
-          type: 'metadata',
-          operator: 'equals',
-          field: 'source',
-          value: 'unit',
-        }),
-      ];
+      const filters = [JSON.stringify(createSourceFilter())];
 
       const { testIndices } = await (eval_ as any).queryTestIndices({
         filterMode: 'failures',
@@ -381,10 +346,7 @@ describe('Filtered Metrics - WHERE Clause Consistency', () => {
     });
 
     it('should return zero counts when search matches nothing', async () => {
-      const eval_ = await EvalFactory.create({
-        numResults: 10,
-        resultTypes: ['success', 'failure'],
-      });
+      const eval_ = await EvalFactory.create(createPassFailOptions(10));
 
       const searchQuery = 'nonexistent_search_term_xyz';
       const { testIndices } = await (eval_ as any).queryTestIndices({ searchQuery });
@@ -430,10 +392,7 @@ describe('Filtered Metrics - WHERE Clause Consistency', () => {
     });
 
     it('should calculate correct metrics for filtered passes', async () => {
-      const eval_ = await EvalFactory.create({
-        numResults: 20,
-        resultTypes: ['success', 'error', 'failure'],
-      });
+      const eval_ = await EvalFactory.create(createMixedResultOptions(20));
 
       const metrics = await eval_.getFilteredMetrics({ filterMode: 'passes' });
 
@@ -451,10 +410,7 @@ describe('Filtered Metrics - WHERE Clause Consistency', () => {
     });
 
     it('should calculate correct metrics for filtered errors', async () => {
-      const eval_ = await EvalFactory.create({
-        numResults: 20,
-        resultTypes: ['success', 'error', 'failure'],
-      });
+      const eval_ = await EvalFactory.create(createMixedResultOptions(20));
 
       const metrics = await eval_.getFilteredMetrics({ filterMode: 'errors' });
 
@@ -472,11 +428,7 @@ describe('Filtered Metrics - WHERE Clause Consistency', () => {
     });
 
     it('should include named scores only from filtered results', async () => {
-      const eval_ = await EvalFactory.create({
-        numResults: 10,
-        resultTypes: ['success', 'failure'],
-        withNamedScores: true,
-      });
+      const eval_ = await EvalFactory.create(createNamedScoreOptions());
 
       // All results have accuracy and relevance scores
       const allMetrics = await eval_.getFilteredMetrics({});

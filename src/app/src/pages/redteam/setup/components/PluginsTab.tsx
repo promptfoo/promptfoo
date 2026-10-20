@@ -46,7 +46,7 @@ import {
   Settings,
 } from 'lucide-react';
 import { ErrorBoundary } from 'react-error-boundary';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams } from 'react-router';
 import { requiresPluginConfig } from '../constants';
 import PluginConfigDialog from './PluginConfigDialog';
 import PresetCard from './PresetCard';
@@ -531,6 +531,8 @@ export default function PluginsTab({
               <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
               <Input
                 data-testid="plugin-search-input"
+                type="search"
+                aria-label="Search plugins"
                 placeholder="Search plugins..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}

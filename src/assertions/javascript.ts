@@ -1,61 +1,121 @@
-import { type GradingResult, isGradingResult } from '../types/index';
+import { Parser, type TokenType, tokTypes, type YieldExpression } from 'acorn';
+import { type GradingResult } from '../types/index';
 import invariant from '../util/invariant';
 import { getProcessShim } from '../util/processShim';
+import { isSafeMode, SafeModeError } from '../util/safeMode';
+import {
+  appendToReason,
+  asGradingResult,
+  normalizeScriptAssertionResult,
+} from './scriptResultNormalization';
 
 import type { AssertionParams } from '../types/index';
 
 /**
- * Checks if a character at the given index is escaped by backslashes.
- * Handles multiple consecutive backslashes correctly (e.g., \\\\ is two escaped backslashes).
+ * Acorn's property-name token context can misclassify following operators.
+ * Treat names after . or ?. as identifiers so following operators and calls do not
+ * interpret them as keywords. Assertion source and token offsets remain unchanged.
  */
-function isCharEscaped(code: string, index: number): boolean {
-  let backslashCount = 0;
-  let i = index - 1;
-  while (i >= 0 && code[i] === '\\') {
-    backslashCount++;
-    i--;
-  }
-  return backslashCount % 2 === 1;
+const assertionParser = Parser.extend((BaseParser) => {
+  const tokenizerPrototype = BaseParser.prototype as Parser & {
+    updateContext(previousType: TokenType): void;
+    next(ignoreEscapeSequenceInKeyword: boolean): void;
+    parseYield(forInit: boolean): YieldExpression;
+  };
+
+  return class extends BaseParser {
+    declare type: TokenType;
+    declare exprAllowed: boolean;
+
+    parseYield(forInit: boolean): YieldExpression {
+      // Acorn's lexical context can miss async generators and generator methods.
+      // The grammar has identified yield here, so its operand can start a regex.
+      this.exprAllowed = true;
+      return tokenizerPrototype.parseYield.call(this, forInit);
+    }
+
+    next(): void {
+      // Escaped keywords are valid property names. Leave their syntax validation
+      // to the unchanged Function body rather than the lexical keyword guard.
+      tokenizerPrototype.next.call(this, true);
+    }
+
+    updateContext(previousType: TokenType): void {
+      if (
+        (previousType === tokTypes.dot || previousType === tokTypes.questionDot) &&
+        (this.type.keyword || this.type === tokTypes.name)
+      ) {
+        this.type = tokTypes.name;
+        previousType = tokTypes.dot;
+      }
+      tokenizerPrototype.updateContext.call(this, previousType);
+    }
+  };
+});
+
+function insertReturnAfterSemicolon(code: string, semicolonIndex: number): string {
+  const statements = code.slice(0, semicolonIndex + 1);
+  const expression = code.slice(semicolonIndex + 1).trim();
+  return `${statements} return ${expression}`;
 }
 
 /**
- * Finds the last semicolon that acts as a statement separator (not inside a string literal).
- * Tracks quote state to skip semicolons inside single quotes, double quotes, and template literals.
- *
- * @returns The index of the last statement-level semicolon, or -1 if none found.
- *
- * @remarks
- * Known limitations (use multiline format for these cases):
- * - Does not handle semicolons inside regex literals (e.g., /;/)
- * - Does not handle semicolons inside template literal expressions (e.g., `${a;b}`)
+ * Finds statement separators using JavaScript grammar so async and generator
+ * expressions distinguish regular expressions from division correctly.
  */
 function findLastStatementSemicolon(code: string): number {
-  let inSingleQuote = false;
-  let inDoubleQuote = false;
-  let inTemplate = false;
+  const prefix = 'function __assertion__() {\n';
+  let depth = 0;
+  let pendingSemiIndex = -1;
   let lastSemiIndex = -1;
-
-  for (let i = 0; i < code.length; i++) {
-    const char = code[i];
-    const isEscaped = isCharEscaped(code, i);
-
-    // Toggle quote state for unescaped quote characters
-    if (!isEscaped) {
-      if (char === "'" && !inDoubleQuote && !inTemplate) {
-        inSingleQuote = !inSingleQuote;
-      } else if (char === '"' && !inSingleQuote && !inTemplate) {
-        inDoubleQuote = !inDoubleQuote;
-      } else if (char === '`' && !inSingleQuote && !inDoubleQuote) {
-        inTemplate = !inTemplate;
-      }
+  try {
+    assertionParser.parse(prefix + code + '\n}', {
+      ecmaVersion: 'latest',
+      onToken(token) {
+        const start = token.start - prefix.length;
+        if (start < 0 || start >= code.length || token.type === tokTypes.eof) {
+          return;
+        }
+        const label = token.type.label;
+        if (label === ';' && depth === 0) {
+          pendingSemiIndex = start;
+          return;
+        }
+        lastSemiIndex = pendingSemiIndex;
+        if (label === '(' || label === '[' || label === '{' || label === '${') {
+          depth++;
+        } else if (label === ')' || label === ']' || label === '}') {
+          depth--;
+        }
+      },
+    });
+  } catch (error) {
+    if (!(error instanceof SyntaxError) || lastSemiIndex === -1) {
+      throw error;
     }
-
-    // Track semicolons only when outside all string contexts
-    if (char === ';' && !inSingleQuote && !inDoubleQuote && !inTemplate) {
-      lastSemiIndex = i;
+    // A bare final object is an expression only after return insertion. Validate
+    // that one complete candidate; never drop source or retry arbitrary semicolons.
+    const returnStart = lastSemiIndex + 1;
+    const candidate = assertionParser.parse(
+      prefix + insertReturnAfterSemicolon(code, lastSemiIndex) + '\n}',
+      { ecmaVersion: 'latest' },
+    );
+    const declaration = candidate.body[0];
+    if (declaration.type !== 'FunctionDeclaration') {
+      throw error;
+    }
+    const statements = declaration.body.body.filter(
+      (statement) => statement.type !== 'EmptyStatement',
+    );
+    const last = statements[statements.length - 1];
+    if (
+      last?.type !== 'ReturnStatement' ||
+      last.start !== prefix.length + returnStart + 1 ||
+      !last.argument
+    ) {
+      throw error;
     }
   }
-
   return lastSemiIndex;
 }
 
@@ -87,11 +147,10 @@ export function buildFunctionBody(code: string): string {
     // Find the last semicolon that's actually a statement separator (not inside a string)
     const lastSemiIndex = findLastStatementSemicolon(trimmed);
     if (lastSemiIndex !== -1) {
-      const statements = trimmed.slice(0, lastSemiIndex + 1);
       const expression = trimmed.slice(lastSemiIndex + 1).trim();
       if (expression) {
         // Inject return before the final expression
-        return `${statements} return ${expression}`;
+        return insertReturnAfterSemicolon(trimmed, lastSemiIndex);
       }
     }
     // No semicolon or no final expression - use as-is (will likely error or return undefined)
@@ -102,17 +161,20 @@ export function buildFunctionBody(code: string): string {
   return `return ${trimmed}`;
 }
 
+class JavascriptAssertionValidationError extends Error {}
+
 const validateResult = async (result: unknown): Promise<boolean | number | GradingResult> => {
   result = await Promise.resolve(result);
-  if (typeof result === 'boolean' || typeof result === 'number' || isGradingResult(result)) {
+  if (typeof result === 'boolean' || (typeof result === 'number' && Number.isFinite(result))) {
     return result;
-  } else {
-    throw new Error(
-      `Custom function must return a boolean, number, or GradingResult object. Got type ${typeof result}: ${JSON.stringify(
-        result,
-      )}`,
-    );
   }
+  const gradingResult = asGradingResult(result);
+  if (gradingResult) {
+    return gradingResult;
+  }
+  throw new JavascriptAssertionValidationError(
+    `Custom function must return a boolean, a finite number, or a GradingResult object with finite scores and weights. Got type ${typeof result}.`,
+  );
 };
 
 function serializeFunctionAssertion(assertion: AssertionParams['assertion']) {
@@ -140,62 +202,38 @@ function normalizeResultAssertion(
   return assertionToNormalize;
 }
 
-function appendRenderedValueToReason(
-  reason: string,
-  renderedValue?: AssertionParams['renderedValue'],
-): string {
-  return typeof renderedValue === 'string' && renderedValue
-    ? `${reason}\n${renderedValue}`
-    : reason;
-}
-
 function normalizeJavascriptAssertionResult(
   assertion: AssertionParams['assertion'],
   result: boolean | number | GradingResult,
   inverse: boolean,
   renderedValue?: string,
 ): GradingResult {
+  // Preserve metadata getter ordering while grading against the original assertion.
   const normalizedAssertion = normalizeResultAssertion(undefined, assertion);
-  const getFailureReason = (rawPass: boolean) => {
-    return appendRenderedValueToReason(
-      `Custom function returned ${rawPass ? 'true' : 'false'}`,
-      renderedValue,
+  const normalizedScriptResult = normalizeScriptAssertionResult(
+    assertion,
+    result,
+    inverse,
+    { code: 'Custom function', language: 'JavaScript' },
+    renderedValue,
+  );
+  const normalizedResult = {
+    ...normalizedScriptResult,
+    assertion:
+      typeof result === 'object'
+        ? normalizeResultAssertion(normalizedScriptResult.assertion, assertion)
+        : normalizedAssertion,
+  };
+  if (!Number.isFinite(normalizedResult.score)) {
+    throw new JavascriptAssertionValidationError(
+      'Custom function must return a GradingResult object with a finite score.',
     );
-  };
-
-  if (typeof result === 'boolean') {
-    const pass = result !== inverse;
-    return {
-      pass,
-      score: pass ? 1 : 0,
-      reason: pass ? 'Assertion passed' : getFailureReason(result),
-      assertion: normalizedAssertion,
-    };
   }
-
-  if (typeof result === 'number') {
-    const rawPass = assertion.threshold === undefined ? result > 0 : result >= assertion.threshold;
-    const pass = rawPass !== inverse;
-    return {
-      pass,
-      score: result,
-      reason: pass ? 'Assertion passed' : getFailureReason(rawPass),
-      assertion: normalizedAssertion,
-    };
-  }
-
-  const pass = result.pass !== inverse;
-  return {
-    ...result,
-    pass,
-    reason:
-      pass === result.pass
-        ? result.reason
-        : pass
-          ? 'Assertion passed'
-          : `Custom function returned ${result.pass ? 'true' : 'false'}`,
-    assertion: normalizeResultAssertion(result.assertion, assertion),
-  };
+  // A GradingResult reason is explanatory prose, including an intentional empty string.
+  // Preserve it for both inverse outcomes; primitive results keep their generated reasons.
+  return typeof result === 'object'
+    ? { ...normalizedResult, reason: result.reason }
+    : normalizedResult;
 }
 
 export const handleJavascript = async ({
@@ -227,6 +265,11 @@ export const handleJavascript = async ({
 
     let result: boolean | number | GradingResult;
     if (typeof valueFromScript === 'undefined') {
+      if (isSafeMode()) {
+        throw new SafeModeError(
+          'Inline JavaScript execution is disabled in safe mode. Please use a file reference instead (e.g. "file://path/to/assertion.js").',
+        );
+      }
       // Multiline assertions use the value as-is (user controls returns)
       // Single-line assertions get processed to handle variable declarations
       const functionBody = renderedValue.includes('\n')
@@ -249,13 +292,21 @@ export const handleJavascript = async ({
 
     return normalizeJavascriptAssertionResult(assertion, result, inverse, renderedValue);
   } catch (err) {
+    if (err instanceof SafeModeError) {
+      return {
+        pass: false,
+        score: 0,
+        reason: err.message,
+        assertion: normalizeResultAssertion(undefined, assertion),
+      };
+    }
     return {
       pass: false,
       score: 0,
-      reason: appendRenderedValueToReason(
+      reason: appendToReason(
         `Custom function threw error: ${(err as Error).message}
 Stack Trace: ${(err as Error).stack}`,
-        renderedValue,
+        err instanceof JavascriptAssertionValidationError ? undefined : renderedValue,
       ),
       assertion: normalizeResultAssertion(undefined, assertion),
     };

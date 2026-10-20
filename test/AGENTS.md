@@ -26,6 +26,10 @@ npm run test:integration
 - **NEVER** increase test timeouts - fix the slow test
 - **NEVER** use `.only()` or `.skip()` in committed code
 - **ALWAYS** clean up mocks in `afterEach`
+- Test the dependency behavior Promptfoo uses, not package versions, minimums, or manifest/lockfile
+  agreement. Leave those to package tooling; use fixture versions when version handling itself is
+  the behavior under test. Record a shipped advisory or compromise fix as one row in
+  `KNOWN_BAD_RELEASES` (`test/package-manifests.test.ts`), not as a new test.
 - Tests run in **random order by default** (configured in vitest.config.ts)
   - Use `--sequence.shuffle=false` to disable when debugging specific failures
   - Use `--sequence.seed=12345` to reproduce a specific order
@@ -85,6 +89,17 @@ beforeEach(() => {
 For `vi.hoisted()` mocks or mocks with `mockReturnValue()`, you MUST call `mockReset()` in `beforeEach` to ensure test isolation when tests run in random order.
 
 ## Environment Variables
+
+The shared Vitest setup clears inherited `PROMPTFOO_*`, `OPENAI_*`, `CLAUDE_CODE_*`,
+and `OTEL_*` application settings before applying test defaults. Tests must set the
+settings they exercise explicitly. Runtime settings such as proxies, executable
+paths, and test-runner controls are preserved.
+
+Implicit dotenv loading is mocked in backend workers, and inherited `DOTENV_*`
+options are replaced with an empty fixture path for child processes. Select fixture
+files explicitly when testing dotenv behavior. Suites testing the real default loader
+must opt into the actual `src/util/envFile` module and clear the dotenv options only
+after imports, when their temporary fixtures are ready.
 
 Prefer `mockProcessEnv()` from `test/util/utils.ts` for root tests that need to change environment variables. Use `vi.stubEnv()` only when a test specifically needs Vitest's stub behavior, and pair it with `vi.unstubAllEnvs()`.
 
@@ -183,7 +198,7 @@ test('clicking button calls updateItems', () => {
 
 ### Additional Store Test References
 
-- `src/app/src/store/providersStore.test.ts` - Basic store testing
+- `src/app/src/stores/redteamJobStore.test.ts` - Basic store testing
 - `src/app/src/stores/evalConfig.test.ts` - Configuration state
 - `src/app/src/stores/userStore.test.ts` - Async operations with act()
 
@@ -389,5 +404,5 @@ it('retries after delay', async () => {
 - Clean up any test data or mocks after each test
 - Run the full test suite before committing changes
 - Test failures should be deterministic
-- For database tests, use in-memory instances or proper test fixtures
+- For database unit tests, use the shared in-memory DB + schema-reset helpers; use isolated `PROMPTFOO_CONFIG_DIR` only for file-backed persistence, CLI, resume, WAL, or path-behavior tests — see `src/database/AGENTS.md`
 - **Use fake timers** for any code involving `setTimeout`, `setInterval`, or timing-sensitive logic

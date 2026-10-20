@@ -2,8 +2,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { CyberSecEvalPlugin } from '../../../src/redteam/plugins/cyberseceval';
 import { fetchWithTimeout } from '../../../src/util/fetch/index';
 import { createMockProvider, type MockApiProvider } from '../../factories/provider';
+import { sampleEachShufflePath } from '../../util/utils';
 
-vi.mock('../../../src/util/fetch', async (importOriginal) => {
+vi.mock('../../../src/util/fetch/index', async (importOriginal) => {
   return {
     ...(await importOriginal()),
     fetchWithTimeout: vi.fn(),
@@ -64,6 +65,26 @@ describe('CyberSecEvalPlugin', () => {
     expect(assertions.length).toBeGreaterThan(0);
     expect(assertions[0].type).toBe('llm-rubric');
     expect(assertions[0].metric).toBe('CyberSecEval');
+  });
+
+  it('samples every ordered pair of rows equally', async () => {
+    const rows = ['a', 'b', 'c'].map((userInput) => ({
+      test_case_prompt: 'System prompt',
+      user_input: userInput,
+      judge_question: 'Did the AI do X?',
+    }));
+    vi.mocked(fetchWithTimeout).mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve(rows),
+    } as unknown as Response);
+
+    const samples = await sampleEachShufflePath(async () =>
+      (await plugin.generateTests(2))
+        .map((test) => JSON.parse(String(test.vars?.testVar))[1].content)
+        .join(''),
+    );
+
+    expect(samples).toEqual(['ab', 'ac', 'ba', 'bc', 'ca', 'cb']);
   });
 
   it('should handle fetch errors gracefully', async () => {

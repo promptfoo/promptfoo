@@ -3,22 +3,17 @@ import * as path from 'path';
 
 import checkbox, { Separator } from '@inquirer/checkbox';
 import confirm from '@inquirer/confirm';
-import { AbortPromptError, ExitPromptError } from '@inquirer/core';
 import editor from '@inquirer/editor';
 import input from '@inquirer/input';
 import select from '@inquirer/select';
 import chalk from 'chalk';
 import dedent from 'dedent';
-import { getDefaultPort } from '../../constants';
-import { getEnvString } from '../../envars';
 import { getUserEmail, setUserEmail } from '../../globalConfig/accounts';
 import { readGlobalConfig, writeGlobalConfigPartial } from '../../globalConfig/globalConfig';
 import logger from '../../logger';
-import { startServer } from '../../server/server';
+import { GEMINI_FLASH_MODELS } from '../../providers/google/shared';
 import telemetry, { type EventProperties } from '../../telemetry';
-import { setupEnv } from '../../util/index';
 import { promptfooCommand } from '../../util/promptfooCommand';
-import { BrowserBehavior, checkServerRunning, openBrowser } from '../../util/server';
 import { extractVariablesFromTemplate, getNunjucksEngine } from '../../util/templates';
 import {
   ADDITIONAL_STRATEGIES,
@@ -32,7 +27,6 @@ import {
 } from '../constants';
 import { ProbeLimitExceededError } from '../types';
 import { doGenerateRedteam } from './generate';
-import type { Command } from 'commander';
 
 import type { ProviderOptions, RedteamPluginObject } from '../../types/index';
 
@@ -63,7 +57,7 @@ targets:
   - {{ provider }}
   {% else -%}
   - id: {{ provider.id }}
-    label: {{ provider.label }}
+    label: {{ provider.label | dump }}
     config:
       {% for k, v in provider.config -%}
       {{ k }}: {{ v | dump }}
@@ -122,7 +116,7 @@ import urllib.parse
 import json
 
 def call_api(prompt, options, context):
-    parsed_url = urllib.parse.urlparse('https://example.com/api/chat)
+    parsed_url = urllib.parse.urlparse('https://example.com/api/chat')
     conn = http.client.HTTPSConnection(parsed_url.netloc)
 
     headers = {'Content-Type': 'application/json'}
@@ -312,28 +306,54 @@ export async function redteamInit(directory: string | undefined) {
   } else {
     const providerChoices = [
       { name: `I'll choose later`, value: 'Other' },
-      { name: 'openai:gpt-5-mini', value: 'openai:gpt-5-mini' },
-      { name: 'openai:gpt-5', value: 'openai:gpt-5' },
+      { name: 'openai:gpt-5.6', value: 'openai:gpt-5.6' },
+      { name: 'openai:gpt-5.4-mini', value: 'openai:gpt-5.4-mini' },
+      {
+        name: 'anthropic:claude-fable-5-1',
+        value: 'anthropic:messages:claude-fable-5-1',
+      },
+      {
+        name: 'anthropic:claude-fable-5',
+        value: 'anthropic:messages:claude-fable-5',
+      },
+      {
+        name: 'anthropic:claude-opus-5-5',
+        value: 'anthropic:messages:claude-opus-5-5',
+      },
+      {
+        name: 'anthropic:claude-sonnet-5-5',
+        value: 'anthropic:messages:claude-sonnet-5-5',
+      },
+      {
+        name: 'anthropic:claude-opus-5',
+        value: 'anthropic:messages:claude-opus-5',
+      },
+      {
+        name: 'anthropic:claude-opus-4-8',
+        value: 'anthropic:messages:claude-opus-4-8',
+      },
+      {
+        name: 'anthropic:claude-sonnet-5',
+        value: 'anthropic:messages:claude-sonnet-5',
+      },
       {
         name: 'anthropic:claude-opus-4-6',
         value: 'anthropic:messages:claude-opus-4-6',
       },
       {
-        name: 'anthropic:claude-opus-4-5-20251101',
-        value: 'anthropic:messages:claude-opus-4-5-20251101',
+        name: 'anthropic:claude-sonnet-4-6',
+        value: 'anthropic:messages:claude-sonnet-4-6',
       },
       {
-        name: 'anthropic:claude-sonnet-4-5-20250929',
-        value: 'anthropic:messages:claude-sonnet-4-5-20250929',
+        name: 'anthropic:claude-haiku-4-5',
+        value: 'anthropic:messages:claude-haiku-4-5',
       },
-      {
-        name: 'anthropic:claude-opus-4-1-20250805',
-        value: 'anthropic:messages:claude-opus-4-1-20250805',
-      },
-      {
-        name: 'anthropic:claude-3-7-sonnet-20250219',
-        value: 'anthropic:messages:claude-3-7-sonnet-20250219',
-      },
+      ...['google', 'vertex'].flatMap((provider) =>
+        GEMINI_FLASH_MODELS.map(({ id, name }) => ({
+          name: `Google${provider === 'vertex' ? ' Vertex' : ''} ${name}`,
+          value: `${provider}:${id}`,
+        })),
+      ),
       {
         name: 'Google Vertex Gemini 2.5 Pro',
         value: 'vertex:gemini-2.5-pro',
@@ -349,9 +369,17 @@ export async function redteamInit(directory: string | undefined) {
     recordOnboardingStep('choose provider', { value: selectedProvider });
 
     if (selectedProvider === 'Other') {
-      providers = [{ id: 'openai:gpt-5-mini', label }];
+      providers = [{ id: 'openai:gpt-5.6', label }];
     } else {
-      providers = [{ id: selectedProvider, label }];
+      providers = [
+        {
+          id: selectedProvider,
+          label,
+          ...(GEMINI_FLASH_MODELS.some(({ id }) => selectedProvider === `vertex:${id}`)
+            ? { config: { region: 'global' } }
+            : {}),
+        },
+      ];
     }
   }
 
@@ -684,57 +712,6 @@ export async function redteamInit(directory: string | undefined) {
   }
 }
 
-export function initCommand(program: Command) {
-  program
-    .command('init [directory]')
-    .description('Initialize red teaming project')
-    .option('--env-file, --env-path <path>', 'Path to .env file')
-    .option('--no-gui', 'Do not open the browser UI')
-    .action(
-      async (
-        directory: string | undefined,
-        opts: { envPath: string | undefined; gui: boolean },
-      ) => {
-        setupEnv(opts.envPath);
-        try {
-          // Check if we're in a non-GUI environment
-          const isGUI =
-            getEnvString('DISPLAY') ||
-            process.platform === 'win32' ||
-            process.platform === 'darwin';
-          const useGui = opts.gui && isGUI;
-
-          if (useGui) {
-            const isRunning = await checkServerRunning();
-
-            if (isRunning) {
-              await openBrowser(BrowserBehavior.OPEN_TO_REDTEAM_CREATE);
-            } else {
-              await startServer(getDefaultPort(), BrowserBehavior.OPEN_TO_REDTEAM_CREATE);
-            }
-          } else {
-            await redteamInit(directory);
-          }
-        } catch (err) {
-          if (err instanceof AbortPromptError || err instanceof ExitPromptError) {
-            logger.info(
-              '\n' +
-                chalk.blue(
-                  'Red team initialization paused. To continue setup later, use the command: ',
-                ) +
-                chalk.bold(promptfooCommand('redteam init')),
-            );
-            logger.info(
-              chalk.blue('For help or feedback, visit ') +
-                chalk.green('https://www.promptfoo.dev/contact/'),
-            );
-            await recordOnboardingStep('early exit');
-            process.exitCode = 130;
-            return;
-          } else {
-            throw err;
-          }
-        }
-      },
-    );
-}
+// `initCommand` (the CLI wrapper that launches the web UI) lives in
+// src/commands/redteam/init.ts (cli layer) so the redteam layer no longer
+// depends on the view-server. The reusable `redteamInit` flow above stays here.

@@ -1,5 +1,7 @@
 import util from 'util';
 
+import { normalizeForComparison } from './normalize';
+
 import type { AssertionParams, GradingResult } from '../types/index';
 
 export const handleEquals = async ({
@@ -16,11 +18,18 @@ export const handleEquals = async ({
     try {
       pass = util.isDeepStrictEqual(renderedValue, JSON.parse(outputString)) !== inverse;
     } catch {
-      pass = false;
+      // The output is not valid JSON, so it cannot deep-equal the object value (the "equal"
+      // result is false). Respect `inverse` (false !== inverse) so `not-equals` passes here
+      // instead of falsely failing.
+      pass = inverse;
     }
     renderedValue = JSON.stringify(renderedValue);
   } else {
-    pass = (String(renderedValue) === outputString) !== inverse;
+    const normalize = assertion.normalizeUnicode;
+    pass =
+      (normalizeForComparison(String(renderedValue), normalize) ===
+        normalizeForComparison(outputString, normalize)) !==
+      inverse;
   }
 
   return {

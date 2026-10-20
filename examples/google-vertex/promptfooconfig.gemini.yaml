@@ -1,6 +1,6 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 
-description: 'Evaluation of Gemini 2.5 models with function calling capabilities'
+description: 'Evaluation of Gemini models with function calling capabilities'
 
 prompts:
   - label: 'Direct Question'
@@ -14,15 +14,15 @@ prompts:
       2. Some recommended places to eat, focusing on {{cuisine}} restaurants
 
 providers:
-  - id: vertex:gemini-2.5-pro
+  - id: vertex:gemini-3.1-pro-preview
     config:
+      expressMode: false
       generationConfig:
-        temperature: 0.7
         maxOutputTokens: 1024
-      toolConfig:
+      toolConfig: &geminiToolConfig
         functionCallingConfig:
           mode: 'AUTO'
-      tools:
+      tools: &geminiTools
         - functionDeclarations:
             - name: 'get_weather'
               description: 'Get weather information for a location'
@@ -47,44 +47,58 @@ providers:
                     enum: ['restaurant', 'hotel', 'attraction']
                 required: ['query']
 
-  - id: vertex:gemini-2.5-flash-preview-09-2025
+  - id: vertex:gemini-3.8-flash
     config:
+      expressMode: false
+      region: global
+      generationConfig:
+        maxOutputTokens: 2048
+        thinkingConfig:
+          thinkingLevel: MEDIUM
+      toolConfig: *geminiToolConfig
+      tools: *geminiTools
+
+  - id: vertex:gemini-3.7-flash
+    config:
+      expressMode: false
+      region: global
+      generationConfig:
+        maxOutputTokens: 2048
+        thinkingConfig:
+          thinkingLevel: MEDIUM
+      toolConfig: *geminiToolConfig
+      tools: *geminiTools
+
+  - id: vertex:gemini-3.6-flash
+    config:
+      expressMode: false
+      region: global
+      generationConfig:
+        maxOutputTokens: 2048
+        thinkingConfig:
+          thinkingLevel: HIGH
+      toolConfig: *geminiToolConfig
+      tools: *geminiTools
+
+  - id: vertex:gemini-3.5-flash-lite
+    config:
+      expressMode: false
+      region: global
+      generationConfig:
+        maxOutputTokens: 2048
+        thinkingConfig:
+          thinkingLevel: LOW
+      toolConfig: *geminiToolConfig
+      tools: *geminiTools
+
+  - id: vertex:gemini-3.5-flash
+    config:
+      expressMode: false
+      region: global # Gemini 3.5 Flash is served on Vertex AI's global endpoint
+      apiHost: aiplatform.googleapis.com
       generationConfig:
         temperature: 0.7
         maxOutputTokens: 2048
-      toolConfig:
-        functionCallingConfig:
-          mode: 'AUTO'
-      tools:
-        - functionDeclarations:
-            - name: 'get_weather'
-              description: 'Get weather information for a location'
-              parameters:
-                type: 'OBJECT'
-                properties:
-                  location:
-                    type: 'STRING'
-                    description: 'City name'
-                required: ['location']
-            - name: 'search_places'
-              description: 'Search for places of interest'
-              parameters:
-                type: 'OBJECT'
-                properties:
-                  query:
-                    type: 'STRING'
-                    description: 'Search query'
-                  type:
-                    type: 'STRING'
-                    description: 'Type of place'
-                    enum: ['restaurant', 'hotel', 'attraction']
-                required: ['query']
-
-  - id: vertex:gemini-2.5-flash-lite-preview-09-2025
-    config:
-      generationConfig:
-        temperature: 0
-        maxOutputTokens: 1024
       toolConfig:
         functionCallingConfig:
           mode: 'AUTO'

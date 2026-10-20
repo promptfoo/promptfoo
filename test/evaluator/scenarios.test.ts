@@ -1,3 +1,4 @@
+import { createTestOutput, createTokenOutput } from '../factories/literalFixtures';
 import './setup';
 
 import { randomUUID } from 'crypto';
@@ -66,6 +67,56 @@ describeEvaluator('evaluator scenarios and conversations', () => {
     expect(summary.stats.failures).toBe(0);
     expect(summary.results[0].response?.output).toBe('Hola mundo');
     expect(summary.results[1].response?.output).toBe('Bonjour le monde');
+  });
+
+  it('applies repeat from scenario config options', async () => {
+    const mockApiProvider: ApiProvider = {
+      id: vi.fn().mockReturnValue('test-provider'),
+      callApi: vi.fn().mockResolvedValue(createTokenOutput('Hello')),
+    };
+
+    const testSuite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [toPrompt('Test prompt')],
+      scenarios: [
+        {
+          config: [{ options: { repeat: 3 } }],
+          tests: [{}],
+        },
+      ],
+    };
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+
+    await evaluate(testSuite, evalRecord, { repeat: 1 });
+    const summary = await evalRecord.toEvaluateSummary();
+
+    expect(mockApiProvider.callApi).toHaveBeenCalledTimes(3);
+    expect(summary.results).toHaveLength(3);
+  });
+
+  it('lets scenario test options.repeat override scenario config options.repeat', async () => {
+    const mockApiProvider: ApiProvider = {
+      id: vi.fn().mockReturnValue('test-provider'),
+      callApi: vi.fn().mockResolvedValue(createTokenOutput('Hello')),
+    };
+
+    const testSuite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [toPrompt('Test prompt')],
+      scenarios: [
+        {
+          config: [{ options: { repeat: 5 } }],
+          tests: [{ options: { repeat: 2 } }],
+        },
+      ],
+    };
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+
+    await evaluate(testSuite, evalRecord, { repeat: 1 });
+    const summary = await evalRecord.toEvaluateSummary();
+
+    expect(mockApiProvider.callApi).toHaveBeenCalledTimes(2);
+    expect(summary.results).toHaveLength(2);
   });
 
   it('evaluate with scenarios and multiple vars', async () => {
@@ -220,9 +271,7 @@ describeEvaluator('evaluator scenarios and conversations', () => {
     // Scenarios should have isolated _conversation state by default
     const mockApiProvider = {
       id: () => 'test-provider',
-      callApi: vi.fn().mockImplementation((_prompt) => ({
-        output: 'Test output',
-      })),
+      callApi: vi.fn().mockImplementation((_prompt) => createTestOutput()),
     };
 
     const testSuite: TestSuite = {
@@ -290,9 +339,7 @@ describeEvaluator('evaluator scenarios and conversations', () => {
     // This test verifies that users can still explicitly share conversations across scenarios
     const mockApiProvider = {
       id: () => 'test-provider',
-      callApi: vi.fn().mockImplementation((_prompt) => ({
-        output: 'Test output',
-      })),
+      callApi: vi.fn().mockImplementation((_prompt) => createTestOutput()),
     };
 
     const testSuite: TestSuite = {

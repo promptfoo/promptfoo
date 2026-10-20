@@ -4,10 +4,20 @@ import { getRequestTimeoutMs } from '../shared';
 import { DEFAULT_AZURE_API_VERSION } from './defaults';
 import { AzureGenericProvider } from './generic';
 
-import type { ProviderEmbeddingResponse } from '../../types/index';
+import type {
+  CallApiContextParams,
+  CallApiOptionsParams,
+  ProviderEmbeddingResponse,
+} from '../../types/index';
 
 export class AzureEmbeddingProvider extends AzureGenericProvider {
-  async callEmbeddingApi(text: string): Promise<ProviderEmbeddingResponse> {
+  readonly supportsEmbeddingCancellation = true;
+
+  async callEmbeddingApi(
+    text: string,
+    _context?: CallApiContextParams,
+    options?: CallApiOptionsParams,
+  ): Promise<ProviderEmbeddingResponse> {
     await this.ensureInitialized();
     invariant(this.authHeaders, 'auth headers are not initialized');
     if (!this.getApiBaseUrl()) {
@@ -17,6 +27,7 @@ export class AzureEmbeddingProvider extends AzureGenericProvider {
     const body = {
       input: text,
       model: this.deploymentName,
+      ...(this.config.dimensions === undefined ? {} : { dimensions: this.config.dimensions }),
     };
     let data,
       cached = false;
@@ -33,10 +44,12 @@ export class AzureEmbeddingProvider extends AzureGenericProvider {
             ...this.config.headers,
           },
           body: JSON.stringify(body),
+          ...(options?.abortSignal && { signal: options.abortSignal }),
         },
         getRequestTimeoutMs(),
       )) as unknown as any);
     } catch (err) {
+      options?.abortSignal?.throwIfAborted();
       return {
         error: `API call error: ${String(err)}`,
         tokenUsage: {
@@ -53,14 +66,15 @@ export class AzureEmbeddingProvider extends AzureGenericProvider {
       if (!embedding) {
         throw new Error('No embedding returned');
       }
-      const ret = {
+      const ret: ProviderEmbeddingResponse = {
         embedding,
+        cached, // surface the cache hit so downstream skips rate-limit delays / metrics are accurate
         tokenUsage: cached
-          ? { cached: data.usage.total_tokens, total: data.usage.total_tokens, numRequests: 1 }
+          ? { cached: data?.usage?.total_tokens, total: data?.usage?.total_tokens, numRequests: 1 }
           : {
-              total: data.usage.total_tokens,
-              prompt: data.usage.prompt_tokens,
-              completion: data.usage.completion_tokens,
+              total: data?.usage?.total_tokens,
+              prompt: data?.usage?.prompt_tokens,
+              completion: data?.usage?.completion_tokens,
               numRequests: 1,
             },
       };
@@ -70,8 +84,8 @@ export class AzureEmbeddingProvider extends AzureGenericProvider {
         error: `API response error: ${String(err)}: ${JSON.stringify(data)}`,
         tokenUsage: cached
           ? {
-              cached: data.usage.total_tokens,
-              total: data.usage.total_tokens,
+              cached: data?.usage?.total_tokens,
+              total: data?.usage?.total_tokens,
               numRequests: 1,
             }
           : {

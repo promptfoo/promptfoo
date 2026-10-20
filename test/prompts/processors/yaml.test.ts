@@ -230,5 +230,56 @@ template: "{{ variable }}   "
       expect(mockMaybeLoadConfigFromExternalFile).toHaveBeenCalledWith(parsedYaml);
       expect(result[0].raw).toBe(JSON.stringify(parsedYaml));
     });
+
+    it('should preserve empty string values when parsing YAML', () => {
+      const filePath = 'empty-value.yaml';
+      const fileContent = dedent`
+        prompts:
+          - key: ""
+      `;
+
+      mockReadFileSync.mockReturnValue(fileContent);
+
+      const result = processYamlFile(filePath, {});
+
+      expect(result).toHaveLength(1);
+      const parsed = JSON.parse(result[0].raw as string);
+      expect(parsed).toEqual({ prompts: [{ key: '' }] });
+    });
+
+    it('should preserve null values when parsing YAML', () => {
+      const filePath = 'null-value.yaml';
+      const fileContent = dedent`
+        prompts:
+          - key: null
+        options:
+          temperature: ~
+      `;
+
+      mockReadFileSync.mockReturnValue(fileContent);
+
+      const result = processYamlFile(filePath, {});
+
+      expect(result).toHaveLength(1);
+      const parsed = JSON.parse(result[0].raw as string);
+      expect(parsed).toEqual({
+        prompts: [{ key: null }],
+        options: { temperature: null },
+      });
+    });
+
+    it('should handle empty YAML document', () => {
+      const filePath = 'empty.yaml';
+      const fileContent = '';
+
+      mockReadFileSync.mockReturnValue(fileContent);
+
+      const result = processYamlFile(filePath, {});
+
+      expect(result).toHaveLength(1);
+      // Empty YAML parses to undefined; maybeLoadConfigFromExternalFile passes it
+      // through; JSON.stringify(undefined) is the literal string "undefined".
+      expect(result[0].raw).toBe(JSON.stringify(undefined));
+    });
   });
 });

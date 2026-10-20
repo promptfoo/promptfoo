@@ -52,6 +52,8 @@ Major updates require careful evaluation:
 
 ## Workspaces
 
+The root `mermaid` override selects version 12. The site explicitly uses `layout: dagre` and `look: classic` to preserve its existing diagrams' layout and appearance. Mermaid's browser floor is newer than some site targets, so validate new diagram types against the site's Browserslist targets before adopting them.
+
 The project uses npm workspaces. Updates must be checked in all three locations:
 
 - Root (`/`) - Core library dependencies
@@ -84,6 +86,6 @@ npm outdated
 # See why a package is installed
 npm explain <package-name>
 
-# Check for unused dependencies
-npm run depcheck
+# Check for missing and unused dependencies
+npm run knip -- --dependencies
 ```

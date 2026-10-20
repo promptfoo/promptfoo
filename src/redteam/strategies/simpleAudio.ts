@@ -8,9 +8,12 @@ import { isMediaStorageEnabled, storeMedia } from '../../storage';
 import invariant from '../../util/invariant';
 import {
   getRemoteGenerationExplicitlyDisabledError,
+  getRemoteGenerationHeaders,
   getRemoteGenerationUrl,
   neverGenerateRemote,
 } from '../remoteGeneration';
+import { remoteGenerationContextPayload } from '../remoteGenerationContext';
+import { appendPluginMetricSuffix } from './assertions';
 
 import type { TestCase } from '../../types/index';
 
@@ -31,7 +34,7 @@ export interface TextToAudioResult {
 export async function textToAudio(
   text: string,
   language: string = 'en',
-  options?: { evalId?: string; storeToStorage?: boolean },
+  options?: { evalId?: string; storeToStorage?: boolean; targetId?: string },
 ): Promise<TextToAudioResult> {
   // Check if remote generation is disabled
   if (neverGenerateRemote()) {
@@ -47,6 +50,7 @@ export async function textToAudio(
       language,
       version: VERSION,
       email: getUserEmail(),
+      ...remoteGenerationContextPayload(options?.targetId),
     };
 
     interface AudioGenerationResponse {
@@ -58,7 +62,7 @@ export async function textToAudio(
       getRemoteGenerationUrl(),
       {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getRemoteGenerationHeaders(),
         body: JSON.stringify(payload),
       },
       getRequestTimeoutMs(),
@@ -144,16 +148,14 @@ export async function addAudioToBase64(
       'en';
 
     // Convert text to audio using the remote API
-    const audioResult = await textToAudio(originalText, language, { evalId });
+    const audioResult = await textToAudio(originalText, language, {
+      evalId,
+      targetId: typeof config.targetId === 'string' ? config.targetId : undefined,
+    });
 
     audioTestCases.push({
       ...testCase,
-      assert: testCase.assert?.map((assertion) => ({
-        ...assertion,
-        metric: assertion.type?.startsWith('promptfoo:redteam:')
-          ? `${assertion.type?.split(':').pop() || assertion.metric}/Audio-Encoded`
-          : assertion.metric,
-      })),
+      assert: appendPluginMetricSuffix(testCase, 'Audio-Encoded'),
       vars: {
         ...testCase.vars,
         // Use base64 for the prompt (provider expects this)

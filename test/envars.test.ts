@@ -1,17 +1,27 @@
+import { execFileSync } from 'node:child_process';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { pathToFileURL } from 'node:url';
+
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import cliState from '../src/cliState';
 import {
   getEnvBool,
   getEnvFloat,
   getEnvInt,
+  getEnvOverrides,
   getEnvString,
   getMaxEvalTimeMs,
+  getProcessEnv,
+  getProviderEnvString,
   isCI,
 } from '../src/envars';
 import { setEnvOverridesProvider } from '../src/envOverrides';
 import { mockProcessEnv } from './util/utils';
 
 import type { EnvVarKey } from '../src/envars';
+import type { EnvOverrides } from '../src/types/env';
 
 describe('envars', () => {
   const originalEnv = { ...process.env };
@@ -44,6 +54,18 @@ describe('envars', () => {
     // at a closure owned by this test file.
     setEnvOverridesProvider(undefined);
   });
+
+  it.each([undefined, '', 0, false, null])(
+    'reads only own provider override values: %s',
+    (value) => {
+      mockProcessEnv({ CUSTOM_KEY: 'ambient' });
+      const key = 'CUSTOM_KEY' as EnvVarKey;
+      const env = { CUSTOM_KEY: value } as unknown as EnvOverrides;
+      expect(getProviderEnvString(env, key)).toBe(value === undefined ? undefined : String(value));
+      expect(getProviderEnvString(Object.create({ CUSTOM_KEY: value }), key)).toBeUndefined();
+      expect(getProviderEnvString(undefined, key)).toBeUndefined();
+    },
+  );
 
   describe('getEnvar', () => {
     it('should return the value of an existing environment variable', () => {
@@ -153,14 +175,154 @@ describe('envars', () => {
     it('should auto-register the provider when cliState is imported', async () => {
       vi.resetModules();
 
-      const [dynEnvOverrides, dynCliState] = await Promise.all([
-        import('../src/envOverrides'),
-        import('../src/cliState'),
-      ]);
+      // Resolve pending mock cleanup before importing cliState again.
+      const dynEnvars = await import('../src/envars');
+      const dynCliState = await import('../src/cliState');
 
       dynCliState.default.config = { env: { OPENAI_API_KEY: 'wired-key' } };
 
-      expect(dynEnvOverrides.getEnvOverrides()).toEqual({ OPENAI_API_KEY: 'wired-key' });
+      expect(dynEnvars.getEnvOverrides()).toEqual({ OPENAI_API_KEY: 'wired-key' });
+    });
+  });
+
+  describe('invocation environment views', () => {
+    it('keeps child-process and suite environments separate without changing process.env', () => {
+      mockProcessEnv({ CONTRACT_PARENT: 'parent', CONTRACT_INHERITED: 'parent' });
+      const suite = { CONTRACT_PARENT: 'suite', CONTRACT_SUITE_ONLY: 'suite' };
+      const file = {
+        CONTRACT_PARENT: 'file',
+        CONTRACT_FILE_ONLY: 'file',
+        CONTRACT_INHERITED: undefined,
+      };
+      setEnvOverridesProvider((layer) => (layer === 'suite' ? suite : file));
+
+      expect(getEnvOverrides()).toBe(suite);
+      expect(getEnvOverrides('file')).toBe(file);
+      const inherited = getProcessEnv();
+      expect(inherited).toMatchObject({
+        CONTRACT_PARENT: 'file',
+        CONTRACT_FILE_ONLY: 'file',
+        CONTRACT_INHERITED: 'parent',
+      });
+      expect(inherited).not.toHaveProperty('CONTRACT_SUITE_ONLY');
+      expect(process.env.CONTRACT_PARENT).toBe('parent');
+      expect(process.env).not.toHaveProperty('CONTRACT_FILE_ONLY');
+    });
+
+    it('keeps the parent environment when no invocation provider can supply overrides', () => {
+      setEnvOverridesProvider(undefined);
+      expect(getEnvOverrides()).toBeUndefined();
+      expect(getProcessEnv()).toBe(process.env);
+
+      setEnvOverridesProvider(() => {
+        throw new Error('unavailable');
+      });
+      expect(getEnvOverrides('file')).toBeUndefined();
+      expect(getProcessEnv()).toBe(process.env);
+    });
+  });
+
+  describe('dotenv loading', () => {
+    // Capture Windows TEMP/TMP before the test clears process.env.
+    const tmpRoot = os.tmpdir();
+    const envarsUrl = pathToFileURL(path.resolve(__dirname, '../src/envars.ts')).href;
+    const tsxUrl = pathToFileURL(require.resolve('tsx')).href;
+
+    async function withDotenvFixture(check: (file: string) => Promise<void>): Promise<void> {
+      const restoreEnv = mockProcessEnv({
+        DOTENV_PATH: undefined,
+        DOTENV_CONFIG_PATH: undefined,
+        PROMPTFOO_DOTENV_PROBE: undefined,
+      });
+      const originalCwd = process.cwd();
+      const dir = fs.mkdtempSync(path.join(tmpRoot, 'promptfoo-dotenv-'));
+      fs.writeFileSync(path.join(dir, '.env'), 'PROMPTFOO_DOTENV_PROBE=fixture\n');
+
+      try {
+        process.chdir(dir);
+        vi.resetModules();
+        await check(path.join(dir, '.env'));
+      } finally {
+        process.chdir(originalCwd);
+        fs.rmSync(dir, { recursive: true, force: true });
+        restoreEnv();
+      }
+    }
+
+    it.each([undefined, 'DOTENV_PATH', 'DOTENV_CONFIG_PATH'])(
+      'does not load implicit files during imports (%s)',
+      async (pathVariable) => {
+        await withDotenvFixture(async (file) => {
+          if (pathVariable) {
+            mockProcessEnv({ [pathVariable]: file });
+          }
+          await import('../src/envars');
+          expect(process.env.PROMPTFOO_DOTENV_PROBE).toBeUndefined();
+        });
+      },
+    );
+
+    it('does not load a .env file after a test clears process.env', async () => {
+      const restoreEnv = mockProcessEnv({}, { clear: true });
+
+      try {
+        await withDotenvFixture(async () => {
+          await import('../src/envars');
+          expect(process.env.PROMPTFOO_DOTENV_PROBE).toBeUndefined();
+        });
+      } finally {
+        restoreEnv();
+      }
+    });
+
+    it.each([undefined, 'DOTENV_PATH', 'DOTENV_CONFIG_PATH'])(
+      'does not load implicit files during command setup (%s)',
+      async (pathVariable) => {
+        await withDotenvFixture(async (file) => {
+          if (pathVariable) {
+            mockProcessEnv({ [pathVariable]: file });
+          }
+          const { setupEnv } = await import('../src/util/env');
+          setupEnv(undefined);
+          expect(process.env.PROMPTFOO_DOTENV_PROBE).toBeUndefined();
+        });
+      },
+    );
+
+    it('keeps default loading for downstream Vitest consumers', async () => {
+      await withDotenvFixture(async () => {
+        const output = execFileSync(
+          process.execPath,
+          [
+            '--import',
+            tsxUrl,
+            '--input-type=module',
+            '--eval',
+            `globalThis.__vitest_worker__ = {};
+             await import(${JSON.stringify(envarsUrl)});
+             process.stdout.write(process.env.PROMPTFOO_DOTENV_PROBE ?? 'missing');`,
+          ],
+          {
+            env: {
+              VITEST: 'true',
+              SystemRoot: process.env.SystemRoot,
+              TMPDIR: tmpRoot,
+              TMP: tmpRoot,
+              TEMP: tmpRoot,
+            },
+            encoding: 'utf8',
+          },
+        );
+        expect(output).toBe('fixture');
+      });
+    });
+
+    it('still loads explicitly selected command fixtures', async () => {
+      await withDotenvFixture(async (file) => {
+        const { setupEnv } = await import('../src/util/env');
+        setupEnv(file);
+        expect(process.env.PROMPTFOO_DOTENV_PROBE).toBe('fixture');
+      });
     });
   });
 
@@ -386,6 +548,7 @@ describe('envars', () => {
       'TRAVIS',
       'CIRCLECI',
       'JENKINS',
+      'JENKINS_URL',
       'GITLAB_CI',
       'APPVEYOR',
       'CODEBUILD_BUILD_ID',
@@ -420,6 +583,16 @@ describe('envars', () => {
     it('should return true if any CI environment variable is set to true', () => {
       mockProcessEnv({ GITHUB_ACTIONS: 'true' });
       mockProcessEnv({ TRAVIS: 'false' });
+      expect(isCI()).toBe(true);
+    });
+
+    it.each([
+      ['CODEBUILD_BUILD_ID', 'fixture-project:12345678-1234-1234-1234-123456789abc'],
+      ['BITBUCKET_COMMIT', '0123456789abcdef0123456789abcdef01234567'],
+      ['TEAMCITY_VERSION', '2026.1.2'],
+      ['JENKINS_URL', 'https://jenkins.example.invalid/'],
+    ])('recognizes the documented %s identifier', (key, value) => {
+      mockProcessEnv({ [key]: value });
       expect(isCI()).toBe(true);
     });
 

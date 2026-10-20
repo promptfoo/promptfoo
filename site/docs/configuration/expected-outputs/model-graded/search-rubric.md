@@ -13,6 +13,10 @@ The `search-rubric` assertion type is like `llm-rubric` but with web search capa
 3. If the rubric requires current information, the provider searches the web
 4. Returns pass/fail with a score from 0.0 to 1.0
 
+The grader must return a JSON object with a boolean `pass` field. JSON inside Markdown or surrounding text is accepted. Provider errors, empty responses, and responses without a valid verdict fail with a score of `0`; `not-search-rubric` preserves these grader failures instead of inverting them.
+
+The rubric `value` must render to a string. Numbers, booleans, arrays, and objects are rejected before calling the grading provider.
+
 ## Basic Usage
 
 ```yaml
@@ -59,21 +63,22 @@ tests:
 
 ## Grading Providers
 
-The search-rubric assertion requires a grading provider with web search capabilities:
+The search-rubric assertion requires a grading provider with web search capabilities. Configure it in `defaultTest.options.provider`:
 
 ### 1. Anthropic Claude
 
-Anthropic Claude models support web search through the `web_search_20250305` tool:
+Anthropic Claude models support web search through the `web_search_20260209` tool:
 
 ```yaml
-grading:
-  provider: anthropic:messages:claude-opus-4-6
-  providerOptions:
-    config:
-      tools:
-        - type: web_search_20250305
-          name: web_search
-          max_uses: 5
+defaultTest:
+  options:
+    provider:
+      id: anthropic:messages:claude-opus-5
+      config:
+        tools:
+          - type: web_search_20260209
+            name: web_search
+            max_uses: 5
 ```
 
 ### 2. OpenAI with Web Search
@@ -81,12 +86,13 @@ grading:
 OpenAI's responses API supports web search through the `web_search_preview` tool:
 
 ```yaml
-grading:
-  provider: openai:responses:gpt-5.1
-  providerOptions:
-    config:
-      tools:
-        - type: web_search_preview
+defaultTest:
+  options:
+    provider:
+      id: openai:responses:gpt-5.1
+      config:
+        tools:
+          - type: web_search_preview
 ```
 
 ### 3. Perplexity
@@ -94,8 +100,9 @@ grading:
 Perplexity models have built-in web search:
 
 ```yaml
-grading:
-  provider: perplexity:sonar
+defaultTest:
+  options:
+    provider: perplexity:sonar
 ```
 
 ### 4. Google Gemini
@@ -103,12 +110,13 @@ grading:
 Google's Gemini models support web search through the `googleSearch` tool:
 
 ```yaml
-grading:
-  provider: google:gemini-3.1-pro-preview
-  providerOptions:
-    config:
-      tools:
-        - googleSearch: {}
+defaultTest:
+  options:
+    provider:
+      id: google:gemini-3.1-pro-preview
+      config:
+        tools:
+          - googleSearch: {}
 ```
 
 ### 5. xAI Grok
@@ -116,12 +124,13 @@ grading:
 xAI's Grok models can use server-side web search tools through the Responses API:
 
 ```yaml
-grading:
-  provider: xai:responses:grok-4.3
-  providerOptions:
-    config:
-      tools:
-        - type: web_search
+defaultTest:
+  options:
+    provider:
+      id: xai:responses:grok-4.3
+      config:
+        tools:
+          - type: web_search
 ```
 
 ## Use Cases
@@ -199,6 +208,20 @@ assert:
     value: 'Contains accurate information about current US inflation rate'
     threshold: 0.9 # Requires 90% accuracy for economic data
 ```
+
+## Negation with `not-search-rubric`
+
+Prepend `not-` to invert the assertion — useful for "must not" criteria:
+
+```yaml
+assert:
+  - type: not-search-rubric
+    value: States a stock price that is more than 5% off the current market price
+```
+
+`not-search-rubric` passes when the rubric criterion does **not** match. The score is inverted alongside `pass` — a negated result scores `1 - score`, clamped to `[0, 1]` — so negated assertions aggregate correctly under `threshold` and weighted scoring.
+
+Transport or parse failures from the grader are reported as failures in both directions — a grader error is not treated as evidence that the criterion was or was not met, so inversion never silently turns a failed search call into a pass.
 
 ## Best Practices
 

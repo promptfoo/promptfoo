@@ -1,0 +1,1414 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { fetchWithCache } from '../../../src/cache';
+import logger from '../../../src/logger';
+import {
+  BedrockGptOssResponsesProvider,
+  BedrockGrokResponsesProvider,
+  BedrockOpenAiResponsesProvider,
+  createBedrockOpenAiResponsesProvider,
+  DEFAULT_BEDROCK_MANTLE_RESPONSES_REGION,
+  getBedrockMantleBaseUrl,
+  getBedrockMantleResponsesBaseUrl,
+} from '../../../src/providers/bedrock/openaiResponses';
+import {
+  isBedrockGptOssResponsesModel,
+  isBedrockGrokModel,
+  isBedrockMantleResponsesModel,
+  isBedrockOpenAiResponsesModel,
+} from '../../../src/providers/bedrock/routing';
+import { calculateOpenAIUsageCost } from '../../../src/providers/openai/billing';
+import { OpenAiResponsesProvider } from '../../../src/providers/openai/responses';
+import { mockProcessEnv } from '../../util/utils';
+
+vi.mock('../../../src/cache', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../../src/cache')>()),
+  fetchWithCache: vi.fn(),
+}));
+
+const GPT_5_6_MODELS = [
+  'openai.gpt-5.6-sol',
+  'openai.gpt-5.6-terra',
+  'openai.gpt-5.6-luna',
+] as const;
+
+describe('bedrock openaiResponses helper', () => {
+  let restoreEnv: (() => void) | undefined;
+  let restoreRegionEnv: (() => void) | undefined;
+
+  beforeEach(() => {
+    // Keep default-region assertions deterministic when this file runs under shuffled test
+    // order or a developer shell that has AWS region variables configured.
+    restoreRegionEnv = mockProcessEnv({
+      AWS_BEDROCK_REGION: undefined,
+      AWS_REGION: undefined,
+      AWS_DEFAULT_REGION: undefined,
+    });
+    vi.mocked(fetchWithCache)
+      .mockReset()
+      .mockResolvedValue({
+        data: {
+          id: 'resp_123',
+          model: 'xai.grok-4.3',
+          output: [
+            {
+              type: 'message',
+              role: 'assistant',
+              content: [{ type: 'output_text', text: 'hello' }],
+            },
+          ],
+          usage: {
+            input_tokens: 10,
+            output_tokens: 5,
+            total_tokens: 15,
+            input_tokens_details: { cache_write_tokens: 0 },
+          },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+  });
+
+  afterEach(() => {
+    restoreEnv?.();
+    restoreEnv = undefined;
+    restoreRegionEnv?.();
+    restoreRegionEnv = undefined;
+    vi.resetAllMocks();
+  });
+
+  describe('isBedrockOpenAiResponsesModel', () => {
+    it('treats frontier gpt-5.x ids as Responses models', () => {
+      for (const modelId of GPT_5_6_MODELS) {
+        expect(isBedrockOpenAiResponsesModel(modelId)).toBe(true);
+      }
+      expect(isBedrockOpenAiResponsesModel('openai.gpt-5.5')).toBe(true);
+      expect(isBedrockOpenAiResponsesModel('openai.gpt-5.4')).toBe(true);
+    });
+
+    it('excludes open-weight gpt-oss ids (served via InvokeModel)', () => {
+      expect(isBedrockOpenAiResponsesModel('openai.gpt-oss-120b-1:0')).toBe(false);
+      expect(isBedrockOpenAiResponsesModel('openai.gpt-oss-safeguard-20b')).toBe(false);
+    });
+
+    it('excludes non-openai ids', () => {
+      expect(isBedrockOpenAiResponsesModel('anthropic.claude-opus-4-8')).toBe(false);
+      expect(isBedrockOpenAiResponsesModel('qwen.qwen3-32b-v1:0')).toBe(false);
+    });
+
+    it('rejects region/geo-prefixed frontier ids (AWS offers only the bare ids)', () => {
+      // AWS's GPT-5.5 / GPT-5.4 model cards mark Geo and Global inference IDs as "Not
+      // supported", so a prefixed id is not a real Bedrock model — it must not be routed to the
+      // mantle endpoint; it falls through to a clear error instead.
+      expect(isBedrockOpenAiResponsesModel('us.openai.gpt-5.5')).toBe(false);
+      expect(isBedrockOpenAiResponsesModel('eu.openai.gpt-5.4')).toBe(false);
+      expect(isBedrockOpenAiResponsesModel('global.openai.gpt-5.5')).toBe(false);
+      expect(isBedrockOpenAiResponsesModel('us.openai.gpt-5.6-sol')).toBe(false);
+      // ...and region-prefixed gpt-oss is likewise not a Responses model.
+      expect(isBedrockOpenAiResponsesModel('us.openai.gpt-oss-120b')).toBe(false);
+    });
+  });
+
+  describe('getBedrockMantleBaseUrl', () => {
+    it('builds the regional mantle endpoint', () => {
+      expect(getBedrockMantleBaseUrl('us-east-2')).toBe(
+        'https://bedrock-mantle.us-east-2.api.aws/openai/v1',
+      );
+      expect(getBedrockMantleBaseUrl('us-west-2')).toBe(
+        'https://bedrock-mantle.us-west-2.api.aws/openai/v1',
+      );
+    });
+
+    it('accepts non-standard but well-formed AWS region shapes', () => {
+      expect(getBedrockMantleBaseUrl('us-gov-west-1')).toBe(
+        'https://bedrock-mantle.us-gov-west-1.api.aws/openai/v1',
+      );
+      expect(getBedrockMantleBaseUrl('ap-southeast-4')).toBe(
+        'https://bedrock-mantle.ap-southeast-4.api.aws/openai/v1',
+      );
+    });
+
+    it('rejects a malformed region instead of building a bogus host (defense-in-depth)', () => {
+      // A value like `evil.com/x` would otherwise yield host `bedrock-mantle.evil.com`.
+      expect(() => getBedrockMantleBaseUrl('evil.com/x')).toThrow(/Invalid AWS region/);
+      expect(() => getBedrockMantleBaseUrl('us_east_2')).toThrow(/Invalid AWS region/);
+      expect(() => getBedrockMantleBaseUrl('')).toThrow(/Invalid AWS region/);
+    });
+  });
+
+  describe.each(['provider', 'prompt'] as const)('%s model overrides', (scope) => {
+    it.each([
+      ['openai.gpt-5.6-sol', 'xai.grok-4.3'],
+      ['openai.gpt-5.6-sol', 'openai.gpt-oss-20b'],
+      ['xai.grok-4.3', 'openai.gpt-5.6-sol'],
+      ['xai.grok-4.3', 'openai.gpt-oss-20b'],
+      ['openai.gpt-oss-120b', 'openai.gpt-5.6-sol'],
+      ['openai.gpt-oss-120b', 'xai.grok-4.3'],
+    ])('rejects switching %s to %s', async (model, overrideModel) => {
+      const override = { passthrough: { model: overrideModel } };
+      const provider = createBedrockOpenAiResponsesProvider(model, {
+        config: { reasoning_effort: 'high', ...(scope === 'provider' ? override : {}) },
+      });
+
+      await expect(
+        provider.getOpenAiBody(
+          'hello',
+          scope === 'prompt'
+            ? { prompt: { raw: 'hello', label: 'fixture', config: override }, vars: {} }
+            : undefined,
+        ),
+      ).rejects.toThrow(
+        `Bedrock model ${overrideModel} cannot use the ${model} Responses provider. Configure a separate provider using bedrock:responses:${overrideModel}.`,
+      );
+      expect(fetchWithCache).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('GPT OSS mantle Responses', () => {
+    it('classifies only the short mantle GPT OSS ids', () => {
+      expect(isBedrockGptOssResponsesModel('openai.gpt-oss-120b')).toBe(true);
+      expect(isBedrockGptOssResponsesModel('openai.gpt-oss-20b')).toBe(true);
+      expect(isBedrockGptOssResponsesModel('openai.gpt-oss-120b-1:0')).toBe(false);
+      expect(isBedrockGptOssResponsesModel('openai.gpt-oss-safeguard-120b')).toBe(false);
+    });
+
+    it('builds the standard /v1 mantle base URL', () => {
+      expect(getBedrockMantleResponsesBaseUrl('us-east-1')).toBe(
+        'https://bedrock-mantle.us-east-1.api.aws/v1',
+      );
+    });
+
+    it('defaults GPT OSS Responses to the standard mantle region', () => {
+      restoreEnv = mockProcessEnv({ AWS_BEARER_TOKEN_BEDROCK: 'env-bedrock-key' });
+      const provider = createBedrockOpenAiResponsesProvider('openai.gpt-oss-120b', {});
+
+      expect(DEFAULT_BEDROCK_MANTLE_RESPONSES_REGION).toBe('us-east-1');
+      expect((provider.config as any).apiBaseUrl).toBe(
+        'https://bedrock-mantle.us-east-1.api.aws/v1',
+      );
+    });
+
+    it.each(['provider', 'prompt'] as const)(
+      'preserves GPT OSS capabilities for a %s model override',
+      async (scope) => {
+        const override = { passthrough: { model: 'openai.gpt-oss-20b' } };
+        const provider = new BedrockGptOssResponsesProvider('openai.gpt-oss-120b', {
+          config: {
+            reasoning_effort: 'high',
+            temperature: 0.4,
+            top_p: 0.8,
+            ...(scope === 'provider' ? override : {}),
+          },
+        });
+        const { body } = await provider.getOpenAiBody(
+          'hello',
+          scope === 'prompt'
+            ? { prompt: { raw: 'hello', label: 'fixture', config: override }, vars: {} }
+            : undefined,
+        );
+
+        expect(body.model).toBe('openai.gpt-oss-20b');
+        expect(body.reasoning).toEqual({ effort: 'high' });
+        expect(body.temperature).toBe(0.4);
+        expect(body.top_p).toBe(0.8);
+        expect(body).not.toHaveProperty('max_output_tokens');
+      },
+    );
+
+    it('uses the standard mantle endpoint and preserves GPT OSS reasoning controls', async () => {
+      restoreEnv = mockProcessEnv({ AWS_BEARER_TOKEN_BEDROCK: 'env-bedrock-key' });
+      const provider = createBedrockOpenAiResponsesProvider('openai.gpt-oss-120b', {
+        config: {
+          region: 'us-east-1',
+          reasoning_effort: 'high',
+          temperature: 0.3,
+          top_p: 0.8,
+        } as any,
+      });
+
+      expect(provider).toBeInstanceOf(BedrockGptOssResponsesProvider);
+      expect((provider.config as any).apiBaseUrl).toBe(
+        'https://bedrock-mantle.us-east-1.api.aws/v1',
+      );
+      expect((provider as any).getCapabilityModelName()).toBe('gpt-oss-120b');
+      expect((provider as any).isReasoningModel()).toBe(true);
+
+      const { body } = await (provider as any).getOpenAiBody('What is 17*23?');
+      expect(body.model).toBe('openai.gpt-oss-120b');
+      expect(body.reasoning).toEqual({ effort: 'high' });
+      expect(body.temperature).toBe(0.3);
+      expect(body.top_p).toBe(0.8);
+    });
+
+    it('posts GPT OSS calls to /v1/responses with the Bedrock API key', async () => {
+      restoreEnv = mockProcessEnv({ AWS_BEARER_TOKEN_BEDROCK: 'env-bedrock-key' });
+      const provider = createBedrockOpenAiResponsesProvider('openai.gpt-oss-120b', {
+        config: { region: 'us-east-1' },
+      });
+
+      await provider.callApi('hello');
+
+      expect(fetchWithCache).toHaveBeenCalledWith(
+        'https://bedrock-mantle.us-east-1.api.aws/v1/responses',
+        expect.objectContaining({
+          getAuthHeaders: expect.any(Function),
+        }),
+        expect.any(Number),
+        'json',
+        true,
+        undefined,
+      );
+    });
+  });
+
+  describe('createBedrockOpenAiResponsesProvider', () => {
+    it('allows AWS credential-chain auth when no Bedrock API key is configured', () => {
+      restoreEnv = mockProcessEnv({ AWS_BEARER_TOKEN_BEDROCK: undefined });
+      expect(() => createBedrockOpenAiResponsesProvider('openai.gpt-5.5', {})).not.toThrow();
+    });
+
+    it('does not preserve an unresolved {{env.*}} apiKey template as a bearer token', () => {
+      restoreEnv = mockProcessEnv({ AWS_BEARER_TOKEN_BEDROCK: undefined });
+      const provider = createBedrockOpenAiResponsesProvider('openai.gpt-5.5', {
+        config: { apiKey: '{{env.AWS_BEARER_TOKEN_BEDROCK}}' },
+      });
+      expect((provider.config as any).apiKey).toBe('{{env.AWS_BEARER_TOKEN_BEDROCK}}');
+    });
+
+    it('falls back to the env var when apiKey is an unresolved template but the env is set', () => {
+      restoreEnv = mockProcessEnv({ AWS_BEARER_TOKEN_BEDROCK: 'real-key' });
+      const provider = createBedrockOpenAiResponsesProvider('openai.gpt-5.5', {
+        config: { apiKey: '{{env.AWS_BEARER_TOKEN_BEDROCK}}' },
+      });
+      expect(provider.getApiKey()).toBe('real-key');
+    });
+
+    it('targets the mantle endpoint for the configured region with config.apiKey', () => {
+      restoreEnv = mockProcessEnv({ AWS_BEARER_TOKEN_BEDROCK: undefined });
+      const provider = createBedrockOpenAiResponsesProvider('openai.gpt-5.5', {
+        config: { region: 'us-west-2', apiKey: 'bedrock-key' },
+      });
+      expect(provider).toBeInstanceOf(OpenAiResponsesProvider);
+      expect(provider['getGenAISystem']()).toBe('bedrock');
+      expect((provider.config as any).apiBaseUrl).toBe(
+        'https://bedrock-mantle.us-west-2.api.aws/openai/v1',
+      );
+      expect((provider.config as any).apiKey).toBe('bedrock-key');
+    });
+
+    it('falls back to AWS_BEARER_TOKEN_BEDROCK and the default region', () => {
+      restoreEnv = mockProcessEnv({
+        AWS_BEARER_TOKEN_BEDROCK: 'env-bedrock-key',
+        AWS_BEDROCK_REGION: undefined,
+        AWS_REGION: undefined,
+        AWS_DEFAULT_REGION: undefined,
+      });
+      const provider = createBedrockOpenAiResponsesProvider('openai.gpt-5.5', {});
+      expect((provider.config as any).apiBaseUrl).toBe(
+        'https://bedrock-mantle.us-east-2.api.aws/openai/v1',
+      );
+      expect(provider.getApiKey()).toBe('env-bedrock-key');
+    });
+
+    it.each(GPT_5_6_MODELS)('uses the shared GA default region for %s', (modelId) => {
+      restoreEnv = mockProcessEnv({
+        AWS_BEARER_TOKEN_BEDROCK: 'env-bedrock-key',
+        AWS_BEDROCK_REGION: undefined,
+        AWS_REGION: undefined,
+        AWS_DEFAULT_REGION: undefined,
+      });
+
+      const provider = createBedrockOpenAiResponsesProvider(modelId, {});
+
+      expect((provider.config as any).apiBaseUrl).toBe(
+        'https://bedrock-mantle.us-east-2.api.aws/openai/v1',
+      );
+    });
+
+    it('defaults GPT-6 Astra to us-west-2 in the factory and direct constructor', async () => {
+      const provider = createBedrockOpenAiResponsesProvider('openai.gpt-6-astra', {
+        config: { apiKey: 'bedrock-key' },
+      });
+      const direct = new BedrockOpenAiResponsesProvider('openai.gpt-6-astra', {
+        config: { apiKey: 'bedrock-key' },
+      });
+
+      expect(provider.getApiUrl()).toBe('https://bedrock-mantle.us-west-2.api.aws/openai/v1');
+      expect(direct.getApiUrl()).toBe('https://bedrock-mantle.us-west-2.api.aws/openai/v1');
+
+      await provider.callApi('hello');
+      expect(fetchWithCache).toHaveBeenCalledWith(
+        'https://bedrock-mantle.us-west-2.api.aws/openai/v1/responses',
+        expect.objectContaining({ body: expect.stringContaining('"model":"openai.gpt-6-astra"') }),
+        expect.any(Number),
+        'json',
+        true,
+        undefined,
+      );
+    });
+
+    it.each([
+      ['AWS_BEDROCK_REGION', 'eu-west-1'],
+      ['AWS_REGION', 'us-east-1'],
+      ['AWS_DEFAULT_REGION', 'ap-southeast-2'],
+    ])('uses %s for GPT-6 Astra when configured', async (envVar, region) => {
+      restoreEnv = mockProcessEnv({ [envVar]: region });
+      const provider = createBedrockOpenAiResponsesProvider('openai.gpt-6-astra', {
+        config: { apiKey: 'bedrock-key' },
+      });
+      await provider.callApi('hello');
+      expect(fetchWithCache).toHaveBeenCalledWith(
+        `https://bedrock-mantle.${region}.api.aws/openai/v1/responses`,
+        expect.anything(),
+        expect.any(Number),
+        'json',
+        true,
+        undefined,
+      );
+    });
+
+    it.each([
+      ['openai.gpt-6-astra', 'us-east-1'],
+      ['openai.gpt-6-sol', 'us-west-2'],
+      ['openai.gpt-6-luna', 'us-east-2'],
+      ['openai.gpt-5.6-sol', 'us-gov-west-1'],
+      ['openai.gpt-5.6-terra', 'eu-west-1'],
+      ['openai.gpt-5.6-luna', 'ap-southeast-2'],
+    ])('uses an explicitly configured region for %s / %s', async (modelId, region) => {
+      const provider = createBedrockOpenAiResponsesProvider(modelId, {
+        config: { apiKey: 'bedrock-key', region },
+      });
+
+      await provider.callApi('hello');
+      expect(fetchWithCache).toHaveBeenCalledWith(
+        `https://bedrock-mantle.${region}.api.aws/openai/v1/responses`,
+        expect.anything(),
+        expect.any(Number),
+        'json',
+        true,
+        undefined,
+      );
+    });
+
+    describe('Mantle region hints', () => {
+      let errorSpy: ReturnType<typeof vi.spyOn>;
+
+      const mockMantleResponse = (model: string, status = 404) => {
+        const data = {
+          error: {
+            code: status === 404 ? 'not_found_error' : 'invalid_request_error',
+            message: `The model '${model}' does not exist`,
+            param: null,
+            type: 'invalid_request_error',
+          },
+        };
+        vi.mocked(fetchWithCache).mockResolvedValue({
+          data,
+          cached: false,
+          status,
+          statusText: status === 404 ? 'Not Found' : 'Bad Request',
+        });
+        return data;
+      };
+
+      beforeEach(() => {
+        errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => logger);
+      });
+
+      afterEach(() => {
+        errorSpy.mockRestore();
+      });
+
+      it.each([
+        ['openai.gpt-6-astra', 'us-east-1', 'us-west-2'],
+        ['openai.gpt-6-sol', 'us-east-2', 'us-east-1'],
+        ['openai.gpt-5.6-sol', 'us-west-2', 'us-east-1, us-east-2'],
+        ['openai.gpt-5.5', 'us-west-2', 'us-east-1, us-east-2'],
+        [
+          'openai.gpt-5.6-luna',
+          'eu-west-1',
+          'us-east-1, us-east-2, us-west-2, us-gov-west-1, us-gov-east-1',
+        ],
+      ])('explains a Mantle 404 for %s in an unlisted region %s', async (model, region, listed) => {
+        restoreEnv = mockProcessEnv({ AWS_REGION: region });
+        const body = mockMantleResponse(model);
+        const provider = createBedrockOpenAiResponsesProvider(model, {
+          config: { apiKey: 'bedrock-key' },
+        });
+
+        const first = await provider.callApi('hello');
+        const second = await provider.callApi('hello');
+
+        const hint =
+          `Amazon Bedrock does not list ${model} on the Mantle endpoint in ${region}. ` +
+          `Set config.region or AWS_BEDROCK_REGION to a listed Region: ${listed}.`;
+        expect(first.error).toBe(`API error: 404 Not Found\n${JSON.stringify(body)}\n\n${hint}`);
+        expect(second.error).toBe(first.error);
+        expect(first.metadata?.http?.status).toBe(404);
+        // Logged once per provider, since concurrent eval rows can all hit the same 404.
+        expect(errorSpy).toHaveBeenCalledTimes(1);
+        expect(errorSpy).toHaveBeenCalledWith(hint);
+      });
+
+      it.each([
+        ['factory', 'us-west-2'],
+        ['factory', 'us-east-1'],
+        ['direct', 'us-west-2'],
+        ['direct', 'us-east-1'],
+      ])(
+        'points an explicit Mantle apiBaseUrl at a listed region (%s, %s)',
+        async (mode, region) => {
+          mockMantleResponse('openai.gpt-6-astra');
+          const options = {
+            config: {
+              apiKey: 'bedrock-key',
+              region,
+              apiBaseUrl: 'https://bedrock-mantle.us-east-1.api.aws/openai/v1',
+            },
+          };
+          const provider =
+            mode === 'factory'
+              ? createBedrockOpenAiResponsesProvider('openai.gpt-6-astra', options)
+              : new BedrockOpenAiResponsesProvider('openai.gpt-6-astra', options);
+
+          const result = await provider.callApi('hello');
+
+          expect(provider.getApiUrl()).toBe(options.config.apiBaseUrl);
+          expect(result.metadata?.http?.status).toBe(404);
+          expect(result.error).toContain(
+            'Amazon Bedrock does not list openai.gpt-6-astra on the Mantle endpoint in us-east-1. ' +
+              'Point config.apiBaseUrl at a listed Region: us-west-2.',
+          );
+          expect(result.error).not.toContain('Set config.region');
+        },
+      );
+
+      it.each(['factory', 'direct'])(
+        'keeps region remediation for a generated Mantle endpoint (%s)',
+        async (mode) => {
+          mockMantleResponse('openai.gpt-6-astra');
+          const options = {
+            config: { apiKey: 'bedrock-key', region: 'us-east-1', apiBaseUrl: '' },
+          };
+          const provider =
+            mode === 'factory'
+              ? createBedrockOpenAiResponsesProvider('openai.gpt-6-astra', options)
+              : new BedrockOpenAiResponsesProvider('openai.gpt-6-astra', options);
+
+          const result = await provider.callApi('hello');
+
+          expect(provider.getApiUrl()).toBe('https://bedrock-mantle.us-east-1.api.aws/openai/v1');
+          expect(result.error).toContain(
+            'Set config.region or AWS_BEDROCK_REGION to a listed Region: us-west-2.',
+          );
+          expect(result.error).not.toContain('Point config.apiBaseUrl');
+        },
+      );
+
+      it('does not turn a 404 refusal into an error', async () => {
+        restoreEnv = mockProcessEnv({ AWS_REGION: 'us-east-1' });
+        vi.mocked(fetchWithCache).mockResolvedValue({
+          data: { error: { code: 'invalid_prompt', message: 'Invalid prompt' } },
+          cached: false,
+          status: 404,
+          statusText: 'Not Found',
+        });
+        const provider = createBedrockOpenAiResponsesProvider('openai.gpt-6-astra', {
+          config: { apiKey: 'bedrock-key' },
+        });
+
+        const result = await provider.callApi('hello');
+
+        expect(result.isRefusal).toBe(true);
+        expect(result.error).toBeUndefined();
+        expect(errorSpy).not.toHaveBeenCalled();
+      });
+
+      it('uses the regions of a prompt-level model override', async () => {
+        mockMantleResponse('openai.gpt-6-sol');
+        const provider = createBedrockOpenAiResponsesProvider('openai.gpt-5.6-terra', {
+          config: { apiKey: 'bedrock-key', region: 'us-east-2' },
+        });
+
+        const result = await provider.callApi('hello', {
+          vars: {},
+          prompt: {
+            raw: 'hello',
+            label: 'hello',
+            config: { passthrough: { model: 'openai.gpt-6-sol' } },
+          },
+        });
+
+        expect(result.error).toContain(
+          'Amazon Bedrock does not list openai.gpt-6-sol on the Mantle endpoint in us-east-2. ' +
+            'Set config.region or AWS_BEDROCK_REGION to a listed Region: us-east-1.',
+        );
+      });
+
+      it.each([
+        ['a listed region', 'openai.gpt-5.6-terra', { region: 'us-west-2' }, 404],
+        ['an unlisted model', 'openai.gpt-5.5-2026-04-23', { region: 'us-west-2' }, 404],
+        [
+          'a custom endpoint',
+          'openai.gpt-6-astra',
+          { region: 'us-east-1', apiBaseUrl: 'https://proxy.example.test/openai/v1' },
+          404,
+        ],
+        ['a non-404 error', 'openai.gpt-6-astra', { region: 'us-east-1' }, 400],
+      ])('leaves the error unchanged for %s', async (_, model, config, status) => {
+        mockMantleResponse(model, status);
+        const provider = createBedrockOpenAiResponsesProvider(model, {
+          config: { apiKey: 'bedrock-key', ...config },
+        });
+
+        const result = await provider.callApi('hello');
+
+        expect(result.error).toMatch(/^API error: \d{3} [A-Za-z ]+\n\{.*\}$/);
+        expect(errorSpy).not.toHaveBeenCalled();
+      });
+    });
+
+    it('respects an explicit apiBaseUrl override', () => {
+      restoreEnv = mockProcessEnv({ AWS_BEARER_TOKEN_BEDROCK: 'env-bedrock-key' });
+      const provider = createBedrockOpenAiResponsesProvider('openai.gpt-5.5', {
+        config: { apiBaseUrl: 'https://example.test/openai/v1' },
+      });
+      expect((provider.config as any).apiBaseUrl).toBe('https://example.test/openai/v1');
+    });
+
+    it('normalizes an explicit apiBaseUrl', () => {
+      const provider = createBedrockOpenAiResponsesProvider('openai.gpt-5.6-sol', {
+        config: {
+          apiKey: 'bedrock-key',
+          apiBaseUrl: 'http://127.0.0.1:15501/openai/v1/',
+          region: 'us-west-2',
+        },
+      });
+
+      expect(provider.getApiUrl()).toBe('http://127.0.0.1:15501/openai/v1');
+    });
+
+    it.each([
+      'bedrock-mantle.us-east-2.api.aws/openai/v1',
+      'file:///tmp/responses',
+      'https://user:password@example.test/openai/v1',
+      'https://example.test/openai/v1?token=secret',
+      'https://example.test/openai/v1#responses',
+      'https://',
+    ])('rejects malformed or credential-bearing apiBaseUrl %s', (apiBaseUrl) => {
+      expect(() =>
+        createBedrockOpenAiResponsesProvider('openai.gpt-5.6-sol', {
+          config: { apiKey: 'bedrock-key', apiBaseUrl },
+        }),
+      ).toThrow(/Invalid apiBaseUrl/);
+    });
+
+    it('strips the openai. prefix for billing so OpenAI cost rates apply', () => {
+      restoreEnv = mockProcessEnv({ AWS_BEARER_TOKEN_BEDROCK: 'env-bedrock-key' });
+      const provider = createBedrockOpenAiResponsesProvider('openai.gpt-5.5', {});
+      // getBillingModelName is protected; the Bedrock id must resolve to the OpenAI
+      // billing key so cost is computed (Bedrock mirrors OpenAI first-party rates).
+      expect((provider as any).getBillingModelName({})).toBe('gpt-5.5');
+    });
+
+    it.each([...GPT_5_6_MODELS, 'openai.gpt-5.5', 'openai.gpt-5.4'])(
+      'computes a finite, non-zero cost end-to-end for %s',
+      (modelId) => {
+        restoreEnv = mockProcessEnv({ AWS_BEARER_TOKEN_BEDROCK: 'env-bedrock-key' });
+        const provider = createBedrockOpenAiResponsesProvider(modelId, {});
+        const billingModelName = (provider as any).getBillingModelName({});
+        // The normalized id must resolve in the applicable billing table, not just be a string.
+        const cost = calculateOpenAIUsageCost(
+          billingModelName,
+          {},
+          {
+            input_tokens: 1000,
+            output_tokens: 500,
+            input_tokens_details: { cache_write_tokens: 0 },
+          },
+        );
+        expect(cost).toBeGreaterThan(0);
+        expect(Number.isFinite(cost)).toBe(true);
+      },
+    );
+
+    it.each([
+      ['openai.gpt-5.6-sol', 4.4, 0.44, 5.5, 22],
+      ['openai.gpt-5.6-terra', 2.2, 0.22, 2.75, 13.2],
+      ['openai.gpt-5.6-luna', 0.22, 0.022, 0.275, 1.32],
+    ])(
+      'applies Bedrock cache read/write and output rates to %s',
+      (modelId, input, cacheRead, cacheWrite, output) => {
+        const provider = createBedrockOpenAiResponsesProvider(modelId, {
+          config: {
+            apiKey: 'bedrock-key',
+            apiBaseUrl: 'https://bedrock-proxy.example.test/openai/v1',
+          },
+        });
+        const cost = calculateOpenAIUsageCost(
+          (provider as any).getBillingModelName({}),
+          provider.config,
+          {
+            input_tokens: 1000,
+            output_tokens: 500,
+            input_tokens_details: { cached_tokens: 200, cache_write_tokens: 300 },
+          },
+          { apiUrl: provider.getApiUrl() },
+        );
+
+        expect(cost).toBeCloseTo(
+          (500 * input + 200 * cacheRead + 300 * cacheWrite + 500 * output) / 1e6,
+          12,
+        );
+      },
+    );
+
+    it('uses the capability model for the Bedrock web-search tool fee', () => {
+      const provider = createBedrockOpenAiResponsesProvider('openai.gpt-5.6-sol', {
+        config: {
+          apiKey: 'bedrock-key',
+          tools: [{ type: 'web_search_preview' }],
+        },
+      });
+
+      const result = (provider as any).applyBilling(
+        {},
+        {
+          output: [{ type: 'web_search_call', action: { type: 'search' } }],
+          usage: {
+            input_tokens: 1000,
+            output_tokens: 500,
+            input_tokens_details: { cached_tokens: 0, cache_write_tokens: 0 },
+          },
+        },
+        provider.config,
+        false,
+      );
+
+      expect(result.cost).toBeCloseTo((1000 * 4.4 + 500 * 22) / 1e6 + 0.01, 10);
+    });
+
+    it('retains Bedrock billing for a passthrough model through a custom proxy', async () => {
+      const provider = createBedrockOpenAiResponsesProvider('openai.gpt-5.6-sol', {
+        config: {
+          apiKey: 'bedrock-key',
+          apiBaseUrl: 'https://bedrock-proxy.example.test/openai/v1',
+          region: 'us-gov-west-1',
+          passthrough: { model: 'openai.gpt-5.6-luna' },
+        },
+      });
+      const result = (provider as any).applyBilling(
+        {},
+        { usage: { input_tokens: 1_000, output_tokens: 1_000, cache_write_input_tokens: 0 } },
+        provider.config,
+        false,
+      );
+      expect(result.cost).toBeCloseTo(0.001848, 10);
+    });
+
+    it('uses the effective passthrough model for Bedrock token billing', async () => {
+      const provider = createBedrockOpenAiResponsesProvider('openai.gpt-5.6-sol', {
+        config: {
+          apiKey: 'bedrock-key',
+          passthrough: { model: 'openai.gpt-5.6-luna' },
+          reasoning_effort: 'high',
+          temperature: 0,
+        },
+      });
+      const request = await provider.getOpenAiBody('hello');
+      const result = (provider as any).applyBilling(
+        {},
+        {
+          usage: {
+            input_tokens: 1_000_000,
+            output_tokens: 1_000_000,
+            input_tokens_details: { cached_tokens: 0, cache_write_tokens: 0 },
+          },
+        },
+        request.config,
+        false,
+      );
+
+      expect(request.body.model).toBe('openai.gpt-5.6-luna');
+      expect(request.body.reasoning).toEqual({ effort: 'high' });
+      expect(request.body.temperature).toBeUndefined();
+      expect(result.cost).toBeCloseTo(2.42, 10);
+    });
+
+    it.each([
+      ['provider config', { service_tier: 'flex' }, undefined, 'flex'],
+      [
+        'provider passthrough',
+        { service_tier: 'default', passthrough: { service_tier: 'priority' } },
+        undefined,
+        'priority',
+      ],
+      [
+        'prompt config',
+        { service_tier: 'default' },
+        { prompt: { config: { service_tier: 'flex' } } },
+        'flex',
+      ],
+      [
+        'prompt passthrough',
+        { service_tier: 'default' },
+        { prompt: { config: { passthrough: { service_tier: 'fast' } } } },
+        'fast',
+      ],
+    ] as const)(
+      'rejects unsupported Bedrock GPT service tiers from %s',
+      async (_case, config, context, tier) => {
+        const provider = createBedrockOpenAiResponsesProvider('openai.gpt-5.6-sol', {
+          config: { apiKey: 'bedrock-key', ...config } as any,
+        });
+
+        await expect(provider.getOpenAiBody('hello', context as any)).rejects.toThrow(
+          `supports only the standard inference tier; received "${tier}"`,
+        );
+      },
+    );
+
+    it.each([
+      ['omitted', undefined],
+      ['default', 'default'],
+      ['null', null],
+    ] as const)('accepts the Bedrock GPT standard tier when %s', async (_case, tier) => {
+      const provider = createBedrockOpenAiResponsesProvider('openai.gpt-5.6-sol', {
+        config: {
+          apiKey: 'bedrock-key',
+          ...(tier === undefined ? {} : { service_tier: tier }),
+        },
+      });
+
+      const { body } = await provider.getOpenAiBody('hello');
+
+      if (tier === 'default') {
+        expect(body.service_tier).toBe('default');
+      } else {
+        expect(body.service_tier).toBeUndefined();
+      }
+    });
+
+    it.each(GPT_5_6_MODELS)('leaves %s cost unset when cache-write usage is missing', (modelId) => {
+      const provider = createBedrockOpenAiResponsesProvider(modelId, {
+        config: { apiKey: 'bedrock-key' },
+      });
+
+      expect(
+        calculateOpenAIUsageCost((provider as any).getBillingModelName({}), provider.config, {
+          input_tokens: 1000,
+          output_tokens: 500,
+          input_tokens_details: { cached_tokens: 200 },
+        }),
+      ).toBeUndefined();
+    });
+
+    it.each([
+      ['openai.gpt-5.6-terra', 'us-gov-east-1', 2.64, 15.84],
+      ['openai.gpt-5.6-terra', 'us-gov-west-1', 2.64, 15.84],
+      ['openai.gpt-5.6-luna', 'us-gov-east-1', 0.264, 1.584],
+      ['openai.gpt-5.6-luna', 'us-gov-west-1', 0.264, 1.584],
+    ])('prices %s in %s through the Responses provider', async (modelId, region, input, output) => {
+      const provider = createBedrockOpenAiResponsesProvider(modelId, {
+        config: { apiKey: 'bedrock-key', region },
+      });
+
+      const result = await provider.callApi('hello');
+
+      expect(result.cost).toBeCloseTo((10 * input + 5 * output) / 1e6, 10);
+    });
+
+    it('applies Bedrock regional rates through a custom proxy', async () => {
+      const provider = createBedrockOpenAiResponsesProvider('openai.gpt-5.6-terra', {
+        config: { apiKey: 'bedrock-key', apiBaseUrl: 'http://localhost:15571/openai/v1' },
+      });
+
+      const result = await provider.callApi('hello');
+
+      expect(result.cost).toBeCloseTo((10 * 2.2 + 5 * 13.2) / 1e6, 10);
+    });
+
+    it.each([
+      ['AWS_BEDROCK_REGION', { AWS_BEDROCK_REGION: 'us-gov-west-1' }, undefined],
+      ['AWS_REGION', { AWS_REGION: 'us-gov-east-1' }, undefined],
+      ['providerOptions.env', {}, { AWS_BEDROCK_REGION: 'us-gov-west-1' }],
+    ])(
+      'uses the resolved %s for GovCloud pricing through a custom proxy',
+      async (_, processEnv, env) => {
+        restoreEnv = mockProcessEnv(processEnv);
+        const provider = createBedrockOpenAiResponsesProvider('openai.gpt-5.6-terra', {
+          config: { apiKey: 'bedrock-key', apiBaseUrl: 'http://localhost:15571/openai/v1' },
+          env,
+        });
+
+        const result = await provider.callApi('hello');
+
+        expect(result.cost).toBeCloseTo((10 * 2.64 + 5 * 15.84) / 1e6, 10);
+      },
+    );
+
+    it('uses the resolved region for GovCloud pricing when constructed directly', async () => {
+      const provider = new BedrockOpenAiResponsesProvider('openai.gpt-5.6-luna', {
+        config: { apiKey: 'bedrock-key', apiBaseUrl: 'http://localhost:15571/openai/v1' },
+        env: { AWS_REGION: 'us-gov-west-1' },
+      });
+
+      const result = await provider.callApi('hello');
+
+      expect(result.cost).toBeCloseTo((10 * 0.264 + 5 * 1.584) / 1e6, 10);
+    });
+
+    it.each([
+      ['openai.gpt-5.6-sol', 4.4, 0.44, 5.5, 22],
+      ['openai.gpt-5.6-terra', 2.2, 0.22, 2.75, 13.2],
+      ['openai.gpt-5.6-luna', 0.22, 0.022, 0.275, 1.32],
+    ])(
+      'uses independently published Bedrock long-context rates for %s',
+      (modelId, input, cacheRead, cacheWrite, output) => {
+        const provider = createBedrockOpenAiResponsesProvider(modelId, {
+          config: { apiKey: 'bedrock-key', region: 'us-east-1' },
+        });
+        const cost = calculateOpenAIUsageCost(
+          (provider as any).getBillingModelName({}),
+          provider.config,
+          {
+            input_tokens: 300_000,
+            output_tokens: 1000,
+            input_tokens_details: { cached_tokens: 100_000, cache_write_tokens: 50_000 },
+          },
+          { apiUrl: provider.getApiUrl() },
+        );
+
+        expect(cost).toBeCloseTo(
+          (150_000 * input * 2 +
+            100_000 * cacheRead * 2 +
+            50_000 * cacheWrite * 2 +
+            1000 * output * 1.5) /
+            1e6,
+          10,
+        );
+      },
+    );
+
+    it.each([...GPT_5_6_MODELS, 'openai.gpt-5.5', 'openai.gpt-5.4'])(
+      'detects the prefixed frontier id %s as a GPT-5 / reasoning model',
+      (modelId) => {
+        restoreEnv = mockProcessEnv({ AWS_BEARER_TOKEN_BEDROCK: 'env-bedrock-key' });
+        const provider = createBedrockOpenAiResponsesProvider(modelId, {});
+        // Without prefix-stripping these would be false (the id starts with "openai.").
+        expect((provider as any).isGPT5Model()).toBe(true);
+        expect((provider as any).isReasoningModel()).toBe(true);
+        expect((provider as any).supportsTemperature()).toBe(false);
+      },
+    );
+
+    it('forwards GPT-5.6 cache breakpoints, structured output, tools, and state controls', async () => {
+      const provider = createBedrockOpenAiResponsesProvider('openai.gpt-5.6-sol', {
+        config: {
+          apiKey: 'bedrock-key',
+          reasoning: { effort: 'max', context: 'current_turn' },
+          verbosity: 'low',
+          max_output_tokens: 1024,
+          prompt_cache_key: 'support-v1',
+          prompt_cache_options: { mode: 'explicit', ttl: '30m' },
+          store: false,
+          tools: [
+            {
+              type: 'function',
+              function: {
+                name: 'lookup_order',
+                parameters: { type: 'object', properties: { id: { type: 'string' } } },
+              },
+            },
+          ],
+          tool_choice: { type: 'function', function: { name: 'lookup_order' } },
+          response_format: {
+            type: 'json_schema',
+            json_schema: {
+              name: 'answer',
+              strict: true,
+              schema: {
+                type: 'object',
+                properties: { result: { type: 'string' } },
+                required: ['result'],
+                additionalProperties: false,
+              },
+            },
+          },
+        } as any,
+      });
+      const input = [
+        {
+          role: 'user',
+          content: [
+            {
+              type: 'input_text',
+              text: 'Stable instructions',
+              prompt_cache_breakpoint: { mode: 'explicit' },
+            },
+            { type: 'input_text', text: 'Look up order 42' },
+          ],
+        },
+      ];
+
+      const { body } = await provider.getOpenAiBody(JSON.stringify(input));
+
+      expect(body).toEqual(
+        expect.objectContaining({
+          model: 'openai.gpt-5.6-sol',
+          input,
+          reasoning: { effort: 'max', context: 'current_turn' },
+          max_output_tokens: 1024,
+          prompt_cache_key: 'support-v1',
+          prompt_cache_options: { mode: 'explicit', ttl: '30m' },
+          store: false,
+          tools: [
+            expect.objectContaining({
+              type: 'function',
+              name: 'lookup_order',
+              parameters: expect.any(Object),
+            }),
+          ],
+          tool_choice: { type: 'function', name: 'lookup_order' },
+          text: expect.objectContaining({
+            verbosity: 'low',
+            format: expect.objectContaining({ type: 'json_schema', name: 'answer', strict: true }),
+          }),
+        }),
+      );
+      expect(body.tools[0].function).toBeUndefined();
+      expect(body.temperature).toBeUndefined();
+      expect(body.top_p).toBeUndefined();
+    });
+
+    it('sends GPT-5 controls in the request body and preserves the openai. model id', async () => {
+      restoreEnv = mockProcessEnv({ AWS_BEARER_TOKEN_BEDROCK: 'env-bedrock-key' });
+      const provider = createBedrockOpenAiResponsesProvider('openai.gpt-5.5', {
+        config: { reasoning_effort: 'high', verbosity: 'low' } as any,
+      });
+
+      const { body } = await (provider as any).getOpenAiBody('hello');
+
+      // Real Bedrock model id is sent to the mantle endpoint...
+      expect(body.model).toBe('openai.gpt-5.5');
+      // ...while GPT-5 capability detection applies: reasoning effort + verbosity are sent,
+      // and no temperature default leaks in (reasoning models don't support it).
+      expect(body.reasoning).toEqual({ effort: 'high' });
+      expect(body.text?.verbosity).toBe('low');
+      expect(body.temperature).toBeUndefined();
+    });
+
+    it.each(['openai.gpt-6-sol', 'openai.gpt-6-luna'])(
+      'treats %s as a reasoning model like GPT-5',
+      async (model) => {
+        restoreEnv = mockProcessEnv({
+          AWS_BEARER_TOKEN_BEDROCK: 'env-bedrock-key',
+          OPENAI_MAX_TOKENS: undefined,
+          OPENAI_MAX_COMPLETION_TOKENS: undefined,
+          OPENAI_TEMPERATURE: undefined,
+        });
+
+        // These models reject promptfoo's default temperature 0, so it must not be added.
+        const { body: defaults } = await (
+          createBedrockOpenAiResponsesProvider(model) as any
+        ).getOpenAiBody('hello');
+        expect(defaults.model).toBe(model);
+        expect(defaults.temperature).toBeUndefined();
+        expect(defaults.max_output_tokens).toBeUndefined();
+
+        const { body } = await (
+          createBedrockOpenAiResponsesProvider(model, {
+            config: { reasoning_effort: 'high', verbosity: 'low' } as any,
+          }) as any
+        ).getOpenAiBody('hello');
+        expect(body.reasoning).toEqual({ effort: 'high' });
+        expect(body.text?.verbosity).toBe('low');
+      },
+    );
+
+    it('honors AWS_BEARER_TOKEN_BEDROCK and AWS_REGION supplied via promptfoo env overrides', () => {
+      restoreEnv = mockProcessEnv({
+        AWS_BEARER_TOKEN_BEDROCK: undefined,
+        AWS_BEDROCK_REGION: undefined,
+        AWS_REGION: undefined,
+        AWS_DEFAULT_REGION: undefined,
+      });
+      const provider = createBedrockOpenAiResponsesProvider('openai.gpt-5.4', {
+        env: { AWS_BEARER_TOKEN_BEDROCK: 'override-key', AWS_REGION: 'us-west-2' } as any,
+      });
+      expect(provider.getApiKey()).toBe('override-key');
+      expect((provider.config as any).apiBaseUrl).toBe(
+        'https://bedrock-mantle.us-west-2.api.aws/openai/v1',
+      );
+    });
+
+    it('pins the mantle endpoint and isolates ambient OpenAI credentials and headers', async () => {
+      restoreEnv = mockProcessEnv({
+        AWS_BEARER_TOKEN_BEDROCK: 'env-bedrock-key',
+        OPENAI_API_HOST: 'unrelated.example.com',
+        OPENAI_API_KEY: 'unrelated-openai-key',
+        OPENAI_ORGANIZATION: 'unrelated-openai-org',
+      });
+      const provider = createBedrockOpenAiResponsesProvider('openai.gpt-5.5', {
+        config: { region: 'us-east-2', headers: { 'x-custom-header': 'preserved' } },
+      });
+      // Base getApiUrl() would prefer OPENAI_API_HOST; the subclass must override that.
+      expect(provider.getApiUrl()).toBe('https://bedrock-mantle.us-east-2.api.aws/openai/v1');
+
+      await provider.callApi('hello');
+
+      expect(fetchWithCache).toHaveBeenCalledWith(
+        'https://bedrock-mantle.us-east-2.api.aws/openai/v1/responses',
+        expect.objectContaining({
+          getAuthHeaders: expect.any(Function),
+          headers: {
+            'Content-Type': 'application/json',
+            'x-custom-header': 'preserved',
+          },
+        }),
+        expect.any(Number),
+        'json',
+        true,
+        undefined,
+      );
+    });
+
+    it('bypasses the persistent fetch cache for frontier calls so bearer-token fingerprints are not stored', async () => {
+      restoreEnv = mockProcessEnv({ AWS_BEARER_TOKEN_BEDROCK: 'env-bedrock-key' });
+      const provider = createBedrockOpenAiResponsesProvider('openai.gpt-5.6-terra', {});
+
+      await provider.callApi('hello');
+
+      expect(fetchWithCache).toHaveBeenCalledWith(
+        'https://bedrock-mantle.us-east-2.api.aws/openai/v1/responses',
+        expect.objectContaining({
+          getAuthHeaders: expect.any(Function),
+        }),
+        expect.any(Number),
+        'json',
+        true,
+        undefined,
+      );
+    });
+
+    it.each(GPT_5_6_MODELS)(
+      'parses streamed Responses events and usage for %s',
+      async (modelId) => {
+        restoreEnv = mockProcessEnv({
+          AWS_BEARER_TOKEN_BEDROCK: 'env-bedrock-key',
+          OPENAI_API_HOST: 'ambient-openai.invalid',
+        });
+        const completed = {
+          id: 'resp_stream',
+          model: modelId,
+          output: [
+            {
+              type: 'reasoning',
+              summary: [{ text: 'internal reasoning' }],
+              encrypted_content: 'opaque',
+            },
+            {
+              type: 'message',
+              role: 'assistant',
+              content: [{ type: 'output_text', text: 'streamed answer' }],
+            },
+          ],
+          usage: {
+            input_tokens: 100,
+            output_tokens: 20,
+            total_tokens: 120,
+            input_tokens_details: { cached_tokens: 10, cache_write_tokens: 30 },
+            output_tokens_details: { reasoning_tokens: 5 },
+          },
+        };
+        vi.mocked(fetchWithCache).mockResolvedValueOnce({
+          data: [
+            'event: response.output_text.delta',
+            'data: {"type":"response.output_text.delta","delta":"streamed "}',
+            '',
+            'event: response.completed',
+            `data: ${JSON.stringify({ type: 'response.completed', response: completed })}`,
+            '',
+            'data: [DONE]',
+            '',
+          ].join('\n'),
+          cached: false,
+          status: 200,
+          statusText: 'OK',
+          headers: { 'content-type': 'text/event-stream', 'x-request-id': 'r1' },
+        });
+        const provider = createBedrockOpenAiResponsesProvider(modelId, {
+          config: {
+            stream: true,
+            reasoning_effort: 'max',
+            include: ['reasoning.encrypted_content'],
+          },
+        });
+
+        const result = await provider.callApi('hello');
+
+        expect(fetchWithCache).toHaveBeenCalledWith(
+          'https://bedrock-mantle.us-east-2.api.aws/openai/v1/responses',
+          expect.objectContaining({
+            getAuthHeaders: expect.any(Function),
+            body: expect.stringContaining(`"model":"${modelId}"`),
+          }),
+          expect.any(Number),
+          'text',
+          true,
+          undefined,
+        );
+        expect(result.output).toBe('streamed answer');
+        expect(result.output).not.toContain('internal reasoning');
+        expect(result.tokenUsage).toEqual({
+          total: 120,
+          prompt: 100,
+          completion: 20,
+          numRequests: 1,
+          completionDetails: {
+            reasoning: 5,
+            acceptedPrediction: undefined,
+            rejectedPrediction: undefined,
+            cacheReadInputTokens: 10,
+            cacheCreationInputTokens: 30,
+          },
+        });
+        expect(result.cost).toBeGreaterThan(0);
+        expect(result.metadata?.http?.headers).toEqual(
+          expect.objectContaining({ 'x-request-id': 'r1' }),
+        );
+      },
+    );
+
+    it('surfaces a streamed Bedrock error without attempting to parse it as SSE', async () => {
+      vi.mocked(fetchWithCache).mockResolvedValueOnce({
+        data: JSON.stringify({ error: { code: 'model_not_found', message: 'not enabled' } }),
+        cached: false,
+        status: 404,
+        statusText: 'Not Found',
+        headers: { 'content-type': 'application/json' },
+      });
+      const provider = createBedrockOpenAiResponsesProvider('openai.gpt-5.6-luna', {
+        config: { apiKey: 'bedrock-key', stream: true },
+      });
+
+      const result = await provider.callApi('hello');
+
+      expect(result.error).toContain('API error: 404 Not Found');
+      expect(result.error).toContain('not enabled');
+    });
+
+    it.each(GPT_5_6_MODELS)(
+      'fails closed on a terminal SSE error after partial output for %s',
+      async (modelId) => {
+        vi.mocked(fetchWithCache).mockResolvedValueOnce({
+          data: [
+            'event: response.output_text.delta',
+            'data: {"type":"response.output_text.delta","delta":"partial answer"}',
+            '',
+            'event: error',
+            'data: {"type":"error","code":"server_error","message":"capacity exhausted"}',
+            '',
+          ].join('\n'),
+          cached: false,
+          status: 200,
+          statusText: 'OK',
+          headers: { 'content-type': 'text/event-stream' },
+        });
+        const provider = createBedrockOpenAiResponsesProvider(modelId, {
+          config: { apiKey: 'bedrock-key', stream: true },
+        });
+
+        const result = await provider.callApi('hello');
+
+        expect(result.error).toContain('OpenAI streaming response error (server_error)');
+        expect(result.error).toContain('capacity exhausted');
+        expect(result.output).toBeUndefined();
+      },
+    );
+
+    it('pins directly constructed providers to Bedrock without apiBaseUrl', () => {
+      restoreEnv = mockProcessEnv({
+        OPENAI_API_HOST: 'unrelated.example',
+        OPENAI_BASE_URL: 'https://unrelated.example/v1',
+        OPENAI_API_BASE_URL: 'https://unrelated.example/v1',
+      });
+      const direct = new BedrockOpenAiResponsesProvider('openai.gpt-5.5', {
+        config: { apiKey: 'k' },
+      });
+      expect(direct.getApiUrl()).toBe('https://bedrock-mantle.us-east-2.api.aws/openai/v1');
+    });
+  });
+
+  describe('xAI Grok (mantle Responses)', () => {
+    it('classifies only xai.grok- ids', () => {
+      expect(isBedrockGrokModel('xai.grok-4.3')).toBe(true);
+      expect(isBedrockGrokModel('xai.other-model')).toBe(false);
+      expect(isBedrockGrokModel('openai.gpt-5.5')).toBe(false);
+      expect(isBedrockGrokModel('anthropic.claude-opus-4-8')).toBe(false);
+    });
+
+    it('isBedrockMantleResponsesModel covers both frontier OpenAI and Grok', () => {
+      expect(isBedrockMantleResponsesModel('openai.gpt-5.5')).toBe(true);
+      expect(isBedrockMantleResponsesModel('xai.grok-4.3')).toBe(true);
+      // gpt-oss (InvokeModel) and ordinary InvokeModel families are not mantle Responses models.
+      expect(isBedrockMantleResponsesModel('openai.gpt-oss-120b-1:0')).toBe(false);
+      expect(isBedrockMantleResponsesModel('zai.glm-5')).toBe(false);
+    });
+
+    it('builds a Grok provider on the us-west-2 mantle endpoint by default', () => {
+      restoreEnv = mockProcessEnv({
+        AWS_BEARER_TOKEN_BEDROCK: 'env-bedrock-key',
+        AWS_BEDROCK_REGION: undefined,
+        AWS_REGION: undefined,
+        AWS_DEFAULT_REGION: undefined,
+      });
+      const provider = createBedrockOpenAiResponsesProvider('xai.grok-4.3', {});
+      expect(provider).toBeInstanceOf(BedrockGrokResponsesProvider);
+      expect((provider.config as any).apiBaseUrl).toBe(
+        'https://bedrock-mantle.us-west-2.api.aws/openai/v1',
+      );
+      expect(provider.getApiKey()).toBe('env-bedrock-key');
+    });
+
+    it('allows Grok to use the AWS credential chain without a configured bearer token', () => {
+      restoreEnv = mockProcessEnv({ AWS_BEARER_TOKEN_BEDROCK: undefined });
+      expect(() => createBedrockOpenAiResponsesProvider('xai.grok-4.3', {})).not.toThrow();
+    });
+
+    it('treats Grok as a reasoning model but does NOT mark it GPT-5', () => {
+      restoreEnv = mockProcessEnv({ AWS_BEARER_TOKEN_BEDROCK: 'env-bedrock-key' });
+      const provider = createBedrockOpenAiResponsesProvider('xai.grok-4.3', {});
+      // Capability/billing name strips the xai. prefix.
+      expect((provider as any).getCapabilityModelName()).toBe('grok-4.3');
+      expect((provider as any).isReasoningModel()).toBe(true);
+      expect((provider as any).isGPT5Model()).toBe(false);
+      expect((provider as any).supportsTemperature()).toBe(true);
+    });
+
+    it('uses the published Bedrock Grok 4.3 rates, including cached input', () => {
+      const provider = createBedrockOpenAiResponsesProvider('xai.grok-4.3', {
+        config: {
+          apiKey: 'bedrock-key',
+          apiBaseUrl: 'https://bedrock-proxy.example.test/openai/v1',
+          passthrough: { model: 'xai.grok-4.3' },
+        },
+      });
+      const billingModelName = (provider as any).getBillingModelName(provider.config);
+
+      expect(billingModelName).toBe('bedrock:grok-4.3');
+      expect(
+        calculateOpenAIUsageCost(
+          billingModelName,
+          provider.config,
+          {
+            input_tokens: 1_000,
+            output_tokens: 500,
+            input_tokens_details: { cached_tokens: 200 },
+          },
+          { apiUrl: provider.getApiUrl() },
+        ),
+      ).toBeCloseTo((800 * 1.25 + 200 * 0.2 + 500 * 2.5) / 1e6, 12);
+    });
+
+    it.each(['batch', 'flex', 'fast', 'priority'])(
+      'leaves Grok 4.3 %s-tier cost unset when AWS does not publish a rate',
+      (serviceTier) => {
+        expect(
+          calculateOpenAIUsageCost(
+            'bedrock:grok-4.3',
+            {},
+            {
+              input_tokens: 1_000,
+              output_tokens: 500,
+              input_tokens_details: { cached_tokens: 200 },
+            },
+            { serviceTier },
+          ),
+        ).toBeUndefined();
+      },
+    );
+
+    it('omits the inherited temperature default when Grok temperature is not configured', async () => {
+      restoreEnv = mockProcessEnv({
+        AWS_BEARER_TOKEN_BEDROCK: 'env-bedrock-key',
+        OPENAI_TEMPERATURE: undefined,
+      });
+      const provider = createBedrockOpenAiResponsesProvider('xai.grok-4.3', {
+        config: { omitDefaults: false } as any,
+      });
+
+      const { body } = await (provider as any).getOpenAiBody('What is 17*23?');
+
+      expect((provider.config as any).omitDefaults).toBe(true);
+      expect(body.temperature).toBeUndefined();
+    });
+
+    it('forwards reasoning effort, sends the real xai. model id, and preserves explicit temperature', async () => {
+      restoreEnv = mockProcessEnv({ AWS_BEARER_TOKEN_BEDROCK: 'env-bedrock-key' });
+      const provider = createBedrockOpenAiResponsesProvider('xai.grok-4.3', {
+        config: {
+          omitDefaults: false,
+          passthrough: { model: 'xai.grok-4.3' },
+          reasoning_effort: 'high',
+          temperature: 0,
+        } as any,
+      });
+      const { body } = await (provider as any).getOpenAiBody('What is 17*23?');
+      expect((provider.config as any).omitDefaults).toBe(true);
+      expect(body.model).toBe('xai.grok-4.3');
+      expect(body.reasoning).toEqual({ effort: 'high' });
+      expect(body.temperature).toBe(0);
+      // No GPT-5 verbosity for Grok.
+      expect(body.text?.verbosity).toBeUndefined();
+    });
+
+    it('preserves Grok capabilities for a passthrough model override', async () => {
+      restoreEnv = mockProcessEnv({ AWS_BEARER_TOKEN_BEDROCK: 'env-bedrock-key' });
+      const provider = createBedrockOpenAiResponsesProvider('xai.grok-4.3', {
+        config: {
+          passthrough: { model: 'xai.grok-4.20-0309' },
+          reasoning_effort: 'high',
+          temperature: 0,
+        } as any,
+      });
+
+      const { body } = await (provider as any).getOpenAiBody('What is 17*23?');
+
+      expect(body.model).toBe('xai.grok-4.20-0309');
+      expect(body.reasoning).toEqual({ effort: 'high' });
+      expect(body.temperature).toBe(0);
+      expect(body.max_output_tokens).toBeUndefined();
+    });
+
+    it('preserves explicit top_p when Grok reasoning is active', async () => {
+      restoreEnv = mockProcessEnv({ AWS_BEARER_TOKEN_BEDROCK: 'env-bedrock-key' });
+      const provider = createBedrockOpenAiResponsesProvider('xai.grok-4.3', {
+        config: { reasoning_effort: 'high', top_p: 0.8 } as any,
+      });
+
+      const { body } = await (provider as any).getOpenAiBody('What is 17*23?');
+
+      expect(body.reasoning).toEqual({ effort: 'high' });
+      expect(body.top_p).toBe(0.8);
+    });
+
+    it('bypasses the persistent fetch cache so the Bedrock bearer token is not in its identity', async () => {
+      restoreEnv = mockProcessEnv({ AWS_BEARER_TOKEN_BEDROCK: 'env-bedrock-key' });
+      const provider = createBedrockOpenAiResponsesProvider('xai.grok-4.3', {});
+
+      await provider.callApi('hello');
+
+      expect(fetchWithCache).toHaveBeenCalledWith(
+        'https://bedrock-mantle.us-west-2.api.aws/openai/v1/responses',
+        expect.objectContaining({
+          getAuthHeaders: expect.any(Function),
+        }),
+        expect.any(Number),
+        'json',
+        true,
+        undefined,
+      );
+    });
+  });
+});

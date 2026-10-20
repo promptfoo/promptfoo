@@ -1,8 +1,8 @@
 # azure/assistant (Azure OpenAI Assistants API with Tools)
 
-Evaluate Azure OpenAI Assistants with file search, function tools, and multi-tool interactions.
+> **Archived:** [Azure OpenAI Assistants retired on August 26, 2026](https://learn.microsoft.com/en-us/azure/foundry/how-to/navigate-from-classic). The setup and commands below preserve the former integration and no longer work against Azure. Use the [Foundry agent provider](https://www.promptfoo.dev/docs/providers/azure/#azure-ai-foundry-agents) for new evaluations; assistant IDs cannot be reused as Foundry agent names.
 
-You can run this example with:
+To retrieve the archived files:
 
 ```bash
 npx promptfoo@latest init --example azure/assistant

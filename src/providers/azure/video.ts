@@ -149,7 +149,7 @@ export class AzureVideoProvider extends AzureGenericProvider {
     const url = `${baseUrl}/openai/v1/video/generations/jobs?api-version=${apiVersion}`;
 
     const body: Record<string, unknown> = {
-      model: 'sora', // Azure always uses 'sora' as model name
+      model: this.deploymentName,
       prompt,
       width: config.width || 1280,
       height: config.height || 720,

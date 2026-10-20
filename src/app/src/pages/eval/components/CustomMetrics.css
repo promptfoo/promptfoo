@@ -10,7 +10,6 @@
   display: inline-flex;
   align-items: center;
   gap: 0.375rem;
-  padding: 0.25rem 0.5rem;
   border-radius: 8px;
   font-size: 0.8125rem;
   font-weight: 500;
@@ -28,12 +27,37 @@
   cursor: pointer;
 }
 
+/*
+ * The clickable button fills the chip and owns the padding so the entire
+ * chip surface (including its inset) is clickable, with no dead zone.
+ */
 .metric-content {
   display: flex;
   align-items: center;
   gap: 0.25rem;
   flex: 1;
+  padding: 0.25rem 0.5rem;
+  border-radius: inherit;
+  border: 0;
+  color: inherit;
+  background: transparent;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
   transition: all 0.15s ease-in-out;
+}
+
+/*
+ * Draw the keyboard-focus ring inset: `.metric-chip` has `overflow: hidden`,
+ * which would clip a default (outset) outline on the inner button.
+ */
+.metric-content:focus {
+  outline: none;
+}
+
+.metric-content:focus-visible {
+  outline: 2px solid var(--color-ring);
+  outline-offset: -2px;
 }
 
 .metric-name {
@@ -107,8 +131,11 @@
   }
 
   .metric-chip {
-    padding: 0.2rem 0.4rem;
     font-size: 0.75rem;
+  }
+
+  .metric-content {
+    padding: 0.2rem 0.4rem;
   }
 
   .filter-icon {

@@ -1,3 +1,4 @@
+import { propagation } from '@opentelemetry/api';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import cliState from '../../src/cliState';
 import { getEnvBool, getEnvString } from '../../src/envars';
@@ -7,6 +8,7 @@ import { hasCodexDefaultCredentials } from '../../src/providers/openai/codexDefa
 import {
   getRemoteGenerationDisabledError,
   getRemoteGenerationExplicitlyDisabledError,
+  getRemoteGenerationHeaders,
   getRemoteGenerationUrl,
   getRemoteGenerationUrlForUnaligned,
   getRemoteHealthUrl,
@@ -14,6 +16,26 @@ import {
   neverGenerateRemoteForRegularEvals,
   shouldGenerateRemote,
 } from '../../src/redteam/remoteGeneration';
+
+function createCloudConfigWithCredentials() {
+  return {
+    id: 'test-id',
+    cloud: {
+      apiKey: 'some-api-key',
+      apiHost: 'https://cloud.api.com',
+    },
+  };
+}
+
+function createCloudConfigWithoutCredentials() {
+  return {
+    id: 'test-id',
+    cloud: {
+      apiKey: undefined,
+      apiHost: 'https://cloud.api.com',
+    },
+  };
+}
 
 vi.mock('../../src/envars');
 vi.mock('../../src/globalConfig/accounts');
@@ -31,81 +53,43 @@ describe('shouldGenerateRemote', () => {
   beforeEach(() => {
     vi.resetAllMocks();
     cliState.remote = undefined;
-    vi.mocked(isLoggedIntoCloud).mockImplementation(function () {
-      return false;
-    });
+    vi.mocked(isLoggedIntoCloud).mockReturnValue(false);
     vi.mocked(hasCodexDefaultCredentials).mockReturnValue(false);
   });
 
   it('should return false when remote generation is explicitly disabled, even for cloud users', () => {
-    vi.mocked(isLoggedIntoCloud).mockImplementation(function () {
-      return true;
-    });
-    vi.mocked(getEnvBool).mockImplementation(function () {
-      return true;
-    }); // neverGenerateRemote = true
+    vi.mocked(isLoggedIntoCloud).mockReturnValue(true);
+    vi.mocked(getEnvBool).mockReturnValue(true); // neverGenerateRemote = true
     expect(shouldGenerateRemote()).toBe(false);
   });
 
   it('should return true when logged into cloud and remote generation is not disabled', () => {
-    vi.mocked(isLoggedIntoCloud).mockImplementation(function () {
-      return true;
-    });
-    vi.mocked(getEnvBool).mockImplementation(function () {
-      return false;
-    }); // neverGenerateRemote = false
-    vi.mocked(getEnvString).mockImplementation(function () {
-      return 'sk-123';
-    }); // Has OpenAI key
+    vi.mocked(isLoggedIntoCloud).mockReturnValue(true);
+    vi.mocked(getEnvBool).mockReturnValue(false); // neverGenerateRemote = false
+    vi.mocked(getEnvString).mockReturnValue('sk-123'); // Has OpenAI key
     expect(shouldGenerateRemote()).toBe(true);
   });
 
-  it('should follow normal logic when not logged into cloud', () => {
-    vi.mocked(isLoggedIntoCloud).mockImplementation(function () {
-      return false;
-    });
-    vi.mocked(getEnvBool).mockImplementation(function () {
-      return false;
-    });
-    vi.mocked(getEnvString).mockImplementation(function () {
-      return '';
-    });
-    expect(shouldGenerateRemote()).toBe(true);
-  });
-
-  it('should return true when remote generation is not disabled and no OpenAI key exists', () => {
-    vi.mocked(isLoggedIntoCloud).mockImplementation(function () {
-      return false;
-    });
-    vi.mocked(getEnvBool).mockImplementation(function () {
-      return false;
-    });
-    vi.mocked(getEnvString).mockImplementation(function () {
-      return '';
-    });
+  it.each([
+    'should follow normal logic when not logged into cloud',
+    'should return true when remote generation is not disabled and no OpenAI key exists',
+  ])('%s', () => {
+    vi.mocked(isLoggedIntoCloud).mockReturnValue(false);
+    vi.mocked(getEnvBool).mockReturnValue(false);
+    vi.mocked(getEnvString).mockReturnValue('');
     expect(shouldGenerateRemote()).toBe(true);
   });
 
   it('should return false when remote generation is disabled via env var', () => {
-    vi.mocked(isLoggedIntoCloud).mockImplementation(function () {
-      return false;
-    });
-    vi.mocked(getEnvBool).mockImplementation(function () {
-      return true;
-    });
-    vi.mocked(getEnvString).mockImplementation(function () {
-      return '';
-    });
+    vi.mocked(isLoggedIntoCloud).mockReturnValue(false);
+    vi.mocked(getEnvBool).mockReturnValue(true);
+    vi.mocked(getEnvString).mockReturnValue('');
     expect(shouldGenerateRemote()).toBe(false);
   });
 
   it('should return false when OpenAI key exists and not logged into cloud', () => {
-    vi.mocked(isLoggedIntoCloud).mockImplementation(function () {
-      return false;
-    });
-    vi.mocked(getEnvBool).mockImplementation(function () {
-      return false;
-    });
+    vi.mocked(isLoggedIntoCloud).mockReturnValue(false);
+    vi.mocked(getEnvBool).mockReturnValue(false);
     vi.mocked(getEnvString).mockImplementation(function (key) {
       return key === 'OPENAI_API_KEY' ? 'sk-123' : '';
     });
@@ -166,42 +150,24 @@ describe('shouldGenerateRemote', () => {
   });
 
   it('should return false when remote generation is disabled and OpenAI key exists', () => {
-    vi.mocked(isLoggedIntoCloud).mockImplementation(function () {
-      return false;
-    });
-    vi.mocked(getEnvBool).mockImplementation(function () {
-      return true;
-    });
-    vi.mocked(getEnvString).mockImplementation(function () {
-      return 'sk-123';
-    });
+    vi.mocked(isLoggedIntoCloud).mockReturnValue(false);
+    vi.mocked(getEnvBool).mockReturnValue(true);
+    vi.mocked(getEnvString).mockReturnValue('sk-123');
     expect(shouldGenerateRemote()).toBe(false);
   });
 
   it('should return true when cliState.remote is true regardless of OpenAI key', () => {
-    vi.mocked(isLoggedIntoCloud).mockImplementation(function () {
-      return false;
-    });
-    vi.mocked(getEnvBool).mockImplementation(function () {
-      return false;
-    });
-    vi.mocked(getEnvString).mockImplementation(function () {
-      return 'sk-123';
-    });
+    vi.mocked(isLoggedIntoCloud).mockReturnValue(false);
+    vi.mocked(getEnvBool).mockReturnValue(false);
+    vi.mocked(getEnvString).mockReturnValue('sk-123');
     cliState.remote = true;
     expect(shouldGenerateRemote()).toBe(true);
   });
 
   it('should return false when cliState.remote is true but neverGenerateRemote is true', () => {
-    vi.mocked(isLoggedIntoCloud).mockImplementation(function () {
-      return false;
-    });
-    vi.mocked(getEnvBool).mockImplementation(function () {
-      return true;
-    }); // neverGenerateRemote = true
-    vi.mocked(getEnvString).mockImplementation(function () {
-      return 'sk-123';
-    });
+    vi.mocked(isLoggedIntoCloud).mockReturnValue(false);
+    vi.mocked(getEnvBool).mockReturnValue(true); // neverGenerateRemote = true
+    vi.mocked(getEnvString).mockReturnValue('sk-123');
     cliState.remote = true;
     expect(shouldGenerateRemote()).toBe(false);
   });
@@ -271,16 +237,12 @@ describe('neverGenerateRemote', () => {
   });
 
   it('should return true when both PROMPTFOO_DISABLE_REMOTE_GENERATION and PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION are set (superset wins)', () => {
-    vi.mocked(getEnvBool).mockImplementation(function () {
-      return true;
-    });
+    vi.mocked(getEnvBool).mockReturnValue(true);
     expect(neverGenerateRemote()).toBe(true);
   });
 
   it('should return false when neither flag is set', () => {
-    vi.mocked(getEnvBool).mockImplementation(function () {
-      return false;
-    });
+    vi.mocked(getEnvBool).mockReturnValue(false);
     expect(neverGenerateRemote()).toBe(false);
   });
 
@@ -314,9 +276,7 @@ describe('neverGenerateRemoteForRegularEvals', () => {
   });
 
   it('should return false when neither flag is set', () => {
-    vi.mocked(getEnvBool).mockImplementation(function () {
-      return false;
-    });
+    vi.mocked(getEnvBool).mockReturnValue(false);
     expect(neverGenerateRemoteForRegularEvals()).toBe(false);
   });
 
@@ -337,42 +297,20 @@ describe('getRemoteGenerationUrl', () => {
   });
 
   it('should return env URL + /task when PROMPTFOO_REMOTE_GENERATION_URL is set', () => {
-    vi.mocked(getEnvString).mockImplementation(function () {
-      return 'https://custom.api.com/task';
-    });
+    vi.mocked(getEnvString).mockReturnValue('https://custom.api.com/task');
     expect(getRemoteGenerationUrl()).toBe('https://custom.api.com/task');
   });
 
   it('should return cloud API host + /task when cloud is enabled and no env URL is set', () => {
-    vi.mocked(getEnvString).mockImplementation(function () {
-      return '';
-    });
-    vi.mocked(readGlobalConfig).mockImplementation(function () {
-      return {
-        id: 'test-id',
-        cloud: {
-          apiKey: 'some-api-key',
-          apiHost: 'https://cloud.api.com',
-        },
-      };
-    });
+    vi.mocked(getEnvString).mockReturnValue('');
+    vi.mocked(readGlobalConfig).mockImplementation(createCloudConfigWithCredentials);
 
     expect(getRemoteGenerationUrl()).toBe('https://cloud.api.com/api/v1/task');
   });
 
   it('should return default URL when cloud is disabled and no env URL is set', () => {
-    vi.mocked(getEnvString).mockImplementation(function () {
-      return '';
-    });
-    vi.mocked(readGlobalConfig).mockImplementation(function () {
-      return {
-        id: 'test-id',
-        cloud: {
-          apiKey: undefined,
-          apiHost: 'https://cloud.api.com',
-        },
-      };
-    });
+    vi.mocked(getEnvString).mockReturnValue('');
+    vi.mocked(readGlobalConfig).mockImplementation(createCloudConfigWithoutCredentials);
 
     expect(getRemoteGenerationUrl()).toBe('https://api.promptfoo.app/api/v1/task');
   });
@@ -384,67 +322,33 @@ describe('getRemoteHealthUrl', () => {
   });
 
   it('should return null when remote generation is disabled', () => {
-    vi.mocked(getEnvBool).mockImplementation(function () {
-      return true;
-    }); // neverGenerateRemote = true
+    vi.mocked(getEnvBool).mockReturnValue(true); // neverGenerateRemote = true
     expect(getRemoteHealthUrl()).toBeNull();
   });
 
   it('should return modified env URL with /health path when PROMPTFOO_REMOTE_GENERATION_URL is set', () => {
-    vi.mocked(getEnvBool).mockImplementation(function () {
-      return false;
-    });
-    vi.mocked(getEnvString).mockImplementation(function () {
-      return 'https://custom.api.com/task';
-    });
+    vi.mocked(getEnvBool).mockReturnValue(false);
+    vi.mocked(getEnvString).mockReturnValue('https://custom.api.com/task');
     expect(getRemoteHealthUrl()).toBe('https://custom.api.com/health');
   });
 
   it('should return default health URL when env URL is invalid', () => {
-    vi.mocked(getEnvBool).mockImplementation(function () {
-      return false;
-    });
-    vi.mocked(getEnvString).mockImplementation(function () {
-      return 'invalid-url';
-    });
+    vi.mocked(getEnvBool).mockReturnValue(false);
+    vi.mocked(getEnvString).mockReturnValue('invalid-url');
     expect(getRemoteHealthUrl()).toBe('https://api.promptfoo.app/health');
   });
 
   it('should return cloud API health URL when cloud is enabled', () => {
-    vi.mocked(getEnvBool).mockImplementation(function () {
-      return false;
-    });
-    vi.mocked(getEnvString).mockImplementation(function () {
-      return '';
-    });
-    vi.mocked(readGlobalConfig).mockImplementation(function () {
-      return {
-        id: 'test-id',
-        cloud: {
-          apiKey: 'some-api-key',
-          apiHost: 'https://cloud.api.com',
-        },
-      };
-    });
+    vi.mocked(getEnvBool).mockReturnValue(false);
+    vi.mocked(getEnvString).mockReturnValue('');
+    vi.mocked(readGlobalConfig).mockImplementation(createCloudConfigWithCredentials);
     expect(getRemoteHealthUrl()).toBe('https://cloud.api.com/health');
   });
 
   it('should return default health URL when cloud is disabled', () => {
-    vi.mocked(getEnvBool).mockImplementation(function () {
-      return false;
-    });
-    vi.mocked(getEnvString).mockImplementation(function () {
-      return '';
-    });
-    vi.mocked(readGlobalConfig).mockImplementation(function () {
-      return {
-        id: 'test-id',
-        cloud: {
-          apiKey: undefined,
-          apiHost: 'https://cloud.api.com',
-        },
-      };
-    });
+    vi.mocked(getEnvBool).mockReturnValue(false);
+    vi.mocked(getEnvString).mockReturnValue('');
+    vi.mocked(readGlobalConfig).mockImplementation(createCloudConfigWithoutCredentials);
     expect(getRemoteHealthUrl()).toBe('https://api.promptfoo.app/health');
   });
 });
@@ -455,43 +359,69 @@ describe('getRemoteGenerationUrlForUnaligned', () => {
   });
 
   it('should return env URL when PROMPTFOO_UNALIGNED_INFERENCE_ENDPOINT is set', () => {
-    vi.mocked(getEnvString).mockImplementation(function () {
-      return 'https://custom.api.com/harmful';
-    });
+    vi.mocked(getEnvString).mockReturnValue('https://custom.api.com/harmful');
     expect(getRemoteGenerationUrlForUnaligned()).toBe('https://custom.api.com/harmful');
   });
 
   it('should return cloud API harmful URL when cloud is enabled', () => {
-    vi.mocked(getEnvString).mockImplementation(function () {
-      return '';
-    });
-    vi.mocked(readGlobalConfig).mockImplementation(function () {
-      return {
-        id: 'test-id',
-        cloud: {
-          apiKey: 'some-api-key',
-          apiHost: 'https://cloud.api.com',
-        },
-      };
-    });
+    vi.mocked(getEnvString).mockReturnValue('');
+    vi.mocked(readGlobalConfig).mockImplementation(createCloudConfigWithCredentials);
     expect(getRemoteGenerationUrlForUnaligned()).toBe('https://cloud.api.com/api/v1/task/harmful');
   });
 
   it('should return default harmful URL when cloud is disabled', () => {
-    vi.mocked(getEnvString).mockImplementation(function () {
-      return '';
-    });
-    vi.mocked(readGlobalConfig).mockImplementation(function () {
-      return {
-        id: 'test-id',
-        cloud: {
-          apiKey: undefined,
-          apiHost: 'https://cloud.api.com',
-        },
-      };
-    });
+    vi.mocked(getEnvString).mockReturnValue('');
+    vi.mocked(readGlobalConfig).mockImplementation(createCloudConfigWithoutCredentials);
     expect(getRemoteGenerationUrlForUnaligned()).toBe(
       'https://api.promptfoo.app/api/v1/task/harmful',
     );
+  });
+});
+
+describe('getRemoteGenerationHeaders', () => {
+  it('returns JSON headers without cloud credentials', () => {
+    expect(getRemoteGenerationHeaders()).toEqual({
+      'Content-Type': 'application/json',
+    });
+  });
+
+  it('preserves caller-supplied extra headers', () => {
+    expect(getRemoteGenerationHeaders({ 'X-Custom': 'value' })).toEqual({
+      'Content-Type': 'application/json',
+      'X-Custom': 'value',
+    });
+  });
+
+  it('propagates W3C trace headers without forwarding baggage', () => {
+    const inject = vi.spyOn(propagation, 'inject').mockImplementation((_context, carrier) => {
+      const headers = carrier as Record<string, string>;
+      headers.traceparent = '00-0123456789abcdef0123456789abcdef-0123456789abcdef-01';
+      headers.tracestate = 'vendor=state';
+      headers.baggage = 'customer-secret=do-not-forward';
+    });
+
+    try {
+      expect(getRemoteGenerationHeaders()).toEqual({
+        'Content-Type': 'application/json',
+        traceparent: '00-0123456789abcdef0123456789abcdef-0123456789abcdef-01',
+        tracestate: 'vendor=state',
+      });
+    } finally {
+      inject.mockRestore();
+    }
+  });
+
+  it('preserves an explicitly supplied traceparent', () => {
+    const inject = vi.spyOn(propagation, 'inject').mockImplementation((_context, carrier) => {
+      (carrier as Record<string, string>).traceparent = 'automatically-injected';
+    });
+
+    try {
+      expect(getRemoteGenerationHeaders({ traceparent: 'explicit-parent' })).toMatchObject({
+        traceparent: 'explicit-parent',
+      });
+    } finally {
+      inject.mockRestore();
+    }
   });
 });
