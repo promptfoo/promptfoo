@@ -198,6 +198,7 @@ describe('envars', () => {
 
       expect(getEnvOverrides()).toBe(suite);
       expect(getEnvOverrides('file')).toBe(file);
+      expect(getEnvString('CONTRACT_PARENT' as EnvVarKey)).toBe('suite');
       const inherited = getProcessEnv();
       expect(inherited).toMatchObject({
         CONTRACT_PARENT: 'file',

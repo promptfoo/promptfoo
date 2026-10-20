@@ -407,14 +407,17 @@ describe('getNunjucksEngine', () => {
     it('keeps provider credentials separate from template and subprocess environments', () => {
       mockProcessEnv({ PROMPTFOO_DISABLE_TEMPLATE_ENV_VARS: 'true' }, { clear: true });
       const previousProvider = getEnvOverridesProvider();
-      setEnvOverridesProvider((layer) => {
-        if (layer === 'provider') {
-          return { OPENAI_API_KEY: 'provider-key', ANTHROPIC_API_KEY: 'provider-secret' };
-        }
-        return layer === 'suite'
-          ? { OPENAI_API_KEY: 'caller-owned-key', PROMPTFOO_AUTHOR: 'caller' }
-          : undefined;
-      });
+      setEnvOverridesProvider(
+        (layer) => {
+          if (layer === 'provider') {
+            return { OPENAI_API_KEY: 'provider-key', ANTHROPIC_API_KEY: 'provider-secret' };
+          }
+          return layer === 'suite'
+            ? { OPENAI_API_KEY: 'caller-owned-key', PROMPTFOO_AUTHOR: 'caller' }
+            : undefined;
+        },
+        { providerLayer: true },
+      );
       try {
         expect(getEnvString('OPENAI_API_KEY')).toBe('provider-key');
         expect(getEnvString('ANTHROPIC_API_KEY')).toBe('provider-secret');

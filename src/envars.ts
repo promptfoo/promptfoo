@@ -1,4 +1,4 @@
-import { getEnvOverridesProvider } from './envOverrides';
+import { getEnvOverridesProvider, getProviderEnvOverrides } from './envOverrides';
 import { loadEnvFiles } from './util/envFile';
 
 import type { EnvOverrides } from './types/env';
@@ -508,7 +508,7 @@ export function getEnvOverrides(
   layer: 'suite' | 'file' | 'provider' = 'suite',
 ): EnvOverrides | undefined {
   try {
-    return getEnvOverridesProvider()?.(layer);
+    return layer === 'provider' ? getProviderEnvOverrides() : getEnvOverridesProvider()?.(layer);
   } catch {
     // All environment reads must still fall back normally when registration fails.
     return undefined;

@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache } from '../../src/cache';
 import cliState from '../../src/cliState';
+import { getEnvOverridesProvider, setEnvOverridesProvider } from '../../src/envOverrides';
 import logger from '../../src/logger';
 import { AI21ChatCompletionProvider } from '../../src/providers/ai21';
 import { getAnthropicProviders } from '../../src/providers/anthropic/defaults';
@@ -72,6 +73,30 @@ function apiKey(provider: object): string | undefined {
 }
 
 describe('provider environment scopes', () => {
+  it('prefers registered provider credentials over suite credentials, below explicit provider env', () => {
+    const previousProvider = getEnvOverridesProvider();
+    setEnvOverridesProvider(
+      (layer) => ({
+        OPENAI_API_KEY: `${layer}-key`,
+        GOOGLE_API_KEY: `${layer}-key`,
+      }),
+      { providerLayer: true },
+    );
+    try {
+      expect({
+        openai: apiKey(new OpenAiChatCompletionProvider('fixture')),
+        google: GoogleAuthManager.getApiKey({}).apiKey,
+      }).toEqual({ openai: 'provider-key', google: 'provider-key' });
+      const env = { OPENAI_API_KEY: 'explicit-key', GOOGLE_API_KEY: 'explicit-key' };
+      expect({
+        openai: apiKey(new OpenAiChatCompletionProvider('fixture', { env })),
+        google: GoogleAuthManager.getApiKey({}, env).apiKey,
+      }).toEqual({ openai: 'explicit-key', google: 'explicit-key' });
+    } finally {
+      setEnvOverridesProvider(previousProvider);
+    }
+  });
+
   it('preserves provider scope across Vertex Express image credential aliases', async () => {
     const provider = await loadApiProvider('google:gemini-2.5-flash-image', {
       env: { VERTEX_API_KEY: 'suite-vertex-key' },

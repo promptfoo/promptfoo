@@ -22,6 +22,7 @@ import type { AnthropicBaseOptions } from './types';
 function getScopedCustomHeaders(env?: EnvOverrides): string | undefined {
   return (
     env?.ANTHROPIC_CUSTOM_HEADERS ??
+    getEnvOverrides('provider')?.ANTHROPIC_CUSTOM_HEADERS ??
     getEnvOverrides()?.ANTHROPIC_CUSTOM_HEADERS ??
     getEnvOverrides('file')?.ANTHROPIC_CUSTOM_HEADERS
   );

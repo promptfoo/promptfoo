@@ -8,7 +8,13 @@ export function resolveProviderEnv(
 ): { name: string; value: string } | undefined {
   const masked = new Set<string>();
   const ambient = Object.fromEntries(names.map((name) => [name, getEnvString(name as EnvVarKey)]));
-  for (const layer of [env, getEnvOverrides(), getEnvOverrides('file'), ambient]) {
+  for (const layer of [
+    env,
+    getEnvOverrides('provider'),
+    getEnvOverrides(),
+    getEnvOverrides('file'),
+    ambient,
+  ]) {
     // A few providers historically prefer a different alias in the host environment.
     for (const name of layer === ambient ? ambientNames : names) {
       const value = layer?.[name];

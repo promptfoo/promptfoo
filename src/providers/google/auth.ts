@@ -177,6 +177,7 @@ export class GoogleAuthManager {
     const masked = new Set<string>();
     for (const layer of [
       env,
+      getEnvOverrides('provider'),
       getEnvOverrides(),
       getEnvOverrides('file'),
       Object.fromEntries(keys.map((key) => [key, getEnvString(key)])),
