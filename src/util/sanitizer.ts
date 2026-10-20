@@ -1378,7 +1378,12 @@ function sanitizePlainObject(
     ) {
       key = `${redactedKey}#${++keySuffix}`;
     }
-    if (isSecretKey(key)) {
+    if (key === 'bayesAtNPlan') {
+      const plan = depth + 1 > maxDepth ? value : countOnlyBayesAtNPlan(value);
+      if (plan !== undefined) {
+        sanitized[key] = recursiveSanitize(plan, depth + 1, maxDepth, sanitizeUrls);
+      }
+    } else if (isSecretKey(key)) {
       sanitized[key] = REDACTED;
     } else if (key.toLowerCase() === 'headers' && value && typeof value === 'object') {
       sanitized[key] = Object.fromEntries(
@@ -1482,6 +1487,133 @@ function recursiveSanitize(
 
   // Handle plain objects
   return sanitizePlainObject(obj, depth, maxDepth, sanitizeUrls, isEnvMap);
+}
+
+function countOnlyBayesAtNPlan(entry: unknown): unknown {
+  if (
+    !entry ||
+    typeof entry !== 'object' ||
+    !('version' in entry) ||
+    entry.version !== 1 ||
+    !('groups' in entry) ||
+    !Array.isArray(entry.groups)
+  ) {
+    return undefined;
+  }
+  if (
+    entry.groups.some((group: unknown) => {
+      if (!group || typeof group !== 'object') {
+        return true;
+      }
+      const g = group as Record<string, unknown>;
+      const provider = g.provider as Record<string, unknown> | undefined;
+      return (
+        typeof g.repeatGroupId !== 'string' ||
+        !Number.isSafeInteger(g.promptIdx) ||
+        (g.promptIdx as number) < 0 ||
+        !Number.isSafeInteger(g.repetitions) ||
+        (g.repetitions as number) < 1 ||
+        !provider ||
+        typeof provider !== 'object' ||
+        typeof provider.id !== 'string' ||
+        (provider.label !== undefined && typeof provider.label !== 'string')
+      );
+    })
+  ) {
+    return undefined;
+  }
+  return {
+    version: 1,
+    groups: entry.groups.map((group: unknown) => {
+      if (!group || typeof group !== 'object') {
+        return undefined;
+      }
+      const g = group as Record<string, unknown>;
+      const provider =
+        g.provider && typeof g.provider === 'object' ? (g.provider as Record<string, unknown>) : {};
+      return {
+        repeatGroupId: g.repeatGroupId,
+        promptIdx: g.promptIdx,
+        provider: sanitizeObject(
+          { id: provider.id, label: provider.label },
+          { sanitizeUrls: true, maxDepth: Infinity, throwOnError: true },
+        ),
+        repetitions: g.repetitions,
+      };
+    }),
+  };
+}
+
+/** Drop obsolete Bayes input verifiers from public data while retaining count-only plans. */
+export function stripBayesAtNInputHashes<T>(value: T): T {
+  const containsPlan = (item: unknown, checked = new WeakSet<object>()): boolean => {
+    if (typeof item === 'string') {
+      return item.includes('"bayesAtNPlan"');
+    }
+    if (
+      !item ||
+      typeof item !== 'object' ||
+      checked.has(item) ||
+      (!Array.isArray(item) &&
+        Object.getPrototypeOf(item) !== null &&
+        Object.getPrototypeOf(item) !== Object.prototype)
+    ) {
+      return false;
+    }
+    checked.add(item);
+    if (Object.prototype.hasOwnProperty.call(item, 'bayesAtNPlan')) {
+      return true;
+    }
+    return Object.values(item).some((entry) => containsPlan(entry, checked));
+  };
+  if (!containsPlan(value)) {
+    return value;
+  }
+  const seen = new WeakMap<object, unknown>();
+  const visit = (item: unknown): unknown => {
+    if (typeof item === 'string' && item.includes('"bayesAtNPlan"')) {
+      try {
+        return JSON.stringify(visit(JSON.parse(item)));
+      } catch {
+        return item;
+      }
+    }
+    if (
+      !item ||
+      typeof item !== 'object' ||
+      (Object.getPrototypeOf(item) !== null &&
+        Object.getPrototypeOf(item) !== Object.prototype &&
+        !Array.isArray(item))
+    ) {
+      return item;
+    }
+    if (seen.has(item)) {
+      return seen.get(item);
+    }
+    const copy: Record<string, unknown> | unknown[] = Array.isArray(item)
+      ? new Array(item.length)
+      : Object.create(Object.getPrototypeOf(item));
+    const put = (key: string, value: unknown) =>
+      Object.defineProperty(copy, key, {
+        value,
+        enumerable: true,
+        configurable: true,
+        writable: true,
+      });
+    seen.set(item, copy);
+    for (const [key, entry] of Object.entries(item)) {
+      if (key !== 'bayesAtNPlan') {
+        put(key, visit(entry));
+        continue;
+      }
+      const plan = countOnlyBayesAtNPlan(entry);
+      if (plan !== undefined) {
+        put(key, plan);
+      }
+    }
+    return copy;
+  };
+  return visit(value) as T;
 }
 
 /**

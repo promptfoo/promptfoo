@@ -10,8 +10,12 @@ import logger from '../src/logger';
 import { runDbMigrations } from '../src/migrate';
 import Eval from '../src/models/eval';
 import { GoogleVideoProvider } from '../src/providers/google/video';
+import { HttpProvider } from '../src/providers/http';
+import { N8nProvider } from '../src/providers/n8n';
 import { OpenClawAgentProvider } from '../src/providers/openclaw/agent';
 import { OpenClawToolInvokeProvider } from '../src/providers/openclaw/tools';
+import { SlackProvider } from '../src/providers/slack';
+import { getLoadedFileMimeType } from '../src/util/file';
 
 import type { ApiProvider, TestSuite } from '../src/types/index';
 
@@ -223,6 +227,7 @@ describe('Transformation integration (real transform)', () => {
           }),
         },
       ],
+      extensions: ['test-hook'],
       tests: [
         {
           ...(owner === 'target override' && { provider }),
@@ -240,24 +245,26 @@ describe('Transformation integration (real transform)', () => {
       // cliState.basePath deliberately differs from the native media owner.
       const priorBasePath = cliState.basePath;
       cliState.basePath = path.join(directory, 'unused-cli-base');
-      const record = await Eval.create({}, suite().prompts, { id: randomUUID() });
+      const record = new Eval({});
       await evaluate(suite(), record, { bayesAtN: true, repeat: 2, cache: false });
-      const plan = structuredClone(record.config.metadata?.bayesAtNPlan);
       const summary = await record.getRepeatStability();
-      fs.writeFileSync(file, 'changed image');
-      cliState.resume = true;
+      expect(summary?.bayesAtN?.[0]).toMatchObject({ questions: 1, trials: 2 });
+      targetCallApi.mockClear();
+      vi.mocked(runExtensionHook).mockImplementation(async (_extensions, hook, context) => {
+        if (hook === 'beforeEach') {
+          fs.writeFileSync(file, 'changed image');
+        }
+        return context;
+      });
       await expect(
-        evaluate(suite(), record, { bayesAtN: true, repeat: 2, cache: false }),
-      ).rejects.toThrow('original questions, grading inputs');
-      expect(record.config.metadata?.bayesAtNPlan).toEqual(plan);
-      expect(targetCallApi).toHaveBeenCalledTimes(2);
-      fs.writeFileSync(file, 'original image');
-      await evaluate(suite(), record, { bayesAtN: true, repeat: 2, cache: false });
-      expect(targetCallApi).toHaveBeenCalledTimes(2);
-      expect(await record.getRepeatStability()).toEqual(summary);
+        evaluate(suite(), new Eval({}), { bayesAtN: true, repeat: 2, cache: false }),
+      ).rejects.toThrow('unchanged question and grading inputs after beforeEach');
+      expect(targetCallApi).not.toHaveBeenCalled();
       cliState.basePath = priorBasePath;
     } finally {
-      cliState.resume = false;
+      vi.mocked(runExtensionHook).mockImplementation(
+        async (_extensions, _hook, context) => context,
+      );
       cliState.basePath = '';
       fs.rmSync(directory, { recursive: true, force: true });
     }
@@ -322,34 +329,251 @@ describe('Transformation integration (real transform)', () => {
     expect(callApi).toHaveBeenCalledTimes(2);
   });
 
-  it('binds Bayes@N file inputs to their effective MIME type', async () => {
+  it('preserves the effective MIME type of freshly prepared repeated file inputs', async () => {
     const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'bayes-mime-'));
-    const audio = path.join(directory, 'clip.m4a');
-    const video = path.join(directory, 'clip.mp4');
     const bytes = Buffer.from([0, 0, 0, 24, 102, 116, 121, 112, 105, 115, 111, 109]);
-    fs.writeFileSync(audio, bytes);
-    fs.writeFileSync(video, bytes);
-    const callApi = vi.fn(async () => ({ output: 'answer' }));
-    const suite = (file: string): TestSuite => ({
-      providers: [
-        { id: () => 'mime-target', getAudioInputFormat: () => 'google', callApi } as ApiProvider,
-      ],
-      prompts: [{ raw: '{{media}}', label: 'media' }],
-      tests: [{ vars: { media: `file://${file}` }, options: { disableVarExpansion: true } }],
+    const observed: Array<string | undefined> = [];
+    const callApi = vi.fn(async (_prompt, context) => {
+      observed.push(getLoadedFileMimeType(context.vars, context.vars.media));
+      return { output: 'answer' };
     });
     try {
-      const record = new Eval({});
-      await evaluate(suite(audio), record, { bayesAtN: true, repeat: 2, cache: false });
-      cliState.resume = true;
-      await expect(
-        evaluate(suite(video), record, { bayesAtN: true, repeat: 2, cache: false }),
-      ).rejects.toThrow('original questions, grading inputs');
-      expect(callApi).toHaveBeenCalledTimes(2);
+      for (const extension of ['m4a', 'mp4']) {
+        const file = path.join(directory, `clip.${extension}`);
+        fs.writeFileSync(file, bytes);
+        await evaluate(
+          {
+            providers: [
+              {
+                id: () => 'mime-target',
+                getAudioInputFormat: () => 'google',
+                callApi,
+              } as ApiProvider,
+            ],
+            prompts: [{ raw: '{{media}}', label: 'media' }],
+            tests: [{ vars: { media: `file://${file}` }, options: { disableVarExpansion: true } }],
+          },
+          new Eval({}),
+          { bayesAtN: true, repeat: 2, cache: false },
+        );
+      }
+      expect(observed).toEqual(['audio/mp4', 'audio/mp4', undefined, undefined]);
     } finally {
-      cliState.resume = false;
       fs.rmSync(directory, { recursive: true, force: true });
     }
   });
+
+  it('accepts fresh n8n calls without a shared session ID', async () => {
+    const provider = new N8nProvider('https://example.test/webhook');
+    const callApi = vi.spyOn(provider, 'callApi').mockResolvedValue({ output: 'answer' });
+    await evaluate(
+      { providers: [provider], prompts: [{ raw: 'question', label: 'n8n' }], tests: [{}] },
+      new Eval({}),
+      { bayesAtN: true, repeat: 2, cache: false },
+    );
+    expect(callApi).toHaveBeenCalledTimes(2);
+  });
+
+  it('rejects provider instances with unreported private inputs before generation', async () => {
+    class PrivateProvider {
+      id() {
+        return 'private-provider';
+      }
+      callApi = vi.fn(async () => ({ output: 'answer' }));
+    }
+    const provider = new PrivateProvider();
+    await expect(
+      evaluate(
+        { providers: [provider], prompts: [{ raw: 'question', label: 'private' }], tests: [{}] },
+        new Eval({}),
+        { bayesAtN: true, repeat: 2, cache: false },
+      ),
+    ).rejects.toThrow('requires getEvaluationInputs for providers with private inputs');
+    expect(provider.callApi).not.toHaveBeenCalled();
+  });
+
+  it.each(['vars', 'prompt function', 'beforeEach'])(
+    'rejects n8n conversation reuse from prepared %s before any workflow call',
+    async (source) => {
+      const provider = new N8nProvider('https://example.test/webhook', { id: 'workflow-alias' });
+      const callApi = vi.spyOn(provider, 'callApi').mockResolvedValue({ output: 'answer' });
+      vi.mocked(runExtensionHook).mockImplementation(async (_extensions, hook, context) => {
+        if (source === 'beforeEach' && hook === 'beforeEach' && 'test' in context) {
+          context.test.vars!.sessionId = 'shared';
+        }
+        return context;
+      });
+      try {
+        await expect(
+          evaluate(
+            {
+              providers: [provider],
+              extensions: ['test-hook'],
+              prompts: [
+                {
+                  raw: 'question',
+                  label: 'n8n',
+                  ...(source === 'prompt function' && {
+                    function: async ({ vars }) => {
+                      vars.sessionId = 'shared';
+                      return 'question';
+                    },
+                  }),
+                },
+              ],
+              tests: [{ vars: source === 'vars' ? { sessionId: 'shared' } : {} }],
+            },
+            new Eval({}),
+            { bayesAtN: true, repeat: 2, cache: false },
+          ),
+        ).rejects.toThrow(
+          source === 'beforeEach'
+            ? 'unchanged question and grading inputs'
+            : 'shared provider sessions',
+        );
+        expect(callApi).not.toHaveBeenCalled();
+      } finally {
+        vi.mocked(runExtensionHook).mockImplementation(
+          async (_extensions, _hook, context) => context,
+        );
+      }
+    },
+  );
+
+  it.each(['channel', 'responseStrategy', 'formatMessage', 'threadTs'] as const)(
+    'checks Slack private %s before each trial without sending a message',
+    async (field) => {
+      const config = {
+        token: 'dummy-token',
+        channel: 'C-original',
+        responseStrategy: 'first' as 'first' | 'timeout',
+        formatMessage: (prompt: string) => prompt,
+        threadTs: '',
+      };
+      const provider = new SlackProvider({ id: 'slack-alias', config });
+      const callApi = vi.spyOn(provider, 'callApi').mockResolvedValue({ output: 'answer' });
+      vi.mocked(runExtensionHook).mockImplementation(async (_extensions, hook, context) => {
+        if (hook === 'beforeEach') {
+          if (field === 'channel') {
+            config.channel = 'C-other';
+          }
+          if (field === 'responseStrategy') {
+            config.responseStrategy = 'timeout';
+          }
+          if (field === 'formatMessage') {
+            config.formatMessage = (prompt) => `other ${prompt}`;
+          }
+          if (field === 'threadTs') {
+            config.threadTs = '123.456';
+          }
+        }
+        return context;
+      });
+      try {
+        await expect(
+          evaluate(
+            {
+              providers: [provider],
+              extensions: ['test-hook'],
+              prompts: [{ raw: 'question', label: 'slack' }],
+              tests: [{}],
+            },
+            new Eval({}),
+            { bayesAtN: true, repeat: 2, cache: false },
+          ),
+        ).rejects.toThrow(
+          field === 'threadTs'
+            ? 'shared provider sessions'
+            : 'unchanged question and grading inputs',
+        );
+        expect(callApi).not.toHaveBeenCalled();
+        expect(provider.getEvaluationInputs().config).not.toHaveProperty('token');
+      } finally {
+        vi.mocked(runExtensionHook).mockImplementation(
+          async (_extensions, _hook, context) => context,
+        );
+      }
+    },
+  );
+
+  it.each([false, true])('checks native HTTP multipart file bytes (file URL=%s)', async (asUrl) => {
+    const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'bayes-multipart-'));
+    const file = path.join(directory, 'payload data.txt');
+    fs.writeFileSync(file, 'original');
+    const provider = new HttpProvider('https://example.test/upload', {
+      config: {
+        method: 'POST',
+        multipart: {
+          parts: [
+            {
+              kind: 'file',
+              name: 'upload',
+              source: {
+                type: 'path',
+                path: asUrl ? `file://${file.replaceAll(' ', '%20')}` : '{{upload}}',
+              },
+            },
+          ],
+        },
+      },
+    });
+    const callApi = vi.spyOn(provider, 'callApi').mockResolvedValue({ output: 'answer' });
+    vi.mocked(runExtensionHook).mockImplementation(async (_extensions, hook, context) => {
+      if (hook === 'beforeEach') {
+        fs.writeFileSync(file, 'changed');
+      }
+      return context;
+    });
+    try {
+      await expect(
+        evaluate(
+          {
+            providers: [provider],
+            extensions: ['test-hook'],
+            prompts: [{ raw: 'question', label: 'multipart' }],
+            tests: [{ vars: asUrl ? {} : { upload: file } }],
+          },
+          new Eval({}),
+          { bayesAtN: true, repeat: 2, cache: false },
+        ),
+      ).rejects.toThrow('unchanged question and grading inputs');
+      expect(callApi).not.toHaveBeenCalled();
+    } finally {
+      vi.mocked(runExtensionHook).mockImplementation(
+        async (_extensions, _hook, context) => context,
+      );
+      fs.rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
+  it.each(['{{prompt}}', '{% if prompt %}input.txt{% endif %}'])(
+    'rejects multipart grader paths requiring a grading-only context: %s',
+    async (filePath) => {
+      const grader = new HttpProvider('https://example.test/grade', {
+        config: {
+          method: 'POST',
+          multipart: {
+            parts: [{ kind: 'file', name: 'upload', source: { type: 'path', path: filePath } }],
+          },
+        },
+      });
+      const target = vi.fn(async () => ({ output: 'answer' }));
+      const grade = vi.spyOn(grader, 'callApi').mockResolvedValue({ output: 'answer' });
+      await expect(
+        evaluate(
+          {
+            providers: [{ id: () => 'graded', callApi: target }],
+            prompts: [{ raw: 'question', label: 'multipart-grader' }],
+            tests: [{ assert: [{ type: 'llm-rubric', provider: grader, value: 'correct' }] }],
+          },
+          new Eval({}),
+          { bayesAtN: true, repeat: 2, cache: false },
+        ),
+      ).rejects.toThrow('dynamic multipart file paths in graders');
+      expect(target).not.toHaveBeenCalled();
+      expect(grade).not.toHaveBeenCalled();
+    },
+  );
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -625,5 +849,3 @@ describe('Transformation integration (real transform)', () => {
     },
   );
 });
-
-import { randomUUID } from 'crypto';

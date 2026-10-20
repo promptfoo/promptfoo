@@ -362,6 +362,10 @@ export class GoogleVideoProvider implements ApiProvider {
     return this.providerId || `google:video:${this.modelName}`;
   }
 
+  getEvaluationInputs(context: Pick<CallApiContextParams, 'prompt' | 'vars'>) {
+    return { filePaths: this.getInputFilePaths(context) };
+  }
+
   getInputFilePaths(context?: Pick<CallApiContextParams, 'prompt' | 'vars'>): string[] {
     const { config, mediaBasePaths } = mergeGoogleVideoRequestConfig(
       this.config,

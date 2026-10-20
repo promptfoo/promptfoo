@@ -1171,46 +1171,50 @@ with errors, cached target responses or grading, duplicate/missing indices, or
 unequal repeat counts have an `unavailableReason` instead of posterior moments.
 Runs with precomputed `providerOutput`, redteam, comparison assertions (including
 inside assertion sets), `_conversation`, `storeOutputAs`, or shared provider
-sessions are unsupported. This binary variant
-uses a uniform prior without prior observations or rubric weights. The saved
-schedule in `metadata.bayesAtNPlan` supports restored and resumed evals; older
-results without that schedule do not get posterior estimates.
+sessions are unsupported. This binary variant uses a uniform prior without prior
+observations or rubric weights.
+
+Bayes@N supports fresh evaluations with an empty result record. Resume,
+`eval --retry-errors`, and the dedicated `retry` command are unsupported, including
+for older Bayes@N records. Start a new evaluation after an interrupted run. The
+count-only schedule in `metadata.bayesAtNPlan` lets completed saved and imported
+results reconstruct their summaries. It contains no input fingerprints. Results
+without a schedule do not get posterior estimates. Exports made with
+`PROMPTFOO_STRIP_GRADING_RESULT` retain the computed summary but omit the schedule;
+imported copies cannot recompute Bayes@N without the original grading evidence.
+Legacy input fingerprints are removed from exported plans.
 
 Shared-session option names are reserved in Bayes@N, including with custom
 provider IDs: `persistSession`, `session_id`, `persist_sessions`, `thread_id`,
 `persist_threads`, `resume`, `continue`, `sessionId`, `session_key`, and `session`.
-The same restriction applies to `runOptions.session`, OpenClaw's session-key
-header, and Claude's session-related `extra_args` flags. Target overrides and
-configured graders are checked too. Providers reporting `hasSharedSession: true`
-are rejected. Remove shared-session modes from base
-provider configuration even if a per-test option disables them, since some
-providers read only their base configuration. Saving a fresh Claude session with
-`persist_session` or creating a fresh OpenCode child with `parent_session_id`
-is allowed.
+The restriction also covers `runOptions.session`, OpenClaw's session-key header,
+Claude's session-related `extra_args` flags, Slack's `threadTs`, and n8n's prepared
+`vars.sessionId`. Target overrides and configured graders are checked too.
+Remove shared-session modes from base provider configuration even if a per-test
+option disables them, since some providers read only their base configuration.
+Saving a fresh Claude session with `persist_session` or creating a fresh OpenCode
+child with `parent_session_id` is allowed.
 
-Exports made with `PROMPTFOO_STRIP_GRADING_RESULT` retain the computed summary but
-omit the saved schedule. Imported copies cannot recompute Bayes@N without the
-original grader-cache evidence, and cannot resume a Bayes@N run. Resume requires
-the original saved schedule with tagged `sha256:` input hashes, unchanged rendered
-questions and grading inputs, provider/prompt columns, and repeat counts. Older
-schedules without valid tagged hashes can still produce summaries but cannot
-resume. Each trial's prompt
-and file variables are prepared before generation and reused during execution;
-`beforeEach` hooks must preserve those inputs. Keep prompt and grading code,
-provider configuration, dependencies, and external state fixed across resume.
-Loaded providers can declare native generation input files with the synchronous
-`getInputFilePaths(context)` hook, which returns absolute paths without side effects.
-Bayes@N hashes those files and checks them again after `beforeEach`. Google Video
-implements this hook for images, frames, reference images, and source video files,
-using the same aliases and owning base paths as generation. These hashes apply
-to loaded target and grader instances; other external provider dependencies must
-remain fixed. If a provider declares files, an older schedule without their content
-hashes needs a fresh evaluation.
-Use plain data objects for vars and grading options; maps, sets, and cyclic data
-are unsupported.
-Use `eval --retry-errors` to retry execution errors in
-the latest eval; the dedicated `retry` command does not support Bayes@N. A fresh
-evaluation clears the previous schedule before building its own.
+Prompt and file inputs are prepared once per scheduled trial. Each call receives
+its own mutable grading state. In-memory consistency checks require identical
+question and grading inputs across repeats, and check again after `beforeEach`.
+These checks include native assertion file inputs such as `contextTransform` and
+`rubricPrompt`, including environment-expanded rubric file paths. No fingerprints
+are saved. Use plain data objects for vars and grading options; maps, sets, and
+cyclic data are unsupported.
+
+Loaded providers can describe private nonsecret configuration, input files, and
+context-dependent session reuse through the synchronous
+`getEvaluationInputs(context)` hook. It must return absolute file paths without
+network calls or mutation. The older `getInputFilePaths(context)` hook remains
+supported for file declarations. Google Video declares media inputs using its
+native aliases and owning base paths. HTTP declares multipart path sources using
+its native template and path rules. Multipart modes with request transforms or
+dynamically fetched authentication/session variables, and templated multipart
+paths in graders, are unsupported. OpenClaw private header modes are unsupported.
+Provider instances that expose neither public configuration nor an input
+descriptor are rejected, as are recognized undeclared file modes. Custom callbacks must keep captured state, code dependencies,
+authentication scope, and other external inputs fixed throughout the run.
 
 ### EvaluateTable
 

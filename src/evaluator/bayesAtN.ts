@@ -6,6 +6,8 @@ interface InputAssertion {
   value?: unknown;
   transform?: unknown;
   provider?: unknown;
+  contextTransform?: unknown;
+  rubricPrompt?: unknown;
 }
 
 interface InputStep {
@@ -37,7 +39,6 @@ interface PlannedGroup {
   promptIdx: number;
   provider: ProviderIdentity;
   repetitions: number;
-  inputHash: string;
 }
 
 interface BayesAtNPlan {
@@ -57,6 +58,8 @@ interface InputSources {
   fileHash: (reference: string) => string;
   functionSource: (fn: Function) => string | undefined;
   providerFiles?: (provider: unknown, target: boolean) => [string, string][];
+  providerConfig?: (provider: object) => unknown;
+  rubricFileReference?: (reference: string, arrayElement?: boolean) => string;
   mimeTypes?: Record<string, string>;
 }
 
@@ -212,6 +215,9 @@ function encodeInput(
           id: provider.id(),
           label: provider.label,
           config: provider.config,
+          ...(sources.providerConfig?.(value) !== undefined && {
+            nativeConfig: sources.providerConfig?.(value),
+          }),
           transform: provider.transform,
           inputs: provider.inputs,
           callApi: provider.callApi,
@@ -288,6 +294,27 @@ export function hashBayesAtNInputs(step: InputStep, sources: InputSources): stri
       }
     }
   };
+  const addRubric = (value: unknown, arrayElement = false): void => {
+    if (typeof value === 'string' && value.startsWith('file://')) {
+      files.add(sources.rubricFileReference?.(value, arrayElement) ?? value);
+    } else if (Array.isArray(value)) {
+      for (const part of value) {
+        addRubric(part, true);
+      }
+    }
+  };
+  const rubricTypes = new Set([
+    'llm-rubric',
+    'agent-rubric',
+    'factuality',
+    'model-graded-factuality',
+    'model-graded-closedqa',
+    'answer-relevance',
+    'context-recall',
+    'context-relevance',
+    'context-faithfulness',
+    'search-rubric',
+  ]);
   const addAssertions = (assertions: InputAssertion[] = []) => {
     for (const assertion of assertions) {
       if (assertion.type === 'assert-set') {
@@ -295,6 +322,24 @@ export function hashBayesAtNInputs(step: InputStep, sources: InputSources): stri
       } else {
         addFile(assertion.value);
         addFile(assertion.transform);
+        const type = assertion.type?.replace(/^not-/, '');
+        if (
+          type &&
+          ['context-recall', 'context-relevance', 'context-faithfulness'].includes(type)
+        ) {
+          addFile(assertion.contextTransform);
+        }
+        const rubric = assertion.rubricPrompt || step.test.options?.rubricPrompt;
+        if (type === 'g-eval' && rubric && typeof rubric === 'object' && !Array.isArray(rubric)) {
+          addRubric('steps' in rubric ? rubric.steps : undefined);
+          addRubric('evaluate' in rubric ? rubric.evaluate : undefined);
+        } else if (type === 'context-faithfulness' && Array.isArray(rubric)) {
+          for (const part of rubric.slice(0, 2)) {
+            addRubric(part && typeof part === 'object' && 'content' in part ? part.content : part);
+          }
+        } else if (type && rubricTypes.has(type)) {
+          addRubric(rubric);
+        }
         addProvider(assertion.provider);
       }
     }
@@ -306,7 +351,6 @@ export function hashBayesAtNInputs(step: InputStep, sources: InputSources): stri
   addFile(step.test.options?.transform);
   addFile(step.test.options?.postprocess);
   addFile(step.test.options?.transformVars);
-  addFile(step.test.options?.rubricPrompt);
   return (
     'sha256:' +
     createHash('sha256')
@@ -362,6 +406,7 @@ export function validateBayesAtNRepeat(repeat: number | undefined): void {
 
 export function createBayesAtNPlan(steps: Iterable<PlannedStep>): BayesAtNPlan {
   const groups = new Map<string, PlannedGroup>();
+  const inputHashes = new Map<string, string>();
   for (const step of steps) {
     if (step.repeatGroupId === undefined) {
       throw new Error('Bayes@N requires a repeat group for every scheduled question');
@@ -371,80 +416,16 @@ export function createBayesAtNPlan(steps: Iterable<PlannedStep>): BayesAtNPlan {
       promptIdx: step.promptIdx,
       provider: { id: step.provider.id(), label: step.provider.label },
       repetitions: step.evaluateOptions?.repeat ?? 1,
-      inputHash: step.inputHash,
     };
-    const existing = groups.get(groupKey(group));
-    if (existing && existing.inputHash !== group.inputHash) {
+    const key = groupKey(group);
+    if (inputHashes.has(key) && inputHashes.get(key) !== step.inputHash) {
       throw new Error('Bayes@N requires identical question and grading inputs across repeats');
     }
-    groups.set(groupKey(group), group);
+    inputHashes.set(key, step.inputHash);
+    groups.set(key, group);
   }
   if (groups.size === 0) {
     throw new Error('Bayes@N requires at least one scheduled question');
   }
   return { version: 1, groups: [...groups.values()] };
-}
-
-export function readResumeBayesAtNPlan(plan: unknown): BayesAtNPlan {
-  const invalidPlan = () =>
-    new Error(
-      'Bayes@N resume requires the original valid sampling plan and retained grading evidence',
-    );
-  if (!plan || typeof plan !== 'object' || !('version' in plan) || plan.version !== 1) {
-    throw invalidPlan();
-  }
-  if (!('groups' in plan) || !Array.isArray(plan.groups) || plan.groups.length === 0) {
-    throw invalidPlan();
-  }
-  const groups: PlannedGroup[] = [];
-  const keys = new Set<string>();
-  for (const group of plan.groups) {
-    if (
-      !group ||
-      typeof group !== 'object' ||
-      typeof group.repeatGroupId !== 'string' ||
-      group.repeatGroupId.length === 0 ||
-      !Number.isSafeInteger(group.promptIdx) ||
-      group.promptIdx < 0 ||
-      !Number.isSafeInteger(group.repetitions) ||
-      group.repetitions < 1 ||
-      typeof group.inputHash !== 'string' ||
-      !/^sha256:[a-f0-9]{64}$/.test(group.inputHash) ||
-      !group.provider ||
-      typeof group.provider !== 'object' ||
-      (group.provider.id !== undefined && typeof group.provider.id !== 'string') ||
-      (group.provider.label !== undefined && typeof group.provider.label !== 'string')
-    ) {
-      throw invalidPlan();
-    }
-    const normalized: PlannedGroup = {
-      repeatGroupId: group.repeatGroupId,
-      promptIdx: group.promptIdx,
-      provider: { id: group.provider.id, label: group.provider.label },
-      repetitions: group.repetitions,
-      inputHash: group.inputHash,
-    };
-    const key = groupKey(normalized);
-    if (keys.has(key)) {
-      throw invalidPlan();
-    }
-    keys.add(key);
-    groups.push(normalized);
-  }
-  return { version: 1, groups };
-}
-
-export function validateResumeBayesAtNPlan(original: BayesAtNPlan, current: BayesAtNPlan): void {
-  const groups = new Map(original.groups.map((group) => [groupKey(group), group]));
-  if (
-    current.groups.length !== groups.size ||
-    current.groups.some((group) => {
-      const saved = groups.get(groupKey(group));
-      return saved?.repetitions !== group.repetitions || saved?.inputHash !== group.inputHash;
-    })
-  ) {
-    throw new Error(
-      'Bayes@N resume requires the original questions, grading inputs, providers, prompts, and repeat counts',
-    );
-  }
 }

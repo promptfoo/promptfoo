@@ -170,7 +170,7 @@ describe('retryCommand', () => {
       });
       vi.mocked(Eval.findById).mockResolvedValue(originalEval);
       dbMocks.errorRows.push({ id: 'original-error' });
-      await expect(retryCommand(originalEval.id, {})).rejects.toThrow('eval --retry-errors');
+      await expect(retryCommand(originalEval.id, {})).rejects.toThrow('fresh evaluations only');
       expect(resolveConfigs).not.toHaveBeenCalled();
       expect(evaluate).not.toHaveBeenCalled();
       expect(dbMocks.deleteRun).not.toHaveBeenCalled();

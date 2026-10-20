@@ -1,3 +1,5 @@
+import { sanitizeObject } from '../sanitizer';
+
 interface ProviderIdentity {
   id?: string;
   label?: string;
@@ -34,8 +36,16 @@ interface BayesAtNCohort {
   unavailableReason?: string;
 }
 
+function safeProvider(provider: ProviderIdentity): ProviderIdentity {
+  return sanitizeObject(provider, { sanitizeUrls: true, maxDepth: Infinity, throwOnError: true });
+}
+
 function cohortKey(result: { promptIdx: number; provider: ProviderIdentity }): string {
-  return JSON.stringify([result.promptIdx, result.provider.id, result.provider.label]);
+  return JSON.stringify([
+    result.promptIdx,
+    safeProvider(result.provider).id,
+    safeProvider(result.provider).label,
+  ]);
 }
 
 function groupKey(result: {
@@ -101,7 +111,7 @@ export class BayesAtNCalculator {
       const key = cohortKey(group);
       const cohort = this.cohorts.get(key) ?? {
         promptIdx: group.promptIdx,
-        provider: group.provider,
+        provider: safeProvider(group.provider),
         questions: 0,
         trials: group.repetitions,
       };

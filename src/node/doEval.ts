@@ -455,6 +455,16 @@ async function doEvalWithEnv(
           logForCli: () => logger.error(message),
         });
       }
+      if (
+        resumeEval.config.evaluateOptions?.bayesAtN ||
+        resumeEval.runtimeOptions?.bayesAtN ||
+        resumeEval.config.metadata?.bayesAtNPlan !== undefined
+      ) {
+        return failEvalRun(
+          'Bayes@N supports fresh evaluations only; resume and retries are unsupported',
+          isCliInvocation,
+        );
+      }
       logger.info(chalk.cyan(`Resuming evaluation ${resumeEval.id}...`));
       // Use the saved config as our base to ensure identical test ordering
       ({
@@ -481,6 +491,17 @@ async function doEvalWithEnv(
         return failEvalRun(message, isCliInvocation, {
           logForCli: () => logger.error(message),
         });
+      }
+
+      if (
+        latestEval.config.evaluateOptions?.bayesAtN ||
+        latestEval.runtimeOptions?.bayesAtN ||
+        latestEval.config.metadata?.bayesAtNPlan !== undefined
+      ) {
+        return failEvalRun(
+          'Bayes@N supports fresh evaluations only; resume and retries are unsupported',
+          isCliInvocation,
+        );
       }
 
       // Get all ERROR result IDs - capture BEFORE retry so we know what to delete on success

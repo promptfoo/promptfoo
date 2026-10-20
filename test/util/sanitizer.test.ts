@@ -16,6 +16,7 @@ import {
   sanitizeUrl,
   sanitizeUrlEncodedString,
   sanitizeUrlForLogging,
+  stripBayesAtNInputHashes,
   stripProviderPromptSelectors,
 } from '../../src/util/sanitizer';
 
@@ -30,6 +31,119 @@ beforeEach(() => {
 afterEach(() => {
   consoleErrorSpy.mockRestore();
   consoleWarnSpy.mockRestore();
+});
+
+describe('Bayes@N legacy plan export projection', () => {
+  const legacyPlan = () => ({
+    version: 1,
+    inputHash: 'outer-secret-verifier',
+    groups: [
+      {
+        repeatGroupId: 'question',
+        promptIdx: 0,
+        provider: { id: 'https://user:password@example.test/model?api_key=secret', label: 'model' },
+        repetitions: 2,
+        inputHash: 'sha256:' + 'a'.repeat(64),
+        fileHashes: { fixture: 'verifier' },
+      },
+    ],
+  });
+  it('removes legacy verifiers at every nested plan while preserving ordinary metadata and secrets redaction', () => {
+    const metadata = { bayesAtNPlan: legacyPlan(), label: 'retained' };
+    const value = {
+      metadata,
+      defaultTest: { metadata },
+      tests: [{ metadata }],
+      scenarios: [{ config: [{ metadata }], tests: [{ metadata }] }],
+      results: [{ metadata, testCase: { metadata } }],
+      serialized: JSON.stringify({ metadata }),
+      inputHash: 'ordinary-user-data',
+      apiKey: 'secret',
+    };
+    const projected = sanitizeConfigForOutput(value) as unknown as typeof value;
+    const text = JSON.stringify(projected);
+    expect(text).not.toContain('sha256:');
+    expect(text).not.toContain('outer-secret-verifier');
+    expect(text).not.toContain('fileHashes');
+    expect(text).not.toContain('user:password');
+    expect(projected.inputHash).toBe('ordinary-user-data');
+    expect(projected.apiKey).toBe('[REDACTED]');
+    expect(projected.results[0].metadata.label).toBe('retained');
+    expect(projected.results[0].metadata.bayesAtNPlan.groups[0]).toMatchObject({ repetitions: 2 });
+    expect(value.metadata.bayesAtNPlan.groups[0].inputHash).toContain('sha256:');
+  });
+  it.each(['repeatGroupId', 'promptIdx', 'repetitions', 'provider.id', 'provider.label'])(
+    'drops the entire malformed plan when %s contains an obsolete verifier',
+    (slot) => {
+      const good = legacyPlan().groups[0];
+      const bad: Record<string, unknown> = { ...good, provider: { ...good.provider } };
+      const verifier = { inputHash: 'sha256:' + 'b'.repeat(64) };
+      if (slot.startsWith('provider.')) {
+        bad.provider = { ...good.provider, [slot.slice('provider.'.length)]: verifier };
+      } else {
+        bad[slot] = verifier;
+      }
+      const value = {
+        metadata: { bayesAtNPlan: { version: 1, groups: [good, bad] }, label: 'kept' },
+      };
+      for (const copy of [
+        stripBayesAtNInputHashes(value),
+        sanitizeObject(value, { maxDepth: Infinity }),
+      ]) {
+        expect(copy.metadata).toEqual({ label: 'kept' });
+        expect(JSON.stringify(copy)).not.toContain('inputHash');
+      }
+      expect(value.metadata.bayesAtNPlan.groups).toHaveLength(2);
+    },
+  );
+  it('keeps normal sanitizer depth limits for reserved plans', () => {
+    expect(sanitizeObject({ bayesAtNPlan: legacyPlan() }, { maxDepth: 0 })).toEqual({
+      bayesAtNPlan: '[...]',
+    });
+    const full = sanitizeObject({ bayesAtNPlan: legacyPlan() }, { maxDepth: Infinity });
+    expect(full.bayesAtNPlan.groups[0].repetitions).toBe(2);
+    expect(JSON.stringify(full)).not.toContain('inputHash');
+  });
+  it('scans a chain once and replaces cycles with a plan-bearing sibling safely', () => {
+    const leaf = { bayesAtNPlan: legacyPlan() };
+    let reads = 0;
+    let chain: object = leaf;
+    for (let index = 0; index < 50; index++) {
+      const child = chain;
+      chain = {
+        get child() {
+          reads++;
+          return child;
+        },
+      };
+    }
+    stripBayesAtNInputHashes(chain);
+    expect(reads).toBe(100);
+    const root: { child?: object; sibling: object } = { sibling: leaf };
+    root.child = { ancestor: root, sparse: new Array(3) };
+    const copy = stripBayesAtNInputHashes(root);
+    expect((copy.child as { ancestor: object }).ancestor).toBe(copy);
+    expect((copy.child as { sparse: unknown[] }).sparse).toHaveLength(3);
+    expect(copy.sibling).not.toBe(leaf);
+    expect(JSON.stringify(copy.sibling)).not.toContain('inputHash');
+    const untouched = { response: { output: 'answer' } };
+    expect(stripBayesAtNInputHashes(untouched)).toBe(untouched);
+  });
+  it('copies own __proto__ keys safely and supports null-prototype/cyclic metadata', () => {
+    const value = JSON.parse('{"__proto__":{"polluted":true},"metadata":{}}');
+    value.metadata.bayesAtNPlan = legacyPlan();
+    const projected = stripBayesAtNInputHashes(value);
+    expect(Object.getPrototypeOf(projected)).toBe(Object.prototype);
+    expect(Object.hasOwn(projected, '__proto__')).toBe(true);
+    expect(projected.polluted).toBeUndefined();
+    const nullRecord = Object.create(null);
+    nullRecord.bayesAtNPlan = legacyPlan();
+    nullRecord.self = nullRecord;
+    const copied = stripBayesAtNInputHashes(nullRecord);
+    expect(Object.getPrototypeOf(copied)).toBeNull();
+    expect(copied.self).toBe(copied);
+    expect(copied.bayesAtNPlan.groups[0]).not.toHaveProperty('inputHash');
+  });
 });
 
 describe('sanitizeRuntimeOptions', () => {

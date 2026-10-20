@@ -31,6 +31,7 @@ import {
   mapTestProviderRefs,
   REDACTED,
   sanitizeObject,
+  stripBayesAtNInputHashes,
   stripProviderPromptSelectors,
   stripTestProviderPromptSelectors,
 } from '../util/sanitizer';
@@ -938,7 +939,7 @@ export function sanitizeResultForJsonlArtifact<T extends object>(
     stripOutput: shouldStripResponseOutput,
   });
 
-  return {
+  return stripBayesAtNInputHashes({
     ...result,
     ...(artifactResult.testCase
       ? {
@@ -986,7 +987,7 @@ export function sanitizeResultForJsonlArtifact<T extends object>(
           redacted.response?.metadata,
           (artifactResult.testCase as AtomicTestCase | undefined)?.metadata,
         ),
-  } as T;
+  } as T);
 }
 
 export default class EvalResult {
@@ -1404,7 +1405,7 @@ export default class EvalResult {
       });
     }
 
-    return {
+    return stripBayesAtNInputHashes({
       cost: this.cost,
       ...(this.response?.incurredCost !== undefined && {
         incurredCost: this.response.incurredCost,
@@ -1443,7 +1444,7 @@ export default class EvalResult {
             this.testCase.metadata,
           ),
       failureReason: this.failureReason,
-    };
+    });
   }
 }
 
@@ -1452,7 +1453,9 @@ export function asEvaluateResult(
   result: EvalResult | EvaluateResult,
   stripFlags = getStripFlags(),
 ): EvaluateResult {
-  return 'toEvaluateResult' in result ? result.toEvaluateResult(stripFlags) : result;
+  return 'toEvaluateResult' in result
+    ? result.toEvaluateResult(stripFlags)
+    : stripBayesAtNInputHashes(result);
 }
 
 /** Canonical `testIdx:promptIdx` key used to dedupe/look up a result across the streaming,

@@ -163,6 +163,44 @@ export class OpenClawAgentProvider implements ApiProvider {
     return Boolean(this.openclawConfig.session_key?.trim());
   }
 
+  getEvaluationInputs() {
+    if (
+      Object.keys(this.openclawConfig.headers ?? {}).length ||
+      Object.keys(this.openclawConfig.ws_headers ?? {}).length
+    ) {
+      throw new Error(
+        'Bayes@N does not support OpenClaw custom headers without declared input identity',
+      );
+    }
+    const {
+      account_id,
+      backend_model,
+      model_override,
+      thinking_level,
+      extra_system_prompt,
+      action,
+      dry_run,
+      message_channel,
+    } = this.openclawConfig;
+    return {
+      config: {
+        gatewayUrl: this.gatewayUrl,
+        timeoutMs: this.timeoutMs,
+        agent: this.agentId,
+        scopes: this.scopes,
+        account_id,
+        backend_model,
+        model_override,
+        thinking_level,
+        extra_system_prompt,
+        action,
+        dry_run,
+        message_channel,
+      },
+      hasSharedSession: this.hasSharedSession,
+    };
+  }
+
   toString(): string {
     return `[OpenClaw Agent Provider ${this.agentId ?? 'default'}]`;
   }

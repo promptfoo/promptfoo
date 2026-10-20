@@ -10,8 +10,9 @@ import cliState from '../../src/cliState';
 import { evaluate } from '../../src/evaluator';
 import { runExtensionHook } from '../../src/evaluatorHelpers';
 import Eval from '../../src/models/eval';
-import { type EvaluateSummaryV3, type TestSuite } from '../../src/types/index';
+import { type Assertion, type EvaluateSummaryV3, type TestSuite } from '../../src/types/index';
 import { processConfigFileReferences } from '../../src/util/fileReference';
+import { mockProcessEnv } from '../util/utils';
 import { mockApiProvider, mockReasoningApiProvider, toPrompt } from './helpers';
 import { describeEvaluator } from './lifecycle';
 
@@ -19,141 +20,216 @@ const createVariableTest = () => ({
   vars: { var1: 'value1', var2: 'value2' },
 });
 describeEvaluator('evaluator basic flows', () => {
-  it.each([
-    'expanded vars',
-    'beforeAll vars',
-    'threshold',
-    'rubric',
-    'assertion',
-    'transform',
-    'scoring function',
-    'provider config',
-  ])('rejects changed concrete Bayes@N inputs on resume: %s', async (change) => {
-    let changed = false;
-    const callApi = vi.fn(async () => ({ output: 'answer' }));
-    const suite = (): TestSuite => ({
-      ...(change === 'beforeAll vars' && { extensions: ['test-hook'] }),
-      providers: [
-        {
-          id: () => 'input-target',
-          callApi,
-          config: { temperature: changed && change === 'provider config' ? 1 : 0 },
-        },
-      ],
-      prompts: [toPrompt('{{question}}')],
-      defaultTest: {
-        threshold: changed && change === 'threshold' ? 0.5 : 1,
-        options: {
-          rubricPrompt: changed && change === 'rubric' ? 'changed rubric' : 'original rubric',
-          transform:
-            changed && change === 'transform' ? (output) => `${output}!` : (output) => output,
-        },
-        assertScoringFunction:
-          changed && change === 'scoring function'
-            ? () => ({ pass: false, score: 0, reason: 'changed' })
-            : () => ({ pass: true, score: 1, reason: 'original' }),
-      },
-      tests: [
-        {
-          vars: { question: [changed && change === 'expanded vars' ? 'changed' : 'original'] },
-          assert: [
-            { type: 'equals', value: changed && change === 'assertion' ? 'other' : 'answer' },
+  it.each(['resume', 'retry'] as const)(
+    'rejects Bayes@N %s before preparing inputs or invoking hooks',
+    async (mode) => {
+      const callApi = vi.fn(async () => ({ output: 'answer' }));
+      const render = vi.fn(async () => 'question');
+      const suite: TestSuite = {
+        providers: [{ id: () => 'fresh-target', callApi }],
+        prompts: [{ ...toPrompt('question'), function: render }],
+        extensions: ['test-hook'],
+        tests: [{}],
+      };
+      cliState.resume = mode === 'resume';
+      cliState.retryMode = mode === 'retry';
+      await expect(
+        evaluate(suite, new Eval({}), { bayesAtN: true, repeat: 2, cache: false }),
+      ).rejects.toThrow('fresh evaluations only');
+      expect(render).not.toHaveBeenCalled();
+      expect(callApi).not.toHaveBeenCalled();
+      expect(runExtensionHook).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(['resume', 'retry'] as const)(
+    'rejects %s of a stored count-only or legacy Bayes@N plan when the option is omitted',
+    async (mode) => {
+      for (const legacy of [false, true]) {
+        const plan = {
+          version: 1,
+          groups: [
+            {
+              repeatGroupId: 'question',
+              promptIdx: 0,
+              provider: { id: 'stored-target' },
+              repetitions: 2,
+              ...(legacy && { inputHash: 'sha256:' + 'a'.repeat(64) }),
+            },
           ],
-        },
-      ],
-    });
-    vi.mocked(runExtensionHook).mockImplementation(async (_extensions, hook, context) => {
-      if (hook === 'beforeAll' && changed && change === 'beforeAll vars' && 'suite' in context) {
-        context.suite.tests![0].vars = { question: ['hook question'] };
-      }
-      return context;
-    });
-    const record = await Eval.create({}, suite().prompts, { id: randomUUID() });
-    await evaluate(suite(), record, { bayesAtN: true, repeat: 2, cache: false });
-    const originalPlan = structuredClone(record.config.metadata?.bayesAtNPlan);
-    const originalRows = await record.getResultsCount();
-    changed = true;
-    callApi.mockClear();
-    cliState.resume = true;
-    await expect(
-      evaluate(suite(), record, { bayesAtN: true, repeat: 2, cache: false }),
-    ).rejects.toThrow('original questions, grading inputs');
-    expect(callApi).not.toHaveBeenCalled();
-    expect(record.config.metadata?.bayesAtNPlan).toEqual(originalPlan);
-    expect(await record.getResultsCount()).toBe(originalRows);
-  });
-
-  it('rejects regenerated transformVars UUIDs on Bayes@N resume', async () => {
-    const callApi = vi.fn(async () => ({ output: 'answer' }));
-    const suite = (): TestSuite => ({
-      providers: [{ id: () => 'uuid-target', callApi }],
-      prompts: [toPrompt('{{id}}')],
-      tests: [{ options: { transformVars: 'return { id: context.uuid };' } }],
-    });
-    const record = new Eval({});
-    await evaluate(suite(), record, { bayesAtN: true, repeat: 2, cache: false });
-    cliState.resume = true;
-    callApi.mockClear();
-    await expect(
-      evaluate(suite(), record, { bayesAtN: true, repeat: 2, cache: false }),
-    ).rejects.toThrow('original questions, grading inputs');
-    expect(callApi).not.toHaveBeenCalled();
-  });
-
-  it.each(['prompt function', 'file variable', 'grading file'])(
-    'binds Bayes@N resume to rendered content: %s',
-    async (source) => {
-      const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'bayes-input-'));
-      const file = path.join(directory, source === 'grading file' ? 'grade.js' : 'question.txt');
-      fs.writeFileSync(
-        file,
-        source === 'grading file' ? 'module.exports = () => true;' : 'original question',
-      );
-      let question = 'original question';
-      const callApi = vi.fn(async (prompt: string) => ({ output: prompt }));
-      const promptFunction = vi.fn(async () => question);
-      const suite = (): TestSuite => ({
-        providers: [{ id: () => 'render-target', callApi }],
-        prompts: [
-          {
-            ...toPrompt('{{question}}'),
-            ...(source === 'prompt function' && { function: promptFunction }),
-          },
-        ],
-        tests: [
-          {
-            options: { disableVarExpansion: true },
-            vars: { question: source === 'file variable' ? `file://${file}` : 'original question' },
-            ...(source === 'grading file' && {
-              assert: [{ type: 'javascript', value: `file://${file}` }],
-            }),
-          },
-        ],
-      });
-      try {
-        const record = new Eval({});
-        await evaluate(suite(), record, { bayesAtN: true, repeat: 2, cache: false });
-        if (source === 'prompt function') {
-          expect(promptFunction).toHaveBeenCalledTimes(2);
-        }
-        expect(callApi).toHaveBeenCalledTimes(2);
-        expect(callApi.mock.calls.every(([prompt]) => prompt === question)).toBe(true);
-        question = 'changed question';
-        fs.writeFileSync(
-          file,
-          source === 'grading file' ? 'module.exports = () => false;' : question,
-        );
-        cliState.resume = true;
-        callApi.mockClear();
+        };
+        const record = new Eval({ metadata: { bayesAtNPlan: plan } });
+        const callApi = vi.fn(async () => ({ output: 'answer' }));
+        cliState.resume = mode === 'resume';
+        cliState.retryMode = mode === 'retry';
         await expect(
-          evaluate(suite(), record, { bayesAtN: true, repeat: 2, cache: false }),
-        ).rejects.toThrow('original questions, grading inputs');
+          evaluate(
+            {
+              providers: [{ id: () => 'stored-target', callApi }],
+              prompts: [toPrompt('question')],
+              tests: [{}],
+            },
+            record,
+            { cache: false },
+          ),
+        ).rejects.toThrow('fresh evaluations only');
         expect(callApi).not.toHaveBeenCalled();
-      } finally {
-        fs.rmSync(directory, { recursive: true, force: true });
+        expect(record.config.metadata?.bayesAtNPlan).toEqual(plan);
       }
     },
   );
+
+  it.each(['resume', 'retry'] as const)(
+    'rejects %s of runtime-only Bayes@N records',
+    async (mode) => {
+      const record = new Eval({});
+      record.runtimeOptions = { bayesAtN: true };
+      const callApi = vi.fn(async () => ({ output: 'answer' }));
+      cliState.resume = mode === 'resume';
+      cliState.retryMode = mode === 'retry';
+      await expect(
+        evaluate(
+          {
+            providers: [{ id: () => 'runtime-target', callApi }],
+            prompts: [toPrompt('question')],
+            tests: [{}],
+          },
+          record,
+          { bayesAtN: false },
+        ),
+      ).rejects.toThrow('fresh evaluations only');
+      expect(callApi).not.toHaveBeenCalled();
+    },
+  );
+
+  it('requires an empty record for a fresh Bayes@N evaluation', async () => {
+    const callApi = vi.fn(async () => ({ output: 'answer' }));
+    const suite: TestSuite = {
+      providers: [{ id: () => 'empty-target', callApi }],
+      prompts: [toPrompt('question')],
+      tests: [{}],
+    };
+    const record = new Eval({});
+    await evaluate(suite, record, { bayesAtN: true, repeat: 2, cache: false });
+    const originalPlan = structuredClone(record.config.metadata?.bayesAtNPlan);
+    await expect(
+      evaluate(suite, record, { bayesAtN: true, repeat: 2, cache: false }),
+    ).rejects.toThrow('new empty evaluation record');
+    expect(callApi).toHaveBeenCalledTimes(2);
+    expect(record.results).toHaveLength(2);
+    expect(record.config.metadata?.bayesAtNPlan).toEqual(originalPlan);
+    expect(JSON.stringify(originalPlan)).not.toContain('inputHash');
+  });
+
+  it.each([
+    'value array',
+    'contextTransform',
+    'assertion rubric',
+    'rubric array',
+    'default rubric',
+    'ENV rubric',
+  ])('rejects changed grading file bytes before provider calls: %s', async (field) => {
+    const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'bayes-grading-'));
+    const file = path.join(directory, 'rubric.txt');
+    fs.writeFileSync(file, 'original grading input');
+    const reference = `file://${file}`;
+    const restoreEnv = mockProcessEnv({ PROMPTFOO_TEST_BAYES_RUBRIC: directory });
+    const callApi = vi.fn(async () => ({ output: 'answer' }));
+    const assertion: Assertion =
+      field === 'value array'
+        ? { type: 'contains-any' as const, value: [reference] }
+        : {
+            type:
+              field === 'contextTransform' || field === 'rubric array'
+                ? 'context-faithfulness'
+                : 'llm-rubric',
+            ...(field === 'contextTransform' && { contextTransform: reference }),
+            ...(field === 'assertion rubric' && { rubricPrompt: reference }),
+            ...(field === 'ENV rubric' && {
+              rubricPrompt: 'file://{{ env.PROMPTFOO_TEST_BAYES_RUBRIC }}/rubric.txt',
+            }),
+            ...(field === 'rubric array' && {
+              rubricPrompt: [{ role: 'user' as const, content: reference }],
+            }),
+          };
+    vi.mocked(runExtensionHook).mockImplementation(async (_extensions, hook, context) => {
+      if (hook === 'beforeEach') {
+        fs.writeFileSync(file, 'changed grading input');
+      }
+      return context;
+    });
+    try {
+      await expect(
+        evaluate(
+          {
+            providers: [{ id: () => 'grading-files', callApi }],
+            prompts: [toPrompt('question')],
+            extensions: ['test-hook'],
+            defaultTest: field === 'default rubric' ? { options: { rubricPrompt: reference } } : {},
+            tests: [{ assert: [{ type: 'assert-set', assert: [assertion] }] }],
+          },
+          new Eval({}),
+          { bayesAtN: true, repeat: 2, cache: false },
+        ),
+      ).rejects.toThrow('unchanged question and grading inputs after beforeEach');
+      expect(callApi).not.toHaveBeenCalled();
+    } finally {
+      restoreEnv();
+      fs.rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
+  it('uses the assertion rubric override without opening an unused inherited file', async () => {
+    const callApi = vi.fn(async () => ({ output: 'answer' }));
+    const grade = vi.fn(async () => ({ output: '{"pass":true,"score":1,"reason":"correct"}' }));
+    const record = new Eval({});
+    await evaluate(
+      {
+        providers: [{ id: () => 'rubric-override', callApi }],
+        prompts: [toPrompt('question')],
+        defaultTest: {
+          options: {
+            rubricPrompt: 'file://missing-unused-rubric.txt',
+            provider: { id: () => 'grader', callApi: grade },
+          },
+        },
+        tests: [
+          { assert: [{ type: 'llm-rubric', rubricPrompt: 'Grade {{output}}', value: 'correct' }] },
+        ],
+      },
+      record,
+      { bayesAtN: true, repeat: 2, cache: false },
+    );
+    expect(callApi).toHaveBeenCalledTimes(2);
+    expect(grade).toHaveBeenCalledTimes(2);
+    expect((await record.getRepeatStability())?.bayesAtN?.[0].mean).toBe(3 / 4);
+  });
+
+  it('persists the same count-only plan for different credentials without a verifier', async () => {
+    const plans = [];
+    for (const password of ['0001', '0042']) {
+      const record = await Eval.create({}, [toPrompt('question')], { id: randomUUID() });
+      await evaluate(
+        {
+          providers: [
+            {
+              id: () => 'credential-target',
+              config: { auth: { type: 'basic', username: 'account', password } },
+              callApi: async () => ({ output: 'answer' }),
+            },
+          ],
+          prompts: [toPrompt('question')],
+          tests: [{}],
+        },
+        record,
+        { bayesAtN: true, repeat: 2, cache: false },
+      );
+      const restored = (await Eval.findById(record.id))!;
+      plans.push(restored.config.metadata?.bayesAtNPlan);
+      expect(JSON.stringify(plans.at(-1))).not.toMatch(/inputHash|sha256|password|0001|0042/);
+    }
+    expect(plans[0]).toEqual(plans[1]);
+  });
 
   it('rejects prompt functions that change the question between repeats before provider calls', async () => {
     const callApi = vi.fn(async () => ({ output: 'answer' }));
@@ -174,39 +250,7 @@ describeEvaluator('evaluator basic flows', () => {
     expect(record.config.metadata?.bayesAtNPlan).toBeUndefined();
   });
 
-  it('checks file references inside assertion value arrays on resume', async () => {
-    const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'bayes-grading-'));
-    const file = path.join(directory, 'answer.txt');
-    fs.writeFileSync(file, 'answer');
-    const callApi = vi.fn(async () => ({ output: 'answer' }));
-    const suite = (): TestSuite => ({
-      providers: [{ id: () => 'array-target', callApi }],
-      prompts: [toPrompt('question')],
-      tests: [{ assert: [{ type: 'contains-any', value: [`file://${file}`] }] }],
-    });
-    try {
-      const record = await Eval.create({}, suite().prompts, { id: randomUUID() });
-      await evaluate(suite(), record, { bayesAtN: true, repeat: 2, cache: false });
-      const originalPlan = structuredClone(record.config.metadata?.bayesAtNPlan);
-      const originalSummary = await record.getRepeatStability();
-      expect(originalSummary?.bayesAtN?.[0]).toMatchObject({ mean: 3 / 4 });
-      fs.writeFileSync(file, 'different answer');
-      cliState.resume = true;
-      await expect(
-        evaluate(suite(), record, { bayesAtN: true, repeat: 2, cache: false }),
-      ).rejects.toThrow('original questions, grading inputs');
-      expect(callApi).toHaveBeenCalledTimes(2);
-      expect(record.config.metadata?.bayesAtNPlan).toEqual(originalPlan);
-      fs.writeFileSync(file, 'answer');
-      await evaluate(suite(), record, { bayesAtN: true, repeat: 2, cache: false });
-      expect(callApi).toHaveBeenCalledTimes(2);
-      expect(await record.getRepeatStability()).toEqual(originalSummary);
-    } finally {
-      fs.rmSync(directory, { recursive: true, force: true });
-    }
-  });
-
-  it('isolates model-grader mutations between repeated trials and accepts an unchanged resume', async () => {
+  it('isolates model-grader mutations between repeated trials and restores completed summaries', async () => {
     const callApi = vi.fn(async () => ({ output: 'answer' }));
     const grade = vi.fn(async () => ({ output: '{"pass":true,"score":1,"reason":"correct"}' }));
     const rubricPrompt = [{ role: 'user', content: 'Grade {{output}}' }];
@@ -228,19 +272,10 @@ describeEvaluator('evaluator basic flows', () => {
     expect(rubricPrompt).toEqual([{ role: 'user', content: 'Grade {{output}}' }]);
     expect((await record.getRepeatStability())?.bayesAtN?.[0]).toMatchObject({ mean: 4 / 5 });
     const restored = (await Eval.findById(record.id))!;
-    cliState.resume = true;
-    await evaluate(suite(), restored, {
-      bayesAtN: true,
-      repeat: 3,
-      maxConcurrency: 1,
-      cache: false,
-    });
-    expect(callApi).toHaveBeenCalledTimes(3);
-    expect(grade).toHaveBeenCalledTimes(3);
     expect(await restored.getRepeatStability()).toEqual(await record.getRepeatStability());
   });
 
-  it('reuses structured prompt renders and accepts unchanged effective config on resume', async () => {
+  it('prepares each structured prompt once and rejects resume before rerendering', async () => {
     const callApi = vi.fn(async (prompt: string) => ({ output: prompt }));
     const render = vi.fn(async () => ({
       prompt: 'prepared question',
@@ -260,8 +295,10 @@ describeEvaluator('evaluator basic flows', () => {
     ]);
     const restored = (await Eval.findById(record.id))!;
     cliState.resume = true;
-    await evaluate(suite(), restored, { bayesAtN: true, repeat: 2, cache: false });
-    expect(render).toHaveBeenCalledTimes(4);
+    await expect(
+      evaluate(suite(), restored, { bayesAtN: true, repeat: 2, cache: false }),
+    ).rejects.toThrow('fresh evaluations only');
+    expect(render).toHaveBeenCalledTimes(2);
     expect(callApi).toHaveBeenCalledTimes(2);
     expect(await restored.getRepeatStability()).toEqual(await record.getRepeatStability());
   });
@@ -423,67 +460,6 @@ describeEvaluator('evaluator basic flows', () => {
       expect(result.metadata).not.toHaveProperty('bayesAtNPlan');
     }
   });
-
-  it.each([
-    undefined,
-    {},
-    { version: 1, groups: [] },
-    { version: 2, groups: [] },
-    {
-      version: 1,
-      groups: [
-        {
-          repeatGroupId: 'test-0-vars-0',
-          promptIdx: 0,
-          provider: { id: 'resume-target' },
-          repetitions: 1,
-        },
-      ],
-    },
-  ])('rejects Bayes@N resume without a valid original plan: %j', async (bayesAtNPlan) => {
-    const callApi = vi.fn(async () => ({ output: 'answer' }));
-    const testSuite: TestSuite = {
-      providers: [{ id: () => 'resume-target', callApi }],
-      prompts: [toPrompt('question')],
-      tests: [{}],
-    };
-    cliState.resume = true;
-    await expect(
-      evaluate(testSuite, new Eval({ metadata: { bayesAtNPlan } }), { bayesAtN: true }),
-    ).rejects.toThrow('original valid sampling plan');
-    expect(callApi).not.toHaveBeenCalled();
-  });
-
-  it.each(['question removed', 'repeat changed', 'Bayes disabled'])(
-    'preserves the original Bayes@N experiment on resume: %s',
-    async (change) => {
-      const callApi = vi.fn(async () => ({ output: 'answer' }));
-      const testSuite: TestSuite = {
-        providers: [{ id: () => 'resume-target', callApi }],
-        prompts: [toPrompt('question')],
-        tests: [{}, {}],
-      };
-      const record = new Eval({});
-      await evaluate(testSuite, record, { bayesAtN: true, repeat: 2, cache: false });
-      const originalPlan = structuredClone(record.config.metadata?.bayesAtNPlan);
-      callApi.mockClear();
-      cliState.resume = true;
-      if (change === 'question removed') {
-        testSuite.tests = [{}];
-      }
-      await expect(
-        evaluate(testSuite, record, {
-          bayesAtN: change !== 'Bayes disabled',
-          repeat: change === 'repeat changed' ? 3 : 2,
-          cache: false,
-        }),
-      ).rejects.toThrow(
-        change === 'Bayes disabled' ? 'requires evaluateOptions.bayesAtN' : 'original questions',
-      );
-      expect(callApi).not.toHaveBeenCalled();
-      expect(record.config.metadata?.bayesAtNPlan).toEqual(originalPlan);
-    },
-  );
 
   it.each([
     { enabled: false, persisted: false },
@@ -773,7 +749,9 @@ describeEvaluator('evaluator basic flows', () => {
         const restored = (await Eval.findById(evalRecord.id))!;
         expect(await restored.getRepeatStability()).toEqual(summary.repeatStability);
         cliState.resume = true;
-        await evaluate(testSuite, restored, { repeat: 2, bayesAtN: true, cache: false });
+        await expect(
+          evaluate(testSuite, restored, { repeat: 2, bayesAtN: true, cache: false }),
+        ).rejects.toThrow('fresh evaluations only');
         expect(await restored.getRepeatStability()).toEqual(summary.repeatStability);
         expect(providers[0].callApi).toHaveBeenCalledTimes(4);
       }

@@ -28,14 +28,13 @@ import {
   hasBayesAtNComparison,
   hasBayesAtNSharedSession,
   hashBayesAtNInputs,
-  readResumeBayesAtNPlan,
   validateBayesAtNRepeat,
-  validateResumeBayesAtNPlan,
 } from './evaluator/bayesAtN';
 import {
   collectFileMetadata,
   copyPromptVars,
   getPromptVarMimeTypes,
+  renderBayesAtNRubricFileReference,
   renderPrompt,
   runExtensionHook,
 } from './evaluatorHelpers';
@@ -761,7 +760,10 @@ const bayesAtNFunctionSources = new WeakMap<Function, string>();
 function hashRunEvalInputs(
   step: Pick<RunEvalOptions, 'prompt' | 'provider' | 'test' | 'nunjucksFilters'>,
   inputFiles?: Map<string, string>,
+  providerVars = step.test.vars ?? {},
+  evaluationId?: string,
 ) {
+  const nativeConfigs = new Map<object, unknown>();
   return hashBayesAtNInputs(step, {
     fileHash: (reference) => {
       const { filePath } = parseFileUrl(reference);
@@ -770,28 +772,78 @@ function hashRunEvalInputs(
         .digest('hex');
     },
     functionSource: (fn) => bayesAtNFunctionSources.get(fn),
+    rubricFileReference: renderBayesAtNRubricFileReference,
+    providerConfig: (provider) => nativeConfigs.get(provider),
     providerFiles: inputFiles
       ? (provider, target) => {
           const inputProvider = provider as ApiProvider | undefined;
-          if (typeof inputProvider?.getInputFilePaths !== 'function') {
+          if (!inputProvider || typeof inputProvider !== 'object') {
             return [];
           }
-          return inputProvider
-            .getInputFilePaths({
-              prompt: {
-                ...step.prompt,
-                config: target
-                  ? mergeProviderPromptConfig(step.prompt.config, step.test.options)
-                  : undefined,
-              },
-              vars: step.test.vars ?? {},
-            })
-            .map((filePath) => {
+          const context = {
+            prompt: {
+              ...step.prompt,
+              config: target
+                ? mergeProviderPromptConfig(step.prompt.config, step.test.options)
+                : undefined,
+            },
+            vars: providerVars,
+            evaluationId,
+            isGrading: !target,
+          };
+          const native = inputProvider.getEvaluationInputs?.(context);
+          if (native?.hasSharedSession) {
+            throw new Error('Bayes@N does not support shared provider sessions');
+          }
+          if (native?.config !== undefined) {
+            nativeConfigs.set(inputProvider, native.config);
+          }
+          if (!native && Object.getPrototypeOf(inputProvider) !== Object.prototype) {
+            if (!('config' in inputProvider)) {
+              throw new Error(
+                'Bayes@N requires getEvaluationInputs for providers with private inputs',
+              );
+            }
+            const promptConfig = { ...context.prompt.config };
+            for (const key of [
+              'provider',
+              'transform',
+              'postprocess',
+              'transformVars',
+              'rubricPrompt',
+            ]) {
+              delete promptConfig[key];
+            }
+            const hasFileMode = (value: unknown, seen = new Set<object>()): boolean => {
+              if (typeof value === 'string') {
+                return value.startsWith('file://');
+              }
+              if (!value || typeof value !== 'object' || seen.has(value)) {
+                return false;
+              }
+              seen.add(value);
+              if ('type' in value && value.type === 'path') {
+                return true;
+              }
+              return Object.values(value).some((item) => hasFileMode(item, seen));
+            };
+            if (
+              !inputProvider.getInputFilePaths &&
+              (hasFileMode(inputProvider.config) || hasFileMode(promptConfig))
+            ) {
+              throw new Error(
+                'Bayes@N requires declared native file inputs for this provider configuration',
+              );
+            }
+          }
+          return (native?.filePaths ?? inputProvider.getInputFilePaths?.(context) ?? []).map(
+            (filePath) => {
               invariant(path.isAbsolute(filePath), 'Provider input file paths must be absolute');
               const hash = createHash('sha256').update(fs.readFileSync(filePath)).digest('hex');
               inputFiles.set(filePath, hash);
               return [filePath, hash];
-            });
+            },
+          );
         }
       : undefined,
     mimeTypes: getPromptVarMimeTypes(step.test.vars ?? {}),
@@ -4486,10 +4538,19 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     if (
       bayesAtNInput &&
       (hashRunEvalInputs(evalStep) !== bayesAtNInput.sourceHash ||
-        [...bayesAtNInput.inputFiles].some(
-          ([filePath, hash]) =>
-            createHash('sha256').update(fs.readFileSync(filePath)).digest('hex') !== hash,
-        ))
+        hashRunEvalInputs(
+          {
+            ...evalStep,
+            prompt: {
+              ...bayesAtNInput.state.promptForRender,
+              ...bayesAtNInput.rendered.setup.prompt,
+            },
+            test: { ...evalStep.test, vars: omitEvalRuntimeVars(bayesAtNInput.state.vars) },
+          },
+          new Map(),
+          bayesAtNInput.state.vars,
+          evalStep.evalId,
+        ) !== bayesAtNInput.inputHash)
     ) {
       throw new Error('Bayes@N requires unchanged question and grading inputs after beforeEach');
     }
@@ -5878,11 +5939,6 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     let { testSuite } = this;
 
     const storedBayesPlan = this.store.config.metadata?.bayesAtNPlan;
-    if (cliState.resume && storedBayesPlan !== undefined && !options.bayesAtN) {
-      throw new Error('Resuming a Bayes@N evaluation requires evaluateOptions.bayesAtN');
-    }
-    const resumeBayesPlan =
-      cliState.resume && options.bayesAtN ? readResumeBayesAtNPlan(storedBayesPlan) : undefined;
     if (!cliState.resume && this.store.config.metadata) {
       // A new evaluation must schedule its own trials, even when its config came from an export.
       const metadata = { ...this.store.config.metadata };
@@ -6041,6 +6097,8 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
             test: { ...step.test, vars: omitEvalRuntimeVars(state.vars) },
           },
           inputFiles,
+          state.vars,
+          step.evalId,
         );
         const shared = preparedInputs.get(inputHash);
         const prepared = {
@@ -6057,16 +6115,22 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
         runEvalOptions.map((step) => ({
           ...step,
           inputHash: this.bayesAtNInputs.get(step)!.inputHash,
+          provider: {
+            id: () =>
+              sanitizeObject({ id: step.provider.id() }, { sanitizeUrls: true, maxDepth: Infinity })
+                .id,
+            label: sanitizeObject(
+              { label: step.provider.label },
+              { sanitizeUrls: true, maxDepth: Infinity },
+            ).label,
+          },
         })),
       );
-      if (resumeBayesPlan) {
-        validateResumeBayesAtNPlan(resumeBayesPlan, currentPlan);
-      }
       this.store.config.metadata = {
         ...this.store.config.metadata,
-        bayesAtNPlan: resumeBayesPlan ?? currentPlan,
+        bayesAtNPlan: currentPlan,
       };
-      // Save the full question set before resume removes already completed steps.
+      // Retain only the schedule counts needed to reconstruct completed summaries.
       if (this.store.persisted) {
         await this.store.save();
       }
@@ -6269,6 +6333,24 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
   }
 
   async evaluate(): Promise<TEvaluation> {
+    const hasStoredPlan = this.store.config.metadata?.bayesAtNPlan !== undefined;
+    if (
+      (cliState.resume || cliState.retryMode) &&
+      (this.options.bayesAtN ||
+        hasStoredPlan ||
+        this.store.config.evaluateOptions?.bayesAtN ||
+        this.store.evaluation.runtimeOptions?.bayesAtN)
+    ) {
+      throw new Error(
+        'Bayes@N supports fresh evaluations only; resume and retries are unsupported',
+      );
+    }
+    if (
+      this.options.bayesAtN &&
+      (this.store.results.length > 0 || (await this.store.readResults()).length > 0)
+    ) {
+      throw new Error('Bayes@N requires a new empty evaluation record');
+    }
     return providerRegistry.withEvaluation(async () => {
       const startTime = Date.now();
       const maxEvalTimeMs = this.options.maxEvalTimeMs ?? getMaxEvalTimeMs();
@@ -6507,6 +6589,17 @@ export function evaluate<
   options: InternalEvaluateOptions,
   runtime?: EvaluatorRuntime<TEvaluation, TResult>,
 ): Promise<TEvaluation> {
+  if (
+    (cliState.resume || cliState.retryMode) &&
+    (options.bayesAtN ||
+      evalRecord.config.metadata?.bayesAtNPlan !== undefined ||
+      evalRecord.config.evaluateOptions?.bayesAtN ||
+      evalRecord.runtimeOptions?.bayesAtN)
+  ) {
+    return Promise.reject(
+      new Error('Bayes@N supports fresh evaluations only; resume and retries are unsupported'),
+    );
+  }
   return cliState.withBasePath(testSuite.basePath ?? cliState.basePath, () =>
     cliState.withEnv(testSuite.env ?? cliState.env, () =>
       cliState.withConfig(

@@ -29,6 +29,7 @@ import {
   getStandaloneEvalCacheKey,
   setCachedStandaloneEvals,
 } from '../../src/util/standaloneEvalCache';
+import { createEmptyTokenUsage } from '../../src/util/tokenUsageUtils';
 import { createEvaluateResult } from '../factories/eval';
 import EvalFactory from '../factories/evalFactory';
 import { createAccuracyFilter, createPassFailOptions } from '../factories/literalFixtures';
@@ -78,6 +79,36 @@ describe('evaluator', () => {
   });
 
   describe('repeat stability export', () => {
+    it('strips legacy verifiers from V2 row and table metadata exports', async () => {
+      const plan = {
+        version: 1,
+        groups: [
+          {
+            repeatGroupId: 'question',
+            promptIdx: 0,
+            provider: { id: 'provider' },
+            repetitions: 1,
+            inputHash: 'sha256:' + 'b'.repeat(64),
+          },
+        ],
+      };
+      const metadata = { bayesAtNPlan: plan, label: 'retained' };
+      const evaluation = new Eval({});
+      evaluation.oldResults = {
+        version: 2,
+        timestamp: '',
+        results: [createEvaluateResult({ metadata, testCase: { metadata } })],
+        table: { head: { prompts: [], vars: [] }, body: [] },
+        stats: { successes: 1, failures: 0, errors: 0, tokenUsage: createEmptyTokenUsage() },
+      };
+      vi.spyOn(evaluation, 'useOldResults').mockReturnValue(true);
+      const summary = await evaluation.toEvaluateSummary();
+      expect(summary.version).toBe(2);
+      expect(summary.results[0].metadata?.label).toBe('retained');
+      expect(JSON.stringify(summary)).not.toContain('inputHash');
+      expect(evaluation.oldResults!.results[0].metadata?.bayesAtNPlan).toEqual(plan);
+    });
+
     it('uses recovered final results for the Bayes@N posterior', async () => {
       const evaluation = await Eval.create(
         {

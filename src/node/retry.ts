@@ -307,7 +307,7 @@ export async function retryCommand(evalId: string, cmdObj: RetryCommandOptions) 
     originalEval.config.evaluateOptions?.bayesAtN ||
     originalEval.config.metadata?.bayesAtNPlan !== undefined
   ) {
-    throw new Error('Bayes@N evaluations must be retried with eval --retry-errors');
+    throw new Error('Bayes@N supports fresh evaluations only; retries are unsupported');
   }
 
   // Get all ERROR result IDs - capture these BEFORE retry so we know what to delete on success

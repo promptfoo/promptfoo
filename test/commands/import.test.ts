@@ -175,7 +175,11 @@ describe('importCommand', () => {
         expect(summary.results[0].gradingResult).toBeNull();
       } else {
         expect(restored?.bayesAtN).toEqual(summary.repeatStability?.bayesAtN);
-        expect(exported.config.metadata?.bayesAtNPlan).toEqual(plan);
+        expect(exported.config.metadata?.bayesAtNPlan).toEqual({
+          ...plan,
+          groups: plan.groups.map(({ inputHash: _hash, ...counts }) => counts),
+        });
+        expect(JSON.stringify(exported)).not.toContain('inputHash');
       }
       expect(source.config.metadata?.bayesAtNPlan).toEqual(plan);
     },

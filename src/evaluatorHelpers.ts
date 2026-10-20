@@ -23,7 +23,11 @@ import {
   type VarValue,
 } from './types/index';
 import { isAudioFile, isImageFile, isJavascriptFile, isVideoFile } from './util/fileExtensions';
-import { renderVarsInObject, setLoadedFileMimeTypes } from './util/index';
+import {
+  getNunjucksEngineForFilePath,
+  renderVarsInObject,
+  setLoadedFileMimeTypes,
+} from './util/index';
 import invariant from './util/invariant';
 import { filterFiniteScores } from './util/numeric';
 import { extractVariablesFromTemplate, getNunjucksEngine } from './util/templates';
@@ -46,6 +50,13 @@ export function getPromptVarMimeTypes(vars: Record<string, VarValue>): Record<st
       return mimeType ? [[key, mimeType]] : [];
     }),
   );
+}
+
+export function renderBayesAtNRubricFileReference(reference: string, arrayElement = false): string {
+  if (arrayElement && getEnvBool('PROMPTFOO_DISABLE_TEMPLATING')) {
+    return reference;
+  }
+  return getNunjucksEngineForFilePath().renderString(reference, {});
 }
 
 export async function extractTextFromPDF(pdfPath: string): Promise<string> {

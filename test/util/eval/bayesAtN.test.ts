@@ -59,6 +59,39 @@ describe('Bayes@N repeat summary', () => {
     expect(summary?.unavailableReason).toBeUndefined();
   });
 
+  it('stores count-only plans without a deterministic input verifier', () => {
+    const { plan } = fixture([[true, false]]);
+    expect(plan).toEqual({
+      version: 1,
+      groups: [
+        { repeatGroupId: 'question-0', promptIdx: 0, provider: { id: 'provider' }, repetitions: 2 },
+      ],
+    });
+  });
+
+  it('sanitizes Bayes cohort identities and matches imported safe plans to raw URL rows', () => {
+    const { results, plan } = fixture([[true]]);
+    const rawId = 'https://user:password@example.test/model?api_key=secret';
+    results[0].provider.id = rawId;
+    plan.groups[0].provider.id = rawId;
+    const original = calculateRepeatStability(results, plan)?.bayesAtN;
+    expect(original?.[0].mean).toBeCloseTo(2 / 3, 14);
+    expect(JSON.stringify(original)).not.toContain('password');
+    expect(JSON.stringify(original)).not.toContain('api_key=secret');
+    plan.groups[0].provider = original![0].provider;
+    expect(calculateRepeatStability(results, plan)?.bayesAtN).toEqual(original);
+    const second = {
+      ...results[0],
+      promptIdx: 1,
+      success: false,
+      failureReason: 1,
+      provider: { id: rawId.replace('password', 'other') },
+    };
+    plan.groups.push({ ...plan.groups[0], promptIdx: 1 });
+    const cohorts = calculateRepeatStability([...results, second], plan)?.bayesAtN;
+    expect(cohorts?.map((cohort) => cohort.mean)).toEqual([2 / 3, 1 / 3]);
+  });
+
   it('does not add posterior fields without an opt-in schedule', () => {
     const { results } = fixture([[false, true]]);
     expect(calculateRepeatStability(results)?.bayesAtN).toBeUndefined();
