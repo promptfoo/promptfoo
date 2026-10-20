@@ -354,7 +354,7 @@ describe('AwsBedrockConverseProvider', () => {
         config: { ...createMcpOptions().config, ...config },
       });
 
-    const queueToolTurn = (blocks: { name: string; input: unknown; id?: string }[], text = '') => {
+    const queueToolTurn = (blocks: { name?: string; input: unknown; id?: string }[], text = '') => {
       if (mode === 'normal') {
         mockSend.mockResolvedValueOnce({
           $metadata: {},
@@ -598,7 +598,85 @@ describe('AwsBedrockConverseProvider', () => {
         expect(response.output).toContain('"type":"tool_use"');
         expect(response.output).toContain('"name":"ordinary"');
       }
-      await expectToolsVerdict(provider, response, true);
+      expect(response.metadata?.hasPendingToolCalls).toBe(true);
+      await expectToolsVerdict(provider, response, false);
+    });
+
+    it.each([
+      { label: 'valid native call', name: 'ordinary', input: { count: 1 } },
+      {
+        label: 'invalid native call',
+        name: 'ordinary',
+        input: { count: 'PRIVATE_SIBLING_ARGUMENT' },
+      },
+      { label: 'unknown call', name: 'unknown', input: {} },
+      { label: 'empty name', name: '', input: {} },
+      { label: 'missing name', name: undefined, input: {} },
+    ])('does not let MCP success certify a $label after rendering', async ({ name, input }) => {
+      const provider = createProvider();
+      queueToolTurn([
+        { name: 'list_resources', input: { resourceType: 'docs' } },
+        { name, input, id: 'PRIVATE_SIBLING_ID' },
+      ]);
+
+      const response = await callProvider(provider);
+
+      expect(response.metadata?.hasPendingToolCalls).toBe(true);
+      expect(response.metadata?.functionToolCalls).toBeUndefined();
+      expect(JSON.stringify(response.metadata)).not.toContain('PRIVATE_SIBLING');
+      await expectToolsVerdict(provider, response, false);
+      await expectToolsVerdict(provider, { ...response, output: 'Rendered result' }, false);
+    });
+
+    it.each([
+      { label: 'valid function', type: 'function', name: 'ordinary', count: 1, pass: true },
+      { label: 'invalid arguments', type: 'function', name: 'ordinary', count: 'bad', pass: false },
+      { label: 'unknown function', type: 'function', name: 'unknown', count: 1, pass: false },
+      { label: 'custom type', type: 'custom', name: 'ordinary', count: 1, pass: false },
+    ])(
+      'validates explicitly transformed $label beside MCP',
+      async ({ type, name, count, pass }) => {
+        const provider = createProvider({
+          tools: [
+            {
+              type: 'function',
+              function: {
+                name: 'ordinary',
+                parameters: {
+                  type: 'object',
+                  properties: { count: { type: 'integer' } },
+                  required: ['count'],
+                },
+              },
+            },
+          ],
+        });
+        queueToolTurn([
+          { name: 'list_resources', input: { resourceType: 'docs' } },
+          { name: 'ordinary', input: { count: 1 } },
+        ]);
+
+        const response = await callProvider(provider);
+
+        await expectToolsVerdict(
+          provider,
+          {
+            ...response,
+            output: [{ type, function: { name, arguments: JSON.stringify({ count }) } }],
+          },
+          pass,
+        );
+      },
+    );
+
+    it('keeps completed MCP-only evidence valid after rendering', async () => {
+      const provider = createProvider();
+      queueToolTurn([{ name: 'list_resources', input: { resourceType: 'docs' } }]);
+
+      const response = await callProvider(provider);
+
+      expect(response.metadata?.hasPendingToolCalls).toBeUndefined();
+      await expectToolsVerdict(provider, { ...response, output: 'Rendered result' }, true);
     });
 
     it('preserves malformed-input routing without fabricating stream executions', async () => {

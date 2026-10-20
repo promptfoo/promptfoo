@@ -1337,21 +1337,29 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
   private async formatStreamingToolUseBlocks(
     blocks: StreamingToolUseBlock[],
     toolsDisabled: boolean,
-  ): Promise<{ toolUseParts: string[]; mcpErrors: string[]; toolCalls: McpToolCallStatus[] }> {
+  ): Promise<{
+    toolUseParts: string[];
+    mcpErrors: string[];
+    toolCalls: McpToolCallStatus[];
+    hasPendingToolCalls: boolean;
+  }> {
     const toolUseParts: string[] = [];
     const mcpErrors: string[] = [];
     const toolCalls: McpToolCallStatus[] = [];
     let hasInvalidMcpInput = false;
+    let hasPendingToolCalls = false;
     const mcpTools = this.mcpClient?.getAllTools() ?? [];
 
     for (const toolBlock of blocks) {
       if (!toolBlock.name) {
+        hasPendingToolCalls = true;
         continue;
       }
       const { value: parsedInput, failed: parseFailed } = parseStreamingToolInput(toolBlock.input);
       const matchedMcpTool = mcpTools.find((tool) => tool.name === toolBlock.name);
 
       if (toolsDisabled || !this.mcpClient || !matchedMcpTool) {
+        hasPendingToolCalls = true;
         toolUseParts.push(
           JSON.stringify({
             type: 'tool_use',
@@ -1384,7 +1392,12 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
 
     // Omit execution evidence for an incomplete turn: a successful subcall must
     // not mask another MCP request rejected before dispatch. Keep its error.
-    return { toolUseParts, mcpErrors, toolCalls: hasInvalidMcpInput ? [] : toolCalls };
+    return {
+      toolUseParts,
+      mcpErrors,
+      toolCalls: hasInvalidMcpInput ? [] : toolCalls,
+      hasPendingToolCalls,
+    };
   }
 
   /**
@@ -1555,6 +1568,9 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
         mcpErrors.push(...mcpResult.errors);
         if (mcpResult.toolCalls.length > 0) {
           metadata.toolCalls = mcpResult.toolCalls;
+          if (mcpEligible.length < toolUseBlocks.length) {
+            metadata.hasPendingToolCalls = true;
+          }
         }
       }
 
@@ -1780,10 +1796,8 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
       }
 
       // Format tool use blocks for output (same as non-streaming)
-      const { toolUseParts, mcpErrors, toolCalls } = await this.formatStreamingToolUseBlocks(
-        Array.from(toolUseBlocks.values()),
-        toolsDisabled,
-      );
+      const { toolUseParts, mcpErrors, toolCalls, hasPendingToolCalls } =
+        await this.formatStreamingToolUseBlocks(Array.from(toolUseBlocks.values()), toolsDisabled);
 
       // Combine reasoning, output, and tool use. Skip whitespace-only
       // reasoning — omitted-display adaptive thinking streams empty deltas.
@@ -1804,6 +1818,9 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
       const metadata: Record<string, unknown> = {};
       if (toolCalls.length > 0) {
         metadata.toolCalls = toolCalls;
+        if (hasPendingToolCalls) {
+          metadata.hasPendingToolCalls = true;
+        }
       }
       if (stopReason) {
         metadata.stopReason = stopReason;
