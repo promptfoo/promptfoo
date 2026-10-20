@@ -182,6 +182,14 @@ const state: CliState = {
   },
 };
 
-setEnvOverridesProvider((layer) => (layer === 'file' ? state.envFileOverrides : state.env));
+setEnvOverridesProvider((layer) => {
+  if (layer === 'file') {
+    return state.envFileOverrides;
+  }
+  if (layer === 'suite') {
+    return state.env;
+  }
+  return undefined;
+});
 
 export default state;

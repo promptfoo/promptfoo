@@ -483,7 +483,9 @@ type EnvVars = {
 export type EnvVarKey = keyof EnvVars;
 
 /** Reads one config layer without mixing in process.env; a missing or failed provider is unset. */
-export function getEnvOverrides(layer: 'suite' | 'file' = 'suite'): EnvOverrides | undefined {
+export function getEnvOverrides(
+  layer: 'suite' | 'file' | 'provider' = 'suite',
+): EnvOverrides | undefined {
   try {
     return getEnvOverridesProvider()?.(layer);
   } catch {
@@ -512,9 +514,9 @@ export function getProcessEnv(): NodeJS.ProcessEnv {
 export function getEnvString(key: EnvVarKey): string | undefined;
 export function getEnvString(key: EnvVarKey, defaultValue: string): string;
 export function getEnvString(key: EnvVarKey, defaultValue?: string): string | undefined {
-  const envOverrides = getEnvOverrides();
-  if (envOverrides) {
-    const envValue = envOverrides[key as string];
+  // Keep provider values out of the template and subprocess environment layers.
+  for (const layer of ['provider', 'suite'] as const) {
+    const envValue = getEnvOverrides(layer)?.[key as string];
     if (envValue !== undefined) {
       return String(envValue);
     }

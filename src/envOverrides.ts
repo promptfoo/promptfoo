@@ -1,6 +1,8 @@
 import type { EnvOverrides } from './types/env';
 
-export type EnvOverridesProvider = (layer: 'suite' | 'file') => EnvOverrides | undefined;
+export type EnvOverridesProvider = (
+  layer: 'suite' | 'file' | 'provider',
+) => EnvOverrides | undefined;
 
 /**
  * Module-level singleton; last-writer-wins. Scoped to the current process —
