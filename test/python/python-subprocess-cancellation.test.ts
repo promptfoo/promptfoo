@@ -4,6 +4,7 @@ import * as path from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { runPython } from '../../src/python/pythonUtils';
+import * as secureTempFiles from '../../src/util/secureTempFiles';
 import type { PythonShell } from 'python-shell';
 
 const observed = vi.hoisted(() => ({
@@ -78,6 +79,8 @@ describe('runPython real invocation cancellation', () => {
   it('closes only the canceled loader child and its streams before removing its files', async () => {
     const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-python-child-'));
     const marker = path.join(directory, 'started');
+    const independentMarker = path.join(directory, 'independent-started');
+    const release = path.join(directory, 'release');
     const script = path.join(directory, 'loader.py');
     fs.writeFileSync(
       script,
@@ -89,12 +92,16 @@ describe('runPython real invocation cancellation', () => {
         '    return {"output": "late result"}',
         'def fail():',
         '    raise ValueError("independent loader failure")',
-        'def complete():',
+        'def complete(marker, release):',
+        '    pathlib.Path(marker).write_text("entered")',
+        '    while not pathlib.Path(release).exists():',
+        '        time.sleep(0.02)',
         '    return {"output": "independent caller completed"}',
         '',
       ].join('\n'),
     );
     const caller = new AbortController();
+    const independentCaller = new AbortController();
     const reason = new Error('cancel only this loader');
     let rejectEntry!: (error: Error) => void;
     let resolveEntry!: () => void;
@@ -102,14 +109,15 @@ describe('runPython real invocation cancellation', () => {
       resolveEntry = resolve;
       rejectEntry = reject;
     });
-    // Observe the marker itself: filesystem notifications can be dropped or omit the filename.
+    const bothEntered = () => fs.existsSync(marker) && fs.existsSync(independentMarker);
+    // Observe the markers themselves: filesystem notifications can be dropped or omit the filename.
     const entryPoll = setInterval(() => {
-      if (fs.existsSync(marker)) {
+      if (bothEntered()) {
         resolveEntry();
       }
     }, 20);
     const watchdog = setTimeout(() => {
-      if (fs.existsSync(marker)) {
+      if (bothEntered()) {
         resolveEntry();
       } else {
         // Snapshot before cleanup changes the child's state. No shell means preparation
@@ -134,28 +142,42 @@ describe('runPython real invocation cancellation', () => {
         (error: unknown) => error,
       );
       calls.push(pending);
+      const independent = runPython(script, 'complete', [independentMarker, release], {
+        abortSignal: independentCaller.signal,
+      }).catch((error: unknown) => error);
+      calls.push(independent);
       await Promise.race([
         entered,
         pending.then((result) => {
           throw new Error('Loader exited before its entry marker', { cause: result });
         }),
+        independent.then((result) => {
+          throw new Error('Independent loader exited before release', { cause: result });
+        }),
       ]);
       clearTimeout(watchdog);
       clearInterval(entryPoll);
-      expect(observed.children).toHaveLength(1);
-      const owned = observed.children[0];
+      expect(observed.children).toHaveLength(2);
+      const owned = observed.children.find(({ shell }) => shell.command.includes('hold'))!;
+      const other = observed.children.find(({ shell }) => shell.command.includes('complete'))!;
       const ownFiles = path.dirname(owned.shell.command[owned.shell.command.length - 1]);
       expect(fs.existsSync(ownFiles)).toBe(true);
-      const independent = runPython(script, 'complete', []);
-      calls.push(independent);
-      expect(await independent).toEqual({ output: 'independent caller completed' });
-      expect(observed.children).toHaveLength(2);
-      await observed.children[1].closed;
-      const failed = runPython(script, 'fail', []);
-      calls.push(failed);
-      await expect(failed).rejects.toThrow('independent loader failure');
-      expect(observed.children).toHaveLength(3);
-      await observed.children[2].closed;
+      for (const child of [owned, other]) {
+        expect(child.lifecycle.closedAtMs).toBeUndefined();
+        expect(child.shell.childProcess.exitCode).toBeNull();
+        expect(child.shell.childProcess.signalCode).toBeNull();
+      }
+      const cleanupOrder: string[] = [];
+      owned.shell.childProcess.once('close', () => cleanupOrder.push('close'));
+      const removeDirectory = secureTempFiles.removeSecureTempDirectory;
+      vi.spyOn(secureTempFiles, 'removeSecureTempDirectory').mockImplementation(
+        async (directory) => {
+          if (directory === ownFiles) {
+            cleanupOrder.push('remove');
+          }
+          await removeDirectory(directory);
+        },
+      );
       const didNotClose = Symbol('loader still pending after abort');
       caller.abort(reason);
       const result = await Promise.race([
@@ -170,9 +192,22 @@ describe('runPython real invocation cancellation', () => {
       await owned.closed;
       expect(owned.shell.childProcess.stdout?.destroyed).toBe(true);
       expect(owned.shell.childProcess.stderr?.destroyed).toBe(true);
+      expect(cleanupOrder).toEqual(['close', 'remove']);
       expect(fs.existsSync(ownFiles)).toBe(false);
+      expect(other.lifecycle.closedAtMs).toBeUndefined();
+      expect(other.shell.childProcess.exitCode).toBeNull();
+      expect(other.shell.childProcess.signalCode).toBeNull();
+      fs.writeFileSync(release, 'complete');
+      expect(await independent).toEqual({ output: 'independent caller completed' });
+      await other.closed;
+      const failed = runPython(script, 'fail', []);
+      calls.push(failed);
+      await expect(failed).rejects.toThrow('independent loader failure');
+      expect(observed.children).toHaveLength(3);
+      await observed.children[2].closed;
     } finally {
       caller.abort(reason);
+      independentCaller.abort();
       clearInterval(entryPoll);
       clearTimeout(watchdog);
       clearTimeout(abortTimer);
