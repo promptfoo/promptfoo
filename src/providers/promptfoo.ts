@@ -12,6 +12,7 @@ import {
 } from '../redteam/remoteGeneration';
 import { getRemoteMaterializationContextFromVars } from '../redteam/remoteMaterialization';
 import { BaseTokenUsageSchema } from '../types/shared';
+import { HttpRateLimitError } from '../util/fetch/errors';
 import { fetchWithRetries } from '../util/fetch/index';
 import { getRequestTimeoutMs } from './shared';
 
@@ -376,6 +377,21 @@ export class PromptfooChatCompletionProvider implements ApiProvider {
       // Re-throw abort errors to properly cancel the operation
       if (err instanceof Error && err.name === 'AbortError') {
         throw err;
+      }
+      if (err instanceof HttpRateLimitError) {
+        const data =
+          err.body && typeof err.body === 'object'
+            ? (err.body as Record<string, unknown>)
+            : undefined;
+        const parsedTokenUsage = BaseTokenUsageSchema.safeParse(data?.tokenUsage);
+        return {
+          error:
+            typeof data?.error === 'string' && data.error
+              ? data.error
+              : `API call error: ${String(err)}`,
+          ...(data?.isRefusal === true ? { isRefusal: true } : {}),
+          ...(parsedTokenUsage.success ? { tokenUsage: parsedTokenUsage.data } : {}),
+        };
       }
       return {
         error: `API call error: ${String(err)}`,

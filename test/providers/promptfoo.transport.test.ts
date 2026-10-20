@@ -1,7 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getUserEmail } from '../../src/globalConfig/accounts';
 import logger, * as loggerModule from '../../src/logger';
-import { PromptfooHarmfulCompletionProvider } from '../../src/providers/promptfoo';
+import {
+  PromptfooChatCompletionProvider,
+  PromptfooHarmfulCompletionProvider,
+} from '../../src/providers/promptfoo';
 import { clearAgentCache, fetchWithRetries } from '../../src/util/fetch/index';
 import { mockProcessEnv, PROXY_ENV_KEYS } from '../util/utils';
 
@@ -190,5 +193,157 @@ describe('harmful generation transport logging', () => {
         response: 'ordinary response',
       }),
     );
+  });
+});
+
+describe('chat completion rate-limit responses through the transport', () => {
+  const tokenUsage = { total: 23, prompt: 15, completion: 8, numRequests: 2 };
+  let restoreEnv = () => {};
+  let provider: PromptfooChatCompletionProvider;
+
+  beforeEach(() => {
+    vi.resetAllMocks();
+    restoreEnv = mockProcessEnv({
+      ...Object.fromEntries(PROXY_ENV_KEYS.map((key) => [key, undefined])),
+      PROMPTFOO_REMOTE_GENERATION_URL: 'https://example.test/chat',
+      PROMPTFOO_DISABLE_REMOTE_GENERATION: undefined,
+      PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION: undefined,
+      PROMPTFOO_CA_CERT_PATH: undefined,
+    });
+    vi.mocked(getUserEmail).mockReturnValue('chat-test@example.test');
+    vi.spyOn(logger, 'debug').mockImplementation(() => {});
+    vi.spyOn(logger, 'info').mockImplementation(() => {});
+    vi.spyOn(logger, 'warn').mockImplementation(() => {});
+    vi.spyOn(logger, 'error').mockImplementation(() => {});
+    vi.spyOn(loggerModule, 'logRequestResponse');
+    vi.spyOn(globalThis, 'fetch');
+    vi.spyOn(Math, 'random').mockReturnValue(0);
+    vi.useFakeTimers();
+    provider = new PromptfooChatCompletionProvider({
+      jsonOnly: false,
+      preferSmallModel: false,
+      task: 'iterative',
+    });
+  });
+
+  afterEach(async () => {
+    await Promise.all(
+      vi.mocked(loggerModule.logRequestResponse).mock.results.map(({ value }) => value),
+    );
+    clearAgentCache();
+    restoreEnv();
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+    vi.resetAllMocks();
+  });
+
+  it.each([true, false])(
+    'preserves refusal and token usage after exhausted 429 retries (remote error: %s)',
+    async (hasRemoteError) => {
+      vi.mocked(fetch).mockImplementation(async () => {
+        return new Response(
+          JSON.stringify({
+            ...(hasRemoteError ? { error: 'Remote request limit reached' } : {}),
+            result: 'stale result must not be returned',
+            isRefusal: true,
+            tokenUsage,
+          }),
+          { status: 429, headers: { 'Retry-After': '1' } },
+        );
+      });
+
+      const pending = provider.callApi('test prompt');
+      await vi.runAllTimersAsync();
+      const result = await pending;
+
+      expect(fetch).toHaveBeenCalledTimes(5);
+      expect(result).toEqual({
+        error: hasRemoteError
+          ? 'Remote request limit reached'
+          : 'API call error: HttpRateLimitError: Rate limit exceeded: HTTP 429 Too Many Requests',
+        isRefusal: true,
+        tokenUsage,
+      });
+      expect(result.output).toBeUndefined();
+    },
+  );
+
+  it('preserves a hard-quota response without retrying', async () => {
+    vi.mocked(fetch).mockImplementation(async () => {
+      return new Response(
+        JSON.stringify({
+          error: 'Remote credits exhausted',
+          code: 'credit_balance_exhausted',
+          result: 'stale result must not be returned',
+          isRefusal: true,
+          tokenUsage,
+        }),
+        { status: 429 },
+      );
+    });
+
+    const result = await provider.callApi('test prompt');
+
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(result).toEqual({
+      error: 'Remote credits exhausted',
+      isRefusal: true,
+      tokenUsage,
+    });
+    expect(result.output).toBeUndefined();
+  });
+
+  it('returns the eventual successful result after a transient 429', async () => {
+    vi.mocked(fetch)
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ error: 'Temporary request limit reached', tokenUsage }), {
+          status: 429,
+          headers: { 'Retry-After': '1' },
+        }),
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ result: 'fresh result', tokenUsage: { total: 7 } })),
+      );
+
+    const pending = provider.callApi('test prompt');
+    await vi.runAllTimersAsync();
+    const result = await pending;
+
+    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(result.error).toBeUndefined();
+    expect(result.output).toBe('fresh result');
+    expect(result.tokenUsage).toEqual({ total: 7 });
+  });
+
+  it('propagates cancellation during 429 backoff without another request', async () => {
+    vi.mocked(fetch).mockImplementation(async () => {
+      return new Response(
+        JSON.stringify({ error: 'Temporary request limit reached', tokenUsage }),
+        {
+          status: 429,
+          headers: { 'Retry-After': '1' },
+        },
+      );
+    });
+    const backoffStarted = new Promise<void>((resolve) => {
+      vi.mocked(logger.debug).mockImplementation((message) => {
+        if (message.startsWith('Rate limited, waiting ')) {
+          resolve();
+        }
+      });
+    });
+    const controller = new AbortController();
+    const reason = Object.assign(new Error('Caller cancelled'), { name: 'AbortError' });
+    const pending = provider.callApi('test prompt', undefined, {
+      abortSignal: controller.signal,
+    });
+    const rejected = expect(pending).rejects.toBe(reason);
+
+    await backoffStarted;
+    controller.abort(reason);
+    await rejected;
+    await vi.runAllTimersAsync();
+
+    expect(fetch).toHaveBeenCalledTimes(1);
   });
 });
