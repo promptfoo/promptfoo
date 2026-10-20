@@ -7,15 +7,17 @@ prompts:
   - "You are a helpful assistant. Reply with a concise answer to this inquiry: '{{question}}'"
 
 providers:
-  - id: 'vertex:gemini-2.5-flash'
-    label: gemini-2.5-flash-cow
+  - id: 'vertex:gemini-3.8-flash'
+    label: gemini-3.8-flash-cow
     config:
+      expressMode: false
       systemInstruction:
         parts:
           - text: Always talk like a cow. Mooo!
-  - id: 'vertex:gemini-2.5-flash'
-    label: gemini-2.5-flash-sheep
+  - id: 'vertex:gemini-3.8-flash'
+    label: gemini-3.8-flash-sheep
     config:
+      expressMode: false
       systemInstruction:
         parts:
           - text: Always talk like a sheep. Baaaah!
@@ -24,7 +26,10 @@ defaultTest:
   options:
     provider:
       # Text model used by model-graded assertions such as llm-rubric and factuality
-      text: vertex:gemini-2.5-pro
+      text:
+        id: vertex:gemini-3.8-flash
+        config:
+          expressMode: false
       # Embedding model used by similar/answer-relevance assertions
       embedding: vertex:embedding:gemini-embedding-001
 

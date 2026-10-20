@@ -18,10 +18,10 @@ Claude Sonnet 5 is the Claude 5-generation Sonnet — built to be Anthropic's mo
 
 ## Working with Sonnet 5
 
-- **Adaptive thinking is on by default.** Omitting `thinking` already lets the model decide when and how much to reason per request; this example sets `thinking: { type: adaptive }` explicitly to make the mode visible in the config. Unlike Fable 5 / Mythos 5, Sonnet 5 also accepts `thinking: { type: disabled }` when you need reasoning off. (Opus 4.7 and 4.8 are the models where an omitted block means _no_ thinking.)
+- **Adaptive thinking is on by default.** Omitting `thinking` still lets the model decide when and how much to reason. This example sets `thinking: { type: adaptive }` explicitly; use `thinking: { type: disabled }` to turn thinking off.
 - **`effort` tunes the cost/performance tradeoff.** Sonnet 5 supports `low`, `medium`, `high`, `xhigh`, and `max`. `high` is a good cost-efficient default; step up to `xhigh`/`max` for the hardest work and pair high effort with a large `max_tokens`.
 - **Sampling controls are managed for you.** Sonnet 5 rejects `temperature`, `top_p`, and `top_k` at the model level; promptfoo omits them automatically (don't set them in config).
-- **Pricing.** $3/$15 per million input/output tokens standard, with introductory pricing of $2/$10 through August 31, 2026 (to track that, set `inputCost`/`outputCost` — a single `cost` is applied as both rates). The full 1M-token context bills at the standard rate (no long-context surcharge).
+- **Pricing.** $2/$10 per million input/output tokens. Anthropic made these rates permanent; only set `inputCost`/`outputCost` when you intentionally override provider pricing. The full 1M-token context has no long-context surcharge.
 
 ## Running the Example
 

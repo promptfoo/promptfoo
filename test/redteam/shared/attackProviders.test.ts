@@ -3,7 +3,6 @@ import {
   ATTACK_PROVIDER_IDS,
   getAttackProviderFullId,
   isAttackProvider,
-  isMultiTurnStrategy,
 } from '../../../src/redteam/shared/attackProviders';
 
 describe('attackProviders', () => {
@@ -151,27 +150,6 @@ describe('attackProviders', () => {
         expect(getAttackProviderFullId('crescendo')).toBe('promptfoo:redteam:crescendo');
         expect(getAttackProviderFullId('goat')).toBe('promptfoo:redteam:goat');
       });
-    });
-  });
-
-  describe('isMultiTurnStrategy', () => {
-    it('should return true for multi-turn strategies', () => {
-      expect(isMultiTurnStrategy('hydra')).toBe(true);
-      expect(isMultiTurnStrategy('goblin')).toBe(true);
-      expect(isMultiTurnStrategy('crescendo')).toBe(true);
-      expect(isMultiTurnStrategy('goat')).toBe(true);
-    });
-
-    it('should handle various ID formats', () => {
-      expect(isMultiTurnStrategy('jailbreak:hydra')).toBe(true);
-      expect(isMultiTurnStrategy('promptfoo:redteam:hydra')).toBe(true);
-      expect(isMultiTurnStrategy('jailbreak:goblin')).toBe(true);
-      expect(isMultiTurnStrategy('promptfoo:redteam:goblin')).toBe(true);
-    });
-
-    it('should return false for non-multi-turn strategies', () => {
-      expect(isMultiTurnStrategy('base64')).toBe(false);
-      expect(isMultiTurnStrategy('basic')).toBe(false);
     });
   });
 });

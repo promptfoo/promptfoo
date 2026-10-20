@@ -15,17 +15,14 @@ import {
   getPersistedProviderFilterOptions,
   getProviderFilterRegexError,
 } from '../util/eval/filterProviders';
+import { createDefaultPromptMetrics, updatePromptResultCounts } from '../util/eval/promptMetrics';
 import { accumulateNamedMetric } from '../util/namedMetrics';
 import { writeMultipleOutputs } from '../util/output';
 import { getOutputFileFormat } from '../util/outputFormats';
 import { shouldShareResults } from '../util/sharing';
-import {
-  accumulateGradingTokenUsage,
-  accumulateResponseTokenUsage,
-  createEmptyTokenUsage,
-} from '../util/tokenUsageUtils';
+import { accumulateGradingTokenUsage, accumulateResponseTokenUsage } from '../util/tokenUsageUtils';
 
-import type { TokenUsage } from '../types/index';
+import type { PromptMetrics } from '../types/index';
 import type { InternalEvaluateOptions } from '../types/internal';
 
 export interface RetryCommandOptions {
@@ -181,41 +178,9 @@ export async function recalculatePromptMetrics(evalRecord: Eval): Promise<void> 
   let totalProcessed = 0;
 
   // Create a map to track metrics by promptIdx
-  const promptMetricsMap = new Map<
-    number,
-    {
-      score: number;
-      testPassCount: number;
-      testFailCount: number;
-      testErrorCount: number;
-      assertPassCount: number;
-      assertFailCount: number;
-      totalLatencyMs: number;
-      tokenUsage: TokenUsage;
-      namedScores: Record<string, number>;
-      namedScoresCount: Record<string, number>;
-      namedScoreWeights?: Record<string, number>;
-      cost: number;
-      incurredCost?: number;
-    }
-  >();
-
-  // Initialize metrics for each prompt
+  const promptMetricsMap = new Map<number, PromptMetrics>();
   for (const [promptIdx] of evalRecord.prompts.entries()) {
-    promptMetricsMap.set(promptIdx, {
-      score: 0,
-      testPassCount: 0,
-      testFailCount: 0,
-      testErrorCount: 0,
-      assertPassCount: 0,
-      assertFailCount: 0,
-      totalLatencyMs: 0,
-      tokenUsage: createEmptyTokenUsage(),
-      namedScores: {},
-      namedScoresCount: {},
-      namedScoreWeights: {},
-      cost: 0,
-    });
+    promptMetricsMap.set(promptIdx, createDefaultPromptMetrics());
   }
 
   // Stream results in batches to avoid OOM with large evaluations
@@ -236,14 +201,7 @@ export async function recalculatePromptMetrics(evalRecord: Eval): Promise<void> 
           continue;
         }
 
-        // Update test counts
-        if (result.success) {
-          metrics.testPassCount++;
-        } else if (result.failureReason === ResultFailureReason.ERROR) {
-          metrics.testErrorCount++;
-        } else {
-          metrics.testFailCount++;
-        }
+        updatePromptResultCounts(metrics, result);
 
         // Update scores and other metrics
         metrics.score += result.score ?? 0;
@@ -354,7 +312,24 @@ export async function retryCommand(evalId: string, cmdObj: RetryCommandOptions) 
   logger.info(`Found ${errorResultIds.length} ERROR results to retry`);
 
   // Load configuration - from provided config file or from original evaluation
-  const { testSuite, commandLineOptions, config } = await resolveRetryConfigs(originalEval, cmdObj);
+  const resolvedConfig = await resolveRetryConfigs(originalEval, cmdObj);
+  return cliState.withConfig(
+    resolvedConfig.config,
+    () =>
+      cliState.withEnv(resolvedConfig.testSuite.env, () =>
+        retryWithConfig(originalEval, errorResultIds, cmdObj, resolvedConfig),
+      ),
+    resolvedConfig.selectedProviderConfigs,
+  );
+}
+
+async function retryWithConfig(
+  originalEval: Eval,
+  errorResultIds: string[],
+  cmdObj: RetryCommandOptions,
+  { testSuite, commandLineOptions, config }: Awaited<ReturnType<typeof resolveRetryConfigs>>,
+) {
+  const evalId = originalEval.id;
 
   // CRITICAL: We do NOT delete ERROR results here anymore!
   // Previously (before this fix), deletion happened before evaluate(), which caused data loss:
@@ -371,6 +346,7 @@ export async function retryCommand(evalId: string, cmdObj: RetryCommandOptions) 
   // Enable retry mode so getCompletedIndexPairs excludes ERROR results
   cliState.resume = true;
   cliState.retryMode = true;
+  cliState._retryErrorResultIds = errorResultIds;
 
   // Calculate effective maxConcurrency from CLI or config (commandLineOptions)
   // Priority: CLI flag > config file's commandLineOptions
@@ -400,6 +376,7 @@ export async function retryCommand(evalId: string, cmdObj: RetryCommandOptions) 
     maxConcurrency: effectiveDelay && effectiveDelay > 0 ? 1 : effectiveMaxConcurrency,
     delay: effectiveDelay,
     eventSource: 'cli',
+    restorePromptColumns: !cmdObj.config,
     showProgressBar: !cmdObj.verbose, // Show progress bar unless verbose mode
   };
 
@@ -481,6 +458,7 @@ export async function retryCommand(evalId: string, cmdObj: RetryCommandOptions) 
     // Always clear the state flags to prevent stale state
     cliState.resume = false;
     cliState.retryMode = false;
+    delete cliState._retryErrorResultIds;
     cliState.maxConcurrency = undefined;
   }
 }

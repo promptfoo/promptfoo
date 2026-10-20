@@ -2,10 +2,10 @@
  * Git Metadata Tests
  */
 
-import { beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 import { extractMetadata } from '../../../src/codeScan/git/metadata';
 import { GitMetadataError } from '../../../src/types/codeScan';
-import type { SimpleGit } from 'simple-git';
+import type { LogResult, SimpleGit } from 'simple-git';
 
 // Define a partial mock type for the SimpleGit methods we use
 type MockSimpleGit = Pick<SimpleGit, 'log' | 'revparse'> & {
@@ -20,48 +20,53 @@ const mockGit: MockSimpleGit = {
 };
 
 vi.mock('simple-git', () => ({
-  default: vi.fn(() => mockGit),
+  simpleGit: vi.fn(() => mockGit),
 }));
+
+type MockCommit = Pick<
+  LogResult['all'][number],
+  'hash' | 'date' | 'message' | 'author_name' | 'author_email'
+>;
+
+function mockGitLog(all: MockCommit[]) {
+  mockGit.log.mockResolvedValue({
+    all,
+    latest: all[0] ? { ...all[0] } : null,
+    total: all.length,
+  });
+}
 
 describe('Git Metadata', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
+    vi.resetAllMocks();
+    (mockGit.revparse as any).mockImplementation(async (options: any) => {
+      const ref = Array.isArray(options) ? options[0] : options;
+      return ref === 'main' ? 'base-sha-123456' : 'compare-sha-789012';
+    });
+  });
+
+  afterEach(() => {
+    vi.resetAllMocks();
   });
 
   describe('extractMetadata', () => {
     it('should extract metadata from git log', async () => {
-      const mockLog = {
-        all: [
-          {
-            hash: 'abc1234',
-            date: '2025-01-15T10:30:00Z',
-            message: 'Add LLM integration',
-            author_name: 'Test User',
-            author_email: 'test@example.com',
-          },
-          {
-            hash: 'def5678',
-            date: '2025-01-14T15:20:00Z',
-            message: 'Fix prompt handling',
-            author_name: 'Test User',
-            author_email: 'test@example.com',
-          },
-        ],
-        latest: {
+      mockGitLog([
+        {
           hash: 'abc1234',
           date: '2025-01-15T10:30:00Z',
           message: 'Add LLM integration',
           author_name: 'Test User',
           author_email: 'test@example.com',
         },
-        total: 2,
-      };
-
-      mockGit.log.mockResolvedValue(mockLog as any);
-      (mockGit.revparse as any).mockImplementation(async (options: any) => {
-        const ref = Array.isArray(options) ? options[0] : options;
-        return ref === 'main' ? 'base-sha-123456' : 'compare-sha-789012';
-      });
+        {
+          hash: 'def5678',
+          date: '2025-01-14T15:20:00Z',
+          message: 'Fix prompt handling',
+          author_name: 'Test User',
+          author_email: 'test@example.com',
+        },
+      ]);
 
       const metadata = await extractMetadata('/fake/repo', 'main', 'feature/test');
 
@@ -84,31 +89,15 @@ describe('Git Metadata', () => {
     });
 
     it('should handle single commit', async () => {
-      const mockLog = {
-        all: [
-          {
-            hash: 'abc1234567',
-            date: '2025-01-15T10:30:00Z',
-            message: 'Initial commit',
-            author_name: 'Test User',
-            author_email: 'test@example.com',
-          },
-        ],
-        latest: {
+      mockGitLog([
+        {
           hash: 'abc1234567',
           date: '2025-01-15T10:30:00Z',
           message: 'Initial commit',
           author_name: 'Test User',
           author_email: 'test@example.com',
         },
-        total: 1,
-      };
-
-      mockGit.log.mockResolvedValue(mockLog as any);
-      (mockGit.revparse as any).mockImplementation(async (options: any) => {
-        const ref = Array.isArray(options) ? options[0] : options;
-        return ref === 'main' ? 'base-sha-123456' : 'compare-sha-789012';
-      });
+      ]);
 
       const metadata = await extractMetadata('/fake/repo', 'main', 'feature/test');
 
@@ -117,17 +106,7 @@ describe('Git Metadata', () => {
     });
 
     it('should handle no commits with default values', async () => {
-      const mockLog = {
-        all: [],
-        latest: null,
-        total: 0,
-      };
-
-      mockGit.log.mockResolvedValue(mockLog as any);
-      (mockGit.revparse as any).mockImplementation(async (options: any) => {
-        const ref = Array.isArray(options) ? options[0] : options;
-        return ref === 'main' ? 'base-sha-123456' : 'compare-sha-789012';
-      });
+      mockGitLog([]);
 
       const metadata = await extractMetadata('/fake/repo', 'main', 'feature/test');
 
@@ -145,34 +124,19 @@ describe('Git Metadata', () => {
       await expect(extractMetadata('/fake/repo', 'main', 'feature/test')).rejects.toThrow(
         'Failed to extract git metadata',
       );
+      expect(mockGit.log).toHaveBeenCalledTimes(2);
     });
 
     it('should handle commits with multiline messages', async () => {
-      const mockLog = {
-        all: [
-          {
-            hash: 'abc123def',
-            date: '2025-01-15T10:30:00Z',
-            message: 'Add feature\n\nDetailed description here',
-            author_name: 'Test User',
-            author_email: 'test@example.com',
-          },
-        ],
-        latest: {
+      mockGitLog([
+        {
           hash: 'abc123def',
           date: '2025-01-15T10:30:00Z',
           message: 'Add feature\n\nDetailed description here',
           author_name: 'Test User',
           author_email: 'test@example.com',
         },
-        total: 1,
-      };
-
-      mockGit.log.mockResolvedValue(mockLog as any);
-      (mockGit.revparse as any).mockImplementation(async (options: any) => {
-        const ref = Array.isArray(options) ? options[0] : options;
-        return ref === 'main' ? 'base-sha-123456' : 'compare-sha-789012';
-      });
+      ]);
 
       const metadata = await extractMetadata('/fake/repo', 'main', 'feature/test');
 
@@ -182,38 +146,22 @@ describe('Git Metadata', () => {
     });
 
     it('should use latest commit for author and timestamp', async () => {
-      const mockLog = {
-        all: [
-          {
-            hash: 'abc1234',
-            date: '2025-01-15T10:30:00Z',
-            message: 'Latest commit',
-            author_name: 'Latest Author',
-            author_email: 'latest@example.com',
-          },
-          {
-            hash: 'def5678',
-            date: '2025-01-14T15:20:00Z',
-            message: 'Older commit',
-            author_name: 'Old Author',
-            author_email: 'old@example.com',
-          },
-        ],
-        latest: {
+      mockGitLog([
+        {
           hash: 'abc1234',
           date: '2025-01-15T10:30:00Z',
           message: 'Latest commit',
           author_name: 'Latest Author',
           author_email: 'latest@example.com',
         },
-        total: 2,
-      };
-
-      mockGit.log.mockResolvedValue(mockLog as any);
-      (mockGit.revparse as any).mockImplementation(async (options: any) => {
-        const ref = Array.isArray(options) ? options[0] : options;
-        return ref === 'main' ? 'base-sha-123456' : 'compare-sha-789012';
-      });
+        {
+          hash: 'def5678',
+          date: '2025-01-14T15:20:00Z',
+          message: 'Older commit',
+          author_name: 'Old Author',
+          author_email: 'old@example.com',
+        },
+      ]);
 
       const metadata = await extractMetadata('/fake/repo', 'main', 'feature/test');
 

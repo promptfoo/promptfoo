@@ -135,7 +135,7 @@ pipelines:
             script:
               - npm ci
               - npm install -g promptfoo
-              - npx promptfoo eval --providers.0.config.model=gpt-4
+              - npx promptfoo eval --providers openai:gpt-4 -o promptfoo-results-gpt4.json
             artifacts:
               - promptfoo-results-gpt4.json
         - step:
@@ -143,7 +143,7 @@ pipelines:
             script:
               - npm ci
               - npm install -g promptfoo
-              - npx promptfoo eval --providers.0.config.model=claude-3-opus-20240229
+              - npx promptfoo eval --providers anthropic:claude-opus-5 -o promptfoo-results-claude.json
             artifacts:
               - promptfoo-results-claude.json
 ```
@@ -175,5 +175,5 @@ If you encounter issues with your Bitbucket Pipelines integration:
 
 - **Check logs**: Review detailed logs in Bitbucket to identify errors
 - **Verify repository variables**: Ensure your API keys are correctly set
-- **Pipeline timeouts**: Bitbucket Pipelines has timeout limits. For long-running evaluations, consider breaking them down or [increasing the timeout](https://support.atlassian.com/bitbucket-cloud/docs/build-timeouts/)
-- **Debug with SSH**: For complex issues, use [enabling SSH access](https://support.atlassian.com/bitbucket-cloud/docs/debug-your-pipelines-with-ssh/) to debug the pipeline environment directly
+- **Pipeline timeouts**: Split long-running evaluations into smaller steps, or raise a step's [`max-time`](https://support.atlassian.com/bitbucket-cloud/docs/step-options/#Max-time)
+- **Debug locally**: [Run the failing build step in Docker](https://support.atlassian.com/bitbucket-cloud/kb/debug-pipelines-locally-with-docker/) to reproduce it locally

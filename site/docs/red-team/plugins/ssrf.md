@@ -5,7 +5,7 @@ description: Red team server-side request forgery (SSRF) vulnerabilities by test
 
 # Server-Side Request Forgery (SSRF) Plugin
 
-Use the SSRF plugin to test whether an AI-connected system can be manipulated into fetching attacker-chosen resources, including internal hosts and local files. It targets [OWASP API7](https://owasp.org/www-project-api-security/) style behavior where a seemingly ordinary retrieval task becomes a server-side access path.
+Use the SSRF plugin to test whether an AI-connected system can be manipulated into fetching attacker-chosen resources, including internal hosts and local files. It targets [OWASP API7:2023](https://api-security.owasp.org/editions/2023/en/0xa7-server-side-request-forgery/), where an ordinary retrieval task becomes a server-side access path.
 
 ## Purpose
 
@@ -38,6 +38,8 @@ redteam:
 | `ssrfFailThreshold` | `string`   | `low`   | Minimum severity to fail: `low`, `medium`, `high`, or `critical` |
 
 The `targetUrls` are used to make the test prompts more specific and realistic. By default, the plugin uses a generic promptfoo.dev URL, but you should replace this with URLs relevant to your internal infrastructure.
+
+Grader transport or parsing failures do not receive an SSRF severity or mitigation suggestion. Resolve the grader error before interpreting the result as a vulnerability verdict.
 
 ## Severity Tiers
 

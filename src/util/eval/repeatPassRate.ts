@@ -1,82 +1,21 @@
-import type EvalResult from '../../models/evalResult';
-import type { EvaluateResult } from '../../types/index';
+import type { calculateRepeatStability } from './repeatStability';
 
-export interface RepeatPassRateGroup {
-  description: string;
-  pass: number;
-  total: number;
-}
+// Derived from the calculator to avoid a dependency on legacy contract types.
+type RepeatStabilitySummary = ReturnType<typeof calculateRepeatStability>;
+type RepeatStabilityGroup = NonNullable<RepeatStabilitySummary>['groups'][number];
 
-export function groupResultsByTest(
-  results: (EvaluateResult | EvalResult)[],
-  repeat: number,
-  repeatPassRateGroupByTestIdx?: ReadonlyMap<number, number>,
-): Map<string, RepeatPassRateGroup> {
-  const resultsBySerializedTest = new Map<
-    string,
-    { hasRuntimeGroupIdentity: boolean; results: (EvaluateResult | EvalResult)[] }
-  >();
-
-  for (const result of results) {
-    const repeatPassRateGroupIdx = repeatPassRateGroupByTestIdx?.get(result.testIdx);
-    const key = JSON.stringify(
-      repeatPassRateGroupIdx === undefined
-        ? {
-            testCase: result.testCase,
-            promptId: result.promptId,
-            provider: {
-              id: result.provider.id,
-              label: result.provider.label,
-            },
-          }
-        : {
-            repeatPassRateGroupIdx,
-            promptId: result.promptId,
-            provider: {
-              id: result.provider.id,
-              label: result.provider.label,
-            },
-          },
-    );
-    const matchingResults = resultsBySerializedTest.get(key) ?? {
-      hasRuntimeGroupIdentity: repeatPassRateGroupIdx !== undefined,
-      results: [],
-    };
-    matchingResults.results.push(result);
-    resultsBySerializedTest.set(key, matchingResults);
-  }
-
-  const groups = new Map<string, RepeatPassRateGroup>();
-
-  for (const [serializedKey, bucket] of resultsBySerializedTest) {
-    const matchingResults = bucket.results;
-    matchingResults.sort((left, right) => left.testIdx - right.testIdx);
-
-    // The runtime plan supplies stable identities before secret redaction and
-    // provider serialization. Retain the window fallback for direct/legacy callers.
-    const windowSize = bucket.hasRuntimeGroupIdentity ? matchingResults.length : repeat;
-    for (let offset = 0; offset < matchingResults.length; offset += windowSize) {
-      const window = matchingResults.slice(offset, offset + windowSize);
-      const description =
-        window[0].testCase.description || JSON.stringify(window[0].testCase.vars || {});
-      const group = { pass: 0, total: window.length, description };
-      for (const result of window) {
-        if ('success' in result && result.success) {
-          group.pass++;
-        }
-      }
-      groups.set(`${serializedKey}:${offset / repeat}`, group);
-    }
-  }
-
-  return groups;
-}
-
-export function getFailingGroups(
-  groups: Map<string, RepeatPassRateGroup>,
+/**
+ * Repeat groups (test, expanded vars, prompt and provider) whose share of passing runs is
+ * below `threshold` percent. Errored runs count as not passing.
+ */
+export function getFailingRepeatGroups(
+  summary: RepeatStabilitySummary | undefined,
   threshold: number,
-): RepeatPassRateGroup[] {
-  return Array.from(groups.values()).filter(
-    (group) => (group.pass / group.total) * 100 < threshold,
+): RepeatStabilityGroup[] {
+  if (!summary) {
+    return [];
+  }
+  return summary.groups.filter(
+    (group) => group.repetitions > 0 && (group.passed / group.repetitions) * 100 < threshold,
   );
 }

@@ -4,9 +4,12 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { handleIsValidFunctionCall } from '../../src/assertions/functionToolCall';
 import { runAssertion } from '../../src/assertions/index';
 import { handleIsValidOpenAiToolsCall } from '../../src/assertions/openai';
+import { InvalidToolCallError } from '../../src/contracts';
 import { hasFunctionToolCallValidator } from '../../src/contracts/providers';
+import { validateFunctionCall as validateGoogleFunctionCall } from '../../src/providers/google/util';
 import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
 import { validateFunctionCall } from '../../src/providers/openai/util';
+import { createToolCall, createTypeConfig } from '../factories/literalFixtures';
 import { createMockProvider } from '../factories/provider';
 
 import type { OpenAiTool } from '../../src/providers/openai/util';
@@ -17,6 +20,63 @@ import type {
   AtomicTestCase,
   GradingResult,
 } from '../../src/types/index';
+
+const createFahrenheitFunctionCall = () => ({
+  name: 'getCurrentTemperature',
+  arguments: '{"location": "San Francisco, CA", "unit": "Fahrenheit"}',
+});
+
+const createCustomUnitFunctionCall = () => ({
+  name: 'getCurrentTemperature',
+  arguments: '{"location": "San Francisco, CA", "unit": "custom_unit"}',
+});
+
+const createTemperatureTool = (): OpenAiTool => ({
+  type: 'function',
+  function: createTemperatureFunction(),
+});
+
+const createTemperatureFunction = (): OpenAiTool['function'] => ({
+  name: 'getCurrentTemperature',
+  parameters: {
+    type: 'object',
+    properties: {
+      location: { type: 'string' },
+      unit: { type: 'string', enum: ['Celsius', 'Fahrenheit'] },
+    },
+    required: ['location', 'unit'],
+  },
+});
+
+const createAddFunction = (): OpenAiTool['function'] => ({
+  name: 'add',
+  parameters: {
+    type: 'object',
+    properties: {
+      x: { type: 'number' },
+      y: { type: 'number' },
+    },
+    required: ['x', 'y'],
+  },
+});
+
+const createAddProviderOptions = () => ({
+  config: {
+    functions: [createAddFunction()],
+  },
+});
+
+const createTemplatedTemperatureFunction = (): OpenAiTool['function'] => ({
+  name: 'getCurrentTemperature',
+  parameters: {
+    type: 'object',
+    properties: {
+      location: { type: 'string' },
+      unit: { type: 'string', enum: ['{{unit}}'] },
+    },
+    required: ['location', 'unit'],
+  },
+});
 
 // Create hoisted mocks for stable references
 const mocks = vi.hoisted(() => ({
@@ -42,45 +102,14 @@ vi.mock('../../src/util', async () => {
 
 const mockedFs = vi.mocked(fs);
 
-const toolsAssertion: Assertion = {
-  type: 'is-valid-openai-tools-call',
-};
+const toolsAssertion: Assertion = createTypeConfig('is-valid-openai-tools-call');
 
-const functionAssertion: Assertion = {
-  type: 'is-valid-openai-function-call',
-};
+const functionAssertion: Assertion = createTypeConfig('is-valid-openai-function-call');
 
 const mockProvider = new OpenAiChatCompletionProvider('test-provider', {
   config: {
-    tools: [
-      {
-        type: 'function',
-        function: {
-          name: 'getCurrentTemperature',
-          parameters: {
-            type: 'object',
-            properties: {
-              location: { type: 'string' },
-              unit: { type: 'string', enum: ['Celsius', 'Fahrenheit'] },
-            },
-            required: ['location', 'unit'],
-          },
-        },
-      },
-    ],
-    functions: [
-      {
-        name: 'getCurrentTemperature',
-        parameters: {
-          type: 'object',
-          properties: {
-            location: { type: 'string' },
-            unit: { type: 'string', enum: ['Celsius', 'Fahrenheit'] },
-          },
-          required: ['location', 'unit'],
-        },
-      },
-    ],
+    tools: [createTemperatureTool()],
+    functions: [createTemperatureFunction()],
   },
 });
 
@@ -94,6 +123,35 @@ const mockContext: AssertionValueFunctionContext = {
 };
 
 describe('OpenAI assertions', () => {
+  const createValidToolsCallCheck = () => async () => {
+    const toolsOutput = [
+      {
+        id: 'call_123',
+        type: 'function',
+        function: createFahrenheitFunctionCall(),
+      },
+    ];
+
+    const result = await handleIsValidOpenAiToolsCall({
+      assertion: toolsAssertion,
+      output: toolsOutput,
+      provider: mockProvider,
+      test: { vars: {} },
+      baseType: toolsAssertion.type,
+      assertionValueContext: mockContext,
+      inverse: false,
+      outputString: JSON.stringify(toolsOutput),
+      providerResponse: { output: toolsOutput },
+    });
+
+    expect(result).toEqual({
+      pass: true,
+      score: 1,
+      reason: 'Assertion passed',
+      assertion: toolsAssertion,
+    });
+  };
+
   beforeEach(() => {
     vi.resetAllMocks();
     mocks.mockPathResolve.mockImplementation((...args: string[]) => args[args.length - 1]);
@@ -105,30 +163,12 @@ describe('OpenAI assertions', () => {
     it('should pass for a valid function call with correct arguments', async () => {
       const output = { arguments: '{"x": 10, "y": 20}', name: 'add' };
 
-      const provider = new OpenAiChatCompletionProvider('foo', {
-        config: {
-          functions: [
-            {
-              name: 'add',
-              parameters: {
-                type: 'object',
-                properties: {
-                  x: { type: 'number' },
-                  y: { type: 'number' },
-                },
-                required: ['x', 'y'],
-              },
-            },
-          ],
-        },
-      });
+      const provider = new OpenAiChatCompletionProvider('foo', createAddProviderOptions());
       const providerResponse = { output };
       const result: GradingResult = await runAssertion({
         prompt: 'Some prompt',
         provider,
-        assertion: {
-          type: 'is-valid-openai-function-call',
-        },
+        assertion: createTypeConfig('is-valid-openai-function-call'),
         test: {} as AtomicTestCase,
         providerResponse,
       });
@@ -144,30 +184,12 @@ describe('OpenAI assertions', () => {
         function_call: { arguments: '{"x": 10, "y": 20}', name: 'add' },
       };
 
-      const provider = new OpenAiChatCompletionProvider('foo', {
-        config: {
-          functions: [
-            {
-              name: 'add',
-              parameters: {
-                type: 'object',
-                properties: {
-                  x: { type: 'number' },
-                  y: { type: 'number' },
-                },
-                required: ['x', 'y'],
-              },
-            },
-          ],
-        },
-      });
+      const provider = new OpenAiChatCompletionProvider('foo', createAddProviderOptions());
       const providerResponse = { output };
       const result: GradingResult = await runAssertion({
         prompt: 'Some prompt',
         provider,
-        assertion: {
-          type: 'is-valid-openai-function-call',
-        },
+        assertion: createTypeConfig('is-valid-openai-function-call'),
         test: {} as AtomicTestCase,
         providerResponse,
       });
@@ -183,26 +205,8 @@ describe('OpenAI assertions', () => {
 
       const result: GradingResult = await runAssertion({
         prompt: 'Some prompt',
-        provider: new OpenAiChatCompletionProvider('foo', {
-          config: {
-            functions: [
-              {
-                name: 'add',
-                parameters: {
-                  type: 'object',
-                  properties: {
-                    x: { type: 'number' },
-                    y: { type: 'number' },
-                  },
-                  required: ['x', 'y'],
-                },
-              },
-            ],
-          },
-        }),
-        assertion: {
-          type: 'is-valid-openai-function-call',
-        },
+        provider: new OpenAiChatCompletionProvider('foo', createAddProviderOptions()),
+        assertion: createTypeConfig('is-valid-openai-function-call'),
         test: {} as AtomicTestCase,
         providerResponse: { output },
       });
@@ -281,10 +285,7 @@ describe('OpenAI assertions', () => {
     });
 
     it('should pass when function call matches schema', async () => {
-      const functionOutput = {
-        name: 'getCurrentTemperature',
-        arguments: '{"location": "San Francisco, CA", "unit": "Fahrenheit"}',
-      };
+      const functionOutput = createFahrenheitFunctionCall();
 
       const result = handleIsValidFunctionCall({
         assertion: functionAssertion,
@@ -307,10 +308,7 @@ describe('OpenAI assertions', () => {
     });
 
     it('should load functions from external file', async () => {
-      const functionOutput = {
-        name: 'getCurrentTemperature',
-        arguments: '{"location": "San Francisco, CA", "unit": "Fahrenheit"}',
-      };
+      const functionOutput = createFahrenheitFunctionCall();
 
       const mockYamlContent = `
 - name: getCurrentTemperature
@@ -344,26 +342,11 @@ describe('OpenAI assertions', () => {
     });
 
     it('should render variables in function definitions', async () => {
-      const functionOutput = {
-        name: 'getCurrentTemperature',
-        arguments: '{"location": "San Francisco, CA", "unit": "custom_unit"}',
-      };
+      const functionOutput = createCustomUnitFunctionCall();
 
       const varProvider = new OpenAiChatCompletionProvider('test-provider', {
         config: {
-          functions: [
-            {
-              name: 'getCurrentTemperature',
-              parameters: {
-                type: 'object',
-                properties: {
-                  location: { type: 'string' },
-                  unit: { type: 'string', enum: ['{{unit}}'] },
-                },
-                required: ['location', 'unit'],
-              },
-            },
-          ],
+          functions: [createTemplatedTemperatureFunction()],
         },
       });
 
@@ -480,24 +463,12 @@ describe('OpenAI assertions', () => {
             tools: [
               {
                 type: 'function',
-                function: {
-                  name: 'add',
-                  parameters: {
-                    type: 'object',
-                    properties: {
-                      x: { type: 'number' },
-                      y: { type: 'number' },
-                    },
-                    required: ['x', 'y'],
-                  },
-                },
+                function: createAddFunction(),
               },
             ],
           },
         }),
-        assertion: {
-          type: 'is-valid-openai-tools-call',
-        },
+        assertion: createTypeConfig('is-valid-openai-tools-call'),
         test: {} as AtomicTestCase,
         providerResponse: { output },
       });
@@ -527,27 +498,10 @@ describe('OpenAI assertions', () => {
         prompt: 'Some prompt',
         provider: new OpenAiChatCompletionProvider('foo', {
           config: {
-            tools: [
-              {
-                type: 'function',
-                function: {
-                  name: 'getCurrentTemperature',
-                  parameters: {
-                    type: 'object',
-                    properties: {
-                      location: { type: 'string' },
-                      unit: { type: 'string', enum: ['Celsius', 'Fahrenheit'] },
-                    },
-                    required: ['location', 'unit'],
-                  },
-                },
-              },
-            ],
+            tools: [createTemperatureTool()],
           },
         }),
-        assertion: {
-          type: 'is-valid-openai-tools-call',
-        },
+        assertion: createTypeConfig('is-valid-openai-tools-call'),
         test: {} as AtomicTestCase,
         providerResponse: { output },
       });
@@ -586,20 +540,7 @@ describe('OpenAI assertions', () => {
         provider: new OpenAiChatCompletionProvider('foo', {
           config: {
             tools: [
-              {
-                type: 'function',
-                function: {
-                  name: 'getCurrentTemperature',
-                  parameters: {
-                    type: 'object',
-                    properties: {
-                      location: { type: 'string' },
-                      unit: { type: 'string', enum: ['Celsius', 'Fahrenheit'] },
-                    },
-                    required: ['location', 'unit'],
-                  },
-                },
-              },
+              createTemperatureTool(),
               {
                 type: 'function',
                 function: {
@@ -616,9 +557,7 @@ describe('OpenAI assertions', () => {
             ],
           },
         }),
-        assertion: {
-          type: 'is-valid-openai-tools-call',
-        },
+        assertion: createTypeConfig('is-valid-openai-tools-call'),
         test: {} as AtomicTestCase,
         providerResponse: { output },
       });
@@ -641,24 +580,12 @@ describe('OpenAI assertions', () => {
             tools: [
               {
                 type: 'function',
-                function: {
-                  name: 'add',
-                  parameters: {
-                    type: 'object',
-                    properties: {
-                      x: { type: 'number' },
-                      y: { type: 'number' },
-                    },
-                    required: ['x', 'y'],
-                  },
-                },
+                function: createAddFunction(),
               },
             ],
           },
         }),
-        assertion: {
-          type: 'is-valid-openai-tools-call',
-        },
+        assertion: createTypeConfig('is-valid-openai-tools-call'),
         test: {} as AtomicTestCase,
         providerResponse: { output },
       });
@@ -671,67 +598,19 @@ describe('OpenAI assertions', () => {
   });
 
   describe('handleIsValidOpenAiToolsCall', () => {
-    it('should pass when tool calls match schema', async () => {
-      const toolsOutput = [
-        {
-          id: 'call_123',
-          type: 'function',
-          function: {
-            name: 'getCurrentTemperature',
-            arguments: '{"location": "San Francisco, CA", "unit": "Fahrenheit"}',
-          },
-        },
-      ];
-
-      const result = await handleIsValidOpenAiToolsCall({
-        assertion: toolsAssertion,
-        output: toolsOutput,
-        provider: mockProvider,
-        test: { vars: {} },
-        baseType: toolsAssertion.type,
-        assertionValueContext: mockContext,
-        inverse: false,
-        outputString: JSON.stringify(toolsOutput),
-        providerResponse: { output: toolsOutput },
-      });
-
-      expect(result).toEqual({
-        pass: true,
-        score: 1,
-        reason: 'Assertion passed',
-        assertion: toolsAssertion,
-      });
-    });
+    it('should pass when tool calls match schema', createValidToolsCallCheck());
 
     it('should load tools from external file', async () => {
       const toolsOutput = [
         {
           id: 'call_123',
           type: 'function',
-          function: {
-            name: 'getCurrentTemperature',
-            arguments: '{"location": "San Francisco, CA", "unit": "Fahrenheit"}',
-          },
+          function: createFahrenheitFunctionCall(),
         },
       ];
 
       // Define the array of tools that should be returned by the mock
-      const mockParsedTools = [
-        {
-          type: 'function',
-          function: {
-            name: 'getCurrentTemperature',
-            parameters: {
-              type: 'object',
-              properties: {
-                location: { type: 'string' },
-                unit: { type: 'string', enum: ['Celsius', 'Fahrenheit'] },
-              },
-              required: ['location', 'unit'],
-            },
-          },
-        },
-      ];
+      const mockParsedTools = [createTemperatureTool()];
 
       // Make sure the mock returns an array, not a string or object
       mocks.mockMaybeLoadToolsFromExternalFile.mockResolvedValue(mockParsedTools);
@@ -774,10 +653,7 @@ describe('OpenAI assertions', () => {
         {
           id: 'call_123',
           type: 'function',
-          function: {
-            name: 'getCurrentTemperature',
-            arguments: '{"location": "San Francisco, CA", "unit": "custom_unit"}',
-          },
+          function: createCustomUnitFunctionCall(),
         },
       ];
 
@@ -786,17 +662,7 @@ describe('OpenAI assertions', () => {
           tools: [
             {
               type: 'function',
-              function: {
-                name: 'getCurrentTemperature',
-                parameters: {
-                  type: 'object',
-                  properties: {
-                    location: { type: 'string' },
-                    unit: { type: 'string', enum: ['{{unit}}'] },
-                  },
-                  required: ['location', 'unit'],
-                },
-              },
+              function: createTemplatedTemperatureFunction(),
             },
           ],
         },
@@ -823,16 +689,7 @@ describe('OpenAI assertions', () => {
     });
 
     it('should fail when tools are not defined', async () => {
-      const toolsOutput = [
-        {
-          id: 'call_123',
-          type: 'function',
-          function: {
-            name: 'getCurrentTemperature',
-            arguments: '{"location": "San Francisco, CA"}',
-          },
-        },
-      ];
+      const toolsOutput = [createToolCall()];
 
       const emptyProvider = new OpenAiChatCompletionProvider('test-provider', {
         config: {},
@@ -858,14 +715,7 @@ describe('OpenAI assertions', () => {
     });
 
     it('should fail when tool output is not an array', async () => {
-      const toolsOutput = {
-        id: 'call_123',
-        type: 'function',
-        function: {
-          name: 'getCurrentTemperature',
-          arguments: '{"location": "San Francisco, CA"}',
-        },
-      };
+      const toolsOutput = createToolCall();
 
       const emptyToolsProvider = new OpenAiChatCompletionProvider('test-provider', {
         config: {
@@ -965,30 +815,12 @@ describe('OpenAI assertions', () => {
         tool_calls: [
           {
             type: 'function',
-            function: {
-              name: 'getCurrentTemperature',
-              arguments: '{"location": "San Francisco, CA", "unit": "Fahrenheit"}',
-            },
+            function: createFahrenheitFunctionCall(),
           },
         ],
       };
 
-      const mockTools = [
-        {
-          type: 'function',
-          function: {
-            name: 'getCurrentTemperature',
-            parameters: {
-              type: 'object',
-              properties: {
-                location: { type: 'string' },
-                unit: { type: 'string', enum: ['Celsius', 'Fahrenheit'] },
-              },
-              required: ['location', 'unit'],
-            },
-          },
-        },
-      ];
+      const mockTools = [createTemperatureTool()];
 
       // Set up the mock to return processed tools
       mocks.mockMaybeLoadToolsFromExternalFile.mockResolvedValue(mockTools);
@@ -1025,10 +857,7 @@ describe('OpenAI assertions', () => {
         tool_calls: [
           {
             type: 'function',
-            function: {
-              name: 'getCurrentTemperature',
-              arguments: '{"location": "San Francisco, CA", "unit": "Fahrenheit"}',
-            },
+            function: createFahrenheitFunctionCall(),
           },
         ],
       };
@@ -1041,22 +870,7 @@ describe('OpenAI assertions', () => {
       });
 
       // Set up the mock to return processed tools from the external file
-      const mockToolsFromFile = [
-        {
-          type: 'function',
-          function: {
-            name: 'getCurrentTemperature',
-            parameters: {
-              type: 'object',
-              properties: {
-                location: { type: 'string' },
-                unit: { type: 'string', enum: ['Celsius', 'Fahrenheit'] },
-              },
-              required: ['location', 'unit'],
-            },
-          },
-        },
-      ];
+      const mockToolsFromFile = [createTemperatureTool()];
       mocks.mockMaybeLoadToolsFromExternalFile.mockResolvedValue(mockToolsFromFile);
 
       const result = await handleIsValidOpenAiToolsCall({
@@ -1090,10 +904,7 @@ describe('OpenAI assertions', () => {
         tool_calls: [
           {
             type: 'function',
-            function: {
-              name: 'getCurrentTemperature',
-              arguments: '{"location": "San Francisco, CA", "unit": "custom_unit"}',
-            },
+            function: createCustomUnitFunctionCall(),
           },
         ],
       };
@@ -1104,17 +915,7 @@ describe('OpenAI assertions', () => {
           tools: [
             {
               type: 'function',
-              function: {
-                name: 'getCurrentTemperature',
-                parameters: {
-                  type: 'object',
-                  properties: {
-                    location: { type: 'string' },
-                    unit: { type: 'string', enum: ['{{unit}}'] },
-                  },
-                  required: ['location', 'unit'],
-                },
-              },
+              function: createTemplatedTemperatureFunction(),
             },
           ],
         },
@@ -1392,37 +1193,10 @@ describe('OpenAI assertions', () => {
       });
     });
 
-    it('should fall back to traditional function tool validation when no MCP content', async () => {
-      const toolsOutput = [
-        {
-          id: 'call_123',
-          type: 'function',
-          function: {
-            name: 'getCurrentTemperature',
-            arguments: '{"location": "San Francisco, CA", "unit": "Fahrenheit"}',
-          },
-        },
-      ];
-
-      const result = await handleIsValidOpenAiToolsCall({
-        assertion: toolsAssertion,
-        output: toolsOutput,
-        provider: mockProvider,
-        test: { vars: {} },
-        baseType: toolsAssertion.type,
-        assertionValueContext: mockContext,
-        inverse: false,
-        outputString: JSON.stringify(toolsOutput),
-        providerResponse: { output: toolsOutput },
-      });
-
-      expect(result).toEqual({
-        pass: true,
-        score: 1,
-        reason: 'Assertion passed',
-        assertion: toolsAssertion,
-      });
-    });
+    it(
+      'should fall back to traditional function tool validation when no MCP content',
+      createValidToolsCallCheck(),
+    );
 
     it('should handle object output with MCP content', async () => {
       const outputObject = {
@@ -1449,5 +1223,260 @@ describe('OpenAI assertions', () => {
         assertion: toolsAssertion,
       });
     });
+  });
+
+  describe('negated tool-call assertions', () => {
+    const toolCall = {
+      name: 'getCurrentTemperature',
+      arguments: '{"location": "Paris", "unit": "Celsius"}',
+    };
+    const badArgsCall = { name: 'getCurrentTemperature', arguments: '{"location": "Paris"}' };
+
+    const run = (type: Assertion['type'], output: string | object, provider: ApiProvider) =>
+      runAssertion({
+        assertion: { type },
+        provider,
+        test: {} as AtomicTestCase,
+        providerResponse: { output },
+      });
+
+    it.each([
+      ['not-is-valid-openai-tools-call', 'It is sunny.', true, 'Assertion passed'],
+      [
+        'not-is-valid-openai-tools-call',
+        [{ type: 'function', function: toolCall }],
+        false,
+        'Expected output to not be a valid OpenAI tools call',
+      ],
+      [
+        'not-is-valid-openai-tools-call',
+        [{ type: 'function', function: badArgsCall }],
+        true,
+        'Assertion passed',
+      ],
+      ['not-is-valid-function-call', 'It is sunny.', true, 'Assertion passed'],
+      [
+        'not-is-valid-function-call',
+        toolCall,
+        false,
+        'Expected output to not be a valid function call',
+      ],
+    ] as const)('%s on %j inverts the verdict', async (type, output, pass, reason) => {
+      await expect(run(type, output, mockProvider)).resolves.toMatchObject({
+        pass,
+        score: pass ? 1 : 0,
+        reason,
+      });
+    });
+
+    it('keeps a missing tools config as a failure under not-', async () => {
+      const provider = new OpenAiChatCompletionProvider('test-provider', { config: {} });
+      await expect(
+        run('not-is-valid-openai-tools-call', [{ type: 'function', function: toolCall }], provider),
+      ).resolves.toMatchObject({
+        pass: false,
+        reason: 'No tools configured in provider, but output contains tool calls',
+      });
+    });
+
+    it('keeps a tool schema that does not compile as a failure under not-', async () => {
+      const provider = new OpenAiChatCompletionProvider('test-provider', {
+        config: {
+          tools: [
+            {
+              type: 'function',
+              function: {
+                name: 'getCurrentTemperature',
+                parameters: { type: 'object', properties: { location: { type: 'not-a-type' } } },
+              },
+            },
+          ],
+        },
+      });
+      const result = await run(
+        'not-is-valid-openai-tools-call',
+        [{ type: 'function', function: toolCall }],
+        provider,
+      );
+      expect(result).toMatchObject({ pass: false, score: 0 });
+      expect(result.reason).toContain('schema is invalid');
+    });
+
+    it('keeps an unreadable functions file as a failure under not-', async () => {
+      const provider = new OpenAiChatCompletionProvider('test-provider', {
+        config: { functions: 'file:///nonexistent/functions.json' as any },
+      });
+      const result = await run('not-is-valid-function-call', toolCall, provider);
+      expect(result).toMatchObject({ pass: false, score: 0 });
+      expect(result.reason).toContain('/nonexistent/functions.json');
+    });
+
+    it('keeps a functions config that is not an array as a failure under not-', async () => {
+      const provider = new OpenAiChatCompletionProvider('test-provider', {
+        config: { functions: { name: 'getCurrentTemperature' } as any },
+      });
+      await expect(run('not-is-valid-function-call', toolCall, provider)).resolves.toMatchObject({
+        pass: false,
+        score: 0,
+        reason: 'Expected the loaded functions to be an array',
+      });
+    });
+
+    it('keeps a provider without a validator as a failure under not-', async () => {
+      await expect(
+        run('not-is-valid-function-call', toolCall, createMockProvider()),
+      ).resolves.toMatchObject({
+        pass: false,
+        reason: 'Provider does not have functionality for checking function call.',
+      });
+    });
+
+    it.each([null, {}, { name: 42 }, { name: 'getCurrentTemperature' }])(
+      'keeps malformed function definitions from passing negation: %j',
+      async (definition) => {
+        const provider = new OpenAiChatCompletionProvider('test-provider', {
+          config: { functions: [definition] as any },
+        });
+        await expect(run('not-is-valid-function-call', toolCall, provider)).resolves.toMatchObject({
+          pass: false,
+          score: 0,
+        });
+      },
+    );
+
+    it.each([{}, [null], [{ type: 'function', function: null }]])(
+      'keeps malformed tools config from passing negation: %j',
+      async (tools) => {
+        const provider = new OpenAiChatCompletionProvider('test-provider', {
+          config: { tools: tools as any },
+        });
+        await expect(
+          run(
+            'not-is-valid-openai-tools-call',
+            [{ type: 'function', function: toolCall }],
+            provider,
+          ),
+        ).resolves.toMatchObject({ pass: false, score: 0 });
+      },
+    );
+
+    it('does not invert an unexpected validator failure', async () => {
+      const provider = {
+        ...createMockProvider(),
+        validateFunctionToolCall: () => {
+          throw new Error('validator unavailable');
+        },
+      };
+      await expect(run('not-is-valid-function-call', toolCall, provider)).resolves.toMatchObject({
+        pass: false,
+        score: 0,
+        reason: 'validator unavailable',
+      });
+    });
+
+    it('inverts invalid-call errors from a custom provider using the public contract', async () => {
+      const provider = {
+        ...createMockProvider(),
+        validateFunctionToolCall: () => {
+          throw new InvalidToolCallError('Unknown function');
+        },
+      };
+      await expect(run('is-valid-function-call', toolCall, provider)).resolves.toMatchObject({
+        pass: false,
+        score: 0,
+        reason: 'Unknown function',
+      });
+      await expect(run('not-is-valid-function-call', toolCall, provider)).resolves.toMatchObject({
+        pass: true,
+        score: 1,
+      });
+    });
+
+    it.each([{ type: 'function' }, { type: 'function', function: null }])(
+      'rejects incomplete tools alongside a valid definition: %j',
+      async (incomplete) => {
+        const provider = new OpenAiChatCompletionProvider('test-provider', {
+          config: {
+            tools: [
+              { type: 'function', function: { name: 'weather', parameters: { type: 'object' } } },
+              incomplete,
+            ] as any,
+          },
+        });
+        await expect(
+          run(
+            'not-is-valid-openai-tools-call',
+            [{ type: 'function', function: badArgsCall }],
+            provider,
+          ),
+        ).resolves.toMatchObject({ pass: false, score: 0 });
+      },
+    );
+
+    it.each([
+      [undefined, true],
+      [{ type: 'OBJECT', properties: {} }, true],
+      [{ type: 'OBJECT', properties: { city: { type: 'STRING' } }, required: ['city'] }, false],
+    ])('validates omitted Google args against %j', async (parameters, valid) => {
+      const provider = {
+        ...createMockProvider(),
+        validateFunctionToolCall: (value: string | object) =>
+          validateGoogleFunctionCall(value, [
+            { functionDeclarations: [{ name: 'weather', parameters }] },
+          ] as any),
+      };
+      const output = { toolCall: { functionCalls: [{ name: 'weather' }] } };
+      await expect(run('is-valid-function-call', output, provider)).resolves.toMatchObject({
+        pass: valid,
+        score: valid ? 1 : 0,
+      });
+      await expect(run('not-is-valid-function-call', output, provider)).resolves.toMatchObject({
+        pass: !valid,
+        score: valid ? 0 : 1,
+      });
+    });
+
+    it.each([
+      [{ toolCall: { functionCalls: [] } }, true],
+      [[], true],
+      [{ toolCall: { functionCalls: [{ name: 'weather', args: {} }] } }, false],
+      [{ toolCall: { functionCalls: [{ name: 'weather', args: '{}' }] } }, false],
+    ])('negates the actual Google call validity: %j', async (output, pass) => {
+      const provider = {
+        ...createMockProvider(),
+        validateFunctionToolCall: (value: string | object) =>
+          validateGoogleFunctionCall(value, [
+            {
+              functionDeclarations: [
+                { name: 'weather', parameters: { type: 'OBJECT', properties: {} } },
+              ],
+            },
+          ] as any),
+      };
+      await expect(run('not-is-valid-function-call', output, provider)).resolves.toMatchObject({
+        pass,
+        score: pass ? 1 : 0,
+      });
+    });
+
+    it.each([[null], [{ functionDeclarations: [null] }], [{ functionDeclarations: {} }]])(
+      'does not invert malformed Google declarations: %j',
+      async (tools) => {
+        const provider = {
+          ...createMockProvider(),
+          validateFunctionToolCall: (value: string | object) =>
+            validateGoogleFunctionCall(value, tools as any),
+        };
+        await expect(
+          run(
+            'not-is-valid-function-call',
+            {
+              toolCall: { functionCalls: [{ name: 'weather', args: {} }] },
+            },
+            provider,
+          ),
+        ).resolves.toMatchObject({ pass: false, score: 0 });
+      },
+    );
   });
 });

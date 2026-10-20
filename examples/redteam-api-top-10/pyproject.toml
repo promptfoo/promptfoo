@@ -4,19 +4,13 @@ version = "0.1.0"
 description = "CloudSwag Customer Service Bot Demo - MCP Tools Integration"
 requires-python = ">=3.10"
 dependencies = [
-    "fastapi>=0.115.0",
-    "uvicorn[standard]>=0.32.0",
-    "anthropic>=0.40.0",
-    "mcp>=1.0.0",
-    "pyjwt>=2.9.0",
-    "python-dotenv>=1.0.0",
-    "httpx>=0.27.0",
-]
-
-[project.optional-dependencies]
-dev = [
-    "pytest>=8.0.0",
-    "pytest-asyncio>=0.24.0",
+    "fastapi>=0.141.1,<1",
+    "uvicorn>=0.53.0,<1",
+    "anthropic>=1.7.0,<2",
+    "mcp>=2.2.0,<3",
+    "pydantic>=2.13.5,<3",
+    "pyjwt>=2.14.0,<3",
+    "python-dotenv>=1.2.3,<2",
 ]
 
 [build-system]

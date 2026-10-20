@@ -9,7 +9,7 @@ import {
   DialogTitle,
 } from '@app/components/ui/dialog';
 import { useTelemetry } from '@app/hooks/useTelemetry';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router';
 import { EXAMPLE_CONFIG, useRedTeamConfig } from '../hooks/useRedTeamConfig';
 
 export default function LoadExampleButton() {
