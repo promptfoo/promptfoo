@@ -70,7 +70,7 @@ describe('runPython real invocation cancellation', () => {
   beforeEach(() => {
     observed.startedAt = Date.now();
     observed.children.length = 0;
-    vi.clearAllMocks();
+    vi.resetAllMocks();
   });
   afterEach(() => {
     vi.restoreAllMocks();
