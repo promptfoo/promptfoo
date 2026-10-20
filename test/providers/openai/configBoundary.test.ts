@@ -399,3 +399,78 @@ describe('portable config enters real OpenAI constructors', () => {
     },
   );
 });
+
+describe('hosted MCP request serialization', () => {
+  it.each([true, false, undefined])(
+    'preserves deferred loading %s and nullable filters on the wire',
+    async (deferLoading) => {
+      const tools = [
+        {
+          type: 'mcp',
+          server_label: 'fixture',
+          server_url: 'https://fixture.example.test/mcp',
+          ...(deferLoading === undefined ? {} : { defer_loading: deferLoading }),
+          allowed_tools: null,
+          headers: null,
+          require_approval: null,
+        },
+      ];
+      const config = OpenAiResponsesConfigInputSchema.parse({ apiKey: 'fixture-key', tools });
+      const provider = new OpenAiResponsesProvider('gpt-4.1', { config });
+      vi.mocked(fetchWithCache).mockResolvedValue(
+        createMockFetchResponse({
+          output: [
+            { type: 'message', role: 'assistant', content: [{ type: 'output_text', text: 'ok' }] },
+          ],
+          usage: { input_tokens: 1, output_tokens: 1, total_tokens: 2 },
+        }),
+      );
+      const result = await provider.callApi('fixture');
+      expect(result.error).toBeUndefined();
+      expect(result.output).toBe('ok');
+      const request = JSON.parse(vi.mocked(fetchWithCache).mock.calls[0][1]?.body as string);
+      expect(request.tools).toEqual(tools);
+    },
+  );
+
+  it('retains future hosted MCP fields through explicit passthrough', async () => {
+    const tools = [
+      {
+        type: 'mcp',
+        server_label: 'fixture',
+        tunnel_id: 'tunnel_fixture',
+        future_field: { nested: true },
+      },
+    ];
+    const config = OpenAiResponsesConfigInputSchema.parse({ passthrough: { tools } });
+    const { body } = await new OpenAiResponsesProvider('gpt-4.1', { config }).getOpenAiBody(
+      'fixture',
+    );
+    expect(JSON.parse(JSON.stringify(body)).tools).toEqual(tools);
+  });
+});
+
+it.each(['inline', 'file'] as const)(
+  'preserves %s Chat response-format strict:null through callApi',
+  async (source) => {
+    const format = {
+      type: 'json_schema',
+      json_schema: {
+        name: 'result',
+        strict: null,
+        schema: { type: 'object', properties: { value: { type: 'string' } } },
+      },
+    };
+    const config = OpenAiChatConfigInputSchema.parse({
+      apiKey: 'fixture-key',
+      response_format: source === 'file' ? fixture('nullable-format.json', format) : format,
+    });
+    const provider = new OpenAiChatCompletionProvider('gpt-4.1', { config });
+    vi.mocked(fetchWithCache).mockResolvedValue(chatResponse('{"value":"ok"}'));
+    const result = await provider.callApi('fixture');
+    expect(result.error).toBeUndefined();
+    expect(result.output).toEqual({ value: 'ok' });
+    const request = JSON.parse(vi.mocked(fetchWithCache).mock.calls[0][1]?.body as string);
+    expect(request.response_format).toEqual(format);
+  },
+);
