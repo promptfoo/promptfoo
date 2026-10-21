@@ -1,10 +1,10 @@
 import { createHash, randomUUID } from 'crypto';
 
 import Anthropic from '@anthropic-ai/sdk';
-import { getEnvOverrides, getEnvString } from '../../envars';
+import { getEnvOverrides, getEnvString, getProviderEnvString } from '../../envars';
+import { getExplicitProviderEnv } from '../../envOverrides';
 import logger from '../../logger';
 import { resolveProviderApiKey } from '../credentials';
-import { getExplicitProviderEnv } from '../env';
 import {
   CLAUDE_CODE_OAUTH_BETA_FEATURES,
   CLAUDE_CODE_USER_AGENT,
@@ -364,7 +364,8 @@ export class AnthropicGenericProvider implements ApiProvider {
   }
 
   getApiBaseUrl(): string | undefined {
-    const envUrl = this.env?.ANTHROPIC_BASE_URL ?? getEnvString('ANTHROPIC_BASE_URL');
+    const envUrl =
+      getProviderEnvString(this.env, 'ANTHROPIC_BASE_URL') ?? getEnvString('ANTHROPIC_BASE_URL');
     return this.config?.apiBaseUrl || (envUrl === '' ? 'https://api.anthropic.com' : envUrl);
   }
 

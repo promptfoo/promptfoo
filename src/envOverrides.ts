@@ -1,5 +1,24 @@
 import type { EnvOverrides } from './types/env';
 
+type ProviderEnv = Readonly<Record<string, string | undefined>>;
+
+// Keep the loader's explicit overrides separate without adding registered secrets
+// to the environment used by templates or subprocesses.
+const explicitProviderEnvs = new WeakMap<ProviderEnv, ProviderEnv | undefined>();
+
+export function setExplicitProviderEnv(
+  env: ProviderEnv | undefined,
+  explicit: ProviderEnv | undefined,
+): void {
+  if (env) {
+    explicitProviderEnvs.set(env, explicit);
+  }
+}
+
+export function getExplicitProviderEnv(env: ProviderEnv | undefined): ProviderEnv | undefined {
+  return env && explicitProviderEnvs.has(env) ? explicitProviderEnvs.get(env) : env;
+}
+
 export type EnvOverridesProvider = (layer: 'suite' | 'file') => EnvOverrides | undefined;
 
 type ProviderLayerOverridesProvider = (

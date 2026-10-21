@@ -132,6 +132,69 @@ describe('provider environment scopes', () => {
     }
   });
 
+  it.each([
+    ['cohere:chat:command-r', 'COHERE_API_KEY'],
+    ['cohere:embedding:embed-english-v3.0', 'COHERE_API_KEY'],
+    ['slack:C-fixture', 'SLACK_BOT_TOKEN'],
+    ['mistral:chat:mistral-large-latest', 'MISTRAL_API_KEY'],
+    ['voyage:voyage-3.5', 'VOYAGE_API_KEY'],
+    ['ai21:chat:jamba-large', 'AI21_API_KEY'],
+  ])('preserves registered credentials for direct credential readers: %s', async (route, key) => {
+    const previousProvider = getEnvOverridesProvider();
+    setEnvOverridesProvider(
+      (layer) => (layer === 'provider' ? { [key]: 'registered-key' } : previousProvider?.(layer)),
+      { providerLayer: true },
+    );
+    try {
+      for (const explicit of [undefined, 'explicit-key', '']) {
+        const loading = loadApiProvider(route, {
+          env: { [key]: 'suite-key' },
+          options: { env: explicit === undefined ? undefined : { [key]: explicit } },
+        });
+        if (route.startsWith('slack:') && explicit === '') {
+          await expect(loading).rejects.toThrow('Slack provider requires a token');
+        } else {
+          const provider = await loading;
+          const keyValue = route.startsWith('slack:')
+            ? Reflect.get(provider, 'client').token
+            : apiKey(provider);
+          expect(keyValue || undefined).toBe((explicit ?? 'registered-key') || undefined);
+        }
+      }
+    } finally {
+      setEnvOverridesProvider(previousProvider);
+    }
+  });
+
+  it.each([
+    ['anthropic:messages:claude-sonnet-4-5', 'ANTHROPIC_BASE_URL'],
+    ['f5:fixture', 'F5_API_BASE_URL'],
+  ])('keeps the registered endpoint ahead of suite configuration: %s', async (route, key) => {
+    const previousProvider = getEnvOverridesProvider();
+    setEnvOverridesProvider(
+      (layer) =>
+        layer === 'provider' ? { [key]: 'https://registered.example' } : previousProvider?.(layer),
+      { providerLayer: true },
+    );
+    try {
+      for (const explicit of [undefined, 'https://explicit.example']) {
+        const provider = await loadApiProvider(route, {
+          env: { [key]: 'https://suite.example' },
+          options: {
+            config: { apiKey: 'fixture' },
+            env: explicit ? { [key]: explicit } : undefined,
+          },
+        });
+        const url = route.startsWith('f5:')
+          ? Reflect.get(provider, 'getApiUrl').call(provider)
+          : Reflect.get(provider, 'getApiBaseUrl').call(provider);
+        expect(url).toContain(explicit ?? 'https://registered.example');
+      }
+    } finally {
+      setEnvOverridesProvider(previousProvider);
+    }
+  });
+
   it('preserves provider scope across Vertex Express image credential aliases', async () => {
     const provider = await loadApiProvider('google:gemini-2.5-flash-image', {
       env: { VERTEX_API_KEY: 'suite-vertex-key' },

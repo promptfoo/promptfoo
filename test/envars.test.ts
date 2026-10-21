@@ -67,6 +67,19 @@ describe('envars', () => {
     },
   );
 
+  it('retains explicit values when the registered provider layer fails', () => {
+    setEnvOverridesProvider(
+      () => {
+        throw new Error('provider unavailable');
+      },
+      { providerLayer: true },
+    );
+    expect(getProviderEnvString({ OPENAI_API_KEY: 'explicit-key' }, 'OPENAI_API_KEY')).toBe(
+      'explicit-key',
+    );
+    expect(getProviderEnvString(undefined, 'OPENAI_API_KEY')).toBeUndefined();
+  });
+
   describe('getEnvar', () => {
     it('should return the value of an existing environment variable', () => {
       mockProcessEnv({ PROMPTFOO_AUTHOR: 'test value' });

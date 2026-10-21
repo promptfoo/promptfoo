@@ -2,7 +2,8 @@ import os from 'os';
 import path from 'path';
 
 import dedent from 'dedent';
-import { getEnvString } from '../envars';
+import { getEnvString, getProviderEnvString } from '../envars';
+import { getExplicitProviderEnv, setExplicitProviderEnv } from '../envOverrides';
 import { importModule } from '../esm';
 import logger from '../logger';
 import { isJavascriptFile } from '../util/fileExtensions';
@@ -39,7 +40,6 @@ import {
   ElevenLabsSTTProvider,
   ElevenLabsTTSProvider,
 } from './elevenlabs';
-import { getExplicitProviderEnv, setExplicitProviderEnv } from './env';
 import { FalImageGenerationProvider } from './fal';
 import { createGitHubProvider } from './github/index';
 import { GolangProvider } from './golangCompletion';
@@ -874,7 +874,7 @@ export const providerMap: ProviderFactory[] = [
       const endpoint = providerPath.slice('f5:'.length).replace(/^\/+/, '');
       const configuredBaseUrl =
         providerOptions.config?.apiBaseUrl ??
-        providerOptions.env?.F5_API_BASE_URL ??
+        getProviderEnvString(providerOptions.env, 'F5_API_BASE_URL') ??
         getEnvString('F5_API_BASE_URL');
       if (!configuredBaseUrl) {
         throw new Error(

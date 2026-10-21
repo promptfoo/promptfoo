@@ -1,4 +1,8 @@
-import { getEnvOverridesProvider, getProviderEnvOverrides } from './envOverrides';
+import {
+  getEnvOverridesProvider,
+  getExplicitProviderEnv,
+  getProviderEnvOverrides,
+} from './envOverrides';
 import { loadEnvFiles } from './util/envFile';
 
 import type { EnvOverrides } from './types/env';
@@ -491,14 +495,18 @@ type EnvVars = {
 // Allow string access to any key for environment variables not explicitly listed
 export type EnvVarKey = keyof EnvVars;
 
-/** Read only own provider overrides, without falling back to process.env. */
+/** Read explicit, registered, then retained provider values without consulting process.env. */
 export function getProviderEnvString(
   env: EnvOverrides | undefined,
   key: EnvVarKey,
 ): string | undefined {
-  if (env && Object.prototype.hasOwnProperty.call(env, key)) {
-    const value = env[key as keyof EnvOverrides];
-    return value === undefined ? undefined : String(value);
+  for (const layer of [getExplicitProviderEnv(env), getEnvOverrides('provider'), env]) {
+    if (layer && Object.prototype.hasOwnProperty.call(layer, key)) {
+      const value = layer[key as keyof EnvOverrides];
+      if (value !== undefined) {
+        return String(value);
+      }
+    }
   }
   return undefined;
 }

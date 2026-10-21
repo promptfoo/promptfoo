@@ -3,7 +3,8 @@ import { GoogleAuthManager } from '../../../src/providers/google/auth';
 import { mockProcessEnv } from '../../util/utils';
 
 // Mock dependencies
-vi.mock('../../../src/envars', () => ({
+vi.mock('../../../src/envars', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../../src/envars')>()),
   getEnvString: vi.fn(),
   getEnvOverrides: vi.fn(),
 }));
