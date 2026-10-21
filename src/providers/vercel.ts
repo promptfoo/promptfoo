@@ -2,7 +2,8 @@ import { createHmac } from 'crypto';
 
 import { context as otelContext, propagation, ROOT_CONTEXT, trace } from '@opentelemetry/api';
 import { getCache, isCacheEnabled } from '../cache';
-import { getEnvString, getProviderEnvString } from '../envars';
+import { getEnvOverrides, getEnvString, getProviderEnvString } from '../envars';
+import { getExplicitProviderEnv } from '../envOverrides';
 import logger from '../logger';
 import { sha256 } from '../util/createHash';
 import { normalizeFinishReason } from '../util/finishReason';
@@ -74,9 +75,12 @@ function resolveApiKey(config: VercelAiConfig, env?: EnvOverrides): string | und
   if (config.apiKey) {
     return config.apiKey;
   }
+  // Check the registered fallback alias before retained suite values in default lookup.
   const apiKey = config.apiKeyEnvar
     ? (getProviderEnvString(env, config.apiKeyEnvar) ?? getEnvString(config.apiKeyEnvar))
-    : (getProviderEnvString(env, 'VERCEL_AI_GATEWAY_API_KEY') ??
+    : (getProviderEnvString(getExplicitProviderEnv(env), 'VERCEL_AI_GATEWAY_API_KEY') ??
+      getEnvOverrides('provider')?.AI_GATEWAY_API_KEY ??
+      getProviderEnvString(env, 'VERCEL_AI_GATEWAY_API_KEY') ??
       getEnvString('VERCEL_AI_GATEWAY_API_KEY'));
   return apiKey ?? getEnvString('AI_GATEWAY_API_KEY');
 }
