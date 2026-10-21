@@ -34,9 +34,11 @@ export const handleIsValidOpenAiToolsCall = async ({
   if (outputStr.includes('MCP Tool Result') || outputStr.includes('MCP Tool Error')) {
     // For MCP tools, we validate that the tool call was successful
     if (outputStr.includes('MCP Tool Error')) {
-      const errorMatch = outputStr.match(/MCP Tool Error(?: \(([^)]+)\))?: (.+)/);
+      const errorMatch = outputStr.match(
+        /MCP Tool Error(?: \(([^)]+)\))?:[ \t]*([\s\S]*?)(?=\r?\n[ \t]*MCP Tool (?:Result|Error)(?: \([^)]+\))?:|$)/,
+      );
       const toolName = errorMatch?.[1] ?? 'unknown';
-      const errorMsg = errorMatch ? errorMatch[2] : 'unknown error';
+      const errorMsg = errorMatch?.[2].trim() || 'unknown error';
       return verdict(false, `MCP tool call failed for ${toolName}: ${errorMsg}`);
     }
 

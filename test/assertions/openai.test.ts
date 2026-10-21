@@ -1248,7 +1248,8 @@ describe('OpenAI assertions', () => {
       expect(result).toEqual({
         pass: false,
         score: 0,
-        reason: 'MCP tool call failed for read_wiki_structure: Failed to read structure.',
+        reason:
+          'MCP tool call failed for read_wiki_structure: Failed to read structure.\n        Mixed results from tools.',
         assertion: toolsAssertion,
       });
     });
@@ -1297,6 +1298,46 @@ describe('OpenAI assertions', () => {
         });
 
         expect(result).toEqual({ pass, score: pass ? 1 : 0, reason, assertion: toolsAssertion });
+      },
+    );
+
+    it.each([
+      ['MCP Tool Error', 'first line\nsecond line'],
+      ['MCP Tool Error', '\nfirst line\nsecond line'],
+      ['MCP Tool Error (weather)', 'first line\nsecond line'],
+      ['MCP Tool Error (weather)', '\nfirst line\nsecond line'],
+    ])('preserves multiline MCP failure details: %s %j', async (prefix, message) => {
+      const result = await runAssertion({
+        prompt: 'Some prompt',
+        assertion: toolsAssertion,
+        provider: mockProvider,
+        test: {} as AtomicTestCase,
+        providerResponse: { output: `${prefix}: ${message}` },
+      });
+
+      expect(result).toEqual({
+        pass: false,
+        score: 0,
+        reason: `MCP tool call failed for ${prefix.includes('(weather)') ? 'weather' : 'unknown'}: ${message.trim()}`,
+        assertion: toolsAssertion,
+      });
+    });
+
+    it.each(['MCP Tool Result (other): done', 'MCP Tool Error: another failure'])(
+      'keeps later MCP output out of the first failure reason: %s',
+      async (nextOutput) => {
+        const result = await runAssertion({
+          prompt: 'Some prompt',
+          assertion: toolsAssertion,
+          provider: mockProvider,
+          test: {} as AtomicTestCase,
+          providerResponse: {
+            output: `MCP Tool Error (weather): first line\nsecond line\n${nextOutput}`,
+          },
+        });
+
+        expect(result.reason).toBe('MCP tool call failed for weather: first line\nsecond line');
+        expect(result.pass).toBe(false);
       },
     );
 
