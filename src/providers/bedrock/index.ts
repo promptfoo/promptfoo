@@ -282,9 +282,12 @@ export interface BedrockAI21GenerationOptions extends BedrockOptions {
 
 interface BedrockAmazonNovaGenerationOptions extends BedrockOptions {
   interfaceConfig?: {
+    maxTokens?: number;
     max_new_tokens?: number;
     temperature?: number;
+    topP?: number;
     top_p?: number;
+    topK?: number;
     top_k?: number;
     stopSequences?: string[];
   };
@@ -1344,11 +1347,11 @@ export const BEDROCK_MODEL = {
         addConfigParam(params, 'system', systemPrompt, undefined, undefined);
       }
 
-      const inferenceConfig: any = config.interfaceConfig ? { ...config.interfaceConfig } : {};
+      const { max_new_tokens, top_p, top_k, ...inferenceConfig } = config.interfaceConfig ?? {};
       addConfigParam(
         inferenceConfig,
-        'max_new_tokens',
-        config?.interfaceConfig?.max_new_tokens,
+        'maxTokens',
+        config.interfaceConfig?.maxTokens ?? max_new_tokens,
         getEnvInt('AWS_BEDROCK_MAX_TOKENS'),
         undefined,
       );
@@ -1359,6 +1362,9 @@ export const BEDROCK_MODEL = {
         getEnvFloat('AWS_BEDROCK_TEMPERATURE'),
         0,
       );
+
+      addConfigParam(inferenceConfig, 'topP', config.interfaceConfig?.topP ?? top_p);
+      addConfigParam(inferenceConfig, 'topK', config.interfaceConfig?.topK ?? top_k);
 
       addConfigParam(params, 'inferenceConfig', inferenceConfig, undefined, undefined);
       addConfigParam(params, 'toolConfig', config.toolConfig, undefined, undefined);
