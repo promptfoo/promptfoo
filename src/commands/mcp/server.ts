@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { getRequestListener } from '@hono/node-server';
 import express from 'express';
 import logger from '../../logger';
+import { defaultErrorHandler } from '../../server/utils/defaultErrorHandler';
 import telemetry from '../../telemetry';
 import { isMissingPackageImportError } from '../../util/packageImportErrors';
 import { registerResources } from './resources';
@@ -130,6 +131,7 @@ export async function startHttpMcpServer(port: number): Promise<void> {
   app.get('/health', (_req, res) => {
     res.status(200).json({ status: 'OK', message: 'Promptfoo MCP server is running' });
   });
+  app.use(defaultErrorHandler);
 
   // Return a Promise that only resolves when the server shuts down
   // This keeps long-running commands running until SIGINT/SIGTERM
