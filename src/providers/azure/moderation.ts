@@ -1,7 +1,7 @@
 import crypto from 'node:crypto';
 
 import { getCache, isCacheEnabled } from '../../cache';
-import { type EnvVarKey, getEnvString } from '../../envars';
+import { type EnvVarKey, getEnvString, getProviderEnvString } from '../../envars';
 import logger from '../../logger';
 import { fetchWithProxy } from '../../util/fetch/index';
 import { resolveProviderApiKey } from '../credentials';
@@ -185,7 +185,7 @@ export class AzureModerationProvider extends AzureGenericProvider implements Api
 
   getContentSafetyApiKey(): string | undefined {
     const namedKey = this.configWithHeaders.apiKeyEnvar
-      ? (this.env?.[this.configWithHeaders.apiKeyEnvar] ??
+      ? (getProviderEnvString(this.env, this.configWithHeaders.apiKeyEnvar) ??
         getEnvString(this.configWithHeaders.apiKeyEnvar as EnvVarKey))
       : undefined;
     return (
