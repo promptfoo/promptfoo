@@ -13,7 +13,7 @@
  *
  * @see https://developers.cloudflare.com/ai-gateway/
  */
-import { getEnvString } from '../envars';
+import { getEnvString, getProviderEnvString } from '../envars';
 import logger from '../logger';
 import invariant from '../util/invariant';
 import { buildIsolatedAnthropicClientOptions } from './anthropic/generic';
@@ -96,7 +96,7 @@ const PROVIDER_CONFIGS: Record<string, GatewayProviderConfig> = {
  * Get a custom environment variable value safely
  */
 function getCustomEnvValue(envVarName: string, env?: EnvOverrides): string | undefined {
-  return env?.[envVarName] ?? getEnvString(envVarName);
+  return getProviderEnvString(env, envVarName) ?? getEnvString(envVarName);
 }
 
 /**
@@ -118,7 +118,9 @@ function getAccountId(config?: CloudflareGatewayConfig, env?: EnvOverrides): str
   }
 
   const accountIdCandidate =
-    customValue ?? env?.CLOUDFLARE_ACCOUNT_ID ?? getEnvString('CLOUDFLARE_ACCOUNT_ID');
+    customValue ??
+    getProviderEnvString(env, 'CLOUDFLARE_ACCOUNT_ID') ??
+    getEnvString('CLOUDFLARE_ACCOUNT_ID');
 
   invariant(
     accountIdCandidate,
@@ -147,7 +149,9 @@ function getGatewayId(config?: CloudflareGatewayConfig, env?: EnvOverrides): str
   }
 
   const gatewayIdCandidate =
-    customValue ?? env?.CLOUDFLARE_GATEWAY_ID ?? getEnvString('CLOUDFLARE_GATEWAY_ID');
+    customValue ??
+    getProviderEnvString(env, 'CLOUDFLARE_GATEWAY_ID') ??
+    getEnvString('CLOUDFLARE_GATEWAY_ID');
 
   invariant(
     gatewayIdCandidate,
@@ -175,7 +179,7 @@ function getCfAigToken(config?: CloudflareGatewayConfig, env?: EnvOverrides): st
   }
 
   // Fall back to default environment variable
-  return env?.CF_AIG_TOKEN ?? getEnvString('CF_AIG_TOKEN');
+  return getProviderEnvString(env, 'CF_AIG_TOKEN') ?? getEnvString('CF_AIG_TOKEN');
 }
 
 /**
@@ -303,7 +307,8 @@ export class CloudflareGatewayOpenAiProvider extends OpenAiChatCompletionProvide
     if (underlyingProvider === 'azure-openai') {
       const azureApiKey =
         providerOptions.config?.apiKey ||
-        (providerOptions.env?.AZURE_OPENAI_API_KEY ?? getEnvString('AZURE_OPENAI_API_KEY'));
+        (getProviderEnvString(providerOptions.env, 'AZURE_OPENAI_API_KEY') ??
+          getEnvString('AZURE_OPENAI_API_KEY'));
       invariant(
         azureApiKey,
         'Azure OpenAI API key is required. Set the AZURE_OPENAI_API_KEY environment variable or add apiKey to the provider config.',
