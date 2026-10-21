@@ -1,6 +1,7 @@
 import express from 'express';
 import OpenAI from 'openai';
 import { v4 as uuidv4 } from 'uuid';
+import defaultErrorHandler from './defaultErrorHandler.cjs';
 
 const app = express();
 const port = 8080;
@@ -73,6 +74,8 @@ app.post('/inference', async (req, res) => {
     });
   }
 });
+
+app.use(defaultErrorHandler);
 
 app.listen(port, () => {
   console.log(`Server running on http://localhost:${port}`);
