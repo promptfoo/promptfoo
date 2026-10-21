@@ -1,5 +1,5 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
-import { disableCache } from '../../../src/cache';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { disableCache, enableCache, isCacheEnabled } from '../../../src/cache';
 import { OpenAiAssistantProvider } from '../../../src/providers/openai/assistant';
 
 // This file deliberately does NOT `vi.mock('openai')`. The Assistants provider is the one
@@ -8,9 +8,19 @@ import { OpenAiAssistantProvider } from '../../../src/providers/openai/assistant
 // A mocked constructor cannot observe that layering, so suppression has to be asserted
 // against the headers that actually reach the wire.
 describe('OpenAiAssistantProvider organization header on the wire', () => {
+  let cacheWasEnabled: boolean;
+
+  beforeEach(() => {
+    cacheWasEnabled = isCacheEnabled();
+    disableCache();
+  });
+
   afterEach(() => {
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
+    if (cacheWasEnabled) {
+      enableCache();
+    }
   });
 
   async function captureRequestHeaders(
@@ -32,7 +42,6 @@ describe('OpenAiAssistantProvider organization header on the wire', () => {
       }),
     );
 
-    disableCache();
     await provider.callApi('Test prompt').catch(() => undefined);
 
     expect(captured.length).toBeGreaterThan(0);
