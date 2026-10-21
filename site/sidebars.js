@@ -169,6 +169,7 @@ const redTeamSidebar = [
           'red-team/strategies/base64',
           'red-team/strategies/basic',
           'red-team/strategies/best-of-n',
+          'red-team/strategies/char-split',
           'red-team/strategies/citation',
           'red-team/strategies/gcg',
           'red-team/strategies/hex',
@@ -210,6 +211,7 @@ const redTeamSidebar = [
         collapsed: true,
         items: [
           'red-team/strategies/image',
+          'red-team/strategies/image-stego',
           'red-team/strategies/audio',
           'red-team/strategies/video',
         ],

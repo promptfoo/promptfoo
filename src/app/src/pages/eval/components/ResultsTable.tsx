@@ -411,6 +411,7 @@ function renderDecodedVariableCell({
     (typeof value === 'string' && isMediaRef(value) && MEDIA_MIME_PATTERNS.audio.test(value));
   const isImageContent =
     strategyId === 'image' ||
+    strategyId === 'image-stego' ||
     (typeof value === 'string' && isMediaRef(value) && MEDIA_MIME_PATTERNS.image.test(value));
 
   return (
