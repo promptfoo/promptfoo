@@ -68,10 +68,11 @@ interface AtomicTestCase {
   metadata?: Record<string, any>;
   options?: Record<string, any>;
 }
-export interface ProviderOptions {
+// Keep the legacy default while allowing adapters and callers to select a checked config type.
+export interface ProviderOptions<TConfig = any> {
   id?: ProviderId;
   label?: ProviderLabel;
-  config?: any;
+  config?: TConfig;
   prompts?: string[];
   transform?: string | TransformFunction;
   delay?: number;

@@ -6,6 +6,8 @@ import {
 } from '@opentelemetry/sdk-trace-node';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getCache, isCacheEnabled } from '../../src/cache';
+import { getEnvOverridesProvider, setEnvOverridesProvider } from '../../src/envOverrides';
+import { loadApiProvider } from '../../src/providers/index';
 import {
   createVercelProvider,
   VercelAiEmbeddingProvider,
@@ -116,6 +118,34 @@ describe('VercelAiProvider', () => {
   });
 
   describe('constructor', () => {
+    it.each([undefined, 'explicit-key', ''])(
+      'keeps a registered gateway alias ahead of suite keys with explicit value %j',
+      async (explicit) => {
+        const { createGateway, generateText } = await import('ai');
+        vi.mocked(generateText).mockResolvedValue(createFreshTextResult() as any);
+        const previousProvider = getEnvOverridesProvider();
+        setEnvOverridesProvider(
+          (layer) =>
+            layer === 'provider'
+              ? { AI_GATEWAY_API_KEY: 'registered-key' }
+              : previousProvider?.(layer),
+          { providerLayer: true },
+        );
+        try {
+          const provider = await loadApiProvider('vercel:openai/gpt-4o-mini', {
+            env: { VERCEL_AI_GATEWAY_API_KEY: 'suite-key' },
+            options: { env: { VERCEL_AI_GATEWAY_API_KEY: explicit } },
+          });
+          await provider.callApi('hello');
+          expect(createGateway).toHaveBeenLastCalledWith(
+            expect.objectContaining({ apiKey: explicit ?? 'registered-key' }),
+          );
+        } finally {
+          setEnvOverridesProvider(previousProvider);
+        }
+      },
+    );
+
     it('preserves gateway initialization errors', async () => {
       const { createGateway } = await import('ai');
       vi.mocked(createGateway).mockImplementationOnce(() => {
