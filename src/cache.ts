@@ -4,8 +4,7 @@ import fs from 'fs';
 import path from 'path';
 
 import { createCache } from 'cache-manager';
-import { Keyv } from 'keyv';
-import { KeyvFile } from 'keyv-file';
+import { createDiskCache } from './cache/storage';
 import { getEnvBool, getEnvInt, getEnvString } from './envars';
 import logger from './logger';
 import { getRequestTimeoutMs, throwIfAborted, waitForPromiseWithAbort } from './providers/shared';
@@ -93,7 +92,7 @@ export function getCache() {
 function getCacheInstance() {
   if (!cacheInstance) {
     let cachePath = '';
-    const stores = [];
+    let diskCache: Cache | undefined;
 
     if (cacheType === 'disk' && enabled) {
       cachePath =
@@ -107,18 +106,7 @@ function getCacheInstance() {
       const newCacheFile = path.join(cachePath, 'cache.json');
 
       try {
-        const store = new KeyvFile({
-          filename: newCacheFile,
-        });
-
-        // Keep this instance on the Keyv major supported by cache-manager.
-        // Its ttl()/wrap() rely on v5 raw reads, and existing disk keys use the v5 prefix.
-        const keyv = new Keyv({
-          store,
-          ttl: getCacheTtlMs(),
-        });
-
-        stores.push(keyv);
+        diskCache = createDiskCache(newCacheFile, getCacheTtlMs());
       } catch (err) {
         logger.warn(
           `[Cache] Failed to initialize disk cache: ${(err as Error).message}. ` +
@@ -128,12 +116,12 @@ function getCacheInstance() {
       }
     }
 
-    // Initialize cache (disk if stores array has items, memory otherwise)
-    cacheInstance = createCache({
-      stores,
-      ttl: getCacheTtlMs(),
-      refreshThreshold: 0, // Disable background refresh
-    });
+    cacheInstance =
+      diskCache ??
+      createCache({
+        ttl: getCacheTtlMs(),
+        refreshThreshold: 0, // Disable background refresh
+      });
     const clear = cacheInstance.clear.bind(cacheInstance);
     cacheInstance.clear = async () => {
       const result = await clear();
