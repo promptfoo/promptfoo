@@ -1,17 +1,15 @@
 import dns from 'node:dns/promises';
-import { createServer } from 'node:http';
-import { createRequire, syncBuiltinESMExports } from 'node:module';
-import type { AddressInfo } from 'node:net';
+import http, { createServer } from 'node:http';
+import https from 'node:https';
+import { syncBuiltinESMExports } from 'node:module';
+import { gzipSync } from 'node:zlib';
+import type { LookupAddress } from 'node:dns';
+import type { AddressInfo, LookupFunction } from 'node:net';
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { dereferenceConfig } from '../../../src/util/config/load';
 
 import type { UnifiedConfig } from '../../../src/types/index';
-
-const parserRequire = createRequire(
-  createRequire(import.meta.url).resolve('@apidevtools/json-schema-ref-parser/package.json'),
-);
-const parserTransport = parserRequire('undici') as typeof import('undici');
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -33,6 +31,25 @@ describe('dereferenceConfig local references', () => {
     expect((await dereferenceConfig(config)).prompts).toEqual(['own prompt']);
   });
 
+  it('keeps literal percent escapes distinct from decoded pointer keys', async () => {
+    const config = {
+      definitions: { '%41': 'literal percent prompt', A: 'letter prompt', 'a/b': 'slash prompt' },
+      prompts: [
+        { $ref: '#/definitions/%2541' },
+        { $ref: '#/definitions/A' },
+        { $ref: '#/definitions/a~1b' },
+      ],
+      providers: ['echo'],
+      tests: [],
+    } as unknown as UnifiedConfig;
+
+    expect((await dereferenceConfig(config)).prompts).toEqual([
+      'literal percent prompt',
+      'letter prompt',
+      'slash prompt',
+    ]);
+  });
+
   it('rejects a reference to an inherited property', async () => {
     const config = {
       definitions: Object.create({ inherited: 'inherited prompt' }),
@@ -46,10 +63,14 @@ describe('dereferenceConfig local references', () => {
 });
 
 describe('dereferenceConfig remote references', () => {
-  it('uses the real resolver and nested Undici transport with a DNS-pinned address', async () => {
+  it.each(['identity', 'gzip'])('resolves a %s response with DNS pinning', async (encoding) => {
     const server = createServer((request, response) => {
-      response.writeHead(200, { 'content-type': 'application/json' });
-      response.end(JSON.stringify({ prompt: `resolved ${request.headers.host}` }));
+      const body = JSON.stringify({ prompt: `resolved ${request.headers.host}` });
+      response.writeHead(200, {
+        'content-type': 'application/json',
+        'content-encoding': encoding,
+      });
+      response.end(encoding === 'gzip' ? gzipSync(body) : body);
     });
     await new Promise<void>((resolve, reject) => {
       server.once('error', reject);
@@ -60,65 +81,43 @@ describe('dereferenceConfig remote references', () => {
       const dnsLookup = vi
         .spyOn(dns, 'lookup')
         .mockResolvedValue([{ address: '93.184.216.34', family: 4 }] as never);
-      syncBuiltinESMExports();
-
-      type LookupAddress = { address: string; family: number };
-      type LookupCallback = (
-        error: Error | null,
-        address: string | LookupAddress[],
-        family?: number,
-      ) => void;
-      type PinnedLookup = (
-        hostname: string,
-        options: { family?: number | string; all?: boolean },
-        callback: LookupCallback,
-      ) => void;
-
-      const RealAgent = parserTransport.Agent;
-      const realFetch = parserTransport.fetch;
+      const realRequest = http.request;
       const validatedLookups: Array<string | LookupAddress[]> = [];
-      let pinnedLookup: PinnedLookup | undefined;
-      let dispatcher: InstanceType<typeof RealAgent> | undefined;
-      vi.spyOn(parserTransport, 'Agent').mockImplementation(function (options) {
-        if (!options) {
-          throw new Error('Expected the parser to configure its DNS-pinned HTTP transport');
+      let pinnedLookup: LookupFunction | undefined;
+      const request = vi.spyOn(http, 'request').mockImplementation(((
+        input: URL,
+        options: http.RequestOptions,
+        callback: (response: http.IncomingMessage) => void,
+      ) => {
+        const validatedLookup = options.lookup;
+        if (typeof validatedLookup !== 'function') {
+          throw new Error('Blocked an unpinned outbound HTTP request');
         }
-        const connect = options.connect as { lookup?: PinnedLookup } | undefined;
-        if (typeof connect?.lookup !== 'function') {
-          throw new Error('Expected the parser to configure a DNS-pinned lookup');
-        }
-        const validatedLookup = connect.lookup;
         pinnedLookup = validatedLookup;
-
-        dispatcher = new RealAgent({
-          ...options,
-          connect: {
-            ...connect,
-            lookup: (hostname, lookupOptions, callback) => {
+        return realRequest(
+          input,
+          {
+            ...options,
+            // Exercise the actual pinned lookup, then route only its validated address to our server.
+            lookup: (hostname, lookupOptions, lookupCallback) => {
               validatedLookup(hostname, lookupOptions, (error, address) => {
                 if (error) {
-                  callback(error, '', 0);
+                  lookupCallback(error, '', 0);
                   return;
                 }
-
                 validatedLookups.push(address);
                 if (Array.isArray(address)) {
-                  callback(null, [{ address: '127.0.0.1', family: 4 }]);
+                  lookupCallback(null, [{ address: '127.0.0.1', family: 4 }]);
                 } else {
-                  callback(null, '127.0.0.1', 4);
+                  lookupCallback(null, '127.0.0.1', 4);
                 }
               });
             },
           },
-        });
-        return dispatcher;
-      });
-      const fetch = vi.spyOn(parserTransport, 'fetch').mockImplementation((input, options) => {
-        if (!dispatcher || options?.dispatcher !== dispatcher) {
-          throw new Error('Blocked an unpinned outbound HTTP request');
-        }
-        return realFetch(input, options);
-      });
+          callback,
+        );
+      }) as typeof http.request);
+      syncBuiltinESMExports();
       const { port } = server.address() as AddressInfo;
 
       const result = await dereferenceConfig({
@@ -132,12 +131,12 @@ describe('dereferenceConfig remote references', () => {
         all: true,
         verbatim: true,
       });
-      expect(fetch).toHaveBeenCalledWith(
+      expect(request).toHaveBeenCalledExactlyOnceWith(
         expect.any(URL),
-        expect.objectContaining({ dispatcher: expect.any(RealAgent), method: 'GET' }),
+        expect.objectContaining({ lookup: expect.any(Function), method: 'GET', agent: false }),
+        expect.any(Function),
       );
       expect(validatedLookups).toEqual([[{ address: '93.184.216.34', family: 4 }]]);
-      expect(dispatcher?.destroyed).toBe(true);
 
       // A redirect or DNS rebind must not reuse the already validated connection.
       const validatedLookup = pinnedLookup;
@@ -157,6 +156,7 @@ describe('dereferenceConfig remote references', () => {
       ).rejects.toThrow();
       expect(dnsLookup).toHaveBeenCalledOnce();
     } finally {
+      server.closeAllConnections();
       await new Promise<void>((resolve, reject) => {
         server.close((error) => (error ? reject(error) : resolve()));
       });
@@ -186,11 +186,13 @@ describe('dereferenceConfig remote references', () => {
     { address: '::ffff:192.168.1.10', family: 6, description: 'IPv4-mapped RFC1918 192.168/16' },
   ])('refuses a remote reference resolving to $description', async ({ address, family }) => {
     vi.spyOn(dns, 'lookup').mockResolvedValue([{ address, family }] as never);
+    const httpRequest = vi.spyOn(http, 'request').mockImplementation(() => {
+      throw new Error('unexpected outbound HTTP request');
+    });
+    const httpsRequest = vi.spyOn(https, 'request').mockImplementation(() => {
+      throw new Error('unexpected outbound HTTPS request');
+    });
     syncBuiltinESMExports();
-
-    const fetch = vi
-      .spyOn(parserTransport, 'fetch')
-      .mockRejectedValue(new Error('unexpected outbound request'));
 
     await expect(
       dereferenceConfig({
@@ -199,6 +201,7 @@ describe('dereferenceConfig remote references', () => {
         tests: [],
       } as unknown as UnifiedConfig),
     ).rejects.toThrow();
-    expect(fetch).not.toHaveBeenCalled();
+    expect(httpRequest).not.toHaveBeenCalled();
+    expect(httpsRequest).not.toHaveBeenCalled();
   });
 });
