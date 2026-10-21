@@ -3,11 +3,14 @@ import { OpenAiResponsesProvider } from '../openai/responses';
 import { waitForPromiseWithAbort } from '../shared';
 import { GoogleAuthManager } from './auth';
 
-import type { ProviderOptions } from '../../types/providers';
 import type { OpenAiResponsesConfig } from '../openai/config';
 import type { GoogleAuthConfig } from './auth';
 
 type VertexResponsesConfig = OpenAiResponsesConfig & GoogleAuthConfig;
+type VertexResponsesOptions = Omit<
+  NonNullable<ConstructorParameters<typeof OpenAiResponsesProvider>[1]>,
+  'config'
+> & { config?: VertexResponsesConfig };
 
 /** OpenAI models on Google Cloud use Responses with Google OAuth credentials. */
 export class VertexResponsesProvider extends OpenAiResponsesProvider {
@@ -16,7 +19,7 @@ export class VertexResponsesProvider extends OpenAiResponsesProvider {
   private authClient?: ReturnType<typeof GoogleAuthManager.getOAuthClient>;
   private readonly apiBaseUrl: string;
 
-  constructor(modelName: string, options: ProviderOptions<VertexResponsesConfig> = {}) {
+  constructor(modelName: string, options: VertexResponsesOptions = {}) {
     super(modelName, options);
     if (
       !this.config.apiBaseUrl &&
