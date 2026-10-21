@@ -5,7 +5,8 @@ import { format } from 'node:util';
 
 import express from 'express';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { setLogCallback } from '../../../src/logger';
+import { createMcpErrorHandler } from '../../../src/commands/mcp/defaultErrorHandler';
+import logger, { setLogCallback } from '../../../src/logger';
 import { defaultErrorHandler } from '../../../src/server/utils/defaultErrorHandler';
 import type { ErrorRequestHandler, Express, Response } from 'express';
 
@@ -72,7 +73,15 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe('server default error handler', () => {
+describe.each([
+  { name: 'view server', handler: defaultErrorHandler },
+  {
+    name: 'MCP',
+    handler: createMcpErrorHandler((message, diagnostic) =>
+      logger.error(message, { error: diagnostic }),
+    ),
+  },
+])('$name default error handler', ({ handler }) => {
   it.each(['production', 'development', 'test'])(
     'returns public JSON and logs only legacy text in %s',
     async (environment) => {
@@ -98,7 +107,7 @@ describe('server default error handler', () => {
         error.stack = 'Error: legacy diagnostic';
         throw error;
       });
-      app.use(defaultErrorHandler);
+      app.use(handler);
 
       await withServer(app, async (port) => {
         expect(JSON.parse((await post(port, '{"value":"ok"}')).body)).toEqual({ value: 'ok' });
@@ -132,7 +141,7 @@ describe('server default error handler', () => {
     });
     original.stack = 'Error: legacy diagnostic';
     const next = vi.fn();
-    defaultErrorHandler(original, {} as express.Request, { headersSent: true } as Response, next);
+    handler(original, {} as express.Request, { headersSent: true } as Response, next);
     const forwarded = next.mock.calls[0][0];
     expect(forwarded).not.toBe(original);
     expect(forwarded.stack).toBe(original.stack);
