@@ -57,7 +57,7 @@ export const handleIsValidOpenAiToolsCall = async ({
     );
   }
 
-  let tools = (provider as OpenAiChatCompletionProvider).config?.tools;
+  let tools: unknown = (provider as OpenAiChatCompletionProvider).config?.tools;
   try {
     if (tools) {
       const loadedTools = await maybeLoadToolsFromExternalFile(tools, test.vars);

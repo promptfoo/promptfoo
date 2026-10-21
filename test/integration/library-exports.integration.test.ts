@@ -81,7 +81,9 @@ describeIfBuildExists('Library Exports', () => {
       // chunk), not just the shim, so a regression that inlines a heavy dep into a chunk is caught.
       for (const entry of ['contracts.js', 'contracts.cjs']) {
         const { totalBytes, bareSpecifiers } = readModuleClosure(path.join(distDir, entry));
-        expect(totalBytes).toBeLessThan(80000);
+        // HTTP/MCP/OpenAI/Gemini: ~87 KB runtime and ~832 KB declarations.
+        // Allow roughly 10% headroom; Zod remains the only external below.
+        expect(totalBytes).toBeLessThan(96000);
         // Leaf-safe contract: zod is the ONLY external the subpath may pull. This catches both a
         // newly-leaked dependency (extra entry) AND zod accidentally being inlined (zod disappears).
         expect([...bareSpecifiers].sort()).toEqual(['zod']);
@@ -90,7 +92,7 @@ describeIfBuildExists('Library Exports', () => {
       for (const declaration of ['contracts.d.ts', 'contracts.d.cts']) {
         const declarationPath = path.join(distDir, declaration);
         expect(fs.existsSync(declarationPath)).toBe(true);
-        expect(fs.statSync(declarationPath).size).toBeLessThan(560000);
+        expect(fs.statSync(declarationPath).size).toBeLessThan(920000);
       }
     });
 

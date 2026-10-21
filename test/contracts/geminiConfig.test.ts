@@ -14,6 +14,27 @@ const validate = new Ajv({ strict: false }).compile(GeminiProviderOptionsInputJs
 
 describe('portable Gemini configuration', () => {
   const cases: [unknown, boolean][] = [
+    [
+      {
+        id: 'google:gemini-2.5-flash',
+        config: { mcp: { enabled: true, server: { command: 'fixture' } } },
+      },
+      true,
+    ],
+    [
+      {
+        id: 'google:gemini-2.5-flash',
+        config: { mcp: { server: { command: 'fixture' }, defaultArgs: { session: 'ignored' } } },
+      },
+      false,
+    ],
+    [
+      {
+        id: 'google:gemini-2.5-flash',
+        config: { mcp: { server: { command: 'fixture' }, transform: 'output' } },
+      },
+      false,
+    ],
     [{ id: 'google:gemini-2.5-flash' }, true],
     [
       {

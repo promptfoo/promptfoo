@@ -31,6 +31,9 @@ factory are excluded, including implicit Omni, Robotics, Live Translate and nati
 image routes. `google:chat:<model>` is not a supported GenerateContent alias in the
 current factory. Future routing changes must update these route tests.
 
+Embedded MCP uses the client-only contract; standalone provider transforms and
+`defaultArgs` are not accepted. Set `enabled: true` to enable the runtime client.
+
 These exports are opt-in contracts. Global YAML/editor validation and Cloud MCP
-integration remain separate work. This change has no dependency on the pending
-OpenAI/Azure/Anthropic schema stack or the shared Gemini pipeline refactor.
+integration remain separate work. This change builds on the OpenAI/MCP contracts on main and remains independent of
+the pending Azure/Anthropic stack and shared Gemini pipeline refactor.

@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { ProviderEnvOverridesSchema } from '../env.js';
-import { McpConfigInputSchema } from './mcp.js';
+import { McpClientConfigInputSchema } from './mcp.js';
 
 const JsonObject = z.record(z.string(), z.json());
 const ResponseSchema = z.union([z.string(), JsonObject]);
@@ -172,7 +172,7 @@ export const GeminiSharedConfigInputSchema = Sampling.extend({
       z.strictObject({ role: z.string().optional(), parts: z.array(JsonObject) }),
     ])
     .optional(),
-  mcp: McpConfigInputSchema.optional(),
+  mcp: McpClientConfigInputSchema.optional(),
   useAssistantRole: z.boolean().optional(),
   streaming: z.boolean().optional(),
 });
