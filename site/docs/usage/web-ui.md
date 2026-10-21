@@ -29,7 +29,7 @@ See [`promptfoo view`](/docs/usage/command-line#promptfoo-view) for CLI options.
 
 - **Eval selector** - Switch between evals
 - **Display mode** - Filter: All, Failures, Passes, Errors, Different, Highlights
-- **Search** - Text or regex
+- **Search** - Shows rows that contain the text. Matching is case-insensitive for ASCII letters only, and `%` and `_` match literally. Highlighting within cells also accepts a regex
 - **Filters** - By metrics, metadata, pass/fail. Operators: `=`, `contains`, `>`, `<`
 
 ![Display mode dropdown](/img/docs/web-ui-display-mode.png)
@@ -139,7 +139,7 @@ Viewer state syncs to the URL—bookmark or share filtered views:
 | Parameter    | Values                                                           |
 | ------------ | ---------------------------------------------------------------- |
 | `filterMode` | `all`, `failures`, `passes`, `errors`, `different`, `highlights` |
-| `search`     | Any text                                                         |
+| `search`     | Any text; matched as described under [Toolbar](#toolbar)         |
 
 ```text
 /eval/abc123?filterMode=failures&search=timeout

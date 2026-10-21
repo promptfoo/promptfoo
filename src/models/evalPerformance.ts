@@ -3,6 +3,7 @@ import { HUMAN_ASSERTION_TYPE } from '../constants';
 import { getDb } from '../database/index';
 import { evalResultsTable } from '../database/tables';
 import logger from '../logger';
+import { escapeLikePattern } from '../util/sqlLike';
 
 import type { EvalResultsFilterMode } from '../types/index';
 
@@ -132,8 +133,8 @@ export async function queryTestIndicesOptimized(
   // This is a compromise - we search less fields but query is faster
   let searchCondition = sql`1=1`;
   if (opts.searchQuery && opts.searchQuery.trim() !== '' && !opts.filters?.length) {
-    // Only search in response field for better performance
-    searchCondition = sql`response LIKE ${`%${opts.searchQuery}%`}`;
+    // Only search in response field for better performance. User-typed `%` and `_` are literal.
+    searchCondition = sql`response LIKE ${`%${escapeLikePattern(opts.searchQuery)}%`} ESCAPE '\\'`;
   }
 
   const whereClause = sql`${baseQuery} AND ${searchCondition}`;

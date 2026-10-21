@@ -2707,6 +2707,42 @@ describe('evaluator', () => {
       expect(limited.testIndices.length).toBeLessThanOrEqual(2);
       expect(limited.filteredCount).toBeGreaterThanOrEqual(limited.testIndices.length);
     });
+
+    it('treats % and _ in the search query as literal text on both search paths', async () => {
+      // queryTestIndices is private; it backs filtered pages, filtered metrics and exports.
+      type FullSearch = {
+        queryTestIndices(opts: { searchQuery: string }): Promise<{ testIndices: number[] }>;
+      };
+      const eval_ = await EvalFactory.create({ numResults: 4, withNamedScores: true });
+      const outputs = ['snake_case value', 'snakeXcase value', '100% done', '1000 done'];
+      const db = await getDb();
+      for (const [index, output] of outputs.entries()) {
+        await db.run(
+          sql`UPDATE eval_results SET response = ${JSON.stringify({ output })} WHERE eval_id = ${eval_.id} AND test_idx = ${index}`,
+        );
+      }
+
+      for (const [searchQuery, expected] of [
+        ['snake_case', [0]],
+        ['100%', [2]],
+        ['_', [0]],
+        ['%', [2]],
+        ['SNAKE_CASE', [0]],
+      ] as const) {
+        // Unfiltered pages use the optimized response-only query.
+        const unfiltered = await eval_.getTablePage({ searchQuery });
+        expect(
+          unfiltered.body.map((row) => row.testIdx),
+          searchQuery,
+        ).toEqual(expected);
+        expect(unfiltered.filteredCount, searchQuery).toBe(expected.length);
+
+        const { testIndices } = await (eval_ as unknown as FullSearch).queryTestIndices({
+          searchQuery,
+        });
+        expect(testIndices, searchQuery).toEqual(expected);
+      }
+    });
   });
 
   describe('getTraces', () => {

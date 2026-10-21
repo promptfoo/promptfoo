@@ -47,6 +47,7 @@ import {
   sanitizeRuntimeOptions,
   sanitizeTracingConfigForPersistence,
 } from '../util/sanitizer';
+import { escapeLikePattern } from '../util/sqlLike';
 import { getCurrentTimestamp } from '../util/time';
 import {
   accumulateGenerationTokenUsage,
@@ -1191,20 +1192,21 @@ export default class Eval {
       }
     }
 
-    // Add search condition if searchQuery is provided
+    // Add search condition if searchQuery is provided. `%` and `_` typed by the user are
+    // literal text; SQLite's LIKE folds ASCII case only.
     if (opts.searchQuery && opts.searchQuery.trim() !== '') {
-      const searchPattern = `%${opts.searchQuery}%`;
+      const searchPattern = `%${escapeLikePattern(opts.searchQuery)}%`;
 
       const searchConditions = [
-        sql`response LIKE ${searchPattern}`,
-        sql`json_extract(grading_result, '$.reason') LIKE ${searchPattern}`,
-        sql`json_extract(grading_result, '$.comment') LIKE ${searchPattern}`,
-        sql`json_extract(named_scores, '$') LIKE ${searchPattern}`,
+        sql`response LIKE ${searchPattern} ESCAPE '\\'`,
+        sql`json_extract(grading_result, '$.reason') LIKE ${searchPattern} ESCAPE '\\'`,
+        sql`json_extract(grading_result, '$.comment') LIKE ${searchPattern} ESCAPE '\\'`,
+        sql`json_extract(named_scores, '$') LIKE ${searchPattern} ESCAPE '\\'`,
         // Search user-visible metadata only — drop the reserved `__promptfoo` namespace
         // (trace linkage) so a query can't match on internal data the UI never shows.
-        sql`json_remove(metadata, ${`$.${PROMPTFOO_METADATA_KEY}`}) LIKE ${searchPattern}`,
-        sql`json_extract(test_case, '$.vars') LIKE ${searchPattern}`,
-        sql`json_extract(test_case, '$.metadata') LIKE ${searchPattern}`,
+        sql`json_remove(metadata, ${`$.${PROMPTFOO_METADATA_KEY}`}) LIKE ${searchPattern} ESCAPE '\\'`,
+        sql`json_extract(test_case, '$.vars') LIKE ${searchPattern} ESCAPE '\\'`,
+        sql`json_extract(test_case, '$.metadata') LIKE ${searchPattern} ESCAPE '\\'`,
       ];
 
       const searchClause = sql.join(searchConditions, sql` OR `);
