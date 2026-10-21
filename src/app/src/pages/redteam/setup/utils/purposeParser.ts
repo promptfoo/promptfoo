@@ -163,19 +163,6 @@ export function purposeToApplicationDefinition(purpose: string | undefined): App
 }
 
 /**
- * Checks if an ApplicationDefinition has any meaningful content
- */
-export function hasApplicationDefinitionContent(
-  appDef: ApplicationDefinition | undefined,
-): boolean {
-  if (!appDef) {
-    return false;
-  }
-
-  return Object.values(appDef).some((value) => value && typeof value === 'string' && value.trim());
-}
-
-/**
  * Merges a parsed ApplicationDefinition with defaults, ensuring all fields exist
  */
 export function mergeWithDefaults(parsed: Partial<ApplicationDefinition>): ApplicationDefinition {

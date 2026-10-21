@@ -57,6 +57,24 @@ The expected outputs are `billing` and `technical`. Check the pass/fail results 
 
 If you keep your key in a local `.env` file, add `--env-file .env` to the command. Keep that file out of version control.
 
+For TypeScript or API authoring, `promptfoo/contracts` exports portable config schemas and types for explicit Chat Completions, Responses, Completions, and embedding routes:
+
+```typescript
+import {
+  OpenAiProviderOptionsInputSchema,
+  type OpenAiProviderOptionsInput,
+} from 'promptfoo/contracts';
+
+const provider = {
+  id: 'openai:responses:my-model',
+  config: { max_output_tokens: 2048 },
+} satisfies OpenAiProviderOptionsInput;
+
+const validation = OpenAiProviderOptionsInputSchema.safeParse(provider);
+```
+
+Each config schema also exports a matching `*InputJsonSchema` for JSON Schema consumers. These contracts check serializable authoring input without loading files, resolving credentials, applying runtime defaults, or executing callbacks. Use string callback code or `file://` references in authoring input. Existing runtime validation remains compatible with in-process functions; these contracts do not automatically change YAML editor validation or select an API for bare `openai:<model>` IDs.
+
 ## Models
 
 For GPT-5.6 and newer models, use `openai:<model>`, such as `openai:gpt-6-luna`. These IDs default to Responses. Add an endpoint prefix only to select a different API or make an API comparison explicit.
@@ -411,6 +429,22 @@ providers:
 
 `store: false` controls storage at OpenAI. It does not disable Promptfoo's local response cache. Use `--no-cache` when you need fresh API requests. OpenAI's [data controls](https://developers.openai.com/api/docs/guides/your-data) describe retention and account-level restrictions.
 
+### Daybreak access programs
+
+Set `config.access_programs.cyber` to select `standard`, `daybreak_blue`, or `daybreak_red` for a Responses request:
+
+```yaml
+providers:
+  - id: openai:responses:gpt-6-sol
+    config:
+      access_programs:
+        cyber: daybreak_blue
+```
+
+Your OpenAI project needs access to the selected model and program. Use `daybreak_blue` with supported mainline models and `daybreak_red` with cyber models such as `gpt-5.6-cyber`. Use `standard` to explicitly request standard safeguards. If omitted, OpenAI chooses based on the model and your access. See [OpenAI's Daybreak guide](https://developers.openai.com/api/docs/guides/daybreak) for model eligibility.
+
+The selected program is available in the provider response's `raw.access_programs.cyber` when OpenAI returns it. Existing `config.passthrough.access_programs` settings continue to work and override the named option.
+
 ### Response state and streaming {#responses-specific-configuration-options}
 
 <details>
@@ -505,7 +539,7 @@ tests:
         value: output.category === 'billing'
 ```
 
-The Responses provider parses valid JSON schema output into an object, so the assertion can read `output.category` directly. Refusals, incomplete responses, or invalid JSON may still produce a different output; check errors and failed assertions. For JSON mode without a schema, use `type: json_object` and explicitly ask for JSON in the prompt.
+Both Chat Completions and Responses parse valid JSON schema output into an object, so the assertion can read `output.category` directly. Refusals, incomplete responses, or invalid JSON may still produce a different output; check errors and failed assertions. For JSON mode without a schema, use `type: json_object` and explicitly ask for JSON in the prompt.
 
 ### External file references
 
@@ -533,7 +567,7 @@ Use the nested `json_schema` shape above for Chat Completions or a shared config
 }
 ```
 
-The schema itself can be a nested `file://` reference. File paths support Nunjucks variables, such as `file://./schemas/{{ schema_name }}.json`.
+The schema itself can be a nested `file://` reference. File paths support Nunjucks variables, such as `file://./schemas/{{ schema_name }}.json`. Files and templates are resolved for each request after prompt settings override provider settings, using that test's variables. The loaded format also controls how the response is parsed.
 
 <details>
 <summary>Prompt-level and per-test formats</summary>

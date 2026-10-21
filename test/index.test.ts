@@ -144,6 +144,7 @@ describe('index.ts exports', () => {
     'InputTypeSchema',
     'InputTypeValues',
     'InputsSchema',
+    'InputsInputSchema',
     'NotPrefixedAssertionTypesSchema',
     'OutputConfigSchema',
     'OutputFileExtension',

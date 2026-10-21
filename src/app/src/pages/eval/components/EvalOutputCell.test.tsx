@@ -2477,6 +2477,26 @@ describe('EvalOutputCell extra actions hover behavior', () => {
       'View output and test details',
     ]);
   });
+  it.each(['google:gemini-nano-banana-2.1', 'custom-image-target'])(
+    'keeps structured images visible after long text from %s',
+    (provider) => {
+      const explanation = 'A detailed explanation of the generated image. '.repeat(10);
+      const { container } = renderWithProviders(
+        <EvalOutputCell
+          {...defaultProps}
+          maxTextLength={250}
+          output={{
+            ...defaultProps.output,
+            provider,
+            text: explanation,
+            images: [{ data: 'data:image/png;base64,aW1hZ2U=', mimeType: 'image/png' }],
+          }}
+        />,
+      );
+      expect(container.querySelectorAll('img')).toHaveLength(1);
+      expect(container.textContent).toContain(explanation.trim());
+    },
+  );
 });
 
 describe('isImageProvider helper function', () => {
