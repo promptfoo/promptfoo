@@ -4,9 +4,13 @@ import { mockProcessEnv } from '../utils';
 vi.mock('node:dns/promises', () => ({
   lookup: vi.fn(),
 }));
-vi.mock('../../../src/util/fetch/monkeyPatchFetch', () => ({
-  monkeyPatchFetch: vi.fn(),
-}));
+vi.mock('../../../src/util/fetch/monkeyPatchFetch', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../../src/util/fetch/monkeyPatchFetch')>();
+  return {
+    ...actual,
+    monkeyPatchFetch: vi.fn(),
+  };
+});
 
 import { lookup } from 'node:dns/promises';
 import type { LookupAddress } from 'node:dns';
