@@ -68,7 +68,7 @@
     "recharts": "^3.8.0",
     "remark-gfm": "^4.0.1",
     "socket.io-client": "^4.8.4",
-    "storybook": "^10.4.0",
+    "storybook": "^10.6.2",
     "tailwind-merge": "^3.5.0",
     "tailwindcss": "^4.2.2",
     "typescript": "^7.0.0",
