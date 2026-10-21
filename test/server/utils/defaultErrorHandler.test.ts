@@ -2,7 +2,9 @@ import http from 'node:http';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { format } from 'node:util';
+import { gunzipSync } from 'node:zlib';
 
+import compression from 'compression';
 import express from 'express';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createMcpErrorHandler } from '../../../src/commands/mcp/defaultErrorHandler';
@@ -35,37 +37,44 @@ async function withServer(app: Express, run: (port: number) => Promise<void>) {
   }
 }
 
-function post(port: number, body: string, pathname = '/') {
-  return new Promise<{ status: number; headers: http.IncomingHttpHeaders; body: string }>(
-    (resolve, reject) => {
-      const req = http.request(
-        {
-          host: '127.0.0.1',
-          port,
-          path: pathname,
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Content-Length': Buffer.byteLength(body),
-          },
+function post(port: number, body: string, pathname = '/', headers: http.OutgoingHttpHeaders = {}) {
+  return new Promise<{
+    status: number;
+    headers: http.IncomingHttpHeaders;
+    body: string;
+    rawBody: Buffer;
+  }>((resolve, reject) => {
+    const req = http.request(
+      {
+        host: '127.0.0.1',
+        port,
+        path: pathname,
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Content-Length': Buffer.byteLength(body),
+          ...headers,
         },
-        (res) => {
-          let text = '';
-          res.setEncoding('utf8');
-          res.on('data', (chunk) => {
-            text += chunk;
+      },
+      (res) => {
+        const chunks: Buffer[] = [];
+        res.on('data', (chunk) => chunks.push(chunk));
+        res.once('error', reject);
+        res.once('end', () => {
+          const rawBody = Buffer.concat(chunks);
+          resolve({
+            status: res.statusCode!,
+            headers: res.headers,
+            body: rawBody.toString('utf8'),
+            rawBody,
           });
-          res.once('error', reject);
-          res.once('end', () =>
-            resolve({ status: res.statusCode!, headers: res.headers, body: text }),
-          );
-        },
-      );
-      req.setTimeout(2000, () => req.destroy(new Error('HTTP test request timed out')));
-      req.once('error', reject);
-      req.end(body);
-    },
-  );
+        });
+      },
+    );
+    req.setTimeout(2000, () => req.destroy(new Error('HTTP test request timed out')));
+    req.once('error', reject);
+    req.end(body);
+  });
 }
 
 afterEach(() => {
@@ -125,6 +134,67 @@ describe.each([
       expect(messages.join('\n')).toContain('SyntaxError');
       expect(messages.join('\n')).toContain('legacy diagnostic');
       expect(messages.join('\n')).not.toContain(CANARY);
+    },
+  );
+
+  it.each([
+    ['response', 'identity'],
+    ['response', 'gzip'],
+    ['error', 'identity'],
+    ['error', 'gzip'],
+  ])(
+    'replaces stale %s headers and negotiates %s for the public JSON body',
+    async (headerSource, encoding) => {
+      const app = express();
+      app.use(compression({ threshold: 0 }));
+      app.post('/', (_req, res) => {
+        res.set({
+          'Content-Encoding': 'br',
+          'Content-Language': 'fr',
+          'Content-Range': 'bytes 0-9/100',
+          'Content-Length': '10',
+          'Content-Type': 'text/plain',
+        });
+        throw Object.assign(new Error('legacy diagnostic'), {
+          status: 429,
+          headers: {
+            ...(headerSource === 'error'
+              ? {
+                  'cOnTeNt-EnCoDiNg': 'gzip',
+                  'CONTENT-LANGUAGE': 'de',
+                  'cOnTeNt-RaNgE': 'bytes 20-29/100',
+                  'content-LENGTH': '999',
+                  'CONTENT-type': 'application/octet-stream',
+                }
+              : {}),
+            'Retry-After': '3',
+            'WWW-Authenticate': 'Bearer',
+            'Set-Cookie': ['a=1', 'b=2'],
+            'X-Error-Id': 'retry-request',
+          },
+        });
+      });
+      app.use(handler);
+
+      await withServer(app, async (port) => {
+        const response = await post(port, '{}', '/', { 'Accept-Encoding': encoding });
+        expect(response.status).toBe(429);
+        const body = encoding === 'gzip' ? gunzipSync(response.rawBody) : response.rawBody;
+        expect(JSON.parse(body.toString('utf8'))).toEqual({ error: 'Too Many Requests' });
+        expect(response.headers['content-encoding']).toBe(encoding === 'gzip' ? 'gzip' : undefined);
+        expect(response.headers['content-language']).toBeUndefined();
+        expect(response.headers['content-range']).toBeUndefined();
+        expect(response.headers['content-type']).toContain('application/json');
+        if (encoding === 'identity') {
+          expect(response.headers['content-length']).toBe(String(response.rawBody.length));
+        } else {
+          expect(response.headers['content-length']).toBeUndefined();
+        }
+        expect(response.headers['retry-after']).toBe('3');
+        expect(response.headers['www-authenticate']).toBe('Bearer');
+        expect(response.headers['set-cookie']).toEqual(['a=1', 'b=2']);
+        expect(response.headers['x-error-id']).toBe('retry-request');
+      });
     },
   );
 

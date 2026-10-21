@@ -78,6 +78,10 @@ export function createMcpErrorHandler(
     }
 
     const responseStatus = status ?? (isErrorStatus(res.statusCode) ? res.statusCode : 500);
+    for (const [name, value] of Object.entries(headers ?? {})) {
+      res.setHeader(name, value);
+    }
+    // These headers describe the discarded body, not the replacement JSON.
     for (const name of [
       'Content-Encoding',
       'Content-Language',
@@ -85,9 +89,6 @@ export function createMcpErrorHandler(
       'Content-Length',
     ]) {
       res.removeHeader(name);
-    }
-    for (const [name, value] of Object.entries(headers ?? {})) {
-      res.setHeader(name, value);
     }
     res.setHeader('Content-Security-Policy', "default-src 'none'");
     res.setHeader('X-Content-Type-Options', 'nosniff');

@@ -79,11 +79,12 @@ export const defaultErrorHandler: ErrorRequestHandler = (error: unknown, _req, r
   }
 
   const responseStatus = status ?? (isErrorStatus(res.statusCode) ? res.statusCode : 500);
-  for (const name of ['Content-Encoding', 'Content-Language', 'Content-Range', 'Content-Length']) {
-    res.removeHeader(name);
-  }
   for (const [name, value] of Object.entries(headers ?? {})) {
     res.setHeader(name, value);
+  }
+  // These headers describe the discarded body, not the replacement JSON.
+  for (const name of ['Content-Encoding', 'Content-Language', 'Content-Range', 'Content-Length']) {
+    res.removeHeader(name);
   }
   res.setHeader('Content-Security-Policy', "default-src 'none'");
   res.setHeader('X-Content-Type-Options', 'nosniff');
