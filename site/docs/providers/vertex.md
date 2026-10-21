@@ -39,7 +39,7 @@ Replace `gpt-6-luna` with the exact model ID enabled for your preview. The provi
 
 Service account configurations can use `credentials`, `keyFilename`, or `googleAuthOptions`, as with other Vertex providers. Gemini API keys and `OPENAI_API_KEY` do not authenticate this route. `google:responses:` and `palm:responses:` are unsupported.
 
-Use [Responses API options](./openai.md#responses-api) such as `max_output_tokens`, `reasoning`, `tools`, and `text`; availability of individual features depends on your preview endpoint. Responses are not cached locally because a Google Cloud project can contain multiple principals. Token usage is reported, but cost estimates require explicit `inputCost` / `outputCost` or `cost` values in dollars per token, since Google Cloud pricing and discounts can differ from OpenAI pricing.
+Use [Responses API options](./openai.md#responses-api) such as `max_output_tokens`, `reasoning`, `tools`, and `response_format`; availability of individual features depends on your preview endpoint. Responses are not cached locally because a Google Cloud project can contain multiple principals. Token usage is reported, but cost estimates require explicit `inputCost` / `outputCost` or `cost` values in dollars per token, since Google Cloud pricing and discounts can differ from OpenAI pricing. Estimates cover token costs only and exclude hosted-tool fees.
 
 See the [Google Cloud OpenAI example](https://github.com/promptfoo/promptfoo/tree/main/examples/google-cloud-openai).
 

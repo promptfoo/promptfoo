@@ -106,4 +106,9 @@ export class VertexResponsesProvider extends OpenAiResponsesProvider {
     // Google Cloud prices/discounts need not match OpenAI. Explicit config.cost still works.
     return `vertex:${this.modelName}`;
   }
+
+  protected getObservableToolCost(): number {
+    // Report configured token costs without assuming OpenAI's hosted-tool prices.
+    return 0;
+  }
 }

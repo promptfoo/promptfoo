@@ -64,6 +64,7 @@ describe('Vertex Responses', () => {
         projectId: 'customer-project',
         max_output_tokens: 100,
         reasoning: { effort: 'low' },
+        response_format: { type: 'json_object' },
         store: false,
         tools,
       },
@@ -86,6 +87,7 @@ describe('Vertex Responses', () => {
       input: 'Hello',
       max_output_tokens: 100,
       reasoning: { effort: 'low' },
+      text: { format: { type: 'json_object' } },
       store: false,
       tools,
     });
@@ -227,5 +229,26 @@ describe('Vertex Responses', () => {
       true,
       undefined,
     );
+  });
+
+  it.each([
+    { pricing: { cost: 0.01 }, expectedCost: 0.18 },
+    { pricing: { inputCost: 0.01, outputCost: 0.02 }, expectedCost: 0.24 },
+  ])('excludes OpenAI hosted-tool fees with $pricing', async ({ pricing, expectedCost }) => {
+    vi.mocked(fetchWithCache).mockResolvedValue(
+      createMockFetchResponse({
+        ...response,
+        output: [
+          ...response.output,
+          { type: 'file_search_call' },
+          { type: 'web_search_call', action: { type: 'search' } },
+        ],
+      }),
+    );
+    const provider = new VertexResponsesProvider('gpt-6-luna', {
+      config: { projectId: 'customer-project', ...pricing },
+    });
+
+    expect((await provider.callApi('Hello')).cost).toBeCloseTo(expectedCost, 8);
   });
 });
