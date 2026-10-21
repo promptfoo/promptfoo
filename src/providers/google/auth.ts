@@ -14,7 +14,7 @@
 import { getEnvOverrides, getEnvString } from '../../envars';
 import logger from '../../logger';
 import { maybeLoadFromExternalFile } from '../../util/file';
-import { resolveProviderEnv } from '../env';
+import { getExplicitProviderEnv, resolveProviderEnv } from '../env';
 import type { GoogleAuthOptions } from 'google-auth-library';
 
 import type { EnvOverrides } from '../../types/env';
@@ -176,8 +176,9 @@ export class GoogleAuthManager {
     // Select the scope before the alias; an empty value masks that name in lower scopes.
     const masked = new Set<string>();
     for (const layer of [
-      env,
+      getExplicitProviderEnv(env),
       getEnvOverrides('provider'),
+      env,
       getEnvOverrides(),
       getEnvOverrides('file'),
       Object.fromEntries(keys.map((key) => [key, getEnvString(key)])),

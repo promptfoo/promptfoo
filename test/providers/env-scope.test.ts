@@ -97,6 +97,41 @@ describe('provider environment scopes', () => {
     }
   });
 
+  it.each([
+    ['openai:chat:fixture', 'OPENAI_API_KEY', 'OPENAI_API_KEY'],
+    ['google:gemini-2.5-flash', 'GOOGLE_API_KEY', 'GEMINI_API_KEY'],
+    ['fireworks:fixture', 'FIREWORKS_API_KEY', 'FIREWORKS_API_KEY'],
+  ])('preserves credential scopes through the %s loader', async (route, key, registeredKey) => {
+    const previousProvider = getEnvOverridesProvider();
+    let credential = 'provider-key';
+    setEnvOverridesProvider(
+      (layer) =>
+        layer === 'provider'
+          ? { [registeredKey]: credential, DEPLOYMENT_ONLY: 'provider-secret' }
+          : previousProvider?.(layer),
+      { providerLayer: true },
+    );
+    try {
+      const provider = await loadApiProvider(route, {
+        env: { [key]: 'suite-key' },
+        options: { label: `{{env.${key}}}|{{env.DEPLOYMENT_ONLY}}` },
+      });
+      expect(apiKey(provider)).toBe('provider-key');
+      expect(provider.label).toBe('suite-key|{{env.DEPLOYMENT_ONLY}}');
+      credential = 'rotated-key';
+      expect(apiKey(provider)).toBe('rotated-key');
+      for (const explicit of ['explicit-key', '']) {
+        const overridden = await loadApiProvider(route, {
+          env: { [key]: 'suite-key' },
+          options: { env: { [key]: explicit, [registeredKey]: explicit } },
+        });
+        expect(apiKey(overridden)).toBe(explicit || undefined);
+      }
+    } finally {
+      setEnvOverridesProvider(previousProvider);
+    }
+  });
+
   it('preserves provider scope across Vertex Express image credential aliases', async () => {
     const provider = await loadApiProvider('google:gemini-2.5-flash-image', {
       env: { VERTEX_API_KEY: 'suite-vertex-key' },

@@ -1,5 +1,24 @@
 import { type EnvVarKey, getEnvOverrides, getEnvString } from '../envars';
 
+type ProviderEnv = Readonly<Record<string, string | undefined>>;
+
+// Keep the loader's explicit overrides separate without adding registered secrets
+// to the environment used by templates or subprocesses.
+const explicitProviderEnvs = new WeakMap<ProviderEnv, ProviderEnv | undefined>();
+
+export function setExplicitProviderEnv(
+  env: ProviderEnv | undefined,
+  explicit: ProviderEnv | undefined,
+): void {
+  if (env) {
+    explicitProviderEnvs.set(env, explicit);
+  }
+}
+
+export function getExplicitProviderEnv(env: ProviderEnv | undefined): ProviderEnv | undefined {
+  return env && explicitProviderEnvs.has(env) ? explicitProviderEnvs.get(env) : env;
+}
+
 /** Resolve aliases within each scope; an empty value masks only that variable. */
 export function resolveProviderEnv(
   env: Readonly<Record<string, string | undefined>> | undefined,
@@ -9,8 +28,9 @@ export function resolveProviderEnv(
   const masked = new Set<string>();
   const ambient = Object.fromEntries(names.map((name) => [name, getEnvString(name as EnvVarKey)]));
   for (const layer of [
-    env,
+    getExplicitProviderEnv(env),
     getEnvOverrides('provider'),
+    env,
     getEnvOverrides(),
     getEnvOverrides('file'),
     ambient,

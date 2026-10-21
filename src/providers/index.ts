@@ -19,6 +19,7 @@ import {
 } from '../util/providerRef';
 import { renderEnvOnlyInObject } from '../util/render';
 import { sanitizeObject } from '../util/sanitizer';
+import { getExplicitProviderEnv, setExplicitProviderEnv } from './env';
 import { getProviderFactories, mergeProviderEnv } from './registry';
 
 import type { EnvOverrides } from '../types/env';
@@ -88,11 +89,18 @@ export async function loadApiProvider(
   providerPath: string,
   context: LoadApiProviderContext = {},
 ): Promise<ApiProvider> {
-  const env = context.env ?? cliState.env;
+  const suiteEnv = context.env ?? cliState.env;
+  const env = suiteEnv && { ...suiteEnv };
+  setExplicitProviderEnv(env, undefined);
   const basePath = context.basePath ?? cliState.basePath;
   return cliState.withBasePath(basePath, () =>
     cliState.withEnv(env, () =>
-      createApiProvider(providerPath, { ...context, basePath, env }, undefined, context.env),
+      createApiProvider(
+        providerPath,
+        { ...context, basePath, env },
+        undefined,
+        context.env ? env : undefined,
+      ),
     ),
   );
 }
@@ -136,6 +144,13 @@ async function createApiProvider(
     Object.prototype.hasOwnProperty.call(templateEnv, apiKeyEnvar)
   ) {
     mergedEnv[apiKeyEnvar] = templateEnv[apiKeyEnvar];
+    const explicit = getExplicitProviderEnv(templateEnv);
+    if (explicit?.[apiKeyEnvar] !== undefined) {
+      setExplicitProviderEnv(mergedEnv, {
+        ...getExplicitProviderEnv(mergedEnv),
+        [apiKeyEnvar]: explicit[apiKeyEnvar],
+      });
+    }
   }
 
   const providerOptions: ProviderOptions = {
