@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { ProviderEnvOverridesSchema } from '../env.js';
-import { McpConfigInputSchema } from './mcp.js';
+import { McpClientConfigInputSchema } from './mcp.js';
 
 const JsonObject = z.record(z.string(), z.json());
 const NamedTool = z.strictObject({ name: z.string() });
@@ -80,7 +80,7 @@ export const BedrockConverseConfigInputSchema = z.strictObject({
   tools: z.union([z.array(Tool), z.string().regex(/^file:\/\/[\s\S]+/)]).optional(),
   toolChoice: ToolChoice.optional(),
   tool_choice: OpenAiToolChoice.optional(),
-  mcp: McpConfigInputSchema.optional(),
+  mcp: McpClientConfigInputSchema.optional(),
   functionToolCallbacks: z.record(z.string(), z.string()).optional(),
   additionalModelRequestFields: JsonObject.optional(),
   additionalModelResponseFieldPaths: z.array(z.string()).optional(),

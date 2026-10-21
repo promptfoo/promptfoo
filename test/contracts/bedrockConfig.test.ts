@@ -22,6 +22,27 @@ describe('portable Bedrock Converse configuration', () => {
     'bedrock:converse:arn:aws:bedrock:us-east-1:123:application-inference-profile/test',
   ];
   const cases: [unknown, boolean][] = [
+    [
+      {
+        id: 'bedrock:converse:amazon.nova-pro-v1:0',
+        config: { mcp: { enabled: true, server: { command: 'fixture' } } },
+      },
+      true,
+    ],
+    [
+      {
+        id: 'bedrock:converse:amazon.nova-pro-v1:0',
+        config: { mcp: { server: { command: 'fixture' }, defaultArgs: { session: 'ignored' } } },
+      },
+      false,
+    ],
+    [
+      {
+        id: 'bedrock:converse:amazon.nova-pro-v1:0',
+        config: { mcp: { server: { command: 'fixture' }, transform: 'output' } },
+      },
+      false,
+    ],
     ...validIds.map((id): [unknown, boolean] => [{ id }, true]),
     [
       {

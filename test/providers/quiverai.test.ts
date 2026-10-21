@@ -21,7 +21,8 @@ vi.mock('../../src/util/fetch/index', () => ({
   fetchWithProxy: vi.fn(),
 }));
 
-vi.mock('../../src/envars', () => ({
+vi.mock('../../src/envars', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../src/envars')>()),
   getEnvString: vi.fn(),
   getEnvInt: vi.fn().mockReturnValue(300_000),
   getEnvFloat: vi.fn(),

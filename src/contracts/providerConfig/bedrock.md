@@ -26,6 +26,9 @@ does not add fields from pending PR #11568 (such as request metadata or output
 configuration) before that implementation lands. Update this contract alongside
 future Converse routing and request changes.
 
-This PR stands on main, independently of the pending OpenAI/Azure/Anthropic/Gemini
-contracts and reasoning refactor. Global YAML/editor and Cloud MCP wiring are
+Embedded MCP uses the client-only contract; standalone provider transforms and
+`defaultArgs` are not accepted. Set `enabled: true` to enable the runtime client.
+
+This PR builds on the OpenAI/MCP contracts on main, independently of the pending
+Azure/Anthropic/Gemini contracts and reasoning refactor. Global YAML/editor and Cloud MCP wiring are
 separate work.
