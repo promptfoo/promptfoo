@@ -3,6 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { getEnvOverridesProvider, setEnvOverridesProvider } from '../../src/envOverrides';
 import { loadApiProvider } from '../../src/providers/index';
 import { getProviderFromCloud } from '../../src/util/cloud';
 import { mockProcessEnv } from '../util/utils';
@@ -163,4 +164,73 @@ describe('referenced provider template boundaries', () => {
       }
     },
   );
+});
+
+describe('registered credentials through referenced providers', () => {
+  it.each([
+    ['file', undefined],
+    ['file', 'referenced-key'],
+    ['cloud', undefined],
+    ['cloud', 'referenced-key'],
+  ] as const)(
+    'keeps suite values below registered credentials through %s (reference key: %s)',
+    async (source, referenceKey) => {
+      const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-loader-env-'));
+      const previousProvider = getEnvOverridesProvider();
+      setEnvOverridesProvider(
+        (layer) =>
+          layer === 'provider' ? { OPENAI_API_KEY: 'provider-key' } : previousProvider?.(layer),
+        { providerLayer: true },
+      );
+      try {
+        const referenced = { id: 'openai:chat:fixture', env: { OPENAI_API_KEY: referenceKey } };
+        const file = path.join(dir, 'provider.json');
+        fs.writeFileSync(file, JSON.stringify(referenced));
+        vi.mocked(getProviderFromCloud).mockResolvedValue(referenced);
+        const route =
+          source === 'file'
+            ? `file://${file}`
+            : 'promptfoo://provider/00000000-0000-0000-0000-000000000001';
+        const provider = await loadApiProvider(route, { env: { OPENAI_API_KEY: 'suite-key' } });
+        // File callers override file defaults; cloud target credentials are provider overrides.
+        expect(explicit(provider)).toBe(
+          source === 'cloud' && referenceKey ? referenceKey : 'provider-key',
+        );
+        const overridden = await loadApiProvider(route, {
+          env: { OPENAI_API_KEY: 'suite-key' },
+          options: { env: { OPENAI_API_KEY: 'explicit-key' } },
+        });
+        expect(explicit(overridden)).toBe('explicit-key');
+      } finally {
+        setEnvOverridesProvider(previousProvider);
+        fs.rmSync(dir, { recursive: true, force: true });
+      }
+    },
+  );
+});
+
+it('retains explicit named credentials when an alias prunes their implicit lookup', async () => {
+  const previousProvider = getEnvOverridesProvider();
+  setEnvOverridesProvider(
+    (layer) =>
+      layer === 'provider' ? { AZURE_API_KEY: 'provider-key' } : previousProvider?.(layer),
+    { providerLayer: true },
+  );
+  try {
+    vi.mocked(getProviderFromCloud).mockResolvedValue({
+      id: 'azure:chat:fixture',
+      env: { AZURE_API_KEY: 'cloud-key' },
+      config: { apiKeyEnvar: 'AZURE_API_KEY' },
+    });
+    const provider = await loadApiProvider(
+      'promptfoo://provider/00000000-0000-0000-0000-000000000001',
+      {
+        env: { AZURE_API_KEY: 'suite-key' },
+        options: { env: { AZURE_OPENAI_API_KEY: 'local-alias' } },
+      },
+    );
+    expect(explicit(provider)).toBe('cloud-key');
+  } finally {
+    setEnvOverridesProvider(previousProvider);
+  }
 });
