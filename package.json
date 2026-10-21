@@ -167,7 +167,7 @@
       "gcp-metadata": "^9.0.2"
     },
     "webpack-dev-server": {
-      "express": "^4.22.2"
+      "express": "^5.3.0"
     },
     "launch-editor": "2.14.2",
     "engine.io": {
