@@ -192,7 +192,7 @@ function applyMetaResponsesOutputCap(
 
 function assertSupportedMetaRequest(
   body: Record<string, unknown>,
-  config: OpenAiCompletionOptions,
+  config: { stop?: unknown; stream?: unknown; logit_bias?: unknown },
 ): void {
   if (config.stop !== undefined || 'stop' in body) {
     throw new Error(
@@ -236,7 +236,9 @@ function assertSupportedMetaRequest(
 // is kept, sourced from config alone.
 function applyMetaSamplingHygiene(
   body: Record<string, unknown>,
-  config: OpenAiCompletionOptions,
+  config: Partial<
+    Record<'temperature' | 'top_p' | 'presence_penalty' | 'frequency_penalty', unknown>
+  > & { omitDefaults?: boolean },
   passthrough: Record<string, unknown>,
   samplingKeys: Array<'top_p' | 'presence_penalty' | 'frequency_penalty'>,
 ): void {
