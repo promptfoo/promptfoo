@@ -428,6 +428,91 @@ describe('runEval', () => {
     });
   });
 
+  it.each([false, true])(
+    'preserves separate native conversation output for cached=%s',
+    async (cached) => {
+      const parts = [
+        { text: 'Signed text', thoughtSignature: 'signature' },
+        {
+          inlineData: { mimeType: 'image/png', data: 'aW1hZ2U=' },
+          thoughtSignature: 'image-signature',
+        },
+      ];
+      const original = structuredClone(parts);
+      const conversations = {} as Record<string, any>;
+      const provider: ApiProvider = {
+        id: () => 'native-history',
+        callApi: vi.fn().mockResolvedValue({
+          output: 'Display text',
+          conversationOutput: parts,
+          cached,
+          tokenUsage: { total: 3, prompt: 1, completion: 2, numRequests: 1 },
+        }),
+      };
+      const [result] = await runEval({
+        ...defaultOptions,
+        provider,
+        prompt: { raw: 'Hello {{_conversation[0].output}}', label: 'native-history' },
+        test: { options: { transform: 'output + "-test"' } },
+        conversations,
+        registers: {},
+      });
+      expect(result.success).toBe(true);
+      expect(result.response?.output).toBe('Display text-test');
+      expect(result.response?.conversationOutput).toEqual(parts);
+      expect(Object.values(conversations)[0][0].output).toEqual(parts);
+      expect(parts).toEqual(original);
+    },
+  );
+
+  it.each([
+    { native: '', expected: '' },
+    { native: undefined, expected: 'Display text' },
+  ])(
+    'honors explicit empty conversation output and legacy fallback: %j',
+    async ({ native, expected }) => {
+      const conversations = {} as Record<string, any>;
+      const provider: ApiProvider = {
+        id: () => 'history-fallback',
+        callApi: vi.fn().mockResolvedValue({ output: 'Display text', conversationOutput: native }),
+      };
+      const [result] = await runEval({
+        ...defaultOptions,
+        provider,
+        prompt: { raw: '{{ _conversation | dump }}', label: 'history-fallback' },
+        test: {},
+        conversations,
+        registers: {},
+      });
+      expect(result.success).toBe(true);
+      expect(Object.values(conversations)[0][0].output).toBe(expected);
+    },
+  );
+
+  it('should not add provider errors to conversation history', async () => {
+    const conversations = {} as Record<string, any>;
+    const errorProvider: ApiProvider = {
+      id: vi.fn().mockReturnValue('error-provider'),
+      callApi: vi.fn().mockResolvedValue({
+        error: 'Provider failed',
+        conversationOutput: [{ text: 'Incomplete' }],
+      }),
+    };
+
+    const [result] = await runEval({
+      ...defaultOptions,
+      provider: errorProvider,
+      prompt: { raw: 'Hello {{_conversation[0].output}}', label: 'test-label' },
+      test: {},
+      conversations,
+      registers: {},
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.error).toBe('Provider failed');
+    expect(conversations).toEqual({});
+  });
+
   it('should handle conversation with custom ID', async () => {
     const conversations = {};
 

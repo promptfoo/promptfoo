@@ -4,8 +4,7 @@ import fs from 'fs';
 import path from 'path';
 
 import { createCache } from 'cache-manager';
-import { Keyv } from 'keyv';
-import { KeyvFile } from 'keyv-file';
+import { createDiskCache } from './cache/storage';
 import { getEnvBool, getEnvInt, getEnvString } from './envars';
 import logger from './logger';
 import { getRequestTimeoutMs, throwIfAborted, waitForPromiseWithAbort } from './providers/shared';
@@ -35,17 +34,23 @@ let cacheInstance: Cache | undefined;
 const namespacedCacheInstances = new Map<string, Cache>();
 let cacheClearGeneration = 0;
 
-const cacheNamespaceStorage = new AsyncLocalStorage<{ namespace: string }>();
 // The CLI and the public ESM/CJS entry points can load separate copies of this
 // module. Share only the async policy, not cache instances or module defaults,
 // so providers loaded by extension hooks observe the evaluation's cache policy.
 const CACHE_ENABLED_CONTEXT = Symbol.for('promptfoo.cache.enabledContext.v1');
+const CACHE_NAMESPACE_CONTEXT = Symbol.for('promptfoo.cache.namespaceContext.v1');
 const cacheContextGlobal = globalThis as typeof globalThis & {
   [CACHE_ENABLED_CONTEXT]?: AsyncLocalStorage<{ enabled: boolean }>;
+  [CACHE_NAMESPACE_CONTEXT]?: AsyncLocalStorage<{ namespace: string }>;
 };
 const cacheEnabledStorage = (cacheContextGlobal[CACHE_ENABLED_CONTEXT] ??= new AsyncLocalStorage<{
   enabled: boolean;
 }>());
+
+const cacheNamespaceStorage = (cacheContextGlobal[CACHE_NAMESPACE_CONTEXT] ??=
+  new AsyncLocalStorage<{
+    namespace: string;
+  }>());
 
 let enabled = getEnvBool('PROMPTFOO_CACHE_ENABLED', true);
 
@@ -87,7 +92,7 @@ export function getCache() {
 function getCacheInstance() {
   if (!cacheInstance) {
     let cachePath = '';
-    const stores = [];
+    let diskCache: Cache | undefined;
 
     if (cacheType === 'disk' && enabled) {
       cachePath =
@@ -101,16 +106,7 @@ function getCacheInstance() {
       const newCacheFile = path.join(cachePath, 'cache.json');
 
       try {
-        const store = new KeyvFile({
-          filename: newCacheFile,
-        });
-
-        const keyv = new Keyv({
-          store,
-          ttl: getCacheTtlMs(),
-        });
-
-        stores.push(keyv);
+        diskCache = createDiskCache(newCacheFile, getCacheTtlMs());
       } catch (err) {
         logger.warn(
           `[Cache] Failed to initialize disk cache: ${(err as Error).message}. ` +
@@ -120,12 +116,12 @@ function getCacheInstance() {
       }
     }
 
-    // Initialize cache (disk if stores array has items, memory otherwise)
-    cacheInstance = createCache({
-      stores,
-      ttl: getCacheTtlMs(),
-      refreshThreshold: 0, // Disable background refresh
-    });
+    cacheInstance =
+      diskCache ??
+      createCache({
+        ttl: getCacheTtlMs(),
+        refreshThreshold: 0, // Disable background refresh
+      });
     const clear = cacheInstance.clear.bind(cacheInstance);
     cacheInstance.clear = async () => {
       const result = await clear();

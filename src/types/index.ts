@@ -337,6 +337,7 @@ const PromptMetricsSchema = z.object({
   testPassCount: z.number(),
   testFailCount: z.number(),
   testErrorCount: z.number(),
+  testCacheHitCount: z.number().optional(),
   assertPassCount: z.number(),
   assertFailCount: z.number(),
   totalLatencyMs: z.number(),
@@ -469,6 +470,11 @@ export interface EvaluateStats {
   durationMs?: number;
   generationDurationMs?: number;
   evaluationDurationMs?: number;
+  /**
+   * Rows served from the response cache. Disclosed alongside the latency/token
+   * stats so an all-cached re-run is distinguishable from a freshly measured one.
+   */
+  cacheHits?: number;
 }
 
 export interface RepeatStabilityConfidenceInterval {
@@ -813,6 +819,9 @@ export const AssertionSchema = z.object({
 
   // Extract context from the output using a transform
   contextTransform: StringOrFunctionSchema.optional(),
+
+  // Opt-in string normalization for equals/contains; true selects NFC.
+  normalizeUnicode: z.union([z.boolean(), z.enum(['NFC', 'NFD', 'NFKC', 'NFKD'])]).optional(),
 });
 
 export type Assertion = z.infer<typeof AssertionSchema>;

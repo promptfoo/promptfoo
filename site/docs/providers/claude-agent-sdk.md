@@ -257,6 +257,8 @@ By default, when a `working_dir` is specified, Claude Agent SDK has access to th
 
 Control Claude Agent SDK's permissions for modifying files and running system commands:
 
+Promptfoo explicitly uses `default` (manual approvals) when `permission_mode` is omitted, including with SDK 0.3.286 and later. Set `permission_mode: auto` to opt into automatic permission classification.
+
 | Mode                | Description                                                           |
 | ------------------- | --------------------------------------------------------------------- |
 | `default`           | Standard permissions                                                  |
@@ -792,6 +794,8 @@ Available sandbox options:
 | `ripgrep.args`                     | string[] | Additional arguments for ripgrep                     |
 
 When `sandbox.enabled` is `true`, Claude Agent SDK defaults `failIfUnavailable` to `true`; set it to `false` only if you want the SDK to degrade gracefully when sandbox dependencies or platform support are missing.
+
+With Claude Agent SDK 0.3.296 or later, `sandbox` merges with an inline `settings.sandbox` object: explicit `sandbox` values take precedence, while deny and credential lists from both are combined. A `settings` file path cannot be combined with `sandbox`; use inline settings when configuring both.
 
 Use `credentials.envVars` with `mode: mask` to keep a credential out of sandboxed commands while allowing the proxy to inject it only for selected hosts. Each `injectHosts` entry must also be present in `network.allowedDomains`:
 

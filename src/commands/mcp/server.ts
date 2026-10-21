@@ -5,6 +5,7 @@ import express from 'express';
 import logger from '../../logger';
 import telemetry from '../../telemetry';
 import { isMissingPackageImportError } from '../../util/packageImportErrors';
+import { createMcpErrorHandler } from './defaultErrorHandler';
 import { registerResources } from './resources';
 import { registerCompareProvidersTool } from './tools/compareProviders';
 import { registerGenerateDatasetTool } from './tools/generateDataset';
@@ -130,6 +131,9 @@ export async function startHttpMcpServer(port: number): Promise<void> {
   app.get('/health', (_req, res) => {
     res.status(200).json({ status: 'OK', message: 'Promptfoo MCP server is running' });
   });
+  app.use(
+    createMcpErrorHandler((message, diagnostic) => logger.error(message, { error: diagnostic })),
+  );
 
   // Return a Promise that only resolves when the server shuts down
   // This keeps long-running commands running until SIGINT/SIGTERM

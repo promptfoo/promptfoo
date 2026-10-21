@@ -976,7 +976,7 @@ describe('bedrock openaiResponses helper', () => {
           }),
         }),
       );
-      expect(body.tools[0].function).toBeUndefined();
+      expect(body.tools?.[0].function).toBeUndefined();
       expect(body.temperature).toBeUndefined();
       expect(body.top_p).toBeUndefined();
     });

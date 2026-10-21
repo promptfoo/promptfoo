@@ -17,8 +17,13 @@ import { useToast } from '@app/hooks/useToast';
 import { cn } from '@app/lib/utils';
 import { callApi } from '@app/utils/api';
 import { formatDuration } from '@app/utils/date';
-import { normalizeMediaText, resolveAudioSource, resolveImageSource } from '@app/utils/media';
-import { getActualPrompt } from '@app/utils/providerResponse';
+import {
+  isMediaRef,
+  normalizeMediaText,
+  resolveAudioSource,
+  resolveBlobUri,
+  resolveImageSource,
+} from '@app/utils/media';
 import {
   getIncurredTokenAccounting,
   getPrimaryTokenUsageLabel,
@@ -36,6 +41,7 @@ import {
 } from '@promptfoo/types';
 import { EVAL_TABLE_MAX_PAGE_SIZE } from '@promptfoo/types/evalConstants';
 import invariant from '@promptfoo/util/invariant';
+import { getActualPrompt } from '@promptfoo/util/providerResponse';
 import {
   createColumnHelper,
   flexRender,
@@ -68,7 +74,6 @@ import type { TruncatedTextProps } from './TruncatedText';
 import './ResultsTable.css';
 
 import { NumberInput } from '@app/components/ui/number-input';
-import { isBlobRef, isStorageRef, resolveAudioUrl } from '@app/utils/mediaStorage';
 import { isEncodingStrategy } from '@promptfoo/redteam/constants/strategies';
 import { useMetricsGetter, usePassingTestCounts, usePassRates, useTestCounts } from './hooks';
 import {
@@ -82,62 +87,19 @@ const PAGE_SIZE_OPTIONS = [10, 50, 100, 500, 1000].filter(
   (size) => size <= EVAL_TABLE_MAX_PAGE_SIZE,
 );
 
-/**
- * Renders an audio player for evaluation outputs that may be stored in different representations.
- *
- * This component accepts either:
- * - A storage/blob reference, which is resolved asynchronously, or
- * - Inline base64/data URL audio content, which is used immediately.
- *
- * @param data Audio payload or reference. Supported inputs:
- *   - storage ref/blob ref string understood by `isStorageRef` / `isBlobRef`
- *   - data URL (`data:audio/...`)
- *   - raw base64 audio data
- * @param format Audio MIME subtype used when constructing inline base64 sources and the `<source>` type.
- * Defaults to `'mp3'`. Typical values include `'mp3'`, `'wav'`, `'ogg'`, and `'webm'`.
- */
 function StorageRefAudioPlayer({ data, format = 'mp3' }: { data: string; format?: string }) {
-  const [audioUrl, setAudioUrl] = React.useState<string | null>(null);
-  const [loading, setLoading] = React.useState(isStorageRef(data) || isBlobRef(data));
-
-  React.useEffect(() => {
-    let cancelled = false;
-
-    if (isStorageRef(data) || isBlobRef(data)) {
-      setLoading(true);
-      resolveAudioUrl(data, format).then((url) => {
-        if (!cancelled) {
-          setAudioUrl(url);
-          setLoading(false);
-        }
-      });
-    } else {
-      // Inline base64
-      const url = data.startsWith('data:') ? data : `data:audio/${format};base64,${data}`;
-      setAudioUrl(url);
-      setLoading(false);
-    }
-
-    return () => {
-      cancelled = true;
-    };
-  }, [data, format]);
-
-  if (loading) {
-    return (
-      <div className="flex items-center gap-2 py-0.5">
-        <Spinner className="size-4" />
-        <span className="text-xs text-muted-foreground">Loading audio...</span>
-      </div>
-    );
-  }
+  const audioUrl = isMediaRef(data)
+    ? resolveBlobUri(data)
+    : data.startsWith('data:')
+      ? data
+      : `data:audio/${format};base64,${data}`;
 
   if (!audioUrl) {
     return <span className="text-xs text-destructive">Failed to load audio</span>;
   }
 
   return (
-    <audio controls style={{ maxWidth: '100%', height: '32px' }}>
+    <audio key={audioUrl} controls style={{ maxWidth: '100%', height: '32px' }}>
       <source src={audioUrl} type={`audio/${format}`} />
       Your browser does not support the audio element.
     </audio>
@@ -353,7 +315,7 @@ function renderMediaVariableCell({
 
   const { type: mediaType, format = '' } = mediaMetadata;
   const normalizedValue = normalizeMediaText(value);
-  const isRefValue = isBlobRef(value) || isStorageRef(value);
+  const isRefValue = isMediaRef(value);
   const audioSource =
     mediaType === 'audio'
       ? resolveAudioSource(isRefValue ? { format, blobRef: value } : { data: value, format })
@@ -446,14 +408,10 @@ function renderDecodedVariableCell({
 
   const isAudioContent =
     strategyId === 'audio' ||
-    (typeof value === 'string' &&
-      (isStorageRef(value) || isBlobRef(value)) &&
-      MEDIA_MIME_PATTERNS.audio.test(value));
+    (typeof value === 'string' && isMediaRef(value) && MEDIA_MIME_PATTERNS.audio.test(value));
   const isImageContent =
     strategyId === 'image' ||
-    (typeof value === 'string' &&
-      (isStorageRef(value) || isBlobRef(value)) &&
-      MEDIA_MIME_PATTERNS.image.test(value));
+    (typeof value === 'string' && isMediaRef(value) && MEDIA_MIME_PATTERNS.image.test(value));
 
   return (
     <div className="cell" data-capture="true">
@@ -463,7 +421,7 @@ function renderDecodedVariableCell({
         </div>
       ) : isImageContent ? (
         <div>
-          {typeof value === 'string' && (isStorageRef(value) || isBlobRef(value)) ? (
+          {typeof value === 'string' && isMediaRef(value) ? (
             <span className="text-xs text-muted-foreground">
               Image preview not yet supported for storage refs
             </span>
@@ -1433,7 +1391,7 @@ function renderResultsTableCell({
   lightboxImage: string | null;
   toggleLightbox: (url?: string) => void;
 }): React.ReactNode {
-  const columnId = String(cell.column.id);
+  const columnId = cell.column.id;
   const isMetadataCol = isMetadataColumn(columnId);
   const renderedCellContent = flexRender(cell.column.columnDef.cell, cell.getContext());
   const value = cell.getValue();
@@ -1589,7 +1547,7 @@ function ResultsTableHeader({
       data-testid="results-table-header"
       data-header-collapsed={collapsed}
       className={cn(
-        'relative -mx-4 overflow-hidden px-4',
+        'relative -mx-4 overflow-hidden border-t border-border',
         stickyHeader && 'results-table-sticky',
         stickyHeader && collapsed !== undefined && 'results-table-scroll-fallback',
         hasMinimalScrollRoom && 'minimal-scroll-room',
@@ -1600,7 +1558,7 @@ function ResultsTableHeader({
           type="button"
           onClick={() => setStickyHeader(false)}
           aria-label="Dismiss sticky header"
-          className="p-1.5 rounded hover:bg-muted hover:text-foreground transition-colors"
+          className="inline-flex size-7 cursor-pointer items-center justify-center rounded-md bg-muted text-muted-foreground transition-colors hover:bg-foreground/10 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
           <X className="size-4" />
         </button>
@@ -1608,7 +1566,7 @@ function ResultsTableHeader({
       <div
         ref={headerScrollRef}
         data-testid="results-table-header-scroll-container"
-        className="overflow-x-auto overflow-y-hidden overscroll-x-contain"
+        className="overflow-x-auto overflow-y-hidden overscroll-x-contain px-4"
       >
         <table
           className={`results-table results-table-header-table firefox-fix ${

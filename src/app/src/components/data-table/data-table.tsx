@@ -991,7 +991,7 @@ export function DataTable<TData, TValue = unknown>({
     <div className={cn('flex flex-col gap-3 flex-1 min-h-0', className)}>
       <div
         className={cn(
-          'rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 flex-1 min-h-0 flex flex-col overflow-hidden',
+          'rounded-xl border border-border bg-card flex-1 min-h-0 flex flex-col overflow-hidden',
           'print:bg-white print:border-gray-300',
         )}
       >
@@ -1028,7 +1028,7 @@ export function DataTable<TData, TValue = unknown>({
               ...(tableMinWidth ? { minWidth: tableMinWidth } : {}),
             }}
           >
-            <thead className="bg-zinc-50 dark:bg-zinc-800 sticky top-0 z-10 print:bg-zinc-50">
+            <thead className="bg-muted/60 sticky top-0 z-10 print:bg-zinc-50">
               {table.getHeaderGroups().map((headerGroup) => (
                 <tr
                   key={headerGroup.id}
