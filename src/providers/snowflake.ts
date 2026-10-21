@@ -1,5 +1,5 @@
 import { fetchWithCache } from '../cache';
-import { getEnvString } from '../envars';
+import { getEnvString, getProviderEnvString } from '../envars';
 import logger from '../logger';
 import { isCallerAbortError } from '../util/fetch/requestSignal';
 import {
@@ -80,7 +80,7 @@ export class SnowflakeCortexProvider extends OpenAiChatCompletionProvider {
   constructor(modelName: string, providerOptions: ProviderOptions) {
     const accountIdentifier =
       providerOptions.config?.accountIdentifier ||
-      (providerOptions.env?.SNOWFLAKE_ACCOUNT_IDENTIFIER ??
+      (getProviderEnvString(providerOptions.env, 'SNOWFLAKE_ACCOUNT_IDENTIFIER') ??
         getEnvString('SNOWFLAKE_ACCOUNT_IDENTIFIER'));
 
     if (!accountIdentifier && !providerOptions.config?.apiBaseUrl) {
