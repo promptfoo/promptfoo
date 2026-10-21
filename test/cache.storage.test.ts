@@ -30,6 +30,14 @@ describe('cache storage compatibility', () => {
     fs.rmSync(cacheDirectory, { recursive: true, force: true });
   });
 
+  it('uses the disk factory instead of silently falling back to memory', async () => {
+    await cacheModule.getCache().set('disk-selection', 'persisted');
+    const contents = JSON.parse(fs.readFileSync(path.join(cacheDirectory, 'cache.json'), 'utf8'));
+    expect(contents.cache).toEqual([
+      ['keyv:disk-selection', expect.objectContaining({ value: expect.any(String) })],
+    ]);
+  });
+
   it('reads responses persisted with the existing disk cache envelope', async () => {
     const response = JSON.stringify({ data: { output: 'previous response' }, status: 200 });
     const expires = Date.now() + 60_000;
