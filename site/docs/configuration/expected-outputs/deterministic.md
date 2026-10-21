@@ -452,7 +452,7 @@ assert:
         - root.sibling
 ```
 
-This checks if the XML is a supported well-formed document and contains the specified elements. The elements are specified as dot-separated paths, allowing for nested element checking.
+This checks if the XML is a supported well-formed document and contains the specified elements. The elements are specified as dot-separated paths, allowing for nested element checking. Required paths match actual XML element names, including names such as `toString`; inherited JavaScript object properties do not count.
 
 #### How it works
 
@@ -612,13 +612,17 @@ Legacy - please use is-valid-function-call instead. This ensures that any JSON L
 
 ### is-valid-openai-tools-call
 
-Checks the model output against the provider's `tools` schema. Missing or null output fails the assertion. See [OpenAI tool calling](/docs/providers/openai/#tool-calling).
+Checks the model output against the provider's `tools` schema. Missing, null, or malformed output produces a failed grade. Circular references or bigint values in malformed output do not prevent grading. See [OpenAI tool calling](/docs/providers/openai/#tool-calling).
 
-**MCP Support**: This assertion also validates MCP (Model Context Protocol) tool calls when using OpenAI's Responses API. It will:
+**MCP Support**: This assertion also validates MCP (Model Context Protocol) tool calls when using OpenAI's Responses API. It inspects output text or an object's string `content` field. Errors retain their message even when no tool name is provided. It will:
 
 - Pass if MCP tool calls succeed (output contains "MCP Tool Result")
 - Fail if MCP tool calls fail (output contains "MCP Tool Error")
 - Continue to validate traditional function tools as before
+
+`not-is-valid-openai-tools-call` and `not-is-valid-function-call` invert the validation result. A configuration error, such as no tools configured, a tool schema that does not compile, or a provider that cannot validate function calls, still fails.
+
+Negation checks for an invalid call, so a failed MCP call can also pass. To check that no tool was called, assert on the absence of tool calls instead. Custom provider validators should throw `InvalidToolCallError` from `promptfoo/contracts` for invalid calls and ordinary errors for configuration or operational failures.
 
 Example with MCP tools:
 

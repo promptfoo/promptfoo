@@ -21,18 +21,6 @@ const darkCodeTheme = themes.duotoneDark;
  */
 const BUILD_TIMESTAMP = new Date().toISOString();
 
-function webpackProgressCompatibilityPlugin(): Plugin {
-  return {
-    name: 'webpack-progress-compatibility-plugin',
-    configureWebpack(config) {
-      config.plugins = config.plugins?.filter(
-        (plugin) => plugin?.constructor?.name !== 'WebpackBarPlugin',
-      );
-      return {};
-    },
-  };
-}
-
 /**
  * Bakes `BUILD_TIMESTAMP` into both the server and the client bundle as the same string
  * literal, so modules that need a stable "now" (event statuses) cannot produce a different
@@ -126,6 +114,13 @@ const config: Config = {
 
   themeConfig: {
     image: 'img/thumbnail.png',
+    mermaid: {
+      options: {
+        // Mermaid 12 defaults to ELK and the neo look.
+        layout: 'dagre',
+        look: 'classic',
+      },
+    },
     colorMode: {
       defaultMode: 'light',
       disableSwitch: false,
@@ -469,7 +464,6 @@ const config: Config = {
 
   plugins: [
     browserInventoryPlugin,
-    webpackProgressCompatibilityPlugin,
     buildTimestampPlugin,
     require.resolve('docusaurus-plugin-image-zoom'),
     require.resolve('./src/plugins/docusaurus-plugin-og-image'),
@@ -604,6 +598,15 @@ const config: Config = {
           {
             from: '/docs/guides/agent-eval',
             to: '/docs/guides/evaluate-coding-agents/',
+          },
+          // Paths that never existed but that Promptfoo's web UIs have linked to
+          {
+            from: '/docs/model-audit/installation',
+            to: '/docs/model-audit/#installation',
+          },
+          {
+            from: '/docs/red-team/configuration/multi-input',
+            to: '/docs/red-team/multi-input/',
           },
         ],
       },

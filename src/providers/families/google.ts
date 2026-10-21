@@ -229,7 +229,7 @@ export const googleProviderFactories: ProviderFactory[] = [
       // Check if this is a Gemini native image generation model. Dispatch is on
       // the '-image' substring (e.g., gemini-2.5-flash-image, gemini-3.1-flash-image,
       // gemini-3.1-flash-lite-image, gemini-3-pro-image).
-      if (modelName.includes('-image')) {
+      if (modelName.includes('-image') || modelName === 'gemini-nano-banana-2.1') {
         const { GeminiImageProvider } = await import('../google/gemini-image');
         return new GeminiImageProvider(modelName, providerOptions);
       }
