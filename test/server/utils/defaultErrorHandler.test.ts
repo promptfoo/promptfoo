@@ -198,6 +198,88 @@ describe.each([
     },
   );
 
+  it('uses statusCode after an invalid status and copies only valid response header values', async () => {
+    const messages: string[] = [];
+    setLogCallback((message) => messages.push(message));
+    const app = express();
+    app.post('/', () => {
+      const error = Object.assign(new Error('legacy diagnostic'), {
+        status: 200,
+        statusCode: 401,
+        headers: {
+          'WWW-Authenticate': 'Bearer',
+          'Retry-After': 3,
+          'X-Object': { body: CANARY },
+          'X-Mixed-Array': ['value', { body: CANARY }],
+        },
+      });
+      error.stack = 'Error: legacy diagnostic';
+      throw error;
+    });
+    app.use(handler);
+
+    await withServer(app, async (port) => {
+      const response = await post(port, '{}');
+      expect(response.status).toBe(401);
+      expect(JSON.parse(response.body)).toEqual({ error: 'Unauthorized' });
+      expect(response.headers['www-authenticate']).toBe('Bearer');
+      expect(response.headers['retry-after']).toBe('3');
+      expect(response.headers['x-object']).toBeUndefined();
+      expect(response.headers['x-mixed-array']).toBeUndefined();
+    });
+    expect(messages.join('\n')).toContain('legacy diagnostic');
+    expect(messages.join('\n')).not.toContain(CANARY);
+  });
+
+  it.each([
+    { status: 503, message: 'Service Unavailable' },
+    { status: 200, message: 'Internal Server Error' },
+  ])(
+    'handles a primitive error with existing response status $status',
+    async ({ status, message }) => {
+      const messages: string[] = [];
+      setLogCallback((diagnostic) => messages.push(diagnostic));
+      const app = express();
+      app.post('/', (_req, res, next) => {
+        res.status(status);
+        next('legacy primitive diagnostic');
+      });
+      app.use(handler);
+
+      await withServer(app, async (port) => {
+        const response = await post(port, '{}');
+        expect(response.status).toBe(status === 503 ? 503 : 500);
+        expect(JSON.parse(response.body)).toEqual({ error: message });
+      });
+      expect(messages.join('\n')).toContain('legacy primitive diagnostic');
+    },
+  );
+
+  it('returns safe JSON and a fixed diagnostic when error rendering throws', async () => {
+    const messages: string[] = [];
+    setLogCallback((message) => messages.push(message));
+    const app = express();
+    app.post('/', () => {
+      const error = Object.assign(new Error('original diagnostic'), { body: CANARY });
+      Object.defineProperty(error, 'stack', {
+        get() {
+          throw new Error(CANARY);
+        },
+      });
+      throw error;
+    });
+    app.use(handler);
+
+    await withServer(app, async (port) => {
+      const response = await post(port, '{}');
+      expect(response.status).toBe(500);
+      expect(JSON.parse(response.body)).toEqual({ error: 'Internal Server Error' });
+    });
+    expect(messages.join('\n')).toContain('Error: Unable to format HTTP error');
+    expect(messages.join('\n')).not.toContain(CANARY);
+    expect(messages.join('\n')).not.toContain('original diagnostic');
+  });
+
   it('detaches late errors without inspecting their attached objects or logging twice', () => {
     const inspect = vi.fn(() => CANARY);
     const messages: string[] = [];
