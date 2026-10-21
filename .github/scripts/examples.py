@@ -271,6 +271,7 @@ def pull_docker_image(image: str, env: dict[str, str]) -> None:
     """Retry registry throttling without retrying example execution."""
     command = ("docker", "pull", image)
     delays = (10, 30, 60)
+    saw_rate_limit = False
     for attempt in range(len(delays) + 1):
         print(f"+ {shlex.join(command)}", flush=True)
         try:
@@ -285,10 +286,11 @@ def pull_docker_image(image: str, env: dict[str, str]) -> None:
         except subprocess.CalledProcessError as error:
             if error.stderr:
                 print(error.stderr, file=sys.stderr, end="", flush=True)
-            if (
-                attempt == len(delays)
-                or "toomanyrequests" not in (error.stderr or "").lower()
-            ):
+            rate_limited = "toomanyrequests" in (error.stderr or "").lower()
+            saw_rate_limit = saw_rate_limit or rate_limited
+            if attempt == len(delays) or not rate_limited:
+                # Carry quota history to mirror selection without replacing the final error.
+                error.docker_pull_rate_limited = saw_rate_limit
                 raise
             delay = delays[attempt]
             print(f"Registry throttled Docker pull; retrying in {delay}s", flush=True)
@@ -348,13 +350,12 @@ def run_example(name: str) -> None:
                 try:
                     pull_docker_image(source, env)
                 except subprocess.CalledProcessError as error:
-                    if (
-                        index == len(sources) - 1
-                        or "toomanyrequests" not in (error.stderr or "").lower()
+                    if index == len(sources) - 1 or not getattr(
+                        error, "docker_pull_rate_limited", False
                     ):
                         raise
                     print(
-                        "Registry still throttled; trying the next pinned mirror",
+                        "Docker pull encountered throttling; trying the next pinned mirror",
                         flush=True,
                     )
                 else:
