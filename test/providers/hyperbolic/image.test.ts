@@ -68,6 +68,90 @@ describe('HyperbolicImageProvider', () => {
     });
   });
 
+  describe('configured API key variable', () => {
+    it.each([
+      {
+        name: 'explicit key',
+        apiKey: 'explicit-key',
+        namedOverride: 'override-key',
+        namedProcess: 'process-key',
+        defaultOverride: 'default-override',
+        defaultProcess: 'default-process',
+        expected: 'explicit-key',
+      },
+      {
+        name: 'provider named variable',
+        namedOverride: 'override-key',
+        namedProcess: 'process-key',
+        defaultOverride: 'default-override',
+        defaultProcess: 'default-process',
+        expected: 'override-key',
+      },
+      {
+        name: 'process named variable',
+        namedProcess: 'process-key',
+        defaultOverride: 'default-override',
+        defaultProcess: 'default-process',
+        expected: 'process-key',
+      },
+      {
+        name: 'default provider variable',
+        defaultOverride: 'default-override',
+        defaultProcess: 'default-process',
+        expected: 'default-override',
+      },
+      {
+        name: 'default process variable',
+        defaultProcess: 'default-process',
+        expected: 'default-process',
+      },
+      { name: 'missing credentials', expected: undefined },
+    ])(
+      'resolves $name and uses it for the request',
+      async ({
+        apiKey,
+        namedOverride,
+        namedProcess,
+        defaultOverride,
+        defaultProcess,
+        expected,
+      }) => {
+        const restoreEnv = mockProcessEnv({
+          CUSTOM_HYPERBOLIC_KEY: namedProcess,
+          HYPERBOLIC_API_KEY: defaultProcess,
+        });
+        try {
+          const provider = new HyperbolicImageProvider('test', {
+            config: { apiKey, apiKeyEnvar: 'CUSTOM_HYPERBOLIC_KEY' },
+            env: { CUSTOM_HYPERBOLIC_KEY: namedOverride, HYPERBOLIC_API_KEY: defaultOverride },
+          });
+          expect(provider.getApiKey()).toBe(expected);
+          if (expected === undefined) {
+            await expect(provider.callApi('hello')).rejects.toThrow(
+              'Hyperbolic API key is not set',
+            );
+            expect(fetchWithCache).not.toHaveBeenCalled();
+          } else {
+            vi.mocked(fetchWithCache).mockResolvedValue(
+              createMockFetchResponse({ audio: 'test-audio', images: [{ image: 'test-image' }] }),
+            );
+            const result = await provider.callApi('hello');
+            expect(result.error).toBeUndefined();
+            expect(fetchWithCache).toHaveBeenCalledWith(
+              expect.any(String),
+              expect.objectContaining({
+                headers: expect.objectContaining({ Authorization: `Bearer ${expected}` }),
+              }),
+              expect.any(Number),
+            );
+          }
+        } finally {
+          restoreEnv();
+        }
+      },
+    );
+  });
+
   describe('callApi', () => {
     it('should throw error if no API key', async () => {
       const restoreEnv = mockProcessEnv({ HYPERBOLIC_API_KEY: undefined });
