@@ -162,7 +162,7 @@
     },
     "serialize-javascript": ">=7.1.2",
     "gaxios": "^8.0.0",
-    "ip-address": "10.7.3",
+    "ip-address": "10.7.4",
     "mongoose": {
       "gcp-metadata": "^9.0.2"
     },
