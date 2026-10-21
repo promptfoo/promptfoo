@@ -169,6 +169,11 @@ EXAMPLES = {
         # LiteLLM imports MCP types for ordinary function-tool completions too.
         extra_requirements=("litellm[mcp]>=1.101,<2",),
     ),
+    "factguard": Example(
+        "examples/factguard-numeric-grounding",
+        ("3.10", "3.14"),
+        ((".", "*_test.py"),),
+    ),
 }
 
 # Shared runtime changes can break examples without changing their own directories.
