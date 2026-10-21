@@ -4111,7 +4111,7 @@ describe('ClaudeCodeSDKProvider', () => {
           expect(spawnClaudeCodeProcess).toHaveBeenCalledTimes(1);
           expect(spawnClaudeCodeProcess).toHaveBeenCalledWith(
             expect.objectContaining({
-              args: expect.arrayContaining(['--permission-mode', 'default']),
+              args: expect.arrayContaining(['--permission-mode=default']),
             }),
           );
         });
