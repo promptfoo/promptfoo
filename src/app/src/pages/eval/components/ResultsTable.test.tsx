@@ -864,6 +864,62 @@ describe('ResultsTable Metrics Display', () => {
       expect(cellElement.closest('code')).toBeNull();
     });
 
+    describe.each([false, true])(
+      'object serialization with renderMarkdown=%s',
+      (renderMarkdown) => {
+        it.each([
+          [undefined, ''],
+          [null, 'null'],
+          [0, '0'],
+          [false, 'false'],
+          ['plain text', 'plain text'],
+        ])('preserves display formatting for %s', (value, expected) => {
+          vi.mocked(useTableStore).mockImplementation(() =>
+            createTableStore({ table: createMockTableWithVar(value) }),
+          );
+          vi.mocked(useResultsViewSettingsStore).mockImplementation(() => ({
+            inComparisonMode: false,
+            renderMarkdown,
+          }));
+
+          const { container } = renderWithProviders(<ResultsTable {...defaultProps} />);
+
+          const cell = container.querySelector('tbody td .cell');
+          expect(cell).not.toBeNull();
+          expect(cell?.textContent?.trim()).toBe(expected);
+          if (renderMarkdown && value === null) {
+            expect(cell?.querySelector('code')).toHaveClass('language-json');
+          } else {
+            expect(cell?.querySelector('code')).toBeNull();
+          }
+        });
+
+        it.each([
+          ['an own non-callable toString', { toString: 'diagnostic' }],
+          ['own non-callable coercion properties', { toString: 'diagnostic', valueOf: 'value' }],
+          ['a null prototype', Object.assign(Object.create(null), { diagnostic: 'value' })],
+        ])('renders JSON for an object with %s', (_description, value) => {
+          vi.mocked(useTableStore).mockImplementation(() =>
+            createTableStore({ table: createMockTableWithVar(value) }),
+          );
+          vi.mocked(useResultsViewSettingsStore).mockImplementation(() => ({
+            inComparisonMode: false,
+            renderMarkdown,
+          }));
+
+          renderWithProviders(<ResultsTable {...defaultProps} />);
+
+          const cell = screen.getByText(/diagnostic/);
+          expect(cell.textContent?.trim()).toBe(JSON.stringify(value, null, 2));
+          if (renderMarkdown) {
+            expect(cell.closest('code')).toHaveClass('language-json');
+          } else {
+            expect(cell.closest('code')).toBeNull();
+          }
+        });
+      },
+    );
+
     it('truncates long object representations', () => {
       const mockTableWithLongVar = createMockTableWithVar(longObject);
 
@@ -933,6 +989,79 @@ describe('ResultsTable Metrics Display', () => {
           table: mockTableWithMedia,
         }),
       );
+    });
+
+    describe.each([false, true])('decoded media with renderMarkdown=%s', (renderMarkdown) => {
+      const renderDecodedVariable = (value: unknown, strategyId: string) => {
+        vi.mocked(useTableStore).mockImplementation(() =>
+          createTableStore({
+            config: createRedteamConfig(),
+            table: {
+              head: createPromptHead(['prompt']),
+              body: [
+                {
+                  outputs: [
+                    {
+                      pass: true,
+                      score: 1,
+                      text: 'test output',
+                      metadata:
+                        strategyId === 'image'
+                          ? {
+                              [FILE_METADATA_KEY]: {
+                                prompt: { path: 'file://input.txt', type: 'text', format: 'txt' },
+                              },
+                            }
+                          : undefined,
+                    },
+                  ],
+                  test: { metadata: { strategyId, originalText: 'decoded prompt' } },
+                  vars: [value],
+                },
+              ],
+            },
+          }),
+        );
+        vi.mocked(useResultsViewSettingsStore).mockImplementation(() => ({
+          inComparisonMode: false,
+          renderMarkdown,
+        }));
+        return renderWithProviders(<ResultsTable {...defaultProps} />);
+      };
+
+      it.each([
+        [0, '0'],
+        [false, 'false'],
+        [undefined, ''],
+      ])('keeps non-string audio variable %s as text', (value, expected) => {
+        const { container } = renderDecodedVariable(value, 'audio');
+
+        expect(container.querySelector('audio')).toBeNull();
+        const cell = container.querySelector('tbody td .cell');
+        expect(cell?.textContent?.trim()).toBe(`${expected}Original (decoded): decoded prompt`);
+      });
+
+      it('preserves string audio routing', async () => {
+        const { container } = renderDecodedVariable('raw-audio', 'audio');
+
+        await waitFor(() =>
+          expect(container.querySelector('audio source')).toHaveAttribute(
+            'src',
+            'data:audio/mp3;base64,raw-audio',
+          ),
+        );
+        expect(screen.getByText('decoded prompt')).toBeInTheDocument();
+      });
+
+      it('preserves string image storage-ref routing', () => {
+        const { container } = renderDecodedVariable('storageRef:image/test.png', 'image');
+
+        expect(
+          screen.getByText('Image preview not yet supported for storage refs'),
+        ).toBeInTheDocument();
+        expect(screen.getByText('decoded prompt')).toBeInTheDocument();
+        expect(container.querySelector('audio')).toBeNull();
+      });
     });
 
     it.each([
@@ -1274,6 +1403,100 @@ describe('ResultsTable Metrics Display', () => {
         'src',
         'data:image/png;base64,encodedImage',
       );
+    });
+
+    it('renders long markdown image variables with lightbox support', async () => {
+      const user = userEvent.setup();
+      const dataUri =
+        'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+      vi.mocked(useResultsViewSettingsStore).mockImplementation(() => ({
+        inComparisonMode: false,
+        renderMarkdown: false,
+      }));
+      vi.mocked(useTableStore).mockImplementation(() => ({
+        config: {},
+        evalId: '123',
+        setTable: vi.fn(),
+        table: {
+          body: [
+            {
+              outputs: [{ pass: true, score: 1, text: 'test output' }],
+              test: {},
+              vars: [
+                `![Preview image](${dataUri})\n![Remote image](https://attacker.example/collect)`,
+              ],
+            },
+          ],
+          head: {
+            prompts: [{}],
+            vars: ['imageVar'],
+          },
+        },
+        version: 4,
+        fetchEvalData: vi.fn(),
+        filters: {
+          values: {},
+          appliedCount: 0,
+          options: {
+            metric: [],
+          },
+        },
+      }));
+
+      renderWithProviders(<ResultsTable {...defaultProps} />);
+
+      const image = screen.getByRole('img', { name: 'Preview image' });
+      expect(image).toHaveAttribute('src', dataUri);
+      expect(screen.queryByRole('img', { name: 'Remote image' })).not.toBeInTheDocument();
+
+      await user.click(screen.getByRole('button', { name: 'Open image preview: Preview image' }));
+
+      expect(screen.getByRole('img', { name: 'Lightbox' })).toHaveAttribute('src', dataUri);
+      expect(screen.getByRole('button', { name: 'Close image preview' })).toBeInTheDocument();
+
+      await user.keyboard('{Escape}');
+
+      expect(screen.queryByRole('button', { name: 'Close image preview' })).not.toBeInTheDocument();
+    });
+
+    it('renders primitive variables and leaves missing variables blank', () => {
+      vi.mocked(useResultsViewSettingsStore).mockImplementation(() => ({
+        inComparisonMode: false,
+        renderMarkdown: false,
+      }));
+      vi.mocked(useTableStore).mockImplementation(() => ({
+        config: {},
+        evalId: '123',
+        setTable: vi.fn(),
+        table: {
+          body: [
+            {
+              outputs: [{ pass: true, score: 1, text: 'test output' }],
+              test: {},
+              vars: [3, true],
+            },
+          ],
+          head: {
+            prompts: [{}],
+            vars: ['count', 'enabled', 'missing'],
+          },
+        },
+        version: 4,
+        fetchEvalData: vi.fn(),
+        filters: {
+          values: {},
+          appliedCount: 0,
+          options: {
+            metric: [],
+          },
+        },
+      }));
+
+      renderWithProviders(<ResultsTable {...defaultProps} />);
+
+      expect(screen.getByText('3')).toBeInTheDocument();
+      expect(screen.getByText('true')).toBeInTheDocument();
+      expect(screen.queryByText('undefined')).not.toBeInTheDocument();
     });
 
     it('renders variable video from file metadata', () => {

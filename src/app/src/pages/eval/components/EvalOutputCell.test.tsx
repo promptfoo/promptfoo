@@ -8,6 +8,7 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ShiftKeyProvider } from '../../../contexts/ShiftKeyContext';
 import EvalOutputCell, { isImageProvider, isVideoProvider } from './EvalOutputCell';
+import * as markdownConfig from './markdown-config';
 
 import type { EvalOutputCellProps } from './EvalOutputCell';
 
@@ -827,6 +828,31 @@ describe('EvalOutputCell', () => {
       'https://example.com/main.png',
       'https://example.com/secondary.png',
     ]);
+  });
+
+  it('keeps structured images whose matching Markdown source is blocked', () => {
+    const dataUri =
+      'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+    const remoteImage = 'https://example.com/structured.png';
+    mockResultsViewSettings.renderMarkdown = false;
+    const propsWithBlockedMarkdownAndStructuredImage: MockEvalOutputCellProps = {
+      ...defaultProps,
+      output: {
+        ...defaultProps.output,
+        text: `![Inline preview](${dataUri})\n![Blocked remote](${remoteImage})`,
+        images: [{ data: remoteImage, mimeType: 'image/png' }],
+      },
+    };
+
+    const { container } = renderWithProviders(
+      <EvalOutputCell {...propsWithBlockedMarkdownAndStructuredImage} />,
+    );
+
+    const renderedSources = [...container.querySelectorAll('img')]
+      .map((img) => img.getAttribute('src'))
+      .filter((src): src is string => Boolean(src));
+
+    expect(renderedSources).toEqual([dataUri, remoteImage]);
   });
 
   it('deduplicates inline image from structured images list', () => {
@@ -2598,6 +2624,73 @@ describe('EvalOutputCell provider error display', () => {
     expect(screen.getByText('AuthenticationError: Invalid API key')).toBeInTheDocument();
   });
 
+  it('renders markdown image previews in assertion failure reasons with lightbox support', async () => {
+    const user = userEvent.setup();
+    const dataUri =
+      'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+    const propsWithImageFailureReason: MockEvalOutputCellProps = {
+      firstOutput: {
+        cost: 0,
+        id: 'test-id',
+        latencyMs: 100,
+        namedScores: {},
+        pass: false,
+        failureReason: ResultFailureReason.ASSERT,
+        prompt: 'Test prompt',
+        provider: 'test-provider',
+        score: 0,
+        text: '',
+        testCase: {},
+      },
+      maxTextLength: 100,
+      onRating: mockOnRating,
+      output: {
+        cost: 0,
+        gradingResult: {
+          componentResults: [
+            {
+              assertion: {
+                type: 'contains' as AssertionType,
+                value: 'expected',
+              },
+              pass: false,
+              reason: `Expected image to match\n![Actual image](${dataUri})`,
+              score: 0,
+            },
+          ],
+          pass: false,
+          reason: 'Assertion failed',
+          score: 0,
+        },
+        id: 'test-id',
+        latencyMs: 100,
+        namedScores: {},
+        pass: false,
+        failureReason: ResultFailureReason.ASSERT,
+        prompt: 'Test prompt',
+        provider: 'test-provider',
+        score: 0,
+        text: '',
+        testCase: {},
+      },
+      promptIndex: 0,
+      rowIndex: 0,
+      searchText: '',
+      showDiffs: false,
+      showStats: true,
+    };
+
+    renderWithProviders(<EvalOutputCell {...propsWithImageFailureReason} />);
+
+    expect(screen.getByText('Expected image to match')).toBeInTheDocument();
+    const image = screen.getByRole('img', { name: 'Actual image' });
+    expect(image).toHaveAttribute('src', dataUri);
+
+    await user.click(image);
+
+    expect(screen.getByRole('img', { name: 'Lightbox' })).toHaveAttribute('src', dataUri);
+  });
+
   it('does not display error when output.error is null', () => {
     const propsWithNullError: MockEvalOutputCellProps = {
       firstOutput: {
@@ -2980,15 +3073,244 @@ describe('EvalOutputCell metrics pills setting', () => {
 describe('EvalOutputCell inline image lightbox', () => {
   const mockOnRating = vi.fn();
 
+  const createMarkdownPreviewProps = (
+    text: string,
+    maxTextLength = 40,
+  ): MockEvalOutputCellProps => ({
+    firstOutput: {
+      cost: 0,
+      id: 'test-id',
+      latencyMs: 100,
+      namedScores: {},
+      pass: true,
+      failureReason: ResultFailureReason.NONE,
+      prompt: 'Test prompt',
+      provider: 'test-provider',
+      score: 1,
+      text: 'First output',
+      testCase: {},
+    },
+    maxTextLength,
+    onRating: mockOnRating,
+    output: {
+      cost: 0,
+      id: 'test-id',
+      latencyMs: 100,
+      namedScores: {},
+      pass: true,
+      failureReason: ResultFailureReason.NONE,
+      prompt: 'Test prompt',
+      provider: 'test-provider',
+      score: 1,
+      text,
+      testCase: {},
+    },
+    promptIndex: 0,
+    rowIndex: 0,
+    searchText: '',
+    showDiffs: false,
+    showStats: false,
+  });
+
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
-  it('opens lightbox when clicking on inline image and closes when clicking lightbox', async () => {
+  it.each([
+    'data:text/plain,diagnostic',
+    'data:application/json,%7B%7D',
+    'DATA:TEXT/PLAIN,diagnostic',
+  ])('keeps Markdown output truncation for non-image source %s', async (source) => {
+    const user = userEvent.setup();
+    const text = `${'Diagnostic text. '.repeat(30)}![Diagnostic](${source}) TAIL_MARKER`;
+    const { container } = renderWithProviders(
+      <EvalOutputCell {...createMarkdownPreviewProps(text, 100)} />,
+    );
+
+    expect(container.querySelector('.truncation-toggler')).toBeInTheDocument();
+    expect(container).not.toHaveTextContent('TAIL_MARKER');
+
+    await user.click(screen.getByText('...'));
+    expect(container).toHaveTextContent('TAIL_MARKER');
+    expect(screen.getByRole('img', { name: 'Diagnostic' })).toHaveAttribute('src', source);
+
+    await user.click(screen.getByText('Show less'));
+    expect(container).not.toHaveTextContent('TAIL_MARKER');
+  });
+
+  it('keeps truncation for a reference-style non-image source', async () => {
+    const user = userEvent.setup();
+    const source = 'data:text/plain,diagnostic';
+    const text = `${'Diagnostic text. '.repeat(30)}![Diagnostic][image] TAIL_MARKER\n\n[image]: ${source}`;
+    const { container } = renderWithProviders(
+      <EvalOutputCell {...createMarkdownPreviewProps(text, 100)} />,
+    );
+
+    expect(container.querySelector('.truncation-toggler')).toBeInTheDocument();
+    expect(container).not.toHaveTextContent('TAIL_MARKER');
+    await user.click(screen.getByText('...'));
+    expect(screen.getByRole('img', { name: 'Diagnostic' })).toHaveAttribute('src', source);
+  });
+
+  it.each(['', '   ', '\t'])(
+    'keeps truncation and alt text for empty Markdown image destination %j',
+    async (destination) => {
+      const user = userEvent.setup();
+      const text = `${'Diagnostic text. '.repeat(30)}![Missing preview](${destination}) TAIL_MARKER`;
+      const { container } = renderWithProviders(
+        <EvalOutputCell {...createMarkdownPreviewProps(text, 100)} />,
+      );
+
+      expect(container.querySelector('.truncation-toggler')).toBeInTheDocument();
+      expect(container).not.toHaveTextContent('TAIL_MARKER');
+      await user.click(screen.getByText('...'));
+      expect(container).toHaveTextContent('Missing preview');
+      expect(container).toHaveTextContent('TAIL_MARKER');
+      expect(screen.queryByRole('img')).not.toBeInTheDocument();
+      expect(
+        screen.queryByRole('button', { name: 'Open image preview: Missing preview' }),
+      ).not.toBeInTheDocument();
+    },
+  );
+
+  it.each([
+    ['PNG data', 'data:image/png;base64,AA=='],
+    ['mixed-case image data', 'DATA:IMAGE/PNG;BASE64,AA=='],
+    ['parameterized image data', 'data:image/png;charset=utf-8;base64,AA=='],
+    ['octet-stream image data', 'data:application/octet-stream;base64,AA=='],
+    ['HTTP', 'http://example.com/image.png'],
+    ['HTTPS', 'https://example.com/image.png'],
+    ['protocol-relative', '//example.com/image.png'],
+    ['root-relative', '/images/image.png'],
+    ['relative', 'images/image.png'],
+    ['relative path with colon', 'images/version:2.png'],
+    ['blob', 'blob:https://example.com/diagnostic-image'],
+  ])('preserves the Markdown preview exemption and source for %s', (_label, source) => {
+    const text = `${'Diagnostic text. '.repeat(30)}![Preview](${source}) TAIL_MARKER`;
+    const { container } = renderWithProviders(
+      <EvalOutputCell {...createMarkdownPreviewProps(text, 100)} />,
+    );
+
+    expect(container.querySelector('.truncation-toggler')).not.toBeInTheDocument();
+    expect(container).toHaveTextContent('TAIL_MARKER');
+    expect(screen.getByRole('img', { name: 'Preview' })).toHaveAttribute('src', source);
+  });
+
+  it('keeps eligible image deduplication alongside a non-image Markdown source', () => {
+    const source = 'data:image/png;base64,AA==';
+    const props = createMarkdownPreviewProps(
+      `${'Diagnostic text. '.repeat(30)}![Diagnostic](data:text/plain,diagnostic) ![Preview](${source}) TAIL_MARKER`,
+      100,
+    );
+    props.output.images = [{ data: source }];
+
+    const { container } = renderWithProviders(<EvalOutputCell {...props} />);
+
+    expect(container.querySelector('.truncation-toggler')).not.toBeInTheDocument();
+    expect(container).toHaveTextContent('TAIL_MARKER');
+    expect(container.querySelectorAll('img')).toHaveLength(2);
+    expect(screen.getByRole('img', { name: 'Preview' })).toHaveAttribute('src', source);
+  });
+
+  it('keeps a structured image when a malformed Markdown source shares its payload', () => {
+    const source = 'data:image/png;base64,AA==';
+    const props = createMarkdownPreviewProps('![Diagnostic](data:image/;base64,AA==)', 1000);
+    props.output.images = [{ data: source }];
+
+    renderWithProviders(<EvalOutputCell {...props} />);
+
+    expect(screen.getByRole('img', { name: 'Test prompt' })).toHaveAttribute('src', source);
+    expect(screen.getByRole('img', { name: 'Diagnostic' })).toHaveAttribute(
+      'src',
+      'data:image/;base64,AA==',
+    );
+  });
+
+  it('preserves Markdown rendering precedence during search for non-image sources', async () => {
+    const user = userEvent.setup();
+    mockTableStoreState.shouldHighlightSearchText = true;
+    const source = 'data:text/plain,diagnostic';
+    const props = createMarkdownPreviewProps(
+      `${'Diagnostic text. '.repeat(30)}![Diagnostic](${source}) TAIL_MARKER`,
+      100,
+    );
+    props.searchText = 'Diagnostic';
+
+    const { container } = renderWithProviders(<EvalOutputCell {...props} />);
+
+    expect(container.querySelector('.search-highlight')).not.toBeInTheDocument();
+    expect(container.querySelector('.truncation-toggler')).toBeInTheDocument();
+    await user.click(screen.getByText('...'));
+    expect(screen.getByRole('img', { name: 'Diagnostic' })).toHaveAttribute('src', source);
+  });
+
+  it('recomputes truncation eligibility across source and Markdown-mode changes', async () => {
+    const user = userEvent.setup();
+    const createProps = (source: string) =>
+      createMarkdownPreviewProps(
+        `${'Diagnostic text. '.repeat(30)}![Preview](${source}) TAIL_MARKER`,
+        100,
+      );
+    const nonImageProps = createProps('data:text/plain,diagnostic');
+    const imageProps = createProps('data:image/png;base64,AA==');
+    const { container, rerender } = renderWithProviders(<EvalOutputCell {...nonImageProps} />);
+
+    expect(container.querySelector('.truncation-toggler')).toBeInTheDocument();
+    rerender(
+      <ShiftKeyProvider>
+        <EvalOutputCell {...imageProps} />
+      </ShiftKeyProvider>,
+    );
+    expect(container.querySelector('.truncation-toggler')).not.toBeInTheDocument();
+    expect(container).toHaveTextContent('TAIL_MARKER');
+    rerender(
+      <ShiftKeyProvider>
+        <EvalOutputCell {...nonImageProps} />
+      </ShiftKeyProvider>,
+    );
+    expect(container.querySelector('.truncation-toggler')).toBeInTheDocument();
+    expect(container).not.toHaveTextContent('TAIL_MARKER');
+
+    mockResultsViewSettings.renderMarkdown = false;
+    rerender(
+      <ShiftKeyProvider>
+        <EvalOutputCell {...nonImageProps} output={{ ...nonImageProps.output }} />
+      </ShiftKeyProvider>,
+    );
+    expect(container.querySelector('.truncation-toggler')).toBeInTheDocument();
+    await user.click(screen.getByText('...'));
+    expect(container).toHaveTextContent('![Preview](data:text/plain,diagnostic)');
+    expect(screen.queryByRole('img', { name: 'Preview' })).not.toBeInTheDocument();
+
+    mockResultsViewSettings.renderMarkdown = true;
+    rerender(
+      <ShiftKeyProvider>
+        <EvalOutputCell {...nonImageProps} output={{ ...nonImageProps.output }} />
+      </ShiftKeyProvider>,
+    );
+    expect(screen.getByRole('img', { name: 'Preview' })).toHaveAttribute(
+      'src',
+      'data:text/plain,diagnostic',
+    );
+    expect(container).not.toHaveTextContent('![Preview](data:text/plain,diagnostic)');
+    await user.click(screen.getByText('Show less'));
+    expect(container).not.toHaveTextContent('TAIL_MARKER');
+
+    mockResultsViewSettings.renderMarkdown = false;
+    rerender(
+      <ShiftKeyProvider>
+        <EvalOutputCell {...nonImageProps} output={{ ...nonImageProps.output }} />
+      </ShiftKeyProvider>,
+    );
+    expect(container.querySelector('.truncation-toggler')).toBeInTheDocument();
+    expect(container).not.toHaveTextContent('TAIL_MARKER');
+  });
+
+  it('opens lightbox for an uppercase image data URI and closes when clicked', async () => {
     const user = userEvent.setup();
     // Use a data URI which triggers the inline image rendering path (not markdown)
     const dataUri =
-      'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+      'DATA:IMAGE/PNG;BASE64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
 
     const props: MockEvalOutputCellProps = {
       firstOutput: {
@@ -3042,6 +3364,414 @@ describe('EvalOutputCell inline image lightbox', () => {
 
     await user.click(container.querySelector('.lightbox')!);
     expect(container.querySelector('.lightbox')).not.toBeInTheDocument();
+  });
+
+  it('renders safe markdown data images when Markdown rendering is disabled', async () => {
+    const user = userEvent.setup();
+    const dataUri =
+      'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+    mockResultsViewSettings.renderMarkdown = false;
+
+    const props: MockEvalOutputCellProps = {
+      firstOutput: {
+        cost: 0,
+        id: 'test-id',
+        latencyMs: 100,
+        namedScores: {},
+        pass: true,
+        failureReason: ResultFailureReason.NONE,
+        prompt: 'Test prompt',
+        provider: 'test-provider',
+        score: 1,
+        text: 'First output',
+        testCase: {},
+      },
+      maxTextLength: 200,
+      onRating: mockOnRating,
+      output: {
+        cost: 0,
+        id: 'test-id',
+        latencyMs: 100,
+        namedScores: {},
+        pass: true,
+        failureReason: ResultFailureReason.NONE,
+        prompt: 'Test prompt',
+        provider: 'test-provider',
+        score: 1,
+        text: `**literal emphasis**\n[diagnostic]: https://example.com/debug\nExpected image output\n![Actual image](${dataUri})\n![Remote image](https://attacker.example/collect)`,
+        testCase: {},
+      },
+      promptIndex: 0,
+      rowIndex: 0,
+      searchText: '',
+      showDiffs: false,
+      showStats: false,
+    };
+
+    const { container } = renderWithProviders(<EvalOutputCell {...props} />);
+
+    expect(container).toHaveTextContent('Expected image output');
+    expect(container).toHaveTextContent('**literal emphasis**');
+    expect(container).toHaveTextContent('[diagnostic]: https://example.com/debug');
+    expect(container).toHaveTextContent('![Remote image](https://attacker.example/collect)');
+    expect(container.querySelector('strong')).not.toBeInTheDocument();
+    expect(container.querySelector('a')).not.toBeInTheDocument();
+    const image = screen.getByRole('img', { name: 'Actual image' });
+    expect(image).toHaveAttribute('src', dataUri);
+    expect(screen.queryByRole('img', { name: 'Remote image' })).not.toBeInTheDocument();
+
+    await user.click(image);
+    expect(container.querySelector('.lightbox')).toBeInTheDocument();
+  });
+
+  it('does not treat bare base64 Markdown destinations as rendered data images', () => {
+    const bareBase64 =
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+    mockResultsViewSettings.renderMarkdown = false;
+    const props = createMarkdownPreviewProps(`![Bare image](${bareBase64})`, 1000);
+    props.output.images = [{ data: bareBase64, mimeType: 'image/png' }];
+
+    const { container } = renderWithProviders(<EvalOutputCell {...props} />);
+
+    expect(container.querySelectorAll('img')).toHaveLength(1);
+    expect(container.querySelector('img')).toHaveAttribute(
+      'src',
+      `data:image/png;base64,${bareBase64}`,
+    );
+  });
+
+  it('truncates literal reference definitions alongside an inline output preview', async () => {
+    const user = userEvent.setup();
+    const dataUri = `data:image/png;base64,${'AaBb'.repeat(100)}`;
+    const definition = `[image]: data:image/png;base64,${'CcDd'.repeat(1000)}`;
+    const text = `![Inline](${dataUri})\n![Reference][image]\n\n${definition}`;
+    mockResultsViewSettings.renderMarkdown = false;
+    const { container } = renderWithProviders(
+      <EvalOutputCell {...createMarkdownPreviewProps(text, 100)} />,
+    );
+
+    expect(screen.getByRole('img', { name: 'Inline' })).toHaveAttribute('src', dataUri);
+    expect(screen.queryByRole('img', { name: 'Reference' })).not.toBeInTheDocument();
+    expect(container).not.toHaveTextContent('CcDd'.repeat(100));
+
+    await user.click(screen.getByText('...'));
+    expect(container).toHaveTextContent(definition);
+    expect(screen.getAllByRole('img')).toHaveLength(1);
+
+    await user.click(screen.getByText('Show less'));
+    expect(container).not.toHaveTextContent('CcDd'.repeat(100));
+    await user.click(screen.getByRole('img', { name: 'Inline' }));
+    expect(container.querySelector('.lightbox')).toBeInTheDocument();
+  });
+
+  it('preserves navigation for linked output images without opening the lightbox', async () => {
+    const user = userEvent.setup();
+    mockResultsViewSettings.renderMarkdown = true;
+    const { container } = renderWithProviders(
+      <EvalOutputCell
+        {...createMarkdownPreviewProps('[![Linked image](data:image/png;base64,AA==)](#details)')}
+      />,
+    );
+
+    expect(screen.getByRole('link', { name: 'Linked image' })).toHaveAttribute('href', '#details');
+    expect(container.querySelector('a button')).not.toBeInTheDocument();
+    const onLinkClick = vi.fn();
+    screen.getByRole('link', { name: 'Linked image' }).addEventListener('click', onLinkClick);
+    await user.click(screen.getByRole('img', { name: 'Linked image' }));
+    expect(onLinkClick).toHaveBeenCalledOnce();
+    expect(onLinkClick.mock.calls[0][0].defaultPrevented).toBe(false);
+    expect(container.querySelector('.lightbox')).not.toBeInTheDocument();
+  });
+
+  it('does not force previews for reference-style data images', () => {
+    const text = ['![Preview][image]', `[image]: data:image/png;base64,${'A'.repeat(200)}`].join(
+      '\n',
+    );
+    mockResultsViewSettings.renderMarkdown = false;
+
+    const { container } = renderWithProviders(
+      <EvalOutputCell {...createMarkdownPreviewProps(text)} />,
+    );
+
+    expect(container.querySelector('img')).not.toBeInTheDocument();
+    expect(container.querySelector('.truncation-toggler')).toBeInTheDocument();
+  });
+
+  it('keeps truncation when prettified JSON bypasses the image preview path', () => {
+    const dataUri = `data:image/png;base64,${'A'.repeat(500)}`;
+    mockResultsViewSettings.renderMarkdown = false;
+    mockResultsViewSettings.prettifyJson = true;
+    const props = createMarkdownPreviewProps(JSON.stringify({ image: `![Preview](${dataUri})` }));
+
+    const { container } = renderWithProviders(<EvalOutputCell {...props} />);
+
+    expect(container.querySelector('img')).not.toBeInTheDocument();
+    expect(container.querySelector('.truncation-toggler')).toBeInTheDocument();
+  });
+
+  it('keeps search highlighting for blocked remote Markdown images', () => {
+    mockResultsViewSettings.renderMarkdown = false;
+    mockTableStoreState.shouldHighlightSearchText = true;
+    const props = createMarkdownPreviewProps(
+      'Remote ![Probe](https://attacker.example/collect) marker',
+    );
+    props.searchText = 'Remote';
+
+    const { container } = renderWithProviders(<EvalOutputCell {...props} />);
+
+    expect(container.querySelector('.search-highlight')).toHaveTextContent('Remote');
+  });
+
+  it('preserves literal output when image extraction fails', () => {
+    mockResultsViewSettings.renderMarkdown = false;
+    const source = 'data:image/png;base64,AA==';
+    const text = `${'> '.repeat(8000)}![Preview](${source})`;
+    const props = createMarkdownPreviewProps(text, 100000);
+    const { container } = renderWithProviders(<EvalOutputCell {...props} />);
+    expect(container).toHaveTextContent(text);
+    expect(screen.queryByRole('img')).not.toBeInTheDocument();
+  });
+
+  it.each(['diff', 'JSON object', 'JSON array'])(
+    'skips image extraction when rendering %s and restores previews when toggled off',
+    (mode) => {
+      const extractSpy = vi.spyOn(markdownConfig, 'extractRenderableMarkdownImages');
+      const image = '![Preview](data:image/png;base64,AA==)';
+      const text =
+        mode === 'JSON object'
+          ? JSON.stringify({ image })
+          : mode === 'JSON array'
+            ? JSON.stringify([image])
+            : image;
+      const props = createMarkdownPreviewProps(text, 1000);
+      mockResultsViewSettings.renderMarkdown = false;
+      mockResultsViewSettings.prettifyJson = mode !== 'diff';
+
+      try {
+        const { container, rerender } = renderWithProviders(
+          <EvalOutputCell {...props} showDiffs={mode === 'diff'} />,
+        );
+        expect(extractSpy).not.toHaveBeenCalled();
+        expect(screen.queryByRole('img')).not.toBeInTheDocument();
+        if (mode !== 'diff') {
+          expect(container.querySelector('pre')).toHaveTextContent(image);
+        }
+
+        mockResultsViewSettings.prettifyJson = false;
+        rerender(
+          <ShiftKeyProvider>
+            <EvalOutputCell {...props} showDiffs={false} />
+          </ShiftKeyProvider>,
+        );
+        expect(extractSpy).toHaveBeenCalledTimes(1);
+        expect(screen.getByRole('img', { name: 'Preview' })).toBeInTheDocument();
+      } finally {
+        extractSpy.mockRestore();
+      }
+    },
+  );
+
+  it.each([
+    '![Preview](data:image/png;base64,AA==)',
+    JSON.stringify('![Preview](data:image/png;base64,AA==)'),
+  ])('keeps image fallback for non-object JSON output: %s', (text) => {
+    mockResultsViewSettings.renderMarkdown = false;
+    mockResultsViewSettings.prettifyJson = true;
+    const extractSpy = vi.spyOn(markdownConfig, 'extractRenderableMarkdownImages');
+    try {
+      renderWithProviders(<EvalOutputCell {...createMarkdownPreviewProps(text, 1000)} />);
+      expect(extractSpy).toHaveBeenCalledTimes(1);
+      expect(screen.getByRole('img', { name: 'Preview' })).toBeInTheDocument();
+    } finally {
+      extractSpy.mockRestore();
+    }
+  });
+
+  it.each(['null', '42', 'true'])('preserves plain-text fallback for JSON %s', (text) => {
+    mockResultsViewSettings.renderMarkdown = false;
+    mockResultsViewSettings.prettifyJson = true;
+    const { container } = renderWithProviders(
+      <EvalOutputCell {...createMarkdownPreviewProps(text, 1000)} />,
+    );
+    expect(container).toHaveTextContent(text);
+    expect(container.querySelector('pre')).not.toBeInTheDocument();
+  });
+
+  it('skips image extraction for diffs without a reference output', () => {
+    const extractSpy = vi.spyOn(markdownConfig, 'extractRenderableMarkdownImages');
+    mockResultsViewSettings.prettifyJson = true;
+    const text = '![Preview](data:image/png;base64,AA==)';
+    try {
+      const { container } = renderWithProviders(
+        <EvalOutputCell
+          {...createMarkdownPreviewProps(text, 1000)}
+          firstOutput={undefined}
+          showDiffs
+        />,
+      );
+      expect(extractSpy).not.toHaveBeenCalled();
+      expect(container).toHaveTextContent(text);
+      expect(screen.queryByRole('img')).not.toBeInTheDocument();
+    } finally {
+      extractSpy.mockRestore();
+    }
+  });
+
+  it('preserves image search precedence in diff mode without a reference output', () => {
+    mockResultsViewSettings.renderMarkdown = false;
+    mockTableStoreState.shouldHighlightSearchText = true;
+    const text = '![Preview](data:image/png;base64,AA==)';
+    const extractSpy = vi.spyOn(markdownConfig, 'extractRenderableMarkdownImages');
+    try {
+      const { container } = renderWithProviders(
+        <EvalOutputCell
+          {...createMarkdownPreviewProps(text, 1000)}
+          firstOutput={undefined}
+          showDiffs
+          searchText="Preview"
+        />,
+      );
+      expect(extractSpy).toHaveBeenCalledTimes(1);
+      expect(container.querySelector('.search-highlight')).not.toBeInTheDocument();
+      expect(container).toHaveTextContent(text);
+    } finally {
+      extractSpy.mockRestore();
+    }
+  });
+
+  it.each([true, false])(
+    'preserves JSON/search precedence with image syntax present: %s',
+    (hasImage) => {
+      mockResultsViewSettings.renderMarkdown = false;
+      mockResultsViewSettings.prettifyJson = true;
+      mockTableStoreState.shouldHighlightSearchText = true;
+      const text = JSON.stringify({
+        image: hasImage ? '![Preview](data:image/png;base64,AA==)' : 'Preview',
+      });
+      const extractSpy = vi.spyOn(markdownConfig, 'extractRenderableMarkdownImages');
+      const parseSpy = vi.spyOn(JSON, 'parse');
+      try {
+        const { container } = renderWithProviders(
+          <EvalOutputCell {...createMarkdownPreviewProps(text, 1000)} searchText="Preview" />,
+        );
+        expect(extractSpy).toHaveBeenCalledTimes(hasImage ? 1 : 0);
+        expect(parseSpy.mock.calls.filter(([input]) => input === text)).toHaveLength(1);
+        if (hasImage) {
+          expect(container.querySelector('pre')).toHaveTextContent('Preview');
+          expect(container.querySelector('.search-highlight')).not.toBeInTheDocument();
+        } else {
+          expect(container.querySelector('pre')).not.toBeInTheDocument();
+          expect(container.querySelector('.search-highlight')).toHaveTextContent('Preview');
+        }
+      } finally {
+        extractSpy.mockRestore();
+        parseSpy.mockRestore();
+      }
+    },
+  );
+
+  it('parses image syntax once per render and skips large ordinary text', () => {
+    const extractSpy = vi.spyOn(markdownConfig, 'extractRenderableMarkdownImages');
+    mockResultsViewSettings.renderMarkdown = false;
+
+    try {
+      const ordinaryRender = renderWithProviders(
+        <EvalOutputCell {...createMarkdownPreviewProps('ordinary text '.repeat(10_000))} />,
+      );
+      expect(extractSpy).not.toHaveBeenCalled();
+      ordinaryRender.unmount();
+
+      renderWithProviders(
+        <EvalOutputCell
+          {...createMarkdownPreviewProps(
+            '![Preview](data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAAB)',
+          )}
+        />,
+      );
+      expect(extractSpy).toHaveBeenCalledTimes(1);
+    } finally {
+      extractSpy.mockRestore();
+    }
+  });
+
+  it.each([
+    ['an incomplete data-image header', '![Preview](data:image/png;base64)'],
+    ['an empty image subtype', '![Preview](data:image/)'],
+    ['an empty image subtype with a payload', '![Preview](data:image/;base64,AA==)'],
+    ['an octet-stream MIME lookalike', '![Preview](data:application/octet-streaming;base64,AA==)'],
+    [
+      'raw HTML',
+      '<img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==">',
+    ],
+    [
+      'escaped image syntax',
+      String.raw`\![Preview](data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==)`,
+    ],
+    [
+      'inline code',
+      '`![Preview](data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==)`',
+    ],
+    [
+      'fenced code',
+      '```md\n![Preview](data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==)\n```',
+    ],
+    [
+      'four-space indented code',
+      '    ![Preview](data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==)',
+    ],
+    [
+      'tab-indented code',
+      '\t![Preview](data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==)',
+    ],
+    [
+      'an HTML comment',
+      '<!-- ![Preview](data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==) -->',
+    ],
+    [
+      'a raw div block',
+      '<div>\n![Preview](data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==)\n</div>',
+    ],
+    [
+      'a raw pre block',
+      '<pre>\n![Preview](data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==)\n</pre>',
+    ],
+    [
+      'list-nested fenced code',
+      '- ```md\n  ![Preview](data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==)\n  ```',
+    ],
+  ])('does not force Markdown or disable truncation for %s', (_label, sample) => {
+    const trailingMarker = 'BASE64_CONTENT_MUST_STAY_TRUNCATED';
+    mockResultsViewSettings.renderMarkdown = false;
+    const props = createMarkdownPreviewProps(`${sample}\n\n${trailingMarker}`);
+
+    const { container } = renderWithProviders(<EvalOutputCell {...props} />);
+
+    expect(container.querySelector('img')).not.toBeInTheDocument();
+    expect(container.querySelector('.truncation-toggler')).toBeInTheDocument();
+    expect(container).not.toHaveTextContent(trailingMarker);
+  });
+
+  it.each([
+    [
+      'escaped alt brackets',
+      String.raw`![Preview \[nested\]](data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==)`,
+    ],
+    [
+      'nested alt brackets',
+      '![Preview [nested]](data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==)',
+    ],
+  ])('forces a safe preview for %s', (_label, markdown) => {
+    mockResultsViewSettings.renderMarkdown = false;
+
+    const { container } = renderWithProviders(
+      <EvalOutputCell {...createMarkdownPreviewProps(markdown)} />,
+    );
+
+    expect(container.querySelector('img')).toHaveAttribute(
+      'src',
+      'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
+    );
+    expect(container.querySelector('.truncation-toggler')).not.toBeInTheDocument();
   });
 
   it('toggleLightbox maintains stable behavior across multiple toggles', async () => {
