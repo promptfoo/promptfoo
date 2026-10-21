@@ -1715,7 +1715,13 @@ export function sanitizeUrlForLogging(url: string): string {
             /^[a-z0-9._~+-]{12,}$/i.test(decoded) &&
             /[a-z]/i.test(decoded) &&
             /[0-9]/.test(decoded);
-          return opaqueValue ||
+          // Webhook routes use their path as a bearer credential, including short
+          // human-chosen paths that do not resemble a random token.
+          const webhookPath = segments
+            .slice(0, index)
+            .some((part) => /^webhook(?:-test)?$/i.test(decodeFormComponent(part) ?? part));
+          return webhookPath ||
+            opaqueValue ||
             OPAQUE_CREDENTIAL_PATH_SEGMENT.test(decoded) ||
             looksLikeSecret(decoded)
             ? '%5BREDACTED%5D'
