@@ -13,6 +13,7 @@ import { RateLimitRegistry } from '../../src/scheduler/rateLimitRegistry';
 import {
   type ApiProvider,
   type CallApiContextParams,
+  type EvalRegisters,
   type Prompt,
   ResultFailureReason,
   type TestSuite,
@@ -795,6 +796,137 @@ describe('runEval', () => {
     const result = results[0];
     expect(result.success).toBe(true);
     expect(registers).toHaveProperty('myOutput', 'Test output');
+  });
+
+  describe.each(['none', 'provider', 'test'] as const)(
+    'storeOutputAs with %s transform',
+    (transformLevel) => {
+      it.each([
+        { output: 0 },
+        { output: false },
+        { output: '' },
+        { output: { count: 0 } },
+        { output: [0, false, ''] },
+      ])('stores output $output for subsequent prompts', async ({ output }) => {
+        for (const hasPreviousOutput of [false, true]) {
+          const registers: EvalRegisters = hasPreviousOutput
+            ? { savedValue: 'previous output' }
+            : {};
+          const transform = 'JSON.parse(output).value';
+          const provider: ApiProvider = {
+            id: () => 'register-provider',
+            ...(transformLevel === 'provider' && { transform }),
+            callApi: vi.fn().mockResolvedValue({
+              output: transformLevel === 'none' ? output : JSON.stringify({ value: output }),
+            }),
+          };
+
+          const [producer] = await runEval({
+            ...defaultOptions,
+            provider,
+            prompt: { raw: 'Produce value', label: 'producer' },
+            test: {
+              options: {
+                ...(transformLevel === 'test' && { transform }),
+                storeOutputAs: 'savedValue',
+              },
+            },
+            conversations: {},
+            registers,
+          });
+          expect(producer.success).toBe(true);
+          expect(producer.response?.output).toEqual(output);
+
+          const [consumer] = await runEval({
+            ...defaultOptions,
+            testIdx: 1,
+            provider: {
+              id: () => 'echo-register',
+              callApi: vi.fn(async (prompt: string) => ({ output: prompt })),
+            },
+            prompt: { raw: 'Current value: {{savedValue | dump}}', label: 'consumer' },
+            test: {},
+            conversations: {},
+            registers,
+          });
+          expect(consumer.success).toBe(true);
+          expect(consumer.prompt.raw).toBe(`Current value: ${JSON.stringify(output)}`);
+          expect(registers.savedValue).toEqual(output);
+        }
+      });
+    },
+  );
+
+  it.each([{}, { output: undefined }, { output: null }, { error: 'Provider error' }])(
+    'does not overwrite a register for an absent output: %j',
+    async (response) => {
+      const registers = { savedValue: 'previous output' };
+      const [result] = await runEval({
+        ...defaultOptions,
+        provider: {
+          id: () => 'no-output-register-provider',
+          callApi: vi.fn().mockResolvedValue(response),
+        },
+        prompt: { raw: 'Produce value', label: 'producer' },
+        test: { options: { storeOutputAs: 'savedValue' } },
+        conversations: {},
+        registers,
+      });
+
+      expect(result.success).toBe(false);
+      expect(result.failureReason).toBe(ResultFailureReason.ERROR);
+      expect(registers.savedValue).toBe('previous output');
+    },
+  );
+
+  it.each(['provider', 'test'] as const)(
+    'does not overwrite a register when the %s transform returns no output',
+    async (transformLevel) => {
+      for (const value of [null, undefined]) {
+        const registers = { savedValue: 'previous output' };
+        const transform = 'JSON.parse(output).value';
+        const [result] = await runEval({
+          ...defaultOptions,
+          provider: {
+            id: () => 'absent-transformed-register-provider',
+            ...(transformLevel === 'provider' && { transform }),
+            callApi: vi.fn().mockResolvedValue({ output: JSON.stringify({ value }) }),
+          },
+          prompt: { raw: 'Produce value', label: 'producer' },
+          test: {
+            options: {
+              ...(transformLevel === 'test' && { transform }),
+              storeOutputAs: 'savedValue',
+            },
+          },
+          conversations: {},
+          registers,
+        });
+
+        expect(result.success).toBe(false);
+        expect(result.failureReason).toBe(ResultFailureReason.ERROR);
+        expect(registers.savedValue).toBe('previous output');
+      }
+    },
+  );
+
+  it('does not overwrite a register when the provider throws', async () => {
+    const registers = { savedValue: 'previous output' };
+    const [result] = await runEval({
+      ...defaultOptions,
+      provider: {
+        id: () => 'throwing-register-provider',
+        callApi: vi.fn().mockRejectedValue(new Error('Provider error')),
+      },
+      prompt: { raw: 'Produce value', label: 'producer' },
+      test: { options: { storeOutputAs: 'savedValue' } },
+      conversations: {},
+      registers,
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.failureReason).toBe(ResultFailureReason.ERROR);
+    expect(registers.savedValue).toBe('previous output');
   });
 
   it('should handle provider errors', async () => {
