@@ -659,6 +659,89 @@ describe('AssertionsResult', () => {
       expect(result.reason).toBe('Aggregate score 0.70 ≥ 0.7 threshold');
     });
 
+    it('should calculate final result when weighted score has floating point representation error at threshold boundary', async () => {
+      const assertionsResult = new AssertionsResult({ threshold: 0.1 });
+
+      assertionsResult.addResult({
+        index: 0,
+        result: {
+          pass: true,
+          score: 0.3,
+          reason: 'Component 1',
+          tokensUsed: DEFAULT_TOKENS_USED,
+        },
+        weight: 1,
+      });
+
+      assertionsResult.addResult({
+        index: 1,
+        result: {
+          pass: false,
+          score: 0,
+          reason: 'Component 2',
+          tokensUsed: DEFAULT_TOKENS_USED,
+        },
+        weight: 2,
+      });
+
+      const result = await assertionsResult.testResult();
+
+      expect(result.pass).toBe(true);
+      expect(result.score).toBeCloseTo(0.1, 10);
+      expect(result.reason).toBe('Aggregate score 0.10 ≥ 0.1 threshold');
+    });
+
+    it('should fail when weighted score is genuinely below threshold', async () => {
+      const assertionsResult = new AssertionsResult({ threshold: 0.1 });
+
+      assertionsResult.addResult({
+        index: 0,
+        result: {
+          pass: true,
+          score: 0.29,
+          reason: 'Component 1',
+          tokensUsed: DEFAULT_TOKENS_USED,
+        },
+        weight: 1,
+      });
+
+      assertionsResult.addResult({
+        index: 1,
+        result: {
+          pass: false,
+          score: 0,
+          reason: 'Component 2',
+          tokensUsed: DEFAULT_TOKENS_USED,
+        },
+        weight: 2,
+      });
+
+      const result = await assertionsResult.testResult();
+
+      expect(result.pass).toBe(false);
+      expect(result.reason).toBe('Aggregate score 0.10 < 0.1 threshold');
+    });
+
+    it('should fail when score is slightly below threshold beyond floating-point representation error', async () => {
+      const assertionsResult = new AssertionsResult({ threshold: 0.1 });
+
+      assertionsResult.addResult({
+        index: 0,
+        result: {
+          pass: true,
+          score: 0.0999,
+          reason: 'Component 1',
+          tokensUsed: DEFAULT_TOKENS_USED,
+        },
+        weight: 1,
+      });
+
+      const result = await assertionsResult.testResult();
+
+      expect(result.pass).toBe(false);
+      expect(result.reason).toBe('Aggregate score 0.10 < 0.1 threshold');
+    });
+
     it('should honor a threshold of 0 as an override (never fail on individual assertion failures)', async () => {
       const assertionsResult = new AssertionsResult({ threshold: 0 });
 
