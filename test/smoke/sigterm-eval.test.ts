@@ -111,7 +111,8 @@ describe.skipIf(process.platform === 'win32')('SIGTERM during an eval', () => {
     expect(elapsedMs).toBeLessThan(SIGTERM_CLEANUP_TIMEOUT_MS + 2_000);
   });
 
-  it('flushes buffered spans before the CLI ends on the signal', async () => {
+  /** Starts an OTLP/HTTP stand-in that records every request body, for the CLI's exporter. */
+  async function startTraceReceiver() {
     const bodies: Buffer[] = [];
     receiver = http.createServer((request, response) => {
       const chunks: Buffer[] = [];
@@ -124,9 +125,17 @@ describe.skipIf(process.platform === 'win32')('SIGTERM during an eval', () => {
     receiver.listen(0, '127.0.0.1');
     await once(receiver, 'listening');
     const { port } = receiver.address() as AddressInfo;
+    return {
+      env: { PROMPTFOO_OTEL_ENDPOINT: `http://127.0.0.1:${port}/v1/traces` },
+      received: (spanName: string) => bodies.some((body) => body.includes(spanName)),
+    };
+  }
+
+  it('flushes buffered spans before the CLI ends on the signal', async () => {
+    const traces = await startTraceReceiver();
     const { proc, exited } = await startUntilProviderCalled(
       [CLI_PATH, 'eval', '-c', 'promptfooconfig.tracing.yaml', '--no-cache', '--no-table'],
-      { PROMPTFOO_OTEL_ENDPOINT: `http://127.0.0.1:${port}/v1/traces` },
+      traces.env,
     );
 
     const { exit, elapsedMs } = await signalAndWait(proc, exited);
@@ -134,6 +143,21 @@ describe.skipIf(process.platform === 'win32')('SIGTERM during an eval', () => {
     expect(exit).toEqual({ code: null, signal: 'SIGTERM' });
     expect(elapsedMs).toBeLessThan(SIGTERM_CLEANUP_TIMEOUT_MS + 2_000);
     // The provider ended this span just before hanging; only the shutdown flush can deliver it.
-    expect(bodies.some((body) => body.includes('sigterm-smoke-before-hang'))).toBe(true);
+    expect(traces.received('sigterm-smoke-before-hang')).toBe(true);
+  });
+
+  it('exports a span that ends when an in-flight call settles during the drain', async () => {
+    const traces = await startTraceReceiver();
+    const { proc, exited } = await startUntilProviderCalled(
+      [CLI_PATH, 'eval', '-c', 'promptfooconfig.tracing.yaml', '--no-cache', '--no-table'],
+      { ...traces.env, SIGTERM_SMOKE_SETTLE_AFTER_MS: '500' },
+    );
+
+    // Once the call settles the eval may finish on its own, so how it exits is not the point.
+    const { elapsedMs } = await signalAndWait(proc, exited);
+
+    expect(elapsedMs).toBeLessThan(SIGTERM_CLEANUP_TIMEOUT_MS + 2_000);
+    // The call ends this span half a second after SIGTERM, while the drain still waits for it.
+    expect(traces.received('sigterm-smoke-settled-after-signal')).toBe(true);
   });
 });

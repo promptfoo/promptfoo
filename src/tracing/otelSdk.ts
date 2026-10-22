@@ -134,8 +134,11 @@ export function initializeOtel(config: OtelConfig): void {
   // the unhandled promise warning while still allowing async completion.
   // The shutdown will complete before process exit because we're not
   // calling process.exit() - we let Node.js exit naturally after async work.
+  // SIGTERM only flushes. The CLI shuts tracing down after its own SIGTERM cleanup, and the
+  // evaluator does when a run ends, so spans that end during that cleanup are still exported.
   handlers.sigTermHandler = () => {
-    void shutdown('SIGTERM');
+    logger.debug('[OtelSdk] Received SIGTERM, flushing pending spans');
+    void flushOtel();
   };
   handlers.sigIntHandler = () => {
     void shutdown('SIGINT');

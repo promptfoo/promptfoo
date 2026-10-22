@@ -70,9 +70,13 @@ describe('providerRegistry', () => {
   });
 
   it('cleans up on SIGTERM without ending the process for a host that handles it', async () => {
-    // Only this test's listeners may see the emitted signal.
-    const saved = process.rawListeners('SIGTERM') as NodeJS.SignalsListener[];
-    process.removeAllListeners('SIGTERM');
+    // Only this test's listeners may see the emitted signal, and the fresh registry's SIGINT and
+    // beforeExit handlers must not outlive the test.
+    const events = ['SIGTERM', 'SIGINT', 'beforeExit'] as const;
+    const saved = events.map((event) => [event, process.rawListeners(event)] as const);
+    for (const event of events) {
+      process.removeAllListeners(event);
+    }
     const kill = vi.spyOn(process, 'kill').mockImplementation(() => true);
     const registry = new ProviderRegistry();
     const cleanedUp = createDeferred<void>();
@@ -93,9 +97,11 @@ describe('providerRegistry', () => {
     } finally {
       hostCleanup.resolve();
       await registry.shutdownAll();
-      process.removeAllListeners('SIGTERM');
-      for (const listener of saved) {
-        process.on('SIGTERM', listener);
+      for (const [event, listeners] of saved) {
+        process.removeAllListeners(event);
+        for (const listener of listeners) {
+          process.on(event, listener as (...args: unknown[]) => void);
+        }
       }
     }
   });
