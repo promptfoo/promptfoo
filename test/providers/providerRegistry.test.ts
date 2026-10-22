@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import logger from '../../src/logger';
-import { providerRegistry } from '../../src/providers/providerRegistry';
+import { ProviderRegistry, providerRegistry } from '../../src/providers/providerRegistry';
 import { createDeferred } from '../util/utils';
 
 vi.mock('../../src/logger');
@@ -67,5 +67,36 @@ describe('providerRegistry', () => {
     expect(logger.warn).toHaveBeenCalledWith(
       expect.stringContaining('synchronous cleanup failure'),
     );
+  });
+
+  it('cleans up on SIGTERM without ending the process for a host that handles it', async () => {
+    // Only this test's listeners may see the emitted signal.
+    const saved = process.rawListeners('SIGTERM') as NodeJS.SignalsListener[];
+    process.removeAllListeners('SIGTERM');
+    const kill = vi.spyOn(process, 'kill').mockImplementation(() => true);
+    const registry = new ProviderRegistry();
+    const cleanedUp = createDeferred<void>();
+    const hostCleanup = createDeferred<void>();
+    try {
+      registry.register({ shutdown: vi.fn(async () => cleanedUp.resolve()) });
+      // A host's one-shot handler with async cleanup: Node removes it before calling it.
+      const host = vi.fn(() => hostCleanup.promise);
+      process.once('SIGTERM', host);
+
+      process.emit('SIGTERM');
+      await cleanedUp.promise;
+      // Let any follow-up from the registry's listener run before checking it did nothing more.
+      await new Promise((resolve) => setImmediate(resolve));
+
+      expect(host).toHaveBeenCalledTimes(1);
+      expect(kill).not.toHaveBeenCalled();
+    } finally {
+      hostCleanup.resolve();
+      await registry.shutdownAll();
+      process.removeAllListeners('SIGTERM');
+      for (const listener of saved) {
+        process.on('SIGTERM', listener);
+      }
+    }
   });
 });

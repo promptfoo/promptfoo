@@ -27,6 +27,7 @@ import { neverGenerateRemote } from '../redteam/remoteGeneration';
 import { createShareableUrl, isSharingEnabled } from '../share';
 import { generateTable } from '../table';
 import telemetry from '../telemetry';
+import { shutdownOtel } from '../tracing/otelSdk';
 import { EMAIL_OK_STATUS } from '../types/email';
 import { isCliEventSource } from '../types/eventSource';
 import { CommandLineOptionsSchema, MAX_SUGGESTIONS_COUNT, TestSuiteSchema } from '../types/index';
@@ -222,6 +223,50 @@ function watchUntilTerminated(watcher: FSWatcher): Promise<void> {
       process.on(signal, onSignal);
     }
   });
+}
+
+/** How long a CLI eval waits for provider and tracing cleanup after SIGTERM before it ends. */
+export const SIGTERM_CLEANUP_TIMEOUT_MS = 3_000;
+
+/**
+ * CLI policy: end the process on SIGTERM after bounded cleanup.
+ *
+ * The provider registry and the OpenTelemetry SDK listen for SIGTERM so they can clean up, and
+ * any listener suppresses Node's default termination. Neither exits, because a library host owns
+ * its own process. A CLI eval does own it, so this listener drains active provider calls and
+ * flushes spans for at most {@link SIGTERM_CLEANUP_TIMEOUT_MS}, then removes every SIGTERM
+ * listener and re-raises the signal so the process ends on it as it would by default.
+ *
+ * @returns A function that removes the listener once the evaluation no longer needs it.
+ */
+export function terminateOnSigterm(): () => void {
+  const onSigterm = () => {
+    void (async () => {
+      let timer: NodeJS.Timeout | undefined;
+      await Promise.race([
+        Promise.allSettled([providerRegistry.shutdownForProcess(), shutdownOtel()]).then(
+          (results) => {
+            for (const result of results) {
+              if (result.status === 'rejected') {
+                logger.debug('Cleanup failed during SIGTERM', { error: result.reason });
+              }
+            }
+          },
+        ),
+        // Referenced on purpose: the process must survive until it ends on the signal.
+        new Promise<void>((resolve) => {
+          timer = setTimeout(resolve, SIGTERM_CLEANUP_TIMEOUT_MS);
+        }),
+      ]);
+      clearTimeout(timer);
+      process.removeAllListeners('SIGTERM');
+      process.kill(process.pid, 'SIGTERM');
+    })();
+  };
+  process.once('SIGTERM', onSigterm);
+  return () => {
+    process.removeListener('SIGTERM', onSigterm);
+  };
 }
 
 function resolveSuggestionOptions(
@@ -880,6 +925,8 @@ async function doEvalWithEnv(
     let paused = false;
     let sigintHandler: NodeJS.SignalsListener | undefined;
     let forceExitTimeout: NodeJS.Timeout | undefined;
+    // Ending the process on SIGTERM is CLI policy too; library hosts keep control of their own.
+    let removeSigtermHandler = isCliInvocation ? terminateOnSigterm() : undefined;
 
     const cleanupHandler = () => {
       if (sigintHandler) {
@@ -890,6 +937,8 @@ async function doEvalWithEnv(
         clearTimeout(forceExitTimeout);
         forceExitTimeout = undefined;
       }
+      removeSigtermHandler?.();
+      removeSigtermHandler = undefined;
     };
 
     // Pause/resume SIGINT behavior is CLI policy. Reusable callers should own cancellation.
