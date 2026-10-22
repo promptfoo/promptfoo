@@ -274,6 +274,15 @@ function buildRedirectHopOptions(
     stripHeadersByName(headers, BODY_HEADERS);
   }
   if (new URL(nextUrl).origin !== new URL(currentUrl).origin) {
+    if (currentOptions.restrictCloudAuthRedirects) {
+      // The request carries the Cloud credential under a custom header name,
+      // which the native-follow path binds to the initial origin via
+      // restrictCloudAuthRedirects. Rebinding the dispatcher per hop would
+      // leak that header to the redirect destination, so refuse the hop
+      // instead, mirroring the CloudAuthRedirectError the unguarded path
+      // raises on a cross-origin redirect.
+      throw new CloudAuthRedirectError();
+    }
     stripHeadersByName(headers, CROSS_ORIGIN_REDIRECT_DROP_HEADERS);
   }
   return nextOptions;
