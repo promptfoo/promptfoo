@@ -94,6 +94,37 @@ describe('validateTestProviderReferences', () => {
     expect(() => validateTestProviderReferences(tests, providers)).toThrow(/Test #2/);
   });
 
+  describe('with pre-filter provider configs (--filter-providers)', () => {
+    // Raw configs before the filter; the instantiated `providers` above only contains
+    // what the filter kept (openai:*), so refs to gemini must match via the configs.
+    const preFilterConfigs = ['openai:gpt-4', 'openai:gpt-3.5-turbo', 'gemini'];
+
+    it('passes when a ref matches a provider removed by the filter', () => {
+      const tests: TestCase[] = [{ vars: { foo: 'bar' }, providers: ['gemini', 'openai:*'] }];
+      expect(() =>
+        validateTestProviderReferences(tests, providers, undefined, undefined, preFilterConfigs),
+      ).not.toThrow();
+    });
+
+    it('passes when a ref matches a filtered-out ProviderOptions config', () => {
+      const tests: TestCase[] = [{ vars: { foo: 'bar' }, providers: ['gemini:gemini-pro'] }];
+      const configs = [
+        'openai:gpt-4',
+        { id: 'gemini:gemini-pro', label: 'my-gemini' },
+      ] as typeof preFilterConfigs;
+      expect(() =>
+        validateTestProviderReferences(tests, providers, undefined, undefined, configs),
+      ).not.toThrow();
+    });
+
+    it('still throws for refs absent from both the providers and the configs', () => {
+      const tests: TestCase[] = [{ vars: { foo: 'bar' }, providers: ['nonexistent'] }];
+      expect(() =>
+        validateTestProviderReferences(tests, providers, undefined, undefined, preFilterConfigs),
+      ).toThrow(ProviderReferenceValidationError);
+    });
+  });
+
   describe('scenario validation', () => {
     it('passes with valid scenario tests', () => {
       const tests: TestCase[] = [];

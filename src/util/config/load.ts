@@ -56,7 +56,10 @@ import {
   type PromptReferenceSource,
   validateTestPromptReferences,
 } from '../validateTestPromptReferences';
-import { validateTestProviderReferences } from '../validateTestProviderReferences';
+import {
+  type RawProviderConfig,
+  validateTestProviderReferences,
+} from '../validateTestProviderReferences';
 import { loadYaml } from '../yamlLoad';
 import { DEFAULT_CONFIG_EXTENSIONS } from './extensions';
 
@@ -1327,12 +1330,18 @@ async function resolveLoadedConfig(
     typeof testSuite.defaultTest === 'object' ? testSuite.defaultTest : undefined,
   );
 
-  // Validate provider references in tests and scenarios
+  // Validate provider references in tests and scenarios. --filter-providers narrows the
+  // instantiated set before validation, so pass the pre-filter configs as well: a reference
+  // to a provider the filter removed is valid in the full suite, and the per-test provider
+  // filter drops such tests at run time.
   validateTestProviderReferences(
     testSuite.tests || [],
     testSuite.providers,
     typeof testSuite.defaultTest === 'object' ? testSuite.defaultTest : undefined,
     testSuite.scenarios,
+    Array.isArray(cliFilteredProviderConfigs)
+      ? (cliFilteredProviderConfigs as RawProviderConfig[])
+      : undefined,
   );
 
   // Validate that all prompt references in tests exist
