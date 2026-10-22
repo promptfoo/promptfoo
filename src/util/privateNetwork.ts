@@ -300,9 +300,13 @@ function getUrlFromProviderId(id: string): string | undefined {
 
 /**
  * Derive the effective fetch target of an HttpProvider raw request
- * (`config.request`), mirroring `callApiWithRawRequest`: an absolute-form
- * request target wins, otherwise the target is built from the Host header. A
- * `file://` reference is resolved the same way the provider resolves it.
+ * (`config.request`), mirroring `callApiWithRawRequest`: the Host header is
+ * the effective authority (the provider strips an absolute-form request
+ * target to its path via `urlEncodeRawRequestPath` and re-resolves it
+ * against the Host header), so a Host header is validated whenever one is
+ * present, even alongside an absolute-form target. Without a Host header an
+ * absolute-form target is used as-is. A `file://` reference is resolved the
+ * same way the provider resolves it.
  * Throws {@link PrivateRangeBlockedError} when no target can be determined:
  * fail closed, since an unverifiable target must not be fetched on an
  * exposed server (the raw request is rendered with caller-controlled
@@ -328,14 +332,20 @@ function getRawRequestTarget(rawRequest: string, useHttps: boolean): string {
   const headerBlock = requestText.replace(/\r\n/g, '\n').split('\n\n')[0] ?? '';
   const lines = headerBlock.split('\n');
   const target = lines[0]?.trim().split(/\s+/)[1] ?? '';
-  if (/^https?:\/\//i.test(target)) {
-    return target;
-  }
+  // Last Host header wins: the provider collapses duplicate headers by
+  // overwriting, so the last one is the authority the fetch resolves against.
   const host = lines
     .slice(1)
-    .find((line) => /^\s*host\s*:/i.test(line))
+    .filter((line) => /^\s*host\s*:/i.test(line))
+    .pop()
     ?.replace(/^\s*host\s*:\s*/i, '')
     .trim();
+  if (/^https?:\/\//i.test(target)) {
+    if (host) {
+      return `${useHttps ? 'https' : 'http'}://${host}`;
+    }
+    return target;
+  }
   if (!host) {
     throw new PrivateRangeBlockedError(
       'PROMPTFOO_BLOCK_PRIVATE_RANGES is set: refusing provider raw request with no Host header or absolute request target to validate',
@@ -355,8 +365,8 @@ function getRawRequestTarget(rawRequest: string, useHttps: boolean): string {
  * Covers every shape that lets a caller choose the fetch target:
  *
  * - explicit `config.apiBaseUrl` / `config.url` overrides,
- * - an HttpProvider raw `config.request` (absolute request target, else the
- *   Host header, mirroring `callApiWithRawRequest`),
+ * - an HttpProvider raw `config.request` (Host header authority, else the
+ *   absolute request target, mirroring `callApiWithRawRequest`),
  * - a bare `http(s)` provider id, parsed with `URL` so the non-canonical
  *   forms the provider registry accepts (`http:127.0.0.1`, backslash
  *   variants) are caught too,
