@@ -465,6 +465,20 @@ describe('OTLPReceiver', () => {
       expect(response.body.error).toMatch(/invalid protobuf/i);
     });
 
+    it('rejects overflowing protobuf lengths without storing spans', async () => {
+      // resourceSpans length encodes 2^32, which previously wrapped to zero.
+      const malformed = Buffer.from([0x0a, 0x80, 0x80, 0x80, 0x80, 0x10]);
+      const response = await request(receiver.getApp())
+        .post('/v1/traces')
+        .set('Content-Type', 'application/x-protobuf')
+        .send(malformed)
+        .expect(400);
+
+      expect(response.body.error).toMatch(/invalid protobuf/i);
+      expect(mockTraceStore.createTrace).not.toHaveBeenCalled();
+      expect(mockTraceStore.addSpans).not.toHaveBeenCalled();
+    });
+
     it('should accept valid OTLP protobuf traces', async () => {
       // Manually override the traceStore property for this test too
       (receiver as any).traceStore = mockTraceStore;

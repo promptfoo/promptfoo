@@ -15,6 +15,7 @@
  */
 
 const express = require('express');
+const defaultErrorHandler = require('./defaultErrorHandler.cjs');
 const crypto = require('crypto');
 
 const app = express();
@@ -256,6 +257,8 @@ app.get('/health', (_req, res) => {
 });
 
 // Start server
+app.use(defaultErrorHandler);
+
 app.listen(PORT, () => {
   console.log(`
 ╔════════════════════════════════════════════════════════╗
