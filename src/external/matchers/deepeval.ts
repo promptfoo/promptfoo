@@ -25,7 +25,7 @@ export interface Message {
 }
 
 interface VerdictResult {
-  verdict: 'yes' | 'no';
+  verdict: unknown;
   reason?: string;
 }
 
@@ -101,10 +101,13 @@ export async function matchesConversationRelevance(
     }
 
     const result = jsonObjects[0] as VerdictResult;
-    if (result.verdict !== 'yes' && result.verdict !== 'no') {
+    // Graders often capitalize the verdict ("Yes"), so compare it case-insensitively.
+    const verdict =
+      typeof result.verdict === 'string' ? result.verdict.trim().toLowerCase() : undefined;
+    if (verdict !== 'yes' && verdict !== 'no') {
       throw new Error('Conversation relevance grader returned an invalid verdict');
     }
-    const pass = result.verdict === 'yes';
+    const pass = verdict === 'yes';
     const score = pass ? 1 : 0;
 
     return {
