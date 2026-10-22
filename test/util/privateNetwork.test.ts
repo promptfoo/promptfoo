@@ -142,7 +142,7 @@ describe('getCallerSuppliedBaseUrls', () => {
     ).toEqual(['http://169.254.169.254']);
   });
 
-  it('prefers an absolute request target in a raw request', () => {
+  it('uses the Host header as the effective authority for an absolute request target', () => {
     expect(
       getCallerSuppliedBaseUrls({
         id: 'http',
@@ -150,7 +150,29 @@ describe('getCallerSuppliedBaseUrls', () => {
           request: 'GET http://169.254.169.254/latest HTTP/1.1\r\nHost: example.com\r\n\r\n',
         },
       }),
-    ).toEqual(['http://169.254.169.254/latest']);
+    ).toEqual(['http://example.com']);
+  });
+
+  it('validates the Host header behind a public absolute request target', () => {
+    expect(
+      getCallerSuppliedBaseUrls({
+        id: 'http',
+        config: {
+          request: 'GET https://8.8.8.8/latest HTTP/1.1\r\nHost: 169.254.169.254\r\n\r\n',
+        },
+      }),
+    ).toEqual(['http://169.254.169.254']);
+  });
+
+  it('uses the last Host header when several are present', () => {
+    expect(
+      getCallerSuppliedBaseUrls({
+        id: 'http',
+        config: {
+          request: 'GET /latest HTTP/1.1\r\nHost: example.com\r\nHost: 169.254.169.254\r\n\r\n',
+        },
+      }),
+    ).toEqual(['http://169.254.169.254']);
   });
 
   it('resolves named providers with local default endpoints', () => {
@@ -358,16 +380,17 @@ describe('assertProviderTargetPublic', () => {
     expect(mockedLookup).not.toHaveBeenCalled();
   });
 
-  it('blocks a raw request with an absolute private request target', async () => {
+  it('blocks a raw request with a public absolute target but a private Host header', async () => {
     restoreEnv = mockProcessEnv({ PROMPTFOO_BLOCK_PRIVATE_RANGES: 'true' });
     await expect(
       assertProviderTargetPublic({
         id: 'http',
         config: {
-          request: 'GET http://169.254.169.254/latest HTTP/1.1\r\nHost: example.com\r\n\r\n',
+          request: 'GET https://8.8.8.8/latest HTTP/1.1\r\nHost: 169.254.169.254\r\n\r\n',
         },
       }),
     ).rejects.toThrow(PrivateRangeBlockedError);
+    expect(mockedLookup).not.toHaveBeenCalled();
   });
 
   it('allows a raw request whose Host header resolves publicly', async () => {
