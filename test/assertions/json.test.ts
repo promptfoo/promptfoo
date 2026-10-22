@@ -229,4 +229,65 @@ describe('handleContainsJson', () => {
       ),
     ).toThrow('contains-json assertion must have a string or object value');
   });
+
+  it('passes for a top-level JSON array with no schema', () => {
+    const result = handleContainsJson(
+      makeParams({
+        assertion: { type: 'contains-json' },
+        outputString: '[1, 2, 3]',
+      }),
+    );
+    expect(result.pass).toBe(true);
+  });
+
+  it('fails not-contains-json for a top-level JSON array', () => {
+    const result = handleContainsJson(
+      makeParams({
+        assertion: { type: 'not-contains-json' },
+        outputString: '[1, 2, 3]',
+        inverse: true,
+      }),
+    );
+    expect(result.pass).toBe(false);
+  });
+
+  it('passes for a fenced JSON array with no schema', () => {
+    const result = handleContainsJson(
+      makeParams({
+        assertion: { type: 'contains-json' },
+        outputString: '```json\n[1, 2, 3]\n```',
+      }),
+    );
+    expect(result.pass).toBe(true);
+  });
+
+  it('validates a JSON array against an array schema', () => {
+    const arraySchema = {
+      type: 'array',
+      items: {
+        type: 'object',
+        required: ['name'],
+        properties: { name: { type: 'string' } },
+      },
+    };
+    const result = handleContainsJson(
+      makeParams({
+        assertion: { type: 'contains-json' },
+        renderedValue: arraySchema as unknown as AssertionValue,
+        outputString: '[{"name":"Ada"}]',
+      }),
+    );
+    expect(result.pass).toBe(true);
+  });
+
+  it('still passes an object schema via the inner object of a JSON array', () => {
+    const pass = handleContainsJson(
+      makeParams({
+        assertion: { type: 'contains-json', value: NAME_SCHEMA_YAML },
+        renderedValue: NAME_SCHEMA_YAML as AssertionValue,
+        outputString: '[{"name":"Ada"}]',
+      }),
+    );
+    expect(pass.pass).toBe(true);
+  });
 });
