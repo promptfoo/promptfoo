@@ -1223,6 +1223,17 @@ async function resolveLoadedConfig(
     testConfigs.map((test) => readTest(test, basePath, false, runtimeEnv)),
   );
 
+  const defaultTest: TestCase = {
+    metadata: config.metadata,
+    ...parsedDefaultTest,
+    options: {
+      prefix: cmdObj.promptPrefix,
+      suffix: cmdObj.promptSuffix,
+      provider: cmdObj.grader,
+      ...parsedDefaultTest?.options,
+    },
+  };
+
   let parsedScenarios = config.scenarios;
   // Parse testCases for each scenario
   if (parsedScenarios && (!Array.isArray(parsedScenarios) || parsedScenarios.length > 0)) {
@@ -1239,6 +1250,7 @@ async function resolveLoadedConfig(
   }
   if (Array.isArray(parsedScenarios)) {
     config.scenarios = [];
+    const filteredScenarios: Scenario[] = [];
     const filterSample = cmdObj.filterSample ?? commandLineOptions?.filterSample;
     const filterSampleSeed = cmdObj.filterSampleSeed ?? commandLineOptions?.filterSampleSeed;
     for (const [scenarioIndex, scenario] of parsedScenarios.entries()) {
@@ -1253,34 +1265,64 @@ async function resolveLoadedConfig(
         );
       }
       invariant(typeof scenario === 'object', 'scenario must be an object');
-      const filteredTests = await filterTests(
-        {
-          ...(scenario ?? {}),
-          providers: parsedProviders,
-          prompts: parsedPrompts,
-        },
-        {
-          firstN: cmdObj.filterFirstN,
-          pattern: cmdObj.filterPattern,
-          failing: cmdObj.filterFailing,
-          sample: filterSample,
-          sampleSeed:
-            filterSampleSeed === undefined
-              ? undefined
-              : deriveScenarioSampleSeed(filterSampleSeed, scenarioIndex),
-        },
-      );
-      invariant(filteredTests, 'filteredTests are undefined');
-      config.scenarios[scenarioIndex] = clone({
-        ...scenario,
-        tests: filteredTests.map((test) =>
-          isApiProvider(test.provider) ? { ...test, provider: undefined } : test,
-        ),
-      });
-      scenario.tests = await Promise.all(
-        filteredTests.map((test) => readTest(test, basePath, false, runtimeEnv)),
-      );
+      // Metadata can differ for each config variant. Keep even empty variants so the
+      // evaluator's per-config conversation IDs retain their original numbering.
+      const variants =
+        cmdObj.filterMetadata && Array.isArray(scenario.config)
+          ? scenario.config.map((data) => ({ ...scenario, config: [data] }))
+          : [scenario];
+      const parsedRows = new Map<TestCase, Promise<TestCase>>();
+      for (const variant of variants) {
+        const filteredTests = await filterTests(
+          {
+            ...variant,
+            providers: parsedProviders,
+            prompts: parsedPrompts,
+          },
+          {
+            metadata: cmdObj.filterMetadata,
+            firstN: cmdObj.filterFirstN,
+            pattern: cmdObj.filterPattern,
+            failing: cmdObj.filterFailing,
+            sample: filterSample,
+            sampleSeed:
+              filterSampleSeed === undefined
+                ? undefined
+                : deriveScenarioSampleSeed(filterSampleSeed, scenarioIndex),
+          },
+          cmdObj.filterMetadata
+            ? { ...defaultTest.metadata, ...variant.config?.[0]?.metadata }
+            : undefined,
+        );
+        invariant(filteredTests, 'filteredTests are undefined');
+        config.scenarios.push(
+          clone({
+            ...variant,
+            tests: filteredTests.map((test) =>
+              isApiProvider(test.provider) ? { ...test, provider: undefined } : test,
+            ),
+          }),
+        );
+        filteredScenarios.push({
+          ...variant,
+          tests: await Promise.all(
+            filteredTests.map((test) => {
+              // Sharing a row across config variants must not reconstruct its provider.
+              if (!cmdObj.filterMetadata) {
+                return readTest(test, basePath, false, runtimeEnv);
+              }
+              let parsed = parsedRows.get(test);
+              if (!parsed) {
+                parsed = readTest(test, basePath, false, runtimeEnv);
+                parsedRows.set(test, parsed);
+              }
+              return parsed;
+            }),
+          ),
+        });
+      }
     }
+    parsedScenarios = filteredScenarios;
   }
 
   if (parsedPrompts.length === 0) {
@@ -1288,17 +1330,6 @@ async function resolveLoadedConfig(
       'No prompts found. Add a `prompts:` entry to your config or pass --prompts path/to/prompt.txt.';
     throw new ConfigResolutionError(message);
   }
-
-  const defaultTest: TestCase = {
-    metadata: config.metadata,
-    ...parsedDefaultTest,
-    options: {
-      prefix: cmdObj.promptPrefix,
-      suffix: cmdObj.promptSuffix,
-      provider: cmdObj.grader,
-      ...parsedDefaultTest?.options,
-    },
-  };
 
   const testSuite: TestSuite = {
     basePath,

@@ -185,10 +185,15 @@ async function filterErrorTests(
  *
  * @param testSuite - The test suite containing all tests
  * @param options - Configuration options for filtering
+ * @param metadataDefaults - Metadata inherited by a scenario's tests, before row overrides
  * @returns A filtered array of tests that match all the specified criteria
  * @throws {Error} If metadata filter format is invalid or if numeric filters contain non-numeric values
  */
-export async function filterTests(testSuite: TestSuite, options: FilterOptions): Promise<Tests> {
+export async function filterTests(
+  testSuite: TestSuite,
+  options: FilterOptions,
+  metadataDefaults?: TestCase['metadata'],
+): Promise<Tests> {
   let tests = testSuite.tests || [];
   let metadataFilter: TestFilterFn | undefined;
 
@@ -226,21 +231,22 @@ export async function filterTests(testSuite: TestSuite, options: FilterOptions):
     logger.debug(`Before metadata filter: ${tests.length} tests`);
 
     metadataFilter = (test) => {
-      if (!test.metadata) {
+      const metadata = metadataDefaults ? { ...metadataDefaults, ...test.metadata } : test.metadata;
+      if (!metadata) {
         logger.debug(`Test has no metadata: ${test.description || 'unnamed test'}`);
         return false;
       }
 
       // Every filter must match, including separate filters for the same key.
       for (const { key, values } of parsedFilters) {
-        const testValue = test.metadata[key];
+        const testValue = metadata[key];
         const matches = values.some((value) => {
           if (Array.isArray(testValue)) {
             // For array metadata, check if any value includes the search term
-            return testValue.some((v) => v.toString().includes(value));
+            return testValue.some((v) => v != null && v.toString().includes(value));
           }
           // For single value metadata, check if it includes the search term
-          return testValue !== undefined && testValue.toString().includes(value);
+          return testValue != null && testValue.toString().includes(value);
         });
 
         if (!matches) {
