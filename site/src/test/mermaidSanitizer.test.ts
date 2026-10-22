@@ -30,6 +30,25 @@ describe('the docs Mermaid sanitizer', () => {
     );
   });
 
+  it.each(['href', 'opacity'])('sanitizes SVG animation targeting %s in XHTML', (attributeName) => {
+    const values = attributeName === 'href' ? 'x;javascript:alert(1)' : '0;1';
+    const output = purify.sanitize(
+      `<svg xmlns="http://www.w3.org/2000/svg"><a><animate attributeName="${attributeName}" values="${values}"/><text>label</text></a></svg>`,
+      {
+        PARSER_MEDIA_TYPE: 'application/xhtml+xml',
+        USE_PROFILES: { svg: true },
+        ADD_TAGS: ['animate'],
+        ADD_ATTR: ['attributeName', 'values'],
+      },
+    );
+    const document = new dom.window.DOMParser().parseFromString(output, 'application/xhtml+xml');
+
+    expect(document.querySelector('animate')?.getAttribute('attributeName')).toBe(
+      attributeName === 'href' ? null : 'opacity',
+    );
+    expect(document.querySelector('text')?.textContent).toBe('label');
+  });
+
   it.each([
     'afterSanitizeElements',
     'beforeSanitizeAttributes',
