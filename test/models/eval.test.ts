@@ -21,6 +21,7 @@ import {
   type EvaluateSummaryV3,
   type Prompt,
   ResultFailureReason,
+  type ResultsFile,
 } from '../../src/types/index';
 import { updateResult, writeResultsToDatabase } from '../../src/util/database';
 import { redactAzureBlobSasTokens } from '../../src/util/sanitizer';
@@ -1630,6 +1631,24 @@ describe('evaluator', () => {
       expect(JSON.stringify(result.config)).toContain('%5BREDACTED%5D');
       expect(result.config.metadata?.documentationUrl).toBe('HTTPS://Docs.Example?version=2');
       expect(JSON.stringify(evaluation.config)).toContain(gateway);
+    });
+
+    it('includes stored traces in the typed results file', async () => {
+      const evaluation = await EvalFactory.create();
+      const traceStore = new TraceStore();
+      await traceStore.createTrace({
+        traceId: 'results-file-trace',
+        evaluationId: evaluation.id,
+        testCaseId: 'test-case-id',
+      });
+      await traceStore.addSpans('results-file-trace', [
+        { spanId: 'results-file-span', name: 'provider-call', startTime: 1 },
+      ]);
+
+      const results: ResultsFile = await evaluation.toResultsFile();
+
+      expect(results.traces?.map((trace) => trace.traceId)).toEqual(['results-file-trace']);
+      expect(results.traces?.[0].spans.map((span) => span.spanId)).toEqual(['results-file-span']);
     });
 
     it('drops malformed trace-provider headers when exporting older evaluations', async () => {
