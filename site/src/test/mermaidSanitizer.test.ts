@@ -71,6 +71,39 @@ describe('the docs Mermaid sanitizer', () => {
     expect(root.querySelector('span')?.textContent).toBe('safe');
   });
 
+  it('removes template expressions joined across a removed shadow-root child', () => {
+    const host = dom.window.document.createElement('div');
+    const shadow = host.attachShadow({ mode: 'open' });
+    shadow.append(
+      dom.window.document.createTextNode('safe $'),
+      dom.window.document.createElement('object'),
+      dom.window.document.createTextNode('{alert(1)}'),
+    );
+
+    expect(purify.sanitize(host, { IN_PLACE: true, SAFE_FOR_TEMPLATES: true })).toBe(host);
+    expect(shadow.querySelector('object')).toBeNull();
+    expect(shadow.textContent).not.toContain('${alert(1)}');
+    expect(shadow.textContent).toContain('safe');
+  });
+
+  it('sanitizes an unvisited sibling detached by a hook on another node', () => {
+    const root = dom.window.document.createElement('div');
+    root.innerHTML =
+      '<span id="trigger">safe</span><section id="detached"><img onerror="void 0"></section>';
+    const detached = root.querySelector('#detached')!;
+    const image = detached.querySelector('img')!;
+    purify.addHook('afterSanitizeElements', (node) => {
+      if (node instanceof dom.window.Element && node.id === 'trigger') {
+        detached.remove();
+      }
+    });
+
+    expect(purify.sanitize(root, { IN_PLACE: true })).toBe(root);
+    expect(root.querySelector('#detached')).toBeNull();
+    expect(image.getAttribute('onerror')).toBeNull();
+    expect(root.querySelector('span')?.textContent).toBe('safe');
+  });
+
   it('rejects an in-place raw-text root that sanitization removes', () => {
     const root = dom.window.document.createElement('style');
     root.textContent = '</style><img src=x onerror=1>';
