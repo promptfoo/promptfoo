@@ -91,6 +91,10 @@ docker run -d \
 
 Access the UI at `http://localhost:3000`.
 
+:::note
+Accessing the UI from another machine (for example, `http://your-server-address:3000`) requires adding that hostname to the server's Host allowlist. The server rejects browser requests arriving on a non-local `Host` header as a DNS-rebinding countermeasure. Set `PROMPTFOO_CSRF_ALLOWED_HOSTS=your-server-address` (comma-separated for several names). When the UI is served from a different origin, also allowlist that origin with `PROMPTFOO_CSRF_ALLOWED_ORIGINS`.
+:::
+
 ## Method 2: Using Docker Compose
 
 For managing multi-container setups or defining configurations declaratively, use Docker Compose.
