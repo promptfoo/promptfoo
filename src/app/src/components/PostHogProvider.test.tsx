@@ -119,11 +119,25 @@ describe('PostHogProvider', () => {
     });
 
     it('should not initialize PostHog', async () => {
+      // Self-contained like the telemetry test above: the consumer is
+      // defined against the freshly imported context so module resets
+      // cannot leave it bound to a stale instance.
       const { PostHogProvider } = await import('./PostHogProvider');
+      const { PostHogContext } = await import('./PostHogContext');
+
+      const NoNetworkTestConsumer = () => {
+        const { posthog: posthogInstance, isInitialized } = useContext(PostHogContext);
+        return (
+          <div>
+            <div data-testid="is-initialized">{isInitialized.toString()}</div>
+            <div data-testid="posthog-instance">{posthogInstance ? 'loaded' : 'null'}</div>
+          </div>
+        );
+      };
 
       render(
         <PostHogProvider>
-          <TestConsumer />
+          <NoNetworkTestConsumer />
         </PostHogProvider>,
       );
 
