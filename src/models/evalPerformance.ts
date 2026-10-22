@@ -1,4 +1,4 @@
-import { sql } from 'drizzle-orm';
+import { type SQL, sql } from 'drizzle-orm';
 import { HUMAN_ASSERTION_TYPE } from '../constants';
 import { getDb } from '../database/index';
 import { evalResultsTable } from '../database/tables';
@@ -91,6 +91,14 @@ export function clearCountCache(evalId?: string) {
   }
 }
 
+/**
+ * The search clause for unfiltered table pages: responses only, a deliberate speed trade-off.
+ * Filtered metrics for the same page must use it too, or they count rows the page does not show.
+ */
+export function buildResponseSearchCondition(searchQuery: string): SQL {
+  return sql`response LIKE ${`%${searchQuery}%`}`;
+}
+
 // Optimized query for test indices without heavy JSON search
 export async function queryTestIndicesOptimized(
   evalId: string,
@@ -133,7 +141,7 @@ export async function queryTestIndicesOptimized(
   let searchCondition = sql`1=1`;
   if (opts.searchQuery && opts.searchQuery.trim() !== '' && !opts.filters?.length) {
     // Only search in response field for better performance
-    searchCondition = sql`response LIKE ${`%${opts.searchQuery}%`}`;
+    searchCondition = buildResponseSearchCondition(opts.searchQuery);
   }
 
   const whereClause = sql`${baseQuery} AND ${searchCondition}`;

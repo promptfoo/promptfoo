@@ -59,6 +59,7 @@ import {
   notifyEvaluationsDeleted,
 } from './evalMutation';
 import {
+  buildResponseSearchCondition,
   getCachedResultsCount,
   getTotalResultRowCount,
   queryTestIndicesOptimized,
@@ -957,6 +958,8 @@ export default class Eval {
     filterMode?: EvalResultsFilterMode;
     searchQuery?: string;
     filters?: string[];
+    /** Search responses only, as unfiltered table pages do (see queryTestIndicesOptimized). */
+    responseOnlySearch?: boolean;
   }): SQL<unknown> {
     const mode: EvalResultsFilterMode = opts.filterMode ?? 'all';
 
@@ -1192,7 +1195,9 @@ export default class Eval {
     }
 
     // Add search condition if searchQuery is provided
-    if (opts.searchQuery && opts.searchQuery.trim() !== '') {
+    if (opts.searchQuery && opts.searchQuery.trim() !== '' && opts.responseOnlySearch) {
+      conditions.push(buildResponseSearchCondition(opts.searchQuery));
+    } else if (opts.searchQuery && opts.searchQuery.trim() !== '') {
       const searchPattern = `%${opts.searchQuery}%`;
 
       const searchConditions = [
@@ -1287,8 +1292,12 @@ export default class Eval {
     searchQuery?: string;
     filters?: string[];
   }): Promise<import('../types').PromptMetrics[]> {
-    // CRITICAL: Use the SAME WHERE clause as queryTestIndices (now returns SQL fragment)
-    const whereSql = this.buildFilterWhereSql(opts);
+    // CRITICAL: Count the rows getTablePage returns. Without structured filters it pages through
+    // queryTestIndicesOptimized, which searches responses only.
+    const whereSql = this.buildFilterWhereSql({
+      ...opts,
+      responseOnlySearch: !opts.filters?.length,
+    });
 
     return calculateFilteredMetrics({
       evalId: this.id,

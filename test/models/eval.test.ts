@@ -2689,6 +2689,47 @@ describe('evaluator', () => {
       }
     });
 
+    it('counts filtered metrics over exactly the rows the page returns, with and without filters', async () => {
+      const eval_ = await EvalFactory.create({ numResults: 4, withNamedScores: true });
+      const db = await getDb();
+      await db.run(
+        sql`UPDATE eval_results SET test_case = json_set(test_case, '$.vars.city', 'var-only-needle') WHERE eval_id = ${eval_.id} AND test_idx = 2`,
+      );
+      await db.run(
+        sql`UPDATE eval_results SET response = ${JSON.stringify({ output: 'response-needle' })} WHERE eval_id = ${eval_.id} AND test_idx = 1`,
+      );
+      const accuracy = [JSON.stringify(createAccuracyFilter())];
+
+      for (const [searchQuery, filters, expectedRows] of [
+        // Unfiltered pages search responses only, so a var-only match shows (and counts) nothing.
+        ['var-only-needle', [], []],
+        ['response-needle', [], [1]],
+        // With a structured filter, pages search all fields.
+        ['var-only-needle', accuracy, [2]],
+        ['response-needle', accuracy, [1]],
+      ] as const) {
+        const page = await eval_.getTablePage({ searchQuery, filters: [...filters] });
+        const metrics = await eval_.getFilteredMetrics({
+          filterMode: 'all',
+          searchQuery,
+          filters: [...filters],
+        });
+        const countedRows = metrics.reduce(
+          (sum, prompt) =>
+            sum + prompt.testPassCount + prompt.testFailCount + prompt.testErrorCount,
+          0,
+        );
+        const shownOutputs = page.body.flatMap((row) => row.outputs.filter(Boolean)).length;
+
+        const label = `${searchQuery} with ${filters.length} filter(s)`;
+        expect(
+          page.body.map((row) => row.testIdx),
+          label,
+        ).toEqual(expectedRows);
+        expect(countedRows, label).toBe(shownOutputs);
+      }
+    });
+
     it('searches across response, grading, named scores, metadata, and vars', async () => {
       const eval_ = await EvalFactory.create({
         numResults: 9,
