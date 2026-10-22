@@ -225,6 +225,33 @@ describe('evaluatorHelpers', () => {
       expect(renderedPrompt).toBe('world');
     });
 
+    it('should load file references nested in vars objects and arrays', async () => {
+      const prompt = toPrompt(
+        '{{ reporting_period.previous.report }}|{{ reporting_period.previous.note }}|{{ attachments[0] }}',
+      );
+      const vars = {
+        reporting_period: {
+          current: { period: '2023-12-31' },
+          previous: {
+            period: '2024-02-15',
+            report: 'file://data/mixed_report_tables.html.txt',
+            note: 'see file://data/mixed_report_tables.html.txt for details',
+          },
+        },
+        attachments: ['file://data/notes.txt'],
+      };
+
+      vi.spyOn(fs, 'readFileSync')
+        .mockReturnValueOnce('report content')
+        .mockReturnValueOnce('notes content');
+
+      const renderedPrompt = await renderPrompt(prompt, vars, {});
+
+      expect(renderedPrompt).toBe(
+        'report content|see file://data/mixed_report_tables.html.txt for details|notes content',
+      );
+    });
+
     it('should render a JSON prompt', async () => {
       const prompt = toPrompt('[{"text": "Test prompt "}, {"text": "{{ var1 }}"}]');
       const renderedPrompt = await renderPrompt(prompt, { var1: 'value1' }, {});

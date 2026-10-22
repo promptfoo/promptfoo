@@ -23,6 +23,7 @@ import {
   type VarValue,
 } from './types/index';
 import { isAudioFile, isImageFile, isJavascriptFile, isVideoFile } from './util/fileExtensions';
+import { parseFileUrl } from './util/functions/loadFunction';
 import { renderVarsInObject, setLoadedFileMimeTypes } from './util/index';
 import invariant from './util/invariant';
 import { filterFiniteScores } from './util/numeric';
@@ -227,6 +228,60 @@ function detectMimeFromBase64(base64Data: string): string | null {
 }
 
 /**
+ * Resolves `file://` references nested inside a vars value.
+ *
+ * Top-level vars are handled by renderPrompt, where a reference may also invoke a
+ * JavaScript/Python var script or be encoded as base64 media. Nested references are
+ * plain data, so only text and YAML files are read here; script and media references
+ * are left as authored rather than parsed as text.
+ */
+async function resolveNestedFileReferences(value: VarValue, basePath: string): Promise<VarValue> {
+  if (Array.isArray(value)) {
+    const result: VarValue[] = [];
+    for (const item of value) {
+      result.push(await resolveNestedFileReferences(item as VarValue, basePath));
+    }
+    return result;
+  }
+
+  if (value && typeof value === 'object' && Object.getPrototypeOf(value) === Object.prototype) {
+    const result: Record<string, VarValue> = {};
+    for (const [key, item] of Object.entries(value)) {
+      result[key] = await resolveNestedFileReferences(item as VarValue, basePath);
+    }
+    return result;
+  }
+
+  if (typeof value !== 'string' || !value.startsWith('file://')) {
+    return value;
+  }
+
+  const { filePath: referencePath } = parseFileUrl(value);
+  const filePath = path.resolve(process.cwd(), basePath, referencePath);
+  const fileExtension = path.extname(filePath).toLowerCase();
+
+  // These types are loaded with top-level-only semantics (var name, prompt, and provider
+  // context), so leave nested references to them untouched.
+  if (
+    isJavascriptFile(filePath) ||
+    fileExtension === '.py' ||
+    fileExtension === '.pdf' ||
+    isImageFile(filePath) ||
+    isVideoFile(filePath) ||
+    isAudioFile(filePath)
+  ) {
+    logger.debug(`Leaving nested file reference unresolved: ${value}`);
+    return value;
+  }
+
+  logger.debug(`Loading nested var file reference: ${filePath}`);
+  if (fileExtension === '.yaml' || fileExtension === '.yml') {
+    return JSON.stringify(loadYaml(await fs.readFile(filePath, 'utf8')) as string | object);
+  }
+  return (await fs.readFile(filePath, 'utf8')).trim();
+}
+
+/**
  * Renders a prompt template with variable substitution using Nunjucks.
  *
  * @param prompt - The prompt template to render
@@ -391,6 +446,8 @@ export async function renderPrompt(
         );
       }
       vars[varName] = javascriptOutput.output;
+    } else if (value !== null && typeof value === 'object') {
+      vars[varName] = await resolveNestedFileReferences(value, cliState.basePath || '');
     }
   }
 
