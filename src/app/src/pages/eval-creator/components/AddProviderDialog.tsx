@@ -25,6 +25,8 @@ interface AddProviderDialogProps {
   onClose: () => void;
   onSave: (provider: ProviderOptions) => void;
   initialProvider?: ProviderOptions;
+  /** Configured ui-providers.yaml catalog. Null/undefined means unrestricted. */
+  availableProviders?: ProviderOptions[] | null;
 }
 
 export default function AddProviderDialog({
@@ -32,7 +34,9 @@ export default function AddProviderDialog({
   onClose,
   onSave,
   initialProvider,
+  availableProviders,
 }: AddProviderDialogProps) {
+  const isCatalogRestricted = availableProviders != null;
   const [step, setStep] = useState<'select' | 'configure'>('select');
   const [provider, setProvider] = useState<ProviderOptions | undefined>(initialProvider);
   const [providerType, setProviderType] = useState<string | undefined>(
@@ -127,14 +131,16 @@ export default function AddProviderDialog({
             <DialogTitle>
               {initialProvider
                 ? 'Edit Provider'
-                : step === 'select'
+                : isCatalogRestricted || step === 'select'
                   ? 'Select Provider Type'
                   : 'Configure Provider'}
             </DialogTitle>
             <DialogDescription>
-              {step === 'select'
-                ? 'Choose the type of provider you want to evaluate'
-                : 'Configure the settings for your provider'}
+              {isCatalogRestricted
+                ? 'Choose one of the configured providers'
+                : step === 'select'
+                  ? 'Choose the type of provider you want to evaluate'
+                  : 'Configure the settings for your provider'}
             </DialogDescription>
           </DialogHeader>
 
@@ -143,7 +149,29 @@ export default function AddProviderDialog({
             data-testid="add-provider-dialog-scroll-body"
             className="min-h-0 flex-1 overflow-y-auto py-4"
           >
-            {step === 'select' ? (
+            {isCatalogRestricted ? (
+              <div className="space-y-2">
+                {availableProviders.length ? (
+                  availableProviders.map((configured, index) => (
+                    <Button
+                      key={index}
+                      variant="outline"
+                      className="h-auto w-full justify-start p-4 text-left"
+                      onClick={() => {
+                        onSave({ ...configured });
+                        onClose();
+                      }}
+                    >
+                      {configured.label || configured.id}
+                    </Button>
+                  ))
+                ) : (
+                  <p className="text-sm text-muted-foreground">
+                    No configured providers are available. Contact your administrator.
+                  </p>
+                )}
+              </div>
+            ) : step === 'select' ? (
               <div className="w-full">
                 <ProviderTypeSelector
                   provider={provider as RedteamProviderOptions | undefined}
@@ -171,10 +199,10 @@ export default function AddProviderDialog({
           </div>
 
           <DialogFooter data-testid="add-provider-dialog-footer" className="shrink-0">
-            <Button variant="outline" onClick={handleBack}>
-              {step === 'configure' ? 'Back' : 'Cancel'}
+            <Button variant="outline" onClick={isCatalogRestricted ? onClose : handleBack}>
+              {!isCatalogRestricted && step === 'configure' ? 'Back' : 'Cancel'}
             </Button>
-            {step === 'configure' && (
+            {!isCatalogRestricted && step === 'configure' && (
               <Tooltip>
                 <TooltipTrigger asChild>
                   <div>
