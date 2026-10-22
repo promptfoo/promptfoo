@@ -183,6 +183,35 @@ describe('getCallerSuppliedBaseUrls', () => {
     expect(getCallerSuppliedBaseUrls({ id: 'localai:chat' })).toEqual(['http://localhost:8080/v1']);
   });
 
+  it('drops the local default when an apiBaseUrl override wins for that provider', () => {
+    // localai and helicone resolve config.apiBaseUrl ahead of the local
+    // default, so the default is never fetched and must not be validated.
+    expect(
+      getCallerSuppliedBaseUrls({
+        id: 'localai:chat',
+        config: { apiBaseUrl: 'https://models.example.com/v1' },
+      }),
+    ).toEqual(['https://models.example.com/v1']);
+    expect(
+      getCallerSuppliedBaseUrls({
+        id: 'helicone:gpt-4o',
+        config: { apiBaseUrl: 'https://helicone.example.com' },
+      }),
+    ).toEqual(['https://helicone.example.com']);
+  });
+
+  it('keeps the local default when the provider ignores config.apiBaseUrl', () => {
+    // ollama builds its fetch URL from OLLAMA_BASE_URL or the localhost
+    // default and never reads config.apiBaseUrl, so the default remains
+    // the effective target and stays validated.
+    expect(
+      getCallerSuppliedBaseUrls({
+        id: 'ollama:chat:llama3',
+        config: { apiBaseUrl: 'https://models.example.com' },
+      }),
+    ).toEqual(['https://models.example.com', 'http://localhost:11434']);
+  });
+
   it('returns an empty list for named providers without overrides', () => {
     expect(getCallerSuppliedBaseUrls({ id: 'openai:gpt-4o-mini' })).toEqual([]);
     expect(getCallerSuppliedBaseUrls({ id: 'openai:gpt-4o-mini', config: {} })).toEqual([]);
