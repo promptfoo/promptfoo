@@ -855,10 +855,12 @@ function deriveVerdictFromGrader(
     return { pass: hasThreshold ? score >= threshold : score > 0, score };
   }
 
+  // 1 is an affirmative verdict. Graders often encode the boolean as 1 or "1".
+  // 0 and every other non-boolean value stay negative.
   let pass =
     typeof parsed.pass === 'boolean'
       ? parsed.pass
-      : /^(true|yes|pass|y)$/i.test(String(parsed.pass));
+      : /^(true|yes|pass|y|1)$/i.test(String(parsed.pass));
   const numericScore = Number(parsed.score);
   const score =
     typeof parsed.score === 'number'
