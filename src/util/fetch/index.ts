@@ -337,12 +337,14 @@ async function fetchWithRedirectValidation(
     if (!isRedirectStatus(response.status) || !location) {
       return response;
     }
-    // Release the redirect response's socket before following it.
-    await response.arrayBuffer().catch(() => undefined);
+    // Discard the redirect response's body to release its socket before
+    // following it. Cancel instead of draining: the body is untrusted and
+    // may be huge or never-ending, so it must never be buffered in memory.
+    await response.body?.cancel().catch(() => undefined);
 
     if (hop === MAX_GUARDED_REDIRECT_HOPS) {
       throw new PrivateRangeBlockedError(
-        `PROMPTFOO_BLOCK_PRIVATE_RANGES is set: refusing to follow more than ${MAX_GUARDED_REDIRECT_HOPS} redirects from ${JSON.stringify(initialUrl)}`,
+        `PROMPTFOO_BLOCK_PRIVATE_RANGES is set: refusing to follow more than ${MAX_GUARDED_REDIRECT_HOPS} redirects from ${JSON.stringify(sanitizeUrl(initialUrl))}`,
       );
     }
 
