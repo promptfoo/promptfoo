@@ -156,6 +156,7 @@ export function registerShareEvaluationTool(server: McpServer) {
             if (existingUrl) {
               const shareData = {
                 url: existingUrl,
+                shareUrl: existingUrl,
                 evalId,
                 createdAt: evalRecord.createdAt,
                 description: evalRecord.description,
