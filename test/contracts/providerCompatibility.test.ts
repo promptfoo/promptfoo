@@ -10,9 +10,12 @@ import {
   AnthropicMessagesConfigInputJsonSchema,
   AnthropicMessagesConfigInputSchema,
   AzureChatConfigInputSchema,
+  AzureProviderOptionsInputJsonSchema,
+  AzureProviderOptionsInputSchema,
   AzureResponsesConfigInputJsonSchema,
   AzureResponsesConfigInputSchema,
 } from '../../src/contracts';
+import { loadApiProvider } from '../../src/providers';
 import { AnthropicCompletionProvider } from '../../src/providers/anthropic/completion';
 import { AnthropicMessagesProvider } from '../../src/providers/anthropic/messages';
 import { AzureChatCompletionProvider } from '../../src/providers/azure/chat';
@@ -199,10 +202,7 @@ it('renders parsed Azure authoring fields without narrowing to SDK wire types', 
 
 // Characterization only: these inherited request semantics need a separate behavior change.
 it('documents that Anthropic model selection still comes from the provider ID', async () => {
-  const config = AnthropicMessagesConfigInputSchema.parse({
-    apiKey: 'test-key',
-    model: 'different-model',
-  });
+  const config: AnthropicMessageOptions = { apiKey: 'test-key', model: 'different-model' };
   const provider = new AnthropicMessagesProvider('claude-3-5-sonnet-20241022', { config });
   const send = vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValue({
     content: [{ type: 'text', text: 'ok' }],
@@ -214,7 +214,7 @@ it('documents that Anthropic model selection still comes from the provider ID', 
 });
 
 it('documents that Azure Responses still omits a zero tool-call limit', async () => {
-  const config = AzureResponsesConfigInputSchema.parse({ max_tool_calls: 0 });
+  const config: AzureResponsesOptions & { max_tool_calls: number } = { max_tool_calls: 0 };
   const provider = new AzureResponsesProvider('gpt-4.1', { config });
   expect(await provider.getAzureResponsesBody('Hello')).not.toHaveProperty('max_tool_calls');
 });
@@ -242,4 +242,63 @@ it('forwards parsed Anthropic Completion headers to the SDK request', async () =
   });
   expect(await provider.callApi('Hello')).toMatchObject({ output: 'ok' });
   expect(send).toHaveBeenCalledWith(expect.objectContaining({ model: 'claude-2.1' }), { headers });
+});
+
+it.each(['azure', 'azureopenai'])(
+  'matches %s Responses registry defaults and explicit deployments',
+  async (prefix) => {
+    const validate = ajv.compile(AzureProviderOptionsInputJsonSchema);
+    for (const suffix of ['', ':', ':custom:deployment']) {
+      const input = { id: `${prefix}:responses${suffix}`, config: { apiKey: 'test-key' } };
+      const parsed = AzureProviderOptionsInputSchema.parse(input);
+      expect(validate(input)).toBe(true);
+      const provider = await loadApiProvider(parsed.id, { options: { config: parsed.config } });
+      expect(provider).toBeInstanceOf(AzureResponsesProvider);
+      expect(
+        await (provider as AzureResponsesProvider).getAzureResponsesBody('Hello'),
+      ).toMatchObject({
+        model: suffix === ':custom:deployment' ? 'custom:deployment' : 'gpt-4.1-2025-04-14',
+      });
+    }
+    for (const route of ['chat', 'completion']) {
+      for (const suffix of ['', ':']) {
+        const id = `${prefix}:${route}${suffix}`;
+        expect(AzureProviderOptionsInputSchema.safeParse({ id }).success).toBe(false);
+        expect(validate({ id })).toBe(false);
+        await expect(loadApiProvider(id)).rejects.toThrow(/requires a deployment name/);
+      }
+    }
+  },
+);
+
+it.each([undefined, 1, 5])(
+  'preserves an Azure tool-call limit of %s at the request boundary',
+  async (limit) => {
+    const input = limit === undefined ? {} : { max_tool_calls: limit };
+    const config = AzureResponsesConfigInputSchema.parse(input);
+    expect(validateAzure(input)).toBe(true);
+    const provider = new AzureResponsesProvider('gpt-4.1', { config });
+    const body = await provider.getAzureResponsesBody('Hello');
+    if (limit === undefined) {
+      expect(body).not.toHaveProperty('max_tool_calls');
+    } else {
+      expect(body).toHaveProperty('max_tool_calls', limit);
+    }
+  },
+);
+
+it('uses the explicit provider-ID model for a valid portable Anthropic config', async () => {
+  const config = AnthropicMessagesConfigInputSchema.parse({ apiKey: 'test-key', max_tokens: 16 });
+  const loaded = await loadApiProvider('anthropic:messages:claude-3-5-sonnet-20241022', {
+    options: { config },
+  });
+  expect(loaded).toBeInstanceOf(AnthropicMessagesProvider);
+  const provider = loaded as AnthropicMessagesProvider;
+  const send = vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValue({
+    content: [{ type: 'text', text: 'ok' }],
+    stop_reason: 'end_turn',
+    usage: { input_tokens: 1, output_tokens: 1 },
+  } as Anthropic.Messages.Message);
+  expect(await provider.callApi('Hello')).toMatchObject({ output: 'ok' });
+  expect(send.mock.calls[0][0].model).toBe('claude-3-5-sonnet-20241022');
 });

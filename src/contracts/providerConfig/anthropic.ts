@@ -99,7 +99,6 @@ const ToolChoice = z.union([
   z.strictObject({ type: z.literal('function'), function: z.strictObject({ name: z.string() }) }),
 ]);
 export const AnthropicMessagesConfigInputSchema = AnthropicSharedConfigInputSchema.extend({
-  model: z.string().optional(),
   max_tokens: z.number().optional(),
   temperature: z.number().optional(),
   top_p: z.number().optional(),

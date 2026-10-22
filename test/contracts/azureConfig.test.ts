@@ -149,6 +149,9 @@ describe('Azure portable configuration contracts', () => {
       invalid: [
         ...commonInvalid,
         { max_output_tokens: '10' },
+        { max_tool_calls: 0 },
+        { max_tool_calls: -1 },
+        { max_tool_calls: 1.5 },
         { stream: true },
         { stream: null },
         { model: 'ignored-model' },
@@ -234,7 +237,6 @@ describe('Azure portable configuration contracts', () => {
     { id: 'azureopenai:embeddings:deployment', config: { temperature: 0 } },
     { id: 'azure:chat:' },
     { id: 'azure:chat' },
-    { id: 'azure:responses:' },
     { id: 'azure:chatty:deployment' },
     { id: 'azure:foundry-agent:deployment' },
     { id: 'openai:chat:deployment' },

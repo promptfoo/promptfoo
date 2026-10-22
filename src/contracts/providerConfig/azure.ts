@@ -79,7 +79,6 @@ export const AzureResponsesConfigInputSchema = AzureSharedConfigInputSchema.exte
       response_format: true,
       instructions: true,
       max_output_tokens: true,
-      max_tool_calls: true,
       previous_response_id: true,
       truncation: true,
       metadata: true,
@@ -88,6 +87,7 @@ export const AzureResponsesConfigInputSchema = AzureSharedConfigInputSchema.exte
     }).shape,
   )
   .extend({
+    max_tool_calls: z.number().int().positive().optional(),
     stream: z.literal(false).optional(),
     service_tier: z.enum(['auto', 'default', 'flex', 'priority']).nullable().optional(),
   })
@@ -108,7 +108,7 @@ export const AzureEmbeddingConfigInputSchema = AzureSharedConfigInputSchema.exte
   dimensions: z.number().optional(),
 }).describe('Serializable Azure embeddings configuration');
 
-// Chat, Responses and Completions require deployments; embeddings retain the legacy default.
+// Chat and Completions require deployments; Responses and embeddings retain runtime defaults.
 const Prefix = z.enum(['azure', 'azureopenai']);
 const Deployment = z.string().regex(/[\s\S]+/);
 export const AzureProviderOptionsInputSchema = z.union([
@@ -117,7 +117,10 @@ export const AzureProviderOptionsInputSchema = z.union([
     config: AzureChatConfigInputSchema.optional(),
   }),
   ProviderOptionsInputFieldsSchema.extend({
-    id: z.templateLiteral([Prefix, ':responses:', Deployment]),
+    id: z.union([
+      z.templateLiteral([Prefix, ':responses']),
+      z.templateLiteral([Prefix, ':responses:', z.string()]),
+    ]),
     config: AzureResponsesConfigInputSchema.optional(),
   }),
   ProviderOptionsInputFieldsSchema.extend({

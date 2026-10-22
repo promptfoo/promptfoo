@@ -37,6 +37,7 @@ const commonInvalid: unknown[] = [
   { headers: { Authorization: 1 } },
   { inputCost: '1' },
   { unknown: true },
+  { model: 'ignored-model' },
 ];
 const validMessages = [
   { tools: [{ type: 'web_search_20260209' }, { type: 'web_fetch_20260209' }] },
@@ -46,7 +47,6 @@ const validMessages = [
   {},
   shared,
   {
-    model: 'custom-model',
     max_tokens: 0,
     temperature: 0,
     top_p: 0,
@@ -288,4 +288,11 @@ describe('nested MCP client contract', () => {
     expect(AnthropicMessagesConfigInputSchema.parse(config)).toEqual(config);
     expect(validate(config)).toBe(true);
   });
+});
+
+it('rejects model overrides in portable config types as well as validation', () => {
+  // @ts-expect-error Model selection belongs in the provider ID, not portable config.
+  const config: AnthropicMessagesConfigInput = { model: 'ignored-model' };
+  expect(AnthropicMessagesConfigInputSchema.safeParse(config).success).toBe(false);
+  expectTypeOf<'model'>().not.toExtend<keyof AnthropicMessagesConfigInput>();
 });
