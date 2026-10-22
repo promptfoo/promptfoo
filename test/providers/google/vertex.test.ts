@@ -3468,6 +3468,39 @@ describe('VertexChatProvider.callLlamaApi', () => {
     );
   });
 
+  it('sends generationConfig sampling options to Llama models', async () => {
+    provider = new VertexChatProvider('llama-3.3-70b-instruct-maas', {
+      config: {
+        region: 'us-central1',
+        temperature: 0.7,
+        maxOutputTokens: 250,
+        generationConfig: {
+          temperature: 0.2,
+          maxOutputTokens: 64,
+          topP: 0.9,
+          topK: 40,
+        },
+      },
+    });
+
+    const mockRequest = vi.fn().mockResolvedValue({
+      data: { choices: [{ message: { content: 'Llama response content' } }] },
+    });
+    vi.spyOn(vertexUtil, 'getGoogleClient').mockResolvedValue({
+      client: { request: mockRequest } as unknown as JSONClient,
+      projectId: 'test-project-id',
+    });
+    vi.spyOn(vertexUtil, 'resolveProjectId').mockResolvedValue('test-project-id');
+
+    await provider.callLlamaApi('test prompt');
+
+    const body = mockRequest.mock.calls[0][0].data;
+    expect(body.temperature).toBe(0.2);
+    expect(body.max_tokens).toBe(64);
+    expect(body.top_p).toBe(0.9);
+    expect(body.top_k).toBe(40);
+  });
+
   it('hashes Llama request body cache keys without leaking prompts', async () => {
     const prompt = 'llama-secret-prompt-value';
     provider = new VertexChatProvider('llama-3.3-70b-instruct-maas', {
