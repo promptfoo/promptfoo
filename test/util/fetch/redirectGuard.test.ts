@@ -113,6 +113,47 @@ describe('fetchWithProxy guarded redirects (PROMPTFOO_BLOCK_PRIVATE_RANGES)', ()
     );
   });
 
+  it('cancels redirect response bodies instead of buffering them', async () => {
+    restoreEnv = mockProcessEnv({ PROMPTFOO_BLOCK_PRIVATE_RANGES: 'true' });
+    let cancelled = false;
+    // A body that never produces data and never ends: draining it with
+    // arrayBuffer() would stall the guarded request forever, so the loop
+    // must cancel the stream instead.
+    const neverEndingBody = new ReadableStream({
+      cancel() {
+        cancelled = true;
+      },
+    });
+    mockedMonkeyPatchFetch
+      .mockResolvedValueOnce(
+        new Response(neverEndingBody, {
+          status: 302,
+          headers: { location: 'https://public.example.com/next' },
+        }),
+      )
+      .mockResolvedValueOnce(new Response('ok', { status: 200 }));
+
+    const response = await fetchWithProxy('https://public.example.com/start');
+
+    expect(response.status).toBe(200);
+    expect(cancelled).toBe(true);
+  });
+
+  it('redacts credentials from the redirect-limit error message', async () => {
+    restoreEnv = mockProcessEnv({ PROMPTFOO_BLOCK_PRIVATE_RANGES: 'true' });
+    mockedMonkeyPatchFetch.mockImplementation(async () =>
+      redirectResponse('https://public.example.com/loop'),
+    );
+
+    const error = await fetchWithProxy(
+      'https://public.example.com/start?api_key=supersecretvalue',
+    ).catch((e: unknown) => e);
+
+    expect(error).toBeInstanceOf(PrivateRangeBlockedError);
+    expect((error as Error).message).toMatch(/more than 5 redirects/);
+    expect((error as Error).message).not.toContain('supersecretvalue');
+  });
+
   it('refuses a cross-origin redirect for a cloud-authenticated request', async () => {
     // A custom cloud-auth header binds the request to its initial origin in
     // the native-follow path; the guarded path must honor that instead of
