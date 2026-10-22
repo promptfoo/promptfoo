@@ -11,7 +11,7 @@ import type { LookupAddress } from 'node:dns';
 import {
   assertProviderTargetPublic,
   assertUrlResolvesPublic,
-  getCallerSuppliedBaseUrl,
+  getCallerSuppliedBaseUrls,
   isPrivateIpAddress,
   isPrivateRangeBlockingEnabled,
   PrivateRangeBlockedError,
@@ -79,51 +79,92 @@ describe('isPrivateIpAddress', () => {
   });
 });
 
-describe('getCallerSuppliedBaseUrl', () => {
-  it('prefers config.apiBaseUrl', () => {
+describe('getCallerSuppliedBaseUrls', () => {
+  it('returns every config URL instead of letting one mask another', () => {
+    // HttpProvider requests `config.url || id` and never reads apiBaseUrl, so
+    // a public apiBaseUrl must not mask a private id.
     expect(
-      getCallerSuppliedBaseUrl({
-        id: 'http://10.0.0.1/v1',
-        config: { apiBaseUrl: 'http://192.168.1.10/v1' },
+      getCallerSuppliedBaseUrls({
+        id: 'http://169.254.169.254/latest',
+        config: { apiBaseUrl: 'https://8.8.8.8' },
       }),
-    ).toBe('http://192.168.1.10/v1');
+    ).toEqual(['https://8.8.8.8', 'http://169.254.169.254/latest']);
   });
 
   it('falls back to a bare http(s) provider id', () => {
-    expect(getCallerSuppliedBaseUrl({ id: 'http://169.254.169.254/' })).toBe(
+    expect(getCallerSuppliedBaseUrls({ id: 'http://169.254.169.254/' })).toEqual([
       'http://169.254.169.254/',
-    );
-    expect(getCallerSuppliedBaseUrl({ id: 'https://example.com/v1' })).toBe(
+    ]);
+    expect(getCallerSuppliedBaseUrls({ id: 'https://example.com/v1' })).toEqual([
       'https://example.com/v1',
-    );
+    ]);
   });
 
   it('catches non-canonical http(s) provider ids accepted by the registry', () => {
     // The registry accepts any `http:` prefix; Node canonicalizes these to
     // loopback before HttpProvider fetches them.
-    expect(getCallerSuppliedBaseUrl({ id: 'http:127.0.0.1' })).toBe('http:127.0.0.1');
-    expect(getCallerSuppliedBaseUrl({ id: 'http:\\\\127.0.0.1\\x' })).toBe('http:\\\\127.0.0.1\\x');
-    expect(getCallerSuppliedBaseUrl({ id: 'HTTP://169.254.169.254/' })).toBe(
+    expect(getCallerSuppliedBaseUrls({ id: 'http:127.0.0.1' })).toEqual(['http:127.0.0.1']);
+    expect(getCallerSuppliedBaseUrls({ id: 'http:\\\\127.0.0.1\\x' })).toEqual([
+      'http:\\\\127.0.0.1\\x',
+    ]);
+    expect(getCallerSuppliedBaseUrls({ id: 'HTTP://169.254.169.254/' })).toEqual([
       'HTTP://169.254.169.254/',
-    );
+    ]);
+  });
+
+  it('unwraps webhook: provider ids before returning the inner URL', () => {
+    expect(getCallerSuppliedBaseUrls({ id: 'webhook:http://169.254.169.254/latest' })).toEqual([
+      'http://169.254.169.254/latest',
+    ]);
+  });
+
+  it('returns ws:/wss: provider ids for validation', () => {
+    expect(getCallerSuppliedBaseUrls({ id: 'ws://169.254.169.254/socket' })).toEqual([
+      'ws://169.254.169.254/socket',
+    ]);
+    expect(getCallerSuppliedBaseUrls({ id: 'wss://example.com/socket' })).toEqual([
+      'wss://example.com/socket',
+    ]);
   });
 
   it('reads config.url (the HttpProvider request URL)', () => {
     expect(
-      getCallerSuppliedBaseUrl({ id: 'http', config: { url: 'http://127.0.0.1:8080/hook' } }),
-    ).toBe('http://127.0.0.1:8080/hook');
+      getCallerSuppliedBaseUrls({ id: 'http', config: { url: 'http://127.0.0.1:8080/hook' } }),
+    ).toEqual(['http://127.0.0.1:8080/hook']);
+  });
+
+  it('derives the target of a raw request from its Host header', () => {
+    expect(
+      getCallerSuppliedBaseUrls({
+        id: 'http',
+        config: { request: 'GET /latest/meta-data HTTP/1.1\r\nHost: 169.254.169.254\r\n\r\n' },
+      }),
+    ).toEqual(['http://169.254.169.254']);
+  });
+
+  it('prefers an absolute request target in a raw request', () => {
+    expect(
+      getCallerSuppliedBaseUrls({
+        id: 'http',
+        config: {
+          request: 'GET http://169.254.169.254/latest HTTP/1.1\r\nHost: example.com\r\n\r\n',
+        },
+      }),
+    ).toEqual(['http://169.254.169.254/latest']);
   });
 
   it('resolves named providers with local default endpoints', () => {
-    expect(getCallerSuppliedBaseUrl({ id: 'ollama:chat:llama3' })).toBe('http://localhost:11434');
-    expect(getCallerSuppliedBaseUrl({ id: 'llama:chat' })).toBe('http://localhost:8080');
-    expect(getCallerSuppliedBaseUrl({ id: 'localai:chat' })).toBe('http://localhost:8080/v1');
+    expect(getCallerSuppliedBaseUrls({ id: 'ollama:chat:llama3' })).toEqual([
+      'http://localhost:11434',
+    ]);
+    expect(getCallerSuppliedBaseUrls({ id: 'llama:chat' })).toEqual(['http://localhost:8080']);
+    expect(getCallerSuppliedBaseUrls({ id: 'localai:chat' })).toEqual(['http://localhost:8080/v1']);
   });
 
-  it('returns undefined for named providers without overrides', () => {
-    expect(getCallerSuppliedBaseUrl({ id: 'openai:gpt-4o-mini' })).toBeUndefined();
-    expect(getCallerSuppliedBaseUrl({ id: 'openai:gpt-4o-mini', config: {} })).toBeUndefined();
-    expect(getCallerSuppliedBaseUrl({})).toBeUndefined();
+  it('returns an empty list for named providers without overrides', () => {
+    expect(getCallerSuppliedBaseUrls({ id: 'openai:gpt-4o-mini' })).toEqual([]);
+    expect(getCallerSuppliedBaseUrls({ id: 'openai:gpt-4o-mini', config: {} })).toEqual([]);
+    expect(getCallerSuppliedBaseUrls({})).toEqual([]);
   });
 });
 
@@ -268,5 +309,86 @@ describe('assertProviderTargetPublic', () => {
       PrivateRangeBlockedError,
     );
     expect(mockedLookup).toHaveBeenCalledWith('localhost', { all: true });
+  });
+
+  it('does not let a public apiBaseUrl mask a private provider id', async () => {
+    // HttpProvider requests `config.url || id` and ignores apiBaseUrl.
+    restoreEnv = mockProcessEnv({ PROMPTFOO_BLOCK_PRIVATE_RANGES: 'true' });
+    await expect(
+      assertProviderTargetPublic({
+        id: 'http://169.254.169.254/latest',
+        config: { apiBaseUrl: 'https://8.8.8.8' },
+      }),
+    ).rejects.toThrow(PrivateRangeBlockedError);
+    expect(mockedLookup).not.toHaveBeenCalled();
+  });
+
+  it('validates the unwrapped target of webhook: provider ids', async () => {
+    restoreEnv = mockProcessEnv({ PROMPTFOO_BLOCK_PRIVATE_RANGES: 'true' });
+    await expect(
+      assertProviderTargetPublic({ id: 'webhook:http://169.254.169.254/latest' }),
+    ).rejects.toThrow(PrivateRangeBlockedError);
+    expect(mockedLookup).not.toHaveBeenCalled();
+  });
+
+  it('allows a webhook: id whose inner URL is public', async () => {
+    restoreEnv = mockProcessEnv({ PROMPTFOO_BLOCK_PRIVATE_RANGES: 'true' });
+    mockedLookup.mockResolvedValue([{ address: '93.184.216.34', family: 4 } as LookupAddress]);
+    await expect(
+      assertProviderTargetPublic({ id: 'webhook:https://example.com/hook' }),
+    ).resolves.toBeUndefined();
+  });
+
+  it('blocks ws:/wss: provider ids pointing at private addresses', async () => {
+    restoreEnv = mockProcessEnv({ PROMPTFOO_BLOCK_PRIVATE_RANGES: 'true' });
+    await expect(assertProviderTargetPublic({ id: 'ws://169.254.169.254/socket' })).rejects.toThrow(
+      PrivateRangeBlockedError,
+    );
+    expect(mockedLookup).not.toHaveBeenCalled();
+  });
+
+  it('blocks a raw request whose Host header points at a private address', async () => {
+    restoreEnv = mockProcessEnv({ PROMPTFOO_BLOCK_PRIVATE_RANGES: 'true' });
+    await expect(
+      assertProviderTargetPublic({
+        id: 'http',
+        config: { request: 'GET /latest/meta-data HTTP/1.1\r\nHost: 169.254.169.254\r\n\r\n' },
+      }),
+    ).rejects.toThrow(PrivateRangeBlockedError);
+    expect(mockedLookup).not.toHaveBeenCalled();
+  });
+
+  it('blocks a raw request with an absolute private request target', async () => {
+    restoreEnv = mockProcessEnv({ PROMPTFOO_BLOCK_PRIVATE_RANGES: 'true' });
+    await expect(
+      assertProviderTargetPublic({
+        id: 'http',
+        config: {
+          request: 'GET http://169.254.169.254/latest HTTP/1.1\r\nHost: example.com\r\n\r\n',
+        },
+      }),
+    ).rejects.toThrow(PrivateRangeBlockedError);
+  });
+
+  it('allows a raw request whose Host header resolves publicly', async () => {
+    restoreEnv = mockProcessEnv({ PROMPTFOO_BLOCK_PRIVATE_RANGES: 'true' });
+    mockedLookup.mockResolvedValue([{ address: '93.184.216.34', family: 4 } as LookupAddress]);
+    await expect(
+      assertProviderTargetPublic({
+        id: 'http',
+        config: { request: 'GET /hook HTTP/1.1\r\nHost: example.com\r\n\r\n' },
+      }),
+    ).resolves.toBeUndefined();
+    expect(mockedLookup).toHaveBeenCalledWith('example.com', { all: true });
+  });
+
+  it('fails closed on a raw request with no verifiable target', async () => {
+    restoreEnv = mockProcessEnv({ PROMPTFOO_BLOCK_PRIVATE_RANGES: 'true' });
+    await expect(
+      assertProviderTargetPublic({
+        id: 'http',
+        config: { request: 'GET /hook HTTP/1.1\r\nX-Custom: yes\r\n\r\n' },
+      }),
+    ).rejects.toThrow(PrivateRangeBlockedError);
   });
 });
