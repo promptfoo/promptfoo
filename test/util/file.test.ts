@@ -1683,6 +1683,13 @@ describe('file utilities', () => {
   describe('readFilters', () => {
     beforeEach(() => {
       vi.clearAllMocks();
+      vi.mocked(globSync).mockReset();
+      vi.mocked(importModule).mockReset();
+    });
+
+    afterEach(() => {
+      vi.mocked(globSync).mockReset();
+      vi.mocked(importModule).mockReset();
     });
 
     it('loads filter from file', async () => {
@@ -1694,6 +1701,60 @@ describe('file utilities', () => {
 
       const filters = await readFilters({ testFilter: 'filter.js' });
 
+      expect(filters.testFilter).toBe(mockFilter);
+    });
+
+    it.each([
+      {
+        description: 'an absolute path with a base path',
+        filterPath: path.resolve('shared', 'filter.js'),
+        basePath: path.resolve('project'),
+        expectedGlob: path.resolve('shared', 'filter.js'),
+      },
+      {
+        description: 'a relative path with a base path',
+        filterPath: './filters/filter.js',
+        basePath: path.resolve('project'),
+        expectedGlob: path.resolve('project', 'filters', 'filter.js'),
+      },
+      {
+        description: 'an absolute glob with a base path',
+        filterPath: path.resolve('shared', 'filter-*.js'),
+        basePath: path.resolve('project'),
+        expectedGlob: path.resolve('shared', 'filter-*.js'),
+      },
+      {
+        description: 'a relative glob with a base path',
+        filterPath: './filters/filter-*.js',
+        basePath: path.resolve('project'),
+        expectedGlob: path.resolve('project', 'filters', 'filter-*.js'),
+      },
+      {
+        description: 'an absolute path with the default base path',
+        filterPath: path.resolve('shared', 'filter.js'),
+        basePath: undefined,
+        expectedGlob: path.resolve('shared', 'filter.js'),
+      },
+      {
+        description: 'a relative path with the default base path',
+        filterPath: './filters/filter.js',
+        basePath: undefined,
+        expectedGlob: path.join('filters', 'filter.js'),
+      },
+    ])('loads a filter from $description', async ({ filterPath, basePath, expectedGlob }) => {
+      const mockFilter = vi.fn();
+      const matchedPath = expectedGlob.replace('*', 'custom');
+      vi.mocked(globSync).mockImplementation((pattern) =>
+        pattern === expectedGlob ? [matchedPath] : [],
+      );
+      vi.mocked(importModule).mockResolvedValueOnce(mockFilter);
+
+      const filters = await readFilters({ testFilter: filterPath }, basePath);
+
+      expect(globSync).toHaveBeenCalledExactlyOnceWith(expectedGlob, {
+        windowsPathsNoEscape: true,
+      });
+      expect(importModule).toHaveBeenCalledExactlyOnceWith(path.resolve(matchedPath));
       expect(filters.testFilter).toBe(mockFilter);
     });
 

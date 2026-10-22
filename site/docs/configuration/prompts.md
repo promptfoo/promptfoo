@@ -427,6 +427,8 @@ Variables from your test cases are automatically passed to these external prompt
 
 ### Custom Nunjucks Filters
 
+Filter file paths can be absolute or relative to the configuration's `basePath` (the config file's directory by default).
+
 Create custom filters for prompt processing:
 
 ```js title="uppercase_first.js"
