@@ -23,7 +23,6 @@ import {
   type VarValue,
 } from './types/index';
 import { isAudioFile, isImageFile, isJavascriptFile, isVideoFile } from './util/fileExtensions';
-import { parseFileUrl } from './util/functions/loadFunction';
 import { renderVarsInObject, setLoadedFileMimeTypes } from './util/index';
 import invariant from './util/invariant';
 import { filterFiniteScores } from './util/numeric';
@@ -256,7 +255,10 @@ async function resolveNestedFileReferences(value: VarValue, basePath: string): P
     return value;
   }
 
-  const { filePath: referencePath } = parseFileUrl(value);
+  // Nested references are plain data: only the path is needed here, with no var-script
+  // function name, so this mirrors the top-level slice rather than importing a parser
+  // from the node layer (which would add a cross-layer dependency).
+  const referencePath = value.slice('file://'.length);
   const filePath = path.resolve(process.cwd(), basePath, referencePath);
   const fileExtension = path.extname(filePath).toLowerCase();
 
