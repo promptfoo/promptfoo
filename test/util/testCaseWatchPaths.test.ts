@@ -154,13 +154,12 @@ describe('resolveTestsWatchPaths', () => {
     expect(watched).toContain(path.join(base, 'vars.csv'));
   });
 
-  it('watches file references nested inside a .jsonl tests file', () => {
-    fs.writeFileSync(
-      path.join(base, 'nested/cases.jsonl'),
-      '{"vars":{"data":"file://vars.csv"}}\n',
-    );
-    const watched = resolve('file://nested/cases.jsonl' as TestSuiteConfig['tests']);
-    expect(watched).toContain(path.join(base, 'nested/cases.jsonl'));
+  it.each(['json', 'jsonl'])('watches references inside a BOM-prefixed .%s tests file', (ext) => {
+    const file = path.join(base, `nested/bom-cases.${ext}`);
+    const row = { vars: { data: 'file://vars.csv' } };
+    fs.writeFileSync(file, '\uFEFF' + JSON.stringify(ext === 'json' ? [row] : row));
+    const watched = resolve(`file://nested/bom-cases.${ext}`);
+    expect(watched).toContain(file);
     expect(watched).toContain(path.join(base, 'vars.csv'));
   });
 
