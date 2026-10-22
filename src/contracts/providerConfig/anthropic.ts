@@ -118,7 +118,7 @@ export const AnthropicMessagesConfigInputSchema = AnthropicSharedConfigInputSche
   mcp: McpClientConfigInputSchema.extend({
     enabled: z.boolean().describe('Set true to initialize MCP tools'),
   }).optional(),
-  max_tool_calls: z.number().optional(),
+  max_tool_calls: z.number().int().nonnegative().optional(),
   output_format: z
     .union([
       FileReferenceInputSchema,
