@@ -158,4 +158,36 @@ describe('fetchWithProxy guarded redirects (PROMPTFOO_BLOCK_PRIVATE_RANGES)', ()
     expect(response.status).toBe(200);
     expect(mockedMonkeyPatchFetch).toHaveBeenCalledTimes(2);
   });
+
+  it('bars Cloud auth injection on every hop when the initial request is not Cloud-bound', async () => {
+    // A caller-controlled public URL that 307-redirects into the Cloud
+    // origin must not pick up the saved Cloud token on the later hop.
+    restoreEnv = mockProcessEnv({ PROMPTFOO_BLOCK_PRIVATE_RANGES: 'true' });
+    mockedMonkeyPatchFetch
+      .mockResolvedValueOnce(redirectResponse('https://api.promptfoo.app/api/v1/users/me', 307))
+      .mockResolvedValueOnce(new Response('ok', { status: 200 }));
+
+    const response = await fetchWithProxy('https://public.example.com/start');
+
+    expect(response.status).toBe(200);
+    expect(mockedMonkeyPatchFetch).toHaveBeenCalledTimes(2);
+    for (const call of mockedMonkeyPatchFetch.mock.calls) {
+      expect(call[1]).toMatchObject({ skipCloudAuthInjection: true });
+    }
+  });
+
+  it('keeps Cloud auth injection eligible when the initial request is Cloud-bound', async () => {
+    restoreEnv = mockProcessEnv({ PROMPTFOO_BLOCK_PRIVATE_RANGES: 'true' });
+    mockedMonkeyPatchFetch
+      .mockResolvedValueOnce(redirectResponse('https://api.promptfoo.app/api/v1/next', 307))
+      .mockResolvedValueOnce(new Response('ok', { status: 200 }));
+
+    const response = await fetchWithProxy('https://api.promptfoo.app/start');
+
+    expect(response.status).toBe(200);
+    expect(mockedMonkeyPatchFetch).toHaveBeenCalledTimes(2);
+    for (const call of mockedMonkeyPatchFetch.mock.calls) {
+      expect(call[1]).not.toMatchObject({ skipCloudAuthInjection: true });
+    }
+  });
 });
