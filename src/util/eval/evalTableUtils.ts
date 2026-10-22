@@ -301,8 +301,8 @@ function batchToStreamRows(
     if (!row) {
       row = {
         vars: varNames.map((varName) => {
-          const value = result.testCase?.vars?.[varName];
-          return value === undefined ? '' : String(value);
+          const value = result.testCase?.vars?.[varName] ?? '';
+          return typeof value === 'string' ? value : JSON.stringify(value);
         }),
         outputs: new Array(numPrompts).fill(null),
         test: { description: result.testCase?.description },
