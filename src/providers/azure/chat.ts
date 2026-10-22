@@ -284,7 +284,7 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
     const configuredReasoningEffort =
       resolvesReasoning && !isFixedReasoningModel
         ? resolveChatReasoningEffort(this.config, context?.prompt?.config, (value) =>
-            renderVarsInObject(value, context?.vars),
+            renderVarsInObject(value, context?.vars ?? {}),
           )
         : undefined;
     const defaultReasoningEffort =
@@ -469,7 +469,7 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
       maxTokens: body.max_completion_tokens ?? body.max_tokens ?? undefined,
       temperature: body.temperature ?? undefined,
       topP: body.top_p ?? undefined,
-      stopSequences: body.stop ?? undefined,
+      stopSequences: typeof body.stop === 'string' ? [body.stop] : (body.stop ?? undefined),
       frequencyPenalty: body.frequency_penalty ?? undefined,
       presencePenalty: body.presence_penalty ?? undefined,
     });

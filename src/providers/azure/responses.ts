@@ -155,7 +155,7 @@ export class AzureResponsesProvider extends AzureGenericProvider<AzureResponsesO
       ? resolveResponsesReasoningState(
           this.config,
           context?.prompt?.config,
-          (value) => renderVarsInObject(value, context?.vars),
+          (value) => renderVarsInObject(value, context?.vars ?? {}),
           { includeEffort: !isFixedReasoningModel },
         )
       : undefined;

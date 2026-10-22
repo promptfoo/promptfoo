@@ -59,7 +59,8 @@ function getResponsesReasoning(
   config: ReasoningConfig | undefined,
   render: (value: unknown) => unknown,
   resolveEffort = true,
-): { options: Record<string, unknown>; effort: unknown; clearOptions: boolean } {
+  allowRawPassthrough = false,
+): { options: Record<string, unknown>; effort: unknown; clearOptions: boolean; raw?: unknown } {
   const typed = renderResponsesReasoning(config?.reasoning, render, resolveEffort);
   if (typed === null) {
     return { options: {}, effort: null, clearOptions: true };
@@ -70,7 +71,7 @@ function getResponsesReasoning(
     render,
     resolveEffort && typedEffort === undefined,
   );
-  for (const value of [typed, passthrough]) {
+  for (const value of allowRawPassthrough ? [typed] : [typed, passthrough]) {
     if (value != null && !getObject(value)) {
       throw new Error('Responses reasoning must be an object or null. Use { effort: low }.');
     }
@@ -82,7 +83,15 @@ function getResponsesReasoning(
   );
   const effort =
     nestedEffort === undefined && resolveEffort ? render(config?.reasoning_effort) : nestedEffort;
-  return { options, effort, clearOptions: passthrough === null };
+  const raw =
+    allowRawPassthrough &&
+    typed === undefined &&
+    effort === undefined &&
+    passthrough != null &&
+    !getObject(passthrough)
+      ? passthrough
+      : undefined;
+  return { options, effort, clearOptions: passthrough === null, raw };
 }
 
 /** Honor literal full clears even when a model does not process typed reasoning options.
@@ -138,13 +147,28 @@ export function resolveResponsesReasoningState(
   providerConfig: ReasoningConfig,
   promptConfig: ReasoningConfig | undefined,
   render: (value: unknown) => unknown,
-  settings: { includeEffort?: boolean } = {},
-): { reasoning: Record<string, unknown> | undefined; hasExplicitConfig: boolean } {
+  settings: { includeEffort?: boolean; allowRawPassthrough?: boolean } = {},
+): {
+  reasoning: Record<string, unknown> | undefined;
+  rawReasoning?: unknown;
+  hasExplicitConfig: boolean;
+} {
   const includeEffort = settings.includeEffort !== false;
-  const prompt = getResponsesReasoning(promptConfig, render, includeEffort);
-  const provider = prompt.clearOptions
-    ? undefined
-    : getResponsesReasoning(providerConfig, render, includeEffort && prompt.effort === undefined);
+  const prompt = getResponsesReasoning(
+    promptConfig,
+    render,
+    includeEffort,
+    settings.allowRawPassthrough,
+  );
+  const provider =
+    prompt.clearOptions || prompt.raw !== undefined
+      ? undefined
+      : getResponsesReasoning(
+          providerConfig,
+          render,
+          includeEffort && prompt.effort === undefined,
+          settings.allowRawPassthrough,
+        );
   const options = { ...provider?.options, ...prompt.options };
   const effort = firstDefined(prompt.effort, provider?.effort);
   const clearsEffort = effort === null || effort === '';
@@ -159,9 +183,13 @@ export function resolveResponsesReasoningState(
     }
   }
   const reasoning = Object.keys(options).length ? options : undefined;
+  const rawReasoning =
+    reasoning === undefined && !clearsEffort ? firstDefined(prompt.raw, provider?.raw) : undefined;
   return {
     reasoning,
+    rawReasoning,
     hasExplicitConfig:
+      rawReasoning !== undefined ||
       reasoning !== undefined ||
       clearsEffort ||
       prompt.clearOptions ||
@@ -174,7 +202,7 @@ export function resolveResponsesReasoning(
   providerConfig: ReasoningConfig,
   promptConfig: ReasoningConfig | undefined,
   render: (value: unknown) => unknown,
-  settings: { includeEffort?: boolean } = {},
+  settings: { includeEffort?: boolean; allowRawPassthrough?: boolean } = {},
 ): Record<string, unknown> | undefined {
   return resolveResponsesReasoningState(providerConfig, promptConfig, render, settings).reasoning;
 }

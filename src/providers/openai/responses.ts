@@ -1077,9 +1077,14 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     } = this.getDeploymentCapabilities(config);
     const supportsReasoningConfig =
       isReasoningModel || !isLegacyOpenAiChatModel(this.getEffectiveModelName(config));
+    // Compatible endpoints may define scalar/array reasoning in their raw JSON contract.
+    const allowRawReasoning = this.requestPolicy === 'compatible' && !isGPT6Model;
     const resolvedReasoning = supportsReasoningConfig
-      ? resolveResponsesReasoningState(this.config, context?.prompt?.config, (value) =>
-          renderVarsInObject(value, context?.vars ?? {}),
+      ? resolveResponsesReasoningState(
+          this.config,
+          context?.prompt?.config,
+          (value) => renderVarsInObject(value, context?.vars ?? {}),
+          { allowRawPassthrough: allowRawReasoning },
         )
       : undefined;
     const renderedReasoning = resolvedReasoning?.reasoning;
@@ -1229,7 +1234,10 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     assertOpenAiApiModel(body.model, this.getApiUrl());
 
     if (supportsReasoningConfig) {
-      if (renderedReasoning) {
+      if (resolvedReasoning?.rawReasoning !== undefined) {
+        // This value belongs to the compatible endpoint's raw passthrough contract.
+        (body as Record<string, unknown>).reasoning = resolvedReasoning.rawReasoning;
+      } else if (renderedReasoning) {
         body.reasoning = renderedReasoning;
       } else {
         delete body.reasoning;

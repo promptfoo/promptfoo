@@ -3,6 +3,7 @@ import { getAnthropicEnvHeaderSuppressions } from './anthropic/generic';
 import { AnthropicMessagesProvider } from './anthropic/messages';
 import { OpenAiChatCompletionProvider } from './openai/chat';
 import { OpenAiResponsesProvider } from './openai/responses';
+import { resolveChatOutputCap } from './openai/tokenCaps';
 import { serializeProvider } from './serialization';
 import type { ClientOptions } from '@anthropic-ai/sdk';
 
@@ -420,7 +421,25 @@ class MetaProvider extends OpenAiChatCompletionProvider {
     // The Meta API caps generation with max_completion_tokens (max_tokens is
     // only a deprecated alias); honor an explicit max_tokens as the canonical
     // field rather than silently dropping it.
-    applyMetaChatOutputCap(body, passthrough, config.max_completion_tokens ?? config.max_tokens);
+    const promptConfig = context?.prompt?.config;
+    const promptPassthrough = promptConfig?.passthrough;
+    const hasPromptCap = [
+      promptPassthrough?.max_completion_tokens,
+      promptPassthrough?.max_tokens,
+      promptConfig?.max_completion_tokens,
+      promptConfig?.max_tokens,
+    ].some((value) => value !== undefined);
+    if (hasPromptCap) {
+      // Resolve the prompt scope before the provider scope, including explicit clears.
+      const cap = resolveChatOutputCap(this.config, promptConfig, true, {});
+      if (cap === undefined) {
+        delete body.max_completion_tokens;
+      } else {
+        body.max_completion_tokens = cap;
+      }
+    } else {
+      applyMetaChatOutputCap(body, passthrough, config.max_completion_tokens ?? config.max_tokens);
+    }
     applyMetaSamplingHygiene(body, config, passthrough, [
       'top_p',
       'presence_penalty',
