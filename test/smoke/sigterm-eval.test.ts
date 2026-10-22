@@ -20,7 +20,8 @@ const FIXTURE_DIR = path.resolve(__dirname, 'fixtures/sigterm-eval');
 
 type Exit = { code: number | null; signal: NodeJS.Signals | null };
 
-describe('SIGTERM during an eval', () => {
+// Windows has no POSIX signals: `kill('SIGTERM')` terminates the child without running handlers.
+describe.skipIf(process.platform === 'win32')('SIGTERM during an eval', () => {
   const workDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-sigterm-'));
   let child: ChildProcess | undefined;
   let receiver: http.Server | undefined;
