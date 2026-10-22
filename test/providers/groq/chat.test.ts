@@ -3,6 +3,7 @@ import { clearCache } from '../../../src/cache';
 import { GroqProvider } from '../../../src/providers/groq/index';
 import { mockProcessEnv } from '../../util/utils';
 
+import type { GroqCompletionOptions } from '../../../src/providers/groq/types';
 import type { OpenAiChatCompletionProvider } from '../../../src/providers/openai/chat';
 import type { CallApiContextParams } from '../../../src/types/index';
 
@@ -380,6 +381,99 @@ describe('GroqProvider', () => {
       expect(body.include_reasoning).toBe(false);
       expect(body.compound_custom).toBeDefined();
       expect(body.search_settings).toBeDefined();
+    });
+
+    describe('prompt configuration overrides', () => {
+      const cases = [
+        {
+          key: 'include_reasoning',
+          model: 'openai/gpt-oss-120b',
+          providerValue: true,
+          promptValue: false,
+        },
+        {
+          key: 'reasoning_format',
+          model: 'qwen/qwen3.6-27b',
+          providerValue: 'parsed',
+          promptValue: 'hidden',
+        },
+        {
+          key: 'compound_custom',
+          model: 'groq/compound',
+          providerValue: { tools: { enabled_tools: ['web_search'] } },
+          promptValue: { tools: { enabled_tools: ['code_interpreter'] } },
+        },
+        {
+          key: 'search_settings',
+          model: 'groq/compound',
+          providerValue: { country: 'US', include_domains: ['example.com'] },
+          promptValue: { country: 'GB' },
+        },
+      ] as const;
+
+      function context(config: GroqCompletionOptions): CallApiContextParams {
+        return { prompt: { raw: 'Test prompt', label: 'Test prompt', config }, vars: {} };
+      }
+
+      it.each(cases)('uses prompt $key instead of the provider default', async (testCase) => {
+        const provider = new GroqProvider(testCase.model, {
+          config: { [testCase.key]: testCase.providerValue, temperature: 0.8 },
+        });
+        const { body, config } = await provider.getOpenAiBody(
+          'Test prompt',
+          context({ [testCase.key]: testCase.promptValue, temperature: 0.25 }),
+        );
+
+        expect(body[testCase.key]).toEqual(testCase.promptValue);
+        expect(config).toMatchObject({ [testCase.key]: testCase.promptValue });
+        expect(body.temperature).toBe(0.25);
+        expect(provider.config).toMatchObject({ [testCase.key]: testCase.providerValue });
+        expect((await provider.getOpenAiBody('Test prompt')).body[testCase.key]).toEqual(
+          testCase.providerValue,
+        );
+      });
+
+      it.each(cases)('forwards prompt-only $key', async (testCase) => {
+        const provider = new GroqProvider(testCase.model, {});
+        const { body } = await provider.getOpenAiBody(
+          'Test prompt',
+          context({ [testCase.key]: testCase.promptValue }),
+        );
+
+        expect(body[testCase.key]).toEqual(testCase.promptValue);
+      });
+
+      it.each(cases)('keeps $key when the prompt does not override it', async (testCase) => {
+        const provider = new GroqProvider(testCase.model, {
+          config: { [testCase.key]: testCase.providerValue },
+        });
+        const { body } = await provider.getOpenAiBody(
+          'Test prompt',
+          context({ temperature: 0.25 }),
+        );
+
+        expect(body[testCase.key]).toEqual(testCase.providerValue);
+        expect(body.temperature).toBe(0.25);
+      });
+
+      it.each(cases)('honors an explicit undefined prompt $key', async (testCase) => {
+        const provider = new GroqProvider(testCase.model, {
+          config: { [testCase.key]: testCase.providerValue },
+        });
+        const { body } = await provider.getOpenAiBody(
+          'Test prompt',
+          context({ [testCase.key]: undefined }),
+        );
+
+        expect(body).not.toHaveProperty(testCase.key);
+      });
+
+      it.each(cases)('omits unconfigured $key', async (testCase) => {
+        const provider = new GroqProvider(testCase.model, {});
+        const { body } = await provider.getOpenAiBody('Test prompt', context({}));
+
+        expect(body).not.toHaveProperty(testCase.key);
+      });
     });
 
     it('should build correct message structure', async () => {
