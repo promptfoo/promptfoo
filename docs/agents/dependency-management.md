@@ -54,6 +54,8 @@ Major updates require careful evaluation:
 
 The root `mermaid` override selects version 12. The site explicitly uses `layout: dagre` and `look: classic` to preserve its existing diagrams' layout and appearance. Mermaid's browser floor is newer than some site targets, so validate new diagram types against the site's Browserslist targets before adopting them.
 
+Keep `storybook`, the `@storybook/*` framework and addons on the same release. Storybook 10.6.2 also requires `@chromatic-com/storybook` 5.5.1 or later for the hardened highlight API. Development servers restrict remote iframe embedding and messaging by default; built Storybooks remain embeddable.
+
 The project uses npm workspaces. Updates must be checked in all three locations:
 
 - Root (`/`) - Core library dependencies

@@ -78,3 +78,25 @@ describe('the docs Mermaid sanitizer', () => {
     expect(safe.textContent).toBe('safe');
   });
 });
+
+describe('the docs Mermaid math renderer', () => {
+  const katex = mermaidRequire('katex') as {
+    renderToString(input: string, options?: { trust?: boolean }): string;
+  };
+
+  it('does not inherit trusted rendering from the options prototype', () => {
+    const options = Object.create({ trust: true });
+    const output = katex.renderToString(String.raw`\href{javascript:alert(1)}{unsafe}`, options);
+
+    expect(output).not.toContain('href="javascript:');
+    expect(output).toContain('unsafe');
+  });
+
+  it('preserves explicitly trusted links', () => {
+    const output = katex.renderToString(String.raw`\href{https://example.com}{safe}`, {
+      trust: true,
+    });
+
+    expect(output).toContain('href="https://example.com"');
+  });
+});
