@@ -226,7 +226,13 @@ export async function assertUrlResolvesPublic(rawUrl: string): Promise<void> {
 
 interface ProviderTarget {
   id?: unknown;
-  config?: { apiBaseUrl?: unknown; url?: unknown; request?: unknown; useHttps?: unknown };
+  config?: {
+    apiBaseUrl?: unknown;
+    baseUrl?: unknown;
+    url?: unknown;
+    request?: unknown;
+    useHttps?: unknown;
+  };
 }
 
 /**
@@ -249,6 +255,15 @@ const LOCAL_DEFAULT_ENDPOINTS: Array<{
    * when an (ignored) `apiBaseUrl` is configured.
    */
   apiBaseUrlWins?: boolean;
+  /**
+   * True when the provider ignores `config.apiBaseUrl` and derives its
+   * effective endpoint from `config.baseUrl` instead. The guard then
+   * validates the explicit `config.baseUrl` when one is configured, and
+   * the local default otherwise: suppressing the default on an
+   * `apiBaseUrl` override would validate a URL that is never fetched
+   * while the real target goes unchecked.
+   */
+  configBaseUrlWins?: boolean;
 }> = [
   {
     test: (id) => id.startsWith('ollama:'),
@@ -270,7 +285,11 @@ const LOCAL_DEFAULT_ENDPOINTS: Array<{
   {
     test: (id) => id.startsWith('helicone:'),
     baseUrl: () => 'http://localhost:8080',
-    apiBaseUrlWins: true,
+    // HeliconeGatewayProvider derives its endpoint from config.baseUrl and
+    // overwrites config.apiBaseUrl with `${baseUrl}/ai`, so the effective
+    // target is the configured baseUrl (or the local default), never the
+    // caller-supplied apiBaseUrl.
+    configBaseUrlWins: true,
   },
   {
     test: (id) => id.startsWith('docker:'),
@@ -385,7 +404,9 @@ function getRawRequestTarget(rawRequest: string, useHttps: boolean): string {
  * - a named provider whose default endpoint is local (ollama, llama, ...),
  *   validated against its effective default base URL, unless the provider
  *   resolves an explicit `config.apiBaseUrl` ahead of that default
- *   (localai, helicone), in which case the default is never fetched.
+ *   (localai), in which case the default is never fetched; providers that
+ *   derive their endpoint from `config.baseUrl` instead (helicone) are
+ *   validated against the effective `config.baseUrl`.
  *
  * Named providers without an override or a local default resolve to their
  * public defaults and need no check.
@@ -415,16 +436,26 @@ export function getCallerSuppliedBaseUrls(providerOptions: ProviderTarget): stri
   const localDefault = LOCAL_DEFAULT_ENDPOINTS.find(({ test }) => test(id));
   const defaultUrl = localDefault?.baseUrl();
   if (defaultUrl) {
-    // A provider that resolves `config.apiBaseUrl` ahead of its local
-    // default never fetches the default once an override is configured, so
-    // validating the default would reject a target that is never used.
-    // Providers whose fetch URL comes from an env var alone keep the
-    // default in the list: it remains their effective target.
-    const apiBaseUrl = config?.apiBaseUrl;
-    const explicitApiBaseUrl =
-      typeof apiBaseUrl === 'string' && apiBaseUrl.length > 0 ? apiBaseUrl : undefined;
-    if (!(explicitApiBaseUrl && localDefault?.apiBaseUrlWins)) {
-      urls.push(defaultUrl);
+    if (localDefault?.configBaseUrlWins) {
+      // The provider derives its endpoint from config.baseUrl and never
+      // fetches config.apiBaseUrl, so the effective target is the explicit
+      // config.baseUrl when one is configured, the local default otherwise.
+      const configBaseUrl = config?.baseUrl;
+      urls.push(
+        typeof configBaseUrl === 'string' && configBaseUrl.length > 0 ? configBaseUrl : defaultUrl,
+      );
+    } else {
+      // A provider that resolves `config.apiBaseUrl` ahead of its local
+      // default never fetches the default once an override is configured, so
+      // validating the default would reject a target that is never used.
+      // Providers whose fetch URL comes from an env var alone keep the
+      // default in the list: it remains their effective target.
+      const apiBaseUrl = config?.apiBaseUrl;
+      const explicitApiBaseUrl =
+        typeof apiBaseUrl === 'string' && apiBaseUrl.length > 0 ? apiBaseUrl : undefined;
+      if (!(explicitApiBaseUrl && localDefault?.apiBaseUrlWins)) {
+        urls.push(defaultUrl);
+      }
     }
   }
   return urls;

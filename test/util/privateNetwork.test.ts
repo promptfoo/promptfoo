@@ -184,20 +184,41 @@ describe('getCallerSuppliedBaseUrls', () => {
   });
 
   it('drops the local default when an apiBaseUrl override wins for that provider', () => {
-    // localai and helicone resolve config.apiBaseUrl ahead of the local
-    // default, so the default is never fetched and must not be validated.
+    // localai resolves config.apiBaseUrl ahead of the local default, so the
+    // default is never fetched and must not be validated.
     expect(
       getCallerSuppliedBaseUrls({
         id: 'localai:chat',
         config: { apiBaseUrl: 'https://models.example.com/v1' },
       }),
     ).toEqual(['https://models.example.com/v1']);
+  });
+
+  it('validates helicone against the effective config.baseUrl, not the overwritten apiBaseUrl', () => {
+    // HeliconeGatewayProvider derives its endpoint from config.baseUrl and
+    // overwrites config.apiBaseUrl with `${baseUrl}/ai`, so a public
+    // apiBaseUrl must not mask a private baseUrl.
+    expect(
+      getCallerSuppliedBaseUrls({
+        id: 'helicone:openai/gpt-4o',
+        config: { apiBaseUrl: 'https://8.8.8.8', baseUrl: 'http://169.254.169.254' },
+      }),
+    ).toEqual(['https://8.8.8.8', 'http://169.254.169.254']);
+    expect(
+      getCallerSuppliedBaseUrls({
+        id: 'helicone:openai/gpt-4o',
+        config: { baseUrl: 'http://169.254.169.254' },
+      }),
+    ).toEqual(['http://169.254.169.254']);
+    // With no baseUrl the provider falls back to its local default, which
+    // stays validated even when an (ignored) apiBaseUrl is configured.
     expect(
       getCallerSuppliedBaseUrls({
         id: 'helicone:gpt-4o',
         config: { apiBaseUrl: 'https://helicone.example.com' },
       }),
-    ).toEqual(['https://helicone.example.com']);
+    ).toEqual(['https://helicone.example.com', 'http://localhost:8080']);
+    expect(getCallerSuppliedBaseUrls({ id: 'helicone:gpt-4o' })).toEqual(['http://localhost:8080']);
   });
 
   it('keeps the local default when the provider ignores config.apiBaseUrl', () => {
@@ -369,6 +390,20 @@ describe('assertProviderTargetPublic', () => {
       assertProviderTargetPublic({
         id: 'http://169.254.169.254/latest',
         config: { apiBaseUrl: 'https://8.8.8.8' },
+      }),
+    ).rejects.toThrow(PrivateRangeBlockedError);
+    expect(mockedLookup).not.toHaveBeenCalled();
+  });
+
+  it('does not let a public apiBaseUrl mask a private helicone baseUrl', async () => {
+    // HeliconeGatewayProvider derives its endpoint from config.baseUrl and
+    // overwrites config.apiBaseUrl, so the guard must reject the private
+    // effective target even though the apiBaseUrl is public.
+    restoreEnv = mockProcessEnv({ PROMPTFOO_BLOCK_PRIVATE_RANGES: 'true' });
+    await expect(
+      assertProviderTargetPublic({
+        id: 'helicone:openai/gpt-4o',
+        config: { apiBaseUrl: 'https://8.8.8.8', baseUrl: 'http://169.254.169.254' },
       }),
     ).rejects.toThrow(PrivateRangeBlockedError);
     expect(mockedLookup).not.toHaveBeenCalled();
