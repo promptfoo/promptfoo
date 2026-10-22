@@ -32,6 +32,7 @@ import {
   monkeyPatchFetch,
   preserveCloudAuthRedirects,
 } from './monkeyPatchFetch';
+import { isRedirectStatus } from './redirectStatus';
 import { getEffectiveRequestSignal } from './requestSignal';
 import { readWithResponseDeadline, trackResponseDeadline } from './responseDeadline';
 import { getFetchRetryContextMaxRetries } from './retryContext';
@@ -231,10 +232,6 @@ const CROSS_ORIGIN_REDIRECT_DROP_HEADERS = new Set([
   'cookie',
   'proxy-authorization',
 ]);
-
-function isRedirectStatus(status: number): boolean {
-  return status === 301 || status === 302 || status === 303 || status === 307 || status === 308;
-}
 
 // Entity headers that must not survive a 301/302/303 downgrade to GET.
 const BODY_HEADERS = new Set([
