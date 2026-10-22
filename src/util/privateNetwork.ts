@@ -241,6 +241,14 @@ const LOCAL_DEFAULT_ENDPOINTS: Array<{
   test: (id: string) => boolean;
   /** The effective default base URL, honoring the provider's env override. */
   baseUrl: () => string;
+  /**
+   * True when the provider resolves `config.apiBaseUrl` ahead of this
+   * default, so an explicit override replaces the default instead of
+   * sitting beside it. Providers that build their fetch URL from an env
+   * var alone leave this unset: their default stays a live target even
+   * when an (ignored) `apiBaseUrl` is configured.
+   */
+  apiBaseUrlWins?: boolean;
 }> = [
   {
     test: (id) => id.startsWith('ollama:'),
@@ -253,6 +261,7 @@ const LOCAL_DEFAULT_ENDPOINTS: Array<{
   {
     test: (id) => id.startsWith('localai:'),
     baseUrl: () => getEnvString('LOCALAI_BASE_URL') || 'http://localhost:8080/v1',
+    apiBaseUrlWins: true,
   },
   {
     test: (id) => id.startsWith('mlflow-gateway:'),
@@ -261,6 +270,7 @@ const LOCAL_DEFAULT_ENDPOINTS: Array<{
   {
     test: (id) => id.startsWith('helicone:'),
     baseUrl: () => 'http://localhost:8080',
+    apiBaseUrlWins: true,
   },
   {
     test: (id) => id.startsWith('docker:'),
@@ -373,7 +383,9 @@ function getRawRequestTarget(rawRequest: string, useHttps: boolean): string {
  * - URL-bearing provider ids the registry unwraps before fetching
  *   (`webhook:<url>`, `ws:`/`wss:`),
  * - a named provider whose default endpoint is local (ollama, llama, ...),
- *   validated against its effective default base URL.
+ *   validated against its effective default base URL, unless the provider
+ *   resolves an explicit `config.apiBaseUrl` ahead of that default
+ *   (localai, helicone), in which case the default is never fetched.
  *
  * Named providers without an override or a local default resolve to their
  * public defaults and need no check.
@@ -403,7 +415,17 @@ export function getCallerSuppliedBaseUrls(providerOptions: ProviderTarget): stri
   const localDefault = LOCAL_DEFAULT_ENDPOINTS.find(({ test }) => test(id));
   const defaultUrl = localDefault?.baseUrl();
   if (defaultUrl) {
-    urls.push(defaultUrl);
+    // A provider that resolves `config.apiBaseUrl` ahead of its local
+    // default never fetches the default once an override is configured, so
+    // validating the default would reject a target that is never used.
+    // Providers whose fetch URL comes from an env var alone keep the
+    // default in the list: it remains their effective target.
+    const apiBaseUrl = config?.apiBaseUrl;
+    const explicitApiBaseUrl =
+      typeof apiBaseUrl === 'string' && apiBaseUrl.length > 0 ? apiBaseUrl : undefined;
+    if (!(explicitApiBaseUrl && localDefault?.apiBaseUrlWins)) {
+      urls.push(defaultUrl);
+    }
   }
   return urls;
 }
