@@ -27,7 +27,11 @@ import {
   HttpRateLimitError,
   type SystemError,
 } from './errors';
-import { monkeyPatchFetch, preserveCloudAuthRedirects } from './monkeyPatchFetch';
+import {
+  isPromptfooCloudApiHost,
+  monkeyPatchFetch,
+  preserveCloudAuthRedirects,
+} from './monkeyPatchFetch';
 import { getEffectiveRequestSignal } from './requestSignal';
 import { getFetchRetryContextMaxRetries } from './retryContext';
 
@@ -306,6 +310,15 @@ async function fetchWithRedirectValidation(
     ...options,
     redirect: 'manual',
   };
+  // Cloud-auth injection eligibility is bound to the initial request:
+  // monkeyPatchFetch re-injects the saved Cloud token on any hop whose URL
+  // matches the Cloud origin, so a caller-controlled public URL that
+  // redirects into the Cloud origin must be barred from injection on every
+  // hop. buildRedirectHopOptions spreads currentOptions per hop, which
+  // carries this flag through the whole chain.
+  if (!isPromptfooCloudApiHost(initialUrl)) {
+    currentOptions.skipCloudAuthInjection = true;
+  }
   // `redirect: 'manual'` stops after the first 3xx, so recompute the
   // dispatcher per hop: proxy selection depends on the hop's URL. A
   // caller-supplied dispatcher (e.g. mTLS) is kept for every hop.
