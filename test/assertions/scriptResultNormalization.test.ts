@@ -1,7 +1,13 @@
 import vm from 'node:vm';
 
 import { describe, expect, it } from 'vitest';
-import { asGradingResult } from '../../src/assertions/scriptResultNormalization';
+import {
+  asGradingResult,
+  normalizeScriptAssertionResult,
+  normalizeScriptResult,
+} from '../../src/assertions/scriptResultNormalization';
+
+import type { Assertion } from '../../src/types/index';
 
 describe('asGradingResult', () => {
   const grade = { pass: true, score: 1, reason: 'ok' };
@@ -264,5 +270,92 @@ describe('asGradingResult', () => {
 
   it.each([undefined, null, true, 0.5, 'true', []])('returns undefined for %j', (result) => {
     expect(asGradingResult(result)).toBeUndefined();
+  });
+});
+
+const pythonAssertion: Assertion = { type: 'not-python', value: 'return True' };
+const labels = { code: 'Python code', language: 'Python' };
+
+describe('normalizeScriptAssertionResult', () => {
+  it('preserves custom GradingResult reason when inverse turns a pass into a fail', () => {
+    const result = normalizeScriptAssertionResult(
+      pythonAssertion,
+      {
+        pass: true,
+        score: 1,
+        reason: 'Expected output not to contain "foo", but it did.',
+      },
+      true,
+      labels,
+    );
+
+    expect(result.pass).toBe(false);
+    expect(result.reason).toBe('Expected output not to contain "foo", but it did.');
+  });
+
+  it('falls back to a generic outcome when an inverted GradingResult has an empty reason', () => {
+    const result = normalizeScriptAssertionResult(
+      pythonAssertion,
+      {
+        pass: true,
+        score: 1,
+        reason: '',
+      },
+      true,
+      labels,
+    );
+
+    expect(result.pass).toBe(false);
+    expect(result.reason).toBe('Python code returned true');
+  });
+
+  it('replaces the default pass reason when inverse turns a pass into a fail', () => {
+    const result = normalizeScriptAssertionResult(
+      pythonAssertion,
+      {
+        pass: true,
+        score: 1,
+        reason: 'Assertion passed',
+      },
+      true,
+      labels,
+    );
+
+    expect(result.pass).toBe(false);
+    expect(result.reason).toBe('Python code returned true');
+  });
+});
+
+describe('normalizeScriptResult', () => {
+  it('falls back to a generic outcome when an inverted object GradingResult has an empty reason', () => {
+    const result = normalizeScriptResult(
+      pythonAssertion,
+      {
+        pass: true,
+        score: 1,
+        reason: '',
+      },
+      true,
+      labels,
+    );
+
+    expect(result.pass).toBe(false);
+    expect(result.reason).toBe('Python code returned true');
+  });
+
+  it('replaces the default pass reason when an inverted object GradingResult is inverted to fail', () => {
+    const result = normalizeScriptResult(
+      pythonAssertion,
+      {
+        pass: true,
+        score: 1,
+        reason: 'Assertion passed',
+      },
+      true,
+      labels,
+    );
+
+    expect(result.pass).toBe(false);
+    expect(result.reason).toBe('Python code returned true');
   });
 });
