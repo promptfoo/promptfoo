@@ -174,7 +174,6 @@ export class ElevenLabsAlignmentProvider implements ApiProvider {
 
     for (let i = 0; i < response.words.length; i++) {
       const word = response.words[i];
-      const nextWord = response.words[i + 1];
 
       // Group words into subtitle chunks (max 10 words or 2 seconds)
       const chunkWords: (typeof word)[] = [word];
@@ -191,9 +190,7 @@ export class ElevenLabsAlignmentProvider implements ApiProvider {
 
       // Format timestamp
       const start = this.formatSRTTimestamp(word.start);
-      const end = this.formatSRTTimestamp(
-        nextWord ? nextWord.start : chunkWords[chunkWords.length - 1].end,
-      );
+      const end = this.formatSRTTimestamp(chunkWords[chunkWords.length - 1].end);
 
       // Add subtitle entry
       lines.push(`${subtitleNumber}`);
