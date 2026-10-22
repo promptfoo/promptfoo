@@ -1,4 +1,5 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { isCacheEnabled } from '../src/cache';
 import { loadApiProvider } from '../src/providers/index';
 import {
   SageMakerCompletionProvider,
@@ -1056,6 +1057,122 @@ describe('SageMakerCompletionProvider - Payload Formatting', () => {
 describe('SageMakerCompletionProvider - Response Parsing', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+
+  describe('callApi generated_text responses', () => {
+    beforeEach(() => {
+      vi.mocked(isCacheEnabled).mockReset().mockReturnValue(false);
+    });
+
+    afterEach(() => {
+      vi.mocked(isCacheEnabled).mockReset().mockReturnValue(true);
+      mockSend.mockReset();
+    });
+
+    describe.each([
+      {
+        format: 'Hugging Face array',
+        modelType: 'huggingface' as const,
+        array: true,
+        path: 'json[0].generated_text',
+      },
+      {
+        format: 'Hugging Face object',
+        modelType: 'huggingface' as const,
+        array: false,
+        path: 'json.generated_text',
+      },
+      {
+        format: 'JumpStart object',
+        modelType: 'jumpstart' as const,
+        array: false,
+        path: 'json.generated_text',
+      },
+    ])('$format', ({ modelType, array, path }) => {
+      it('preserves empty text without requiring an explicit response path', async () => {
+        const record = { generated_text: '', metadata: { model_version: '1.0' } };
+        const body = JSON.stringify(array ? [record] : record);
+        mockSend.mockResolvedValue({ Body: new TextEncoder().encode(body) });
+
+        const explicitProvider = new SageMakerCompletionProvider('generated-text-endpoint', {
+          config: { modelType, responseFormat: { path } },
+        });
+        const explicitResult = await explicitProvider.callApi('Return no text');
+        expect(explicitResult.error).toBeUndefined();
+        expect(explicitResult.output).toBe('');
+
+        const provider = new SageMakerCompletionProvider('generated-text-endpoint', {
+          config: { modelType },
+        });
+        const result = await provider.callApi('Return no text');
+        expect(mockSend).toHaveBeenCalledTimes(2);
+        expect(result.error).toBeUndefined();
+        expect(result.raw).toBe(body);
+        expect(result.output).toBe(explicitResult.output);
+      });
+
+      it('extracts nonempty text', async () => {
+        const record = { generated_text: 'Generated answer', metadata: { model_version: '1.0' } };
+        mockSend.mockResolvedValue({
+          Body: new TextEncoder().encode(JSON.stringify(array ? [record] : record)),
+        });
+        const provider = new SageMakerCompletionProvider('generated-text-endpoint', {
+          config: { modelType },
+        });
+
+        const result = await provider.callApi('Return an answer');
+
+        expect(mockSend).toHaveBeenCalledTimes(1);
+        expect(result.error).toBeUndefined();
+        expect(result.output).toBe('Generated answer');
+      });
+
+      it.each([undefined, null, false, 0])(
+        'keeps the existing record fallback for generated_text=%s',
+        async (generatedText) => {
+          const record = {
+            ...(generatedText === undefined ? {} : { generated_text: generatedText }),
+            metadata: { model_version: '1.0' },
+          };
+          mockSend.mockResolvedValue({
+            Body: new TextEncoder().encode(JSON.stringify(array ? [record] : record)),
+          });
+          const provider = new SageMakerCompletionProvider('generated-text-endpoint', {
+            config: { modelType },
+          });
+
+          const result = await provider.callApi('Return a record');
+
+          expect(mockSend).toHaveBeenCalledTimes(1);
+          expect(result.error).toBeUndefined();
+          expect(result.output).toEqual(record);
+        },
+      );
+    });
+
+    it.each(['openai', 'custom'] as const)(
+      'keeps top-level generated_text precedence for %s responses',
+      async (modelType) => {
+        mockSend.mockResolvedValue({
+          Body: new TextEncoder().encode(
+            JSON.stringify({
+              generated_text: '',
+              output: 'Custom fallback',
+              choices: [{ message: { content: 'OpenAI fallback' } }],
+            }),
+          ),
+        });
+        const provider = new SageMakerCompletionProvider('generated-text-endpoint', {
+          config: { modelType },
+        });
+
+        const result = await provider.callApi('Return no text');
+
+        expect(mockSend).toHaveBeenCalledTimes(1);
+        expect(result.error).toBeUndefined();
+        expect(result.output).toBe('');
+      },
+    );
   });
 
   describe('parseResponse method', () => {
