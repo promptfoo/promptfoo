@@ -1,10 +1,11 @@
 import { PostMessageTransport } from 'storybook/internal/channels';
 import { describe, expect, it, vi } from 'vitest';
+import { mockBrowserProperty, restoreBrowserMocks } from './browserMocks';
 
 describe('Storybook development preview channel', () => {
   it('accepts local messages and rejects messages from an untrusted embedding page', () => {
-    vi.stubGlobal('CONFIG_TYPE', 'DEVELOPMENT');
-    vi.stubGlobal('INSECURE_IFRAME_MESSAGING', false);
+    mockBrowserProperty(globalThis, 'CONFIG_TYPE', 'DEVELOPMENT');
+    mockBrowserProperty(globalThis, 'INSECURE_IFRAME_MESSAGING', false);
     const listeners = vi.spyOn(globalThis, 'addEventListener');
     const handler = vi.fn();
 
@@ -40,7 +41,7 @@ describe('Storybook development preview channel', () => {
         globalThis.removeEventListener(type, listener, options);
       }
       listeners.mockRestore();
-      vi.unstubAllGlobals();
+      restoreBrowserMocks();
     }
   });
 });
