@@ -252,6 +252,21 @@ describe('evaluatorHelpers', () => {
       );
     });
 
+    it('should keep a nested __proto__ key as an own property instead of polluting the prototype', async () => {
+      // JSON.parse defines `__proto__` as an own property; plain assignment would write
+      // through to Object.prototype instead.
+      const vars = JSON.parse(
+        '{"payload":{"__proto__":{"polluted":true},"note":"file://data/notes.txt"}}',
+      );
+
+      vi.spyOn(fs, 'readFileSync').mockReturnValueOnce('notes content');
+
+      const renderedPrompt = await renderPrompt(toPrompt('{{ payload.note }}'), vars, {});
+
+      expect(renderedPrompt).toBe('notes content');
+      expect(({} as Record<string, unknown>).polluted).toBeUndefined();
+    });
+
     it('should render a JSON prompt', async () => {
       const prompt = toPrompt('[{"text": "Test prompt "}, {"text": "{{ var1 }}"}]');
       const renderedPrompt = await renderPrompt(prompt, { var1: 'value1' }, {});
