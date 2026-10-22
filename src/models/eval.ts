@@ -685,8 +685,8 @@ export default class Eval {
     this.oldResults.table = table;
   }
 
-  async save() {
-    const db = await getDb();
+  async save(transaction?: Pick<Awaited<ReturnType<typeof getDb>>, 'update'>) {
+    const db = transaction ?? (await getDb());
     const updateObj: Record<string, unknown> = {
       config: sanitizeTracingConfigForPersistence(this.config),
       isRedteam: this.config.redteam !== undefined,
@@ -722,7 +722,9 @@ export default class Eval {
       updateObj.results = expr;
     }
     await db.update(evalsTable).set(updateObj).where(eq(evalsTable.id, this.id)).run();
-    notifyEvaluationChanged(this.id);
+    if (!transaction) {
+      notifyEvaluationChanged(this.id);
+    }
     this.persisted = true;
   }
 

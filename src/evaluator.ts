@@ -624,7 +624,10 @@ function synchronizeLegacyTransportHeaders(
 function applyGradingResult(row: EvaluateResult, checkResult: GradingResult) {
   if (!checkResult.pass) {
     row.error = checkResult.reason;
-    row.failureReason = ResultFailureReason.ASSERT;
+    row.failureReason =
+      checkResult.metadata?.graderError === true
+        ? ResultFailureReason.ERROR
+        : ResultFailureReason.ASSERT;
   }
   row.success = checkResult.pass;
   row.score = checkResult.score;
@@ -3674,6 +3677,7 @@ async function filterCompletedResumeSteps(
   try {
     const completedPairs = await store.readCompletedIndexPairs({
       excludeErrors: cliState.retryMode,
+      ...(cliState.retryMode && { excludeResultIds: cliState._retryErrorResultIds }),
     });
     const originalCount = runEvalOptions.length;
     for (let i = runEvalOptions.length - 1; i >= 0; i--) {
@@ -4293,9 +4297,12 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
 
     updatePromptResultCounts(metrics, row);
     metrics.assertPassCount +=
-      row.gradingResult?.componentResults?.filter((r) => r.pass).length || 0;
+      row.gradingResult?.componentResults?.filter((r) => r.metadata?.graderError !== true && r.pass)
+        .length || 0;
     metrics.assertFailCount +=
-      row.gradingResult?.componentResults?.filter((r) => !r.pass).length || 0;
+      row.gradingResult?.componentResults?.filter(
+        (r) => r.metadata?.graderError !== true && !r.pass,
+      ).length || 0;
     metrics.totalLatencyMs += row.latencyMs || 0;
     accumulateResponseTokenUsage(metrics.tokenUsage, row.response, {
       countCachedAsRequest: (row.tokenUsage?.numRequests ?? 0) > 0,
@@ -5226,7 +5233,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
           failureReason: result.failureReason,
         };
         // Keep the existing assertion verdict and outcome for a successful retry.
-        if (!getComparisonError(result)) {
+        if (!getComparisonError(result) || result.failureReason !== ResultFailureReason.ERROR) {
           setComparisonError(result, { ...previous, error: result.error });
         }
         result.error = reason;

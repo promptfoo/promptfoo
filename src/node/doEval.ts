@@ -60,7 +60,12 @@ import { shouldShareResults } from '../util/sharing';
 import { resolveTestsWatchPaths } from '../util/testCaseReader';
 import { TokenUsageTracker } from '../util/tokenUsage';
 import { isUuid } from '../util/uuid';
-import { deleteErrorResults, getErrorResultIds, recalculatePromptMetrics } from './retry';
+import {
+  deleteErrorResults,
+  getRetryResultIds,
+  hasRetryReplacements,
+  recalculatePromptMetrics,
+} from './retry';
 import { notCloudEnabledShareInstructions } from './shareInstructions';
 import type { FSWatcher } from 'chokidar';
 import type { Command } from 'commander';
@@ -483,18 +488,15 @@ async function doEvalWithEnv(
         });
       }
 
-      // Get all ERROR result IDs - capture BEFORE retry so we know what to delete on success
-      retryErrorResultIds = await getErrorResultIds(latestEval.id);
+      // Keep originals until the selected errors and comparison siblings are replaced.
+      retryErrorResultIds = await getRetryResultIds(latestEval.id);
       if (retryErrorResultIds.length === 0) {
         logger.info('✅ No ERROR results found in the latest evaluation');
         return latestEval;
       }
 
-      logger.info(`Found ${retryErrorResultIds.length} ERROR results to retry`);
+      logger.info(`Found ${retryErrorResultIds.length} results to retry`);
 
-      // NOTE (v0.121.0): ERROR results are deleted AFTER successful retry, not before.
-      // Previously, deletion happened before evaluate(), causing data loss if retry failed.
-      // Now we delete AFTER successful retry to preserve ERROR results for re-retry on failure.
       logger.info(
         `🔄 Running evaluation with resume mode to retry ${retryErrorResultIds.length} test cases...`,
       );
@@ -593,7 +595,7 @@ async function doEvalWithEnv(
       };
     }
 
-    // Resume and error retries must preserve the original expansion and cache settings.
+    // Resume preserves cache settings. Explicit error retries need fresh grader responses.
     let repeat: number;
     let cache: boolean | undefined;
     let maxConcurrency: number;
@@ -606,7 +608,7 @@ async function doEvalWithEnv(
         Number.isSafeInteger(persisted.repeat || 0) && (persisted.repeat as number) > 0
           ? (persisted.repeat as number)
           : 1;
-      cache = persisted.cache ?? true;
+      cache = retryErrors ? false : (persisted.cache ?? true);
       maxConcurrency = (persisted.maxConcurrency as number | undefined) ?? DEFAULT_MAX_CONCURRENCY;
       delay = (persisted.delay as number | undefined) ?? 0;
     } else {
@@ -964,31 +966,37 @@ async function doEvalWithEnv(
         isRedteam: Boolean(config.redteam),
       });
 
-      // Post-evaluation cleanup for retry-errors mode
-      // SUCCESS: Now it's safe to delete the old ERROR results and recalculate metrics
-      // Skip if evaluation was paused - no point cleaning up incomplete retry
+      // Delete original results only after their replacements are saved.
       if (retryErrors && cliState._retryErrorResultIds && !paused) {
         const errorResultIds = cliState._retryErrorResultIds;
+        if (ret.resultPersistenceFailed) {
+          throw new Error('Retry results failed to persist. Original results were preserved.');
+        }
+        if (!(await hasRetryReplacements(ret.id, errorResultIds))) {
+          throw new Error(
+            'Retry did not replace all selected results. Original results were preserved.',
+          );
+        }
         try {
           await deleteErrorResults(errorResultIds);
           await recalculatePromptMetrics(ret);
           logger.debug(
-            `Cleaned up ${errorResultIds.length} old ERROR results after successful retry`,
+            `Cleaned up ${errorResultIds.length} original results after successful retry`,
           );
         } catch (cleanupError) {
           // Cleanup failure is non-fatal - retry itself succeeded
           logger.warn('Post-retry cleanup had issues. Retry results are saved.', {
             error: cleanupError,
           });
-        } finally {
-          // Clear the stored error result IDs
-          delete cliState._retryErrorResultIds;
-          // Clear retry mode flags
-          cliState.retryMode = false;
         }
       }
     } finally {
       cleanupHandler(); // Always cleanup, even if evaluate() throws
+      if (retryErrors) {
+        cliState.resume = false;
+        cliState.retryMode = false;
+        delete cliState._retryErrorResultIds;
+      }
     }
 
     // Clear resume flag after run completes

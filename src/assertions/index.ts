@@ -902,7 +902,7 @@ export async function runAssertions({
 
     mainAssertResult.addResult({
       index,
-      result,
+      result: weight === 0 ? { ...result, pass: true } : result,
       metric: renderMetricName(metric, vars || test.vars || {}),
       weight,
     });

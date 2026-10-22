@@ -43,21 +43,21 @@ export async function handleContextFaithfulness({
     providerResponse,
   );
 
+  const result = await matchesContextFaithfulness(
+    test.vars.query,
+    output,
+    context,
+    assertion.threshold ?? DEFAULT_RAG_ASSERTION_THRESHOLD,
+    test.options,
+    test.vars,
+    providerCallContext,
+  );
+
   return {
     assertion,
-    ...applyRagInverse(
-      await matchesContextFaithfulness(
-        test.vars.query,
-        output,
-        context,
-        assertion.threshold ?? DEFAULT_RAG_ASSERTION_THRESHOLD,
-        test.options,
-        test.vars,
-        providerCallContext,
-      ),
-      inverse,
-    ),
+    ...applyRagInverse(result, inverse),
     metadata: {
+      ...result.metadata,
       context,
     },
   };

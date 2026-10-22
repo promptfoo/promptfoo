@@ -14,6 +14,7 @@ import { runExtensionHook } from '../../src/evaluatorHelpers';
 import logger, { getLogLevel, setLogLevel } from '../../src/logger';
 import Eval from '../../src/models/eval';
 import EvalResult, { sanitizeResultForJsonlArtifact } from '../../src/models/evalResult';
+import { applyManualRating, updateManualRatingMetrics } from '../../src/presentation/manualRating';
 import { EchoProvider } from '../../src/providers/echo';
 import { HttpProvider } from '../../src/providers/http';
 import telemetry from '../../src/telemetry';
@@ -570,6 +571,65 @@ describeEvaluator('select-best runtime grading configuration', () => {
     expect(target.callApi).toHaveBeenCalledTimes(2);
     expect(grader.callApi).toHaveBeenCalledTimes(2);
   });
+
+  it.each([false, true])(
+    'retains a manual pass=%s and score across a failed comparison retry',
+    async (pass) => {
+      const { grader, suite, target } = makeSuite();
+      suite.tests![0].assert!.unshift({ type: 'equals', value: pass ? 'different' : 'candidate' });
+      vi.mocked(grader.callApi)
+        .mockRejectedValueOnce(new Error('initial grader failure'))
+        .mockRejectedValueOnce(new Error('retry grader failure'));
+      const record = await Eval.create({}, suite.prompts, { id: randomUUID() });
+      await evaluate(suite, record, { maxConcurrency: 1 });
+
+      const row = (await record.fetchResultsByTestIdx(0)).find((result) => result.promptIdx === 0)!;
+      const previous = {
+        pass: row.success,
+        score: row.score,
+        failureReason: row.failureReason,
+        error: row.error,
+        gradingResult: row.gradingResult,
+      };
+      const rated = applyManualRating(previous, { action: 'rate', pass, score: 0.4 });
+      row.success = rated.pass;
+      row.score = rated.score;
+      row.failureReason = rated.failureReason;
+      row.error = rated.error ?? null;
+      row.gradingResult = rated.gradingResult;
+      record.prompts[0].metrics = updateManualRatingMetrics(
+        record.prompts[0].metrics!,
+        previous,
+        rated,
+      );
+      await row.save();
+      await record.save();
+
+      cliState.resume = true;
+      await evaluate(suite, record, { maxConcurrency: 1 });
+      const retried = (await record.fetchResultsByTestIdx(0)).find(
+        (result) => result.promptIdx === 0,
+      )!;
+      expect(retried.metadata?.__promptfoo?.comparisonError).toMatchObject({
+        success: pass,
+        score: 0.4,
+        failureReason: pass ? ResultFailureReason.NONE : ResultFailureReason.ASSERT,
+      });
+
+      await evaluate(suite, record, { maxConcurrency: 1 });
+      const recovered = (await record.fetchResultsByTestIdx(0)).find(
+        (result) => result.promptIdx === 0,
+      )!;
+      expect(recovered).toMatchObject({
+        success: pass,
+        score: 0.4,
+        failureReason: pass ? ResultFailureReason.NONE : ResultFailureReason.ASSERT,
+      });
+      expect(recovered.metadata?.__promptfoo?.comparisonError).toBeUndefined();
+      expect(target.callApi).toHaveBeenCalledTimes(2);
+      expect(grader.callApi).toHaveBeenCalledTimes(3);
+    },
+  );
 
   it.each(['malformed YAML', 'Error', 'string'])(
     'keeps secrets in a grader %s out of persisted errors and recovers on resume',

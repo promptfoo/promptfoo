@@ -45,6 +45,49 @@ vi.mock('../../src/matchers/similarity', () => ({
 }));
 
 describe('handleSimilar', () => {
+  it.each([
+    { inverse: false, decisive: true },
+    { inverse: true, decisive: true },
+    { inverse: false, decisive: false },
+    { inverse: true, decisive: false },
+  ])(
+    'preserves array verdict semantics after a grader error: %j',
+    async ({ inverse, decisive }) => {
+      const unavailable = {
+        pass: false,
+        score: 0,
+        reason: 'Embedding unavailable',
+        metadata: { graderError: true as const },
+      };
+      const valid = {
+        pass: decisive !== inverse,
+        score: decisive === inverse ? 0 : 1,
+        reason: 'Valid similarity verdict',
+      };
+      vi.mocked(matchesSimilarity).mockResolvedValueOnce(unavailable).mockResolvedValueOnce(valid);
+      const result = await handleSimilar({
+        assertion: { type: inverse ? 'not-similar' : 'similar', value: ['first', 'second'] },
+        baseType: 'similar',
+        renderedValue: ['first', 'second'],
+        outputString: 'answer',
+        output: 'answer',
+        inverse,
+        test: {},
+        providerResponse: { output: 'answer' },
+        assertionValueContext: {
+          prompt: 'question',
+          vars: {},
+          test: {},
+          logProbs: undefined,
+          provider: undefined,
+          providerResponse: { output: 'answer' },
+        },
+      });
+      expect(result).toMatchObject(decisive ? valid : unavailable);
+      expect(result.metadata?.graderError).toBe(decisive ? undefined : true);
+    },
+  );
+
   it('should handle string similarity assertion', async () => {
     const result = await handleSimilar({
       assertion: createStringAssertion('similar', 'hello world'),
