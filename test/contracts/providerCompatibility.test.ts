@@ -6,12 +6,14 @@ import Ajv from 'ajv';
 import { afterEach, beforeEach, describe, expect, expectTypeOf, it, vi } from 'vitest';
 import * as cache from '../../src/cache';
 import {
+  AnthropicCompletionConfigInputSchema,
   AnthropicMessagesConfigInputJsonSchema,
   AnthropicMessagesConfigInputSchema,
   AzureChatConfigInputSchema,
   AzureResponsesConfigInputJsonSchema,
   AzureResponsesConfigInputSchema,
 } from '../../src/contracts';
+import { AnthropicCompletionProvider } from '../../src/providers/anthropic/completion';
 import { AnthropicMessagesProvider } from '../../src/providers/anthropic/messages';
 import { AzureChatCompletionProvider } from '../../src/providers/azure/chat';
 import { AzureResponsesProvider } from '../../src/providers/azure/responses';
@@ -215,4 +217,29 @@ it('documents that Azure Responses still omits a zero tool-call limit', async ()
   const config = AzureResponsesConfigInputSchema.parse({ max_tool_calls: 0 });
   const provider = new AzureResponsesProvider('gpt-4.1', { config });
   expect(await provider.getAzureResponsesBody('Hello')).not.toHaveProperty('max_tool_calls');
+});
+
+it.each(['dataSources', 'data_sources'] as const)(
+  'forwards the parsed Azure Chat %s retrieval payload',
+  async (field) => {
+    const payload = [{ type: 'azure_search', parameters: { endpoint: 'https://search.example' } }];
+    const config = AzureChatConfigInputSchema.parse({ [field]: payload });
+    const provider = new AzureChatCompletionProvider('gpt-4.1', { config });
+    expect((await provider.getOpenAiBody('Hello')).body).toHaveProperty(field, payload);
+  },
+);
+
+it('forwards parsed Anthropic Completion headers to the SDK request', async () => {
+  const headers = { 'X-Gateway-Route': 'synthetic-test' };
+  const config = AnthropicCompletionConfigInputSchema.parse({ apiKey: 'test-key', headers });
+  const provider = new AnthropicCompletionProvider('claude-2.1', { config });
+  const send = vi.spyOn(provider.anthropic.completions, 'create').mockResolvedValue({
+    id: 'test-completion',
+    model: 'claude-2.1',
+    type: 'completion',
+    completion: 'ok',
+    stop_reason: 'stop_sequence',
+  });
+  expect(await provider.callApi('Hello')).toMatchObject({ output: 'ok' });
+  expect(send).toHaveBeenCalledWith(expect.objectContaining({ model: 'claude-2.1' }), { headers });
 });
