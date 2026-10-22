@@ -56,6 +56,7 @@ const ChatFields = OpenAiChatConfigInputSchema.pick({
     deployment_id: z.string().optional(),
     systemPrompt: z.string().optional(),
     dataSources: z.json().optional().describe('Azure retrieval data-source request payload'),
+    data_sources: z.json().optional().describe('Azure retrieval data-source request payload'),
     isClaudeOpus47OrLater: z.boolean().optional(),
   });
 export const AzureChatConfigInputSchema = ChatFields.describe(
@@ -83,11 +84,11 @@ export const AzureResponsesConfigInputSchema = AzureSharedConfigInputSchema.exte
       truncation: true,
       metadata: true,
       parallel_tool_calls: true,
-      stream: true,
       store: true,
     }).shape,
   )
   .extend({
+    stream: z.literal(false).optional(),
     service_tier: z.enum(['auto', 'default', 'flex', 'priority']).nullable().optional(),
   })
   .describe('Serializable Azure Responses configuration');

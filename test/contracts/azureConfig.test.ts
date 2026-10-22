@@ -75,6 +75,7 @@ const chat = {
   modelName: 'underlying-model',
   systemPrompt: '{{ prompt }}',
   dataSources: [{ type: 'AzureCognitiveSearch', parameters: { endpoint: '{{ ENDPOINT }}' } }],
+  data_sources: [{ type: 'azure_search', parameters: { endpoint: '{{ ENDPOINT }}' } }],
   isReasoningModel: false,
   isClaudeOpus47OrLater: true,
   o1: false,
@@ -148,6 +149,8 @@ describe('Azure portable configuration contracts', () => {
       invalid: [
         ...commonInvalid,
         { max_output_tokens: '10' },
+        { stream: true },
+        { stream: null },
         { model: 'ignored-model' },
         { isClaudeOpus47OrLater: true },
         { mcp: { enabled: true, server: { command: 'node' } } },
