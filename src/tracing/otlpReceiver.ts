@@ -517,7 +517,7 @@ export class OTLPReceiver {
         status: 'running',
         uptime: process.uptime(),
         timestamp: new Date().toISOString(),
-        port: this.port || 4318,
+        port: this.port,
       });
     });
 
@@ -1022,8 +1022,11 @@ export class OTLPReceiver {
     }
   }
 
-  listen(port: number = 4318, host: string = '127.0.0.1'): Promise<void> {
-    this.port = port;
+  /**
+   * Bind the receiver and resolve with the port actually bound, which differs from the
+   * requested one when `port` is 0.
+   */
+  listen(port: number = 4318, host: string = '127.0.0.1'): Promise<number> {
     logger.debug(`[OtlpReceiver] Starting receiver on ${host}:${port}`);
 
     return new Promise((resolve, reject) => {
@@ -1036,9 +1039,12 @@ export class OTLPReceiver {
           return;
         }
         settled = true;
-        logger.info(`[OtlpReceiver] Listening on http://${host}:${port}`);
+        const address = server.address();
+        const boundPort = address && typeof address === 'object' ? address.port : port;
+        this.port = boundPort;
+        logger.info(`[OtlpReceiver] Listening on http://${host}:${boundPort}`);
         logger.debug('[OtlpReceiver] Receiver fully initialized and ready to accept traces');
-        resolve();
+        resolve(boundPort);
       });
       this.server = server;
 
@@ -1112,11 +1118,11 @@ export async function startOTLPReceiver(
     redactAttributes?: string[];
     tracePolicy?: OTLPReceiverTracePolicy;
   },
-): Promise<void> {
+): Promise<number> {
   logger.debug('[OtlpReceiver] Starting receiver through startOTLPReceiver function');
   const receiver = getOTLPReceiver({ acceptFormats, ...extra });
   try {
-    await receiver.listen(port, host);
+    return await receiver.listen(port, host);
   } catch (error) {
     // A receiver that never bound must not dictate options for a later retry.
     if (otlpReceiver === receiver) {
