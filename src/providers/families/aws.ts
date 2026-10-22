@@ -10,10 +10,14 @@ import {
 
 import type { ProviderFactory } from '../registryTypes';
 
-const NOVA_SONIC_MODEL_IDS = new Set(['amazon.nova-sonic-v1:0', 'amazon.nova-2-sonic-v1:0']);
+const NOVA_SONIC_MODEL_IDS = new Set([
+  'amazon.nova-sonic-v1:0',
+  'amazon.nova-2-sonic-v1:0',
+  'amazon.nova-2-5-sonic',
+]);
 
 function isUnsupportedNovaSonicGeoId(modelName: string): boolean {
-  return /^[^.]+\.amazon\.nova(?:-2)?-sonic-v1:0$/.test(modelName);
+  return /^[^.]+\.amazon\.nova(?:-sonic-v1:0|-2-sonic-v1:0|-2-5-sonic)$/.test(modelName);
 }
 
 export const awsProviderFactories: ProviderFactory[] = [
@@ -34,7 +38,9 @@ export const awsProviderFactories: ProviderFactory[] = [
           ? { expectedModel: 'amazon.nova-sonic-v1:0', name: 'nova-sonic' }
           : modelType === 'nova-2-sonic'
             ? { expectedModel: 'amazon.nova-2-sonic-v1:0', name: 'nova-2-sonic' }
-            : undefined;
+            : modelType === 'nova-2-5-sonic'
+              ? { expectedModel: 'amazon.nova-2-5-sonic', name: 'nova-2-5-sonic' }
+              : undefined;
 
       if (novaSonicSubtype && modelName) {
         if (!NOVA_SONIC_MODEL_IDS.has(modelName)) {
@@ -57,8 +63,7 @@ export const awsProviderFactories: ProviderFactory[] = [
           ? novaSonicSubtype.expectedModel
           : NOVA_SONIC_MODEL_IDS.has(bareModelName)
             ? bareModelName
-            : (modelType === 'nova-sonic' || modelType === 'nova-2-sonic') &&
-                NOVA_SONIC_MODEL_IDS.has(modelName)
+            : novaSonicSubtype && NOVA_SONIC_MODEL_IDS.has(modelName)
               ? modelName
               : undefined;
       if (isUnsupportedNovaSonicGeoId(bareModelName) || isUnsupportedNovaSonicGeoId(modelName)) {
