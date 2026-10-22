@@ -37,7 +37,13 @@ export function getWilsonScoreInterval(
   passed: number,
   total: number,
 ): RepeatStabilityConfidenceInterval | undefined {
-  if (total <= 0 || passed < 0 || passed > total) {
+  if (
+    !Number.isInteger(passed) ||
+    !Number.isInteger(total) ||
+    total <= 0 ||
+    passed < 0 ||
+    passed > total
+  ) {
     return undefined;
   }
 
@@ -108,7 +114,12 @@ function isCachedResult(result: RepeatStabilityResult): boolean {
 }
 
 function getGroupKey(result: RepeatStabilityResult): string {
-  return `${result.repeatGroupId}\u0000${result.promptIdx}\u0000${result.provider.id}\u0000${result.provider.label}`;
+  return JSON.stringify([
+    result.repeatGroupId,
+    result.promptIdx,
+    result.provider.id,
+    result.provider.label,
+  ]);
 }
 
 export class RepeatStabilityCalculator {
