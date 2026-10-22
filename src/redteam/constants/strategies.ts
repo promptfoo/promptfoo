@@ -19,6 +19,7 @@ export const DEFAULT_MULTI_TURN_MAX_TURNS = 5;
 
 export const MULTI_TURN_STRATEGIES = [
   'crescendo',
+  'react-crescendo',
   'goat',
   'jailbreak:hydra',
   'jailbreak:goblin',
@@ -45,6 +46,7 @@ export const MULTI_MODAL_STRATEGIES_SET: ReadonlySet<string> = new Set(MULTI_MOD
 
 export const AGENTIC_STRATEGIES = [
   'crescendo',
+  'react-crescendo',
   'goat',
   'indirect-web-pwn',
   'custom',
@@ -102,6 +104,7 @@ export const ADDITIONAL_STRATEGIES = [
   'multilingual', // Deprecated: Use top-level language config instead
   'piglatin',
   'prompt-injection', // Deprecated: Use 'jailbreak-templates' instead
+  'react-crescendo',
   'retry',
   'rot13',
   'video',
@@ -129,6 +132,7 @@ export const CONFIGURABLE_STRATEGIES = [
   'best-of-n',
   'goat',
   'crescendo',
+  'react-crescendo',
   'indirect-web-pwn',
   'jailbreak',
   'jailbreak:composite',

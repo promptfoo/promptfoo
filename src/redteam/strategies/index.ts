@@ -26,6 +26,7 @@ import { addMathPrompt } from './mathPrompt';
 import { addMischievousUser } from './mischievousUser';
 import { addOtherEncodings, EncodingType } from './otherEncodings';
 import { addInjections } from './promptInjections/index';
+import { addReactCrescendo } from './react-crescendo';
 import { addRetryTestCases } from './retry';
 import { addRot13 } from './rot13';
 import { addSimbaTestCases } from './simba';
@@ -120,6 +121,20 @@ export const Strategies: Strategy[] = [
         withPersistableGenerationProvider(config, runtimeContext),
       );
       logger.debug(`Added ${newTestCases.length} Crescendo test cases`);
+      return newTestCases;
+    },
+  },
+  {
+    id: 'react-crescendo',
+    requiresGoalExtraction: true,
+    action: async (testCases, injectVar, config, _strategyId, runtimeContext) => {
+      logger.debug(`Adding React Crescendo to ${testCases.length} test cases`);
+      const newTestCases = addReactCrescendo(
+        testCases,
+        injectVar,
+        withPersistableGenerationProvider(config, runtimeContext),
+      );
+      logger.debug(`Added ${newTestCases.length} React Crescendo test cases`);
       return newTestCases;
     },
   },

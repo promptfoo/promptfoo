@@ -389,7 +389,7 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
   }, [selectedStrategyIds]);
 
   const showSystemConfig = config.strategies.some((s) =>
-    ['goat', 'crescendo'].includes(getStrategyId(s)),
+    ['goat', 'crescendo', 'react-crescendo'].includes(getStrategyId(s)),
   );
 
   // Calculate count of selected advanced strategies (excludes hero strategies)
