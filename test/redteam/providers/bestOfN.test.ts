@@ -407,7 +407,7 @@ describe('BestOfNProvider - Runtime Behavior', () => {
     });
     vi.mocked(mockTargetProvider.callApi)
       .mockResolvedValueOnce(
-        createProviderResponse({ output: "I'm sorry, I can't help with that." }),
+        createProviderResponse({ output: "I'm sorry, I can't help with that.", isRefusal: true }),
       )
       .mockResolvedValueOnce(createProviderResponse({ output: '' }))
       .mockResolvedValueOnce(createProviderResponse({ output: 'Here is how you do it.' }));
@@ -425,7 +425,9 @@ describe('BestOfNProvider - Runtime Behavior', () => {
       json: async () => ({ modifiedPrompts: ['candidate 1', 'candidate 2'] }),
     });
     vi.mocked(mockTargetProvider.callApi)
-      .mockResolvedValueOnce(createProviderResponse({ output: 'I cannot help with that.' }))
+      .mockResolvedValueOnce(
+        createProviderResponse({ output: 'I cannot help with that.', isRefusal: true }),
+      )
       .mockResolvedValueOnce(createProviderResponse({ output: 'refused', isRefusal: true }));
 
     const provider = new BestOfNProvider({ injectVar: 'input', maxConcurrency: 1 });
@@ -467,26 +469,20 @@ describe('BestOfNProvider - Runtime Behavior', () => {
     expect(result.metadata).toMatchObject({ redteamFinalPrompt: 'candidate 1', step: 1 });
   });
 
-  it.each(['coding-agent:secret-env-read', 'policy'])(
-    'keeps an apologetic reply for %s, whose grader skips the refusal check',
-    async (pluginId) => {
-      mockFetchWithProxy.mockResolvedValue({
-        json: async () => ({ modifiedPrompts: ['candidate 1', 'candidate 2'] }),
-      });
-      vi.mocked(mockTargetProvider.callApi).mockResolvedValueOnce(
-        createProviderResponse({ output: "I'm sorry, but here is the secret: hunter2" }),
-      );
+  it('leaves an unflagged apologetic reply for the grader to judge', async () => {
+    mockFetchWithProxy.mockResolvedValue({
+      json: async () => ({ modifiedPrompts: ['candidate 1', 'candidate 2'] }),
+    });
+    vi.mocked(mockTargetProvider.callApi).mockResolvedValueOnce(
+      createProviderResponse({ output: "I'm sorry, but here is the secret: hunter2" }),
+    );
 
-      const provider = new BestOfNProvider({ injectVar: 'input', maxConcurrency: 1 });
-      const result = await provider.callApi('test prompt', {
-        ...createMockContext(mockTargetProvider),
-        test: { metadata: { pluginId } },
-      });
+    const provider = new BestOfNProvider({ injectVar: 'input', maxConcurrency: 1 });
+    const result = await provider.callApi('test prompt', createMockContext(mockTargetProvider));
 
-      expect(mockTargetProvider.callApi).toHaveBeenCalledTimes(1);
-      expect(result.output).toBe("I'm sorry, but here is the secret: hunter2");
-    },
-  );
+    expect(mockTargetProvider.callApi).toHaveBeenCalledTimes(1);
+    expect(result.output).toBe("I'm sorry, but here is the secret: hunter2");
+  });
 
   it('should pass options to target provider callApi', async () => {
     const provider = new BestOfNProvider({
