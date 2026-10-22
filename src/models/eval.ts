@@ -1196,7 +1196,13 @@ export default class Eval {
 
     // Add search condition if searchQuery is provided
     if (opts.searchQuery && opts.searchQuery.trim() !== '' && opts.responseOnlySearch) {
-      conditions.push(buildResponseSearchCondition(opts.searchQuery));
+      // Unfiltered pages select every test row where some result in the current mode has a
+      // matching response, then show all of that row's results. Match the same rows here so
+      // multi-prompt rows count every output the page shows.
+      const rowConditions = [...conditions, buildResponseSearchCondition(opts.searchQuery)];
+      conditions.push(
+        sql`test_idx IN (SELECT test_idx FROM eval_results WHERE ${sql.join(rowConditions, sql` AND `)})`,
+      );
     } else if (opts.searchQuery && opts.searchQuery.trim() !== '') {
       const searchPattern = `%${opts.searchQuery}%`;
 
