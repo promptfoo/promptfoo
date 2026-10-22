@@ -2,6 +2,9 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 
 import logger from '../logger';
 
+/** How long SIGTERM waits for provider resources and active calls before the process ends. */
+export const SIGTERM_CLEANUP_TIMEOUT_MS = 3_000;
+
 interface CleanupProvider {
   shutdown(): Promise<void>;
 }
@@ -660,7 +663,27 @@ export class ProviderRegistry {
       logger.debug('Provider resource shutdown complete');
     };
     process.once('SIGINT', () => void shutdown('SIGINT'));
-    process.once('SIGTERM', () => void shutdown('SIGTERM'));
+    process.once('SIGTERM', () => {
+      void (async () => {
+        let timer: NodeJS.Timeout | undefined;
+        await Promise.race([
+          shutdown('SIGTERM').catch((error) => {
+            logger.debug('Provider resource shutdown failed during SIGTERM', { error });
+          }),
+          // Referenced on purpose: the process must survive until it ends on the signal.
+          new Promise<void>((resolve) => {
+            timer = setTimeout(resolve, SIGTERM_CLEANUP_TIMEOUT_MS);
+          }),
+        ]);
+        clearTimeout(timer);
+        // Listening for SIGTERM suppressed Node's default termination. Restore it once cleanup
+        // is done or has run out of time, unless an embedding host owns SIGTERM with its own
+        // listener.
+        if (process.listenerCount('SIGTERM') === 0) {
+          process.kill(process.pid, 'SIGTERM');
+        }
+      })();
+    });
     // beforeExit can schedule more work in an embedded host; only termination is permanent.
     process.on('beforeExit', () => void this.shutdownAll());
   }
