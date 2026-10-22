@@ -15,6 +15,7 @@ vi.mock('../../../src/util/fetch/monkeyPatchFetch', async (importOriginal) => {
 import { lookup } from 'node:dns/promises';
 import type { LookupAddress } from 'node:dns';
 
+import { CloudAuthRedirectError } from '../../../src/util/fetch/cloudAuthRedirects';
 import { fetchWithProxy } from '../../../src/util/fetch/index';
 import { monkeyPatchFetch } from '../../../src/util/fetch/monkeyPatchFetch';
 import { PrivateRangeBlockedError } from '../../../src/util/privateNetwork';
@@ -110,5 +111,51 @@ describe('fetchWithProxy guarded redirects (PROMPTFOO_BLOCK_PRIVATE_RANGES)', ()
     await expect(fetchWithProxy('https://public.example.com/start')).rejects.toThrow(
       /more than 5 redirects/,
     );
+  });
+
+  it('refuses a cross-origin redirect for a cloud-authenticated request', async () => {
+    // A custom cloud-auth header binds the request to its initial origin in
+    // the native-follow path; the guarded path must honor that instead of
+    // rebinding the dispatcher per hop and leaking the header.
+    restoreEnv = mockProcessEnv({ PROMPTFOO_BLOCK_PRIVATE_RANGES: 'true' });
+    mockedMonkeyPatchFetch.mockResolvedValueOnce(
+      redirectResponse('https://other.example.com/next'),
+    );
+
+    await expect(
+      fetchWithProxy('https://public.example.com/start', {
+        headers: { 'x-custom-auth': 'Bearer test-token' },
+        skipCloudAuthInjection: true,
+      }),
+    ).rejects.toThrow(CloudAuthRedirectError);
+    // The redirect destination is never requested.
+    expect(mockedMonkeyPatchFetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('follows a same-origin redirect for a cloud-authenticated request', async () => {
+    restoreEnv = mockProcessEnv({ PROMPTFOO_BLOCK_PRIVATE_RANGES: 'true' });
+    mockedMonkeyPatchFetch
+      .mockResolvedValueOnce(redirectResponse('https://public.example.com/next'))
+      .mockResolvedValueOnce(new Response('ok', { status: 200 }));
+
+    const response = await fetchWithProxy('https://public.example.com/start', {
+      headers: { 'x-custom-auth': 'Bearer test-token' },
+      skipCloudAuthInjection: true,
+    });
+
+    expect(response.status).toBe(200);
+    expect(mockedMonkeyPatchFetch).toHaveBeenCalledTimes(2);
+  });
+
+  it('still follows cross-origin redirects without cloud auth', async () => {
+    restoreEnv = mockProcessEnv({ PROMPTFOO_BLOCK_PRIVATE_RANGES: 'true' });
+    mockedMonkeyPatchFetch
+      .mockResolvedValueOnce(redirectResponse('https://other.example.com/next'))
+      .mockResolvedValueOnce(new Response('ok', { status: 200 }));
+
+    const response = await fetchWithProxy('https://public.example.com/start');
+
+    expect(response.status).toBe(200);
+    expect(mockedMonkeyPatchFetch).toHaveBeenCalledTimes(2);
   });
 });

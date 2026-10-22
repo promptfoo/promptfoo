@@ -3,6 +3,7 @@ import { isIP } from 'node:net';
 
 import { getEnvBool, getEnvString } from '../envars';
 import logger from '../logger';
+import { maybeLoadFromExternalFile } from './file';
 
 /**
  * Guards for the opt-in `PROMPTFOO_BLOCK_PRIVATE_RANGES` mode (see #11768).
@@ -225,7 +226,7 @@ export async function assertUrlResolvesPublic(rawUrl: string): Promise<void> {
 
 interface ProviderTarget {
   id?: unknown;
-  config?: { apiBaseUrl?: unknown; url?: unknown };
+  config?: { apiBaseUrl?: unknown; url?: unknown; request?: unknown; useHttps?: unknown };
 }
 
 /**
@@ -268,61 +269,146 @@ const LOCAL_DEFAULT_ENDPOINTS: Array<{
 ];
 
 /**
- * Extract the effective fetch target from provider options, if one can be
- * determined. Covers every shape that lets a caller choose the fetch target:
+ * Resolve a provider id to a fetchable URL when the registry routes it to a
+ * URL-fetching provider. `webhook:<url>` is unwrapped because the registry
+ * strips the prefix before WebhookProvider fetches the inner URL; `ws:` and
+ * `wss:` ids reach WebSocketProvider, which dials the URL outside the fetch
+ * layer, so the route preflight is the only guard for them.
+ */
+function getUrlFromProviderId(id: string): string | undefined {
+  const candidate = id.startsWith('webhook:') ? id.slice('webhook:'.length) : id;
+  try {
+    const parsed = new URL(candidate);
+    if (
+      parsed.protocol === 'http:' ||
+      parsed.protocol === 'https:' ||
+      parsed.protocol === 'ws:' ||
+      parsed.protocol === 'wss:'
+    ) {
+      return candidate;
+    }
+  } catch {
+    // Not an absolute URL. The provider registry still accepts any `http:`-
+    // prefixed id, so treat it as an HTTP target and let
+    // assertUrlResolvesPublic fail closed on it.
+    if (/^https?:/i.test(candidate)) {
+      return candidate;
+    }
+  }
+  return undefined;
+}
+
+/**
+ * Derive the effective fetch target of an HttpProvider raw request
+ * (`config.request`), mirroring `callApiWithRawRequest`: an absolute-form
+ * request target wins, otherwise the target is built from the Host header. A
+ * `file://` reference is resolved the same way the provider resolves it.
+ * Throws {@link PrivateRangeBlockedError} when no target can be determined:
+ * fail closed, since an unverifiable target must not be fetched on an
+ * exposed server (the raw request is rendered with caller-controlled
+ * template variables at call time, so a missing Host header here cannot be
+ * proven safe).
+ */
+function getRawRequestTarget(rawRequest: string, useHttps: boolean): string {
+  let requestText = rawRequest;
+  if (requestText.startsWith('file://')) {
+    let loaded: unknown;
+    try {
+      loaded = maybeLoadFromExternalFile(requestText);
+    } catch {
+      loaded = undefined;
+    }
+    if (typeof loaded !== 'string' || loaded.length === 0) {
+      throw new PrivateRangeBlockedError(
+        'PROMPTFOO_BLOCK_PRIVATE_RANGES is set: refusing provider raw request whose file:// target could not be loaded for preflight validation',
+      );
+    }
+    requestText = loaded;
+  }
+  const headerBlock = requestText.replace(/\r\n/g, '\n').split('\n\n')[0] ?? '';
+  const lines = headerBlock.split('\n');
+  const target = lines[0]?.trim().split(/\s+/)[1] ?? '';
+  if (/^https?:\/\//i.test(target)) {
+    return target;
+  }
+  const host = lines
+    .slice(1)
+    .find((line) => /^\s*host\s*:/i.test(line))
+    ?.replace(/^\s*host\s*:\s*/i, '')
+    .trim();
+  if (!host) {
+    throw new PrivateRangeBlockedError(
+      'PROMPTFOO_BLOCK_PRIVATE_RANGES is set: refusing provider raw request with no Host header or absolute request target to validate',
+    );
+  }
+  return `${useHttps ? 'https' : 'http'}://${host}`;
+}
+
+/**
+ * Extract every caller-supplied fetch target from provider options, so the
+ * preflight can validate each one. A first-match lookup is not enough: the
+ * provider that finally runs may ignore the first field and fetch another
+ * (e.g. HttpProvider requests `config.url || id` and never reads
+ * `config.apiBaseUrl`), which would let a validated public field mask the
+ * private effective target.
  *
- * - an explicit `config.apiBaseUrl` or `config.url` override (the latter is
- *   what `HttpProvider` actually requests for `{ id: 'http', ... }`),
- * - a bare `http(s)` provider id — parsed with `URL` so the non-canonical
+ * Covers every shape that lets a caller choose the fetch target:
+ *
+ * - explicit `config.apiBaseUrl` / `config.url` overrides,
+ * - an HttpProvider raw `config.request` (absolute request target, else the
+ *   Host header, mirroring `callApiWithRawRequest`),
+ * - a bare `http(s)` provider id, parsed with `URL` so the non-canonical
  *   forms the provider registry accepts (`http:127.0.0.1`, backslash
  *   variants) are caught too,
+ * - URL-bearing provider ids the registry unwraps before fetching
+ *   (`webhook:<url>`, `ws:`/`wss:`),
  * - a named provider whose default endpoint is local (ollama, llama, ...),
  *   validated against its effective default base URL.
  *
  * Named providers without an override or a local default resolve to their
  * public defaults and need no check.
  */
-export function getCallerSuppliedBaseUrl(providerOptions: ProviderTarget): string | undefined {
+export function getCallerSuppliedBaseUrls(providerOptions: ProviderTarget): string[] {
+  const urls: string[] = [];
   const config = providerOptions?.config;
   for (const key of ['apiBaseUrl', 'url'] as const) {
     const configUrl = config?.[key];
     if (typeof configUrl === 'string' && configUrl.length > 0) {
-      return configUrl;
+      urls.push(configUrl);
     }
+  }
+  const rawRequest = config?.request;
+  if (typeof rawRequest === 'string' && rawRequest.length > 0) {
+    urls.push(getRawRequestTarget(rawRequest, config?.useHttps === true));
   }
   const id = providerOptions?.id;
   if (typeof id !== 'string' || id.length === 0) {
-    return undefined;
+    return urls;
   }
-  try {
-    const parsed = new URL(id);
-    if (parsed.protocol === 'http:' || parsed.protocol === 'https:') {
-      return id;
-    }
-  } catch {
-    // Not an absolute URL. The provider registry still accepts any `http:`-
-    // prefixed id, so treat it as an HTTP target and let
-    // assertUrlResolvesPublic fail closed on it.
-    if (/^https?:/i.test(id)) {
-      return id;
-    }
+  const idUrl = getUrlFromProviderId(id);
+  if (idUrl) {
+    urls.push(idUrl);
+    return urls;
   }
   const localDefault = LOCAL_DEFAULT_ENDPOINTS.find(({ test }) => test(id));
-  return localDefault?.baseUrl();
+  const defaultUrl = localDefault?.baseUrl();
+  if (defaultUrl) {
+    urls.push(defaultUrl);
+  }
+  return urls;
 }
 
 /**
- * No-op unless `PROMPTFOO_BLOCK_PRIVATE_RANGES` is set. Otherwise resolves the
- * caller-supplied provider target and throws {@link PrivateRangeBlockedError}
- * when it is not publicly routable.
+ * No-op unless `PROMPTFOO_BLOCK_PRIVATE_RANGES` is set. Otherwise resolves
+ * every caller-supplied provider target and throws
+ * {@link PrivateRangeBlockedError} when any of them is not publicly routable.
  */
 export async function assertProviderTargetPublic(providerOptions: ProviderTarget): Promise<void> {
   if (!isPrivateRangeBlockingEnabled()) {
     return;
   }
-  const url = getCallerSuppliedBaseUrl(providerOptions);
-  if (!url) {
-    return;
+  const urls = getCallerSuppliedBaseUrls(providerOptions);
+  for (const url of urls) {
+    await assertUrlResolvesPublic(url);
   }
-  await assertUrlResolvesPublic(url);
 }
