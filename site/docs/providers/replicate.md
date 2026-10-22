@@ -81,6 +81,8 @@ These parameters are supported for all models:
 | `prompt.prefix` | String added before each prompt. Useful for instruction/chat formatting. |
 | `prompt.suffix` | String added after each prompt. Useful for instruction/chat formatting.  |
 
+For image models, these wrappers are applied to the outgoing image prompt; the Markdown image label retains the original evaluation prompt.
+
 Supported environment variables:
 
 - `REPLICATE_API_TOKEN` - Your Replicate API key.
