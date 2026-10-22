@@ -1188,7 +1188,7 @@ describe('OTLPReceiver', () => {
       const listenSpy = vi
         .spyOn(OTLPReceiver.prototype, 'listen')
         .mockRejectedValueOnce(new Error('EADDRINUSE'))
-        .mockResolvedValueOnce(undefined);
+        .mockResolvedValueOnce(4319);
 
       try {
         await expect(startOTLPReceiver(4318, '127.0.0.1', ['json'])).rejects.toThrow('EADDRINUSE');
@@ -1217,6 +1217,25 @@ describe('OTLPReceiver', () => {
         );
       } finally {
         await new Promise<void>((resolve) => blocker.close(() => resolve()));
+      }
+    });
+
+    it('resolves with the OS-chosen port for port 0 and reports it from /debug/status', async () => {
+      const first = new OTLPReceiver({ acceptFormats: ['json'] });
+      const second = new OTLPReceiver({ acceptFormats: ['json'] });
+      try {
+        const [firstPort, secondPort] = await Promise.all([
+          first.listen(0, '127.0.0.1'),
+          second.listen(0, '127.0.0.1'),
+        ]);
+
+        expect(firstPort).toBeGreaterThan(0);
+        expect(secondPort).toBeGreaterThan(0);
+        expect(firstPort).not.toBe(secondPort);
+        const status = await fetch(`http://127.0.0.1:${firstPort}/debug/status`);
+        expect((await status.json()).port).toBe(firstPort);
+      } finally {
+        await Promise.all([first.stop(), second.stop()]);
       }
     });
   });

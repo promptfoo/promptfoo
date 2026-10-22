@@ -45,6 +45,11 @@ export function getConfiguredTracingExport(): ConfiguredTracingExport | undefine
   }
 
   const receiver = cliState.activeOtlpReceiver ?? requestedReceiver;
+  const port = receiver.port ?? 4318;
+  // `port: 0` has no endpoint until the receiver has bound its OS-chosen port.
+  if (port === 0) {
+    return undefined;
+  }
   const acceptFormats = receiver.acceptFormats;
   const format =
     !acceptFormats?.length || acceptFormats.includes('json')
@@ -58,7 +63,7 @@ export function getConfiguredTracingExport(): ConfiguredTracingExport | undefine
 
   const host = receiver.host ?? '127.0.0.1';
   const urlHost = host.includes(':') && !host.startsWith('[') ? `[${host}]` : host;
-  return { endpoint: `http://${urlHost}:${receiver.port ?? 4318}`, format };
+  return { endpoint: `http://${urlHost}:${port}`, format };
 }
 
 /** Only suppress Promptfoo spans when subprocess exports can reach the live receiver. */
