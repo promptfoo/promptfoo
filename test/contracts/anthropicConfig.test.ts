@@ -40,6 +40,8 @@ const commonInvalid: unknown[] = [
   { model: 'ignored-model' },
 ];
 const validMessages = [
+  { max_tool_calls: 1 },
+  { max_tool_calls: 8 },
   { tools: [{ type: 'web_search_20260209' }, { type: 'web_fetch_20260209' }] },
   { apiKeyEnvar: 'CUSTOM_ANTHROPIC_KEY' },
   { tools: [{ type: 'function', function: { name: 'ping' } }] },
@@ -115,6 +117,8 @@ const validMessages = [
   { tool_choice: { type: 'none' } },
 ];
 const invalidMessages: unknown[] = [
+  { max_tool_calls: -1 },
+  { max_tool_calls: 1.5 },
   { tools: [{ type: 'function', function: { name: 'lookup', strict: true } }] },
   { tools: [{ type: 'bash_20250124' }] },
   { apiKeyEnvar: 123 },
