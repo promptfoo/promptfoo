@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
+import { dump } from 'js-yaml';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache } from '../../../src/cache';
 import {
@@ -40,7 +41,7 @@ afterEach(async () => {
 });
 function fixture(name: string, value: unknown) {
   const file = path.join(directory, name);
-  fs.writeFileSync(file, JSON.stringify(value));
+  fs.writeFileSync(file, name.endsWith('.yaml') ? dump(value) : JSON.stringify(value));
   return `file://${file}` as const;
 }
 function context(vars: CallApiContextParams['vars'], config = {}): CallApiContextParams {
@@ -266,18 +267,26 @@ describe('portable config enters real OpenAI constructors', () => {
       const tool = { type: 'function', function: { name: 'ping', description: '{{ payload }}' } };
       const functions = [{ name: 'ping', description: '{{ payload }}' }];
       const schema = { type: 'object', description: '{{ payload }}' };
+      const templated = source === 'template' || source === 'template-array';
+      const suffix = templated ? `-${payload}` : '';
+      const extension = source === 'template-array' ? 'yaml' : 'json';
+      const schemaRef = fixture(`schema${suffix}.${extension}`, schema);
       const format = {
         type: 'json_schema',
         json_schema: {
           name: 'fixture',
           description: '{{ payload }}',
-          schema: source.endsWith('-array') ? fixture('schema.json', schema) : schema,
+          schema:
+            source === 'template-array'
+              ? '{{ schemaRef }}'
+              : source === 'file-array'
+                ? schemaRef
+                : schema,
         },
       };
-      const toolRef = fixture('tools.json', [tool]);
-      const functionsRef = fixture('functions.json', functions);
-      const formatRef = fixture('format.json', format);
-      const templated = source === 'template' || source === 'template-array';
+      const toolRef = fixture(`tools${suffix}.${extension}`, [tool]);
+      const functionsRef = fixture(`functions${suffix}.${extension}`, functions);
+      const formatRef = fixture(`format${suffix}.${extension}`, format);
       const config = templated
         ? {
             apiKey: 'fixture-key',
@@ -294,7 +303,7 @@ describe('portable config enters real OpenAI constructors', () => {
       const provider = await loadOpenAiProvider('chat', config);
       const { body } = await provider.getOpenAiBody(
         'fixture',
-        context({ payload, toolRef, functionsRef, formatRef }),
+        context({ payload, toolRef, functionsRef, formatRef, schemaRef }),
       );
       expect(body).toMatchObject({
         tools: [{ function: { description: payload } }],
@@ -312,16 +321,24 @@ describe('portable config enters real OpenAI constructors', () => {
       const payload = '{{ env.CONSTRUCTOR_TEMPLATE_SECRET }}';
       const tool = { type: 'function', function: { name: 'ping', description: '{{ payload }}' } };
       const schema = { type: 'object', description: '{{ payload }}' };
+      const templated = source === 'template' || source === 'template-array';
+      const suffix = templated ? `-${payload}` : '';
+      const extension = source === 'template-array' ? 'yaml' : 'json';
+      const schemaRef = fixture(`schema${suffix}.${extension}`, schema);
       const format = {
         type: 'json_schema',
         json_schema: {
           name: 'fixture',
-          schema: source.endsWith('-array') ? fixture('schema.json', schema) : schema,
+          schema:
+            source === 'template-array'
+              ? '{{ schemaRef }}'
+              : source === 'file-array'
+                ? schemaRef
+                : schema,
         },
       };
-      const toolRef = fixture('tools.json', [tool]);
-      const formatRef = fixture('format.json', format);
-      const templated = source === 'template' || source === 'template-array';
+      const toolRef = fixture(`tools${suffix}.${extension}`, [tool]);
+      const formatRef = fixture(`format${suffix}.${extension}`, format);
       const config = templated
         ? {
             apiKey: 'fixture-key',
@@ -336,7 +353,7 @@ describe('portable config enters real OpenAI constructors', () => {
       const provider = await loadOpenAiProvider('responses', config);
       const { body } = await provider.getOpenAiBody(
         'fixture',
-        context({ payload, toolRef, formatRef }),
+        context({ payload, toolRef, formatRef, schemaRef }),
       );
       expect(body).toMatchObject({
         tools: [{ description: payload }],
@@ -346,24 +363,43 @@ describe('portable config enters real OpenAI constructors', () => {
     },
   );
   it.each(['tools', 'functions', 'response_format'] as const)(
-    'reports file errors for a fully templated %s reference before sending a request',
+    'reports file errors without rendering template text in the resolved %s path',
     async (field) => {
       const provider = await loadOpenAiProvider('chat', {
         apiKey: 'fixture-key',
         [field]: '{{ reference }}',
       });
-      const file = path.join(directory, `${field}.json`);
+      const file = path.join(directory, `${field}-{{ env.CONSTRUCTOR_TEMPLATE_SECRET }}.json`);
       const callContext = context({ reference: `file://${file}` });
-      await expect(provider.callApi('fixture', callContext)).rejects.toThrow(
-        `File does not exist: ${file}`,
-      );
+      await expect(provider.callApi('fixture', callContext)).rejects.toMatchObject({
+        message: `File does not exist: ${file}`,
+      });
       fs.writeFileSync(file, '{');
-      await expect(provider.callApi('fixture', callContext)).rejects.toThrow(
-        `Failed to parse JSON file ${file}`,
-      );
+      const malformed = provider.callApi('fixture', callContext);
+      await expect(malformed).rejects.toThrow(`Failed to parse JSON file ${file}`);
+      await expect(malformed).rejects.not.toThrow('fixture-sensitive-value');
       expect(fetchWithCache).not.toHaveBeenCalled();
     },
   );
+  it('validates function calls using a fully templated provider-level reference', async () => {
+    const provider = await loadOpenAiProvider('chat', {
+      apiKey: 'fixture-key',
+      functions: '{{ reference }}',
+    });
+    if (!(provider instanceof OpenAiChatCompletionProvider)) {
+      throw new Error('Expected an OpenAI Chat provider');
+    }
+    const vars = {
+      reference: fixture('functions.json', [{ name: '{{ functionName }}' }]),
+      functionName: 'ping',
+    };
+    expect(() =>
+      provider.validateFunctionToolCall({ name: 'ping', arguments: '{}' }, vars),
+    ).not.toThrow();
+    expect(() =>
+      provider.validateFunctionToolCall({ name: 'ping', arguments: '{"unexpected":true}' }, vars),
+    ).toThrow(InvalidToolCallError);
+  });
   it.each(['root', 'nested'] as const)(
     'evaluates %s reasoning callbacks without request vars',
     async (form) => {
