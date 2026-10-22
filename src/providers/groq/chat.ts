@@ -1,4 +1,4 @@
-import { getEnvString } from '../../envars';
+import { getEnvInt, getEnvString } from '../../envars';
 import { OpenAiChatCompletionProvider } from '../openai/chat';
 import { resolveChatOutputCap } from '../openai/tokenCaps';
 import { serializeProvider } from '../serialization';
@@ -70,7 +70,7 @@ export class GroqProvider extends OpenAiChatCompletionProvider {
         this.config,
         context?.prompt?.config,
         false,
-        {},
+        { maxCompletionTokens: getEnvInt('OPENAI_MAX_COMPLETION_TOKENS') },
       );
       if (maxCompletionTokens === undefined) {
         delete body.max_completion_tokens;
