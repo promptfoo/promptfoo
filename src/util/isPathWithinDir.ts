@@ -48,6 +48,18 @@ export async function isPathWithinDir(filePath: string, dir: string): Promise<bo
     // This allows writes to create new files in valid directories.
     if (error.code === 'ENOENT') {
       const absoluteTarget = path.isAbsolute(filePath) ? filePath : path.resolve(dir, filePath);
+      // realpath() also reports ENOENT for dangling symlinks. Those must not
+      // be treated as new files just because their parent is inside dir.
+      try {
+        if ((await fs.lstat(absoluteTarget)).isSymbolicLink()) {
+          return false;
+        }
+      } catch (statError) {
+        if ((statError as NodeJS.ErrnoException).code !== 'ENOENT') {
+          return false;
+        }
+      }
+
       const parentDir = path.dirname(absoluteTarget);
 
       // Stop recursion if we've reached root
