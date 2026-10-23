@@ -22,6 +22,17 @@ describe('portable Bedrock Converse configuration', () => {
     'bedrock:converse:arn:aws:bedrock:us-east-1:123:application-inference-profile/test',
   ];
   const cases: [unknown, boolean][] = [
+    ...[
+      { tools: [{ name: 'lookup', parameters: { type: 'object' } }] },
+      { tools: ['file://one.json', 'file://two.yaml'] },
+      { tools: [{ type: 'function', function: { name: 'a' } }, { toolSpec: { name: 'b' } }] },
+      { toolChoice: 'none' },
+      { guardrailIdentifier: 123, guardrailVersion: 1 },
+    ].map((config): [unknown, boolean] => [
+      { id: 'bedrock:converse:amazon.nova-pro-v1:0', config },
+      true,
+    ]),
+    [{ id: 'bedrock:converse:amazon.nova-pro-v1:0', inputs: { question: '{{query}}' } }, true],
     [
       {
         id: 'bedrock:converse:amazon.nova-pro-v1:0',

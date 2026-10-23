@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { ProviderEnvOverridesSchema } from '../env.js';
+import { InputsInputSchema } from '../shared.js';
 import { McpClientConfigInputSchema } from './mcp.js';
 
 const JsonObject = z.record(z.string(), z.json());
@@ -24,9 +25,10 @@ const Tool = z.union([
     name: z.string(),
     description: z.string().optional(),
     input_schema: JsonObject.optional(),
+    parameters: JsonObject.optional(),
   }),
 ]);
-const ToolChoice = z.union([z.enum(['auto', 'any']), z.strictObject({ tool: NamedTool })]);
+const ToolChoice = z.union([z.enum(['auto', 'any', 'none']), z.strictObject({ tool: NamedTool })]);
 const OpenAiToolChoice = z.union([
   ToolChoice,
   z.enum(['none', 'required']),
@@ -41,8 +43,8 @@ export const BedrockConverseConfigInputSchema = z.strictObject({
   secretAccessKey: z.string().optional(),
   sessionToken: z.string().optional(),
   endpoint: z.string().optional(),
-  guardrailIdentifier: z.string().optional(),
-  guardrailVersion: z.string().optional(),
+  guardrailIdentifier: z.union([z.string(), z.number()]).optional(),
+  guardrailVersion: z.union([z.string(), z.number()]).optional(),
   trace: z.enum(['enabled', 'disabled', 'enabled_full']).optional(),
   showThinking: z.boolean().optional(),
   maxTokens: z.number().optional(),
@@ -77,7 +79,13 @@ export const BedrockConverseConfigInputSchema = z.strictObject({
   serviceTier: z
     .strictObject({ type: z.enum(['priority', 'default', 'flex', 'reserved']) })
     .optional(),
-  tools: z.union([z.array(Tool), z.string().regex(/^file:\/\/[\s\S]+/)]).optional(),
+  tools: z
+    .union([
+      z.array(Tool),
+      z.string().regex(/^file:\/\/[\s\S]+/),
+      z.array(z.string().regex(/^file:\/\/[\s\S]+/)),
+    ])
+    .optional(),
   toolChoice: ToolChoice.optional(),
   tool_choice: OpenAiToolChoice.optional(),
   mcp: McpClientConfigInputSchema.optional(),
@@ -94,6 +102,7 @@ export const BedrockConverseProviderOptionsInputSchema = z.strictObject({
       /^bedrock:converse:(?!openai\.(?![^:]*gpt-oss))(?!xai\.grok-)(?!anthropic\.claude-mythos-(?:5|preview)$)(?![^.]+\.anthropic\.claude-mythos-(?:5|preview)$)(?!(?!(?:us|global)\.xai\.grok-4\.6$)[^:]*\.xai\.)(?!(?:[^.]+\.)?amazon\.nova(?:-2)?-sonic-v1:0$).+$/,
     ),
   config: BedrockConverseConfigInputSchema.optional(),
+  inputs: InputsInputSchema.optional(),
   label: z.string().optional(),
   prompts: z.array(z.string()).optional(),
   transform: z.string().optional(),

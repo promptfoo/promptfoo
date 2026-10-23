@@ -37,13 +37,7 @@ import {
 import { MCPClient } from '../mcp/client';
 import { getMcpErrorMessage, isMcpErrorResult, normalizeMcpToolContent } from '../mcp/util';
 import { providerRegistry } from '../providerRegistry';
-import {
-  isOpenAIToolArray,
-  isOpenAIToolChoice,
-  type OpenAIToolChoice,
-  openaiToolChoiceToBedrock,
-  openaiToolsToBedrock,
-} from '../shared';
+import { isOpenAIToolChoice, type OpenAIToolChoice, openaiToolChoiceToBedrock } from '../shared';
 import { AwsBedrockGenericProvider, type BedrockOptions, createBedrockCacheKeyHash } from './base';
 import { calculateBedrockCost } from './pricing';
 import type {
@@ -160,11 +154,6 @@ export interface BedrockConverseToolConfig {
  * Supports OpenAI, Anthropic, and native Bedrock formats.
  */
 function convertToolsToConverseFormat(tools: BedrockConverseToolConfig[]): Tool[] {
-  // Check if entire array is OpenAI format
-  if (isOpenAIToolArray(tools)) {
-    return openaiToolsToBedrock(tools) as Tool[];
-  }
-
   return tools.map((tool): Tool => {
     // Already in Converse format - cast to expected type
     if (tool.toolSpec) {
@@ -178,7 +167,7 @@ function convertToolsToConverseFormat(tools: BedrockConverseToolConfig[]): Tool[
           name: tool.function.name,
           description: tool.function.description,
           inputSchema: {
-            json: (tool.function.parameters || {}) as DocumentType,
+            json: (tool.function.parameters || { type: 'object', properties: {} }) as DocumentType,
           },
         },
       } as Tool;
