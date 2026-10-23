@@ -84,7 +84,7 @@ describe('MediaEmptyState', () => {
       render(<MediaEmptyState hasFilters={false} blobStorageEnabled={false} />);
 
       expect(screen.getByText('Blob storage is not enabled')).toBeInTheDocument();
-      expect(screen.getByText(/PROMPTFOO_ENABLE_BLOB_STORAGE/)).toBeInTheDocument();
+      expect(screen.getByText(/PROMPTFOO_INLINE_MEDIA/)).toBeInTheDocument();
     });
 
     it('renders the blob storage docs link', () => {
@@ -92,6 +92,10 @@ describe('MediaEmptyState', () => {
 
       const link = screen.getByRole('link', { name: /Learn more about blob storage/i });
       expect(link).toBeInTheDocument();
+      expect(link).toHaveAttribute(
+        'href',
+        'https://www.promptfoo.dev/docs/usage/self-hosting/#eval-storage-path',
+      );
       expect(link).toHaveAttribute('target', '_blank');
     });
 
