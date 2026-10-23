@@ -144,6 +144,9 @@ const invalidMessages: unknown[] = [
   { effort: 'unknown' },
   { thinking: { type: 'enabled' } },
   { thinking: { type: 'enabled', budget_tokens: '1024' } },
+  ...[-1, 0, 512, 1023, 1024.5].map((budget_tokens) => ({
+    thinking: { type: 'enabled', budget_tokens },
+  })),
   { thinking: { type: 'disabled', budget_tokens: 1024 } },
   { thinking: { type: 'unknown' } },
   { tools: [{ name: 'lookup' }] },

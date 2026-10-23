@@ -75,7 +75,7 @@ const Tools = z.union([
 const Thinking = z.union([
   z.strictObject({
     type: z.literal('enabled'),
-    budget_tokens: z.number(),
+    budget_tokens: z.number().int().min(1024),
     display: z.enum(['summarized', 'omitted']).optional(),
   }),
   z.strictObject({
