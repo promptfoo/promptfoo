@@ -64,7 +64,9 @@ describe('monkeyPatchFetch manual-redirect body logging', () => {
 
     // Let the fire-and-forget logRequestResponse run: it must log the hop
     // without touching the discarded body.
-    await new Promise((resolve) => setTimeout(resolve, 100));
+    await vi.waitFor(() => {
+      expect(apiRequestLogObjects()).toHaveLength(1);
+    });
 
     const logged = apiRequestLogObjects();
     expect(logged).toHaveLength(1);
@@ -85,7 +87,9 @@ describe('monkeyPatchFetch manual-redirect body logging', () => {
     });
     expect(response.status).toBe(200);
 
-    await new Promise((resolve) => setTimeout(resolve, 100));
+    await vi.waitFor(() => {
+      expect(apiRequestLogObjects()).toHaveLength(1);
+    });
     const logged = apiRequestLogObjects();
     expect(logged).toHaveLength(1);
     expect(logged[0]).toMatchObject({ status: 200, response: 'ok-body' });
@@ -104,7 +108,9 @@ describe('monkeyPatchFetch manual-redirect body logging', () => {
     const response = await monkeyPatchFetch('https://public.example.com/start');
     expect(response.status).toBe(200);
 
-    await new Promise((resolve) => setTimeout(resolve, 100));
+    await vi.waitFor(() => {
+      expect(apiRequestLogObjects()).toHaveLength(1);
+    });
     const logged = apiRequestLogObjects();
     expect(logged).toHaveLength(1);
     expect(logged[0]).toMatchObject({ status: 200, response: 'final-body' });
