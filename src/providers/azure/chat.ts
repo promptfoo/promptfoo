@@ -402,7 +402,7 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
       maxTokens: this.config.max_tokens,
       temperature: this.config.temperature,
       topP: this.config.top_p,
-      stopSequences: this.config.stop,
+      stopSequences: typeof this.config.stop === 'string' ? [this.config.stop] : this.config.stop,
       frequencyPenalty: this.config.frequency_penalty,
       presencePenalty: this.config.presence_penalty,
       // Promptfoo context from test case if available
