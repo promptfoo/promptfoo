@@ -70,6 +70,9 @@ vi.mock('../src/envars', async () => {
       if (key === 'PROMPTFOO_DISABLE_TELEMETRY') {
         return (process.env as NodeJS.ProcessEnv).PROMPTFOO_DISABLE_TELEMETRY === '1';
       }
+      if (key === 'PROMPTFOO_NO_NETWORK') {
+        return (process.env as NodeJS.ProcessEnv).PROMPTFOO_NO_NETWORK === 'true';
+      }
       if (key === 'IS_TESTING') {
         return (
           (process.env as NodeJS.ProcessEnv).IS_TESTING === 'true' ||
@@ -894,6 +897,55 @@ describe('Telemetry', () => {
           },
           body: JSON.stringify({ email: 'test@example.com', metadata: undefined }),
         },
+        1000,
+      );
+    });
+  });
+
+  describe('PROMPTFOO_NO_NETWORK (#11768 item 3)', () => {
+    let restoreEnv: () => void;
+
+    afterEach(() => {
+      restoreEnv?.();
+    });
+
+    it('skips license consent submission without any request', async () => {
+      restoreEnv = mockProcessEnv({ PROMPTFOO_NO_NETWORK: 'true' });
+      vi.mocked(fetchWithTimeout).mockClear();
+      const telemetry = new Telemetry();
+
+      await telemetry.saveConsent('test@example.com', { source: 'test' });
+
+      expect(fetchWithTimeout).not.toHaveBeenCalled();
+    });
+
+    it('reports telemetry as disabled', () => {
+      restoreEnv = mockProcessEnv({ PROMPTFOO_NO_NETWORK: 'true' });
+      const telemetry = new Telemetry();
+
+      expect(telemetry.disabled).toBe(true);
+    });
+
+    it('emits no telemetry request at all, not even the "telemetry disabled" marker', () => {
+      restoreEnv = mockProcessEnv({ PROMPTFOO_NO_NETWORK: 'true' });
+      vi.mocked(fetchWithProxy).mockClear();
+      const telemetry = new Telemetry();
+
+      telemetry.record('eval_ran', { foo: 'bar' });
+
+      expect(fetchWithProxy).not.toHaveBeenCalled();
+    });
+
+    it('still submits consent when the flag is unset', async () => {
+      restoreEnv = mockProcessEnv({ PROMPTFOO_NO_NETWORK: undefined });
+      vi.mocked(fetchWithTimeout).mockResolvedValue({ ok: true } as any);
+      const telemetry = new Telemetry();
+
+      await telemetry.saveConsent('test@example.com');
+
+      expect(fetchWithTimeout).toHaveBeenCalledWith(
+        'https://api.promptfoo.dev/consent',
+        expect.objectContaining({ method: 'POST' }),
         1000,
       );
     });
