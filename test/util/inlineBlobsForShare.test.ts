@@ -67,6 +67,7 @@ describe('inlineBlobRefsForShare', () => {
 
     expect(getShareAuthorizedBlob).toHaveBeenCalledOnce();
   });
+
   it('inlines a shared metadata object in every result row', async () => {
     const sharedMetadata = { preview: uri };
     const rows = [{ metadata: sharedMetadata }, { metadata: sharedMetadata }];
@@ -80,5 +81,4 @@ describe('inlineBlobRefsForShare', () => {
     ]);
     expect(getShareAuthorizedBlob).toHaveBeenCalledOnce();
   });
-
 });
