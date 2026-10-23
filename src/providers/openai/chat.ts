@@ -652,6 +652,18 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       // OpenAI's cap alias and null-clearing policy.
       delete body.max_tokens;
     }
+    if (!usesModernTokenCap) {
+      const promptConfig = context?.prompt?.config;
+      const legacyCap = [
+        promptConfig?.passthrough?.max_tokens,
+        promptConfig?.max_tokens,
+        (this.config.passthrough as { max_tokens?: unknown } | undefined)?.max_tokens,
+        this.config.max_tokens,
+      ].find((value) => value !== undefined);
+      if (legacyCap === null) {
+        delete body.max_tokens;
+      }
+    }
     if (isOpenRouterGpt6) {
       reconcileOpenRouterReasoning(body, this.config, context?.prompt?.config, context?.vars);
     } else if (resolvesReasoning) {

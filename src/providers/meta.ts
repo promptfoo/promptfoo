@@ -544,11 +544,30 @@ export class MetaResponsesProvider extends OpenAiResponsesProvider {
 
     // The Responses API caps generation with max_output_tokens; map the
     // chat-style caps across so a config shared with meta:<model> keeps its cap.
-    applyMetaResponsesOutputCap(
-      body,
-      passthrough,
-      config.max_output_tokens ?? config.max_completion_tokens ?? config.max_tokens,
-    );
+    const promptConfig = context?.prompt?.config;
+    const promptPassthrough = promptConfig?.passthrough;
+    const promptCap = [
+      promptPassthrough?.max_output_tokens,
+      promptPassthrough?.max_completion_tokens,
+      promptPassthrough?.max_tokens,
+      promptConfig?.max_output_tokens,
+      promptConfig?.max_completion_tokens,
+      promptConfig?.max_tokens,
+    ].find((value) => value !== undefined);
+    if (promptCap === undefined) {
+      applyMetaResponsesOutputCap(
+        body,
+        passthrough,
+        config.max_output_tokens ?? config.max_completion_tokens ?? config.max_tokens,
+      );
+    } else {
+      delete body.max_completion_tokens;
+      if (promptCap === null) {
+        delete body.max_output_tokens;
+      } else {
+        body.max_output_tokens = promptCap;
+      }
+    }
     applyMetaSamplingHygiene(body, config, passthrough, ['top_p']);
 
     return result;

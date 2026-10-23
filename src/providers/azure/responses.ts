@@ -151,17 +151,21 @@ export class AzureResponsesProvider extends AzureGenericProvider<AzureResponsesO
     const supportsReasoningConfig =
       isReasoningModel ||
       (config.isReasoningModel !== false && !isLegacyOpenAiChatModel(capabilityModelName));
+    // Azure deployments can target third-party models with their own raw JSON contract.
+    const allowRawReasoning =
+      !isGPT6Model && !/(?:^|[\/-])(?:gpt-|chatgpt-|o[134](?:-|$))/.test(capabilityModelName);
     const resolvedReasoning = supportsReasoningConfig
       ? resolveResponsesReasoningState(
           this.config,
           context?.prompt?.config,
           (value) => renderVarsInObject(value, context?.vars ?? {}),
-          { includeEffort: !isFixedReasoningModel },
+          { includeEffort: !isFixedReasoningModel, allowRawPassthrough: allowRawReasoning },
         )
       : undefined;
     const renderedReasoning = resolvedReasoning?.reasoning;
     // Explicit clears also defer to the model's defaults rather than restoring client defaults.
-    const hasExplicitReasoning = resolvedReasoning?.hasExplicitConfig === true;
+    const hasExplicitReasoning =
+      resolvedReasoning?.hasExplicitConfig === true && resolvedReasoning.rawReasoning === undefined;
     const maxOutputTokensDefault = config.omitDefaults
       ? getEnvString('OPENAI_MAX_TOKENS') === undefined
         ? undefined
@@ -280,7 +284,9 @@ export class AzureResponsesProvider extends AzureGenericProvider<AzureResponsesO
     };
 
     if (supportsReasoningConfig) {
-      if (renderedReasoning) {
+      if (resolvedReasoning?.rawReasoning !== undefined) {
+        body.reasoning = resolvedReasoning.rawReasoning;
+      } else if (renderedReasoning) {
         Object.assign(body, { reasoning: renderedReasoning });
       } else {
         delete body.reasoning;

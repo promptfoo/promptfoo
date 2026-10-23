@@ -10,7 +10,9 @@ import { AzureChatCompletionProvider } from '../../src/providers/azure/chat';
 import { AzureResponsesProvider } from '../../src/providers/azure/responses';
 import { GroqProvider } from '../../src/providers/groq/chat';
 import { createMetaProvider } from '../../src/providers/meta';
+import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
 import { OpenAiResponsesProvider } from '../../src/providers/openai/responses';
+import { mockProcessEnv } from '../util/utils';
 import { createMockFetchResponse } from './mockProviderResponses';
 import { installTracerSpy } from './openai/tracing';
 
@@ -183,4 +185,117 @@ describe('reasoning request compatibility', () => {
     expect(AzureResponsesConfigInputSchema.safeParse({ max_tool_calls: 0 }).success).toBe(false);
     expect(AnthropicMessagesConfigInputSchema.safeParse({ max_tool_calls: 0 }).success).toBe(true);
   });
+});
+
+describe('reviewed portable token and reasoning compatibility', () => {
+  let restoreEnv: () => void;
+  beforeEach(() => {
+    restoreEnv = mockProcessEnv({
+      OPENAI_MAX_TOKENS: undefined,
+      OPENAI_MAX_COMPLETION_TOKENS: undefined,
+      OPENAI_TEMPERATURE: undefined,
+    });
+  });
+  afterEach(() => restoreEnv());
+  it.each([true, false, 'vendor-mode', ['low']])(
+    'preserves Azure vendor raw reasoning %j',
+    async (reasoning) => {
+      vi.mocked(fetchWithCache).mockResolvedValue(createMockFetchResponse({ output: [] }));
+      const p = new AzureResponsesProvider('opaque-vendor', {
+        config: { ...fixture, passthrough: { reasoning } },
+      });
+      await p.callApi('Hello');
+      expect(JSON.parse(vi.mocked(fetchWithCache).mock.calls[0][1]?.body as string)).toMatchObject({
+        reasoning,
+        max_output_tokens: 1024,
+        temperature: 0,
+      });
+    },
+  );
+  it.each(['gpt-5', 'gpt-6', 'o3'])(
+    'retains native Azure object-only reasoning for %s',
+    async (modelName) => {
+      const p = new AzureResponsesProvider('opaque', {
+        config: { ...fixture, modelName, passthrough: { reasoning: true } },
+      });
+      await expect(p.callApi('Hello')).rejects.toThrow(/reasoning must be an object/i);
+      expect(fetchWithCache).not.toHaveBeenCalled();
+    },
+  );
+  it('clears raw Azure provider reasoning with a named prompt null', async () => {
+    vi.mocked(fetchWithCache).mockResolvedValue(createMockFetchResponse({ output: [] }));
+    const p = new AzureResponsesProvider('opaque-vendor', {
+      config: { ...fixture, passthrough: { reasoning: true } },
+    });
+    await p.callApi('Hello', context({ reasoning: null }));
+    expect(
+      JSON.parse(vi.mocked(fetchWithCache).mock.calls[0][1]?.body as string),
+    ).not.toHaveProperty('reasoning');
+  });
+  for (const field of ['max_output_tokens', 'max_completion_tokens', 'max_tokens']) {
+    for (const raw of [false, true]) {
+      it.each([null, 0, 17])(
+        `Meta Responses prompt ${raw ? 'raw' : 'named'} ${field} overrides provider cap: %s`,
+        async (value) => {
+          const p = createMetaProvider('meta:responses:muse-spark', {
+            config: { ...fixture, max_output_tokens: 77, passthrough: { max_output_tokens: 88 } },
+          });
+          const { body } = await (p as OpenAiResponsesProvider).getOpenAiBody(
+            'Hello',
+            context(raw ? { passthrough: { [field]: value } } : { [field]: value }),
+          );
+          if (value === null) {
+            expect(body).not.toHaveProperty('max_output_tokens');
+          } else {
+            expect(body.max_output_tokens).toBe(value);
+          }
+          expect(body).not.toHaveProperty('max_completion_tokens');
+        },
+      );
+    }
+  }
+  for (const azure of [false, true]) {
+    for (const raw of [false, true]) {
+      it.each([null, 0, 17])(
+        `${azure ? 'Azure' : 'OpenAI'} legacy Chat ${raw ? 'raw' : 'named'} cap: %s`,
+        async (value) => {
+          const p = azure
+            ? new AzureChatCompletionProvider('gpt-4o', { config: { ...fixture, max_tokens: 77 } })
+            : new OpenAiChatCompletionProvider('gpt-4o', {
+                config: { ...fixture, max_tokens: 77 },
+              });
+          const { body } = await p.getOpenAiBody(
+            'Hello',
+            context(raw ? { passthrough: { max_tokens: value } } : { max_tokens: value }),
+          );
+          if (value === null) {
+            expect(body).not.toHaveProperty('max_tokens');
+          } else {
+            expect(body.max_tokens).toBe(value);
+          }
+        },
+      );
+    }
+  }
+});
+
+describe('legacy token clears with environment defaults', () => {
+  let restoreEnv: () => void;
+  beforeEach(() => {
+    restoreEnv = mockProcessEnv({ OPENAI_MAX_TOKENS: '73' });
+  });
+  afterEach(() => restoreEnv());
+  it.each([false, true])(
+    'preserves environment fallback except explicit clears (Azure=%s)',
+    async (azure) => {
+      const p = azure
+        ? new AzureChatCompletionProvider('gpt-4o', { config: fixture })
+        : new OpenAiChatCompletionProvider('gpt-4o', { config: fixture });
+      expect((await p.getOpenAiBody('Hello')).body.max_tokens).toBe(73);
+      expect(
+        (await p.getOpenAiBody('Hello', context({ max_tokens: null }))).body,
+      ).not.toHaveProperty('max_tokens');
+      expect((await p.getOpenAiBody('Hello', context({ max_tokens: 0 }))).body.max_tokens).toBe(0);
+    },
+  );
 });

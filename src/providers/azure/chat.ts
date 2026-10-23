@@ -389,6 +389,18 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
         body.max_completion_tokens = outputCap;
       }
     }
+    if (!usesModernTokenCap) {
+      const promptConfig = context?.prompt?.config;
+      const legacyCap = [
+        promptConfig?.passthrough?.max_tokens,
+        promptConfig?.max_tokens,
+        (this.config.passthrough as { max_tokens?: unknown } | undefined)?.max_tokens,
+        this.config.max_tokens,
+      ].find((value) => value !== undefined);
+      if (legacyCap === null) {
+        delete body.max_tokens;
+      }
+    }
     applyGpt6RequestRules(body, capabilityModelName, 'chat');
 
     return {
