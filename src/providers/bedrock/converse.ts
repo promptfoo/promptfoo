@@ -37,13 +37,7 @@ import {
 import { MCPClient } from '../mcp/client';
 import { getMcpErrorMessage, isMcpErrorResult, normalizeMcpToolContent } from '../mcp/util';
 import { providerRegistry } from '../providerRegistry';
-import {
-  isOpenAIToolArray,
-  isOpenAIToolChoice,
-  type OpenAIToolChoice,
-  openaiToolChoiceToBedrock,
-  openaiToolsToBedrock,
-} from '../shared';
+import { isOpenAIToolChoice, type OpenAIToolChoice, openaiToolChoiceToBedrock } from '../shared';
 import { AwsBedrockGenericProvider, type BedrockOptions, createBedrockCacheKeyHash } from './base';
 import { calculateBedrockCost } from './pricing';
 import type {
@@ -64,6 +58,7 @@ import type {
 } from '@aws-sdk/client-bedrock-runtime';
 import type { DocumentType } from '@smithy/types';
 
+import type { BedrockConverseConfigInput } from '../../contracts/providerConfig/bedrock';
 import type { EnvOverrides } from '../../types/env';
 import type { ApiProvider, CallApiContextParams, ProviderResponse } from '../../types/providers';
 import type { TokenUsage, VarValue } from '../../types/shared';
@@ -85,15 +80,13 @@ function getOneHourCacheWriteTokens(
  * Configuration options for the Bedrock Converse API provider
  * Extends base BedrockOptions with Converse-specific parameters
  */
-export interface BedrockConverseOptions extends BedrockOptions {
+export interface BedrockConverseOptions
+  extends BedrockOptions,
+    Pick<
+      BedrockConverseConfigInput,
+      'maxTokens' | 'max_tokens' | 'temperature' | 'topP' | 'top_p' | 'stopSequences' | 'stop'
+    > {
   // Inference configuration (standard Converse API params)
-  maxTokens?: number;
-  max_tokens?: number; // Alias for compatibility
-  temperature?: number;
-  topP?: number;
-  top_p?: number; // Alias for compatibility
-  stopSequences?: string[];
-  stop?: string[]; // Alias for compatibility
 
   // Shared with the Anthropic Messages and Bedrock InvokeModel providers.
   thinking?: ClaudeThinkingConfig;
@@ -161,11 +154,6 @@ export interface BedrockConverseToolConfig {
  * Supports OpenAI, Anthropic, and native Bedrock formats.
  */
 function convertToolsToConverseFormat(tools: BedrockConverseToolConfig[]): Tool[] {
-  // Check if entire array is OpenAI format
-  if (isOpenAIToolArray(tools)) {
-    return openaiToolsToBedrock(tools) as Tool[];
-  }
-
   return tools.map((tool): Tool => {
     // Already in Converse format - cast to expected type
     if (tool.toolSpec) {
@@ -179,7 +167,7 @@ function convertToolsToConverseFormat(tools: BedrockConverseToolConfig[]): Tool[
           name: tool.function.name,
           description: tool.function.description,
           inputSchema: {
-            json: (tool.function.parameters || {}) as DocumentType,
+            json: (tool.function.parameters || { type: 'object', properties: {} }) as DocumentType,
           },
         },
       } as Tool;

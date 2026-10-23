@@ -11,6 +11,7 @@ export {
   type McpAuthParsed,
   McpAuthSchema,
 } from './providerConfig/auth.js';
+export * from './providerConfig/bedrock.js';
 export {
   type HttpProviderConfigInput,
   HttpProviderConfigInputJsonSchema,
