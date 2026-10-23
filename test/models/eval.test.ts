@@ -29,7 +29,7 @@ import {
   getStandaloneEvalCacheKey,
   setCachedStandaloneEvals,
 } from '../../src/util/standaloneEvalCache';
-import { createEvaluateResult } from '../factories/eval';
+import { createCompletedPrompt, createEvaluateResult } from '../factories/eval';
 import EvalFactory from '../factories/evalFactory';
 import { createAccuracyFilter, createPassFailOptions } from '../factories/literalFixtures';
 
@@ -2687,6 +2687,89 @@ describe('evaluator', () => {
         expect(page.body.map((row) => row.testIdx)).toEqual(expected);
         expect(page.filteredCount).toBe(expected.length);
       }
+    });
+
+    it('counts filtered metrics over exactly the rows the page returns, with and without filters', async () => {
+      const eval_ = await EvalFactory.create({ numResults: 4, withNamedScores: true });
+      const db = await getDb();
+      await db.run(
+        sql`UPDATE eval_results SET test_case = json_set(test_case, '$.vars.city', 'var-only-needle') WHERE eval_id = ${eval_.id} AND test_idx = 2`,
+      );
+      await db.run(
+        sql`UPDATE eval_results SET response = ${JSON.stringify({ output: 'response-needle' })} WHERE eval_id = ${eval_.id} AND test_idx = 1`,
+      );
+      const accuracy = [JSON.stringify(createAccuracyFilter())];
+
+      for (const [searchQuery, filters, expectedRows] of [
+        // Unfiltered pages search responses only, so a var-only match shows (and counts) nothing.
+        ['var-only-needle', [], []],
+        ['response-needle', [], [1]],
+        // With a structured filter, pages search all fields.
+        ['var-only-needle', accuracy, [2]],
+        ['response-needle', accuracy, [1]],
+      ] as const) {
+        const page = await eval_.getTablePage({ searchQuery, filters: [...filters] });
+        const metrics = await eval_.getFilteredMetrics({
+          filterMode: 'all',
+          searchQuery,
+          filters: [...filters],
+        });
+        const countedRows = metrics.reduce(
+          (sum, prompt) =>
+            sum + prompt.testPassCount + prompt.testFailCount + prompt.testErrorCount,
+          0,
+        );
+        const shownOutputs = page.body.flatMap((row) => row.outputs.filter(Boolean)).length;
+
+        const label = `${searchQuery} with ${filters.length} filter(s)`;
+        expect(
+          page.body.map((row) => row.testIdx),
+          label,
+        ).toEqual(expectedRows);
+        expect(countedRows, label).toBe(shownOutputs);
+      }
+    });
+
+    it('counts every output of a response-matched multi-prompt row', async () => {
+      const prompts = [
+        createCompletedPrompt('First {{topic}}', { label: 'first' }),
+        createCompletedPrompt('Second {{topic}}', { label: 'second' }),
+      ];
+      const eval_ = await Eval.create({}, prompts);
+      await eval_.addPrompts(prompts);
+      const outputs = [
+        // Row 0: both results share a var containing the query, but only the first response does.
+        ['about shared-needle', 'unrelated'],
+        ['unrelated', 'unrelated'],
+      ];
+      for (const [testIdx, rowOutputs] of outputs.entries()) {
+        for (const [promptIdx, output] of rowOutputs.entries()) {
+          await eval_.addResult(
+            createEvaluateResult({
+              testIdx,
+              promptIdx,
+              prompt: prompts[promptIdx],
+              testCase: { vars: { topic: testIdx === 0 ? 'shared-needle' : 'other' } },
+              response: { output },
+            }),
+          );
+        }
+      }
+
+      const page = await eval_.getTablePage({ searchQuery: 'shared-needle' });
+      const metrics = await eval_.getFilteredMetrics({
+        filterMode: 'all',
+        searchQuery: 'shared-needle',
+        filters: [],
+      });
+
+      expect(page.body.map((row) => row.testIdx)).toEqual([0]);
+      expect(page.body[0].outputs.filter(Boolean)).toHaveLength(2);
+      expect(
+        metrics.map(
+          (prompt) => prompt.testPassCount + prompt.testFailCount + prompt.testErrorCount,
+        ),
+      ).toEqual([1, 1]);
     });
 
     it('searches across response, grading, named scores, metadata, and vars', async () => {

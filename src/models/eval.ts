@@ -59,6 +59,7 @@ import {
   notifyEvaluationsDeleted,
 } from './evalMutation';
 import {
+  buildResponseSearchCondition,
   getCachedResultsCount,
   getTotalResultRowCount,
   queryTestIndicesOptimized,
@@ -957,6 +958,8 @@ export default class Eval {
     filterMode?: EvalResultsFilterMode;
     searchQuery?: string;
     filters?: string[];
+    /** Search responses only, as unfiltered table pages do (see queryTestIndicesOptimized). */
+    responseOnlySearch?: boolean;
   }): SQL<unknown> {
     const mode: EvalResultsFilterMode = opts.filterMode ?? 'all';
 
@@ -1192,7 +1195,15 @@ export default class Eval {
     }
 
     // Add search condition if searchQuery is provided
-    if (opts.searchQuery && opts.searchQuery.trim() !== '') {
+    if (opts.searchQuery && opts.searchQuery.trim() !== '' && opts.responseOnlySearch) {
+      // Unfiltered pages select every test row where some result in the current mode has a
+      // matching response, then show all of that row's results. Match the same rows here so
+      // multi-prompt rows count every output the page shows.
+      const rowConditions = [...conditions, buildResponseSearchCondition(opts.searchQuery)];
+      conditions.push(
+        sql`test_idx IN (SELECT test_idx FROM eval_results WHERE ${sql.join(rowConditions, sql` AND `)})`,
+      );
+    } else if (opts.searchQuery && opts.searchQuery.trim() !== '') {
       const searchPattern = `%${opts.searchQuery}%`;
 
       const searchConditions = [
@@ -1287,8 +1298,12 @@ export default class Eval {
     searchQuery?: string;
     filters?: string[];
   }): Promise<import('../types').PromptMetrics[]> {
-    // CRITICAL: Use the SAME WHERE clause as queryTestIndices (now returns SQL fragment)
-    const whereSql = this.buildFilterWhereSql(opts);
+    // CRITICAL: Count the rows getTablePage returns. Without structured filters it pages through
+    // queryTestIndicesOptimized, which searches responses only.
+    const whereSql = this.buildFilterWhereSql({
+      ...opts,
+      responseOnlySearch: !opts.filters?.length,
+    });
 
     return calculateFilteredMetrics({
       evalId: this.id,
