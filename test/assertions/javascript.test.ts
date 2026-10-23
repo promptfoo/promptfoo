@@ -2085,9 +2085,10 @@ describe('JavaScript file references', () => {
       });
     },
   );
+
   it('should return a failed result when a file-based JavaScript assertion throws', async () => {
     const mockFn = vi.fn(() => {
-      throw new Error('boom');
+      throw new Error('boom secret-provider-payload');
     });
 
     vi.mocked(path.resolve).mockReturnValue('/mocked/path/to/assert.js');
@@ -2107,13 +2108,39 @@ describe('JavaScript file references', () => {
     expect(result).toMatchObject({
       pass: false,
       score: 0,
-      reason: expect.stringContaining('boom'),
+      reason: 'JavaScript assertion callback failed',
+    });
+    expect(result.reason).not.toContain('secret-provider-payload');
+  });
+
+  it('should preserve zero-weight behavior when a file-based JavaScript assertion throws', async () => {
+    vi.mocked(path.resolve).mockReturnValue('/mocked/path/to/assert.js');
+    vi.mocked(path.extname).mockReturnValue('.js');
+    vi.mocked(isPackagePath).mockReturnValue(false);
+    vi.mocked(importModule).mockResolvedValue(() => {
+      throw new Error('file secret');
+    });
+
+    const result = await runAssertion({
+      assertion: {
+        type: 'javascript',
+        value: 'file:///path/to/assert.js',
+        weight: 0,
+      },
+      test: {} as AtomicTestCase,
+      providerResponse: { output: 'Expected output' },
+    });
+
+    expect(result).toMatchObject({
+      pass: true,
+      score: 0,
+      reason: 'JavaScript assertion callback failed',
     });
   });
 
   it('should return a failed result when a package JavaScript assertion throws', async () => {
     const mockFn = vi.fn(() => {
-      throw new Error('boom');
+      throw new Error('boom secret-package-payload');
     });
 
     vi.mocked(isPackagePath).mockReturnValue(true);
@@ -2131,7 +2158,31 @@ describe('JavaScript file references', () => {
     expect(result).toMatchObject({
       pass: false,
       score: 0,
-      reason: expect.stringContaining('boom'),
+      reason: 'JavaScript assertion callback failed',
+    });
+    expect(result.reason).not.toContain('secret-package-payload');
+  });
+
+  it('should preserve zero-weight behavior when a package JavaScript assertion throws', async () => {
+    vi.mocked(isPackagePath).mockReturnValue(true);
+    vi.mocked(loadFromPackage).mockResolvedValue(() => {
+      throw new Error('package secret');
+    });
+
+    const result = await runAssertion({
+      assertion: {
+        type: 'javascript',
+        value: 'package:@promptfoo/fake:assertionFunction',
+        weight: 0,
+      },
+      test: {} as AtomicTestCase,
+      providerResponse: { output: 'Expected output' },
+    });
+
+    expect(result).toMatchObject({
+      pass: true,
+      score: 0,
+      reason: 'JavaScript assertion callback failed',
     });
   });
 
@@ -2230,7 +2281,7 @@ describe('JavaScript file references', () => {
           assertion: { type: 'javascript', value: 'package:@promptfoo/fake:assertionFunction' },
           pass: false,
           score: 0,
-          reason: 'boom',
+          reason: 'JavaScript assertion callback failed',
         }),
       ]),
     );

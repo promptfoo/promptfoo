@@ -480,6 +480,21 @@ async function runAssertionInternal({
 
   // Render assertion values
   type ValueFromScriptType = string | boolean | number | GradingResult | object | undefined;
+
+  function getJavaScriptAssertionErrorResult(
+    assertion: Assertion,
+    source: string,
+    error: unknown,
+  ): GradingResult {
+    logger.debug('[Assertions] JavaScript assertion callback failed', { source, error });
+    return {
+      pass: assertion.weight === 0,
+      score: 0,
+      reason: 'JavaScript assertion callback failed',
+      assertion,
+    };
+  }
+
   let renderedValue = assertion.value;
   let valueFromScript: ValueFromScriptType;
   if (typeof renderedValue === 'string') {
@@ -498,16 +513,14 @@ async function runAssertionInternal({
       filePath = path.resolve(basePath, filePath);
 
       if (isJavascriptFile(filePath)) {
-        const assertionFunction = await loadJavaScriptFunction(filePath, functionName);
+        const assertionFunction = await loadJavaScriptFunction<ValueFromScriptType>(
+          filePath,
+          functionName,
+        );
         try {
           valueFromScript = await assertionFunction(output, context);
         } catch (error) {
-          return {
-            pass: false,
-            score: 0,
-            reason: error instanceof Error ? error.message : String(error),
-            assertion,
-          };
+          return getJavaScriptAssertionErrorResult(assertion, filePath, error);
         }
         logger.debug(`Javascript script ${filePath} output: ${valueFromScript}`);
       } else if (filePath.endsWith('.py')) {
@@ -560,12 +573,7 @@ async function runAssertionInternal({
       try {
         valueFromScript = await Promise.resolve(requiredModule(output, context));
       } catch (error) {
-        return {
-          pass: false,
-          score: 0,
-          reason: error instanceof Error ? error.message : String(error),
-          assertion,
-        };
+        return getJavaScriptAssertionErrorResult(assertion, renderedValue, error);
       }
     } else {
       // It's a normal string value

@@ -51,12 +51,12 @@ export function getFinalTest(test: TestCase, assertion: Assertion) {
   return Object.freeze(ret);
 }
 
-export type JavaScriptAssertionFunction = (...args: unknown[]) => unknown;
+export type JavaScriptAssertionFunction<T = unknown> = (...args: unknown[]) => T | Promise<T>;
 
-export async function loadJavaScriptFunction(
+export async function loadJavaScriptFunction<T = unknown>(
   filePath: string,
   functionName: string | undefined,
-): Promise<JavaScriptAssertionFunction> {
+): Promise<JavaScriptAssertionFunction<T>> {
   const requiredModule = await importModule(filePath, functionName);
   if (functionName && requiredModule && typeof requiredModule[functionName] === 'function') {
     return requiredModule[functionName];
@@ -76,8 +76,8 @@ export async function loadFromJavaScriptFile<T extends string | object = string 
   functionName: string | undefined,
   args: unknown[],
 ): Promise<T> {
-  const assertionFunction = await loadJavaScriptFunction(filePath, functionName);
-  return assertionFunction(...args) as T;
+  const assertionFunction = await loadJavaScriptFunction<T>(filePath, functionName);
+  return assertionFunction(...args);
 }
 
 export function processFileReference(fileRef: string): object | string {
