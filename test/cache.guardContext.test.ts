@@ -2,8 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { clearCache, enableCache, fetchWithCache } from '../src/cache';
 import { cloudConfig } from '../src/globalConfig/cloud';
 import { getConfigDirectoryPath } from '../src/util/config/manage';
-import { fetchWithRetries } from '../src/util/fetch/index';
 import { withPrivateRangeGuard } from '../src/util/fetch/guardContext';
+import { fetchWithRetries } from '../src/util/fetch/index';
 import { mockProcessEnv } from './util/utils';
 
 vi.mock('../src/util/config/manage', () => ({
