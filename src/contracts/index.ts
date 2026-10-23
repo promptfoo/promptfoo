@@ -11,6 +11,7 @@ export {
   type McpAuthParsed,
   McpAuthSchema,
 } from './providerConfig/auth.js';
+export * from './providerConfig/google.js';
 export {
   type HttpProviderConfigInput,
   HttpProviderConfigInputJsonSchema,
