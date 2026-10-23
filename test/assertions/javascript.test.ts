@@ -2086,6 +2086,63 @@ describe('JavaScript file references', () => {
     },
   );
 
+  it('should return a failed assertion when a JavaScript file function throws', async () => {
+    vi.mocked(path.resolve).mockReturnValue('/path/to/assert.js');
+    vi.mocked(path.extname).mockReturnValue('.js');
+    vi.mocked(isPackagePath).mockReturnValue(false);
+    const mockFn = vi.fn(() => {
+      throw new Error('boom');
+    });
+    vi.mocked(importModule).mockResolvedValue(mockFn);
+
+    const assertion: Assertion = { type: 'javascript', value: 'file:///path/to/assert.js' };
+    const result = await runAssertion({
+      prompt: 'Some prompt',
+      assertion,
+      test: {} as AtomicTestCase,
+      providerResponse: { output: 'Test output' },
+    });
+
+    expect(mockFn).toHaveBeenCalled();
+    expect(result).toMatchObject({ pass: false, score: 0, reason: 'boom', assertion });
+  });
+
+  it('should return a failed assertion when a package assertion function throws', async () => {
+    vi.mocked(isPackagePath).mockReturnValue(true);
+    vi.mocked(loadFromPackage).mockResolvedValue(() => {
+      throw new Error('boom');
+    });
+
+    const assertion: Assertion = {
+      type: 'javascript',
+      value: 'package:@promptfoo/fake:assertionFunction',
+    };
+    const result = await runAssertion({
+      prompt: 'Some prompt',
+      assertion,
+      test: {} as AtomicTestCase,
+      providerResponse: { output: 'Test output' },
+    });
+
+    expect(result).toMatchObject({ pass: false, score: 0, reason: 'boom', assertion });
+  });
+
+  it('should still reject when a JavaScript file cannot be loaded', async () => {
+    vi.mocked(path.resolve).mockReturnValue('/path/to/missing.js');
+    vi.mocked(path.extname).mockReturnValue('.js');
+    vi.mocked(isPackagePath).mockReturnValue(false);
+    vi.mocked(importModule).mockRejectedValue(new Error('Cannot find module'));
+
+    await expect(
+      runAssertion({
+        prompt: 'Some prompt',
+        assertion: { type: 'javascript', value: 'file:///path/to/missing.js' },
+        test: {} as AtomicTestCase,
+        providerResponse: { output: 'Test output' },
+      }),
+    ).rejects.toThrow('Cannot find module');
+  });
+
   it('should resolve js paths relative to the configuration file', async () => {
     const output = 'Expected output';
     const mockFn = vi.fn((output: string) => output === 'Expected output');
