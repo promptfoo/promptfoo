@@ -89,15 +89,20 @@ providersRouter.post('/test', async (req: Request, res: Response): Promise<void>
   }
 
   try {
-    const loadedProvider = await loadApiProvider(providerOptions.id, {
-      options: {
-        ...(providerOptions as ProviderOptions),
-        config: {
-          ...providerOptions.config,
-          maxRetries: 1,
+    // Load inside the guard context too: provider constructors can issue
+    // requests during load (e.g. elevenlabs voice design), and redirect
+    // validation only applies inside the context.
+    const loadedProvider = await runGuardedProviderCall(() =>
+      loadApiProvider(providerOptions.id, {
+        options: {
+          ...(providerOptions as ProviderOptions),
+          config: {
+            ...providerOptions.config,
+            maxRetries: 1,
+          },
         },
-      },
-    });
+      }),
+    );
 
     // Pass inputs explicitly from providerOptions since loaded provider may not expose config.inputs
     // Check both top-level inputs (from redteam UI) and config.inputs for backwards compatibility
@@ -164,9 +169,13 @@ providersRouter.post(
     }
 
     try {
-      const loadedProvider = await loadApiProvider(providerOptions.id, {
-        options: providerOptions as ProviderOptions,
-      });
+      // Keep provider loading inside the guard context (see /providers/test):
+      // constructor-time requests must get redirect validation too.
+      const loadedProvider = await runGuardedProviderCall(() =>
+        loadApiProvider(providerOptions.id, {
+          options: providerOptions as ProviderOptions,
+        }),
+      );
       const result = await runGuardedProviderCall(() =>
         doTargetPurposeDiscovery(loadedProvider, undefined, false),
       );
@@ -395,17 +404,21 @@ providersRouter.post('/test-session', async (req: Request, res: Response): Promi
   }
 
   try {
-    const loadedProvider = await loadApiProvider(validatedProvider.id, {
-      options: {
-        ...validatedProvider,
-        config: {
-          ...validatedProvider.config,
-          maxRetries: 1,
-          sessionSource: sessionConfig?.sessionSource || validatedProvider.config?.sessionSource,
-          sessionParser: sessionConfig?.sessionParser || validatedProvider.config?.sessionParser,
+    // Keep provider loading inside the guard context (see /providers/test):
+    // constructor-time requests must get redirect validation too.
+    const loadedProvider = await runGuardedProviderCall(() =>
+      loadApiProvider(validatedProvider.id, {
+        options: {
+          ...validatedProvider,
+          config: {
+            ...validatedProvider.config,
+            maxRetries: 1,
+            sessionSource: sessionConfig?.sessionSource || validatedProvider.config?.sessionSource,
+            sessionParser: sessionConfig?.sessionParser || validatedProvider.config?.sessionParser,
+          },
         },
-      },
-    });
+      }),
+    );
 
     // Pass inputs from validatedProvider since loaded provider may not expose config.inputs
     // Check both top-level inputs (from redteam UI) and config.inputs for backwards compatibility
