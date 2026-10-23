@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { runInNewContext } from 'node:vm';
 
 import * as yaml from 'js-yaml';
 import { describe, expect, it } from 'vitest';
@@ -62,6 +63,47 @@ function isShallowClone(): boolean {
 // Without these bounds, release-please re-scans the full git history on every run and
 // either times out or emits a giant changelog when something perturbs the prior tag.
 describe('release-please automation', () => {
+  // release-please.yml builds the image for a release commit after npm publishes, so the
+  // push of that commit does not need its own build. Both runs see the same push event.
+  it.each([
+    ['a push to main', 'push', '', 'fix(docker): something (#1)', '', true],
+    ['the push of a release commit', 'push', '', 'chore(main): release 0.125.0 (#2)', '', false],
+    [
+      'the release-please call for that commit',
+      'push',
+      '0.125.0',
+      'chore(main): release 0.125.0 (#2)',
+      '',
+      true,
+    ],
+    ['a pull request', 'pull_request', '', '', '', true],
+    ['a release published by the bot', 'release', '', '', 'Bot', false],
+    ['a release published by a person', 'release', '', '', 'User', true],
+    ['a manual run', 'workflow_dispatch', '', '', '', true],
+    ['a manual backfill', 'workflow_dispatch', '0.121.6', '', '', true],
+  ])(
+    'decides whether to build the Docker image for %s',
+    (_label, eventName, tagInput, message, releaseAuthor, runs) => {
+      const workflow = yaml.load(
+        readRepoFile('.github/workflows/docker.yml'),
+      ) as ReleasePleaseWorkflow;
+      const condition = workflow.jobs?.test?.if;
+      assert(typeof condition === 'string', 'the Docker test job must have a condition');
+
+      // The condition only uses operators that mean the same in JavaScript.
+      const result = runInNewContext(condition, {
+        github: {
+          event_name: eventName,
+          event: { head_commit: { message }, release: { author: { type: releaseAuthor } } },
+        },
+        inputs: { tag_name: tagInput },
+        startsWith: (value: string, prefix: string) => value.startsWith(prefix),
+      });
+
+      expect(Boolean(result)).toBe(runs);
+    },
+  );
+
   it('pins last-release-sha to a 40-char commit SHA', () => {
     const sha = readReleasePleaseConfig()['last-release-sha'];
     assert(typeof sha === 'string', 'last-release-sha must be a string');
