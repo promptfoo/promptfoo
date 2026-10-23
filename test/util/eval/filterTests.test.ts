@@ -283,6 +283,20 @@ describe('filterTests', () => {
         expect(result).toEqual(arrayMetadataSuite.tests!.slice(0, 2));
       });
 
+      it('should skip null metadata values instead of throwing', async () => {
+        const nullMetadataSuite: TestSuite = {
+          prompts: [],
+          providers: [],
+          tests: [
+            { description: 'null-value', metadata: { owner: null } },
+            { description: 'null-in-array', metadata: { owner: [null, 'alice'] } },
+            { description: 'match', metadata: { owner: 'alice' } },
+          ],
+        };
+        const result = await filterTests(nullMetadataSuite, { metadata: 'owner=alice' });
+        expect(result.map((t: TestCase) => t.description)).toEqual(['null-in-array', 'match']);
+      });
+
       it.each([
         { filter: 'id=1,3', values: [1, 3, 10, 2], expected: [1, 3, 10] },
         { filter: 'id=false,true', values: [false, true, 0], expected: [false, true] },
