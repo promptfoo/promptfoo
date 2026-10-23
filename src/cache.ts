@@ -11,6 +11,7 @@ import { getRequestTimeoutMs, throwIfAborted, waitForPromiseWithAbort } from './
 import { getConfigDirectoryPath } from './util/config/manage';
 import { sha256 } from './util/createHash';
 import { isAbortError, isTransientConnectionError } from './util/fetch/errors';
+import { isPrivateRangeGuardContextActive } from './util/fetch/guardContext';
 import { fetchWithRetries, getFetchWithProxyHeaders } from './util/fetch/index';
 import {
   getCloudAuthHeaderName,
@@ -961,8 +962,15 @@ export async function fetchWithCache<T = unknown>(
   const providedKeyPrefix = fetchOptions.restrictCloudAuthRedirects
     ? 'fetch:cloud-auth:v3'
     : 'fetch:v3';
+  // Guarded server requests never touch the shared fetch cache: the cache key
+  // carries no guard-context bit, so without this bypass a public URL that
+  // redirected into private space during an ordinary eval could have its
+  // private response served to a guarded preflight without revalidation
+  // (and vice versa via in-flight coalescing). Guarded calls are rare
+  // server-route requests, so skipping the cache costs nothing measurable.
+  const guardedCacheBypass = isPrivateRangeGuardContextActive();
   const cacheKey =
-    cacheEnabled && !bust
+    cacheEnabled && !bust && !guardedCacheBypass
       ? providedCacheKey
         ? getScopedCacheKey(`${providedKeyPrefix}:${providedCacheKey}${repeatSuffix}`)
         : getFetchCacheKey(url, fetchOptions, method, format, repeatIndex)
