@@ -581,6 +581,84 @@ describe('Eval Routes - Zod Validation', () => {
     });
   });
 
+  describe('POST /api/eval/job - metricOnly comparison assertions', () => {
+    beforeEach(() => {
+      vi.mocked(evaluateWithSource).mockResolvedValue({
+        id: 'comparison-job-eval',
+        toEvaluateSummary: async () => ({ results: [] }),
+      } as unknown as Eval);
+    });
+
+    it.each([
+      ['max-score in tests', { tests: [{ assert: [{ type: 'max-score', metricOnly: true }] }] }],
+      [
+        'select-best in defaultTest',
+        { defaultTest: { assert: [{ type: 'select-best', value: 'best', metricOnly: true }] } },
+      ],
+      [
+        'max-score in scenario tests',
+        {
+          scenarios: [
+            { config: [{}], tests: [{ assert: [{ type: 'max-score', metricOnly: true }] }] },
+          ],
+        },
+      ],
+      [
+        'max-score in scenario defaults',
+        {
+          scenarios: [
+            { config: [{ assert: [{ type: 'max-score', metricOnly: true }] }], tests: [{}] },
+          ],
+        },
+      ],
+      [
+        'max-score inside a set',
+        {
+          tests: [
+            {
+              assert: [{ type: 'assert-set', assert: [{ type: 'max-score', metricOnly: true }] }],
+            },
+          ],
+        },
+      ],
+    ])('rejects %s before starting a job', async (_location, config) => {
+      const createJob = vi.spyOn(evalJobService, 'create');
+      try {
+        const response = await api.post('/api/eval/job').send({
+          prompts: ['hello'],
+          providers: ['echo'],
+          ...config,
+        });
+
+        expect(response.status).toBe(400);
+        expect(response.body).toEqual({ error: expect.stringContaining('metricOnly') });
+        expect(evaluateWithSource).not.toHaveBeenCalled();
+        expect(createJob).not.toHaveBeenCalled();
+      } finally {
+        createJob.mockRestore();
+      }
+    });
+
+    it('accepts comparison assertions with metricOnly false', async () => {
+      const tests = [
+        {
+          assert: [
+            { type: 'contains', value: 'hello' },
+            { type: 'max-score', metricOnly: false },
+          ],
+        },
+      ];
+      const response = await api.post('/api/eval/job').send({
+        prompts: ['hello'],
+        providers: ['echo'],
+        tests,
+      });
+
+      expect(response.status).toBe(200);
+      expect(evaluateWithSource).toHaveBeenCalledOnce();
+    });
+  });
+
   describe('GET /api/eval/job/:id', () => {
     it('should return 400 when id is not a valid UUID', async () => {
       const response = await api.get('/api/eval/job/not-a-uuid');
