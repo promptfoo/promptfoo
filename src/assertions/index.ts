@@ -100,7 +100,7 @@ import {
   handleTrajectoryToolSequence,
   handleTrajectoryToolUsed,
 } from './trajectory';
-import { coerceString, getFinalTest, loadFromJavaScriptFile, processFileReference } from './utils';
+import { coerceString, getFinalTest, loadJavaScriptFunction, processFileReference } from './utils';
 import { handleWebhook } from './webhook';
 import { handleWordCount } from './wordCount';
 import { handleIsXml } from './xml';
@@ -480,6 +480,21 @@ async function runAssertionInternal({
 
   // Render assertion values
   type ValueFromScriptType = string | boolean | number | GradingResult | object | undefined;
+
+  function getJavaScriptAssertionErrorResult(
+    assertion: Assertion,
+    source: string,
+    error: unknown,
+  ): GradingResult {
+    logger.debug('[Assertions] JavaScript assertion callback failed', { source, error });
+    return {
+      pass: assertion.weight === 0,
+      score: 0,
+      reason: 'JavaScript assertion callback failed',
+      assertion,
+    };
+  }
+
   let renderedValue = assertion.value;
   let valueFromScript: ValueFromScriptType;
   if (typeof renderedValue === 'string') {
@@ -498,7 +513,15 @@ async function runAssertionInternal({
       filePath = path.resolve(basePath, filePath);
 
       if (isJavascriptFile(filePath)) {
-        valueFromScript = await loadFromJavaScriptFile(filePath, functionName, [output, context]);
+        const assertionFunction = await loadJavaScriptFunction<ValueFromScriptType>(
+          filePath,
+          functionName,
+        );
+        try {
+          valueFromScript = await assertionFunction(output, context);
+        } catch (error) {
+          return getJavaScriptAssertionErrorResult(assertion, filePath, error);
+        }
         logger.debug(`Javascript script ${filePath} output: ${valueFromScript}`);
       } else if (filePath.endsWith('.py')) {
         try {
@@ -547,7 +570,11 @@ async function runAssertionInternal({
         );
       }
 
-      valueFromScript = await Promise.resolve(requiredModule(output, context));
+      try {
+        valueFromScript = await Promise.resolve(requiredModule(output, context));
+      } catch (error) {
+        return getJavaScriptAssertionErrorResult(assertion, renderedValue, error);
+      }
     } else {
       // It's a normal string value
       renderedValue = nunjucks.renderString(renderedValue, resolvedVars);

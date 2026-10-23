@@ -1,7 +1,7 @@
 import * as path from 'path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { runAssertion } from '../../src/assertions/index';
+import { runAssertion, runAssertions } from '../../src/assertions/index';
 import { buildFunctionBody } from '../../src/assertions/javascript';
 import { importModule } from '../../src/esm';
 import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
@@ -2086,6 +2086,206 @@ describe('JavaScript file references', () => {
     },
   );
 
+  it('should return a failed result when a file-based JavaScript assertion throws', async () => {
+    const mockFn = vi.fn(() => {
+      throw new Error('boom secret-provider-payload');
+    });
+
+    vi.mocked(path.resolve).mockReturnValue('/mocked/path/to/assert.js');
+    vi.mocked(path.extname).mockReturnValue('.js');
+    vi.mocked(isPackagePath).mockReturnValue(false);
+    vi.mocked(importModule).mockResolvedValue(mockFn);
+
+    const result = await runAssertion({
+      assertion: {
+        type: 'javascript',
+        value: 'file:///path/to/assert.js',
+      },
+      test: {} as AtomicTestCase,
+      providerResponse: { output: 'Expected output' },
+    });
+
+    expect(result).toMatchObject({
+      pass: false,
+      score: 0,
+      reason: 'JavaScript assertion callback failed',
+    });
+    expect(result.reason).not.toContain('secret-provider-payload');
+  });
+
+  it('should preserve zero-weight behavior when a file-based JavaScript assertion throws', async () => {
+    vi.mocked(path.resolve).mockReturnValue('/mocked/path/to/assert.js');
+    vi.mocked(path.extname).mockReturnValue('.js');
+    vi.mocked(isPackagePath).mockReturnValue(false);
+    vi.mocked(importModule).mockResolvedValue(() => {
+      throw new Error('file secret');
+    });
+
+    const result = await runAssertion({
+      assertion: {
+        type: 'javascript',
+        value: 'file:///path/to/assert.js',
+        weight: 0,
+      },
+      test: {} as AtomicTestCase,
+      providerResponse: { output: 'Expected output' },
+    });
+
+    expect(result).toMatchObject({
+      pass: true,
+      score: 0,
+      reason: 'JavaScript assertion callback failed',
+    });
+  });
+
+  it('should return a failed result when a package JavaScript assertion throws', async () => {
+    const mockFn = vi.fn(() => {
+      throw new Error('boom secret-package-payload');
+    });
+
+    vi.mocked(isPackagePath).mockReturnValue(true);
+    vi.mocked(loadFromPackage).mockResolvedValue(mockFn);
+
+    const result = await runAssertion({
+      assertion: {
+        type: 'javascript',
+        value: 'package:@promptfoo/fake:assertionFunction',
+      },
+      test: {} as AtomicTestCase,
+      providerResponse: { output: 'Expected output' },
+    });
+
+    expect(result).toMatchObject({
+      pass: false,
+      score: 0,
+      reason: 'JavaScript assertion callback failed',
+    });
+    expect(result.reason).not.toContain('secret-package-payload');
+  });
+
+  it('should preserve zero-weight behavior when a package JavaScript assertion throws', async () => {
+    vi.mocked(isPackagePath).mockReturnValue(true);
+    vi.mocked(loadFromPackage).mockResolvedValue(() => {
+      throw new Error('package secret');
+    });
+
+    const result = await runAssertion({
+      assertion: {
+        type: 'javascript',
+        value: 'package:@promptfoo/fake:assertionFunction',
+        weight: 0,
+      },
+      test: {} as AtomicTestCase,
+      providerResponse: { output: 'Expected output' },
+    });
+
+    expect(result).toMatchObject({
+      pass: true,
+      score: 0,
+      reason: 'JavaScript assertion callback failed',
+    });
+  });
+
+  it('should preserve configuration errors for malformed JavaScript assertions', async () => {
+    vi.mocked(path.resolve).mockReturnValue('/mocked/path/to/assert.js');
+    vi.mocked(path.extname).mockReturnValue('.js');
+    vi.mocked(isPackagePath).mockReturnValue(false);
+    vi.mocked(importModule).mockResolvedValue({ notAFunction: true });
+
+    await expect(
+      runAssertion({
+        assertion: {
+          type: 'javascript',
+          value: 'file:///path/to/assert.js',
+        },
+        test: {} as AtomicTestCase,
+        providerResponse: { output: 'Expected output' },
+      }),
+    ).rejects.toThrow('Assertion malformed');
+  });
+
+  it('should preserve file loading errors for missing JavaScript assertions', async () => {
+    vi.mocked(path.resolve).mockReturnValue('/mocked/path/to/missing.js');
+    vi.mocked(path.extname).mockReturnValue('.js');
+    vi.mocked(isPackagePath).mockReturnValue(false);
+    vi.mocked(importModule).mockRejectedValue(new Error('File does not exist'));
+
+    await expect(
+      runAssertion({
+        assertion: {
+          type: 'javascript',
+          value: 'file:///path/to/missing.js',
+        },
+        test: {} as AtomicTestCase,
+        providerResponse: { output: 'Expected output' },
+      }),
+    ).rejects.toThrow('File does not exist');
+  });
+
+  it('should preserve package configuration errors for non-function exports', async () => {
+    vi.mocked(isPackagePath).mockReturnValue(true);
+    vi.mocked(loadFromPackage).mockResolvedValue('not a function');
+
+    await expect(
+      runAssertion({
+        assertion: {
+          type: 'javascript',
+          value: 'package:@promptfoo/fake:assertionFunction',
+        },
+        test: {} as AtomicTestCase,
+        providerResponse: { output: 'Expected output' },
+      }),
+    ).rejects.toThrow('Assertion malformed');
+  });
+
+  it('should preserve package loading errors for missing exports', async () => {
+    vi.mocked(isPackagePath).mockReturnValue(true);
+    vi.mocked(loadFromPackage).mockRejectedValue(new Error('Could not find entity'));
+
+    await expect(
+      runAssertion({
+        assertion: {
+          type: 'javascript',
+          value: 'package:@promptfoo/fake:missingExport',
+        },
+        test: {} as AtomicTestCase,
+        providerResponse: { output: 'Expected output' },
+      }),
+    ).rejects.toThrow('Could not find entity');
+  });
+
+  it('should retain successful assertion results when another JavaScript assertion throws', async () => {
+    const throwingFn = vi.fn(() => {
+      throw new Error('boom');
+    });
+
+    vi.mocked(path.resolve).mockReturnValue('/mocked/path/to/assert.js');
+    vi.mocked(path.extname).mockReturnValue('.js');
+    vi.mocked(isPackagePath).mockImplementation((value) => value.startsWith('package:'));
+    vi.mocked(loadFromPackage).mockResolvedValue(throwingFn);
+
+    const result = await runAssertions({
+      test: {
+        assert: [
+          { type: 'contains', value: 'Expected' },
+          { type: 'javascript', value: 'package:@promptfoo/fake:assertionFunction' },
+        ],
+      },
+      providerResponse: { output: 'Expected output' },
+    });
+
+    expect(result.componentResults).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ assertion: { type: 'contains', value: 'Expected' }, pass: true }),
+        expect.objectContaining({
+          assertion: { type: 'javascript', value: 'package:@promptfoo/fake:assertionFunction' },
+          pass: false,
+          score: 0,
+          reason: 'JavaScript assertion callback failed',
+        }),
+      ]),
+    );
+  });
   it('should resolve js paths relative to the configuration file', async () => {
     const output = 'Expected output';
     const mockFn = vi.fn((output: string) => output === 'Expected output');

@@ -171,6 +171,8 @@ These metrics are programmatic tests that are run on LLM output. [See all detail
 Single-line [JavaScript assertions](/docs/configuration/expected-outputs/javascript) return the final expression after variable declarations and ignore semicolons inside comments. The final expression can use optional chaining and division, call an async function, consume a generator's yielded result, or return a grading result object. Multiline JavaScript assertions require an explicit `return`.
 
 :::tip
+Runtime exceptions from external JavaScript callbacks loaded through `file://` or `package:` produce the generic reason `JavaScript assertion callback failed`; see the [JavaScript assertion docs](/docs/configuration/expected-outputs/javascript) for debug logging details.
+
 Every test type can be negated by prepending `not-`. For example, `not-equals` or `not-regex`.
 
 For tool-call validity assertions, `not-` inverts a validation verdict. Tool configuration errors and unexpected validator failures remain failures.
