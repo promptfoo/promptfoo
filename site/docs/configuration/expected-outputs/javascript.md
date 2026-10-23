@@ -47,7 +47,7 @@ assert:
 
 In the example above, the longer the output, the higher the score.
 
-If your function throws an error, the assertion will fail and the error message will be included in the reason for the failure. For example:
+If an external JavaScript assertion callback loaded through `file://` or `package:` throws a runtime exception, the assertion fails with the generic reason `JavaScript assertion callback failed`; the exception message is not included in the result. Detailed diagnostics are written through sanitized debug logging. Set `LOG_LEVEL=debug` when running Promptfoo to enable these logs. Inline expressions and programmatic function assertions use their respective execution paths and are not covered by this external-callback behavior. Other JavaScript forms can still return custom grading results. For example:
 
 ```yaml
 assert:
