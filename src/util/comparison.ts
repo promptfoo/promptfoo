@@ -86,7 +86,18 @@ export function varsMatch(vars1: Vars | undefined, vars2: Vars | undefined) {
 export function getTestCaseDeduplicationKey(testCase: TestCase): string {
   const filteredVars = filterRuntimeVars(testCase.vars);
   const strategyId = testCase.metadata?.strategyId || 'none';
-  return JSON.stringify({ vars: filteredVars, strategyId });
+  // JSON.stringify depends on insertion order. Compare object values regardless of key order.
+  return JSON.stringify({ vars: filteredVars, strategyId }, (_key, value: unknown) => {
+    if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+      return value;
+    }
+
+    return Object.fromEntries(
+      Object.keys(value)
+        .sort()
+        .map((key) => [key, (value as Record<string, unknown>)[key]]),
+    );
+  });
 }
 
 /**

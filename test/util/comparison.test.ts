@@ -577,6 +577,35 @@ describe('deduplicateTestCases', () => {
     expect(result[1].vars).toEqual({ prompt: 'world' });
   });
 
+  it('deduplicates equivalent vars regardless of nested object key order', () => {
+    const first: TestCase = {
+      vars: {
+        input: 'hello',
+        options: { model: 'gpt', temperature: 0 },
+        turns: [{ role: 'user', content: 'Hi' }],
+      },
+      metadata: { strategyId: 'basic' },
+    };
+    const reordered: TestCase = {
+      vars: {
+        turns: [{ content: 'Hi', role: 'user' }],
+        options: { temperature: 0, model: 'gpt' },
+        input: 'hello',
+      },
+      metadata: { strategyId: 'basic' },
+    };
+
+    expect(getTestCaseDeduplicationKey(first)).toBe(getTestCaseDeduplicationKey(reordered));
+    expect(deduplicateTestCases([first, reordered])).toEqual([first]);
+  });
+
+  it('preserves array order when deduplicating test cases', () => {
+    const first: TestCase = { vars: { turns: ['hello', 'world'] } };
+    const reversed: TestCase = { vars: { turns: ['world', 'hello'] } };
+
+    expect(deduplicateTestCases([first, reversed])).toEqual([first, reversed]);
+  });
+
   it('should keep tests with same vars but different strategyId', () => {
     const tests: TestCase[] = [
       { vars: { prompt: 'hello' }, metadata: { strategyId: 'basic' } },
