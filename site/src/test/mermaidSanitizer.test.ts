@@ -30,6 +30,25 @@ describe('the docs Mermaid sanitizer', () => {
     );
   });
 
+  it.each(['href', 'opacity'])('sanitizes SVG animation targeting %s in XHTML', (attributeName) => {
+    const values = attributeName === 'href' ? 'x;javascript:alert(1)' : '0;1';
+    const output = purify.sanitize(
+      `<svg xmlns="http://www.w3.org/2000/svg"><a><animate attributeName="${attributeName}" values="${values}"/><text>label</text></a></svg>`,
+      {
+        PARSER_MEDIA_TYPE: 'application/xhtml+xml',
+        USE_PROFILES: { svg: true },
+        ADD_TAGS: ['animate'],
+        ADD_ATTR: ['attributeName', 'values'],
+      },
+    );
+    const document = new dom.window.DOMParser().parseFromString(output, 'application/xhtml+xml');
+
+    expect(document.querySelector('animate')?.getAttribute('attributeName')).toBe(
+      attributeName === 'href' ? null : 'opacity',
+    );
+    expect(document.querySelector('text')?.textContent).toBe('label');
+  });
+
   it.each([
     'afterSanitizeElements',
     'beforeSanitizeAttributes',
@@ -49,6 +68,39 @@ describe('the docs Mermaid sanitizer', () => {
     expect(purify.sanitize(root, { IN_PLACE: true })).toBe(root);
     expect(root.querySelector('#wrap')).toBeNull();
     expect(tail.getAttribute('onerror')).toBeNull();
+    expect(root.querySelector('span')?.textContent).toBe('safe');
+  });
+
+  it('removes template expressions joined across a removed shadow-root child', () => {
+    const host = dom.window.document.createElement('div');
+    const shadow = host.attachShadow({ mode: 'open' });
+    shadow.append(
+      dom.window.document.createTextNode('safe $'),
+      dom.window.document.createElement('object'),
+      dom.window.document.createTextNode('{alert(1)}'),
+    );
+
+    expect(purify.sanitize(host, { IN_PLACE: true, SAFE_FOR_TEMPLATES: true })).toBe(host);
+    expect(shadow.querySelector('object')).toBeNull();
+    expect(shadow.textContent).not.toContain('${alert(1)}');
+    expect(shadow.textContent).toContain('safe');
+  });
+
+  it('sanitizes an unvisited sibling detached by a hook on another node', () => {
+    const root = dom.window.document.createElement('div');
+    root.innerHTML =
+      '<span id="trigger">safe</span><section id="detached"><img onerror="void 0"></section>';
+    const detached = root.querySelector('#detached')!;
+    const image = detached.querySelector('img')!;
+    purify.addHook('afterSanitizeElements', (node) => {
+      if (node instanceof dom.window.Element && node.id === 'trigger') {
+        detached.remove();
+      }
+    });
+
+    expect(purify.sanitize(root, { IN_PLACE: true })).toBe(root);
+    expect(root.querySelector('#detached')).toBeNull();
+    expect(image.getAttribute('onerror')).toBeNull();
     expect(root.querySelector('span')?.textContent).toBe('safe');
   });
 
