@@ -1,12 +1,13 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import { HUMAN_ASSERTION_TYPE } from '../../constants';
+import { AssertValidationError, validateAssertions } from '../../assertions/validateAssertions';
 import { getUserEmail, setUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
 import Eval, { EvalQueries } from '../../models/eval';
 import EvalResult from '../../models/evalResult';
 import { evaluateWithSource } from '../../node';
 import { EvalSchemas } from '../../types/api/eval';
+import { countedComponentResults } from '../../types/results';
 import { deleteEval, deleteEvals, updateResult, writeResultsToDatabase } from '../../util/database';
 import {
   ComparisonEvalNotFoundError,
@@ -37,10 +38,29 @@ import type {
   GradingResult,
   PromptMetrics,
   ResultsFile,
+  Scenario,
+  TestCase,
   Vars,
 } from '../../types/index';
 
 export const evalRouter = Router();
+
+/** Applies the evaluate() assertion contract to inline config before a job starts. */
+function validateJobAssertions({
+  tests,
+  defaultTest,
+  scenarios,
+}: z.infer<typeof EvalSchemas.CreateJob.Request>): void {
+  const inlineTests = (value: unknown): TestCase[] =>
+    Array.isArray(value)
+      ? value.filter((test): test is TestCase => typeof test === 'object' && test !== null)
+      : [];
+  validateAssertions(
+    inlineTests(tests),
+    typeof defaultTest === 'object' ? defaultTest : undefined,
+    scenarios?.filter((scenario): scenario is Scenario => typeof scenario === 'object'),
+  );
+}
 
 function sendEvalTableResponse(res: Response, evalId: string, responsePayload: EvalTableDTO): void {
   let parsedPayload: EvalTableDTO;
@@ -134,6 +154,15 @@ evalRouter.post('/job', async (req: Request, res: Response): Promise<void> => {
   const result = EvalSchemas.CreateJob.Request.safeParse(req.body);
   if (!result.success) {
     res.status(400).json({ error: z.prettifyError(result.error) });
+    return;
+  }
+  try {
+    validateJobAssertions(result.data);
+  } catch (error) {
+    if (!(error instanceof AssertValidationError)) {
+      throw error;
+    }
+    res.status(400).json({ error: error.message });
     return;
   }
 
@@ -738,11 +767,8 @@ evalRouter.post(
       }
 
       // Capture the current state before we change it
-      const hasExistingManualOverride = Boolean(
-        result.gradingResult?.componentResults?.some(
-          (r) => r.assertion?.type === HUMAN_ASSERTION_TYPE,
-        ),
-      );
+      const oldCountedResults = countedComponentResults(result.gradingResult?.componentResults);
+      const newCountedResults = countedComponentResults(gradingResult.componentResults);
       const successChanged = result.success !== gradingResult.pass;
       const scoreChange = gradingResult.score - result.score;
 
@@ -768,30 +794,18 @@ evalRouter.post(
           // Result changed from fail to pass
           prompt.metrics.testPassCount += 1;
           prompt.metrics.testFailCount -= 1;
-          prompt.metrics.assertPassCount += 1;
-          prompt.metrics.score += scoreChange;
-          if (hasExistingManualOverride) {
-            // If there was an existing manual override, we need to decrement the assertFailCount because it changed from fail to pass
-            prompt.metrics.assertFailCount -= 1;
-          }
         } else {
           prompt.metrics.testPassCount -= 1;
           prompt.metrics.testFailCount += 1;
-          prompt.metrics.assertFailCount += 1;
-          prompt.metrics.score += scoreChange;
-          if (hasExistingManualOverride) {
-            // If there was an existing manual override, we need to decrement the assertPassCount because it changed from pass to fail
-            prompt.metrics.assertPassCount -= 1;
-          }
-        }
-      } else if (!hasExistingManualOverride) {
-        // Nothing changed, so the user just added an assertion
-        if (result.success) {
-          prompt.metrics.assertPassCount += 1;
-        } else {
-          prompt.metrics.assertFailCount += 1;
         }
       }
+      prompt.metrics.score += scoreChange;
+      prompt.metrics.assertPassCount +=
+        newCountedResults.filter((r) => r.pass).length -
+        oldCountedResults.filter((r) => r.pass).length;
+      prompt.metrics.assertFailCount +=
+        newCountedResults.filter((r) => !r.pass).length -
+        oldCountedResults.filter((r) => !r.pass).length;
 
       await result.save();
       await eval_.save();
