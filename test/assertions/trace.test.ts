@@ -136,6 +136,35 @@ describe('trace assertions', () => {
     ],
   };
 
+  it.each<Assertion>([
+    { type: 'trace-span-count', value: { pattern: '*', max: 0 } },
+    { type: 'trace-span-duration', value: { pattern: '*', max: 100 } },
+    { type: 'trace-error-spans', value: { pattern: '*', max_count: 0 } },
+  ])('does not omit multiline spans when grading $type', async (assertion) => {
+    mockTraceStore.getTrace.mockResolvedValue({
+      ...mockTraceData,
+      spans: [
+        {
+          spanId: 'multiline-command',
+          name: 'exec printf first\nprintf second',
+          startTime: 1000,
+          endTime: 1500,
+          statusCode: 2,
+        },
+      ],
+    });
+
+    const result = await runAssertion({
+      assertion,
+      test: mockTest,
+      providerResponse: mockProviderResponse,
+      traceId: 'test-trace-id',
+    });
+
+    expect(result.pass).toBe(false);
+    expect(result.score).toBe(0);
+  });
+
   describe('deterministic assertions with span attribute filters', () => {
     it.each<{ assertion: Assertion; pass: boolean }>([
       { assertion: { type: 'trace-span-count', value: { max: 2 } }, pass: true },
