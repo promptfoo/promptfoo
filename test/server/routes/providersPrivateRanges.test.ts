@@ -19,6 +19,7 @@ import { testProviderConnectivity, testProviderSession } from '../../../src/node
 import { loadApiProvider } from '../../../src/providers/index';
 import { doTargetPurposeDiscovery } from '../../../src/redteam/commands/discover';
 import { createApp } from '../../../src/server/server';
+import { isPrivateRangeGuardContextActive } from '../../../src/util/fetch/guardContext';
 import { mockProcessEnv } from '../../util/utils';
 
 const mockedLoadApiProvider = vi.mocked(loadApiProvider);
@@ -133,6 +134,43 @@ describe('PROMPTFOO_BLOCK_PRIVATE_RANGES server guards (#11768 item 2)', () => {
       expect(response.status).toBe(200);
       expect(mockedLoadApiProvider).toHaveBeenCalled();
     });
+
+    it('loads the provider inside the guard context when the flag is set', async () => {
+      restoreEnv = mockProcessEnv({ PROMPTFOO_BLOCK_PRIVATE_RANGES: 'true' });
+      let guardActiveDuringLoad: boolean | undefined;
+      mockedLoadApiProvider.mockImplementation(() => {
+        guardActiveDuringLoad = isPrivateRangeGuardContextActive();
+        return Promise.resolve({} as never);
+      });
+
+      const response = await request(app)
+        .post('/api/providers/test')
+        .send({ providerOptions: { id: 'openai:gpt-4o-mini' } });
+
+      expect(response.status).toBe(200);
+      expect(mockedLoadApiProvider).toHaveBeenCalled();
+      // Provider constructors can issue requests during load (e.g. elevenlabs
+      // voice design), so loading must happen inside the guard context where
+      // redirect validation applies.
+      expect(guardActiveDuringLoad).toBe(true);
+    });
+
+    it('loads the provider outside the guard context when the flag is unset', async () => {
+      restoreEnv = mockProcessEnv({ PROMPTFOO_BLOCK_PRIVATE_RANGES: undefined });
+      let guardActiveDuringLoad: boolean | undefined;
+      mockedLoadApiProvider.mockImplementation(() => {
+        guardActiveDuringLoad = isPrivateRangeGuardContextActive();
+        return Promise.resolve({} as never);
+      });
+
+      const response = await request(app)
+        .post('/api/providers/test')
+        .send({ providerOptions: { id: 'openai:gpt-4o-mini' } });
+
+      expect(response.status).toBe(200);
+      expect(mockedLoadApiProvider).toHaveBeenCalled();
+      expect(guardActiveDuringLoad).toBe(false);
+    });
   });
 
   describe('POST /api/providers/discover', () => {
@@ -157,6 +195,23 @@ describe('PROMPTFOO_BLOCK_PRIVATE_RANGES server guards (#11768 item 2)', () => {
       expect(response.status).toBe(200);
       expect(mockedLoadApiProvider).toHaveBeenCalled();
     });
+
+    it('loads the provider inside the guard context when the flag is set', async () => {
+      restoreEnv = mockProcessEnv({ PROMPTFOO_BLOCK_PRIVATE_RANGES: 'true' });
+      let guardActiveDuringLoad: boolean | undefined;
+      mockedLoadApiProvider.mockImplementation(() => {
+        guardActiveDuringLoad = isPrivateRangeGuardContextActive();
+        return Promise.resolve({} as never);
+      });
+
+      const response = await request(app)
+        .post('/api/providers/discover')
+        .send({ id: 'openai:gpt-4o-mini' });
+
+      expect(response.status).toBe(200);
+      expect(mockedLoadApiProvider).toHaveBeenCalled();
+      expect(guardActiveDuringLoad).toBe(true);
+    });
   });
 
   describe('POST /api/providers/test-session', () => {
@@ -180,6 +235,23 @@ describe('PROMPTFOO_BLOCK_PRIVATE_RANGES server guards (#11768 item 2)', () => {
 
       expect(response.status).toBe(200);
       expect(mockedLoadApiProvider).toHaveBeenCalled();
+    });
+
+    it('loads the provider inside the guard context when the flag is set', async () => {
+      restoreEnv = mockProcessEnv({ PROMPTFOO_BLOCK_PRIVATE_RANGES: 'true' });
+      let guardActiveDuringLoad: boolean | undefined;
+      mockedLoadApiProvider.mockImplementation(() => {
+        guardActiveDuringLoad = isPrivateRangeGuardContextActive();
+        return Promise.resolve({} as never);
+      });
+
+      const response = await request(app)
+        .post('/api/providers/test-session')
+        .send({ provider: { id: 'openai:gpt-4o-mini' } });
+
+      expect(response.status).toBe(200);
+      expect(mockedLoadApiProvider).toHaveBeenCalled();
+      expect(guardActiveDuringLoad).toBe(true);
     });
   });
 });
