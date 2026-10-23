@@ -100,7 +100,12 @@ import {
   handleTrajectoryToolSequence,
   handleTrajectoryToolUsed,
 } from './trajectory';
-import { coerceString, getFinalTest, loadFromJavaScriptFile, processFileReference } from './utils';
+import {
+  coerceString,
+  getFinalTest,
+  loadJavaScriptFileFunction,
+  processFileReference,
+} from './utils';
 import { handleWebhook } from './webhook';
 import { handleWordCount } from './wordCount';
 import { handleIsXml } from './xml';
@@ -498,8 +503,22 @@ async function runAssertionInternal({
       filePath = path.resolve(basePath, filePath);
 
       if (isJavascriptFile(filePath)) {
-        valueFromScript = await loadFromJavaScriptFile(filePath, functionName, [output, context]);
-        logger.debug(`Javascript script ${filePath} output: ${valueFromScript}`);
+        // Load errors (missing file, module, or export) stay configuration errors, but a
+        // function that throws is a failed assertion, like the Python and Ruby branches below.
+        // Without this, the rejection escapes `runAssertions` and the whole row becomes ERROR,
+        // losing the results of the other assertions on it.
+        const assertionFunction = await loadJavaScriptFileFunction(filePath, functionName);
+        try {
+          valueFromScript = await assertionFunction(output, context);
+          logger.debug(`Javascript script ${filePath} output: ${valueFromScript}`);
+        } catch (error) {
+          return {
+            pass: false,
+            score: 0,
+            reason: (error as Error).message,
+            assertion,
+          };
+        }
       } else if (filePath.endsWith('.py')) {
         try {
           const pythonScriptOutput = await runPython<ValueFromScriptType>(
@@ -547,7 +566,16 @@ async function runAssertionInternal({
         );
       }
 
-      valueFromScript = await Promise.resolve(requiredModule(output, context));
+      try {
+        valueFromScript = await Promise.resolve(requiredModule(output, context));
+      } catch (error) {
+        return {
+          pass: false,
+          score: 0,
+          reason: (error as Error).message,
+          assertion,
+        };
+      }
     } else {
       // It's a normal string value
       renderedValue = nunjucks.renderString(renderedValue, resolvedVars);
