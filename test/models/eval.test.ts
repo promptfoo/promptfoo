@@ -2249,6 +2249,39 @@ describe('evaluator', () => {
       expect(result.testIndices).toEqual([1, 2, 3]);
     });
 
+    it('treats % and _ in metadata contains filters as literal text', async () => {
+      const eval_ = await EvalFactory.create(createPassFailOptions(2));
+
+      const db = await getDb();
+      await db.run(
+        `UPDATE eval_results SET metadata = json('{"model":"gpt_4","discount":"100%"}') WHERE eval_id = '${eval_.id}' AND test_idx = 0`,
+      );
+      await db.run(
+        `UPDATE eval_results SET metadata = json('{"model":"gptX4","discount":"1000"}') WHERE eval_id = '${eval_.id}' AND test_idx = 1`,
+      );
+
+      for (const [operator, field, value, expected] of [
+        ['contains', 'model', 'gpt_4', [0]],
+        ['contains', 'discount', '100%', [0]],
+        ['not_contains', 'model', 'gpt_4', [1]],
+        ['not_contains', 'discount', '100%', [1]],
+      ] as const) {
+        const filters = [
+          JSON.stringify({ logicOperator: 'and', type: 'metadata', operator, field, value }),
+        ];
+        const label = `${field} ${operator} ${value}`;
+
+        const { testIndices } = await (eval_ as any).queryTestIndices({ filters });
+        expect(testIndices, label).toEqual(expected);
+
+        const page = await eval_.getTablePage({ filters });
+        expect(
+          page.body.map((row) => row.testIdx),
+          label,
+        ).toEqual(expected);
+      }
+    });
+
     it('filters by metadata exists operator (non-empty values only)', async () => {
       const eval_ = await EvalFactory.create(createPassFailOptions(10));
 
