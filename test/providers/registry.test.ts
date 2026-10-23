@@ -3177,3 +3177,12 @@ describe('Provider Registry', () => {
     );
   });
 });
+
+describe('portable Gemini preview routing', () => {
+  it.each(['google', 'palm'])('keeps %s preview on GenerateContent', async (prefix) => {
+    const provider = await loadApiProvider(`${prefix}:gemini-omni-1.1-flash-preview`, {
+      options: { config: { apiKey: 'synthetic' } },
+    });
+    expect(provider.constructor.name).toBe('AIStudioChatProvider');
+  });
+});

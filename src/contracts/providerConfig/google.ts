@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { ProviderEnvOverridesSchema } from '../env.js';
+import { InputsInputSchema } from '../shared.js';
 import { McpClientConfigInputSchema } from './mcp.js';
 
 const JsonObject = z.record(z.string(), z.json());
@@ -44,17 +45,19 @@ const FunctionDeclaration = z.strictObject({
   parameters: JsonObject.optional(),
   response: JsonObject.optional(),
 });
+const GoogleSearchRetrieval = z.strictObject({
+  dynamicRetrievalConfig: z.strictObject({
+    mode: z.enum(['MODE_UNSPECIFIED', 'MODE_DYNAMIC']).optional(),
+    dynamicThreshold: z.number().optional(),
+  }),
+});
 const Tool = z.strictObject({
   functionDeclarations: z.array(FunctionDeclaration).optional(),
   function_declarations: z.array(FunctionDeclaration).optional(),
-  googleSearchRetrieval: z
-    .strictObject({
-      dynamicRetrievalConfig: z.strictObject({
-        mode: z.enum(['MODE_UNSPECIFIED', 'MODE_DYNAMIC']).optional(),
-        dynamicThreshold: z.number().optional(),
-      }),
-    })
-    .optional(),
+  googleSearchRetrieval: GoogleSearchRetrieval.optional(),
+  code_execution: JsonObject.optional(),
+  google_search: JsonObject.optional(),
+  google_search_retrieval: GoogleSearchRetrieval.optional(),
   codeExecution: JsonObject.optional(),
   googleSearch: JsonObject.optional(),
   googleMaps: z.strictObject({ enableWidget: z.boolean().optional() }).optional(),
@@ -73,6 +76,16 @@ const Tool = z.strictObject({
       disabledSafetyPolicies: z.array(z.string()).optional(),
     })
     .optional(),
+});
+
+const FileReference = z.string().regex(/^file:\/\/[\s\S]+/);
+const OpenAiFunctionTool = z.strictObject({
+  type: z.literal('function'),
+  function: z.strictObject({
+    name: z.string(),
+    description: z.string().optional(),
+    parameters: JsonObject.optional(),
+  }),
 });
 
 export const GeminiSharedConfigInputSchema = Sampling.extend({
@@ -100,7 +113,7 @@ export const GeminiSharedConfigInputSchema = Sampling.extend({
     .optional(),
   generationConfig: Sampling.extend({
     response_mime_type: z.string().optional(),
-    response_schema: ResponseSchema.optional(),
+    response_schema: JsonObject.optional(),
     response_modalities: z.array(z.string()).optional(),
     responseModalities: z.array(z.string()).optional(),
     speechConfig: Speech.optional(),
@@ -157,7 +170,15 @@ export const GeminiSharedConfigInputSchema = Sampling.extend({
       }),
     ])
     .optional(),
-  tools: z.union([z.array(Tool), z.string().regex(/^file:\/\/[\s\S]+/)]).optional(),
+  tools: z
+    .union([
+      Tool,
+      z.array(Tool),
+      z.array(OpenAiFunctionTool),
+      FileReference,
+      z.array(FileReference),
+    ])
+    .optional(),
   functionToolCallbacks: z.record(z.string(), z.string()).optional(),
   functionToolStatefulApi: z
     .strictObject({
@@ -201,6 +222,7 @@ export const VertexGeminiConfigInputSchema = GeminiSharedConfigInputSchema.exten
 const Model =
   'gemini-(?!(?:omni-flash-preview|omni-1\\.1-flash(?:-preview)?|robotics-er-2-preview|3\\.5-live-translate-preview)$)(?!robotics-er-2-streaming-)(?![^:]*-image)(?!nano-banana-2\\.1$)[^:]+';
 const Options = z.strictObject({
+  inputs: InputsInputSchema.optional(),
   label: z.string().optional(),
   prompts: z.array(z.string()).optional(),
   transform: z.string().optional(),
@@ -208,7 +230,9 @@ const Options = z.strictObject({
   env: ProviderEnvOverridesSchema.catchall(z.string()).optional(),
 });
 export const GoogleAiStudioProviderOptionsInputSchema = Options.extend({
-  id: z.string().regex(new RegExp(`^(?:google|palm):${Model}$`)),
+  id: z
+    .string()
+    .regex(new RegExp(`^(?:google|palm):(?:${Model}|gemini-omni-1\\.1-flash-preview)$`)),
   config: GoogleAiStudioConfigInputSchema.optional(),
 });
 export const VertexGeminiProviderOptionsInputSchema = Options.extend({

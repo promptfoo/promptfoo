@@ -14,6 +14,25 @@ const validate = new Ajv({ strict: false }).compile(GeminiProviderOptionsInputJs
 
 describe('portable Gemini configuration', () => {
   const cases: [unknown, boolean][] = [
+    [{ id: 'google:gemini-omni-1.1-flash-preview' }, true],
+    ...[
+      { tools: { googleSearch: {} } },
+      {
+        tools: [
+          {
+            google_search: {},
+            code_execution: {},
+            google_search_retrieval: { dynamicRetrievalConfig: {} },
+          },
+        ],
+      },
+      {
+        tools: [{ type: 'function', function: { name: 'lookup', parameters: { type: 'object' } } }],
+      },
+      { tools: ['file://one.json', 'file://two.yaml'] },
+      { generationConfig: { response_schema: { type: 'object' } } },
+    ].map((config): [unknown, boolean] => [{ id: 'google:gemini-2.5-flash', config }, true]),
+    [{ id: 'google:gemini-2.5-flash', inputs: { question: '{{query}}' } }, true],
     [
       {
         id: 'google:gemini-2.5-flash',
@@ -101,6 +120,14 @@ describe('portable Gemini configuration', () => {
       'Google:gemini-2.5-flash',
     ].map((id): [unknown, boolean] => [{ id }, false]),
     ...[
+      { generationConfig: { response_schema: 'file://schema.json' } },
+      { generationConfig: { response_schema: '{"type":"object"}' } },
+      {
+        tools: [
+          { google_search_retrieval: { dynamicRetrievalConfig: { dynamicThreshold: 'bad' } } },
+        ],
+      },
+      { tools: [{ type: 'function', function: { name: 'lookup' } }, { googleSearch: {} }] },
       { temperature: 'hot' },
       { maxOutputToken: 10 },
       { projectId: 'wrong-service' },
