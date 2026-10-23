@@ -100,7 +100,7 @@ import {
   handleTrajectoryToolSequence,
   handleTrajectoryToolUsed,
 } from './trajectory';
-import { coerceString, getFinalTest, loadFromJavaScriptFile, processFileReference } from './utils';
+import { coerceString, getFinalTest, loadJavaScriptFunction, processFileReference } from './utils';
 import { handleWebhook } from './webhook';
 import { handleWordCount } from './wordCount';
 import { handleIsXml } from './xml';
@@ -498,7 +498,17 @@ async function runAssertionInternal({
       filePath = path.resolve(basePath, filePath);
 
       if (isJavascriptFile(filePath)) {
-        valueFromScript = await loadFromJavaScriptFile(filePath, functionName, [output, context]);
+        const assertionFunction = await loadJavaScriptFunction(filePath, functionName);
+        try {
+          valueFromScript = await assertionFunction(output, context);
+        } catch (error) {
+          return {
+            pass: false,
+            score: 0,
+            reason: error instanceof Error ? error.message : String(error),
+            assertion,
+          };
+        }
         logger.debug(`Javascript script ${filePath} output: ${valueFromScript}`);
       } else if (filePath.endsWith('.py')) {
         try {
@@ -547,7 +557,16 @@ async function runAssertionInternal({
         );
       }
 
-      valueFromScript = await Promise.resolve(requiredModule(output, context));
+      try {
+        valueFromScript = await Promise.resolve(requiredModule(output, context));
+      } catch (error) {
+        return {
+          pass: false,
+          score: 0,
+          reason: error instanceof Error ? error.message : String(error),
+          assertion,
+        };
+      }
     } else {
       // It's a normal string value
       renderedValue = nunjucks.renderString(renderedValue, resolvedVars);

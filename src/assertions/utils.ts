@@ -51,24 +51,33 @@ export function getFinalTest(test: TestCase, assertion: Assertion) {
   return Object.freeze(ret);
 }
 
-export async function loadFromJavaScriptFile(
+export type JavaScriptAssertionFunction = (...args: unknown[]) => unknown;
+
+export async function loadJavaScriptFunction(
   filePath: string,
   functionName: string | undefined,
-  args: unknown[],
-  // biome-ignore lint/suspicious/noExplicitAny: I think this is hotloading JS
-): Promise<any> {
+): Promise<JavaScriptAssertionFunction> {
   const requiredModule = await importModule(filePath, functionName);
-  if (functionName && typeof requiredModule[functionName] === 'function') {
-    return requiredModule[functionName](...args);
+  if (functionName && requiredModule && typeof requiredModule[functionName] === 'function') {
+    return requiredModule[functionName];
   } else if (typeof requiredModule === 'function') {
-    return requiredModule(...args);
-  } else if (requiredModule.default && typeof requiredModule.default === 'function') {
-    return requiredModule.default(...args);
+    return requiredModule;
+  } else if (requiredModule?.default && typeof requiredModule.default === 'function') {
+    return requiredModule.default;
   } else {
     throw new Error(
       `Assertion malformed: ${filePath} must export a function or have a default export as a function`,
     );
   }
+}
+
+export async function loadFromJavaScriptFile<T extends string | object = string | object>(
+  filePath: string,
+  functionName: string | undefined,
+  args: unknown[],
+): Promise<T> {
+  const assertionFunction = await loadJavaScriptFunction(filePath, functionName);
+  return assertionFunction(...args) as T;
 }
 
 export function processFileReference(fileRef: string): object | string {
