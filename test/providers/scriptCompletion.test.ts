@@ -1,6 +1,8 @@
 import { execFile } from 'child_process';
 import * as crypto from 'crypto';
 import * as fs from 'fs';
+import * as os from 'os';
+import * as path from 'path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as cacheModule from '../../src/cache';
@@ -79,6 +81,53 @@ describe('parseScriptParts', () => {
     const scriptPath = '/bin/bash script.sh';
     const result = parseScriptParts(scriptPath);
     expect(result).toEqual(['/bin/bash', 'script.sh']);
+  });
+
+  it.each([
+    // Plain commands tokenize as before
+    ['node script.js', ['node', 'script.js']],
+    [
+      'python3 inference.py --model gpt-4 -v',
+      ['python3', 'inference.py', '--model', 'gpt-4', '-v'],
+    ],
+    ['./run.sh --k=v', ['./run.sh', '--k=v']],
+    // Whitespace
+    ['node  a.js \t b\n c', ['node', 'a.js', 'b', 'c']],
+    ['   node a.js   ', ['node', 'a.js']],
+    ['', []],
+    ['   ', []],
+    // Quotes in the middle of a token join the token
+    ['node a.js --name="John Smith"', ['node', 'a.js', '--name=John Smith']],
+    ['node a.js --x=\'a b\' --y="c d"', ['node', 'a.js', '--x=a b', '--y=c d']],
+    ['a"b c"d', ['ab cd']],
+    ['"a b"\'c d\'', ['a bc d']],
+    // Empty quotes are empty arguments
+    ['node a.js "" b', ['node', 'a.js', '', 'b']],
+    ["node a.js '' b", ['node', 'a.js', '', 'b']],
+    ['node a.js --empty=""', ['node', 'a.js', '--empty=']],
+    ["node a.js --empty=''", ['node', 'a.js', '--empty=']],
+    ['node a.js ""', ['node', 'a.js', '']],
+    // The other quote style is literal inside quotes
+    ['"it\'s"', ["it's"]],
+    ['\'say "hi"\'', ['say "hi"']],
+    // Backslashes are always literal, so Windows paths work, even before a closing quote
+    ['C:\\Users\\x\\script.py arg', ['C:\\Users\\x\\script.py', 'arg']],
+    ['.\\script.js arg', ['.\\script.js', 'arg']],
+    [
+      '"C:\\Program Files\\node\\node.exe" "C:\\Users\\x y\\s.js"',
+      ['C:\\Program Files\\node\\node.exe', 'C:\\Users\\x y\\s.js'],
+    ],
+    ["'C:\\Users\\x y\\s.js' a", ['C:\\Users\\x y\\s.js', 'a']],
+    ['"\\\\server\\share\\run.bat" a', ['\\\\server\\share\\run.bat', 'a']],
+    ['node a.js --out="C:\\out dir\\" next', ['node', 'a.js', '--out=C:\\out dir\\', 'next']],
+    ['"C:\\dir\\" "D:\\x y\\"', ['C:\\dir\\', 'D:\\x y\\']],
+    // A quote with no closing match is a literal character and does not swallow later arguments
+    ["node a.js --name=O'Brien --verbose", ['node', 'a.js', "--name=O'Brien", '--verbose']],
+    ['node a.js "b c', ['node', 'a.js', '"b', 'c']],
+    ['node a.js "', ['node', 'a.js', '"']],
+    ['node a.js "a b" "c', ['node', 'a.js', 'a b', '"c']],
+  ])('parses %j', (input, expected) => {
+    expect(parseScriptParts(input)).toEqual(expected);
   });
 });
 
@@ -316,9 +365,46 @@ describe('ScriptCompletionProvider', () => {
     expect(result.cached).toBe(true);
     expect(result).toEqual({ ...cachedResult, cached: true });
     expect(mockCache.get).toHaveBeenCalledWith(
-      'exec:node script.js:mock hash:mock hash:test prompt:undefined',
+      'exec:argv-v2:node script.js:mock hash:mock hash:test prompt:undefined',
     );
     expect(execFile).not.toHaveBeenCalled();
+  });
+
+  it('should not reuse output cached under the unversioned key', async () => {
+    const staleKey = 'exec:node script.js:mock hash:mock hash:test prompt:undefined';
+    const mockCache = {
+      get: vi.fn(async (key: string) =>
+        key === staleKey ? JSON.stringify({ output: 'stale output' }) : undefined,
+      ),
+      set: vi.fn(),
+    };
+    vi.spyOn(cacheModule, 'getCache').mockResolvedValue(mockCache as never);
+    vi.spyOn(cacheModule, 'isCacheEnabled').mockReturnValue(true);
+
+    existsSyncMock.mockReturnValue(true);
+    statSyncMock.mockReturnValue({ isFile: () => true } as fs.Stats);
+    readFileSyncMock.mockReturnValue('file content');
+    const mockHashUpdate = {
+      update: vi.fn().mockReturnThis(),
+      digest: vi.fn().mockReturnValue('mock hash'),
+    } as unknown as crypto.Hash;
+    vi.mocked(crypto.createHash).mockImplementation(function () {
+      return mockHashUpdate;
+    });
+    vi.mocked(execFile).mockImplementation(function (_cmd, _args, _options, callback) {
+      (callback as (error: Error | null, stdout: string | Buffer, stderr: string | Buffer) => void)(
+        null,
+        Buffer.from('fresh output'),
+        '',
+      );
+      return {} as any;
+    });
+
+    const result = await provider.callApi('test prompt');
+
+    expect(result.output).toBe('fresh output');
+    expect(result.cached).toBeUndefined();
+    expect(execFile).toHaveBeenCalledOnce();
   });
 
   it('should handle script execution errors', async () => {
@@ -357,5 +443,185 @@ describe('ScriptCompletionProvider', () => {
 
     const result = await provider.callApi('test prompt');
     expect(result.output).toBe(strippedOutput);
+  });
+
+  it('passes quoted arguments to the script as single arguments', async () => {
+    vi.mocked(execFile).mockImplementation(function (_cmd, _args, _options, callback) {
+      (callback as (error: Error | null, stdout: string, stderr: string) => void)(null, 'ok', '');
+      return {} as any;
+    });
+    const quotedProvider = new ScriptCompletionProvider(
+      `node args.js --name="John Smith" "" --x='a b' --empty=""`,
+    );
+
+    await quotedProvider.callApi('test prompt');
+
+    expect(vi.mocked(execFile).mock.calls[0].slice(0, 2)).toEqual([
+      'node',
+      [
+        'args.js',
+        '--name=John Smith',
+        '',
+        '--x=a b',
+        '--empty=',
+        'test prompt',
+        expect.any(String),
+        expect.any(String),
+      ],
+    ]);
+  });
+
+  describe('with a real child process', () => {
+    let tempDir: string;
+
+    beforeEach(() => {
+      tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-exec-args-'));
+    });
+
+    afterEach(() => {
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    });
+
+    it('delivers shell-style quoted arguments to the script intact', async () => {
+      const actual = await vi.importActual<typeof import('child_process')>('child_process');
+      vi.mocked(execFile).mockImplementation(actual.execFile as typeof execFile);
+      const scriptFile = path.join(tempDir, 'args.js');
+      // The last three arguments are always prompt, options and context
+      fs.writeFileSync(scriptFile, 'console.log(JSON.stringify(process.argv.slice(2, -3)));');
+      const quotedProvider = new ScriptCompletionProvider(
+        `node "${scriptFile}" --name="John Smith" "" --x='a b' --empty="" plain`,
+      );
+
+      const result = await quotedProvider.callApi('test prompt');
+
+      expect(JSON.parse(result.output as string)).toEqual([
+        '--name=John Smith',
+        '',
+        '--x=a b',
+        '--empty=',
+        'plain',
+      ]);
+    });
+  });
+});
+
+describe('files attached to arguments', () => {
+  let tempDir: string;
+  let realExistsSync: typeof fs.existsSync;
+  let realStatSync: typeof fs.statSync;
+  let realReadFileSync: typeof fs.readFileSync;
+  let realCreateHash: typeof crypto.createHash;
+
+  const sha256 = (content: string) => crypto.createHash('sha256').update(content).digest('hex');
+
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    const actualFs = await vi.importActual<typeof import('fs')>('fs');
+    const actualCrypto = await vi.importActual<typeof import('crypto')>('crypto');
+    realExistsSync = actualFs.existsSync;
+    realStatSync = actualFs.statSync;
+    realReadFileSync = actualFs.readFileSync;
+    realCreateHash = actualCrypto.createHash;
+    // Use the real file system and hashing for these tests
+    vi.mocked(fs.existsSync).mockImplementation(realExistsSync);
+    vi.mocked(fs.statSync).mockImplementation(realStatSync as never);
+    vi.mocked(fs.readFileSync).mockImplementation(realReadFileSync as never);
+    vi.mocked(crypto.createHash).mockImplementation(realCreateHash);
+    tempDir = actualFs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-exec-attached-'));
+  });
+
+  afterEach(() => {
+    fs.rmSync(tempDir, { recursive: true, force: true });
+    vi.mocked(fs.existsSync).mockReset();
+    vi.mocked(fs.statSync).mockReset();
+    vi.mocked(fs.readFileSync).mockReset();
+    vi.mocked(crypto.createHash).mockReset();
+  });
+
+  function writeFile(name: string, content: string): string {
+    const filePath = path.join(tempDir, name);
+    fs.writeFileSync(filePath, content);
+    return filePath;
+  }
+
+  it.each([
+    ['double quotes', 'config file.json', '--config="%s"'],
+    ['single quotes', 'config file.json', "--config='%s'"],
+    ['double quotes without spaces', 'config.json', '--config="%s"'],
+    ['no quotes', 'config.json', '--config=%s'],
+    ['a short flag', 'config.json', '-c=%s'],
+    ['a bare key', 'config.json', 'config=%s'],
+  ])('hashes a file attached with =, %s', (_label, fileName, template) => {
+    const filePath = writeFile(fileName, 'config v1');
+    const parts = parseScriptParts(`node script.js ${template.replace('%s', filePath)}`);
+
+    expect(getFileHashes(parts)).toEqual([sha256('config v1')]);
+  });
+
+  it('hashes the part itself and the attached file independently', () => {
+    const script = writeFile('script.js', 'script');
+    const config = writeFile('config file.json', 'config');
+    const parts = parseScriptParts(`node "${script}" --config="${config}"`);
+
+    expect(getFileHashes(parts)).toEqual([sha256('script'), sha256('config')]);
+  });
+
+  it('ignores an attached value that is not an existing file', () => {
+    const script = writeFile('script.js', 'script');
+    fs.mkdirSync(path.join(tempDir, 'a dir'));
+    const parts = parseScriptParts(
+      `node "${script}" --config="${path.join(tempDir, 'missing file.json')}" --dir="${path.join(tempDir, 'a dir')}" --name="John Smith" --empty= --trailing=`,
+    );
+
+    expect(getFileHashes(parts)).toEqual([sha256('script')]);
+  });
+
+  it('hashes a file whose own name contains = once', () => {
+    const filePath = writeFile('a=b.json', 'literal name');
+    // The whole part is a file, so the text after the first = is not hashed as well
+    writeFile('b.json', 'would be a duplicate');
+
+    expect(getFileHashes([filePath])).toEqual([sha256('literal name')]);
+    expect(getFileHashes([`--config=${filePath}`])).toEqual([sha256('literal name')]);
+  });
+
+  it('hashes the value after the first = only', () => {
+    const filePath = writeFile('x=y.json', 'nested');
+
+    expect(getFileHashes([`--opt=${filePath}`])).toEqual([sha256('nested')]);
+    expect(getFileHashes([`--opt=other=${filePath}`])).toEqual([]);
+  });
+
+  it('changes the exec cache key when a file attached to a quoted argument changes', async () => {
+    const script = writeFile('script.js', 'script');
+    const config = writeFile('config file.json', 'config v1');
+    const keys: string[] = [];
+    const mockCache = {
+      get: vi.fn(async (key: string) => {
+        keys.push(key);
+        return undefined;
+      }),
+      set: vi.fn(),
+    };
+    vi.spyOn(cacheModule, 'getCache').mockResolvedValue(mockCache as never);
+    vi.spyOn(cacheModule, 'isCacheEnabled').mockReturnValue(true);
+    vi.mocked(execFile).mockImplementation(function (_cmd, _args, _options, callback) {
+      (callback as (error: Error | null, stdout: string | Buffer, stderr: string | Buffer) => void)(
+        null,
+        Buffer.from('output'),
+        '',
+      );
+      return {} as any;
+    });
+    const provider = new ScriptCompletionProvider(`node "${script}" --config="${config}"`);
+
+    await provider.callApi('prompt');
+    fs.writeFileSync(config, 'config v2');
+    await provider.callApi('prompt');
+
+    expect(keys).toHaveLength(2);
+    expect(keys[0]).toContain(`:${sha256('script')}:${sha256('config v1')}:`);
+    expect(keys[1]).toContain(`:${sha256('script')}:${sha256('config v2')}:`);
+    expect(keys[0]).not.toBe(keys[1]);
   });
 });

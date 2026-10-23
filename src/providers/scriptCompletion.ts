@@ -15,34 +15,84 @@ import type {
   ProviderResponse,
 } from '../types/index';
 
+/** Bump when `parseScriptParts` changes the argv it produces, so output cached for the old argv is not reused. */
+export const EXEC_CACHE_VERSION = 'argv-v2';
+
 const ANSI_ESCAPE = /\x1b(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])/g;
 
 export function stripText(text: string) {
   return text.replace(ANSI_ESCAPE, '');
 }
 
+/**
+ * Splits a command line into arguments, shell-style but without running a shell:
+ * - whitespace outside quotes separates arguments
+ * - `'...'` and `"..."` group text; adjacent segments join (`--a="b c"` -> `--a=b c`)
+ * - empty quotes are kept as empty arguments
+ * - backslashes are always literal (Windows paths like `"C:\dir\"` work), so a quote
+ *   can't be escaped: use the other quote style (`'say "hi"'`)
+ * - a quote with no closing match is kept as a literal character
+ */
 export function parseScriptParts(scriptPath: string): string[] {
-  const scriptPartsRegex = /[^\s"']+|"([^"]*)"|'([^']*)'/g;
-  let match;
-  const scriptParts = [];
+  const parts: string[] = [];
+  let current = '';
+  let inToken = false;
 
-  while ((match = scriptPartsRegex.exec(scriptPath)) !== null) {
-    scriptParts.push(match[1] || match[2] || match[0]);
+  for (let i = 0; i < scriptPath.length; i++) {
+    const char = scriptPath[i];
+    if (char === '"' || char === "'") {
+      const end = scriptPath.indexOf(char, i + 1);
+      if (end !== -1) {
+        current += scriptPath.slice(i + 1, end);
+        inToken = true;
+        i = end;
+        continue;
+      }
+    } else if (/\s/.test(char)) {
+      if (inToken) {
+        parts.push(current);
+        current = '';
+        inToken = false;
+      }
+      continue;
+    }
+    current += char;
+    inToken = true;
   }
 
-  return scriptParts;
+  if (inToken) {
+    parts.push(current);
+  }
+  return parts;
 }
 
+function hashFileIfExists(filePath: string): string | undefined {
+  if (!fs.existsSync(filePath) || !fs.statSync(filePath).isFile()) {
+    return undefined;
+  }
+  const fileContent = fs.readFileSync(filePath);
+  const fileHash = crypto.createHash('sha256').update(fileContent).digest('hex');
+  logger.debug(`File hash for ${filePath}: ${fileHash}`);
+  return fileHash;
+}
+
+/**
+ * Hashes the files named by the command's arguments, for use in cache keys. An argument counts
+ * when it is a file, or when it is `flag=value` / `key=value` and the value is a file (so
+ * `--config="my config.json"` is covered). A part that is itself a file is hashed once.
+ */
 export function getFileHashes(scriptParts: string[]): string[] {
+  const stripQuotes = (value: string) => value.replace(/^['"]|['"]$/g, '');
   const fileHashes: string[] = [];
 
   for (const part of scriptParts) {
-    const cleanPart = part.replace(/^['"]|['"]$/g, '');
-    if (fs.existsSync(cleanPart) && fs.statSync(cleanPart).isFile()) {
-      const fileContent = fs.readFileSync(cleanPart);
-      const fileHash = crypto.createHash('sha256').update(fileContent).digest('hex');
+    const equalsIndex = part.indexOf('=');
+    let fileHash = hashFileIfExists(stripQuotes(part));
+    if (fileHash === undefined && equalsIndex !== -1) {
+      fileHash = hashFileIfExists(stripQuotes(part.slice(equalsIndex + 1)));
+    }
+    if (fileHash !== undefined) {
       fileHashes.push(fileHash);
-      logger.debug(`File hash for ${cleanPart}: ${fileHash}`);
     }
   }
 
@@ -67,7 +117,7 @@ export class ScriptCompletionProvider implements ApiProvider {
       logger.warn(`Could not find any valid files in the command: ${this.scriptPath}`);
     }
 
-    const cacheKey = `exec:${this.scriptPath}:${fileHashes.join(':')}:${prompt}:${JSON.stringify(this.options)}`;
+    const cacheKey = `exec:${EXEC_CACHE_VERSION}:${this.scriptPath}:${fileHashes.join(':')}:${prompt}:${JSON.stringify(this.options)}`;
 
     let cachedResult;
     if (fileHashes.length > 0 && isCacheEnabled()) {

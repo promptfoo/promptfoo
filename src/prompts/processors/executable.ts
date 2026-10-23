@@ -3,7 +3,12 @@ import { stat as fsStat, readFile } from 'fs/promises';
 
 import { getCache, isCacheEnabled } from '../../cache';
 import { getProcessEnv } from '../../envars';
-import { getFileHashes, parseScriptParts, stripText } from '../../providers/scriptCompletion';
+import {
+  EXEC_CACHE_VERSION,
+  getFileHashes,
+  parseScriptParts,
+  stripText,
+} from '../../providers/scriptCompletion';
 import invariant from '../../util/invariant';
 import { safeJsonStringify } from '../../util/json';
 
@@ -42,7 +47,7 @@ export const executablePromptFunction = async (
   const scriptParts = parseScriptParts(scriptPath);
   const fileHashes = getFileHashes(scriptParts);
 
-  const cacheKey = `exec-prompt:${scriptPath}:${fileHashes.join(':')}:${safeJsonStringify(transformedContext)}`;
+  const cacheKey = `exec-prompt:${EXEC_CACHE_VERSION}:${scriptPath}:${fileHashes.join(':')}:${safeJsonStringify(transformedContext)}`;
 
   let cachedResult;
   if (fileHashes.length > 0 && isCacheEnabled()) {
