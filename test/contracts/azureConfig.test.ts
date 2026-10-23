@@ -115,6 +115,7 @@ describe('Azure portable configuration contracts', () => {
       schema: AzureResponsesConfigInputSchema,
       jsonSchema: AzureResponsesConfigInputJsonSchema,
       valid: [
+        { reasoning: null },
         {},
         {
           ...shared,
@@ -249,6 +250,7 @@ describe('Azure portable configuration contracts', () => {
     expectTypeOf<AzureChatConfigInput>().toEqualTypeOf<
       z.input<typeof AzureChatConfigInputSchema>
     >();
+    expectTypeOf<{ reasoning: null }>().toExtend<z.input<typeof AzureResponsesConfigInputSchema>>();
     expectTypeOf<AzureProviderOptionsInput>().not.toBeAny();
     expectTypeOf<AzureProviderOptions<AzureCompletionOptions>>().toEqualTypeOf<
       Pick<ProviderOptions<AzureCompletionOptions>, 'config' | 'id' | 'env'>

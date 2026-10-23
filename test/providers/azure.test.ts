@@ -59,6 +59,7 @@ describe('Azure Provider Tests', () => {
       beforeEach(() => {
         provider = new AzureChatCompletionProvider('test-deployment', {
           config: {
+            modelName: 'gpt-4o',
             apiHost: 'test.azure.com',
             apiKey: 'test-key',
             functions: [{ name: 'provider_func', parameters: {} }],
