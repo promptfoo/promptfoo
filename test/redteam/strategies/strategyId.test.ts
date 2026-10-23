@@ -99,6 +99,7 @@ describe('Strategy IDs', () => {
     const expectedFileNameMap: Record<string, string> = {
       'arabic-presentation-forms': 'arabicPresentationForms.ts',
       base64: 'base64.ts',
+      'char-split': 'outputFormat.ts',
       citation: 'citation.ts',
       crescendo: 'crescendo.ts',
       gcg: 'gcg.ts',
@@ -106,6 +107,7 @@ describe('Strategy IDs', () => {
       hex: 'hex.ts',
       homoglyph: 'homoglyph.ts',
       image: 'simpleImage.ts',
+      'image-stego': 'lsbStego.ts',
       audio: 'simpleAudio.ts',
       leetspeak: 'leetspeak.ts',
       'math-prompt': 'mathPrompt.ts',
