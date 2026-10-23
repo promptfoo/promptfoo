@@ -235,6 +235,31 @@ describe('persisted manual rating metrics', () => {
     },
   );
 
+  it.each([
+    ['assertion', { assertion: { type: 'javascript', metricOnly: 'false' } }],
+    ['metadata', { assertion: { type: 'javascript' }, metadata: { metricOnly: 'false' } }],
+    ['numeric metadata', { assertion: { type: 'javascript' }, metadata: { metricOnly: 1 } }],
+  ])(
+    'rates and clears legacy results with a non-boolean metricOnly value: %s',
+    async (_, marker) => {
+      const legacy = {
+        pass: true,
+        score: 1,
+        reason: 'Legacy assertion passed',
+        ...marker,
+      } as unknown as GradingResult;
+      const original: GradingResult = {
+        pass: true,
+        score: 1,
+        reason: 'All assertions passed',
+        componentResults: [legacy],
+      };
+      const fixture = await createFixture(original, 1);
+      await submitAndReload(fixture, manualRating(original, false), 1, 1);
+      await submitAndReload(fixture, original, 1, 0);
+    },
+  );
+
   it('counts scalar SDK submissions from their stored components', async () => {
     const fixture = await createFixture(
       { pass: true, score: 0.5, reason: 'Passed', componentResults: [passingAssertion] },
@@ -257,8 +282,6 @@ describe('persisted manual rating metrics', () => {
     ['missing pass', [{}]],
     ['string pass', [{ pass: 'true' }]],
     ['null pass', [{ pass: null }]],
-    ['string assertion flag', [{ pass: true, assertion: { metricOnly: 'false' } }]],
-    ['numeric metadata flag', [{ pass: true, metadata: { metricOnly: 1 } }]],
     ['string assertion', [{ pass: true, assertion: 'invalid' }]],
     ['array assertion', [{ pass: true, assertion: [] }]],
     ['string metadata', [{ pass: true, metadata: 'invalid' }]],
@@ -317,6 +340,14 @@ describe('persisted manual rating metrics', () => {
       'false flags',
       [{ pass: true, assertion: { metricOnly: false }, metadata: { metricOnly: false } }],
       1,
+    ],
+    [
+      'legacy non-boolean flags',
+      [
+        { pass: true, assertion: { metricOnly: 'false' } },
+        { pass: true, assertion: { metricOnly: 'true' }, metadata: { metricOnly: 1 } },
+      ],
+      2,
     ],
     [
       'legacy set assertion',

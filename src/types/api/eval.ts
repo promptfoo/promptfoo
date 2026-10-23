@@ -263,8 +263,10 @@ export const SubmitRatingParamsSchema = z.object({
   id: z.string().min(1),
 });
 
-// Validate the fields used for counting while preserving legacy and SDK grading data.
-const RatingMetricOnlyMarkerSchema = z.object({ metricOnly: z.boolean().nullish() }).passthrough();
+// Validate the containers used for counting while preserving legacy and SDK grading data.
+// Legacy results may carry non-boolean metricOnly values; only boolean true marks a
+// metric-only result, matching countedComponentResults.
+const RatingMetricOnlyMarkerSchema = z.object({ metricOnly: z.unknown().optional() }).passthrough();
 
 const RatingComponentSchema = z
   .object({
