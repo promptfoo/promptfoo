@@ -8,7 +8,13 @@ vi.mock('node:dns/promises', () => ({
 import { lookup } from 'node:dns/promises';
 import type { LookupAddress } from 'node:dns';
 
+import { withPrivateRangeGuard } from '../../../src/util/fetch/guardContext';
 import { fetchWithProxy } from '../../../src/util/fetch/index';
+
+// Guarded-route calls run inside the guard context (see guardContext.ts);
+// the env flag alone no longer switches fetchWithProxy into validation mode.
+const guardedFetch = (...args: Parameters<typeof fetchWithProxy>) =>
+  withPrivateRangeGuard(() => fetchWithProxy(...args));
 
 const mockedLookup = vi.mocked(
   lookup as unknown as (hostname: string, options: { all: true }) => Promise<LookupAddress[]>,
@@ -64,7 +70,7 @@ describe('guarded redirects and Cloud auth injection (PROMPTFOO_BLOCK_PRIVATE_RA
       new Response('{"user":"me"}', { status: 200 }),
     );
 
-    const response = await fetchWithProxy('https://public.example.com/start');
+    const response = await guardedFetch('https://public.example.com/start');
 
     expect(response.status).toBe(200);
     expect(fetchStub).toHaveBeenCalledTimes(2);
@@ -85,7 +91,7 @@ describe('guarded redirects and Cloud auth injection (PROMPTFOO_BLOCK_PRIVATE_RA
       new Response('ok', { status: 200 }),
     );
 
-    const response = await fetchWithProxy('https://api.promptfoo.app/start');
+    const response = await guardedFetch('https://api.promptfoo.app/start');
 
     expect(response.status).toBe(200);
     expect(fetchStub).toHaveBeenCalledTimes(2);

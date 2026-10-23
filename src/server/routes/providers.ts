@@ -12,8 +12,24 @@ import {
 } from '../../redteam/commands/discover';
 import { neverGenerateRemote } from '../../redteam/remoteGeneration';
 import { ProviderSchemas } from '../../types/api/providers';
+import { withPrivateRangeGuard } from '../../util/fetch/guardContext';
 import { fetchWithProxy } from '../../util/fetch/index';
-import { assertProviderTargetPublic, PrivateRangeBlockedError } from '../../util/privateNetwork';
+import {
+  assertProviderTargetPublic,
+  isPrivateRangeBlockingEnabled,
+  PrivateRangeBlockedError,
+} from '../../util/privateNetwork';
+
+/**
+ * Run a guarded route's downstream provider call inside the private-range
+ * guard context when `PROMPTFOO_BLOCK_PRIVATE_RANGES` is set, so the fetch
+ * layer validates every redirect hop for this request only. Without the flag
+ * the call runs unwrapped and fetch behavior is unchanged.
+ */
+function runGuardedProviderCall<T>(fn: () => Promise<T>): Promise<T> {
+  return isPrivateRangeBlockingEnabled() ? withPrivateRangeGuard(fn) : fn();
+}
+
 import { getAvailableProviders } from '../config/serverConfig';
 import { sendError } from '../utils/errors';
 import type { Request, Response } from 'express';
@@ -85,11 +101,13 @@ providersRouter.post('/test', async (req: Request, res: Response): Promise<void>
 
     // Pass inputs explicitly from providerOptions since loaded provider may not expose config.inputs
     // Check both top-level inputs (from redteam UI) and config.inputs for backwards compatibility
-    const result = await testProviderConnectivity({
-      provider: loadedProvider,
-      prompt: bodyResult.data.prompt,
-      inputs: providerOptions.inputs || providerOptions.config?.inputs,
-    });
+    const result = await runGuardedProviderCall(() =>
+      testProviderConnectivity({
+        provider: loadedProvider,
+        prompt: bodyResult.data.prompt,
+        inputs: providerOptions.inputs || providerOptions.config?.inputs,
+      }),
+    );
 
     res.status(200).json(
       ProviderSchemas.Test.Response.parse({
@@ -149,7 +167,9 @@ providersRouter.post(
       const loadedProvider = await loadApiProvider(providerOptions.id, {
         options: providerOptions as ProviderOptions,
       });
-      const result = await doTargetPurposeDiscovery(loadedProvider, undefined, false);
+      const result = await runGuardedProviderCall(() =>
+        doTargetPurposeDiscovery(loadedProvider, undefined, false),
+      );
 
       if (result) {
         res.json(ProviderSchemas.Discover.Response.parse(result));
@@ -389,12 +409,14 @@ providersRouter.post('/test-session', async (req: Request, res: Response): Promi
 
     // Pass inputs from validatedProvider since loaded provider may not expose config.inputs
     // Check both top-level inputs (from redteam UI) and config.inputs for backwards compatibility
-    const result = await testProviderSession({
-      provider: loadedProvider,
-      sessionConfig,
-      inputs: validatedProvider.inputs || validatedProvider.config?.inputs,
-      mainInputVariable,
-    });
+    const result = await runGuardedProviderCall(() =>
+      testProviderSession({
+        provider: loadedProvider,
+        sessionConfig,
+        inputs: validatedProvider.inputs || validatedProvider.config?.inputs,
+        mainInputVariable,
+      }),
+    );
 
     res.json(ProviderSchemas.TestSession.Response.parse(result));
   } catch (error) {

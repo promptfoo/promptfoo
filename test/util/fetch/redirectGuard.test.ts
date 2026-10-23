@@ -16,7 +16,14 @@ import { lookup } from 'node:dns/promises';
 import type { LookupAddress } from 'node:dns';
 
 import { CloudAuthRedirectError } from '../../../src/util/fetch/cloudAuthRedirects';
+import { withPrivateRangeGuard } from '../../../src/util/fetch/guardContext';
 import { fetchWithProxy } from '../../../src/util/fetch/index';
+
+// Guarded-route calls run inside the guard context (see guardContext.ts);
+// the env flag alone no longer switches fetchWithProxy into validation mode.
+const guardedFetch = (...args: Parameters<typeof fetchWithProxy>) =>
+  withPrivateRangeGuard(() => fetchWithProxy(...args));
+
 import { monkeyPatchFetch } from '../../../src/util/fetch/monkeyPatchFetch';
 import { PrivateRangeBlockedError } from '../../../src/util/privateNetwork';
 
@@ -48,7 +55,7 @@ describe('fetchWithProxy guarded redirects (PROMPTFOO_BLOCK_PRIVATE_RANGES)', ()
       redirectResponse('http://169.254.169.254/latest/meta-data'),
     );
 
-    await expect(fetchWithProxy('https://public.example.com/start')).rejects.toThrow(
+    await expect(guardedFetch('https://public.example.com/start')).rejects.toThrow(
       PrivateRangeBlockedError,
     );
     // The private hop is never requested.
@@ -63,7 +70,7 @@ describe('fetchWithProxy guarded redirects (PROMPTFOO_BLOCK_PRIVATE_RANGES)', ()
       .mockResolvedValueOnce(redirectResponse('https://public.example.com/next'))
       .mockResolvedValueOnce(new Response('ok', { status: 200 }));
 
-    const response = await fetchWithProxy('https://public.example.com/start', {
+    const response = await guardedFetch('https://public.example.com/start', {
       method: 'POST',
       body: 'x',
     });
@@ -81,7 +88,7 @@ describe('fetchWithProxy guarded redirects (PROMPTFOO_BLOCK_PRIVATE_RANGES)', ()
       .mockResolvedValueOnce(redirectResponse('https://public.example.com/next', 307))
       .mockResolvedValueOnce(new Response('ok', { status: 200 }));
 
-    const response = await fetchWithProxy('https://public.example.com/start', {
+    const response = await guardedFetch('https://public.example.com/start', {
       method: 'POST',
       body: 'x',
     });
@@ -102,13 +109,26 @@ describe('fetchWithProxy guarded redirects (PROMPTFOO_BLOCK_PRIVATE_RANGES)', ()
     expect(mockedMonkeyPatchFetch.mock.calls[0][1]).not.toMatchObject({ redirect: 'manual' });
   });
 
+  it('does not intercept redirects for unscoped callers when the flag is set', async () => {
+    restoreEnv = mockProcessEnv({ PROMPTFOO_BLOCK_PRIVATE_RANGES: 'true' });
+    mockedMonkeyPatchFetch.mockResolvedValueOnce(redirectResponse('http://127.0.0.1:11434/api'));
+
+    const response = await fetchWithProxy('https://public.example.com/start');
+
+    // Outside a guarded server-route context, the flag alone changes nothing:
+    // an eval-style call in the same process keeps default redirect handling.
+    expect(response.status).toBe(302);
+    expect(mockedMonkeyPatchFetch).toHaveBeenCalledTimes(1);
+    expect(mockedMonkeyPatchFetch.mock.calls[0][1]).not.toMatchObject({ redirect: 'manual' });
+  });
+
   it('refuses redirect chains past the hop limit', async () => {
     restoreEnv = mockProcessEnv({ PROMPTFOO_BLOCK_PRIVATE_RANGES: 'true' });
     mockedMonkeyPatchFetch.mockImplementation(async () =>
       redirectResponse('https://public.example.com/loop'),
     );
 
-    await expect(fetchWithProxy('https://public.example.com/start')).rejects.toThrow(
+    await expect(guardedFetch('https://public.example.com/start')).rejects.toThrow(
       /more than 5 redirects/,
     );
   });
@@ -133,7 +153,7 @@ describe('fetchWithProxy guarded redirects (PROMPTFOO_BLOCK_PRIVATE_RANGES)', ()
       )
       .mockResolvedValueOnce(new Response('ok', { status: 200 }));
 
-    const response = await fetchWithProxy('https://public.example.com/start');
+    const response = await guardedFetch('https://public.example.com/start');
 
     expect(response.status).toBe(200);
     expect(cancelled).toBe(true);
@@ -145,7 +165,7 @@ describe('fetchWithProxy guarded redirects (PROMPTFOO_BLOCK_PRIVATE_RANGES)', ()
       redirectResponse('https://public.example.com/loop'),
     );
 
-    const error = await fetchWithProxy(
+    const error = await guardedFetch(
       'https://public.example.com/start?api_key=supersecretvalue',
     ).catch((e: unknown) => e);
 
@@ -164,7 +184,7 @@ describe('fetchWithProxy guarded redirects (PROMPTFOO_BLOCK_PRIVATE_RANGES)', ()
     );
 
     await expect(
-      fetchWithProxy('https://public.example.com/start', {
+      guardedFetch('https://public.example.com/start', {
         headers: { 'x-custom-auth': 'Bearer test-token' },
         skipCloudAuthInjection: true,
       }),
@@ -179,7 +199,7 @@ describe('fetchWithProxy guarded redirects (PROMPTFOO_BLOCK_PRIVATE_RANGES)', ()
       .mockResolvedValueOnce(redirectResponse('https://public.example.com/next'))
       .mockResolvedValueOnce(new Response('ok', { status: 200 }));
 
-    const response = await fetchWithProxy('https://public.example.com/start', {
+    const response = await guardedFetch('https://public.example.com/start', {
       headers: { 'x-custom-auth': 'Bearer test-token' },
       skipCloudAuthInjection: true,
     });
@@ -194,7 +214,7 @@ describe('fetchWithProxy guarded redirects (PROMPTFOO_BLOCK_PRIVATE_RANGES)', ()
       .mockResolvedValueOnce(redirectResponse('https://other.example.com/next'))
       .mockResolvedValueOnce(new Response('ok', { status: 200 }));
 
-    const response = await fetchWithProxy('https://public.example.com/start');
+    const response = await guardedFetch('https://public.example.com/start');
 
     expect(response.status).toBe(200);
     expect(mockedMonkeyPatchFetch).toHaveBeenCalledTimes(2);
@@ -208,7 +228,7 @@ describe('fetchWithProxy guarded redirects (PROMPTFOO_BLOCK_PRIVATE_RANGES)', ()
       .mockResolvedValueOnce(redirectResponse('https://api.promptfoo.app/api/v1/users/me', 307))
       .mockResolvedValueOnce(new Response('ok', { status: 200 }));
 
-    const response = await fetchWithProxy('https://public.example.com/start');
+    const response = await guardedFetch('https://public.example.com/start');
 
     expect(response.status).toBe(200);
     expect(mockedMonkeyPatchFetch).toHaveBeenCalledTimes(2);
@@ -223,7 +243,7 @@ describe('fetchWithProxy guarded redirects (PROMPTFOO_BLOCK_PRIVATE_RANGES)', ()
       .mockResolvedValueOnce(redirectResponse('https://api.promptfoo.app/api/v1/next', 307))
       .mockResolvedValueOnce(new Response('ok', { status: 200 }));
 
-    const response = await fetchWithProxy('https://api.promptfoo.app/start');
+    const response = await guardedFetch('https://api.promptfoo.app/start');
 
     expect(response.status).toBe(200);
     expect(mockedMonkeyPatchFetch).toHaveBeenCalledTimes(2);

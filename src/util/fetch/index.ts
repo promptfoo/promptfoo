@@ -13,11 +13,7 @@ import { parseRateLimitHeaders } from '../../scheduler/headerParser';
 import invariant from '../../util/invariant';
 import { sleep } from '../../util/time';
 import { sha256 } from '../createHash';
-import {
-  assertUrlResolvesPublic,
-  isPrivateRangeBlockingEnabled,
-  PrivateRangeBlockedError,
-} from '../privateNetwork';
+import { assertUrlResolvesPublic, PrivateRangeBlockedError } from '../privateNetwork';
 import { sanitizeUrl, sanitizeUrlForLogging } from '../sanitizer';
 import { CloudAuthRedirectError } from './cloudAuthRedirects';
 import { createDecompressionInterceptor, stripDecompressionHeaders } from './decompress';
@@ -28,6 +24,7 @@ import {
   HttpRateLimitError,
   type SystemError,
 } from './errors';
+import { isPrivateRangeGuardContextActive } from './guardContext';
 import {
   isPromptfooCloudApiHost,
   monkeyPatchFetch,
@@ -290,7 +287,8 @@ function buildRedirectHopOptions(
 
 /**
  * Follow redirects manually, re-validating every destination against the
- * private-range guard. Used only when `PROMPTFOO_BLOCK_PRIVATE_RANGES` is set:
+ * private-range guard. Used only inside a guarded server-route context
+ * (see `guardContext.ts`):
  * the default `redirect: 'follow'` would let a publicly-resolving URL 302
  * into link-local/cloud-metadata space after the preflight check passed.
  *
@@ -505,12 +503,16 @@ async function fetchWithTransientRetries(
   const disableTransientRetries = resolveTransientRetryDisabled(options.disableTransientRetries);
   const maxTransientRetries = disableTransientRetries ? 0 : 3;
 
-  // With the private-range guard on, redirects are followed manually so every
-  // hop can be re-validated; otherwise a single automatic fetch is used.
+  // Inside a guarded server-route context, redirects are followed manually so
+  // every hop can be re-validated; otherwise a single automatic fetch is used.
+  // The context is request-scoped: the process-wide
+  // `PROMPTFOO_BLOCK_PRIVATE_RANGES` flag alone must not switch unrelated
+  // callers in the same process (for example eval runs against local targets)
+  // into private-hop validation.
   // The caller-owned dispatcher path never reaches the TLS options here
   // because the guard keeps the caller dispatcher for every hop, so the
   // fallback is unused on that path.
-  const guardRedirects = isPrivateRangeBlockingEnabled();
+  const guardRedirects = isPrivateRangeGuardContextActive();
   const doSingleFetch = (options: FetchOptions & { dispatcher?: any }): Promise<Response> =>
     guardRedirects
       ? fetchWithRedirectValidation(
