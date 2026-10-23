@@ -96,7 +96,9 @@ def call_api(prompt):
   });
 
   it('preserves module initialization errors', async () => {
-    await expect(callProvider('raise ValueError("module initialization failed")\n')).rejects.toThrow(
+    await expect(
+      callProvider('raise ValueError("module initialization failed")\n'),
+    ).rejects.toThrow(
       mode === 'one-shot'
         ? 'module initialization failed'
         : 'Python worker exited before becoming ready (exit code 1)',
