@@ -78,6 +78,8 @@ tests:
 The per-test value overrides `--repeat`, `commandLineOptions.repeat`, or
 `evaluateOptions.repeat` for that test. Other tests continue to use the global repeat count.
 Repeat indexes use separate cache entries; add `--no-cache` when every run must call the provider.
+When a prompt uses `_conversation`, each repeat index also gets a separate conversation history.
+Repeated runs do not continue one another and may run concurrently.
 
 ### Filtering Tests by Provider
 
