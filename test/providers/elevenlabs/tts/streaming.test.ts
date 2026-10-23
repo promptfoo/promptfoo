@@ -149,3 +149,25 @@ it('clears the timer when sending throws', async () => {
   await expect(handleStreamingTTS(client, 'Hello')).rejects.toThrow('send failed');
   expect(vi.getTimerCount()).toBe(0);
 });
+
+it('finishes as soon as the server closes the socket normally', async () => {
+  vi.useFakeTimers();
+  const client = new ElevenLabsWebSocketClient({ apiKey: 'fixture-key' });
+  const pending = handleStreamingTTS(client, 'Hello');
+  const [onMessage] = vi.mocked(client.onMessage).mock.calls[0];
+  const [onClose] = vi.mocked(client.onClose).mock.calls[0];
+  onMessage({ type: 'audio', data: Buffer.from('audio').toString('base64') });
+  onClose(1000, '');
+  expect((await pending).chunks).toHaveLength(1);
+  expect(vi.getTimerCount()).toBe(0);
+});
+
+it('fails when the server closes the socket with an error code', async () => {
+  vi.useFakeTimers();
+  const client = new ElevenLabsWebSocketClient({ apiKey: 'fixture-key' });
+  const pending = handleStreamingTTS(client, 'Hello');
+  const [onClose] = vi.mocked(client.onClose).mock.calls[0];
+  onClose(1008, 'quota_exceeded');
+  await expect(pending).rejects.toThrow('WebSocket closed with code 1008: quota_exceeded');
+  expect(vi.getTimerCount()).toBe(0);
+});
