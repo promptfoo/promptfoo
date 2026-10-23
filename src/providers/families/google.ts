@@ -157,6 +157,7 @@ export const googleProviderFactories: ProviderFactory[] = [
         if (serviceType === 'interactions') {
           if (
             ![
+              'gemini-4-argon',
               'gemini-omni-flash-preview',
               'gemini-omni-1.1-flash',
               GEMINI_ROBOTICS_STANDARD_MODEL,
