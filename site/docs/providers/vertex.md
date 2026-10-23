@@ -18,6 +18,31 @@ For Gemini speech generation, use `vertex:gemini-3.8-flash-tts` or `vertex:gemin
 
 TTS cost estimates include the [published promotional credits](https://cloud.google.com/gemini-enterprise-agent-platform/generative-ai/pricing) through December 31, 2026, followed by the standard rates.
 
+### OpenAI Models (Private Preview)
+
+Use `vertex:responses:<model>` for [OpenAI models on Google Cloud](https://openai.com/index/openai-models-google-cloud/). Access requires an approved Google Cloud project and a model enabled for that project; the announcement does not grant preview access.
+
+Authenticate with [Application Default Credentials](https://cloud.google.com/docs/authentication/application-default-credentials), for example `gcloud auth application-default login`, then configure:
+
+```yaml
+providers:
+  - id: vertex:responses:gpt-6-luna
+    config:
+      projectId: your-google-cloud-project
+      max_output_tokens: 1024
+      reasoning:
+        effort: low
+      store: false
+```
+
+Replace `gpt-6-luna` with the exact model ID enabled for your preview. The provider uses the global OpenAI publisher Responses endpoint and resolves Google OAuth headers for each HTTP attempt, refreshing credentials when needed. `GOOGLE_CLOUD_PROJECT`, `GOOGLE_PROJECT_ID`, and `VERTEX_PROJECT_ID` are alternatives to `config.projectId`. A non-global `region`, `VERTEX_REGION`, or `GOOGLE_CLOUD_LOCATION` is rejected; set `config.region: global` for this preview. For an endpoint supplied during onboarding or a customer gateway, set `config.apiBaseUrl` to the base URL before `/responses`.
+
+Service account configurations can use `credentials`, `keyFilename`, or `googleAuthOptions`, as with other Vertex providers. Gemini API keys and `OPENAI_API_KEY` do not authenticate this route. `google:responses:` and `palm:responses:` are unsupported.
+
+Use [Responses API options](./openai.md#responses-api) such as `max_output_tokens`, `reasoning`, `tools`, and `response_format`; availability of individual features depends on your preview endpoint. Responses are not cached locally because a Google Cloud project can contain multiple principals. Token usage is reported, but cost estimates require explicit `inputCost` / `outputCost` or `cost` values in dollars per token, since Google Cloud pricing and discounts can differ from OpenAI pricing. Estimates cover token costs only and exclude hosted-tool fees.
+
+See the [Google Cloud OpenAI example](https://github.com/promptfoo/promptfoo/tree/main/examples/google-cloud-openai).
+
 ### Gemini Models
 
 **Gemini 3.8:**

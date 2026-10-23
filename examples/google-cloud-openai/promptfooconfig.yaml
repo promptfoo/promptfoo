@@ -1,0 +1,26 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: OpenAI on Google Cloud
+
+prompts:
+  - 'Answer with only the capital city of {{country}}.'
+
+providers:
+  - id: vertex:responses:gpt-6-luna
+    config:
+      projectId: '{{env.GOOGLE_CLOUD_PROJECT}}'
+      max_output_tokens: 1024
+      reasoning:
+        effort: low
+      store: false
+
+tests:
+  - vars:
+      country: France
+    assert:
+      - type: icontains
+        value: Paris
+  - vars:
+      country: Japan
+    assert:
+      - type: icontains
+        value: Tokyo
