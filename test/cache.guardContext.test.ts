@@ -6,16 +6,19 @@ import { withPrivateRangeGuard } from '../src/util/fetch/guardContext';
 import { fetchWithRetries } from '../src/util/fetch/index';
 import { mockProcessEnv } from './util/utils';
 
+// Factory mocks stay implementation-free: the hygiene suite forbids
+// module-scope persistent mock setters, so every implementation is
+// (re-)established in beforeEach below.
 vi.mock('../src/util/config/manage', () => ({
-  getConfigDirectoryPath: vi.fn().mockReturnValue('/mock/config/path'),
+  getConfigDirectoryPath: vi.fn(),
 }));
 
 vi.mock('../src/globalConfig/cloud', () => ({
   cloudConfig: {
-    getApiHost: vi.fn().mockReturnValue('https://api.promptfoo.app'),
-    getApiKey: vi.fn(() => process.env.PROMPTFOO_API_KEY),
-    getAuthHeaderName: vi.fn().mockReturnValue('Authorization'),
-    getCurrentOrganizationId: vi.fn().mockReturnValue('org-1'),
+    getApiHost: vi.fn(),
+    getApiKey: vi.fn(),
+    getAuthHeaderName: vi.fn(),
+    getCurrentOrganizationId: vi.fn(),
     getCurrentTeamId: vi.fn(),
   },
 }));
