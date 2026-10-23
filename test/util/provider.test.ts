@@ -27,7 +27,12 @@ describe('normalizeProviderRef', () => {
     expect(isProviderConfigFileReference('file://providers.yaml')).toBe(true);
     expect(isProviderConfigFileReference('file://providers.yml')).toBe(true);
     expect(isProviderConfigFileReference('file://providers.json')).toBe(true);
+    expect(isProviderConfigFileReference('file://providers.YAML')).toBe(true);
+    expect(isProviderConfigFileReference('file://providers.YmL')).toBe(true);
+    expect(isProviderConfigFileReference('file://providers.JSON')).toBe(true);
     expect(isProviderConfigFileReference('file://provider.js')).toBe(false);
+    expect(isProviderConfigFileReference('file://providers.yaml.bak')).toBe(false);
+    expect(isProviderConfigFileReference('https://example.com/providers.YAML')).toBe(false);
   });
 
   it('normalizes ProviderOptionsMap refs with explicit id overrides', () => {
@@ -133,6 +138,11 @@ describe('normalizeProviderRef', () => {
       kind: 'file',
       id: 'file://providers.yaml',
       loadProviderPath: 'file://providers.yaml',
+    });
+    expect(normalizeProviderRef('file://providers.YAML')).toMatchObject({
+      kind: 'file',
+      id: 'file://providers.YAML',
+      loadProviderPath: 'file://providers.YAML',
     });
     expect(normalizeProviderRef('file://provider.js')).toMatchObject({
       kind: 'named',
