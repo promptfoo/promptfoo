@@ -2,6 +2,8 @@
  * Shared utilities for trace assertions
  */
 
+import type { Assertion, GradingResult } from '../types/index';
+
 export type TraceSpanAttributeFilter = Record<string, string | number | boolean>;
 
 export function withTraceAttributeFilterContext(
@@ -12,6 +14,23 @@ export function withTraceAttributeFilterContext(
   return keys.length > 0
     ? `${reason}. Attribute filters applied to keys: ${JSON.stringify(keys)}.`
     : reason;
+}
+
+/** Builds a trace assertion verdict, inverted for `not-` assertions. Not for configuration errors. */
+export function traceVerdict(
+  assertion: Assertion,
+  inverse: boolean,
+  pass: boolean,
+  reason: string,
+): GradingResult {
+  const finalPass = inverse ? !pass : pass;
+  const baseType = assertion.type.replace(/^not-/, '');
+  return {
+    pass: finalPass,
+    score: finalPass ? 1 : 0,
+    reason: inverse && !finalPass ? `Expected ${baseType} not to pass: ${reason}` : reason,
+    assertion,
+  };
 }
 
 export function filterTraceSpans<T extends { name: string; attributes?: Record<string, unknown> }>(
