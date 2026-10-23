@@ -1,3 +1,4 @@
+import * as crypto from 'crypto';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
@@ -113,6 +114,68 @@ describe('processExecutableFile', () => {
       vi.mocked(cacheModule.isCacheEnabled).mockReturnValue(false);
       fs.rmSync(tempDir, { recursive: true, force: true });
     }
+  });
+
+  describe('cache key for files attached to quoted arguments', () => {
+    const sha256 = (content: string) => crypto.createHash('sha256').update(content).digest('hex');
+
+    async function collectKeys(buildCommand: (configPath: string) => string, configName: string) {
+      const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-executable-attached-'));
+      const scriptPath = path.join(tempDir, 'prompt.cjs');
+      const configPath = path.join(tempDir, configName);
+      const keys: string[] = [];
+      const cache = {
+        get: vi.fn(async (key: string) => {
+          keys.push(key);
+          return undefined;
+        }),
+        set: vi.fn(),
+      };
+      vi.mocked(cacheModule.getCache).mockReturnValue(cache as never);
+      vi.mocked(cacheModule.isCacheEnabled).mockReturnValue(true);
+      try {
+        fs.writeFileSync(scriptPath, "process.stdout.write('output');");
+        fs.writeFileSync(configPath, 'config v1');
+        const [prompt] = await processExecutableFile(
+          `"${process.execPath}" "${scriptPath}" ${buildCommand(configPath)}`,
+          {},
+        );
+        await prompt.function!({ vars: {}, provider: mockProvider });
+        fs.writeFileSync(configPath, 'config v2');
+        await prompt.function!({ vars: {}, provider: mockProvider });
+        return { keys, scriptHash: sha256(fs.readFileSync(scriptPath, 'utf8')) };
+      } finally {
+        vi.mocked(cacheModule.getCache).mockImplementation(
+          () => ({ get: vi.fn(), set: vi.fn() }) as never,
+        );
+        vi.mocked(cacheModule.isCacheEnabled).mockReturnValue(false);
+        fs.rmSync(tempDir, { recursive: true, force: true });
+      }
+    }
+
+    it.each([
+      ['double quotes', 'config file.json', (p: string) => `--config="${p}"`],
+      ['single quotes', 'config file.json', (p: string) => `--config='${p}'`],
+      ['double quotes without spaces', 'config.json', (p: string) => `--config="${p}"`],
+      ['no quotes', 'config.json', (p: string) => `--config=${p}`],
+    ])('changes when a file attached with =, %s, changes', async (_label, name, build) => {
+      const { keys, scriptHash } = await collectKeys(build, name);
+
+      expect(keys).toHaveLength(2);
+      expect(keys[0]).toContain(`:${scriptHash}:${sha256('config v1')}:`);
+      expect(keys[1]).toContain(`:${scriptHash}:${sha256('config v2')}:`);
+    });
+
+    it('ignores an attached value that is not a file', async () => {
+      const { keys, scriptHash } = await collectKeys(
+        (p) => `--config="${p}.missing" --name="John Smith"`,
+        'config file.json',
+      );
+
+      expect(keys).toHaveLength(2);
+      expect(keys[0]).toBe(keys[1]);
+      expect(keys[0]).toContain(`:${scriptHash}:{`);
+    });
   });
 
   it('should process a script with exec: prefix', async () => {

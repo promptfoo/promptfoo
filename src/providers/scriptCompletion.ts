@@ -66,16 +66,33 @@ export function parseScriptParts(scriptPath: string): string[] {
   return parts;
 }
 
+function hashFileIfExists(filePath: string): string | undefined {
+  if (!fs.existsSync(filePath) || !fs.statSync(filePath).isFile()) {
+    return undefined;
+  }
+  const fileContent = fs.readFileSync(filePath);
+  const fileHash = crypto.createHash('sha256').update(fileContent).digest('hex');
+  logger.debug(`File hash for ${filePath}: ${fileHash}`);
+  return fileHash;
+}
+
+/**
+ * Hashes the files named by the command's arguments, for use in cache keys. An argument counts
+ * when it is a file, or when it is `flag=value` / `key=value` and the value is a file (so
+ * `--config="my config.json"` is covered). A part that is itself a file is hashed once.
+ */
 export function getFileHashes(scriptParts: string[]): string[] {
+  const stripQuotes = (value: string) => value.replace(/^['"]|['"]$/g, '');
   const fileHashes: string[] = [];
 
   for (const part of scriptParts) {
-    const cleanPart = part.replace(/^['"]|['"]$/g, '');
-    if (fs.existsSync(cleanPart) && fs.statSync(cleanPart).isFile()) {
-      const fileContent = fs.readFileSync(cleanPart);
-      const fileHash = crypto.createHash('sha256').update(fileContent).digest('hex');
+    const equalsIndex = part.indexOf('=');
+    let fileHash = hashFileIfExists(stripQuotes(part));
+    if (fileHash === undefined && equalsIndex !== -1) {
+      fileHash = hashFileIfExists(stripQuotes(part.slice(equalsIndex + 1)));
+    }
+    if (fileHash !== undefined) {
       fileHashes.push(fileHash);
-      logger.debug(`File hash for ${cleanPart}: ${fileHash}`);
     }
   }
 
