@@ -81,6 +81,18 @@ assert:
 The default threshold is `0.5` if not specified.
 :::
 
+## Negation with `not-pi`
+
+`not-pi` passes when the output does not meet the criteria, so you can fail outputs that show a trait you want to avoid:
+
+```yaml
+assert:
+  - type: not-pi
+    value: Does the response insult the user?
+```
+
+The verdict is inverted and the score is reported as `1 - score`.
+
 ## Metrics Brainstorming
 
 You can use the [Pi Labs Copilot](https://build.withpi.ai) to interactively brainstorm representative metrics for your application. It helps you:
