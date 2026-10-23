@@ -1,3 +1,6 @@
+import { createHash } from 'crypto';
+import fs from 'fs';
+import path from 'path';
 import readline from 'readline';
 import { isDeepStrictEqual } from 'util';
 
@@ -19,7 +22,22 @@ import { getCache, isCacheEnabled, withCacheEnabled, withCacheNamespace } from '
 import cliState from './cliState';
 import { DEFAULT_MAX_CONCURRENCY, FILE_METADATA_KEY } from './constants';
 import { getEnvBool, getEnvInt, getEvalTimeoutMs, getMaxEvalTimeMs, isCI } from './envars';
-import { collectFileMetadata, renderPrompt, runExtensionHook } from './evaluatorHelpers';
+import {
+  copyBayesAtNInput,
+  createBayesAtNPlan,
+  hasBayesAtNComparison,
+  hasBayesAtNSharedSession,
+  hashBayesAtNInputs,
+  validateBayesAtNRepeat,
+} from './evaluator/bayesAtN';
+import {
+  collectFileMetadata,
+  copyPromptVars,
+  getPromptVarMimeTypes,
+  renderBayesAtNRubricFileReference,
+  renderPrompt,
+  runExtensionHook,
+} from './evaluatorHelpers';
 import logger, { globalLogCallback, isDebugEnabled, setLogCallback } from './logger';
 import { selectMaxScore } from './matchers/comparison';
 import {
@@ -705,6 +723,131 @@ interface RenderedRunEvalPrompt {
   renderedJson: unknown;
   renderedPrompt: string;
   setup: RunEvalSetup;
+}
+
+interface PreparedBayesAtNInput {
+  sourceHash: string;
+  inputHash: string;
+  inputFiles: Map<string, string>;
+  state: RunEvalState;
+  rendered: RenderedRunEvalPrompt;
+}
+
+function copyPreparedBayesAtNInput(prepared: PreparedBayesAtNInput): PreparedBayesAtNInput {
+  const vars = copyPromptVars(prepared.state.vars);
+  return {
+    ...prepared,
+    state: {
+      ...prepared.state,
+      vars,
+      promptForRender: copyPromptDefinition(prepared.state.promptForRender),
+      fileMetadata: structuredClone(prepared.state.fileMetadata),
+    },
+    rendered: {
+      ...prepared.rendered,
+      renderedJson: structuredClone(prepared.rendered.renderedJson),
+      setup: {
+        ...prepared.rendered.setup,
+        vars,
+        prompt: copyBayesAtNInput(prepared.rendered.setup.prompt),
+      },
+    },
+  };
+}
+
+const bayesAtNFunctionSources = new WeakMap<Function, string>();
+
+function hashRunEvalInputs(
+  step: Pick<RunEvalOptions, 'prompt' | 'provider' | 'test' | 'nunjucksFilters'>,
+  inputFiles?: Map<string, string>,
+  providerVars = step.test.vars ?? {},
+  evaluationId?: string,
+) {
+  const nativeConfigs = new Map<object, unknown>();
+  return hashBayesAtNInputs(step, {
+    fileHash: (reference) => {
+      const { filePath } = parseFileUrl(reference);
+      return createHash('sha256')
+        .update(fs.readFileSync(path.resolve(cliState.basePath || '', filePath)))
+        .digest('hex');
+    },
+    functionSource: (fn) => bayesAtNFunctionSources.get(fn),
+    rubricFileReference: renderBayesAtNRubricFileReference,
+    providerConfig: (provider) => nativeConfigs.get(provider),
+    providerFiles: inputFiles
+      ? (provider, target) => {
+          const inputProvider = provider as ApiProvider | undefined;
+          if (!inputProvider || typeof inputProvider !== 'object') {
+            return [];
+          }
+          const context = {
+            prompt: {
+              ...step.prompt,
+              config: target
+                ? mergeProviderPromptConfig(step.prompt.config, step.test.options)
+                : undefined,
+            },
+            vars: providerVars,
+            evaluationId,
+            isGrading: !target,
+          };
+          const native = inputProvider.getEvaluationInputs?.(context);
+          if (native?.hasSharedSession) {
+            throw new Error('Bayes@N does not support shared provider sessions');
+          }
+          if (native?.config !== undefined) {
+            nativeConfigs.set(inputProvider, native.config);
+          }
+          if (!native && Object.getPrototypeOf(inputProvider) !== Object.prototype) {
+            if (!('config' in inputProvider)) {
+              throw new Error(
+                'Bayes@N requires getEvaluationInputs for providers with private inputs',
+              );
+            }
+            const promptConfig = { ...context.prompt.config };
+            for (const key of [
+              'provider',
+              'transform',
+              'postprocess',
+              'transformVars',
+              'rubricPrompt',
+            ]) {
+              delete promptConfig[key];
+            }
+            const hasFileMode = (value: unknown, seen = new Set<object>()): boolean => {
+              if (typeof value === 'string') {
+                return value.startsWith('file://');
+              }
+              if (!value || typeof value !== 'object' || seen.has(value)) {
+                return false;
+              }
+              seen.add(value);
+              if ('type' in value && value.type === 'path') {
+                return true;
+              }
+              return Object.values(value).some((item) => hasFileMode(item, seen));
+            };
+            if (
+              !inputProvider.getInputFilePaths &&
+              (hasFileMode(inputProvider.config) || hasFileMode(promptConfig))
+            ) {
+              throw new Error(
+                'Bayes@N requires declared native file inputs for this provider configuration',
+              );
+            }
+          }
+          return (native?.filePaths ?? inputProvider.getInputFilePaths?.(context) ?? []).map(
+            (filePath) => {
+              invariant(path.isAbsolute(filePath), 'Provider input file paths must be absolute');
+              const hash = createHash('sha256').update(fs.readFileSync(filePath)).digest('hex');
+              inputFiles.set(filePath, hash);
+              return [filePath, hash];
+            },
+          );
+        }
+      : undefined,
+    mimeTypes: getPromptVarMimeTypes(step.test.vars ?? {}),
+  });
 }
 
 interface ProviderCallResult {
@@ -1787,7 +1930,9 @@ async function runEvalInternal(
     providerCallQueue,
     rateLimitRegistry,
   }: RunEvalOptions,
-  orchestrationOptions: Pick<InternalEvaluateOptions, 'abortSignal' | 'pauseSignal'> = {
+  orchestrationOptions: Pick<InternalEvaluateOptions, 'abortSignal' | 'pauseSignal'> & {
+    bayesAtNInput?: PreparedBayesAtNInput;
+  } = {
     abortSignal,
   },
 ): Promise<EvaluateResult[]> {
@@ -1797,7 +1942,10 @@ async function runEvalInternal(
     `Provider delay should be set for ${provider.label}`,
   );
 
-  const state = createRunEvalState({ provider, prompt, promptIndex, test });
+  const bayesAtNInput =
+    orchestrationOptions.bayesAtNInput &&
+    copyPreparedBayesAtNInput(orchestrationOptions.bayesAtNInput);
+  const state = bayesAtNInput?.state ?? createRunEvalState({ provider, prompt, promptIndex, test });
   attachConversationVar({
     conversations,
     conversationKey: state.conversationKey,
@@ -1824,15 +1972,17 @@ async function runEvalInternal(
   let workspace: AgentWorkspace | undefined;
 
   try {
-    const rendered = await renderRunEvalPrompt({
-      filters,
-      isRedteam,
-      provider,
-      promptForRender: state.promptForRender,
-      test,
-      testSuite,
-      vars: state.vars,
-    });
+    const rendered =
+      bayesAtNInput?.rendered ??
+      (await renderRunEvalPrompt({
+        filters,
+        isRedteam,
+        provider,
+        promptForRender: state.promptForRender,
+        test,
+        testSuite,
+        vars: state.vars,
+      }));
     setup = rendered.setup;
     if (!test.providerOutput) {
       const activeProvider = isApiProvider(test.provider) ? test.provider : provider;
@@ -3070,6 +3220,7 @@ async function prepareTestCaseForEval(
     ...(defaultTest?.metadata || {}),
     ...testCase.metadata,
   };
+  delete testCase.metadata.bayesAtNPlan;
   testCase.prompts = testCase.prompts ?? defaultTest?.prompts;
   testCase.provider = await resolveDefaultTestProvider(defaultTest, testCase);
   testCase.assertScoringFunction =
@@ -3077,11 +3228,13 @@ async function prepareTestCaseForEval(
   testCase.providers = testCase.providers ?? defaultTest?.providers;
 
   if (typeof testCase.assertScoringFunction === 'string') {
+    const source = testCase.assertScoringFunction;
     const { filePath: resolvedPath, functionName } = parseFileUrl(testCase.assertScoringFunction);
     testCase.assertScoringFunction = await loadFunction<ScoringFunction>({
       filePath: resolvedPath,
       functionName,
     });
+    bayesAtNFunctionSources.set(testCase.assertScoringFunction, source);
   }
 }
 
@@ -3144,6 +3297,10 @@ function appendRunEvalOptionsForTestCase({
       ? [testCase.vars]
       : generateVarCombinations(testCase.vars || {});
 
+  if (options.bayesAtN) {
+    validateBayesAtNRepeat(options.repeat);
+    validateBayesAtNRepeat(testCase.options?.repeat);
+  }
   const globalRepeat = normalizeRepeatCount(options.repeat);
   const testRepeat = normalizeRepeatCount(testCase.options?.repeat, globalRepeat);
   const effectiveOptions = {
@@ -3164,7 +3321,9 @@ function appendRunEvalOptionsForTestCase({
         rateLimitRegistry,
         registers,
         repeatGroupId:
-          testRepeat > 1 ? `test-${testCaseIndex}-vars-${varCombinationIndex}` : undefined,
+          testRepeat > 1 || options.bayesAtN
+            ? `test-${testCaseIndex}-vars-${varCombinationIndex}`
+            : undefined,
         repeatIndex,
         runEvalOptions,
         testCase,
@@ -4060,6 +4219,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
   fileWriters: EvaluatorResultWriter[];
   rateLimitRegistry: RateLimitRegistry | undefined;
   private readonly comparisonProviders = new Map<string, ComparisonProviders>();
+  private readonly bayesAtNInputs = new Map<RunEvalOptions, PreparedBayesAtNInput>();
   private readonly currentResultKeys = new Set<string>();
   private readonly retryErrorResultIds = new Set(
     cliState.retryMode ? cliState._retryErrorResultIds : [],
@@ -4363,10 +4523,37 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       testSuite: TestSuite;
     },
   ) {
+    const bayesAtNInput = this.bayesAtNInputs.get(evalStep);
+    this.bayesAtNInputs.delete(evalStep);
     const beforeEachOut = await runExtensionHook(testSuite.extensions, 'beforeEach', {
       test: evalStep.test,
     });
     evalStep.test = beforeEachOut.test;
+    if (
+      bayesAtNInput &&
+      hasBayesAtNSharedSession({ ...evalStep, prompt: bayesAtNInput.rendered.setup.prompt })
+    ) {
+      throw new Error('Bayes@N does not support shared provider sessions');
+    }
+    if (
+      bayesAtNInput &&
+      (hashRunEvalInputs(evalStep) !== bayesAtNInput.sourceHash ||
+        hashRunEvalInputs(
+          {
+            ...evalStep,
+            prompt: {
+              ...bayesAtNInput.state.promptForRender,
+              ...bayesAtNInput.rendered.setup.prompt,
+            },
+            test: { ...evalStep.test, vars: omitEvalRuntimeVars(bayesAtNInput.state.vars) },
+          },
+          new Map(),
+          bayesAtNInput.state.vars,
+          evalStep.evalId,
+        ) !== bayesAtNInput.inputHash)
+    ) {
+      throw new Error('Bayes@N requires unchanged question and grading inputs after beforeEach');
+    }
 
     const rows = await runEvalInternal(
       {
@@ -4374,7 +4561,11 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
         deferGrading,
         providerCallQueue: deferGrading ? providerCallQueue : undefined,
       },
-      { abortSignal: deferredGradingAbortSignal, pauseSignal: this.options.pauseSignal },
+      {
+        abortSignal: deferredGradingAbortSignal,
+        pauseSignal: this.options.pauseSignal,
+        bayesAtNInput,
+      },
     );
     onRowsReady?.();
     return rows;
@@ -5747,6 +5938,17 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     const { options } = this;
     let { testSuite } = this;
 
+    const storedBayesPlan = this.store.config.metadata?.bayesAtNPlan;
+    if (!cliState.resume && this.store.config.metadata) {
+      // A new evaluation must schedule its own trials, even when its config came from an export.
+      const metadata = { ...this.store.config.metadata };
+      delete metadata.bayesAtNPlan;
+      this.store.config.metadata = metadata;
+      if (storedBayesPlan !== undefined && this.store.persisted) {
+        await this.store.save();
+      }
+    }
+
     const processedIndices = new Set<number>();
 
     const targetErrorAbortController = new AbortController();
@@ -5831,6 +6033,108 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       tests,
     });
     markComparisonRows(runEvalOptions, rowsWithSelectBestAssertion, rowsWithMaxScoreAssertion);
+    if (options.bayesAtN) {
+      if (
+        options.isRedteam ||
+        testSuite.redteam ||
+        rowsWithSelectBestAssertion.size ||
+        rowsWithMaxScoreAssertion.size ||
+        runEvalOptions.some((step) => hasBayesAtNComparison(step.test.assert))
+      ) {
+        throw new Error('Bayes@N does not support redteam runs or comparison assertions');
+      }
+      if (runEvalOptions.some((step) => step.test.providerOutput !== undefined)) {
+        throw new Error(
+          'Bayes@N requires fresh provider generations, not precomputed providerOutput',
+        );
+      }
+      if (
+        runEvalOptions.some(
+          (step) =>
+            promptUsesConversationVariable(step.prompt) ||
+            step.test.options?.storeOutputAs ||
+            hasBayesAtNSharedSession(step),
+        )
+      ) {
+        throw new Error(
+          'Bayes@N does not support conversation history, output registers, or shared provider sessions',
+        );
+      }
+      const preparedInputs = new Map<string, PreparedBayesAtNInput>();
+      for (const step of runEvalOptions) {
+        checkAbort();
+        const sourceHash = hashRunEvalInputs(step);
+        step.test = copyBayesAtNInput(step.test);
+        step.prompt = copyPromptDefinition(step.prompt);
+        const state = createRunEvalState({ ...step, promptIndex: step.promptIdx });
+        Object.assign(
+          state.vars,
+          getEvalRuntimeVars({
+            evalId: step.evalId,
+            promptIndex: step.promptIdx,
+            repeatIndex: step.repeatIndex,
+            testIndex: step.testIdx,
+          }),
+        );
+        const rendered = await renderRunEvalPrompt({
+          filters: step.nunjucksFilters,
+          isRedteam: false,
+          provider: step.provider,
+          promptForRender: state.promptForRender,
+          test: step.test,
+          testSuite,
+          vars: state.vars,
+        });
+        checkAbort();
+        if (hasBayesAtNSharedSession({ ...step, prompt: rendered.setup.prompt })) {
+          throw new Error('Bayes@N does not support shared provider sessions');
+        }
+        const inputFiles = new Map<string, string>();
+        const inputHash = hashRunEvalInputs(
+          {
+            ...step,
+            prompt: { ...state.promptForRender, ...rendered.setup.prompt },
+            test: { ...step.test, vars: omitEvalRuntimeVars(state.vars) },
+          },
+          inputFiles,
+          state.vars,
+          step.evalId,
+        );
+        const shared = preparedInputs.get(inputHash);
+        const prepared = {
+          sourceHash,
+          inputHash,
+          inputFiles,
+          state: shared ? { ...shared.state, fileMetadata: state.fileMetadata } : state,
+          rendered: shared?.rendered ?? rendered,
+        };
+        preparedInputs.set(inputHash, prepared);
+        this.bayesAtNInputs.set(step, prepared);
+      }
+      const currentPlan = createBayesAtNPlan(
+        runEvalOptions.map((step) => ({
+          ...step,
+          inputHash: this.bayesAtNInputs.get(step)!.inputHash,
+          provider: {
+            id: () =>
+              sanitizeObject({ id: step.provider.id() }, { sanitizeUrls: true, maxDepth: Infinity })
+                .id,
+            label: sanitizeObject(
+              { label: step.provider.label },
+              { sanitizeUrls: true, maxDepth: Infinity },
+            ).label,
+          },
+        })),
+      );
+      this.store.config.metadata = {
+        ...this.store.config.metadata,
+        bayesAtNPlan: currentPlan,
+      };
+      // Retain only the schedule counts needed to reconstruct completed summaries.
+      if (this.store.persisted) {
+        await this.store.save();
+      }
+    }
     if (cliState.resume && this.store.persisted) {
       for (const step of runEvalOptions) {
         if (rowsWithSelectBestAssertion.has(step.testIdx)) {
@@ -6029,6 +6333,24 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
   }
 
   async evaluate(): Promise<TEvaluation> {
+    const hasStoredPlan = this.store.config.metadata?.bayesAtNPlan !== undefined;
+    if (
+      (cliState.resume || cliState.retryMode) &&
+      (this.options.bayesAtN ||
+        hasStoredPlan ||
+        this.store.config.evaluateOptions?.bayesAtN ||
+        this.store.evaluation.runtimeOptions?.bayesAtN)
+    ) {
+      throw new Error(
+        'Bayes@N supports fresh evaluations only; resume and retries are unsupported',
+      );
+    }
+    if (
+      this.options.bayesAtN &&
+      (this.store.results.length > 0 || (await this.store.readResults()).length > 0)
+    ) {
+      throw new Error('Bayes@N requires a new empty evaluation record');
+    }
     return providerRegistry.withEvaluation(async () => {
       const startTime = Date.now();
       const maxEvalTimeMs = this.options.maxEvalTimeMs ?? getMaxEvalTimeMs();
@@ -6267,6 +6589,17 @@ export function evaluate<
   options: InternalEvaluateOptions,
   runtime?: EvaluatorRuntime<TEvaluation, TResult>,
 ): Promise<TEvaluation> {
+  if (
+    (cliState.resume || cliState.retryMode) &&
+    (options.bayesAtN ||
+      evalRecord.config.metadata?.bayesAtNPlan !== undefined ||
+      evalRecord.config.evaluateOptions?.bayesAtN ||
+      evalRecord.runtimeOptions?.bayesAtN)
+  ) {
+    return Promise.reject(
+      new Error('Bayes@N supports fresh evaluations only; resume and retries are unsupported'),
+    );
+  }
   return cliState.withBasePath(testSuite.basePath ?? cliState.basePath, () =>
     cliState.withEnv(testSuite.env ?? cliState.env, () =>
       cliState.withConfig(

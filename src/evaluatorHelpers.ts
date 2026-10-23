@@ -23,7 +23,11 @@ import {
   type VarValue,
 } from './types/index';
 import { isAudioFile, isImageFile, isJavascriptFile, isVideoFile } from './util/fileExtensions';
-import { renderVarsInObject, setLoadedFileMimeTypes } from './util/index';
+import {
+  getNunjucksEngineForFilePath,
+  renderVarsInObject,
+  setLoadedFileMimeTypes,
+} from './util/index';
 import invariant from './util/invariant';
 import { filterFiniteScores } from './util/numeric';
 import { extractVariablesFromTemplate, getNunjucksEngine } from './util/templates';
@@ -31,6 +35,29 @@ import { transform } from './util/transform';
 import { loadYaml } from './util/yamlLoad';
 
 type FileMetadata = Record<string, { path: string; type: string; format?: string }>;
+
+export function copyPromptVars(vars: Record<string, VarValue>): Record<string, VarValue> {
+  const copy = structuredClone(vars);
+  setLoadedFileMimeTypes(copy, setLoadedFileMimeTypes({ ...vars }));
+  return copy;
+}
+
+export function getPromptVarMimeTypes(vars: Record<string, VarValue>): Record<string, string> {
+  const mimeTypes = setLoadedFileMimeTypes({ ...vars });
+  return Object.fromEntries(
+    Object.entries(vars).flatMap(([key, value]) => {
+      const mimeType = typeof value === 'string' ? mimeTypes.get(value) : undefined;
+      return mimeType ? [[key, mimeType]] : [];
+    }),
+  );
+}
+
+export function renderBayesAtNRubricFileReference(reference: string, arrayElement = false): string {
+  if (arrayElement && getEnvBool('PROMPTFOO_DISABLE_TEMPLATING')) {
+    return reference;
+  }
+  return getNunjucksEngineForFilePath().renderString(reference, {});
+}
 
 export async function extractTextFromPDF(pdfPath: string): Promise<string> {
   logger.debug(`Extracting text from PDF: ${pdfPath}`);

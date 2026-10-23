@@ -407,6 +407,16 @@ function getRepeatStabilityLines(summary: RepeatStabilitySummary | undefined): s
     );
   }
 
+  for (const cohort of summary.bayesAtN ?? []) {
+    const label = cohort.provider.label || cohort.provider.id || 'provider';
+    const prefix = `  Bayes@N (${label}, prompt ${cohort.promptIdx}, M=${cohort.questions}, N=${cohort.trials})`;
+    lines.push(
+      cohort.mean !== undefined && cohort.posteriorStd !== undefined
+        ? `${prefix}: mean ${cohort.mean.toFixed(6)}, posterior SD ${cohort.posteriorStd.toFixed(6)}`
+        : `${prefix}: unavailable (${cohort.unavailableReason})`,
+    );
+  }
+
   return lines;
 }
 
