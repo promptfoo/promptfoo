@@ -15,6 +15,7 @@ import {
   setupSignalWatcher,
   updateEvalIds,
 } from '../database/signal';
+import { getEnvString } from '../envars';
 import { getDirectory } from '../esm';
 import { cloudConfig } from '../globalConfig/cloud';
 import logger from '../logger';
@@ -49,7 +50,7 @@ import versionRouter from './routes/version';
 import { promptCacheService } from './services/promptCacheService';
 import { defaultErrorHandler } from './utils/defaultErrorHandler';
 import { replyValidationError, sendError } from './utils/errors';
-import type { Request, Response } from 'express';
+import type { NextFunction, Request, Response } from 'express';
 
 import type { Prompt, TestCase, TestSuite } from '../types/index';
 
@@ -57,7 +58,32 @@ import type { Prompt, TestCase, TestSuite } from '../types/index';
 const JS_EXTENSIONS = new Set(['.js', '.mjs', '.cjs']);
 
 // Express middleware limits
-const REQUEST_SIZE_LIMIT = '100mb';
+const DEFAULT_REQUEST_SIZE_LIMIT = '100mb';
+
+/**
+ * Maximum JSON / urlencoded request body size accepted by the local server.
+ * Operators who expose the server beyond loopback can lower it with
+ * PROMPTFOO_REQUEST_SIZE_LIMIT (any value accepted by body-parser, e.g. "10mb").
+ * Malformed values fall back to the default so an unbound limit is never applied.
+ */
+// Cap magnitude so body-parser's bytes.parse cannot overflow to Infinity
+// (Number.MAX_VALUE ~ 1e308); an unbounded limit would skip raw-body's guard.
+const REQUEST_SIZE_LIMIT_PATTERN = /^\d{1,15}(?:\.\d{1,15})?\s*(?:b|kb|mb|gb|tb)?$/i;
+
+export function getRequestSizeLimit(): string {
+  const configured = getEnvString('PROMPTFOO_REQUEST_SIZE_LIMIT')?.trim();
+  if (!configured) {
+    return DEFAULT_REQUEST_SIZE_LIMIT;
+  }
+  if (!REQUEST_SIZE_LIMIT_PATTERN.test(configured)) {
+    logger.warn('Invalid PROMPTFOO_REQUEST_SIZE_LIMIT; using default', {
+      configured,
+      fallback: DEFAULT_REQUEST_SIZE_LIMIT,
+    });
+    return DEFAULT_REQUEST_SIZE_LIMIT;
+  }
+  return configured;
+}
 
 /**
  * Middleware to set proper MIME types for JavaScript files.
@@ -124,8 +150,22 @@ export function createApp() {
   app.use(cors());
   app.use(csrfProtection);
   app.use(compression());
-  app.use(express.json({ limit: REQUEST_SIZE_LIMIT }));
-  app.use(express.urlencoded({ limit: REQUEST_SIZE_LIMIT, extended: true }));
+  const requestSizeLimit = getRequestSizeLimit();
+  app.use(express.json({ limit: requestSizeLimit }));
+  app.use(express.urlencoded({ limit: requestSizeLimit, extended: true }));
+  // body-parser forwards oversize bodies as `entity.too.large`; answer with the
+  // JSON error envelope instead of Express's default HTML error page.
+  app.use((err: unknown, _req: Request, res: Response, next: NextFunction): void => {
+    if (
+      typeof err === 'object' &&
+      err !== null &&
+      (err as { type?: unknown }).type === 'entity.too.large'
+    ) {
+      sendError(res, 413, 'Request body exceeds the configured size limit');
+      return;
+    }
+    next(err);
+  });
   app.get('/health', (_req, res) => {
     // Health probes must never 500 from a self-imposed schema check.
     res.status(200).json({ status: 'OK', version: VERSION });
