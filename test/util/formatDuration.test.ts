@@ -21,6 +21,14 @@ describe('formatDuration', () => {
     expect(formatDuration(7382)).toBe('2h 3m 2s');
   });
 
+  it('should format negative and non-finite durations as zero', () => {
+    expect(formatDuration(Number.NaN)).toBe('0s');
+    expect(formatDuration(Number.POSITIVE_INFINITY)).toBe('0s');
+    expect(formatDuration(Number.NEGATIVE_INFINITY)).toBe('0s');
+    expect(formatDuration(-10)).toBe('0s');
+    expect(formatDuration(-0.1)).toBe('0s');
+  });
+
   it('should handle edge cases correctly', () => {
     // Test with decimal values - should round down
     expect(formatDuration(45.9)).toBe('45s');
