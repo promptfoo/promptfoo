@@ -106,6 +106,21 @@ tests:
       question: How many planets are in our solar system?
 ```
 
+Rubrics loaded from text files are also rendered with test variables:
+
+```yaml
+tests:
+  - vars:
+      topic: capybaras
+    assert:
+      - type: llm-rubric
+        value: file://rubric.txt
+```
+
+```txt title="rubric.txt"
+The response mentions {{topic}}.
+```
+
 ## Overriding the LLM grader
 
 By default, `llm-rubric` uses `gpt-5` for grading. You can override this in several ways:
