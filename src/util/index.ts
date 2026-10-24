@@ -13,6 +13,9 @@ export {
 export { setupEnv } from './env';
 // File operations
 export {
+  getOutputVars,
+  isOutputValue,
+  markOutputValue,
   maybeLoadFromExternalFileWithVars,
   maybeLoadResponseFormatFromExternalFile,
   maybeLoadToolsFromExternalFile,
@@ -20,6 +23,7 @@ export {
   readFilters,
   readOutput,
   setLoadedFileMimeTypes,
+  setOutputVars,
 } from './file';
 // Output operations
 export {

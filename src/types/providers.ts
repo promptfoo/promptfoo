@@ -87,6 +87,7 @@ export interface CallApiContextParams {
   originalProvider?: ApiProvider;
   prompt: Prompt;
   vars: Record<string, VarValue>;
+  registers?: Record<string, VarValue>;
   debug?: boolean;
   /** True for assertion-grader calls, independent of the prompt label. */
   isGrading?: boolean;
