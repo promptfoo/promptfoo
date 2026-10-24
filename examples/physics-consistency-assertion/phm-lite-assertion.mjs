@@ -220,6 +220,7 @@ function phmLiteCheck(output) {
         detail: `${pct.length} percentages sum to ${sum.toFixed(DIGITS)}% — verify the shares are mutually exclusive`,
       });
     }
+    }
   }
 
   const hasFail = violations.some((v) => v.severity === 'FAIL');
