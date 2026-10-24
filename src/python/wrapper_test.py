@@ -1,5 +1,6 @@
 import os
 import sys
+import tempfile
 import unittest
 from unittest.mock import MagicMock, mock_open, patch
 
@@ -78,6 +79,74 @@ async def test_async_function(arg1, arg2):
         """
         with self.assertRaises(FileNotFoundError):
             wrapper.call_method("/path/to/nonexistent/script.py", "some_method")
+
+    def test_call_method_rejects_non_python_source(self) -> None:
+        """Only Python source extensions may be loaded as executable modules."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            text_path = os.path.join(temp_dir, "grader.txt")
+            with open(text_path, "w", encoding="utf-8") as script:
+                script.write("def grade():\n    return True\n")
+
+            with self.assertRaises(ImportError):
+                wrapper.call_method(text_path, "grade")
+
+    def test_call_method_does_not_replace_dangling_mixed_case_symlink(self) -> None:
+        """An explicitly requested symlink is not replaced by a lowercase file."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            lowercase_path = os.path.join(temp_dir, "grader.py")
+            mixed_case_path = os.path.join(temp_dir, "grader.PY")
+            with open(lowercase_path, "w", encoding="utf-8") as script:
+                script.write("def grade():\n    return 'lowercase'\n")
+            try:
+                os.symlink(os.path.join(temp_dir, "missing.py"), mixed_case_path)
+            except (NotImplementedError, OSError) as error:
+                self.skipTest(f"symlinks are unavailable: {error}")
+
+            with self.assertRaises(FileNotFoundError):
+                wrapper.call_method(mixed_case_path, "grade")
+
+    def test_call_method_normalizes_mixed_case_extension(self) -> None:
+        """A mixed-case reference can resolve an existing lowercase source file."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            lowercase_path = os.path.join(temp_dir, "grader.py")
+            mixed_case_path = os.path.join(temp_dir, "grader.PY")
+            with open(lowercase_path, "w", encoding="utf-8") as script:
+                script.write("def grade():\n    return 'lowercase'\n")
+
+            self.assertEqual(wrapper.call_method(mixed_case_path, "grade"), "lowercase")
+
+    def test_call_method_loads_actual_mixed_case_file(self) -> None:
+        """An actual mixed-case source file is loaded with SourceFileLoader."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            mixed_case_path = os.path.join(temp_dir, "grader.PY")
+            with open(mixed_case_path, "w", encoding="utf-8") as script:
+                script.write("def grade():\n    return 'mixed-case'\n")
+
+            self.assertEqual(
+                wrapper.call_method(mixed_case_path, "grade"), "mixed-case"
+            )
+
+    def test_call_method_preserves_distinct_mixed_case_file(self) -> None:
+        """Do not substitute or reuse bytecode from a distinct lowercase file."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            lowercase_path = os.path.join(temp_dir, "grader.py")
+            mixed_case_path = os.path.join(temp_dir, "grader.PY")
+            with open(lowercase_path, "w", encoding="utf-8") as script:
+                script.write("def grade():\n    return 'lower'\n")
+
+            if os.path.exists(mixed_case_path):
+                self.skipTest("filesystem is case-insensitive")
+
+            with open(mixed_case_path, "w", encoding="utf-8") as script:
+                script.write("def grade():\n    return 'UPPER'\n")
+
+            timestamp = 1_700_000_000
+            os.utime(lowercase_path, (timestamp, timestamp))
+            os.utime(mixed_case_path, (timestamp, timestamp))
+
+            self.assertEqual(wrapper.call_method(lowercase_path, "grade"), "lower")
+
+            self.assertEqual(wrapper.call_method(mixed_case_path, "grade"), "UPPER")
 
     def test_call_method_with_classmethod(self) -> None:
         """Tests the call_method function with methods that are Python's classmethods or staticmethods.
