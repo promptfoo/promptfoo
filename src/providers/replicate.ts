@@ -59,7 +59,7 @@ interface ReplicatePrediction {
   output?: any;
   logs?: string;
   error?: string | null;
-  status: 'starting' | 'processing' | 'succeeded' | 'failed' | 'canceled';
+  status: 'starting' | 'processing' | 'succeeded' | 'failed' | 'canceled' | 'aborted';
   created_at: string;
   started_at?: string;
   completed_at?: string;
@@ -403,8 +403,12 @@ export class ReplicateProvider implements ApiProvider {
         response = await this.pollForCompletion(response.id, options?.abortSignal);
       }
 
-      if (response.status === 'failed') {
-        throw new Error(response.error || 'Prediction failed');
+      if (
+        response.status === 'failed' ||
+        response.status === 'canceled' ||
+        response.status === 'aborted'
+      ) {
+        throw new Error(response.error || `Prediction ${response.status}`);
       }
 
       response = response.output;
@@ -487,7 +491,8 @@ export class ReplicateProvider implements ApiProvider {
       if (
         prediction.status === 'succeeded' ||
         prediction.status === 'failed' ||
-        prediction.status === 'canceled'
+        prediction.status === 'canceled' ||
+        prediction.status === 'aborted'
       ) {
         return prediction;
       }
@@ -702,9 +707,17 @@ export class ReplicateImageProvider extends ReplicateProvider {
         ...getReplicateValueSummary('output', prediction.output),
       });
 
-      if (prediction.status === 'failed') {
+      if (
+        prediction.status === 'failed' ||
+        prediction.status === 'canceled' ||
+        prediction.status === 'aborted'
+      ) {
         return {
-          error: prediction.error || 'Image generation failed',
+          error:
+            prediction.error ||
+            (prediction.status === 'failed'
+              ? 'Image generation failed'
+              : `Prediction ${prediction.status}`),
         };
       }
 
