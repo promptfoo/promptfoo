@@ -1,0 +1,51 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Compare decision values and confidence across OpenAI and Jev
+prompts:
+  - '{{ticket}}'
+providers:
+  - id: openai:decisions:gpt-6-luna
+    label: OpenAI Decisions
+    config:
+      questions:
+        - type: choice
+          name: category
+          instructions: Which team should handle this ticket?
+          choices:
+            - value: billing
+              description: Payments, invoices, refunds
+            - value: technical
+              description: Bugs, outages, integrations
+    # Normalize only the selected answer; retain its other fields for inspection.
+    transform: |
+      const answer = JSON.parse(output).answers.find(a => a.name === 'category');
+      return { ...answer, value: answer?.type === 'choice' ? answer.choice : null };
+  - id: typesafe:jev-latest
+    label: TypeSafe Jev
+    config:
+      questions:
+        category:
+          type: choice
+          instructions: Which team should handle this ticket?
+          criteria:
+            billing: Payments, invoices, refunds
+            technical: Bugs, outages, integrations
+    transform: |
+      const answer = output.category;
+      return { ...answer, value: answer?.type === 'choice' ? answer.choice : null };
+defaultTest:
+  assert:
+    - type: equals
+      transform: output.value
+      value: '{{expected}}'
+      metric: CorrectValue
+    - type: numeric
+      transform: output.confidence ?? NaN
+      value: { min: 0.8, max: 1 }
+      metric: SufficientConfidence
+tests:
+  - vars:
+      ticket: I was charged twice. Please refund the duplicate payment.
+      expected: billing
+  - vars:
+      ticket: The webhook endpoint returns a server error on every request.
+      expected: technical
