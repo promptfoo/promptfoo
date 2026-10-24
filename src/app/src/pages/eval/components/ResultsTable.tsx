@@ -18,8 +18,8 @@ import { cn } from '@app/lib/utils';
 import { callApi } from '@app/utils/api';
 import { formatDuration } from '@app/utils/date';
 import {
+  isLegacyMediaPath,
   isMediaRef,
-  normalizeMediaText,
   resolveAudioSource,
   resolveBlobUri,
   resolveImageSource,
@@ -314,8 +314,8 @@ function renderMediaVariableCell({
   }
 
   const { type: mediaType, format = '' } = mediaMetadata;
-  const normalizedValue = normalizeMediaText(value);
   const isRefValue = isMediaRef(value);
+  const normalizedValue = isRefValue || isLegacyMediaPath(value) ? resolveBlobUri(value) : value;
   const audioSource =
     mediaType === 'audio'
       ? resolveAudioSource(isRefValue ? { format, blobRef: value } : { data: value, format })
@@ -329,12 +329,13 @@ function renderMediaVariableCell({
         <source src={audioSource.src} type={audioSource.type || 'audio/mpeg'} />
         Your browser does not support the audio element.
       </audio>
-    ) : mediaType === 'video' ? (
+    ) : mediaType === 'video' && normalizedValue ? (
       <video controls style={{ maxWidth: '100%', maxHeight: '200px' }}>
         <source
           src={
             normalizedValue.startsWith('data:') ||
             normalizedValue.startsWith('http') ||
+            isLegacyMediaPath(normalizedValue) ||
             normalizedValue.startsWith('/api/')
               ? normalizedValue
               : `data:${mediaType}/${format};base64,${value}`
