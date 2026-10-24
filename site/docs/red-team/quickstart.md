@@ -1,7 +1,7 @@
 ---
 sidebar_position: 2
 sidebar_label: Getting started
-description: Start red teaming LLMs in minutes by scanning 50+ vulnerabilities including jailbreaks, prompt injection, and data exfiltration
+description: Configure an application target, choose red team plugins and attack strategies, run a scan, and inspect the responses and grading reasons behind failed tests.
 ---
 
 import CodeBlock from '@theme/CodeBlock';
@@ -11,16 +11,9 @@ import styles from '@site/src/pages/quickstart.module.css';
 
 # Getting started
 
-Promptfoo is an [open-source](https://github.com/promptfoo/promptfoo) tool for red teaming gen AI applications.
+This guide takes you from configuring a target to inspecting a red team result. Promptfoo generates attacks based on your application's purpose, sends them to the target, and grades the responses against the selected plugins' criteria.
 
-- **Automatically scans 50+ vulnerability types**:
-  - <a href="/docs/red-team/llm-vulnerability-types/#privacy-and-security" className={styles.badge}>Security & data privacy</a>: jailbreaks, injections, RAG poisoning, etc.
-  - <a href="/docs/red-team/llm-vulnerability-types/" className={styles.badge}>Compliance & ethics</a>: harmful & biased content, content filter validation, OWASP/NIST/EU compliance, etc.
-  - <a href="/docs/red-team/configuration/#custom-policies" className={styles.badge}>Custom policies</a>: enforce organizational guidelines.
-- Generates **dynamic attack probes** tailored to your application using specialized uncensored models.
-- Implements state-of-the-art **adversarial ML research** from [Microsoft](/docs/red-team/strategies/multi-turn/), [Meta](/docs/red-team/strategies/goat/), and others.
-- Integrates with [CI/CD](/docs/integrations/ci-cd/).
-- Tests via [HTTP API](#attacking-an-api-endpoint), [browser](/docs/providers/browser/), or [direct model access](#alternative-test-specific-prompts-and-models).
+You can test an [HTTP API](#attacking-an-api-endpoint), a [browser application](/docs/providers/browser/), or a [model directly](#alternative-test-specific-prompts-and-models).
 
 <div className={styles.imageContainer}>
   ![llm red team report](/img/riskreport-1@2x.png)
@@ -29,7 +22,8 @@ Promptfoo is an [open-source](https://github.com/promptfoo/promptfoo) tool for r
 ## Prerequisites
 
 - Install [Node.js](https://nodejs.org/en/download/package-manager/) `>=22.22.0`
-- Optional: Set your `OPENAI_API_KEY` environment variable
+- A reachable target and any credentials needed to call it
+- Credentials for any generation or grading providers you configure. See [provider configuration](/docs/red-team/configuration/#providers) and [remote generation](/docs/red-team/troubleshooting/remote-generation) for the available paths.
 
 ## Initialize the project
 
@@ -156,7 +150,7 @@ Run this command in the same directory as your `promptfooconfig.yaml` file:
   </TabItem>
 </Tabs>
 
-This command will generate several hundred adversarial inputs across many categories of potential harm and save them in `redteam.yaml`. Then, it will run the test cases against the target.
+This command generates test cases in `redteam.yaml` and runs them against the target. The number and type of attacks depend on your selected plugins, strategies, and test counts.
 
 ![llm red team run](/img/docs/redteam-run.png)
 
@@ -194,12 +188,9 @@ Clicking into a specific test case to view logs will display the raw inputs and 
 
 ### Understanding the report view
 
-The red teaming results provide insights into various aspects of your LLM application's behavior:
+Start with a failed test and read the attack input, target response, and grading reason together. Check whether the response violates the application's stated purpose. If the grader misunderstood the application's permissions or expected behavior, [correct its context](/docs/red-team/troubleshooting/false-positives) before interpreting the result.
 
-1. **Vulnerability categories**: Identifies the types of vulnerabilities discovered, such as prompt injections, context poisoning, or unintended behaviors.
-2. **Severity levels**: Classifies vulnerabilities based on their potential impact and likelihood of occurrence.
-3. **Logs**: Provides concrete instances of inputs that triggered vulnerabilities.
-4. **Suggested mitigations**: Recommendations for addressing identified vulnerabilities, which may include prompt engineering, additional safeguards, or architectural changes.
+Use the vulnerability categories and [risk scores](/docs/red-team/risk-scoring) to prioritize review. Investigate execution errors separately. A passing test means the configured check did not find a violation in that response, not that untested behavior is secure.
 
 ## Common target types
 

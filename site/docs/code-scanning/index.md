@@ -23,13 +23,13 @@ sidebar_position: 1
 
 # Code Scanning
 
-Promptfoo Code Scanning uses AI agents to find LLM-related vulnerabilities in your codebase and helps you fix them before you merge. By focusing specifically on LLM-related vulnerabilities, it finds issues that more general security scanners might miss.
+Promptfoo Code Scanning reviews code changes for LLM-related security risks, such as prompt injection and PII exposure. Use it during pull request review or run the CLI against local changes.
 
 ## How It Works
 
 The scanner examines code changes for common LLM security risks including prompt injection, PII exposure, and excessive agency. Rather than just analyzing the surface-level diff, it traces data flows deep into your codebase to understand how user inputs reach LLM prompts, how outputs are used, and what capabilities your LLM has access to.
 
-This agentic approach catches subtle security issues that span multiple files, while maintaining a high signal-to-noise ratio to avoid alert fatigue.
+Review each finding's code references and explanation before deciding on a fix. A scan with no findings does not establish that the code is free of vulnerabilities.
 
 ## Getting Started
 
