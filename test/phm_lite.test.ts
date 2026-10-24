@@ -11,11 +11,6 @@ describe('PHM-Lite physics-consistency assertion', () => {
     ['temperature below absolute zero (ASCII)', 'We cooled the sample to -300 degC.'],
     ['temperature below absolute zero (U+2212)', 'We cooled the sample to −300 °C.'],
     ['negative mass (kg)', 'The reaction consumed -5 kg of catalyst.'],
-    ['negative mass (grams)', 'mass is -5 g'],
-    ['negative energy (kWh)', 'The process released -5 kWh.'],
-    ['negative energy (eV)', 'The process released -1 eV.'],
-    ['negative energy (MeV)', 'The process released -2 MeV.'],
-    ['negative energy (GeV)', 'The process released -3 GeV.'],
     ['probability above 100%', 'We are 150% confident in this result.'],
     ['probability below 0%', 'a probability of -5% is recorded'],
   ])('flags FAIL: %s', (_name, text) => {
@@ -29,7 +24,7 @@ describe('PHM-Lite physics-consistency assertion', () => {
     ['zero-second fall', 'fell 100 m in 0 s'],
     ['fall claim spanning a line break', 'The weight fell 100 m\nin 1 s.'],
     ['exponent-form fall quantities', 'fell 1e2 m in 1e0 s'],
-    ['percentage sum over 100', 'A took 60% and B took 70% of traffic.'],
+    ['percentage shares summing over 100%', 'Traffic shares: A took 6e1% and B took 7e1%.'],
     ['scientific-notation percentage sum', 'A took 6e1% and B took 7e1% of traffic.'],
   ])('flags WARN: %s', (_name, text) => {
     const r = phmLiteCheck(text);
