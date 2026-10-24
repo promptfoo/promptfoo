@@ -57,7 +57,6 @@ export function resolveVariables(
   varsResolvedFromSkipped?: Set<string>,
 ): Record<string, VarValue> {
   let resolved: boolean;
-  const regex = /\{\{\s*(\w+)\s*\}\}/; // Matches {{variableName}}, {{ variableName }}, etc.
 
   let iterations = 0;
   do {
@@ -71,15 +70,20 @@ export function resolveVariables(
         continue;
       }
       const value = variables[key] as string;
-      const match = regex.exec(value);
+      const match = firstUnprotectedPlaceholder(value);
       if (match) {
-        const [placeholder, varName] = match;
+        const { placeholder, varName, index } = match;
         if (variables[varName] === undefined) {
           // Do nothing - final nunjucks render will fail if necessary.
           // logger.warn(`Variable "${varName}" not found for substitution.`);
         } else {
-          // A replacer function keeps `$&`, `$'` and `` $` `` in the value literal.
-          variables[key] = value.replace(placeholder, () => variables[varName] as string);
+          // Splice at the reported index: replace() would hit an identical
+          // placeholder inside an earlier {% raw %} block, and string
+          // concatenation keeps `$&`-style sequences in the value literal.
+          variables[key] =
+            value.slice(0, index) +
+            (variables[varName] as string) +
+            value.slice(index + placeholder.length);
           if (skipResolveVars?.includes(varName) || varsResolvedFromSkipped?.has(varName)) {
             varsResolvedFromSkipped?.add(key);
           }
@@ -93,12 +97,85 @@ export function resolveVariables(
   return variables;
 }
 
+// Nunjucks tags accept a whitespace-control dash on either side
+// ({%- raw -%}), so the scan cannot anchor on '{%' followed by whitespace.
+const RAW_TOKEN_REGEX = /\{%-?\s*(raw|endraw)\s*-?%\}/g;
+const SIMPLE_PLACEHOLDER_REGEX = /\{\{\s*(\w+)\s*\}\}/g;
+
+// Regex substitution cannot see Nunjucks structure, so a placeholder inside a
+// {% raw %} block or nested in another {{ ... }} expression (say a quoted
+// string literal) must be left for the real render pass; replacing it here
+// would defeat the escape.
+function firstUnprotectedPlaceholder(
+  value: string,
+): { placeholder: string; varName: string; index: number } | null {
+  const rawSpans = collectRawSpans(value);
+  let spanIdx = 0;
+  for (const match of value.matchAll(SIMPLE_PLACEHOLDER_REGEX)) {
+    const start = match.index;
+    // Spans and matches are both ascending, so a moving index replaces the
+    // per-match rescan of the span array (quadratic on many raw blocks).
+    while (spanIdx < rawSpans.length && start >= rawSpans[spanIdx][1]) {
+      spanIdx++;
+    }
+    if (spanIdx < rawSpans.length && start >= rawSpans[spanIdx][0]) {
+      continue;
+    }
+    const before = value.slice(0, start);
+    // Depth, not lastIndexOf: in `{{ '{{x}}' ~ '{{y}}' }}` the first quoted
+    // pair opens and closes before the second one starts, so comparing the
+    // last positions of '{{' and '}}' thinks the second is top-level. '{%'
+    // counts the same way: inside a {% set ... %} tag a '{{x}}' can only be
+    // a quoted literal, never a real placeholder.
+    if (
+      before.split('{{').length - 1 > before.split('}}').length - 1 ||
+      before.split('{%').length - 1 > before.split('%}').length - 1
+    ) {
+      continue;
+    }
+    return { placeholder: match[0], varName: match[1]!, index: start };
+  }
+  return null;
+}
+
+// Mirror Nunjucks parseRaw: nested {% raw %} blocks are balanced, so a
+// non-greedy regex that stops at the first {% endraw %} under-covers. An
+// unterminated block still swallows everything through the last raw/endraw
+// token as literal text; content after that token parses normally.
+function collectRawSpans(value: string): Array<[number, number]> {
+  const spans: Array<[number, number]> = [];
+  let depth = 0;
+  let spanStart = 0;
+  let lastTokenEnd = 0;
+  for (const match of value.matchAll(RAW_TOKEN_REGEX)) {
+    const tokenEnd = match.index + match[0].length;
+    if (match[1] === 'raw') {
+      if (depth === 0) {
+        spanStart = match.index;
+      }
+      depth++;
+      lastTokenEnd = tokenEnd;
+    } else if (depth > 0) {
+      depth--;
+      lastTokenEnd = tokenEnd;
+      if (depth === 0) {
+        spans.push([spanStart, tokenEnd]);
+      }
+    }
+  }
+  if (depth > 0) {
+    spans.push([spanStart, lastTokenEnd]);
+  }
+  return spans;
+}
+
 // Utility: Detect partial/unclosed Nunjucks tags and wrap in {% raw %} if needed
 function autoWrapRawIfPartialNunjucks(prompt: string): string {
   // Detects any occurrence of an opening Nunjucks tag without a matching close
   // e.g. "{%" or "{{" not followed by a closing "%}" or "}}"
   const hasPartialTag = /({%[^%]*$|{{[^}]*$|{#[^#]*$)/m.test(prompt);
-  const alreadyWrapped = /{\%\s*raw\s*\%}/.test(prompt) && /{\%\s*endraw\s*\%}/.test(prompt);
+  const alreadyWrapped =
+    /{\%-?\s*raw\s*-?\%}/.test(prompt) && /{\%-?\s*endraw\s*-?\%}/.test(prompt);
   if (hasPartialTag && !alreadyWrapped) {
     return `{% raw %}${prompt}{% endraw %}`;
   }
@@ -106,10 +183,45 @@ function autoWrapRawIfPartialNunjucks(prompt: string): string {
 }
 
 function referencesUndefinedVariables(template: string, vars: Record<string, VarValue>): boolean {
-  return extractVariablesFromTemplate(template).some((variableName) => {
+  // Raw spans are literal text, not references: {% raw %}{{x}}{% endraw %}
+  // cannot count x as a dependency, or this guard would skip the very render
+  // pass that resolves the raw block.
+  const spans = collectRawSpans(template);
+  let scrubbed = template;
+  for (let i = spans.length - 1; i >= 0; i--) {
+    scrubbed = scrubbed.slice(0, spans[i][0]) + scrubbed.slice(spans[i][1]);
+  }
+  // A quoted placeholder inside a surrounding expression or block tag is
+  // literal text too: {{ '{{x}}' }} renders to the text {{x}}, so x is not a
+  // dependency. The extractor below is regex-based and would report it, so
+  // scrub those occurrences first (same nesting notion as
+  // firstUnprotectedPlaceholder).
+  const nested: Array<[number, number]> = [];
+  for (const match of scrubbed.matchAll(SIMPLE_PLACEHOLDER_REGEX)) {
+    const before = scrubbed.slice(0, match.index);
+    if (
+      before.split('{{').length - 1 > before.split('}}').length - 1 ||
+      before.split('{%').length - 1 > before.split('%}').length - 1
+    ) {
+      nested.push([match.index, match.index + match[0].length]);
+    }
+  }
+  for (let i = nested.length - 1; i >= 0; i--) {
+    scrubbed = scrubbed.slice(0, nested[i][0]) + scrubbed.slice(nested[i][1]);
+  }
+  // Names bound by {% set ... %} inside the template are local bindings, not
+  // external dependencies; the extractor has no notion of them.
+  const defined = new Set<string>();
+  for (const match of scrubbed.matchAll(/\{%\s*-?\s*set\s+([A-Za-z_]\w*)/g)) {
+    defined.add(match[1]!);
+  }
+  return extractVariablesFromTemplate(scrubbed).some((variableName) => {
     const rootVariableName = /^([A-Za-z_]\w*)/.exec(variableName)?.[1];
     return Boolean(
-      rootVariableName && rootVariableName !== 'env' && vars[rootVariableName] === undefined,
+      rootVariableName &&
+        rootVariableName !== 'env' &&
+        !defined.has(rootVariableName) &&
+        vars[rootVariableName] === undefined,
     );
   });
 }
@@ -430,9 +542,43 @@ export async function renderPrompt(
   // Resolve variable mappings
   const varsResolvedFromSkipped = new Set<string>();
   resolveVariables(vars, skipRenderVars, varsResolvedFromSkipped);
+  // Render prompt
+  // Vars values can be template strings, so render them first. Every path
+  // below consumes the same pre-rendered values: a {% raw %} block inside a
+  // value comes out as literal text whether the prompt is plain, JSON,
+  // rendered with PROMPTFOO_DISABLE_JSON_AUTOESCAPE, or fetched from a
+  // third-party integration that returns before the local render.
+  const renderedVars = Object.fromEntries(
+    Object.entries(vars).map(([key, value]) => {
+      if (
+        typeof value !== 'string' ||
+        skipRenderVars?.includes(key) ||
+        varsResolvedFromSkipped.has(key)
+      ) {
+        return [key, value];
+      }
+
+      if (referencesUndefinedVariables(value, vars)) {
+        return [key, value];
+      }
+
+      // A value the prompt never references can still carry template-like
+      // payload (say {% unknown %}) that Nunjucks cannot parse. Leave it
+      // untouched instead of failing the eval; before values were pre-rendered
+      // such payloads passed through raw and only referenced strings rendered.
+      try {
+        return [key, nunjucks.renderString(autoWrapRawIfPartialNunjucks(value), vars)];
+      } catch {
+        return [key, value];
+      }
+    }),
+  );
   // Third party integrations
   if (prompt.raw.startsWith('portkey://')) {
-    const portKeyResult = await getPortkeyPrompt(prompt.raw.slice('portkey://'.length), vars);
+    const portKeyResult = await getPortkeyPrompt(
+      prompt.raw.slice('portkey://'.length),
+      renderedVars,
+    );
     return JSON.stringify(portKeyResult.messages);
   } else if (prompt.raw.startsWith('langfuse://')) {
     const langfusePrompt = prompt.raw.slice('langfuse://'.length);
@@ -486,7 +632,7 @@ export async function renderPrompt(
 
     const langfuseResult = await getLangfusePrompt(
       helper,
-      vars,
+      renderedVars,
       promptType,
       version === undefined || version === 'latest' ? undefined : Number(version),
       label,
@@ -498,44 +644,24 @@ export async function renderPrompt(
     const [majorVersion, minorVersion] = version ? version.split('.') : [undefined, undefined];
     const heliconeResult = await getHeliconePrompt(
       id,
-      vars,
+      renderedVars,
       majorVersion === undefined ? undefined : Number(majorVersion),
       minorVersion === undefined ? undefined : Number(minorVersion),
     );
     return heliconeResult;
   }
-  // Render prompt
   try {
     if (getEnvBool('PROMPTFOO_DISABLE_JSON_AUTOESCAPE')) {
       // Pre-process: auto-wrap in {% raw %} if partial Nunjucks tags detected
       basePrompt = autoWrapRawIfPartialNunjucks(basePrompt);
-      return nunjucks.renderString(basePrompt, vars);
+      return nunjucks.renderString(basePrompt, renderedVars);
     }
 
     const parsed = JSON.parse(basePrompt);
     // The _raw_ prompt is valid JSON. That means that the user likely wants to substitute vars _within_ the JSON itself.
     // Recursively walk the JSON structure. If we find a string, render it with nunjucks.
-    return JSON.stringify(renderVarsInObject(parsed, vars), null, 2);
+    return JSON.stringify(renderVarsInObject(parsed, renderedVars), null, 2);
   } catch {
-    // Vars values can be template strings, so we need to render them first:
-    const renderedVars = Object.fromEntries(
-      Object.entries(vars).map(([key, value]) => {
-        if (
-          typeof value !== 'string' ||
-          skipRenderVars?.includes(key) ||
-          varsResolvedFromSkipped.has(key)
-        ) {
-          return [key, value];
-        }
-
-        if (referencesUndefinedVariables(value, vars)) {
-          return [key, value];
-        }
-
-        return [key, nunjucks.renderString(autoWrapRawIfPartialNunjucks(value), vars)];
-      }),
-    );
-
     // Pre-process: auto-wrap in {% raw %} if partial Nunjucks tags detected
     basePrompt = autoWrapRawIfPartialNunjucks(basePrompt);
     // Note: Explicitly not using `renderVarsInObject` as it will re-call `renderString`; each call will
