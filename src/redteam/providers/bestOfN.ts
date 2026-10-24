@@ -84,6 +84,9 @@ export default class BestOfNProvider implements ApiProvider {
     let targetCost: number | undefined;
     let incurredTargetCost: number | undefined;
     const sessionIds: string[] = [];
+    // Coding-agent verifiers grade what the agent did, so an empty final message can still
+    // carry an exploit and must reach the grader.
+    const keepEmptyResponses = isCodingAgentPlugin(context.test?.metadata?.pluginId);
     try {
       // Get candidate prompts from the server
       const response = await fetchWithProxy(
@@ -211,7 +214,7 @@ export default class BestOfNProvider implements ApiProvider {
             currentStep++;
             // A refusal is not a successful jailbreak, so keep sampling candidates until the
             // target answers or the candidates run out.
-            if (!response.error && !isRefusalResponse(response)) {
+            if (!response.error && !isRefusalResponse(response, keepEmptyResponses)) {
               successfulResponse = response;
               successfulResponse.prompt = candidatePrompt;
               successfulResponse.metadata = {
@@ -298,9 +301,16 @@ function hasMediaOutput(response: ProviderResponse): boolean {
 
 // Only the target's own refusal flag and empty replies count. Refusal wording is left to the
 // plugin grader, since some graders treat an apologetic reply as a possible jailbreak.
-function isRefusalResponse(response: ProviderResponse): boolean {
+function isCodingAgentPlugin(pluginId: unknown): boolean {
+  return typeof pluginId === 'string' && pluginId.startsWith('coding-agent:');
+}
+
+function isRefusalResponse(response: ProviderResponse, keepEmptyResponses: boolean): boolean {
   if (response.isRefusal === true) {
     return true;
+  }
+  if (keepEmptyResponses) {
+    return false;
   }
   if (response.output === undefined || response.output === null) {
     return !hasMediaOutput(response);
