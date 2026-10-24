@@ -27,6 +27,7 @@ import { neverGenerateRemote } from '../redteam/remoteGeneration';
 import { createShareableUrl, isSharingEnabled } from '../share';
 import { generateTable } from '../table';
 import telemetry from '../telemetry';
+import { flushOtel, shutdownOtel } from '../tracing/otelSdk';
 import { EMAIL_OK_STATUS } from '../types/email';
 import { isCliEventSource } from '../types/eventSource';
 import { CommandLineOptionsSchema, MAX_SUGGESTIONS_COUNT, TestSuiteSchema } from '../types/index';
@@ -222,6 +223,61 @@ function watchUntilTerminated(watcher: FSWatcher): Promise<void> {
       process.on(signal, onSignal);
     }
   });
+}
+
+/** How long a CLI eval waits for provider and tracing cleanup after SIGTERM before it ends. */
+export const SIGTERM_CLEANUP_TIMEOUT_MS = 3_000;
+
+/**
+ * CLI policy: end the process on SIGTERM after bounded cleanup.
+ *
+ * The provider registry and the OpenTelemetry SDK listen for SIGTERM so they can clean up, and
+ * any listener suppresses Node's default termination. Neither exits, because a library host owns
+ * its own process. A CLI eval does own it, so within one {@link SIGTERM_CLEANUP_TIMEOUT_MS}
+ * budget this listener flushes spans that have already ended, drains active provider calls, and
+ * then shuts the OpenTelemetry SDK down, so spans ended by calls that settle during the drain
+ * are exported too. It then removes every SIGTERM listener and re-raises the signal, so the
+ * process ends on it as it would by default.
+ *
+ * @returns A function that removes the listener once the evaluation no longer needs it.
+ */
+export function terminateOnSigterm(): () => void {
+  const onSigterm = () => {
+    void (async () => {
+      const deadline = Date.now() + SIGTERM_CLEANUP_TIMEOUT_MS;
+      await untilDeadline(() => flushOtel(), deadline);
+      await untilDeadline(() => providerRegistry.shutdownForProcess(), deadline);
+      await untilDeadline(() => shutdownOtel(), deadline);
+      process.removeAllListeners('SIGTERM');
+      process.kill(process.pid, 'SIGTERM');
+    })();
+  };
+  process.once('SIGTERM', onSigterm);
+  return () => {
+    process.removeListener('SIGTERM', onSigterm);
+  };
+}
+
+/** Runs one SIGTERM cleanup step for whatever remains of the shared budget, if anything does. */
+async function untilDeadline(step: () => Promise<void>, deadline: number): Promise<void> {
+  const remaining = deadline - Date.now();
+  if (remaining <= 0) {
+    return;
+  }
+  let timer: NodeJS.Timeout | undefined;
+  try {
+    await Promise.race([
+      step().catch((error) => {
+        logger.debug('Cleanup failed during SIGTERM', { error });
+      }),
+      // Referenced on purpose: the process must survive until it ends on the signal.
+      new Promise<void>((resolve) => {
+        timer = setTimeout(resolve, remaining);
+      }),
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 function resolveSuggestionOptions(
@@ -1298,7 +1354,7 @@ async function doEvalWithEnv(
     return ret;
   };
 
-  const runEvaluation = (initialization?: boolean) => {
+  const runEvaluation = async (initialization?: boolean) => {
     // Each watch run keeps its inputs, resolved environment and providers through cleanup.
     const runEnv: EnvOverrides = {};
     const runEnvFileOverrides =
@@ -1308,28 +1364,35 @@ async function doEvalWithEnv(
     const runCommand = { ...cmdObj };
     const runDefaults = { ...defaultConfig };
     const runOptions = { ...evaluateOptions };
-    return cliState.withSafeMode(
-      Boolean(runCommand.safeMode || runDefaults.commandLineOptions?.safeMode),
-      () =>
-        cliState.withConfig(undefined, () =>
-          cliState.withBasePath(undefined, () =>
-            cliState.withEnvFileOverrides(runEnvFileOverrides, () =>
-              cliState.withEnv(runEnv, () =>
-                providerRegistry.withEvaluation(() =>
-                  runEvaluationWithEnv(
-                    runEnv,
-                    runEnvFileOverrides,
-                    runCommand,
-                    runDefaults,
-                    runOptions,
-                    initialization,
+    // Ending the process on SIGTERM is CLI policy too; library hosts keep control of their own.
+    // Keep it until the whole run settles, including sharing and output files after evaluate().
+    const removeSigtermHandler = isCliInvocation ? terminateOnSigterm() : undefined;
+    try {
+      return await cliState.withSafeMode(
+        Boolean(runCommand.safeMode || runDefaults.commandLineOptions?.safeMode),
+        () =>
+          cliState.withConfig(undefined, () =>
+            cliState.withBasePath(undefined, () =>
+              cliState.withEnvFileOverrides(runEnvFileOverrides, () =>
+                cliState.withEnv(runEnv, () =>
+                  providerRegistry.withEvaluation(() =>
+                    runEvaluationWithEnv(
+                      runEnv,
+                      runEnvFileOverrides,
+                      runCommand,
+                      runDefaults,
+                      runOptions,
+                      initialization,
+                    ),
                   ),
                 ),
               ),
             ),
           ),
-        ),
-    );
+      );
+    } finally {
+      removeSigtermHandler?.();
+    }
   };
 
   const result = await runEvaluation(true /* initialization */);
