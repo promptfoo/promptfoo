@@ -20,6 +20,7 @@ import {
 } from '../util/providerRef';
 import { renderEnvOnlyInObject } from '../util/render';
 import { sanitizeObject } from '../util/sanitizer';
+import { providerRegistry } from './providerRegistry';
 import { getProviderFactories, mergeProviderEnv } from './registry';
 
 import type { EnvOverrides } from '../types/env';
@@ -103,6 +104,18 @@ export async function loadApiProvider(
       ),
     ),
   );
+}
+
+/** Run an owned provider operation, including loading, inside its resource lifecycle. */
+export async function withOwnedProvider<T>(
+  loadProvider: () => Promise<ApiProvider>,
+  run: (provider: ApiProvider) => Promise<T>,
+): Promise<T> {
+  return providerRegistry.withEvaluation(async () => {
+    const provider = await loadProvider();
+    await providerRegistry.cleanupWhenIdle([provider]);
+    return providerRegistry.withProvider(provider, () => run(provider));
+  });
 }
 
 async function createApiProvider(

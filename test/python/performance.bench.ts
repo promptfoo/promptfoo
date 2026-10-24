@@ -25,27 +25,34 @@ def call_api(prompt, options, context):
       config: { basePath: process.cwd() },
     });
 
-    const start = Date.now();
-    await provider.initialize();
-    const initTime = Date.now() - start;
+    try {
+      const start = Date.now();
+      await provider.initialize();
+      const initTime = Date.now() - start;
 
-    console.log(`Initialization (1 worker): ${initTime}ms`);
+      console.log(`Initialization (1 worker): ${initTime}ms`);
 
-    const callStart = Date.now();
-    for (let i = 0; i < 10; i++) {
-      await provider.callApi(`test ${i}`);
+      const callStart = Date.now();
+      for (let i = 0; i < 10; i++) {
+        const response = await provider.callApi(`test ${i}`);
+        expect(response.error).toBeUndefined();
+        expect(response.output).toBe('test');
+      }
+      const totalCallTime = Date.now() - callStart;
+      const avgCallTime = totalCallTime / 10;
+
+      console.log(`10 calls total: ${totalCallTime}ms`);
+      console.log(`Avg per call: ${avgCallTime}ms`);
+      console.log(`Expected without persistence: ~10,000ms (1s import × 10 calls)`);
+      console.log(`Speedup: ${(10000 / totalCallTime).toFixed(1)}x`);
+
+      expect(avgCallTime).toBeLessThan(100); // Each call should be fast
+    } finally {
+      try {
+        await provider.shutdown();
+      } finally {
+        fs.unlinkSync(scriptPath);
+      }
     }
-    const totalCallTime = Date.now() - callStart;
-    const avgCallTime = totalCallTime / 10;
-
-    console.log(`10 calls total: ${totalCallTime}ms`);
-    console.log(`Avg per call: ${avgCallTime}ms`);
-    console.log(`Expected without persistence: ~10,000ms (1s import × 10 calls)`);
-    console.log(`Speedup: ${(10000 / totalCallTime).toFixed(1)}x`);
-
-    expect(avgCallTime).toBeLessThan(100); // Each call should be fast
-
-    await provider.shutdown();
-    fs.unlinkSync(scriptPath);
   }, 30000);
 });

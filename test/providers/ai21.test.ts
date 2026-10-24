@@ -154,7 +154,7 @@ describe('AI21ChatCompletionProvider', () => {
     const provider = new AI21ChatCompletionProvider('jamba-mini', createApiKeyOptions());
 
     const result = await provider.callApi('test prompt');
-    expect(result.cost).toBeDefined();
+    expect(result.cost).toBeCloseTo(0.000003, 10);
   });
 
   it('should preserve an explicit max_tokens value of 0', async () => {
