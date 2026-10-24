@@ -23,7 +23,14 @@ import {
   type VarValue,
 } from './types/index';
 import { isAudioFile, isImageFile, isJavascriptFile, isVideoFile } from './util/fileExtensions';
-import { renderVarsInObject, setLoadedFileMimeTypes } from './util/index';
+import {
+  getOutputVars,
+  isOutputValue,
+  isRuntimeVar,
+  renderVarsInObject,
+  setLoadedFileMimeTypes,
+  setOutputVars,
+} from './util/index';
 import invariant from './util/invariant';
 import { filterFiniteScores } from './util/numeric';
 import { extractVariablesFromTemplate, getNunjucksEngine } from './util/templates';
@@ -227,6 +234,57 @@ function detectMimeFromBase64(base64Data: string): string | null {
 }
 
 /**
+ * Loads text, JSON, and YAML `file://` references nested in object and array vars.
+ * Scripts, PDFs, and media are only loaded as top-level vars, so nested ones stay as-is.
+ */
+async function loadNestedFileVars(
+  value: unknown,
+  ancestors = new WeakSet<object>(),
+): Promise<unknown> {
+  if (typeof value === 'string') {
+    if (!value.startsWith('file://')) {
+      return value;
+    }
+    const filePath = path.resolve(
+      process.cwd(),
+      cliState.basePath || '',
+      value.slice('file://'.length),
+    );
+    if (
+      isJavascriptFile(filePath) ||
+      /\.(py|pdf)$/i.test(filePath) ||
+      isImageFile(filePath) ||
+      isVideoFile(filePath) ||
+      isAudioFile(filePath)
+    ) {
+      return value;
+    }
+    const contents = await fs.readFile(filePath, 'utf8');
+    return /\.ya?ml$/i.test(filePath) ? JSON.stringify(loadYaml(contents)) : contents.trim();
+  }
+  if (
+    !value ||
+    typeof value !== 'object' ||
+    isOutputValue(value) ||
+    ancestors.has(value) ||
+    (!Array.isArray(value) && Object.getPrototypeOf(value) !== Object.prototype)
+  ) {
+    return value;
+  }
+  ancestors.add(value);
+  const entries: [string, unknown][] = [];
+  for (const [key, item] of Object.entries(value)) {
+    entries.push([key, await loadNestedFileVars(item, ancestors)]);
+  }
+  ancestors.delete(value);
+  // Keep the original when nothing was loaded; renderPrompt runs on every redteam turn.
+  if (entries.every(([key, item]) => item === (value as Record<string, unknown>)[key])) {
+    return value;
+  }
+  return Array.isArray(value) ? entries.map(([, item]) => item) : Object.fromEntries(entries);
+}
+
+/**
  * Renders a prompt template with variable substitution using Nunjucks.
  *
  * @param prompt - The prompt template to render
@@ -237,6 +295,8 @@ function detectMimeFromBase64(base64Data: string): string | null {
  *                         rendering for. This is critical for red team testing where injection
  *                         variables contain attack payloads (e.g., SSTI, XSS) that should NOT be
  *                         evaluated by Promptfoo before reaching the target.
+ * @param outputVars - Optional names of vars holding provider output (`storeOutputAs` registers).
+ *                     `file://` references in them are not loaded.
  * @returns The rendered prompt string
  */
 export async function renderPrompt(
@@ -245,15 +305,19 @@ export async function renderPrompt(
   nunjucksFilters?: NunjucksFilterMap,
   provider?: ApiProvider,
   skipRenderVars?: string[],
+  outputVars?: string[],
 ): Promise<string> {
   const nunjucks = getNunjucksEngine(nunjucksFilters);
   const loadedMimeTypes = setLoadedFileMimeTypes(vars);
+  const effectiveOutputVars = outputVars
+    ? setOutputVars(vars, outputVars)
+    : (getOutputVars(vars) ?? new Set<string>());
 
   let basePrompt = prompt.raw;
 
   // Load files
   for (const [varName, value] of Object.entries(vars)) {
-    if (skipRenderVars?.includes(varName)) {
+    if (skipRenderVars?.includes(varName) || isRuntimeVar(varName)) {
       continue;
     }
 
@@ -261,6 +325,14 @@ export async function renderPrompt(
       const basePath = cliState.basePath || '';
       const filePath = path.resolve(process.cwd(), basePath, value.slice('file://'.length));
       const fileExtension = filePath.split('.').pop();
+
+      // Output registers holding model output must never execute scripts or load local text/data files.
+      // Only media files (images, video, audio) are permitted to resolve to base64 for multimodal providers.
+      if (effectiveOutputVars.has(varName) || isOutputValue(value)) {
+        if (!isImageFile(filePath) && !isVideoFile(filePath) && !isAudioFile(filePath)) {
+          continue;
+        }
+      }
 
       logger.debug(`Loading var ${varName} from file: ${filePath}`);
       if (isJavascriptFile(filePath)) {
@@ -391,6 +463,10 @@ export async function renderPrompt(
         );
       }
       vars[varName] = javascriptOutput.output;
+    } else if (value && typeof value === 'object') {
+      if (!isOutputValue(value) && !effectiveOutputVars.has(varName)) {
+        vars[varName] = (await loadNestedFileVars(value)) as VarValue;
+      }
     }
   }
 

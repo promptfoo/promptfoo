@@ -90,6 +90,7 @@ import {
   isProviderTypeMap,
   resolveConfiguredProviderReference,
 } from './util/gradingProvider';
+import { markOutputValue, setOutputVars } from './util/index';
 import invariant from './util/invariant';
 import { safeJsonStringify, summarizeEvaluateResultForLogging } from './util/json';
 import { accumulateNamedMetric, backfillNamedScoreWeights } from './util/namedMetrics';
@@ -859,6 +860,7 @@ async function renderRunEvalPrompt({
   isRedteam,
   provider,
   promptForRender,
+  registers,
   test,
   testSuite,
   vars,
@@ -867,6 +869,7 @@ async function renderRunEvalPrompt({
   isRedteam: boolean;
   provider: ApiProvider;
   promptForRender: Prompt;
+  registers?: EvalRegisters;
   test: AtomicTestCase;
   testSuite?: TestSuite;
   vars: Vars;
@@ -880,6 +883,7 @@ async function renderRunEvalPrompt({
     filters,
     provider,
     skipRenderVars,
+    registers && Object.keys(registers),
   );
   if (isRedteam) {
     throwIfTargetPromptExceedsMaxChars(renderedPrompt, testSuite?.redteam?.maxCharsPerMessage);
@@ -923,6 +927,7 @@ async function callProviderForRunEval({
   promptForRender,
   provider,
   rateLimitRegistry,
+  registers,
   renderedPrompt,
   repeatIndex,
   test,
@@ -937,6 +942,7 @@ async function callProviderForRunEval({
   | 'nunjucksFilters'
   | 'provider'
   | 'rateLimitRegistry'
+  | 'registers'
   | 'repeatIndex'
   | 'test'
   | 'testSuite'
@@ -974,6 +980,7 @@ async function callProviderForRunEval({
         promptForRender,
         provider,
         rateLimitRegistry,
+        registers,
         renderedPrompt,
         repeatIndex,
         test,
@@ -1097,6 +1104,7 @@ async function callActiveProvider({
   promptForRender,
   provider,
   rateLimitRegistry,
+  registers,
   renderedPrompt,
   repeatIndex,
   test,
@@ -1106,7 +1114,14 @@ async function callActiveProvider({
   vars,
 }: Pick<
   RunEvalOptions,
-  'abortSignal' | 'evalId' | 'provider' | 'rateLimitRegistry' | 'repeatIndex' | 'test' | 'testSuite'
+  | 'abortSignal'
+  | 'evalId'
+  | 'provider'
+  | 'rateLimitRegistry'
+  | 'registers'
+  | 'repeatIndex'
+  | 'test'
+  | 'testSuite'
 > & {
   filters: RunEvalOptions['nunjucksFilters'];
   pauseSignal?: AbortSignal;
@@ -1130,6 +1145,7 @@ async function callActiveProvider({
     filters,
     originalProvider,
     promptForRender,
+    registers,
     repeatIndex,
     test,
     testIndex,
@@ -1243,6 +1259,7 @@ function buildCallApiContext({
   filters,
   originalProvider,
   promptForRender,
+  registers,
   repeatIndex,
   test,
   testIndex,
@@ -1253,6 +1270,7 @@ function buildCallApiContext({
   filters: RunEvalOptions['nunjucksFilters'];
   originalProvider: ApiProvider;
   promptForRender: Prompt;
+  registers?: EvalRegisters;
   repeatIndex: number;
   test: AtomicTestCase;
   testIndex: number;
@@ -1262,6 +1280,7 @@ function buildCallApiContext({
   const callApiContext: CallApiContextParams = {
     vars,
     prompt: promptForRender,
+    registers,
     filters,
     originalProvider,
     test,
@@ -1806,6 +1825,12 @@ async function runEvalInternal(
     vars: state.vars,
   });
   Object.assign(state.vars, registers);
+  if (registers) {
+    setOutputVars(state.vars, Object.keys(registers));
+    for (const val of Object.values(registers)) {
+      markOutputValue(val);
+    }
+  }
   Object.assign(
     state.vars,
     getEvalRuntimeVars({
@@ -1829,6 +1854,7 @@ async function runEvalInternal(
       isRedteam,
       provider,
       promptForRender: state.promptForRender,
+      registers,
       test,
       testSuite,
       vars: state.vars,
@@ -1876,6 +1902,7 @@ async function runEvalInternal(
             },
             provider,
             rateLimitRegistry,
+            registers,
             renderedPrompt: rendered.renderedPrompt,
             repeatIndex,
             test,
@@ -1963,6 +1990,7 @@ async function runEvalInternal(
           if (test.options?.storeOutputAs && ret.response?.output && registers) {
             // Save the output in a register for later use
             registers[test.options.storeOutputAs] = ret.response.output;
+            markOutputValue(ret.response.output);
           }
 
           return [ret];

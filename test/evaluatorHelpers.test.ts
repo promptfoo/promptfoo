@@ -309,6 +309,99 @@ describe('evaluatorHelpers', () => {
       expect(renderedPrompt).toBe('Test prompt with loaded from file');
     });
 
+    it('should load file references nested in object and array vars', async () => {
+      vi.mocked(fs.readFileSync).mockImplementation((filePath) =>
+        String(filePath).endsWith('nested-report.txt') ? 'report text\n' : 'key: value',
+      );
+      const vars = {
+        period: {
+          previous: { report: 'file://nested-report.txt', data: ['file://nested-data.YML', 'x'] },
+          untouched: ['file://chart.png', 'file://paper.PDF', 'file://gen.py', 'file://fn.js'],
+        },
+      };
+
+      const renderedPrompt = await renderPrompt(
+        toPrompt(
+          '{{ period.previous.report }}|{{ period.previous.data | join(",") }}|{{ period.untouched | join(",") }}',
+        ),
+        vars,
+      );
+
+      expect(renderedPrompt).toBe(
+        'report text|{"key":"value"},x|file://chart.png,file://paper.PDF,file://gen.py,file://fn.js',
+      );
+      expect(fs.readFileSync).toHaveBeenCalledTimes(2);
+    });
+
+    it('should not load file references from runtime or output vars', async () => {
+      const vars = {
+        _conversation: [{ input: 'hi', output: 'file:///etc/passwd' }],
+        sessionId: 'file:///etc/passwd',
+        stored: { answer: 'file:///etc/passwd' },
+        storedText: 'file:///etc/passwd',
+      };
+
+      const renderedPrompt = await renderPrompt(
+        toPrompt(
+          '{{ _conversation[0].output }}|{{ sessionId }}|{{ stored.answer }}|{{ storedText }}',
+        ),
+        vars,
+        undefined,
+        undefined,
+        undefined,
+        ['stored', 'storedText'],
+      );
+
+      expect(renderedPrompt).toBe(Array(4).fill('file:///etc/passwd').join('|'));
+      expect(fs.readFileSync).not.toHaveBeenCalled();
+    });
+
+    it('should preserve output vars provenance across copied vars and re-renders', async () => {
+      const vars: Record<string, any> = {
+        normal: { file: 'file://normal.txt' },
+        saved: { report: 'file://canary.txt' },
+      };
+
+      vi.mocked(fs.readFileSync).mockReturnValue('NORMAL-CONTENT\n');
+
+      // First render marks 'saved' as outputVar
+      await renderPrompt(toPrompt('{{ normal.file }}'), vars, undefined, undefined, undefined, [
+        'saved',
+      ]);
+
+      expect(vars.normal.file).toBe('NORMAL-CONTENT');
+      expect(vars.saved.report).toBe('file://canary.txt');
+
+      // Strategy-level copy like redteam iterative: { ...vars, prompt: 'attack' }
+      const copiedVars: Record<string, any> = { ...vars, prompt: 'attack' };
+
+      // Re-render WITHOUT outputVars argument
+      const reRendered = await renderPrompt(
+        toPrompt('{{ prompt }}|{{ saved.report }}'),
+        copiedVars,
+      );
+
+      expect(reRendered).toBe('attack|file://canary.txt');
+      expect(copiedVars.saved.report).toBe('file://canary.txt');
+    });
+
+    it('should throw when a nested file reference does not exist', async () => {
+      vi.mocked(fs.readFileSync).mockImplementationOnce(() => {
+        throw new Error('ENOENT: no such file or directory');
+      });
+
+      await expect(
+        renderPrompt(toPrompt('{{ cfg.report }}'), { cfg: { report: 'file://missing.txt' } }),
+      ).rejects.toThrow('ENOENT');
+    });
+
+    it('should not recurse forever on self-referential object vars', async () => {
+      const cfg: Record<string, unknown> = { name: 'loop' };
+      cfg.self = cfg;
+
+      await expect(renderPrompt(toPrompt('{{ cfg.name }}'), { cfg })).resolves.toBe('loop');
+    });
+
     it('should load external js files in renderPrompt and execute the exported function', async () => {
       const prompt = toPrompt('Test prompt with {{ var1 }} {{ var2 }} {{ var3 }}');
       const vars = {
