@@ -251,6 +251,7 @@ function phmLiteCheck(output) {
         });
       }
     }
+    }
   }
 
   const hasFail = violations.some((v) => v.severity === 'FAIL');
