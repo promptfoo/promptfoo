@@ -49,6 +49,10 @@ const DIGITS = 4;
  */
 function extractQuantities(text) {
   const out = [];
+  // Unicode minus (U+2212 / fullwidth －) appears in many LLM outputs; normalize
+  // before parsing so "−300" is not read as positive 300. Normalizing here
+  // covers every caller, including direct unit-test imports.
+  text = String(text ?? '').replace(/\u2212/g, '-').replace(/\uFF0D/g, '-');
   const re =
     /(-?\d[\d,]*(?:\.\d+)?(?:\s*[eE][+-]?\d+)?)\s*(°C|degC|°F|K\b|km\/s|m\/s|c\b|%|kg\b|g\b|km\b|m\b|J\b|kJ\b|MJ\b|Wh\b|kWh\b|MeV\b|GeV\b|eV\b|N\b|Pa\b|kPa\b|MPa\b|atm\b|mol\/L\b|mg\/mL\b)?/g;
   let m;
@@ -77,7 +81,12 @@ function toCelsius(value, unit) {
  */
 function phmLiteCheck(output) {
   const violations = [];
-  const qs = extractQuantities(output);
+  // Normalize typographic minus signs (U+2212, fullwidth －) to ASCII hyphen
+  // so negative quantities are parsed as negative everywhere below.
+  const normalized = String(output ?? '')
+    .replace(/\u2212/g, '-')
+    .replace(/\uFF0D/g, '-');
+  const qs = extractQuantities(normalized);
 
   for (const { value, unit, raw } of qs) {
     // Rule 1: universal speed limit ("1.5 c", "400,000 km/s", "5e8 m/s").
@@ -91,7 +100,9 @@ function phmLiteCheck(output) {
         : unit === 'm/s'
           ? value
           : null;
-    if (speedMs !== null && speedMs > C_LIGHT * 1.01) {
+    // Relativistic limit applies to magnitude: "−400,000 km/s" is just as
+    // impossible as the positive value, so compare |speedMs| against c.
+    if (speedMs !== null && Math.abs(speedMs) > C_LIGHT * 1.01) {
       violations.push({
         rule: 'speed-of-light',
         severity: 'FAIL',
@@ -109,8 +120,8 @@ function phmLiteCheck(output) {
       });
     }
 
-    // Rule 3: non-negativity of mass and energy.
-    if ((unit === 'kg' || unit === 'J' || unit === 'kJ' || unit === 'MJ') && value < 0) {
+    // Rule 3: non-negativity of mass and energy (kg and g are both mass).
+    if ((unit === 'kg' || unit === 'g' || unit === 'J' || unit === 'kJ' || unit === 'MJ') && value < 0) {
       violations.push({
         rule: 'negative-mass-energy',
         severity: 'FAIL',
@@ -118,8 +129,9 @@ function phmLiteCheck(output) {
       });
     }
 
-    // Rule 4: percentage range.
-    if (unit === '%' && Math.abs(value) > 100) {
+    // Rule 4: percentage range — check both bounds separately; "-5%" is as
+    // out-of-range as "150%" since probabilities live in [0, 100].
+    if (unit === '%' && (value < 0 || value > 100)) {
       violations.push({
         rule: 'percentage-range',
         severity: 'FAIL',
@@ -129,11 +141,11 @@ function phmLiteCheck(output) {
   }
 
   // Rule 5: free-fall time consistency, "fell X m in Y s" (15% tolerance).
-  const fall =
-    /(?:fell|drops?|dropped|falls?)\s+([\d,.]+)\s*(?:m\b|meters?|metres?).*?(?:in|within|after)\s+([\d,.]+)\s*s(?:ec|econds?)?\b/i.exec(
-      output
-    );
-  if (fall) {
+  // Iterate over every claim in the output — a plausible first sentence must
+  // not mask an impossible later one.
+  const fallRe =
+    /(?:fell|drops?|dropped|falls?)\s+([\d,.]+)\s*(?:m\b|meters?|metres?).*?(?:in|within|after)\s+([\d,.]+)\s*s(?:ec|econds?)?\b/gi;
+  for (const fall of normalized.matchAll(fallRe)) {
     const h = Number(fall[1].replace(/,/g, ''));
     const t = Number(fall[2].replace(/,/g, ''));
     if (h > 0 && t > 0) {
@@ -149,7 +161,7 @@ function phmLiteCheck(output) {
   }
 
   // Rule 6: percentage shares summing above 100% (warn; may be overlapping).
-  const pct = [...output.matchAll(/(\d[\d,.]*)\s*%/g)].map((x) => Number(x[1].replace(/,/g, '')));
+  const pct = [...normalized.matchAll(/(\d[\d,.]*)\s*%/g)].map((x) => Number(x[1].replace(/,/g, '')));
   if (pct.length >= 2) {
     const sum = pct.reduce((a, b) => a + b, 0);
     if (sum > 100 + 1e-9) {
