@@ -6,7 +6,7 @@ import { createServer } from 'node:http';
 import { createRequire } from 'node:module';
 import os from 'node:os';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { parseArgs } from 'node:util';
 import { brotliCompressSync, gzipSync } from 'node:zlib';
 
@@ -863,6 +863,128 @@ async function runInstalledCompressionEval(consumerDir: string, configDir: strin
   }
 }
 
+async function runInstalledNoCacheExtensionEval(
+  consumerDir: string,
+  configDir: string,
+): Promise<void> {
+  const responseValues = ['A', 'B'];
+  let requestCount = 0;
+  const server = createServer((_request, response) => {
+    const output = responseValues[Math.min(requestCount++, responseValues.length - 1)];
+    response.writeHead(200, { 'content-type': 'application/json' });
+    response.end(JSON.stringify({ output }));
+  });
+
+  try {
+    await new Promise<void>((resolve, reject) => {
+      server.once('error', reject);
+      server.listen(0, '127.0.0.1', () => {
+        server.off('error', reject);
+        resolve();
+      });
+    });
+    const address = server.address();
+    assert(address && typeof address !== 'string', 'Failed to bind no-cache extension server');
+    const providerUrl = `http://127.0.0.1:${address.port}/response`;
+    const hookPath = path.join(consumerDir, 'no-cache-extension.mjs');
+    fs.writeFileSync(
+      hookPath,
+      `import { loadApiProvider } from 'promptfoo';
+
+export async function beforeEach(context) {
+  const provider = await loadApiProvider(process.env.PROMPTFOO_EXTENSION_PROVIDER_URL, {
+    options: { config: { method: 'GET', maxRetries: 0, transformResponse: 'json.output' } },
+  });
+  return { ...context, test: { ...context.test, provider } };
+}
+`,
+    );
+    const baseConfig = {
+      prompts: ['artifact no-cache extension'],
+      providers: [
+        {
+          id: providerUrl,
+          config: { method: 'GET', maxRetries: 0, transformResponse: 'json.output' },
+        },
+      ],
+      tests: [{ assert: [{ type: 'equals', value: 'A' }] }],
+      writeLatestResults: false,
+      sharing: false,
+    };
+    const extensionConfig = {
+      ...baseConfig,
+      extensions: [`${pathToFileURL(hookPath).href}:beforeEach`],
+      tests: [{ assert: [{ type: 'equals', value: 'B' }] }],
+    };
+    const baseConfigPath = path.join(consumerDir, 'no-cache-base.json');
+    const extensionConfigPath = path.join(consumerDir, 'no-cache-extension.json');
+    fs.writeFileSync(baseConfigPath, JSON.stringify(baseConfig));
+    fs.writeFileSync(extensionConfigPath, JSON.stringify(extensionConfig));
+
+    const outputPath = (name: string) => path.join(consumerDir, `${name}-results.json`);
+    const entrypointPath = path.join(
+      consumerDir,
+      'node_modules',
+      'promptfoo',
+      'dist',
+      'src',
+      'entrypoint.js',
+    );
+    const env = {
+      ALL_PROXY: '',
+      HTTP_PROXY: '',
+      HTTPS_PROXY: '',
+      NO_PROXY: '127.0.0.1,localhost',
+      PROMPTFOO_CONFIG_DIR: configDir,
+      PROMPTFOO_DISABLE_REMOTE_GENERATION: 'true',
+      PROMPTFOO_DISABLE_TELEMETRY: '1',
+      PROMPTFOO_DISABLE_UPDATE: 'true',
+      PROMPTFOO_EXTENSION_PROVIDER_URL: providerUrl,
+      all_proxy: '',
+      http_proxy: '',
+      https_proxy: '',
+      no_proxy: '127.0.0.1,localhost',
+    };
+    const runEval = async (configPath: string, name: string, noCache = false) => {
+      await runAsync(
+        process.execPath,
+        [
+          entrypointPath,
+          'eval',
+          '--config',
+          configPath,
+          '--output',
+          outputPath(name),
+          ...(noCache ? ['--no-cache'] : []),
+          '--no-write',
+          '--no-table',
+          '--no-progress-bar',
+          '--max-concurrency',
+          '1',
+        ],
+        consumerDir,
+        env,
+      );
+      const result = JSON.parse(fs.readFileSync(outputPath(name), 'utf8')) as ArtifactEvalOutput;
+      const evaluationResult = result.results?.results?.[0];
+      assert(evaluationResult, `Missing result for ${name} evaluation`);
+      assert.equal(evaluationResult.success, true, `${name} evaluation failed`);
+      return evaluationResult.response?.output;
+    };
+
+    assert.equal(await runEval(baseConfigPath, 'warm'), 'A');
+    assert.equal(await runEval(extensionConfigPath, 'disabled', true), 'B');
+    assert.equal(await runEval(baseConfigPath, 'enabled'), 'A');
+    assert.equal(requestCount, 2, 'The disabled evaluation must not overwrite the cache');
+  } finally {
+    if (server.listening) {
+      await new Promise<void>((resolve, reject) => {
+        server.close((error) => (error ? reject(error) : resolve()));
+      });
+    }
+  }
+}
+
 async function runInstalledCodingSdkEval(
   consumerDir: string,
   configDir: string,
@@ -1646,6 +1768,9 @@ async function main(): Promise<void> {
       );
       await timeAsyncPhase('check response compression', () =>
         runInstalledCompressionEval(consumerDir, configDir),
+      );
+      await timeAsyncPhase('check no-cache extension provider', () =>
+        runInstalledNoCacheExtensionEval(consumerDir, configDir),
       );
     }
     await timeAsyncPhase('check optional browser dependencies', () =>
