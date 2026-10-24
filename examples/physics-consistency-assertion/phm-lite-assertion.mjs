@@ -93,6 +93,7 @@ function toCelsius(value, unit) {
  * @param {string} output
  * @returns {{verdict: 'PASS'|'WARN'|'FAIL', violations: Array<object>}}
  */
+// biome-ignore lint/complexity/useExcessiveComplexity: deterministic rule engine, single flat function keeps all rule thresholds in one place
 function phmLiteCheck(output) {
   const violations = [];
   // Normalize typographic minus signs (U+2212, fullwidth －) to ASCII hyphen
@@ -275,4 +276,4 @@ export default async function phmLiteAssertion(output) {
 }
 
 // Expose internals so the example's own unit tests can import them.
-export { phmLiteCheck, extractQuantities, C_LIGHT, G_EARTH };
+export { C_LIGHT, G_EARTH, extractQuantities, phmLiteCheck };
