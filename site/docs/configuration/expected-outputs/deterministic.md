@@ -13,6 +13,7 @@ keywords:
     regex,
     json,
     levenshtein,
+    numeric match,
     LLM testing,
     output validation,
     deterministic tests,
@@ -61,6 +62,7 @@ These assertions can check LLM output or provider metadata directly. Configured 
 | [javascript](/docs/configuration/expected-outputs/javascript)   | provided Javascript function validates the output                  |
 | [latency](#latency)                                             | Latency is below a threshold (milliseconds)                        |
 | [levenshtein](#levenshtein-distance)                            | Levenshtein distance is below a threshold                          |
+| [numeric-match](#numeric-match)                                 | stated number is within a relative tolerance of the expected value |
 | [perplexity-score](#perplexity-score)                           | Normalized perplexity                                              |
 | [perplexity](#perplexity)                                       | Perplexity is below a threshold                                    |
 | [python](/docs/configuration/expected-outputs/python)           | provided Python function validates the output                      |
@@ -1055,6 +1057,49 @@ tests:
         threshold: 2
         value: '{{expected}}'
 ```
+
+### Numeric match
+
+The `numeric-match` assertion checks that the number stated in the output is within a relative tolerance of an expected value. Use it for quantitative answers, where the same correct value can be written many ways and text matching is unreliable: `contains: "416,161"` rejects a correct `$416.2 billion`, while `contains: "416"` accepts a wrong `$416 million`.
+
+Before comparing, the assertion normalizes:
+
+- currency symbols (`$`, `€`, `£`, `¥`)
+- thousands separators (`416,161`)
+- scale words and suffixes: `thousand`, `million`, `billion`, `trillion`, `bn`, `mn`, and `K`, `M`, `B`, `T` when attached to the number (`$416.16B`)
+- negatives, including accounting-style negatives such as `(1,234)`
+
+Digits inside words, such as `FY2025` or `Q3`, are ignored.
+
+```yaml
+assert:
+  - type: numeric-match
+    value: 416161000000 # expected value in base units
+    threshold: 0.005 # relative tolerance; defaults to 0.005 (0.5%)
+```
+
+With this assertion, `$416.2 billion`, `416,161 million`, `$416.16B` and `416161000000` all pass, and `$391.0 billion` fails.
+
+`value` can be a number or a string that contains exactly one number, so `value: '$416.161 billion'` and `value: '{{expected}}'` work too. When the expected value is `0`, `threshold` is used as an absolute tolerance.
+
+**Which number is graded.** When the output has a `Final answer:` line, only the last such line is searched. That lets a prompt ask for a final line, so a figure mentioned in passing is not graded by mistake. Within that text, `config.mode` selects the number:
+
+| `mode`            | Number graded                                      |
+| ----------------- | -------------------------------------------------- |
+| `first` (default) | The first number                                   |
+| `last`            | The last number                                    |
+| `closest`         | The number closest to the expected value (lenient) |
+
+```yaml
+assert:
+  - type: numeric-match
+    value: 89.3e9
+    threshold: 0.01
+    config:
+      mode: last
+```
+
+The score is `1 - error / threshold`, clamped to the range 0 to 1, so near misses score higher than wild misses. `not-numeric-match` passes when the stated number is outside the tolerance or when no number is found.
 
 ### Perplexity
 
