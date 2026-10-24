@@ -31,7 +31,7 @@ npx promptfoo@latest eval
 npx promptfoo@latest view
 ```
 
-The example uses the built-in `echo` provider, so it runs **without any API key**: each test's variable text is echoed as the provider output, and the PHM-Lite assertion runs on that text — demonstrating each rule end-to-end. To check real model output, swap the provider for any Promptfoo provider (e.g. `openai:gpt-4.1-mini`) and keep everything else unchanged.
+The example uses the built-in `echo` provider, so it runs **without any API key**: each test's variable text is echoed as the provider output, and the PHM-Lite assertion runs on that text — demonstrating each rule end-to-end. To check real model output, swap the provider for any Promptfoo provider (e.g. `openai:gpt-6-sol`) and keep everything else unchanged.
 
 ## Rules Covered
 
@@ -49,7 +49,7 @@ The example uses the built-in `echo` provider, so it runs **without any API key*
 ## Design Guarantees and Limits
 
 - **Deterministic**: on a given Node runtime, repeated runs on identical input produce identical verdicts (verified via a SHA-256 repeated-run check). No model, no sampling.
-- **No third-party runtime dependencies**: one ES module using Node ≥ 18 built-ins only. Nothing installed.
+- **Runtime**: run the eval with Promptfoo's supported runtime (Node ≥ 22.22, per this repo's `engines` field). The assertion module itself is a single ES module with no third-party runtime dependencies (Node ≥ 18 built-ins only), so it can also be reused standalone.
 - **Designed for no network**: the checker performs no network calls and sends no data anywhere — everything runs inside the Promptfoo process. (Design property, not a runtime-monitored isolation claim.)
 - **Scope — exactly the seven rules listed above**: arithmetic and physical-law consistency only. This is not a general physics engine, does not fact-check semantics, and is not a substitute for domain validation. What it flags, it flags because the numbers themselves are impossible — not because they look unusual.
 - **The eval in this example is a rule self-test** on the `echo` provider (question text echoed as output), used to demonstrate assertion wiring at zero API cost. It is not a benchmark of model quality; point `providers` at any real model to use it for real.
