@@ -7,7 +7,7 @@ prompts:
 # The built-in echo provider makes this example runnable with no API key:
 # the question text is echoed as the provider output, and the PHM-Lite
 # assertion runs on it. For real model output, replace with any provider,
-# e.g.  openai:gpt-4.1-mini  — nothing else needs to change.
+# e.g.  openai:gpt-6-sol  — nothing else needs to change.
 providers:
   - echo
 
