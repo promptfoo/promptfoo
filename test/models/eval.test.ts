@@ -2730,6 +2730,82 @@ describe('evaluator', () => {
       }
     });
 
+    it.each([
+      {
+        name: 'scalar result metadata',
+        searchQuery: 'metadata-scalar-metric-needle',
+        update: (evalId: string) =>
+          sql`UPDATE eval_results SET metadata = ${JSON.stringify({ source: 'metadata-scalar-metric-needle' })} WHERE eval_id = ${evalId} AND test_idx = 0`,
+        expectedTestIdx: 0,
+      },
+      {
+        name: 'nested result metadata',
+        searchQuery: 'metadata-nested-metric-needle',
+        update: (evalId: string) =>
+          sql`UPDATE eval_results SET metadata = ${JSON.stringify({ nested: { source: 'metadata-nested-metric-needle' } })} WHERE eval_id = ${evalId} AND test_idx = 1`,
+        expectedTestIdx: 1,
+      },
+      {
+        name: 'test case metadata',
+        searchQuery: 'test-case-metadata-metric-needle',
+        update: (evalId: string) =>
+          sql`UPDATE eval_results SET test_case = json_set(test_case, '$.metadata', json(${JSON.stringify({ source: 'test-case-metadata-metric-needle' })})) WHERE eval_id = ${evalId} AND test_idx = 2`,
+        expectedTestIdx: 2,
+      },
+      {
+        name: 'reserved __promptfoo metadata',
+        searchQuery: 'reserved-metadata-metric-needle',
+        update: (evalId: string) =>
+          sql`UPDATE eval_results SET metadata = ${JSON.stringify({ __promptfoo: { source: 'reserved-metadata-metric-needle' } })} WHERE eval_id = ${evalId} AND test_idx = 3`,
+        expectedTestIdx: undefined,
+      },
+    ])(
+      'keeps metrics consistent for $name searches',
+      async ({ searchQuery, update, expectedTestIdx }) => {
+        const eval_ = await EvalFactory.create({ numResults: 4, withNamedScores: true });
+        const db = await getDb();
+        await db.run(update(eval_.id));
+        const filters = [JSON.stringify(createAccuracyFilter())];
+
+        const unfilteredPage = await eval_.getTablePage({ searchQuery });
+        const unfilteredMetrics = await eval_.getFilteredMetrics({
+          filterMode: 'all',
+          searchQuery,
+        });
+        const unfilteredCount = unfilteredMetrics.reduce(
+          (sum, prompt) =>
+            sum + prompt.testPassCount + prompt.testFailCount + prompt.testErrorCount,
+          0,
+        );
+        expect(unfilteredPage.body).toEqual([]);
+        expect(unfilteredCount).toBe(0);
+
+        const filteredPage = await eval_.getTablePage({
+          searchQuery,
+          filters,
+        });
+        const filteredMetrics = await eval_.getFilteredMetrics({
+          filterMode: 'all',
+          searchQuery,
+          filters,
+        });
+        const filteredCount = filteredMetrics.reduce(
+          (sum, prompt) =>
+            sum + prompt.testPassCount + prompt.testFailCount + prompt.testErrorCount,
+          0,
+        );
+        const displayedOutputs = filteredPage.body.flatMap((row) =>
+          row.outputs.filter(Boolean),
+        ).length;
+
+        expect(filteredPage.body.map((row) => row.testIdx)).toEqual(
+          expectedTestIdx === undefined ? [] : [expectedTestIdx],
+        );
+        expect(filteredCount).toBe(displayedOutputs);
+        expect(filteredCount).toBe(expectedTestIdx === undefined ? 0 : 1);
+      },
+    );
+
     it('counts every output of a response-matched multi-prompt row', async () => {
       const prompts = [
         createCompletedPrompt('First {{topic}}', { label: 'first' }),
