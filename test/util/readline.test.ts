@@ -39,6 +39,10 @@ describe('readline utils', () => {
 
   describe('promptUser', () => {
     it('should resolve with user answer', async () => {
+      mockInterface.close.mockImplementation(() => {
+        const onClose = mockInterface.on.mock.calls.find(([event]) => event === 'close')?.[1];
+        onClose?.();
+      });
       mockInterface.question.mockImplementation((_, callback) => callback('Test answer'));
       await expect(promptUser('Test question?')).resolves.toBe('Test answer');
       expect(mockInterface.question).toHaveBeenCalledWith('Test question?', expect.any(Function));
@@ -46,12 +50,25 @@ describe('readline utils', () => {
     });
 
     it('should reject on error', async () => {
+      mockInterface.close.mockImplementation(() => {
+        const onClose = mockInterface.on.mock.calls.find(([event]) => event === 'close')?.[1];
+        onClose?.();
+      });
       const error = new Error('Test error');
       const answer = promptUser('Test question?');
       mockInterface.on.mock.calls[0][1](error);
       await expect(answer).rejects.toBe(error);
       expect(mockInterface.on).toHaveBeenCalledWith('error', expect.any(Function));
       expect(mockInterface.close).toHaveBeenCalledExactlyOnceWith();
+    });
+
+    it('should reject when stdin closes without an answer', async () => {
+      const answer = promptUser('Test question?');
+      const onClose = mockInterface.on.mock.calls.find(([event]) => event === 'close')?.[1];
+      expect(onClose).toBeDefined();
+      onClose?.();
+      await expect(answer).rejects.toThrow('Input closed before an answer was received');
+      expect(mockInterface.close).not.toHaveBeenCalled();
     });
 
     it('should reject if readline creation fails', async () => {
