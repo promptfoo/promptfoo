@@ -209,27 +209,26 @@ function phmLiteCheck(output) {
     }
   }
 
-  // Rule 6: percentage shares summing above 100% (warn). Independent
-  // metrics ("precision was 60% and recall was 70%") are not shares of one
-  // whole, so the sum applies only inside a sentence that carries share
-  // wording; scientific-notation percentages are handled because they are
-  // re-parsed by the same grammar here.
-  // Rule 6: percentage shares summing above 100% (warn). A percentage is
-  // treated as a share only when its own neighbourhood carries share
-  // wording ("Market share was 60%" — yes; "recall was 70%" — no), so
-  // unrelated metrics in one sentence are not summed together.
-  const sharePcts = qs
-    .filter((q) => q.unit === '%')
-    .filter((q) => /share|allocation|split|portion|breakdown|divided/i.test(normalized.slice(Math.max(0, q.index - 80), q.index + 60)))
-    .map((q) => q.value);
-  if (sharePcts.length >= 2) {
-    const sum = sharePcts.reduce((a, b) => a + b, 0);
-    if (sum > 100 + 1e-9) {
-      violations.push({
-        rule: 'percentage-sum',
-        severity: 'WARN',
-        detail: `${sharePcts.length} shares sum to ${sum.toFixed(DIGITS)}% — verify the shares are mutually exclusive`,
-      });
+  // Rule 6: percentage shares summing above 100% (warn). A sentence counts
+  // as a share breakdown only when it carries share wording AND none of the
+  // common independent-metric words (recall, precision, ...), so
+  // "Market share was 60% while recall was 70%" is not summed, while
+  // "Traffic shares: A took 60% and B took 70%" is.
+  const SHARE_CTX = /share|allocation|split|portion|breakdown|divided/i;
+  const METRIC_CTX = /recall|precision|accuracy|margin|error rate|f1/i;
+  for (const sentence of normalized.split(/[.!?]\s|\n/)) {
+    const pct = [...sentence.matchAll(/(\d[\d,]*(?:\.\d+)?(?:\s*[eE][+-]?\d+)?)\s*%/g)].map((x) =>
+      Number(x[1].replace(/[\s,]/g, ''))
+    );
+    if (pct.length >= 2 && SHARE_CTX.test(sentence) && !METRIC_CTX.test(sentence)) {
+      const sum = pct.reduce((a, b) => a + b, 0);
+      if (sum > 100 + 1e-9) {
+        violations.push({
+          rule: 'percentage-sum',
+          severity: 'WARN',
+          detail: `${pct.length} shares sum to ${sum.toFixed(DIGITS)}% — verify the shares are mutually exclusive`,
+        });
+      }
     }
   }
 
