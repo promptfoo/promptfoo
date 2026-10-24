@@ -6,7 +6,7 @@ import { createServer } from 'node:http';
 import { createRequire } from 'node:module';
 import os from 'node:os';
 import path from 'node:path';
-import { fileURLToPath, pathToFileURL } from 'node:url';
+import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 import { brotliCompressSync, gzipSync } from 'node:zlib';
 
@@ -886,7 +886,8 @@ async function runInstalledNoCacheExtensionEval(
     const address = server.address();
     assert(address && typeof address !== 'string', 'Failed to bind no-cache extension server');
     const providerUrl = `http://127.0.0.1:${address.port}/response`;
-    const hookPath = path.join(consumerDir, 'no-cache-extension.mjs');
+    const hookPath = path.join(consumerDir, 'extension fixture', 'no-cache-extension.mjs');
+    fs.mkdirSync(path.dirname(hookPath), { recursive: true });
     fs.writeFileSync(
       hookPath,
       `import { loadApiProvider } from 'promptfoo';
@@ -913,7 +914,7 @@ export async function beforeEach(context) {
     };
     const extensionConfig = {
       ...baseConfig,
-      extensions: [`${pathToFileURL(hookPath).href}:beforeEach`],
+      extensions: [`file://${hookPath}:beforeEach`],
       tests: [{ assert: [{ type: 'equals', value: 'B' }] }],
     };
     const baseConfigPath = path.join(consumerDir, 'no-cache-base.json');
@@ -935,6 +936,10 @@ export async function beforeEach(context) {
       HTTP_PROXY: '',
       HTTPS_PROXY: '',
       NO_PROXY: '127.0.0.1,localhost',
+      NODE_ENV: 'production',
+      PROMPTFOO_CACHE_ENABLED: 'true',
+      PROMPTFOO_CACHE_PATH: path.join(consumerDir, 'no-cache-cache'),
+      PROMPTFOO_CACHE_TYPE: 'disk',
       PROMPTFOO_CONFIG_DIR: configDir,
       PROMPTFOO_DISABLE_REMOTE_GENERATION: 'true',
       PROMPTFOO_DISABLE_TELEMETRY: '1',
