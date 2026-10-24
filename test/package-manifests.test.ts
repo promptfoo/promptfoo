@@ -690,6 +690,20 @@ describe('package manifests', () => {
     }
   });
 
+  it('builds the image and dev container one step at a time', () => {
+    // The environment option only applies while the build script uses concurrently.
+    const { scripts } = readPackageJson<{ scripts: Record<string, string> }>('package.json');
+    expect(scripts.build).toMatch(/^concurrently /);
+
+    const dockerfile = fs.readFileSync(path.join(process.cwd(), 'Dockerfile'), 'utf8');
+    expect(dockerfile).toMatch(/^RUN CONCURRENTLY_MAX_PROCESSES=1 npm run build$/m);
+
+    const devcontainer = readPackageJson<{ postCreateCommand: string }>(
+      '.devcontainer/devcontainer.json',
+    );
+    expect(devcontainer.postCreateCommand).toContain('CONCURRENTLY_MAX_PROCESSES=1 npm run build');
+  });
+
   it('blocks dependency install scripts in the Docker build', () => {
     const dockerfile = fs.readFileSync(path.join(process.cwd(), 'Dockerfile'), 'utf8');
 
