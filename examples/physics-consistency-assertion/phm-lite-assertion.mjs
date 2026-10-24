@@ -58,11 +58,6 @@ function extractQuantities(text) {
   //    range separator in "0-300 °C" is not read as a sign of "-300");
   //  - leading-dot decimals (".5 c" = 0.5 c);
   //  - thousands separators and scientific notation.
-  const num = '-?(?:\\d[\\d,]*(?:\\.\\d+)?|\\.\\d+)(?:\\s*[eE][+-]?\\d+)?';
-  // Speed units reject a following per-second exponent in every common form:
-  // "/s", "^2", superscripts, and the plain-ASCII "m/s2" without a caret.
-  const unitAlt =
-    '°C|degC|°F|K\\b|km\\/s(?!\\s*[/^²³]|\\s*\\d)|m\\/s(?!\\s*[/^²³]|\\s*\\d)|c\\b|%|kg\\b(?!\\s*[·*/⋅])|g\\b|km\\b|m\\b|J\\b|kJ\\b|MJ\\b|Wh\\b|kWh\\b|MeV\\b|GeV\\b|eV\\b|N\\b|Pa\\b|kPa\\b|MPa\\b|atm\\b|mol\\/L\\b|mg\\/mL\\b';
   const re = new RegExp(`(?<![\\d.,])(${num})\\s*(${unitAlt})?`, 'g');
   let m;
   while ((m = re.exec(text)) !== null) {
@@ -98,86 +93,99 @@ function toCelsius(value, unit) {
  * @param {string} output
  * @returns {{verdict: 'PASS'|'WARN'|'FAIL', violations: Array<object>}}
  */
-// biome-ignore lint/complexity/useExcessiveComplexity: deterministic rule engine, single flat function keeps all rule thresholds in one place
-function phmLiteCheck(output) {
-  const violations = [];
-  // Normalize typographic minus signs (U+2212, fullwidth －) to ASCII hyphen
-  // so negative quantities are parsed as negative everywhere below.
-  const normalized = String(output ?? '')
-    .replace(/\u2212/g, '-')
-    .replace(/\uFF0D/g, '-');
-  const qs = extractQuantities(normalized);
-
-  for (const { value, unit, raw, index } of qs) {
-    // Rule 1: universal speed limit ("1.5 c", "400,000 km/s", "5e8 m/s").
-    // 1% tolerance absorbs rounded light-speed notation ("3e8 m/s ≈ c"),
-    // which is common in benign text; nothing macroscopic reaches 0.99c+.
-    const isLightFrac = unit === 'c' && Math.abs(value) > 1.01;
-    const speedMs = isLightFrac
-      ? value * C_LIGHT
-      : unit === 'km/s'
-        ? value * 1000
-        : unit === 'm/s'
-          ? value
-          : null;
-    // Relativistic limit applies to magnitude: "−400,000 km/s" is just as
-    // impossible as the positive value, so compare |speedMs| against c.
-    if (speedMs !== null && Math.abs(speedMs) > C_LIGHT * 1.01) {
-      violations.push({
-        rule: 'speed-of-light',
-        severity: 'FAIL',
-        detail: `stated speed ${raw} exceeds c (${C_LIGHT} m/s)`,
-      });
-    }
-
-    // Rule 2: absolute temperature floor. 1e-9 tolerance absorbs the
-    // float round-trip of the exact Fahrenheit boundary (-459.67 °F).
-    // Negative deltas ("a temperature change of -300 °C", ΔT) are valid
-    // and exempt: only absolute readings are floored.
-    const tempWindow = normalized.slice(Math.max(0, index - 160), index + 120);
-    // The delta marker must belong to THIS quantity: search only the span
-    // after the previous temperature unit, so "dropped by 300 °C to -300 °C"
-    // keeps the absolute -300 °C reading floored.
-    const before = normalized.slice(0, index);
-    const prevTemp = Math.max(before.lastIndexOf('°C'), before.lastIndexOf('degC'), before.lastIndexOf('°F'));
-    const ownSpan = normalized.slice(prevTemp === -1 ? 0 : prevTemp + 3, index) + normalized.slice(index, index + 120);
-    const isDelta = /change|delta|\u0394|difference|dropped by|fell by|cooled by/i.test(ownSpan);
-    const celsius = toCelsius(value, unit);
-    if (!isDelta && celsius !== null && celsius < ABSOLUTE_ZERO_C - 1e-9) {
-      violations.push({
-        rule: 'absolute-zero',
-        severity: 'FAIL',
-        detail: `stated temperature ${raw} is below absolute zero`,
-      });
-    }
-
-    // Rule 3: non-negativity of mass (kg only — see MASS_UNITS note).
-    if (MASS_UNITS.has(unit) && value < 0) {
-      violations.push({
-        rule: 'negative-mass',
-        severity: 'FAIL',
-        detail: `negative ${unit} quantity: ${raw}`,
-      });
-    }
-
-    // Rule 4: percentage range — gated on probability context. Percentages
-    // of growth or return ("sales grew 150%", "returned -5%") are valid and
-    // must not fail; only probability/confidence claims live in [0, 100].
-    if (unit === '%' && (value < 0 || value > 100)) {
-      const back = normalized.slice(Math.max(0, index - 220), index);
-      const sentStart = Math.max(back.lastIndexOf('.'), back.lastIndexOf('!'), back.lastIndexOf('?')) + 1;
-      const fwd = normalized.slice(index, index + 160);
-      const sentEnd = (() => { const m2 = fwd.match(/[.!?](?=\s|$)/); return m2 ? m2.index : fwd.length; })();
-      const window = normalized.slice(Math.max(0, index - 220) + sentStart, index + sentEnd);
-      if (!/probabilit|confiden|chance|likelihood|certainty|belief|odds/i.test(window)) continue;
-      violations.push({
-        rule: 'percentage-range',
-        severity: 'FAIL',
-        detail: `percentage outside [0, 100]: ${raw}`,
-      });
-    }
+/**
+ * Apply the four per-quantity rules (speed limit, absolute zero,
+ * non-negativity of mass, percentage range) to one parsed quantity.
+ */
+function checkQuantityRules({ value, unit, raw, index, underflowNeg }, violations, normalized) {
+  // Rule 1: universal speed limit ("1.5 c", "400,000 km/s", "5e8 m/s").
+  // 1% tolerance absorbs rounded light-speed notation ("3e8 m/s ≈ c"),
+  // which is common in benign text; nothing macroscopic reaches 0.99c+.
+  const isLightFrac = unit === 'c' && Math.abs(value) > 1.01;
+  const speedMs = isLightFrac
+    ? value * C_LIGHT
+    : unit === 'km/s'
+      ? value * 1000
+      : unit === 'm/s'
+        ? value
+        : null;
+  // Relativistic limit applies to magnitude: "−400,000 km/s" is just as
+  // impossible as the positive value, so compare |speedMs| against c.
+  if (speedMs !== null && Math.abs(speedMs) > C_LIGHT * 1.01) {
+    violations.push({
+      rule: 'speed-of-light',
+      severity: 'FAIL',
+      detail: `stated speed ${raw} exceeds c (${C_LIGHT} m/s)`,
+    });
   }
 
+  // Rule 2: absolute temperature floor. 1e-9 tolerance absorbs the
+  // float round-trip of the exact Fahrenheit boundary (-459.67 °F).
+  // Negative deltas ("a temperature change of -300 °C", ΔT) are valid
+  // and exempt: only absolute readings are floored.
+  const tempWindow = normalized.slice(Math.max(0, index - 160), index + 120);
+  // The delta marker must belong to THIS quantity: search only the span
+  // after the previous temperature unit, so "dropped by 300 °C to -300 °C"
+  // keeps the absolute -300 °C reading floored.
+  const before = normalized.slice(0, index);
+  const prevTemp = Math.max(before.lastIndexOf('°C'), before.lastIndexOf('degC'), before.lastIndexOf('°F'));
+  const ownSpan = normalized.slice(prevTemp === -1 ? 0 : prevTemp + 3, index) + normalized.slice(index, index + 120);
+  const isDelta = /change|delta|\u0394|difference|dropped by|fell by|cooled by/i.test(ownSpan);
+  const celsius = toCelsius(value, unit);
+  if (!isDelta && celsius !== null && celsius < ABSOLUTE_ZERO_C - 1e-9) {
+    violations.push({
+      rule: 'absolute-zero',
+      severity: 'FAIL',
+      detail: `stated temperature ${raw} is below absolute zero`,
+    });
+  }
+
+  // Rule 3: non-negativity of mass (kg only — see MASS_UNITS note).
+  if (MASS_UNITS.has(unit) && value < 0) {
+    violations.push({
+      rule: 'negative-mass',
+      severity: 'FAIL',
+      detail: `negative ${unit} quantity: ${raw}`,
+    });
+  }
+
+  // Rule 4: percentage range — gated on probability context. Percentages
+  // of growth or return ("sales grew 150%", "returned -5%") are valid and
+  // must not fail; only probability/confidence claims live in [0, 100].
+  if (unit === '%' && (value < 0 || value > 100)) {
+    const back = normalized.slice(Math.max(0, index - 220), index);
+    const sentStart = Math.max(back.lastIndexOf('.'), back.lastIndexOf('!'), back.lastIndexOf('?')) + 1;
+    const fwd = normalized.slice(index, index + 160);
+    const sentEnd = (() => { const m2 = fwd.match(/[.!?](?=\s|$)/); return m2 ? m2.index : fwd.length; })();
+    const window = normalized.slice(Math.max(0, index - 220) + sentStart, index + sentEnd);
+    if (!/probabilit|confiden|chance|likelihood|certainty|belief|odds/i.test(window)) return;
+    violations.push({
+      rule: 'percentage-range',
+      severity: 'FAIL',
+      detail: `percentage outside [0, 100]: ${raw}`,
+    });
+  }
+}
+
+const num = '-?(?:\\d[\\d,]*(?:\\.\\d+)?|\\.\\d+)(?:\\s*[eE][+-]?\\d+)?';
+// Speed units reject a following per-second exponent in every common form:
+// "/s", "^2", superscripts, and the plain-ASCII "m/s2" without a caret.
+const unitAlt =
+  '°C|degC|°F|K\\b|km\\/s(?!\\s*[/^²³]|\\s*\\d)|m\\/s(?!\\s*[/^²³]|\\s*\\d)|c\\b|%|kg\\b(?!\\s*[·*/⋅])|g\\b|km\\b|m\\b|J\\b|kJ\\b|MJ\\b|Wh\\b|kWh\\b|MeV\\b|GeV\\b|eV\\b|N\\b|Pa\\b|kPa\\b|MPa\\b|atm\\b|mol\\/L\\b|mg\\/mL\\b';
+
+
+function phmLiteCheck(output) {
+  const violations = [];
+  let normalized = String(output ?? '')
+    .replace(/\u2212/g, '-')
+    .replace(/\uFF0D/g, '-');
+  // Shared-unit range propagation
+  const rangeProp = new RegExp(`(${num})\\s+(?:to|\\u2013|\\u2014)\\s+(${num})\\s*(${unitAlt})`, 'gi');
+  normalized = normalized.replace(rangeProp, (_mm, a, b, u) => `${a} ${u} and ${b} ${u}`);
+  const qs = extractQuantities(normalized);
+  for (const q of qs) {
+    checkQuantityRules(q, violations, normalized);
+  }
   // Rule 5: free-fall time consistency, "fell X m in Y s" (15% tolerance).
   // - Iterate over every claim (a plausible first sentence must not mask a
   //   later impossible one).
