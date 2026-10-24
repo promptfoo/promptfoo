@@ -53,8 +53,15 @@ function extractQuantities(text) {
   // before parsing so "−300" is not read as positive 300. Normalizing here
   // covers every caller, including direct unit-test imports.
   text = String(text ?? '').replace(/\u2212/g, '-').replace(/\uFF0D/g, '-');
-  const re =
-    /(-?\d[\d,]*(?:\.\d+)?(?:\s*[eE][+-]?\d+)?)\s*(°C|degC|°F|K\b|km\/s|m\/s|c\b|%|kg\b|g\b|km\b|m\b|J\b|kJ\b|MJ\b|Wh\b|kWh\b|MeV\b|GeV\b|eV\b|N\b|Pa\b|kPa\b|MPa\b|atm\b|mol\/L\b|mg\/mL\b)?/g;
+  // Number grammar:
+  //  - unary minus only when NOT immediately preceded by a digit (so the
+  //    range separator in "0-300 °C" is not read as a sign of "-300");
+  //  - leading-dot decimals (".5 c" = 0.5 c);
+  //  - thousands separators and scientific notation.
+  const num = '-?(?:\\d[\\d,]*(?:\\.\\d+)?|\\.\\d+)(?:\\s*[eE][+-]?\\d+)?';
+  const unitAlt =
+    '°C|degC|°F|K\\b|km\\/s(?!\\s*[/^²³])|m\\/s(?!\\s*[/^²³])|c\\b|%|kg\\b|g\\b|km\\b|m\\b|J\\b|kJ\\b|MJ\\b|Wh\\b|kWh\\b|MeV\\b|GeV\\b|eV\\b|N\\b|Pa\\b|kPa\\b|MPa\\b|atm\\b|mol\\/L\\b|mg\\/mL\\b';
+  const re = new RegExp(`(?<![\\d.,])(${num})\\s*(${unitAlt})?`, 'g');
   let m;
   while ((m = re.exec(text)) !== null) {
     const raw = m[1].replace(/,/g, '');
@@ -64,6 +71,11 @@ function extractQuantities(text) {
   }
   return out;
 }
+
+/** Units the extractor recognises as mass (non-negativity applies). */
+const MASS_UNITS = new Set(['kg', 'g']);
+/** Units the extractor recognises as energy (non-negativity applies). */
+const ENERGY_UNITS = new Set(['J', 'kJ', 'MJ', 'Wh', 'kWh', 'MeV', 'GeV', 'eV']);
 
 /** Convert a temperature-like quantity to Celsius when recognisable. */
 function toCelsius(value, unit) {
@@ -110,9 +122,10 @@ function phmLiteCheck(output) {
       });
     }
 
-    // Rule 2: absolute temperature floor.
+    // Rule 2: absolute temperature floor. 1e-9 tolerance absorbs the
+    // float round-trip of the exact Fahrenheit boundary (-459.67 °F).
     const celsius = toCelsius(value, unit);
-    if (celsius !== null && celsius < ABSOLUTE_ZERO_C) {
+    if (celsius !== null && celsius < ABSOLUTE_ZERO_C - 1e-9) {
       violations.push({
         rule: 'absolute-zero',
         severity: 'FAIL',
@@ -120,8 +133,9 @@ function phmLiteCheck(output) {
       });
     }
 
-    // Rule 3: non-negativity of mass and energy (kg and g are both mass).
-    if ((unit === 'kg' || unit === 'g' || unit === 'J' || unit === 'kJ' || unit === 'MJ') && value < 0) {
+    // Rule 3: non-negativity of mass and energy, covering every energy unit
+    // the extractor recognises (J, kJ, MJ, Wh, kWh, eV, MeV, GeV).
+    if ((MASS_UNITS.has(unit) || ENERGY_UNITS.has(unit)) && value < 0) {
       violations.push({
         rule: 'negative-mass-energy',
         severity: 'FAIL',
@@ -142,13 +156,15 @@ function phmLiteCheck(output) {
 
   // Rule 5: free-fall time consistency, "fell X m in Y s" (15% tolerance).
   // Iterate over every claim in the output — a plausible first sentence must
-  // not mask an impossible later one.
+  // not mask an impossible later one. The connector spans line breaks
+  // (bounded to 200 chars so it cannot merge two separate claims), and a
+  // claimed duration of exactly 0 s is physically impossible too.
   const fallRe =
-    /(?:fell|drops?|dropped|falls?)\s+([\d,.]+)\s*(?:m\b|meters?|metres?).*?(?:in|within|after)\s+([\d,.]+)\s*s(?:ec|econds?)?\b/gi;
+    /(?:fell|drops?|dropped|falls?)\s+([\d,.]+)\s*(?:m\b|meters?|metres?)[\s\S]{0,200}?(?:in|within|after)\s+([\d,.]+)\s*s(?:ec|econds?)?\b/gi;
   for (const fall of normalized.matchAll(fallRe)) {
     const h = Number(fall[1].replace(/,/g, ''));
     const t = Number(fall[2].replace(/,/g, ''));
-    if (h > 0 && t > 0) {
+    if (h > 0 && t >= 0) {
       const expected = Math.sqrt((2 * h) / G_EARTH);
       if (t < expected * 0.85) {
         violations.push({
@@ -161,7 +177,9 @@ function phmLiteCheck(output) {
   }
 
   // Rule 6: percentage shares summing above 100% (warn; may be overlapping).
-  const pct = [...normalized.matchAll(/(\d[\d,.]*)\s*%/g)].map((x) => Number(x[1].replace(/,/g, '')));
+  // Reuse the quantities already parsed by extractQuantities so alternate
+  // numeric forms ("6e1%") cannot bypass the sum check.
+  const pct = qs.filter((q) => q.unit === '%').map((q) => q.value);
   if (pct.length >= 2) {
     const sum = pct.reduce((a, b) => a + b, 0);
     if (sum > 100 + 1e-9) {
@@ -180,7 +198,13 @@ function phmLiteCheck(output) {
 }
 
 export default async function phmLiteAssertion(output) {
-  const { verdict, violations } = phmLiteCheck(String(output ?? ''));
+  // Promptfoo passes provider outputs through unchanged: structured outputs
+  // arrive as objects, and naive String() of them yields "[object Object]",
+  // which would silently skip every nested violation. Serialize objects so
+  // numeric claims inside them are still scanned.
+  const text =
+    output !== null && typeof output === 'object' ? JSON.stringify(output) : String(output ?? '');
+  const { verdict, violations } = phmLiteCheck(text);
   const failHit = violations.filter((v) => FAIL_ON.includes(v.severity));
 
   if (failHit.length === 0 && verdict === 'PASS') {
