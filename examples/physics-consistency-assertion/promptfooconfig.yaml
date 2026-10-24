@@ -1,0 +1,42 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Deterministic physics-consistency assertions (PHM-Lite)
+
+prompts:
+  - "{{question}}"
+
+# The built-in echo provider makes this example runnable with no API key:
+# the question text is echoed as the provider output, and the PHM-Lite
+# assertion runs on it. For real model output, replace with any provider,
+# e.g.  openai:gpt-4.1-mini  — nothing else needs to change.
+providers:
+  - echo
+
+defaultTest:
+  assert:
+    - type: javascript
+      value: file://phm-lite-assertion.mjs
+
+tests:
+  # --- FAIL: violates universal physical law ---
+  - vars:
+      question: "Mission update: the probe travels at 1.5 c and will reach the comet by Tuesday."
+  - vars:
+      question: "The signal moved through the cable at 400,000 km/s."
+  - vars:
+      question: "Lab notes: we cooled the sample to -300 degC before measurement."
+  - vars:
+      question: "The reaction consumed -5 kg of catalyst."
+  - vars:
+      question: "We are 150% confident in this result."
+
+  # --- WARN: suspicious but not strictly impossible ---
+  - vars:
+      question: "In the test the ball fell 100 m in 1 s."
+  - vars:
+      question: "Method A handled 60% of traffic, method B handled 70% of traffic."
+
+  # --- PASS: physically plausible output ---
+  - vars:
+      question: "The car travels at 25 m/s. Water freezes at 0 degC."
+  - vars:
+      question: "Light travels at 3e8 m/s in vacuum (rounded)."
