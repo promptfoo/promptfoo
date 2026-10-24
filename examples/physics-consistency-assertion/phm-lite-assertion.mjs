@@ -62,7 +62,7 @@ function extractQuantities(text) {
   // Speed units reject a following per-second exponent in every common form:
   // "/s", "^2", superscripts, and the plain-ASCII "m/s2" without a caret.
   const unitAlt =
-    '°C|degC|°F|K\\b|km\\/s(?!\\s*[/^²³]|\\s*\\d)|m\\/s(?!\\s*[/^²³]|\\s*\\d)|c\\b|%|kg\\b|g\\b|km\\b|m\\b|J\\b|kJ\\b|MJ\\b|Wh\\b|kWh\\b|MeV\\b|GeV\\b|eV\\b|N\\b|Pa\\b|kPa\\b|MPa\\b|atm\\b|mol\\/L\\b|mg\\/mL\\b';
+    '°C|degC|°F|K\\b|km\\/s(?!\\s*[/^²³]|\\s*\\d)|m\\/s(?!\\s*[/^²³]|\\s*\\d)|c\\b|%|kg\\b(?!\\s*[·*/⋅])|g\\b|km\\b|m\\b|J\\b|kJ\\b|MJ\\b|Wh\\b|kWh\\b|MeV\\b|GeV\\b|eV\\b|N\\b|Pa\\b|kPa\\b|MPa\\b|atm\\b|mol\\/L\\b|mg\\/mL\\b';
   const re = new RegExp(`(?<![\\d.,])(${num})\\s*(${unitAlt})?`, 'g');
   let m;
   while ((m = re.exec(text)) !== null) {
@@ -132,8 +132,12 @@ function phmLiteCheck(output) {
 
     // Rule 2: absolute temperature floor. 1e-9 tolerance absorbs the
     // float round-trip of the exact Fahrenheit boundary (-459.67 °F).
+    // Negative deltas ("a temperature change of -300 °C", ΔT) are valid
+    // and exempt: only absolute readings are floored.
+    const tempWindow = normalized.slice(Math.max(0, index - 160), index + 120);
+    const isDelta = /change|delta|\u0394|difference|dropped by|fell by|cooled by/i.test(tempWindow);
     const celsius = toCelsius(value, unit);
-    if (celsius !== null && celsius < ABSOLUTE_ZERO_C - 1e-9) {
+    if (!isDelta && celsius !== null && celsius < ABSOLUTE_ZERO_C - 1e-9) {
       violations.push({
         rule: 'absolute-zero',
         severity: 'FAIL',
@@ -154,7 +158,11 @@ function phmLiteCheck(output) {
     // of growth or return ("sales grew 150%", "returned -5%") are valid and
     // must not fail; only probability/confidence claims live in [0, 100].
     if (unit === '%' && (value < 0 || value > 100)) {
-      const window = normalized.slice(Math.max(0, index - 220), index + 120);
+      const back = normalized.slice(Math.max(0, index - 220), index);
+      const sentStart = Math.max(back.lastIndexOf('.'), back.lastIndexOf('!'), back.lastIndexOf('?')) + 1;
+      const fwd = normalized.slice(index, index + 160);
+      const sentEnd = (() => { const m2 = fwd.match(/[.!?]/); return m2 ? m2.index : fwd.length; })();
+      const window = normalized.slice(Math.max(0, index - 220) + sentStart, index + sentEnd);
       if (!/probabilit|confiden|chance|likelihood|certainty|belief|odds/i.test(window)) continue;
       violations.push({
         rule: 'percentage-range',
@@ -181,8 +189,8 @@ function phmLiteCheck(output) {
     'gi'
   );
   for (const fall of normalized.matchAll(fallRe)) {
-    const h = Number(fall[1].replace(/,/g, ''));
-    const t = Number(fall[3].replace(/,/g, ''));
+    const h = Number(fall[1].replace(/[\s,]/g, ''));
+    const t = Number(fall[3].replace(/[\s,]/g, ''));
     if (h > 0 && t < 0) {
       violations.push({
         rule: 'free-fall-time',
@@ -206,20 +214,22 @@ function phmLiteCheck(output) {
   // whole, so the sum applies only inside a sentence that carries share
   // wording; scientific-notation percentages are handled because they are
   // re-parsed by the same grammar here.
-  const SHARE_CTX = /share|allocation|split|portion|breakdown|divided/i;
-  for (const sentence of normalized.split(/[.!?]\s|\n/)) {
-    const pct = [...sentence.matchAll(/(\d[\d,]*(?:\.\d+)?(?:\s*[eE][+-]?\d+)?)\s*%/g)].map((x) =>
-      Number(x[1].replace(/,/g, '').replace(/\s+/g, ''))
-    );
-    if (pct.length >= 2 && SHARE_CTX.test(sentence)) {
-    const sum = pct.reduce((a, b) => a + b, 0);
+  // Rule 6: percentage shares summing above 100% (warn). A percentage is
+  // treated as a share only when its own neighbourhood carries share
+  // wording ("Market share was 60%" — yes; "recall was 70%" — no), so
+  // unrelated metrics in one sentence are not summed together.
+  const sharePcts = qs
+    .filter((q) => q.unit === '%')
+    .filter((q) => /share|allocation|split|portion|breakdown|divided/i.test(normalized.slice(Math.max(0, q.index - 80), q.index + 60)))
+    .map((q) => q.value);
+  if (sharePcts.length >= 2) {
+    const sum = sharePcts.reduce((a, b) => a + b, 0);
     if (sum > 100 + 1e-9) {
       violations.push({
         rule: 'percentage-sum',
         severity: 'WARN',
         detail: `${pct.length} percentages sum to ${sum.toFixed(DIGITS)}% — verify the shares are mutually exclusive`,
       });
-    }
     }
   }
 
