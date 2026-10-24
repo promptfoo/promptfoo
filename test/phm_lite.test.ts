@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 // @ts-ignore -- ESM module without type declarations
-import phmAssert, { phmLiteCheck, C_LIGHT } from '../../examples/physics-consistency-assertion/phm-lite-assertion.mjs';
+import phmAssert, { phmLiteCheck, C_LIGHT } from '../examples/physics-consistency-assertion/phm-lite-assertion.mjs';
 
 describe('PHM-Lite physics-consistency assertion', () => {
   // ---- FAIL: violates universal physical law ----
