@@ -141,7 +141,7 @@ function phmLiteCheck(output) {
     const before = normalized.slice(0, index);
     const prevTemp = Math.max(before.lastIndexOf('°C'), before.lastIndexOf('degC'), before.lastIndexOf('°F'));
     const ownSpan = normalized.slice(prevTemp === -1 ? 0 : prevTemp + 3, index) + normalized.slice(index, index + 120);
-    const isDelta = /change|delta|\u0394|difference|dropped by|fell by|cooled by/i.test(ownSpan);
+    const isDelta = /\b(?:change|delta|\u0394|difference|dropped\s+by|fell\s+by|cooled\s+by)\b/i.test(ownSpan);
     const celsius = toCelsius(value, unit);
     if (!isDelta && celsius !== null && celsius < ABSOLUTE_ZERO_C - 1e-9) {
       violations.push({
@@ -165,7 +165,8 @@ function phmLiteCheck(output) {
     // must not fail; only probability/confidence claims live in [0, 100].
     if (unit === '%' && (value < 0 || value > 100)) {
       const back = normalized.slice(Math.max(0, index - 220), index);
-      const sentStart = Math.max(back.lastIndexOf('.'), back.lastIndexOf('!'), back.lastIndexOf('?')) + 1;
+      const sentMatches = [...back.matchAll(/[.!?]+\s+(?=[A-Z"])/g)];
+      const sentStart = sentMatches.length ? sentMatches[sentMatches.length - 1].index + sentMatches[sentMatches.length - 1][0].length : 0;
       const fwd = normalized.slice(index, index + 160);
       const sentEnd = (() => { const m2 = fwd.match(/[.!?](?=\s|$)/); return m2 ? m2.index : fwd.length; })();
       const window = normalized.slice(Math.max(0, index - 220) + sentStart, index + sentEnd);
@@ -190,7 +191,7 @@ function phmLiteCheck(output) {
   const fallNum = '-?(?:\\d[\\d,]*(?:\\.\\d+)?|\\.\\d+)(?:\\s*[eE][+-]?\\d+)?';
   const fallRe = new RegExp(
     '(?:fell|drops?|dropped|falls?)\\s+(' + fallNum + ')\\s*(?!(?:meters?|metres?)\\s*(?:per\\s+second|/s))(?:m\\b|meters?|metres?)' +
-      '((?:(?!fell\\b|drops?\\b|dropped\\b|falls?\\b)[\\s\\S]){0,200}?)' +
+      '((?:(?![.!?]\\s)(?!fell\\b|drops?\\b|dropped\\b|falls?\\b)[\\s\\S]){0,200}?)' +
       '(?:in|within|after)\\s+(' + fallNum + ')\\s*s(?:ec|econds?)?\\b',
     'gi'
   );
