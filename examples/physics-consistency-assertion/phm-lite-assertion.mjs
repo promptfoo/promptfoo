@@ -59,8 +59,10 @@ function extractQuantities(text) {
   //  - leading-dot decimals (".5 c" = 0.5 c);
   //  - thousands separators and scientific notation.
   const num = '-?(?:\\d[\\d,]*(?:\\.\\d+)?|\\.\\d+)(?:\\s*[eE][+-]?\\d+)?';
+  // Speed units reject a following per-second exponent in every common form:
+  // "/s", "^2", superscripts, and the plain-ASCII "m/s2" without a caret.
   const unitAlt =
-    '°C|degC|°F|K\\b|km\\/s(?!\\s*[/^²³])|m\\/s(?!\\s*[/^²³])|c\\b|%|kg\\b|g\\b|km\\b|m\\b|J\\b|kJ\\b|MJ\\b|Wh\\b|kWh\\b|MeV\\b|GeV\\b|eV\\b|N\\b|Pa\\b|kPa\\b|MPa\\b|atm\\b|mol\\/L\\b|mg\\/mL\\b';
+    '°C|degC|°F|K\\b|km\\/s(?!\\s*[/^²³]|\\s*\\d)|m\\/s(?!\\s*[/^²³]|\\s*\\d)|c\\b|%|kg\\b|g\\b|km\\b|m\\b|J\\b|kJ\\b|MJ\\b|Wh\\b|kWh\\b|MeV\\b|GeV\\b|eV\\b|N\\b|Pa\\b|kPa\\b|MPa\\b|atm\\b|mol\\/L\\b|mg\\/mL\\b';
   const re = new RegExp(`(?<![\\d.,])(${num})\\s*(${unitAlt})?`, 'g');
   let m;
   while ((m = re.exec(text)) !== null) {
@@ -155,15 +157,24 @@ function phmLiteCheck(output) {
   }
 
   // Rule 5: free-fall time consistency, "fell X m in Y s" (15% tolerance).
-  // Iterate over every claim in the output — a plausible first sentence must
-  // not mask an impossible later one. The connector spans line breaks
-  // (bounded to 200 chars so it cannot merge two separate claims), and a
-  // claimed duration of exactly 0 s is physically impossible too.
-  const fallRe =
-    /(?:fell|drops?|dropped|falls?)\s+([\d,.]+)\s*(?:m\b|meters?|metres?)[\s\S]{0,200}?(?:in|within|after)\s+([\d,.]+)\s*s(?:ec|econds?)?\b/gi;
+  // - Iterate over every claim (a plausible first sentence must not mask a
+  //   later impossible one).
+  // - The connector spans line breaks, bounded to 200 chars, and stops at
+  //   another fall verb (tempered token) so an untimed first fall cannot
+  //   swallow a later timed claim.
+  // - Quantities reuse the main numeric grammar, so exponent forms like
+  //   "1e2 m in 1e0 s" are parsed.
+  // - A claimed duration of exactly 0 s is physically impossible too.
+  const fallNum = '-?(?:\\d[\\d,]*(?:\\.\\d+)?|\\.\\d+)(?:\\s*[eE][+-]?\\d+)?';
+  const fallRe = new RegExp(
+    '(?:fell|drops?|dropped|falls?)\\s+(' + fallNum + ')\\s*(?:m\\b|meters?|metres?)' +
+      '((?:(?!fell\\b|drops?\\b|dropped\\b|falls?\\b)[\\s\\S]){0,200}?)' +
+      '(?:in|within|after)\\s+(' + fallNum + ')\\s*s(?:ec|econds?)?\\b',
+    'gi'
+  );
   for (const fall of normalized.matchAll(fallRe)) {
     const h = Number(fall[1].replace(/,/g, ''));
-    const t = Number(fall[2].replace(/,/g, ''));
+    const t = Number(fall[3].replace(/,/g, ''));
     if (h > 0 && t >= 0) {
       const expected = Math.sqrt((2 * h) / G_EARTH);
       if (t < expected * 0.85) {
@@ -197,13 +208,50 @@ function phmLiteCheck(output) {
   return { verdict, violations };
 }
 
+/**
+ * Flatten structured outputs into scannable text. Promptfoo passes parsed
+ * objects through unchanged, and JSON-schema-style payloads often split the
+ * number from its unit ("temperature": { "value": -300, "unit": "degC" });
+ * naive JSON.stringify would separate them with field syntax and every
+ * extracted quantity would lose its unit. This walker recombines value/unit
+ * pairs and emits "key: value" leaves so nothing hides from the parser.
+ * @param {unknown} v
+ * @returns {string}
+ */
+function serializeForScan(v) {
+  if (v === null || typeof v !== 'object') return String(v ?? '');
+  const parts = [];
+  const walk = (node, keyHint) => {
+    if (node === null || typeof node !== 'object') {
+      parts.push(keyHint ? `${keyHint}: ${node}` : String(node));
+      return;
+    }
+    if (Array.isArray(node)) {
+      node.forEach((item) => walk(item));
+      return;
+    }
+    const keys = Object.keys(node);
+    if (
+      keys.includes('value') &&
+      keys.includes('unit') &&
+      typeof node.value === 'number' &&
+      typeof node.unit === 'string'
+    ) {
+      parts.push(`${node.value} ${node.unit}`);
+      for (const k of keys) if (k !== 'value' && k !== 'unit') walk(node[k], k);
+      return;
+    }
+    for (const k of keys) walk(node[k], k);
+  };
+  walk(v);
+  return parts.join('. ');
+}
+
 export default async function phmLiteAssertion(output) {
   // Promptfoo passes provider outputs through unchanged: structured outputs
-  // arrive as objects, and naive String() of them yields "[object Object]",
-  // which would silently skip every nested violation. Serialize objects so
+  // arrive as objects. Serialize them with value/unit recombination so
   // numeric claims inside them are still scanned.
-  const text =
-    output !== null && typeof output === 'object' ? JSON.stringify(output) : String(output ?? '');
+  const text = output !== null && typeof output === 'object' ? serializeForScan(output) : String(output ?? '');
   const { verdict, violations } = phmLiteCheck(text);
   const failHit = violations.filter((v) => FAIL_ON.includes(v.severity));
 
