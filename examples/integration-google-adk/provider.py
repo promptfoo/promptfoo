@@ -10,9 +10,11 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Iterator
 
+from google.adk.agents.run_config import RunConfig
 from google.adk.artifacts import InMemoryArtifactService
 from google.adk.runners import Runner
 from google.adk.sessions import InMemorySessionService
+from google.adk.telemetry import ContentCapturingMode, TelemetryConfig
 from google.genai import types
 from opentelemetry import context as otel_context
 from opentelemetry import trace
@@ -200,6 +202,11 @@ async def _run_conversational_provider(
                 user_id=DEFAULT_USER_ID,
                 session_id=session_id,
                 new_message=types.Content(role="user", parts=[types.Part(text=step)]),
+                run_config=RunConfig(
+                    telemetry=TelemetryConfig(
+                        capture_message_content=ContentCapturingMode.SPAN_ONLY
+                    ),
+                ),
             ):
                 pass
 
@@ -246,6 +253,11 @@ async def _run_workflow_provider(
             user_id=DEFAULT_USER_ID,
             session_id=session_id,
             new_message=types.Content(role="user", parts=[types.Part(text=prompt)]),
+            run_config=RunConfig(
+                telemetry=TelemetryConfig(
+                    capture_message_content=ContentCapturingMode.SPAN_ONLY
+                ),
+            ),
         ):
             pass
 

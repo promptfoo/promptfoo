@@ -82,16 +82,16 @@ The eval asserts that:
 - ADK used both `get_weather` and `save_trip_note`
 - the tool arguments were correct
 - the tool sequence was correct
-- ADK emitted `invoke_agent`, `call_llm`, and `execute_tool` spans
+- ADK emitted `invoke_agent`, `generate_content`, and `execute_tool` spans
 - no traced error spans were emitted
 
 ## How Tracing Works
 
 ADK 2.x emits OpenTelemetry spans for the important framework steps:
 
-- `invocation`
+- `invocation` (v1) or `invoke_workflow <name>` (v2)
 - `invoke_agent <name>`
-- `call_llm`
+- `generate_content <model>`
 - `execute_tool <name>`
 
 `provider.py` keeps those spans inside Promptfoo's trace by:
@@ -101,16 +101,18 @@ ADK 2.x emits OpenTelemetry spans for the important framework steps:
 3. starting a small provider span under the Promptfoo parent trace
 4. letting ADK emit its native child spans beneath it
 
-Because ADK records `gen_ai.tool.name` and tool-call arguments, Promptfoo can normalize those spans into `trajectory:*` assertions without a custom SDK span converter.
+The provider passes `RunConfig(telemetry=TelemetryConfig(capture_message_content=ContentCapturingMode.SPAN_ONLY))` to each ADK invocation so exported spans include tool arguments for trajectory assertions. This also captures model inputs/outputs and tool results. ADK 2.13 defaults to telemetry v2, which omits tool arguments unless span content capture is enabled.
+
+Promptfoo recognizes `gen_ai.tool.name` and tool arguments from both telemetry schemas: `gcp.vertex.agent.tool_call_args` in v1 and `gen_ai.tool.call.arguments` in v2. The `generate_content <model>` span is available in both; v2 no longer emits `call_llm`.
 
 After an eval, open the Trace Timeline for the row and inspect:
 
 - `invoke_agent weather_agent`
-- `call_llm`
+- `generate_content <model>`
 - `execute_tool get_weather`
 - `execute_tool save_trip_note`
 - tool attributes such as `gen_ai.tool.name`
-- ADK tool arguments captured in `gcp.vertex.agent.tool_call_args`
+- tool arguments in `gcp.vertex.agent.tool_call_args` (v1) or `gen_ai.tool.call.arguments` (v2)
 
 ## Why This Uses A Python Provider
 

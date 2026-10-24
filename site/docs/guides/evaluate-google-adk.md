@@ -69,12 +69,14 @@ Pick the HTTP provider when the deployed HTTP contract itself is what you want t
 
 ADK 2.x emits OpenTelemetry spans such as:
 
-- `invocation`
+- `invocation` (v1) or `invoke_workflow <name>` (v2)
 - `invoke_agent weather_agent`
-- `call_llm`
+- `generate_content <model>`
 - `execute_tool get_weather`
 
-The example provider preserves Promptfoo's W3C `traceparent`, starts a small provider span beneath it, and exports ADK's child spans to Promptfoo's built-in OTLP receiver. ADK already records `gen_ai.tool.name` and tool-call arguments, so Promptfoo can normalize them into trajectory steps without a custom span translator.
+The example provider preserves Promptfoo's W3C `traceparent`, starts a small provider span beneath it, and exports ADK's child spans to Promptfoo's built-in OTLP receiver. Promptfoo recognizes `gen_ai.tool.name` and tool-call arguments from both ADK telemetry schemas without a custom span translator.
+
+The example provider passes `RunConfig(telemetry=TelemetryConfig(capture_message_content=ContentCapturingMode.SPAN_ONLY))` to each invocation to capture tool arguments for trajectory assertions. This also includes model inputs/outputs and tool results in exported spans. ADK 2.13 defaults to telemetry v2, which omits tool arguments without this opt-in and no longer emits `call_llm`; `generate_content <model>` works with both schemas.
 
 ```yaml
 assert:
@@ -103,11 +105,11 @@ After the eval, inspect the row in the Trace Timeline. The bundled conversationa
 
 - one Promptfoo provider span beneath the injected parent trace
 - `invoke_agent weather_agent` once per user turn
-- `call_llm` spans around the model hops
+- `generate_content <model>` spans around the model hops
 - `execute_tool get_weather`
 - `execute_tool save_trip_note`
 - `gen_ai.tool.name` on tool spans
-- serialized ADK tool arguments in `gcp.vertex.agent.tool_call_args`
+- serialized tool arguments in `gcp.vertex.agent.tool_call_args` (v1) or `gen_ai.tool.call.arguments` (v2)
 
 ## Sessions, State, Plugins, And Artifacts
 
