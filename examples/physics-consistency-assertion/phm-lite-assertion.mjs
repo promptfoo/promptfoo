@@ -154,7 +154,7 @@ function phmLiteCheck(output) {
     // of growth or return ("sales grew 150%", "returned -5%") are valid and
     // must not fail; only probability/confidence claims live in [0, 100].
     if (unit === '%' && (value < 0 || value > 100)) {
-      const window = normalized.slice(Math.max(0, m.index - 220), m.index + 120);
+      const window = normalized.slice(Math.max(0, index - 220), index + 120);
       if (!/probabilit|confiden|chance|likelihood|certainty|belief|odds/i.test(window)) continue;
       violations.push({
         rule: 'percentage-range',
