@@ -295,6 +295,16 @@ const LOCAL_DEFAULT_ENDPOINTS: Array<{
     test: (id) => id.startsWith('docker:'),
     baseUrl: () => getEnvString('DOCKER_MODEL_RUNNER_BASE_URL') || 'http://localhost:12434',
   },
+  {
+    test: (id) => id.startsWith('elevenlabs:'),
+    baseUrl: () => 'https://api.elevenlabs.io/v1',
+    // Every ElevenLabs provider (tts, stt, agents, ...) hands config.baseUrl
+    // to ElevenLabsClient, which dispatches `${baseUrl}${endpoint}` via
+    // fetchWithProxy. The client-side guard validates redirects but not the
+    // initial hop, so the configured baseUrl must be preflighted here; the
+    // public default needs no exception because it is public.
+    configBaseUrlWins: true,
+  },
 ];
 
 /**
@@ -405,7 +415,7 @@ function getRawRequestTarget(rawRequest: string, useHttps: boolean): string {
  *   validated against its effective default base URL, unless the provider
  *   resolves an explicit `config.apiBaseUrl` ahead of that default
  *   (localai), in which case the default is never fetched; providers that
- *   derive their endpoint from `config.baseUrl` instead (helicone) are
+ *   derive their endpoint from `config.baseUrl` instead (helicone, elevenlabs) are
  *   validated against the effective `config.baseUrl`.
  *
  * Named providers without an override or a local default resolve to their
