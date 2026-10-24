@@ -21,15 +21,30 @@ describe('CopyButton', () => {
 
   it('copies text to clipboard on click', async () => {
     const user = userEvent.setup();
+    const writeText = vi.spyOn(navigator.clipboard, 'writeText').mockResolvedValue();
     render(<CopyButton value="test text" />);
     const button = screen.getByRole('button', { name: 'Copy' });
 
     await user.click(button);
+    expect(writeText).toHaveBeenCalledWith('test text');
 
     // Verify the button changes to "Copied" state, indicating clipboard write succeeded
     await waitFor(() => {
       expect(screen.getByRole('button', { name: 'Copied' })).toBeInTheDocument();
     });
+  });
+
+  it('keeps copy feedback unchanged when clipboard writing fails', async () => {
+    const user = userEvent.setup();
+    const failure = new Error('Clipboard denied');
+    const writeText = vi.spyOn(navigator.clipboard, 'writeText').mockRejectedValue(failure);
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+    render(<CopyButton value="private text" />);
+    await user.click(screen.getByRole('button', { name: 'Copy' }));
+    expect(writeText).toHaveBeenCalledWith('private text');
+    expect(consoleError).toHaveBeenCalledWith('Failed to copy to clipboard:', failure);
+    expect(screen.getByRole('button', { name: 'Copy' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Copied' })).not.toBeInTheDocument();
   });
 
   it('shows check icon after successful copy', async () => {
