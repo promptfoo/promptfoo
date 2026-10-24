@@ -64,7 +64,7 @@ redteam:
           present.
 ```
 
-To run policies in batches, repeat the `policy` plugin. Each entry is generated and reported independently, and each can have its own `numTests` and severity.
+To run policies in batches, repeat the `policy` plugin. Each entry is generated and reported independently, and each can have its own `numTests` and severity. Report labels include a shortened policy ID and the policy name or text preview. Entries remain separate even when their labels match; languages other than `en` appear at the start of the label.
 
 ```yaml
 redteam:
