@@ -759,6 +759,56 @@ describe('RedteamIterativeProvider', () => {
       }
     });
 
+    it('restarts the no-improvement count when a new max score is found', async () => {
+      let attempt = 0;
+      const attacker = createMockProvider();
+      attacker.callApi.mockImplementation(async () => ({
+        output: JSON.stringify({ prompt: `attack${++attempt}`, improvement: 'try again' }),
+      }));
+      const ratings = [5, 1, 1, 6, 1, 1, 1, 1, 1, 1];
+      let judgeCall = 0;
+      const judge = createMockProvider();
+      judge.callApi.mockImplementation(async () =>
+        createProviderResponse({
+          output: JSON.stringify({
+            currentResponse: { rating: ratings[judgeCall++] ?? 1 },
+            previousBestResponse: { rating: 0 },
+          }),
+        }),
+      );
+      const target = createMockProvider({
+        response: createProviderResponse({ output: 'actual response' }),
+      });
+      const remote = vi.spyOn(remoteGeneration, 'shouldGenerateRemote').mockReturnValue(false);
+      const attackerSpy = vi
+        .spyOn(redteamProviderManager, 'getProvider')
+        .mockResolvedValue(attacker);
+      const judgeSpy = vi
+        .spyOn(redteamProviderManager, 'getGradingProvider')
+        .mockResolvedValue(judge);
+      try {
+        const provider = new RedteamIterativeTreeProvider({
+          injectVar: 'goal',
+          maxDepth: 5,
+          branchingFactor: 2,
+          maxWidth: 1,
+          maxNoImprovement: 3,
+        });
+        const result = await provider.callApi('', {
+          originalProvider: target,
+          vars: { goal: 'test goal' },
+          prompt: { raw: '{{goal}}', label: 'test' },
+        });
+
+        // The new max of 6 on attempt 4 restarts the count, so three more misses are needed.
+        expect(result.metadata).toMatchObject({ attempts: 7, stopReason: 'NO_IMPROVEMENT' });
+      } finally {
+        remote.mockRestore();
+        attackerSpy.mockRestore();
+        judgeSpy.mockRestore();
+      }
+    });
+
     it('counts the final target probe even when the target reports no token usage', async () => {
       const gradingProvider = createMockProvider({ id: 'mock-grader' });
       const targetProvider = createMockProvider({ id: 'mock-target' });
