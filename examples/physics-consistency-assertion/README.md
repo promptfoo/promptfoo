@@ -39,10 +39,10 @@ The example uses the built-in `echo` provider, so it runs **without any API key*
 | ---------------------- | -------- | ------------------------------------ | --------------------------------- |
 | `speed-of-light` | FAIL | speed > c (1% tolerance for rounded notation) | "travels at 1.5 c", "400,000 km/s" |
 | `absolute-zero` | FAIL | temperature below −273.15 °C | "cooled to −300 °C" |
-| `negative-mass-energy` | FAIL | negative mass/energy quantity | "consumed −5 kg" |
-| `percentage-range` | FAIL | a stated percentage outside [0, 100] | "150% confident" |
+| `negative-mass` | FAIL | negative mass in kg (bare `g` excluded as acceleration-ambiguous; energy excluded since binding energies are legitimately negative) | "consumed −5 kg" |
+| `percentage-range` | FAIL | a stated percentage outside [0, 100] **in probability/confidence context** (growth or return percentages are valid) | "150% confident" |
 | `free-fall-time` | WARN | fall time < 85% of the 1 g value for the height | "fell 100 m in 1 s" |
-| `percentage-sum` | WARN | multiple percentages summing over 100% | "A: 60%, B: 70%" |
+| `percentage-sum` | WARN | multiple percentage **shares** of one whole summing over 100% (same sentence, share wording required) | "Traffic shares: A 60%, B 70%" |
 
 `FAIL` breaks the assertion with score 0. `WARN` (suspicious but not strictly impossible) also fails the assertion but scores 0.5, so soft violations can be separated from hard ones in the results table — flip `FAIL_ON` in the assertion file to score warnings 0 instead.
 
