@@ -4,6 +4,7 @@ import { evalResultsTable } from '../../database/tables';
 import { cloudConfig } from '../../globalConfig/cloud';
 import logger from '../../logger';
 import { makeRequest } from '../../util/cloud';
+import { deduplicateTestCases } from '../../util/comparison';
 import invariant from '../../util/invariant';
 import { AGENTIC_STRATEGIES, MULTI_TURN_STRATEGIES } from '../constants/strategies';
 
@@ -64,21 +65,6 @@ function transformResult(
     logger.debug(`Failed to transform test case: ${e}`);
     return null;
   }
-}
-
-export function deduplicateTests(tests: TestCase[]): TestCase[] {
-  const seen = new Set<string>();
-  return tests.filter((test) => {
-    // Include strategyId in deduplication key - tests with the same prompt but different
-    // strategies (e.g., plugin-only vs goat) should be considered different test cases
-    const strategyId = test.metadata?.strategyId || 'none';
-    const key = JSON.stringify({ vars: test.vars, strategyId });
-    if (seen.has(key)) {
-      return false;
-    }
-    seen.add(key);
-    return true;
-  });
 }
 
 async function getFailedTestCases(
@@ -173,8 +159,7 @@ async function getFailedTestCases(
 
     allTestCases.push(...localTestCases);
 
-    // Deduplicate combined results from both cloud and local
-    return deduplicateTests(allTestCases);
+    return allTestCases;
   } catch (error) {
     logger.error(`Error retrieving failed test cases: ${error}`);
     return [];
@@ -214,28 +199,35 @@ export async function addRetryTestCases(
       // Fetch only the number of tests we need for efficiency
       const failedTests = await getFailedTestCases(pluginId, targetId, maxTests);
 
-      // Use the stored provider from the database if it exists and has injectVar
-      // Only add injectVar if it's missing from an agentic strategy test
       const testsWithProvider = failedTests.map((test) => {
-        const existingProvider = test.provider as
+        const { provider, ...testWithoutProvider } = test;
+        const existingProvider = provider as
           | { id?: string; config?: Record<string, unknown> }
           | undefined;
 
-        // If test already has a complete provider with injectVar, use it directly
-        if (existingProvider?.config?.injectVar) {
-          return test;
-        }
-
-        // Strip the provider - these run directly against the target
-        const { provider: _provider, ...testWithoutProvider } = test;
-        return testWithoutProvider;
+        return {
+          ...testWithoutProvider,
+          // Agentic retries retain their configured provider; others run directly against the target.
+          ...(existingProvider?.config?.injectVar ? { provider } : {}),
+          metadata: {
+            ...test.metadata,
+            // Cloud history may omit plugin metadata; retain the plugin whose history we requested.
+            pluginId: test.metadata?.pluginId || pluginId,
+          },
+        };
       });
 
       retryTestCases.push(...testsWithProvider);
     }
   }
 
-  const deduped = deduplicateTests(retryTestCases);
+  const deduped = deduplicateTestCases(retryTestCases, (test) =>
+    JSON.stringify({
+      pluginId: test.metadata?.pluginId,
+      vars: test.vars,
+      strategyId: test.metadata?.strategyId || 'none',
+    }),
+  );
 
   // Mark all retry tests with retry: true flag, preserve original strategyId (even if undefined)
   const marked = deduped.map((test) => ({
