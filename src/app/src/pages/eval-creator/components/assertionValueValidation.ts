@@ -2,7 +2,12 @@ import { BaseAssertionTypesSchema } from '@promptfoo/types';
 import type { Assertion, AssertionType } from '@promptfoo/types';
 
 const BASE_ASSERTION_TYPE_SET = new Set<string>(BaseAssertionTypesSchema.options);
-const SPECIAL_ASSERTION_TYPES = new Set<string>(['max-score', 'select-best']);
+const SPECIAL_ASSERTION_TYPES = new Set<string>([
+  'max-score',
+  'select-best',
+  'select-lowest-cost',
+  'select-lowest-latency',
+]);
 
 function isSupportedAssertionType(type: string): boolean {
   return (

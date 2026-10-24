@@ -153,6 +153,8 @@ These metrics are programmatic tests that are run on LLM output. [See all detail
 | [meteor](/docs/configuration/expected-outputs/deterministic/#meteor)                                               | METEOR score is above a given threshold (default 0.5); requires `natural`       |
 | [perplexity](/docs/configuration/expected-outputs/deterministic/#perplexity)                                       | Perplexity is below a threshold                                                 |
 | [perplexity-score](/docs/configuration/expected-outputs/deterministic/#perplexity-score)                           | Normalized perplexity                                                           |
+| [select-lowest-cost](/docs/configuration/expected-outputs/deterministic/#select-lowest-cost)                       | Select lowest-cost output, optionally among passing outputs                     |
+| [select-lowest-latency](/docs/configuration/expected-outputs/deterministic/#select-lowest-latency)                 | Select fastest passing output                                                   |
 | [cost](/docs/configuration/expected-outputs/deterministic/#cost)                                                   | Cost is below a threshold, or recorded as a zero-weight named metric            |
 | [is-valid-function-call](/docs/configuration/expected-outputs/deterministic/#is-valid-function-call)               | Ensure that the function call matches the function's JSON schema                |
 | [is-valid-openai-function-call](/docs/configuration/expected-outputs/deterministic/#is-valid-openai-function-call) | Ensure that the function call matches the function's JSON schema                |
