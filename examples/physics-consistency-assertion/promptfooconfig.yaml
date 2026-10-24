@@ -33,7 +33,7 @@ tests:
   - vars:
       question: "In the test the ball fell 100 m in 1 s."
   - vars:
-      question: "Method A handled 60% of traffic, method B handled 70% of traffic."
+      question: "Traffic shares: method A handled 60% and method B handled 70%."
 
   # --- PASS: physically plausible output ---
   - vars:
