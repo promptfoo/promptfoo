@@ -25,7 +25,7 @@ describe('PHM-Lite physics-consistency assertion', () => {
     ['fall claim spanning a line break', 'The weight fell 100 m\nin 1 s.'],
     ['exponent-form fall quantities', 'fell 1e2 m in 1e0 s'],
     ['percentage shares summing over 100%', 'Traffic shares: A took 6e1% and B took 7e1%.'],
-    ['scientific-notation percentage sum', 'A took 6e1% and B took 7e1% of traffic.'],
+    ['scientific-notation percentage sum', 'Traffic shares: A took 6e1% and B took 7e1% of traffic.'],
   ])('flags WARN: %s', (_name, text) => {
     const r = phmLiteCheck(text);
     expect(r.verdict).toBe('WARN');
@@ -63,6 +63,21 @@ describe('PHM-Lite physics-consistency assertion', () => {
     const res = await phmAssert({ temperature: { value: -300, unit: 'degC' } });
     expect(res.pass).toBe(false);
     expect(res.reason).toContain('absolute-zero');
+  });
+
+  it('does not let substrings of delta words exempt absolute readings', () => {
+    const r = phmLiteCheck('The chamber temperature remained unchanged at -300 °C.');
+    expect(r.violations.some((v) => v.rule === 'absolute-zero')).toBe(true);
+  });
+
+  it('keeps probability context across abbreviations (e.g.)', () => {
+    const r = phmLiteCheck('The probability, e.g. 150%, is invalid');
+    expect(r.violations.some((v) => v.rule === 'percentage-range')).toBe(true);
+  });
+
+  it('stops free-fall pairing at sentence boundaries', () => {
+    const r = phmLiteCheck('The rock fell 100 m. The sensor responded in 1 s.');
+    expect(r.violations.some((v) => v.rule === 'free-fall-time')).toBe(false);
   });
 
   it('scores deterministic repeats identically', () => {
