@@ -309,6 +309,19 @@ providers:
         user_role: 'customer'
 ```
 
+For portable configuration validation, `McpConfigInputSchema` accepts JSON values in `defaultArgs` and string response transforms. `McpClientConfigInputSchema` covers connection and tool-filter settings for nested model-provider `config.mcp` blocks. Parsing these schemas does not open connections, launch servers, or load transform files. In-process callers can continue to use function response transforms with the runtime schema.
+
+When exporting through `zod-to-openapi`, extend Zod before loading the contracts and register the recursive default-value schema as a named component. For static imports, load a separate Zod setup module before importing the contracts; calling the extension after static imports is too late for the recursive schema:
+
+```typescript
+extendZodWithOpenApi(z);
+const { McpConfigInputSchema } = await import('promptfoo/contracts');
+registry.register(
+  'McpDefaultArgumentValue',
+  McpConfigInputSchema.shape.defaultArgs.unwrap().valueType,
+);
+```
+
 Tools and response transforms receive the full arguments. Debug logs list argument names only. Promptfoo redacts credential fields such as `session_id` and `apiKey` in saved result metadata and tool traces. Use the separate [server authentication](#authentication) settings for credentials that authenticate the connection itself.
 
 ### Response Transforms

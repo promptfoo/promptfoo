@@ -314,6 +314,27 @@ describe('buildFunctionBody', () => {
     expect(new Function(buildFunctionBody(code))()).toBe(true);
   });
 
+  it.each(['in {}', 'instanceof String'])(
+    'preserves a use-strict string continued with %s as an expression',
+    (operator) => {
+      const code = `const f = function () { "use strict"\n${operator}; return 010; }; f() === 8`;
+      expect(new Function(buildFunctionBody(code))()).toBe(true);
+    },
+  );
+
+  it('preserves assignment defaults in valid destructuring', () => {
+    const code = 'let a; [{a = 1}] = [{}]; a === 1';
+    expect(new Function(buildFunctionBody(code))()).toBe(true);
+  });
+
+  it.each([
+    'const f = async(a)(b) => 1; true',
+    'const x = 1; ({a = 0}.x = 0); true',
+    'const x = 1; ({__proto__: null, __proto__: null}.x = 0); true',
+  ])('rejects invalid expression syntax before constructing the assertion: %s', (code) => {
+    expect(() => buildFunctionBody(code)).toThrow(SyntaxError);
+  });
+
   it.each(['\n', '\r', '\u2028', '\u2029'])(
     'should end a line comment at %j when scanning statement separators',
     (lineEnding) => {

@@ -25,6 +25,7 @@ import {
   withCacheEnabled,
   withCacheNamespace,
 } from '../src/cache';
+import { createDiskCache } from '../src/cache/storage';
 import { cloudConfig } from '../src/globalConfig/cloud';
 import logger from '../src/logger';
 import { fetchWithRetries } from '../src/util/fetch/index';
@@ -177,19 +178,13 @@ vi.mock('cache-manager', () => ({
   }),
 }));
 
-// Mock keyv and keyv-file with proper class constructors
-vi.mock('keyv', () => {
-  return {
-    Keyv: class MockKeyv {},
-  };
-});
+// The storage suite exercises real packages; these tests exercise the cache policy layer.
+vi.mock('../src/cache/storage', () => ({ createDiskCache: vi.fn() }));
 
-vi.mock('keyv-file', () => {
-  return {
-    __esModule: true,
-    KeyvFile: class MockKeyvFile {},
-    default: class MockKeyvFile {},
-  };
+beforeEach(() => {
+  vi.mocked(createDiskCache)
+    .mockReset()
+    .mockImplementation((_filename, ttl) => createCache({ ttl, refreshThreshold: 0 }));
 });
 
 const mockFetchWithRetriesResponse = (
@@ -248,17 +243,19 @@ describe('cache configuration', () => {
       delete: expect.any(Function),
       clear: expect.any(Function),
     });
-    expect(cache.stores[0]?.constructor?.name).not.toBe('MockKeyv');
+    expect(createDiskCache).not.toHaveBeenCalled();
   });
 
   it('should use disk cache in non-test environment', async () => {
     mockProcessEnv({ NODE_ENV: 'production' });
     const cacheModule = await import('../src/cache');
     const cache = cacheModule.getCache();
-    // In production, stores array should have at least one store (disk cache)
     expect(cache.stores.length).toBeGreaterThan(0);
-    expect(cache.stores[0]?.constructor?.name).toBe('MockKeyv');
     const expectedCachePath = path.join('/mock/config/path', 'cache');
+    expect(createDiskCache).toHaveBeenCalledWith(
+      path.join(expectedCachePath, 'cache.json'),
+      cacheModule.getCacheTtlMs(),
+    );
     expect(fs.existsSync).toHaveBeenCalledWith(expectedCachePath);
     expect(fs.mkdirSync).toHaveBeenCalledWith(expectedCachePath, { recursive: true });
   });
@@ -324,12 +321,8 @@ describe('cache configuration', () => {
     mockProcessEnv({ NODE_ENV: 'production' });
 
     const cacheModule = await import('../src/cache');
-    const cache = cacheModule.getCache();
-    expect(createCache).toHaveBeenLastCalledWith({
-      stores: cache.stores,
-      ttl: 3_600_000,
-      refreshThreshold: 0,
-    });
+    cacheModule.getCache();
+    expect(createDiskCache).toHaveBeenLastCalledWith(expect.any(String), 3_600_000);
   });
 
   it('should handle cache directory creation when it exists', async () => {
