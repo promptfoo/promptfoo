@@ -16,7 +16,15 @@ LLMs state impossible physics with high fluency ("the probe reached the planet i
 
 ## Getting Started
 
-No npm install needed — the assertion is a single self-contained ES module. From this directory:
+No npm install needed — the assertion is a single self-contained ES module.
+
+Materialize this example locally:
+
+```bash
+npx promptfoo@latest init --example physics-consistency-assertion
+```
+
+Then, from the example directory, run the eval (uses the built-in `echo` provider, no API key):
 
 ```bash
 npx promptfoo@latest eval
