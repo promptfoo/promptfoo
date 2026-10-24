@@ -12,7 +12,24 @@ import {
 } from '../../redteam/commands/discover';
 import { neverGenerateRemote } from '../../redteam/remoteGeneration';
 import { ProviderSchemas } from '../../types/api/providers';
+import { withPrivateRangeGuard } from '../../util/fetch/guardContext';
 import { fetchWithProxy } from '../../util/fetch/index';
+import {
+  assertProviderTargetPublic,
+  isPrivateRangeBlockingEnabled,
+  PrivateRangeBlockedError,
+} from '../../util/privateNetwork';
+
+/**
+ * Run a guarded route's downstream provider call inside the private-range
+ * guard context when `PROMPTFOO_BLOCK_PRIVATE_RANGES` is set, so the fetch
+ * layer validates every redirect hop for this request only. Without the flag
+ * the call runs unwrapped and fetch behavior is unchanged.
+ */
+function runGuardedProviderCall<T>(fn: () => Promise<T>): Promise<T> {
+  return isPrivateRangeBlockingEnabled() ? withPrivateRangeGuard(fn) : fn();
+}
+
 import { getAvailableProviders } from '../config/serverConfig';
 import { sendError } from '../utils/errors';
 import type { Request, Response } from 'express';
@@ -55,24 +72,47 @@ providersRouter.post('/test', async (req: Request, res: Response): Promise<void>
 
   const { providerOptions } = bodyResult.data;
 
+  // SSRF guard for intentionally exposed servers: when PROMPTFOO_BLOCK_PRIVATE_RANGES
+  // is set, refuse caller-chosen private targets before any provider is loaded.
   try {
-    const loadedProvider = await loadApiProvider(providerOptions.id, {
-      options: {
-        ...(providerOptions as ProviderOptions),
-        config: {
-          ...providerOptions.config,
-          maxRetries: 1,
+    await assertProviderTargetPublic(providerOptions);
+  } catch (error) {
+    if (error instanceof PrivateRangeBlockedError) {
+      logger.warn('[POST /providers/test] Blocked private-range provider target');
+      res.status(400).json({
+        error:
+          'Refused: PROMPTFOO_BLOCK_PRIVATE_RANGES is set and the provider target resolves to a private, loopback, or link-local address.',
+      });
+      return;
+    }
+    throw error;
+  }
+
+  try {
+    // Load inside the guard context too: provider constructors can issue
+    // requests during load (e.g. elevenlabs voice design), and redirect
+    // validation only applies inside the context.
+    const loadedProvider = await runGuardedProviderCall(() =>
+      loadApiProvider(providerOptions.id, {
+        options: {
+          ...(providerOptions as ProviderOptions),
+          config: {
+            ...providerOptions.config,
+            maxRetries: 1,
+          },
         },
-      },
-    });
+      }),
+    );
 
     // Pass inputs explicitly from providerOptions since loaded provider may not expose config.inputs
     // Check both top-level inputs (from redteam UI) and config.inputs for backwards compatibility
-    const result = await testProviderConnectivity({
-      provider: loadedProvider,
-      prompt: bodyResult.data.prompt,
-      inputs: providerOptions.inputs || providerOptions.config?.inputs,
-    });
+    const result = await runGuardedProviderCall(() =>
+      testProviderConnectivity({
+        provider: loadedProvider,
+        prompt: bodyResult.data.prompt,
+        inputs: providerOptions.inputs || providerOptions.config?.inputs,
+      }),
+    );
 
     res.status(200).json(
       ProviderSchemas.Test.Response.parse({
@@ -112,11 +152,33 @@ providersRouter.post(
       return;
     }
 
+    // SSRF guard for intentionally exposed servers: when PROMPTFOO_BLOCK_PRIVATE_RANGES
+    // is set, refuse caller-chosen private targets before any provider is loaded.
     try {
-      const loadedProvider = await loadApiProvider(providerOptions.id, {
-        options: providerOptions as ProviderOptions,
-      });
-      const result = await doTargetPurposeDiscovery(loadedProvider, undefined, false);
+      await assertProviderTargetPublic(providerOptions);
+    } catch (error) {
+      if (error instanceof PrivateRangeBlockedError) {
+        logger.warn('[POST /providers/discover] Blocked private-range provider target');
+        res.status(400).json({
+          error:
+            'Refused: PROMPTFOO_BLOCK_PRIVATE_RANGES is set and the provider target resolves to a private, loopback, or link-local address.',
+        });
+        return;
+      }
+      throw error;
+    }
+
+    try {
+      // Keep provider loading inside the guard context (see /providers/test):
+      // constructor-time requests must get redirect validation too.
+      const loadedProvider = await runGuardedProviderCall(() =>
+        loadApiProvider(providerOptions.id, {
+          options: providerOptions as ProviderOptions,
+        }),
+      );
+      const result = await runGuardedProviderCall(() =>
+        doTargetPurposeDiscovery(loadedProvider, undefined, false),
+      );
 
       if (result) {
         res.json(ProviderSchemas.Discover.Response.parse(result));
@@ -325,27 +387,49 @@ providersRouter.post('/test-session', async (req: Request, res: Response): Promi
   }
   const { provider: validatedProvider, sessionConfig, mainInputVariable } = bodyResult.data;
 
+  // SSRF guard for intentionally exposed servers: when PROMPTFOO_BLOCK_PRIVATE_RANGES
+  // is set, refuse caller-chosen private targets before any provider is loaded.
   try {
-    const loadedProvider = await loadApiProvider(validatedProvider.id, {
-      options: {
-        ...validatedProvider,
-        config: {
-          ...validatedProvider.config,
-          maxRetries: 1,
-          sessionSource: sessionConfig?.sessionSource || validatedProvider.config?.sessionSource,
-          sessionParser: sessionConfig?.sessionParser || validatedProvider.config?.sessionParser,
+    await assertProviderTargetPublic(validatedProvider);
+  } catch (error) {
+    if (error instanceof PrivateRangeBlockedError) {
+      logger.warn('[POST /providers/test-session] Blocked private-range provider target');
+      res.status(400).json({
+        error:
+          'Refused: PROMPTFOO_BLOCK_PRIVATE_RANGES is set and the provider target resolves to a private, loopback, or link-local address.',
+      });
+      return;
+    }
+    throw error;
+  }
+
+  try {
+    // Keep provider loading inside the guard context (see /providers/test):
+    // constructor-time requests must get redirect validation too.
+    const loadedProvider = await runGuardedProviderCall(() =>
+      loadApiProvider(validatedProvider.id, {
+        options: {
+          ...validatedProvider,
+          config: {
+            ...validatedProvider.config,
+            maxRetries: 1,
+            sessionSource: sessionConfig?.sessionSource || validatedProvider.config?.sessionSource,
+            sessionParser: sessionConfig?.sessionParser || validatedProvider.config?.sessionParser,
+          },
         },
-      },
-    });
+      }),
+    );
 
     // Pass inputs from validatedProvider since loaded provider may not expose config.inputs
     // Check both top-level inputs (from redteam UI) and config.inputs for backwards compatibility
-    const result = await testProviderSession({
-      provider: loadedProvider,
-      sessionConfig,
-      inputs: validatedProvider.inputs || validatedProvider.config?.inputs,
-      mainInputVariable,
-    });
+    const result = await runGuardedProviderCall(() =>
+      testProviderSession({
+        provider: loadedProvider,
+        sessionConfig,
+        inputs: validatedProvider.inputs || validatedProvider.config?.inputs,
+        mainInputVariable,
+      }),
+    );
 
     res.json(ProviderSchemas.TestSession.Response.parse(result));
   } catch (error) {
