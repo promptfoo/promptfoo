@@ -228,7 +228,7 @@ function phmLiteCheck(output) {
       violations.push({
         rule: 'percentage-sum',
         severity: 'WARN',
-        detail: `${pct.length} percentages sum to ${sum.toFixed(DIGITS)}% — verify the shares are mutually exclusive`,
+        detail: `${sharePcts.length} shares sum to ${sum.toFixed(DIGITS)}% — verify the shares are mutually exclusive`,
       });
     }
   }
