@@ -650,22 +650,25 @@ The `TestCase.options.transform` field is a Javascript snippet that modifies the
 It is a function that takes a string output and a context object:
 
 ```typescript
-transformFn: (output: string, context: {
-  prompt: {
-    // ID of the prompt, if assigned
-    id?: string;
-    // Raw prompt as provided in the test case, without {{variable}} substitution.
-    raw?: string;
-    // Prompt as sent to the LLM API and assertions.
-    display?: string;
-  };
-  vars?: Record<string, any>;
-  // Metadata returned in the provider response.
-  metadata?: Record<string, any>;
-}) => void;
+transformFn: (
+  output: string,
+  context: {
+    prompt: {
+      // ID of the prompt, if assigned
+      id?: string;
+      // Raw prompt as provided in the test case, without {{variable}} substitution.
+      raw?: string;
+      // Prompt as sent to the LLM API and assertions.
+      display?: string;
+    };
+    vars?: Record<string, any>;
+    // Metadata returned in the provider response.
+    metadata?: Record<string, any>;
+  },
+) => unknown | Promise<unknown>;
 ```
 
-This is useful if you need to somehow transform or clean LLM output before running an eval.
+Return the transformed value used by assertions, either directly or through a promise. Returning `null` or `undefined` causes an error.
 
 For example:
 
@@ -713,7 +716,7 @@ tests:
 ```
 
 :::tip
-Use `defaultTest` apply a transform option to every test case in your test suite.
+Use `defaultTest` to apply a transform option to every test case in your test suite.
 :::
 
 :::tip
