@@ -135,7 +135,13 @@ function phmLiteCheck(output) {
     // Negative deltas ("a temperature change of -300 °C", ΔT) are valid
     // and exempt: only absolute readings are floored.
     const tempWindow = normalized.slice(Math.max(0, index - 160), index + 120);
-    const isDelta = /change|delta|\u0394|difference|dropped by|fell by|cooled by/i.test(tempWindow);
+    // The delta marker must belong to THIS quantity: search only the span
+    // after the previous temperature unit, so "dropped by 300 °C to -300 °C"
+    // keeps the absolute -300 °C reading floored.
+    const before = normalized.slice(0, index);
+    const prevTemp = Math.max(before.lastIndexOf('°C'), before.lastIndexOf('degC'), before.lastIndexOf('°F'));
+    const ownSpan = normalized.slice(prevTemp === -1 ? 0 : prevTemp + 3, index) + normalized.slice(index, index + 120);
+    const isDelta = /change|delta|\u0394|difference|dropped by|fell by|cooled by/i.test(ownSpan);
     const celsius = toCelsius(value, unit);
     if (!isDelta && celsius !== null && celsius < ABSOLUTE_ZERO_C - 1e-9) {
       violations.push({
@@ -161,7 +167,7 @@ function phmLiteCheck(output) {
       const back = normalized.slice(Math.max(0, index - 220), index);
       const sentStart = Math.max(back.lastIndexOf('.'), back.lastIndexOf('!'), back.lastIndexOf('?')) + 1;
       const fwd = normalized.slice(index, index + 160);
-      const sentEnd = (() => { const m2 = fwd.match(/[.!?]/); return m2 ? m2.index : fwd.length; })();
+      const sentEnd = (() => { const m2 = fwd.match(/[.!?](?=\s|$)/); return m2 ? m2.index : fwd.length; })();
       const window = normalized.slice(Math.max(0, index - 220) + sentStart, index + sentEnd);
       if (!/probabilit|confiden|chance|likelihood|certainty|belief|odds/i.test(window)) continue;
       violations.push({
@@ -183,7 +189,7 @@ function phmLiteCheck(output) {
   // - A claimed duration of exactly 0 s is physically impossible too.
   const fallNum = '-?(?:\\d[\\d,]*(?:\\.\\d+)?|\\.\\d+)(?:\\s*[eE][+-]?\\d+)?';
   const fallRe = new RegExp(
-    '(?:fell|drops?|dropped|falls?)\\s+(' + fallNum + ')\\s*(?:m\\b|meters?|metres?)' +
+    '(?:fell|drops?|dropped|falls?)\\s+(' + fallNum + ')\\s*(?!(?:meters?|metres?)\\s*(?:per\\s+second|/s))(?:m\\b|meters?|metres?)' +
       '((?:(?!fell\\b|drops?\\b|dropped\\b|falls?\\b)[\\s\\S]){0,200}?)' +
       '(?:in|within|after)\\s+(' + fallNum + ')\\s*s(?:ec|econds?)?\\b',
     'gi'
