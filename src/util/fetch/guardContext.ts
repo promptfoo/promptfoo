@@ -4,7 +4,18 @@ interface PrivateRangeGuardContext {
   enabled: true;
 }
 
-const privateRangeGuardContext = new AsyncLocalStorage<PrivateRangeGuardContext>();
+// The packaged server and the public ESM/CJS entry points can load separate
+// copies of this module. The guard decision must survive that split: a server
+// route enters the guard context in its copy, but the provider code that
+// performs the fetch may run in the library copy. Share the
+// AsyncLocalStorage on globalThis under a well-known symbol, mirroring the
+// cache module's handling of the same duplicate-copy condition.
+const GUARD_CONTEXT_KEY = Symbol.for('promptfoo.guard.privateRangeContext.v1');
+const guardContextGlobal = globalThis as typeof globalThis & {
+  [GUARD_CONTEXT_KEY]?: AsyncLocalStorage<PrivateRangeGuardContext>;
+};
+const privateRangeGuardContext = (guardContextGlobal[GUARD_CONTEXT_KEY] ??=
+  new AsyncLocalStorage<PrivateRangeGuardContext>());
 
 /**
  * Run `fn` inside the private-range guard context.
