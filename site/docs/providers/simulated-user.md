@@ -49,6 +49,7 @@ For each turn:
 4. This continues until either:
    - The maximum number of turns is reached
    - The simulated user emits `###STOP###`
+   - The target returns `conversationEnded: true`
 
 ## Configuration Options
 
@@ -268,6 +269,7 @@ The conversation will automatically stop when:
 
 - The `maxTurns` limit is reached
 - The simulated user includes `###STOP###` anywhere in its message
+- The target returns `conversationEnded: true`, including in response to `initialMessages`. The final target response is retained in the transcript and metadata.
 - An error occurs during the conversation
 
 Promptfoo checks for `###STOP###` before sending the simulated user's message to the target. You can include instructions such as "say `###STOP###` once the booking is confirmed." The marker has no effect in the target's own response.
