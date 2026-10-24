@@ -1222,15 +1222,17 @@ export class VertexChatProvider extends GoogleGenericProvider {
       return { error: safetyRequestConfig.error };
     }
 
+    // generationConfig overrides the top-level options, as it does for Gemini.
+    const generationConfig = this.config.generationConfig;
     // Prepare the request body for Llama models
     const body = {
       model: `meta/${this.modelName}`,
       messages,
-      max_tokens: this.config.maxOutputTokens || 1024,
+      max_tokens: generationConfig?.maxOutputTokens || this.config.maxOutputTokens || 1024,
       stream: false,
-      temperature: this.config.temperature,
-      top_p: this.config.topP,
-      top_k: this.config.topK,
+      temperature: generationConfig?.temperature ?? this.config.temperature,
+      top_p: generationConfig?.topP ?? this.config.topP,
+      top_k: generationConfig?.topK ?? this.config.topK,
       ...safetyRequestConfig.bodyFields,
     };
 
