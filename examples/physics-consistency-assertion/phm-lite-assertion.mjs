@@ -66,18 +66,23 @@ function extractQuantities(text) {
   const re = new RegExp(`(?<![\\d.,])(${num})\\s*(${unitAlt})?`, 'g');
   let m;
   while ((m = re.exec(text)) !== null) {
-    const raw = m[1].replace(/,/g, '');
+    const raw = m[1].replace(/,/g, '').replace(/\s+/g, '');
     const value = Number(raw);
-    if (!Number.isFinite(value)) continue;
-    out.push({ value, unit: (m[2] || '').trim(), raw: m[0].trim() });
+    if (Number.isNaN(value)) continue; // NaN dropped; ±Infinity kept so overflow magnitudes still fail rules
+    out.push({ value, unit: (m[2] || '').trim(), raw: m[0].trim(), index: m.index });
   }
   return out;
 }
 
-/** Units the extractor recognises as mass (non-negativity applies). */
-const MASS_UNITS = new Set(['kg', 'g']);
-/** Units the extractor recognises as energy (non-negativity applies). */
-const ENERGY_UNITS = new Set(['J', 'kJ', 'MJ', 'Wh', 'kWh', 'MeV', 'GeV', 'eV']);
+/**
+ * Units the extractor recognises as mass. Only kg carries a universal
+ * non-negativity guarantee: bare "g" is ambiguous with acceleration in
+ * standard gravities ("decelerated at -5 g"), and binding/potential
+ * energies (eV, J, ...) are routinely negative relative to a chosen zero
+ * ("the hydrogen ground-state energy is -13.6 eV" is correct physics),
+ * so energy units are excluded from the non-negativity rule.
+ */
+const MASS_UNITS = new Set(['kg']);
 
 /** Convert a temperature-like quantity to Celsius when recognisable. */
 function toCelsius(value, unit) {
@@ -103,7 +108,7 @@ function phmLiteCheck(output) {
     .replace(/\uFF0D/g, '-');
   const qs = extractQuantities(normalized);
 
-  for (const { value, unit, raw } of qs) {
+  for (const { value, unit, raw, index } of qs) {
     // Rule 1: universal speed limit ("1.5 c", "400,000 km/s", "5e8 m/s").
     // 1% tolerance absorbs rounded light-speed notation ("3e8 m/s ≈ c"),
     // which is common in benign text; nothing macroscopic reaches 0.99c+.
@@ -136,19 +141,21 @@ function phmLiteCheck(output) {
       });
     }
 
-    // Rule 3: non-negativity of mass and energy, covering every energy unit
-    // the extractor recognises (J, kJ, MJ, Wh, kWh, eV, MeV, GeV).
-    if ((MASS_UNITS.has(unit) || ENERGY_UNITS.has(unit)) && value < 0) {
+    // Rule 3: non-negativity of mass (kg only — see MASS_UNITS note).
+    if (MASS_UNITS.has(unit) && value < 0) {
       violations.push({
-        rule: 'negative-mass-energy',
+        rule: 'negative-mass',
         severity: 'FAIL',
         detail: `negative ${unit} quantity: ${raw}`,
       });
     }
 
-    // Rule 4: percentage range — check both bounds separately; "-5%" is as
-    // out-of-range as "150%" since probabilities live in [0, 100].
+    // Rule 4: percentage range — gated on probability context. Percentages
+    // of growth or return ("sales grew 150%", "returned -5%") are valid and
+    // must not fail; only probability/confidence claims live in [0, 100].
     if (unit === '%' && (value < 0 || value > 100)) {
+      const window = normalized.slice(Math.max(0, m.index - 220), m.index + 120);
+      if (!/probabilit|confiden|chance|likelihood|certainty|belief|odds/i.test(window)) continue;
       violations.push({
         rule: 'percentage-range',
         severity: 'FAIL',
@@ -176,7 +183,13 @@ function phmLiteCheck(output) {
   for (const fall of normalized.matchAll(fallRe)) {
     const h = Number(fall[1].replace(/,/g, ''));
     const t = Number(fall[3].replace(/,/g, ''));
-    if (h > 0 && t >= 0) {
+    if (h > 0 && t < 0) {
+      violations.push({
+        rule: 'free-fall-time',
+        severity: 'WARN',
+        detail: `negative fall duration ${t} s for ${h} m`,
+      });
+    } else if (h > 0 && t >= 0) {
       const expected = Math.sqrt((2 * h) / G_EARTH);
       if (t < expected * 0.85) {
         violations.push({
@@ -188,11 +201,17 @@ function phmLiteCheck(output) {
     }
   }
 
-  // Rule 6: percentage shares summing above 100% (warn; may be overlapping).
-  // Reuse the quantities already parsed by extractQuantities so alternate
-  // numeric forms ("6e1%") cannot bypass the sum check.
-  const pct = qs.filter((q) => q.unit === '%').map((q) => q.value);
-  if (pct.length >= 2) {
+  // Rule 6: percentage shares summing above 100% (warn). Independent
+  // metrics ("precision was 60% and recall was 70%") are not shares of one
+  // whole, so the sum applies only inside a sentence that carries share
+  // wording; scientific-notation percentages are handled because they are
+  // re-parsed by the same grammar here.
+  const SHARE_CTX = /share|allocation|split|portion|breakdown|divided/i;
+  for (const sentence of normalized.split(/[.!?]\s|\n/)) {
+    const pct = [...sentence.matchAll(/(\d[\d,]*(?:\.\d+)?(?:\s*[eE][+-]?\d+)?)\s*%/g)].map((x) =>
+      Number(x[1].replace(/,/g, '').replace(/\s+/g, ''))
+    );
+    if (pct.length >= 2 && SHARE_CTX.test(sentence)) {
     const sum = pct.reduce((a, b) => a + b, 0);
     if (sum > 100 + 1e-9) {
       violations.push({
