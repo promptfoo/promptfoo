@@ -221,6 +221,24 @@ describe('getCallerSuppliedBaseUrls', () => {
     expect(getCallerSuppliedBaseUrls({ id: 'helicone:gpt-4o' })).toEqual(['http://localhost:8080']);
   });
 
+  it('validates elevenlabs against the effective config.baseUrl', () => {
+    // Every ElevenLabs provider hands config.baseUrl to ElevenLabsClient,
+    // which posts `${baseUrl}${endpoint}` through fetchWithProxy. The
+    // client-side guard validates redirects, not the initial hop, so a
+    // private config.baseUrl must be preflighted here.
+    expect(
+      getCallerSuppliedBaseUrls({
+        id: 'elevenlabs:tts',
+        config: { baseUrl: 'http://169.254.169.254' },
+      }),
+    ).toEqual(['http://169.254.169.254']);
+    // With no baseUrl the provider falls back to its public default, which
+    // resolves publicly and needs no exception.
+    expect(getCallerSuppliedBaseUrls({ id: 'elevenlabs:tts' })).toEqual([
+      'https://api.elevenlabs.io/v1',
+    ]);
+  });
+
   it('keeps the local default when the provider ignores config.apiBaseUrl', () => {
     // ollama builds its fetch URL from OLLAMA_BASE_URL or the localhost
     // default and never reads config.apiBaseUrl, so the default remains
@@ -407,6 +425,28 @@ describe('assertProviderTargetPublic', () => {
       }),
     ).rejects.toThrow(PrivateRangeBlockedError);
     expect(mockedLookup).not.toHaveBeenCalled();
+  });
+
+  it('blocks a private elevenlabs config.baseUrl when the flag is set', async () => {
+    // ElevenLabsClient posts `${baseUrl}${endpoint}` through fetchWithProxy;
+    // the client-side guard validates redirects, not the initial hop, so the
+    // preflight must reject a private config.baseUrl outright.
+    restoreEnv = mockProcessEnv({ PROMPTFOO_BLOCK_PRIVATE_RANGES: 'true' });
+    await expect(
+      assertProviderTargetPublic({
+        id: 'elevenlabs:tts',
+        config: { baseUrl: 'http://169.254.169.254' },
+      }),
+    ).rejects.toThrow(PrivateRangeBlockedError);
+    expect(mockedLookup).not.toHaveBeenCalled();
+  });
+
+  it('allows elevenlabs with no baseUrl override when the flag is set', async () => {
+    // No override: the effective target is the public default, which the
+    // preflight resolves publicly instead of rejecting.
+    restoreEnv = mockProcessEnv({ PROMPTFOO_BLOCK_PRIVATE_RANGES: 'true' });
+    mockedLookup.mockResolvedValue([{ address: '93.184.216.34', family: 4 } as LookupAddress]);
+    await expect(assertProviderTargetPublic({ id: 'elevenlabs:tts' })).resolves.toBeUndefined();
   });
 
   it('validates the unwrapped target of webhook: provider ids', async () => {
