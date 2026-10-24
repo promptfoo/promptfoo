@@ -61,7 +61,7 @@ describe('PHM-Lite physics-consistency assertion', () => {
 
   it('connects an untimed first fall without swallowing a later timed claim', () => {
     const r = phmLiteCheck('The first ball fell 5 m while the second fell 100 m in 1 s');
-    expect(r.violations.some((v) => v.rule === 'free-fall-time')).toBe(true);
+    expect(r.violations.some((v: { rule: string }) => v.rule === 'free-fall-time')).toBe(true);
   });
 
   it('scans structured object outputs with split value/unit fields', async () => {
