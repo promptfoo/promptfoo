@@ -118,3 +118,74 @@ test('extractQuantities parses U+2212 as negative', () => {
 test('C_LIGHT is the exact SI value', () => {
   assert.equal(C_LIGHT, 299792458);
 });
+
+// ---- Round 2 review fixes ----
+
+test('negative energy in every recognised unit fails', () => {
+  for (const u of ['kWh', 'eV', 'MeV', 'GeV', 'J', 'kJ', 'MJ', 'Wh']) {
+    const r = phmLiteCheck(`The process released -5 ${u}.`);
+    assert.ok(
+      r.violations.some((v) => v.rule === 'negative-mass-energy'),
+      `expected negative-mass-energy for -5 ${u}`
+    );
+  }
+});
+
+test('range separator is not read as unary minus (0-300 degC passes)', () => {
+  const r = phmLiteCheck('The sensor operates over a range 0-300 °C.');
+  assert.equal(r.verdict, 'PASS');
+});
+
+test('range separator is not read as negative mass (0-5 kg passes)', () => {
+  const r = phmLiteCheck('Capacity 0-5 kg per batch.');
+  assert.equal(r.verdict, 'PASS');
+});
+
+test('true negative temperature still fails after range fix', () => {
+  const r = phmLiteCheck('We cooled it to -300 °C.');
+  assert.equal(r.verdict, 'FAIL');
+});
+
+test('leading-dot decimals parse at their magnitude (.5 c passes)', () => {
+  const r = phmLiteCheck('The signal moved at .5 c relative to the lab frame.');
+  assert.equal(r.verdict, 'PASS');
+});
+
+test('acceleration units are not flagged as superluminal speeds', () => {
+  const r = phmLiteCheck('The piston saw 5e8 m/s^2 of acceleration.');
+  assert.equal(r.verdict, 'PASS');
+  const r2 = phmLiteCheck('Acceleration reached 6.0e8 m/s².');
+  assert.equal(r2.verdict, 'PASS');
+});
+
+test('exact Fahrenheit absolute-zero boundary passes (no float round-trip fail)', () => {
+  const r = phmLiteCheck('The gas reached -459.67 °F, absolute zero.');
+  assert.ok(!r.violations.some((v) => v.rule === 'absolute-zero'));
+});
+
+test('still fails below the Fahrenheit boundary', () => {
+  const r = phmLiteCheck('We reached -500 °F.');
+  assert.ok(r.violations.some((v) => v.rule === 'absolute-zero'));
+});
+
+test('zero-second fall is flagged, not silently dropped', () => {
+  const r = phmLiteCheck('The ball fell 100 m in 0 s.');
+  assert.ok(r.violations.some((v) => v.rule === 'free-fall-time'));
+});
+
+test('free-fall claim spanning a line break is caught', () => {
+  const r = phmLiteCheck('The weight fell 100 m\nin 1 s.');
+  assert.ok(r.violations.some((v) => v.rule === 'free-fall-time'));
+});
+
+test('percentage sum reuses parsed values (scientific-notation shares)', () => {
+  const r = phmLiteCheck('A took 6e1% and B took 7e1% of traffic.');
+  assert.ok(r.violations.some((v) => v.rule === 'percentage-sum'));
+});
+
+test('structured object outputs are scanned (no [object Object] bypass)', async () => {
+  const mod = await import('./phm-lite-assertion.mjs');
+  const res = await mod.default({ temperature: '-300 degC' });
+  assert.equal(res.pass, false);
+  assert.ok(res.reason.includes('absolute-zero'));
+});
