@@ -998,6 +998,37 @@ describe('HydraProvider', () => {
       expect(result.metadata?.hydraRoundsCompleted).toBeGreaterThanOrEqual(1);
     });
 
+    it('does not use up a turn when the first turn is refused', async () => {
+      await import('../../../../src/redteam/util');
+      mockAgentProvider.callApi.mockResolvedValue({
+        output: 'Attack message',
+        tokenUsage: { total: 100, prompt: 50, completion: 50 },
+      });
+      mockTargetProvider.callApi.mockResolvedValue({ output: 'Target cooperated' });
+      mockIsBasicRefusal.mockReturnValueOnce(true).mockReturnValue(false);
+
+      const provider = new HydraProvider({
+        injectVar: 'input',
+        maxTurns: 2,
+        maxBacktracks: 5,
+        stateful: false,
+      });
+
+      const result = await provider.callApi('', {
+        originalProvider: mockTargetProvider,
+        vars: { input: 'test goal' },
+        prompt: { raw: 'test prompt', label: 'test' },
+        test: {
+          assert: [{ type: 'harmful:test' }],
+          metadata: { goal: 'test goal', pluginId: 'harmful:test' },
+        } as any,
+      });
+
+      // One refused attempt plus both configured turns, as for a refusal on a later turn.
+      expect(mockTargetProvider.callApi).toHaveBeenCalledTimes(3);
+      expect(result.metadata?.hydraBacktrackCount).toBe(1);
+    });
+
     it('should stop when max backtracks reached', async () => {
       // Import to trigger the mock
       await import('../../../../src/redteam/util');
