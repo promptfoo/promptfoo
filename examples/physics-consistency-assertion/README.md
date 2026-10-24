@@ -54,6 +54,10 @@ The example uses the built-in `echo` provider, so it runs **without any API key*
 - **Scope — exactly the seven rules listed above**: arithmetic and physical-law consistency only. This is not a general physics engine, does not fact-check semantics, and is not a substitute for domain validation. What it flags, it flags because the numbers themselves are impossible — not because they look unusual.
 - **The eval in this example is a rule self-test** on the `echo` provider (question text echoed as output), used to demonstrate assertion wiring at zero API cost. It is not a benchmark of model quality; point `providers` at any real model to use it for real.
 
+## Tests
+
+The regression suite lives at `test/phm_lite.test.ts` and runs as part of the repository's standard `npm test` (vitest) pipeline, so CI catches parser or rule regressions automatically. It covers every rule, the documented edge cases (typographic minus, range separators, leading-dot decimals, acceleration units, the Fahrenheit boundary, zero-second and line-spanning fall claims, scientific-notation percentages, structured-object outputs), and a deterministic-repeat check.
+
 ## Reference Implementations
 
 - Python offline subset implementing the same rule family: [PHM-Audit on GitHub](https://github.com/PHM-Audit) (public repo; not rule-for-rule equivalence-verified against this JS module).
