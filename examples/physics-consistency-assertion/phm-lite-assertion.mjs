@@ -68,8 +68,17 @@ function extractQuantities(text) {
   while ((m = re.exec(text)) !== null) {
     const raw = m[1].replace(/,/g, '').replace(/\s+/g, '');
     const value = Number(raw);
+    // Textual underflow: "-1e-400" converts to -0, losing the sign — mark it
+    // so non-negativity rules still see a negative quantity.
+    const underflowNeg = value === 0 && /^-/.test(raw) && /[1-9]/.test(raw) && /e/i.test(raw);
     if (Number.isNaN(value)) continue; // NaN dropped; ±Infinity kept so overflow magnitudes still fail rules
-    out.push({ value, unit: (m[2] || '').trim(), raw: m[0].trim(), index: m.index });
+    let unit = (m[2] || '').trim();
+    // Compound-unit continuation ("kg m/s", "°C/min", "kg per box") makes the
+    // quantity a derived signed scalar — demote it so mass/temperature
+    // constraints don't fire on valid physics.
+    const after = text.slice(re.lastIndex, re.lastIndex + 8);
+    if (unit && /^\s*(?:[·*/⋅]|\/|per\b|m\/s)/i.test(after)) unit = '';
+    out.push({ value, unit, raw: m[0].trim(), index: m.index, underflowNeg });
   }
   return out;
 }
@@ -106,9 +115,13 @@ function phmLiteCheck(output) {
   const normalized = String(output ?? '')
     .replace(/\u2212/g, '-')
     .replace(/\uFF0D/g, '-');
+  // Shared-unit range propagation: "-300 to 20 °C" → "-300 °C and 20 °C"
+  // so the impossible lower endpoint is checked too.
+  const rangeProp = new RegExp(`(${num})\\s+(?:to|\\u2013|\\u2014)\\s+(${num})\\s*(${unitAlt})`, 'gi');
+  normalized = normalized.replace(rangeProp, (_mm, a, b, u) => `${a} ${u} and ${b} ${u}`);
   const qs = extractQuantities(normalized);
 
-  for (const { value, unit, raw, index } of qs) {
+  for (const { value, unit, raw, index, underflowNeg } of qs) {
     // Rule 1: universal speed limit ("1.5 c", "400,000 km/s", "5e8 m/s").
     // 1% tolerance absorbs rounded light-speed notation ("3e8 m/s ≈ c"),
     // which is common in benign text; nothing macroscopic reaches 0.99c+.
@@ -141,7 +154,7 @@ function phmLiteCheck(output) {
     const before = normalized.slice(0, index);
     const prevTemp = Math.max(before.lastIndexOf('°C'), before.lastIndexOf('degC'), before.lastIndexOf('°F'));
     const ownSpan = normalized.slice(prevTemp === -1 ? 0 : prevTemp + 3, index) + normalized.slice(index, index + 120);
-    const isDelta = /\b(?:change|delta|\u0394|difference|dropped\s+by|fell\s+by|cooled\s+by)\b/i.test(ownSpan);
+    const isDelta = /(?:\b(?:change|delta|difference|dropped\s+by|fell\s+by|cooled\s+by)\b|\u0394\s*T?\s*=)/i.test(ownSpan);
     const celsius = toCelsius(value, unit);
     if (!isDelta && celsius !== null && celsius < ABSOLUTE_ZERO_C - 1e-9) {
       violations.push({
@@ -152,7 +165,7 @@ function phmLiteCheck(output) {
     }
 
     // Rule 3: non-negativity of mass (kg only — see MASS_UNITS note).
-    if (MASS_UNITS.has(unit) && value < 0) {
+    if (MASS_UNITS.has(unit) && (value < 0 || underflowNeg)) {
       violations.push({
         rule: 'negative-mass',
         severity: 'FAIL',
@@ -163,7 +176,7 @@ function phmLiteCheck(output) {
     // Rule 4: percentage range — gated on probability context. Percentages
     // of growth or return ("sales grew 150%", "returned -5%") are valid and
     // must not fail; only probability/confidence claims live in [0, 100].
-    if (unit === '%' && (value < 0 || value > 100)) {
+    if (unit === '%' && (value < 0 || value > 100 || underflowNeg)) {
       const back = normalized.slice(Math.max(0, index - 220), index);
       const sentMatches = [...back.matchAll(/[.!?]+\s+(?=[A-Z"])/g)];
       const sentStart = sentMatches.length ? sentMatches[sentMatches.length - 1].index + sentMatches[sentMatches.length - 1][0].length : 0;
@@ -190,7 +203,7 @@ function phmLiteCheck(output) {
   // - A claimed duration of exactly 0 s is physically impossible too.
   const fallNum = '-?(?:\\d[\\d,]*(?:\\.\\d+)?|\\.\\d+)(?:\\s*[eE][+-]?\\d+)?';
   const fallRe = new RegExp(
-    '(?:fell|drops?|dropped|falls?)\\s+(' + fallNum + ')\\s*(?!(?:meters?|metres?)\\s*(?:per\\s+second|/s))(?:m\\b|meters?|metres?)' +
+    '(?:fell|drops?|dropped|falls?)\\s+(' + fallNum + ')\\s*(?!\\s*(?:per\\s+second|/s))(?:m\\b|meters?|metres?)' +
       '((?:(?![.!?]\\s)(?!fell\\b|drops?\\b|dropped\\b|falls?\\b)[\\s\\S]){0,200}?)' +
       '(?:in|within|after)\\s+(' + fallNum + ')\\s*s(?:ec|econds?)?\\b',
     'gi'
@@ -224,10 +237,11 @@ function phmLiteCheck(output) {
   const SHARE_CTX = /share|allocation|split|portion|breakdown|divided/i;
   const METRIC_CTX = /recall|precision|accuracy|margin|error rate|f1/i;
   for (const sentence of normalized.split(/[.!?]\s|\n/)) {
-    const pct = [...sentence.matchAll(/(\d[\d,]*(?:\.\d+)?(?:\s*[eE][+-]?\d+)?)\s*%/g)].map((x) =>
+    for (const segment of sentence.split(';')) {
+    const pct = [...segment.matchAll(/(\d[\d,]*(?:\.\d+)?(?:\s*[eE][+-]?\d+)?)\s*%/g)].map((x) =>
       Number(x[1].replace(/[\s,]/g, ''))
     );
-    if (pct.length >= 2 && SHARE_CTX.test(sentence) && !METRIC_CTX.test(sentence)) {
+    if (pct.length >= 2 && SHARE_CTX.test(segment) && !METRIC_CTX.test(segment)) {
       const sum = pct.reduce((a, b) => a + b, 0);
       if (sum > 100 + 1e-9) {
         violations.push({
