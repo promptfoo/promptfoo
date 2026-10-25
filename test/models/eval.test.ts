@@ -2657,7 +2657,7 @@ describe('evaluator', () => {
       expect(testIndices).toEqual([0]);
     });
 
-    it('searches user metadata with filters while the unfiltered path searches responses only', async () => {
+    it('searches and counts user metadata only when a structured filter is active', async () => {
       const eval_ = await EvalFactory.create({ numResults: 4, withNamedScores: true });
       const metadataRows = [
         { model: 'metadata-scalar-needle', temperature: 0.7 },
@@ -2671,21 +2671,27 @@ describe('evaluator', () => {
           sql`UPDATE eval_results SET metadata = ${JSON.stringify(metadata)} WHERE eval_id = ${eval_.id} AND test_idx = ${index}`,
         );
       }
+      await db.run(
+        sql`UPDATE eval_results SET test_case = json_set(test_case, '$.metadata.source', 'test-case-needle') WHERE eval_id = ${eval_.id} AND test_idx = 3`,
+      );
+      const accuracyFilter = [JSON.stringify(createAccuracyFilter())];
       for (const [searchQuery, expected] of [
         ['metadata-scalar-needle', [0]],
         ['metadata-nested-needle', [1]],
         ['[101,202,303]', [1]],
+        ['test-case-needle', [3]],
         ['absent-needle', []],
         ['private-only-needle', []],
       ] as const) {
-        const unfiltered = await eval_.getTablePage({ searchQuery });
-        expect(unfiltered.body).toEqual([]);
-        const page = await eval_.getTablePage({
-          searchQuery,
-          filters: [JSON.stringify(createAccuracyFilter())],
-        });
-        expect(page.body.map((row) => row.testIdx)).toEqual(expected);
-        expect(page.filteredCount).toBe(expected.length);
+        for (const filters of [[], accuracyFilter]) {
+          const opts = { searchQuery, filters };
+          const indices = filters.length ? expected : [];
+          const page = await eval_.getTablePage(opts);
+          const [metrics] = await eval_.getFilteredMetrics(opts);
+          expect(page.body.map((row) => row.testIdx)).toEqual(indices);
+          expect(page.filteredCount).toBe(indices.length);
+          expect(metrics.testPassCount).toBe(indices.length);
+        }
       }
     });
 
