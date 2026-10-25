@@ -122,7 +122,6 @@ describe('list command', () => {
   });
 
   describe('evals', () => {
-
     it('outputs full eval metadata as JSON', async () => {
       const description = 'Long description '.repeat(10);
       const olderEval = createEval({
@@ -226,7 +225,6 @@ describe('list command', () => {
   });
 
   describe('prompts', () => {
-
     it('outputs prompt metadata as JSON without shortening IDs or text', async () => {
       const raw = 'Long prompt '.repeat(12);
       const prompts: PromptWithMetadata[] = [
@@ -318,7 +316,6 @@ describe('list command', () => {
   });
 
   describe('datasets', () => {
-
     it('outputs dataset metadata as JSON including full prompt IDs', async () => {
       const datasets: TestCasesWithMetadata[] = [
         {
