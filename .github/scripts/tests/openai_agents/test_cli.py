@@ -1,6 +1,7 @@
 """Exercise every original OpenAI Agents eval case with real SDKs over HTTP."""
 
 import asyncio
+import errno
 import importlib.metadata
 import io
 import json
@@ -17,6 +18,7 @@ import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from unittest.mock import patch
+from urllib.parse import urlparse
 
 from fixture import ResponsesFixture
 
@@ -122,9 +124,6 @@ class OpenAIAgentsCliTest(unittest.TestCase):
         fixture = ResponsesFixture(failure)
         errors = []
         exports = []
-        with socket.socket() as available:
-            available.bind(("127.0.0.1", 0))
-            trace_port = available.getsockname()[1]
 
         class Handler(BaseHTTPRequestHandler):
             def read_payload(self):
@@ -214,6 +213,10 @@ class OpenAIAgentsCliTest(unittest.TestCase):
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
         try:
+            # Bind the fixture first so it cannot take the receiver's released port.
+            with socket.socket() as available:
+                available.bind(("127.0.0.1", 0))
+                trace_port = available.getsockname()[1]
             with tempfile.TemporaryDirectory(
                 prefix="promptfoo-agents-cli-"
             ) as temporary:
@@ -471,6 +474,42 @@ class OpenAIAgentsCliTest(unittest.TestCase):
 
     def test_wrong_arguments(self):
         self.run_config("wrong-tool-args")
+
+
+class FixturePortTests(unittest.TestCase):
+    def test_trace_receiver_port_cannot_be_reused_by_fixture_server(self):
+        with socket.socket() as candidate:
+            candidate.bind(("127.0.0.1", 0))
+            preferred_port = candidate.getsockname()[1]
+        original_bind = socket.socket.bind
+
+        def reuse_available_port(connection, address):
+            # Force the OS-allowed reuse instead of waiting for a random collision.
+            if address == ("127.0.0.1", 0):
+                try:
+                    return original_bind(connection, ("127.0.0.1", preferred_port))
+                except OSError as exc:
+                    if exc.errno != errno.EADDRINUSE:
+                        raise
+            return original_bind(connection, address)
+
+        class StopBeforeCli(Exception):
+            pass
+
+        def check_receiver(command, **_):
+            trace_port = int(command[-2])
+            self.assertNotEqual(trace_port, urlparse(command[-1]).port)
+            with socket.socket() as receiver:
+                receiver.bind(("127.0.0.1", trace_port))
+            raise StopBeforeCli
+
+        with (
+            patch.object(socket.socket, "bind", reuse_available_port),
+            patch.dict(os.environ, {"PROMPTFOO_EXAMPLE_PROFILE": ""}),
+            patch("subprocess.check_output", side_effect=check_receiver),
+            self.assertRaises(StopBeforeCli),
+        ):
+            OpenAIAgentsCliTest().run_config()
 
 
 if __name__ == "__main__":
