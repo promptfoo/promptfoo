@@ -101,7 +101,8 @@ function findKnownBadRanges(
     .filter(([name, range]) => {
       const badRange = knownBadReleases.get(name);
       if (badRange && name === '@azure/msal-node') {
-        // Compare conservatively against MSAL's affected beta interval after expanding npm shorthands.
+        // Review historical ranges that overlap MSAL's beta interval, even if npm would skip the beta.
+        // Normalize supported stable shorthands before comparing their bounds.
         const declared = validRange(range);
         return !declared || intersects(declared, badRange, { includePrerelease: true });
       }
@@ -121,9 +122,18 @@ function collectLockfileReleaseChecks(
     if (!badRange || !version) {
       return [];
     }
-    const affected = satisfies(version, badRange, { includePrerelease: true });
+    const affected = satisfies(version, badRange, {
+      includePrerelease: packageName === '@azure/msal-node',
+    });
     return [{ id: `${installPath}@${version}`, name: packageName, affected }];
   });
+}
+
+function azureIdentityMsalRequirement(lockfile: PackageLockManifest<LockedPackage>) {
+  const identity = lockfile.packages['node_modules/@azure/identity'];
+  return (identity?.name ?? '@azure/identity') === '@azure/identity'
+    ? identity?.dependencies?.['@azure/msal-node']
+    : undefined;
 }
 
 // Scan the whole Dockerfile, not just RUN lines, so heredoc bodies and exec-form RUNs count.
@@ -389,10 +399,8 @@ describe('package manifests', () => {
     const installs = ['package-lock.json', 'code-scan-action/package-lock.json'].flatMap((path) => {
       const lockfile = readPackageJson<PackageLockManifest<LockedPackage>>(path);
       if (path === 'package-lock.json') {
-        // Retire the nested exception when Azure Identity can use a patched MSAL.
-        expect(
-          lockfile.packages['node_modules/@azure/identity']?.dependencies?.['@azure/msal-node'],
-        ).toBe('^6.0.0');
+        // Review the exception when its owner or constraint changes, or when the child disappears.
+        expect(azureIdentityMsalRequirement(lockfile)).toBe('^6.0.0');
       }
       return collectLockfileReleaseChecks(lockfile, KNOWN_BAD_RELEASES).map((check) => ({
         ...check,
@@ -412,6 +420,19 @@ describe('package manifests', () => {
     ]);
   });
 
+  it('does not grant the MSAL exception to an aliased parent', () => {
+    expect(
+      azureIdentityMsalRequirement({
+        packages: {
+          'node_modules/@azure/identity': {
+            name: 'fixture-replacement',
+            dependencies: { '@azure/msal-node': '^6.0.0' },
+          },
+        },
+      }),
+    ).toBeUndefined();
+  });
+
   it.each([
     ['node_modules/alias', { name: 'fixture-leaf', version: '1.0.0' }, true],
     [
@@ -421,13 +442,15 @@ describe('package manifests', () => {
     ],
     ['node_modules/parent/node_modules/fixture-leaf', { version: '1.0.0' }, true],
     ['node_modules/@fixture/leaf', { version: '1.0.0' }, true],
-    ['node_modules/fixture-leaf', { version: '1.1.0-beta.0' }, true],
+    ['node_modules/fixture-leaf', { version: '1.1.0-beta.0' }, false],
+    ['node_modules/alias', { name: '@azure/msal-node', version: '1.1.0-beta.0' }, true],
     ['node_modules/alias', { name: 'fixture-leaf', version: '2.0.0' }, false],
     ['node_modules/fixture-leaf', { name: 'fixture-replacement', version: '1.0.0' }, false],
   ] as const)('checks locked package identity at %s: %j', (installPath, packageInfo, violates) => {
     const checks = collectLockfileReleaseChecks(
       { packages: { [installPath]: packageInfo } },
       new Map([
+        ['@azure/msal-node', '<2.0.0'],
         ['fixture-leaf', '<2.0.0'],
         ['@fixture/leaf', '<2.0.0'],
       ]),
