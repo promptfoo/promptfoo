@@ -21,40 +21,47 @@ EXAMPLE = ROOT / "examples/integration-google-adk"
 TRIP_NOTE_SUMMARY = "Cloudy with drizzle. Bring an umbrella."
 
 
-def isolated_environment_paths(work: Path) -> dict[str, str]:
+def isolated_cli_directory(
+    parent: Path, capture_content: bool
+) -> tuple[Path, dict[str, str]]:
+    work = parent / "example"
+    work.mkdir()
     home = work / "home"
     state = home / ".local" / "state"
     state.mkdir(parents=True)
     temporary = work / "tmp"
     temporary.mkdir()
-    return {
-        "HOME": str(home),
-        "USERPROFILE": str(home),
-        "XDG_STATE_HOME": str(state),
-        "TMPDIR": str(temporary),
+    capture_mode = "SPAN_ONLY" if capture_content else "NO_CONTENT"
+    (work / ".env").write_text(
+        f"OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT={capture_mode}\n"
+        f"ADK_CAPTURE_MESSAGE_CONTENT_IN_SPANS={str(capture_content).lower()}\n"
+    )
+    env = {
+        key: value
+        for key, value in os.environ.items()
+        if key in ("PATH", "SYSTEMROOT", "LANG", "LC_ALL")
     }
+    env.update(
+        HOME=str(home),
+        USERPROFILE=str(home),
+        XDG_STATE_HOME=str(state),
+        TMPDIR=str(temporary),
+    )
+    return work, env
 
 
 class GoogleAdkCliTest(unittest.TestCase):
     backend = "gemini"
     cli = ("node", str(ROOT / "dist/src/entrypoint.js"))
 
-    def test_import_time_defaults_cannot_reload_checkout_settings(self):
+    def test_implicit_env_loads_example_policy_without_checkout_settings(self):
         with tempfile.TemporaryDirectory(prefix="promptfoo-adk-env-") as directory:
-            work = Path(directory)
-            checkout = work / "synthetic-checkout"
-            checkout.mkdir()
+            checkout = Path(directory)
             (checkout / ".env").write_text(
                 "PROMPTFOO_QA_SYNTHETIC_SECRET=fixture-secret\n"
                 "OPENAI_API_HOST=fixture.invalid/v1\n"
             )
-            env_file = work / "empty.env"
-            env_file.touch()
-            env = {
-                "PATH": os.environ["PATH"],
-                "DOTENV_PATH": str(env_file),
-                **isolated_environment_paths(work),
-            }
+            work, env = isolated_cli_directory(checkout, capture_content=False)
             for key in ("HOME", "USERPROFILE", "XDG_STATE_HOME", "TMPDIR"):
                 self.assertTrue(Path(env[key]).is_relative_to(work))
                 self.assertTrue(Path(env[key]).is_dir())
@@ -67,25 +74,26 @@ class GoogleAdkCliTest(unittest.TestCase):
                 (
                     "import {pathToFileURL} from 'node:url'; "
                     "await import(pathToFileURL(process.argv[1]).href); "
-                    "process.stdout.write(JSON.stringify({"
-                    "secret: process.env.PROMPTFOO_QA_SYNTHETIC_SECRET ?? null, "
-                    "host: process.env.OPENAI_API_HOST ?? null}));"
+                    "console.log(JSON.stringify(process.argv.slice(2).map(k => process.env[k] ?? null)));"
                 ),
                 str(ROOT / "src/envars.ts"),
+                "OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT",
+                "ADK_CAPTURE_MESSAGE_CONTENT_IN_SPANS",
+                "PROMPTFOO_QA_SYNTHETIC_SECRET",
+                "OPENAI_API_HOST",
             ]
-            result = subprocess.check_output(
-                command, cwd=checkout, env=env, text=True, timeout=20
-            )
-            self.assertEqual(json.loads(result), {"secret": None, "host": None})
 
-            # The old startup defaults import both values from this same fixture.
-            del env["DOTENV_PATH"]
-            control = subprocess.check_output(
-                command, cwd=checkout, env=env, text=True, timeout=20
-            )
+            def read_settings(cwd):
+                return json.loads(
+                    subprocess.check_output(
+                        command, cwd=cwd, env=env, text=True, timeout=20
+                    )
+                )
+
+            self.assertEqual(read_settings(work), ["NO_CONTENT", "false", None, None])
             self.assertEqual(
-                json.loads(control),
-                {"secret": "fixture-secret", "host": "fixture.invalid/v1"},
+                read_settings(checkout),
+                [None, None, "fixture-secret", "fixture.invalid/v1"],
             )
 
     def assert_span_content(self, database: Path, row, capture_content: bool) -> None:
@@ -294,23 +302,12 @@ class GoogleAdkCliTest(unittest.TestCase):
         thread.start()
         try:
             with tempfile.TemporaryDirectory(prefix="promptfoo-adk-test-") as temporary:
-                work = Path(temporary)
-                env = {
-                    key: value
-                    for key, value in os.environ.items()
-                    if key in ("PATH", "SYSTEMROOT", "LANG", "LC_ALL")
-                }
-                env.update(isolated_environment_paths(work))
+                capture_content = failure != "no-content"
+                work, env = isolated_cli_directory(Path(temporary), capture_content)
                 # No inherited SDK credentials, model routing, proxies or trace exporters.
                 for proxy in ("HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY"):
                     env[proxy] = env[proxy.lower()] = ""
                 env["NO_PROXY"] = env["no_proxy"] = "*"
-                capture_content = failure != "no-content"
-                capture_mode = "SPAN_ONLY" if capture_content else "NO_CONTENT"
-                (work / ".env").write_text(
-                    f"OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT={capture_mode}\n"
-                    f"ADK_CAPTURE_MESSAGE_CONTENT_IN_SPANS={str(capture_content).lower()}\n"
-                )
                 env.update(
                     # Exercise the modern schema supported by these example configs.
                     ADK_TELEMETRY_SCHEMA_VERSION_OPT_IN="2",
