@@ -10,6 +10,7 @@ type PackageManifest = {
   devDependencies?: Record<string, string>;
   optionalDependencies?: Record<string, string>;
   peerDependencies?: Record<string, string>;
+  acceptDependencies?: Record<string, string>;
   overrides?: PackageOverrides;
 };
 
@@ -24,6 +25,11 @@ type PackageLockManifest<T> = {
 type LockedPackage = {
   name?: string;
   version?: string;
+  integrity?: string;
+  resolved?: string;
+  dependencies?: Record<string, string>;
+  optionalDependencies?: Record<string, string>;
+  acceptDependencies?: Record<string, string>;
 };
 
 function readPackageJson<T>(relativePath: string): T {
@@ -99,6 +105,12 @@ function findKnownBadRanges(
     })
     .filter(([name, range]) => {
       const badRange = knownBadReleases.get(name);
+      if (badRange && name === '@azure/msal-node') {
+        // Review historical ranges that overlap MSAL's beta interval, even if npm would skip the beta.
+        // Normalize supported stable shorthands before comparing their bounds.
+        const declared = validRange(range);
+        return !declared || intersects(declared, badRange, { includePrerelease: true });
+      }
       return badRange && validRange(range) && intersects(range, badRange);
     })
     .map(([name, range]) => `${name}@${range}`);
@@ -107,13 +119,42 @@ function findKnownBadRanges(
 function collectLockfileReleaseChecks(
   lockfile: PackageLockManifest<LockedPackage>,
   knownBadReleases: ReadonlyMap<string, string>,
-): { id: string; version: string; badRange: string }[] {
+): { id: string; name: string; affected: boolean }[] {
   return Object.entries(lockfile.packages).flatMap(([installPath, { name, version }]) => {
     // npm records an alias target's actual package name separately from its install path.
     const packageName = name ?? installPath.split('node_modules/').at(-1)!;
     const badRange = knownBadReleases.get(packageName);
-    return badRange && version ? [{ id: `${installPath}@${version}`, version, badRange }] : [];
+    if (!badRange || !version) {
+      return [];
+    }
+    const affected = satisfies(version, badRange, {
+      includePrerelease: packageName === '@azure/msal-node',
+    });
+    return [{ id: `${installPath}@${version}`, name: packageName, affected }];
   });
+}
+
+// Retire this exception when the published Azure Identity range no longer permits this release.
+function isReviewedMsalInstall(
+  path: string,
+  lockfile: PackageLockManifest<LockedPackage>,
+  { id, name }: { id: string; name: string },
+): boolean {
+  const identity = lockfile.packages['node_modules/@azure/identity'];
+  const msal = '@azure/msal-node';
+  return (
+    path === 'package-lock.json' &&
+    name === msal &&
+    id === 'node_modules/@azure/identity/node_modules/@azure/msal-node@6.0.1' &&
+    identity?.version === '4.13.3' &&
+    identity.resolved === 'https://registry.npmjs.org/@azure/identity/-/identity-4.13.3.tgz' &&
+    identity.integrity ===
+      'sha512-zGQPtqvXPgSA8yfV2CkIQ1qirqk0p9AIVpC5uEkdXQYcKl07QHvyaGYRnZOk0AsQUmxNb4wfkcwY5di8Z5xa9A==' &&
+    (identity.name ?? '@azure/identity') === '@azure/identity' &&
+    identity.dependencies?.[msal] === '^6.0.0' &&
+    identity.optionalDependencies?.[msal] === undefined &&
+    identity.acceptDependencies?.[msal] === undefined
+  );
 }
 
 // Scan the whole Dockerfile, not just RUN lines, so heredoc bodies and exec-form RUNs count.
@@ -155,6 +196,7 @@ const TYPESCRIPT_SOURCE_EXTENSIONS = new Set(['.ts', '.tsx', '.mts', '.cts']);
 // on `npm audit`, so this keeps a nested install, lockfile refresh, or widened range from
 // reintroducing one. Add the affected range when shipping a fix; this is not an audit.
 const KNOWN_BAD_RELEASES = new Map([
+  ['@azure/msal-node', '>=5.0.0-beta.0 <7.1.0'], // GHSA-xcx6-jx8p-x3h5
   ['@cacheable/utils', '2.5.1'], // Shai-Hulud compromise (#10301)
   ['@hono/node-server', '<2.1.3'], // GHSA-frvp-7c67-39w9, GHSA-9mqv-5hh9-4cgg, GHSA-rmxm-3fg6-px4f
   ['@modelcontextprotocol/sdk', '<1.32.0'], // GHSA-6prh-2h8m-c8cw
@@ -374,19 +416,17 @@ describe('package manifests', () => {
     expect(privateRegistryPackages).toEqual([]);
   });
 
-  it('keeps known-bad releases out of every lockfile install, including nested copies', () => {
-    const installs = ['package-lock.json', 'code-scan-action/package-lock.json'].flatMap(
-      (lockfile) =>
-        collectLockfileReleaseChecks(
-          readPackageJson<PackageLockManifest<LockedPackage>>(lockfile),
-          KNOWN_BAD_RELEASES,
-        ).map((check) => ({ ...check, id: `${lockfile}: ${check.id}` })),
-    );
+  it('limits known-bad lockfile installs to documented exceptions', () => {
+    const installs = ['package-lock.json', 'code-scan-action/package-lock.json'].flatMap((path) => {
+      const lockfile = readPackageJson<PackageLockManifest<LockedPackage>>(path);
+      return collectLockfileReleaseChecks(lockfile, KNOWN_BAD_RELEASES).map((check) => ({
+        id: `${path}: ${check.id}`,
+        unexpected: check.affected && !isReviewedMsalInstall(path, lockfile, check),
+      }));
+    });
 
     expect(installs.length).toBeGreaterThan(0);
-    expect(
-      installs.filter(({ version, badRange }) => satisfies(version, badRange)).map(({ id }) => id),
-    ).toEqual([]);
+    expect(installs.filter(({ unexpected }) => unexpected).map(({ id }) => id)).toEqual([]);
   });
 
   it.each([
@@ -398,20 +438,23 @@ describe('package manifests', () => {
     ],
     ['node_modules/parent/node_modules/fixture-leaf', { version: '1.0.0' }, true],
     ['node_modules/@fixture/leaf', { version: '1.0.0' }, true],
+    ['node_modules/fixture-leaf', { version: '1.1.0-beta.0' }, false],
+    ['node_modules/alias', { name: '@azure/msal-node', version: '1.1.0-beta.0' }, true],
     ['node_modules/alias', { name: 'fixture-leaf', version: '2.0.0' }, false],
     ['node_modules/fixture-leaf', { name: 'fixture-replacement', version: '1.0.0' }, false],
   ] as const)('checks locked package identity at %s: %j', (installPath, packageInfo, violates) => {
     const checks = collectLockfileReleaseChecks(
       { packages: { [installPath]: packageInfo } },
       new Map([
+        ['@azure/msal-node', '<2.0.0'],
         ['fixture-leaf', '<2.0.0'],
         ['@fixture/leaf', '<2.0.0'],
       ]),
     );
 
-    expect(
-      checks.filter(({ version, badRange }) => satisfies(version, badRange)).map(({ id }) => id),
-    ).toEqual(violates ? [`${installPath}@${packageInfo.version}`] : []);
+    expect(checks.filter(({ affected }) => affected).map(({ id }) => id)).toEqual(
+      violates ? [`${installPath}@${packageInfo.version}`] : [],
+    );
   });
 
   it('keeps declared ranges from resolving known-bad releases', () => {
@@ -453,10 +496,13 @@ describe('package manifests', () => {
               mixedCaseScopedAlias: 'NpM:@fixture/leaf@^1.1.0',
               safeAlias: 'npm:fixture-leaf@^2.0.0',
               safeScopedAlias: 'npm:@fixture/leaf@^2.0.0',
+              msalWithAffectedBeta: 'npm:@azure/msal-node@1.0.0-beta.0 <2 || ^2.0.0',
+              patchedMsal: 'npm:@azure/msal-node@2.x',
               'fixture-original': 'npm:fixture-replacement@1.0.0',
             },
           },
           new Map([
+            ['@azure/msal-node', '>=1.0.0-beta.0 <2.0.0'],
             ['fixture-leaf', '<2.0.0'],
             ['@fixture/leaf', '<2.0.0'],
             ['fixture-original', '<2.0.0'],
@@ -469,6 +515,7 @@ describe('package manifests', () => {
         '@fixture/leaf@1.0.0',
         'fixture-leaf@1.1.0',
         '@fixture/leaf@^1.1.0',
+        '@azure/msal-node@1.0.0-beta.0 <2 || ^2.0.0',
       ]);
     },
   );
@@ -758,6 +805,7 @@ describe('package manifests', () => {
         'package-lock.json',
       );
     for (const dependency of [
+      '@azure/msal-node',
       '@modelcontextprotocol/sdk',
       '@opencode-ai/sdk',
       'hono',
@@ -766,6 +814,17 @@ describe('package manifests', () => {
     ]) {
       expect(packageJson.optionalDependencies, dependency).toHaveProperty(dependency);
       expect(packageJson.dependencies, dependency).not.toHaveProperty(dependency);
+    }
+
+    // SharePoint imports MSAL by this name. Publish one stable registry pin, caret, or tilde.
+    const msal = '@azure/msal-node';
+    expect(packageJson.optionalDependencies?.[msal]).toMatch(/^[~^]?\d+\.\d+\.\d+$/);
+    for (const extra of [
+      packageJson.devDependencies,
+      packageJson.peerDependencies,
+      packageJson.acceptDependencies,
+    ]) {
+      expect(extra?.[msal]).toBeUndefined();
     }
 
     expect(packageJson.devDependencies).not.toHaveProperty('sharp');
