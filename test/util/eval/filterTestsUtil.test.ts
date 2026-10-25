@@ -138,9 +138,10 @@ describe('filterTestsUtil', () => {
 
     describe('large result matching', () => {
       beforeEach(async () => {
-        const actual = await vi.importActual<typeof import('../../../src/util/index')>(
-          '../../../src/util/index',
-        );
+        const actual =
+          await vi.importActual<typeof import('../../../src/util/index')>(
+            '../../../src/util/index',
+          );
         vi.mocked(util.resultIsForTestCase).mockImplementation(actual.resultIsForTestCase);
       });
 
@@ -152,7 +153,12 @@ describe('filterTestsUtil', () => {
             timestamp: new Date().toISOString(),
             results,
             table: { head: { prompts: [], vars: [] }, body: [] },
-            stats: { successes: 0, failures: 0, errors: results.length, tokenUsage: mockTokenUsage },
+            stats: {
+              successes: 0,
+              failures: 0,
+              errors: results.length,
+              tokenUsage: mockTokenUsage,
+            },
           },
           config: {},
           shareableUrl: null,
@@ -194,7 +200,9 @@ describe('filterTestsUtil', () => {
           'many-results.json',
           () => true,
         );
-        expect(matched.map((test) => test.vars?.input)).toEqual(tests.map((test) => test.vars.input));
+        expect(matched.map((test) => test.vars?.input)).toEqual(
+          tests.map((test) => test.vars.input),
+        );
         expect(matched).toHaveLength(128);
         expect(matched[11]?.vars?.sessionId).toBe('restored-session');
       });
@@ -228,7 +236,7 @@ describe('filterTestsUtil', () => {
           vars: { input: `input-${i}` },
         }));
         mockFileResults(
-          tests.map((test, i) => ({
+          tests.map((test, i): EvaluateResult => ({
             ...mockResults[0]!,
             testIdx: i,
             testCase: test,
