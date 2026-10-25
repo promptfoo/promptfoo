@@ -1,7 +1,13 @@
 import request from 'supertest';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-vi.mock('../../../src/util/apiHealth');
+vi.mock('../../../src/util/apiHealth', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../../src/util/apiHealth')>();
+  return {
+    ...actual,
+    checkRemoteHealth: vi.fn(),
+  };
+});
 
 import { createApp } from '../../../src/server/server';
 import { checkRemoteHealth } from '../../../src/util/apiHealth';
