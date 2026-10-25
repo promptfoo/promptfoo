@@ -467,5 +467,5 @@ Check out complete examples:
 ### Getting Help
 
 - [GitHub Issues](https://github.com/promptfoo/promptfoo/issues)
-- [Discord Community](https://discord.gg/promptfoo)
+- [Discord Community](https://discord.gg/gHPS9jjfbs)
 - [ElevenLabs Support](https://elevenlabs.io/support)
