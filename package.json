@@ -2,7 +2,7 @@
   "name": "promptfoo",
   "description": "LLM eval & testing toolkit",
   "author": "Ian Webster",
-  "version": "0.124.1",
+  "version": "0.125.1",
   "license": "MIT",
   "type": "module",
   "repository": {
@@ -114,7 +114,7 @@
     "prepare": "husky || exit 0"
   },
   "overrides": {
-    "mermaid": "^12.0.0",
+    "mermaid": "^12.2.0",
     "@ibm-cloud/watsonx-ai": {
       "ibm-cloud-sdk-core": "5.6.2"
     },
@@ -162,7 +162,7 @@
     },
     "serialize-javascript": ">=7.1.2",
     "gaxios": "^8.0.0",
-    "ip-address": "10.7.3",
+    "ip-address": "10.7.4",
     "mongoose": {
       "gcp-metadata": "^9.0.2"
     },
@@ -191,17 +191,17 @@
     "vite": "^8.0.16",
     "lodash-es": "^4.18.1",
     "webpack": "5.111.1",
-    "dompurify": "3.4.16",
+    "dompurify": "3.4.17",
     "monaco-editor": {
       ".": "0.57.0",
-      "dompurify": "3.4.16"
+      "dompurify": "3.4.17"
     }
   },
   "resolutions": {
     "ibm-cloud-sdk-core": "5.6.2"
   },
   "devDependencies": {
-    "@anthropic-ai/claude-agent-sdk": "0.3.295",
+    "@anthropic-ai/claude-agent-sdk": "0.3.296",
     "@asteasolutions/zod-to-openapi": "^9.1.0",
     "@aws-sdk/client-bedrock-agent-runtime": "^3.1045.0",
     "@aws-sdk/client-bedrock-runtime": "^3.1045.0",
@@ -213,7 +213,7 @@
     "@biomejs/biome": "2.5.15",
     "@fal-ai/client": "~1.10.1",
     "@ibm-cloud/watsonx-ai": "^1.7.16",
-    "@langfuse/client": "^5.11.1",
+    "@langfuse/client": "^6.0.0",
     "@openai/agents": "^0.14.1",
     "@openai/codex-sdk": "^0.156.1",
     "@openai/codex-security": "^0.2.0",
@@ -242,7 +242,7 @@
     "ibm-cloud-sdk-core": "5.6.2",
     "knip": "~6.27.0",
     "node-sql-parser": "^5.4.0",
-    "oxc-parser": "^0.153.0",
+    "oxc-parser": "^0.154.0",
     "pdf-parse": "^2.4.5",
     "playwright": "^1.63.0",
     "playwright-extra": "^4.3.6",
@@ -251,7 +251,7 @@
     "read-excel-file": "^9.3.9",
     "source-map-support": "^0.5.21",
     "supertest": "^7.3.0",
-    "tsdown": "0.23.0",
+    "tsdown": "0.23.1",
     "typescript": "^7.0.0",
     "vitest": "^5.0.2",
     "yaml": "^2.9.0"
@@ -273,7 +273,7 @@
     "@modelcontextprotocol/server-filesystem": "2026.8.31",
     "@opencode-ai/sdk": "^1.18.34",
     "@smithy/node-http-handler": "^4.4.14",
-    "google-auth-library": "^11.2.0",
+    "google-auth-library": "^11.3.0",
     "hono": "^4.13.12",
     "natural": "^8.1.1",
     "node-sql-parser": "^5.4.0",
@@ -283,9 +283,9 @@
     "sharp": "^0.35.5"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "0.132.1",
-    "@apidevtools/json-schema-ref-parser": "^16.0.3",
-    "@hono/node-server": "2.1.4",
+    "@anthropic-ai/sdk": "0.133.0",
+    "@apidevtools/json-schema-ref-parser": "^16.0.5",
+    "@hono/node-server": "2.1.5",
     "@inquirer/checkbox": "^5.1.0",
     "@inquirer/confirm": "^6.0.8",
     "@inquirer/core": "^12.0.0",
@@ -331,7 +331,7 @@
     "js-rouge": "^3.2.1",
     "js-yaml": "5.4.3",
     "json5": "^2.2.3",
-    "keyv": "^5.6.0",
+    "keyv": "^6.1.0",
     "keyv-file": "^5.3.3",
     "lru-cache": "^11.5.3",
     "mathjs": "^15.1.1",
@@ -342,7 +342,7 @@
     "ora": "^9.3.0",
     "parse5": "^8.0.0",
     "posthog-node": "~5.24.10",
-    "protobufjs": "^8.7.2",
+    "protobufjs": "^8.8.1",
     "proxy-agent": "^8.0.0",
     "proxy-from-env": "^2.1.0",
     "python-shell": "^5.0.0",
@@ -358,7 +358,7 @@
     "undici": ">=7.30.1 <8",
     "winston": "^3.19.0",
     "ws": "^8.21.3",
-    "zod": "^4.3.6"
+    "zod": "^4.6.7"
   },
   "madge": {
     "detectiveOptions": {

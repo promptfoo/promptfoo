@@ -397,6 +397,8 @@ assertionTemplates:
 // highlight-end
 ```
 
+HTTP(S) `$ref` downloads are limited to 50 MiB per response, including decompressed content. Private and loopback network destinations are blocked. Use a local reference or split larger documents if a remote reference exceeds this limit.
+
 :::info
 `tools` and `functions` values in providers config are _not_ dereferenced. This is because they are standalone JSON schemas that may contain their own internal references.
 :::
