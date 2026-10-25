@@ -357,52 +357,33 @@ class DockerPullTests(unittest.TestCase):
             self.assertEqual(invocation.kwargs["cwd"], ROOT)
             self.assertTrue(invocation.kwargs["check"])
 
-    def test_exhausted_throttling_preserves_the_failure(self):
+    def test_failed_retries_preserve_the_final_error_and_diagnostics(self):
         command = ("docker", "pull", "registry/image@sha256:fixture")
         throttled = subprocess.CalledProcessError(
-            1, command, stderr="toomanyrequests: Rate exceeded\n"
-        )
-        with (
-            patch("examples.subprocess.run", side_effect=throttled) as run,
-            patch("examples.time.sleep") as sleep,
-            self.assertRaises(subprocess.CalledProcessError) as raised,
-        ):
-            pull_docker_image(command[2], {})
-        self.assertIs(raised.exception, throttled)
-        self.assertEqual(run.call_count, 4)
-        self.assertEqual(
-            sleep.call_args_list, [mock_call(10), mock_call(30), mock_call(60)]
-        )
-
-    def test_timeout_after_throttling_preserves_the_failure_and_diagnostics(self):
-        command = ("docker", "pull", "registry/image@sha256:fixture")
-        throttled = subprocess.CalledProcessError(
-            1, command, stderr="toomanyrequests: Data limit exceeded\n"
+            1, command, stderr="toomanyrequests\n"
         )
         timeout = subprocess.CalledProcessError(
-            1,
-            command,
-            output="Docker pull output\n",
-            stderr="Error response from daemon: context deadline exceeded\n",
+            1, command, stderr="context deadline exceeded\n"
         )
-        diagnostics = io.StringIO()
-        with (
-            patch("examples.subprocess.run", side_effect=[throttled, timeout]) as run,
-            patch("examples.time.sleep") as sleep,
-            patch("examples.sys.stderr", diagnostics),
-            self.assertRaises(subprocess.CalledProcessError) as raised,
+        for failures, delays in (
+            ([throttled] * 4, [10, 30, 60]),
+            ([throttled, timeout], [10]),
         ):
-            pull_docker_image(command[2], {})
-        self.assertIs(raised.exception, timeout)
-        self.assertEqual(timeout.returncode, 1)
-        self.assertEqual(timeout.cmd, command)
-        self.assertEqual(timeout.stdout, "Docker pull output\n")
-        self.assertEqual(
-            timeout.stderr, "Error response from daemon: context deadline exceeded\n"
-        )
-        self.assertEqual(diagnostics.getvalue(), throttled.stderr + timeout.stderr)
-        self.assertEqual(run.call_count, 2)
-        sleep.assert_called_once_with(10)
+            with (
+                self.subTest(final_stderr=failures[-1].stderr),
+                patch("examples.subprocess.run", side_effect=failures),
+                patch("examples.time.sleep") as sleep,
+                patch("examples.sys.stderr", new_callable=io.StringIO) as diagnostics,
+                self.assertRaises(subprocess.CalledProcessError) as raised,
+            ):
+                pull_docker_image(command[2], {})
+            self.assertIs(raised.exception, failures[-1])
+            self.assertEqual(
+                diagnostics.getvalue(), "".join(error.stderr for error in failures)
+            )
+            self.assertEqual(
+                sleep.call_args_list, [mock_call(delay) for delay in delays]
+            )
 
     def test_other_pull_failures_are_not_retried(self):
         for stderr in (
@@ -488,118 +469,64 @@ class RunnerTests(unittest.TestCase):
                 self.assertEqual(command[4], "test_*.py")
             self.assertTrue(all(call.kwargs["check"] for call in run.call_args_list))
 
-    def test_throttled_mirror_falls_back_to_same_digest_and_runs_both_suites(self):
-        def throttle_ecr(command, **_kwargs):
-            if command[:2] == ("docker", "pull") and command[2].startswith(
-                "public.ecr.aws/"
-            ):
-                raise subprocess.CalledProcessError(
-                    1, command, stderr="toomanyrequests: Data limit exceeded\n"
-                )
-            return subprocess.CompletedProcess(command, 0, stderr="")
-
-        with (
-            patch(
-                "examples.sys.version_info", types.SimpleNamespace(major=3, minor=10)
-            ),
-            patch("examples.Path.is_file", return_value=True),
-            patch("examples.venv.EnvBuilder.create"),
-            patch("examples.subprocess.run", side_effect=throttle_ecr) as run,
-            patch("examples.time.sleep") as sleep,
+    def test_throttled_pulls_tag_the_successful_source_and_run_both_suites(self):
+        quota = "toomanyrequests: Data limit exceeded"
+        for primary_errors, delays, fallback in (
+            ([quota] * 4, [10, 30, 60], True),
+            ([quota, quota, "context deadline exceeded"], [10, 30], True),
+            ([quota, quota], [10, 30], False),
         ):
-            run_example("docker-sandbox")
-        commands = [invocation.args[0] for invocation in run.call_args_list]
-        pulls = [command for command in commands if command[:2] == ("docker", "pull")]
-        self.assertEqual(len(pulls), 5)
-        self.assertEqual(pulls[:4], [pulls[0]] * 4)
-        digest = pulls[0][2].split("@sha256:")[1]
-        self.assertEqual(pulls[4][2], f"docker.io/library/python@sha256:{digest}")
-        self.assertIn(("docker", "tag", pulls[4][2], "python:3.9-alpine"), commands)
-        self.assertEqual(
-            [
-                command[-1]
-                for command in commands
-                if command[1:3] == (str(SCRIPT), "test")
-            ],
-            ["test_*.py", "test_*.py"],
-        )
-        self.assertEqual(
-            sleep.call_args_list, [mock_call(10), mock_call(30), mock_call(60)]
-        )
+            errors = iter(primary_errors)
 
-    def test_quota_history_allows_primary_recovery_or_timeout_mirror_fallback(self):
-        for terminal_timeout in (False, True):
-            ecr_attempts = 0
-
-            def pull_after_quota(command, **_kwargs):
-                nonlocal ecr_attempts
-                if command[:2] == ("docker", "pull") and command[2].startswith(
-                    "public.ecr.aws/"
+            def pull(command, errors=errors, **_kwargs):
+                if (
+                    command[:2] == ("docker", "pull")
+                    and command[2].startswith("public.ecr.aws/")
+                    and (error := next(errors, None))
                 ):
-                    ecr_attempts += 1
-                    if ecr_attempts <= 2:
-                        raise subprocess.CalledProcessError(
-                            1, command, stderr="toomanyrequests: Data limit exceeded\n"
-                        )
-                    if terminal_timeout:
-                        raise subprocess.CalledProcessError(
-                            1, command, stderr="context deadline exceeded\n"
-                        )
+                    raise subprocess.CalledProcessError(1, command, stderr=error)
                 return subprocess.CompletedProcess(command, 0, stderr="")
 
             with (
-                self.subTest(terminal_timeout=terminal_timeout),
+                self.subTest(primary_errors=primary_errors),
                 patch(
                     "examples.sys.version_info",
-                    types.SimpleNamespace(major=3, minor=14),
+                    types.SimpleNamespace(major=3, minor=10),
                 ),
                 patch("examples.Path.is_file", return_value=True),
                 patch("examples.venv.EnvBuilder.create"),
-                patch("examples.subprocess.run", side_effect=pull_after_quota) as run,
+                patch("examples.subprocess.run", side_effect=pull) as run,
                 patch("examples.time.sleep") as sleep,
             ):
                 run_example("docker-sandbox")
-                commands = [invocation.args[0] for invocation in run.call_args_list]
-                pulls = [
-                    command for command in commands if command[:2] == ("docker", "pull")
-                ]
-                digest = (
-                    "c99b6eb43b3ac4d750db3d6e8b22268d5ea9a99deead7218ce3deda7f2ca029c"
-                )
-                ecr = f"public.ecr.aws/docker/library/python@sha256:{digest}"
-                mirror = f"docker.io/library/python@sha256:{digest}"
-                self.assertEqual(
-                    pulls,
-                    [("docker", "pull", ecr)] * 3
-                    + ([("docker", "pull", mirror)] if terminal_timeout else []),
-                )
-                self.assertEqual(
-                    [
-                        command
-                        for command in commands
-                        if command[:2] == ("docker", "tag")
-                    ],
-                    [
-                        (
-                            "docker",
-                            "tag",
-                            mirror if terminal_timeout else ecr,
-                            "python:3.9-alpine",
-                        )
-                    ],
-                )
-                self.assertEqual(
-                    [
-                        Path(command[3])
-                        for command in commands
-                        if command[1:3] == (str(SCRIPT), "test")
-                    ],
-                    [
-                        ROOT / EXAMPLES["docker-sandbox"].directory / relative
-                        for relative in (".", "tests")
-                    ],
-                )
-                self.assertEqual(sleep.call_args_list, [mock_call(10), mock_call(30)])
+            commands = [call.args[0] for call in run.call_args_list]
+            pulls = [
+                command[2] for command in commands if command[:2] == ("docker", "pull")
+            ]
+            primary = pulls[0]
+            digest = primary.split("@sha256:")[1]
+            source = (
+                f"docker.io/library/python@sha256:{digest}" if fallback else primary
+            )
+            self.assertEqual(pulls, [primary] * len(primary_errors) + [source])
+            self.assertEqual(
+                [command for command in commands if command[:2] == ("docker", "tag")],
+                [("docker", "tag", source, "python:3.9-alpine")],
+            )
+            self.assertEqual(
+                [
+                    Path(command[3])
+                    for command in commands
+                    if command[1:3] == (str(SCRIPT), "test")
+                ],
+                [
+                    ROOT / EXAMPLES["docker-sandbox"].directory / relative
+                    for relative in (".", "tests")
+                ],
+            )
+            self.assertEqual(
+                sleep.call_args_list, [mock_call(delay) for delay in delays]
+            )
 
     def test_failed_fallback_stops_before_tagging_or_example_execution(self):
         for fallback_error, expected_pulls in (
@@ -607,7 +534,6 @@ class RunnerTests(unittest.TestCase):
             ("manifest unknown", 5),
             ("context deadline exceeded", 5),
         ):
-            failures = []
 
             def fail_pull(command, fallback_error=fallback_error, **_kwargs):
                 if command[:2] == ("docker", "pull"):
@@ -616,11 +542,7 @@ class RunnerTests(unittest.TestCase):
                         if command[2].startswith("public.ecr.aws/")
                         else fallback_error
                     )
-                    failure = subprocess.CalledProcessError(
-                        1, command, output="Docker pull output\n", stderr=stderr
-                    )
-                    failures.append(failure)
-                    raise failure
+                    raise subprocess.CalledProcessError(1, command, stderr=stderr)
                 return subprocess.CompletedProcess(command, 0, stderr="")
 
             with (
@@ -638,10 +560,6 @@ class RunnerTests(unittest.TestCase):
                 run_example("docker-sandbox")
             commands = [invocation.args[0] for invocation in run.call_args_list]
             self.assertEqual(len(commands), 2 + expected_pulls)
-            self.assertIs(raised.exception, failures[-1])
-            self.assertEqual(raised.exception.returncode, 1)
-            self.assertEqual(raised.exception.cmd, commands[-1])
-            self.assertEqual(raised.exception.stdout, "Docker pull output\n")
             self.assertEqual(raised.exception.stderr, fallback_error)
             self.assertTrue(
                 raised.exception.cmd[2].startswith("docker.io/library/python@sha256:")

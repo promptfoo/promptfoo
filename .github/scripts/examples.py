@@ -267,11 +267,12 @@ def check_gate(selection: str, selected: str, tests: str) -> None:
         )
 
 
-def pull_docker_image(image: str, env: dict[str, str]) -> None:
-    """Retry registry throttling without retrying example execution."""
+def pull_docker_image(
+    image: str, env: dict[str, str], *, has_mirror: bool = False
+) -> bool:
+    """Return False if throttling warrants trying the next pinned mirror."""
     command = ("docker", "pull", image)
     delays = (10, 30, 60)
-    saw_rate_limit = False
     for attempt in range(len(delays) + 1):
         print(f"+ {shlex.join(command)}", flush=True)
         try:
@@ -287,10 +288,10 @@ def pull_docker_image(image: str, env: dict[str, str]) -> None:
             if error.stderr:
                 print(error.stderr, file=sys.stderr, end="", flush=True)
             rate_limited = "toomanyrequests" in (error.stderr or "").lower()
-            saw_rate_limit = saw_rate_limit or rate_limited
             if attempt == len(delays) or not rate_limited:
-                # Carry quota history to mirror selection without replacing the final error.
-                error.docker_pull_rate_limited = saw_rate_limit
+                # Only a quota error can have triggered an earlier retry.
+                if has_mirror and (attempt > 0 or rate_limited):
+                    return False
                 raise
             delay = delays[attempt]
             print(f"Registry throttled Docker pull; retrying in {delay}s", flush=True)
@@ -298,7 +299,7 @@ def pull_docker_image(image: str, env: dict[str, str]) -> None:
         else:
             if result.stderr:
                 print(result.stderr, file=sys.stderr, end="", flush=True)
-            return
+            return True
 
 
 def run_example(name: str) -> None:
@@ -347,19 +348,12 @@ def run_example(name: str) -> None:
         for image in example.docker_images:
             sources = DOCKER_IMAGE_MIRRORS.get(image, (image,))
             for index, source in enumerate(sources):
-                try:
-                    pull_docker_image(source, env)
-                except subprocess.CalledProcessError as error:
-                    if index == len(sources) - 1 or not getattr(
-                        error, "docker_pull_rate_limited", False
-                    ):
-                        raise
-                    print(
-                        "Docker pull encountered throttling; trying the next pinned mirror",
-                        flush=True,
-                    )
-                else:
+                if pull_docker_image(source, env, has_mirror=index + 1 < len(sources)):
                     break
+                print(
+                    "Docker pull encountered throttling; trying the next pinned mirror",
+                    flush=True,
+                )
             if source != image:
                 run("docker", "tag", source, image)
         for relative, pattern in example.suites:
