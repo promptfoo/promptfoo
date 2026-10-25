@@ -4,11 +4,13 @@ import json
 import os
 import signal
 import socket
+import sqlite3
 import subprocess
 import sys
 import tempfile
 import threading
 import unittest
+from contextlib import closing
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
@@ -16,6 +18,7 @@ import yaml
 
 ROOT = Path(__file__).resolve().parents[4]
 EXAMPLE = ROOT / "examples/integration-google-adk"
+TRIP_NOTE_SUMMARY = "Cloudy with drizzle. Bring an umbrella."
 
 
 def isolated_environment_paths(work: Path) -> dict[str, str]:
@@ -80,6 +83,39 @@ class GoogleAdkCliTest(unittest.TestCase):
                 json.loads(control),
                 {"secret": "fixture-secret", "host": "fixture.invalid/v1"},
             )
+
+    def assert_span_content(self, database: Path, row, capture_content: bool) -> None:
+        # The CLI JSON export truncates long attributes. Read the receiver's full payloads.
+        with closing(sqlite3.connect(f"{database.as_uri()}?mode=ro", uri=True)) as db:
+            spans = db.execute(
+                "SELECT name, attributes FROM spans WHERE trace_id = ?",
+                (row["traceId"],),
+            ).fetchall()
+        tools = [attrs for name, attrs in spans if name.startswith("execute_tool ")]
+        models = [
+            attrs
+            for name, attrs in spans
+            if name == "call_llm" or name.startswith("generate_content ")
+        ]
+        self.assertTrue(tools, "Missing ADK tool spans")
+        self.assertTrue(models, "Missing ADK model spans")
+
+        output = json.loads(row["response"]["output"])
+        if "steps_json" in row["vars"]:
+            prompt = json.loads(row["vars"]["steps_json"])[-1]
+            tool_values = (TRIP_NOTE_SUMMARY, output["artifact_names"][0])
+        else:
+            prompt = row["vars"]["task"]
+            tool_values = ("Tokyo", output["session_state"]["weather_snapshot"])
+
+        # With capture off, a tool payload can still leak in the model's history.
+        for group, values in (
+            (tools, tool_values),
+            (models, (prompt, output["final_answer"])),
+        ):
+            attributes = "\n".join(group if capture_content else tools + models)
+            for value in values:
+                self.assertEqual(value in attributes, capture_content, value)
 
     def run_configs(self, failure=None) -> None:
         requests = []
@@ -151,7 +187,7 @@ class GoogleAdkCliTest(unittest.TestCase):
                                 "name": "save_trip_note",
                                 "args": {
                                     "city": city,
-                                    "summary": "Cloudy with drizzle. Bring an umbrella.",
+                                    "summary": TRIP_NOTE_SUMMARY,
                                 },
                             }
                         }
@@ -250,6 +286,7 @@ class GoogleAdkCliTest(unittest.TestCase):
                 env.update(
                     # Exercise the modern schema supported by these example configs.
                     ADK_TELEMETRY_SCHEMA_VERSION_OPT_IN="2",
+                    OTEL_SEMCONV_STABILITY_OPT_IN="gen_ai_latest_experimental",
                     OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT=(
                         "SPAN_ONLY" if capture_content else "NO_CONTENT"
                     ),
@@ -330,6 +367,12 @@ class GoogleAdkCliTest(unittest.TestCase):
                         data = json.loads(output.read_text())["results"]
                         self.assertEqual(len(data["results"]), 1)
                         row = data["results"][0]
+                        if failure in (None, "no-content"):
+                            self.assert_span_content(
+                                work / "promptfoo" / "promptfoo.db",
+                                row,
+                                capture_content,
+                            )
                         if failure:
                             self.assertNotEqual(process.returncode, 0, log)
                             self.assertFalse(row["success"], row)
@@ -414,7 +457,7 @@ class GoogleAdkCliTest(unittest.TestCase):
     def test_api_errors_are_not_successful_outputs(self) -> None:
         self.run_configs(failure="api-error")
 
-    def test_disabling_capture_hides_tool_arguments(self) -> None:
+    def test_disabling_capture_hides_model_and_tool_content(self) -> None:
         self.run_configs(failure="no-content")
 
     def test_wrong_tool_arguments_fail_original_trace_assertions(self) -> None:
