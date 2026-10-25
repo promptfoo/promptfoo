@@ -376,6 +376,83 @@ describe('PromptfooChatCompletionProvider', () => {
     expect(result.error).toBe('LLM did not return a result, likely refusal');
   });
 
+  it.each(['crescendo', 'judge'] as const)(
+    'preserves terminal %s provider errors and usage instead of stale output',
+    async (task) => {
+      const taskProvider = new PromptfooChatCompletionProvider({ ...options, task });
+      const tokenUsage = {
+        total: 73,
+        prompt: 45,
+        completion: 28,
+        cached: 12,
+        numRequests: 2,
+        completionDetails: { reasoning: 8 },
+      };
+      vi.mocked(fetchWithRetries).mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            error: 'Provider request failed',
+            result: 'partial output',
+            tokenUsage,
+          }),
+          { status: 200 },
+        ),
+      );
+
+      expect(await taskProvider.callApi('test prompt')).toEqual({
+        error: 'Provider request failed',
+        tokenUsage,
+      });
+      expect(fetchWithRetries).toHaveBeenCalledTimes(1);
+    },
+  );
+
+  it('preserves an explicit remote provider error without output or usage', async () => {
+    vi.mocked(fetchWithRetries).mockResolvedValue(
+      new Response(JSON.stringify({ error: 'Provider request failed' }), { status: 200 }),
+    );
+
+    expect(await provider.callApi('test prompt')).toEqual({ error: 'Provider request failed' });
+  });
+
+  it.each([
+    {
+      response: { result: 'I cannot assist with that request' },
+      output: 'I cannot assist with that request',
+    },
+    { response: {}, error: 'LLM did not return a result, likely refusal' },
+    { response: { error: 'Provider refused' }, error: 'Provider refused' },
+  ])('preserves explicit refusal and usage for $response', async ({ response, output, error }) => {
+    const tokenUsage = { total: 12, prompt: 8, completion: 4 };
+    vi.mocked(fetchWithRetries).mockResolvedValue(
+      new Response(JSON.stringify({ ...response, isRefusal: true, tokenUsage }), { status: 200 }),
+    );
+
+    expect(await provider.callApi('test prompt')).toEqual({
+      ...(output ? { output } : { error }),
+      isRefusal: true,
+      tokenUsage,
+    });
+  });
+
+  it.each([undefined, '', null, false, {}])(
+    'keeps successful fallback output when the error field is %s',
+    async (error) => {
+      const tokenUsage = { total: 23, prompt: 15, completion: 8, numRequests: 2 };
+      vi.mocked(fetchWithRetries).mockResolvedValue(
+        new Response(
+          JSON.stringify({ result: 'fallback result', error, isRefusal: false, tokenUsage }),
+          { status: 200 },
+        ),
+      );
+
+      expect(await provider.callApi('test prompt')).toEqual({
+        output: 'fallback result',
+        tokenUsage,
+      });
+    },
+  );
+
   it('preserves token usage when a remote task fails after calling a model', async () => {
     const tokenUsage = {
       total: 73,
@@ -468,7 +545,7 @@ describe('PromptfooChatCompletionProvider', () => {
       });
 
       expect(await metaProvider.callApi('test prompt')).toEqual({
-        error: 'LLM did not return a result, likely refusal',
+        error: 'Customer text mentions invalid_json and invalid_request_error',
       });
     },
   );

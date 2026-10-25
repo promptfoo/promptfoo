@@ -162,7 +162,7 @@ const KNOWN_BAD_RELEASES = new Map([
   ['cache-manager', '7.2.10'], // Shai-Hulud compromise (#10301)
   ['cacheable-request', '13.0.20'], // Shai-Hulud compromise (#10301)
   ['csv-parse', '<7.0.2'], // GHSA-8cw4-87c7-c6xx
-  ['dompurify', '<=3.4.15'], // GHSA-p98j-92pf-mc4p, GHSA-6688-9rhm-gjv2
+  ['dompurify', '<=3.4.16'], // GHSA-c6gr-qvv4-5v3f, GHSA-mrv2-3pqr-j5jr, GHSA-cg2g-xh64-v4q7
   ['drizzle-orm', '<0.45.2 || >=1.0.0-beta.2 <1.0.0-beta.20'], // GHSA-gpj5-g38j-94v9
   ['extract-zip', '<=2.0.1'], // GHSA-jmr9-qjv8-65gv, GHSA-7pqw-9j4j-h8q3
   ['fast-uri', '<2.4.7 || >=3.0.0 <3.1.8 || >=4.0.0 <4.1.5'], // GHSA-hrr3-gc8f-f4qj, GHSA-qw65-cvwx-89v3, GHSA-58mr-gqgx-xq4g
@@ -175,7 +175,11 @@ const KNOWN_BAD_RELEASES = new Map([
   ['sharp', '<0.35.5'], // GHSA-wq5f-xc86-pv6w (bundled librsvg)
   ['simple-git', '<=3.36.0'], // GHSA-858h-whjf-mvg5
   ['smol-toml', '<=1.8.0'], // GHSA-r4xh-jqrq-34v2
-  ['undici', '<7.29.1 || >=8.0.0 <8.10.2'], // GHSA-3xpg-4rpp-hhhm and the 7.29.1/8.10.2 fixes
+  [
+    'storybook',
+    '>=8.0.0 <8.6.19 || >=9.0.0 <9.1.21 || >=10.0.0 <10.6.2 || >=11.0.0-alpha.0 <11.0.0-alpha.6',
+  ], // GHSA-f2ph-cmg5-wxc8
+  ['undici', '<7.30.1 || >=8.0.0 <8.10.2'], // 7.30.1 security fixes and GHSA-3xpg-4rpp-hhhm
   ['ws', '<5.2.5 || >=6.0.0 <6.2.4 || >=7.0.0 <7.5.11 || >=8.0.0 <8.21.0'], // GHSA-96hv-2xvq-fx4p
 ]);
 
