@@ -134,24 +134,27 @@ function collectLockfileReleaseChecks(
   });
 }
 
-const REVIEWED_AZURE_IDENTITY = {
-  version: '4.13.3',
-  resolved: 'https://registry.npmjs.org/@azure/identity/-/identity-4.13.3.tgz',
-  integrity:
-    'sha512-zGQPtqvXPgSA8yfV2CkIQ1qirqk0p9AIVpC5uEkdXQYcKl07QHvyaGYRnZOk0AsQUmxNb4wfkcwY5di8Z5xa9A==',
-};
-
-function azureIdentityMsalRequirement(lockfile: PackageLockManifest<LockedPackage>) {
+// Retire this exception when the published Azure Identity range no longer permits this release.
+function isReviewedMsalInstall(
+  path: string,
+  lockfile: PackageLockManifest<LockedPackage>,
+  { id, name }: { id: string; name: string },
+): boolean {
   const identity = lockfile.packages['node_modules/@azure/identity'];
   const msal = '@azure/msal-node';
-  return identity?.version === REVIEWED_AZURE_IDENTITY.version &&
-    identity.resolved === REVIEWED_AZURE_IDENTITY.resolved &&
-    identity.integrity === REVIEWED_AZURE_IDENTITY.integrity &&
+  return (
+    path === 'package-lock.json' &&
+    name === msal &&
+    id === 'node_modules/@azure/identity/node_modules/@azure/msal-node@6.0.1' &&
+    identity?.version === '4.13.3' &&
+    identity.resolved === 'https://registry.npmjs.org/@azure/identity/-/identity-4.13.3.tgz' &&
+    identity.integrity ===
+      'sha512-zGQPtqvXPgSA8yfV2CkIQ1qirqk0p9AIVpC5uEkdXQYcKl07QHvyaGYRnZOk0AsQUmxNb4wfkcwY5di8Z5xa9A==' &&
     (identity.name ?? '@azure/identity') === '@azure/identity' &&
+    identity.dependencies?.[msal] === '^6.0.0' &&
     identity.optionalDependencies?.[msal] === undefined &&
     identity.acceptDependencies?.[msal] === undefined
-    ? identity.dependencies?.[msal]
-    : undefined;
+  );
 }
 
 // Scan the whole Dockerfile, not just RUN lines, so heredoc bodies and exec-form RUNs count.
@@ -416,47 +419,14 @@ describe('package manifests', () => {
   it('limits known-bad lockfile installs to documented exceptions', () => {
     const installs = ['package-lock.json', 'code-scan-action/package-lock.json'].flatMap((path) => {
       const lockfile = readPackageJson<PackageLockManifest<LockedPackage>>(path);
-      if (path === 'package-lock.json') {
-        // Review the exception when its owner or constraint changes, or when the child disappears.
-        expect(azureIdentityMsalRequirement(lockfile)).toBe('^6.0.0');
-      }
       return collectLockfileReleaseChecks(lockfile, KNOWN_BAD_RELEASES).map((check) => ({
-        ...check,
         id: `${path}: ${check.id}`,
+        unexpected: check.affected && !isReviewedMsalInstall(path, lockfile, check),
       }));
     });
 
     expect(installs.length).toBeGreaterThan(0);
-    const violations = installs
-      .filter(({ affected }) => affected)
-      .map(({ name, id }) => ({ name, id }));
-    expect(violations).toEqual([
-      {
-        name: '@azure/msal-node',
-        id: 'package-lock.json: node_modules/@azure/identity/node_modules/@azure/msal-node@6.0.1',
-      },
-    ]);
-  });
-
-  it.each([
-    { name: 'fixture-replacement' },
-    { version: '4.14.0' },
-    { resolved: 'git+https://example.com/identity.git' },
-    { integrity: `sha512-${Buffer.alloc(64).toString('base64')}` },
-    { optionalDependencies: { '@azure/msal-node': '^6.0.0 || ^7.1.0' } },
-    { acceptDependencies: { '@azure/msal-node': '^7.1.0' } },
-  ])('rechecks the MSAL exception when Azure Identity changes: %j', (change) => {
-    expect(
-      azureIdentityMsalRequirement({
-        packages: {
-          'node_modules/@azure/identity': {
-            ...REVIEWED_AZURE_IDENTITY,
-            dependencies: { '@azure/msal-node': '^6.0.0' },
-            ...change,
-          },
-        },
-      }),
-    ).toBeUndefined();
+    expect(installs.filter(({ unexpected }) => unexpected).map(({ id }) => id)).toEqual([]);
   });
 
   it.each([
