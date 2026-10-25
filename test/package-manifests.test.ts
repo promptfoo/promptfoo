@@ -107,12 +107,14 @@ function findKnownBadRanges(
 function collectLockfileReleaseChecks(
   lockfile: PackageLockManifest<LockedPackage>,
   knownBadReleases: ReadonlyMap<string, string>,
-): { id: string; version: string; badRange: string }[] {
+): { id: string; name: string; version: string; badRange: string }[] {
   return Object.entries(lockfile.packages).flatMap(([installPath, { name, version }]) => {
     // npm records an alias target's actual package name separately from its install path.
     const packageName = name ?? installPath.split('node_modules/').at(-1)!;
     const badRange = knownBadReleases.get(packageName);
-    return badRange && version ? [{ id: `${installPath}@${version}`, version, badRange }] : [];
+    return badRange && version
+      ? [{ id: `${installPath}@${version}`, name: packageName, version, badRange }]
+      : [];
   });
 }
 
@@ -155,6 +157,7 @@ const TYPESCRIPT_SOURCE_EXTENSIONS = new Set(['.ts', '.tsx', '.mts', '.cts']);
 // on `npm audit`, so this keeps a nested install, lockfile refresh, or widened range from
 // reintroducing one. Add the affected range when shipping a fix; this is not an audit.
 const KNOWN_BAD_RELEASES = new Map([
+  ['@azure/msal-node', '>=5.0.0-beta.0 <7.1.0'], // GHSA-xcx6-jx8p-x3h5
   ['@cacheable/utils', '2.5.1'], // Shai-Hulud compromise (#10301)
   ['@hono/node-server', '<2.1.3'], // GHSA-frvp-7c67-39w9, GHSA-9mqv-5hh9-4cgg, GHSA-rmxm-3fg6-px4f
   ['@modelcontextprotocol/sdk', '<1.32.0'], // GHSA-6prh-2h8m-c8cw
@@ -373,7 +376,7 @@ describe('package manifests', () => {
     expect(privateRegistryPackages).toEqual([]);
   });
 
-  it('keeps known-bad releases out of every lockfile install, including nested copies', () => {
+  it('rejects new known-bad lockfile installs, including nested copies', () => {
     const installs = ['package-lock.json', 'code-scan-action/package-lock.json'].flatMap(
       (lockfile) =>
         collectLockfileReleaseChecks(
@@ -384,7 +387,17 @@ describe('package manifests', () => {
 
     expect(installs.length).toBeGreaterThan(0);
     expect(
-      installs.filter(({ version, badRange }) => satisfies(version, badRange)).map(({ id }) => id),
+      installs
+        .filter(({ version, badRange }) => satisfies(version, badRange))
+        // No patched MSAL satisfies @azure/identity's ^6.0.0 requirement. Remove this
+        // exception when Azure Identity supports a patched release.
+        .filter(
+          ({ name, id }) =>
+            name !== '@azure/msal-node' ||
+            id !==
+              'package-lock.json: node_modules/@azure/identity/node_modules/@azure/msal-node@6.0.1',
+        )
+        .map(({ id }) => id),
     ).toEqual([]);
   });
 
@@ -747,15 +760,6 @@ describe('package manifests', () => {
       expect(packageJson.dependencies, dependency).toHaveProperty(dependency);
       expect(packageJson.optionalDependencies, dependency).not.toHaveProperty(dependency);
     }
-  });
-
-  it('keeps the direct MSAL dependency above the authorization-code security fix', () => {
-    const packageJson = readPackageJson<PackageManifest>('package.json');
-    const range = packageJson.optionalDependencies?.['@azure/msal-node'];
-    expect(range).toBeDefined();
-    // GHSA-xcx6-jx8p-x3h5. The older MSAL nested under @azure/identity needs
-    // a separate parent-package compatibility upgrade.
-    expect(intersects(range!, '>=5.0.0-beta.0 <7.1.0')).toBe(false);
   });
 
   it('lets consumers omit separately installed features', () => {
