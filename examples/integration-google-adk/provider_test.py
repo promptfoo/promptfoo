@@ -1,13 +1,10 @@
 """Focused tests for provider helper behavior."""
 
 import importlib.util
-import os
 import sys
 import unittest
 from pathlib import Path
 from unittest.mock import patch
-
-from google.adk.agents.run_config import RunConfig
 
 EXAMPLE_DIR = Path(__file__).resolve().parent
 if str(EXAMPLE_DIR) not in sys.path:
@@ -62,50 +59,6 @@ class SessionIdTests(unittest.TestCase):
     def test_falls_back_to_defaults(self):
         session_id = provider._session_id({}, {})
         self.assertEqual(session_id, "promptfoo-adk-local-eval-default-test")
-
-
-class TelemetryCaptureTests(unittest.IsolatedAsyncioTestCase):
-    async def assert_run_capture(self, invoke, steps, locked=False):
-        configs = []
-
-        async def record_run(*_args, **kwargs):
-            configs.append(kwargs.get("run_config"))
-            for event in ():
-                yield event
-
-        settings = {
-            "OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT": "NO_CONTENT",
-            "ADK_TELEMETRY_IGNORE_RUN_CONFIG": str(locked).lower(),
-        }
-        with (
-            patch.dict(os.environ, settings),
-            patch.object(provider.Runner, "run_async", record_run),
-        ):
-            await invoke("London weather", {}, {"vars": {"steps_json": '["a", "b"]'}})
-            self.assertEqual(len(configs), steps)
-            for config in configs:
-                self.assertIsInstance(config, RunConfig)
-                self.assertIsNotNone(config.telemetry)
-                self.assertEqual(
-                    config.telemetry.should_add_content_to_experimental_spans,
-                    not locked,
-                )
-                self.assertFalse(config.telemetry.should_add_content_to_logs)
-            for key, value in settings.items():
-                self.assertEqual(os.environ[key], value)
-
-    async def test_every_conversation_turn_captures_span_content_without_env_mutation(
-        self,
-    ):
-        await self.assert_run_capture(provider._run_conversational_provider, 2)
-
-    async def test_workflow_captures_span_content_without_env_mutation(self):
-        await self.assert_run_capture(provider._run_workflow_provider, 1)
-
-    async def test_administrator_capture_lock_is_respected(self):
-        await self.assert_run_capture(
-            provider._run_conversational_provider, 2, locked=True
-        )
 
 
 class TracerProviderTests(unittest.TestCase):

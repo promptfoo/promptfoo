@@ -27,6 +27,8 @@ source .venv/bin/activate
 python -m pip install -r requirements.txt
 
 export GOOGLE_API_KEY=your_google_api_key_here
+# Allow ADK to include model messages and tool arguments/results in example traces.
+export OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT=SPAN_ONLY
 npx promptfoo@latest eval -c promptfooconfig.yaml --no-cache
 npx promptfoo@latest eval -c promptfooconfig.workflow.yaml --no-cache
 npx promptfoo@latest view
@@ -101,7 +103,7 @@ ADK 2.x emits OpenTelemetry spans for the important framework steps:
 3. starting a small provider span under the Promptfoo parent trace
 4. letting ADK emit its native child spans beneath it
 
-The provider passes `RunConfig(telemetry=TelemetryConfig(capture_message_content=ContentCapturingMode.SPAN_ONLY))` to each ADK invocation so exported spans include tool arguments for trajectory assertions. This also captures model inputs/outputs and tool results. ADK 2.13 defaults to telemetry v2, which omits tool arguments unless span content capture is enabled.
+ADK 2.13 uses telemetry v2 by default. Without span content capture, tool names remain visible, but the `trajectory:tool-args-match` assertions fail because the arguments are missing. To keep model messages and tool content out of spans, set `OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT=NO_CONTENT` and `ADK_CAPTURE_MESSAGE_CONTENT_IN_SPANS=false` (the latter controls legacy spans, which capture content by default).
 
 Promptfoo recognizes `gen_ai.tool.name` and tool arguments from both telemetry schemas: `gcp.vertex.agent.tool_call_args` in v1 and `gen_ai.tool.call.arguments` in v2. The `generate_content <model>` span is available in both; v2 no longer emits `call_llm`.
 

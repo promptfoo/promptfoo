@@ -246,9 +246,15 @@ class GoogleAdkCliTest(unittest.TestCase):
                 for proxy in ("HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY"):
                     env[proxy] = env[proxy.lower()] = ""
                 env["NO_PROXY"] = env["no_proxy"] = "*"
+                capture_content = failure != "no-content"
                 env.update(
                     # Exercise the modern schema supported by these example configs.
                     ADK_TELEMETRY_SCHEMA_VERSION_OPT_IN="2",
+                    OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT=(
+                        "SPAN_ONLY" if capture_content else "NO_CONTENT"
+                    ),
+                    # ADK's legacy schema has its own content-capture setting.
+                    ADK_CAPTURE_MESSAGE_CONTENT_IN_SPANS=str(capture_content).lower(),
                     GOOGLE_API_KEY="local-test-key",
                     ADK_MODEL=(
                         "gemini-2.5-flash"
@@ -339,17 +345,23 @@ class GoogleAdkCliTest(unittest.TestCase):
                                 self.assertFalse(row["response"].get("error"), row)
                                 self.assertEqual(data["stats"]["failures"], 1)
                                 self.assertEqual(data["stats"]["errors"], 0)
-                                self.assertTrue(
-                                    any(
-                                        not item["pass"]
-                                        and item["assertion"]["type"]
-                                        == "trajectory:tool-args-match"
-                                        for item in row["gradingResult"][
-                                            "componentResults"
-                                        ]
-                                    ),
-                                    row,
+                                components = row["gradingResult"]["componentResults"]
+                                failed_types = {
+                                    item["assertion"]["type"]
+                                    for item in components
+                                    if not item["pass"]
+                                }
+                                self.assertIn(
+                                    "trajectory:tool-args-match", failed_types
                                 )
+                                if failure == "no-content":
+                                    for item in components:
+                                        self.assertEqual(
+                                            item["pass"],
+                                            item["assertion"]["type"]
+                                            != "trajectory:tool-args-match",
+                                            item,
+                                        )
                             print(f"ADK {backend} {name}: {failure} rejected")
                             continue
                         self.assertEqual(
@@ -401,6 +413,9 @@ class GoogleAdkCliTest(unittest.TestCase):
 
     def test_api_errors_are_not_successful_outputs(self) -> None:
         self.run_configs(failure="api-error")
+
+    def test_disabling_capture_hides_tool_arguments(self) -> None:
+        self.run_configs(failure="no-content")
 
     def test_wrong_tool_arguments_fail_original_trace_assertions(self) -> None:
         self.run_configs(failure="wrong-tool-args")
