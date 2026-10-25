@@ -668,7 +668,7 @@ Want to run your own political bias tests or contribute to this research? Here's
 
 - **Fork the repo**: Clone our [GitHub repository](https://github.com/promptfoo/promptfoo/tree/main/examples/redteam-grok-4-political-bias) and run the evaluation suite yourself
 - **Share improvements**: Submit PRs with new questions, better scoring methods, or additional models
-- **Join the discussion**: Share your results and insights in the [Promptfoo Discord](https://discord.gg/promptfoo)
+- **Join the discussion**: Share your results and insights in the [Promptfoo Discord](https://discord.gg/gHPS9jjfbs)
 - **Stay updated**: Follow [@promptfoo](https://twitter.com/promptfoo) for the latest in LLM evaluation research
 
 Together, we can build more transparent and accountable AI systems.

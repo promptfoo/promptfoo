@@ -29,7 +29,7 @@ const links: { icon: React.ReactElement; text: string; href: string }[] = [
   {
     icon: <MessageCircle className="size-4" />,
     text: 'Join Our Discord Community',
-    href: 'https://discord.gg/promptfoo',
+    href: 'https://discord.gg/gHPS9jjfbs',
   },
   {
     icon: <Calendar className="size-4" />,
