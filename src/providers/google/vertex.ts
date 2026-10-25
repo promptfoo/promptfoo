@@ -1228,7 +1228,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
     const body = {
       model: `meta/${this.modelName}`,
       messages,
-      max_tokens: generationConfig?.maxOutputTokens || this.config.maxOutputTokens || 1024,
+      max_tokens: generationConfig?.maxOutputTokens ?? (this.config.maxOutputTokens || 1024),
       stream: false,
       temperature: generationConfig?.temperature ?? this.config.temperature,
       top_p: generationConfig?.topP ?? this.config.topP,
