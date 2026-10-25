@@ -26,6 +26,7 @@ type LockedPackage = {
   name?: string;
   version?: string;
   integrity?: string;
+  resolved?: string;
   dependencies?: Record<string, string>;
   optionalDependencies?: Record<string, string>;
   acceptDependencies?: Record<string, string>;
@@ -98,7 +99,8 @@ function findKnownBadRanges(
 
   return ranges
     .map(([name, range]): [string, string] => {
-      if (!/^npm:/i.test(range)) {
+      // The direct import uses this install name; require a semver range even for npm alternates.
+      if (name === msal || !/^npm:/i.test(range)) {
         return [name, range];
       }
       // Aliases resolve the target package, regardless of the dependency or override key.
@@ -110,7 +112,7 @@ function findKnownBadRanges(
     })
     .filter(([name, range]) => {
       const badRange = knownBadReleases.get(name);
-      if (badRange && name === '@azure/msal-node') {
+      if (badRange && name === msal) {
         // Review historical ranges that overlap MSAL's beta interval, even if npm would skip the beta.
         // Normalize supported stable shorthands before comparing their bounds.
         const declared = validRange(range);
@@ -139,14 +141,19 @@ function collectLockfileReleaseChecks(
   });
 }
 
-const AZURE_IDENTITY_4_13_3_INTEGRITY =
-  'sha512-zGQPtqvXPgSA8yfV2CkIQ1qirqk0p9AIVpC5uEkdXQYcKl07QHvyaGYRnZOk0AsQUmxNb4wfkcwY5di8Z5xa9A==';
+const REVIEWED_AZURE_IDENTITY = {
+  version: '4.13.3',
+  resolved: 'https://registry.npmjs.org/@azure/identity/-/identity-4.13.3.tgz',
+  integrity:
+    'sha512-zGQPtqvXPgSA8yfV2CkIQ1qirqk0p9AIVpC5uEkdXQYcKl07QHvyaGYRnZOk0AsQUmxNb4wfkcwY5di8Z5xa9A==',
+};
 
 function azureIdentityMsalRequirement(lockfile: PackageLockManifest<LockedPackage>) {
   const identity = lockfile.packages['node_modules/@azure/identity'];
   const msal = '@azure/msal-node';
-  return identity?.version === '4.13.3' &&
-    identity.integrity === AZURE_IDENTITY_4_13_3_INTEGRITY &&
+  return identity?.version === REVIEWED_AZURE_IDENTITY.version &&
+    identity.resolved === REVIEWED_AZURE_IDENTITY.resolved &&
+    identity.integrity === REVIEWED_AZURE_IDENTITY.integrity &&
     (identity.name ?? '@azure/identity') === '@azure/identity' &&
     identity.optionalDependencies?.[msal] === undefined &&
     identity.acceptDependencies?.[msal] === undefined
@@ -441,6 +448,7 @@ describe('package manifests', () => {
   it.each([
     { name: 'fixture-replacement' },
     { version: '4.14.0' },
+    { resolved: 'git+https://example.com/identity.git' },
     { integrity: `sha512-${Buffer.alloc(64).toString('base64')}` },
     { optionalDependencies: { '@azure/msal-node': '^6.0.0 || ^7.1.0' } },
     { acceptDependencies: { '@azure/msal-node': '^7.1.0' } },
@@ -449,8 +457,7 @@ describe('package manifests', () => {
       azureIdentityMsalRequirement({
         packages: {
           'node_modules/@azure/identity': {
-            version: '4.13.3',
-            integrity: AZURE_IDENTITY_4_13_3_INTEGRITY,
+            ...REVIEWED_AZURE_IDENTITY,
             dependencies: { '@azure/msal-node': '^6.0.0' },
             ...change,
           },
@@ -512,16 +519,17 @@ describe('package manifests', () => {
   });
 
   it.each([
-    ['^6.0.0', ['@azure/msal-node@^6.0.0']],
-    ['^7.1.0', []],
+    ['^1.0.0', ['@azure/msal-node@^1.0.0']],
+    ['npm:fixture-fork@^1.0.0', ['@azure/msal-node@npm:fixture-fork@^1.0.0']],
+    ['^2.0.0', []],
   ] as const)('checks MSAL’s alternate range %s for npm consumers', (range, expected) => {
     expect(
       findKnownBadRanges(
         {
-          optionalDependencies: { '@azure/msal-node': '^7.1.0' },
+          optionalDependencies: { '@azure/msal-node': '^2.0.0' },
           acceptDependencies: { '@azure/msal-node': range },
         },
-        KNOWN_BAD_RELEASES,
+        new Map([['@azure/msal-node', '<2.0.0']]),
       ),
     ).toEqual(expected);
   });
@@ -543,6 +551,7 @@ describe('package manifests', () => {
               safeScopedAlias: 'npm:@fixture/leaf@^2.0.0',
               msalWithAffectedBeta: 'npm:@azure/msal-node@1.0.0-beta.0 <2 || ^2.0.0',
               patchedMsal: 'npm:@azure/msal-node@2.x',
+              '@azure/msal-node': 'npm:fixture-fork@^1.0.0',
               'fixture-original': 'npm:fixture-replacement@1.0.0',
             },
           },
@@ -561,6 +570,7 @@ describe('package manifests', () => {
         'fixture-leaf@1.1.0',
         '@fixture/leaf@^1.1.0',
         '@azure/msal-node@1.0.0-beta.0 <2 || ^2.0.0',
+        '@azure/msal-node@npm:fixture-fork@^1.0.0',
       ]);
     },
   );
