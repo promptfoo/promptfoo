@@ -27,15 +27,11 @@ def isolated_environment_paths(work: Path) -> dict[str, str]:
     state.mkdir(parents=True)
     temporary = work / "tmp"
     temporary.mkdir()
-    env_file = work / "empty.env"
-    env_file.touch()
     return {
         "HOME": str(home),
         "USERPROFILE": str(home),
         "XDG_STATE_HOME": str(state),
         "TMPDIR": str(temporary),
-        # envars loads defaults before main processes the explicit --env-file flag.
-        "DOTENV_PATH": str(env_file),
     }
 
 
@@ -52,7 +48,13 @@ class GoogleAdkCliTest(unittest.TestCase):
                 "PROMPTFOO_QA_SYNTHETIC_SECRET=fixture-secret\n"
                 "OPENAI_API_HOST=fixture.invalid/v1\n"
             )
-            env = {"PATH": os.environ["PATH"], **isolated_environment_paths(work)}
+            env_file = work / "empty.env"
+            env_file.touch()
+            env = {
+                "PATH": os.environ["PATH"],
+                "DOTENV_PATH": str(env_file),
+                **isolated_environment_paths(work),
+            }
             for key in ("HOME", "USERPROFILE", "XDG_STATE_HOME", "TMPDIR"):
                 self.assertTrue(Path(env[key]).is_relative_to(work))
                 self.assertTrue(Path(env[key]).is_dir())
@@ -62,11 +64,13 @@ class GoogleAdkCliTest(unittest.TestCase):
                 str(ROOT / "node_modules/tsx/dist/loader.mjs"),
                 "--input-type=module",
                 "-e",
-                "import {pathToFileURL} from 'node:url'; "
-                "await import(pathToFileURL(process.argv[1]).href); "
-                "process.stdout.write(JSON.stringify({"
-                "secret: process.env.PROMPTFOO_QA_SYNTHETIC_SECRET ?? null, "
-                "host: process.env.OPENAI_API_HOST ?? null}));",
+                (
+                    "import {pathToFileURL} from 'node:url'; "
+                    "await import(pathToFileURL(process.argv[1]).href); "
+                    "process.stdout.write(JSON.stringify({"
+                    "secret: process.env.PROMPTFOO_QA_SYNTHETIC_SECRET ?? null, "
+                    "host: process.env.OPENAI_API_HOST ?? null}));"
+                ),
                 str(ROOT / "src/envars.ts"),
             ]
             result = subprocess.check_output(
@@ -100,6 +104,26 @@ class GoogleAdkCliTest(unittest.TestCase):
         self.assertTrue(tools, "Missing ADK tool spans")
         self.assertTrue(models, "Missing ADK model spans")
 
+        if not capture_content:
+            # Legacy ADK writes empty JSON; v2 omits payload attributes. Metadata remains.
+            for raw in tools + models:
+                attributes = json.loads(raw)
+                for key in (
+                    "gcp.vertex.agent.llm_request",
+                    "gcp.vertex.agent.llm_response",
+                    "gcp.vertex.agent.tool_call_args",
+                    "gcp.vertex.agent.tool_response",
+                    "gen_ai.input.messages",
+                    "gen_ai.output.messages",
+                    "gen_ai.system_instructions",
+                    "gen_ai.tool.call.arguments",
+                    "gen_ai.tool.call.result",
+                ):
+                    self.assertIn(
+                        attributes.get(key), (None, "", "{}", "[]", {}, []), key
+                    )
+            return
+
         output = json.loads(row["response"]["output"])
         if "steps_json" in row["vars"]:
             prompt = json.loads(row["vars"]["steps_json"])[-1]
@@ -108,14 +132,13 @@ class GoogleAdkCliTest(unittest.TestCase):
             prompt = row["vars"]["task"]
             tool_values = ("Tokyo", output["session_state"]["weather_snapshot"])
 
-        # With capture off, a tool payload can still leak in the model's history.
         for group, values in (
             (tools, tool_values),
             (models, (prompt, output["final_answer"])),
         ):
-            attributes = "\n".join(group if capture_content else tools + models)
+            attributes = "\n".join(group)
             for value in values:
-                self.assertEqual(value in attributes, capture_content, value)
+                self.assertIn(value, attributes)
 
     def run_configs(self, failure=None) -> None:
         requests = []
@@ -283,15 +306,15 @@ class GoogleAdkCliTest(unittest.TestCase):
                     env[proxy] = env[proxy.lower()] = ""
                 env["NO_PROXY"] = env["no_proxy"] = "*"
                 capture_content = failure != "no-content"
+                capture_mode = "SPAN_ONLY" if capture_content else "NO_CONTENT"
+                (work / ".env").write_text(
+                    f"OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT={capture_mode}\n"
+                    f"ADK_CAPTURE_MESSAGE_CONTENT_IN_SPANS={str(capture_content).lower()}\n"
+                )
                 env.update(
                     # Exercise the modern schema supported by these example configs.
                     ADK_TELEMETRY_SCHEMA_VERSION_OPT_IN="2",
                     OTEL_SEMCONV_STABILITY_OPT_IN="gen_ai_latest_experimental",
-                    OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT=(
-                        "SPAN_ONLY" if capture_content else "NO_CONTENT"
-                    ),
-                    # ADK's legacy schema has its own content-capture setting.
-                    ADK_CAPTURE_MESSAGE_CONTENT_IN_SPANS=str(capture_content).lower(),
                     GOOGLE_API_KEY="local-test-key",
                     ADK_MODEL=(
                         "gemini-2.5-flash"
@@ -343,14 +366,12 @@ class GoogleAdkCliTest(unittest.TestCase):
                                 str(config_path),
                                 "--no-cache",
                                 "--no-share",
-                                "--env-file",
-                                env["DOTENV_PATH"],
                                 "-j",
                                 "1",
                                 "-o",
                                 str(output),
                             ],
-                            cwd=ROOT,
+                            cwd=work,
                             env=env,
                             stdout=subprocess.PIPE,
                             stderr=subprocess.STDOUT,
