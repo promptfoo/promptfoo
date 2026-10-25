@@ -27,10 +27,13 @@ source .venv/bin/activate
 python -m pip install -r requirements.txt
 
 export GOOGLE_API_KEY=your_google_api_key_here
-# Allow ADK to include model messages and tool arguments/results in example traces.
-export OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT=SPAN_ONLY
-npx promptfoo@latest eval -c promptfooconfig.yaml --no-cache
-npx promptfoo@latest eval -c promptfooconfig.workflow.yaml --no-cache
+# Unless a capture policy is set, record model messages and tool data for these two evals.
+(
+  : "${OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT=SPAN_ONLY}"
+  export OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT
+  npx promptfoo@latest eval -c promptfooconfig.yaml --no-cache
+  npx promptfoo@latest eval -c promptfooconfig.workflow.yaml --no-cache
+)
 npx promptfoo@latest view
 ```
 
@@ -91,7 +94,7 @@ The eval asserts that:
 
 ADK 2.x emits OpenTelemetry spans for the important framework steps:
 
-- `invocation` (v1) or `invoke_workflow <name>` (v2)
+- `invocation` (legacy ADK) or `invoke_workflow <name>` (ADK 2.13 v2)
 - `invoke_agent <name>`
 - `generate_content <model>`
 - `execute_tool <name>`
@@ -103,9 +106,9 @@ ADK 2.x emits OpenTelemetry spans for the important framework steps:
 3. starting a small provider span under the Promptfoo parent trace
 4. letting ADK emit its native child spans beneath it
 
-ADK 2.13 uses telemetry v2 by default. Without span content capture, tool names remain visible, but the `trajectory:tool-args-match` assertions fail because the arguments are missing. To disable message and tool content on ADK spans, set `OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT=NO_CONTENT` and `ADK_CAPTURE_MESSAGE_CONTENT_IN_SPANS=false` (legacy spans capture content by default). Leave Promptfoo’s separate Python worker tracing (`PROMPTFOO_ENABLE_OTEL`) off if you also want to avoid recording provider request and response bodies.
+ADK 2.13 defaults to telemetry v2. Without span content capture, tool names remain visible but the tool-argument assertions fail. To opt out for both new and legacy ADK spans, set `OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT=NO_CONTENT` and `ADK_CAPTURE_MESSAGE_CONTENT_IN_SPANS=false` before running the Quick Start. Leave `PROMPTFOO_ENABLE_OTEL` off to avoid recording provider request and response bodies in separate Python worker spans.
 
-Promptfoo recognizes `gen_ai.tool.name` and tool arguments from both telemetry schemas: `gcp.vertex.agent.tool_call_args` in v1 and `gen_ai.tool.call.arguments` in v2. The `generate_content <model>` span is available in both; v2 no longer emits `call_llm`.
+ADK 2.9.2 and 2.12 store tool arguments in `gcp.vertex.agent.tool_call_args` and emit `call_llm`. ADK 2.13’s v2 schema uses `gen_ai.tool.call.arguments` and drops `call_llm`. Use `generate_content <model>` to count model calls across these releases.
 
 After an eval, open the Trace Timeline for the row and inspect:
 
@@ -114,7 +117,7 @@ After an eval, open the Trace Timeline for the row and inspect:
 - `execute_tool get_weather`
 - `execute_tool save_trip_note`
 - tool attributes such as `gen_ai.tool.name`
-- tool arguments in `gcp.vertex.agent.tool_call_args` (v1) or `gen_ai.tool.call.arguments` (v2)
+- tool arguments in `gcp.vertex.agent.tool_call_args` (legacy ADK) or `gen_ai.tool.call.arguments` (ADK 2.13 v2)
 
 ## Why This Uses A Python Provider
 
