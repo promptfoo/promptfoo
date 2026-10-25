@@ -35,7 +35,10 @@ import {
   type ResultsFile,
   type UnifiedConfig,
 } from '../types/index';
-import { calculateFilteredMetrics } from '../util/calculateFilteredMetrics';
+import {
+  calculateFilteredMetrics,
+  MAX_RESULTS_FOR_METRICS,
+} from '../util/calculateFilteredMetrics';
 import { convertResultsToTable } from '../util/convertEvalResultsToTable';
 import { randomSequence, sha256 } from '../util/createHash';
 import { calculateRepeatStability, RepeatStabilityCalculator } from '../util/eval/repeatStability';
@@ -1260,8 +1263,9 @@ export default class Eval {
       const search = opts.filters?.length
         ? buildFullSearchCondition(opts.searchQuery)
         : buildResponseSearchCondition(opts.searchQuery);
+      // Each match is itself an eligible output, so one past the cap already makes metrics unavailable.
       whereSql = sql`${whereSql} AND test_idx IN (
-        SELECT test_idx FROM eval_results WHERE ${whereSql} AND ${search}
+        SELECT test_idx FROM eval_results WHERE ${whereSql} AND ${search} LIMIT ${MAX_RESULTS_FOR_METRICS + 1}
       )`;
     }
 

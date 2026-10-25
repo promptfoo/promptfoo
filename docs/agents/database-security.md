@@ -122,6 +122,10 @@ transaction usable; letting it escape rolls the transaction back. Nested root
 independently. The context expires when the callback settles, so asynchronous
 work that runs later queues as a new top-level operation.
 
+Use `withReadTransaction` from `src/database/index.ts` when several reads must
+see the same snapshot. Its callback receives a read handle, and a separate WAL
+connection can still write while the callback runs.
+
 Promptfoo serializes top-level operations and configures libSQL with one pooled
 connection so foreign-key, busy-timeout, and WAL settings survive transaction
 reuse. Reconnecting during a transaction would close its connection and must not

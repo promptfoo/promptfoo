@@ -1127,6 +1127,10 @@ function PromptColumnHeader({
 }) {
   const columnId = `Prompt ${idx + 1}`;
   const { total: metrics, filtered: filteredMetrics } = getMetrics(idx);
+  const passRate = passRates[idx];
+  const totalCases = metrics && `${passingTestCounts[idx]?.total}/${testCounts[idx]?.total}`;
+  const filteredCases = `${passingTestCounts[idx]?.filtered}/${testCounts[idx]?.filtered}`;
+  const hasPassRate = metrics !== null || passRate?.filtered != null;
 
   return (
     <div className="output-header">
@@ -1141,26 +1145,34 @@ function PromptColumnHeader({
           </div>
         ) : null}
         <div className="summary">
-          <div className={getPassRateClassName(passRates[idx])}>
-            {passRates[idx]?.filtered === null ? (
-              <>
-                <strong>{passRates[idx]?.total?.toFixed(2) ?? '0.00'}% passing</strong> (
-                {passingTestCounts[idx]?.total}/{testCounts[idx]?.total}{' '}
-                {isFilteringActive ? 'cases across the full eval' : 'cases'})
-              </>
+          <div
+            className={
+              hasPassRate ? getPassRateClassName(passRate) : 'text-xs text-muted-foreground'
+            }
+          >
+            {hasPassRate ? (
+              passRate?.filtered == null ? (
+                <>
+                  <strong>{passRate?.total?.toFixed(2) ?? '0.00'}% passing</strong> ({totalCases}{' '}
+                  {isFilteringActive ? 'cases across the full eval' : 'cases'})
+                </>
+              ) : (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span>
+                      <strong>{passRate.filtered.toFixed(2)}% passing</strong> ({filteredCases}{' '}
+                      filtered
+                      {totalCases && `, ${totalCases} total`})
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    {`Filtered: ${filteredCases} passing (${passRate.filtered.toFixed(2)}%).`}
+                    {totalCases && ` Total: ${totalCases} passing (${passRate.total?.toFixed(2)}%)`}
+                  </TooltipContent>
+                </Tooltip>
+              )
             ) : (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <span>
-                    <strong>{passRates[idx]?.filtered?.toFixed(2)}% passing</strong> (
-                    {passingTestCounts[idx]?.filtered}/{testCounts[idx]?.filtered} filtered,{' '}
-                    {passingTestCounts[idx]?.total}/{testCounts[idx]?.total} total)
-                  </span>
-                </TooltipTrigger>
-                <TooltipContent>
-                  {`Filtered: ${passingTestCounts[idx]?.filtered}/${testCounts[idx]?.filtered} passing (${passRates[idx]?.filtered?.toFixed(2)}%). Total: ${passingTestCounts[idx]?.total}/${testCounts[idx]?.total} passing (${passRates[idx]?.total?.toFixed(2)}%)`}
-                </TooltipContent>
-              </Tooltip>
+              'Pass rate unavailable'
             )}
           </div>
         </div>

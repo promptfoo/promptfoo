@@ -2928,6 +2928,28 @@ describe('ResultsTable Pass Rate Display', () => {
     expect(fullEvalRate()).toHaveTextContent('50.00% passing (5/10 cases)');
   });
 
+  it.each([
+    [undefined, null, 'Pass rate unavailable'],
+    [0, null, '0.00% passing (0/0 cases across the full eval)'],
+    [undefined, [{ testPassCount: 1, testFailCount: 0 }], '100.00% passing (1/1 filtered)'],
+  ] as const)(
+    'distinguishes missing metrics from zero: %s, %o',
+    (totalPasses, filteredMetrics, label) => {
+      vi.mocked(useTableStore).mockImplementation(() =>
+        createTableStore({
+          table: { ...mockTable, head: createPromptHead([], totalPasses, 0) },
+          filteredMetrics,
+          filteredResultsCount: 1,
+        }),
+      );
+      const { container } = renderWithProviders(
+        <ResultsTable {...defaultProps} debouncedSearchText="needle" />,
+      );
+
+      expect(container.querySelector('th .summary')).toHaveTextContent(label);
+    },
+  );
+
   it('displays 0% filtered pass rate when filtered results have zero test cases but total results have some', () => {
     const mockTableWithZeroFilteredTestCases = {
       body: Array(10).fill(createPassingRow()),

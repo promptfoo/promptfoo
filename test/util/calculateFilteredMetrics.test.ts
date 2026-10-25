@@ -763,17 +763,25 @@ describe('calculateFilteredMetrics', () => {
     });
   });
 
-  it('rejects unavailable metrics instead of reporting zeros above the result limit', async () => {
+  it('aggregates up to 50,000 matching outputs and rejects one more', async () => {
+    const { id } = await EvalFactory.create({ numResults: 0 });
     const db = await getDb();
-    const overLimit = db.get(sql`SELECT 50001 AS count`);
-    const count = vi.spyOn(db, 'get').mockReturnValueOnce(overLimit);
-    try {
-      await expect(
-        calculateFilteredMetrics({ evalId: 'large-eval', numPrompts: 2, whereSql: sql`1 = 1` }),
-      ).rejects.toThrow('Filtered result count exceeds 50000');
-    } finally {
-      count.mockRestore();
-    }
+    await db.run(sql`
+      WITH RECURSIVE outputs(idx) AS (
+        VALUES (0) UNION ALL SELECT idx + 1 FROM outputs WHERE idx < 50000
+      )
+      INSERT INTO eval_results (id, eval_id, test_idx, prompt_idx, test_case, prompt, provider, success, score)
+      SELECT idx, ${id}, idx / 2, idx % 2, '{}', '{}', '{}', 1, 1 FROM outputs
+    `);
+    const metrics = (testCases: number) =>
+      calculateFilteredMetrics({
+        evalId: id,
+        numPrompts: 2,
+        whereSql: sql`eval_id = ${id} AND test_idx < ${testCases}`,
+      });
+
+    expect((await metrics(25000)).map((prompt) => prompt.testPassCount)).toEqual([25000, 25000]);
+    await expect(metrics(25001)).rejects.toThrow('Filtered result count exceeds 50000');
   });
 
   describe('error handling', () => {

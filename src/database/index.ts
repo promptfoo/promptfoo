@@ -20,7 +20,11 @@ import {
 // error from getDb() rather than crashing module load before any handler can
 // translate it into a friendly message.
 type Client = import('@libsql/client/node').Client;
+type TransactionMode = import('@libsql/client/node').TransactionMode;
 type Drizzle = ReturnType<typeof import('drizzle-orm/libsql/node').drizzle>;
+
+export type DatabaseReader = Pick<Drizzle, 'all' | 'get'>;
+const readTransactionMode = new AsyncLocalStorage<'read' | undefined>();
 
 export class DrizzleLogWriter implements LogWriter {
   write(message: string) {
@@ -287,6 +291,11 @@ function serializeTopLevelOperations(
       }
     }
   };
+  // Drizzle's libSQL adapter does not forward a transaction mode to the client.
+  const beginTransaction = client.transaction.bind(client);
+  client.transaction = (mode?: TransactionMode) =>
+    beginTransaction(readTransactionMode.getStore() ?? mode);
+
   const transaction = db.transaction.bind(db);
   type TransactionCallback = Parameters<typeof transaction>[0];
   type TransactionContext = Parameters<TransactionCallback>[0];
@@ -368,6 +377,14 @@ function serializeTopLevelOperations(
   }) as typeof db.transaction;
 
   return db;
+}
+
+/** Read one snapshot without reserving a writer on the database. */
+export async function withReadTransaction<T>(read: (tx: DatabaseReader) => Promise<T>): Promise<T> {
+  const db = await getDb();
+  return readTransactionMode.run('read', () =>
+    db.transaction((tx) => readTransactionMode.run(undefined, () => read(tx))),
+  );
 }
 
 export async function getDb() {
