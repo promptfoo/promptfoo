@@ -415,7 +415,7 @@ import type {
 - **API Reference**: Full documentation at `/docs/usage/node-api-reference`
 - **Examples**: Advanced examples at `/docs/usage/node-api-examples`
 - **Issues**: GitHub issues at https://github.com/promptfoo/promptfoo/issues
-- **Discord**: Community at https://discord.gg/promptfoo
+- **Discord**: Community at https://discord.gg/gHPS9jjfbs
 
 ---
 

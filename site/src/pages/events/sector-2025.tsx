@@ -288,7 +288,7 @@ export default function SecTor2025(): React.ReactElement {
                 <Link to="/docs/red-team/quickstart/" className={styles.primaryCta}>
                   Get Started
                 </Link>
-                <Link to="https://discord.gg/promptfoo" className={styles.secondaryCta}>
+                <Link to="https://discord.gg/gHPS9jjfbs" className={styles.secondaryCta}>
                   Join Discord
                 </Link>
               </div>
