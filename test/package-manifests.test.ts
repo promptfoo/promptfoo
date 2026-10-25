@@ -159,13 +159,14 @@ const KNOWN_BAD_RELEASES = new Map([
   ['@hono/node-server', '<2.1.3'], // GHSA-frvp-7c67-39w9, GHSA-9mqv-5hh9-4cgg, GHSA-rmxm-3fg6-px4f
   ['@modelcontextprotocol/sdk', '<1.32.0'], // GHSA-6prh-2h8m-c8cw
   ['@simple-git/argv-parser', '<2.0.1'], // GHSA-v5rq-49vh-5v5c; upstream fixes VISUAL in 2.0.1
+  ['body-parser', '<1.20.9 || >=2.0.0 <2.4.0'], // GHSA-27r3-jxmh-p828
   ['cache-manager', '7.2.10'], // Shai-Hulud compromise (#10301)
   ['cacheable-request', '13.0.20'], // Shai-Hulud compromise (#10301)
   ['csv-parse', '<7.0.2'], // GHSA-8cw4-87c7-c6xx
   ['dompurify', '<=3.4.16'], // GHSA-c6gr-qvv4-5v3f, GHSA-mrv2-3pqr-j5jr, GHSA-cg2g-xh64-v4q7
   ['drizzle-orm', '<0.45.2 || >=1.0.0-beta.2 <1.0.0-beta.20'], // GHSA-gpj5-g38j-94v9
   ['extract-zip', '<=2.0.1'], // GHSA-jmr9-qjv8-65gv, GHSA-7pqw-9j4j-h8q3
-  ['fast-uri', '<2.4.7 || >=3.0.0 <3.1.8 || >=4.0.0 <4.1.5'], // GHSA-hrr3-gc8f-f4qj, GHSA-qw65-cvwx-89v3, GHSA-58mr-gqgx-xq4g
+  ['fast-uri', '<2.4.8 || >=3.0.0 <3.1.9 || >=4.0.0 <4.2.3'], // GHSA-w74x-v6f9-j3xg, GHSA-wjr9-j795-jxcr, GHSA-xhq7-xmqj-769h, GHSA-333x-w4r6-6crp
   ['image-size', '>=0.6.3 <=2.0.2'], // GHSA-5p2g-fcmc-qvqq, GHSA-w3rx-r6r6-pgpr
   ['hono', '<4.13.11'], // GHSA-hxh3-vqpv-xpqv, GHSA-5r4p-p66f-jhc7
   ['ibm-cloud-sdk-core', '5.6.3'], // Escaped quotes expose JSON secret suffixes in debug logs (#11472)
