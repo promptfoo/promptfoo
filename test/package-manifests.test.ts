@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-import { inc, intersects, minVersion, Range, satisfies, validRange } from 'semver';
+import { inc, intersects, minVersion, Range, satisfies, valid, validRange } from 'semver';
 import { describe, expect, it } from 'vitest';
 import { extractModuleSpecifiers } from '../scripts/architectureUtils';
 
@@ -32,19 +32,14 @@ function readPackageJson<T>(relativePath: string): T {
 }
 
 function intersectsAdvisory(declared: string, affected: string): boolean {
-  if (!affected.includes('-')) {
-    return intersects(declared, affected);
-  }
-
-  // semver.intersects compares bounds separately and loses npm's prerelease opt-in.
-  // Check candidate versions against both complete ranges to preserve that rule.
-  const left = new Range(declared);
-  const right = new Range(affected);
+  // npm declarations must opt in to prereleases; an advisory covers everything between its bounds.
+  const declaration = new Range(declared);
+  const advisory = new Range(affected, { includePrerelease: true });
   const matches = (version: string | null) =>
-    version !== null && left.test(version) && right.test(version);
+    version !== null && declaration.test(version) && advisory.test(version);
   return (
     matches('0.0.0') ||
-    [...left.set, ...right.set].flat().some(({ value, semver }) => {
+    [...declaration.set, ...advisory.set].flat().some(({ value, operator, semver }) => {
       if (!value) {
         return false; // wildcard
       }
@@ -55,8 +50,23 @@ function intersectsAdvisory(declared: string, affected: string): boolean {
         inc(semver, 'major'),
       ];
       if (semver.prerelease.length) {
-        // The first prerelease at this tuple and the first version after an exclusive prerelease bound.
-        candidates.push(`${semver.major}.${semver.minor}.${semver.patch}-0`, `${semver.version}.0`);
+        const tuple = `${semver.major}.${semver.minor}.${semver.patch}`;
+        const successor = `${semver.version}.0`;
+        // At npm's length limit compare the interval only for clauses that opt in to this tuple.
+        if (
+          operator === '>' &&
+          !valid(successor) &&
+          declaration.set.some(
+            (clause) =>
+              clause.some((c) => c.semver.version?.startsWith(`${tuple}-`)) &&
+              intersects([...clause, `>${semver.version}`, `<${tuple}`].join(' '), affected, {
+                includePrerelease: true,
+              }),
+          )
+        ) {
+          return true;
+        }
+        candidates.push(`${tuple}-0`, successor);
       }
       return candidates.some(matches);
     })
@@ -419,7 +429,7 @@ describe('package manifests', () => {
 
     expect(installs.length).toBeGreaterThan(0);
     const violations = installs
-      .filter(({ version, badRange }) => satisfies(version, badRange))
+      .filter(({ version, badRange }) => satisfies(version, badRange, { includePrerelease: true }))
       .map(({ name, id }) => ({ name, id }));
     expect(violations).toEqual([
       // Azure Identity requires unpatched MSAL 6.x. Remove this entry with the upstream upgrade.
@@ -439,6 +449,7 @@ describe('package manifests', () => {
     ],
     ['node_modules/parent/node_modules/fixture-leaf', { version: '1.0.0' }, true],
     ['node_modules/@fixture/leaf', { version: '1.0.0' }, true],
+    ['node_modules/fixture-leaf', { version: '1.1.0-beta.0' }, true],
     ['node_modules/alias', { name: 'fixture-leaf', version: '2.0.0' }, false],
     ['node_modules/fixture-leaf', { name: 'fixture-replacement', version: '1.0.0' }, false],
   ] as const)('checks locked package identity at %s: %j', (installPath, packageInfo, violates) => {
@@ -451,7 +462,11 @@ describe('package manifests', () => {
     );
 
     expect(
-      checks.filter(({ version, badRange }) => satisfies(version, badRange)).map(({ id }) => id),
+      checks
+        .filter(({ version, badRange }) =>
+          satisfies(version, badRange, { includePrerelease: true }),
+        )
+        .map(({ id }) => id),
     ).toEqual(violates ? [`${installPath}@${packageInfo.version}`] : []);
   });
 
@@ -483,7 +498,10 @@ describe('package manifests', () => {
     ['1.0.0-beta.0 || ^2.0.0', true],
     ['>1.0.0-beta.0 <1.0.0', true],
     ['<1.0.0', false],
-    ['1.1.0-beta.0', false],
+    ['1.1.0-beta.0', true],
+    ['>=10.6.0-beta.0 <10.6.0', true, '>=10.0.0 <10.6.2'],
+    [`>${'1.0.0-beta.2.'.padEnd(255, 'a')} <1.0.0-beta.20`, true, '>=1.0.0-beta.2 <1.0.0-beta.20'],
+    [`<1.0.0 || >${'8.0.0-'.padEnd(255, 'x')}`, false],
     ['>1.0.9007199254740991 <2', true],
     ['^1.0.0', true],
     ['^2.0.0', false],
