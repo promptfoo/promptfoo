@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-import { intersects, minVersion, satisfies, validRange } from 'semver';
+import { inc, intersects, minVersion, Range, satisfies, validRange } from 'semver';
 import { describe, expect, it } from 'vitest';
 import { extractModuleSpecifiers } from '../scripts/architectureUtils';
 
@@ -29,6 +29,38 @@ type LockedPackage = {
 function readPackageJson<T>(relativePath: string): T {
   const packageJsonPath = path.join(process.cwd(), relativePath);
   return JSON.parse(fs.readFileSync(packageJsonPath, 'utf8')) as T;
+}
+
+function intersectsAdvisory(declared: string, affected: string): boolean {
+  if (!affected.includes('-')) {
+    return intersects(declared, affected);
+  }
+
+  // semver.intersects compares bounds separately and loses npm's prerelease opt-in.
+  // Check candidate versions against both complete ranges to preserve that rule.
+  const left = new Range(declared);
+  const right = new Range(affected);
+  const matches = (version: string | null) =>
+    version !== null && left.test(version) && right.test(version);
+  return (
+    matches('0.0.0') ||
+    [...left.set, ...right.set].flat().some(({ value, semver }) => {
+      if (!value) {
+        return false; // wildcard
+      }
+      const candidates = [
+        semver.version,
+        inc(semver, 'patch'),
+        inc(semver, 'minor'),
+        inc(semver, 'major'),
+      ];
+      if (semver.prerelease.length) {
+        // The first prerelease at this tuple and the first version after an exclusive prerelease bound.
+        candidates.push(`${semver.major}.${semver.minor}.${semver.patch}-0`, `${semver.version}.0`);
+      }
+      return candidates.some(matches);
+    })
+  );
 }
 
 function findKnownBadRanges(
@@ -99,7 +131,7 @@ function findKnownBadRanges(
     })
     .filter(([name, range]) => {
       const badRange = knownBadReleases.get(name);
-      return badRange && validRange(range) && intersects(range, badRange);
+      return badRange && validRange(range) && intersectsAdvisory(range, badRange);
     })
     .map(([name, range]) => `${name}@${range}`);
 }
@@ -376,7 +408,7 @@ describe('package manifests', () => {
     expect(privateRegistryPackages).toEqual([]);
   });
 
-  it('rejects new known-bad lockfile installs, including nested copies', () => {
+  it('limits known-bad lockfile installs to documented exceptions', () => {
     const installs = ['package-lock.json', 'code-scan-action/package-lock.json'].flatMap(
       (lockfile) =>
         collectLockfileReleaseChecks(
@@ -386,19 +418,16 @@ describe('package manifests', () => {
     );
 
     expect(installs.length).toBeGreaterThan(0);
-    expect(
-      installs
-        .filter(({ version, badRange }) => satisfies(version, badRange))
-        // No patched MSAL satisfies @azure/identity's ^6.0.0 requirement. Remove this
-        // exception when Azure Identity supports a patched release.
-        .filter(
-          ({ name, id }) =>
-            name !== '@azure/msal-node' ||
-            id !==
-              'package-lock.json: node_modules/@azure/identity/node_modules/@azure/msal-node@6.0.1',
-        )
-        .map(({ id }) => id),
-    ).toEqual([]);
+    const violations = installs
+      .filter(({ version, badRange }) => satisfies(version, badRange))
+      .map(({ name, id }) => ({ name, id }));
+    expect(violations).toEqual([
+      // Azure Identity requires unpatched MSAL 6.x. Remove this entry with the upstream upgrade.
+      {
+        name: '@azure/msal-node',
+        id: 'package-lock.json: node_modules/@azure/identity/node_modules/@azure/msal-node@6.0.1',
+      },
+    ]);
   });
 
   it.each([
@@ -449,6 +478,27 @@ describe('package manifests', () => {
 
     expect(violations).toEqual([]);
   });
+
+  it.each([
+    ['1.0.0-beta.0 || ^2.0.0', true],
+    ['>1.0.0-beta.0 <1.0.0', true],
+    ['<1.0.0', false],
+    ['1.1.0-beta.0', false],
+    ['>1.0.9007199254740991 <2', true],
+    ['^1.0.0', true],
+    ['^2.0.0', false],
+    // Both ranges allow 6.0.1-0 even though their combined stable minimum is out of range.
+    ['>6.0.0 <6.0.1-beta || ^9', true, '<6.0.1-alpha'],
+  ] as const)(
+    'checks whether %s can install an affected prerelease or stable version',
+    (range, affected, badRange: string = '>=1.0.0-beta.0 <2.0.0') => {
+      const violations = findKnownBadRanges(
+        { dependencies: { fixture: range } },
+        new Map([['fixture', badRange]]),
+      );
+      expect(violations).toEqual(affected ? [`fixture@${range}`] : []);
+    },
+  );
 
   it.each(['dependencies', 'devDependencies', 'optionalDependencies'] as const)(
     'checks npm alias targets in %s',
