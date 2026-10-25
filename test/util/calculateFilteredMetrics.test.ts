@@ -763,26 +763,17 @@ describe('calculateFilteredMetrics', () => {
     });
   });
 
-  describe('OOM protection', () => {
-    it('should throw error when result count exceeds limit', async () => {
-      const eval_ = await EvalFactory.create({
-        numResults: 10,
-        resultTypes: ['success'],
-      });
-
-      // Mock a WHERE clause that would return too many results
-      // We can't actually create 50k+ results in the test, but we can test the check
-      const whereSql = sql`eval_id = ${eval_.id}`;
-
-      // This should succeed (10 results < 50000)
+  it('rejects unavailable metrics instead of reporting zeros above the result limit', async () => {
+    const db = await getDb();
+    const overLimit = db.get(sql`SELECT 50001 AS count`);
+    const count = vi.spyOn(db, 'get').mockReturnValueOnce(overLimit);
+    try {
       await expect(
-        calculateFilteredMetrics({
-          evalId: eval_.id,
-          numPrompts: 1,
-          whereSql,
-        }),
-      ).resolves.toBeDefined();
-    });
+        calculateFilteredMetrics({ evalId: 'large-eval', numPrompts: 2, whereSql: sql`1 = 1` }),
+      ).rejects.toThrow('Filtered result count exceeds 50000');
+    } finally {
+      count.mockRestore();
+    }
   });
 
   describe('error handling', () => {

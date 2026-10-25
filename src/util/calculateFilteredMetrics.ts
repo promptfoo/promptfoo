@@ -205,20 +205,17 @@ export async function calculateFilteredMetrics(
   try {
     // Check result count first (protect against OOM)
     const countResult = await getResultCount(whereSql);
-    if (countResult > MAX_RESULTS_FOR_METRICS) {
-      logger.warn(`Filtered result count ${countResult} exceeds limit ${MAX_RESULTS_FOR_METRICS}`, {
-        evalId: opts.evalId,
-      });
-      throw new Error(`Result count ${countResult} exceeds maximum ${MAX_RESULTS_FOR_METRICS}`);
+    if (countResult <= MAX_RESULTS_FOR_METRICS) {
+      return await calculateWithOptimizedQuery(opts);
     }
-
-    return await calculateWithOptimizedQuery(opts);
   } catch (error) {
     logger.error('Failed to calculate filtered metrics', { error });
 
     // Fallback: Return empty metrics
     return createEmptyMetricsArray(numPrompts);
   }
+
+  throw new Error(`Filtered result count exceeds ${MAX_RESULTS_FOR_METRICS}`);
 }
 
 /**

@@ -2736,16 +2736,26 @@ describe('evaluator', () => {
       }
     });
 
-    it('counts every output of a response-matched multi-prompt row', async () => {
+    it('counts eligible outputs in each matching row across prompts', async () => {
       const prompts = [
         createCompletedPrompt('First {{topic}}', { label: 'first' }),
         createCompletedPrompt('Second {{topic}}', { label: 'second' }),
       ];
       const eval_ = await Eval.create({}, prompts);
       await eval_.addPrompts(prompts);
+      await eval_.addResult(
+        createEvaluateResult({
+          testIdx: 0,
+          promptIdx: 0,
+          prompt: prompts[0],
+          success: false,
+          failureReason: ResultFailureReason.ERROR,
+          response: { error: 'initial attempt failed' },
+          namedScores: { accuracy: 1, left: 1 },
+        }),
+      );
       const outputs = [
-        // Row 0: both results share a var containing the query, but only the first response does.
-        ['about shared-needle', 'unrelated'],
+        ['response-needle', 'unrelated'],
         ['unrelated', 'unrelated'],
       ];
       for (const [testIdx, rowOutputs] of outputs.entries()) {
@@ -2755,27 +2765,32 @@ describe('evaluator', () => {
               testIdx,
               promptIdx,
               prompt: prompts[promptIdx],
-              testCase: { vars: { topic: testIdx === 0 ? 'shared-needle' : 'other' } },
+              namedScores: { accuracy: 1, [promptIdx === 0 ? 'left' : 'right']: 1 },
               response: { output },
             }),
           );
         }
       }
 
-      const page = await eval_.getTablePage({ searchQuery: 'shared-needle' });
-      const metrics = await eval_.getFilteredMetrics({
-        filterMode: 'all',
-        searchQuery: 'shared-needle',
-        filters: [],
-      });
-
-      expect(page.body.map((row) => row.testIdx)).toEqual([0]);
-      expect(page.body[0].outputs.filter(Boolean)).toHaveLength(2);
-      expect(
-        metrics.map(
-          (prompt) => prompt.testPassCount + prompt.testFailCount + prompt.testErrorCount,
-        ),
-      ).toEqual([1, 1]);
+      for (const [field, rows, counts] of [
+        [undefined, [0], [1, 1]],
+        ['accuracy', [0], [1, 1]], // A filter that matches both outputs must not change the counts.
+        ['left', [0], [1, 0]], // Only eligible siblings count.
+        ['right', [], [0, 0]], // The search term is present only in the ineligible output.
+      ] as const) {
+        const filters = field
+          ? [JSON.stringify({ type: 'metric', operator: 'is_defined', field })]
+          : [];
+        const opts = { searchQuery: 'response-needle', filters };
+        const page = await eval_.getTablePage(opts);
+        const metrics = await eval_.getFilteredMetrics(opts);
+        expect(page.body.map((row) => row.testIdx)).toEqual(rows);
+        expect(page.body.map((row) => row.outputs.map((cell) => cell?.text))).toEqual(
+          rows.map((idx) => outputs[idx]),
+        );
+        expect(metrics.map((prompt) => prompt.testPassCount)).toEqual(counts);
+        expect(metrics.map((prompt) => prompt.testErrorCount)).toEqual([0, 0]);
+      }
     });
 
     it('searches across response, grading, named scores, metadata, and vars', async () => {
