@@ -43,31 +43,34 @@ describe('optional Langfuse client module', () => {
   it('explains co-installation before loading the client when the SDK is absent', async () => {
     const load = vi.fn();
     await expect(loadLangfuseClient(load)).rejects.toThrow(
-      'npm install promptfoo @langfuse/client@^5.11.1',
+      'npm install promptfoo @langfuse/client@^6.0.0',
     );
     await expect(loadLangfuseClient(load)).rejects.toThrow(
-      'npm install -g promptfoo @langfuse/client@^5.11.1',
+      'npm install -g promptfoo @langfuse/client@^6.0.0',
     );
     expect(load).not.toHaveBeenCalled();
   });
 
-  it.each(['4.99.0', '5.11.0', '6.0.0', 'invalid', undefined])(
+  it.each(['4.99.0', '5.11.0', '7.0.0', '6.0.0-beta.1', 'invalid', undefined])(
     'rejects unsupported SDK metadata %j before loading the client',
     async (version) => {
       installFixture(version);
       const load = vi.fn();
       await expect(loadLangfuseClient(load)).rejects.toThrow(
-        `requires @langfuse/client@^5.11.1 (found ${version ?? 'unknown'})`,
+        `requires @langfuse/client ^5.11.1 || ^6.0.0 (found ${version ?? 'unknown'})`,
       );
       expect(load).not.toHaveBeenCalled();
     },
   );
 
-  it('loads a compatible SDK with restricted package metadata exports', async () => {
-    installFixture('5.11.123');
-    const module = { LangfuseClient: vi.fn() };
-    await expect(loadLangfuseClient(async () => module)).resolves.toBe(module);
-  });
+  it.each(['5.11.1', '5.11.123', '6.0.0', '6.1.0'])(
+    'loads compatible SDK %s with restricted package metadata exports',
+    async (version) => {
+      installFixture(version);
+      const module = { LangfuseClient: vi.fn() };
+      await expect(loadLangfuseClient(async () => module)).resolves.toBe(module);
+    },
+  );
 
   it("checks Promptfoo's SDK rather than an unrelated current-directory installation", async () => {
     installFixture('5.11.123');
@@ -102,7 +105,7 @@ describe('optional Langfuse client module', () => {
         loadLangfuseClient(async () => {
           throw error;
         }),
-      ).rejects.toThrow('npm install promptfoo @langfuse/client@^5.11.1');
+      ).rejects.toThrow('npm install promptfoo @langfuse/client@^6.0.0');
     },
   );
 
