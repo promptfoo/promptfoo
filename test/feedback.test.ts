@@ -3,9 +3,7 @@ import { gatherFeedback, sendFeedback } from '../src/feedback';
 import logger from '../src/logger';
 import { fetchWithProxy } from '../src/util/fetch/index';
 import * as readlineUtils from '../src/util/readline';
-import { createMockResponse, mockConsole, mockProcessEnv } from './util/utils';
-
-let actualFeedback: typeof import('../src/feedback');
+import { createMockResponse, mockProcessEnv } from './util/utils';
 
 vi.mock('../src/util/fetch/index', () => ({
   fetchWithProxy: vi.fn(),
