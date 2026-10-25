@@ -29,14 +29,14 @@ python -m pip install -r requirements.txt
 export GOOGLE_API_KEY=your_google_api_key_here
 ```
 
-Choose whether to store model messages, tool arguments, and tool results in the trace. To run the tool-argument assertions, opt in with these settings in the example directory's `.env`:
+Choose whether ADK model and tool spans store messages, arguments, and results. To run the tool-argument assertions, opt in with these settings in the example directory's `.env`:
 
 ```text
 OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT=SPAN_ONLY
 ADK_CAPTURE_MESSAGE_CONTENT_IN_SPANS=true
 ```
 
-Legacy ADK spans capture content by default. To omit it across the supported SDKs, use `NO_CONTENT` and `false`, respectively. Exported settings take precedence over this `.env`. With capture off, the tool-argument assertions fail because no arguments are available to match.
+Legacy ADK spans capture content by default. To disable capture on both schemas, use `NO_CONTENT` and `false`, respectively. Shell settings take precedence [by default](https://www.promptfoo.dev/docs/usage/command-line/#multiple-environment-files). With capture off, the tool-argument assertions fail. Promptfoo still saves eval inputs, outputs, and grader explanations separately; these ADK settings do not redact them.
 
 ```bash
 npx promptfoo@latest eval -c promptfooconfig.yaml --no-cache
