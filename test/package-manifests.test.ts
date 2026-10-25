@@ -749,6 +749,15 @@ describe('package manifests', () => {
     }
   });
 
+  it('keeps the direct MSAL dependency above the authorization-code security fix', () => {
+    const packageJson = readPackageJson<PackageManifest>('package.json');
+    const range = packageJson.optionalDependencies?.['@azure/msal-node'];
+    expect(range).toBeDefined();
+    // GHSA-xcx6-jx8p-x3h5. The older MSAL nested under @azure/identity needs
+    // a separate parent-package compatibility upgrade.
+    expect(intersects(range!, '>=5.0.0-beta.0 <7.1.0')).toBe(false);
+  });
+
   it('lets consumers omit separately installed features', () => {
     const packageJson = readPackageJson<PackageManifest>('package.json');
     const sitePackageJson = readPackageJson<PackageManifest>('site/package.json');
@@ -757,6 +766,7 @@ describe('package manifests', () => {
         'package-lock.json',
       );
     for (const dependency of [
+      '@azure/msal-node',
       '@modelcontextprotocol/sdk',
       '@opencode-ai/sdk',
       'hono',
