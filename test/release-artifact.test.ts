@@ -433,21 +433,31 @@ if (args[0] === 'install') {
 `,
         );
       }
+      // Build fixtures directly, without starting Git Bash helpers or another Node process.
+      // The workflow still performs its own independent checksum and real npm validation.
+      for (const [source, archive] of [
+        [native, nativeTarball],
+        [fixture, tarball],
+      ]) {
+        const packed = spawnSync('tar', ['-czf', archive, '-C', path.dirname(source), 'package'], {
+          encoding: 'utf8',
+          timeout: 5_000,
+        });
+        expect(packed.error).toBeUndefined();
+        expect(packed.status, packed.stderr).toBe(0);
+      }
+      const expectedSha512 = createHash('sha512').update(fs.readFileSync(tarball)).digest('hex');
       const script = path.join(root, 'acceptance.sh');
       fs.writeFileSync(
         script,
         // Git Bash's npm launcher starts several helper processes to rediscover Node and npm.
         // Use this runner's entrypoints for the real install/rebuild acceptance cases.
-        // Relative archive paths avoid GNU tar treating Windows drive letters as remote hosts.
         (testsInstalledCli
           ? 'npm() { "$NODE_BINARY" "$BACKFILL_NPM_FIXTURE" "$@"; }\n'
           : directNpm
             ? 'npm() { "$NODE_BINARY" "$NPM_CLI" "$@"; }\n'
             : '') +
-          'tar -czf better-sqlite3-0.0.0.tgz -C native package\n' +
-          'tar -czf artifact/promptfoo-0.0.0.tgz -C fixture package\n' +
           'cd fixture/package\n' +
-          'export EXPECTED_SHA512="$(node -e \'console.log(require("node:crypto").createHash("sha512").update(require("node:fs").readFileSync(process.argv[1])).digest("hex"))\' "$PACKAGE_TARBALL")"\n' +
           validate,
       );
       // The process-tree runner retains the same deadline and waits for close after
@@ -469,6 +479,7 @@ if (args[0] === 'install') {
           TAG_NAME: '0.0.0',
           BACKFILL_EVIDENCE: evidence,
           BACKFILL_FAILURE: failure,
+          EXPECTED_SHA512: expectedSha512,
           npm_config_offline: 'true',
           npm_config_userconfig: path.join(root, '.npmrc'),
           npm_config_globalconfig: path.join(root, 'fixtures.npmrc'),
