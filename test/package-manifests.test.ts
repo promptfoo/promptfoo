@@ -115,14 +115,16 @@ function findKnownBadRanges(
 function collectLockfileReleaseChecks(
   lockfile: PackageLockManifest<LockedPackage>,
   knownBadReleases: ReadonlyMap<string, string>,
-): { id: string; name: string; version: string; badRange: string }[] {
+): { id: string; name: string; affected: boolean }[] {
   return Object.entries(lockfile.packages).flatMap(([installPath, { name, version }]) => {
     // npm records an alias target's actual package name separately from its install path.
     const packageName = name ?? installPath.split('node_modules/').at(-1)!;
     const badRange = knownBadReleases.get(packageName);
-    return badRange && version
-      ? [{ id: `${installPath}@${version}`, name: packageName, version, badRange }]
-      : [];
+    if (!badRange || !version) {
+      return [];
+    }
+    const affected = satisfies(version, badRange, { includePrerelease: true });
+    return [{ id: `${installPath}@${version}`, name: packageName, affected }];
   });
 }
 
@@ -396,7 +398,7 @@ describe('package manifests', () => {
 
     expect(installs.length).toBeGreaterThan(0);
     const violations = installs
-      .filter(({ version, badRange }) => satisfies(version, badRange, { includePrerelease: true }))
+      .filter(({ affected }) => affected)
       .map(({ name, id }) => ({ name, id }));
     expect(violations).toEqual([
       // Azure Identity requires unpatched MSAL 6.x. Remove this entry with the upstream upgrade.
@@ -428,13 +430,9 @@ describe('package manifests', () => {
       ]),
     );
 
-    expect(
-      checks
-        .filter(({ version, badRange }) =>
-          satisfies(version, badRange, { includePrerelease: true }),
-        )
-        .map(({ id }) => id),
-    ).toEqual(violates ? [`${installPath}@${packageInfo.version}`] : []);
+    expect(checks.filter(({ affected }) => affected).map(({ id }) => id)).toEqual(
+      violates ? [`${installPath}@${packageInfo.version}`] : [],
+    );
   });
 
   it('keeps declared ranges from resolving known-bad releases', () => {
@@ -476,10 +474,13 @@ describe('package manifests', () => {
               mixedCaseScopedAlias: 'NpM:@fixture/leaf@^1.1.0',
               safeAlias: 'npm:fixture-leaf@^2.0.0',
               safeScopedAlias: 'npm:@fixture/leaf@^2.0.0',
+              msalWithAffectedBeta: 'npm:@azure/msal-node@5.0.0-beta.0 || ^7.1.0',
+              patchedMsal: 'npm:@azure/msal-node@^7.1.0',
               'fixture-original': 'npm:fixture-replacement@1.0.0',
             },
           },
           new Map([
+            ...KNOWN_BAD_RELEASES,
             ['fixture-leaf', '<2.0.0'],
             ['@fixture/leaf', '<2.0.0'],
             ['fixture-original', '<2.0.0'],
@@ -492,6 +493,7 @@ describe('package manifests', () => {
         '@fixture/leaf@1.0.0',
         'fixture-leaf@1.1.0',
         '@fixture/leaf@^1.1.0',
+        '@azure/msal-node@5.0.0-beta.0 || ^7.1.0',
       ]);
     },
   );
