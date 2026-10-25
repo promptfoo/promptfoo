@@ -439,10 +439,19 @@ if (args[0] === 'install') {
         [native, nativeTarball],
         [fixture, tarball],
       ]) {
-        const packed = spawnSync('tar', ['-czf', archive, '-C', path.dirname(source), 'package'], {
-          encoding: 'utf8',
-          timeout: 5_000,
-        });
+        // GNU tar treats a Windows drive letter in an archive path as a remote host.
+        // Relative paths keep both GNU tar and the system BSD tar on the local filesystem.
+        const packed = spawnSync(
+          'tar',
+          [
+            '-czf',
+            path.relative(root, archive).replaceAll('\\', '/'),
+            '-C',
+            path.relative(root, path.dirname(source)).replaceAll('\\', '/'),
+            'package',
+          ],
+          { cwd: root, encoding: 'utf8', timeout: 5_000 },
+        );
         expect(packed.error).toBeUndefined();
         expect(packed.status, packed.stderr).toBe(0);
       }
