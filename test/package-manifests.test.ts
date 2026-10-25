@@ -46,12 +46,6 @@ function findKnownBadRanges(
     Object.entries(declared ?? {}),
   );
 
-  const msal = '@azure/msal-node';
-  const alternate = manifest.acceptDependencies?.[msal];
-  if (alternate !== undefined && ranges.some(([name]) => name === msal)) {
-    ranges.push([msal, alternate]);
-  }
-
   const resolveOverrideRange = (value: string): string => {
     if (!value.startsWith('$')) {
       return value;
@@ -99,8 +93,7 @@ function findKnownBadRanges(
 
   return ranges
     .map(([name, range]): [string, string] => {
-      // The direct import uses this install name; require a semver range even for npm alternates.
-      if (name === msal || !/^npm:/i.test(range)) {
+      if (!/^npm:/i.test(range)) {
         return [name, range];
       }
       // Aliases resolve the target package, regardless of the dependency or override key.
@@ -112,7 +105,7 @@ function findKnownBadRanges(
     })
     .filter(([name, range]) => {
       const badRange = knownBadReleases.get(name);
-      if (badRange && name === msal) {
+      if (badRange && name === '@azure/msal-node') {
         // Review historical ranges that overlap MSAL's beta interval, even if npm would skip the beta.
         // Normalize supported stable shorthands before comparing their bounds.
         const declared = validRange(range);
@@ -518,22 +511,6 @@ describe('package manifests', () => {
     expect(violations).toEqual([]);
   });
 
-  it.each([
-    ['^1.0.0', ['@azure/msal-node@^1.0.0']],
-    ['npm:fixture-fork@^1.0.0', ['@azure/msal-node@npm:fixture-fork@^1.0.0']],
-    ['^2.0.0', []],
-  ] as const)('checks MSAL’s alternate range %s for npm consumers', (range, expected) => {
-    expect(
-      findKnownBadRanges(
-        {
-          optionalDependencies: { '@azure/msal-node': '^2.0.0' },
-          acceptDependencies: { '@azure/msal-node': range },
-        },
-        new Map([['@azure/msal-node', '<2.0.0']]),
-      ),
-    ).toEqual(expected);
-  });
-
   it.each(['dependencies', 'devDependencies', 'optionalDependencies'] as const)(
     'checks npm alias targets in %s',
     (dependencyType) => {
@@ -551,7 +528,6 @@ describe('package manifests', () => {
               safeScopedAlias: 'npm:@fixture/leaf@^2.0.0',
               msalWithAffectedBeta: 'npm:@azure/msal-node@1.0.0-beta.0 <2 || ^2.0.0',
               patchedMsal: 'npm:@azure/msal-node@2.x',
-              '@azure/msal-node': 'npm:fixture-fork@^1.0.0',
               'fixture-original': 'npm:fixture-replacement@1.0.0',
             },
           },
@@ -570,7 +546,6 @@ describe('package manifests', () => {
         'fixture-leaf@1.1.0',
         '@fixture/leaf@^1.1.0',
         '@azure/msal-node@1.0.0-beta.0 <2 || ^2.0.0',
-        '@azure/msal-node@npm:fixture-fork@^1.0.0',
       ]);
     },
   );
@@ -869,6 +844,17 @@ describe('package manifests', () => {
     ]) {
       expect(packageJson.optionalDependencies, dependency).toHaveProperty(dependency);
       expect(packageJson.dependencies, dependency).not.toHaveProperty(dependency);
+    }
+
+    // SharePoint imports MSAL by this name. Publish one stable registry pin, caret, or tilde.
+    const msal = '@azure/msal-node';
+    expect(packageJson.optionalDependencies?.[msal]).toMatch(/^[~^]?\d+\.\d+\.\d+$/);
+    for (const extra of [
+      packageJson.devDependencies,
+      packageJson.peerDependencies,
+      packageJson.acceptDependencies,
+    ]) {
+      expect(extra?.[msal]).toBeUndefined();
     }
 
     expect(packageJson.devDependencies).not.toHaveProperty('sharp');
