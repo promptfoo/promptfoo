@@ -236,12 +236,14 @@ describe('filterTestsUtil', () => {
           vars: { input: `input-${i}` },
         }));
         mockFileResults(
-          tests.map((test, i): EvaluateResult => ({
-            ...mockResults[0]!,
-            testIdx: i,
-            testCase: test,
-            vars: i % 2 === 0 ? { input: `input-${i}` } : { input: `input-${i}`, locale: 'en' },
-          })),
+          tests.map(
+            (test, i): EvaluateResult => ({
+              ...mockResults[0]!,
+              testIdx: i,
+              testCase: test,
+              vars: i % 2 === 0 ? { input: `input-${i}` } : { input: `input-${i}`, locale: 'en' },
+            }),
+          ),
         );
         const matched = await filterTestsByResults(
           { prompts: [], providers: [], tests, defaultTest: { vars: { locale: 'en' } } },
