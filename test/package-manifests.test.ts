@@ -10,6 +10,7 @@ type PackageManifest = {
   devDependencies?: Record<string, string>;
   optionalDependencies?: Record<string, string>;
   peerDependencies?: Record<string, string>;
+  acceptDependencies?: Record<string, string>;
   overrides?: PackageOverrides;
 };
 
@@ -24,7 +25,9 @@ type PackageLockManifest<T> = {
 type LockedPackage = {
   name?: string;
   version?: string;
+  integrity?: string;
   dependencies?: Record<string, string>;
+  optionalDependencies?: Record<string, string>;
   acceptDependencies?: Record<string, string>;
 };
 
@@ -41,6 +44,12 @@ function findKnownBadRanges(
   const ranges = [dependencies, devDependencies, optionalDependencies].flatMap((declared) =>
     Object.entries(declared ?? {}),
   );
+
+  const msal = '@azure/msal-node';
+  const alternate = manifest.acceptDependencies?.[msal];
+  if (alternate !== undefined && ranges.some(([name]) => name === msal)) {
+    ranges.push([msal, alternate]);
+  }
 
   const resolveOverrideRange = (value: string): string => {
     if (!value.startsWith('$')) {
@@ -130,12 +139,18 @@ function collectLockfileReleaseChecks(
   });
 }
 
+const AZURE_IDENTITY_4_13_3_INTEGRITY =
+  'sha512-zGQPtqvXPgSA8yfV2CkIQ1qirqk0p9AIVpC5uEkdXQYcKl07QHvyaGYRnZOk0AsQUmxNb4wfkcwY5di8Z5xa9A==';
+
 function azureIdentityMsalRequirement(lockfile: PackageLockManifest<LockedPackage>) {
   const identity = lockfile.packages['node_modules/@azure/identity'];
+  const msal = '@azure/msal-node';
   return identity?.version === '4.13.3' &&
+    identity.integrity === AZURE_IDENTITY_4_13_3_INTEGRITY &&
     (identity.name ?? '@azure/identity') === '@azure/identity' &&
-    identity.acceptDependencies?.['@azure/msal-node'] === undefined
-    ? identity.dependencies?.['@azure/msal-node']
+    identity.optionalDependencies?.[msal] === undefined &&
+    identity.acceptDependencies?.[msal] === undefined
+    ? identity.dependencies?.[msal]
     : undefined;
 }
 
@@ -426,6 +441,8 @@ describe('package manifests', () => {
   it.each([
     { name: 'fixture-replacement' },
     { version: '4.14.0' },
+    { integrity: `sha512-${Buffer.alloc(64).toString('base64')}` },
+    { optionalDependencies: { '@azure/msal-node': '^6.0.0 || ^7.1.0' } },
     { acceptDependencies: { '@azure/msal-node': '^7.1.0' } },
   ])('rechecks the MSAL exception when Azure Identity changes: %j', (change) => {
     expect(
@@ -433,6 +450,7 @@ describe('package manifests', () => {
         packages: {
           'node_modules/@azure/identity': {
             version: '4.13.3',
+            integrity: AZURE_IDENTITY_4_13_3_INTEGRITY,
             dependencies: { '@azure/msal-node': '^6.0.0' },
             ...change,
           },
@@ -491,6 +509,21 @@ describe('package manifests', () => {
     });
 
     expect(violations).toEqual([]);
+  });
+
+  it.each([
+    ['^6.0.0', ['@azure/msal-node@^6.0.0']],
+    ['^7.1.0', []],
+  ] as const)('checks MSAL’s alternate range %s for npm consumers', (range, expected) => {
+    expect(
+      findKnownBadRanges(
+        {
+          optionalDependencies: { '@azure/msal-node': '^7.1.0' },
+          acceptDependencies: { '@azure/msal-node': range },
+        },
+        KNOWN_BAD_RELEASES,
+      ),
+    ).toEqual(expected);
   });
 
   it.each(['dependencies', 'devDependencies', 'optionalDependencies'] as const)(
