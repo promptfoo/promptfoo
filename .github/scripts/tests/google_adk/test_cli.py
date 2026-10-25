@@ -130,23 +130,24 @@ class GoogleAdkCliTest(unittest.TestCase):
                     self.assertIn(
                         attributes.get(key), (None, "", "{}", "[]", {}, []), key
                     )
-            return
 
         output = json.loads(row["response"]["output"])
         if "steps_json" in row["vars"]:
-            prompt = json.loads(row["vars"]["steps_json"])[-1]
+            prompts = json.loads(row["vars"]["steps_json"])
             tool_values = (TRIP_NOTE_SUMMARY, output["artifact_names"][0])
         else:
-            prompt = row["vars"]["task"]
+            prompts = [row["vars"]["task"]]
             tool_values = ("Tokyo", output["session_state"]["weather_snapshot"])
 
+        # A provider-specific attribute or model history can repeat a tool payload.
+        all_attributes = "\n".join(tools + models)
         for group, values in (
             (tools, tool_values),
-            (models, (prompt, output["final_answer"])),
+            (models, [*prompts, output["final_answer"]]),
         ):
-            attributes = "\n".join(group)
+            attributes = "\n".join(group) if capture_content else all_attributes
             for value in values:
-                self.assertIn(value, attributes)
+                self.assertEqual(value in attributes, capture_content, value)
 
     def run_configs(self, failure=None) -> None:
         requests = []
