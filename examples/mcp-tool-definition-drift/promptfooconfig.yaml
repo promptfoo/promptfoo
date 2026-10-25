@@ -1,0 +1,19 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: MCP tool definition precheck demonstration
+
+prompts:
+  - '{"tool":"get_weather","args":{"city":"Paris"}}'
+
+providers:
+  - id: mcp
+    config:
+      enabled: true
+      transformResponse: 'result.content[0].text'
+      servers:
+        - name: tool-definition-example
+          path: ./server.js
+
+tests:
+  - assert:
+      - type: equals
+        value: 'Paris: sunny, 20 C'
