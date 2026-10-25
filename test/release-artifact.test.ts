@@ -397,6 +397,20 @@ else {
 }
 `,
       );
+      // Keep archive creation and checksum setup outside the release workflow's deadline.
+      for (const [archive, source] of [
+        ['better-sqlite3-0.0.0.tgz', 'native'],
+        ['artifact/promptfoo-0.0.0.tgz', 'fixture'],
+      ] as const) {
+        const packed = spawnSync('tar', ['-czf', archive, '-C', source, 'package'], {
+          cwd: root,
+          encoding: 'utf8',
+          timeout: 15_000,
+        });
+        expect(packed.error, packed.stderr).toBeUndefined();
+        expect(packed.status, packed.stderr).toBe(0);
+      }
+      const expectedSha512 = createHash('sha512').update(fs.readFileSync(tarball)).digest('hex');
       const validate = workflow.jobs['validate-npm'].steps.find(
         (step) => step.name === 'Validate npm package',
       )!.run!;
@@ -433,29 +447,6 @@ if (args[0] === 'install') {
 `,
         );
       }
-      // Build fixtures directly, without starting Git Bash helpers or another Node process.
-      // The workflow still performs its own independent checksum and real npm validation.
-      for (const [source, archive] of [
-        [native, nativeTarball],
-        [fixture, tarball],
-      ]) {
-        // GNU tar treats a Windows drive letter in an archive path as a remote host.
-        // Relative paths keep both GNU tar and the system BSD tar on the local filesystem.
-        const packed = spawnSync(
-          'tar',
-          [
-            '-czf',
-            path.relative(root, archive).replaceAll('\\', '/'),
-            '-C',
-            path.relative(root, path.dirname(source)).replaceAll('\\', '/'),
-            'package',
-          ],
-          { cwd: root, encoding: 'utf8', timeout: 5_000 },
-        );
-        expect(packed.error).toBeUndefined();
-        expect(packed.status, packed.stderr).toBe(0);
-      }
-      const expectedSha512 = createHash('sha512').update(fs.readFileSync(tarball)).digest('hex');
       const script = path.join(root, 'acceptance.sh');
       fs.writeFileSync(
         script,
@@ -465,16 +456,14 @@ if (args[0] === 'install') {
           ? 'npm() { "$NODE_BINARY" "$BACKFILL_NPM_FIXTURE" "$@"; }\n'
           : directNpm
             ? 'npm() { "$NODE_BINARY" "$NPM_CLI" "$@"; }\n'
-            : '') +
-          'cd fixture/package\n' +
-          validate,
+            : '') + validate,
       );
       // The process-tree runner retains the same deadline and waits for close after
       // terminating descendants, before afterEach removes the fixture directory.
       const result = await runInstallProfileCommand(
         bash,
-        ['-e', '-o', 'pipefail', path.basename(script)],
-        root,
+        ['-e', '-o', 'pipefail', path.relative(fixture, script).replaceAll('\\', '/')],
+        fixture,
         {
           ...process.env,
           NODE_BINARY: process.execPath.replaceAll('\\', '/'),
@@ -485,10 +474,10 @@ if (args[0] === 'install') {
           RUNNER_TEMP: root.replaceAll('\\', '/'),
           PACKAGE_TARBALL: tarball,
           PACKAGE_DIR: packageDir.replaceAll('\\', '/'),
+          EXPECTED_SHA512: expectedSha512,
           TAG_NAME: '0.0.0',
           BACKFILL_EVIDENCE: evidence,
           BACKFILL_FAILURE: failure,
-          EXPECTED_SHA512: expectedSha512,
           npm_config_offline: 'true',
           npm_config_userconfig: path.join(root, '.npmrc'),
           npm_config_globalconfig: path.join(root, 'fixtures.npmrc'),

@@ -58,8 +58,10 @@ SDK versions, then exercises success and failure through local subprocess
 protocol fixtures without model-service requests.
 
 The default profile checks both CLI aliases and evaluates compressed HTTP responses
-from a local server. It also checks the Transformers provider with an offline model
-fixture when the optional SDK is absent, incompatible, and installed.
+from a local server. When an extension loads the HTTP provider, `--no-cache` must
+fetch a fresh response and leave the saved response intact. The profile also checks
+the Transformers provider with an offline model fixture when the optional SDK is
+absent, incompatible, and installed.
 Without optional dependencies, native SQLite is unavailable;
 even `--version` must report the expected missing-dependency diagnostic.
 
