@@ -136,6 +136,132 @@ describe('filterTestsUtil', () => {
       expect(result).toEqual([]);
     });
 
+    describe('large result matching', () => {
+      beforeEach(async () => {
+        const actual = await vi.importActual<typeof import('../../../src/util/index')>(
+          '../../../src/util/index',
+        );
+        vi.mocked(util.resultIsForTestCase).mockImplementation(actual.resultIsForTestCase);
+      });
+
+      function mockFileResults(results: EvaluateResult[]) {
+        vi.mocked(util.readOutput).mockResolvedValue({
+          evalId: null,
+          results: {
+            version: 2,
+            timestamp: new Date().toISOString(),
+            results,
+            table: { head: { prompts: [], vars: [] }, body: [] },
+            stats: { successes: 0, failures: 0, errors: results.length, tokenUsage: mockTokenUsage },
+          },
+          config: {},
+          shareableUrl: null,
+        });
+      }
+
+      it('preserves matching order, nested equality, provider checks, and runtime preference', async () => {
+        const tests = Array.from({ length: 128 }, (_, i) => ({
+          vars: { input: `input-${i}`, nested: { group: i % 4 } },
+          provider: i % 7 === 0 ? 'model-b' : 'model-a',
+        }));
+        const results: EvaluateResult[] = tests
+          .map((test, i) => ({
+            ...mockResults[0]!,
+            testIdx: i,
+            testCase: test,
+            provider: { id: test.provider },
+            // Reversed field order and a common constant are intentional.
+            vars: {
+              nested: { group: i % 4 },
+              locale: 'en',
+              input: `input-${i}`,
+              ...(i === 11 ? { sessionId: 'restored-session' } : {}),
+            },
+          }))
+          .reverse();
+
+        // The earlier result for input-11 lacks runtime vars.
+        const runtimeResult = results.find((result) => result.testIdx === 11)!;
+        results.unshift({
+          ...runtimeResult,
+          vars: { ...runtimeResult.vars, sessionId: undefined },
+        });
+
+        // Default vars must match the stored locale while retaining the input key.
+        mockFileResults(results);
+        const matched = await filterTestsByResults(
+          { prompts: [], providers: [], tests, defaultTest: { vars: { locale: 'en' } } },
+          'many-results.json',
+          () => true,
+        );
+        expect(matched.map((test) => test.vars?.input)).toEqual(tests.map((test) => test.vars.input));
+        expect(matched).toHaveLength(128);
+        expect(matched[11]?.vars?.sessionId).toBe('restored-session');
+      });
+
+      it('does not match a provider or nested vars just because an indexed value matches', async () => {
+        const tests = Array.from({ length: 96 }, (_, i) => ({
+          vars: { input: `input-${i}`, nested: { group: i % 3 } },
+          provider: 'expected-provider',
+        }));
+        const results: EvaluateResult[] = tests.map((test, i) => ({
+          ...mockResults[0]!,
+          testIdx: i,
+          vars: { input: `input-${i}`, nested: { group: i === 20 ? 99 : i % 3 } },
+          provider: { id: i === 50 ? 'other-provider' : 'expected-provider' },
+          // No testCase means mismatched saved results cannot be extracted as new tests.
+          testCase: i === 20 || i === 50 ? undefined! : test,
+        }));
+        mockFileResults(results);
+        const matched = await filterTestsByResults(
+          { prompts: [], providers: [], tests },
+          'many-results.json',
+          () => true,
+        );
+        expect(matched).toHaveLength(94);
+        expect(matched.some((test) => test.vars?.input === 'input-20')).toBe(false);
+        expect(matched.some((test) => test.vars?.input === 'input-50')).toBe(false);
+      });
+
+      it('keeps legacy default-var fallback and complex-only variable matching', async () => {
+        const tests = Array.from({ length: 80 }, (_, i) => ({
+          vars: { input: `input-${i}` },
+        }));
+        mockFileResults(
+          tests.map((test, i) => ({
+            ...mockResults[0]!,
+            testIdx: i,
+            testCase: test,
+            vars: i % 2 === 0 ? { input: `input-${i}` } : { input: `input-${i}`, locale: 'en' },
+          })),
+        );
+        const matched = await filterTestsByResults(
+          { prompts: [], providers: [], tests, defaultTest: { vars: { locale: 'en' } } },
+          'many-results.json',
+          () => true,
+        );
+        expect(matched).toHaveLength(80);
+
+        const nestedTests = Array.from({ length: 80 }, (_, i) => ({
+          vars: { nested: { input: `input-${i}` } },
+        }));
+        mockFileResults(
+          nestedTests.map((test, i) => ({
+            ...mockResults[0]!,
+            testIdx: i,
+            testCase: test,
+            vars: { nested: { input: `input-${i}` } },
+          })),
+        );
+        const nestedMatched = await filterTestsByResults(
+          { prompts: [], providers: [], tests: nestedTests },
+          'many-results.json',
+          () => true,
+        );
+        expect(nestedMatched).toHaveLength(80);
+      });
+    });
+
     describe('with file path', () => {
       beforeEach(() => {
         vi.mocked(util.readOutput).mockResolvedValue({
