@@ -247,8 +247,8 @@ class GoogleAdkCliTest(unittest.TestCase):
                     env[proxy] = env[proxy.lower()] = ""
                 env["NO_PROXY"] = env["no_proxy"] = "*"
                 env.update(
-                    # Preserve the original configs' span names and tool-argument assertions.
-                    ADK_TELEMETRY_SCHEMA_VERSION_OPT_IN="1",
+                    # Exercise the modern schema supported by these example configs.
+                    ADK_TELEMETRY_SCHEMA_VERSION_OPT_IN="2",
                     GOOGLE_API_KEY="local-test-key",
                     ADK_MODEL=(
                         "gemini-2.5-flash"
