@@ -273,7 +273,8 @@ def pull_docker_image(
     """Return False if throttling warrants trying the next pinned mirror."""
     command = ("docker", "pull", image)
     delays = (10, 30, 60)
-    for attempt in range(len(delays) + 1):
+    attempt = 0
+    while True:
         print(f"+ {shlex.join(command)}", flush=True)
         try:
             result = subprocess.run(
@@ -294,6 +295,7 @@ def pull_docker_image(
                     return False
                 raise
             delay = delays[attempt]
+            attempt += 1
             print(f"Registry throttled Docker pull; retrying in {delay}s", flush=True)
             time.sleep(delay)
         else:
