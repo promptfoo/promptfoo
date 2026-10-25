@@ -27,6 +27,7 @@ source .venv/bin/activate
 python -m pip install -r requirements.txt
 
 export GOOGLE_API_KEY=your_google_api_key_here
+export ADK_TELEMETRY_SCHEMA_VERSION_OPT_IN=1
 npx promptfoo@latest eval -c promptfooconfig.yaml --no-cache
 npx promptfoo@latest eval -c promptfooconfig.workflow.yaml --no-cache
 npx promptfoo@latest view
@@ -87,7 +88,13 @@ The eval asserts that:
 
 ## How Tracing Works
 
-ADK 2.x emits OpenTelemetry spans for the important framework steps:
+The Quick Start selects ADK telemetry schema 1 with
+`ADK_TELEMETRY_SCHEMA_VERSION_OPT_IN=1`. ADK 2.13 defaults to schema 2, which
+changes span names and makes tool-argument capture opt-in. Schema 1 preserves
+the trace contract demonstrated here and is supported by ADK until at least
+March 31, 2027.
+
+With schema 1, ADK emits OpenTelemetry spans for the important framework steps:
 
 - `invocation`
 - `invoke_agent <name>`
