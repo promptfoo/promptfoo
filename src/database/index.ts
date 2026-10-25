@@ -210,6 +210,7 @@ const TRANSIENT_LOCK_RETRY_MAX_MS = 250;
  * `Failed query: ...`), so walk the cause chain and match on code/message.
  */
 function isTransientDatabaseLockError(error: unknown): boolean {
+  let hasSqliteCode = false;
   for (
     let current = error as {
         code?: unknown;
@@ -221,22 +222,20 @@ function isTransientDatabaseLockError(error: unknown): boolean {
     current != null && depth < 6;
     current = (current.cause ?? null) as typeof current, depth++
   ) {
-    const code = typeof current.code === 'string' ? current.code : '';
-    const extendedCode = typeof current.extendedCode === 'string' ? current.extendedCode : '';
-    if (
-      code.startsWith('SQLITE_BUSY') ||
-      code.startsWith('SQLITE_LOCKED') ||
-      extendedCode.startsWith('SQLITE_BUSY') ||
-      extendedCode.startsWith('SQLITE_LOCKED')
-    ) {
-      return true;
+    for (const code of [current.code, current.extendedCode]) {
+      if (typeof code === 'string' && code.startsWith('SQLITE_')) {
+        hasSqliteCode = true;
+        if (/^SQLITE_(?:BUSY|LOCKED)(?:_|$)/.test(code)) {
+          return true;
+        }
+      }
     }
-    const message = typeof current.message === 'string' ? current.message : '';
-    if (
-      /\bSQLITE_(?:BUSY|LOCKED)\b/.test(message) ||
-      /database (?:is|table is) locked/i.test(message)
-    ) {
-      return true;
+    // Drizzle's wrapper includes the SQL and bound values. Only use a native error's
+    // message when the chain supplied no SQLite error code.
+    if (!current.cause && !hasSqliteCode && typeof current.message === 'string') {
+      return /^(?:SQLITE_(?:BUSY|LOCKED)(?:_[A-Z0-9]+)*\b|database (?:is|table is) locked\b)/i.test(
+        current.message,
+      );
     }
   }
   return false;

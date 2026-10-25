@@ -14,7 +14,6 @@ import { runDbMigrations } from '../../src/migrate';
 import Eval from '../../src/models/eval';
 import { ResultFailureReason } from '../../src/types/index';
 import { calculateFilteredMetrics } from '../../src/util/calculateFilteredMetrics';
-import { sleep } from '../../src/util/time';
 import { createEvaluateResult } from '../factories/eval';
 import EvalFactory from '../factories/evalFactory';
 
@@ -796,20 +795,30 @@ describe('calculateFilteredMetrics', () => {
       expect(metrics.map((prompt) => prompt.testPassCount)).toEqual([0, 0]);
     });
 
-    it('reports a query failure instead of zero matches', async () => {
-      await expect(
-        calculateFilteredMetrics({
-          evalId: 'no-results',
-          numPrompts: 1,
-          whereSql: sql`invalid SQL`,
-        }),
-      ).rejects.toThrow();
+    it('does not retry malformed JSON when the search term resembles a SQLite lock', async () => {
+      const eval_ = await EvalFactory.create({
+        numResults: 1,
+        resultTypes: ['failure'],
+        withNamedScores: true,
+        searchableContent: 'SQLITE_BUSY',
+      });
+      const db = await getDb();
+      await db.run(sql`UPDATE eval_results
+        SET grading_result = json_set(grading_result, '$.namedScoreWeights', 'not JSON')
+        WHERE eval_id = ${eval_.id}`);
+      using attempts = vi.spyOn(db.$client, 'transaction');
+      const metrics = eval_.getFilteredMetrics({ searchQuery: 'SQLITE_BUSY' });
+      await expect(metrics).rejects.toMatchObject({
+        cause: { code: 'SQLITE_ERROR', message: expect.stringContaining('malformed JSON') },
+      });
+      expect(attempts).toHaveBeenCalledTimes(1);
     });
 
     it.each(['released', 'held'])('retries a read lock that is %s', async (lock) => {
       const { id } = await EvalFactory.create({ numResults: 1, resultTypes: ['success'] });
       const holder = createClient({ url: 'file::memory:?cache=shared' });
       const writer = await holder.transaction('write');
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
       try {
         await writer.execute({
           sql: 'UPDATE eval_results SET success = 0 WHERE eval_id = ?',
@@ -824,13 +833,13 @@ describe('calculateFilteredMetrics', () => {
           (error: unknown) => error,
         );
         if (lock === 'released') {
-          await sleep(30);
+          await vi.advanceTimersByTimeAsync(30);
           await writer.rollback();
-          expect(await outcome).toBe(1);
-        } else {
-          expect(await outcome).toBeInstanceOf(Error);
         }
+        await vi.runAllTimersAsync();
+        expect(await outcome).toEqual(lock === 'released' ? 1 : expect.any(Error));
       } finally {
+        vi.useRealTimers();
         writer.close();
         holder.close();
       }
