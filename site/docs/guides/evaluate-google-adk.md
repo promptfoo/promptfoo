@@ -23,13 +23,20 @@ source .venv/bin/activate
 python -m pip install -r requirements.txt
 
 export GOOGLE_API_KEY=your_google_api_key_here
-# Unless a capture policy is set, record model messages and tool data for these two evals.
-(
-  : "${OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT=SPAN_ONLY}"
-  export OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT
-  npx promptfoo@latest eval -c promptfooconfig.yaml --no-cache
-  npx promptfoo@latest eval -c promptfooconfig.workflow.yaml --no-cache
-)
+```
+
+Choose whether to store model messages, tool arguments, and tool results in the trace. To run the tool-argument assertions, opt in with these settings in the example directory's `.env`:
+
+```text
+OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT=SPAN_ONLY
+ADK_CAPTURE_MESSAGE_CONTENT_IN_SPANS=true
+```
+
+Legacy ADK spans capture content by default. To omit it across the supported SDKs, use `NO_CONTENT` and `false`, respectively. Exported settings take precedence over this `.env`. With capture off, the tool-argument assertions fail because no arguments are available to match.
+
+```bash
+npx promptfoo@latest eval -c promptfooconfig.yaml --no-cache
+npx promptfoo@latest eval -c promptfooconfig.workflow.yaml --no-cache
 npx promptfoo@latest view
 ```
 
@@ -41,11 +48,7 @@ export OPENAI_API_KEY=your_openai_api_key_here
 export ADK_MODEL=openai/gpt-5.4-mini
 ```
 
-If Promptfoo runs outside the activated virtual environment, set the interpreter explicitly:
-
-```bash
-PROMPTFOO_PYTHON=.venv/bin/python npx promptfoo@latest eval -c promptfooconfig.yaml --no-cache
-```
+If Promptfoo runs outside the activated virtual environment, prefix either eval command above with `PROMPTFOO_PYTHON=.venv/bin/python`.
 
 ## What The Example Covers
 
@@ -81,7 +84,7 @@ ADK 2.x emits OpenTelemetry spans such as:
 
 The example provider preserves Promptfoo's W3C `traceparent`, starts a small provider span beneath it, and exports ADK's child spans to Promptfoo's built-in OTLP receiver. On ADK 2.9.2 and 2.12, look for tool arguments in `gcp.vertex.agent.tool_call_args`. ADK 2.13’s v2 schema uses `gen_ai.tool.call.arguments` and drops `call_llm`. Use `generate_content <model>` to count model calls across these releases.
 
-ADK 2.13 defaults to telemetry v2. Without span content capture, tool names remain visible but the tool-argument assertions fail. To opt out for both new and legacy ADK spans, set `OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT=NO_CONTENT` and `ADK_CAPTURE_MESSAGE_CONTENT_IN_SPANS=false` before running the Quick Start. Leave `PROMPTFOO_ENABLE_OTEL` off to avoid recording provider request and response bodies in separate Python worker spans.
+ADK 2.13 defaults to telemetry v2. Tool names remain visible when content capture is off. Leave `PROMPTFOO_ENABLE_OTEL` off to avoid recording provider request and response bodies in separate Python worker spans.
 
 ```yaml
 assert:
