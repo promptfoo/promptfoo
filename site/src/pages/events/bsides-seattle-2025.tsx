@@ -224,7 +224,7 @@ export default function BSidesSeattle2025(): React.ReactElement {
                 Let's connect.
               </p>
               <div className={styles.ctaButtons}>
-                <Link to="https://discord.gg/promptfoo" className={styles.primaryCta}>
+                <Link to="https://discord.gg/gHPS9jjfbs" className={styles.primaryCta}>
                   Join Discord
                 </Link>
                 <Link to="https://github.com/promptfoo/promptfoo" className={styles.secondaryCta}>
