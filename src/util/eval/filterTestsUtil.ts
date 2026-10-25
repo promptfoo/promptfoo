@@ -66,7 +66,12 @@ function createCandidateLookup<T>(
   const buckets = new Map<unknown, T[]>();
   for (const item of items) {
     const vars = filterRuntimeVars(getVars(item));
-    if (!vars || typeof vars !== 'object' || Array.isArray(vars) || !Object.prototype.hasOwnProperty.call(vars, key)) {
+    if (
+      !vars ||
+      typeof vars !== 'object' ||
+      Array.isArray(vars) ||
+      !Object.prototype.hasOwnProperty.call(vars, key)
+    ) {
       continue;
     }
     const value = vars[key];
@@ -83,7 +88,12 @@ function createCandidateLookup<T>(
 
   return (rawVars) => {
     const vars = filterRuntimeVars(rawVars);
-    if (!vars || typeof vars !== 'object' || Array.isArray(vars) || !Object.prototype.hasOwnProperty.call(vars, key)) {
+    if (
+      !vars ||
+      typeof vars !== 'object' ||
+      Array.isArray(vars) ||
+      !Object.prototype.hasOwnProperty.call(vars, key)
+    ) {
       return items;
     }
     const value = vars[key];
