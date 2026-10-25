@@ -7,6 +7,13 @@ import { printBorder, setupEnv } from '../util/index';
 import { printResourceHint } from './show';
 import { type Command, Option } from 'commander';
 
+type ListOptions = {
+  envPath?: string;
+  n?: string;
+  idsOnly?: boolean;
+  json?: boolean;
+};
+
 export function listCommand(program: Command) {
   const listCommand = program.command('list').description('List various resources');
 
@@ -17,7 +24,7 @@ export function listCommand(program: Command) {
     .option('-n <limit>', 'Number of evaluations to display')
     .option('--ids-only', 'Only show evaluation IDs')
     .addOption(new Option('--json', 'Output records as JSON').conflicts('idsOnly'))
-    .action(async (cmdObj: { envPath?: string; n?: string; idsOnly?: boolean; json?: boolean }) => {
+    .action(async (cmdObj: ListOptions) => {
       setupEnv(cmdObj.envPath);
 
       // For --ids-only, fetch all at once (typically used in scripts)
@@ -82,7 +89,7 @@ export function listCommand(program: Command) {
     .option('-n <limit>', 'Number of prompts to display')
     .option('--ids-only', 'Only show prompt IDs')
     .addOption(new Option('--json', 'Output records as JSON').conflicts('idsOnly'))
-    .action(async (cmdObj: { envPath?: string; n?: string; idsOnly?: boolean; json?: boolean }) => {
+    .action(async (cmdObj: ListOptions) => {
       setupEnv(cmdObj.envPath);
 
       const prompts = (await getPrompts(Number(cmdObj.n) || undefined)).sort((a, b) =>
@@ -137,7 +144,7 @@ export function listCommand(program: Command) {
     .option('-n <limit>', 'Number of datasets to display')
     .option('--ids-only', 'Only show dataset IDs')
     .addOption(new Option('--json', 'Output records as JSON').conflicts('idsOnly'))
-    .action(async (cmdObj: { envPath?: string; n?: string; idsOnly?: boolean; json?: boolean }) => {
+    .action(async (cmdObj: ListOptions) => {
       setupEnv(cmdObj.envPath);
 
       const datasets = (await getTestCases(Number(cmdObj.n) || undefined)).sort((a, b) =>
