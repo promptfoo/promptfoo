@@ -2,7 +2,7 @@
 description: Deterministic physics-consistency assertions (PHM-Lite)
 
 prompts:
-  - "{{question}}"
+  - '{{question}}'
 
 # The built-in echo provider makes this example runnable with no API key:
 # the question text is echoed as the provider output, and the PHM-Lite
@@ -19,24 +19,24 @@ defaultTest:
 tests:
   # --- FAIL: violates universal physical law ---
   - vars:
-      question: "Mission update: the probe travels at 1.5 c and will reach the comet by Tuesday."
+      question: 'Mission update: the probe travels at 1.5 c and will reach the comet by Tuesday.'
   - vars:
-      question: "The signal moved through the cable at 400,000 km/s."
+      question: 'The signal moved through the cable at 400,000 km/s.'
   - vars:
-      question: "Lab notes: we cooled the sample to -300 degC before measurement."
+      question: 'Lab notes: we cooled the sample to -300 degC before measurement.'
   - vars:
-      question: "The reaction consumed -5 kg of catalyst."
+      question: 'The reaction consumed -5 kg of catalyst.'
   - vars:
-      question: "We are 150% confident in this result."
+      question: 'We are 150% confident in this result.'
 
   # --- WARN: suspicious but not strictly impossible ---
   - vars:
-      question: "In the test the ball fell 100 m in 1 s."
+      question: 'In the test the ball fell 100 m in 1 s.'
   - vars:
-      question: "Traffic shares: method A handled 60% and method B handled 70%."
+      question: 'Traffic shares: method A handled 60% and method B handled 70%.'
 
   # --- PASS: physically plausible output ---
   - vars:
-      question: "The car travels at 25 m/s. Water freezes at 0 degC."
+      question: 'The car travels at 25 m/s. Water freezes at 0 degC.'
   - vars:
-      question: "Light travels at 3e8 m/s in vacuum (rounded)."
+      question: 'Light travels at 3e8 m/s in vacuum (rounded).'

@@ -52,7 +52,9 @@ function extractQuantities(text) {
   // Unicode minus (U+2212 / fullwidth －) appears in many LLM outputs; normalize
   // before parsing so "−300" is not read as positive 300. Normalizing here
   // covers every caller, including direct unit-test imports.
-  text = String(text ?? '').replace(/\u2212/g, '-').replace(/\uFF0D/g, '-');
+  text = String(text ?? '')
+    .replace(/\u2212/g, '-')
+    .replace(/\uFF0D/g, '-');
   // Number grammar:
   //  - unary minus only when NOT immediately preceded by a digit (so the
   //    range separator in "0-300 °C" is not read as a sign of "-300");
@@ -128,9 +130,17 @@ function checkQuantityRules({ value, unit, raw, index, underflowNeg }, violation
   // after the previous temperature unit, so "dropped by 300 °C to -300 °C"
   // keeps the absolute -300 °C reading floored.
   const before = normalized.slice(0, index);
-  const prevTemp = Math.max(before.lastIndexOf('°C'), before.lastIndexOf('degC'), before.lastIndexOf('°F'));
-  const ownSpan = normalized.slice(prevTemp === -1 ? 0 : prevTemp + 3, index) + normalized.slice(index, index + 120);
-  const isDelta = /change|delta|\u0394|difference|dropped by|fell by|cooled by/i.test(ownSpan);
+  const prevTemp = Math.max(
+    before.lastIndexOf('°C'),
+    before.lastIndexOf('degC'),
+    before.lastIndexOf('°F'),
+  );
+  const ownSpan =
+    normalized.slice(prevTemp === -1 ? 0 : prevTemp + 3, index) +
+    normalized.slice(index, index + 120);
+  const isDelta = /(?:\b(?:change|delta|difference|dropped by|fell by|cooled by)\b|\u0394)/i.test(
+    ownSpan,
+  );
   const celsius = toCelsius(value, unit);
   if (!isDelta && celsius !== null && celsius < ABSOLUTE_ZERO_C - 1e-9) {
     violations.push({
@@ -153,10 +163,17 @@ function checkQuantityRules({ value, unit, raw, index, underflowNeg }, violation
   // of growth or return ("sales grew 150%", "returned -5%") are valid and
   // must not fail; only probability/confidence claims live in [0, 100].
   if (unit === '%' && (value < 0 || value > 100)) {
-    const back = normalized.slice(Math.max(0, index - 220), index);
-    const sentStart = Math.max(back.lastIndexOf('.'), back.lastIndexOf('!'), back.lastIndexOf('?')) + 1;
+    // Preserve offsets while removing periods in common non-terminal abbreviations.
+    const back = normalized
+      .slice(Math.max(0, index - 220), index)
+      .replace(/\b(?:e\.g|i\.e)\./gi, (match) => match.replaceAll('.', ' '));
+    const boundary = [...back.matchAll(/[.!?](?=\s|$)/g)].at(-1);
+    const sentStart = boundary ? boundary.index + 1 : 0;
     const fwd = normalized.slice(index, index + 160);
-    const sentEnd = (() => { const m2 = fwd.match(/[.!?](?=\s|$)/); return m2 ? m2.index : fwd.length; })();
+    const sentEnd = (() => {
+      const m2 = fwd.match(/[.!?](?=\s|$)/);
+      return m2 ? m2.index : fwd.length;
+    })();
     const window = normalized.slice(Math.max(0, index - 220) + sentStart, index + sentEnd);
     if (!/probabilit|confiden|chance|likelihood|certainty|belief|odds/i.test(window)) return;
     violations.push({
@@ -173,14 +190,16 @@ const num = '-?(?:\\d[\\d,]*(?:\\.\\d+)?|\\.\\d+)(?:\\s*[eE][+-]?\\d+)?';
 const unitAlt =
   '°C|degC|°F|K\\b|km\\/s(?!\\s*[/^²³]|\\s*\\d)|m\\/s(?!\\s*[/^²³]|\\s*\\d)|c\\b|%|kg\\b(?!\\s*[·*/⋅])|g\\b|km\\b|m\\b|J\\b|kJ\\b|MJ\\b|Wh\\b|kWh\\b|MeV\\b|GeV\\b|eV\\b|N\\b|Pa\\b|kPa\\b|MPa\\b|atm\\b|mol\\/L\\b|mg\\/mL\\b';
 
-
 function phmLiteCheck(output) {
   const violations = [];
   let normalized = String(output ?? '')
     .replace(/\u2212/g, '-')
     .replace(/\uFF0D/g, '-');
   // Shared-unit range propagation
-  const rangeProp = new RegExp(`(${num})\\s+(?:to|\\u2013|\\u2014)\\s+(${num})\\s*(${unitAlt})`, 'gi');
+  const rangeProp = new RegExp(
+    `(${num})\\s+(?:to|\\u2013|\\u2014)\\s+(${num})\\s*(${unitAlt})`,
+    'gi',
+  );
   normalized = normalized.replace(rangeProp, (_mm, a, b, u) => `${a} ${u} and ${b} ${u}`);
   const qs = extractQuantities(normalized);
   for (const q of qs) {
@@ -197,10 +216,14 @@ function phmLiteCheck(output) {
   // - A claimed duration of exactly 0 s is physically impossible too.
   const fallNum = '-?(?:\\d[\\d,]*(?:\\.\\d+)?|\\.\\d+)(?:\\s*[eE][+-]?\\d+)?';
   const fallRe = new RegExp(
-    '(?:fell|drops?|dropped|falls?)\\s+(' + fallNum + ')\\s*(?!(?:meters?|metres?)\\s*(?:per\\s+second|/s))(?:m\\b|meters?|metres?)' +
-      '((?:(?!fell\\b|drops?\\b|dropped\\b|falls?\\b)[\\s\\S]){0,200}?)' +
-      '(?:in|within|after)\\s+(' + fallNum + ')\\s*s(?:ec|econds?)?\\b',
-    'gi'
+    '(?:fell|drops?|dropped|falls?)\\s+(' +
+      fallNum +
+      ')\\s*(?!(?:meters?|metres?)\\s*(?:per\\s+second|/s))(?:m\\b|meters?|metres?)' +
+      '((?:(?!fell\\b|drops?\\b|dropped\\b|falls?\\b|[.!?](?=\\s|$))[\\s\\S]){0,200}?)' +
+      '(?:in|within|after)\\s+(' +
+      fallNum +
+      ')\\s*s(?:ec|econds?)?\\b',
+    'gi',
   );
   for (const fall of normalized.matchAll(fallRe)) {
     const h = Number(fall[1].replace(/[\s,]/g, ''));
@@ -232,7 +255,7 @@ function phmLiteCheck(output) {
   const METRIC_CTX = /recall|precision|accuracy|margin|error rate|f1/i;
   for (const sentence of normalized.split(/[.!?]\s|\n/)) {
     const pct = [...sentence.matchAll(/(\d[\d,]*(?:\.\d+)?(?:\s*[eE][+-]?\d+)?)\s*%/g)].map((x) =>
-      Number(x[1].replace(/[\s,]/g, ''))
+      Number(x[1].replace(/[\s,]/g, '')),
     );
     if (pct.length >= 2 && SHARE_CTX.test(sentence) && !METRIC_CTX.test(sentence)) {
       const sum = pct.reduce((a, b) => a + b, 0);
@@ -295,7 +318,8 @@ export default async function phmLiteAssertion(output) {
   // Promptfoo passes provider outputs through unchanged: structured outputs
   // arrive as objects. Serialize them with value/unit recombination so
   // numeric claims inside them are still scanned.
-  const text = output !== null && typeof output === 'object' ? serializeForScan(output) : String(output ?? '');
+  const text =
+    output !== null && typeof output === 'object' ? serializeForScan(output) : String(output ?? '');
   const { verdict, violations } = phmLiteCheck(text);
   const failHit = violations.filter((v) => FAIL_ON.includes(v.severity));
 
@@ -319,4 +343,4 @@ export default async function phmLiteAssertion(output) {
 }
 
 // Expose internals so the example's own unit tests can import them.
-export { C_LIGHT, G_EARTH, extractQuantities, phmLiteCheck };
+export { C_LIGHT, extractQuantities, G_EARTH, phmLiteCheck };

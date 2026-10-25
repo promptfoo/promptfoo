@@ -4,13 +4,13 @@ This example adds a deterministic physics-consistency layer to Promptfoo asserti
 
 ## Why?
 
-Promptfoo's LLM-based grading catches semantic errors. [ATR (Agent Threat Rules)](https://github.com/Agent-Threat-Rule/agent-threat-rules) catches known attack patterns. PHM-Lite catches a third category: **statements that violate universal physical law** — speeds above *c*, temperatures below absolute zero, negative masses, probabilities outside [0, 100%], free-fall timings that cannot happen at 1 *g*. The three layers complement each other:
+Promptfoo's LLM-based grading catches semantic errors. [ATR (Agent Threat Rules)](https://github.com/Agent-Threat-Rule/agent-threat-rules) catches known attack patterns. PHM-Lite catches a third category: **statements that violate universal physical law** — speeds above _c_, temperatures below absolute zero, negative masses, probabilities outside [0, 100%], free-fall timings that cannot happen at 1 _g_. The three layers complement each other:
 
-| Layer | Method | Catches | Cost |
-| ------------------------ | --------------- | ------------------------------------------- | --------- |
-| Promptfoo grading | LLM rubric | Novel/semantic errors | API calls |
-| ATR assertion | Regex | Known text patterns in output strings | None |
-| **PHM-Lite assertion** | **Numeric + unit rules** | **Physically impossible numbers and claims** | **None** |
+| Layer                  | Method                   | Catches                                      | Cost      |
+| ---------------------- | ------------------------ | -------------------------------------------- | --------- |
+| Promptfoo grading      | LLM rubric               | Novel/semantic errors                        | API calls |
+| ATR assertion          | Regex                    | Known text patterns in output strings        | None      |
+| **PHM-Lite assertion** | **Numeric + unit rules** | **Physically impossible numbers and claims** | **None**  |
 
 LLMs state impossible physics with high fluency ("the probe reached the planet in 2 hours travelling at 5c", "we cooled the sample to −300 °C"). A deterministic numeric checker catches these classes instantly, on every run, with the same verdict every time — no model in the judge loop.
 
@@ -35,14 +35,14 @@ The example uses the built-in `echo` provider, so it runs **without any API key*
 
 ## Rules Covered
 
-| Rule | Severity | Trigger | Example caught |
-| ---------------------- | -------- | ------------------------------------ | --------------------------------- |
-| `speed-of-light` | FAIL | speed > c (1% tolerance for rounded notation) | "travels at 1.5 c", "400,000 km/s" |
-| `absolute-zero` | FAIL | temperature below −273.15 °C | "cooled to −300 °C" |
-| `negative-mass` | FAIL | negative mass in kg (bare `g` excluded as acceleration-ambiguous; energy excluded since binding energies are legitimately negative) | "consumed −5 kg" |
-| `percentage-range` | FAIL | a stated percentage outside [0, 100] **in probability/confidence context** (growth or return percentages are valid) | "150% confident" |
-| `free-fall-time` | WARN | fall time < 85% of the 1 g value for the height | "fell 100 m in 1 s" |
-| `percentage-sum` | WARN | multiple percentage **shares** of one whole summing over 100% (same sentence, share wording required) | "Traffic shares: A 60%, B 70%" |
+| Rule               | Severity | Trigger                                                                                                                             | Example caught                     |
+| ------------------ | -------- | ----------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------- |
+| `speed-of-light`   | FAIL     | speed > c (1% tolerance for rounded notation)                                                                                       | "travels at 1.5 c", "400,000 km/s" |
+| `absolute-zero`    | FAIL     | temperature below −273.15 °C                                                                                                        | "cooled to −300 °C"                |
+| `negative-mass`    | FAIL     | negative mass in kg (bare `g` excluded as acceleration-ambiguous; energy excluded since binding energies are legitimately negative) | "consumed −5 kg"                   |
+| `percentage-range` | FAIL     | a stated percentage outside [0, 100] **in probability/confidence context** (growth or return percentages are valid)                 | "150% confident"                   |
+| `free-fall-time`   | WARN     | fall time < 85% of the 1 g value for the height                                                                                     | "fell 100 m in 1 s"                |
+| `percentage-sum`   | WARN     | multiple percentage **shares** of one whole summing over 100% (same sentence, share wording required)                               | "Traffic shares: A 60%, B 70%"     |
 
 `FAIL` breaks the assertion with score 0. `WARN` (suspicious but not strictly impossible) also fails the assertion but scores 0.5, so soft violations can be separated from hard ones in the results table — flip `FAIL_ON` in the assertion file to score warnings 0 instead.
 

@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
-// @ts-ignore -- ESM module without type declarations
-import phmAssert, { phmLiteCheck, C_LIGHT } from '../examples/physics-consistency-assertion/phm-lite-assertion.mjs';
+// @ts-expect-error -- The JavaScript example has no TypeScript declarations.
+import * as physics from '../examples/physics-consistency-assertion/phm-lite-assertion.mjs';
+
+const { default: phmAssert, phmLiteCheck, C_LIGHT } = physics;
 
 describe('PHM-Lite physics-consistency assertion', () => {
   // ---- FAIL: violates universal physical law ----
@@ -25,7 +27,10 @@ describe('PHM-Lite physics-consistency assertion', () => {
     ['fall claim spanning a line break', 'The weight fell 100 m\nin 1 s.'],
     ['exponent-form fall quantities', 'fell 1e2 m in 1e0 s'],
     ['percentage shares summing over 100%', 'Traffic shares: A took 6e1% and B took 7e1%.'],
-    ['scientific-notation percentage sum', 'Traffic shares: A took 6e1% and B took 7e1% of traffic.'],
+    [
+      'scientific-notation percentage sum',
+      'Traffic shares: A took 6e1% and B took 7e1% of traffic.',
+    ],
   ])('flags WARN: %s', (_name, text) => {
     const r = phmLiteCheck(text);
     expect(r.verdict).toBe('WARN');
@@ -33,6 +38,9 @@ describe('PHM-Lite physics-consistency assertion', () => {
 
   // ---- PASS: physically plausible ----
   it.each([
+    ['temperature difference', 'The temperature change was -300 °C.'],
+    ['symbolic temperature difference', 'ΔT = -300 °C.'],
+    ['probability context in another sentence', 'We checked the probability. Revenue grew 150%.'],
     ['ordinary speeds', 'The car travels at 25 m/s. Water freezes at 0 degC.'],
     ['rounded light speed (1% tolerance)', 'Light travels at 3e8 m/s in vacuum.'],
     ['range separator (temperature)', 'The sensor operates over a range 0-300 °C.'],
@@ -67,17 +75,17 @@ describe('PHM-Lite physics-consistency assertion', () => {
 
   it('does not let substrings of delta words exempt absolute readings', () => {
     const r = phmLiteCheck('The chamber temperature remained unchanged at -300 °C.');
-    expect(r.violations.some((v) => v.rule === 'absolute-zero')).toBe(true);
+    expect(r.violations.some((v: { rule: string }) => v.rule === 'absolute-zero')).toBe(true);
   });
 
   it('keeps probability context across abbreviations (e.g.)', () => {
     const r = phmLiteCheck('The probability, e.g. 150%, is invalid');
-    expect(r.violations.some((v) => v.rule === 'percentage-range')).toBe(true);
+    expect(r.violations.some((v: { rule: string }) => v.rule === 'percentage-range')).toBe(true);
   });
 
   it('stops free-fall pairing at sentence boundaries', () => {
     const r = phmLiteCheck('The rock fell 100 m. The sensor responded in 1 s.');
-    expect(r.violations.some((v) => v.rule === 'free-fall-time')).toBe(false);
+    expect(r.violations.some((v: { rule: string }) => v.rule === 'free-fall-time')).toBe(false);
   });
 
   it('scores deterministic repeats identically', () => {
