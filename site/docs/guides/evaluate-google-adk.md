@@ -32,7 +32,7 @@ OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT=SPAN_ONLY
 ADK_CAPTURE_MESSAGE_CONTENT_IN_SPANS=true
 ```
 
-To omit these payload attributes on modern and legacy ADK, set `NO_CONTENT` and `false`, respectively. Legacy ADK captures content by default. The tool-argument assertions fail with capture off. The **exported trace can still contain sensitive text**: Promptfoo includes test variables and grader explanations, and model errors can include rejected input. Saved eval results also include model output.
+To suppress payload content on both schemas, use `NO_CONTENT` and `false`, respectively. Legacy ADK captures content by default and writes empty JSON to its payload attributes when disabled; telemetry v2 omits the attributes. The tool-argument assertions fail with capture off. The **exported trace can still contain sensitive text**: Promptfoo includes test variables and grader explanations, and model errors can include rejected input. Saved eval results also include model output.
 
 The commands below load `.env` from the current directory (`integration-google-adk`). If you run the same configs from the repository root, pass `--env-file examples/integration-google-adk/.env` to each eval. Shell values win for an implicit `.env` by default; an [explicit env file](/docs/usage/command-line/#multiple-environment-files) overrides them.
 
