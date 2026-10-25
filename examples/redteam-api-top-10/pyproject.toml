@@ -13,6 +13,9 @@ dependencies = [
     "python-dotenv>=1.2.3,<2",
 ]
 
+[project.optional-dependencies]
+test = ["httpx2"]
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"

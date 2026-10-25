@@ -8,13 +8,73 @@ from unittest.mock import AsyncMock, patch
 
 import httpx2
 from anthropic import Anthropic
-from app.auth import UserContext
+from app.auth import UserContext, create_token
+from app.main import app
 from app.mcp_client import SwagMCPClient
+from app.routers import chat as chat_router
 
 from app import chat_handler
 
 
 class ChatHandlerTest(unittest.IsolatedAsyncioTestCase):
+    async def test_rejected_user_citations_do_not_poison_session(self) -> None:
+        request = {
+            "token": create_token({"user_id": "test", "full_name": "Ada"}),
+            "session_id": "test-citations",
+        }
+        document = {
+            "type": "document",
+            "title": "Stock",
+            "citations": {"enabled": True},
+            "source": {"type": "text", "media_type": "text/plain", "data": "hat"},
+        }
+        citation = {
+            "type": "char_location",
+            "document_index": 0,
+            "document_title": "Stock",
+            "cited_text": "hat",
+            "start_char_index": 0,
+            "end_char_index": 3,
+        }
+        text = {"type": "text", "text": "hat", "citations": [citation]}
+        search = {
+            "type": "search_result",
+            "source": "stock",
+            "title": "Stock",
+            "content": [text],
+        }
+        with (
+            patch.dict(chat_router._sessions, clear=True),
+            patch.object(chat_router, "chat", return_value=("Ready", [])) as chat,
+        ):
+            async with httpx2.AsyncClient(
+                transport=httpx2.ASGITransport(app=app), base_url="http://app.test"
+            ) as web:
+                for block in (text, search):
+                    message = [{"role": "user", "content": [document, block]}]
+                    response = await web.post(
+                        "/chat/", json={**request, "message": message}
+                    )
+                    self.assertEqual(response.status_code, 422, response.text)
+                    self.assertIn("citations", response.json()["detail"][0]["msg"])
+                follow_up = {
+                    **search,
+                    "citations": {"enabled": True},
+                    "content": [{"type": "text", "text": "Any hats?", "citations": []}],
+                }
+                response = await web.post(
+                    "/chat/",
+                    json={
+                        **request,
+                        "message": [{"role": "user", "content": [document, follow_up]}],
+                    },
+                )
+                self.assertEqual(response.status_code, 200, response.text)
+                self.assertEqual(response.json()["response"], "Ready")
+        chat.assert_awaited_once()
+        self.assertEqual(chat.await_args.kwargs["message"], [document, follow_up])
+        self.assertEqual(chat.await_args.kwargs["conversation_history"], [])
+
     async def test_anthropic_tool_round_trip(self) -> None:
         tool = {
             "name": "stock",

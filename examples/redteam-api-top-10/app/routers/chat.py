@@ -48,6 +48,22 @@ class ChatRequest(BaseModel):
             )
         return v
 
+    @field_validator("message")
+    @classmethod
+    def reject_user_text_citations(cls, message: str | list[dict]) -> str | list[dict]:
+        """Claude accepts citation settings on search results, but not citations on user text."""
+        if isinstance(message, list):
+            blocks = message.copy()
+            while blocks:
+                block = blocks.pop()
+                if not isinstance(block, dict):
+                    continue
+                if block.get("type") == "text" and block.get("citations"):
+                    raise ValueError("Remove citations from user text blocks.")
+                if isinstance(block.get("content"), list):
+                    blocks.extend(block["content"])
+        return message
+
 
 class ChatResponse(BaseModel):
     """Response from chat endpoint."""
