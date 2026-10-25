@@ -1,6 +1,6 @@
 import { isDeepStrictEqual } from 'node:util';
 
-import { and, eq, gte, inArray, lt, ne, sql } from 'drizzle-orm';
+import { and, eq, gte, inArray, lt, ne } from 'drizzle-orm';
 import { extractBlobHashesFromValue } from '../blobs/blobRefs';
 import { extractAndStoreBinaryData, isBlobStorageEnabled } from '../blobs/extractor';
 import { getDb } from '../database/index';
@@ -41,7 +41,7 @@ import {
   createEmptyTokenUsage,
 } from '../util/tokenUsageUtils';
 import { invalidateEvaluationCache } from './evalMutation';
-import { clearCountCache } from './evalPerformance';
+import { clearCountCache, isLatestResult } from './evalPerformance';
 
 function sanitizeProviderConfig(config: ProviderConfig): ProviderConfig {
   return sanitizeObject(JSON.parse(safeJsonStringify(config) as string), {
@@ -1170,10 +1170,9 @@ export default class EvalResult {
           testIndices.length === 1
             ? eq(evalResultsTable.testIdx, testIndices[0])
             : inArray(evalResultsTable.testIdx, testIndices),
+          isLatestResult,
         ),
-      )
-      // The table keeps the last result for a cell when a retry has not cleared its old error.
-      .orderBy(sql`eval_results.rowid`);
+      );
 
     return results.map((result) => new EvalResult({ ...result, persisted: true }));
   }

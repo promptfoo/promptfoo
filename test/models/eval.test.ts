@@ -2751,6 +2751,7 @@ describe('evaluator', () => {
           success: false,
           failureReason: ResultFailureReason.ERROR,
           response: { error: 'initial attempt failed' },
+          metadata: { sessionId: 'stale-session' },
           namedScores: { accuracy: 1, left: 1 },
         }),
       );
@@ -2772,18 +2773,24 @@ describe('evaluator', () => {
         }
       }
 
-      for (const [field, rows, counts] of [
-        [undefined, [0], [1, 1]],
-        ['accuracy', [0], [1, 1]], // A filter that matches both outputs must not change the counts.
-        ['left', [0], [1, 0]], // Only eligible siblings count.
-        ['right', [], [0, 0]], // The search term is present only in the ineligible output.
+      for (const [searchQuery, field, filterMode, rows, counts] of [
+        ['response-needle', undefined, 'all', [0], [1, 1]],
+        ['response-needle', 'accuracy', 'all', [0], [1, 1]], // A filter matching both cells changes nothing.
+        ['response-needle', 'left', 'all', [0], [1, 0]], // Only eligible siblings count.
+        ['response-needle', 'right', 'all', [], [0, 0]], // The matching output is ineligible.
+        ['initial attempt', undefined, 'all', [], [0, 0]],
+        ['initial attempt', 'accuracy', 'all', [], [0, 0]],
+        [undefined, undefined, 'errors', [], [0, 0]],
+        [undefined, 'accuracy', 'errors', [], [0, 0]],
       ] as const) {
         const filters = field
           ? [JSON.stringify({ type: 'metric', operator: 'is_defined', field })]
           : [];
-        const opts = { searchQuery: 'response-needle', filters };
+        const opts = { searchQuery, filters, filterMode };
         const page = await eval_.getTablePage(opts);
         const metrics = await eval_.getFilteredMetrics(opts);
+        expect(page.filteredCount).toBe(rows.length);
+        expect(page.head.vars).not.toContain('sessionId');
         expect(page.body.map((row) => row.testIdx)).toEqual(rows);
         expect(page.body.map((row) => row.outputs.map((cell) => cell?.text))).toEqual(
           rows.map((idx) => outputs[idx]),

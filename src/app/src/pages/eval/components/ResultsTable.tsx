@@ -1098,6 +1098,7 @@ function PromptColumnHeader({
   passingTestCounts,
   config,
   filterMode,
+  isFilteringActive,
   headPromptCount,
   maxTextLength,
   onFailureFilterToggle,
@@ -1117,6 +1118,7 @@ function PromptColumnHeader({
   passingTestCounts: PromptSummaryMetric[];
   config: ReturnType<typeof useTableStore.getState>['config'];
   filterMode: EvalResultsFilterMode;
+  isFilteringActive: boolean;
   headPromptCount: number;
   maxTextLength: number;
   onFailureFilterToggle: (columnId: string, checked: boolean) => void;
@@ -1143,7 +1145,8 @@ function PromptColumnHeader({
             {passRates[idx]?.filtered === null ? (
               <>
                 <strong>{passRates[idx]?.total?.toFixed(2) ?? '0.00'}% passing</strong> (
-                {passingTestCounts[idx]?.total}/{testCounts[idx]?.total} cases)
+                {passingTestCounts[idx]?.total}/{testCounts[idx]?.total}{' '}
+                {isFilteringActive ? 'cases across the full eval' : 'cases'})
               </>
             ) : (
               <Tooltip>
@@ -2143,6 +2146,7 @@ function ResultsTable({
                 passingTestCounts={passingTestCounts}
                 config={config}
                 filterMode={filterMode}
+                isFilteringActive={isFilteringActive}
                 headPromptCount={head.prompts.length}
                 maxTextLength={maxTextLength}
                 onFailureFilterToggle={onFailureFilterToggle}
@@ -2214,7 +2218,7 @@ function ResultsTable({
     onFailureFilterToggle,
     debouncedSearchText,
     showStats,
-    filters.appliedCount,
+    isFilteringActive,
     passRates,
     passingTestCounts,
     testCounts,

@@ -2913,6 +2913,21 @@ describe('ResultsTable Pass Rate Display', () => {
 
   beforeEach(() => mockPassRateTable(mockTable));
 
+  it('labels the full eval count when a search has no filtered metrics', () => {
+    vi.mocked(useTableStore).mockImplementation(() =>
+      createTableStore({ table: mockTable, filteredMetrics: null, filteredResultsCount: 1 }),
+    );
+    const view = renderWithProviders(
+      <ResultsTable {...defaultProps} debouncedSearchText="needle" />,
+    );
+
+    const fullEvalRate = () => screen.getByText('50.00% passing').parentElement;
+    expect(fullEvalRate()).toHaveTextContent('50.00% passing (5/10 cases across the full eval)');
+
+    view.rerender(<ResultsTable {...defaultProps} />);
+    expect(fullEvalRate()).toHaveTextContent('50.00% passing (5/10 cases)');
+  });
+
   it('displays 0% filtered pass rate when filtered results have zero test cases but total results have some', () => {
     const mockTableWithZeroFilteredTestCases = {
       body: Array(10).fill(createPassingRow()),

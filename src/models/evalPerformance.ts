@@ -99,6 +99,13 @@ export function buildResponseSearchCondition(searchQuery: string): SQL {
   return sql`response LIKE ${`%${searchQuery}%`}`;
 }
 
+// A paused retry may leave multiple results for one cell. Only the last saved result is visible.
+export const isLatestResult = sql`NOT EXISTS (
+  SELECT 1 FROM eval_results AS newer
+  WHERE newer.eval_id = eval_results.eval_id AND newer.test_idx = eval_results.test_idx
+    AND newer.rowid > eval_results.rowid AND newer.prompt_idx = eval_results.prompt_idx
+)`;
+
 // Optimized query for test indices without heavy JSON search
 export async function queryTestIndicesOptimized(
   evalId: string,
@@ -136,22 +143,22 @@ export async function queryTestIndicesOptimized(
     )`;
   }
 
-  // For search queries, only search in response field if no filters
-  // This is a compromise - we search less fields but query is faster
-  let searchCondition = sql`1=1`;
-  if (opts.searchQuery && opts.searchQuery.trim() !== '' && !opts.filters?.length) {
-    // Only search in response field for better performance
-    searchCondition = buildResponseSearchCondition(opts.searchQuery);
+  const search =
+    opts.searchQuery?.trim() && !opts.filters?.length
+      ? buildResponseSearchCondition(opts.searchQuery)
+      : undefined;
+  if (search) {
+    baseQuery = sql`${baseQuery} AND ${search}`;
   }
-
-  const whereClause = sql`${baseQuery} AND ${searchCondition}`;
+  // Every stored test index has a visible result, so unfiltered pages can keep their index-only scan.
+  const whereSql = mode === 'all' && !search ? baseQuery : sql`${baseQuery} AND ${isLatestResult}`;
 
   // Get filtered count using the composite index
   const countStart = Date.now();
   const countQuery = sql`
     SELECT COUNT(DISTINCT test_idx) as count 
     FROM ${evalResultsTable} 
-    WHERE ${whereClause}
+    WHERE ${whereSql}
   `;
 
   const countResult = await db.all<CountResult>(countQuery);
@@ -163,7 +170,7 @@ export async function queryTestIndicesOptimized(
   const idxQuery = sql`
     SELECT DISTINCT test_idx 
     FROM ${evalResultsTable} 
-    WHERE ${whereClause}
+    WHERE ${whereSql}
     ORDER BY test_idx 
     LIMIT ${limit} 
     OFFSET ${offset}
