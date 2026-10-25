@@ -62,7 +62,6 @@ import {
   buildResponseSearchCondition,
   getCachedResultsCount,
   getTotalResultRowCount,
-  isLatestResult,
   queryTestIndicesOptimized,
 } from './evalPerformance';
 import EvalResult, {
@@ -1193,7 +1192,6 @@ export default class Eval {
       }
     }
 
-    conditions.push(isLatestResult);
     return sql.join(conditions, sql` AND `);
   }
 
@@ -1216,7 +1214,7 @@ export default class Eval {
 
     let whereSql = this.buildFilterWhereSql(opts);
     if (opts.searchQuery?.trim()) {
-      whereSql = sql`${buildFullSearchCondition(opts.searchQuery)} AND ${whereSql}`;
+      whereSql = sql`${whereSql} AND ${buildFullSearchCondition(opts.searchQuery)}`;
     }
 
     // Get filtered count using parameterized query
@@ -1263,7 +1261,7 @@ export default class Eval {
         ? buildFullSearchCondition(opts.searchQuery)
         : buildResponseSearchCondition(opts.searchQuery);
       whereSql = sql`${whereSql} AND test_idx IN (
-        SELECT test_idx FROM eval_results WHERE ${search} AND ${whereSql}
+        SELECT test_idx FROM eval_results WHERE ${whereSql} AND ${search}
       )`;
     }
 

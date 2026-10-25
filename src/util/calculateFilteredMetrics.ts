@@ -200,39 +200,36 @@ function getFilteredTokenUsage(row: FilteredBasicMetricsRow): PromptMetrics['tok
 export async function calculateFilteredMetrics(
   opts: FilteredMetricsOptions,
 ): Promise<PromptMetrics[]> {
-  const { numPrompts, whereSql } = opts;
-
+  const { evalId, numPrompts, whereSql } = opts;
+  let unavailableReason: string;
   try {
-    // Check result count first (protect against OOM)
-    const countResult = await getResultCount(whereSql);
-    if (countResult <= MAX_RESULTS_FOR_METRICS) {
+    const db = await getDb();
+    // A retained retry makes the cell ambiguous even when only one attempt passed its filters.
+    const summary = await db.get<{ count: number; overlapping: number | null }>(sql`
+      WITH matched AS MATERIALIZED (
+        SELECT test_idx, prompt_idx FROM eval_results WHERE ${whereSql} LIMIT ${MAX_RESULTS_FOR_METRICS + 1}
+      )
+      SELECT COUNT(*) AS count, CASE WHEN COUNT(*) BETWEEN 1 AND ${MAX_RESULTS_FOR_METRICS} THEN EXISTS (
+        SELECT 1 FROM eval_results
+        WHERE eval_id = ${evalId} AND (test_idx, prompt_idx) IN (SELECT test_idx, prompt_idx FROM matched)
+        GROUP BY test_idx, prompt_idx HAVING COUNT(*) > 1
+      ) END AS overlapping FROM matched
+    `);
+    if (!summary?.count) {
+      return createEmptyMetricsArray(numPrompts);
+    }
+    if (summary.count > MAX_RESULTS_FOR_METRICS) {
+      unavailableReason = `Filtered result count exceeds ${MAX_RESULTS_FOR_METRICS}`;
+    } else if (summary.overlapping) {
+      unavailableReason = 'A filtered row contains overlapping attempts for the same output';
+    } else {
       return await calculateWithOptimizedQuery(opts);
     }
   } catch (error) {
     logger.error('Failed to calculate filtered metrics', { error });
-
-    // Fallback: Return empty metrics
     return createEmptyMetricsArray(numPrompts);
   }
-
-  throw new Error(`Filtered result count exceeds ${MAX_RESULTS_FOR_METRICS}`);
-}
-
-/**
- * Get count of filtered results (for OOM protection)
- *
- * SECURITY: Uses parameterized SQL query via Drizzle's sql template strings.
- */
-async function getResultCount(whereSql: SQL<unknown>): Promise<number> {
-  const db = await getDb();
-  const query = sql`
-    SELECT COUNT(*) as count
-    FROM eval_results
-    WHERE ${whereSql}
-  `;
-
-  const result = (await db.get(query)) as { count: number } | undefined;
-  return result?.count || 0;
+  throw new Error(unavailableReason);
 }
 
 /** Aggregate all prompts together using parameterized SQL. */

@@ -41,7 +41,7 @@ import {
   createEmptyTokenUsage,
 } from '../util/tokenUsageUtils';
 import { invalidateEvaluationCache } from './evalMutation';
-import { clearCountCache, isLatestResult } from './evalPerformance';
+import { clearCountCache } from './evalPerformance';
 
 function sanitizeProviderConfig(config: ProviderConfig): ProviderConfig {
   return sanitizeObject(JSON.parse(safeJsonStringify(config) as string), {
@@ -1170,7 +1170,6 @@ export default class EvalResult {
           testIndices.length === 1
             ? eq(evalResultsTable.testIdx, testIndices[0])
             : inArray(evalResultsTable.testIdx, testIndices),
-          isLatestResult,
         ),
       );
 
