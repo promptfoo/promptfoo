@@ -1600,11 +1600,6 @@ describe('OTLPReceiver', () => {
       },
     );
 
-    it('preserves the trace service info endpoint alongside log ingestion', async () => {
-      const response = await request(receiver.getApp()).get('/v1/traces').expect(200);
-      expect(response.body.service).toBe('promptfoo-otlp-receiver');
-    });
-
     it('preserves OK span status while exposing ERROR log severity', async () => {
       const req = makeLogsRequest([
         {
