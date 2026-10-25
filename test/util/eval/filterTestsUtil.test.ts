@@ -184,7 +184,7 @@ describe('filterTestsUtil', () => {
         const runtimeResult = results.find((result) => result.testIdx === 11)!;
         results.unshift({
           ...runtimeResult,
-          vars: { ...runtimeResult.vars, sessionId: undefined },
+          vars: { nested: { group: 11 % 4 }, locale: 'en', input: 'input-11' },
         });
 
         // Default vars must match the stored locale while retaining the input key.
