@@ -6,10 +6,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [0.125.1](https://github.com/promptfoo/promptfoo/compare/0.125.0...0.125.1) (2026-10-25)
 
-
 ### Bug Fixes
 
-* restore the authentic Discord invite ([#11967](https://github.com/promptfoo/promptfoo/issues/11967)) ([98000c4](https://github.com/promptfoo/promptfoo/commit/98000c43c371c6b68f655150cb5485d1c748bf15))
+- restore the authentic Discord invite ([#11967](https://github.com/promptfoo/promptfoo/issues/11967)) ([98000c4](https://github.com/promptfoo/promptfoo/commit/98000c43c371c6b68f655150cb5485d1c748bf15))
 
 ## [0.125.0](https://github.com/promptfoo/promptfoo/compare/0.124.1...0.125.0) (2026-10-23)
 
