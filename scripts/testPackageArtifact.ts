@@ -880,8 +880,10 @@ async function runInstalledNoCacheExtensionEval(
     assert(address && typeof address !== 'string');
     fs.writeFileSync(
       path.join(consumerDir, 'cache hook.mjs'),
-      `import { loadApiProvider } from 'promptfoo';
+      `import assert from 'node:assert/strict';
+import { cache, loadApiProvider } from 'promptfoo';
 export async function beforeEach({ test }) {
+  assert.equal(cache.isCacheEnabled(), !process.argv.includes('--no-cache'));
   const provider = await loadApiProvider(test.vars.url, {
     options: { config: { method: 'GET', maxRetries: 0, transformResponse: 'json.output' } },
   });
@@ -909,6 +911,7 @@ export async function beforeEach({ test }) {
           ...consumerEnv,
           NO_PROXY: '127.0.0.1',
           no_proxy: '127.0.0.1',
+          DOTENV_PATH: os.devNull,
           PROMPTFOO_API_KEY: '',
           PROMPTFOO_DISABLE_SHARING: 'true',
           PROMPTFOO_CACHE_TTL: '3600',
