@@ -283,6 +283,9 @@ List various resources like evals, prompts, and datasets.
 | ------------ | --------------------------------------------------------------- |
 | `-n`         | Show the first n records, sorted by descending date of creation |
 | `--ids-only` | Show only IDs without descriptions                              |
+| `--json`     | Output full IDs and metadata as JSON (not with `--ids-only`)      |
+
+For scripting, use `promptfoo list evals --json`, `promptfoo list prompts --json`, or `promptfoo list datasets --json`. JSON output includes full IDs instead of shortened table values.
 
 ## `promptfoo logs`
 
