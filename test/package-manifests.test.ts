@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-import { intersects, minVersion, satisfies, subset, validRange } from 'semver';
+import { intersects, minVersion, satisfies, validRange } from 'semver';
 import { describe, expect, it } from 'vitest';
 import { extractModuleSpecifiers } from '../scripts/architectureUtils';
 
@@ -24,6 +24,7 @@ type PackageLockManifest<T> = {
 type LockedPackage = {
   name?: string;
   version?: string;
+  dependencies?: Record<string, string>;
 };
 
 function readPackageJson<T>(relativePath: string): T {
@@ -99,13 +100,10 @@ function findKnownBadRanges(
     })
     .filter(([name, range]) => {
       const badRange = knownBadReleases.get(name);
-      // MSAL's first patched release is 7.1.0. intersects() can miss an affected beta in an OR range.
-      if (
-        badRange &&
-        name === '@azure/msal-node' &&
-        (!validRange(range) || !subset(range, '>=7.1.0'))
-      ) {
-        return true;
+      if (badRange && name === '@azure/msal-node') {
+        // Compare conservatively against MSAL's affected beta interval after expanding npm shorthands.
+        const declared = validRange(range);
+        return !declared || intersects(declared, badRange, { includePrerelease: true });
       }
       return badRange && validRange(range) && intersects(range, badRange);
     })
@@ -388,20 +386,25 @@ describe('package manifests', () => {
   });
 
   it('limits known-bad lockfile installs to documented exceptions', () => {
-    const installs = ['package-lock.json', 'code-scan-action/package-lock.json'].flatMap(
-      (lockfile) =>
-        collectLockfileReleaseChecks(
-          readPackageJson<PackageLockManifest<LockedPackage>>(lockfile),
-          KNOWN_BAD_RELEASES,
-        ).map((check) => ({ ...check, id: `${lockfile}: ${check.id}` })),
-    );
+    const installs = ['package-lock.json', 'code-scan-action/package-lock.json'].flatMap((path) => {
+      const lockfile = readPackageJson<PackageLockManifest<LockedPackage>>(path);
+      if (path === 'package-lock.json') {
+        // Retire the nested exception when Azure Identity can use a patched MSAL.
+        expect(
+          lockfile.packages['node_modules/@azure/identity']?.dependencies?.['@azure/msal-node'],
+        ).toBe('^6.0.0');
+      }
+      return collectLockfileReleaseChecks(lockfile, KNOWN_BAD_RELEASES).map((check) => ({
+        ...check,
+        id: `${path}: ${check.id}`,
+      }));
+    });
 
     expect(installs.length).toBeGreaterThan(0);
     const violations = installs
       .filter(({ affected }) => affected)
       .map(({ name, id }) => ({ name, id }));
     expect(violations).toEqual([
-      // Azure Identity requires unpatched MSAL 6.x. Remove this entry with the upstream upgrade.
       {
         name: '@azure/msal-node',
         id: 'package-lock.json: node_modules/@azure/identity/node_modules/@azure/msal-node@6.0.1',
@@ -474,13 +477,13 @@ describe('package manifests', () => {
               mixedCaseScopedAlias: 'NpM:@fixture/leaf@^1.1.0',
               safeAlias: 'npm:fixture-leaf@^2.0.0',
               safeScopedAlias: 'npm:@fixture/leaf@^2.0.0',
-              msalWithAffectedBeta: 'npm:@azure/msal-node@5.0.0-beta.0 || ^7.1.0',
-              patchedMsal: 'npm:@azure/msal-node@^7.1.0',
+              msalWithAffectedBeta: 'npm:@azure/msal-node@1.0.0-beta.0 <2 || ^2.0.0',
+              patchedMsal: 'npm:@azure/msal-node@2.x',
               'fixture-original': 'npm:fixture-replacement@1.0.0',
             },
           },
           new Map([
-            ...KNOWN_BAD_RELEASES,
+            ['@azure/msal-node', '>=1.0.0-beta.0 <2.0.0'],
             ['fixture-leaf', '<2.0.0'],
             ['@fixture/leaf', '<2.0.0'],
             ['fixture-original', '<2.0.0'],
@@ -493,7 +496,7 @@ describe('package manifests', () => {
         '@fixture/leaf@1.0.0',
         'fixture-leaf@1.1.0',
         '@fixture/leaf@^1.1.0',
-        '@azure/msal-node@5.0.0-beta.0 || ^7.1.0',
+        '@azure/msal-node@1.0.0-beta.0 <2 || ^2.0.0',
       ]);
     },
   );
