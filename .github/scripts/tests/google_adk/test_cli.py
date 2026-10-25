@@ -134,7 +134,11 @@ class GoogleAdkCliTest(unittest.TestCase):
         output = json.loads(row["response"]["output"])
         if "steps_json" in row["vars"]:
             prompts = json.loads(row["vars"]["steps_json"])
-            tool_values = (TRIP_NOTE_SUMMARY, output["artifact_names"][0])
+            tool_values = (
+                output["session_state"]["last_city"],
+                TRIP_NOTE_SUMMARY,
+                output["artifact_names"][0],
+            )
         else:
             prompts = [row["vars"]["task"]]
             tool_values = ("Tokyo", output["session_state"]["weather_snapshot"])
