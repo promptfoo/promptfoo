@@ -371,7 +371,7 @@ function serializeTopLevelOperations(
               }
             });
           }, config),
-        false,
+        readTransactionMode.getStore() === 'read',
       ),
     );
   }) as typeof db.transaction;
@@ -379,7 +379,7 @@ function serializeTopLevelOperations(
   return db;
 }
 
-/** Read one snapshot without reserving a writer on the database. */
+/** Read one snapshot without reserving a writer; callers must tolerate a retry after a lock. */
 export async function withReadTransaction<T>(read: (tx: DatabaseReader) => Promise<T>): Promise<T> {
   const db = await getDb();
   return readTransactionMode.run('read', () =>

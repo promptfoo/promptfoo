@@ -2930,14 +2930,27 @@ describe('ResultsTable Pass Rate Display', () => {
 
   it.each([
     [undefined, null, 'Pass rate unavailable'],
-    [0, null, '0.00% passing (0/0 cases across the full eval)'],
+    [{}, null, 'Pass rate unavailable'],
+    [{ testPassCount: 1 }, null, 'Pass rate unavailable'],
+    [{ testFailCount: 2 }, null, 'Pass rate unavailable'],
+    [
+      { testPassCount: 0, testFailCount: 0 },
+      null,
+      '0.00% passing (0/0 cases across the full eval)',
+    ],
     [undefined, [{ testPassCount: 1, testFailCount: 0 }], '100.00% passing (1/1 filtered)'],
   ] as const)(
     'distinguishes missing metrics from zero: %s, %o',
-    (totalPasses, filteredMetrics, label) => {
+    (metrics, filteredMetrics, label) => {
       vi.mocked(useTableStore).mockImplementation(() =>
         createTableStore({
-          table: { ...mockTable, head: createPromptHead([], totalPasses, 0) },
+          table: {
+            ...mockTable,
+            head: {
+              ...mockTable.head,
+              prompts: mockTable.head.prompts.map((p) => ({ ...p, metrics })),
+            },
+          },
           filteredMetrics,
           filteredResultsCount: 1,
         }),

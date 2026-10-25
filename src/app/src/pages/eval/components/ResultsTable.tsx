@@ -1128,9 +1128,12 @@ function PromptColumnHeader({
   const columnId = `Prompt ${idx + 1}`;
   const { total: metrics, filtered: filteredMetrics } = getMetrics(idx);
   const passRate = passRates[idx];
-  const totalCases = metrics && `${passingTestCounts[idx]?.total}/${testCounts[idx]?.total}`;
+  const totalCases =
+    typeof metrics?.testPassCount === 'number' && typeof metrics?.testFailCount === 'number'
+      ? `${passingTestCounts[idx]?.total}/${testCounts[idx]?.total}`
+      : null;
   const filteredCases = `${passingTestCounts[idx]?.filtered}/${testCounts[idx]?.filtered}`;
-  const hasPassRate = metrics !== null || passRate?.filtered != null;
+  const hasPassRate = totalCases !== null || passRate?.filtered != null;
 
   return (
     <div className="output-header">

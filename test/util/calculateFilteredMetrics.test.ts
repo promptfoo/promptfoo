@@ -6,6 +6,7 @@ import { clearEvalTables } from '../util/evalDb';
  * on filtered evaluation results.
  */
 
+import { createClient } from '@libsql/client/node';
 import { sql } from 'drizzle-orm';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getDb } from '../../src/database/index';
@@ -13,6 +14,7 @@ import { runDbMigrations } from '../../src/migrate';
 import Eval from '../../src/models/eval';
 import { ResultFailureReason } from '../../src/types/index';
 import { calculateFilteredMetrics } from '../../src/util/calculateFilteredMetrics';
+import { sleep } from '../../src/util/time';
 import { createEvaluateResult } from '../factories/eval';
 import EvalFactory from '../factories/evalFactory';
 
@@ -785,56 +787,53 @@ describe('calculateFilteredMetrics', () => {
   });
 
   describe('error handling', () => {
-    it('should return empty metrics array on database error', async () => {
-      // Invalid eval ID
+    it('returns zero counts when the eval has no results', async () => {
       const metrics = await calculateFilteredMetrics({
-        evalId: 'nonexistent-eval-id',
+        evalId: 'no-results',
         numPrompts: 2,
-        whereSql: sql`eval_id = ${'nonexistent-eval-id'}`,
+        whereSql: sql`eval_id = ${'no-results'}`,
       });
-
-      expect(metrics).toHaveLength(2);
-      expect(metrics[0]).toMatchObject({
-        score: 0,
-        testPassCount: 0,
-        testFailCount: 0,
-        testErrorCount: 0,
-        assertPassCount: 0,
-        assertFailCount: 0,
-        totalLatencyMs: 0,
-        tokenUsage: {
-          total: 0,
-          prompt: 0,
-          completion: 0,
-          cached: 0,
-          numRequests: 0,
-        },
-        namedScores: {},
-        namedScoresCount: {},
-        cost: 0,
-      });
+      expect(metrics.map((prompt) => prompt.testPassCount)).toEqual([0, 0]);
     });
 
-    it('should handle invalid WHERE SQL gracefully', async () => {
-      const eval_ = await EvalFactory.create({
-        numResults: 10,
-        resultTypes: ['success'],
-      });
+    it('reports a query failure instead of zero matches', async () => {
+      await expect(
+        calculateFilteredMetrics({
+          evalId: 'no-results',
+          numPrompts: 1,
+          whereSql: sql`invalid SQL`,
+        }),
+      ).rejects.toThrow();
+    });
 
-      // Invalid SQL syntax - using sql.raw to simulate malformed SQL fragment
-      // Note: In practice, with SQL fragments this is harder to achieve,
-      // but we test the error handling path
-      const whereSql = sql`INVALID SQL SYNTAX HERE`;
-
-      const metrics = await calculateFilteredMetrics({
-        evalId: eval_.id,
-        numPrompts: 1,
-        whereSql,
-      });
-
-      // Should fallback to empty metrics
-      expect(metrics).toHaveLength(1);
-      expect(metrics[0].testPassCount).toBe(0);
+    it.each(['released', 'held'])('retries a read lock that is %s', async (lock) => {
+      const { id } = await EvalFactory.create({ numResults: 1, resultTypes: ['success'] });
+      const holder = createClient({ url: 'file::memory:?cache=shared' });
+      const writer = await holder.transaction('write');
+      try {
+        await writer.execute({
+          sql: 'UPDATE eval_results SET success = 0 WHERE eval_id = ?',
+          args: [id],
+        });
+        const outcome = calculateFilteredMetrics({
+          evalId: id,
+          numPrompts: 1,
+          whereSql: sql`eval_id = ${id}`,
+        }).then(
+          ([metrics]) => metrics.testPassCount,
+          (error: unknown) => error,
+        );
+        if (lock === 'released') {
+          await sleep(30);
+          await writer.rollback();
+          expect(await outcome).toBe(1);
+        } else {
+          expect(await outcome).toBeInstanceOf(Error);
+        }
+      } finally {
+        writer.close();
+        holder.close();
+      }
     });
   });
 

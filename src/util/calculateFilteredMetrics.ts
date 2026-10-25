@@ -201,39 +201,29 @@ export async function calculateFilteredMetrics(
   opts: FilteredMetricsOptions,
 ): Promise<PromptMetrics[]> {
   const { evalId, numPrompts, whereSql } = opts;
-  let result: PromptMetrics[] | string;
-  try {
-    result = await withReadTransaction(async (tx) => {
-      // A retained retry makes the cell ambiguous even when only one attempt passed its filters.
-      const summary = await tx.get<{ count: number; overlapping: number | null }>(sql`
-        WITH matched AS MATERIALIZED (
-          SELECT test_idx, prompt_idx FROM eval_results WHERE ${whereSql} LIMIT ${MAX_RESULTS_FOR_METRICS + 1}
-        )
-        SELECT COUNT(*) AS count, CASE WHEN COUNT(*) BETWEEN 1 AND ${MAX_RESULTS_FOR_METRICS} THEN EXISTS (
-          SELECT 1 FROM eval_results
-          WHERE eval_id = ${evalId} AND (test_idx, prompt_idx) IN (SELECT test_idx, prompt_idx FROM matched)
-          GROUP BY test_idx, prompt_idx HAVING COUNT(*) > 1
-        ) END AS overlapping FROM matched
-      `);
-      if (!summary?.count) {
-        return createEmptyMetricsArray(numPrompts);
-      }
-      if (summary.count > MAX_RESULTS_FOR_METRICS) {
-        return `Filtered result count exceeds ${MAX_RESULTS_FOR_METRICS}`;
-      }
-      if (summary.overlapping) {
-        return 'A filtered row contains overlapping attempts for the same output';
-      }
-      return calculateWithOptimizedQuery(tx, opts);
-    });
-  } catch (error) {
-    logger.error('Failed to calculate filtered metrics', { error });
-    return createEmptyMetricsArray(numPrompts);
-  }
-  if (typeof result === 'string') {
-    throw new Error(result);
-  }
-  return result;
+  return withReadTransaction(async (tx) => {
+    // A retained retry makes the cell ambiguous even when only one attempt passed its filters.
+    const summary = await tx.get<{ count: number; overlapping: number | null }>(sql`
+      WITH matched AS MATERIALIZED (
+        SELECT test_idx, prompt_idx FROM eval_results WHERE ${whereSql} LIMIT ${MAX_RESULTS_FOR_METRICS + 1}
+      )
+      SELECT COUNT(*) AS count, CASE WHEN COUNT(*) BETWEEN 1 AND ${MAX_RESULTS_FOR_METRICS} THEN EXISTS (
+        SELECT 1 FROM eval_results
+        WHERE eval_id = ${evalId} AND (test_idx, prompt_idx) IN (SELECT test_idx, prompt_idx FROM matched)
+        GROUP BY test_idx, prompt_idx HAVING COUNT(*) > 1
+      ) END AS overlapping FROM matched
+    `);
+    if (!summary?.count) {
+      return createEmptyMetricsArray(numPrompts);
+    }
+    if (summary.count > MAX_RESULTS_FOR_METRICS) {
+      throw new Error(`Filtered result count exceeds ${MAX_RESULTS_FOR_METRICS}`);
+    }
+    if (summary.overlapping) {
+      throw new Error('A filtered row contains overlapping attempts for the same output');
+    }
+    return calculateWithOptimizedQuery(tx, opts);
+  });
 }
 
 /** Aggregate all prompts together using parameterized SQL. */
@@ -548,10 +538,7 @@ async function aggregateAssertions(
   }
 }
 
-/**
- * Create empty metrics array initialized with zeros.
- * Used as fallback when calculation fails or no results found.
- */
+/** Initialize each prompt's metrics, including prompts with no matching results. */
 function createEmptyMetricsArray(numPrompts: number): PromptMetrics[] {
   return Array.from({ length: numPrompts }, () => ({
     score: 0,

@@ -1,4 +1,4 @@
-import { DatabaseSync } from 'node:sqlite';
+import { execFileSync } from 'node:child_process';
 
 import { sql } from 'drizzle-orm';
 import { expect, it, vi } from 'vitest';
@@ -13,7 +13,6 @@ it('keeps one metrics snapshot when another connection saves a retry', async () 
   const dir = createTempDir();
   const restoreEnv = mockProcessEnv({ IS_TESTING: 'false' });
   setConfigDirectoryPath(dir);
-  let writer: DatabaseSync | undefined;
   try {
     await runDbMigrations();
     const { id } = await EvalFactory.create({
@@ -21,15 +20,24 @@ it('keeps one metrics snapshot when another connection saves a retry', async () 
       resultTypes: ['success'],
       withNamedScores: true,
     });
-    writer = new DatabaseSync(getDbPath());
-    const retry = writer.prepare(`
+    const retrySql = `
       INSERT INTO eval_results (id, eval_id, test_idx, prompt_idx, test_case, prompt, provider, success, score, named_scores, grading_result)
       SELECT 'retry', eval_id, test_idx, prompt_idx, test_case, prompt, provider, success, score, named_scores, grading_result
-      FROM eval_results WHERE eval_id = ?`);
-    // Let the overlap check finish, then commit the retry before the first aggregate reads.
+      FROM eval_results WHERE eval_id = ?`;
+    const writeRetry = () =>
+      execFileSync(process.execPath, [
+        '-e',
+        `const db = new (require('node:sqlite').DatabaseSync)(process.argv[1]);
+         db.prepare(process.argv[2]).run(process.argv[3]);
+         db.close();`,
+        getDbPath(),
+        retrySql,
+        id,
+      ]);
+    // A separate process must acquire the WAL writer lock after preflight, before aggregation.
     vi.spyOn(DrizzleLogWriter.prototype, 'write')
       .mockImplementationOnce(() => {})
-      .mockImplementationOnce(() => retry.run(id));
+      .mockImplementationOnce(writeRetry);
     const read = () =>
       calculateFilteredMetrics({ evalId: id, numPrompts: 1, whereSql: sql`eval_id = ${id}` });
 
@@ -41,7 +49,6 @@ it('keeps one metrics snapshot when another connection saves a retry', async () 
     await expect(read()).rejects.toThrow('overlapping attempts');
   } finally {
     vi.restoreAllMocks();
-    writer?.close();
     await closeDb();
     setConfigDirectoryPath(undefined);
     restoreEnv();
