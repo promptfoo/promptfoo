@@ -25,6 +25,7 @@ type LockedPackage = {
   name?: string;
   version?: string;
   dependencies?: Record<string, string>;
+  acceptDependencies?: Record<string, string>;
 };
 
 function readPackageJson<T>(relativePath: string): T {
@@ -131,8 +132,10 @@ function collectLockfileReleaseChecks(
 
 function azureIdentityMsalRequirement(lockfile: PackageLockManifest<LockedPackage>) {
   const identity = lockfile.packages['node_modules/@azure/identity'];
-  return (identity?.name ?? '@azure/identity') === '@azure/identity'
-    ? identity?.dependencies?.['@azure/msal-node']
+  return identity?.version === '4.13.3' &&
+    (identity.name ?? '@azure/identity') === '@azure/identity' &&
+    identity.acceptDependencies?.['@azure/msal-node'] === undefined
+    ? identity.dependencies?.['@azure/msal-node']
     : undefined;
 }
 
@@ -420,13 +423,18 @@ describe('package manifests', () => {
     ]);
   });
 
-  it('does not grant the MSAL exception to an aliased parent', () => {
+  it.each([
+    { name: 'fixture-replacement' },
+    { version: '4.14.0' },
+    { acceptDependencies: { '@azure/msal-node': '^7.1.0' } },
+  ])('rechecks the MSAL exception when Azure Identity changes: %j', (change) => {
     expect(
       azureIdentityMsalRequirement({
         packages: {
           'node_modules/@azure/identity': {
-            name: 'fixture-replacement',
+            version: '4.13.3',
             dependencies: { '@azure/msal-node': '^6.0.0' },
+            ...change,
           },
         },
       }),
