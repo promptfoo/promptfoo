@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-import { inc, intersects, minVersion, Range, satisfies, valid, validRange } from 'semver';
+import { type Comparator, inc, minVersion, Range, satisfies, validRange } from 'semver';
 import { describe, expect, it } from 'vitest';
 import { extractModuleSpecifiers } from '../scripts/architectureUtils';
 
@@ -32,44 +32,38 @@ function readPackageJson<T>(relativePath: string): T {
 }
 
 function intersectsAdvisory(declared: string, affected: string): boolean {
-  // npm declarations must opt in to prereleases; an advisory covers everything between its bounds.
-  const declaration = new Range(declared);
   const advisory = new Range(affected, { includePrerelease: true });
-  const matches = (version: string | null) =>
-    version !== null && declaration.test(version) && advisory.test(version);
-  return (
-    matches('0.0.0') ||
-    [...declaration.set, ...advisory.set].flat().some(({ value, operator, semver }) => {
-      if (!value) {
-        return false; // wildcard
-      }
-      const candidates = [
-        semver.version,
-        inc(semver, 'patch'),
-        inc(semver, 'minor'),
-        inc(semver, 'major'),
+  const release = (c: Comparator) => c.semver.version.split('-')[0];
+  return new Range(declared).set.some((declaration) =>
+    advisory.set.some((clause) => {
+      const bounds = [...declaration, ...clause].filter((c) => c.value);
+      const stable = [
+        '0.0.0',
+        ...bounds.flatMap((c) => [
+          release(c),
+          inc(c.semver, 'patch'),
+          inc(c.semver, 'minor'),
+          inc(c.semver, 'major'),
+        ]),
       ];
-      if (semver.prerelease.length) {
-        const tuple = `${semver.major}.${semver.minor}.${semver.patch}`;
-        const successor = `${semver.version}.0`;
-        // At npm's length limit compare the interval only for clauses that opt in to this tuple.
-        if (
-          operator === '>' &&
-          !valid(successor) &&
-          declaration.set.some(
-            (clause) =>
-              clause.some((c) => c.semver.version?.startsWith(`${tuple}-`)) &&
-              intersects([...clause, `>${semver.version}`, `<${tuple}`].join(' '), affected, {
-                includePrerelease: true,
-              }),
-          )
-        ) {
-          return true;
-        }
-        candidates.push(`${tuple}-0`, successor);
+      if (stable.some((v) => v && bounds.every((c) => c.test(v)))) {
+        return true;
       }
-      return candidates.some(matches);
-    })
+      // npm declarations only opt in to prereleases at the release tuples they name.
+      return declaration.some((c) => {
+        if (!c.value || !c.semver.prerelease.length) {
+          return false;
+        }
+        const tuple = release(c);
+        const floor = `${tuple}-0`;
+        const local = bounds.filter((bound) => release(bound) === tuple);
+        // A bound at another tuple accepts the whole prerelease interval or none of it.
+        return (
+          bounds.every((bound) => local.includes(bound) || bound.test(floor)) &&
+          minVersion([...local, `>=${floor}`, `<${tuple}`].join(' ')) !== null
+        );
+      });
+    }),
   );
 }
 
