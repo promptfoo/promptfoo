@@ -249,7 +249,7 @@ const config: Config = {
           position: 'right',
         },
         {
-          href: 'https://discord.gg/promptfoo',
+          href: 'https://discord.gg/gHPS9jjfbs',
           position: 'right',
           className: 'header-discord-link',
           'aria-label': 'Discord community',
@@ -400,7 +400,7 @@ const config: Config = {
             },
             {
               label: 'Discord',
-              href: 'https://discord.gg/promptfoo',
+              href: 'https://discord.gg/gHPS9jjfbs',
             },
             {
               label: 'LinkedIn',
