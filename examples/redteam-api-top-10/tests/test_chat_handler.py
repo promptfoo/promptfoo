@@ -50,7 +50,20 @@ class ChatHandlerTest(unittest.IsolatedAsyncioTestCase):
             async with httpx2.AsyncClient(
                 transport=httpx2.ASGITransport(app=app), base_url="http://app.test"
             ) as web:
-                for block in (text, search):
+                content_document = {
+                    **document,
+                    "source": {"type": "content", "content": [text]},
+                }
+                fetched = {
+                    "type": "web_fetch_tool_result",
+                    "tool_use_id": "fetch",
+                    "content": {
+                        "type": "web_fetch_result",
+                        "url": "https://example.test",
+                        "content": content_document,
+                    },
+                }
+                for block in (text, search, content_document, fetched):
                     message = [{"role": "user", "content": [document, block]}]
                     response = await web.post(
                         "/chat/", json={**request, "message": message}
