@@ -1,5 +1,5 @@
-import { doesProviderRefMatch, getProviderDescription } from './provider';
 import { getProviderIdAndLabel } from './eval/filterProviders';
+import { doesProviderRefMatch, getProviderDescription } from './provider';
 
 import type { ProviderOptions, Scenario, TestCase } from '../types/index';
 import type { ApiProvider, ProviderOptionsMap } from '../types/providers';
