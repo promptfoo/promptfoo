@@ -357,7 +357,7 @@ function Contact(): React.ReactElement {
                     <ArrowForwardIcon className={styles.resourceLinkIcon} />
                   </MuiLink>
                   <MuiLink
-                    href="https://discord.gg/promptfoo"
+                    href="https://discord.gg/gHPS9jjfbs"
                     target="_blank"
                     rel="noreferrer"
                     className={styles.resourceLink}

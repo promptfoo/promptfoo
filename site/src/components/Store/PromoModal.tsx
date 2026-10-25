@@ -9,7 +9,7 @@ import IconButton from '@mui/material/IconButton';
 import SvgIcon from '@mui/material/SvgIcon';
 import Typography from '@mui/material/Typography';
 
-const DISCORD_URL = 'https://discord.gg/promptfoo';
+const DISCORD_URL = 'https://discord.gg/gHPS9jjfbs';
 const GITHUB_URL = 'https://github.com/promptfoo/promptfoo';
 
 function DiscordIcon(props: React.ComponentProps<typeof SvgIcon>) {
