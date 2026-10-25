@@ -78,7 +78,7 @@ ADK 2.x emits OpenTelemetry spans such as:
 
 The example provider preserves Promptfoo's W3C `traceparent`, starts a small provider span beneath it, and exports ADK's child spans to Promptfoo's built-in OTLP receiver. Promptfoo recognizes `gen_ai.tool.name` and tool-call arguments from both ADK telemetry schemas without a custom span translator.
 
-ADK 2.13 uses telemetry v2 by default. Without span content capture, tool names remain visible, but the `trajectory:tool-args-match` assertions fail because the arguments are missing. To keep model messages and tool content out of spans, set `OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT=NO_CONTENT` and `ADK_CAPTURE_MESSAGE_CONTENT_IN_SPANS=false` (the latter controls legacy spans, which capture content by default).
+ADK 2.13 uses telemetry v2 by default. Without span content capture, tool names remain visible, but the `trajectory:tool-args-match` assertions fail because the arguments are missing. To disable message and tool content on ADK spans, set `OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT=NO_CONTENT` and `ADK_CAPTURE_MESSAGE_CONTENT_IN_SPANS=false` (legacy spans capture content by default). Leave Promptfoo’s separate Python worker tracing (`PROMPTFOO_ENABLE_OTEL`) off if you also want to avoid recording provider request and response bodies.
 
 ```yaml
 assert:
