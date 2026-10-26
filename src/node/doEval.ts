@@ -879,12 +879,20 @@ async function doEvalWithEnv(
 
     // Create or load eval record
     const author = getAuthor();
+    const sourceIndexByTest = new Map<(typeof sourceTests)[number], number>();
+    if (!resumeEval && filterMetadataExact !== undefined) {
+      for (const [index, test] of sourceTests.entries()) {
+        if (!sourceIndexByTest.has(test)) {
+          sourceIndexByTest.set(test, index);
+        }
+      }
+    }
     const savedConfig =
       !resumeEval && filterMetadataExact !== undefined
         ? {
             ...config,
             tests: (testSuite.tests ?? []).map((test) => {
-              let sourceIndex = sourceTests.indexOf(test);
+              let sourceIndex = sourceIndexByTest.get(test) ?? -1;
               if (sourceIndex < 0) {
                 const copiedSourceIndices = sourceTests.flatMap((source, index) =>
                   Object.keys(source).filter((key) => key !== 'vars').length ===

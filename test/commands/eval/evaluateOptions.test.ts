@@ -1204,6 +1204,57 @@ describe('evaluateOptions behavior', () => {
       });
     });
 
+    it('should persist normal exact selections without scanning source tests per selected test', async () => {
+      const tempConfig = writeTempConfig(tmpDir, 'test-exact-source-lookup.yaml', {
+        providers: ['echo'],
+        prompts: ['Hello {{id}}'],
+        tests: Array.from({ length: 100 }, (_, id) => ({
+          vars: { id },
+          metadata: { category: id % 2 === 0 ? 'selected' : 'excluded' },
+        })),
+      });
+      const originalIndexOf = Array.prototype.indexOf;
+      let selectedTestScans = 0;
+      const indexOfSpy = vi.spyOn(Array.prototype, 'indexOf').mockImplementation(function (
+        this: unknown[],
+        value: unknown,
+        fromIndex?: number,
+      ) {
+        if (
+          value &&
+          typeof value === 'object' &&
+          'metadata' in value &&
+          value.metadata &&
+          typeof value.metadata === 'object' &&
+          'category' in value.metadata &&
+          value.metadata.category === 'selected'
+        ) {
+          selectedTestScans++;
+        }
+        return originalIndexOf.call(this, value, fromIndex);
+      });
+      try {
+        await doEval(
+          {
+            table: false,
+            write: false,
+            config: [tempConfig],
+            filterMetadataExact: 'category=selected',
+          },
+          {},
+          undefined,
+          {},
+        );
+        const initialEval = evaluateMock.mock.calls.at(-1)?.[1] as Eval;
+        expect(
+          Array.isArray(initialEval.config.tests) ? initialEval.config.tests : [],
+        ).toHaveLength(50);
+        expect(selectedTestScans).toBe(0);
+      } finally {
+        indexOfSpy.mockRestore();
+      }
+    });
+
     it('should persist the selected source when tests share vars and provider', async () => {
       const tempConfig = writeTempConfig(tmpDir, 'test-exact-duplicate-vars-resume.yaml', {
         providers: ['echo'],
