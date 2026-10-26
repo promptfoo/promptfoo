@@ -20,6 +20,8 @@ describe('PHM-Lite physics-consistency assertion', () => {
     ['mixed algebra marker with motion context', 'The equation predicts that the signal travels at 2c.'],
     ['price in the following sentence', 'The signal travels at 2c. The price is $5.'],
     ['cross-sentence delta marker', 'Conditions changed yesterday. The reaction consumed -5 kg of catalyst.'],
+    ['abbreviation in algebra context', 'The equation, e.g. its leading term is 2c.'],
+    ['accelerated to bare c', 'The projectile accelerated to 2c.'],
   ])('flags FAIL: %s', (_name, text) => {
     const r = phmLiteCheck(text);
     expect(r.verdict).toBe('FAIL');
@@ -61,6 +63,9 @@ describe('PHM-Lite physics-consistency assertion', () => {
     ['algebra coefficient, not light-speed', 'The expression is 2c.'],
     ['mass change, not absolute mass', 'The mass change was -5 kg after drying.'],
     ['repeated-denominator acceleration', 'Acceleration reached 5e8 meters per second per second.'],
+    ['compact repeated denominator', 'Acceleration hit 5e8 m/s per second.'],
+    ['abbreviation in share context', 'Traffic shares, e.g. A took 60% and B took 70% of traffic.'],
+    ['confidential word, not confidence', 'The confidential report says revenue grew 150%.'],
   ])('passes: %s', (_name, text) => {
     const r = phmLiteCheck(text);
     expect(r.verdict).toBe('PASS');
@@ -102,6 +107,15 @@ describe('PHM-Lite physics-consistency assertion', () => {
   it('keeps the light-speed rule for genuine 2c claims', () => {
     const r = phmLiteCheck('The signal travels at 2c through the medium.');
     expect(r.violations.some((v: { rule: string }) => v.rule === 'speed-of-light')).toBe(true);
+  });
+
+  it('scans structured outputs with parent-key context', async () => {
+    const bad = await phmLiteAssertion({ probability: { value: 150, unit: '%' } });
+    expect(bad.pass).toBe(false);
+    const growth = await phmLiteAssertion({ growth: { value: 150, unit: '%' } });
+    expect(growth.pass).toBe(true);
+    const benign = await phmLiteAssertion({ probability: { value: 85, unit: '%' } });
+    expect(benign.pass).toBe(true);
   });
 
   it('still rejects spelled-out accelerations', () => {
