@@ -9,6 +9,7 @@ import logger from '../../../src/logger';
 import Eval from '../../../src/models/eval';
 import { doEval } from '../../../src/node/doEval';
 import * as retryModule from '../../../src/node/retry';
+import * as configLoadModule from '../../../src/util/config/load';
 import { isSafeMode } from '../../../src/util/safeMode';
 import { mockProcessEnv } from '../../util/utils';
 import type { Command } from 'commander';
@@ -1205,34 +1206,32 @@ describe('evaluateOptions behavior', () => {
     });
 
     it('should persist normal exact selections without scanning source tests per selected test', async () => {
+      const sourceCount = 100;
       const tempConfig = writeTempConfig(tmpDir, 'test-exact-source-lookup.yaml', {
         providers: ['echo'],
         prompts: ['Hello {{id}}'],
-        tests: Array.from({ length: 100 }, (_, id) => ({
+        tests: Array.from({ length: sourceCount }, (_, id) => ({
           vars: { id },
           metadata: { category: id % 2 === 0 ? 'selected' : 'excluded' },
         })),
       });
-      const originalIndexOf = Array.prototype.indexOf;
-      let selectedTestScans = 0;
-      const indexOfSpy = vi.spyOn(Array.prototype, 'indexOf').mockImplementation(function (
-        this: unknown[],
-        value: unknown,
-        fromIndex?: number,
-      ) {
-        if (
-          value &&
-          typeof value === 'object' &&
-          'metadata' in value &&
-          value.metadata &&
-          typeof value.metadata === 'object' &&
-          'category' in value.metadata &&
-          value.metadata.category === 'selected'
-        ) {
-          selectedTestScans++;
-        }
-        return originalIndexOf.call(this, value, fromIndex);
-      });
+      let sourceReads = 0;
+      const resolveConfigs = configLoadModule.resolveConfigs;
+      const resolveSpy = vi
+        .spyOn(configLoadModule, 'resolveConfigs')
+        .mockImplementation(async (...args) => {
+          const resolved = await resolveConfigs(...args);
+          const tests = resolved.testSuite.tests ?? [];
+          resolved.testSuite.tests = new Proxy(tests, {
+            get(target, key, receiver) {
+              if (typeof key === 'string' && /^(0|[1-9]\d*)$/.test(key)) {
+                sourceReads++;
+              }
+              return Reflect.get(target, key, receiver);
+            },
+          });
+          return resolved;
+        });
       try {
         await doEval(
           {
@@ -1249,9 +1248,9 @@ describe('evaluateOptions behavior', () => {
         expect(
           Array.isArray(initialEval.config.tests) ? initialEval.config.tests : [],
         ).toHaveLength(50);
-        expect(selectedTestScans).toBe(0);
+        expect(sourceReads).toBeLessThan(sourceCount * 10);
       } finally {
-        indexOfSpy.mockRestore();
+        resolveSpy.mockRestore();
       }
     });
 
