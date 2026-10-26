@@ -158,7 +158,7 @@ function isReviewedMsalInstall(
   );
 }
 
-// Review the complete npm script chain used by the Docker build, including implicit hooks.
+// Review the npm script definitions used by the Docker build, including implicit hooks.
 // A script change must be reviewed here too, rather than silently permitting new install commands.
 const DOCKER_BUILD_SCRIPTS: Record<string, Record<string, string | undefined>> = {
   'package.json': {
@@ -184,11 +184,16 @@ function validateDockerInstallCommands(
   dockerfile: string,
   buildManifests: Record<string, PackageManifest> = {},
 ): void {
-  const instructions = dockerfile
+  const logicalInstructions = dockerfile
     .split('\n')
     .filter((line) => !line.trimStart().startsWith('#'))
     .join('\n')
     .replace(/\\\r?\n/g, ' ')
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean);
+  const instructions = logicalInstructions
+    .join('\n')
     // Normalize literal shell spelling so n\\pm and n'p'm cannot hide npm.
     // This intentionally errs toward rejecting quoted command-like text.
     .replace(/\\(.)/g, '$1')
@@ -196,6 +201,23 @@ function validateDockerInstallCommands(
   // Docker uses npm only. Other package managers and their execution entry points need
   // a deliberate policy change, even when the required safe npm commands are also present.
   expect(instructions).not.toMatch(/(?<![\w.-])(?:npx|pnpm|pnpx|yarn|yarnpkg|bun|bunx|corepack)\b/);
+  expect(instructions).not.toMatch(/(?<![\w.-])node\b[^;&|()`\n]*--run\b/);
+  // Support only the current standalone build immediately after an explicit root WORKDIR.
+  // This binds the reviewed manifests to the build without interpreting shell cd or stage state.
+  for (const [index, instruction] of instructions.split('\n').entries()) {
+    // The optional Python version is the only reviewed RUN expansion. Bind it to its
+    // complete install command; other dynamic commands and heredocs need policy review.
+    const isPythonInstall =
+      instruction.replace(/\s+/g, ' ') ===
+      'RUN apk add --no-cache python3${PYTHON_VERSION:+~=${PYTHON_VERSION}} py3-pip py3-setuptools curl && ln -sf python3 /usr/bin/python';
+    if (/^RUN\b/i.test(instruction) && !isPythonInstall) {
+      expect(instruction).not.toMatch(/[$`]|<</);
+    }
+    if (/(?<![\w.-])npm\s+run\b/.test(instruction)) {
+      expect(logicalInstructions[index]).toBe('RUN npm run build');
+      expect(logicalInstructions[index - 1]).toBe('WORKDIR /app');
+    }
+  }
   // Stop at every shell separator and substitution so each nested npm is checked separately.
   const commands = [...instructions.matchAll(/(?<![\w.-])npm\b([^;&|()`\n]*)/g)].map(([, text]) =>
     text.trim().split(/\s+/),
@@ -208,7 +230,15 @@ function validateDockerInstallCommands(
     expect(['ci', 'rebuild', 'run', 'pkg']).toContain(command);
     if (command === 'ci') {
       expect(args).toContain('--ignore-scripts');
-      expect(args.some((arg) => arg.startsWith('--ignore-scripts='))).toBe(false);
+      for (const arg of args) {
+        expect([
+          '--ignore-scripts',
+          '--install-links',
+          '--include=peer',
+          '--omit=dev',
+          '--workspaces=false',
+        ]).toContain(arg);
+      }
     } else if (command === 'rebuild') {
       // Package names and globs can rebuild untrusted nested dependencies.
       expect(args).toEqual(['./node_modules/esbuild']);
@@ -800,6 +830,18 @@ describe('package manifests', () => {
     'RUN bun install',
     'RUN bunx fixture-package',
     'RUN corepack pnpm install',
+    'RUN node --run unreviewed-script',
+    'RUN node --run=unreviewed-script',
+    'RUN /usr/local/bin/node --no-warnings --run unreviewed-script',
+    'RUN ["node","--run","unreviewed-script"]',
+    'RUN n${UNSET}pm ci',
+    'RUN n${UNSET}px fixture-package',
+    'RUN env n${UNSET}px fixture-package',
+    'RUN ${COMMAND} fixture-package',
+    'RUN `printf fixture-command`',
+    'RUN python3${PYTHON_VERSION:+~=${PYTHON_VERSION}}',
+    'RUN echo python3${PYTHON_VERSION:+~=${PYTHON_VERSION}}',
+    'RUN <<EOF\nn${UNSET}pm ci\nEOF',
     'RUN npm exec fixture-package',
     'RUN npm run unreviewed-script',
     'RUN npm run build --prefix site',
@@ -819,6 +861,10 @@ describe('package manifests', () => {
     'RUN npm --prefix /app ci',
     'RUN npm --silent rebuild esbuild',
     'RUN npm ci --ignore-scripts=false',
+    'RUN npm ci --ignore-scripts --no-ignore-scripts',
+    'RUN npm ci --ignore-scripts false',
+    'RUN npm ci --ignore-scripts --ignore-scripts false',
+    'RUN npm ci --ignore-scripts --foreground-scripts',
     'RUN npm rebuild esbuild',
     'RUN npm rebuild ./node_modules/*',
     // Every shell and Dockerfile form that still executes npm.
@@ -831,7 +877,8 @@ describe('package manifests', () => {
     'RUN node /usr/local/lib/node_modules/npm/bin/npm-cli.js ci',
     'RUN <<EOF\nnpm ci\nEOF',
   ])('rejects an additional unsafe Docker command: %s', (unsafeCommand) => {
-    const safeCommands = 'RUN npm ci --ignore-scripts && npm rebuild ./node_modules/esbuild';
+    const safeCommands =
+      'RUN npm ci --ignore-scripts && npm rebuild ./node_modules/esbuild\nWORKDIR /app';
     const manifests = {
       'package.json': readPackageJson<PackageManifest>('package.json'),
       'src/app/package.json': readPackageJson<PackageManifest>('src/app/package.json'),
@@ -841,9 +888,32 @@ describe('package manifests', () => {
     ).toThrow();
     expect(() =>
       validateDockerInstallCommands(
-        `${safeCommands} && ${unsafeCommand.replace('RUN ', '')}`,
+        `WORKDIR /app\nRUN npm ci --ignore-scripts && npm rebuild ./node_modules/esbuild && ${unsafeCommand.replace('RUN ', '')}`,
         manifests,
       ),
+    ).toThrow();
+  });
+
+  it.each([
+    'WORKDIR /app\nRUN cd site && npm run build',
+    'WORKDIR /app/site\nRUN npm run build',
+    'WORKDIR /app\nWORKDIR site\nRUN npm run build',
+    'WORKDIR /app\nFROM node AS other\nRUN npm run build',
+    'RUN npm run build',
+    'WORKDIR /app\nRUN env npm run build',
+    'WORKDIR /app\nRUN NPM_CONFIG_PREFIX=site npm run build',
+    'WORKDIR /app\nRUN --mount=type=bind,target=/app npm run build',
+    'WORKDIR /app\nRUN cd "site" && n\\pm run build',
+    'WORKDIR /app\nRUN cd site && \\\n    npm run build',
+  ])('rejects an unreviewed Docker build context: %s', (buildInstructions) => {
+    const manifests = {
+      'package.json': readPackageJson<PackageManifest>('package.json'),
+      'src/app/package.json': readPackageJson<PackageManifest>('src/app/package.json'),
+    };
+    const install = 'RUN npm ci --ignore-scripts && npm rebuild ./node_modules/esbuild';
+
+    expect(() =>
+      validateDockerInstallCommands(`${install}\n${buildInstructions}`, manifests),
     ).toThrow();
   });
 
@@ -865,14 +935,12 @@ describe('package manifests', () => {
       'package.json': readPackageJson<PackageManifest>('package.json'),
       'src/app/package.json': readPackageJson<PackageManifest>('src/app/package.json'),
     };
-    manifests[manifestPath].scripts![script] = 'echo changed-script';
+    const dockerfile =
+      'RUN npm ci --ignore-scripts && npm rebuild ./node_modules/esbuild\nWORKDIR /app\nRUN npm run build';
+    expect(() => validateDockerInstallCommands(dockerfile, manifests)).not.toThrow();
 
-    expect(() =>
-      validateDockerInstallCommands(
-        'RUN npm ci --ignore-scripts && npm rebuild ./node_modules/esbuild && npm run build',
-        manifests,
-      ),
-    ).toThrow();
+    manifests[manifestPath].scripts![script] = 'echo changed-script';
+    expect(() => validateDockerInstallCommands(dockerfile, manifests)).toThrow();
   });
 
   it('declares static runtime imports as required for installs that omit optional packages', () => {
