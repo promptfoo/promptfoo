@@ -144,7 +144,7 @@ The `tests` config property takes a list of paths to files or directories. For e
 prompts: file://prompts.txt
 providers: openai:gpt-6-luna
 
-# Load & runs all test cases matching these filepaths
+# Load and run all test cases matching these file paths
 tests:
   # You can supply an exact filepath
   - file://tests/tests2.yaml
@@ -235,10 +235,10 @@ The function receives `varName`, `prompt`, `otherVars`, and `provider` as argume
 ```js title="dynamicVarGenerator.js"
 module.exports = async function (varName, prompt, otherVars, provider) {
   // Access other variables from the test case
-  const role = otherVars.role;
+  const role = otherVars.role ?? 'assistant';
 
   // Return the dynamic value
-  return { output: PROMPTS[role] };
+  return { output: `You are a ${role}.` };
 
   // Or return an error
   // return { error: 'Something went wrong' };
@@ -260,10 +260,10 @@ tests:
 ```python title="load_context.py"
 def get_var(var_name, prompt, other_vars):
     # Access other variables from the test case
-    role = other_vars.get("role")
+    role = other_vars.get("role", "assistant")
 
     # Return the dynamic value
-    return {"output": PROMPTS[role]}
+    return {"output": f"You are a {role}."}
 
     # Or return an error
     # return {"error": "Something went wrong"}
