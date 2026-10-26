@@ -353,17 +353,7 @@ export class MCPClient {
         }
       }
 
-      // List available tools
-      const toolsResult = await client.listTools(
-        undefined, // no pagination params
-        requestOptions,
-      );
-      const serverTools =
-        toolsResult?.tools?.map((tool) => ({
-          name: tool.name,
-          description: tool.description || '',
-          inputSchema: tool.inputSchema,
-        })) || [];
+      const serverTools = await this.listServerTools(client, requestOptions, signal);
 
       // Filter tools if specified
       let filteredTools = serverTools;
@@ -403,6 +393,41 @@ export class MCPClient {
       throw new Error(`Failed to connect to MCP server ${serverKey}: ${errorMessage}`);
     } finally {
       this.pendingConnections.delete(close);
+    }
+  }
+
+  private async listServerTools(
+    client: Client,
+    requestOptions: MCPRequestOptions,
+    signal: AbortSignal,
+  ): Promise<MCPTool[]> {
+    const tools: MCPTool[] = [];
+    const seenCursors = new Set<string>();
+    let cursor: string | undefined;
+
+    while (true) {
+      signal.throwIfAborted();
+      const result = await client.listTools(
+        cursor === undefined ? undefined : { cursor },
+        requestOptions,
+      );
+      tools.push(
+        ...result.tools.map((tool) => ({
+          name: tool.name,
+          description: tool.description || '',
+          inputSchema: tool.inputSchema,
+        })),
+      );
+
+      const nextCursor = result.nextCursor;
+      if (nextCursor === undefined) {
+        return tools;
+      }
+      if (seenCursors.has(nextCursor)) {
+        throw new Error('MCP server returned a repeated tools/list pagination cursor');
+      }
+      seenCursors.add(nextCursor);
+      cursor = nextCursor;
     }
   }
 

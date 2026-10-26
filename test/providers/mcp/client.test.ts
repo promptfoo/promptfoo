@@ -708,6 +708,55 @@ describe('MCPClient', () => {
       ]);
     });
 
+    it('discovers tools from every paginated listTools response', async () => {
+      mockClient.connect.mockResolvedValueOnce(undefined);
+      mockClient.listTools
+        .mockResolvedValueOnce({
+          tools: [{ name: 'tool1', description: 'desc1', inputSchema: {} }],
+          nextCursor: 'page-2',
+        })
+        .mockResolvedValueOnce({
+          tools: [{ name: 'tool2', description: 'desc2', inputSchema: {} }],
+        });
+
+      mcpClient = new MCPClient(createMcpServerOptions());
+
+      await mcpClient.initialize();
+
+      expect(mockClient.listTools).toHaveBeenNthCalledWith(
+        1,
+        undefined,
+        expect.objectContaining({ signal: expect.any(AbortSignal) }),
+      );
+      expect(mockClient.listTools).toHaveBeenNthCalledWith(
+        2,
+        { cursor: 'page-2' },
+        expect.objectContaining({ signal: expect.any(AbortSignal) }),
+      );
+      expect(mcpClient.getAllTools()).toEqual([
+        { name: 'tool1', description: 'desc1', inputSchema: {} },
+        { name: 'tool2', description: 'desc2', inputSchema: {} },
+      ]);
+    });
+
+    it('rejects repeated pagination cursors and closes the unpublished connection', async () => {
+      mockClient.connect.mockResolvedValueOnce(undefined);
+      mockClient.listTools.mockResolvedValue({
+        tools: [{ name: 'tool1', description: 'desc1', inputSchema: {} }],
+        nextCursor: 'stale-cursor',
+      });
+
+      mcpClient = new MCPClient(createMcpServerOptions());
+
+      await expect(mcpClient.initialize()).rejects.toThrow(
+        'MCP server returned a repeated tools/list pagination cursor',
+      );
+      expect(mockClient.listTools).toHaveBeenCalledTimes(2);
+      expect(mockStdioTransport.close).toHaveBeenCalledOnce();
+      expect(mockClient.close).toHaveBeenCalledOnce();
+      expect(mcpClient.getAllTools()).toEqual([]);
+    });
+
     it('should initialize with correct client metadata including name, version, and description', async () => {
       // Reset mocks for this test
       mockClient.connect.mockResolvedValueOnce(undefined);
