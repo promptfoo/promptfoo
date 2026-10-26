@@ -403,7 +403,12 @@ export function createScenarioResultClassifier(suite: TestSuite, scenario: Scena
 
 export function topLevelResultMatchContext(suite: TestSuite): ResultMatchContext {
   if (!suite.tests?.length) {
-    return { includesResult: () => false, matchesTest: () => false };
+    // Scenario-only suites must not extract stored scenario results as top-level tests.
+    // A top-level-only suite can still restore runtime-generated tests from prior results.
+    return {
+      includesResult: () => !suite.scenarios?.length,
+      matchesTest: () => false,
+    };
   }
   const topLevelVariant: Variant = {};
   const topLevelCandidates = (suite.tests ?? []).map((test) => {

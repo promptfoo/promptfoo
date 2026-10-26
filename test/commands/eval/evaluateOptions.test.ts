@@ -9,6 +9,7 @@ import logger from '../../../src/logger';
 import Eval from '../../../src/models/eval';
 import { doEval } from '../../../src/node/doEval';
 import * as retryModule from '../../../src/node/retry';
+import { ResultFailureReason } from '../../../src/types/index';
 import * as configLoadModule from '../../../src/util/config/load';
 import { isSafeMode } from '../../../src/util/safeMode';
 import { mockProcessEnv } from '../../util/utils';
@@ -1001,6 +1002,138 @@ describe('evaluateOptions behavior', () => {
 
       const testSuite = evaluateMock.mock.calls.at(-1)?.[0] as TestSuite;
       expect(testSuite.tests?.map((test) => test.vars?.input)).toEqual(['integration']);
+    });
+
+    it.each([
+      ['filterFailing', ResultFailureReason.ASSERT],
+      ['filterFailingOnly', ResultFailureReason.ASSERT],
+      ['filterErrorsOnly', ResultFailureReason.ERROR],
+    ] as const)(
+      'should not reuse a different top-level metadata case with %s',
+      async (resultFilter, failureReason) => {
+        const tempConfig = writeTempConfig(tmpDir, 'test-exact-top-level-results.yaml', {
+          providers: ['echo'],
+          prompts: ['Hello {{input}}'],
+          tests: [
+            { vars: { input: 'same' }, metadata: { id: 'A' } },
+            { vars: { input: 'same' }, metadata: { id: 'B' } },
+          ],
+        });
+        const resultsPath = path.join(tmpDir, 'test-exact-top-level-results.json');
+        fs.writeFileSync(
+          resultsPath,
+          JSON.stringify({
+            results: {
+              results: [
+                {
+                  success: false,
+                  failureReason,
+                  vars: { input: 'same' },
+                  testCase: { vars: { input: 'same' }, metadata: { id: 'A' } },
+                },
+              ],
+            },
+          }),
+        );
+
+        await doEval(
+          {
+            table: false,
+            write: false,
+            config: [tempConfig],
+            filterMetadataExact: 'id=B',
+            [resultFilter]: resultsPath,
+          },
+          {},
+          undefined,
+          {},
+        );
+
+        const testSuite = evaluateMock.mock.calls.at(-1)?.[0] as TestSuite;
+        expect(testSuite.tests).toEqual([]);
+      },
+    );
+
+    it('should retain distinct failed top-level tests that share vars', async () => {
+      const tempConfig = writeTempConfig(tmpDir, 'test-exact-top-level-shared-vars.yaml', {
+        providers: ['echo'],
+        prompts: ['Hello {{input}}'],
+        tests: [
+          { vars: { input: 'same' }, metadata: { id: 'A' } },
+          { vars: { input: 'same' }, metadata: { id: 'B' } },
+        ],
+      });
+      const resultsPath = path.join(tmpDir, 'test-exact-top-level-shared-vars.json');
+      fs.writeFileSync(
+        resultsPath,
+        JSON.stringify({
+          results: {
+            results: ['A', 'B'].map((id) => ({
+              success: false,
+              failureReason: id === 'A' ? ResultFailureReason.ASSERT : ResultFailureReason.ERROR,
+              vars: { input: 'same' },
+              testCase: { vars: { input: 'same' }, metadata: { id } },
+            })),
+          },
+        }),
+      );
+
+      await doEval(
+        {
+          table: false,
+          write: false,
+          config: [tempConfig],
+          filterMetadataExact: 'id=A,B',
+          filterFailingOnly: resultsPath,
+          filterErrorsOnly: resultsPath,
+        },
+        {},
+        undefined,
+        {},
+      );
+
+      const testSuite = evaluateMock.mock.calls.at(-1)?.[0] as TestSuite;
+      expect(testSuite.tests?.map((test) => test.metadata?.id)).toEqual(['A', 'B']);
+    });
+
+    it('should extract a top-level runtime test from results when there are no authored tests', async () => {
+      const tempConfig = writeTempConfig(tmpDir, 'test-exact-top-level-runtime.yaml', {
+        providers: ['echo'],
+        prompts: ['Hello {{input}}'],
+        tests: [],
+        scenarios: [],
+      });
+      const resultsPath = path.join(tmpDir, 'test-exact-top-level-runtime.json');
+      fs.writeFileSync(
+        resultsPath,
+        JSON.stringify({
+          results: {
+            results: [
+              {
+                success: false,
+                vars: { input: 'runtime' },
+                testCase: { vars: { input: 'runtime' }, metadata: { id: 'generated' } },
+              },
+            ],
+          },
+        }),
+      );
+
+      await doEval(
+        {
+          table: false,
+          write: false,
+          config: [tempConfig],
+          filterMetadataExact: 'id=generated',
+          filterFailing: resultsPath,
+        },
+        {},
+        undefined,
+        {},
+      );
+
+      const testSuite = evaluateMock.mock.calls.at(-1)?.[0] as TestSuite;
+      expect(testSuite.tests?.map((test) => test.vars?.input)).toEqual(['runtime']);
     });
 
     it('should resume the exact selection and its original order after range and sampling', async () => {

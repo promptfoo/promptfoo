@@ -715,7 +715,6 @@ async function doEvalWithEnv(
         sampleSeed: filterSampleSeed,
         resultMatchContext:
           filterMetadataExact !== undefined &&
-          hasScenarios &&
           (cmdObj.filterFailing || cmdObj.filterFailingOnly || cmdObj.filterErrorsOnly)
             ? topLevelResultMatchContext(testSuite)
             : undefined,
