@@ -6,6 +6,7 @@ import { describe, expect, it } from 'vitest';
 import { extractModuleSpecifiers } from '../scripts/architectureUtils';
 
 type PackageManifest = {
+  scripts?: Record<string, string>;
   dependencies?: Record<string, string>;
   devDependencies?: Record<string, string>;
   optionalDependencies?: Record<string, string>;
@@ -157,8 +158,32 @@ function isReviewedMsalInstall(
   );
 }
 
+// Review the complete npm script chain used by the Docker build, including implicit hooks.
+// A script change must be reviewed here too, rather than silently permitting new install commands.
+const DOCKER_BUILD_SCRIPTS: Record<string, Record<string, string | undefined>> = {
+  'package.json': {
+    prebuild: undefined,
+    build: `concurrently -g --kill-others-on-fail "npm run tsc" "NODE_OPTIONS='--max-old-space-size=8192' tsdown" "npm run build:app"`,
+    postbuild: 'tsx scripts/postbuild.ts',
+    pretsc: undefined,
+    tsc: 'tsc --noEmit',
+    posttsc: undefined,
+    'prebuild:app': undefined,
+    'build:app': 'npm run build --prefix src/app',
+    'postbuild:app': undefined,
+  },
+  'src/app/package.json': {
+    prebuild: undefined,
+    build: 'tsc -b && vite build',
+    postbuild: undefined,
+  },
+};
+
 // Scan the whole Dockerfile, not just RUN lines, so heredoc bodies and exec-form RUNs count.
-function validateDockerInstallCommands(dockerfile: string): void {
+function validateDockerInstallCommands(
+  dockerfile: string,
+  buildManifests: Record<string, PackageManifest> = {},
+): void {
   const instructions = dockerfile
     .split('\n')
     .filter((line) => !line.trimStart().startsWith('#'))
@@ -168,6 +193,9 @@ function validateDockerInstallCommands(dockerfile: string): void {
     // This intentionally errs toward rejecting quoted command-like text.
     .replace(/\\(.)/g, '$1')
     .replace(/["']/g, '');
+  // Docker uses npm only. Other package managers and their execution entry points need
+  // a deliberate policy change, even when the required safe npm commands are also present.
+  expect(instructions).not.toMatch(/(?<![\w.-])(?:npx|pnpm|pnpx|yarn|yarnpkg|bun|bunx|corepack)\b/);
   // Stop at every shell separator and substitution so each nested npm is checked separately.
   const commands = [...instructions.matchAll(/(?<![\w.-])npm\b([^;&|()`\n]*)/g)].map(([, text]) =>
     text.trim().split(/\s+/),
@@ -186,6 +214,14 @@ function validateDockerInstallCommands(dockerfile: string): void {
       expect(args).toEqual(['./node_modules/esbuild']);
     } else if (command === 'pkg') {
       expect(args).toEqual(['delete', 'devDependencies']);
+    } else if (command === 'run') {
+      expect(args).toEqual(['build']);
+      for (const [manifestPath, reviewedScripts] of Object.entries(DOCKER_BUILD_SCRIPTS)) {
+        const scripts = buildManifests[manifestPath]?.scripts ?? {};
+        for (const [name, definition] of Object.entries(reviewedScripts)) {
+          expect(scripts[name], `${manifestPath} scripts.${name}`).toBe(definition);
+        }
+      }
     }
   }
 }
@@ -741,10 +777,33 @@ describe('package manifests', () => {
   it('blocks dependency install scripts in the Docker build', () => {
     const dockerfile = fs.readFileSync(path.join(process.cwd(), 'Dockerfile'), 'utf8');
 
-    expect(() => validateDockerInstallCommands(dockerfile)).not.toThrow();
+    const manifests = {
+      'package.json': readPackageJson<PackageManifest>('package.json'),
+      'src/app/package.json': readPackageJson<PackageManifest>('src/app/package.json'),
+    };
+
+    expect(() => validateDockerInstallCommands(dockerfile, manifests)).not.toThrow();
   });
 
   it.each([
+    'RUN npx fixture-package',
+    String.raw`RUN n\px fixture-package`,
+    `RUN n'p'x fixture-package`,
+    'RUN /usr/local/bin/npx fixture-package',
+    'RUN node /usr/local/lib/node_modules/npm/bin/npx-cli.js fixture-package',
+    'RUN ["npx", "fixture-package"]',
+    'RUN <<EOF\nnpx fixture-package\nEOF',
+    'RUN pnpm dlx fixture-package',
+    'RUN pnpx fixture-package',
+    'RUN yarn dlx fixture-package',
+    'RUN yarnpkg add fixture-package',
+    'RUN bun install',
+    'RUN bunx fixture-package',
+    'RUN corepack pnpm install',
+    'RUN npm exec fixture-package',
+    'RUN npm run unreviewed-script',
+    'RUN npm run build --prefix site',
+    'RUN npm run build --workspaces',
     'RUN npm pkg delete dependencies',
     'RUN npm pkg delete optionalDependencies',
     'RUN npm ci',
@@ -773,9 +832,46 @@ describe('package manifests', () => {
     'RUN <<EOF\nnpm ci\nEOF',
   ])('rejects an additional unsafe Docker command: %s', (unsafeCommand) => {
     const safeCommands = 'RUN npm ci --ignore-scripts && npm rebuild ./node_modules/esbuild';
-    expect(() => validateDockerInstallCommands(`${safeCommands}\n${unsafeCommand}`)).toThrow();
+    const manifests = {
+      'package.json': readPackageJson<PackageManifest>('package.json'),
+      'src/app/package.json': readPackageJson<PackageManifest>('src/app/package.json'),
+    };
     expect(() =>
-      validateDockerInstallCommands(`${safeCommands} && ${unsafeCommand.replace('RUN ', '')}`),
+      validateDockerInstallCommands(`${safeCommands}\n${unsafeCommand}`, manifests),
+    ).toThrow();
+    expect(() =>
+      validateDockerInstallCommands(
+        `${safeCommands} && ${unsafeCommand.replace('RUN ', '')}`,
+        manifests,
+      ),
+    ).toThrow();
+  });
+
+  it.each([
+    ['package.json', 'build'],
+    ['package.json', 'tsc'],
+    ['package.json', 'build:app'],
+    ['package.json', 'postbuild'],
+    ['package.json', 'prebuild'],
+    ['package.json', 'pretsc'],
+    ['package.json', 'posttsc'],
+    ['package.json', 'prebuild:app'],
+    ['package.json', 'postbuild:app'],
+    ['src/app/package.json', 'build'],
+    ['src/app/package.json', 'prebuild'],
+    ['src/app/package.json', 'postbuild'],
+  ])('rejects an unreviewed Docker build script in %s: %s', (manifestPath, script) => {
+    const manifests: Record<string, PackageManifest> = {
+      'package.json': readPackageJson<PackageManifest>('package.json'),
+      'src/app/package.json': readPackageJson<PackageManifest>('src/app/package.json'),
+    };
+    manifests[manifestPath].scripts![script] = 'echo changed-script';
+
+    expect(() =>
+      validateDockerInstallCommands(
+        'RUN npm ci --ignore-scripts && npm rebuild ./node_modules/esbuild && npm run build',
+        manifests,
+      ),
     ).toThrow();
   });
 
