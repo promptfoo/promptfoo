@@ -950,4 +950,102 @@ describe('filterTests', () => {
       expect(result).toEqual([selectedGeneratedTest]);
     });
   });
+
+  describe('exact metadata filter', () => {
+    const exactMetadataSuite: TestSuite = {
+      prompts: [],
+      providers: [],
+      tests: [
+        { description: 'string-one', metadata: { id: '1', type: 'unit' } },
+        { description: 'number-ten', metadata: { id: 10, type: 'unit' } },
+        { description: 'array-values', metadata: { id: [1, 10], type: ['unit', 'slow'] } },
+        { description: 'string-null', metadata: { id: 'null', type: 'integration' } },
+        { description: 'null', metadata: { id: null, type: 'unit' } },
+        { description: 'missing', metadata: { type: 'unit' } },
+      ],
+    };
+
+    it('matches scalar values by exact stringification and array values by element', async () => {
+      const result = await filterTests(exactMetadataSuite, { metadataExact: 'id=1' });
+
+      expect(result.map((test) => test.description)).toEqual(['string-one', 'array-values']);
+    });
+
+    it('matches exact comma alternatives, repeated filters, and escaped commas', async () => {
+      const suite: TestSuite = {
+        prompts: [],
+        providers: [],
+        tests: [
+          { description: 'one', metadata: { id: 1, label: 'a,b' } },
+          { description: 'ten', metadata: { id: 10, label: 'a,b' } },
+          { description: 'other', metadata: { id: 2, label: 'a' } },
+        ],
+      };
+
+      const result = await filterTests(suite, {
+        metadataExact: ['id=1,10', 'label=a\\,b'],
+      });
+
+      expect(result.map((test) => test.description)).toEqual(['one', 'ten']);
+    });
+
+    it('intersects with the existing substring metadata filter', async () => {
+      const result = await filterTests(exactMetadataSuite, {
+        metadata: 'id=1',
+        metadataExact: 'id=1',
+      });
+
+      expect(result.map((test) => test.description)).toEqual(['string-one', 'array-values']);
+    });
+
+    it('skips null legacy metadata in mixed filters across keys and array elements', async () => {
+      const result = await filterTests(
+        {
+          prompts: [],
+          providers: [],
+          tests: [
+            { description: 'null scalar', metadata: { id: null, type: 'unit' } },
+            { description: 'null array element', metadata: { id: [null, 1], type: 'unit' } },
+          ],
+        },
+        { metadata: 'id=1', metadataExact: 'type=unit' },
+      );
+
+      expect(result.map((test) => test.description)).toEqual(['null array element']);
+    });
+
+    it('does not match null or missing values to the text null', async () => {
+      const result = await filterTests(exactMetadataSuite, { metadataExact: 'id=null' });
+
+      expect(result.map((test) => test.description)).toEqual(['string-null']);
+    });
+
+    it('uses inherited metadata unless the test explicitly overrides the key', async () => {
+      const suite: TestSuite = {
+        prompts: [],
+        providers: [],
+        tests: [
+          { description: 'inherits', metadata: { suite: 'test' } },
+          { description: 'overrides', metadata: { suite: 'test', category: 'slow' } },
+          { description: 'null override', metadata: { category: null } },
+        ],
+      };
+
+      const result = await filterTests(suite, {
+        metadataExact: 'category=fast',
+        inheritedMetadata: { category: 'fast', suite: 'default' },
+      });
+
+      expect(result.map((test) => test.description)).toEqual(['inherits']);
+    });
+
+    it.each(['invalid', 'id=', 'id=,1', 'id=1,'])(
+      'rejects invalid exact filters: %s',
+      async (filter) => {
+        await expect(filterTests(exactMetadataSuite, { metadataExact: filter })).rejects.toThrow(
+          '--filter-metadata-exact',
+        );
+      },
+    );
+  });
 });

@@ -948,6 +948,144 @@ describe('evaluateOptions behavior', () => {
       expect(testSuite.scenarios).toBeUndefined();
     });
 
+    it('should filter an implicit default test by exact inherited metadata', async () => {
+      const tempConfig = writeTempConfig(tmpDir, 'test-filter-implicit-default-exact.yaml', {
+        providers: ['echo'],
+        prompts: ['Hello'],
+        defaultTest: {
+          metadata: { category: 'keep' },
+          assert: [{ type: 'contains', value: 'Hello' }],
+        },
+      });
+
+      await doEval(
+        {
+          table: false,
+          write: false,
+          config: [tempConfig],
+          filterMetadataExact: 'category=keep',
+        },
+        {},
+        undefined,
+        {},
+      );
+
+      const testSuite = evaluateMock.mock.calls.at(-1)?.[0] as TestSuite;
+      expect(testSuite.tests).toHaveLength(1);
+      expect(testSuite.tests?.[0].metadata).toEqual({ category: 'keep' });
+    });
+
+    it('should prefer the CLI exact metadata filter over its configured value', async () => {
+      const tempConfig = writeTempConfig(tmpDir, 'test-filter-metadata-exact-precedence.yaml', {
+        commandLineOptions: { filterMetadataExact: 'category=unit' },
+        providers: ['echo'],
+        prompts: ['Hello {{input}}'],
+        tests: [
+          { vars: { input: 'unit' }, metadata: { category: 'unit' } },
+          { vars: { input: 'integration' }, metadata: { category: 'integration' } },
+        ],
+      });
+
+      await doEval(
+        {
+          table: false,
+          write: false,
+          config: [tempConfig],
+          filterMetadataExact: ['category=integration'],
+        },
+        {},
+        undefined,
+        {},
+      );
+
+      const testSuite = evaluateMock.mock.calls.at(-1)?.[0] as TestSuite;
+      expect(testSuite.tests?.map((test) => test.vars?.input)).toEqual(['integration']);
+    });
+
+    it('should filter scenario tests using default, scenario, and test metadata precedence', async () => {
+      const tempConfig = writeTempConfig(tmpDir, 'test-filter-scenario-metadata-exact.yaml', {
+        providers: ['echo'],
+        prompts: ['Hello'],
+        defaultTest: { metadata: { category: 'default' } },
+        scenarios: [
+          {
+            description: 'metadata precedence',
+            config: [
+              { metadata: { category: 'scenario', region: 'west' } },
+              { metadata: { category: 'scenario', region: 'east' } },
+            ],
+            tests: [
+              { description: 'inherits scenario metadata', metadata: { kind: 'fast' } },
+              { description: 'overrides scenario metadata', metadata: { category: 'test' } },
+            ],
+          },
+        ],
+      });
+
+      await doEval(
+        {
+          table: false,
+          write: false,
+          config: [tempConfig],
+          filterMetadataExact: 'category=scenario',
+        },
+        {},
+        undefined,
+        {},
+      );
+
+      const testSuite = evaluateMock.mock.calls.at(-1)?.[0] as TestSuite;
+      expect(testSuite.scenarios).toHaveLength(2);
+      expect(
+        testSuite.scenarios?.map((scenario) => scenario.tests?.map((test) => test.description)),
+      ).toEqual([['inherits scenario metadata'], ['inherits scenario metadata']]);
+    });
+
+    it('should use the effective defaultTest metadata when filtering scenarios', async () => {
+      const tempConfig = writeTempConfig(tmpDir, 'test-filter-scenario-default-metadata.yaml', {
+        metadata: { category: 'root' },
+        defaultTest: { metadata: { label: 'default' } },
+        providers: ['echo'],
+        prompts: ['Hello'],
+        scenarios: [
+          {
+            config: [{}],
+            tests: [{ description: 'inherits default metadata', metadata: { kind: 'fast' } }],
+          },
+        ],
+      });
+
+      await doEval(
+        {
+          table: false,
+          write: false,
+          config: [tempConfig],
+          filterMetadataExact: 'category=root',
+        },
+        {},
+        undefined,
+        {},
+      );
+      const rootMetadataSuite = evaluateMock.mock.calls.at(-1)?.[0] as TestSuite;
+      expect(rootMetadataSuite.scenarios?.[0]?.tests).toEqual([]);
+
+      await doEval(
+        {
+          table: false,
+          write: false,
+          config: [tempConfig],
+          filterMetadataExact: 'label=default',
+        },
+        {},
+        undefined,
+        {},
+      );
+      const defaultMetadataSuite = evaluateMock.mock.calls.at(-1)?.[0] as TestSuite;
+      expect(defaultMetadataSuite.scenarios?.[0]?.tests?.map((test) => test.description)).toEqual([
+        'inherits default metadata',
+      ]);
+    });
+
     it('should apply filterRange to the implicit default test', async () => {
       const tempConfig = writeTempConfig(tmpDir, 'test-filter-range-implicit-default.yaml', {
         providers: ['echo'],

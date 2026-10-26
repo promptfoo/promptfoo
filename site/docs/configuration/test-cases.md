@@ -411,6 +411,16 @@ promptfoo eval --filter-metadata 'path=C:\data\\,D:\data'
 
 Quote the argument, as in these examples, so that the shell passes the backslashes on.
 
+Use `--filter-metadata-exact` to match the complete string form of a scalar metadata value. For array metadata, an element is stringified and must equal one of the requested values. Missing and null values do not match. When both metadata filters are supplied, a test must match both:
+
+```bash
+promptfoo eval --filter-metadata-exact category=math
+promptfoo eval --filter-metadata-exact tags=ai,technology
+promptfoo eval --filter-metadata category=math --filter-metadata-exact category=math
+```
+
+Exact filters use the same comma escaping, OR alternatives, and repeated-flag AND behavior as `--filter-metadata`. They also include metadata inherited from `defaultTest` and scenario configuration unless a test case overrides that key.
+
 ### JSON in CSV
 
 Include structured data:

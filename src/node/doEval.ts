@@ -673,6 +673,8 @@ async function doEvalWithEnv(
       : (cmdObj.filterRange ?? commandLineOptions?.filterRange ?? evaluateOptions.filterRange);
     const filterSample = cmdObj.filterSample ?? commandLineOptions?.filterSample;
     const filterSampleSeed = cmdObj.filterSampleSeed ?? commandLineOptions?.filterSampleSeed;
+    const filterMetadataExact =
+      cmdObj.filterMetadataExact ?? commandLineOptions?.filterMetadataExact;
     const hasActiveTestFilter =
       filterRange !== undefined ||
       cmdObj.filterFailing !== undefined ||
@@ -680,6 +682,7 @@ async function doEvalWithEnv(
       cmdObj.filterErrorsOnly !== undefined ||
       cmdObj.filterFirstN !== undefined ||
       cmdObj.filterMetadata !== undefined ||
+      filterMetadataExact !== undefined ||
       cmdObj.filterPattern !== undefined ||
       filterSample !== undefined;
     const shouldApplyFiltersToImplicitDefaultTest =
@@ -698,6 +701,9 @@ async function doEvalWithEnv(
         errorsOnly: cmdObj.filterErrorsOnly,
         firstN: cmdObj.filterFirstN,
         metadata: cmdObj.filterMetadata,
+        metadataExact: filterMetadataExact,
+        inheritedMetadata:
+          typeof testSuite.defaultTest === 'object' ? testSuite.defaultTest.metadata : undefined,
         pattern: cmdObj.filterPattern,
         range: hasScenarios ? undefined : filterRange,
         sample: filterSample,
