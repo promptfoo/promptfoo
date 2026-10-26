@@ -151,6 +151,7 @@ assert:
 ## Performance
 
 - **Caching:** Pipelines are cached after first load. Initial model download may take time, but subsequent runs are fast.
+- **External weights:** In-memory external weight buffers use reference identity. Use a new buffer or start a new eval when changing their contents.
 - **Quantization:** Use `dtype: q4` or `dtype: q8` for faster inference and lower memory. Use `dtype: q4f16` for WebGPU-optimized quantization.
 - **WebGPU:** v4 includes a WebGPU runtime written in C++ with improved performance. Use `device: webgpu` on supported systems.
 - **Concurrency:** For limited RAM, use `promptfoo eval -j 1` to run serially.
