@@ -572,6 +572,51 @@ describe('filterTests', () => {
         expect.arrayContaining(['test1', 'test2', 'test3']),
       );
     });
+
+    it('deduplicates the same scoped test across failure types without dropping distinct metadata', async () => {
+      const tests = [
+        { vars: { id: 'shared' }, metadata: { category: 'X' } },
+        { vars: { id: 'shared' }, metadata: { category: 'Y' } },
+      ];
+      vi.mocked(Eval.findById).mockResolvedValue({
+        toEvaluateSummary: vi.fn().mockResolvedValue({
+          results: [
+            {
+              vars: { id: 'shared' },
+              success: false,
+              failureReason: ResultFailureReason.ASSERT,
+              testCase: tests[0],
+            },
+            {
+              vars: { id: 'shared' },
+              success: false,
+              failureReason: ResultFailureReason.ERROR,
+              testCase: tests[0],
+            },
+            {
+              vars: { id: 'shared' },
+              success: false,
+              failureReason: ResultFailureReason.ASSERT,
+              testCase: tests[1],
+            },
+          ],
+        }),
+      } as any);
+
+      const result = await filterTests(
+        { prompts: [], providers: [], tests },
+        {
+          failingOnly: 'eval-123',
+          errorsOnly: 'eval-123',
+          resultMatchContext: {
+            includesResult: () => true,
+            matchesTest: (stored, test) =>
+              stored.testCase?.metadata?.category === test.metadata?.category,
+          },
+        },
+      );
+      expect(result.map((test) => test.metadata?.category)).toEqual(['X', 'Y']);
+    });
   });
 
   describe('pattern filter', () => {

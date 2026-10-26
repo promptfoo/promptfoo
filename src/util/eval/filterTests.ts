@@ -17,10 +17,10 @@
 
 import logger from '../../logger';
 import { ResultFailureReason } from '../../types/index';
-import { deduplicateTestCases } from '../../util/comparison';
+import { deduplicateTestCases, filterRuntimeVars } from '../../util/comparison';
 import { filterByRange } from '../../util/filterRange';
 import { warnEmptyFilterRange } from '../../util/filterRangeWarn';
-import { filterTestsByResults } from './filterTestsUtil';
+import { filterTestsByResults, type ResultMatchContext } from './filterTestsUtil';
 
 import type { TestCase, TestSuite } from '../../types/index';
 
@@ -55,6 +55,8 @@ export interface FilterOptions {
   metadataExact?: string | string[];
   /** Metadata inherited from defaults and scenario config when applying exact filters. */
   inheritedMetadata?: TestCase['metadata'];
+  /** Restricts stored-result matching and extraction to the selected scenario variant. */
+  resultMatchContext?: ResultMatchContext;
   /** Regular expression pattern to filter tests by description */
   pattern?: string;
   /** Zero-based test index range in start:end format. End is exclusive. */
@@ -67,6 +69,18 @@ export interface FilterOptions {
 
 type Tests = NonNullable<TestSuite['tests']>;
 type TestFilterFn = (test: TestCase) => boolean;
+
+function deduplicateTestsWithMetadata(tests: Tests): Tests {
+  const seen = new Set<string>();
+  return tests.filter((test) => {
+    const key = JSON.stringify({ vars: filterRuntimeVars(test.vars), metadata: test.metadata });
+    if (seen.has(key)) {
+      return false;
+    }
+    seen.add(key);
+    return true;
+  });
+}
 
 /**
  * Splits a metadata filter value into its alternatives. Commas separate alternatives, and
@@ -161,6 +175,7 @@ async function filterFailingTests(
   testSuite: TestSuite,
   pathOrId: string,
   extractedTestFilter?: TestFilterFn,
+  resultMatchContext?: ResultMatchContext,
 ): Promise<Tests> {
   // Filter for all non-successful results (both assertion failures and errors)
   return filterTestsByResults(
@@ -168,6 +183,7 @@ async function filterFailingTests(
     pathOrId,
     (result) => !result.success,
     extractedTestFilter,
+    resultMatchContext,
   );
 }
 
@@ -181,6 +197,7 @@ async function filterFailingOnlyTests(
   testSuite: TestSuite,
   pathOrId: string,
   extractedTestFilter?: TestFilterFn,
+  resultMatchContext?: ResultMatchContext,
 ): Promise<Tests> {
   // Filter for assertion failures only, excluding errors
   return filterTestsByResults(
@@ -188,6 +205,7 @@ async function filterFailingOnlyTests(
     pathOrId,
     (result) => !result.success && result.failureReason !== ResultFailureReason.ERROR,
     extractedTestFilter,
+    resultMatchContext,
   );
 }
 
@@ -201,12 +219,14 @@ async function filterErrorTests(
   testSuite: TestSuite,
   pathOrId: string,
   extractedTestFilter?: TestFilterFn,
+  resultMatchContext?: ResultMatchContext,
 ): Promise<Tests> {
   return filterTestsByResults(
     testSuite,
     pathOrId,
     (result) => result.failureReason === ResultFailureReason.ERROR,
     extractedTestFilter,
+    resultMatchContext,
   );
 }
 
@@ -235,6 +255,7 @@ export async function filterTests(testSuite: TestSuite, options: FilterOptions):
   delete loggableOptions.metadata;
   delete loggableOptions.metadataExact;
   delete loggableOptions.inheritedMetadata;
+  delete loggableOptions.resultMatchContext;
   logger.debug('Starting filterTests with options', loggableOptions);
   logger.debug(`Initial test count: ${tests.length}`);
 
@@ -354,15 +375,19 @@ export async function filterTests(testSuite: TestSuite, options: FilterOptions):
       resultFilterTestSuite,
       options.failingOnly,
       combinedMetadataFilter,
+      options.resultMatchContext,
     );
     const errorTests = await filterErrorTests(
       resultFilterTestSuite,
       options.errorsOnly,
       combinedMetadataFilter,
+      options.resultMatchContext,
     );
 
     // Create a union of both sets, deduplicating by test identity
-    tests = deduplicateTestCases([...failingOnlyTests, ...errorTests]);
+    tests = options.resultMatchContext
+      ? deduplicateTestsWithMetadata([...failingOnlyTests, ...errorTests])
+      : deduplicateTestCases([...failingOnlyTests, ...errorTests]);
 
     logger.debug(
       `Combined failingOnly (${failingOnlyTests.length}) and errors (${errorTests.length}) filters: ${tests.length} unique tests`,
@@ -379,6 +404,7 @@ export async function filterTests(testSuite: TestSuite, options: FilterOptions):
       resultFilterTestSuite,
       options.failing,
       combinedMetadataFilter,
+      options.resultMatchContext,
     );
     if (tests.length === 0) {
       logNoTestsWarning('filter-failing', options.failing, 'no failures/errors');
@@ -389,6 +415,7 @@ export async function filterTests(testSuite: TestSuite, options: FilterOptions):
       resultFilterTestSuite,
       options.failingOnly,
       combinedMetadataFilter,
+      options.resultMatchContext,
     );
     if (tests.length === 0) {
       logNoTestsWarning(
@@ -402,6 +429,7 @@ export async function filterTests(testSuite: TestSuite, options: FilterOptions):
       resultFilterTestSuite,
       options.errorsOnly,
       combinedMetadataFilter,
+      options.resultMatchContext,
     );
     if (tests.length === 0) {
       logNoTestsWarning('filter-errors-only', options.errorsOnly, 'no errors');

@@ -43,6 +43,7 @@ import { PromptSchema } from '../../validators/prompts';
 import { filterPrompts } from '../eval/filterPrompts';
 import { filterProviderConfigs, getProviderIdAndLabel } from '../eval/filterProviders';
 import { filterTests } from '../eval/filterTests';
+import { createScenarioResultClassifier } from '../eval/scenarioResultMatching';
 import { promptfooCommand } from '../promptfooCommand';
 import { preserveTracingCredentialReferences } from '../sanitizer';
 import {
@@ -1222,6 +1223,16 @@ async function resolveLoadedConfig(
   const parsedTests = await Promise.all(
     testConfigs.map((test) => readTest(test, basePath, false, runtimeEnv)),
   );
+  const defaultTest: TestCase = {
+    metadata: config.metadata,
+    ...parsedDefaultTest,
+    options: {
+      prefix: cmdObj.promptPrefix,
+      suffix: cmdObj.promptSuffix,
+      provider: cmdObj.grader,
+      ...parsedDefaultTest?.options,
+    },
+  };
 
   let parsedScenarios = config.scenarios;
   // Parse testCases for each scenario
@@ -1296,8 +1307,14 @@ async function resolveLoadedConfig(
         continue;
       }
 
+      const resultClassifier = cmdObj.filterFailing
+        ? createScenarioResultClassifier(
+            { providers: parsedProviders, prompts: parsedPrompts, defaultTest },
+            scenario,
+          )
+        : undefined;
       const testsByConfig = await Promise.all(
-        scenario.config.map(async (scenarioConfig) => ({
+        scenario.config.map(async (scenarioConfig, variantIndex) => ({
           config: scenarioConfig,
           tests: await filterTests(
             {
@@ -1320,6 +1337,7 @@ async function resolveLoadedConfig(
                 filterSampleSeed === undefined
                   ? undefined
                   : deriveScenarioSampleSeed(filterSampleSeed, scenarioIndex),
+              resultMatchContext: resultClassifier?.forVariant(variantIndex),
             },
           ),
         })),
@@ -1361,17 +1379,6 @@ async function resolveLoadedConfig(
       'No prompts found. Add a `prompts:` entry to your config or pass --prompts path/to/prompt.txt.';
     throw new ConfigResolutionError(message);
   }
-
-  const defaultTest: TestCase = {
-    metadata: config.metadata,
-    ...parsedDefaultTest,
-    options: {
-      prefix: cmdObj.promptPrefix,
-      suffix: cmdObj.promptSuffix,
-      provider: cmdObj.grader,
-      ...parsedDefaultTest?.options,
-    },
-  };
 
   const testSuite: TestSuite = {
     basePath,

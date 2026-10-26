@@ -47,6 +47,7 @@ import {
 } from '../util/eval/filterProviders';
 import { filterTests } from '../util/eval/filterTests';
 import { warnIfRedteamConfigHasNoTests } from '../util/eval/redteamWarning';
+import { topLevelResultMatchContext } from '../util/eval/scenarioResultMatching';
 import { generateEvalSummary } from '../util/eval/summary';
 import { maybeLoadFromExternalFile } from '../util/file';
 import {
@@ -712,6 +713,12 @@ async function doEvalWithEnv(
         range: hasScenarios ? undefined : filterRange,
         sample: filterSample,
         sampleSeed: filterSampleSeed,
+        resultMatchContext:
+          filterMetadataExact !== undefined &&
+          hasScenarios &&
+          (cmdObj.filterFailing || cmdObj.filterFailingOnly || cmdObj.filterErrorsOnly)
+            ? topLevelResultMatchContext(testSuite)
+            : undefined,
       };
       testSuite.tests = await filterTests(testSuite, filterOptions);
       const shouldSuppressImplicitDefaultTest =

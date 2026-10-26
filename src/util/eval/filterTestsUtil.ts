@@ -13,6 +13,11 @@ type Tests = NonNullable<TestSuite['tests']>;
 type ResultFilterFn = (result: EvaluateResult) => boolean;
 type TestFilterFn = (test: TestCase) => boolean;
 
+export interface ResultMatchContext {
+  includesResult: (result: EvaluateResult) => boolean;
+  matchesTest: (result: EvaluateResult, test: TestCase) => boolean;
+}
+
 /**
  * Merges defaultTest.vars into a test case's vars for comparison purposes.
  * This mirrors what prepareTests does in the evaluator, ensuring that when
@@ -45,6 +50,7 @@ export async function filterTestsByResults(
   pathOrId: string,
   filterFn: ResultFilterFn,
   extractedTestFilter?: TestFilterFn,
+  resultMatchContext?: ResultMatchContext,
 ): Promise<Tests> {
   if (!testSuite.tests) {
     logger.debug('[filterTestsByResults] No tests in test suite');
@@ -77,7 +83,11 @@ export async function filterTestsByResults(
     return [];
   }
 
-  const filteredResults = results.results.filter(filterFn);
+  const filteredResults = results.results.filter(
+    (result) =>
+      filterFn(result) && (!resultMatchContext || resultMatchContext.includesResult(result)),
+  );
+  const matchesTest = resultMatchContext?.matchesTest ?? resultIsForTestCase;
   logger.debug(
     `[filterTestsByResults] Found ${filteredResults.length} matching results out of ${results.results.length} total`,
   );
@@ -112,15 +122,12 @@ export async function filterTestsByResults(
     // This prevents issues when a test matches multiple results and only some have runtime vars.
     let matchedResult = filteredResults.find(
       (result) =>
-        resultIsForTestCase(result, testWithDefaults) &&
-        extractRuntimeVars(result.vars) !== undefined,
+        matchesTest(result, testWithDefaults) && extractRuntimeVars(result.vars) !== undefined,
     );
 
     // Fallback: any matching result (even without runtime vars)
     if (!matchedResult) {
-      matchedResult = filteredResults.find((result) =>
-        resultIsForTestCase(result, testWithDefaults),
-      );
+      matchedResult = filteredResults.find((result) => matchesTest(result, testWithDefaults));
     }
 
     // Fallback: try matching without defaults (old results that don't have defaults merged)
@@ -134,11 +141,10 @@ export async function filterTestsByResults(
       if (hasDefaultVars) {
         // Again, prefer results with runtime vars first
         matchedResult = filteredResults.find(
-          (result) =>
-            resultIsForTestCase(result, test) && extractRuntimeVars(result.vars) !== undefined,
+          (result) => matchesTest(result, test) && extractRuntimeVars(result.vars) !== undefined,
         );
         if (!matchedResult) {
-          matchedResult = filteredResults.find((result) => resultIsForTestCase(result, test));
+          matchedResult = filteredResults.find((result) => matchesTest(result, test));
         }
       }
     }
@@ -182,10 +188,17 @@ export async function filterTestsByResults(
   const matchedTestsWithDefaults = matchedTests.map((test) =>
     mergeDefaultVars(test, testSuite.defaultTest),
   );
+  const resultKey = (result: EvaluateResult) =>
+    resultMatchContext
+      ? JSON.stringify({
+          vars: filterRuntimeVars(result.vars),
+          metadata: result.testCase?.metadata,
+        })
+      : JSON.stringify(filterRuntimeVars(result.vars));
   for (const result of filteredResults) {
     for (const testWithDefaults of matchedTestsWithDefaults) {
-      if (resultIsForTestCase(result, testWithDefaults)) {
-        matchedResultKeys.add(JSON.stringify(filterRuntimeVars(result.vars)));
+      if (matchesTest(result, testWithDefaults)) {
+        matchedResultKeys.add(resultKey(result));
         break;
       }
     }
@@ -193,10 +206,10 @@ export async function filterTestsByResults(
 
   // Extract tests from unmatched results
   for (const result of filteredResults) {
-    const resultKey = JSON.stringify(filterRuntimeVars(result.vars));
+    const key = resultKey(result);
 
     // Skip if this result already matched a config test
-    if (matchedResultKeys.has(resultKey)) {
+    if (matchedResultKeys.has(key)) {
       continue;
     }
 
@@ -211,7 +224,7 @@ export async function filterTestsByResults(
     }
 
     // Skip if we already extracted a test with these vars (dedup within extraction)
-    if (extractedTestKeys.has(resultKey)) {
+    if (extractedTestKeys.has(key)) {
       continue;
     }
 
@@ -225,7 +238,7 @@ export async function filterTestsByResults(
       // Intentionally omit: provider (security - may contain stale credentials)
     };
     extractedTests.push(extractedTest);
-    extractedTestKeys.add(JSON.stringify(filterRuntimeVars(extractedTest.vars)));
+    extractedTestKeys.add(key);
   }
 
   if (extractedTests.length > 0) {
@@ -249,5 +262,7 @@ export async function filterTestsByResults(
   }
 
   // Deduplicate and return combined tests
-  return deduplicateTestCases([...matchedTests, ...extractedTests]);
+  return resultMatchContext
+    ? [...matchedTests, ...extractedTests]
+    : deduplicateTestCases([...matchedTests, ...extractedTests]);
 }

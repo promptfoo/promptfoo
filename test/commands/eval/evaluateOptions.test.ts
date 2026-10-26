@@ -1173,6 +1173,136 @@ describe('evaluateOptions behavior', () => {
       }
     });
 
+    it('should keep failed scenario variants separate when their test vars are shared', async () => {
+      const tempConfig = writeTempConfig(tmpDir, 'test-exact-scenario-failing.yaml', {
+        providers: ['echo'],
+        prompts: ['Hello {{variant}}'],
+        scenarios: [
+          {
+            config: [
+              { vars: { variant: 'shared' }, metadata: { category: 'A' } },
+              { vars: { variant: 'shared' }, metadata: { category: 'B' } },
+            ],
+            tests: [{ vars: { caseId: 'shared' }, metadata: { role: 'common' } }],
+          },
+        ],
+      });
+      const failedResultsPath = path.join(tmpDir, 'test-exact-scenario-failing.json');
+      const failedCase = (category: string) => ({
+        success: false,
+        vars: { variant: 'shared', caseId: 'shared' },
+        testCase: {
+          vars: { variant: 'shared', caseId: 'shared' },
+          metadata: { category, role: 'common' },
+        },
+      });
+      for (const failedCases of [[failedCase('A')], [failedCase('A'), failedCase('B')]]) {
+        fs.writeFileSync(failedResultsPath, JSON.stringify({ results: { results: failedCases } }));
+        await doEval(
+          {
+            table: false,
+            write: false,
+            config: [tempConfig],
+            filterMetadataExact: 'role=common',
+            filterFailing: failedResultsPath,
+          },
+          {},
+          undefined,
+          {},
+        );
+        const testSuite = evaluateMock.mock.calls.at(-1)?.[0] as TestSuite;
+        expect(testSuite.tests).toEqual([]);
+        expect(
+          testSuite.scenarios?.map((scenario) => scenario.tests?.map((test) => test.vars?.caseId)),
+        ).toEqual(failedCases.length === 1 ? [['shared'], []] : [['shared'], ['shared']]);
+      }
+
+      fs.writeFileSync(
+        failedResultsPath,
+        JSON.stringify({
+          results: {
+            results: [
+              {
+                success: false,
+                vars: { variant: 'shared', caseId: 'generated' },
+                testCase: {
+                  vars: { variant: 'shared', caseId: 'generated' },
+                  metadata: { category: 'A', role: 'common' },
+                },
+              },
+            ],
+          },
+        }),
+      );
+      await doEval(
+        {
+          table: false,
+          write: false,
+          config: [tempConfig],
+          filterMetadataExact: 'role=common',
+          filterFailing: failedResultsPath,
+        },
+        {},
+        undefined,
+        {},
+      );
+      const generatedSuite = evaluateMock.mock.calls.at(-1)?.[0] as TestSuite;
+      expect(generatedSuite.tests).toEqual([]);
+      expect(
+        generatedSuite.scenarios?.map((scenario) =>
+          scenario.tests?.map((test) => test.vars?.caseId),
+        ),
+      ).toEqual([['generated'], []]);
+    });
+
+    it('should retain distinct failed scenario tests that share vars', async () => {
+      const tempConfig = writeTempConfig(tmpDir, 'test-exact-scenario-shared-vars.yaml', {
+        providers: ['echo'],
+        prompts: ['Hello {{caseId}}'],
+        scenarios: [
+          {
+            config: [{ metadata: { category: 'A' } }],
+            tests: [
+              { vars: { caseId: 'shared' }, metadata: { id: 'X' } },
+              { vars: { caseId: 'shared' }, metadata: { id: 'Y' } },
+            ],
+          },
+        ],
+      });
+      const failedResultsPath = path.join(tmpDir, 'test-exact-scenario-shared-vars.json');
+      fs.writeFileSync(
+        failedResultsPath,
+        JSON.stringify({
+          results: {
+            results: ['X', 'Y'].map((id) => ({
+              success: false,
+              vars: { caseId: 'shared' },
+              testCase: {
+                vars: { caseId: 'shared' },
+                metadata: { category: 'A', id },
+              },
+            })),
+          },
+        }),
+      );
+
+      await doEval(
+        {
+          table: false,
+          write: false,
+          config: [tempConfig],
+          filterMetadataExact: 'category=A',
+          filterFailing: failedResultsPath,
+        },
+        {},
+        undefined,
+        {},
+      );
+      const testSuite = evaluateMock.mock.calls.at(-1)?.[0] as TestSuite;
+      expect(testSuite.tests).toEqual([]);
+      expect(testSuite.scenarios?.[0].tests?.map((test) => test.metadata?.id)).toEqual(['X', 'Y']);
+    });
+
     it('should retain authored provider options in the saved exact selection', async () => {
       const tempConfig = writeTempConfig(tmpDir, 'test-exact-provider-resume.yaml', {
         providers: ['echo'],
