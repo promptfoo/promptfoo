@@ -1,4 +1,5 @@
 import deepEqual from 'fast-deep-equal';
+import { globSync } from 'glob';
 import logger from '../../logger';
 import Eval from '../../models/eval';
 import { PROMPTFOO_METADATA_KEY } from '../../models/evalResult';
@@ -498,6 +499,7 @@ export async function filterTestsByResults(
 }
 
 type Variant = Scenario['config'][number];
+type ExpansionContext = { basePath?: string; varExpansionDisabled?: boolean };
 
 function scenarioDefaultTest(suite: TestSuite): TestCase | undefined {
   return typeof suite.defaultTest === 'object' ? suite.defaultTest : undefined;
@@ -515,6 +517,7 @@ function effectiveScenarioTest(suite: TestSuite, variant: Variant, test: TestCas
     ...variant,
     ...test,
     vars: { ...defaults?.vars, ...variant.vars, ...test.vars },
+    options: { ...defaults?.options, ...variant.options, ...test.options },
     metadata: declaredScenarioMetadata(suite, variant, test),
   };
 }
@@ -586,6 +589,7 @@ export function createScenarioResultClassifier(
   suite: TestSuite,
   scenario: Scenario,
   globalScenarioOffset = 0,
+  expansionContext?: ExpansionContext,
 ) {
   const defaults = scenarioDefaultTest(suite);
   const variantMetadataKeys = [
@@ -634,12 +638,30 @@ export function createScenarioResultClassifier(
         candidate.effective.prompts !== signatures[index].prompts,
     ),
   );
-  const expandedSelectorCandidates = selectorCandidates.map((variantCandidates) =>
-    variantCandidates.filter((candidate) =>
-      Object.values(candidate.effective.vars ?? {}).some(
-        (value) => Array.isArray(value) && value.every((item) => typeof item === 'string'),
-      ),
-    ),
+  const varExpansionDisabled = expansionContext?.varExpansionDisabled;
+  const expandedCandidates = candidates.map((variantCandidates) =>
+    variantCandidates.flatMap((candidate) => {
+      if (varExpansionDisabled || candidate.effective.options?.disableVarExpansion) {
+        return [];
+      }
+      const valuesByKey = new Map<string, Set<string>>();
+      for (const [key, value] of Object.entries(candidate.effective.vars ?? {})) {
+        if (
+          Array.isArray(value) &&
+          value.length > 0 &&
+          value.every((item) => typeof item === 'string')
+        ) {
+          valuesByKey.set(key, new Set(value));
+        } else if (typeof value === 'string' && value.startsWith('file://')) {
+          const paths = globSync(value.slice('file://'.length), {
+            cwd: expansionContext?.basePath || process.cwd(),
+            windowsPathsNoEscape: true,
+          });
+          valuesByKey.set(key, new Set(paths.map((path) => `file://${path}`)));
+        }
+      }
+      return valuesByKey.size > 0 ? [{ ...candidate, valuesByKey }] : [];
+    }),
   );
   const configuredMatch = (result: EvaluateResult, index: number) =>
     candidates[index].some((candidate) =>
@@ -656,15 +678,11 @@ export function createScenarioResultClassifier(
       return false;
     }
     const resultVars = filterRuntimeVars(result.vars) ?? {};
-    const expandedMatches = expandedSelectorCandidates[index].filter((candidate) => {
+    const expandedMatches = expandedCandidates[index].filter((candidate) => {
       const vars = Object.fromEntries(
         Object.entries(candidate.effective.vars ?? {}).map(([key, value]) => [
           key,
-          Array.isArray(value) &&
-          value.every((item) => typeof item === 'string') &&
-          value.includes(resultVars[key])
-            ? resultVars[key]
-            : value,
+          candidate.valuesByKey.get(key)?.has(resultVars[key] as string) ? resultVars[key] : value,
         ]),
       );
       return matchesScenarioCandidate(
@@ -800,7 +818,10 @@ function isGeneratedScenarioId(conversationId: unknown): boolean {
   return typeof conversationId === 'string' && /^__scenario_\d+__$/.test(conversationId);
 }
 
-export function topLevelResultMatchContext(suite: TestSuite): ResultMatchContext {
+export function topLevelResultMatchContext(
+  suite: TestSuite,
+  expansionContext?: ExpansionContext,
+): ResultMatchContext {
   const authoredTestByMatch = new WeakMap<TestCase, TestCase>();
   const bindMatchedTest = (test: TestCase, authoredTest: TestCase) => {
     authoredTestByMatch.set(test, authoredTest);
@@ -823,7 +844,12 @@ export function topLevelResultMatchContext(suite: TestSuite): ResultMatchContext
   });
   let globalScenarioOffset = 0;
   const scenarioClassifiers = (suite.scenarios ?? []).map((scenario) => {
-    const classifier = createScenarioResultClassifier(suite, scenario, globalScenarioOffset);
+    const classifier = createScenarioResultClassifier(
+      suite,
+      scenario,
+      globalScenarioOffset,
+      expansionContext,
+    );
     globalScenarioOffset += scenario.config.length;
     return classifier;
   });

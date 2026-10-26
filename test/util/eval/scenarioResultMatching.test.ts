@@ -1,3 +1,7 @@
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
+
 import { describe, expect, it } from 'vitest';
 import {
   createScenarioResultClassifier,
@@ -445,6 +449,114 @@ describe('exact scenario result matching', () => {
 
     expect(context.includesResult(stored)).toBe(true);
     expect(context.matchesTest(stored, scenario.tests?.[0] as TestCase)).toBe(false);
+  });
+
+  it('admits a failed scalar from ordinary scenario config arrays without matching the whole test', () => {
+    const scenario: Scenario = {
+      config: [{ vars: { variant: ['a', 'b'], region: ['east', 'west'] } }],
+      tests: [{ vars: { caseId: 'shared' }, metadata: { role: 'common' } }],
+    };
+    const suite: TestSuite = { prompts: [], providers: [], scenarios: [scenario] };
+    const context = createScenarioResultClassifier(suite, scenario).forVariant(0);
+    const stored = failedResult(
+      { variant: 'a', region: 'east', caseId: 'shared' },
+      { role: 'common', conversationId: '__scenario_0__' },
+    );
+
+    expect(context.includesResult(stored)).toBe(true);
+    expect(context.matchesTest(stored, scenario.tests![0])).toBe(false);
+    expect(
+      context.includesResult({
+        ...stored,
+        vars: { ...stored.vars, region: 'unknown' },
+        testCase: { ...stored.testCase, vars: { ...stored.vars, region: 'unknown' } },
+      }),
+    ).toBe(false);
+    const disabledScenario: Scenario = {
+      ...scenario,
+      config: [{ ...scenario.config[0], options: { disableVarExpansion: true } }],
+    };
+    expect(
+      createScenarioResultClassifier(suite, disabledScenario).forVariant(0).includesResult(stored),
+    ).toBe(false);
+    expect(
+      createScenarioResultClassifier(suite, scenario, 0, { varExpansionDisabled: true })
+        .forVariant(0)
+        .includesResult(stored),
+    ).toBe(false);
+  });
+
+  it('matches only current files from a scenario config glob and honors disabled expansion', async () => {
+    const basePath = await mkdtemp(path.join(tmpdir(), 'promptfoo-scenario-glob-'));
+    try {
+      await mkdir(path.join(basePath, 'cases'));
+      await Promise.all(
+        ['a', 'b'].map((name) => writeFile(path.join(basePath, 'cases', `${name}.txt`), name)),
+      );
+      const scenario: Scenario = {
+        config: [{ vars: { caseId: 'file://./cases/*.txt' } }],
+        tests: [{ metadata: { role: 'common' } }],
+      };
+      const suite: TestSuite = { prompts: [], providers: [], scenarios: [scenario] };
+      const selected = failedResult(
+        { caseId: 'file://cases/a.txt' },
+        { role: 'common', conversationId: '__scenario_0__' },
+      );
+      const context = createScenarioResultClassifier(suite, scenario, 0, { basePath }).forVariant(
+        0,
+      );
+
+      expect(context.includesResult(selected)).toBe(true);
+      expect(context.matchesTest(selected, scenario.tests![0])).toBe(false);
+      expect(
+        context.includesResult({
+          ...selected,
+          vars: { caseId: 'file://cases/missing.txt' },
+          testCase: { ...selected.testCase, vars: { caseId: 'file://cases/missing.txt' } },
+        }),
+      ).toBe(false);
+
+      const disabledScenario: Scenario = {
+        ...scenario,
+        config: [{ ...scenario.config[0], options: { disableVarExpansion: true } }],
+      };
+      expect(
+        createScenarioResultClassifier(suite, disabledScenario, 0, { basePath })
+          .forVariant(0)
+          .includesResult(selected),
+      ).toBe(false);
+      const unmatchedGlob: Scenario = {
+        ...scenario,
+        config: [{ vars: { caseId: 'file://./cases/missing-*.txt' } }],
+      };
+      expect(
+        createScenarioResultClassifier(suite, unmatchedGlob, 0, { basePath })
+          .forVariant(0)
+          .includesResult(selected),
+      ).toBe(false);
+    } finally {
+      await rm(basePath, { recursive: true, force: true });
+    }
+  });
+
+  it('does not treat non-string arrays as scalar combinations', () => {
+    const scenario: Scenario = {
+      config: [{ vars: { objectValue: [{ key: 'a' }, { key: 'b' }] } }],
+      tests: [{}],
+    };
+    const suite: TestSuite = { prompts: [], providers: [], scenarios: [scenario] };
+    const result = {
+      ...failedResult({}, { conversationId: '__scenario_0__' }),
+      vars: { objectValue: { key: 'a' } },
+      testCase: {
+        vars: { objectValue: { key: 'a' } },
+        metadata: { conversationId: '__scenario_0__' },
+      },
+    } as unknown as EvaluateResult;
+
+    expect(
+      createScenarioResultClassifier(suite, scenario).forVariant(0).includesResult(result),
+    ).toBe(false);
   });
 
   it('keeps a runtime-generated case with its unique variant', () => {

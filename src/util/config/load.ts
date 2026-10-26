@@ -1351,6 +1351,10 @@ async function resolveLoadedConfig(
             { providers: parsedProviders, prompts: parsedPrompts, defaultTest },
             matchingScenario,
             scenarioOffset,
+            {
+              basePath,
+              varExpansionDisabled: getEnvBool('PROMPTFOO_DISABLE_VAR_EXPANSION'),
+            },
           )
         : undefined;
       const testsByConfig = await Promise.all(

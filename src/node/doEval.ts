@@ -716,7 +716,10 @@ async function doEvalWithEnv(
         resultMatchContext:
           filterMetadataExact !== undefined &&
           (cmdObj.filterFailing || cmdObj.filterFailingOnly || cmdObj.filterErrorsOnly)
-            ? topLevelResultMatchContext(testSuite)
+            ? topLevelResultMatchContext(testSuite, {
+                basePath: cliState.basePath,
+                varExpansionDisabled: getEnvBool('PROMPTFOO_DISABLE_VAR_EXPANSION'),
+              })
             : undefined,
       };
       testSuite.tests = await filterTests(testSuite, filterOptions);
