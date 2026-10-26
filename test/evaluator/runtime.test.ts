@@ -71,6 +71,79 @@ function createInMemoryEvaluation(overrides: Partial<InMemoryEvaluation> = {}): 
 }
 
 describeEvaluator('evaluator runtime ports', () => {
+  it('marks a normal row when its target label will be sanitized on persistence', async () => {
+    const evaluation = createInMemoryEvaluation();
+    const target: ApiProvider = {
+      id: () => 'safe-target',
+      label: 'sk-proj-QAFakeOnlyOpaqueSecret1234567890',
+      callApi: vi.fn(async () => ({ output: 'ok' })),
+    };
+
+    await evaluate(
+      {
+        providers: [mockApiProvider],
+        prompts: [toPrompt('Test prompt')],
+        tests: [{ provider: target }],
+      },
+      evaluation,
+      {},
+      createInMemoryRuntime(new InMemoryEvaluationStore(evaluation)),
+    );
+
+    expect(evaluation.results).toHaveLength(1);
+    expect(evaluation.results[0].success).toBe(true);
+    expect(evaluation.results[0].metadata?.__promptfoo).toMatchObject({
+      evalOrigin: 'top-level',
+      targetIdentityRedacted: true,
+    });
+  });
+
+  it('persists top-level and scenario origins when beforeEach replaces test objects', async () => {
+    const evaluation = createInMemoryEvaluation();
+    vi.mocked(runExtensionHook).mockImplementation(async (_extensions, hook, context) => {
+      if (hook === 'beforeEach' && 'test' in context) {
+        return {
+          ...context,
+          test: Object.freeze(Object.fromEntries(Object.entries(context.test))),
+        };
+      }
+      if (hook === 'afterEach' && 'result' in context) {
+        return {
+          ...context,
+          result: {
+            ...context.result,
+            metadata: { ...context.result.metadata, __promptfoo: { targetIdentityRedacted: true } },
+          },
+        };
+      }
+      return context;
+    });
+
+    await evaluate(
+      {
+        providers: [mockApiProvider],
+        prompts: [toPrompt('Test prompt')],
+        tests: [{ vars: { caseId: 'top' } }],
+        scenarios: [{ config: [{}], tests: [{ vars: { caseId: 'scenario' } }] }],
+        extensions: ['local hook'],
+      },
+      evaluation,
+      {},
+      createInMemoryRuntime(new InMemoryEvaluationStore(evaluation)),
+    );
+
+    expect(evaluation.results.map((result) => result.metadata?.__promptfoo?.evalOrigin)).toEqual([
+      'top-level',
+      'scenario',
+    ]);
+    expect(evaluation.results[1].testCase.metadata?.conversationId).toBe('__scenario_0__');
+    expect(
+      evaluation.results.every(
+        (result) => result.metadata?.__promptfoo?.targetIdentityRedacted === undefined,
+      ),
+    ).toBe(true);
+  });
+
   it.each([undefined, 10000])(
     'evaluates with an in-memory store and preserves identity with deadline %s',
     async (maxEvalTimeMs) => {
@@ -1001,14 +1074,41 @@ describeEvaluator('evaluator runtime ports', () => {
     expect(failingWriter.close).toHaveBeenCalledOnce();
   });
 
-  it('persists per-call timeout rows without streaming them', async () => {
+  it.each([
+    { name: 'safe target', id: 'slow-provider', label: undefined, redacted: false },
+    {
+      name: 'unsafe label',
+      id: 'slow-provider',
+      label: 'https://example.invalid?api_key=fake-secret',
+      redacted: true,
+    },
+    {
+      name: 'unsafe ID',
+      id: 'https://example.invalid?api_key=fake-secret',
+      label: 'safe-label',
+      redacted: true,
+    },
+    {
+      name: 'opaque secret label',
+      id: 'slow-provider',
+      label: 'sk-proj-QAFakeOnlyOpaqueSecret1234567890',
+      redacted: true,
+    },
+    {
+      name: 'opaque secret ID',
+      id: 'sk-proj-QAFakeOnlyOpaqueSecret1234567890',
+      label: 'safe-label',
+      redacted: true,
+    },
+  ])('persists per-call timeout rows without streaming them for $name', async (target) => {
     vi.useFakeTimers();
     const resultWriter = createResultWriter();
     const runtime = createRuntime([resultWriter]);
     const evalRecord = createEvalRecord();
     const appendResult = vi.spyOn(evalRecord, 'addResult');
     const slowProvider: ApiProvider = {
-      id: () => 'slow-provider',
+      id: () => target.id,
+      label: target.label,
       callApi: vi.fn<ApiProvider['callApi']>((_prompt, _context, options) => {
         return new Promise<never>((_resolve, reject) => {
           const rejectAbort = () => {
@@ -1025,9 +1125,9 @@ describeEvaluator('evaluator runtime ports', () => {
       }),
     };
     const testSuite: TestSuite = {
-      providers: [slowProvider],
+      providers: [mockApiProvider],
       prompts: [toPrompt('Test prompt')],
-      tests: [{}],
+      tests: [{ provider: slowProvider }],
     };
 
     try {
@@ -1036,6 +1136,17 @@ describeEvaluator('evaluator runtime ports', () => {
       await evaluation;
 
       expect(appendResult).toHaveBeenCalledOnce();
+      const saved = appendResult.mock.calls[0][0];
+      expect(saved.metadata?.__promptfoo?.targetIdentityRedacted).toBe(
+        target.redacted || undefined,
+      );
+      expect(saved.testCase.provider).toEqual(
+        target.id.includes('api_key') || target.id.startsWith('sk-proj-')
+          ? undefined
+          : { id: target.id, ...(target.label && !target.redacted && { label: target.label }) },
+      );
+      expect(JSON.stringify(saved)).not.toContain('fake-secret');
+      expect(JSON.stringify(saved)).not.toContain('QAFakeOnlyOpaqueSecret');
       expect(resultWriter.write).not.toHaveBeenCalled();
       expect(resultWriter.close).toHaveBeenCalledOnce();
     } finally {

@@ -1,6 +1,7 @@
 import deepEqual from 'fast-deep-equal';
 import logger from '../../logger';
 import Eval from '../../models/eval';
+import { PROMPTFOO_METADATA_KEY } from '../../models/evalResult';
 import { deduplicateTestCases, extractRuntimeVars, filterRuntimeVars } from '../../util/comparison';
 import { readOutput, resultIsForTestCase } from '../../util/index';
 import { isPromptAllowed } from '../promptMatching';
@@ -38,7 +39,26 @@ export interface StoredResults {
 export interface StoredResultProvenance {
   hasScenarios?: boolean;
   generatedScenarioIdsObserved?: boolean;
-  explicitScenarioOrigins?: Map<unknown, { scenario: TestCase[]; topLevel: TestCase[] }>;
+}
+
+function storedEvalOrigin(result: EvaluateResult): 'scenario' | 'top-level' | undefined {
+  const internal = result.metadata?.[PROMPTFOO_METADATA_KEY];
+  if (!internal || typeof internal !== 'object' || Array.isArray(internal)) {
+    return undefined;
+  }
+  return internal.evalOrigin === 'scenario' || internal.evalOrigin === 'top-level'
+    ? internal.evalOrigin
+    : undefined;
+}
+
+function hasRedactedTargetIdentity(result: EvaluateResult): boolean {
+  const internal = result.metadata?.[PROMPTFOO_METADATA_KEY];
+  return Boolean(
+    internal &&
+      typeof internal === 'object' &&
+      !Array.isArray(internal) &&
+      internal.targetIdentityRedacted === true,
+  );
 }
 
 function hasUnresolvedScenarioMetadata(config: Partial<UnifiedConfig>): boolean {
@@ -61,97 +81,6 @@ function hasUnresolvedScenarioMetadata(config: Partial<UnifiedConfig>): boolean 
       (scenario.tests !== undefined &&
         (!Array.isArray(scenario.tests) || scenario.tests.some(unresolvedTest))),
   );
-}
-
-function savedExplicitScenarioOrigins(config: Partial<UnifiedConfig>) {
-  const defaults =
-    config.defaultTest && typeof config.defaultTest === 'object' ? config.defaultTest : undefined;
-  const defaultMetadata = defaults?.metadata ?? config.metadata;
-  const origins = new Map<unknown, { scenario: TestCase[]; topLevel: TestCase[] }>();
-  const add = (test: TestCase, kind: 'scenario' | 'topLevel') => {
-    const id = test.metadata?.conversationId;
-    if (id == null) {
-      return;
-    }
-    let origin = origins.get(id);
-    if (!origin) {
-      origin = { scenario: [], topLevel: [] };
-      origins.set(id, origin);
-    }
-    origin[kind].push(test);
-  };
-  for (const test of Array.isArray(config.tests) ? config.tests : []) {
-    const authored = test as TestCase;
-    add(
-      {
-        vars: { ...defaults?.vars, ...authored.vars },
-        metadata: { ...defaultMetadata, ...authored.metadata },
-        provider: authored.provider ?? defaults?.provider,
-      },
-      'topLevel',
-    );
-  }
-  for (const scenario of config.scenarios ?? []) {
-    const authoredScenario = scenario as Scenario;
-    for (const variant of authoredScenario.config) {
-      for (const test of authoredScenario.tests ?? [{}]) {
-        add(
-          {
-            vars: { ...defaults?.vars, ...variant.vars, ...test.vars },
-            metadata: { ...defaultMetadata, ...variant.metadata, ...test.metadata },
-            provider: test.provider ?? variant.provider ?? defaults?.provider,
-          },
-          'scenario',
-        );
-      }
-    }
-  }
-  return origins;
-}
-
-function matchesSavedCase(result: EvaluateResult, test: TestCase): boolean | undefined {
-  if (!deepEqual(result.testCase?.metadata ?? {}, test.metadata ?? {})) {
-    return false;
-  }
-  if (
-    (test.vars && (typeof test.vars !== 'object' || Array.isArray(test.vars))) ||
-    Object.values(test.vars ?? {}).some(
-      (value) =>
-        (value !== null && typeof value === 'object') ||
-        (typeof value === 'string' && value.startsWith('file://')),
-    )
-  ) {
-    // Arrays expand and file references resolve after the config is saved.
-    // Neither a match nor a mismatch in raw vars can prove row origin.
-    return undefined;
-  }
-  if (!deepEqual(filterRuntimeVars(result.vars) ?? {}, filterRuntimeVars(test.vars) ?? {})) {
-    return false;
-  }
-  if (test.provider === undefined && result.testCase?.provider === undefined) {
-    return true;
-  }
-  const savedProvider = providerToIdentifier(test.provider);
-  const storedProvider = result.testCase?.provider;
-  const storedProviderId =
-    storedProvider && typeof storedProvider === 'object' && 'id' in storedProvider
-      ? typeof storedProvider.id === 'string'
-        ? storedProvider.id
-        : undefined
-      : undefined;
-  if (savedProvider && storedProviderId && savedProvider === storedProviderId) {
-    return true;
-  }
-  // A raw file or options provider may resolve to a different runtime ID. A mismatch
-  // can prove origin only for a plain authored provider ID.
-  if (
-    typeof test.provider === 'string' &&
-    !/^(?:file:|https?:|\.\.?\/|\/)/.test(test.provider) &&
-    storedProviderId
-  ) {
-    return false;
-  }
-  return undefined;
 }
 
 function observedGeneratedScenarioId(config: Partial<UnifiedConfig>, results: EvaluateResult[]) {
@@ -210,10 +139,6 @@ function storedResultProvenance(
       return provenance;
     }
     provenance.generatedScenarioIdsObserved = observedGeneratedScenarioId(config, results);
-    const explicitScenarioOrigins = savedExplicitScenarioOrigins(config);
-    if (explicitScenarioOrigins.size > 0) {
-      provenance.explicitScenarioOrigins = explicitScenarioOrigins;
-    }
     return provenance;
   }
   if (trustOmittedScenarios && completeConfig) {
@@ -821,9 +746,13 @@ export function createScenarioResultClassifier(
 
   return {
     matchesAny: (result: EvaluateResult, source?: StoredResultProvenance) =>
-      source?.hasScenarios !== false &&
+      !hasRedactedTargetIdentity(result) &&
+      storedEvalOrigin(result) !== 'top-level' &&
+      (source?.hasScenarios !== false || storedEvalOrigin(result) === 'scenario') &&
       !(
-        source?.generatedScenarioIdsObserved && result.testCase?.metadata?.conversationId == null
+        storedEvalOrigin(result) !== 'scenario' &&
+        source?.generatedScenarioIdsObserved &&
+        result.testCase?.metadata?.conversationId == null
       ) &&
       scenario.config.some(
         (_, index) => configuredMatch(result, index) || signatureMatch(result, index),
@@ -831,10 +760,15 @@ export function createScenarioResultClassifier(
     forVariant: (index: number): ResultMatchContext => ({
       includesResult: (result, source) => {
         if (
-          source?.hasScenarios === false ||
-          (source?.generatedScenarioIdsObserved &&
+          storedEvalOrigin(result) === 'top-level' ||
+          (source?.hasScenarios === false && storedEvalOrigin(result) !== 'scenario') ||
+          (storedEvalOrigin(result) !== 'scenario' &&
+            source?.generatedScenarioIdsObserved &&
             result.testCase?.metadata?.conversationId == null)
         ) {
+          return false;
+        }
+        if (hasRedactedTargetIdentity(result)) {
           return false;
         }
         if (configuredMatch(result, index)) {
@@ -893,19 +827,13 @@ export function topLevelResultMatchContext(suite: TestSuite): ResultMatchContext
     globalScenarioOffset += scenario.config.length;
     return classifier;
   });
-  const explicitScenarioIds = new Set(
-    (suite.scenarios ?? []).flatMap((scenario) =>
-      scenario.config.flatMap((variant) =>
-        (scenario.tests ?? []).map(
-          (test) => declaredScenarioMetadata(suite, variant, test).conversationId,
-        ),
-      ),
-    ),
-  );
   return {
     bindMatchedTest,
     authoredTestFor,
     includesResult: (result, source) => {
+      if (hasRedactedTargetIdentity(result)) {
+        return false;
+      }
       const topLevelMatch = topLevelCandidates.some((candidate) =>
         matchesScenarioCandidate(
           result,
@@ -933,34 +861,28 @@ export function topLevelResultMatchContext(suite: TestSuite): ResultMatchContext
       ) {
         return false;
       }
+      const origin = storedEvalOrigin(result);
+      if (origin === 'scenario') {
+        return false;
+      }
+      if (origin === 'top-level') {
+        return true;
+      }
       if (source?.hasScenarios === false) {
         return true;
       }
       const conversationId = result.testCase?.metadata?.conversationId;
-      const savedOrigin = source?.explicitScenarioOrigins?.get(conversationId);
-      if (
-        savedOrigin?.scenario.some((test) => matchesSavedCase(result, test) === true) &&
-        savedOrigin.topLevel.every((test) => matchesSavedCase(result, test) === false) &&
-        !topLevelCandidates.some(
-          (candidate) =>
-            candidate.metadata.conversationId === conversationId &&
-            matchesScenarioCandidate(
-              result,
-              candidate.effective,
-              candidate.metadata,
-              candidate.metadataKeys,
-            ),
-        )
-      ) {
-        return false;
+      // Older rows do not record their origin. An authored ID alone cannot prove
+      // that such a row came from a scenario, even when the current suite uses it.
+      if (conversationId != null && !isGeneratedScenarioId(conversationId)) {
+        return true;
       }
       const scenarioMatch = scenarioClassifiers.some((classifier) =>
         classifier.matchesAny(result, source),
       );
       const generatedScenarioId = isGeneratedScenarioId(conversationId);
-      const explicitScenarioId = explicitScenarioIds.has(conversationId);
       if (
-        (generatedScenarioId || (conversationId !== undefined && explicitScenarioId)) &&
+        generatedScenarioId &&
         !topLevelCandidates.some(
           (candidate) =>
             candidate.metadata.conversationId !== undefined &&

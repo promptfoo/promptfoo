@@ -2873,6 +2873,79 @@ function getDefaultTest(testSuite: TestSuite) {
   return typeof testSuite.defaultTest === 'object' ? testSuite.defaultTest : undefined;
 }
 
+const SCENARIO_RESULT_SOURCE = Symbol('scenarioResultSource');
+
+function snapshotTargetIdentity(provider: AtomicTestCase['provider']) {
+  if (!provider) {
+    return undefined;
+  }
+  const id =
+    typeof provider === 'string'
+      ? provider
+      : typeof provider.id === 'function'
+        ? provider.id()
+        : provider.id;
+  const label = typeof provider === 'string' ? undefined : provider.label;
+  if (typeof id !== 'string') {
+    return undefined;
+  }
+  const sanitized = sanitizeObject(
+    { id, label },
+    {
+      context: 'eval target identity',
+      sanitizeUrls: true,
+      maxDepth: Number.POSITIVE_INFINITY,
+      throwOnError: true,
+    },
+  ) as { id?: string; label?: string };
+  return {
+    id,
+    label,
+    idSafe: Boolean(id) && sanitized.id === id,
+    labelSafe: !label || sanitized.label === label,
+  };
+}
+
+function stampResultSource(
+  result: EvaluateResult,
+  test: AtomicTestCase,
+  targetIdentityRedacted?: boolean,
+): void {
+  let redacted = targetIdentityRedacted;
+  if (redacted === undefined) {
+    const persistedTarget = snapshotTargetIdentity(result.testCase?.provider);
+    const scheduledTarget =
+      result.testCase?.provider === test.provider
+        ? persistedTarget
+        : snapshotTargetIdentity(test.provider);
+    const identityLost =
+      scheduledTarget &&
+      (!persistedTarget ||
+        scheduledTarget.id !== persistedTarget.id ||
+        scheduledTarget.label !== persistedTarget.label);
+    redacted = Boolean(
+      identityLost || (persistedTarget && (!persistedTarget.idSafe || !persistedTarget.labelSafe)),
+    );
+  }
+  const existing = result.metadata?.[PROMPTFOO_METADATA_KEY];
+  const internal =
+    existing && typeof existing === 'object' && !Array.isArray(existing) ? existing : {};
+  const reserved = { ...internal };
+  delete reserved.targetIdentityRedacted;
+  result.metadata = {
+    ...result.metadata,
+    [PROMPTFOO_METADATA_KEY]: {
+      ...reserved,
+      evalOrigin: (test as AtomicTestCase & { [SCENARIO_RESULT_SOURCE]?: true })[
+        SCENARIO_RESULT_SOURCE
+      ]
+        ? 'scenario'
+        : 'top-level',
+      ...(redacted && { targetIdentityRedacted: true }),
+    },
+  };
+}
+
 function buildTestsFromSuite(testSuite: TestSuite): AtomicTestCase[] {
   const tests = getInitialTests(testSuite);
   if (!testSuite.scenarios?.length) {
@@ -2937,6 +3010,7 @@ function mergeScenarioTest(
     },
     assert: [...(data.assert || []), ...(test.assert || [])],
     metadata: mergedMetadata,
+    [SCENARIO_RESULT_SOURCE]: true,
   } as AtomicTestCase;
 }
 
@@ -4366,10 +4440,26 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       testSuite: TestSuite;
     },
   ) {
+    const fromScenario = Boolean(
+      (evalStep.test as AtomicTestCase & { [SCENARIO_RESULT_SOURCE]?: true })[
+        SCENARIO_RESULT_SOURCE
+      ],
+    );
     const beforeEachOut = await runExtensionHook(testSuite.extensions, 'beforeEach', {
       test: evalStep.test,
     });
-    evalStep.test = beforeEachOut.test;
+    // Hooks may return a frozen or shared test object. Keep the scheduled origin on
+    // an evaluator-owned copy without mutating extension state.
+    evalStep.test = { ...beforeEachOut.test };
+    if (fromScenario) {
+      (evalStep.test as AtomicTestCase & { [SCENARIO_RESULT_SOURCE]?: true })[
+        SCENARIO_RESULT_SOURCE
+      ] = true;
+    } else {
+      delete (evalStep.test as AtomicTestCase & { [SCENARIO_RESULT_SOURCE]?: true })[
+        SCENARIO_RESULT_SOURCE
+      ];
+    }
 
     const rows = await runEvalInternal(
       {
@@ -4441,6 +4531,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
         }
       }
 
+      stampResultSource(row, evalStep.test);
       await this.persistEvalRow(row);
 
       const metrics = context.prompts[row.promptIdx].metrics;
@@ -4584,12 +4675,27 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     const sanitizedTestCase = { ...evalStep.test };
     delete (sanitizedTestCase as Partial<AtomicTestCase>).provider;
 
+    const targetProvider = evalStep.test.provider;
+    let targetIdentityRedacted = false;
+    if (isApiProvider(targetProvider)) {
+      const targetIdentity = snapshotTargetIdentity(targetProvider);
+      targetIdentityRedacted =
+        !targetIdentity || !targetIdentity.idSafe || !targetIdentity.labelSafe;
+      if (targetIdentity?.idSafe) {
+        sanitizedTestCase.provider = {
+          id: targetIdentity.id,
+          ...(targetIdentity.label && targetIdentity.labelSafe && { label: targetIdentity.label }),
+        };
+      }
+    }
+
     const timeoutResult = createEvalStepTimeoutResult(
       evalStep,
       sanitizedTestCase,
       timeoutMs,
       error,
     );
+    stampResultSource(timeoutResult, evalStep.test, targetIdentityRedacted);
     this.trackFinalJsonlResult(timeoutResult);
     await this.store.appendResult(timeoutResult);
     this.stats.errors++;
@@ -5638,6 +5744,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       }
       const evalStep = runEvalOptions[i];
       const timeoutResult = createMaxDurationTimeoutResult(evalStep, maxEvalTimeMs, startTime);
+      stampResultSource(timeoutResult, evalStep.test);
       this.trackFinalJsonlResult(timeoutResult);
       await this.store.appendResult(timeoutResult);
       this.stats.errors++;

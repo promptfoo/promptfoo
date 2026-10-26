@@ -15,6 +15,88 @@ function failedResult(vars: Record<string, string>, metadata: Record<string, str
 }
 
 describe('exact scenario result matching', () => {
+  it.each([
+    {
+      name: 'an unsafe target label',
+      id: 'safe-target',
+      label: 'https://example.invalid?api_key=fake-secret',
+      storedProvider: { id: 'safe-target' },
+    },
+    {
+      name: 'an unsafe target ID',
+      id: 'https://example.invalid?api_key=fake-secret',
+      label: 'safe-label',
+      storedProvider: undefined,
+    },
+  ])('does not fall back to a suite provider for $name', ({ id, label, storedProvider }) => {
+    const target = { id: () => id, label, callApi: async () => ({ output: 'unused' }) };
+    const test: TestCase = { vars: { caseId: 'shared' }, provider: target };
+    const scenario: Scenario = { config: [{}], tests: [test] };
+    const suite: TestSuite = { prompts: [], providers: [], tests: [test], scenarios: [scenario] };
+    const scenarioResult = {
+      ...failedResult({ caseId: 'shared' }, { conversationId: '__scenario_0__' }),
+      provider: { id: 'echo' },
+      metadata: { __promptfoo: { evalOrigin: 'scenario', targetIdentityRedacted: true } },
+      testCase: {
+        vars: { caseId: 'shared' },
+        metadata: { conversationId: '__scenario_0__' },
+        provider: storedProvider,
+      },
+    } as unknown as EvaluateResult;
+    const topResult = {
+      ...scenarioResult,
+      metadata: { __promptfoo: { evalOrigin: 'top-level', targetIdentityRedacted: true } },
+      testCase: { ...scenarioResult.testCase, metadata: {} },
+    } as EvaluateResult;
+
+    expect(
+      createScenarioResultClassifier(suite, scenario).forVariant(0).includesResult(scenarioResult),
+    ).toBe(false);
+    expect(topLevelResultMatchContext(suite).includesResult(topResult)).toBe(false);
+    const sameColumnIdentity = { ...scenarioResult, provider: { id, label } } as EvaluateResult;
+    expect(
+      createScenarioResultClassifier(suite, scenario)
+        .forVariant(0)
+        .includesResult(sameColumnIdentity),
+    ).toBe(false);
+    const distinctTarget = {
+      ...scenarioResult,
+      metadata: { __promptfoo: { evalOrigin: 'scenario' } },
+      testCase: { ...scenarioResult.testCase, provider: { id: 'different-target' } },
+    } as EvaluateResult;
+    expect(
+      createScenarioResultClassifier(suite, scenario).forVariant(0).includesResult(distinctTarget),
+    ).toBe(true);
+  });
+
+  it('keeps a marked row when the current test adds its suite column as a target', () => {
+    const target = { id: () => 'shared-provider', callApi: async () => ({ output: 'unused' }) };
+    const test: TestCase = { vars: { caseId: 'shared' }, provider: target };
+    const scenario: Scenario = { config: [{}], tests: [test] };
+    const suite: TestSuite = {
+      prompts: [],
+      providers: [target],
+      tests: [test],
+      scenarios: [scenario],
+    };
+    const saved = {
+      ...failedResult({ caseId: 'shared' }, { conversationId: '__scenario_0__' }),
+      provider: { id: 'shared-provider' },
+      metadata: { __promptfoo: { evalOrigin: 'scenario' } },
+    } as EvaluateResult;
+
+    expect(
+      createScenarioResultClassifier(suite, scenario).forVariant(0).includesResult(saved),
+    ).toBe(true);
+    expect(
+      topLevelResultMatchContext(suite).includesResult({
+        ...saved,
+        metadata: { __promptfoo: { evalOrigin: 'top-level' } },
+        testCase: { ...saved.testCase, metadata: {} },
+      }),
+    ).toBe(true);
+  });
+
   it('distinguishes a variant with missing metadata from one that declares the key', () => {
     const scenario: Scenario = {
       config: [{}, { metadata: { category: 'B' } }],

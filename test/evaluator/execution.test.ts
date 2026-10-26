@@ -761,7 +761,7 @@ describeEvaluator('evaluator execution control', () => {
     const testSuite: TestSuite = {
       providers: [slowApiProvider],
       prompts: [{ ...toPrompt('Test prompt'), id: 'authored-step-timeout' }],
-      tests: [{}],
+      tests: [{ provider: slowApiProvider }],
     };
 
     try {
@@ -783,6 +783,10 @@ describeEvaluator('evaluator execution control', () => {
           success: false,
           failureReason: ResultFailureReason.ERROR,
           prompt: expect.objectContaining({ id: 'authored-step-timeout' }),
+          metadata: expect.objectContaining({
+            __promptfoo: expect.objectContaining({ evalOrigin: 'top-level' }),
+          }),
+          testCase: expect.objectContaining({ provider: { id: 'slow-provider' } }),
         }),
       );
 
@@ -1174,99 +1178,121 @@ describeEvaluator('evaluator execution control', () => {
     }
   });
 
-  it('retains completed target output and cancels queued grading at the max duration', async () => {
-    useEvaluationTimers();
+  it.each([
+    {
+      name: 'unsafe target label',
+      id: 'target-provider',
+      label: 'sk-proj-QAFakeOnlyOpaqueSecret1234567890',
+    },
+    {
+      name: 'unsafe target ID',
+      id: 'sk-proj-QAFakeOnlyOpaqueSecret1234567890',
+      label: 'safe-label',
+    },
+  ])(
+    'retains completed target output and cancels queued grading at the max duration for $name',
+    async ({ id, label }) => {
+      useEvaluationTimers();
 
-    const results: any[] = [];
-    const waitForTarget = (ms: number, signal?: AbortSignal) => {
-      let resolveSleep!: () => void;
-      let rejectSleep!: (err: Error) => void;
-      const sleepPromise = new Promise<void>((resolve, reject) => {
-        resolveSleep = resolve;
-        rejectSleep = reject;
-      });
-      const timeout = setTimeout(() => resolveSleep(), ms);
-      signal?.addEventListener(
-        'abort',
-        () => {
-          clearTimeout(timeout);
-          rejectSleep(new Error('target aborted'));
-        },
-        { once: true },
-      );
-      return sleepPromise;
-    };
-    const provider: ApiProvider = {
-      id: vi.fn().mockReturnValue('target-provider'),
-      callApi: vi.fn(async (prompt: string, _context, options) => {
-        await waitForTarget(40, options?.abortSignal);
-        return {
-          output: `Target output for ${prompt}`,
-          tokenUsage: createEmptyTokenUsage(),
-        };
-      }),
-    };
-    const judge: ApiProvider = {
-      id: vi.fn().mockReturnValue('judge'),
-      callApi: vi.fn(async () => ({
-        output: JSON.stringify({ pass: true, score: 1, reason: 'judge passed' }),
-        tokenUsage: createEmptyTokenUsage(),
-      })),
-    };
-    const evalRecord = {
-      id: 'grouped-timeout-eval',
-      results,
-      prompts: [],
-      persisted: false,
-      config: {},
-      addPrompts: vi.fn().mockResolvedValue(undefined),
-      addResult: vi.fn(async (result) => {
-        results.push(result);
-      }),
-      fetchResultsByTestIdx: vi.fn().mockResolvedValue([]),
-      getResults: vi.fn().mockResolvedValue(results),
-      save: vi.fn().mockResolvedValue(undefined),
-      setDurationMs: vi.fn(),
-      setVars: vi.fn(),
-      toEvaluateSummary: vi.fn(),
-    };
-    const testSuite: TestSuite = {
-      providers: [provider],
-      prompts: [{ ...toPrompt('Test prompt {{topic}}'), id: 'authored-max-duration' }],
-      tests: ['alpha', 'beta', 'gamma'].map((topic) => ({
-        vars: { topic },
-        assert: [{ type: 'llm-rubric', value: `Judge ${topic}`, provider: judge }],
-      })),
-    };
-
-    try {
-      const evalPromise = evaluate(testSuite, evalRecord as unknown as Eval, {
-        maxConcurrency: 1,
-        maxEvalTimeMs: 55,
-      });
-      await vi.advanceTimersByTimeAsync(40);
-      await vi.advanceTimersByTimeAsync(15);
-      await evalPromise;
-    } finally {
-      vi.useRealTimers();
-    }
-
-    const resultByTopic = new Map(results.map((result) => [result.vars.topic, result]));
-
-    expect(judge.callApi).not.toHaveBeenCalled();
-    expect(resultByTopic.get('alpha')).toEqual(
-      expect.objectContaining({
-        success: false,
-        failureReason: ResultFailureReason.ERROR,
-        response: expect.objectContaining({
-          output: 'Target output for Test prompt alpha',
+      const results: any[] = [];
+      const waitForTarget = (ms: number, signal?: AbortSignal) => {
+        let resolveSleep!: () => void;
+        let rejectSleep!: (err: Error) => void;
+        const sleepPromise = new Promise<void>((resolve, reject) => {
+          resolveSleep = resolve;
+          rejectSleep = reject;
+        });
+        const timeout = setTimeout(() => resolveSleep(), ms);
+        signal?.addEventListener(
+          'abort',
+          () => {
+            clearTimeout(timeout);
+            rejectSleep(new Error('target aborted'));
+          },
+          { once: true },
+        );
+        return sleepPromise;
+      };
+      const provider: ApiProvider = {
+        id: vi.fn().mockReturnValue(id),
+        label,
+        callApi: vi.fn(async (prompt: string, _context, options) => {
+          await waitForTarget(40, options?.abortSignal);
+          return {
+            output: `Target output for ${prompt}`,
+            tokenUsage: createEmptyTokenUsage(),
+          };
         }),
-      }),
-    );
-    expect(resultByTopic.get('alpha')?.error).toMatch(/^Aborted: /);
-    expect(resultByTopic.get('gamma')?.error).toContain('Evaluation exceeded max duration');
-    expect(resultByTopic.get('gamma')?.prompt.id).toBe('authored-max-duration');
-  });
+      };
+      const columnProvider: ApiProvider = {
+        id: () => 'suite-column',
+        callApi: vi.fn(async () => ({ output: 'unused' })),
+      };
+      const judge: ApiProvider = {
+        id: vi.fn().mockReturnValue('judge'),
+        callApi: vi.fn(async () => ({
+          output: JSON.stringify({ pass: true, score: 1, reason: 'judge passed' }),
+          tokenUsage: createEmptyTokenUsage(),
+        })),
+      };
+      const evalRecord = {
+        id: 'grouped-timeout-eval',
+        results,
+        prompts: [],
+        persisted: false,
+        config: {},
+        addPrompts: vi.fn().mockResolvedValue(undefined),
+        addResult: vi.fn(async (result) => {
+          results.push(result);
+        }),
+        fetchResultsByTestIdx: vi.fn().mockResolvedValue([]),
+        getResults: vi.fn().mockResolvedValue(results),
+        save: vi.fn().mockResolvedValue(undefined),
+        setDurationMs: vi.fn(),
+        setVars: vi.fn(),
+        toEvaluateSummary: vi.fn(),
+      };
+      const testSuite: TestSuite = {
+        providers: [columnProvider],
+        prompts: [{ ...toPrompt('Test prompt {{topic}}'), id: 'authored-max-duration' }],
+        tests: ['alpha', 'beta', 'gamma'].map((topic) => ({
+          vars: { topic },
+          provider,
+          assert: [{ type: 'llm-rubric', value: `Judge ${topic}`, provider: judge }],
+        })),
+      };
+
+      try {
+        const evalPromise = evaluate(testSuite, evalRecord as unknown as Eval, {
+          maxConcurrency: 1,
+          maxEvalTimeMs: 55,
+        });
+        await vi.advanceTimersByTimeAsync(40);
+        await vi.advanceTimersByTimeAsync(15);
+        await evalPromise;
+      } finally {
+        vi.useRealTimers();
+      }
+
+      const resultByTopic = new Map(results.map((result) => [result.vars.topic, result]));
+
+      expect(judge.callApi).not.toHaveBeenCalled();
+      expect(resultByTopic.get('alpha')).toEqual(
+        expect.objectContaining({
+          success: false,
+          failureReason: ResultFailureReason.ERROR,
+          response: expect.objectContaining({
+            output: 'Target output for Test prompt alpha',
+          }),
+        }),
+      );
+      expect(resultByTopic.get('alpha')?.error).toMatch(/^Aborted: /);
+      expect(resultByTopic.get('gamma')?.error).toContain('Evaluation exceeded max duration');
+      expect(resultByTopic.get('gamma')?.prompt.id).toBe('authored-max-duration');
+      expect(resultByTopic.get('gamma')?.metadata?.__promptfoo?.evalOrigin).toBe('top-level');
+      expect(resultByTopic.get('gamma')?.metadata?.__promptfoo?.targetIdentityRedacted).toBe(true);
+    },
+  );
 
   it('cancels in-flight grouped grading when the max duration expires', async () => {
     useEvaluationTimers();

@@ -332,9 +332,10 @@ describe('filterTestsUtil', () => {
         expect(includesResult).toHaveBeenCalledWith(expect.anything(), { hasScenarios: true });
       });
 
-      it('does not extract a removed explicit scenario ID from saved source config', async () => {
+      it('does not extract a marked removed scenario', async () => {
         const saved = {
           ...mockResults[1],
+          metadata: { __promptfoo: { evalOrigin: 'scenario' } },
           testCase: {
             ...mockResults[1].testCase,
             metadata: { role: 'common', conversationId: 'stable-A' },
@@ -380,9 +381,87 @@ describe('filterTestsUtil', () => {
         expect(selected).toEqual([]);
       });
 
-      it('separates saved top-level and scenario rows sharing one explicit conversation ID', async () => {
+      it('keeps one historical top-level timeout when old rows have ambiguous origin', async () => {
+        const saved = {
+          ...mockResults[1],
+          success: false,
+          failureReason: ResultFailureReason.ERROR,
+          error: 'Evaluation timed out after 10ms',
+          vars: { caseId: 'shared' },
+          testCase: {
+            vars: { caseId: 'shared' },
+            metadata: { role: 'common', conversationId: 'stable-shared' },
+          },
+        };
+        vi.mocked(util.readOutput).mockResolvedValue({
+          evalId: null,
+          results: {
+            version: 3,
+            timestamp: new Date().toISOString(),
+            results: [
+              { ...saved, testIdx: 0 },
+              { ...saved, testIdx: 1 },
+            ],
+            table: { head: { prompts: [], vars: [] }, body: [] },
+            stats: { successes: 0, failures: 0, errors: 2, tokenUsage: mockTokenUsage },
+          },
+          config: {
+            prompts: [],
+            providers: [],
+            tests: [],
+            scenarios: [
+              {
+                config: [{ metadata: { role: 'common', conversationId: 'stable-shared' } }],
+                tests: [{ vars: { caseId: 'shared' } }],
+              },
+            ],
+          },
+          shareableUrl: null,
+        } as any);
+        const currentSuite: TestSuite = {
+          prompts: [],
+          providers: [],
+          tests: [],
+          scenarios: [{ config: [{}], tests: [{ vars: { caseId: 'other' } }] }],
+        };
+
+        const selected = await filterTestsByResults(
+          currentSuite,
+          'legacy-ambiguous.json',
+          () => true,
+          undefined,
+          topLevelResultMatchContext(currentSuite),
+        );
+
+        expect(selected).toHaveLength(1);
+        expect(selected[0]?.vars?.caseId).toBe('shared');
+
+        const retainedScenarioSuite: TestSuite = {
+          ...currentSuite,
+          scenarios: [
+            {
+              config: [{ metadata: { role: 'common', conversationId: 'stable-shared' } }],
+              tests: [{ vars: { caseId: 'shared' } }],
+            },
+          ],
+        };
+        const retainedSelected = await filterTestsByResults(
+          retainedScenarioSuite,
+          'legacy-ambiguous.json',
+          () => true,
+          undefined,
+          topLevelResultMatchContext(retainedScenarioSuite),
+        );
+        expect(retainedSelected).toHaveLength(1);
+        expect(retainedSelected[0]?.vars?.caseId).toBe('shared');
+      });
+
+      it('separates marked top-level and scenario rows sharing one explicit conversation ID', async () => {
         const savedResult = (caseId: string) => ({
           ...mockResults[1],
+          metadata: {
+            __promptfoo: { evalOrigin: caseId === 'top' ? 'top-level' : 'scenario' },
+          },
           vars: { caseId },
           testCase: { vars: { caseId }, metadata: { conversationId: 'shared' } },
         });
@@ -436,9 +515,14 @@ describe('filterTestsUtil', () => {
         expect(scenario).toEqual([]);
       });
 
-      it('uses a stable saved target provider to disambiguate shared ID and vars', async () => {
+      it('uses result origin to distinguish providers sharing an ID and vars', async () => {
         const savedResult = (providerId: string) => ({
           ...mockResults[1],
+          metadata: {
+            __promptfoo: {
+              evalOrigin: providerId === 'provider:top' ? 'top-level' : 'scenario',
+            },
+          },
           vars: { caseId: 'shared' },
           testCase: {
             vars: { caseId: 'shared' },
@@ -606,9 +690,10 @@ describe('filterTestsUtil', () => {
         },
       );
 
-      it('classifies a saved scenario ID inherited only from root metadata', async () => {
+      it('excludes a marked scenario with an ID inherited from root metadata', async () => {
         const saved = {
           ...mockResults[1],
+          metadata: { __promptfoo: { evalOrigin: 'scenario' } },
           vars: { caseId: 'scenario' },
           testCase: {
             vars: { caseId: 'scenario' },
