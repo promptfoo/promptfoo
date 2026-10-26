@@ -1,7 +1,7 @@
+import { createHash } from 'node:crypto';
 import { serialize } from 'node:v8';
 
 import logger from '../logger';
-import { sha256 } from '../util/createHash';
 import { providerRegistry } from './providerRegistry';
 import { loadTransformers } from './transformersAvailability';
 
@@ -221,7 +221,8 @@ function getPipelineCacheKey(
     revision: options.revision || 'main',
     sessionOptions: options.sessionOptions || {},
   });
-  return `${task}:${model}:${device}:${dtype}:${sha256(serialize(constructionOptions))}`;
+  const optionsHash = createHash('sha256').update(serialize(constructionOptions)).digest('hex');
+  return `${task}:${model}:${device}:${dtype}:${optionsHash}`;
 }
 
 async function initializePipeline(
