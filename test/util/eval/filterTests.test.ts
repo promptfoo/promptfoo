@@ -1020,6 +1020,24 @@ describe('filterTests', () => {
       expect(result.map((test) => test.description)).toEqual(['string-null']);
     });
 
+    it('does not expose values in invalid exact-filter errors', async () => {
+      const secret = 'qa-token-secret-sentinel';
+      let errorMessage = '';
+
+      try {
+        await filterTests(exactMetadataSuite, {
+          metadataExact: `apiKey=${secret},`,
+        });
+      } catch (error) {
+        errorMessage = error instanceof Error ? error.message : String(error);
+      }
+
+      expect(errorMessage).not.toContain(secret);
+      expect(errorMessage).toContain('--filter-metadata-exact');
+      expect(errorMessage).toContain('empty value');
+      expect(errorMessage).toContain('key=value');
+    });
+
     it('uses inherited metadata unless the test explicitly overrides the key', async () => {
       const suite: TestSuite = {
         prompts: [],

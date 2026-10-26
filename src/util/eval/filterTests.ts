@@ -101,7 +101,11 @@ function splitMetadataFilterValue(value: string): string[] {
   return alternatives;
 }
 
-function parseMetadataFilters(filters: string[], optionName: string) {
+function parseMetadataFilters(
+  filters: string[],
+  optionName: string,
+  includeInvalidFilterInError = true,
+) {
   return filters.map((filter) => {
     const [key, ...valueParts] = filter.split('=');
     const value = valueParts.join('=');
@@ -110,7 +114,10 @@ function parseMetadataFilters(filters: string[], optionName: string) {
     }
     const values = splitMetadataFilterValue(value);
     if (values.includes('')) {
-      throw new Error(`${optionName} has an empty value in "${filter}"`);
+      const detail = includeInvalidFilterInError
+        ? ` in "${filter}"`
+        : '. Use key=value with non-empty values.';
+      throw new Error(`${optionName} has an empty value${detail}`);
     }
     return { key, values };
   });
@@ -292,7 +299,7 @@ export async function filterTests(testSuite: TestSuite, options: FilterOptions):
     const metadataFilters = Array.isArray(options.metadataExact)
       ? options.metadataExact
       : [options.metadataExact];
-    const parsedFilters = parseMetadataFilters(metadataFilters, '--filter-metadata-exact');
+    const parsedFilters = parseMetadataFilters(metadataFilters, '--filter-metadata-exact', false);
     const inheritedMetadata = options.inheritedMetadata;
 
     logger.debug(`Filtering for ${parsedFilters.length} exact metadata condition(s)`);
