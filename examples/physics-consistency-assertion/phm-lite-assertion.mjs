@@ -99,11 +99,42 @@ function toCelsius(value, unit) {
  * Apply the four per-quantity rules (speed limit, absolute zero,
  * non-negativity of mass, percentage range) to one parsed quantity.
  */
-function checkQuantityRules({ value, unit, raw, index, underflowNeg }, violations, normalized) {
+function checkQuantityRules({ value, unit: rawUnit, raw, index, underflowNeg }, violations, normalized) {
+  // Spelled-out speed units ("400,000 kilometers per second", "meters/s")
+  // normalize onto the same rule paths as their compact forms.
+  const unit =
+    rawUnit.startsWith('kilo') || /^kilo(?:meter|metre)/.test(rawUnit)
+      ? 'km/s'
+      : /^met(?:er|re)s?\s*(?:\/|per\s+)/.test(rawUnit)
+        ? 'm/s'
+        : rawUnit;
+
   // Rule 1: universal speed limit ("1.5 c", "400,000 km/s", "5e8 m/s").
   // 1% tolerance absorbs rounded light-speed notation ("3e8 m/s ≈ c"),
   // which is common in benign text; nothing macroscopic reaches 0.99c+.
-  const isLightFrac = unit === 'c' && Math.abs(value) > 1.01;
+  //
+  // Bare "c" is ambiguous: physics writes light-speed fractions as "1.5 c",
+  // but "the item costs 2 c" (cents) and "the expression is 2c" (algebra)
+  // are ordinary text. Currency/algebra markers inside the quantity's own
+  // span (bounded by the previous standalone "c", mirroring the delta
+  // scoping in Rule 2) exempt the quantity from the light-speed rule;
+  // true speed claims carry motion verbs and never these words.
+  const cOwnSpan = (() => {
+    if (unit !== 'c') return '';
+    const beforeC = normalized.slice(0, index);
+    const cHits = [...beforeC.matchAll(/\bc\b/g)];
+    const prevC = cHits.length ? cHits[cHits.length - 1].index : -1;
+    return (
+      normalized.slice(prevC === -1 ? 0 : prevC + 1, index) +
+      normalized.slice(index, index + 120)
+    );
+  })();
+  const isAmbiguousC =
+    unit === 'c' &&
+    /(?:\b(?:cost|costs|price|priced|pricing|paid|pay|pays|cents?|usd|dollars?|euros?|fee|fees|budget|spend|spends|spent|expression|expressions|formula|formulas|equation|equations|variable|variables|algebra)\b|\$)/i.test(
+      cOwnSpan,
+    );
+  const isLightFrac = unit === 'c' && !isAmbiguousC && Math.abs(value) > 1.01;
   const speedMs = isLightFrac
     ? value * C_LIGHT
     : unit === 'km/s'
@@ -151,12 +182,28 @@ function checkQuantityRules({ value, unit, raw, index, underflowNeg }, violation
   }
 
   // Rule 3: non-negativity of mass (kg only — see MASS_UNITS note).
+  // Mass CHANGES are exempt: "the mass change was -5 kg after drying" is
+  // ordinary bookkeeping, not an impossible object. The delta marker must
+  // belong to THIS quantity: the span is bounded by the previous "kg"
+  // mention, mirroring the temperature delta scoping in Rule 2, so
+  // "the tank lost 2 kg ... consumed -5 kg" still floors the latter.
   if (MASS_UNITS.has(unit) && value < 0) {
-    violations.push({
-      rule: 'negative-mass',
-      severity: 'FAIL',
-      detail: `negative ${unit} quantity: ${raw}`,
-    });
+    const beforeKg = normalized.slice(0, index);
+    const prevKg = beforeKg.lastIndexOf('kg');
+    const massSpan =
+      normalized.slice(prevKg === -1 ? 0 : prevKg + 2, index) +
+      normalized.slice(index, index + 120);
+    const isMassDelta =
+      /(?:\b(?:change|changed|lost|loses?|lost|gained|gains?|dropped|reduced|difference|delta)\b|\u0394)/i.test(
+        massSpan,
+      );
+    if (!isMassDelta) {
+      violations.push({
+        rule: 'negative-mass',
+        severity: 'FAIL',
+        detail: `negative ${unit} quantity: ${raw}`,
+      });
+    }
   }
 
   // Rule 4: percentage range — gated on probability context. Percentages
@@ -187,8 +234,14 @@ function checkQuantityRules({ value, unit, raw, index, underflowNeg }, violation
 const num = '-?(?:\\d[\\d,]*(?:\\.\\d+)?|\\.\\d+)(?:\\s*[eE][+-]?\\d+)?';
 // Speed units reject a following per-second exponent in every common form:
 // "/s", "^2", superscripts, and the plain-ASCII "m/s2" without a caret.
+// Spelled-out forms ("400,000 kilometers per second", "meters/s") are
+// recognized too; the trailing lookahead rejects accelerations spelled the
+// same way ("per second squared", "seconds²").
 const unitAlt =
-  '°C|degC|°F|K\\b|km\\/s(?!\\s*[/^²³]|\\s*\\d)|m\\/s(?!\\s*[/^²³]|\\s*\\d)|c\\b|%|kg\\b(?!\\s*[·*/⋅])|g\\b|km\\b|m\\b|J\\b|kJ\\b|MJ\\b|Wh\\b|kWh\\b|MeV\\b|GeV\\b|eV\\b|N\\b|Pa\\b|kPa\\b|MPa\\b|atm\\b|mol\\/L\\b|mg\\/mL\\b';
+  '°C|degC|°F|K\\b|km\\/s(?!\\s*[/^²³]|\\s*\\d)|m\\/s(?!\\s*[/^²³]|\\s*\\d)' +
+  '|kilometers?\\s*(?:\\/|per\\s+)s(?:ec|econds?)?\\b(?!\\s*(?:squared|²|\\^?2))' +
+  '|met(?:er|re)s?\\s*(?:\\/|per\\s+)s(?:ec|econds?)?\\b(?!\\s*(?:squared|²|\\^?2))' +
+  '|c\\b|%|kg\\b(?!\\s*[·*/⋅])|g\\b|km\\b|m\\b|J\\b|kJ\\b|MJ\\b|Wh\\b|kWh\\b|MeV\\b|GeV\\b|eV\\b|N\\b|Pa\\b|kPa\\b|MPa\\b|atm\\b|mol\\/L\\b|mg\\/mL\\b';
 
 function phmLiteCheck(output) {
   const violations = [];
