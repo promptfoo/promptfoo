@@ -499,7 +499,7 @@ describe('exact scenario result matching', () => {
       };
       const suite: TestSuite = { prompts: [], providers: [], scenarios: [scenario] };
       const selected = failedResult(
-        { caseId: 'file://cases/a.txt' },
+        { caseId: `file://${path.join('cases', 'a.txt')}` },
         { role: 'common', conversationId: '__scenario_0__' },
       );
       const context = createScenarioResultClassifier(suite, scenario, 0, { basePath }).forVariant(
@@ -511,8 +511,11 @@ describe('exact scenario result matching', () => {
       expect(
         context.includesResult({
           ...selected,
-          vars: { caseId: 'file://cases/missing.txt' },
-          testCase: { ...selected.testCase, vars: { caseId: 'file://cases/missing.txt' } },
+          vars: { caseId: `file://${path.join('cases', 'missing.txt')}` },
+          testCase: {
+            ...selected.testCase,
+            vars: { caseId: `file://${path.join('cases', 'missing.txt')}` },
+          },
         }),
       ).toBe(false);
 
