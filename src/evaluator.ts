@@ -848,6 +848,7 @@ function createRunEvalSetup({
     prompt: {
       raw: '',
       label: prompt.label,
+      ...(prompt.id && { id: prompt.id }),
       config: promptConfig,
     },
     vars,
@@ -3873,6 +3874,7 @@ function createEvalStepTimeoutResult(
     prompt: {
       raw: evalStep.prompt.raw,
       label: evalStep.prompt.label,
+      ...(evalStep.prompt.id && { id: evalStep.prompt.id }),
       config: evalStep.prompt.config,
     },
     vars: evalStep.test.vars || {},
@@ -3972,6 +3974,7 @@ function createMaxDurationTimeoutResult(
     prompt: {
       raw: evalStep.prompt.raw,
       label: evalStep.prompt.label,
+      ...(evalStep.prompt.id && { id: evalStep.prompt.id }),
       config: evalStep.prompt.config,
     },
     vars: evalStep.test.vars || {},

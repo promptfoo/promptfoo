@@ -180,6 +180,477 @@ describe('filterTestsUtil', () => {
         expect(result[0]?.vars?.var1).toBe('test3');
       });
 
+      it('passes complete file config provenance through the shared results cache', async () => {
+        const output = {
+          evalId: null,
+          results: {
+            version: 3 as const,
+            timestamp: new Date().toISOString(),
+            results: mockResults,
+            table: { head: { prompts: [], vars: [] }, body: [] },
+            stats: { successes: 0, failures: 2, errors: 0, tokenUsage: mockTokenUsage },
+          },
+          config: { prompts: [], providers: [], tests: [] },
+          shareableUrl: null,
+        };
+        vi.mocked(util.readOutput).mockResolvedValue(output as any);
+        const includesResult = vi.fn(
+          (_result: EvaluateResult, source?: { hasScenarios?: boolean }) =>
+            source?.hasScenarios !== false,
+        );
+        const resultLoadCache = new Map();
+        const context = { includesResult, matchesTest: () => false, resultLoadCache };
+
+        const selected = await Promise.all([
+          filterTestsByResults(mockTestSuite, 'complete.json', () => true, undefined, context),
+          filterTestsByResults(mockTestSuite, 'complete.json', () => true, undefined, context),
+        ]);
+
+        expect(selected).toEqual([[], []]);
+        expect(util.readOutput).toHaveBeenCalledTimes(1);
+        expect(includesResult).toHaveBeenCalledWith(mockResults[0], { hasScenarios: false });
+      });
+
+      it('keeps old partial file config provenance unknown', async () => {
+        const includesResult = vi.fn(() => false);
+        await filterTestsByResults(mockTestSuite, 'results.json', () => true, undefined, {
+          includesResult,
+          matchesTest: () => false,
+        });
+        expect(includesResult).toHaveBeenCalledWith(mockResults[0], {});
+      });
+
+      it('infers generated scenario IDs only from undeclared IDs in a complete saved config', async () => {
+        const scenarioResult = {
+          ...mockResults[1],
+          testCase: {
+            ...mockResults[1].testCase,
+            metadata: { conversationId: '__scenario_0__' },
+          },
+        };
+        const config = {
+          prompts: [],
+          providers: [],
+          tests: [],
+          scenarios: [{ config: [{}], tests: [] }],
+        };
+        const output = {
+          evalId: null,
+          results: {
+            version: 3,
+            timestamp: new Date().toISOString(),
+            results: [mockResults[0], scenarioResult],
+            table: { head: { prompts: [], vars: [] }, body: [] },
+            stats: { successes: 0, failures: 1, errors: 0, tokenUsage: mockTokenUsage },
+          },
+          config,
+          shareableUrl: null,
+        };
+        vi.mocked(util.readOutput).mockResolvedValue(output as any);
+        const includesResult = vi.fn(() => false);
+        const context = { includesResult, matchesTest: () => false };
+
+        await filterTestsByResults(mockTestSuite, 'generated.json', () => true, undefined, context);
+        expect(includesResult).toHaveBeenCalledWith(mockResults[0], {
+          hasScenarios: true,
+          generatedScenarioIdsObserved: true,
+        });
+
+        vi.mocked(util.readOutput).mockResolvedValue({
+          ...output,
+          config: {
+            ...config,
+            scenarios: [
+              { config: [{ metadata: { conversationId: '__scenario_0__' } }], tests: [] },
+            ],
+          },
+        } as any);
+        includesResult.mockClear();
+        await filterTestsByResults(mockTestSuite, 'explicit.json', () => true, undefined, context);
+        expect(includesResult).toHaveBeenCalledWith(mockResults[0], {
+          hasScenarios: true,
+          generatedScenarioIdsObserved: false,
+        });
+      });
+
+      it('keeps generated-ID evidence unknown when saved metadata sources are unresolved', async () => {
+        const output = {
+          evalId: null,
+          results: {
+            version: 3,
+            timestamp: new Date().toISOString(),
+            results: [
+              {
+                ...mockResults[1],
+                testCase: {
+                  ...mockResults[1].testCase,
+                  metadata: { conversationId: '__scenario_0__' },
+                },
+              },
+            ],
+            table: { head: { prompts: [], vars: [] }, body: [] },
+            stats: { successes: 0, failures: 1, errors: 0, tokenUsage: mockTokenUsage },
+          },
+          config: {
+            prompts: [],
+            providers: [],
+            tests: [],
+            scenarios: [{ config: [{}], tests: [{}] }],
+            defaultTest: 'file://old-default.yaml',
+          },
+          shareableUrl: null,
+        };
+        vi.mocked(util.readOutput).mockResolvedValue(output as any);
+        const includesResult = vi.fn(() => false);
+        const context = { includesResult, matchesTest: () => false };
+
+        await filterTestsByResults(
+          mockTestSuite,
+          'unresolved-default.json',
+          () => true,
+          undefined,
+          context,
+        );
+        expect(includesResult).toHaveBeenCalledWith(expect.anything(), { hasScenarios: true });
+
+        vi.mocked(util.readOutput).mockResolvedValue({
+          ...output,
+          config: {
+            ...output.config,
+            defaultTest: undefined,
+            scenarios: [{ config: [{}], tests: 'file://old-tests.yaml' }],
+          },
+        } as any);
+        includesResult.mockClear();
+        await filterTestsByResults(
+          mockTestSuite,
+          'unresolved-tests.json',
+          () => true,
+          undefined,
+          context,
+        );
+        expect(includesResult).toHaveBeenCalledWith(expect.anything(), { hasScenarios: true });
+      });
+
+      it('does not extract a removed explicit scenario ID from saved source config', async () => {
+        const saved = {
+          ...mockResults[1],
+          testCase: {
+            ...mockResults[1].testCase,
+            metadata: { role: 'common', conversationId: 'stable-A' },
+          },
+        };
+        vi.mocked(util.readOutput).mockResolvedValue({
+          evalId: null,
+          results: {
+            version: 3,
+            timestamp: new Date().toISOString(),
+            results: [saved],
+            table: { head: { prompts: [], vars: [] }, body: [] },
+            stats: { successes: 0, failures: 1, errors: 0, tokenUsage: mockTokenUsage },
+          },
+          config: {
+            prompts: [],
+            providers: [],
+            tests: [],
+            scenarios: [
+              {
+                config: [{ metadata: { role: 'common', conversationId: 'stable-A' } }],
+                tests: [{ vars: { var1: 'test2' } }],
+              },
+            ],
+          },
+          shareableUrl: null,
+        } as any);
+        const currentSuite: TestSuite = {
+          prompts: [],
+          providers: [],
+          tests: [],
+          scenarios: [{ config: [{}], tests: [{ vars: { var1: 'test2' } }] }],
+        };
+
+        const selected = await filterTestsByResults(
+          currentSuite,
+          'saved-explicit.json',
+          () => true,
+          undefined,
+          topLevelResultMatchContext(currentSuite),
+        );
+
+        expect(selected).toEqual([]);
+      });
+
+      it('separates saved top-level and scenario rows sharing one explicit conversation ID', async () => {
+        const savedResult = (caseId: string) => ({
+          ...mockResults[1],
+          vars: { caseId },
+          testCase: { vars: { caseId }, metadata: { conversationId: 'shared' } },
+        });
+        vi.mocked(util.readOutput).mockResolvedValue({
+          evalId: null,
+          results: {
+            version: 3,
+            timestamp: new Date().toISOString(),
+            results: [savedResult('top'), savedResult('scenario')],
+            table: { head: { prompts: [], vars: [] }, body: [] },
+            stats: { successes: 0, failures: 2, errors: 0, tokenUsage: mockTokenUsage },
+          },
+          config: {
+            prompts: [],
+            providers: [],
+            tests: [{ vars: { caseId: 'top' }, metadata: { conversationId: 'shared' } }],
+            scenarios: [
+              {
+                config: [{}],
+                tests: [{ vars: { caseId: 'scenario' }, metadata: { conversationId: 'shared' } }],
+              },
+            ],
+          },
+          shareableUrl: null,
+        } as any);
+        const currentSuite: TestSuite = {
+          prompts: [],
+          providers: [],
+          tests: [],
+          scenarios: [{ config: [{}], tests: [{ vars: { caseId: 'current' } }] }],
+        };
+        const context = topLevelResultMatchContext(currentSuite);
+
+        const top = await filterTestsByResults(
+          currentSuite,
+          'shared-id.json',
+          (result) => result.vars.caseId === 'top',
+          undefined,
+          context,
+        );
+        const scenario = await filterTestsByResults(
+          currentSuite,
+          'shared-id.json',
+          (result) => result.vars.caseId === 'scenario',
+          undefined,
+          context,
+        );
+
+        expect(top).toHaveLength(1);
+        expect(top[0]?.vars?.caseId).toBe('top');
+        expect(scenario).toEqual([]);
+      });
+
+      it('uses a stable saved target provider to disambiguate shared ID and vars', async () => {
+        const savedResult = (providerId: string) => ({
+          ...mockResults[1],
+          vars: { caseId: 'shared' },
+          testCase: {
+            vars: { caseId: 'shared' },
+            metadata: { conversationId: 'shared' },
+            provider: { id: providerId, label: 'shared-label' },
+          },
+        });
+        vi.mocked(util.readOutput).mockResolvedValue({
+          evalId: null,
+          results: {
+            version: 3,
+            timestamp: new Date().toISOString(),
+            results: [savedResult('provider:top'), savedResult('provider:scenario')],
+            table: { head: { prompts: [], vars: [] }, body: [] },
+            stats: { successes: 0, failures: 2, errors: 0, tokenUsage: mockTokenUsage },
+          },
+          config: {
+            prompts: [],
+            providers: [],
+            tests: [
+              {
+                vars: { caseId: 'shared' },
+                metadata: { conversationId: 'shared' },
+                provider: 'provider:top',
+              },
+            ],
+            scenarios: [
+              {
+                config: [{}],
+                tests: [
+                  {
+                    vars: { caseId: 'shared' },
+                    metadata: { conversationId: 'shared' },
+                    provider: 'provider:scenario',
+                  },
+                ],
+              },
+            ],
+          },
+          shareableUrl: null,
+        } as any);
+        const currentSuite: TestSuite = { prompts: [], providers: [], tests: [] };
+        const context = topLevelResultMatchContext(currentSuite);
+
+        const top = await filterTestsByResults(
+          currentSuite,
+          'shared-provider.json',
+          (result) =>
+            (result.testCase?.provider as { id?: string } | undefined)?.id === 'provider:top',
+          undefined,
+          context,
+        );
+        const scenario = await filterTestsByResults(
+          currentSuite,
+          'shared-provider.json',
+          (result) =>
+            (result.testCase?.provider as { id?: string } | undefined)?.id === 'provider:scenario',
+          undefined,
+          context,
+        );
+
+        expect(top).toHaveLength(1);
+        expect(scenario).toEqual([]);
+      });
+
+      it('does not misclassify a saved top-level vars expansion as a removed scenario', async () => {
+        const saved = {
+          ...mockResults[1],
+          vars: { caseId: 'a' },
+          testCase: { vars: { caseId: 'a' }, metadata: { conversationId: 'shared' } },
+        };
+        vi.mocked(util.readOutput).mockResolvedValue({
+          evalId: null,
+          results: {
+            version: 3,
+            timestamp: new Date().toISOString(),
+            results: [saved],
+            table: { head: { prompts: [], vars: [] }, body: [] },
+            stats: { successes: 0, failures: 1, errors: 0, tokenUsage: mockTokenUsage },
+          },
+          config: {
+            prompts: [],
+            providers: [],
+            tests: [{ vars: { caseId: ['a', 'b'] }, metadata: { conversationId: 'shared' } }],
+            scenarios: [
+              {
+                config: [{}],
+                tests: [{ vars: { caseId: 'a' }, metadata: { conversationId: 'shared' } }],
+              },
+            ],
+          },
+          shareableUrl: null,
+        } as any);
+        const currentSuite: TestSuite = { prompts: [], providers: [], tests: [] };
+
+        const selected = await filterTestsByResults(
+          currentSuite,
+          'expanded.json',
+          () => true,
+          undefined,
+          topLevelResultMatchContext(currentSuite),
+        );
+
+        expect(selected).toHaveLength(1);
+        expect(selected[0]?.vars?.caseId).toBe('a');
+      });
+
+      it.each(['vars', 'provider'] as const)(
+        'keeps saved origin unknown when top-level %s need file resolution',
+        async (unresolved) => {
+          const saved = {
+            ...mockResults[1],
+            vars: { caseId: 'a' },
+            testCase: {
+              vars: { caseId: 'a' },
+              metadata: { conversationId: 'shared' },
+              provider: { id: 'provider:scenario' },
+            },
+          };
+          vi.mocked(util.readOutput).mockResolvedValue({
+            evalId: null,
+            results: {
+              version: 3,
+              timestamp: new Date().toISOString(),
+              results: [saved],
+              table: { head: { prompts: [], vars: [] }, body: [] },
+              stats: { successes: 0, failures: 1, errors: 0, tokenUsage: mockTokenUsage },
+            },
+            config: {
+              prompts: [],
+              providers: [],
+              tests: [
+                {
+                  vars: { caseId: unresolved === 'vars' ? 'file://./case.txt' : 'a' },
+                  metadata: { conversationId: 'shared' },
+                  provider: unresolved === 'provider' ? 'file://./provider.cjs' : undefined,
+                },
+              ],
+              scenarios: [
+                {
+                  config: [{}],
+                  tests: [
+                    {
+                      vars: { caseId: 'a' },
+                      metadata: { conversationId: 'shared' },
+                      provider: 'provider:scenario',
+                    },
+                  ],
+                },
+              ],
+            },
+            shareableUrl: null,
+          } as any);
+          const currentSuite: TestSuite = { prompts: [], providers: [], tests: [] };
+
+          const selected = await filterTestsByResults(
+            currentSuite,
+            'unresolved-origin.json',
+            () => true,
+            undefined,
+            topLevelResultMatchContext(currentSuite),
+          );
+
+          expect(selected).toHaveLength(1);
+        },
+      );
+
+      it('classifies a saved scenario ID inherited only from root metadata', async () => {
+        const saved = {
+          ...mockResults[1],
+          vars: { caseId: 'scenario' },
+          testCase: {
+            vars: { caseId: 'scenario' },
+            metadata: { conversationId: 'root-shared' },
+          },
+        };
+        vi.mocked(util.readOutput).mockResolvedValue({
+          evalId: null,
+          results: {
+            version: 3,
+            timestamp: new Date().toISOString(),
+            results: [saved],
+            table: { head: { prompts: [], vars: [] }, body: [] },
+            stats: { successes: 0, failures: 1, errors: 0, tokenUsage: mockTokenUsage },
+          },
+          config: {
+            prompts: [],
+            providers: [],
+            tests: [{ vars: { caseId: 'top' } }],
+            metadata: { conversationId: 'root-shared' },
+            scenarios: [{ config: [{}], tests: [{ vars: { caseId: 'scenario' } }] }],
+          },
+          shareableUrl: null,
+        } as any);
+        const currentSuite: TestSuite = {
+          prompts: [],
+          providers: [],
+          tests: [],
+          scenarios: [{ config: [{}], tests: [{ vars: { caseId: 'current' } }] }],
+        };
+
+        expect(
+          await filterTestsByResults(
+            currentSuite,
+            'root-shared.json',
+            () => true,
+            undefined,
+            topLevelResultMatchContext(currentSuite),
+          ),
+        ).toEqual([]);
+      });
+
       it('should return empty array if no results match filter', async () => {
         const result = await filterTestsByResults(mockTestSuite, 'results.json', () => false);
         expect(result).toHaveLength(0);
@@ -211,6 +682,29 @@ describe('filterTestsUtil', () => {
         expect(result).toHaveLength(1);
         expect(result[0]?.vars?.var1).toBe('test1');
         expect(util.readOutput).not.toHaveBeenCalled();
+      });
+
+      it('passes complete saved Eval config provenance through one summary read', async () => {
+        const summary = vi.fn().mockResolvedValue({ results: mockResults });
+        vi.mocked(Eval.findById).mockResolvedValue({
+          config: { prompts: [], providers: [], tests: [] },
+          toEvaluateSummary: summary,
+        } as any);
+        const includesResult = vi.fn(() => false);
+        const context = {
+          includesResult,
+          matchesTest: () => false,
+          resultLoadCache: new Map(),
+        };
+
+        await Promise.all([
+          filterTestsByResults(mockTestSuite, 'eval-complete', () => true, undefined, context),
+          filterTestsByResults(mockTestSuite, 'eval-complete', () => true, undefined, context),
+        ]);
+
+        expect(Eval.findById).toHaveBeenCalledTimes(1);
+        expect(summary).toHaveBeenCalledTimes(1);
+        expect(includesResult).toHaveBeenCalledWith(mockResults[0], { hasScenarios: false });
       });
 
       it('should handle readOutput returning summary without results', async () => {
@@ -1059,6 +1553,209 @@ describe('filterTestsUtil', () => {
       vi.resetAllMocks();
     });
 
+    it('restores a unique authored prompt ID from saved config for legacy DB results', async () => {
+      const { resultIsForTestCase: realResultIsForTestCase } =
+        await vi.importActual<typeof import('../../../src/util/index')>('../../../src/util/index');
+      vi.mocked(util.resultIsForTestCase).mockImplementation(realResultIsForTestCase);
+      const testSuite: TestSuite = {
+        prompts: [],
+        providers: [],
+        tests: [{ vars: { caseId: 'shared' }, prompts: ['alpha-custom-id'] }],
+      };
+      const result = {
+        vars: { caseId: 'shared' },
+        success: false,
+        failureReason: ResultFailureReason.ASSERT,
+        provider: { id: 'echo' },
+        prompt: { raw: 'alpha case=shared', label: 'QA:alpha-label' },
+        promptId: 'hash-of-label',
+        promptIdx: 0,
+        testIdx: 0,
+        testCase: { vars: { caseId: 'shared' }, prompts: ['alpha-custom-id'] },
+      } as unknown as EvaluateResult;
+      vi.mocked(util.readOutput).mockResolvedValue({
+        evalId: null,
+        results: {
+          version: 3,
+          timestamp: new Date().toISOString(),
+          results: [result],
+          table: { head: { prompts: [], vars: [] }, body: [] },
+          stats: createFailedStats(),
+        },
+        config: {
+          prompts: [
+            { raw: 'alpha case={{caseId}}', label: 'QA:alpha-label', id: 'alpha-custom-id' },
+          ],
+          providers: [],
+          tests: [],
+        },
+        shareableUrl: null,
+      });
+
+      const selected = await filterTestsByResults(
+        testSuite,
+        'legacy.json',
+        () => true,
+        undefined,
+        topLevelResultMatchContext(testSuite),
+      );
+
+      expect(selected).toHaveLength(1);
+      expect(selected[0]).toEqual(testSuite.tests?.[0]);
+      expect(result.prompt.id).toBeUndefined();
+    });
+
+    it('does not guess a legacy prompt ID when saved definitions share a label', async () => {
+      const { resultIsForTestCase: realResultIsForTestCase } =
+        await vi.importActual<typeof import('../../../src/util/index')>('../../../src/util/index');
+      vi.mocked(util.resultIsForTestCase).mockImplementation(realResultIsForTestCase);
+      const testSuite: TestSuite = {
+        prompts: [],
+        providers: [],
+        tests: [{ vars: { caseId: 'shared' }, prompts: ['alpha-custom-id'] }],
+      };
+      const result = {
+        vars: { caseId: 'shared' },
+        success: false,
+        failureReason: ResultFailureReason.ASSERT,
+        provider: { id: 'echo' },
+        prompt: { raw: 'alpha case=shared', label: 'shared-label' },
+        promptId: 'hash-of-label',
+        promptIdx: 0,
+        testIdx: 0,
+        testCase: { vars: { caseId: 'shared' }, prompts: ['alpha-custom-id'] },
+      } as unknown as EvaluateResult;
+      vi.mocked(util.readOutput).mockResolvedValue({
+        evalId: null,
+        results: {
+          version: 3,
+          timestamp: new Date().toISOString(),
+          results: [result],
+          table: { head: { prompts: [], vars: [] }, body: [] },
+          stats: createFailedStats(),
+        },
+        config: {
+          prompts: [
+            { raw: 'alpha case={{caseId}}', label: 'shared-label', id: 'alpha-custom-id' },
+            { raw: 'beta case={{caseId}}', label: 'shared-label', id: 'beta-custom-id' },
+          ],
+          providers: [],
+          tests: [],
+        },
+        shareableUrl: null,
+      });
+
+      const selected = await filterTestsByResults(
+        testSuite,
+        'ambiguous.json',
+        () => true,
+        undefined,
+        topLevelResultMatchContext(testSuite),
+      );
+
+      expect(selected).toEqual([]);
+    });
+
+    it('does not infer a legacy prompt ID alongside an unresolved saved prompt', async () => {
+      const { resultIsForTestCase: realResultIsForTestCase } =
+        await vi.importActual<typeof import('../../../src/util/index')>('../../../src/util/index');
+      vi.mocked(util.resultIsForTestCase).mockImplementation(realResultIsForTestCase);
+      const testSuite: TestSuite = {
+        prompts: [],
+        providers: [],
+        tests: [{ vars: { caseId: 'shared' }, prompts: ['alpha-custom-id'] }],
+      };
+      const result = {
+        vars: { caseId: 'shared' },
+        success: false,
+        failureReason: ResultFailureReason.ASSERT,
+        provider: { id: 'echo' },
+        prompt: { raw: 'rendered', label: 'shared-label' },
+        promptId: 'hash-of-label',
+        promptIdx: 0,
+        testIdx: 0,
+        testCase: { vars: { caseId: 'shared' }, prompts: ['alpha-custom-id'] },
+      } as unknown as EvaluateResult;
+      vi.mocked(util.readOutput).mockResolvedValue({
+        evalId: null,
+        results: {
+          version: 3,
+          timestamp: new Date().toISOString(),
+          results: [result],
+          table: { head: { prompts: [], vars: [] }, body: [] },
+          stats: createFailedStats(),
+        },
+        config: {
+          prompts: [
+            { raw: 'alpha', label: 'shared-label', id: 'alpha-custom-id' },
+            'file://./possibly-same-label.txt',
+          ],
+          providers: [],
+          tests: [],
+        },
+        shareableUrl: null,
+      });
+
+      const selected = await filterTestsByResults(
+        testSuite,
+        'unresolved-prompt.json',
+        () => true,
+        undefined,
+        topLevelResultMatchContext(testSuite),
+      );
+
+      expect(selected).toEqual([]);
+    });
+
+    it('keeps distinct exact-mode runtime prompt and provider selectors without copying provider config', async () => {
+      const testSuite: TestSuite = { prompts: [], providers: [], tests: [] };
+      const results = ['alpha', 'beta'].map((label) => ({
+        vars: { caseId: 'shared' },
+        success: false,
+        failureReason: ResultFailureReason.ASSERT,
+        provider: { id: `provider-${label}` },
+        prompt: { raw: 'rendered', label },
+        promptId: `hash-${label}`,
+        promptIdx: 0,
+        testIdx: 0,
+        testCase: {
+          vars: { caseId: 'shared' },
+          metadata: { group: 'common' },
+          prompts: [label],
+          providers: [`provider-${label}`],
+          provider: { id: `old-provider-${label}`, config: { apiKey: 'stale' } },
+        },
+      })) as unknown as EvaluateResult[];
+      vi.mocked(util.readOutput).mockResolvedValue({
+        evalId: null,
+        results: {
+          version: 2,
+          timestamp: new Date().toISOString(),
+          results,
+          table: { head: { prompts: [], vars: [] }, body: [] },
+          stats: createFailedStats(),
+        },
+        config: {},
+        shareableUrl: null,
+      });
+
+      const selected = await filterTestsByResults(
+        testSuite,
+        'runtime.json',
+        () => true,
+        undefined,
+        topLevelResultMatchContext(testSuite),
+      );
+
+      expect(selected).toHaveLength(2);
+      expect(selected.map((test) => test.prompts)).toEqual([['alpha'], ['beta']]);
+      expect(selected.map((test) => test.providers)).toEqual([
+        ['provider-alpha'],
+        ['provider-beta'],
+      ]);
+      expect(selected.every((test) => test.provider === undefined)).toBe(true);
+    });
+
     it('should extract tests from results when no config match exists', async () => {
       const { resultIsForTestCase: realResultIsForTestCase } =
         await vi.importActual<typeof import('../../../src/util/index')>('../../../src/util/index');
@@ -1397,7 +2094,7 @@ describe('filterTestsUtil', () => {
       expect(selected[1].provider).toBeUndefined();
     });
 
-    it('does not suppress another provider column with the same authored target provider', async () => {
+    it('does not extract another provider column excluded by the current authored allowlist', async () => {
       const { resultIsForTestCase: realResultIsForTestCase } =
         await vi.importActual<typeof import('../../../src/util/index')>('../../../src/util/index');
       vi.mocked(util.resultIsForTestCase).mockImplementation(realResultIsForTestCase);
@@ -1440,10 +2137,57 @@ describe('filterTestsUtil', () => {
         topLevelResultMatchContext(testSuite),
       );
 
-      expect(selected).toHaveLength(2);
+      expect(selected).toHaveLength(1);
       expect(selected[0]).toEqual(authoredTest);
-      expect(selected[1]).toMatchObject({ vars: { id: 'shared' }, metadata: { group: 'common' } });
-      expect(selected[1].provider).toBeUndefined();
+    });
+
+    it('does not extract another prompt excluded by the current authored allowlist', async () => {
+      const { resultIsForTestCase: realResultIsForTestCase } =
+        await vi.importActual<typeof import('../../../src/util/index')>('../../../src/util/index');
+      vi.mocked(util.resultIsForTestCase).mockImplementation(realResultIsForTestCase);
+      const authoredTest = {
+        vars: { id: 'shared' },
+        metadata: { group: 'common' },
+        provider: 'target',
+        prompts: ['alpha'],
+      };
+      const testSuite: TestSuite = { prompts: [], providers: [], tests: [authoredTest] };
+      const results = ['alpha', 'beta'].map((label) => ({
+        vars: { id: 'shared' },
+        success: false,
+        failureReason: ResultFailureReason.ASSERT,
+        provider: { id: 'echo' },
+        prompt: { raw: 'rendered', label },
+        promptId: `hash-${label}`,
+        testCase: {
+          vars: { id: 'shared' },
+          metadata: { group: 'common' },
+          provider: { id: 'target' },
+        },
+      })) as unknown as EvaluateResult[];
+      vi.mocked(util.readOutput).mockResolvedValue({
+        evalId: null,
+        results: {
+          version: 2,
+          timestamp: new Date().toISOString(),
+          results,
+          table: { head: { prompts: [], vars: [] }, body: [] },
+          stats: { successes: 0, failures: 2, errors: 0, tokenUsage: mockTokenUsage },
+        },
+        config: {},
+        shareableUrl: null,
+      });
+
+      const selected = await filterTestsByResults(
+        testSuite,
+        'results.json',
+        () => true,
+        undefined,
+        topLevelResultMatchContext(testSuite),
+      );
+
+      expect(selected).toHaveLength(1);
+      expect(selected[0]).toEqual(authoredTest);
     });
 
     it('should deduplicate extracted tests with same vars', async () => {

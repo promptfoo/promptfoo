@@ -3,9 +3,16 @@ import logger from '../../logger';
 import Eval from '../../models/eval';
 import { deduplicateTestCases, extractRuntimeVars, filterRuntimeVars } from '../../util/comparison';
 import { readOutput, resultIsForTestCase } from '../../util/index';
+import { isPromptAllowed } from '../promptMatching';
 import { isProviderAllowed, providerToIdentifier } from '../provider';
 
-import type { EvaluateResult, Scenario, TestCase, TestSuite } from '../../types/index';
+import type {
+  EvaluateResult,
+  Scenario,
+  TestCase,
+  TestSuite,
+  UnifiedConfig,
+} from '../../types/index';
 
 type Tests = NonNullable<TestSuite['tests']>;
 
@@ -16,18 +23,260 @@ type ResultFilterFn = (result: EvaluateResult) => boolean;
 type TestFilterFn = (test: TestCase) => boolean;
 
 export interface ResultMatchContext {
-  includesResult: (result: EvaluateResult) => boolean;
+  includesResult: (result: EvaluateResult, source?: StoredResultProvenance) => boolean;
   matchesTest: (result: EvaluateResult, test: TestCase, authoredTest?: TestCase) => boolean;
   bindMatchedTest?: (test: TestCase, authoredTest: TestCase) => void;
   authoredTestFor?: (test: TestCase) => TestCase | undefined;
-  resultLoadCache?: Map<string, Promise<EvaluateResult[] | undefined>>;
+  resultLoadCache?: Map<string, Promise<StoredResults | undefined>>;
 }
 
-async function loadStoredResults(pathOrId: string): Promise<EvaluateResult[] | undefined> {
+export interface StoredResults {
+  results: EvaluateResult[];
+  provenance: StoredResultProvenance;
+}
+
+export interface StoredResultProvenance {
+  hasScenarios?: boolean;
+  generatedScenarioIdsObserved?: boolean;
+  explicitScenarioOrigins?: Map<unknown, { scenario: TestCase[]; topLevel: TestCase[] }>;
+}
+
+function hasUnresolvedScenarioMetadata(config: Partial<UnifiedConfig>): boolean {
+  const unresolvedTest = (test: unknown) => !test || typeof test !== 'object' || 'path' in test;
+  if (
+    typeof config.defaultTest === 'string' ||
+    (config.defaultTest != null &&
+      typeof config.defaultTest === 'object' &&
+      'path' in config.defaultTest) ||
+    (Array.isArray(config.tests) && config.tests.some(unresolvedTest))
+  ) {
+    return true;
+  }
+  return (config.scenarios ?? []).some(
+    (scenario) =>
+      !scenario ||
+      typeof scenario !== 'object' ||
+      !Array.isArray(scenario.config) ||
+      scenario.config.some(unresolvedTest) ||
+      (scenario.tests !== undefined &&
+        (!Array.isArray(scenario.tests) || scenario.tests.some(unresolvedTest))),
+  );
+}
+
+function savedExplicitScenarioOrigins(config: Partial<UnifiedConfig>) {
+  const defaults =
+    config.defaultTest && typeof config.defaultTest === 'object' ? config.defaultTest : undefined;
+  const defaultMetadata = defaults?.metadata ?? config.metadata;
+  const origins = new Map<unknown, { scenario: TestCase[]; topLevel: TestCase[] }>();
+  const add = (test: TestCase, kind: 'scenario' | 'topLevel') => {
+    const id = test.metadata?.conversationId;
+    if (id == null) {
+      return;
+    }
+    let origin = origins.get(id);
+    if (!origin) {
+      origin = { scenario: [], topLevel: [] };
+      origins.set(id, origin);
+    }
+    origin[kind].push(test);
+  };
+  for (const test of Array.isArray(config.tests) ? config.tests : []) {
+    const authored = test as TestCase;
+    add(
+      {
+        vars: { ...defaults?.vars, ...authored.vars },
+        metadata: { ...defaultMetadata, ...authored.metadata },
+        provider: authored.provider ?? defaults?.provider,
+      },
+      'topLevel',
+    );
+  }
+  for (const scenario of config.scenarios ?? []) {
+    const authoredScenario = scenario as Scenario;
+    for (const variant of authoredScenario.config) {
+      for (const test of authoredScenario.tests ?? [{}]) {
+        add(
+          {
+            vars: { ...defaults?.vars, ...variant.vars, ...test.vars },
+            metadata: { ...defaultMetadata, ...variant.metadata, ...test.metadata },
+            provider: test.provider ?? variant.provider ?? defaults?.provider,
+          },
+          'scenario',
+        );
+      }
+    }
+  }
+  return origins;
+}
+
+function matchesSavedCase(result: EvaluateResult, test: TestCase): boolean | undefined {
+  if (!deepEqual(result.testCase?.metadata ?? {}, test.metadata ?? {})) {
+    return false;
+  }
+  if (
+    (test.vars && (typeof test.vars !== 'object' || Array.isArray(test.vars))) ||
+    Object.values(test.vars ?? {}).some(
+      (value) =>
+        (value !== null && typeof value === 'object') ||
+        (typeof value === 'string' && value.startsWith('file://')),
+    )
+  ) {
+    // Arrays expand and file references resolve after the config is saved.
+    // Neither a match nor a mismatch in raw vars can prove row origin.
+    return undefined;
+  }
+  if (!deepEqual(filterRuntimeVars(result.vars) ?? {}, filterRuntimeVars(test.vars) ?? {})) {
+    return false;
+  }
+  if (test.provider === undefined && result.testCase?.provider === undefined) {
+    return true;
+  }
+  const savedProvider = providerToIdentifier(test.provider);
+  const storedProvider = result.testCase?.provider;
+  const storedProviderId =
+    storedProvider && typeof storedProvider === 'object' && 'id' in storedProvider
+      ? typeof storedProvider.id === 'string'
+        ? storedProvider.id
+        : undefined
+      : undefined;
+  if (savedProvider && storedProviderId && savedProvider === storedProviderId) {
+    return true;
+  }
+  // A raw file or options provider may resolve to a different runtime ID. A mismatch
+  // can prove origin only for a plain authored provider ID.
+  if (
+    typeof test.provider === 'string' &&
+    !/^(?:file:|https?:|\.\.?\/|\/)/.test(test.provider) &&
+    storedProviderId
+  ) {
+    return false;
+  }
+  return undefined;
+}
+
+function observedGeneratedScenarioId(config: Partial<UnifiedConfig>, results: EvaluateResult[]) {
+  const generatedIds = new Set<string>();
+  const declaredIds = new Set<unknown>();
+  const addDeclared = (id: unknown) => {
+    if (id != null) {
+      declaredIds.add(id);
+    }
+  };
+  addDeclared(config.metadata?.conversationId);
+  if (config.defaultTest && typeof config.defaultTest === 'object') {
+    addDeclared(config.defaultTest.metadata?.conversationId);
+  }
+  for (const test of Array.isArray(config.tests) ? config.tests : []) {
+    if (typeof test === 'object' && 'metadata' in test) {
+      addDeclared(test.metadata?.conversationId);
+    }
+  }
+  let globalScenarioIndex = 0;
+  for (const scenario of config.scenarios ?? []) {
+    if (typeof scenario !== 'object' || !Array.isArray(scenario.config)) {
+      return false;
+    }
+    for (const variant of scenario.config) {
+      generatedIds.add(`__scenario_${globalScenarioIndex++}__`);
+      addDeclared(variant.metadata?.conversationId);
+    }
+    if (Array.isArray(scenario.tests)) {
+      for (const test of scenario.tests) {
+        addDeclared(test.metadata?.conversationId);
+      }
+    }
+  }
+  return results.some((result) => {
+    const id = result.testCase?.metadata?.conversationId;
+    return typeof id === 'string' && generatedIds.has(id) && !declaredIds.has(id);
+  });
+}
+
+function storedResultProvenance(
+  config: Partial<UnifiedConfig> | undefined,
+  results: EvaluateResult[],
+  trustOmittedScenarios: boolean,
+): StoredResultProvenance {
+  const completeConfig =
+    Array.isArray(config?.prompts) &&
+    Array.isArray(config.providers) &&
+    Array.isArray(config.tests);
+  if (Array.isArray(config?.scenarios)) {
+    if (config.scenarios.length === 0) {
+      return { hasScenarios: false };
+    }
+    const provenance: StoredResultProvenance = { hasScenarios: true };
+    if (!completeConfig || hasUnresolvedScenarioMetadata(config)) {
+      return provenance;
+    }
+    provenance.generatedScenarioIdsObserved = observedGeneratedScenarioId(config, results);
+    const explicitScenarioOrigins = savedExplicitScenarioOrigins(config);
+    if (explicitScenarioOrigins.size > 0) {
+      provenance.explicitScenarioOrigins = explicitScenarioOrigins;
+    }
+    return provenance;
+  }
+  if (trustOmittedScenarios && completeConfig) {
+    return { hasScenarios: false };
+  }
+  return {};
+}
+
+function restoreStoredPromptIds(
+  results: EvaluateResult[],
+  config: Partial<UnifiedConfig> | undefined,
+): EvaluateResult[] {
+  if (!Array.isArray(config?.prompts)) {
+    return results;
+  }
+  // A string, file reference, or function can resolve to a label equal to an
+  // inline definition. Do not infer uniqueness from only the visible objects.
+  if (
+    config.prompts.some((prompt) => !prompt || typeof prompt !== 'object' || !('label' in prompt))
+  ) {
+    return results;
+  }
+  const idsByLabel = new Map<string, string | undefined>();
+  for (const prompt of config.prompts) {
+    if (!prompt || typeof prompt !== 'object' || !('label' in prompt)) {
+      continue;
+    }
+    const label = prompt.label;
+    if (typeof label !== 'string') {
+      continue;
+    }
+    const id = 'id' in prompt && typeof prompt.id === 'string' ? prompt.id : undefined;
+    idsByLabel.set(label, idsByLabel.has(label) ? undefined : id);
+  }
+  return results.map((result) => {
+    const prompt = result.prompt;
+    if (!prompt || prompt.id || !prompt.label) {
+      return result;
+    }
+    const id = idsByLabel.get(prompt.label);
+    return id ? { ...result, prompt: { ...prompt, id } } : result;
+  });
+}
+
+async function loadStoredResults(
+  pathOrId: string,
+  includeProvenance: boolean,
+): Promise<StoredResults | undefined> {
   try {
     if (pathOrId.endsWith('.json')) {
       const output = await readOutput(pathOrId);
-      return output.results.results;
+      return {
+        results: includeProvenance
+          ? restoreStoredPromptIds(output.results.results, output.config)
+          : output.results.results,
+        provenance: includeProvenance
+          ? storedResultProvenance(
+              output.config,
+              output.results.results,
+              output.results.version === 3,
+            )
+          : {},
+      };
     }
 
     const eval_ = await Eval.findById(pathOrId);
@@ -37,7 +286,14 @@ async function loadStoredResults(pathOrId: string): Promise<EvaluateResult[] | u
     }
     const summary = await eval_.toEvaluateSummary();
     if ('results' in summary) {
-      return summary.results;
+      return {
+        results: includeProvenance
+          ? restoreStoredPromptIds(summary.results, eval_.config)
+          : summary.results,
+        provenance: includeProvenance
+          ? storedResultProvenance(eval_.config, summary.results, true)
+          : {},
+      };
     }
     logger.debug('[filterTestsByResults] No results in evaluation summary');
   } catch (error) {
@@ -90,17 +346,19 @@ export async function filterTestsByResults(
   const cache = resultMatchContext?.resultLoadCache;
   let resultsPromise = cache?.get(pathOrId);
   if (!resultsPromise) {
-    resultsPromise = loadStoredResults(pathOrId);
+    resultsPromise = loadStoredResults(pathOrId, Boolean(resultMatchContext));
     cache?.set(pathOrId, resultsPromise);
   }
-  const results = await resultsPromise;
-  if (!results) {
+  const stored = await resultsPromise;
+  if (!stored) {
     return [];
   }
+  const { results, provenance } = stored;
 
   const filteredResults = results.filter(
     (result) =>
-      filterFn(result) && (!resultMatchContext || resultMatchContext.includesResult(result)),
+      filterFn(result) &&
+      (!resultMatchContext || resultMatchContext.includesResult(result, provenance)),
   );
   const matchesTest = resultMatchContext?.matchesTest ?? resultIsForTestCase;
   logger.debug(
@@ -215,6 +473,8 @@ export async function filterTestsByResults(
       ? JSON.stringify({
           vars: filterRuntimeVars(result.vars),
           metadata: result.testCase?.metadata,
+          prompts: result.testCase?.prompts,
+          providers: result.testCase?.providers,
         })
       : JSON.stringify(filterRuntimeVars(result.vars));
   const matchedResultKey = (result: EvaluateResult) =>
@@ -229,6 +489,10 @@ export async function filterTestsByResults(
             id: result.provider?.id,
             label: result.provider?.label,
             promptIdx: result.promptIdx,
+          },
+          prompt: {
+            id: result.prompt?.id || result.promptId,
+            label: result.prompt?.label,
           },
         })
       : resultKey(result);
@@ -272,6 +536,10 @@ export async function filterTestsByResults(
       assert: result.testCase.assert,
       metadata: result.testCase.metadata,
       options: result.testCase.options,
+      ...(resultMatchContext && {
+        prompts: result.testCase.prompts,
+        providers: result.testCase.providers,
+      }),
       // Intentionally omit: provider (security - may contain stale credentials)
     };
     extractedTests.push(extractedTest);
@@ -332,6 +600,8 @@ function matchesScenarioCandidate(
   metadata: TestCase['metadata'],
   metadataKeys: string[],
   generatedScenarioId?: string,
+  ignoreConversationId = false,
+  ignoreColumnSelectors = false,
 ): boolean {
   const resultMetadata = result.testCase?.metadata;
   const storedTestProviderId = providerToIdentifier(result.testCase?.provider);
@@ -342,18 +612,19 @@ function matchesScenarioCandidate(
   const storedConversationId = resultMetadata?.conversationId;
   const authoredConversationId = metadata?.conversationId;
   const conversationMatches =
-    generatedScenarioId === undefined || storedConversationId == null
+    ignoreConversationId || generatedScenarioId === undefined
       ? true
       : authoredConversationId == null
-        ? deepEqual(storedConversationId, generatedScenarioId)
+        ? storedConversationId == null || deepEqual(storedConversationId, generatedScenarioId)
         : deepEqual(storedConversationId, authoredConversationId);
   return (
     resultIsForTestCase(comparableResult, effective) &&
-    isStoredProviderAllowed(result, effective.providers) &&
+    (ignoreColumnSelectors || isStoredProviderAllowed(result, effective.providers)) &&
+    (ignoreColumnSelectors || isStoredPromptAllowed(result, effective.prompts)) &&
     conversationMatches &&
     metadataKeys.every(
       (key) =>
-        (generatedScenarioId !== undefined && key === 'conversationId') ||
+        ((generatedScenarioId !== undefined || ignoreConversationId) && key === 'conversationId') ||
         deepEqual(resultMetadata?.[key], metadata?.[key]),
     )
   );
@@ -371,6 +642,19 @@ function isStoredProviderAllowed(result: EvaluateResult, allowedProviders: strin
     label: result.provider?.label,
   } as Parameters<typeof isProviderAllowed>[0];
   return isProviderAllowed(columnProvider, allowedProviders);
+}
+
+function isStoredPromptAllowed(result: EvaluateResult, allowedPrompts: string[] | undefined) {
+  if (!Array.isArray(allowedPrompts)) {
+    return true;
+  }
+  if (!result.prompt && !result.promptId) {
+    return false;
+  }
+  return isPromptAllowed(
+    { ...(result.prompt ?? { raw: '' }), id: result.prompt?.id || result.promptId },
+    allowedPrompts,
+  );
 }
 
 export function createScenarioResultClassifier(
@@ -398,6 +682,12 @@ export function createScenarioResultClassifier(
       metadataKeys,
     })),
   );
+  const explicitConversationCandidates = candidates.map((variantCandidates) =>
+    variantCandidates.filter((candidate) => candidate.metadata?.conversationId != null),
+  );
+  const implicitConversationCandidates = candidates.map((variantCandidates) =>
+    variantCandidates.filter((candidate) => candidate.metadata?.conversationId == null),
+  );
   const signatureVarKeys = [
     ...new Set(scenario.config.flatMap((variant) => Object.keys(variant.vars ?? {}))),
   ];
@@ -409,8 +699,23 @@ export function createScenarioResultClassifier(
     metadata: { ...defaults?.metadata, ...variant.metadata },
     providerId: providerToIdentifier(variant.provider ?? defaults?.provider),
     providers: { ...defaults, ...variant }.providers,
+    prompts: { ...defaults, ...variant }.prompts,
     conversationId: { ...defaults?.metadata, ...variant.metadata }.conversationId,
   }));
+  const selectorCandidates = candidates.map((variantCandidates, index) =>
+    variantCandidates.filter(
+      (candidate) =>
+        candidate.effective.providers !== signatures[index].providers ||
+        candidate.effective.prompts !== signatures[index].prompts,
+    ),
+  );
+  const expandedSelectorCandidates = selectorCandidates.map((variantCandidates) =>
+    variantCandidates.filter((candidate) =>
+      Object.values(candidate.effective.vars ?? {}).some(
+        (value) => Array.isArray(value) && value.every((item) => typeof item === 'string'),
+      ),
+    ),
+  );
   const configuredMatch = (result: EvaluateResult, index: number) =>
     candidates[index].some((candidate) =>
       matchesScenarioCandidate(
@@ -426,14 +731,82 @@ export function createScenarioResultClassifier(
       return false;
     }
     const resultVars = filterRuntimeVars(result.vars) ?? {};
+    const expandedMatches = expandedSelectorCandidates[index].filter((candidate) => {
+      const vars = Object.fromEntries(
+        Object.entries(candidate.effective.vars ?? {}).map(([key, value]) => [
+          key,
+          Array.isArray(value) &&
+          value.every((item) => typeof item === 'string') &&
+          value.includes(resultVars[key])
+            ? resultVars[key]
+            : value,
+        ]),
+      );
+      return matchesScenarioCandidate(
+        result,
+        { ...candidate.effective, vars },
+        candidate.metadata,
+        candidate.metadataKeys,
+        `__scenario_${globalScenarioOffset + index}__`,
+        false,
+        true,
+      );
+    });
+    if (expandedMatches.length > 0) {
+      return expandedMatches.some(
+        (candidate) =>
+          isStoredProviderAllowed(result, candidate.effective.providers) &&
+          isStoredPromptAllowed(result, candidate.effective.prompts),
+      );
+    }
+    if (
+      selectorCandidates[index].some(
+        (candidate) =>
+          matchesScenarioCandidate(
+            result,
+            candidate.effective,
+            candidate.metadata,
+            candidate.metadataKeys,
+            `__scenario_${globalScenarioOffset + index}__`,
+            false,
+            true,
+          ) &&
+          (!isStoredProviderAllowed(result, candidate.effective.providers) ||
+            !isStoredPromptAllowed(result, candidate.effective.prompts)),
+      )
+    ) {
+      return false;
+    }
     const resultProviderId =
       providerToIdentifier(result.testCase.provider) ?? providerToIdentifier(result.provider);
     const storedConversationId = result.testCase.metadata?.conversationId;
+    if (storedConversationId == null && explicitConversationCandidates[index].length > 0) {
+      const matchesIgnoringConversation = (candidate: (typeof candidates)[number][number]) =>
+        matchesScenarioCandidate(
+          result,
+          candidate.effective,
+          candidate.metadata,
+          candidate.metadataKeys,
+          `__scenario_${globalScenarioOffset + index}__`,
+          true,
+        );
+      if (
+        explicitConversationCandidates[index].some(matchesIgnoringConversation) &&
+        !implicitConversationCandidates[index].some(matchesIgnoringConversation)
+      ) {
+        return false;
+      }
+    }
     const expectedConversationId =
       signatures[index].conversationId ?? `__scenario_${globalScenarioOffset + index}__`;
+    const conversationMatches =
+      signatures[index].conversationId == null
+        ? storedConversationId == null || deepEqual(storedConversationId, expectedConversationId)
+        : deepEqual(storedConversationId, expectedConversationId);
     return (
-      (storedConversationId == null || deepEqual(storedConversationId, expectedConversationId)) &&
+      conversationMatches &&
       isStoredProviderAllowed(result, signatures[index].providers) &&
+      isStoredPromptAllowed(result, signatures[index].prompts) &&
       (!signatures[index].providerId ||
         !resultProviderId ||
         signatures[index].providerId === resultProviderId) &&
@@ -447,12 +820,23 @@ export function createScenarioResultClassifier(
   };
 
   return {
-    matchesAny: (result: EvaluateResult) =>
+    matchesAny: (result: EvaluateResult, source?: StoredResultProvenance) =>
+      source?.hasScenarios !== false &&
+      !(
+        source?.generatedScenarioIdsObserved && result.testCase?.metadata?.conversationId == null
+      ) &&
       scenario.config.some(
         (_, index) => configuredMatch(result, index) || signatureMatch(result, index),
       ),
     forVariant: (index: number): ResultMatchContext => ({
-      includesResult: (result) => {
+      includesResult: (result, source) => {
+        if (
+          source?.hasScenarios === false ||
+          (source?.generatedScenarioIdsObserved &&
+            result.testCase?.metadata?.conversationId == null)
+        ) {
+          return false;
+        }
         if (configuredMatch(result, index)) {
           return true;
         }
@@ -488,18 +872,6 @@ export function topLevelResultMatchContext(suite: TestSuite): ResultMatchContext
     authoredTestByMatch.set(test, authoredTest);
   };
   const authoredTestFor = (test: TestCase) => authoredTestByMatch.get(test);
-  if (!suite.tests?.length) {
-    // Scenario-only suites must not extract stored scenario results as top-level tests.
-    // A top-level-only suite can still restore runtime-generated tests from prior results.
-    return {
-      includesResult: (result) =>
-        !suite.scenarios?.length &&
-        !isGeneratedScenarioId(result.testCase?.metadata?.conversationId),
-      matchesTest: () => false,
-      bindMatchedTest,
-      authoredTestFor,
-    };
-  }
   const topLevelVariant: Variant = {};
   const topLevelMetadataKeys = [
     ...new Set([
@@ -533,7 +905,7 @@ export function topLevelResultMatchContext(suite: TestSuite): ResultMatchContext
   return {
     bindMatchedTest,
     authoredTestFor,
-    includesResult: (result) => {
+    includesResult: (result, source) => {
       const topLevelMatch = topLevelCandidates.some((candidate) =>
         matchesScenarioCandidate(
           result,
@@ -542,8 +914,49 @@ export function topLevelResultMatchContext(suite: TestSuite): ResultMatchContext
           candidate.metadataKeys,
         ),
       );
-      const scenarioMatch = scenarioClassifiers.some((classifier) => classifier.matchesAny(result));
+      if (
+        !topLevelMatch &&
+        topLevelCandidates.some(
+          (candidate) =>
+            matchesScenarioCandidate(
+              result,
+              candidate.effective,
+              candidate.metadata,
+              candidate.metadataKeys,
+              undefined,
+              false,
+              true,
+            ) &&
+            (!isStoredProviderAllowed(result, candidate.effective.providers) ||
+              !isStoredPromptAllowed(result, candidate.effective.prompts)),
+        )
+      ) {
+        return false;
+      }
+      if (source?.hasScenarios === false) {
+        return true;
+      }
       const conversationId = result.testCase?.metadata?.conversationId;
+      const savedOrigin = source?.explicitScenarioOrigins?.get(conversationId);
+      if (
+        savedOrigin?.scenario.some((test) => matchesSavedCase(result, test) === true) &&
+        savedOrigin.topLevel.every((test) => matchesSavedCase(result, test) === false) &&
+        !topLevelCandidates.some(
+          (candidate) =>
+            candidate.metadata.conversationId === conversationId &&
+            matchesScenarioCandidate(
+              result,
+              candidate.effective,
+              candidate.metadata,
+              candidate.metadataKeys,
+            ),
+        )
+      ) {
+        return false;
+      }
+      const scenarioMatch = scenarioClassifiers.some((classifier) =>
+        classifier.matchesAny(result, source),
+      );
       const generatedScenarioId = isGeneratedScenarioId(conversationId);
       const explicitScenarioId = explicitScenarioIds.has(conversationId);
       if (

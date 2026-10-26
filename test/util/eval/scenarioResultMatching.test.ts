@@ -4,7 +4,7 @@ import {
   topLevelResultMatchContext,
 } from '../../../src/util/eval/filterTestsUtil';
 
-import type { EvaluateResult, Scenario, TestSuite } from '../../../src/types/index';
+import type { EvaluateResult, Scenario, TestCase, TestSuite } from '../../../src/types/index';
 
 function failedResult(vars: Record<string, string>, metadata: Record<string, string>) {
   return {
@@ -67,6 +67,11 @@ describe('exact scenario result matching', () => {
     expect(
       createScenarioResultClassifier(suite, scenario, 5).forVariant(0).includesResult(result),
     ).toBe(true);
+    expect(
+      createScenarioResultClassifier(suite, scenario, 5)
+        .forVariant(0)
+        .includesResult(failedResult({ caseId: 'shared' }, {})),
+    ).toBe(false);
   });
 
   it('keeps an implicit scenario ID beside an explicit authored ID', () => {
@@ -83,6 +88,23 @@ describe('exact scenario result matching', () => {
 
     expect(context.includesResult(implicit)).toBe(true);
     expect(context.matchesTest(implicit, scenario.tests![1])).toBe(true);
+  });
+
+  it('keeps a legacy no-ID row for an implicit sibling beside an explicit-ID test', () => {
+    const scenario: Scenario = {
+      config: [{}],
+      tests: [
+        { vars: { caseId: 'shared' }, metadata: { conversationId: 'stable' } },
+        { vars: { caseId: 'shared' } },
+      ],
+    };
+    const suite: TestSuite = { prompts: [], providers: [], scenarios: [scenario] };
+    const context = createScenarioResultClassifier(suite, scenario).forVariant(0);
+    const legacy = failedResult({ caseId: 'shared' }, {});
+
+    expect(context.matchesTest(legacy, scenario.tests![0])).toBe(false);
+    expect(context.matchesTest(legacy, scenario.tests![1])).toBe(true);
+    expect(context.includesResult(legacy)).toBe(true);
   });
 
   it('compares missing metadata keys across all authored tests and top-level tests', () => {
@@ -164,6 +186,183 @@ describe('exact scenario result matching', () => {
 
     expect(context.includesResult(scenarioResult)).toBe(false);
     expect(context.includesResult(generatedTopLevel)).toBe(true);
+  });
+
+  it('preserves generated top-level rows beside scenarios while rejecting scenario IDs', () => {
+    const scenario: Scenario = {
+      config: [{ metadata: { role: 'common' } }],
+      tests: [{ vars: { caseId: 'shared' } }],
+    };
+    const suite: TestSuite = { prompts: [], providers: [], tests: [], scenarios: [scenario] };
+    const topLevel = topLevelResultMatchContext(suite);
+    const priorTopLevel = failedResult({ caseId: 'shared' }, { role: 'common', id: 'A' });
+    const priorScenario = failedResult(
+      { caseId: 'shared' },
+      { role: 'common', conversationId: '__scenario_0__' },
+    );
+
+    expect(topLevel.includesResult(priorTopLevel, { hasScenarios: false })).toBe(true);
+    expect(topLevel.includesResult(priorScenario, { hasScenarios: true })).toBe(false);
+    expect(topLevel.includesResult(priorScenario, { hasScenarios: false })).toBe(true);
+    const scenarioContext = createScenarioResultClassifier(suite, scenario).forVariant(0);
+    expect(scenarioContext.includesResult(priorTopLevel, { hasScenarios: false })).toBe(false);
+    expect(scenarioContext.includesResult(priorTopLevel)).toBe(true);
+    expect(scenarioContext.includesResult(priorScenario, { hasScenarios: true })).toBe(true);
+    expect(
+      scenarioContext.includesResult(priorTopLevel, {
+        hasScenarios: true,
+        generatedScenarioIdsObserved: true,
+      }),
+    ).toBe(false);
+  });
+
+  it('honors prompt labels, IDs, wildcards, and empty allowlists for authored tests', () => {
+    const tests = [
+      { vars: { caseId: 'shared' }, prompts: ['Group:*'] },
+      { vars: { caseId: 'shared' }, prompts: ['prompt-hash'] },
+      { vars: { caseId: 'shared' }, prompts: ['other'] },
+      { vars: { caseId: 'shared' }, prompts: [] },
+    ];
+    const result = {
+      ...failedResult({ caseId: 'shared' }, {}),
+      prompt: { raw: 'rendered', label: 'Group:one' },
+      promptId: 'prompt-hash',
+    } as EvaluateResult;
+    const context = topLevelResultMatchContext({ prompts: [], providers: [], tests });
+
+    expect(context.matchesTest(result, tests[0])).toBe(true);
+    expect(context.matchesTest(result, tests[1])).toBe(true);
+    expect(context.matchesTest(result, tests[2])).toBe(false);
+    expect(context.matchesTest(result, tests[3])).toBe(false);
+  });
+
+  it('does not extract a top-level result excluded only by its authored prompt selector', () => {
+    const suite: TestSuite = {
+      prompts: [],
+      providers: [],
+      tests: [{ vars: { caseId: 'authored' }, metadata: { role: 'common' }, prompts: ['alpha'] }],
+    };
+    const context = topLevelResultMatchContext(suite);
+    const stored = {
+      ...failedResult({ caseId: 'authored' }, { role: 'common' }),
+      prompt: { raw: 'rendered', label: 'beta' },
+      promptId: 'hash-beta',
+    } as EvaluateResult;
+
+    expect(context.includesResult(stored, { hasScenarios: false })).toBe(false);
+    expect(
+      context.includesResult(
+        {
+          ...stored,
+          vars: { caseId: 'generated' },
+          testCase: { ...stored.testCase, vars: { caseId: 'generated' } },
+        },
+        { hasScenarios: false },
+      ),
+    ).toBe(true);
+  });
+
+  it('scopes runtime-generated scenario cases by inherited prompt allowlist', () => {
+    const scenario: Scenario = {
+      config: [{ prompts: ['alpha'] }, { prompts: ['beta'] }],
+      tests: [{ vars: { caseId: 'authored' } }],
+    };
+    const suite: TestSuite = { prompts: [], providers: [], scenarios: [scenario] };
+    const generated = {
+      ...failedResult({ caseId: 'generated' }, {}),
+      prompt: { raw: 'rendered', label: 'beta' },
+      promptId: 'hash-beta',
+    } as EvaluateResult;
+    const classifier = createScenarioResultClassifier(suite, scenario);
+
+    expect(classifier.forVariant(0).includesResult(generated)).toBe(false);
+    expect(classifier.forVariant(1).includesResult(generated)).toBe(true);
+  });
+
+  it('does not extract an authored case rejected by its own prompt or provider selectors', () => {
+    const scenario: Scenario = {
+      config: [{}],
+      tests: [{ vars: { caseId: 'authored' }, prompts: ['alpha'], providers: ['echo:A'] }],
+    };
+    const suite: TestSuite = { prompts: [], providers: [], scenarios: [scenario] };
+    const context = createScenarioResultClassifier(suite, scenario).forVariant(0);
+    const stored = {
+      ...failedResult({ caseId: 'authored' }, { conversationId: '__scenario_0__' }),
+      provider: { id: 'echo:A' },
+      prompt: { raw: 'rendered', label: 'beta' },
+      promptId: 'hash-beta',
+    } as EvaluateResult;
+
+    expect(context.includesResult(stored)).toBe(false);
+    expect(
+      context.includesResult({
+        ...stored,
+        provider: { id: 'echo:B' },
+        prompt: { raw: 'rendered', label: 'alpha' },
+      }),
+    ).toBe(false);
+    expect(
+      context.includesResult({
+        ...stored,
+        vars: { caseId: 'generated' },
+        testCase: { ...stored.testCase, vars: { caseId: 'generated' } },
+      }),
+    ).toBe(true);
+  });
+
+  it('keeps an expanded scenario test selected by its own prompt override', () => {
+    const scenario: Scenario = {
+      config: [{ prompts: ['alpha'] }],
+      tests: [
+        {
+          vars: { caseId: ['x', 'y'] },
+          metadata: { role: 'keep' },
+          prompts: ['beta'],
+        },
+      ],
+    };
+    const suite: TestSuite = { prompts: [], providers: [], scenarios: [scenario] };
+    const stored = {
+      ...failedResult({ caseId: 'x' }, { role: 'keep', conversationId: '__scenario_0__' }),
+      prompt: { raw: 'rendered', label: 'beta' },
+      promptId: 'hash-beta',
+      testCase: {
+        vars: { caseId: 'x' },
+        metadata: { role: 'keep', conversationId: '__scenario_0__' },
+        prompts: ['beta'],
+      },
+    } as EvaluateResult;
+    const context = createScenarioResultClassifier(suite, scenario).forVariant(0);
+
+    expect(context.includesResult(stored)).toBe(true);
+    expect(context.matchesTest(stored, scenario.tests?.[0] as TestCase)).toBe(false);
+  });
+
+  it('keeps an expanded scenario test selected by its own provider override', () => {
+    const scenario: Scenario = {
+      config: [{ providers: ['echo:A'] }],
+      tests: [
+        {
+          vars: { caseId: ['x', 'y'] },
+          metadata: { role: 'keep' },
+          providers: ['echo:B'],
+        },
+      ],
+    };
+    const suite: TestSuite = { prompts: [], providers: [], scenarios: [scenario] };
+    const stored = {
+      ...failedResult({ caseId: 'x' }, { role: 'keep', conversationId: '__scenario_0__' }),
+      provider: { id: 'echo:B' },
+      testCase: {
+        vars: { caseId: 'x' },
+        metadata: { role: 'keep', conversationId: '__scenario_0__' },
+        providers: ['echo:B'],
+      },
+    } as EvaluateResult;
+    const context = createScenarioResultClassifier(suite, scenario).forVariant(0);
+
+    expect(context.includesResult(stored)).toBe(true);
+    expect(context.matchesTest(stored, scenario.tests?.[0] as TestCase)).toBe(false);
   });
 
   it('keeps a runtime-generated case with its unique variant', () => {

@@ -87,6 +87,8 @@ function deduplicateTestsWithMetadata(tests: Tests, context: ResultMatchContext)
       vars: filterRuntimeVars(test.vars),
       metadata: test.metadata,
       provider: providerToIdentifier(test.provider),
+      prompts: test.prompts,
+      providers: test.providers,
     });
     if (seenExtracted.has(key)) {
       return false;

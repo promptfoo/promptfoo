@@ -458,6 +458,7 @@ describeEvaluator('evaluator runtime ports', () => {
 
     expect(callable).toHaveBeenCalledTimes(2);
     expect(evaluation.results.map((result) => result.promptIdx)).toEqual([0, 1]);
+    expect(evaluation.results.every((result) => result.prompt.id === 'authored')).toBe(true);
     expect(evaluation.results.every((result) => result.success)).toBe(true);
   });
 

@@ -1307,7 +1307,7 @@ describe('evaluateOptions behavior', () => {
     });
 
     it('should keep failed scenario variants separate when their test vars are shared', async () => {
-      const tempConfig = writeTempConfig(tmpDir, 'test-exact-scenario-failing.yaml', {
+      const scenarioConfig = {
         providers: ['echo'],
         prompts: ['Hello {{variant}}'],
         scenarios: [
@@ -1319,18 +1319,33 @@ describe('evaluateOptions behavior', () => {
             tests: [{ vars: { caseId: 'shared' }, metadata: { role: 'common' } }],
           },
         ],
-      });
+      };
+      const tempConfig = writeTempConfig(
+        tmpDir,
+        'test-exact-scenario-failing.yaml',
+        scenarioConfig,
+      );
       const failedResultsPath = path.join(tmpDir, 'test-exact-scenario-failing.json');
       const failedCase = (category: string) => ({
         success: false,
         vars: { variant: 'shared', caseId: 'shared' },
         testCase: {
           vars: { variant: 'shared', caseId: 'shared' },
-          metadata: { category, role: 'common' },
+          metadata: {
+            category,
+            role: 'common',
+            conversationId: `__scenario_${category === 'A' ? 0 : 1}__`,
+          },
         },
       });
       for (const failedCases of [[failedCase('A')], [failedCase('A'), failedCase('B')]]) {
-        fs.writeFileSync(failedResultsPath, JSON.stringify({ results: { results: failedCases } }));
+        fs.writeFileSync(
+          failedResultsPath,
+          JSON.stringify({
+            config: { ...scenarioConfig, tests: [] },
+            results: { version: 3, results: failedCases },
+          }),
+        );
         await doEval(
           {
             table: false,
@@ -1353,14 +1368,16 @@ describe('evaluateOptions behavior', () => {
       fs.writeFileSync(
         failedResultsPath,
         JSON.stringify({
+          config: { ...scenarioConfig, tests: [] },
           results: {
+            version: 3,
             results: [
               {
                 success: false,
                 vars: { variant: 'shared', caseId: 'generated' },
                 testCase: {
                   vars: { variant: 'shared', caseId: 'generated' },
-                  metadata: { category: 'A', role: 'common' },
+                  metadata: { category: 'A', role: 'common', conversationId: '__scenario_0__' },
                 },
               },
             ],
@@ -1389,7 +1406,7 @@ describe('evaluateOptions behavior', () => {
     });
 
     it('should retain distinct failed scenario tests that share vars', async () => {
-      const tempConfig = writeTempConfig(tmpDir, 'test-exact-scenario-shared-vars.yaml', {
+      const scenarioConfig = {
         providers: ['echo'],
         prompts: ['Hello {{caseId}}'],
         scenarios: [
@@ -1401,18 +1418,25 @@ describe('evaluateOptions behavior', () => {
             ],
           },
         ],
-      });
+      };
+      const tempConfig = writeTempConfig(
+        tmpDir,
+        'test-exact-scenario-shared-vars.yaml',
+        scenarioConfig,
+      );
       const failedResultsPath = path.join(tmpDir, 'test-exact-scenario-shared-vars.json');
       fs.writeFileSync(
         failedResultsPath,
         JSON.stringify({
+          config: { ...scenarioConfig, tests: [] },
           results: {
+            version: 3,
             results: ['X', 'Y'].map((id) => ({
               success: false,
               vars: { caseId: 'shared' },
               testCase: {
                 vars: { caseId: 'shared' },
-                metadata: { category: 'A', id },
+                metadata: { category: 'A', id, conversationId: '__scenario_0__' },
               },
             })),
           },

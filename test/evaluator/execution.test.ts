@@ -760,7 +760,7 @@ describeEvaluator('evaluator execution control', () => {
 
     const testSuite: TestSuite = {
       providers: [slowApiProvider],
-      prompts: [toPrompt('Test prompt')],
+      prompts: [{ ...toPrompt('Test prompt'), id: 'authored-step-timeout' }],
       tests: [{}],
     };
 
@@ -782,6 +782,7 @@ describeEvaluator('evaluator execution control', () => {
           error: expect.stringContaining('Evaluation timed out after 100ms'),
           success: false,
           failureReason: ResultFailureReason.ERROR,
+          prompt: expect.objectContaining({ id: 'authored-step-timeout' }),
         }),
       );
 
@@ -1231,7 +1232,7 @@ describeEvaluator('evaluator execution control', () => {
     };
     const testSuite: TestSuite = {
       providers: [provider],
-      prompts: [toPrompt('Test prompt {{topic}}')],
+      prompts: [{ ...toPrompt('Test prompt {{topic}}'), id: 'authored-max-duration' }],
       tests: ['alpha', 'beta', 'gamma'].map((topic) => ({
         vars: { topic },
         assert: [{ type: 'llm-rubric', value: `Judge ${topic}`, provider: judge }],
@@ -1264,6 +1265,7 @@ describeEvaluator('evaluator execution control', () => {
     );
     expect(resultByTopic.get('alpha')?.error).toMatch(/^Aborted: /);
     expect(resultByTopic.get('gamma')?.error).toContain('Evaluation exceeded max duration');
+    expect(resultByTopic.get('gamma')?.prompt.id).toBe('authored-max-duration');
   });
 
   it('cancels in-flight grouped grading when the max duration expires', async () => {

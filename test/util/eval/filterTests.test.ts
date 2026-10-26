@@ -721,6 +721,46 @@ describe('filterTests', () => {
       expect(result).toEqual(tests);
     });
 
+    it('keeps distinct extracted prompt selectors across a failure union', async () => {
+      const testSuite: TestSuite = { prompts: [], providers: [], tests: [] };
+      vi.mocked(Eval.findById).mockResolvedValue({
+        config: {},
+        toEvaluateSummary: vi.fn().mockResolvedValue({
+          results: [
+            {
+              vars: { id: 'shared' },
+              success: false,
+              failureReason: ResultFailureReason.ASSERT,
+              provider: { id: 'echo' },
+              prompt: { raw: 'rendered', label: 'alpha' },
+              testCase: {
+                vars: { id: 'shared' },
+                metadata: { role: 'common' },
+                prompts: ['alpha'],
+              },
+            },
+            {
+              vars: { id: 'shared' },
+              success: false,
+              failureReason: ResultFailureReason.ERROR,
+              provider: { id: 'echo' },
+              prompt: { raw: 'rendered', label: 'beta' },
+              testCase: { vars: { id: 'shared' }, metadata: { role: 'common' }, prompts: ['beta'] },
+            },
+          ],
+        }),
+      } as any);
+
+      const result = await filterTests(testSuite, {
+        metadataExact: 'role=common',
+        failingOnly: 'eval-123',
+        errorsOnly: 'eval-123',
+        resultMatchContext: topLevelResultMatchContext(testSuite),
+      });
+
+      expect(result.map((test) => test.prompts)).toEqual([['alpha'], ['beta']]);
+    });
+
     it('keeps indistinguishable authored tests while collapsing one authored runtime copy across filters', async () => {
       const tests: TestCase[] = [
         {

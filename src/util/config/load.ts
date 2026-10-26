@@ -21,7 +21,6 @@ import {
   type CommandLineOptions,
   CommandLineOptionsSchema,
   EvaluateOptionsSchema,
-  type EvaluateResult,
   type Prompt,
   type ProviderOptions,
   ProvidersSchema,
@@ -45,7 +44,7 @@ import { PromptSchema } from '../../validators/prompts';
 import { filterPrompts } from '../eval/filterPrompts';
 import { filterProviderConfigs, getProviderIdAndLabel } from '../eval/filterProviders';
 import { filterTests } from '../eval/filterTests';
-import { createScenarioResultClassifier } from '../eval/filterTestsUtil';
+import { createScenarioResultClassifier, type StoredResults } from '../eval/filterTestsUtil';
 import { promptfooCommand } from '../promptfooCommand';
 import { preserveTracingCredentialReferences } from '../sanitizer';
 import {
@@ -1257,7 +1256,7 @@ async function resolveLoadedConfig(
     const filterMetadataExact =
       cmdObj.filterMetadataExact ?? commandLineOptions?.filterMetadataExact;
     const resolvedScenarios: Scenario[] = [];
-    const resultLoadCache = new Map<string, Promise<EvaluateResult[] | undefined>>();
+    const resultLoadCache = new Map<string, Promise<StoredResults | undefined>>();
     let globalScenarioOffset = 0;
     for (const [scenarioIndex, scenario] of parsedScenarios.entries()) {
       if (typeof scenario === 'object' && scenario.tests && typeof scenario.tests === 'string') {
