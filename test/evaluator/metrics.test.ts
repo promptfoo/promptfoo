@@ -25,6 +25,81 @@ const createErrorMetricTest = (errorValue: number) => ({
 });
 
 describeEvaluator('evaluator metrics and scoring', () => {
+  it('counts grader execution failures as errors instead of assertion failures', async () => {
+    const matchers = await import('../../src/matchers/llmGrading');
+    const matchesFactualitySpy = vi.spyOn(matchers, 'matchesFactuality').mockResolvedValue({
+      pass: false,
+      score: 0,
+      reason: 'Grader provider unavailable',
+      tokensUsed: { total: 0, prompt: 0, completion: 0, numRequests: 0 },
+      metadata: { graderError: true },
+    });
+
+    try {
+      const testSuite: TestSuite = {
+        providers: [mockApiProvider],
+        prompts: [toPrompt('Test prompt for grader failure')],
+        tests: [
+          {
+            assert: [{ type: 'factuality', value: 'Expected output' }],
+          },
+        ],
+      };
+
+      const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+      await evaluate(testSuite, evalRecord, {});
+
+      const summary = await evalRecord.toEvaluateSummary();
+      const result = summary.results[0];
+      const metrics = evalRecord.prompts[0]?.metrics;
+
+      expect(result.failureReason).toBe(ResultFailureReason.ERROR);
+      expect(result.gradingResult?.componentResults?.[0]).toMatchObject({
+        metadata: { graderError: true },
+      });
+      expect(metrics?.testErrorCount).toBe(1);
+      expect(metrics?.testFailCount).toBe(0);
+    } finally {
+      matchesFactualitySpy.mockRestore();
+    }
+  });
+
+  it('counts a valid negative factuality grade as an assertion failure', async () => {
+    const matchers = await import('../../src/matchers/llmGrading');
+    const matchesFactualitySpy = vi.spyOn(matchers, 'matchesFactuality').mockResolvedValue({
+      pass: false,
+      score: 0,
+      reason: 'The answer disagrees with the reference.',
+      tokensUsed: { total: 0, prompt: 0, completion: 0, numRequests: 0 },
+    });
+
+    try {
+      const testSuite: TestSuite = {
+        providers: [mockApiProvider],
+        prompts: [toPrompt('Test prompt for negative grade')],
+        tests: [
+          {
+            assert: [{ type: 'factuality', value: 'Expected output' }],
+          },
+        ],
+      };
+
+      const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+      await evaluate(testSuite, evalRecord, {});
+
+      const summary = await evalRecord.toEvaluateSummary();
+      const result = summary.results[0];
+      const metrics = evalRecord.prompts[0]?.metrics;
+
+      expect(result.failureReason).toBe(ResultFailureReason.ASSERT);
+      expect(result.gradingResult?.componentResults?.[0].metadata?.graderError).toBeUndefined();
+      expect(metrics?.testFailCount).toBe(1);
+      expect(metrics?.testErrorCount).toBe(0);
+    } finally {
+      matchesFactualitySpy.mockRestore();
+    }
+  });
+
   it('evaluator should count named score assertions per metric', async () => {
     const testSuite: TestSuite = {
       providers: [mockApiProvider],
