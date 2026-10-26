@@ -217,6 +217,7 @@ function validateDockerInstallCommands(
   let hasRootWorkdir = false;
   const runs: string[] = [];
   for (const instruction of instructions) {
+    expect(instruction).not.toContain('<<');
     const kind = instruction.split(/\s+/, 1)[0].toUpperCase();
     // Custom shells, ONBUILD triggers, heredocs and unrecognized continuation bodies
     // are unsupported; otherwise the literal RUN policy would not describe execution.
@@ -961,6 +962,27 @@ describe('package manifests', () => {
       validateDockerInstallCommands(dockerfile.replace(required, ''), manifests),
     ).toThrow();
     expect(() => validateDockerInstallCommands(`${dockerfile}\n${required}`, manifests)).toThrow();
+  });
+
+  it('does not count COPY heredoc contents as required Docker RUN instructions', () => {
+    const dockerfile = fs
+      .readFileSync(path.join(process.cwd(), 'Dockerfile'), 'utf8')
+      .replace(/[ \t]*\\\r?\n[ \t]*/g, ' ');
+    const manifests = {
+      'package.json': readPackageJson<PackageManifest>('package.json'),
+      'src/app/package.json': readPackageJson<PackageManifest>('src/app/package.json'),
+    };
+    expect(() => validateDockerInstallCommands(dockerfile, manifests)).not.toThrow();
+    const withoutRequired = DOCKER_REQUIRED_RUNS.reduce(
+      (source, required) => source.replace(required, ''),
+      dockerfile,
+    );
+    expect(() => validateDockerInstallCommands(withoutRequired, manifests)).toThrow();
+
+    const heredoc = `COPY <<CMD /tmp/policy.txt\n${DOCKER_REQUIRED_RUNS.join('\n')}\nCMD`;
+    expect(() =>
+      validateDockerInstallCommands(`${withoutRequired}\n${heredoc}`, manifests),
+    ).toThrow();
   });
 
   it.each([
