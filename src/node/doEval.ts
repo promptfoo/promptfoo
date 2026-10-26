@@ -22,6 +22,7 @@ import { cloudConfig } from '../globalConfig/cloud';
 import logger, { getLogLevel } from '../logger';
 import { runDbMigrations } from '../migrate';
 import Eval from '../models/eval';
+import { toSerializableProviderRef } from '../models/evalResult';
 import { providerRegistry } from '../providers/providerRegistry';
 import { neverGenerateRemote } from '../redteam/remoteGeneration';
 import { createShareableUrl, isSharingEnabled } from '../share';
@@ -56,6 +57,7 @@ import {
 } from '../util/index';
 import { promptfooCommand } from '../util/promptfooCommand';
 import { checkProviderApiKeys } from '../util/provider';
+import { mapTestProviderRefs } from '../util/sanitizer';
 import { shouldShareResults } from '../util/sharing';
 import { resolveTestsWatchPaths } from '../util/testCaseReader';
 import { TokenUsageTracker } from '../util/tokenUsage';
@@ -687,6 +689,8 @@ async function doEvalWithEnv(
       filterSample !== undefined;
     const shouldApplyFiltersToImplicitDefaultTest =
       hasActiveTestFilter && canSynthesizeImplicitDefaultTest && !testSuite.tests?.length;
+    const sourceTests = testSuite.tests ?? [];
+    const sourceConfigs = Array.isArray(config.tests) ? config.tests : [];
 
     // Apply filtering only when not resuming, to preserve test indices
     if (!resumeEval) {
@@ -852,6 +856,7 @@ async function doEvalWithEnv(
     const runtimeOptions: EvalRuntimeOptions = {
       ...options,
       ...(providerFilter ? { providerFilter } : {}),
+      ...(filterMetadataExact !== undefined && !hasScenarios ? { filterRange: undefined } : {}),
     };
 
     if (!resumeEval && config.metadata && 'generationAccounting' in config.metadata) {
@@ -874,11 +879,51 @@ async function doEvalWithEnv(
 
     // Create or load eval record
     const author = getAuthor();
+    const savedConfig =
+      !resumeEval && filterMetadataExact !== undefined
+        ? {
+            ...config,
+            tests: (testSuite.tests ?? []).map((test) => {
+              let sourceIndex = sourceTests.indexOf(test);
+              if (sourceIndex < 0) {
+                const copiedSourceIndices = sourceTests.flatMap((source, index) =>
+                  Object.keys(source).filter((key) => key !== 'vars').length ===
+                    Object.keys(test).filter((key) => key !== 'vars').length &&
+                  Object.entries(source).every(
+                    ([key, value]) =>
+                      key === 'vars' || Object.is((test as Record<string, unknown>)[key], value),
+                  ) &&
+                  Object.entries(source.vars ?? {}).every(
+                    ([key, value]) => test.vars?.[key] === value,
+                  )
+                    ? [index]
+                    : [],
+                );
+                sourceIndex = copiedSourceIndices.length === 1 ? copiedSourceIndices[0] : -1;
+              }
+              const sourceConfig = sourceConfigs[sourceIndex];
+              return sourceConfig && typeof sourceConfig === 'object'
+                ? { ...sourceConfig, vars: test.vars }
+                : mapTestProviderRefs(test, toSerializableProviderRef);
+            }),
+            ...(testSuite.scenarios?.length === 0 ? { scenarios: [] } : {}),
+            commandLineOptions: {
+              ...config.commandLineOptions,
+              filterMetadataExact: undefined,
+              filterSample: undefined,
+              filterSampleSeed: undefined,
+              ...(hasScenarios ? {} : { filterRange: undefined }),
+            },
+            ...(!hasScenarios && config.evaluateOptions
+              ? { evaluateOptions: { ...config.evaluateOptions, filterRange: undefined } }
+              : {}),
+          }
+        : config;
     const evalRecord = resumeEval
       ? resumeEval
       : cmdObj.write
-        ? await Eval.create(config, testSuite.prompts, { author, runtimeOptions })
-        : new Eval(config, { author, runtimeOptions });
+        ? await Eval.create(savedConfig, testSuite.prompts, { author, runtimeOptions })
+        : new Eval(savedConfig, { author, runtimeOptions });
 
     // Graceful pause support via Ctrl+C (only when writing to database)
     const abortController = new AbortController();

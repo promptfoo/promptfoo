@@ -1002,6 +1002,234 @@ describe('evaluateOptions behavior', () => {
       expect(testSuite.tests?.map((test) => test.vars?.input)).toEqual(['integration']);
     });
 
+    it('should resume the exact selection and its original order after range and sampling', async () => {
+      const tempConfig = writeTempConfig(tmpDir, 'test-exact-resume-selection.yaml', {
+        providers: ['echo'],
+        prompts: ['Hello {{id}}'],
+        tests: [1, 10, 3, 13, 7, 70].map((id) => ({
+          vars: { id },
+          metadata: { id },
+        })),
+      });
+
+      await doEval(
+        {
+          table: false,
+          write: false,
+          config: [tempConfig],
+          filterMetadataExact: 'id=1,3,7',
+          filterRange: '1:3',
+          filterSample: 1,
+        },
+        {},
+        undefined,
+        {},
+      );
+
+      const initialSuite = evaluateMock.mock.calls.at(-1)?.[0] as TestSuite;
+      const initialEval = evaluateMock.mock.calls.at(-1)?.[1] as Eval;
+      expect(initialSuite.tests).toHaveLength(1);
+      const selectedIds = initialSuite.tests?.map((test) => test.vars?.id);
+      const savedEval = new Eval(initialEval.config, {
+        id: 'eval-exact-resume-selection',
+        persisted: true,
+        runtimeOptions: initialEval.runtimeOptions,
+      });
+      const findByIdSpy = vi.spyOn(Eval, 'findById').mockResolvedValue(savedEval);
+      evaluateMock.mockClear();
+      try {
+        await doEval({ table: false, resume: savedEval.id } as any, {}, undefined, {});
+        const resumedSuite = evaluateMock.mock.calls.at(-1)?.[0] as TestSuite;
+        const resumedOptions = evaluateMock.mock.calls.at(-1)?.[2] as EvaluateOptions;
+        expect(resumedSuite.tests?.map((test) => test.vars?.id)).toEqual(selectedIds);
+        expect(resumedOptions.filterRange).toBeUndefined();
+      } finally {
+        findByIdSpy.mockRestore();
+      }
+    });
+
+    it('should retry errors against the saved exact test selection', async () => {
+      const tempConfig = writeTempConfig(tmpDir, 'test-exact-retry-selection.yaml', {
+        providers: ['echo'],
+        prompts: ['Hello {{id}}'],
+        tests: [1, 10, 3, 13, 7, 70].map((id) => ({
+          vars: { id },
+          metadata: { id },
+        })),
+      });
+      await doEval(
+        { table: false, write: false, config: [tempConfig], filterMetadataExact: 'id=1,3,7' },
+        {},
+        undefined,
+        {},
+      );
+      const initialEval = evaluateMock.mock.calls.at(-1)?.[1] as Eval;
+      const savedEval = new Eval(initialEval.config, {
+        id: 'eval-exact-retry-selection',
+        persisted: true,
+        runtimeOptions: initialEval.runtimeOptions,
+      });
+      const latestSpy = vi.spyOn(Eval, 'latest').mockResolvedValue(savedEval);
+      const errorsSpy = vi
+        .spyOn(retryModule, 'getErrorResultIds')
+        .mockResolvedValue(['failed-row']);
+      const deleteSpy = vi.spyOn(retryModule, 'deleteErrorResults').mockResolvedValue(undefined);
+      const metricsSpy = vi
+        .spyOn(retryModule, 'recalculatePromptMetrics')
+        .mockResolvedValue(undefined);
+      evaluateMock.mockClear();
+      try {
+        await doEval({ table: false, retryErrors: true }, {}, undefined, {});
+        const retriedSuite = evaluateMock.mock.calls.at(-1)?.[0] as TestSuite;
+        expect(retriedSuite.tests?.map((test) => test.vars?.id)).toEqual([1, 3, 7]);
+      } finally {
+        latestSpy.mockRestore();
+        errorsSpy.mockRestore();
+        deleteSpy.mockRestore();
+        metricsSpy.mockRestore();
+      }
+    });
+
+    it('should resume scenario exact samples without filtering the saved variants again', async () => {
+      const tempConfig = writeTempConfig(tmpDir, 'test-exact-scenario-resume.yaml', {
+        commandLineOptions: {
+          filterMetadataExact: 'category=keep',
+          filterSample: 2,
+          filterSampleSeed: 42,
+          filterRange: '1:3',
+        },
+        providers: ['echo'],
+        prompts: ['Hello'],
+        scenarios: [
+          {
+            config: [
+              { metadata: { category: 'keep', variant: 'a' } },
+              { metadata: { category: 'keep', variant: 'b' } },
+            ],
+            tests: [{ description: 'one' }, { description: 'two' }, { description: 'three' }],
+          },
+        ],
+      });
+
+      await doEval({ table: false, write: false, config: [tempConfig] }, {}, undefined, {});
+      const initialSuite = evaluateMock.mock.calls.at(-1)?.[0] as TestSuite;
+      const initialEval = evaluateMock.mock.calls.at(-1)?.[1] as Eval;
+      const selectedDescriptions = initialSuite.scenarios?.map((scenario) =>
+        scenario.tests?.map((test) => test.description),
+      );
+      expect(selectedDescriptions).toHaveLength(2);
+      expect(selectedDescriptions?.every((tests) => tests?.length === 2)).toBe(true);
+
+      const savedEval = new Eval(initialEval.config, {
+        id: 'eval-exact-scenario-resume',
+        persisted: true,
+        runtimeOptions: initialEval.runtimeOptions,
+      });
+      const findByIdSpy = vi.spyOn(Eval, 'findById').mockResolvedValue(savedEval);
+      evaluateMock.mockClear();
+      try {
+        await doEval({ table: false, resume: savedEval.id } as any, {}, undefined, {});
+        const resumedSuite = evaluateMock.mock.calls.at(-1)?.[0] as TestSuite;
+        const resumedOptions = evaluateMock.mock.calls.at(-1)?.[2] as EvaluateOptions;
+        expect(
+          resumedSuite.scenarios?.map((scenario) =>
+            scenario.tests?.map((test) => test.description),
+          ),
+        ).toEqual(selectedDescriptions);
+        expect(resumedOptions.filterRange).toBe('1:3');
+      } finally {
+        findByIdSpy.mockRestore();
+      }
+    });
+
+    it('should keep an empty exact selection empty when resuming', async () => {
+      const tempConfig = writeTempConfig(tmpDir, 'test-exact-empty-resume.yaml', {
+        providers: ['echo'],
+        prompts: ['Hello'],
+        tests: [{ metadata: { id: 'excluded' } }],
+      });
+      await doEval(
+        { table: false, write: false, config: [tempConfig], filterMetadataExact: 'id=selected' },
+        {},
+        undefined,
+        {},
+      );
+      const initialEval = evaluateMock.mock.calls.at(-1)?.[1] as Eval;
+      const savedEval = new Eval(initialEval.config, {
+        id: 'eval-exact-empty-resume',
+        persisted: true,
+        runtimeOptions: initialEval.runtimeOptions,
+      });
+      const findByIdSpy = vi.spyOn(Eval, 'findById').mockResolvedValue(savedEval);
+      evaluateMock.mockClear();
+      try {
+        await doEval({ table: false, resume: savedEval.id } as any, {}, undefined, {});
+        const resumedSuite = evaluateMock.mock.calls.at(-1)?.[0] as TestSuite;
+        expect(resumedSuite.tests).toEqual([]);
+        expect(resumedSuite.scenarios).toEqual([]);
+      } finally {
+        findByIdSpy.mockRestore();
+      }
+    });
+
+    it('should retain authored provider options in the saved exact selection', async () => {
+      const tempConfig = writeTempConfig(tmpDir, 'test-exact-provider-resume.yaml', {
+        providers: ['echo'],
+        prompts: ['Hello'],
+        tests: [
+          {
+            provider: { id: 'echo', config: { response: 'kept-provider-option' } },
+            metadata: { id: 'selected' },
+          },
+          { metadata: { id: 'excluded' } },
+        ],
+      });
+      await doEval(
+        { table: false, write: false, config: [tempConfig], filterMetadataExact: 'id=selected' },
+        {},
+        undefined,
+        {},
+      );
+      const initialEval = evaluateMock.mock.calls.at(-1)?.[1] as Eval;
+      const savedTests = initialEval.config.tests;
+      expect(Array.isArray(savedTests) ? savedTests : []).toHaveLength(1);
+      const selectedProvider = Array.isArray(savedTests) ? savedTests[0] : undefined;
+      expect(
+        selectedProvider && typeof selectedProvider === 'object' && 'provider' in selectedProvider
+          ? selectedProvider.provider
+          : undefined,
+      ).toEqual({
+        id: 'echo',
+        config: { response: 'kept-provider-option' },
+      });
+    });
+
+    it('should persist the selected source when tests share vars and provider', async () => {
+      const tempConfig = writeTempConfig(tmpDir, 'test-exact-duplicate-vars-resume.yaml', {
+        providers: ['echo'],
+        prompts: ['Hello'],
+        tests: [
+          { vars: { input: 'same' }, metadata: { id: 1 } },
+          { vars: { input: 'same' }, metadata: { id: 3 } },
+        ],
+      });
+      await doEval(
+        { table: false, write: false, config: [tempConfig], filterMetadataExact: 'id=3' },
+        {},
+        undefined,
+        {},
+      );
+      const initialEval = evaluateMock.mock.calls.at(-1)?.[1] as Eval;
+      const savedTests = initialEval.config.tests;
+      expect(
+        Array.isArray(savedTests)
+          ? savedTests.map((test) =>
+              typeof test === 'object' && 'metadata' in test ? test.metadata?.id : undefined,
+            )
+          : [],
+      ).toEqual([3]);
+    });
+
     it('should filter scenario tests using default, scenario, and test metadata precedence', async () => {
       const tempConfig = writeTempConfig(tmpDir, 'test-filter-scenario-metadata-exact.yaml', {
         providers: ['echo'],

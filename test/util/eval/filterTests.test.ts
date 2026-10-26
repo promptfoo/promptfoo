@@ -1039,6 +1039,34 @@ describe('filterTests', () => {
       expect(result.map((test) => test.description)).toEqual(['inherits']);
     });
 
+    it('does not log inherited metadata or exact filter values', async () => {
+      const inheritedSecret = 'qa-inherited-secret-sentinel';
+      const filterSecret = 'qa-filter-secret-sentinel';
+      const debugSpy = vi.spyOn(logger, 'debug');
+
+      try {
+        await filterTests(
+          {
+            prompts: [],
+            providers: [],
+            tests: [{ description: 'secret metadata', metadata: { token: 'other' } }],
+          },
+          {
+            metadataExact: `token=${filterSecret}`,
+            inheritedMetadata: { credential: inheritedSecret, token: filterSecret },
+          },
+        );
+
+        const logged = debugSpy.mock.calls
+          .flatMap((call) => call.map((value) => String(value)))
+          .join('\n');
+        expect(logged).not.toContain(inheritedSecret);
+        expect(logged).not.toContain(filterSecret);
+      } finally {
+        debugSpy.mockRestore();
+      }
+    });
+
     it.each(['invalid', 'id=', 'id=,1', 'id=1,'])(
       'rejects invalid exact filters: %s',
       async (filter) => {

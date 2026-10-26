@@ -224,7 +224,11 @@ export async function filterTests(testSuite: TestSuite, options: FilterOptions):
   let metadataFilter: TestFilterFn | undefined;
   let exactMetadataFilter: TestFilterFn | undefined;
 
-  logger.debug(`Starting filterTests with options: ${JSON.stringify(options)}`);
+  const loggableOptions = { ...options };
+  delete loggableOptions.metadata;
+  delete loggableOptions.metadataExact;
+  delete loggableOptions.inheritedMetadata;
+  logger.debug('Starting filterTests with options', loggableOptions);
   logger.debug(`Initial test count: ${tests.length}`);
 
   if (Object.keys(options).length === 0) {
@@ -291,9 +295,7 @@ export async function filterTests(testSuite: TestSuite, options: FilterOptions):
     const parsedFilters = parseMetadataFilters(metadataFilters, '--filter-metadata-exact');
     const inheritedMetadata = options.inheritedMetadata;
 
-    logger.debug(
-      `Filtering for exact metadata conditions (AND across filters, OR within each filter): ${metadataFilters.join('; ')}`,
-    );
+    logger.debug(`Filtering for ${parsedFilters.length} exact metadata condition(s)`);
 
     exactMetadataFilter = (test) => {
       const effectiveMetadata = { ...inheritedMetadata, ...test.metadata };
@@ -306,9 +308,7 @@ export async function filterTests(testSuite: TestSuite, options: FilterOptions):
         });
 
         if (!matches) {
-          logger.debug(
-            `Test "${test.description || 'unnamed test'}" metadata doesn't match. Expected ${key} to equal one of [${values.join(', ')}]`,
-          );
+          logger.debug('Test did not match exact metadata conditions');
           return false;
         }
       }
