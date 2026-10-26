@@ -974,15 +974,16 @@ describe('evaluatorHelpers', () => {
       }
     });
 
-    it('should keep runtime values as data when JSON autoescape is disabled', async () => {
+    it('should keep file-backed runtime values as data when JSON autoescape is disabled', async () => {
       const restoreEnv = mockProcessEnv({
         PROMPTFOO_DISABLE_JSON_AUTOESCAPE: 'true',
         TEST_ENV_VAR: 'runtime-value-sentinel',
       });
       try {
+        vi.spyOn(fs, 'readFileSync').mockReturnValueOnce('{{env.TEST_ENV_VAR}}');
         const renderedPrompt = await renderPrompt(
           toPrompt('{{payload}}'),
-          { payload: '{{env.TEST_ENV_VAR}}' },
+          { payload: 'file://runtime-value.txt' },
           {},
         );
 
