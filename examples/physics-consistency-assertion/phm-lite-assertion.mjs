@@ -240,7 +240,8 @@ function checkQuantityRules(
       return m2 ? m2.index : fwd.length;
     })();
     const window = normalized.slice(Math.max(0, index - 220) + sentStart, index + sentEnd);
-    if (!/probabilit|confiden(?:t|ce)\b|chance|likelihood|certainty|belief|odds/i.test(window)) return;
+    if (!/probabilit|confiden(?:t|ce)\b|chance|likelihood|certainty|belief|odds/i.test(window))
+      return;
     violations.push({
       rule: 'percentage-range',
       severity: 'FAIL',
@@ -419,4 +420,4 @@ export default async function phmLiteAssertion(output) {
 }
 
 // Expose internals so the example's own unit tests can import them.
-export { C_LIGHT, extractQuantities, G_EARTH, phmLiteCheck };   // serializeForScan 内部实现（phmLiteAssertion 入口覆盖）
+export { C_LIGHT, extractQuantities, G_EARTH, phmLiteCheck }; // serializeForScan 内部实现（phmLiteAssertion 入口覆盖）
