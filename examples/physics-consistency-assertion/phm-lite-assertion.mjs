@@ -115,22 +115,28 @@ function checkQuantityRules({ value, unit: rawUnit, raw, index, underflowNeg }, 
   //
   // Bare "c" is ambiguous: physics writes light-speed fractions as "1.5 c",
   // but "the item costs 2 c" (cents) and "the expression is 2c" (algebra)
-  // are ordinary text. Currency/algebra markers inside the quantity's own
-  // span (bounded by the previous standalone "c", mirroring the delta
-  // scoping in Rule 2) exempt the quantity from the light-speed rule;
-  // true speed claims carry motion verbs and never these words.
+  // are ordinary text. Two gates keep the exemption tight:
+  //   1. The currency/algebra marker must belong to the SAME sentence as
+  //      the quantity ("Conditions changed yesterday. ... -5 kg" must not
+  //      leak markers across claims).
+  //   2. Local motion context wins: a speed claim's sentence carries a
+  //      motion verb, so "the equation predicts that the signal travels at
+  //      2c" stays FAIL even though "equation" shares the sentence.
   const cOwnSpan = (() => {
     if (unit !== 'c') return '';
     const beforeC = normalized.slice(0, index);
-    const cHits = [...beforeC.matchAll(/\bc\b/g)];
-    const prevC = cHits.length ? cHits[cHits.length - 1].index : -1;
+    const sb = [...beforeC.matchAll(/[.!?](?:\s|$)|\n/g)];
+    const sentStart = sb.length ? sb[sb.length - 1].index + sb[sb.length - 1][0].length : 0;
     return (
-      normalized.slice(prevC === -1 ? 0 : prevC + 1, index) +
-      normalized.slice(index, index + 120)
+      normalized.slice(sentStart, index) +
+      normalized.slice(index).split(/[.!?](?:\s|$)|\n/)[0].slice(0, 160)
     );
   })();
+  const MOTION_RE =
+    /(?:\b(?:travels?|travelled|traveled|moves?|moved|speeds?|races?|flies|flew|propagat(?:es|ed|ing)|travelling|traveling|velocit(?:y|ies)|faster|fastest|slower|reach(?:es|ed)?\s+\d)\b)/i;
   const isAmbiguousC =
     unit === 'c' &&
+    !MOTION_RE.test(cOwnSpan) &&
     /(?:\b(?:cost|costs|price|priced|pricing|paid|pay|pays|cents?|usd|dollars?|euros?|fee|fees|budget|spend|spends|spent|expression|expressions|formula|formulas|equation|equations|variable|variables|algebra)\b|\$)/i.test(
       cOwnSpan,
     );
@@ -184,15 +190,17 @@ function checkQuantityRules({ value, unit: rawUnit, raw, index, underflowNeg }, 
   // Rule 3: non-negativity of mass (kg only — see MASS_UNITS note).
   // Mass CHANGES are exempt: "the mass change was -5 kg after drying" is
   // ordinary bookkeeping, not an impossible object. The delta marker must
-  // belong to THIS quantity: the span is bounded by the previous "kg"
-  // mention, mirroring the temperature delta scoping in Rule 2, so
-  // "the tank lost 2 kg ... consumed -5 kg" still floors the latter.
+  // belong to the SAME sentence as the quantity — the span runs from the
+  // last sentence boundary to the sentence end (capped at 160 chars after
+  // the number), so "Conditions changed yesterday. The reaction consumed
+  // -5 kg of catalyst." keeps its impossible-mass finding.
   if (MASS_UNITS.has(unit) && value < 0) {
     const beforeKg = normalized.slice(0, index);
-    const prevKg = beforeKg.lastIndexOf('kg');
+    const sb = [...beforeKg.matchAll(/[.!?](?:\s|$)|\n/g)];
+    const sentStart = sb.length ? sb[sb.length - 1].index + sb[sb.length - 1][0].length : 0;
     const massSpan =
-      normalized.slice(prevKg === -1 ? 0 : prevKg + 2, index) +
-      normalized.slice(index, index + 120);
+      normalized.slice(sentStart, index) +
+      normalized.slice(index).split(/[.!?](?:\s|$)|\n/)[0].slice(0, 160);
     const isMassDelta =
       /(?:\b(?:change|changed|lost|loses?|lost|gained|gains?|dropped|reduced|difference|delta)\b|\u0394)/i.test(
         massSpan,
@@ -233,14 +241,15 @@ function checkQuantityRules({ value, unit: rawUnit, raw, index, underflowNeg }, 
 
 const num = '-?(?:\\d[\\d,]*(?:\\.\\d+)?|\\.\\d+)(?:\\s*[eE][+-]?\\d+)?';
 // Speed units reject a following per-second exponent in every common form:
-// "/s", "^2", superscripts, and the plain-ASCII "m/s2" without a caret.
-// Spelled-out forms ("400,000 kilometers per second", "meters/s") are
-// recognized too; the trailing lookahead rejects accelerations spelled the
-// same way ("per second squared", "seconds²").
+// "/s", "^2", superscripts, the plain-ASCII "m/s2" without a caret, and
+// repeated denominators ("meters per second per second" = acceleration).
+// Spelled-out forms ("400,000 kilometres per second" — BrE included) are
+// recognized; a trailing compound continuation or squared marker rejects
+// the speed interpretation so the quantity stays exempt from Rule 1.
 const unitAlt =
   '°C|degC|°F|K\\b|km\\/s(?!\\s*[/^²³]|\\s*\\d)|m\\/s(?!\\s*[/^²³]|\\s*\\d)' +
-  '|kilometers?\\s*(?:\\/|per\\s+)s(?:ec|econds?)?\\b(?!\\s*(?:squared|²|\\^?2))' +
-  '|met(?:er|re)s?\\s*(?:\\/|per\\s+)s(?:ec|econds?)?\\b(?!\\s*(?:squared|²|\\^?2))' +
+  '|kilo(?:meter|metre)s?\\s*(?:\\/|per\\s+)s(?:ec|econds?)?\\b(?!\\s*(?:squared|²|\\^?2|\\/\\s*s|per\\s+s))' +
+  '|met(?:er|re)s?\\s*(?:\\/|per\\s+)s(?:ec|econds?)?\\b(?!\\s*(?:squared|²|\\^?2|\\/\\s*s|per\\s+s))' +
   '|c\\b|%|kg\\b(?!\\s*[·*/⋅])|g\\b|km\\b|m\\b|J\\b|kJ\\b|MJ\\b|Wh\\b|kWh\\b|MeV\\b|GeV\\b|eV\\b|N\\b|Pa\\b|kPa\\b|MPa\\b|atm\\b|mol\\/L\\b|mg\\/mL\\b';
 
 function phmLiteCheck(output) {
