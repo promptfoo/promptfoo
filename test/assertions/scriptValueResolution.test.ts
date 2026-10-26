@@ -409,6 +409,38 @@ describe('Script value resolution', () => {
       });
     });
 
+    it('should apply the weight: 0 override to a throwing file assertion', async () => {
+      const result = await runAssertion({
+        assertion: { type: 'javascript', value: 'file://throws.cjs', weight: 0 },
+        test: { vars: {} },
+        providerResponse: baseProviderResponse,
+      });
+
+      expect(result.pass).toBe(true);
+      expect(result.score).toBe(0);
+      expect(result.reason).toBe('Custom function threw error: boom');
+
+      const rowResult = await runAssertions({
+        test: {
+          vars: { n: 1 },
+          assert: [
+            { type: 'contains', value: 'hello' },
+            { type: 'javascript', value: 'file://throws.cjs', weight: 0 },
+          ],
+        },
+        providerResponse: {
+          output: 'hello 1',
+          tokenUsage: { total: 0, prompt: 0, completion: 0 },
+        },
+      });
+
+      expect(rowResult.pass).toBe(true);
+      expect(rowResult.componentResults?.[1]).toMatchObject({
+        pass: true,
+        reason: 'Custom function threw error: boom',
+      });
+    });
+
     it('should still throw when the file does not export a function', async () => {
       await expect(
         runAssertion({

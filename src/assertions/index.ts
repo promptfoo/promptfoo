@@ -487,6 +487,9 @@ async function runAssertionInternal({
   type ValueFromScriptType = string | boolean | number | GradingResult | object | undefined;
   let renderedValue = assertion.value;
   let valueFromScript: ValueFromScriptType;
+  // A JavaScript file or package function that throws becomes a failed result. It still goes
+  // through the common post-processing below, so overrides such as weight: 0 apply.
+  let scriptFailure: GradingResult | undefined;
   if (typeof renderedValue === 'string') {
     if (renderedValue.startsWith('file://')) {
       const basePath = cliState.basePath || '';
@@ -508,7 +511,7 @@ async function runAssertionInternal({
         try {
           valueFromScript = await assertionFunction(output, context);
         } catch (error) {
-          return {
+          scriptFailure = {
             pass: false,
             score: 0,
             reason: `Custom function threw error: ${(error as Error)?.message ?? String(error)}`,
@@ -566,7 +569,7 @@ async function runAssertionInternal({
       try {
         valueFromScript = await Promise.resolve(requiredModule(output, context));
       } catch (error) {
-        return {
+        scriptFailure = {
           pass: false,
           score: 0,
           reason: `Custom function threw error: ${(error as Error)?.message ?? String(error)}`,
@@ -677,13 +680,13 @@ async function runAssertionInternal({
   };
 
   // Check for redteam assertions first
-  if (assertionParams.baseType.startsWith('promptfoo:redteam:')) {
+  if (!scriptFailure && assertionParams.baseType.startsWith('promptfoo:redteam:')) {
     return handleRedteam(assertionParams, claimStoredGradingUsage);
   }
 
   const handler = ASSERTION_HANDLERS[assertionParams.baseType as keyof typeof ASSERTION_HANDLERS];
-  if (handler) {
-    const result = await handler(assertionParams);
+  if (scriptFailure || handler) {
+    const result = scriptFailure ?? (await handler(assertionParams));
 
     // Store rendered assertion value in metadata if it differs from the original template
     // This allows the UI to display substituted variable values instead of raw templates
