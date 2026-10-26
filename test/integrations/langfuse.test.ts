@@ -7,7 +7,7 @@ const mocks = vi.hoisted(() => {
   // Set by tests to make importing the SDK or constructing the client fail.
   const failures: { importError?: Error; constructorError?: Error } = {};
 
-  // Create a proper class mock for the Langfuse v5 client.
+  // Create a proper class mock for the Langfuse client.
   class MockLangfuseClient {
     prompt: { get: typeof mockGetPrompt };
 
@@ -185,7 +185,7 @@ describe('langfuse integration', () => {
       const { getPrompt } = await import('../../src/integrations/langfuse');
 
       await expect(getPrompt('greeting', {}, 'text')).rejects.toThrow(
-        'The @langfuse/client package is required for Langfuse prompt management. Install it with: npm install promptfoo @langfuse/client@^5.11.1',
+        'The @langfuse/client package is required for Langfuse prompt management. Install it with: npm install promptfoo @langfuse/client@^6.0.0',
       );
     });
 
