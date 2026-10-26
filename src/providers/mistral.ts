@@ -7,7 +7,7 @@ import {
   getScopedCacheKey,
   isCacheEnabled,
 } from '../cache';
-import { getEnvString } from '../envars';
+import { getEnvString, getProviderEnvString } from '../envars';
 import logger from '../logger';
 import { extractGenAIResponse, type GenAISpanContext, withGenAISpan } from '../tracing/genaiTracer';
 import { maybeLoadToolsFromExternalFile } from '../util';
@@ -504,12 +504,14 @@ function resolveMistralApiKey(
   provider: MistralChatCompletionProvider | MistralEmbeddingProvider,
 ): string | undefined {
   const namedKey = provider.config.apiKeyEnvar
-    ? (provider.env?.[provider.config.apiKeyEnvar] ??
+    ? (getProviderEnvString(provider.env, provider.config.apiKeyEnvar) ??
       getEnvString(provider.config.apiKeyEnvar as EnvVarKey))
     : undefined;
   return (
     provider.config.apiKey ||
-    (namedKey ?? provider.env?.MISTRAL_API_KEY ?? getEnvString('MISTRAL_API_KEY'))
+    (namedKey ??
+      getProviderEnvString(provider.env, 'MISTRAL_API_KEY') ??
+      getEnvString('MISTRAL_API_KEY'))
   );
 }
 

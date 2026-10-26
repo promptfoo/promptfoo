@@ -47,6 +47,7 @@ import { tracesRouter } from './routes/traces';
 import { userRouter } from './routes/user';
 import versionRouter from './routes/version';
 import { promptCacheService } from './services/promptCacheService';
+import { defaultErrorHandler } from './utils/defaultErrorHandler';
 import { replyValidationError, sendError } from './utils/errors';
 import type { Request, Response } from 'express';
 
@@ -362,6 +363,7 @@ export function createApp() {
   app.get('/*splat', (_req: Request, res: Response): void => {
     res.sendFile('index.html', { root: staticDir, dotfiles: 'allow' });
   });
+  app.use(defaultErrorHandler);
   return app;
 }
 
