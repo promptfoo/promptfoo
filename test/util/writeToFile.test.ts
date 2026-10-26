@@ -6,11 +6,13 @@ import { JsonlFileWriter } from '../../src/util/exportToFile/writeToFile';
 
 const mocks = vi.hoisted(() => ({
   createWriteStream: vi.fn(),
+  mkdirSync: vi.fn(),
 }));
 
 vi.mock('fs', async (importOriginal) => ({
   ...(await importOriginal<typeof import('fs')>()),
   createWriteStream: mocks.createWriteStream,
+  mkdirSync: mocks.mkdirSync,
 }));
 
 function createMockWriteStream({ destroyed = false }: { destroyed?: boolean } = {}) {
@@ -46,6 +48,7 @@ describe('JsonlFileWriter', () => {
 
     await writer.write({ a: 1 });
     expect(mocks.createWriteStream).toHaveBeenCalledWith('/tmp/results.jsonl', { flags: 'w' });
+    expect(mocks.mkdirSync).toHaveBeenCalledWith('/tmp', { recursive: true });
 
     mocks.createWriteStream.mockClear();
     createMockWriteStream();
@@ -54,10 +57,24 @@ describe('JsonlFileWriter', () => {
     expect(mocks.createWriteStream).toHaveBeenCalledWith('/tmp/results.jsonl', { flags: 'a' });
   });
 
+  it('wraps errors from creating the parent directory with the output path', async () => {
+    mocks.mkdirSync.mockImplementation(() => {
+      throw new Error('permission denied');
+    });
+
+    const writer = new JsonlFileWriter('/tmp/results.jsonl');
+    await expect(writer.write({ a: 1 })).rejects.toThrow(
+      'Failed to write JSONL output /tmp/results.jsonl: permission denied',
+    );
+    expect(mocks.createWriteStream).not.toHaveBeenCalled();
+    await expect(writer.close()).resolves.toBeUndefined();
+  });
+
   it('leaves the destination untouched when nothing is written', async () => {
     createMockWriteStream();
     await expect(new JsonlFileWriter('/tmp/results.jsonl').close()).resolves.toBeUndefined();
     expect(mocks.createWriteStream).not.toHaveBeenCalled();
+    expect(mocks.mkdirSync).not.toHaveBeenCalled();
   });
 
   it('waits for the underlying file descriptor to close', async () => {

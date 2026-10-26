@@ -36,6 +36,22 @@ describe('JsonlFileWriter (real filesystem)', () => {
     fs.mkdirSync(dir);
   });
 
+  it('creates missing parent directories when the first row is written', async () => {
+    const file = path.join(dir, 'nested', 'deep', 'results.jsonl');
+    const writer = new JsonlFileWriter(file);
+
+    await Promise.all([writer.write({ a: 1 }), writer.write({ b: 2 })]);
+    await writer.close();
+
+    expect(
+      fs
+        .readFileSync(file, 'utf-8')
+        .trim()
+        .split('\n')
+        .map((line) => JSON.parse(line)),
+    ).toEqual([{ a: 1 }, { b: 2 }]);
+  });
+
   it('resolves a second close() call on an already-closed stream', async () => {
     const writer = new JsonlFileWriter(path.join(dir, 'out.jsonl'));
     await writer.write({ a: 1 });
@@ -44,9 +60,10 @@ describe('JsonlFileWriter (real filesystem)', () => {
   });
 
   it('leaves the destination untouched when nothing was written', async () => {
-    const file = path.join(dir, 'never.jsonl');
+    const file = path.join(dir, 'nested', 'deep', 'never.jsonl');
     await expect(new JsonlFileWriter(file).close()).resolves.toBeUndefined();
     expect(fs.existsSync(file)).toBe(false);
+    expect(fs.existsSync(path.dirname(file))).toBe(false);
   });
 
   it('rejects close() when the stream failed mid-run', async () => {

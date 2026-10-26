@@ -1,4 +1,5 @@
-import { createWriteStream, type WriteStream } from 'fs';
+import { createWriteStream, mkdirSync, type WriteStream } from 'fs';
+import { dirname } from 'path';
 
 export class JsonlFileWriter {
   private readonly flags: 'a' | 'w';
@@ -34,6 +35,14 @@ export class JsonlFileWriter {
     const jsonLine = JSON.stringify(data) + '\n';
 
     if (!this.writeStream) {
+      try {
+        mkdirSync(dirname(this.filePath), { recursive: true });
+      } catch (error) {
+        throw this.wrapStreamError(
+          'write',
+          error instanceof Error ? error : new Error(String(error)),
+        );
+      }
       const stream = createWriteStream(this.filePath, { flags: this.flags });
       // Keep a persistent listener for the stream's lifetime so an error emitted while no
       // write is in flight is recorded rather than thrown. write()/close() surface it as a
