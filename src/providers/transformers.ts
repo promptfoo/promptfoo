@@ -3,9 +3,11 @@ import { providerRegistry } from './providerRegistry';
 import { loadTransformers } from './transformersAvailability';
 
 import type {
+  ApiClassificationProvider,
   ApiProvider,
   CallApiContextParams,
   CallApiOptionsParams,
+  ProviderClassificationResponse,
   ProviderEmbeddingResponse,
   ProviderResponse,
 } from '../types/index';
@@ -331,7 +333,7 @@ const pipelineCleanup = { shutdown: disposePipelines };
 function handleTransformersError(
   error: Error,
   provider: { modelName: string },
-  kind: 'embedding' | 'generation',
+  kind: 'embedding' | 'generation' | 'classification',
 ): { error: string } {
   // Check for model not found
   if (error.message?.includes('Could not locate file')) {
@@ -343,12 +345,106 @@ function handleTransformersError(
     };
   }
 
-  logger.error(`[Transformers] ${kind === 'embedding' ? 'Embedding' : 'Generation'} error:`, {
+  logger.error(`[Transformers] ${kind} error:`, {
     error: error.message,
   });
   return {
     error: `Transformers.js ${kind} error: ${error.message}`,
   };
+}
+
+/**
+ * Local classifiers usable both as targets and by the existing classifier assertion.
+ * The SDK returns every label, including non-winning labels used by thresholds.
+ */
+export class TransformersTextClassificationProvider implements ApiClassificationProvider {
+  modelName: string;
+  config: TransformersBaseOptions;
+  private pipelines = new Set<PipelineEntry>();
+
+  constructor(modelName: string, options: { id?: string; config?: TransformersBaseOptions } = {}) {
+    const { id, config } = options;
+    this.modelName = modelName;
+    this.id = id ? () => id : this.id;
+    this.config = config || {};
+  }
+
+  id(): string {
+    return `transformers:text-classification:${this.modelName}`;
+  }
+
+  toString(): string {
+    return `[Transformers Text Classification Provider ${this.modelName}]`;
+  }
+
+  cleanup(): Promise<void> {
+    const pipelines = this.pipelines;
+    this.pipelines = new Set<PipelineEntry>();
+    return releasePipelines(pipelines);
+  }
+
+  async callApi(
+    prompt: string,
+    _context?: CallApiContextParams,
+    options?: CallApiOptionsParams,
+  ): Promise<ProviderResponse> {
+    const result = await this.callClassificationApi(prompt, options);
+    return { error: result.error, output: JSON.stringify(result.classification) };
+  }
+
+  async callClassificationApi(
+    prompt: string,
+    options?: CallApiOptionsParams,
+  ): Promise<ProviderClassificationResponse> {
+    try {
+      providerRegistry.throwIfResourceUseAborted(options?.abortSignal);
+      if (!prompt.trim()) {
+        return { error: 'Text classification requires nonempty input' };
+      }
+
+      const classifier = await getOrCreatePipeline(
+        'text-classification',
+        this.modelName,
+        this.config,
+        this.pipelines,
+        options?.abortSignal,
+      );
+      providerRegistry.throwIfResourceUseAborted(options?.abortSignal);
+      const result = await classifier(prompt, { top_k: null });
+      providerRegistry.throwIfResourceUseAborted(options?.abortSignal);
+
+      if (!Array.isArray(result) || result.length === 0) {
+        return { error: 'Transformers.js classifier returned no label probabilities' };
+      }
+      const classification: Record<string, number> = {};
+      for (const item of result) {
+        if (
+          !item ||
+          typeof item !== 'object' ||
+          typeof item.label !== 'string' ||
+          !item.label ||
+          typeof item.score !== 'number' ||
+          !Number.isFinite(item.score) ||
+          item.score < 0 ||
+          item.score > 1 ||
+          Object.hasOwn(classification, item.label)
+        ) {
+          return { error: 'Transformers.js classifier returned invalid label probabilities' };
+        }
+        // Define own properties safely even for model labels such as __proto__.
+        Object.defineProperty(classification, item.label, {
+          value: item.score,
+          enumerable: true,
+          configurable: true,
+          writable: true,
+        });
+      }
+      return { classification };
+    } catch (error) {
+      providerRegistry.throwIfResourceUseAborted(options?.abortSignal);
+      return handleTransformersError(error as Error, this, 'classification');
+    }
+  }
 }
 
 /**
