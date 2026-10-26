@@ -8,6 +8,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as cacheModule from '../../src/cache';
 import cliState from '../../src/cliState';
 import {
+  getExecFileInputs,
   getFileHashes,
   parseScriptParts,
   ScriptCompletionProvider,
@@ -623,5 +624,226 @@ describe('files attached to arguments', () => {
     expect(keys[0]).toContain(`:${sha256('script')}:${sha256('config v1')}:`);
     expect(keys[1]).toContain(`:${sha256('script')}:${sha256('config v2')}:`);
     expect(keys[0]).not.toBe(keys[1]);
+  });
+  describe('relative files and the child working directory', () => {
+    let hostDir: string;
+    let baseDir: string;
+    let originalCwd: string;
+
+    beforeEach(() => {
+      originalCwd = process.cwd();
+      hostDir = path.join(tempDir, 'host');
+      baseDir = path.join(tempDir, 'base');
+      fs.mkdirSync(hostDir);
+      fs.mkdirSync(baseDir);
+      process.chdir(hostDir);
+    });
+
+    afterEach(() => {
+      process.chdir(originalCwd);
+    });
+
+    it('hashes a relative attached file in the given cwd, not in ours', () => {
+      fs.writeFileSync(path.join(hostDir, 'config.json'), 'host copy');
+      fs.writeFileSync(path.join(baseDir, 'config.json'), 'base copy');
+
+      expect(getFileHashes(['--config=config.json'])).toEqual([sha256('host copy')]);
+      expect(getFileHashes(['--config=config.json'], baseDir)).toEqual([sha256('base copy')]);
+    });
+
+    it('does not hash a copy that exists only in our cwd', () => {
+      fs.writeFileSync(path.join(hostDir, 'config.json'), 'host copy');
+
+      expect(getFileHashes(['--config=config.json'], baseDir)).toEqual([]);
+      expect(getFileHashes(['config.json'], baseDir)).toEqual([]);
+    });
+
+    it('resolves a relative script part against the cwd as well', () => {
+      fs.writeFileSync(path.join(hostDir, 'script.py'), 'host script');
+      fs.writeFileSync(path.join(baseDir, 'script.py'), 'base script');
+
+      expect(getFileHashes(['python', 'script.py'], baseDir)).toEqual([sha256('base script')]);
+    });
+
+    it('keeps absolute paths independent of the cwd', () => {
+      const config = writeFile('config.json', 'absolute');
+
+      expect(getFileHashes([`--config=${config}`], baseDir)).toEqual([sha256('absolute')]);
+    });
+
+    it('keys the exec cache by the file in basePath, not the one in our cwd', async () => {
+      fs.writeFileSync(path.join(hostDir, 'config.json'), 'host copy');
+      fs.writeFileSync(path.join(baseDir, 'config.json'), 'base v1');
+      fs.writeFileSync(path.join(baseDir, 'script.py'), 'script');
+      const keys: string[] = [];
+      const mockCache = {
+        get: vi.fn(async (key: string) => {
+          keys.push(key);
+          return undefined;
+        }),
+        set: vi.fn(),
+      };
+      vi.spyOn(cacheModule, 'getCache').mockResolvedValue(mockCache as never);
+      vi.spyOn(cacheModule, 'isCacheEnabled').mockReturnValue(true);
+      vi.mocked(execFile).mockImplementation(function (_cmd, _args, _options, callback) {
+        (
+          callback as (
+            error: Error | null,
+            stdout: string | Buffer,
+            stderr: string | Buffer,
+          ) => void
+        )(null, Buffer.from('output'), '');
+        return {} as any;
+      });
+      const provider = new ScriptCompletionProvider('python script.py --config=config.json', {
+        config: { basePath: baseDir },
+      });
+
+      await provider.callApi('prompt');
+      fs.writeFileSync(path.join(baseDir, 'config.json'), 'base v2');
+      await provider.callApi('prompt');
+
+      expect(vi.mocked(execFile).mock.calls[0][2]).toMatchObject({ cwd: baseDir });
+      expect(keys).toHaveLength(2);
+      expect(keys[0]).toContain(`:${sha256('script')}:${sha256('base v1')}:`);
+      expect(keys[1]).toContain(`:${sha256('script')}:${sha256('base v2')}:`);
+      expect(keys.join()).not.toContain(sha256('host copy'));
+    });
+
+    it('does not enable caching from a file that exists only in our cwd', async () => {
+      fs.writeFileSync(path.join(hostDir, 'config.json'), 'host copy');
+      const mockCache = { get: vi.fn(), set: vi.fn() };
+      vi.spyOn(cacheModule, 'getCache').mockResolvedValue(mockCache as never);
+      vi.spyOn(cacheModule, 'isCacheEnabled').mockReturnValue(true);
+      vi.mocked(execFile).mockImplementation(function (_cmd, _args, _options, callback) {
+        (
+          callback as (
+            error: Error | null,
+            stdout: string | Buffer,
+            stderr: string | Buffer,
+          ) => void
+        )(null, Buffer.from('output'), '');
+        return {} as any;
+      });
+      const provider = new ScriptCompletionProvider('python --config=config.json', {
+        config: { basePath: baseDir },
+      });
+
+      await provider.callApi('prompt');
+
+      expect(mockCache.get).not.toHaveBeenCalled();
+      expect(mockCache.set).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('credential files', () => {
+    it.each([
+      '--token-file',
+      '--api-key-file',
+      '--api_key_file',
+      '--apiKey',
+      '--apikey',
+      '--password',
+      '--passwd',
+      '--pwd',
+      '--passphrase-file',
+      '--credentials',
+      '--client-secret-file',
+      '--private-key',
+      '--privatekey',
+      '--ssh-key',
+      '--key',
+      '--cert',
+      '--auth',
+      '--Auth-Token',
+      '--authorization-file',
+      'token',
+      'API_KEY',
+    ])('never hashes a file attached to %s', (option) => {
+      const secret = writeFile('secret.txt', 'hunter2');
+      const script = writeFile('script.js', 'script');
+
+      expect(getExecFileInputs([script, `${option}=${secret}`])).toEqual({
+        fileHashes: [],
+        hasSecretFile: true,
+      });
+      expect(getFileHashes([script, `${option}=${secret}`])).toEqual([]);
+    });
+
+    it('never hashes a file that follows a credential option as a separate argument', () => {
+      const secret = writeFile('secret.txt', 'hunter2');
+      const script = writeFile('script.js', 'script');
+
+      expect(getExecFileInputs([script, '--token-file', secret]).hasSecretFile).toBe(true);
+      expect(getFileHashes([script, '--token-file', secret])).toEqual([]);
+    });
+
+    it('still hashes a file that follows a non-credential option', () => {
+      const config = writeFile('config.json', 'config');
+
+      expect(getFileHashes(['--config', config])).toEqual([sha256('config')]);
+    });
+
+    it('does not flag a credential option whose value is not a file', () => {
+      const script = writeFile('script.js', 'script');
+
+      expect(getExecFileInputs([script, '--token=abc123', '--password=hunter2'])).toEqual({
+        fileHashes: [sha256('script')],
+        hasSecretFile: false,
+      });
+    });
+
+    it.each([
+      '--config',
+      '--author-file',
+      '--input',
+      '--keyboard-layout',
+      '--monkey',
+      '--output-dir',
+      '-c',
+      'config',
+    ])('keeps hashing a file attached to %s', (option) => {
+      const filePath = writeFile('attached.txt', 'attached');
+
+      expect(getFileHashes([`${option}=${filePath}`])).toEqual([sha256('attached')]);
+    });
+
+    it('drops every hash from a command that attaches a credential file', () => {
+      const script = writeFile('script.js', 'script');
+      const config = writeFile('config.json', 'config');
+      const secret = writeFile('secret.txt', 'hunter2');
+
+      expect(getExecFileInputs([script, `--config=${config}`, `--token-file=${secret}`])).toEqual({
+        fileHashes: [],
+        hasSecretFile: true,
+      });
+    });
+
+    it('does not read, hash or cache a credential file', async () => {
+      const script = writeFile('script.js', 'script');
+      const secret = writeFile('token.txt', 'hunter2');
+      const mockCache = { get: vi.fn(), set: vi.fn() };
+      vi.spyOn(cacheModule, 'getCache').mockResolvedValue(mockCache as never);
+      vi.spyOn(cacheModule, 'isCacheEnabled').mockReturnValue(true);
+      vi.mocked(execFile).mockImplementation(function (_cmd, _args, _options, callback) {
+        (
+          callback as (
+            error: Error | null,
+            stdout: string | Buffer,
+            stderr: string | Buffer,
+          ) => void
+        )(null, Buffer.from('output'), '');
+        return {} as any;
+      });
+      const readSpy = vi.mocked(fs.readFileSync);
+      const provider = new ScriptCompletionProvider(`node "${script}" --token-file="${secret}"`);
+
+      const result = await provider.callApi('prompt');
+
+      expect(result).toEqual({ output: 'output' });
+      expect(mockCache.get).not.toHaveBeenCalled();
+      expect(mockCache.set).not.toHaveBeenCalled();
+      expect(readSpy.mock.calls.map(([file]) => String(file))).not.toContain(secret);
+    });
   });
 });

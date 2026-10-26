@@ -3,9 +3,10 @@ import { stat as fsStat, readFile } from 'fs/promises';
 
 import { getCache, isCacheEnabled } from '../../cache';
 import { getProcessEnv } from '../../envars';
+import logger from '../../logger';
 import {
   EXEC_CACHE_VERSION,
-  getFileHashes,
+  getExecFileInputs,
   parseScriptParts,
   stripText,
 } from '../../providers/scriptCompletion';
@@ -45,7 +46,14 @@ export const executablePromptFunction = async (
   };
 
   const scriptParts = parseScriptParts(scriptPath);
-  const fileHashes = getFileHashes(scriptParts);
+  // The child runs in basePath when it is set, so files are looked up there
+  const { fileHashes, hasSecretFile } = getExecFileInputs(
+    scriptParts,
+    context.config?.basePath || undefined,
+  );
+  if (hasSecretFile) {
+    logger.debug(`Command ${scriptPath} attaches a credential file, caching will not be used`);
+  }
 
   const cacheKey = `exec-prompt:${EXEC_CACHE_VERSION}:${scriptPath}:${fileHashes.join(':')}:${safeJsonStringify(transformedContext)}`;
 

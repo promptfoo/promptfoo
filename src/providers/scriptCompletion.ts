@@ -1,6 +1,7 @@
 import { execFile } from 'child_process';
 import crypto from 'crypto';
 import fs from 'fs';
+import path from 'path';
 
 import { getCache, isCacheEnabled } from '../cache';
 import { getProcessEnv } from '../envars';
@@ -66,37 +67,128 @@ export function parseScriptParts(scriptPath: string): string[] {
   return parts;
 }
 
-function hashFileIfExists(filePath: string): string | undefined {
-  if (!fs.existsSync(filePath) || !fs.statSync(filePath).isFile()) {
+/** The path of the file `filePath` names, or undefined when it is not a file. */
+function findFile(filePath: string, cwd?: string): string | undefined {
+  // The child process runs in `cwd`, so relative files must be looked up there, not in ours
+  const resolvedPath = cwd === undefined ? filePath : path.resolve(cwd, filePath);
+  if (!fs.existsSync(resolvedPath) || !fs.statSync(resolvedPath).isFile()) {
     return undefined;
   }
-  const fileContent = fs.readFileSync(filePath);
+  return resolvedPath;
+}
+
+function hashFile(resolvedPath: string): string {
+  const fileContent = fs.readFileSync(resolvedPath);
   const fileHash = crypto.createHash('sha256').update(fileContent).digest('hex');
-  logger.debug(`File hash for ${filePath}: ${fileHash}`);
+  logger.debug(`File hash for ${resolvedPath}: ${fileHash}`);
   return fileHash;
 }
 
+// Words that name a credential on their own. Matched against the words of an option name,
+// split on `-`, `_`, `.` and camelCase, so `--auth-file` matches but `--author-file` does not.
+const SECRET_OPTION_WORDS = new Set([
+  'key',
+  'keys',
+  'auth',
+  'cert',
+  'certs',
+  'certificate',
+  'cred',
+  'creds',
+  'pass',
+  'pwd',
+]);
+// Distinctive substrings, matched against the option name with separators removed, which also
+// catches joined spellings such as `apikey` or `privatekey`.
+const SECRET_OPTION_SUBSTRINGS = [
+  'token',
+  'secret',
+  'password',
+  'passwd',
+  'passphrase',
+  'credential',
+  'authorization',
+  'bearer',
+  'jwt',
+  'apikey',
+  'privatekey',
+  'accesskey',
+  'keyfile',
+];
+
 /**
- * Hashes the files named by the command's arguments, for use in cache keys. An argument counts
+ * Whether an option name (`--token-file`, `api_key`) looks like it points
+ * at a credential. This is a name heuristic only: it cannot recognize a secret in a
+ * positional argument or an option with an unrelated name (`--input=creds.txt` is not caught,
+ * `--sort-key=...` is a false positive). It errs toward flagging, because the cost of a false
+ * positive is only a skipped cache, while a false negative puts a secret digest on disk.
+ */
+export function isSecretOptionName(optionName: string): boolean {
+  const words = optionName
+    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .filter(Boolean);
+  if (words.some((word) => SECRET_OPTION_WORDS.has(word))) {
+    return true;
+  }
+  const collapsed = words.join('');
+  return SECRET_OPTION_SUBSTRINGS.some((substring) => collapsed.includes(substring));
+}
+
+export interface ExecFileInputs {
+  /** Content hashes of the files the command refers to, in argument order. */
+  fileHashes: string[];
+  /** True when a file belongs to a credential-like option; the command must then not be cached. */
+  hasSecretFile: boolean;
+}
+
+/**
+ * Finds the files named by the command's arguments, for use in cache keys. An argument counts
  * when it is a file, or when it is `flag=value` / `key=value` and the value is a file (so
  * `--config="my config.json"` is covered). A part that is itself a file is hashed once.
+ *
+ * Relative files are looked up in `cwd` (the child's working directory; defaults to ours).
+ *
+ * Files that belong to a credential-like option (`--token-file=t.txt`, or `--token-file t.txt`)
+ * are never hashed: a digest of a low-entropy secret in the persistent cache lets anyone with
+ * the cache file test guesses offline. Such a command reports `hasSecretFile` and no hashes, so
+ * callers skip the cache for it.
  */
-export function getFileHashes(scriptParts: string[]): string[] {
+export function getExecFileInputs(scriptParts: string[], cwd?: string): ExecFileInputs {
   const stripQuotes = (value: string) => value.replace(/^['"]|['"]$/g, '');
   const fileHashes: string[] = [];
 
-  for (const part of scriptParts) {
+  for (let i = 0; i < scriptParts.length; i++) {
+    const part = scriptParts[i];
     const equalsIndex = part.indexOf('=');
-    let fileHash = hashFileIfExists(stripQuotes(part));
-    if (fileHash === undefined && equalsIndex !== -1) {
-      fileHash = hashFileIfExists(stripQuotes(part.slice(equalsIndex + 1)));
+    const wholePartFile = findFile(stripQuotes(part), cwd);
+    if (wholePartFile !== undefined) {
+      // `--token-file t.txt`: the file is the value of the option in the previous part
+      const previous = scriptParts[i - 1];
+      if (previous?.startsWith('-') && !previous.includes('=') && isSecretOptionName(previous)) {
+        return { fileHashes: [], hasSecretFile: true };
+      }
+      fileHashes.push(hashFile(wholePartFile));
+      continue;
     }
-    if (fileHash !== undefined) {
-      fileHashes.push(fileHash);
+    if (equalsIndex !== -1) {
+      const attachedFile = findFile(stripQuotes(part.slice(equalsIndex + 1)), cwd);
+      if (attachedFile !== undefined) {
+        if (isSecretOptionName(part.slice(0, equalsIndex))) {
+          return { fileHashes: [], hasSecretFile: true };
+        }
+        fileHashes.push(hashFile(attachedFile));
+      }
     }
   }
 
-  return fileHashes;
+  return { fileHashes, hasSecretFile: false };
+}
+
+/** File hashes for the command, or none at all when it must not be cached; see getExecFileInputs. */
+export function getFileHashes(scriptParts: string[], cwd?: string): string[] {
+  return getExecFileInputs(scriptParts, cwd).fileHashes;
 }
 
 export class ScriptCompletionProvider implements ApiProvider {
@@ -111,9 +203,15 @@ export class ScriptCompletionProvider implements ApiProvider {
 
   async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
     const scriptParts = parseScriptParts(this.scriptPath);
-    const fileHashes = getFileHashes(scriptParts);
+    // The child runs in basePath when it is set, so files are looked up there
+    const cwd = this.options?.config?.basePath || undefined;
+    const { fileHashes, hasSecretFile } = getExecFileInputs(scriptParts, cwd);
 
-    if (fileHashes.length === 0) {
+    if (hasSecretFile) {
+      logger.warn(
+        `Command ${this.scriptPath} attaches a credential file, caching will not be used`,
+      );
+    } else if (fileHashes.length === 0) {
       logger.warn(`Could not find any valid files in the command: ${this.scriptPath}`);
     }
 
@@ -128,7 +226,7 @@ export class ScriptCompletionProvider implements ApiProvider {
         logger.debug(`Returning cached result for script ${this.scriptPath}: ${cachedResult}`);
         return { ...JSON.parse(cachedResult as string), cached: true };
       }
-    } else if (fileHashes.length === 0 && isCacheEnabled()) {
+    } else if (fileHashes.length === 0 && !hasSecretFile && isCacheEnabled()) {
       logger.warn(
         `Could not hash any files for command ${this.scriptPath}, caching will not be used`,
       );
@@ -149,7 +247,7 @@ export class ScriptCompletionProvider implements ApiProvider {
         safeJsonStringify(context || {}) as string,
       ]);
       const options = {
-        ...(this.options?.config.basePath && { cwd: this.options.config.basePath }),
+        ...(cwd && { cwd }),
         env: getProcessEnv(),
       };
 

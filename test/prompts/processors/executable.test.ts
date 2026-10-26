@@ -3,7 +3,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 
-import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as cacheModule from '../../../src/cache';
 import cliState from '../../../src/cliState';
 import { processExecutableFile } from '../../../src/prompts/processors/executable';
@@ -175,6 +175,100 @@ describe('processExecutableFile', () => {
       expect(keys).toHaveLength(2);
       expect(keys[0]).toBe(keys[1]);
       expect(keys[0]).toContain(`:${scriptHash}:{`);
+    });
+
+    describe('child working directory and credential files', () => {
+      let tempDir: string;
+      let hostDir: string;
+      let baseDir: string;
+      let scriptPath: string;
+      let originalCwd: string;
+      let keys: string[];
+      let cache: { get: ReturnType<typeof vi.fn>; set: ReturnType<typeof vi.fn> };
+
+      beforeEach(() => {
+        originalCwd = process.cwd();
+        tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-executable-cwd-'));
+        hostDir = path.join(tempDir, 'host');
+        baseDir = path.join(tempDir, 'base');
+        fs.mkdirSync(hostDir);
+        fs.mkdirSync(baseDir);
+        scriptPath = path.join(tempDir, 'prompt.cjs');
+        fs.writeFileSync(scriptPath, "process.stdout.write('output');");
+        process.chdir(hostDir);
+        keys = [];
+        cache = {
+          get: vi.fn(async (key: string) => {
+            keys.push(key);
+            return undefined;
+          }),
+          set: vi.fn(),
+        };
+        vi.mocked(cacheModule.getCache).mockReturnValue(cache as never);
+        vi.mocked(cacheModule.isCacheEnabled).mockReturnValue(true);
+      });
+
+      afterEach(() => {
+        process.chdir(originalCwd);
+        vi.mocked(cacheModule.getCache).mockImplementation(
+          () => ({ get: vi.fn(), set: vi.fn() }) as never,
+        );
+        vi.mocked(cacheModule.isCacheEnabled).mockReturnValue(false);
+        fs.rmSync(tempDir, { recursive: true, force: true });
+      });
+
+      it('keys the cache by the attached file in basePath, not the one in our cwd', async () => {
+        fs.writeFileSync(path.join(hostDir, 'config.json'), 'host copy');
+        fs.writeFileSync(path.join(baseDir, 'config.json'), 'base v1');
+        const [prompt] = await processExecutableFile(
+          `"${process.execPath}" "${scriptPath}" --config=config.json`,
+          { config: { basePath: baseDir } },
+        );
+
+        await prompt.function!({ vars: {}, provider: mockProvider });
+        fs.writeFileSync(path.join(baseDir, 'config.json'), 'base v2');
+        await prompt.function!({ vars: {}, provider: mockProvider });
+
+        const scriptHash = sha256(fs.readFileSync(scriptPath, 'utf8'));
+        expect(keys).toHaveLength(2);
+        expect(keys[0]).toContain(`:${scriptHash}:${sha256('base v1')}:`);
+        expect(keys[1]).toContain(`:${scriptHash}:${sha256('base v2')}:`);
+        expect(keys.join()).not.toContain(sha256('host copy'));
+      });
+
+      it('does not cache from a file that exists only in our cwd', async () => {
+        fs.writeFileSync(path.join(hostDir, 'config.json'), 'host copy');
+        const [prompt] = await processExecutableFile(
+          `node -e "process.stdout.write('output')" -- --config=config.json`,
+          { config: { basePath: baseDir } },
+        );
+
+        await prompt.function!({ vars: {}, provider: mockProvider });
+
+        expect(cache.get).not.toHaveBeenCalled();
+        expect(cache.set).not.toHaveBeenCalled();
+      });
+
+      it.each([
+        ['--token-file="%s"'],
+        ['--api-key-file=%s'],
+        ['--password=%s'],
+        ['--token-file %s'],
+      ])('does not hash or cache a command with a credential file, %s', async (template) => {
+        const secretPath = path.join(tempDir, 'secret.txt');
+        fs.writeFileSync(secretPath, 'hunter2');
+        const [prompt] = await processExecutableFile(
+          `"${process.execPath}" "${scriptPath}" ${template.replace('%s', secretPath)}`,
+          {},
+        );
+
+        const output = await prompt.function!({ vars: {}, provider: mockProvider });
+
+        expect(output).toBe('output');
+        expect(cache.get).not.toHaveBeenCalled();
+        expect(cache.set).not.toHaveBeenCalled();
+        expect(keys).toEqual([]);
+      });
     });
   });
 
