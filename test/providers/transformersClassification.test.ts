@@ -18,6 +18,10 @@ const { pipeline, classify, dispose } = vi.hoisted(() => ({
 vi.mock('../../src/providers/transformersAvailability', () => ({
   loadTransformers: async () => ({ pipeline }),
 }));
+vi.mock('node:v8', async (importOriginal) => {
+  const original = await importOriginal<typeof import('node:v8')>();
+  return { ...original, serialize: vi.fn(original.serialize) };
+});
 vi.mock('../../src/providers/providerRegistry', () => ({
   providerRegistry: {
     register: vi.fn(),
@@ -27,8 +31,10 @@ vi.mock('../../src/providers/providerRegistry', () => ({
   },
 }));
 
-beforeEach(() => {
+beforeEach(async () => {
   vi.resetAllMocks();
+  const original = await vi.importActual<typeof import('node:v8')>('node:v8');
+  vi.mocked(serialize).mockImplementation(original.serialize);
   classify.mockResolvedValue([
     { label: 'POSITIVE', score: 0.8 },
     { label: 'NEGATIVE', score: 0.2 },
@@ -213,16 +219,33 @@ describe('local text classification', () => {
     expect(pipeline).toHaveBeenCalledTimes(2);
   });
 
-  it('distinguishes binary external weights and shares equal byte content', async () => {
-    const options = (value: number) => ({
-      sessionOptions: { externalData: [{ path: 'weights.bin', data: new Uint8Array([value]) }] },
+  it('distinguishes binary external weights and shares the same buffer reference', async () => {
+    const options = (data: Uint8Array) => ({
+      sessionOptions: { externalData: [{ path: 'weights.bin', data }] },
     });
-    for (const value of [1, 1, 2]) {
+    const first = new Uint8Array([1]);
+    const second = new Uint8Array([2]);
+    for (const data of [first, first, second]) {
       await new TransformersTextClassificationProvider('fixture', {
-        config: options(value),
+        config: options(data),
       }).callClassificationApi('text');
     }
     expect(pipeline).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not copy or hash an external weight buffer on repeated calls', async () => {
+    const data = new Uint8Array(32 * 1024 * 1024);
+    const provider = new TransformersTextClassificationProvider('fixture', {
+      config: { sessionOptions: { externalData: [{ path: 'weights.bin', data }] } },
+    });
+    await provider.callClassificationApi('first');
+    await provider.callClassificationApi('second');
+    expect(pipeline).toHaveBeenCalledTimes(1);
+    expect(serialize).toHaveBeenCalledTimes(2);
+    for (const result of vi.mocked(serialize).mock.results) {
+      expect(result.type).toBe('return');
+      expect(result.value.byteLength).toBeLessThan(1024);
+    }
   });
 
   it('keeps opaque device references distinct while sharing the same device', async () => {
@@ -279,3 +302,5 @@ describe('local text classification', () => {
     await expect(result).rejects.toThrow('fixture canceled');
   });
 });
+
+import { serialize } from 'node:v8';

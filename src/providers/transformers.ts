@@ -180,12 +180,7 @@ function canonicalizePipelineOption(value: unknown, ancestors = new WeakSet<obje
   if (typeof value === 'function') {
     return opaqueOptionIdentity(value);
   }
-  if (
-    value === null ||
-    typeof value !== 'object' ||
-    value instanceof ArrayBuffer ||
-    ArrayBuffer.isView(value)
-  ) {
+  if (value === null || typeof value !== 'object') {
     return value;
   }
   const prototype = Object.getPrototypeOf(value);
@@ -193,7 +188,7 @@ function canonicalizePipelineOption(value: unknown, ancestors = new WeakSet<obje
     (!Array.isArray(value) && prototype !== Object.prototype && prototype !== null) ||
     ancestors.has(value)
   ) {
-    // Native GPUDevice/MLContext instances cannot be serialized by value.
+    // Device handles and external weights use identity, avoiding large buffer copies.
     return opaqueOptionIdentity(value);
   }
   ancestors.add(value);
