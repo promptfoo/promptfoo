@@ -25,7 +25,6 @@ import {
 import { isAudioFile, isImageFile, isJavascriptFile, isVideoFile } from './util/fileExtensions';
 import { renderVarsInObject, setLoadedFileMimeTypes } from './util/index';
 import invariant from './util/invariant';
-import { isValidJson } from './util/json';
 import { filterFiniteScores } from './util/numeric';
 import {
   extractVariablesFromTemplate,
@@ -257,6 +256,23 @@ function hasProtectedLiteralSyntax(value: string): boolean {
     }
   }
   return false;
+}
+
+// Only the non-JSON fallback historically rendered every value as source.
+function shouldRenderAllVarTemplates(
+  promptRaw: string,
+  basePrompt: string,
+  jsonAutoescapeDisabled: boolean,
+): boolean {
+  if (/^(portkey|langfuse|helicone):\/\//.test(promptRaw) || jsonAutoescapeDisabled) {
+    return false;
+  }
+  try {
+    JSON.parse(basePrompt);
+    return false;
+  } catch {
+    return true;
+  }
 }
 
 // Utility: Detect partial/unclosed Nunjucks tags and wrap in {% raw %} if needed
@@ -645,10 +661,12 @@ export async function renderPrompt(
   // The plain-text fallback already rendered every value before this pass was
   // hoisted. JSON, no-autoescape, and integration paths supplied values as data,
   // so they only pre-render the explicit literal escapes handled above.
-  const isIntegrationPrompt = /^(portkey|langfuse|helicone):\/\//.test(prompt.raw);
   const jsonAutoescapeDisabled = getEnvBool('PROMPTFOO_DISABLE_JSON_AUTOESCAPE');
-  const renderAllVarTemplates =
-    !isIntegrationPrompt && !jsonAutoescapeDisabled && !isValidJson(basePrompt);
+  const renderAllVarTemplates = shouldRenderAllVarTemplates(
+    prompt.raw,
+    basePrompt,
+    jsonAutoescapeDisabled,
+  );
   // Determine which vars the prompt actually references so render failures
   // on unused values can be suppressed without hiding errors on used ones.
   const promptReferencedVars = new Set(extractVariablesFromTemplate(prompt.raw));
