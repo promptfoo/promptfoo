@@ -1611,6 +1611,46 @@ describe('resolveConfigs', () => {
     ).toEqual(['A', 'B']);
   });
 
+  it('uses evaluator global scenario indices across separate scenarios for historical filters', async () => {
+    const resultsPath = '/mock/global-scenarios.json';
+    const defaultConfig: Partial<UnifiedConfig> = {
+      prompts: ['Hello {{caseId}}'],
+      providers: ['echo'],
+      scenarios: Array.from({ length: 3 }, () => ({
+        config: [{}],
+        tests: [{ vars: { caseId: 'shared' }, metadata: { role: 'common' } }],
+      })),
+    };
+    vi.mocked(maybeLoadFromExternalFile).mockImplementation(async (value) => value);
+    vi.mocked(readTests).mockImplementation(async (tests) =>
+      Array.isArray(tests) ? (tests as TestCase[]) : [],
+    );
+    vi.mocked(fs.readFileSync).mockReturnValue(
+      JSON.stringify({
+        results: {
+          results: [
+            {
+              success: false,
+              failureReason: ResultFailureReason.ASSERT,
+              vars: { caseId: 'shared' },
+              testCase: {
+                vars: { caseId: 'shared' },
+                metadata: { role: 'common', conversationId: '__scenario_1__' },
+              },
+            },
+          ],
+        },
+      }),
+    );
+
+    const { testSuite } = await resolveConfigs(
+      { filterMetadataExact: 'role=common', filterFailing: resultsPath },
+      defaultConfig,
+    );
+
+    expect(testSuite.scenarios?.map((scenario) => scenario.tests.length)).toEqual([0, 1, 0]);
+  });
+
   it('loads a shared eval ID once for combined exact scenario result filters', async () => {
     const evalId = 'eval-shared-results';
     const results = ['A', 'B'].map((category) => ({

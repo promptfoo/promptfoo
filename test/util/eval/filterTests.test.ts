@@ -666,6 +666,110 @@ describe('filterTests', () => {
 
       expect(result).toEqual(tests);
     });
+
+    it('keeps distinct authored tests selected by provider allowlist in a failure union', async () => {
+      const tests: TestCase[] = [
+        {
+          vars: { id: 'shared' },
+          metadata: { role: 'common' },
+          providers: ['echo:A'],
+          assert: [{ type: 'equals', value: 'A' }],
+        },
+        {
+          vars: { id: 'shared' },
+          metadata: { role: 'common' },
+          providers: ['echo:B'],
+          assert: [{ type: 'equals', value: 'B' }],
+        },
+      ];
+      const testSuite: TestSuite = { prompts: [], providers: [], tests };
+      vi.mocked(Eval.findById).mockResolvedValue({
+        toEvaluateSummary: vi.fn().mockResolvedValue({
+          results: [
+            {
+              vars: { id: 'shared' },
+              success: false,
+              failureReason: ResultFailureReason.ASSERT,
+              provider: { id: 'echo:A' },
+              testCase: { vars: tests[0].vars, metadata: tests[0].metadata },
+            },
+            {
+              vars: { id: 'shared' },
+              success: false,
+              failureReason: ResultFailureReason.ERROR,
+              provider: { id: 'echo:A' },
+              testCase: { vars: tests[0].vars, metadata: tests[0].metadata },
+            },
+            {
+              vars: { id: 'shared' },
+              success: false,
+              failureReason: ResultFailureReason.ERROR,
+              provider: { id: 'echo:B' },
+              testCase: { vars: tests[1].vars, metadata: tests[1].metadata },
+            },
+          ],
+        }),
+      } as any);
+
+      const result = await filterTests(testSuite, {
+        metadataExact: 'role=common',
+        failingOnly: 'eval-123',
+        errorsOnly: 'eval-123',
+        resultMatchContext: topLevelResultMatchContext(testSuite),
+      });
+
+      expect(result).toEqual(tests);
+    });
+
+    it('keeps indistinguishable authored tests while collapsing one authored runtime copy across filters', async () => {
+      const tests: TestCase[] = [
+        {
+          vars: { id: 'shared' },
+          metadata: { role: 'common' },
+          assert: [{ type: 'equals', value: 'first' }],
+        },
+        {
+          vars: { id: 'shared' },
+          metadata: { role: 'common' },
+          assert: [{ type: 'equals', value: 'second' }],
+        },
+      ];
+      const testSuite: TestSuite = { prompts: [], providers: [], tests };
+      vi.mocked(Eval.findById).mockResolvedValue({
+        toEvaluateSummary: vi.fn().mockResolvedValue({
+          results: [
+            {
+              vars: { id: 'shared', sessionId: 'runtime-session' },
+              success: false,
+              failureReason: ResultFailureReason.ASSERT,
+              provider: { id: 'echo' },
+              testCase: { vars: tests[0].vars, metadata: tests[0].metadata },
+            },
+            {
+              vars: { id: 'shared', sessionId: 'runtime-session' },
+              success: false,
+              failureReason: ResultFailureReason.ERROR,
+              provider: { id: 'echo' },
+              testCase: { vars: tests[0].vars, metadata: tests[0].metadata },
+            },
+          ],
+        }),
+      } as any);
+
+      const result = await filterTests(testSuite, {
+        metadataExact: 'role=common',
+        failingOnly: 'eval-123',
+        errorsOnly: 'eval-123',
+        resultMatchContext: topLevelResultMatchContext(testSuite),
+      });
+
+      expect(result).toHaveLength(2);
+      expect(result.map((test) => test.assert)).toEqual(tests.map((test) => test.assert));
+      expect(result.map((test) => test.vars?.sessionId)).toEqual([
+        'runtime-session',
+        'runtime-session',
+      ]);
+    });
   });
 
   describe('pattern filter', () => {

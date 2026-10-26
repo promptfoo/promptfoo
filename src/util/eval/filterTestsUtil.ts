@@ -3,7 +3,7 @@ import logger from '../../logger';
 import Eval from '../../models/eval';
 import { deduplicateTestCases, extractRuntimeVars, filterRuntimeVars } from '../../util/comparison';
 import { readOutput, resultIsForTestCase } from '../../util/index';
-import { providerToIdentifier } from '../provider';
+import { isProviderAllowed, providerToIdentifier } from '../provider';
 
 import type { EvaluateResult, Scenario, TestCase, TestSuite } from '../../types/index';
 
@@ -18,8 +18,8 @@ type TestFilterFn = (test: TestCase) => boolean;
 export interface ResultMatchContext {
   includesResult: (result: EvaluateResult) => boolean;
   matchesTest: (result: EvaluateResult, test: TestCase, authoredTest?: TestCase) => boolean;
-  providerIdentifier?: (test: TestCase) => string | undefined;
   bindMatchedTest?: (test: TestCase, authoredTest: TestCase) => void;
+  authoredTestFor?: (test: TestCase) => TestCase | undefined;
   resultLoadCache?: Map<string, Promise<EvaluateResult[] | undefined>>;
 }
 
@@ -188,6 +188,7 @@ export async function filterTestsByResults(
         matchedTests.push(testWithRuntimeVars);
       } else {
         logger.debug('[filterTestsByResults] Matched test has no runtime vars to restore');
+        resultMatchContext?.bindMatchedTest?.(test, test);
         matchedTests.push(test);
       }
     }
@@ -224,6 +225,11 @@ export async function filterTestsByResults(
           provider:
             providerToIdentifier(result.testCase?.provider) ??
             providerToIdentifier(result.provider),
+          columnProvider: {
+            id: result.provider?.id,
+            label: result.provider?.label,
+            promptIdx: result.promptIdx,
+          },
         })
       : resultKey(result);
   for (const result of filteredResults) {
@@ -325,6 +331,7 @@ function matchesScenarioCandidate(
   effective: TestCase,
   metadata: TestCase['metadata'],
   metadataKeys: string[],
+  generatedScenarioId?: string,
 ): boolean {
   const resultMetadata = result.testCase?.metadata;
   const storedTestProviderId = providerToIdentifier(result.testCase?.provider);
@@ -332,13 +339,45 @@ function matchesScenarioCandidate(
     storedTestProviderId === undefined
       ? result
       : { ...result, provider: { id: storedTestProviderId, label: storedTestProviderId } };
+  const storedConversationId = resultMetadata?.conversationId;
+  const authoredConversationId = metadata?.conversationId;
+  const conversationMatches =
+    generatedScenarioId === undefined || storedConversationId == null
+      ? true
+      : authoredConversationId == null
+        ? deepEqual(storedConversationId, generatedScenarioId)
+        : deepEqual(storedConversationId, authoredConversationId);
   return (
     resultIsForTestCase(comparableResult, effective) &&
-    metadataKeys.every((key) => deepEqual(resultMetadata?.[key], metadata?.[key]))
+    isStoredProviderAllowed(result, effective.providers) &&
+    conversationMatches &&
+    metadataKeys.every(
+      (key) =>
+        (generatedScenarioId !== undefined && key === 'conversationId') ||
+        deepEqual(resultMetadata?.[key], metadata?.[key]),
+    )
   );
 }
 
-export function createScenarioResultClassifier(suite: TestSuite, scenario: Scenario) {
+function isStoredProviderAllowed(result: EvaluateResult, allowedProviders: string[] | undefined) {
+  if (!Array.isArray(allowedProviders)) {
+    return true;
+  }
+  if (!result.provider?.id && !result.provider?.label) {
+    return false;
+  }
+  const columnProvider = {
+    id: () => result.provider?.id ?? '',
+    label: result.provider?.label,
+  } as Parameters<typeof isProviderAllowed>[0];
+  return isProviderAllowed(columnProvider, allowedProviders);
+}
+
+export function createScenarioResultClassifier(
+  suite: TestSuite,
+  scenario: Scenario,
+  globalScenarioOffset = 0,
+) {
   const defaults = scenarioDefaultTest(suite);
   const variantMetadataKeys = [
     ...new Set([
@@ -346,14 +385,17 @@ export function createScenarioResultClassifier(suite: TestSuite, scenario: Scena
       ...scenario.config.flatMap((variant) => Object.keys(variant.metadata ?? {})),
     ]),
   ];
-  const metadataKeysForTest = (test: TestCase) => [
-    ...new Set([...variantMetadataKeys, ...Object.keys(test.metadata ?? {})]),
+  const metadataKeys = [
+    ...new Set([
+      ...variantMetadataKeys,
+      ...(scenario.tests ?? []).flatMap((test) => Object.keys(test.metadata ?? {})),
+    ]),
   ];
   const candidates = scenario.config.map((variant) =>
     (scenario.tests ?? []).map((test) => ({
       effective: effectiveScenarioTest(suite, variant, test),
       metadata: declaredScenarioMetadata(suite, variant, test),
-      metadataKeys: metadataKeysForTest(test),
+      metadataKeys,
     })),
   );
   const signatureVarKeys = [
@@ -366,6 +408,8 @@ export function createScenarioResultClassifier(suite: TestSuite, scenario: Scena
     vars: { ...defaults?.vars, ...variant.vars },
     metadata: { ...defaults?.metadata, ...variant.metadata },
     providerId: providerToIdentifier(variant.provider ?? defaults?.provider),
+    providers: { ...defaults, ...variant }.providers,
+    conversationId: { ...defaults?.metadata, ...variant.metadata }.conversationId,
   }));
   const configuredMatch = (result: EvaluateResult, index: number) =>
     candidates[index].some((candidate) =>
@@ -374,6 +418,7 @@ export function createScenarioResultClassifier(suite: TestSuite, scenario: Scena
         candidate.effective,
         candidate.metadata,
         candidate.metadataKeys,
+        `__scenario_${globalScenarioOffset + index}__`,
       ),
     );
   const signatureMatch = (result: EvaluateResult, index: number) => {
@@ -383,13 +428,20 @@ export function createScenarioResultClassifier(suite: TestSuite, scenario: Scena
     const resultVars = filterRuntimeVars(result.vars) ?? {};
     const resultProviderId =
       providerToIdentifier(result.testCase.provider) ?? providerToIdentifier(result.provider);
+    const storedConversationId = result.testCase.metadata?.conversationId;
+    const expectedConversationId =
+      signatures[index].conversationId ?? `__scenario_${globalScenarioOffset + index}__`;
     return (
+      (storedConversationId == null || deepEqual(storedConversationId, expectedConversationId)) &&
+      isStoredProviderAllowed(result, signatures[index].providers) &&
       (!signatures[index].providerId ||
         !resultProviderId ||
         signatures[index].providerId === resultProviderId) &&
       signatureVarKeys.every((key) => deepEqual(resultVars[key], signatures[index].vars[key])) &&
-      signatureMetadataKeys.every((key) =>
-        deepEqual(result.testCase?.metadata?.[key], signatures[index].metadata[key]),
+      signatureMetadataKeys.every(
+        (key) =>
+          key === 'conversationId' ||
+          deepEqual(result.testCase?.metadata?.[key], signatures[index].metadata[key]),
       )
     );
   };
@@ -419,33 +471,56 @@ export function createScenarioResultClassifier(suite: TestSuite, scenario: Scena
           result,
           effectiveScenarioTest(suite, scenario.config[index], test),
           declaredScenarioMetadata(suite, scenario.config[index], test),
-          metadataKeysForTest(test),
+          metadataKeys,
+          `__scenario_${globalScenarioOffset + index}__`,
         ),
     }),
   };
 }
 
+function isGeneratedScenarioId(conversationId: unknown): boolean {
+  return typeof conversationId === 'string' && /^__scenario_\d+__$/.test(conversationId);
+}
+
 export function topLevelResultMatchContext(suite: TestSuite): ResultMatchContext {
+  const authoredTestByMatch = new WeakMap<TestCase, TestCase>();
+  const bindMatchedTest = (test: TestCase, authoredTest: TestCase) => {
+    authoredTestByMatch.set(test, authoredTest);
+  };
+  const authoredTestFor = (test: TestCase) => authoredTestByMatch.get(test);
   if (!suite.tests?.length) {
     // Scenario-only suites must not extract stored scenario results as top-level tests.
     // A top-level-only suite can still restore runtime-generated tests from prior results.
     return {
-      includesResult: () => !suite.scenarios?.length,
+      includesResult: (result) =>
+        !suite.scenarios?.length &&
+        !isGeneratedScenarioId(result.testCase?.metadata?.conversationId),
       matchesTest: () => false,
+      bindMatchedTest,
+      authoredTestFor,
     };
   }
   const topLevelVariant: Variant = {};
+  const topLevelMetadataKeys = [
+    ...new Set([
+      ...Object.keys(scenarioDefaultTest(suite)?.metadata ?? {}),
+      ...(suite.tests ?? []).flatMap((test) => Object.keys(test.metadata ?? {})),
+    ]),
+  ];
   const topLevelCandidates = (suite.tests ?? []).map((test) => {
     const metadata = declaredScenarioMetadata(suite, topLevelVariant, test);
     return {
       effective: effectiveScenarioTest(suite, topLevelVariant, test),
       metadata,
-      metadataKeys: Object.keys(metadata),
+      metadataKeys: topLevelMetadataKeys,
     };
   });
-  const scenarioClassifiers = (suite.scenarios ?? []).map((scenario) =>
-    createScenarioResultClassifier(suite, scenario),
-  );
+  let globalScenarioOffset = 0;
+  const scenarioClassifiers = (suite.scenarios ?? []).map((scenario) => {
+    const classifier = createScenarioResultClassifier(suite, scenario, globalScenarioOffset);
+    globalScenarioOffset += scenario.config.length;
+    return classifier;
+  });
   const explicitScenarioIds = new Set(
     (suite.scenarios ?? []).flatMap((scenario) =>
       scenario.config.flatMap((variant) =>
@@ -456,6 +531,8 @@ export function topLevelResultMatchContext(suite: TestSuite): ResultMatchContext
     ),
   );
   return {
+    bindMatchedTest,
+    authoredTestFor,
     includesResult: (result) => {
       const topLevelMatch = topLevelCandidates.some((candidate) =>
         matchesScenarioCandidate(
@@ -467,8 +544,7 @@ export function topLevelResultMatchContext(suite: TestSuite): ResultMatchContext
       );
       const scenarioMatch = scenarioClassifiers.some((classifier) => classifier.matchesAny(result));
       const conversationId = result.testCase?.metadata?.conversationId;
-      const generatedScenarioId =
-        typeof conversationId === 'string' && /^__scenario_\d+__$/.test(conversationId);
+      const generatedScenarioId = isGeneratedScenarioId(conversationId);
       const explicitScenarioId = explicitScenarioIds.has(conversationId);
       if (
         (generatedScenarioId || (conversationId !== undefined && explicitScenarioId)) &&
@@ -493,7 +569,7 @@ export function topLevelResultMatchContext(suite: TestSuite): ResultMatchContext
         result,
         effectiveScenarioTest(suite, topLevelVariant, test),
         metadata,
-        Object.keys(metadata),
+        topLevelMetadataKeys,
       );
     },
   };

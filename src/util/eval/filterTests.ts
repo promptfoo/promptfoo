@@ -71,22 +71,27 @@ export interface FilterOptions {
 type Tests = NonNullable<TestSuite['tests']>;
 type TestFilterFn = (test: TestCase) => boolean;
 
-function deduplicateTestsWithMetadata(
-  tests: Tests,
-  providerIdentifier: (test: TestCase) => string | undefined = (test) =>
-    providerToIdentifier(test.provider),
-): Tests {
-  const seen = new Set<string>();
+function deduplicateTestsWithMetadata(tests: Tests, context: ResultMatchContext): Tests {
+  const seenAuthored = new Set<TestCase>();
+  const seenExtracted = new Set<string>();
   return tests.filter((test) => {
+    const authoredTest = context.authoredTestFor?.(test);
+    if (authoredTest) {
+      if (seenAuthored.has(authoredTest)) {
+        return false;
+      }
+      seenAuthored.add(authoredTest);
+      return true;
+    }
     const key = JSON.stringify({
       vars: filterRuntimeVars(test.vars),
       metadata: test.metadata,
-      provider: providerIdentifier(test),
+      provider: providerToIdentifier(test.provider),
     });
-    if (seen.has(key)) {
+    if (seenExtracted.has(key)) {
       return false;
     }
-    seen.add(key);
+    seenExtracted.add(key);
     return true;
   });
 }
@@ -397,7 +402,7 @@ export async function filterTests(testSuite: TestSuite, options: FilterOptions):
     tests = options.resultMatchContext
       ? deduplicateTestsWithMetadata(
           [...failingOnlyTests, ...errorTests],
-          options.resultMatchContext.providerIdentifier,
+          options.resultMatchContext,
         )
       : deduplicateTestCases([...failingOnlyTests, ...errorTests]);
 

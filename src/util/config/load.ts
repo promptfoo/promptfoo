@@ -47,7 +47,6 @@ import { filterProviderConfigs, getProviderIdAndLabel } from '../eval/filterProv
 import { filterTests } from '../eval/filterTests';
 import { createScenarioResultClassifier } from '../eval/filterTestsUtil';
 import { promptfooCommand } from '../promptfooCommand';
-import { providerToIdentifier } from '../provider';
 import { preserveTracingCredentialReferences } from '../sanitizer';
 import {
   isRemoteTestsReference,
@@ -1259,6 +1258,7 @@ async function resolveLoadedConfig(
       cmdObj.filterMetadataExact ?? commandLineOptions?.filterMetadataExact;
     const resolvedScenarios: Scenario[] = [];
     const resultLoadCache = new Map<string, Promise<EvaluateResult[] | undefined>>();
+    let globalScenarioOffset = 0;
     for (const [scenarioIndex, scenario] of parsedScenarios.entries()) {
       if (typeof scenario === 'object' && scenario.tests && typeof scenario.tests === 'string') {
         scenario.tests = await maybeLoadFromExternalFile(scenario.tests);
@@ -1271,6 +1271,8 @@ async function resolveLoadedConfig(
         );
       }
       invariant(typeof scenario === 'object', 'scenario must be an object');
+      const scenarioOffset = globalScenarioOffset;
+      globalScenarioOffset += scenario.config?.length ?? 0;
       if (filterMetadataExact === undefined) {
         const filteredTests = await filterTests(
           {
@@ -1349,6 +1351,7 @@ async function resolveLoadedConfig(
         ? createScenarioResultClassifier(
             { providers: parsedProviders, prompts: parsedPrompts, defaultTest },
             matchingScenario,
+            scenarioOffset,
           )
         : undefined;
       const testsByConfig = await Promise.all(
@@ -1393,13 +1396,10 @@ async function resolveLoadedConfig(
                       loadedProvider ? { ...test, provider: loadedProvider } : test,
                     );
                   },
-                  providerIdentifier: (test) =>
-                    providerToIdentifier(
-                      loadedProviderForTest(test) ?? matchingScenario.config[variantIndex].provider,
-                    ),
                   bindMatchedTest: (test, authoredTest) => {
                     authoredTestByCopy.set(test, authoredTest);
                   },
+                  authoredTestFor: (test) => authoredTestByCopy.get(test),
                 },
               },
             ),

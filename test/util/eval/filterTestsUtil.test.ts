@@ -1397,6 +1397,55 @@ describe('filterTestsUtil', () => {
       expect(selected[1].provider).toBeUndefined();
     });
 
+    it('does not suppress another provider column with the same authored target provider', async () => {
+      const { resultIsForTestCase: realResultIsForTestCase } =
+        await vi.importActual<typeof import('../../../src/util/index')>('../../../src/util/index');
+      vi.mocked(util.resultIsForTestCase).mockImplementation(realResultIsForTestCase);
+      const authoredTest = {
+        vars: { id: 'shared' },
+        metadata: { group: 'common' },
+        provider: 'target',
+        providers: ['echo:A'],
+      };
+      const testSuite: TestSuite = { prompts: [], providers: [], tests: [authoredTest] };
+      const results = ['echo:A', 'echo:B'].map((columnId) => ({
+        vars: { id: 'shared' },
+        success: false,
+        failureReason: ResultFailureReason.ASSERT,
+        provider: { id: columnId, label: 'shared-label' },
+        testCase: {
+          vars: { id: 'shared' },
+          metadata: { group: 'common' },
+          provider: { id: 'target' },
+        },
+      })) as unknown as EvaluateResult[];
+      vi.mocked(util.readOutput).mockResolvedValue({
+        evalId: null,
+        results: {
+          version: 2,
+          timestamp: new Date().toISOString(),
+          results,
+          table: { head: { prompts: [], vars: [] }, body: [] },
+          stats: { successes: 0, failures: 2, errors: 0, tokenUsage: mockTokenUsage },
+        },
+        config: {},
+        shareableUrl: null,
+      });
+
+      const selected = await filterTestsByResults(
+        testSuite,
+        'results.json',
+        () => true,
+        undefined,
+        topLevelResultMatchContext(testSuite),
+      );
+
+      expect(selected).toHaveLength(2);
+      expect(selected[0]).toEqual(authoredTest);
+      expect(selected[1]).toMatchObject({ vars: { id: 'shared' }, metadata: { group: 'common' } });
+      expect(selected[1].provider).toBeUndefined();
+    });
+
     it('should deduplicate extracted tests with same vars', async () => {
       const { resultIsForTestCase: realResultIsForTestCase } =
         await vi.importActual<typeof import('../../../src/util/index')>('../../../src/util/index');
