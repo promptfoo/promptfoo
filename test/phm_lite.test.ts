@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 // @ts-expect-error -- The JavaScript example has no TypeScript declarations.
 import * as physics from '../examples/physics-consistency-assertion/phm-lite-assertion.mjs';
 
-const { default: phmAssert, phmLiteCheck, C_LIGHT } = physics;
+const { default: phmLiteAssertion, phmLiteCheck, C_LIGHT } = physics;
 
 describe('PHM-Lite physics-consistency assertion', () => {
   // ---- FAIL: violates universal physical law ----
@@ -17,9 +17,15 @@ describe('PHM-Lite physics-consistency assertion', () => {
     ['probability below 0%', 'a probability of -5% is recorded'],
     ['spelled-out speed unit', 'The beam moved at 400,000 kilometers per second.'],
     ['British kilometre spelling', 'The beam moved at 400,000 kilometres per second.'],
-    ['mixed algebra marker with motion context', 'The equation predicts that the signal travels at 2c.'],
+    [
+      'mixed algebra marker with motion context',
+      'The equation predicts that the signal travels at 2c.',
+    ],
     ['price in the following sentence', 'The signal travels at 2c. The price is $5.'],
-    ['cross-sentence delta marker', 'Conditions changed yesterday. The reaction consumed -5 kg of catalyst.'],
+    [
+      'cross-sentence delta marker',
+      'Conditions changed yesterday. The reaction consumed -5 kg of catalyst.',
+    ],
     ['abbreviation in algebra context', 'The equation, e.g. its leading term is 2c.'],
     ['accelerated to bare c', 'The projectile accelerated to 2c.'],
   ])('flags FAIL: %s', (_name, text) => {
@@ -82,7 +88,7 @@ describe('PHM-Lite physics-consistency assertion', () => {
   });
 
   it('scans structured object outputs with split value/unit fields', async () => {
-    const res = await phmAssert({ temperature: { value: -300, unit: 'degC' } });
+    const res = await phmLiteAssertion({ temperature: { value: -300, unit: 'degC' } });
     expect(res.pass).toBe(false);
     expect(res.reason).toContain('absolute-zero');
   });
@@ -98,9 +104,7 @@ describe('PHM-Lite physics-consistency assertion', () => {
   });
 
   it('scopes mass-change exemption to the preceding kg mention', () => {
-    const r = phmLiteCheck(
-      'The tank lost 2 kg of water. The reaction consumed -5 kg of catalyst.',
-    );
+    const r = phmLiteCheck('The tank lost 2 kg of water. The reaction consumed -5 kg of catalyst.');
     expect(r.violations.some((v: { rule: string }) => v.rule === 'negative-mass')).toBe(true);
   });
 
