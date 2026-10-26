@@ -15,6 +15,7 @@ describe('PHM-Lite physics-consistency assertion', () => {
     ['negative mass (kg)', 'The reaction consumed -5 kg of catalyst.'],
     ['probability above 100%', 'We are 150% confident in this result.'],
     ['probability below 0%', 'a probability of -5% is recorded'],
+    ['spelled-out speed unit', 'The beam moved at 400,000 kilometers per second.'],
   ])('flags FAIL: %s', (_name, text) => {
     const r = phmLiteCheck(text);
     expect(r.verdict).toBe('FAIL');
@@ -52,6 +53,9 @@ describe('PHM-Lite physics-consistency assertion', () => {
     ['exact Fahrenheit absolute-zero boundary', 'The gas reached -459.67 °F, absolute zero.'],
     ['no quantities at all', 'Chapter 3 covers 5 topics. The answer is 42.'],
     ['plausible free-fall timing', 'The ball fell 20 m in 2.1 s.'],
+    ['cents notation, not light-speed', 'The item costs 2 c each.'],
+    ['algebra coefficient, not light-speed', 'The expression is 2c.'],
+    ['mass change, not absolute mass', 'The mass change was -5 kg after drying.'],
   ])('passes: %s', (_name, text) => {
     const r = phmLiteCheck(text);
     expect(r.verdict).toBe('PASS');
@@ -81,6 +85,23 @@ describe('PHM-Lite physics-consistency assertion', () => {
   it('keeps probability context across abbreviations (e.g.)', () => {
     const r = phmLiteCheck('The probability, e.g. 150%, is invalid');
     expect(r.violations.some((v: { rule: string }) => v.rule === 'percentage-range')).toBe(true);
+  });
+
+  it('scopes mass-change exemption to the preceding kg mention', () => {
+    const r = phmLiteCheck(
+      'The tank lost 2 kg of water. The reaction consumed -5 kg of catalyst.',
+    );
+    expect(r.violations.some((v: { rule: string }) => v.rule === 'negative-mass')).toBe(true);
+  });
+
+  it('keeps the light-speed rule for genuine 2c claims', () => {
+    const r = phmLiteCheck('The signal travels at 2c through the medium.');
+    expect(r.violations.some((v: { rule: string }) => v.rule === 'speed-of-light')).toBe(true);
+  });
+
+  it('still rejects spelled-out accelerations', () => {
+    const r = phmLiteCheck('The piston saw 5e8 meters per second squared of acceleration.');
+    expect(r.verdict).toBe('PASS');
   });
 
   it('stops free-fall pairing at sentence boundaries', () => {
