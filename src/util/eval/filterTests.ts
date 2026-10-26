@@ -20,6 +20,7 @@ import { ResultFailureReason } from '../../types/index';
 import { deduplicateTestCases, filterRuntimeVars } from '../../util/comparison';
 import { filterByRange } from '../../util/filterRange';
 import { warnEmptyFilterRange } from '../../util/filterRangeWarn';
+import { providerToIdentifier } from '../provider';
 import { filterTestsByResults, type ResultMatchContext } from './filterTestsUtil';
 
 import type { TestCase, TestSuite } from '../../types/index';
@@ -70,10 +71,18 @@ export interface FilterOptions {
 type Tests = NonNullable<TestSuite['tests']>;
 type TestFilterFn = (test: TestCase) => boolean;
 
-function deduplicateTestsWithMetadata(tests: Tests): Tests {
+function deduplicateTestsWithMetadata(
+  tests: Tests,
+  providerIdentifier: (test: TestCase) => string | undefined = (test) =>
+    providerToIdentifier(test.provider),
+): Tests {
   const seen = new Set<string>();
   return tests.filter((test) => {
-    const key = JSON.stringify({ vars: filterRuntimeVars(test.vars), metadata: test.metadata });
+    const key = JSON.stringify({
+      vars: filterRuntimeVars(test.vars),
+      metadata: test.metadata,
+      provider: providerIdentifier(test),
+    });
     if (seen.has(key)) {
       return false;
     }
@@ -386,7 +395,10 @@ export async function filterTests(testSuite: TestSuite, options: FilterOptions):
 
     // Create a union of both sets, deduplicating by test identity
     tests = options.resultMatchContext
-      ? deduplicateTestsWithMetadata([...failingOnlyTests, ...errorTests])
+      ? deduplicateTestsWithMetadata(
+          [...failingOnlyTests, ...errorTests],
+          options.resultMatchContext.providerIdentifier,
+        )
       : deduplicateTestCases([...failingOnlyTests, ...errorTests]);
 
     logger.debug(

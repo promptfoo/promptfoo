@@ -58,6 +58,14 @@ describe('exact scenario result matching', () => {
 
     expect(classifier.forVariant(0).includesResult(generated)).toBe(false);
     expect(classifier.forVariant(1).includesResult(generated)).toBe(true);
+
+    const savedOverride = {
+      ...generated,
+      provider: { id: 'echo' },
+      testCase: { ...generated.testCase, provider: { id: 'echo:B' } },
+    } as EvaluateResult;
+    expect(classifier.forVariant(0).includesResult(savedOverride)).toBe(false);
+    expect(classifier.forVariant(1).includesResult(savedOverride)).toBe(true);
   });
 
   it('keeps both authored variants when a test override makes their effective identity identical', () => {

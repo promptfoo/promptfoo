@@ -36,6 +36,7 @@ import {
   UnifiedConfigSchema,
 } from '../../types/index';
 import { isApiProvider } from '../../types/providers';
+import { extractRuntimeVars } from '../../util/comparison';
 import { maybeLoadFromExternalFile, pathExists } from '../../util/file';
 import { isJavascriptFile } from '../../util/fileExtensions';
 import { readFilters, renderEnvOnlyInObject } from '../../util/index';
@@ -46,6 +47,7 @@ import { filterProviderConfigs, getProviderIdAndLabel } from '../eval/filterProv
 import { filterTests } from '../eval/filterTests';
 import { createScenarioResultClassifier } from '../eval/filterTestsUtil';
 import { promptfooCommand } from '../promptfooCommand';
+import { providerToIdentifier } from '../provider';
 import { preserveTracingCredentialReferences } from '../sanitizer';
 import {
   isRemoteTestsReference,
@@ -1309,57 +1311,124 @@ async function resolveLoadedConfig(
         continue;
       }
 
-      const resultClassifier =
-        cmdObj.filterFailing || cmdObj.filterFailingOnly || cmdObj.filterErrorsOnly
-          ? createScenarioResultClassifier(
-              { providers: parsedProviders, prompts: parsedPrompts, defaultTest },
-              scenario,
-            )
-          : undefined;
-      const testsByConfig = await Promise.all(
-        scenario.config.map(async (scenarioConfig, variantIndex) => ({
-          config: scenarioConfig,
-          tests: await filterTests(
-            {
-              ...scenario,
-              providers: parsedProviders,
-              prompts: parsedPrompts,
-            },
-            {
-              firstN: cmdObj.filterFirstN,
-              failing: cmdObj.filterFailing,
-              failingOnly: cmdObj.filterFailingOnly,
-              errorsOnly: cmdObj.filterErrorsOnly,
-              metadata: cmdObj.filterMetadata,
-              metadataExact: filterMetadataExact,
-              inheritedMetadata: {
-                ...(parsedDefaultTest?.metadata ?? config.metadata),
-                ...scenarioConfig.metadata,
+      const hasHistoricalResultFilter = Boolean(
+        cmdObj.filterFailing || cmdObj.filterFailingOnly || cmdObj.filterErrorsOnly,
+      );
+      const loadedTestBySource = new WeakMap<TestCase, TestCase>();
+      const authoredTestByCopy = new WeakMap<TestCase, TestCase>();
+      let matchingScenario = scenario;
+      if (hasHistoricalResultFilter) {
+        const metadataSelectedByVariant = await Promise.all(
+          scenario.config.map((scenarioConfig) =>
+            filterTests(
+              { ...scenario, providers: parsedProviders, prompts: parsedPrompts },
+              {
+                metadata: cmdObj.filterMetadata,
+                metadataExact: filterMetadataExact,
+                inheritedMetadata: {
+                  ...(parsedDefaultTest?.metadata ?? config.metadata),
+                  ...scenarioConfig.metadata,
+                },
               },
-              pattern: cmdObj.filterPattern,
-              sample: filterSample,
-              sampleSeed:
-                filterSampleSeed === undefined
-                  ? undefined
-                  : deriveScenarioSampleSeed(filterSampleSeed, scenarioIndex),
-              resultMatchContext: resultClassifier && {
-                ...resultClassifier.forVariant(variantIndex),
-                resultLoadCache,
-              },
-            },
+            ),
           ),
-        })),
+        );
+        const metadataSelectedTests = [...new Set(metadataSelectedByVariant.flat())];
+        const loadedTests = await Promise.all(
+          metadataSelectedTests.map((test) => readTest(test, basePath, false, runtimeEnv)),
+        );
+        metadataSelectedTests.forEach((test, index) => {
+          loadedTestBySource.set(test, loadedTests[index]);
+        });
+        matchingScenario = {
+          ...scenario,
+          tests: (scenario.tests ?? []).map((test) => loadedTestBySource.get(test) ?? test),
+        };
+      }
+      const resultClassifier = hasHistoricalResultFilter
+        ? createScenarioResultClassifier(
+            { providers: parsedProviders, prompts: parsedPrompts, defaultTest },
+            matchingScenario,
+          )
+        : undefined;
+      const testsByConfig = await Promise.all(
+        scenario.config.map(async (scenarioConfig, variantIndex) => {
+          const variantContext = resultClassifier?.forVariant(variantIndex);
+          const loadedProviderForTest = (test: TestCase) => {
+            const authoredTest = authoredTestByCopy.get(test) ?? test;
+            return loadedTestBySource.get(authoredTest)?.provider;
+          };
+          return {
+            config: scenarioConfig,
+            tests: await filterTests(
+              {
+                ...scenario,
+                providers: parsedProviders,
+                prompts: parsedPrompts,
+              },
+              {
+                firstN: cmdObj.filterFirstN,
+                failing: cmdObj.filterFailing,
+                failingOnly: cmdObj.filterFailingOnly,
+                errorsOnly: cmdObj.filterErrorsOnly,
+                metadata: cmdObj.filterMetadata,
+                metadataExact: filterMetadataExact,
+                inheritedMetadata: {
+                  ...(parsedDefaultTest?.metadata ?? config.metadata),
+                  ...scenarioConfig.metadata,
+                },
+                pattern: cmdObj.filterPattern,
+                sample: filterSample,
+                sampleSeed:
+                  filterSampleSeed === undefined
+                    ? undefined
+                    : deriveScenarioSampleSeed(filterSampleSeed, scenarioIndex),
+                resultMatchContext: variantContext && {
+                  ...variantContext,
+                  resultLoadCache,
+                  matchesTest: (result, test, authoredTest) => {
+                    const loadedProvider = authoredTest && loadedProviderForTest(authoredTest);
+                    return variantContext.matchesTest(
+                      result,
+                      loadedProvider ? { ...test, provider: loadedProvider } : test,
+                    );
+                  },
+                  providerIdentifier: (test) =>
+                    providerToIdentifier(
+                      loadedProviderForTest(test) ?? matchingScenario.config[variantIndex].provider,
+                    ),
+                  bindMatchedTest: (test, authoredTest) => {
+                    authoredTestByCopy.set(test, authoredTest);
+                  },
+                },
+              },
+            ),
+          };
+        }),
       );
       const uniqueFilteredTests = [...new Set(testsByConfig.flatMap((variant) => variant.tests))];
       const loadedTests = await Promise.all(
-        uniqueFilteredTests.map((test) => readTest(test, basePath, false, runtimeEnv)),
+        uniqueFilteredTests.map((test) => {
+          const authoredTest = authoredTestByCopy.get(test) ?? test;
+          const loadedTest = loadedTestBySource.get(authoredTest);
+          if (!loadedTest) {
+            return readTest(test, basePath, false, runtimeEnv);
+          }
+          if (authoredTest === test) {
+            return loadedTest;
+          }
+          return {
+            ...loadedTest,
+            vars: { ...loadedTest.vars, ...extractRuntimeVars(test.vars) },
+          };
+        }),
       );
-      const loadedTestBySource = new Map(
+      const loadedTestByFiltered = new Map(
         uniqueFilteredTests.map((test, index) => [test, loadedTests[index]] as const),
       );
       for (const variant of testsByConfig) {
         const scenarioTests = variant.tests.map((test) => {
-          const loadedTest = loadedTestBySource.get(test);
+          const loadedTest = loadedTestByFiltered.get(test);
           invariant(loadedTest, 'exactFilteredTest was not loaded');
           return loadedTest;
         });

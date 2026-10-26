@@ -17,7 +17,9 @@ type TestFilterFn = (test: TestCase) => boolean;
 
 export interface ResultMatchContext {
   includesResult: (result: EvaluateResult) => boolean;
-  matchesTest: (result: EvaluateResult, test: TestCase) => boolean;
+  matchesTest: (result: EvaluateResult, test: TestCase, authoredTest?: TestCase) => boolean;
+  providerIdentifier?: (test: TestCase) => string | undefined;
+  bindMatchedTest?: (test: TestCase, authoredTest: TestCase) => void;
   resultLoadCache?: Map<string, Promise<EvaluateResult[] | undefined>>;
 }
 
@@ -126,6 +128,7 @@ export async function filterTestsByResults(
   // When a match is found, we restore runtime variables (like _conversation, sessionId)
   // from the result into the test so they're available during re-evaluation.
   const matchedTests: Tests = [];
+  const matchedAuthoredTests: Tests = [];
 
   for (const test of testSuite.tests) {
     const testWithDefaults = mergeDefaultVars(test, testSuite.defaultTest);
@@ -135,12 +138,13 @@ export async function filterTestsByResults(
     // This prevents issues when a test matches multiple results and only some have runtime vars.
     let matchedResult = filteredResults.find(
       (result) =>
-        matchesTest(result, testWithDefaults) && extractRuntimeVars(result.vars) !== undefined,
+        matchesTest(result, testWithDefaults, test) &&
+        extractRuntimeVars(result.vars) !== undefined,
     );
 
     // Fallback: any matching result (even without runtime vars)
     if (!matchedResult) {
-      matchedResult = filteredResults.find((result) => matchesTest(result, testWithDefaults));
+      matchedResult = filteredResults.find((result) => matchesTest(result, testWithDefaults, test));
     }
 
     // Fallback: try matching without defaults (old results that don't have defaults merged)
@@ -154,15 +158,17 @@ export async function filterTestsByResults(
       if (hasDefaultVars) {
         // Again, prefer results with runtime vars first
         matchedResult = filteredResults.find(
-          (result) => matchesTest(result, test) && extractRuntimeVars(result.vars) !== undefined,
+          (result) =>
+            matchesTest(result, test, test) && extractRuntimeVars(result.vars) !== undefined,
         );
         if (!matchedResult) {
-          matchedResult = filteredResults.find((result) => matchesTest(result, test));
+          matchedResult = filteredResults.find((result) => matchesTest(result, test, test));
         }
       }
     }
 
     if (matchedResult) {
+      matchedAuthoredTests.push(test);
       // Restore runtime variables from the matched result into the test.
       // This ensures variables like _conversation and sessionId are available
       // during re-evaluation, preventing template render errors.
@@ -178,6 +184,7 @@ export async function filterTestsByResults(
         logger.debug('[filterTestsByResults] Restored runtime vars for test', {
           varKeys: Object.keys(runtimeVars),
         });
+        resultMatchContext?.bindMatchedTest?.(testWithRuntimeVars, test);
         matchedTests.push(testWithRuntimeVars);
       } else {
         logger.debug('[filterTestsByResults] Matched test has no runtime vars to restore');
@@ -198,9 +205,10 @@ export async function filterTestsByResults(
   const matchedResultKeys = new Set<string>();
 
   // Track which results matched config tests
-  const matchedTestsWithDefaults = matchedTests.map((test) =>
-    mergeDefaultVars(test, testSuite.defaultTest),
-  );
+  const matchedTestsWithDefaults = matchedTests.map((test, index) => ({
+    test: mergeDefaultVars(test, testSuite.defaultTest),
+    authoredTest: matchedAuthoredTests[index],
+  }));
   const resultKey = (result: EvaluateResult) =>
     resultMatchContext
       ? JSON.stringify({
@@ -208,10 +216,20 @@ export async function filterTestsByResults(
           metadata: result.testCase?.metadata,
         })
       : JSON.stringify(filterRuntimeVars(result.vars));
+  const matchedResultKey = (result: EvaluateResult) =>
+    resultMatchContext
+      ? JSON.stringify({
+          vars: filterRuntimeVars(result.vars),
+          metadata: result.testCase?.metadata,
+          provider:
+            providerToIdentifier(result.testCase?.provider) ??
+            providerToIdentifier(result.provider),
+        })
+      : resultKey(result);
   for (const result of filteredResults) {
-    for (const testWithDefaults of matchedTestsWithDefaults) {
-      if (matchesTest(result, testWithDefaults)) {
-        matchedResultKeys.add(resultKey(result));
+    for (const { test, authoredTest } of matchedTestsWithDefaults) {
+      if (matchesTest(result, test, authoredTest)) {
+        matchedResultKeys.add(matchedResultKey(result));
         break;
       }
     }
@@ -222,7 +240,7 @@ export async function filterTestsByResults(
     const key = resultKey(result);
 
     // Skip if this result already matched a config test
-    if (matchedResultKeys.has(key)) {
+    if (matchedResultKeys.has(matchedResultKey(result))) {
       continue;
     }
 
@@ -309,8 +327,13 @@ function matchesScenarioCandidate(
   metadataKeys: string[],
 ): boolean {
   const resultMetadata = result.testCase?.metadata;
+  const storedTestProviderId = providerToIdentifier(result.testCase?.provider);
+  const comparableResult =
+    storedTestProviderId === undefined
+      ? result
+      : { ...result, provider: { id: storedTestProviderId, label: storedTestProviderId } };
   return (
-    resultIsForTestCase(result, effective) &&
+    resultIsForTestCase(comparableResult, effective) &&
     metadataKeys.every((key) => deepEqual(resultMetadata?.[key], metadata?.[key]))
   );
 }
@@ -358,7 +381,8 @@ export function createScenarioResultClassifier(suite: TestSuite, scenario: Scena
       return false;
     }
     const resultVars = filterRuntimeVars(result.vars) ?? {};
-    const resultProviderId = providerToIdentifier(result.provider);
+    const resultProviderId =
+      providerToIdentifier(result.testCase.provider) ?? providerToIdentifier(result.provider);
     return (
       (!signatures[index].providerId ||
         !resultProviderId ||

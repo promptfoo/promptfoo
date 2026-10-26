@@ -1,7 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import Eval from '../../../src/models/eval';
 import { ResultFailureReason } from '../../../src/types/index';
-import { filterTestsByResults } from '../../../src/util/eval/filterTestsUtil';
+import {
+  filterTestsByResults,
+  topLevelResultMatchContext,
+} from '../../../src/util/eval/filterTestsUtil';
 import * as util from '../../../src/util/index';
 
 import type { EvaluateResult, Prompt, ProviderResponse, TestSuite } from '../../../src/types/index';
@@ -1344,6 +1347,54 @@ describe('filterTestsUtil', () => {
       // Should extract test WITHOUT provider (security - don't leak credentials)
       expect(result).toHaveLength(1);
       expect(result[0]?.provider).toBeUndefined();
+    });
+
+    it('extracts an unmatched provider result even when its vars and metadata match an authored test', async () => {
+      const { resultIsForTestCase: realResultIsForTestCase } =
+        await vi.importActual<typeof import('../../../src/util/index')>('../../../src/util/index');
+      vi.mocked(util.resultIsForTestCase).mockImplementation(realResultIsForTestCase);
+      const authoredTest = {
+        vars: { id: 'shared' },
+        metadata: { group: 'common' },
+        provider: 'provider-A',
+      };
+      const testSuite: TestSuite = { prompts: [], providers: [], tests: [authoredTest] };
+      const results = ['provider-A', 'provider-B', 'provider-C'].map((providerId) => ({
+        vars: { id: 'shared' },
+        success: false,
+        failureReason: ResultFailureReason.ASSERT,
+        provider: { id: 'echo' },
+        testCase: {
+          vars: { id: 'shared' },
+          metadata: { group: 'common' },
+          provider: { id: providerId },
+        },
+      })) as unknown as EvaluateResult[];
+      vi.mocked(util.readOutput).mockResolvedValue({
+        evalId: null,
+        results: {
+          version: 2,
+          timestamp: new Date().toISOString(),
+          results,
+          table: { head: { prompts: [], vars: [] }, body: [] },
+          stats: { successes: 0, failures: 3, errors: 0, tokenUsage: mockTokenUsage },
+        },
+        config: {},
+        shareableUrl: null,
+      });
+
+      const selected = await filterTestsByResults(
+        testSuite,
+        'results.json',
+        () => true,
+        undefined,
+        topLevelResultMatchContext(testSuite),
+      );
+
+      expect(selected).toHaveLength(2);
+      expect(selected[0]).toEqual(authoredTest);
+      expect(selected[1]).toMatchObject({ vars: { id: 'shared' }, metadata: { group: 'common' } });
+      expect(selected[1].provider).toBeUndefined();
     });
 
     it('should deduplicate extracted tests with same vars', async () => {

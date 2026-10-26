@@ -5,6 +5,7 @@ import logger from '../../../src/logger';
 import Eval from '../../../src/models/eval';
 import { ResultFailureReason } from '../../../src/types/index';
 import { filterTests } from '../../../src/util/eval/filterTests';
+import { topLevelResultMatchContext } from '../../../src/util/eval/filterTestsUtil';
 
 import type { TestCase, TestSuite } from '../../../src/types/index';
 
@@ -616,6 +617,54 @@ describe('filterTests', () => {
         },
       );
       expect(result.map((test) => test.metadata?.category)).toEqual(['X', 'Y']);
+    });
+
+    it('keeps distinct scoped providers while deduplicating the same test across failure types', async () => {
+      const tests: TestCase[] = [
+        { vars: { id: 'shared' }, metadata: { category: 'selected' }, provider: 'provider-A' },
+        {
+          vars: { id: 'shared' },
+          metadata: { category: 'selected' },
+          provider: {
+            id: 'provider-B',
+            label: 'file://./relative-provider.js',
+            config: { apiKey: 'private-marker' },
+          },
+        },
+      ];
+      const testSuite: TestSuite = { prompts: [], providers: [], tests };
+      const storedResult = (test: TestCase, failureReason: ResultFailureReason) => ({
+        vars: { id: 'shared' },
+        success: false,
+        failureReason,
+        provider: { id: 'echo' },
+        testCase: {
+          vars: test.vars,
+          metadata: test.metadata,
+          provider:
+            test.provider === 'provider-A'
+              ? { id: 'provider-A' }
+              : { id: 'provider-B', label: 'file://./relative-provider.js' },
+        },
+      });
+      vi.mocked(Eval.findById).mockResolvedValue({
+        toEvaluateSummary: vi.fn().mockResolvedValue({
+          results: [
+            storedResult(tests[0], ResultFailureReason.ASSERT),
+            storedResult(tests[0], ResultFailureReason.ERROR),
+            storedResult(tests[1], ResultFailureReason.ERROR),
+          ],
+        }),
+      } as any);
+
+      const result = await filterTests(testSuite, {
+        metadataExact: 'category=selected',
+        failingOnly: 'eval-123',
+        errorsOnly: 'eval-123',
+        resultMatchContext: topLevelResultMatchContext(testSuite),
+      });
+
+      expect(result).toEqual(tests);
     });
   });
 

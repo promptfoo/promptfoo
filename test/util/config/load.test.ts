@@ -31,7 +31,7 @@ import {
 import { maybeLoadFromExternalFile } from '../../../src/util/file';
 import { isRunningUnderNpx } from '../../../src/util/promptfooCommand';
 import { sanitizeTracingConfigForPersistence } from '../../../src/util/sanitizer';
-import { readTests } from '../../../src/util/testCaseReader';
+import { readTest, readTests } from '../../../src/util/testCaseReader';
 import { createMockProvider } from '../../factories/provider';
 import { mockProcessEnv } from '../utils';
 
@@ -1695,6 +1695,110 @@ describe('resolveConfigs', () => {
     expect(failedLoad.testSuite.scenarios?.every((scenario) => scenario.tests.length === 0)).toBe(
       true,
     );
+  });
+
+  it('matches exact scenario history by loaded authored providers while preserving current source config', async () => {
+    const resultsPath = '/mock/scenario-provider-results.json';
+    const providerSource = (marker: string) => ({
+      id: 'file://./same-provider.cjs',
+      config: { marker: `current-${marker}` },
+    });
+    const defaultConfig: Partial<UnifiedConfig> = {
+      prompts: ['Hello {{caseId}}'],
+      providers: ['echo'],
+      scenarios: [
+        {
+          config: [{ vars: { scenario: 'one' }, metadata: { group: 'common' } }],
+          tests: [
+            ...['A', 'B'].map((marker) => ({
+              vars: { caseId: 'shared' },
+              provider: providerSource(marker),
+            })),
+            {
+              vars: { caseId: 'shared' },
+              metadata: { group: 'excluded' },
+              provider: providerSource('C'),
+            },
+          ],
+        },
+      ],
+    };
+    const results = ['A', 'B'].map((marker) => ({
+      success: false,
+      failureReason: marker === 'A' ? ResultFailureReason.ASSERT : ResultFailureReason.ERROR,
+      vars: {
+        scenario: 'one',
+        caseId: 'shared',
+        ...(marker === 'A' ? { sessionId: 'runtime-session' } : {}),
+      },
+      provider: { id: 'echo' },
+      testCase: {
+        vars: { scenario: 'one', caseId: 'shared' },
+        metadata: { group: 'common' },
+        provider: { id: `runtime-${marker}` },
+      },
+    }));
+    vi.mocked(maybeLoadFromExternalFile).mockImplementation(async (value) => value);
+    vi.mocked(readTests).mockImplementation(async (tests) =>
+      Array.isArray(tests) ? (tests as TestCase[]) : [],
+    );
+    vi.mocked(readTest).mockImplementation(async (test) => {
+      if (
+        typeof test === 'object' &&
+        typeof test.provider === 'object' &&
+        test.provider !== null &&
+        !('callApi' in test.provider)
+      ) {
+        const marker = (test.provider as { config?: { marker?: string } }).config?.marker;
+        if (marker) {
+          return {
+            ...test,
+            provider: createMockProvider({
+              id: `runtime-${marker.replace(/^current-/, '')}`,
+              config: { marker },
+            }),
+          } as TestCase;
+        }
+      }
+      return test as TestCase;
+    });
+    vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify({ results: { results } }));
+
+    const { testSuite, config } = await resolveConfigs(
+      {
+        filterMetadataExact: 'group=common',
+        filterFailingOnly: resultsPath,
+        filterErrorsOnly: resultsPath,
+      },
+      defaultConfig,
+    );
+
+    expect(
+      testSuite.scenarios?.[0].tests.map((test) =>
+        typeof test.provider === 'object' &&
+        'id' in test.provider &&
+        typeof test.provider.id === 'function'
+          ? test.provider.id()
+          : undefined,
+      ),
+    ).toEqual(['runtime-A', 'runtime-B']);
+    expect(testSuite.scenarios?.[0].tests[0].vars?.sessionId).toBe('runtime-session');
+    expect((config.scenarios as Scenario[])?.[0].tests.map((test) => test.provider)).toEqual([
+      providerSource('A'),
+      providerSource('B'),
+    ]);
+    expect(
+      vi
+        .mocked(readTest)
+        .mock.calls.filter(
+          ([test]) =>
+            typeof test === 'object' &&
+            typeof test.provider === 'object' &&
+            test.provider !== null &&
+            !('callApi' in test.provider) &&
+            (test.provider as { config?: { marker?: string } }).config?.marker,
+        ),
+    ).toHaveLength(2);
   });
 
   it('should set cliState.basePath', async () => {
