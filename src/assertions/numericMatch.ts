@@ -24,39 +24,78 @@ const SCALE_MULTIPLIERS: Record<string, number> = {
 
 /**
  * Matches one number token, for example `$416.2 billion`, `416,161 million`, `$416.16B`,
- * `(1,234)` or `-3.5`. A token must not start in the middle of a word, so `FY2025` and `Q3`
- * are ignored. Spelled-out scale words may follow a space; abbreviations (K/M/B/T) must be
- * attached to the number, and `bn`/`mn` may follow a space.
+ * `(1,234)`, `-3.5` or `4.16161e11`. A token must not start in the middle of a word, so `FY2025`
+ * and `Q3` are ignored. Spelled-out scale words may follow a space; abbreviations (K/M/B/T) must
+ * be attached to the number, and `bn`/`mn` may follow a space.
  */
 const NUMBER_TOKEN_REGEX =
-  /(?<![\p{L}\p{N}_.])(\()?([-−])?\s?([$€£¥])?([-−])?(\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+(?:\.\d+)?|\.\d+)(?:(?:\s?(thousand|million|billion|trillion|bn|mn)s?\b)|([kmbt])(?![\p{L}\p{N}_]))?(\))?/giu;
-
-const FINAL_ANSWER_REGEX = /final answer\s*[:\-–—]\s*([^\n]*)/gi;
+  /(?<![\p{L}\p{N}_.])(\()?([-−])?\s?([$€£¥])?([-−])?((?:\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+(?:\.\d+)?|\.\d+)(?:e[-+]?\d+)?)(?:(?:\s?(thousand|million|billion|trillion|bn|mn)s?\b)|([kmbt])(?![\p{L}\p{N}_]))?(\))?/giu;
 
 /**
- * Extracts numbers from text, normalizing currency symbols, thousands separators, scale
- * words/suffixes and accounting-style negatives.
+ * `Final answer:`, `Final answer - 42` or `Final answer -42`. A dash only counts as a delimiter
+ * when whitespace follows it, so a minus sign attached to the number is kept.
  */
-export function extractNumbers(text: string): number[] {
-  const numbers: number[] = [];
+const FINAL_ANSWER_REGEX = /final answer\s*(?::|[-–—](?=\s))?\s*([^\n]*)/gi;
+
+/** SEC form names such as `10-K`, `10-Q`, `8-K`, `20-F` and `6-K`. */
+const SEC_FORM_SUFFIX_REGEX = /^-(?:K|Q|F)(?:T|\/A)?(?![\p{L}\p{N}_])/iu;
+const PERCENT_SUFFIX_REGEX = /^\s?(?:%|percent\b|per cent\b)/i;
+
+export interface NumberToken {
+  value: number;
+  /** True for tokens that are rarely the stated answer: SEC form names, bare years and percentages. */
+  isIncidental: boolean;
+}
+
+/**
+ * Extracts number tokens from text, normalizing currency symbols, thousands separators,
+ * scientific notation, scale words/suffixes and accounting-style negatives. Values that overflow
+ * when scaled are returned as non-finite so callers can reject them.
+ */
+export function extractNumberTokens(text: string): NumberToken[] {
+  const tokens: NumberToken[] = [];
   for (const match of text.matchAll(NUMBER_TOKEN_REGEX)) {
-    const [, openParen, signBefore, , signAfter, digits, scaleWord, scaleSuffix, closeParen] =
-      match;
+    const [
+      token,
+      openParen,
+      signBefore,
+      currency,
+      signAfter,
+      digits,
+      scaleWord,
+      scaleSuffix,
+      closeParen,
+    ] = match;
     let value = Number.parseFloat(digits.replace(/,/g, ''));
-    if (!Number.isFinite(value)) {
-      continue;
-    }
     const scale = (scaleWord ?? scaleSuffix)?.toLowerCase();
     if (scale) {
       value *= SCALE_MULTIPLIERS[scale];
     }
     const isAccountingNegative = Boolean(openParen && closeParen);
-    if (signBefore || signAfter || isAccountingNegative) {
+    const isNegative = Boolean(signBefore || signAfter || isAccountingNegative);
+    if (isNegative) {
       value = -value;
     }
-    numbers.push(value);
+    const rest = text.slice((match.index ?? 0) + token.length);
+    const isSecFormName = !scale && !closeParen && SEC_FORM_SUFFIX_REGEX.test(rest);
+    const isPercentage = !scale && !closeParen && PERCENT_SUFFIX_REGEX.test(rest);
+    const isBareYear =
+      /^\d{4}$/.test(digits) &&
+      !currency &&
+      !scale &&
+      !isNegative &&
+      value >= 1900 &&
+      value <= 2099;
+    tokens.push({ value, isIncidental: isSecFormName || isPercentage || isBareYear });
   }
-  return numbers;
+  return tokens;
+}
+
+/** Extracts the finite numbers from text, in order. See {@link extractNumberTokens}. */
+export function extractNumbers(text: string): number[] {
+  return extractNumberTokens(text)
+    .map((token) => token.value)
+    .filter((value) => Number.isFinite(value));
 }
 
 /**
@@ -77,7 +116,12 @@ function parseExpectedValue(value: unknown): number {
     typeof value === 'string',
     '"numeric-match" assertion must have a number or numeric string value',
   );
-  const numbers = extractNumbers(value);
+  const tokens = extractNumberTokens(value);
+  invariant(
+    tokens.every((token) => Number.isFinite(token.value)),
+    `"numeric-match" assertion value overflows when scaled. Received: ${value}`,
+  );
+  const numbers = tokens.map((token) => token.value);
   invariant(
     numbers.length === 1,
     `"numeric-match" assertion value must contain exactly one number. Received: ${value}`,
@@ -91,22 +135,25 @@ function relativeError(actual: number, expected: number): number {
 }
 
 function selectCandidate(
-  candidates: number[],
+  tokens: NumberToken[],
   expected: number,
   mode: NumericMatchMode,
 ): number | undefined {
-  if (candidates.length === 0) {
+  const finiteTokens = tokens.filter((token) => Number.isFinite(token.value));
+  if (finiteTokens.length === 0) {
     return undefined;
   }
-  if (mode === 'first') {
-    return candidates[0];
+  if (mode === 'closest') {
+    return finiteTokens
+      .map((token) => token.value)
+      .reduce((best, candidate) =>
+        relativeError(candidate, expected) < relativeError(best, expected) ? candidate : best,
+      );
   }
-  if (mode === 'last') {
-    return candidates[candidates.length - 1];
-  }
-  return candidates.reduce((best, candidate) =>
-    relativeError(candidate, expected) < relativeError(best, expected) ? candidate : best,
-  );
+  // Skip SEC form names, bare years and percentages, unless nothing else is left.
+  const answerTokens = finiteTokens.filter((token) => !token.isIncidental);
+  const candidates = answerTokens.length > 0 ? answerTokens : finiteTokens;
+  return mode === 'first' ? candidates[0].value : candidates[candidates.length - 1].value;
 }
 
 /**
@@ -127,13 +174,17 @@ export function handleNumericMatch({
     Number.isFinite(tolerance) && tolerance >= 0,
     '"numeric-match" assertion threshold must be a non-negative number',
   );
-  const mode: NumericMatchMode = assertion.config?.mode ?? 'first';
+  const mode: NumericMatchMode = assertion.config?.mode ?? 'closest';
   invariant(
     NUMERIC_MATCH_MODES.includes(mode),
     `"numeric-match" assertion config.mode must be one of: ${NUMERIC_MATCH_MODES.join(', ')}`,
   );
 
-  const actual = selectCandidate(extractNumbers(getStatedAnswerText(outputString)), expected, mode);
+  const actual = selectCandidate(
+    extractNumberTokens(getStatedAnswerText(outputString)),
+    expected,
+    mode,
+  );
   if (actual === undefined) {
     return {
       pass: inverse,

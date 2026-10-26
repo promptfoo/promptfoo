@@ -1067,6 +1067,7 @@ Before comparing, the assertion normalizes:
 - currency symbols (`$`, `€`, `£`, `¥`)
 - thousands separators (`416,161`)
 - scale words and suffixes: `thousand`, `million`, `billion`, `trillion`, `bn`, `mn`, and `K`, `M`, `B`, `T` when attached to the number (`$416.16B`)
+- scientific notation (`4.16161e11`)
 - negatives, including accounting-style negatives such as `(1,234)`
 
 Digits inside words, such as `FY2025` or `Q3`, are ignored.
@@ -1080,15 +1081,17 @@ assert:
 
 With this assertion, `$416.2 billion`, `416,161 million`, `$416.16B` and `416161000000` all pass, and `$391.0 billion` fails.
 
-`value` can be a number or a string that contains exactly one number, so `value: '$416.161 billion'` and `value: '{{expected}}'` work too. When the expected value is `0`, `threshold` is used as an absolute tolerance.
+`value` can be a number or a string that contains exactly one number, so `value: '$416.161 billion'` and `value: '{{expected}}'` work too. When the expected value is `0`, `threshold` is used as an absolute tolerance. A value that overflows when scaled is rejected as a configuration error.
 
-**Which number is graded.** When the output has a `Final answer:` line, only the last such line is searched. That lets a prompt ask for a final line, so a figure mentioned in passing is not graded by mistake. Within that text, `config.mode` selects the number:
+**Which number is graded.** When the output has a `Final answer` line (`Final answer: 42`, `Final answer - 42` or `Final answer -42`), only the last such line is searched. That lets a prompt ask for a final line, so a figure mentioned in passing is not graded by mistake. Within that text, `config.mode` selects the number:
 
-| `mode`            | Number graded                                      |
-| ----------------- | -------------------------------------------------- |
-| `first` (default) | The first number                                   |
-| `last`            | The last number                                    |
-| `closest`         | The number closest to the expected value (lenient) |
+| `mode`              | Number graded                                                         |
+| ------------------- | --------------------------------------------------------------------- |
+| `closest` (default) | The number closest to the expected value                              |
+| `first`             | The first number, skipping SEC form names, bare years and percentages |
+| `last`              | The last number, skipping SEC form names, bare years and percentages  |
+
+In `first` and `last` modes, SEC form names (`10-K`, `10-Q`, `8-K`, `20-F`), bare four-digit years (`2025`) and percentages (`6%`) are skipped, so `In fiscal 2025, net sales grew 6% to $416.2 billion.` grades `$416.2 billion`. If only skipped numbers remain, they are used. `closest` is lenient when an output lists several figures; use `first` or `last` with a `Final answer` line to grade the stated answer strictly.
 
 ```yaml
 assert:

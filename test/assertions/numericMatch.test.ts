@@ -50,6 +50,19 @@ describe('extractNumbers', () => {
     expect(extractNumbers(text)).toEqual([expected]);
   });
 
+  it.each([
+    ['4.16161e11', 4.16161e11],
+    ['1e-7', 1e-7],
+    ['$4.16E+11', 4.16e11],
+    ['2.5e3 million', 2.5e9],
+  ])('parses scientific notation %s as one number', (text, expected) => {
+    expect(extractNumbers(text)).toEqual([expected]);
+  });
+
+  it('drops values that overflow when scaled', () => {
+    expect(extractNumbers(`${'9'.repeat(300)} trillion and 5`)).toEqual([5]);
+  });
+
   it('ignores digits inside words', () => {
     expect(extractNumbers('Apple FY2025 Q3 revenue was $94.0 billion')).toEqual([94e9]);
   });
@@ -68,6 +81,15 @@ describe('getStatedAnswerText', () => {
     expect(
       getStatedAnswerText('Revenue was $90.7 billion.\nFinal answer: $89.3 billion\nThanks'),
     ).toBe('$89.3 billion');
+  });
+
+  it.each([
+    ['Final answer -42', '-42'],
+    ['Final answer: -42', '-42'],
+    ['Final answer - 42', '42'],
+    ['Final answer — $5 million', '$5 million'],
+  ])('keeps a minus sign attached to the number in %s', (text, expected) => {
+    expect(getStatedAnswerText(text)).toBe(expected);
   });
 
   it('returns the whole output when there is no final answer line', () => {
@@ -118,7 +140,8 @@ describe('handleNumericMatch', () => {
 
   it('supports first, last and closest modes', () => {
     const output = 'Last year 391 billion, this year 416 billion, next year 450 billion';
-    expect(runNumericMatch(output, 416e9).pass).toBe(false);
+    expect(runNumericMatch(output, 416e9, { mode: 'first' }).pass).toBe(false);
+    expect(runNumericMatch(output, 391e9, { mode: 'first' }).pass).toBe(true);
     expect(runNumericMatch(output, 450e9, { mode: 'last' }).pass).toBe(true);
     expect(runNumericMatch(output, 416e9, { mode: 'closest' }).pass).toBe(true);
   });
@@ -147,6 +170,66 @@ describe('handleNumericMatch', () => {
     expect(far.pass).toBe(true);
     expect(far.score).toBe(1);
     expect(runNumericMatch('no numbers', 100, { inverse: true }).pass).toBe(true);
+  });
+
+  describe('stated answers from real 10-K Q&A runs (#11909)', () => {
+    const examples = [
+      'Per the 10-K, net sales were $416.2 billion.',
+      'In fiscal 2025, net sales were $416.2 billion.',
+      'Net sales grew 6% to $416.2 billion.',
+      'Total net sales (Item 8) were $416.2 billion.',
+    ];
+
+    it.each(examples)('passes with the default mode: %s', (output) => {
+      expect(runNumericMatch(output, 416_161_000_000).pass).toBe(true);
+    });
+
+    it.each(examples.slice(0, 3))(
+      'skips SEC form names, bare years and percentages in first mode: %s',
+      (output) => {
+        expect(runNumericMatch(output, 416_161_000_000, { mode: 'first' }).pass).toBe(true);
+      },
+    );
+
+    it('skips incidental numbers in last mode', () => {
+      const output = 'Net sales were $416.2 billion, up 6%, per the 10-Q filed in 2025';
+      expect(runNumericMatch(output, 416_161_000_000, { mode: 'last' }).pass).toBe(true);
+    });
+
+    it.each([
+      ['8-K', 8],
+      ['20-F', 20],
+      ['6-K', 6],
+    ])('treats %s as a form name', (form, value) => {
+      expect(runNumericMatch(`Filed a ${form}; total 42`, 42, { mode: 'first' }).pass).toBe(true);
+      expect(runNumericMatch(`Filed a ${form}; total 42`, value, { mode: 'first' }).pass).toBe(
+        false,
+      );
+    });
+
+    it('does not skip years with currency, scale or separators', () => {
+      expect(runNumericMatch('Revenue was $2025 then', 2025, { mode: 'first' }).pass).toBe(true);
+      expect(runNumericMatch('About 2,025 units, 7 left', 2025, { mode: 'first' }).pass).toBe(true);
+    });
+
+    it('falls back to incidental numbers when nothing else is left', () => {
+      expect(runNumericMatch('Final answer: 2025', 2025, { mode: 'first' }).pass).toBe(true);
+      expect(runNumericMatch('Growth was 6%', 6, { mode: 'last' }).pass).toBe(true);
+    });
+  });
+
+  it('grades scientific notation in output and expected values', () => {
+    expect(runNumericMatch('Net sales: 4.16161e11', 416_161_000_000).pass).toBe(true);
+    expect(runNumericMatch('About 0.0000001', '1e-7').pass).toBe(true);
+  });
+
+  it('keeps a negative final answer written without a colon', () => {
+    expect(runNumericMatch('Change was 42 points.\nFinal answer -42', -42).pass).toBe(true);
+    expect(runNumericMatch('Final answer -42', 42).pass).toBe(false);
+  });
+
+  it('rejects expected values that overflow when scaled', () => {
+    expect(() => runNumericMatch('1', `${'9'.repeat(300)} trillion`)).toThrow('overflows');
   });
 
   it('rejects invalid configuration', () => {
