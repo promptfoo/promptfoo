@@ -16,6 +16,10 @@ describe('PHM-Lite physics-consistency assertion', () => {
     ['probability above 100%', 'We are 150% confident in this result.'],
     ['probability below 0%', 'a probability of -5% is recorded'],
     ['spelled-out speed unit', 'The beam moved at 400,000 kilometers per second.'],
+    ['British kilometre spelling', 'The beam moved at 400,000 kilometres per second.'],
+    ['mixed algebra marker with motion context', 'The equation predicts that the signal travels at 2c.'],
+    ['price in the following sentence', 'The signal travels at 2c. The price is $5.'],
+    ['cross-sentence delta marker', 'Conditions changed yesterday. The reaction consumed -5 kg of catalyst.'],
   ])('flags FAIL: %s', (_name, text) => {
     const r = phmLiteCheck(text);
     expect(r.verdict).toBe('FAIL');
@@ -56,6 +60,7 @@ describe('PHM-Lite physics-consistency assertion', () => {
     ['cents notation, not light-speed', 'The item costs 2 c each.'],
     ['algebra coefficient, not light-speed', 'The expression is 2c.'],
     ['mass change, not absolute mass', 'The mass change was -5 kg after drying.'],
+    ['repeated-denominator acceleration', 'Acceleration reached 5e8 meters per second per second.'],
   ])('passes: %s', (_name, text) => {
     const r = phmLiteCheck(text);
     expect(r.verdict).toBe('PASS');
