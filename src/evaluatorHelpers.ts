@@ -99,8 +99,60 @@ export function resolveVariables(
 
 // Nunjucks tags accept a whitespace-control dash on either side
 // ({%- raw -%}), so the scan cannot anchor on '{%' followed by whitespace.
-const RAW_TOKEN_REGEX = /\{%-?\s*(raw|endraw)\s*-?%\}/g;
 const SIMPLE_PLACEHOLDER_REGEX = /\{\{\s*(\w+)\s*\}\}/g;
+// Matches dotted-path placeholders like {{user.name}} for the dependency scrub.
+// firstUnprotectedPlaceholder intentionally uses SIMPLE_PLACEHOLDER_REGEX
+// because its substitution only handles bare names; the scrub needs to see
+// every path form that extractVariablesFromTemplate would report.
+const PATH_PLACEHOLDER_REGEX = /\{\{\s*([\w.]+)\s*\}\}/g;
+
+// Precompute nesting depth at every position in one forward scan.
+// Depth is the number of unclosed {{ or {% delimiters before each character.
+// A placeholder is nested (and must be left for the real render) when its
+// opening position has depth > 0. Delimiters inside single- or double-quoted
+// strings are literal text, not structure, so they do not affect depth.
+function computeNestingDepths(value: string): Int32Array {
+  const depths = new Int32Array(value.length + 1);
+  let depth = 0;
+  let quote: string | null = null;
+  for (let i = 0; i < value.length; i++) {
+    depths[i] = depth;
+    const ch = value[i];
+    if (quote) {
+      // Inside a quoted string: only the matching quote ends it.
+      if (ch === quote) {
+        quote = null;
+      }
+      continue;
+    }
+    if (ch === '"' || ch === "'") {
+      quote = ch;
+      continue;
+    }
+    if (i + 1 < value.length) {
+      const two = value.substring(i, i + 2);
+      if (two === '{{') {
+        depth++;
+        depths[i + 1] = depth;
+        i++;
+      } else if (two === '}}' && depth > 0) {
+        depth--;
+        depths[i + 1] = depth;
+        i++;
+      } else if (two === '{%') {
+        depth++;
+        depths[i + 1] = depth;
+        i++;
+      } else if (two === '%}' && depth > 0) {
+        depth--;
+        depths[i + 1] = depth;
+        i++;
+      }
+    }
+  }
+  depths[value.length] = depth;
+  return depths;
+}
 
 // Regex substitution cannot see Nunjucks structure, so a placeholder inside a
 // {% raw %} block or nested in another {{ ... }} expression (say a quoted
@@ -110,6 +162,7 @@ function firstUnprotectedPlaceholder(
   value: string,
 ): { placeholder: string; varName: string; index: number } | null {
   const rawSpans = collectRawSpans(value);
+  const depths = computeNestingDepths(value);
   let spanIdx = 0;
   for (const match of value.matchAll(SIMPLE_PLACEHOLDER_REGEX)) {
     const start = match.index;
@@ -121,16 +174,12 @@ function firstUnprotectedPlaceholder(
     if (spanIdx < rawSpans.length && start >= rawSpans[spanIdx][0]) {
       continue;
     }
-    const before = value.slice(0, start);
     // Depth, not lastIndexOf: in `{{ '{{x}}' ~ '{{y}}' }}` the first quoted
     // pair opens and closes before the second one starts, so comparing the
     // last positions of '{{' and '}}' thinks the second is top-level. '{%'
     // counts the same way: inside a {% set ... %} tag a '{{x}}' can only be
     // a quoted literal, never a real placeholder.
-    if (
-      before.split('{{').length - 1 > before.split('}}').length - 1 ||
-      before.split('{%').length - 1 > before.split('%}').length - 1
-    ) {
+    if (depths[start] > 0) {
       continue;
     }
     return { placeholder: match[0], varName: match[1]!, index: start };
@@ -142,25 +191,45 @@ function firstUnprotectedPlaceholder(
 // non-greedy regex that stops at the first {% endraw %} under-covers. An
 // unterminated block still swallows everything through the last raw/endraw
 // token as literal text; content after that token parses normally.
+// Raw markers inside single- or double-quoted strings are literal text, not
+// real block tags, so they are ignored.
 function collectRawSpans(value: string): Array<[number, number]> {
   const spans: Array<[number, number]> = [];
   let depth = 0;
   let spanStart = 0;
   let lastTokenEnd = 0;
-  for (const match of value.matchAll(RAW_TOKEN_REGEX)) {
-    const tokenEnd = match.index + match[0].length;
-    if (match[1] === 'raw') {
-      if (depth === 0) {
-        spanStart = match.index;
+  let quote: string | null = null;
+  for (let i = 0; i < value.length; i++) {
+    const ch = value[i];
+    if (quote) {
+      if (ch === quote) {
+        quote = null;
       }
-      depth++;
-      lastTokenEnd = tokenEnd;
-    } else if (depth > 0) {
-      depth--;
-      lastTokenEnd = tokenEnd;
-      if (depth === 0) {
-        spans.push([spanStart, tokenEnd]);
+      continue;
+    }
+    if (ch === '"' || ch === "'") {
+      quote = ch;
+      continue;
+    }
+    // Check for raw/endraw token at this position.
+    const remaining = value.substring(i);
+    const rawMatch = /^\{%-?\s*(raw|endraw)\s*-?%\}/.exec(remaining);
+    if (rawMatch) {
+      const tokenEnd = i + rawMatch[0].length;
+      if (rawMatch[1] === 'raw') {
+        if (depth === 0) {
+          spanStart = i;
+        }
+        depth++;
+        lastTokenEnd = tokenEnd;
+      } else if (depth > 0) {
+        depth--;
+        lastTokenEnd = tokenEnd;
+        if (depth === 0) {
+          spans.push([spanStart, tokenEnd]);
+        }
       }
+      i = tokenEnd - 1; // loop will i++
     }
   }
   if (depth > 0) {
@@ -195,14 +264,12 @@ function referencesUndefinedVariables(template: string, vars: Record<string, Var
   // literal text too: {{ '{{x}}' }} renders to the text {{x}}, so x is not a
   // dependency. The extractor below is regex-based and would report it, so
   // scrub those occurrences first (same nesting notion as
-  // firstUnprotectedPlaceholder).
+  // firstUnprotectedPlaceholder). Use PATH_PLACEHOLDER_REGEX so dotted paths
+  // like {{user.name}} are scrubbed too.
   const nested: Array<[number, number]> = [];
-  for (const match of scrubbed.matchAll(SIMPLE_PLACEHOLDER_REGEX)) {
-    const before = scrubbed.slice(0, match.index);
-    if (
-      before.split('{{').length - 1 > before.split('}}').length - 1 ||
-      before.split('{%').length - 1 > before.split('%}').length - 1
-    ) {
+  const scrubbedDepths = computeNestingDepths(scrubbed);
+  for (const match of scrubbed.matchAll(PATH_PLACEHOLDER_REGEX)) {
+    if (scrubbedDepths[match.index] > 0) {
       nested.push([match.index, match.index + match[0].length]);
     }
   }
@@ -210,12 +277,24 @@ function referencesUndefinedVariables(template: string, vars: Record<string, Var
     scrubbed = scrubbed.slice(0, nested[i][0]) + scrubbed.slice(nested[i][1]);
   }
   // Names bound by {% set ... %} inside the template are local bindings, not
-  // external dependencies; the extractor has no notion of them.
+  // external dependencies; the extractor has no notion of them. But the RHS
+  // of a set can reference external variables, so those still count.
   const defined = new Set<string>();
-  for (const match of scrubbed.matchAll(/\{%\s*-?\s*set\s+([A-Za-z_]\w*)/g)) {
+  const setRhsVars: string[] = [];
+  for (const match of scrubbed.matchAll(
+    /\{%\s*-?\s*set\s+([A-Za-z_]\w*)\s*=\s*([^%]+?)\s*-?%\}/g,
+  )) {
+    defined.add(match[1]!);
+    // Extract variable references from the RHS expression.
+    for (const rhsMatch of (match[2] || '').matchAll(/([A-Za-z_]\w*)/g)) {
+      setRhsVars.push(rhsMatch[1]!);
+    }
+  }
+  // Also handle set without explicit RHS extraction (e.g. {% set local %}).
+  for (const match of scrubbed.matchAll(/\{%\s*-?\s*set\s+([A-Za-z_]\w*)\s*-?%\}/g)) {
     defined.add(match[1]!);
   }
-  return extractVariablesFromTemplate(scrubbed).some((variableName) => {
+  return [...extractVariablesFromTemplate(scrubbed), ...setRhsVars].some((variableName) => {
     const rootVariableName = /^([A-Za-z_]\w*)/.exec(variableName)?.[1];
     return Boolean(
       rootVariableName &&
@@ -548,6 +627,9 @@ export async function renderPrompt(
   // value comes out as literal text whether the prompt is plain, JSON,
   // rendered with PROMPTFOO_DISABLE_JSON_AUTOESCAPE, or fetched from a
   // third-party integration that returns before the local render.
+  // Determine which vars the prompt actually references so render failures
+  // on unused values can be suppressed without hiding errors on used ones.
+  const promptReferencedVars = new Set(extractVariablesFromTemplate(prompt.raw));
   const renderedVars = Object.fromEntries(
     Object.entries(vars).map(([key, value]) => {
       if (
@@ -564,11 +646,15 @@ export async function renderPrompt(
 
       // A value the prompt never references can still carry template-like
       // payload (say {% unknown %}) that Nunjucks cannot parse. Leave it
-      // untouched instead of failing the eval; before values were pre-rendered
-      // such payloads passed through raw and only referenced strings rendered.
+      // untouched instead of failing the eval. But if the prompt does
+      // reference this value, a render failure is a real error the caller
+      // must see rather than silently passing the raw template to the provider.
       try {
         return [key, nunjucks.renderString(autoWrapRawIfPartialNunjucks(value), vars)];
-      } catch {
+      } catch (renderError) {
+        if (promptReferencedVars.has(key)) {
+          throw renderError;
+        }
         return [key, value];
       }
     }),
