@@ -427,7 +427,7 @@ export class TransformersTextClassificationProvider implements ApiClassification
           !Number.isFinite(item.score) ||
           item.score < 0 ||
           item.score > 1 ||
-          Object.hasOwn(classification, item.label)
+          Object.prototype.hasOwnProperty.call(classification, item.label)
         ) {
           return { error: 'Transformers.js classifier returned invalid label probabilities' };
         }
