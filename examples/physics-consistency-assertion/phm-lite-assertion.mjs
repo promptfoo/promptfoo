@@ -99,7 +99,11 @@ function toCelsius(value, unit) {
  * Apply the four per-quantity rules (speed limit, absolute zero,
  * non-negativity of mass, percentage range) to one parsed quantity.
  */
-function checkQuantityRules({ value, unit: rawUnit, raw, index, underflowNeg }, violations, normalized) {
+function checkQuantityRules(
+  { value, unit: rawUnit, raw, index, underflowNeg },
+  violations,
+  normalized,
+) {
   // Spelled-out speed units ("400,000 kilometers per second", "meters/s")
   // normalize onto the same rule paths as their compact forms.
   const unit =
@@ -129,7 +133,10 @@ function checkQuantityRules({ value, unit: rawUnit, raw, index, underflowNeg }, 
     const sentStart = sb.length ? sb[sb.length - 1].index + sb[sb.length - 1][0].length : 0;
     return (
       normalized.slice(sentStart, index) +
-      normalized.slice(index).split(/[.!?](?:\s|$)|\n/)[0].slice(0, 160)
+      normalized
+        .slice(index)
+        .split(/[.!?](?:\s|$)|\n/)[0]
+        .slice(0, 160)
     );
   })();
   const MOTION_RE =
@@ -200,7 +207,10 @@ function checkQuantityRules({ value, unit: rawUnit, raw, index, underflowNeg }, 
     const sentStart = sb.length ? sb[sb.length - 1].index + sb[sb.length - 1][0].length : 0;
     const massSpan =
       normalized.slice(sentStart, index) +
-      normalized.slice(index).split(/[.!?](?:\s|$)|\n/)[0].slice(0, 160);
+      normalized
+        .slice(index)
+        .split(/[.!?](?:\s|$)|\n/)[0]
+        .slice(0, 160);
     const isMassDelta =
       /(?:\b(?:change|changed|lost|loses?|lost|gained|gains?|dropped|reduced|difference|delta)\b|\u0394)/i.test(
         massSpan,
