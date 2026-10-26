@@ -25,8 +25,13 @@ import {
 import { isAudioFile, isImageFile, isJavascriptFile, isVideoFile } from './util/fileExtensions';
 import { renderVarsInObject, setLoadedFileMimeTypes } from './util/index';
 import invariant from './util/invariant';
+import { isValidJson } from './util/json';
 import { filterFiniteScores } from './util/numeric';
-import { extractVariablesFromTemplate, getNunjucksEngine } from './util/templates';
+import {
+  extractVariablesFromTemplate,
+  getNunjucksEngine,
+  templateReferencesVariable,
+} from './util/templates';
 import { transform } from './util/transform';
 import { loadYaml } from './util/yamlLoad';
 
@@ -236,6 +241,22 @@ function collectRawSpans(value: string): Array<[number, number]> {
     spans.push([spanStart, lastTokenEnd]);
   }
   return spans;
+}
+
+// Only the explicit escape forms need a separate value render on paths that
+// historically supplied variables as data. A plain {{...}} in a CSV or file
+// value is not, by itself, an opt-in to evaluate that value as template source.
+function hasProtectedLiteralSyntax(value: string): boolean {
+  if (collectRawSpans(value).length > 0) {
+    return true;
+  }
+  const depths = computeNestingDepths(value);
+  for (const match of value.matchAll(PATH_PLACEHOLDER_REGEX)) {
+    if (depths[match.index] > 0) {
+      return true;
+    }
+  }
+  return false;
 }
 
 // Utility: Detect partial/unclosed Nunjucks tags and wrap in {% raw %} if needed
@@ -621,12 +642,13 @@ export async function renderPrompt(
   // Resolve variable mappings
   const varsResolvedFromSkipped = new Set<string>();
   resolveVariables(vars, skipRenderVars, varsResolvedFromSkipped);
-  // Render prompt
-  // Vars values can be template strings, so render them first. Every path
-  // below consumes the same pre-rendered values: a {% raw %} block inside a
-  // value comes out as literal text whether the prompt is plain, JSON,
-  // rendered with PROMPTFOO_DISABLE_JSON_AUTOESCAPE, or fetched from a
-  // third-party integration that returns before the local render.
+  // The plain-text fallback already rendered every value before this pass was
+  // hoisted. JSON, no-autoescape, and integration paths supplied values as data,
+  // so they only pre-render the explicit literal escapes handled above.
+  const isIntegrationPrompt = /^(portkey|langfuse|helicone):\/\//.test(prompt.raw);
+  const jsonAutoescapeDisabled = getEnvBool('PROMPTFOO_DISABLE_JSON_AUTOESCAPE');
+  const renderAllVarTemplates =
+    !isIntegrationPrompt && !jsonAutoescapeDisabled && !isValidJson(basePrompt);
   // Determine which vars the prompt actually references so render failures
   // on unused values can be suppressed without hiding errors on used ones.
   const promptReferencedVars = new Set(extractVariablesFromTemplate(prompt.raw));
@@ -636,6 +658,13 @@ export async function renderPrompt(
         typeof value !== 'string' ||
         skipRenderVars?.includes(key) ||
         varsResolvedFromSkipped.has(key)
+      ) {
+        return [key, value];
+      }
+
+      if (
+        !renderAllVarTemplates &&
+        (!hasProtectedLiteralSyntax(value) || templateReferencesVariable(value, 'env'))
       ) {
         return [key, value];
       }
@@ -737,7 +766,7 @@ export async function renderPrompt(
     return heliconeResult;
   }
   try {
-    if (getEnvBool('PROMPTFOO_DISABLE_JSON_AUTOESCAPE')) {
+    if (jsonAutoescapeDisabled) {
       // Pre-process: auto-wrap in {% raw %} if partial Nunjucks tags detected
       basePrompt = autoWrapRawIfPartialNunjucks(basePrompt);
       return nunjucks.renderString(basePrompt, renderedVars);

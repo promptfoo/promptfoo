@@ -957,6 +957,115 @@ describe('evaluatorHelpers', () => {
       expect(renderedPrompt).toBe(getNunjucksEngine().renderString(template, { x: 'XVAL' }));
     });
 
+    it('should keep file-backed runtime values as data in JSON prompts', async () => {
+      const restoreEnv = mockProcessEnv({ TEST_ENV_VAR: 'runtime-value-sentinel' });
+      try {
+        vi.spyOn(fs, 'readFileSync').mockReturnValueOnce('{{env.TEST_ENV_VAR}}');
+        const renderedPrompt = await renderPrompt(
+          toPrompt('{"text": "{{payload}}"}'),
+          { payload: 'file://runtime-value.txt' },
+          {},
+        );
+
+        expect(renderedPrompt).toBe(JSON.stringify({ text: '{{env.TEST_ENV_VAR}}' }, null, 2));
+        expect(renderedPrompt).not.toContain('runtime-value-sentinel');
+      } finally {
+        restoreEnv();
+      }
+    });
+
+    it('should keep runtime values as data when JSON autoescape is disabled', async () => {
+      const restoreEnv = mockProcessEnv({
+        PROMPTFOO_DISABLE_JSON_AUTOESCAPE: 'true',
+        TEST_ENV_VAR: 'runtime-value-sentinel',
+      });
+      try {
+        const renderedPrompt = await renderPrompt(
+          toPrompt('{{payload}}'),
+          { payload: '{{env.TEST_ENV_VAR}}' },
+          {},
+        );
+
+        expect(renderedPrompt).toBe('{{env.TEST_ENV_VAR}}');
+      } finally {
+        restoreEnv();
+      }
+    });
+
+    it('should not evaluate an env reference just because a value also has protected syntax', async () => {
+      const restoreEnv = mockProcessEnv({ TEST_ENV_VAR: 'runtime-value-sentinel' });
+      try {
+        const renderedPrompt = await renderPrompt(
+          toPrompt('{"text": "{{payload}}"}'),
+          { payload: '{% raw %}{{x}}{% endraw %} {{env.TEST_ENV_VAR}}' },
+          {},
+        );
+
+        expect(renderedPrompt).toContain('{{env.TEST_ENV_VAR}}');
+        expect(renderedPrompt).not.toContain('runtime-value-sentinel');
+      } finally {
+        restoreEnv();
+      }
+    });
+
+    it('should still render quoted environment placeholders as literals in JSON prompts', async () => {
+      const restoreEnv = mockProcessEnv({ TEST_ENV_VAR: 'runtime-value-sentinel' });
+      try {
+        const renderedPrompt = await renderPrompt(
+          toPrompt('{"text": "{{payload}}"}'),
+          { payload: "{{ '{{env.TEST_ENV_VAR}}' }}" },
+          {},
+        );
+
+        expect(renderedPrompt).toBe(JSON.stringify({ text: '{{env.TEST_ENV_VAR}}' }, null, 2));
+      } finally {
+        restoreEnv();
+      }
+    });
+
+    it('should pass runtime values to third-party integrations without evaluating them', async () => {
+      const restoreEnv = mockProcessEnv({ TEST_ENV_VAR: 'runtime-value-sentinel' });
+      try {
+        vi.mocked(getPortkeyPrompt).mockResolvedValue({
+          model: 'gpt-4o',
+          n: 1,
+          top_p: 1,
+          max_tokens: 128,
+          temperature: 0.7,
+          presence_penalty: 0,
+          frequency_penalty: 0,
+          messages: [{ role: 'user', content: 'hi' }],
+        });
+        vi.mocked(getLangfusePrompt).mockResolvedValue('langfuse result');
+        vi.mocked(getHeliconePrompt).mockResolvedValue('helicone result');
+
+        const vars = () => ({ payload: '{{env.TEST_ENV_VAR}}' });
+        await renderPrompt(toPrompt('portkey://my-prompt'), vars(), {});
+        await renderPrompt(toPrompt('langfuse://my-prompt'), vars(), {});
+        await renderPrompt(toPrompt('helicone://my-prompt'), vars(), {});
+
+        expect(getPortkeyPrompt).toHaveBeenCalledWith(
+          'my-prompt',
+          expect.objectContaining({ payload: '{{env.TEST_ENV_VAR}}' }),
+        );
+        expect(getLangfusePrompt).toHaveBeenCalledWith(
+          'my-prompt',
+          expect.objectContaining({ payload: '{{env.TEST_ENV_VAR}}' }),
+          'text',
+          undefined,
+          undefined,
+        );
+        expect(getHeliconePrompt).toHaveBeenCalledWith(
+          'my-prompt',
+          expect.objectContaining({ payload: '{{env.TEST_ENV_VAR}}' }),
+          undefined,
+          undefined,
+        );
+      } finally {
+        restoreEnv();
+      }
+    });
+
     it('should not fail a JSON prompt over an unreferenced unparseable var', async () => {
       // payload is never referenced by the prompt, so its invalid Nunjucks
       // must not abort the eval; it simply stays unused.
