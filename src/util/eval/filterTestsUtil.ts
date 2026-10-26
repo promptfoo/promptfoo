@@ -1,9 +1,11 @@
+import deepEqual from 'fast-deep-equal';
 import logger from '../../logger';
 import Eval from '../../models/eval';
 import { deduplicateTestCases, extractRuntimeVars, filterRuntimeVars } from '../../util/comparison';
 import { readOutput, resultIsForTestCase } from '../../util/index';
+import { providerToIdentifier } from '../provider';
 
-import type { EvaluateResult, TestCase, TestSuite } from '../../types/index';
+import type { EvaluateResult, Scenario, TestCase, TestSuite } from '../../types/index';
 
 type Tests = NonNullable<TestSuite['tests']>;
 
@@ -16,6 +18,30 @@ type TestFilterFn = (test: TestCase) => boolean;
 export interface ResultMatchContext {
   includesResult: (result: EvaluateResult) => boolean;
   matchesTest: (result: EvaluateResult, test: TestCase) => boolean;
+  resultLoadCache?: Map<string, Promise<EvaluateResult[] | undefined>>;
+}
+
+async function loadStoredResults(pathOrId: string): Promise<EvaluateResult[] | undefined> {
+  try {
+    if (pathOrId.endsWith('.json')) {
+      const output = await readOutput(pathOrId);
+      return output.results.results;
+    }
+
+    const eval_ = await Eval.findById(pathOrId);
+    if (!eval_) {
+      logger.warn(`[filterTestsByResults] Evaluation not found: ${pathOrId}`);
+      return undefined;
+    }
+    const summary = await eval_.toEvaluateSummary();
+    if ('results' in summary) {
+      return summary.results;
+    }
+    logger.debug('[filterTestsByResults] No results in evaluation summary');
+  } catch (error) {
+    logger.warn(`[filterTestsByResults] Error loading results: ${error}`);
+  }
+  return undefined;
 }
 
 /**
@@ -59,37 +85,24 @@ export async function filterTestsByResults(
 
   logger.debug(`[filterTestsByResults] Loading results from: ${pathOrId}`);
 
-  let results: { results: EvaluateResult[] };
-  try {
-    if (pathOrId.endsWith('.json')) {
-      const output = await readOutput(pathOrId);
-      results = output.results;
-    } else {
-      const eval_ = await Eval.findById(pathOrId);
-      if (!eval_) {
-        logger.warn(`[filterTestsByResults] Evaluation not found: ${pathOrId}`);
-        return [];
-      }
-      const summary = await eval_.toEvaluateSummary();
-      if ('results' in summary) {
-        results = { results: summary.results };
-      } else {
-        logger.debug('[filterTestsByResults] No results in evaluation summary');
-        return [];
-      }
-    }
-  } catch (error) {
-    logger.warn(`[filterTestsByResults] Error loading results: ${error}`);
+  const cache = resultMatchContext?.resultLoadCache;
+  let resultsPromise = cache?.get(pathOrId);
+  if (!resultsPromise) {
+    resultsPromise = loadStoredResults(pathOrId);
+    cache?.set(pathOrId, resultsPromise);
+  }
+  const results = await resultsPromise;
+  if (!results) {
     return [];
   }
 
-  const filteredResults = results.results.filter(
+  const filteredResults = results.filter(
     (result) =>
       filterFn(result) && (!resultMatchContext || resultMatchContext.includesResult(result)),
   );
   const matchesTest = resultMatchContext?.matchesTest ?? resultIsForTestCase;
   logger.debug(
-    `[filterTestsByResults] Found ${filteredResults.length} matching results out of ${results.results.length} total`,
+    `[filterTestsByResults] Found ${filteredResults.length} matching results out of ${results.length} total`,
   );
 
   if (filteredResults.length === 0) {
@@ -265,4 +278,194 @@ export async function filterTestsByResults(
   return resultMatchContext
     ? [...matchedTests, ...extractedTests]
     : deduplicateTestCases([...matchedTests, ...extractedTests]);
+}
+
+type Variant = Scenario['config'][number];
+
+function scenarioDefaultTest(suite: TestSuite): TestCase | undefined {
+  return typeof suite.defaultTest === 'object' ? suite.defaultTest : undefined;
+}
+
+function declaredScenarioMetadata(suite: TestSuite, variant: Variant, test: TestCase) {
+  return { ...scenarioDefaultTest(suite)?.metadata, ...variant.metadata, ...test.metadata };
+}
+
+function effectiveScenarioTest(suite: TestSuite, variant: Variant, test: TestCase): TestCase {
+  const defaults = scenarioDefaultTest(suite);
+  // Match the evaluator's default -> scenario config -> test precedence for compared fields.
+  return {
+    ...(defaults || {}),
+    ...variant,
+    ...test,
+    vars: { ...defaults?.vars, ...variant.vars, ...test.vars },
+    metadata: declaredScenarioMetadata(suite, variant, test),
+  };
+}
+
+function matchesScenarioCandidate(
+  result: EvaluateResult,
+  effective: TestCase,
+  metadata: TestCase['metadata'],
+  metadataKeys: string[],
+): boolean {
+  const resultMetadata = result.testCase?.metadata;
+  return (
+    resultIsForTestCase(result, effective) &&
+    metadataKeys.every((key) => deepEqual(resultMetadata?.[key], metadata?.[key]))
+  );
+}
+
+export function createScenarioResultClassifier(suite: TestSuite, scenario: Scenario) {
+  const defaults = scenarioDefaultTest(suite);
+  const variantMetadataKeys = [
+    ...new Set([
+      ...Object.keys(defaults?.metadata ?? {}),
+      ...scenario.config.flatMap((variant) => Object.keys(variant.metadata ?? {})),
+    ]),
+  ];
+  const metadataKeysForTest = (test: TestCase) => [
+    ...new Set([...variantMetadataKeys, ...Object.keys(test.metadata ?? {})]),
+  ];
+  const candidates = scenario.config.map((variant) =>
+    (scenario.tests ?? []).map((test) => ({
+      effective: effectiveScenarioTest(suite, variant, test),
+      metadata: declaredScenarioMetadata(suite, variant, test),
+      metadataKeys: metadataKeysForTest(test),
+    })),
+  );
+  const signatureVarKeys = [
+    ...new Set(scenario.config.flatMap((variant) => Object.keys(variant.vars ?? {}))),
+  ];
+  const signatureMetadataKeys = [
+    ...new Set(scenario.config.flatMap((variant) => Object.keys(variant.metadata ?? {}))),
+  ];
+  const signatures = scenario.config.map((variant) => ({
+    vars: { ...defaults?.vars, ...variant.vars },
+    metadata: { ...defaults?.metadata, ...variant.metadata },
+    providerId: providerToIdentifier(variant.provider ?? defaults?.provider),
+  }));
+  const configuredMatch = (result: EvaluateResult, index: number) =>
+    candidates[index].some((candidate) =>
+      matchesScenarioCandidate(
+        result,
+        candidate.effective,
+        candidate.metadata,
+        candidate.metadataKeys,
+      ),
+    );
+  const signatureMatch = (result: EvaluateResult, index: number) => {
+    if (!result.testCase) {
+      return false;
+    }
+    const resultVars = filterRuntimeVars(result.vars) ?? {};
+    const resultProviderId = providerToIdentifier(result.provider);
+    return (
+      (!signatures[index].providerId ||
+        !resultProviderId ||
+        signatures[index].providerId === resultProviderId) &&
+      signatureVarKeys.every((key) => deepEqual(resultVars[key], signatures[index].vars[key])) &&
+      signatureMetadataKeys.every((key) =>
+        deepEqual(result.testCase?.metadata?.[key], signatures[index].metadata[key]),
+      )
+    );
+  };
+
+  return {
+    matchesAny: (result: EvaluateResult) =>
+      scenario.config.some(
+        (_, index) => configuredMatch(result, index) || signatureMatch(result, index),
+      ),
+    forVariant: (index: number): ResultMatchContext => ({
+      includesResult: (result) => {
+        if (configuredMatch(result, index)) {
+          return true;
+        }
+        if (!signatureMatch(result, index)) {
+          return false;
+        }
+        if (scenario.config.some((_, other) => other !== index && configuredMatch(result, other))) {
+          return false;
+        }
+        return !scenario.config.some(
+          (_, other) => other !== index && signatureMatch(result, other),
+        );
+      },
+      matchesTest: (result, test) =>
+        matchesScenarioCandidate(
+          result,
+          effectiveScenarioTest(suite, scenario.config[index], test),
+          declaredScenarioMetadata(suite, scenario.config[index], test),
+          metadataKeysForTest(test),
+        ),
+    }),
+  };
+}
+
+export function topLevelResultMatchContext(suite: TestSuite): ResultMatchContext {
+  if (!suite.tests?.length) {
+    return { includesResult: () => false, matchesTest: () => false };
+  }
+  const topLevelVariant: Variant = {};
+  const topLevelCandidates = (suite.tests ?? []).map((test) => {
+    const metadata = declaredScenarioMetadata(suite, topLevelVariant, test);
+    return {
+      effective: effectiveScenarioTest(suite, topLevelVariant, test),
+      metadata,
+      metadataKeys: Object.keys(metadata),
+    };
+  });
+  const scenarioClassifiers = (suite.scenarios ?? []).map((scenario) =>
+    createScenarioResultClassifier(suite, scenario),
+  );
+  const explicitScenarioIds = new Set(
+    (suite.scenarios ?? []).flatMap((scenario) =>
+      scenario.config.flatMap((variant) =>
+        (scenario.tests ?? []).map(
+          (test) => declaredScenarioMetadata(suite, variant, test).conversationId,
+        ),
+      ),
+    ),
+  );
+  return {
+    includesResult: (result) => {
+      const topLevelMatch = topLevelCandidates.some((candidate) =>
+        matchesScenarioCandidate(
+          result,
+          candidate.effective,
+          candidate.metadata,
+          candidate.metadataKeys,
+        ),
+      );
+      const scenarioMatch = scenarioClassifiers.some((classifier) => classifier.matchesAny(result));
+      const conversationId = result.testCase?.metadata?.conversationId;
+      const generatedScenarioId =
+        typeof conversationId === 'string' && /^__scenario_\d+__$/.test(conversationId);
+      const explicitScenarioId = explicitScenarioIds.has(conversationId);
+      if (
+        (generatedScenarioId || (conversationId !== undefined && explicitScenarioId)) &&
+        !topLevelCandidates.some(
+          (candidate) =>
+            candidate.metadata.conversationId !== undefined &&
+            matchesScenarioCandidate(
+              result,
+              candidate.effective,
+              candidate.metadata,
+              candidate.metadataKeys,
+            ),
+        )
+      ) {
+        return false;
+      }
+      return !scenarioMatch || Boolean(topLevelMatch) || conversationId === undefined;
+    },
+    matchesTest: (result, test) => {
+      const metadata = declaredScenarioMetadata(suite, topLevelVariant, test);
+      return matchesScenarioCandidate(
+        result,
+        effectiveScenarioTest(suite, topLevelVariant, test),
+        metadata,
+        Object.keys(metadata),
+      );
+    },
+  };
 }

@@ -79,7 +79,6 @@ import {
   TestSuiteConfigSchema,
 } from './types/index';
 import { type ApiProvider, isApiProvider } from './types/providers';
-import { mergeScenarioTest } from './util/eval/mergeScenarioTest';
 import { createDefaultPromptMetrics, updatePromptResultCounts } from './util/eval/promptMetrics';
 import { isAbortError, isNonTransientHttpStatus } from './util/fetch/errors';
 import { isCallerAbortError } from './util/fetch/requestSignal';
@@ -2905,6 +2904,39 @@ function buildScenarioTests(
 ): AtomicTestCase[] {
   const scenarioTests = scenario.tests || [{}];
   return scenarioTests.map((test) => mergeScenarioTest(testSuite, data, test, scenarioIndex));
+}
+
+function mergeScenarioTest(
+  testSuite: TestSuite,
+  data: NonNullable<TestSuite['scenarios']>[number]['config'][number],
+  test: NonNullable<TestSuite['scenarios']>[number]['tests'][number],
+  scenarioIndex: number,
+): AtomicTestCase {
+  const defaultTest = getDefaultTest(testSuite);
+  const mergedMetadata = {
+    ...(defaultTest?.metadata || {}),
+    ...data.metadata,
+    ...test.metadata,
+  };
+  mergedMetadata.conversationId ??= `__scenario_${scenarioIndex}__`;
+
+  return {
+    ...(defaultTest || {}),
+    ...data,
+    ...test,
+    vars: {
+      ...(defaultTest?.vars || {}),
+      ...data.vars,
+      ...test.vars,
+    },
+    options: {
+      ...(defaultTest?.options || {}),
+      ...data.options,
+      ...test.options,
+    },
+    assert: [...(data.assert || []), ...(test.assert || [])],
+    metadata: mergedMetadata,
+  } as AtomicTestCase;
 }
 
 async function prepareTestVariables(

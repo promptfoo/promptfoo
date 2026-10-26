@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   createScenarioResultClassifier,
   topLevelResultMatchContext,
-} from '../../../src/util/eval/scenarioResultMatching';
+} from '../../../src/util/eval/filterTestsUtil';
 
 import type { EvaluateResult, Scenario, TestSuite } from '../../../src/types/index';
 

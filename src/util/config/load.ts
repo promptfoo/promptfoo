@@ -21,6 +21,7 @@ import {
   type CommandLineOptions,
   CommandLineOptionsSchema,
   EvaluateOptionsSchema,
+  type EvaluateResult,
   type Prompt,
   type ProviderOptions,
   ProvidersSchema,
@@ -43,7 +44,7 @@ import { PromptSchema } from '../../validators/prompts';
 import { filterPrompts } from '../eval/filterPrompts';
 import { filterProviderConfigs, getProviderIdAndLabel } from '../eval/filterProviders';
 import { filterTests } from '../eval/filterTests';
-import { createScenarioResultClassifier } from '../eval/scenarioResultMatching';
+import { createScenarioResultClassifier } from '../eval/filterTestsUtil';
 import { promptfooCommand } from '../promptfooCommand';
 import { preserveTracingCredentialReferences } from '../sanitizer';
 import {
@@ -1255,6 +1256,7 @@ async function resolveLoadedConfig(
     const filterMetadataExact =
       cmdObj.filterMetadataExact ?? commandLineOptions?.filterMetadataExact;
     const resolvedScenarios: Scenario[] = [];
+    const resultLoadCache = new Map<string, Promise<EvaluateResult[] | undefined>>();
     for (const [scenarioIndex, scenario] of parsedScenarios.entries()) {
       if (typeof scenario === 'object' && scenario.tests && typeof scenario.tests === 'string') {
         scenario.tests = await maybeLoadFromExternalFile(scenario.tests);
@@ -1307,12 +1309,13 @@ async function resolveLoadedConfig(
         continue;
       }
 
-      const resultClassifier = cmdObj.filterFailing
-        ? createScenarioResultClassifier(
-            { providers: parsedProviders, prompts: parsedPrompts, defaultTest },
-            scenario,
-          )
-        : undefined;
+      const resultClassifier =
+        cmdObj.filterFailing || cmdObj.filterFailingOnly || cmdObj.filterErrorsOnly
+          ? createScenarioResultClassifier(
+              { providers: parsedProviders, prompts: parsedPrompts, defaultTest },
+              scenario,
+            )
+          : undefined;
       const testsByConfig = await Promise.all(
         scenario.config.map(async (scenarioConfig, variantIndex) => ({
           config: scenarioConfig,
@@ -1325,6 +1328,8 @@ async function resolveLoadedConfig(
             {
               firstN: cmdObj.filterFirstN,
               failing: cmdObj.filterFailing,
+              failingOnly: cmdObj.filterFailingOnly,
+              errorsOnly: cmdObj.filterErrorsOnly,
               metadata: cmdObj.filterMetadata,
               metadataExact: filterMetadataExact,
               inheritedMetadata: {
@@ -1337,7 +1342,10 @@ async function resolveLoadedConfig(
                 filterSampleSeed === undefined
                   ? undefined
                   : deriveScenarioSampleSeed(filterSampleSeed, scenarioIndex),
-              resultMatchContext: resultClassifier?.forVariant(variantIndex),
+              resultMatchContext: resultClassifier && {
+                ...resultClassifier.forVariant(variantIndex),
+                resultLoadCache,
+              },
             },
           ),
         })),

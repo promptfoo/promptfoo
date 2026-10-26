@@ -46,8 +46,8 @@ import {
   getProviderFilterRegexError,
 } from '../util/eval/filterProviders';
 import { filterTests } from '../util/eval/filterTests';
+import { topLevelResultMatchContext } from '../util/eval/filterTestsUtil';
 import { warnIfRedteamConfigHasNoTests } from '../util/eval/redteamWarning';
-import { topLevelResultMatchContext } from '../util/eval/scenarioResultMatching';
 import { generateEvalSummary } from '../util/eval/summary';
 import { maybeLoadFromExternalFile } from '../util/file';
 import {
