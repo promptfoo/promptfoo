@@ -148,6 +148,95 @@ describe('local text classification', () => {
     expect(dispose).toHaveBeenCalledTimes(1);
   });
 
+  it('returns each configured revision rather than the first cached model', async () => {
+    pipeline.mockImplementation(async (_task, _model, options) =>
+      Object.assign(
+        vi
+          .fn()
+          .mockResolvedValue([
+            { label: 'POSITIVE', score: options.revision === 'first' ? 0.8 : 0.3 },
+          ]),
+        { dispose: vi.fn() },
+      ),
+    );
+    const first = new TransformersTextClassificationProvider('fixture', {
+      config: { revision: 'first' },
+    });
+    const second = new TransformersTextClassificationProvider('fixture', {
+      config: { revision: 'second' },
+    });
+    expect(await first.callClassificationApi('text')).toEqual({
+      classification: { POSITIVE: 0.8 },
+    });
+    expect(await second.callClassificationApi('text')).toEqual({
+      classification: { POSITIVE: 0.3 },
+    });
+  });
+
+  it.each([
+    { cacheDir: '/second-cache' },
+    { localFilesOnly: true },
+    { sessionOptions: { intraOpNumThreads: 2 } },
+  ])('isolates model loading options: %j', async (config) => {
+    const first = new TransformersTextClassificationProvider('fixture');
+    const second = new TransformersTextClassificationProvider('fixture', { config });
+    await first.callClassificationApi('text');
+    await second.callClassificationApi('text');
+    expect(pipeline).toHaveBeenCalledTimes(2);
+  });
+
+  it('shares equivalent nested session options regardless of object key order', async () => {
+    const first = new TransformersTextClassificationProvider('fixture', {
+      config: {
+        sessionOptions: { intraOpNumThreads: 2, freeDimensionOverrides: { batch: 1, sequence: 8 } },
+      },
+    });
+    const second = new TransformersTextClassificationProvider('fixture', {
+      config: {
+        sessionOptions: { freeDimensionOverrides: { sequence: 8, batch: 1 }, intraOpNumThreads: 2 },
+      },
+    });
+    await first.callClassificationApi('text');
+    await second.callClassificationApi('text');
+    expect(pipeline).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps execution-provider priority in the cache identity', async () => {
+    const first = new TransformersTextClassificationProvider('fixture', {
+      config: { sessionOptions: { executionProviders: ['cpu', 'webgpu'] } },
+    });
+    const second = new TransformersTextClassificationProvider('fixture', {
+      config: { sessionOptions: { executionProviders: ['webgpu', 'cpu'] } },
+    });
+    await first.callClassificationApi('text');
+    await second.callClassificationApi('text');
+    expect(pipeline).toHaveBeenCalledTimes(2);
+  });
+
+  it('distinguishes binary external weights and shares equal byte content', async () => {
+    const options = (value: number) => ({
+      sessionOptions: { externalData: [{ path: 'weights.bin', data: new Uint8Array([value]) }] },
+    });
+    for (const value of [1, 1, 2]) {
+      await new TransformersTextClassificationProvider('fixture', {
+        config: options(value),
+      }).callClassificationApi('text');
+    }
+    expect(pipeline).toHaveBeenCalledTimes(2);
+  });
+
+  it('keeps opaque device references distinct while sharing the same device', async () => {
+    class Device {}
+    const first = new Device();
+    const second = new Device();
+    for (const device of [first, first, second]) {
+      await new TransformersTextClassificationProvider('fixture', {
+        config: { sessionOptions: { executionProviders: [{ name: 'webgpu', device }] } },
+      }).callClassificationApi('text');
+    }
+    expect(pipeline).toHaveBeenCalledTimes(2);
+  });
+
   it('can be reused after cleanup and retries failed initialization', async () => {
     pipeline.mockRejectedValueOnce(new Error('fixture model unavailable'));
     const provider = new TransformersTextClassificationProvider('fixture');

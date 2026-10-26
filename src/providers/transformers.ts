@@ -1,4 +1,7 @@
+import { serialize } from 'node:v8';
+
 import logger from '../logger';
+import { sha256 } from '../util/createHash';
 import { providerRegistry } from './providerRegistry';
 import { loadTransformers } from './transformersAvailability';
 
@@ -160,6 +163,50 @@ interface PipelineEntry {
 
 // Providers share pipelines until the last owner releases them.
 const pipelineCache = new Map<string, PipelineEntry>();
+const opaqueOptionIds = new WeakMap<object, number>();
+let nextOpaqueOptionId = 0;
+
+function opaqueOptionIdentity(value: object): Map<string, number> {
+  let id = opaqueOptionIds.get(value);
+  if (id === undefined) {
+    id = nextOpaqueOptionId++;
+    opaqueOptionIds.set(value, id);
+  }
+  // A Map cannot collide with a user-supplied plain configuration object.
+  return new Map([['reference', id]]);
+}
+
+function canonicalizePipelineOption(value: unknown, ancestors = new WeakSet<object>()): unknown {
+  if (typeof value === 'function') {
+    return opaqueOptionIdentity(value);
+  }
+  if (
+    value === null ||
+    typeof value !== 'object' ||
+    value instanceof ArrayBuffer ||
+    ArrayBuffer.isView(value)
+  ) {
+    return value;
+  }
+  const prototype = Object.getPrototypeOf(value);
+  if (
+    (!Array.isArray(value) && prototype !== Object.prototype && prototype !== null) ||
+    ancestors.has(value)
+  ) {
+    // Native GPUDevice/MLContext instances cannot be serialized by value.
+    return opaqueOptionIdentity(value);
+  }
+  ancestors.add(value);
+  const canonical = Array.isArray(value)
+    ? value.map((item) => canonicalizePipelineOption(item, ancestors))
+    : Object.fromEntries(
+        Object.entries(value)
+          .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+          .map(([key, item]) => [key, canonicalizePipelineOption(item, ancestors)]),
+      );
+  ancestors.delete(value);
+  return canonical;
+}
 
 function getPipelineCacheKey(
   task: string,
@@ -168,7 +215,13 @@ function getPipelineCacheKey(
 ): string {
   const device = options.device || 'auto';
   const dtype = options.dtype || 'auto';
-  return `${task}:${model}:${device}:${dtype}`;
+  const constructionOptions = canonicalizePipelineOption({
+    cacheDir: options.cacheDir || null,
+    localFilesOnly: options.localFilesOnly || false,
+    revision: options.revision || 'main',
+    sessionOptions: options.sessionOptions || {},
+  });
+  return `${task}:${model}:${device}:${dtype}:${sha256(serialize(constructionOptions))}`;
 }
 
 async function initializePipeline(
