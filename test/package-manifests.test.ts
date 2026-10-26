@@ -199,6 +199,7 @@ function validateDockerInstallCommands(
   dockerfile: string,
   buildManifests: Record<string, PackageManifest> = {},
 ): void {
+  expect(dockerfile.split('\n', 1)[0].trim()).toBe('# syntax=docker/dockerfile:1');
   for (const [, escape] of dockerfile.matchAll(/^[ \t]*#[ \t]*escape[ \t]*=[ \t]*(.*)$/gim)) {
     expect(escape.trim()).toBe('\\');
   }
@@ -813,6 +814,24 @@ describe('package manifests', () => {
 
     expect(() => validateDockerInstallCommands(dockerfile, manifests)).not.toThrow();
   });
+
+  it.each(['# syntax=example.invalid/custom-frontend:1', ''])(
+    'requires the reviewed Docker frontend instead of %j',
+    (directive) => {
+      const dockerfile = fs.readFileSync(path.join(process.cwd(), 'Dockerfile'), 'utf8');
+      const manifests = {
+        'package.json': readPackageJson<PackageManifest>('package.json'),
+        'src/app/package.json': readPackageJson<PackageManifest>('src/app/package.json'),
+      };
+      expect(() => validateDockerInstallCommands(dockerfile, manifests)).not.toThrow();
+      expect(() =>
+        validateDockerInstallCommands(
+          dockerfile.replace(/^#[^\r\n]*\r?\n/, `${directive}\n`),
+          manifests,
+        ),
+      ).toThrow();
+    },
+  );
 
   it.each([
     'RUN /usr/local/bin/n[p]m ci',
