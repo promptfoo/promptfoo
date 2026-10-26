@@ -140,7 +140,7 @@ function checkQuantityRules(
     );
   })();
   const MOTION_RE =
-    /(?:\b(?:travels?|travelled|traveled|moves?|moved|speeds?|races?|flies|flew|propagat(?:es|ed|ing)|travelling|traveling|velocit(?:y|ies)|faster|fastest|slower|reach(?:es|ed)?\s+\d)\b)/i;
+    /(?:\b(?:travels?|travelled|traveled|moves?|moved|speeds?|races?|flies|flew|propagat\w*|travelling|traveling|velocit(?:y|ies)|accelerat\w*|launch\w*|zoom\w*|dash\w*|sprint\w*|rocket\w*|soars?|climbs?|hurtl\w*|speed\w*|faster|fastest|slower|reach(?:es|ed)?\s+\d)\b)/i;
   const isAmbiguousC =
     unit === 'c' &&
     !MOTION_RE.test(cOwnSpan) &&
@@ -240,7 +240,7 @@ function checkQuantityRules(
       return m2 ? m2.index : fwd.length;
     })();
     const window = normalized.slice(Math.max(0, index - 220) + sentStart, index + sentEnd);
-    if (!/probabilit|confiden|chance|likelihood|certainty|belief|odds/i.test(window)) return;
+    if (!/probabilit|confiden(?:t|ce)\b|chance|likelihood|certainty|belief|odds/i.test(window)) return;
     violations.push({
       rule: 'percentage-range',
       severity: 'FAIL',
@@ -257,7 +257,7 @@ const num = '-?(?:\\d[\\d,]*(?:\\.\\d+)?|\\.\\d+)(?:\\s*[eE][+-]?\\d+)?';
 // recognized; a trailing compound continuation or squared marker rejects
 // the speed interpretation so the quantity stays exempt from Rule 1.
 const unitAlt =
-  '°C|degC|°F|K\\b|km\\/s(?!\\s*[/^²³]|\\s*\\d)|m\\/s(?!\\s*[/^²³]|\\s*\\d)' +
+  '°C|degC|°F|K\\b|km\\/s(?!\\s*[/^²³]|\\s*\\d|\\s*per\\s+s)|m\\/s(?!\\s*[/^²³]|\\s*\\d|\\s*per\\s+s)' +
   '|kilo(?:meter|metre)s?\\s*(?:\\/|per\\s+)s(?:ec|econds?)?\\b(?!\\s*(?:squared|²|\\^?2|\\/\\s*s|per\\s+s))' +
   '|met(?:er|re)s?\\s*(?:\\/|per\\s+)s(?:ec|econds?)?\\b(?!\\s*(?:squared|²|\\^?2|\\/\\s*s|per\\s+s))' +
   '|c\\b|%|kg\\b(?!\\s*[·*/⋅])|g\\b|km\\b|m\\b|J\\b|kJ\\b|MJ\\b|Wh\\b|kWh\\b|MeV\\b|GeV\\b|eV\\b|N\\b|Pa\\b|kPa\\b|MPa\\b|atm\\b|mol\\/L\\b|mg\\/mL\\b';
@@ -266,7 +266,11 @@ function phmLiteCheck(output) {
   const violations = [];
   let normalized = String(output ?? '')
     .replace(/\u2212/g, '-')
-    .replace(/\uFF0D/g, '-');
+    .replace(/\uFF0D/g, '-')
+    // Abbreviation periods are not sentence boundaries ("e.g.", "i.e.", ...).
+    // Mask them 1:1 BEFORE any segmentation so every downstream sentence
+    // scanner (bare-c span, mass span, share split) ignores them.
+    .replace(/(\be\.g|\bi\.e|\betc|\bvs|\bcf|\bDr|\bMr|\bMrs|\bMs|\bProf|\bapprox)\./g, '$1\u0001');
   // Shared-unit range propagation
   const rangeProp = new RegExp(
     `(${num})\\s+(?:to|\\u2013|\\u2014)\\s+(${num})\\s*(${unitAlt})`,
@@ -376,7 +380,7 @@ function serializeForScan(v) {
       typeof node.value === 'number' &&
       typeof node.unit === 'string'
     ) {
-      parts.push(`${node.value} ${node.unit}`);
+      parts.push(keyHint ? `${keyHint}: ${node.value} ${node.unit}` : `${node.value} ${node.unit}`);
       for (const k of keys) if (k !== 'value' && k !== 'unit') walk(node[k], k);
       return;
     }
@@ -415,4 +419,4 @@ export default async function phmLiteAssertion(output) {
 }
 
 // Expose internals so the example's own unit tests can import them.
-export { C_LIGHT, extractQuantities, G_EARTH, phmLiteCheck };
+export { C_LIGHT, extractQuantities, G_EARTH, phmLiteCheck };   // serializeForScan 内部实现（phmLiteAssertion 入口覆盖）
