@@ -1943,6 +1943,7 @@ describe('writeOutput', () => {
     expect(templateContent).toContain('data-detail-drawer');
     expect(templateContent).toContain('data-detail-template');
     expect(templateContent).toContain('appendVariableDetails(trigger);');
+    expect(templateContent).toContain("'a[href], summary, button:not([disabled])");
     expect(templateContent).not.toContain('{% for variable in cell.variables %}');
   });
 
