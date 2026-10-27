@@ -896,9 +896,7 @@
           <span class="detail-section-title">Prompt</span>
           <p class="detail-copy">{{ cell.prompt | escape }}</p>
         </section>
-        {% endif %}
-
-        {% if cell.error and cell.error != cell.reason %}
+        {% endif %} {% if cell.error and cell.error != cell.reason %}
         <section class="detail-section">
           <span class="detail-section-title">Error</span>
           <p class="detail-copy detail-reason">{{ cell.error | escape }}</p>
