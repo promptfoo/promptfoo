@@ -773,7 +773,7 @@
                       >
                       {% endfor %}
                     </div>
-                    {% if cell.error %}
+                    {% if cell.error and cell.error != cell.reason %}
                     <div class="output-section">
                       <span class="output-section-label">Error</span>
                       <p class="output-reason">{{ cell.error | escape }}</p>
@@ -898,7 +898,7 @@
         </section>
         {% endif %}
 
-        {% if cell.error %}
+        {% if cell.error and cell.error != cell.reason %}
         <section class="detail-section">
           <span class="detail-section-title">Error</span>
           <p class="detail-copy detail-reason">{{ cell.error | escape }}</p>

@@ -2018,6 +2018,7 @@ describe('writeOutput', () => {
       html.indexOf('<div class="output-text">Failing output</div>'),
     );
     expect(html).toContain('<details class="output-section output-collapse">');
+    expect(html).not.toContain('<span class="output-section-label">Error</span>');
     expect(html).not.toContain('<details class="output-section output-collapse" open');
     expect(html).toContain('View detail');
     expect(html).toContain('Result detail - row 1, prompt 1');
