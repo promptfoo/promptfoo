@@ -622,14 +622,14 @@ function synchronizeLegacyTransportHeaders(
 }
 
 function applyGradingResult(row: EvaluateResult, checkResult: GradingResult) {
-  if (!checkResult.pass) {
+  const graderError =
+    checkResult.metadata?.graderError === true ||
+    checkResult.componentResults?.some((result) => result.metadata?.graderError === true);
+  if (!checkResult.pass || graderError) {
     row.error = checkResult.reason;
-    const graderError =
-      checkResult.metadata?.graderError === true ||
-      checkResult.componentResults?.some((result) => result.metadata?.graderError === true);
     row.failureReason = graderError ? ResultFailureReason.ERROR : ResultFailureReason.ASSERT;
   }
-  row.success = checkResult.pass;
+  row.success = checkResult.pass && !graderError;
   row.score = checkResult.score;
   row.namedScores = checkResult.namedScores || {};
 
