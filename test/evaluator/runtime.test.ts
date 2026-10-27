@@ -71,6 +71,249 @@ function createInMemoryEvaluation(overrides: Partial<InMemoryEvaluation> = {}): 
 }
 
 describeEvaluator('evaluator runtime ports', () => {
+  it('saves effective defaults in a prepared plan and does not remerge changed defaults on replay', async () => {
+    const initial = createInMemoryEvaluation();
+    const suite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [toPrompt('Test prompt')],
+      defaultTest: { options: { prefix: 'old-', transformVars: 'return vars' } },
+      tests: [{ vars: { input: 'a' }, metadata: { role: 'keep' } }],
+    };
+    await evaluate(
+      suite,
+      initial,
+      {
+        exactHistoricalSelection: {
+          writeEnabled: true,
+          eligible: async (candidates) => candidates,
+          select: async (candidates) => candidates,
+        },
+      },
+      createInMemoryRuntime(new InMemoryEvaluationStore(initial)),
+    );
+    const plan = initial.runtimeOptions?.exactHistoricalReplay;
+    expect(plan?.cases).toHaveLength(1);
+    expect(plan?.cases[0].test.options).toMatchObject({ prefix: 'old-' });
+    expect(plan?.cases[0].test.options?.transformVars).toBeUndefined();
+
+    const resumed = createInMemoryEvaluation({ runtimeOptions: { exactHistoricalReplay: plan } });
+    await evaluate(
+      {
+        ...suite,
+        defaultTest: { options: { prefix: 'new-', transformVars: 'throw Error("again")' } },
+      },
+      resumed,
+      {},
+      createInMemoryRuntime(new InMemoryEvaluationStore(resumed)),
+    );
+    expect(resumed.results[0].prompt.raw).toBe('old-Test prompt');
+    expect(resumed.results[0].testCase.vars).toEqual({ input: 'a' });
+  });
+
+  it('does not load a newly configured scorer while restoring a prepared case', async () => {
+    const initial = createInMemoryEvaluation();
+    const suite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [toPrompt('Test prompt')],
+      tests: [{ vars: { input: 'a' } }],
+    };
+    await evaluate(
+      suite,
+      initial,
+      {
+        exactHistoricalSelection: {
+          writeEnabled: true,
+          eligible: async (candidates) => candidates,
+          select: async (candidates) => candidates,
+        },
+      },
+      createInMemoryRuntime(new InMemoryEvaluationStore(initial)),
+    );
+
+    const resumed = createInMemoryEvaluation({
+      runtimeOptions: { exactHistoricalReplay: initial.runtimeOptions?.exactHistoricalReplay },
+    });
+    await evaluate(
+      {
+        ...suite,
+        defaultTest: { assertScoringFunction: 'file://./missing-current-scorer.js' },
+      },
+      resumed,
+      {},
+      createInMemoryRuntime(new InMemoryEvaluationStore(resumed)),
+    );
+    expect(resumed.results).toHaveLength(1);
+    expect(resumed.results[0].testCase.assertScoringFunction).toBeUndefined();
+  });
+
+  it('keeps the saved plan unchanged when beforeEach mutates nested test values', async () => {
+    const initial = createInMemoryEvaluation();
+    const suite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [toPrompt('Test prompt')],
+      tests: [{ vars: { input: 'original' }, metadata: { role: 'keep' } }],
+    };
+    await evaluate(
+      suite,
+      initial,
+      {
+        exactHistoricalSelection: {
+          writeEnabled: true,
+          eligible: async (candidates) => candidates,
+          select: async (candidates) => candidates,
+        },
+      },
+      createInMemoryRuntime(new InMemoryEvaluationStore(initial)),
+    );
+    const plan = initial.runtimeOptions?.exactHistoricalReplay;
+    const resumed = createInMemoryEvaluation({ runtimeOptions: { exactHistoricalReplay: plan } });
+    vi.mocked(runExtensionHook).mockImplementation(async (_extensions, hook, context) => {
+      if (hook === 'beforeEach' && 'test' in context) {
+        context.test.vars!.input = 'mutated';
+        context.test.metadata!.role = 'changed';
+      }
+      return context;
+    });
+
+    await evaluate(suite, resumed, {}, createInMemoryRuntime(new InMemoryEvaluationStore(resumed)));
+
+    expect(resumed.results[0].vars.input).toBe('mutated');
+    expect(plan?.cases[0].test.vars).toEqual({ input: 'original' });
+    expect(plan?.cases[0].test.metadata).toEqual({ role: 'keep' });
+  });
+
+  it('rejects malformed prepared plans and prompt generation before provider calls', async () => {
+    const suite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [toPrompt('Test prompt')],
+      tests: [{ vars: { input: 'a' } }],
+    };
+    const malformed = createInMemoryEvaluation({
+      runtimeOptions: { exactHistoricalReplay: { version: 2, cases: [] } as any },
+    });
+    await expect(
+      evaluate(suite, malformed, {}, createInMemoryRuntime(new InMemoryEvaluationStore(malformed))),
+    ).rejects.toThrow('Invalid prepared exact historical replay plan');
+    expect(mockApiProvider.callApi).not.toHaveBeenCalled();
+
+    const fresh = createInMemoryEvaluation();
+    await expect(
+      evaluate(
+        suite,
+        fresh,
+        {
+          generateSuggestions: true,
+          exactHistoricalSelection: {
+            writeEnabled: true,
+            eligible: async (candidates) => candidates,
+            select: async (candidates) => candidates,
+          },
+        },
+        createInMemoryRuntime(new InMemoryEvaluationStore(fresh)),
+      ),
+    ).rejects.toThrow('Prompt suggestions cannot run');
+    expect(generatePrompts).not.toHaveBeenCalled();
+    expect(mockApiProvider.callApi).not.toHaveBeenCalled();
+  });
+
+  it('refuses to save a plan that the persisted strip policy would remove', async () => {
+    const record = new Eval(
+      { env: { PROMPTFOO_STRIP_TEST_VARS: 'true' } },
+      { id: randomUUID(), persisted: false },
+    );
+    const store = new EvalEvaluationStore(record);
+    await expect(store.saveExactHistoricalReplay({ version: 1, cases: [] })).rejects.toThrow(
+      'Could not safely save the prepared exact historical selection',
+    );
+    expect(record.runtimeOptions?.exactHistoricalReplay).toBeUndefined();
+  });
+
+  it('rejects ambiguous current provider identities even when one case would be selected', async () => {
+    const makeTarget = (marker: string): ApiProvider => ({
+      id: () => 'same-target',
+      label: 'same-label',
+      callApi: vi.fn(async () => ({ output: marker })),
+    });
+    const first = makeTarget('first');
+    const second = makeTarget('second');
+    const suite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [toPrompt('Test prompt')],
+      tests: [
+        { vars: { input: 'first' }, provider: first },
+        { vars: { input: 'second' }, provider: second },
+      ],
+    };
+    const evaluation = createInMemoryEvaluation();
+    await expect(
+      evaluate(
+        suite,
+        evaluation,
+        {
+          exactHistoricalSelection: {
+            writeEnabled: true,
+            eligible: async (candidates) => candidates,
+            select: async (candidates) => candidates.slice(0, 1),
+          },
+        },
+        createInMemoryRuntime(new InMemoryEvaluationStore(evaluation)),
+      ),
+    ).rejects.toThrow('distinct providers with the same id and label');
+    expect(first.callApi).not.toHaveBeenCalled();
+    expect(second.callApi).not.toHaveBeenCalled();
+
+    const noWrite = createInMemoryEvaluation();
+    await evaluate(
+      suite,
+      noWrite,
+      {
+        exactHistoricalSelection: {
+          writeEnabled: false,
+          eligible: async (candidates) => candidates,
+          select: async (candidates) => candidates.slice(0, 1),
+        },
+      },
+      createInMemoryRuntime(new InMemoryEvaluationStore(noWrite)),
+    );
+    expect(first.callApi).toHaveBeenCalledTimes(1);
+    expect(second.callApi).not.toHaveBeenCalled();
+  });
+
+  it('applies the global range to the suite after beforeAll adds a scenario', async () => {
+    vi.mocked(runExtensionHook).mockImplementation(async (_extensions, hook, context) => {
+      if (hook === 'beforeAll' && 'suite' in context) {
+        return {
+          ...context,
+          suite: {
+            ...context.suite,
+            scenarios: [{ config: [{}], tests: [{ vars: { input: 'C' } }] }],
+          },
+        };
+      }
+      return context;
+    });
+    const evaluation = createInMemoryEvaluation();
+    await evaluate(
+      {
+        providers: [mockApiProvider],
+        prompts: [toPrompt('{{input}}')],
+        tests: [{ vars: { input: 'A' } }, { vars: { input: 'B' } }],
+        extensions: ['file://./before-all.js'],
+      },
+      evaluation,
+      {
+        filterRange: '1:3',
+        exactHistoricalSelection: {
+          writeEnabled: false,
+          eligible: async (candidates) => candidates,
+          select: async (candidates) => candidates,
+        },
+      },
+      createInMemoryRuntime(new InMemoryEvaluationStore(evaluation)),
+    );
+    expect(evaluation.results.map((result) => result.vars.input)).toEqual(['B', 'C']);
+  });
+
   it('marks a normal row when its target label will be sanitized on persistence', async () => {
     const evaluation = createInMemoryEvaluation();
     const target: ApiProvider = {

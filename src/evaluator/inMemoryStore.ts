@@ -1,6 +1,8 @@
 import type {
   CompletedPrompt,
+  EvalRuntimeOptions,
   EvaluateResult,
+  ExactHistoricalReplayPlan,
   ResultFailureReason,
   UnifiedConfig,
 } from '../types/index';
@@ -16,6 +18,7 @@ export interface InMemoryEvaluation {
   results: EvaluateResult[];
   vars: string[];
   resultPersistenceFailed: boolean;
+  runtimeOptions?: EvalRuntimeOptions;
   finalResults: EvaluateResult[];
   failedResults: EvaluateResult[];
   durationMs?: number;
@@ -69,6 +72,17 @@ export class InMemoryEvaluationStore
 
   get resultPersistenceFailed(): boolean {
     return this.evaluation.resultPersistenceFailed;
+  }
+
+  readExactHistoricalReplay(): unknown {
+    return this.evaluation.runtimeOptions?.exactHistoricalReplay;
+  }
+
+  async saveExactHistoricalReplay(plan: ExactHistoricalReplayPlan): Promise<void> {
+    this.evaluation.runtimeOptions = {
+      ...this.evaluation.runtimeOptions,
+      exactHistoricalReplay: plan,
+    };
   }
 
   async appendResult(result: EvaluateResult): Promise<void> {

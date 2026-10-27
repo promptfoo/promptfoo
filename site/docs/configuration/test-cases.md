@@ -421,6 +421,10 @@ promptfoo eval --filter-metadata category=math --filter-metadata-exact category=
 
 Exact filters use the same comma escaping, OR alternatives, and repeated-flag AND behavior as `--filter-metadata`. They also include metadata inherited from `defaultTest` and scenario configuration unless a test case overrides that key.
 
+When an exact metadata filter is combined with `--filter-failing`, `--filter-failing-only`, or `--filter-errors-only`, promptfoo compares previous results with the current test cases after applying their current `transformVars` once and expanding their variables. For example, if the current transform changes `a` to `a!`, a previous failure for `a!` selects the current `a` test and runs it with `a!`. A changed or random transform result that no longer matches selects no test; promptfoo does not guess the original input. For a saved eval from this combined filter, resume and retry reuse its selected variables and test settings without transforming them again, even if the historical results file is no longer available. Provider configuration still comes from the current config.
+
+The selected cases must be saved safely before provider calls. If active data-stripping or redaction settings prevent that, the eval stops; use `--no-write` to run without saving a resumable eval. Distinct test providers need distinguishable IDs or labels for saved recovery; otherwise the eval stops before provider calls. Prompt suggestion generation cannot run with this filter combination; generate prompts separately and reuse them. Historical-only cases can retain simple declarative assertions, but executable assertions, graders, and provider settings must come from current config test cases.
+
 ### JSON in CSV
 
 Include structured data:

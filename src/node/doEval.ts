@@ -36,6 +36,7 @@ import { loadDefaultConfig } from '../util/config/default';
 import { DEFAULT_CONFIG_EXTENSIONS } from '../util/config/extensions';
 import {
   ConfigResolutionError,
+  deriveScenarioSampleSeed,
   logConfigResolutionError,
   renderConfigEnvTemplates,
   resolveConfigs,
@@ -46,7 +47,10 @@ import {
   getProviderFilterRegexError,
 } from '../util/eval/filterProviders';
 import { filterTests } from '../util/eval/filterTests';
-import { topLevelResultMatchContext } from '../util/eval/filterTestsUtil';
+import {
+  createScenarioResultClassifier,
+  topLevelResultMatchContext,
+} from '../util/eval/filterTestsUtil';
 import { warnIfRedteamConfigHasNoTests } from '../util/eval/redteamWarning';
 import { generateEvalSummary } from '../util/eval/summary';
 import { maybeLoadFromExternalFile } from '../util/file';
@@ -73,11 +77,13 @@ import type {
   EnvOverrides,
   EvalRuntimeOptions,
   Scenario,
+  TestCase,
   TestSuite,
   UnifiedConfig,
 } from '../types/index';
-import type { InternalEvaluateOptions } from '../types/internal';
+import type { InternalEvaluateOptions, PreparedHistoricalCandidate } from '../types/internal';
 import type { FilterOptions } from '../util/eval/filterTests';
+import type { ResultMatchContext, StoredResults } from '../util/eval/filterTestsUtil';
 
 export const EvalCommandSchema = CommandLineOptionsSchema.extend({
   help: z.boolean().optional(),
@@ -93,6 +99,244 @@ export const EvalCommandSchema = CommandLineOptionsSchema.extend({
 }).partial();
 
 export type EvalCommandOptions = z.infer<typeof EvalCommandSchema>;
+
+// Enumerable Symbols survive ordinary beforeAll scenario clones without entering saved JSON.
+const ORIGINAL_SCENARIO_SOURCE_INDEX = Symbol('promptfoo.originalScenarioSourceIndex');
+type ScenarioWithSourceIndex = Scenario & { [ORIGINAL_SCENARIO_SOURCE_INDEX]?: number };
+
+function hasExecutableHistoricalReference(value: unknown): boolean {
+  if (typeof value === 'function') {
+    return true;
+  }
+  if (typeof value === 'string') {
+    return value.startsWith('file://') || value.startsWith('package:');
+  }
+  if (Array.isArray(value)) {
+    return value.some(hasExecutableHistoricalReference);
+  }
+  if (!value || typeof value !== 'object') {
+    return false;
+  }
+  return Object.entries(value).some(
+    ([key, item]) =>
+      /^(?:provider|transform|transformVars|contextTransform|postprocess)$/i.test(key) ||
+      (key === 'type' &&
+        typeof item === 'string' &&
+        /^(?:not-)*(?:javascript|python|ruby|webhook)(?:$|:)/i.test(item)) ||
+      hasExecutableHistoricalReference(item),
+  );
+}
+
+function hasExecutableHistoricalValue(value: unknown): boolean {
+  if (typeof value === 'string') {
+    return value.startsWith('file://') || value.startsWith('package:');
+  }
+  if (Array.isArray(value)) {
+    return value.some(hasExecutableHistoricalValue);
+  }
+  return Boolean(
+    value && typeof value === 'object' && Object.values(value).some(hasExecutableHistoricalValue),
+  );
+}
+
+function assertSafeExtractedHistoricalTest(test: TestCase): void {
+  if (
+    test.assertScoringFunction !== undefined ||
+    hasExecutableHistoricalReference(test.assert) ||
+    hasExecutableHistoricalReference(test.options) ||
+    hasExecutableHistoricalValue(test.vars)
+  ) {
+    throw new Error(
+      'An extracted historical case contains executable or provider references. Declare the case in the current config before replaying it.',
+    );
+  }
+}
+
+function createExactHistoricalSelector({
+  filters,
+  scenarioSourceIndices,
+  initialScenarios,
+  basePath,
+}: {
+  filters: FilterOptions;
+  scenarioSourceIndices?: number[];
+  initialScenarios?: Scenario[];
+  basePath?: string;
+}): NonNullable<InternalEvaluateOptions['exactHistoricalSelection']>['select'] {
+  const originalIndexByScenario = new WeakMap<Scenario, number>();
+  initialScenarios?.forEach((scenario, index) => {
+    const sourceIndex = scenarioSourceIndices?.[index] ?? index;
+    originalIndexByScenario.set(scenario, sourceIndex);
+    if (Object.isExtensible(scenario)) {
+      (scenario as ScenarioWithSourceIndex)[ORIGINAL_SCENARIO_SOURCE_INDEX] = sourceIndex;
+    }
+  });
+  return async (candidates, suite) => {
+    const resultLoadCache = new Map<string, Promise<StoredResults | undefined>>();
+    const topCandidates: PreparedHistoricalCandidate[] = [];
+    const scenarioCandidates = new Map<string, PreparedHistoricalCandidate[]>();
+    for (const candidate of candidates) {
+      if (candidate.source.kind === 'top-level') {
+        topCandidates.push(candidate);
+      } else {
+        const key = `${candidate.source.scenarioIndex}:${candidate.source.variantIndex}`;
+        const group = scenarioCandidates.get(key) ?? [];
+        group.push(candidate);
+        scenarioCandidates.set(key, group);
+      }
+    }
+    const groups: Array<{
+      scenario: Scenario;
+      candidates: PreparedHistoricalCandidate[];
+      scenarioIndex: number;
+      variantIndex: number;
+      globalOffset: number;
+    }> = [];
+    let globalOffset = 0;
+    for (const [scenarioIndex, scenario] of (suite.scenarios ?? []).entries()) {
+      for (const [variantIndex, variant] of scenario.config.entries()) {
+        const groupCandidates = scenarioCandidates.get(`${scenarioIndex}:${variantIndex}`) ?? [];
+        groups.push({
+          scenario: {
+            ...scenario,
+            config: [variant],
+            tests: groupCandidates.map((candidate) => candidate.test),
+          },
+          candidates: groupCandidates,
+          scenarioIndex,
+          variantIndex,
+          globalOffset: globalOffset++,
+        });
+      }
+    }
+    const preparedSuite: TestSuite = {
+      ...suite,
+      tests: topCandidates.map((candidate) => candidate.test),
+      scenarios: groups.map((group) => group.scenario),
+    };
+    const expansionContext = {
+      basePath,
+      varExpansionDisabled: getEnvBool('PROMPTFOO_DISABLE_VAR_EXPANSION'),
+    };
+
+    const selectGroup = async (
+      groupCandidates: PreparedHistoricalCandidate[],
+      groupSuite: TestSuite,
+      resultContext: ResultMatchContext,
+      groupFilters: FilterOptions,
+      extractedSource: PreparedHistoricalCandidate['source'],
+    ): Promise<PreparedHistoricalCandidate[]> => {
+      const byTest = new Map(groupCandidates.map((candidate) => [candidate.test, candidate]));
+      const originalByCopy = new WeakMap<object, PreparedHistoricalCandidate>();
+      const context: ResultMatchContext = {
+        ...resultContext,
+        resultLoadCache,
+        shouldExtractResult: (result) => {
+          if (resultContext.shouldExtractResult?.(result) === false) {
+            return false;
+          }
+          // A changed, non-deterministic current transform may no longer yield the saved
+          // value. Do not turn that authored result into a new test with old transformed vars.
+          return !groupCandidates.some(
+            (candidate) =>
+              (candidate.test.options?.transformVars ||
+                (typeof suite.defaultTest === 'object' &&
+                  suite.defaultTest.options?.transformVars)) &&
+              Object.keys(result.testCase?.metadata ?? {}).every(
+                (key) => key in (candidate.test.metadata ?? {}),
+              ) &&
+              resultContext.matchesTest(
+                result,
+                { ...candidate.test, vars: result.vars },
+                candidate.test,
+              ),
+          );
+        },
+        bindMatchedTest: (copy, authored) => {
+          const candidate = byTest.get(authored);
+          if (candidate) {
+            originalByCopy.set(copy, candidate);
+          }
+          resultContext.bindMatchedTest?.(copy, authored);
+        },
+        authoredTestFor: (test) =>
+          originalByCopy.get(test)?.test ?? resultContext.authoredTestFor?.(test),
+      };
+      const selected = await filterTests(groupSuite, {
+        ...groupFilters,
+        resultMatchContext: context,
+      });
+      return selected.map((test) => {
+        const original = byTest.get(test) ?? originalByCopy.get(test);
+        if (original) {
+          return { ...original, test };
+        }
+        // Extracted historical cases are already prepared; never execute a saved transform.
+        const { transformVars: _historicalTransform, ...options } = test.options ?? {};
+        assertSafeExtractedHistoricalTest({ ...test, options });
+        return {
+          source: extractedSource,
+          test: {
+            ...test,
+            options,
+          },
+        };
+      });
+    };
+
+    const selectedTop = await selectGroup(
+      topCandidates,
+      { ...preparedSuite, tests: topCandidates.map((candidate) => candidate.test) },
+      topLevelResultMatchContext(preparedSuite, expansionContext),
+      { ...filters, range: suite.scenarios?.length ? undefined : filters.range },
+      { kind: 'top-level', testIndex: -1 },
+    );
+    const selectedScenarios: PreparedHistoricalCandidate[] = [];
+    for (const group of groups) {
+      const classifier = createScenarioResultClassifier(
+        preparedSuite,
+        group.scenario,
+        group.globalOffset,
+        expansionContext,
+      );
+      const seed = filters.sampleSeed;
+      selectedScenarios.push(
+        ...(await selectGroup(
+          group.candidates,
+          { ...group.scenario, providers: suite.providers, prompts: suite.prompts },
+          classifier.forVariant(0),
+          {
+            ...filters,
+            range: undefined,
+            sampleSeed:
+              seed === undefined
+                ? undefined
+                : deriveScenarioSampleSeed(
+                    seed,
+                    (suite.scenarios![group.scenarioIndex] as ScenarioWithSourceIndex)[
+                      ORIGINAL_SCENARIO_SOURCE_INDEX
+                    ] ??
+                      originalIndexByScenario.get(suite.scenarios![group.scenarioIndex]) ??
+                      scenarioSourceIndices?.[group.scenarioIndex] ??
+                      group.scenarioIndex,
+                  ),
+            inheritedMetadata: {
+              ...(typeof suite.defaultTest === 'object' ? suite.defaultTest.metadata : undefined),
+              ...group.scenario.config[0].metadata,
+            },
+          },
+          {
+            kind: 'scenario',
+            scenarioIndex: group.scenarioIndex,
+            variantIndex: group.variantIndex,
+            testIndex: -1,
+          },
+        )),
+      );
+    }
+    return [...selectedTop, ...selectedScenarios];
+  };
+}
 
 function runtimeTagsForEval(
   cmdObj: Partial<CommandLineOptions & Command>,
@@ -352,6 +596,7 @@ async function doEvalWithEnv(
     let _basePath: string | undefined;
     let commandLineOptions: Record<string, any> | undefined;
     let testSources: Awaited<ReturnType<typeof resolveConfigs>>['testSources'];
+    let deferredScenarioSourceIndices: number[] | undefined;
     telemetry.record('command_used', {
       name: 'eval - started',
       watch: Boolean(cmdObj.watch),
@@ -519,6 +764,7 @@ async function doEvalWithEnv(
         basePath: _basePath,
         commandLineOptions,
         testSources,
+        deferredScenarioSourceIndices,
       } = await resolveConfigs(cmdObj, defaultConfig));
     }
 
@@ -678,6 +924,10 @@ async function doEvalWithEnv(
     const filterSampleSeed = cmdObj.filterSampleSeed ?? commandLineOptions?.filterSampleSeed;
     const filterMetadataExact =
       cmdObj.filterMetadataExact ?? commandLineOptions?.filterMetadataExact;
+    const deferExactHistoricalSelection =
+      !resumeEval &&
+      filterMetadataExact !== undefined &&
+      Boolean(cmdObj.filterFailing || cmdObj.filterFailingOnly || cmdObj.filterErrorsOnly);
     const hasActiveTestFilter =
       filterRange !== undefined ||
       cmdObj.filterFailing !== undefined ||
@@ -701,19 +951,20 @@ async function doEvalWithEnv(
         testSuite.tests = defaultMetadata ? [{ metadata: defaultMetadata }] : [{}];
       }
       const filterOptions: FilterOptions = {
-        failing: cmdObj.filterFailing,
-        failingOnly: cmdObj.filterFailingOnly,
-        errorsOnly: cmdObj.filterErrorsOnly,
-        firstN: cmdObj.filterFirstN,
+        failing: deferExactHistoricalSelection ? undefined : cmdObj.filterFailing,
+        failingOnly: deferExactHistoricalSelection ? undefined : cmdObj.filterFailingOnly,
+        errorsOnly: deferExactHistoricalSelection ? undefined : cmdObj.filterErrorsOnly,
+        firstN: deferExactHistoricalSelection ? undefined : cmdObj.filterFirstN,
         metadata: cmdObj.filterMetadata,
         metadataExact: filterMetadataExact,
         inheritedMetadata:
           typeof testSuite.defaultTest === 'object' ? testSuite.defaultTest.metadata : undefined,
-        pattern: cmdObj.filterPattern,
-        range: hasScenarios ? undefined : filterRange,
-        sample: filterSample,
+        pattern: deferExactHistoricalSelection ? undefined : cmdObj.filterPattern,
+        range: hasScenarios || deferExactHistoricalSelection ? undefined : filterRange,
+        sample: deferExactHistoricalSelection ? undefined : filterSample,
         sampleSeed: filterSampleSeed,
         resultMatchContext:
+          !deferExactHistoricalSelection &&
           filterMetadataExact !== undefined &&
           (cmdObj.filterFailing || cmdObj.filterFailingOnly || cmdObj.filterErrorsOnly)
             ? topLevelResultMatchContext(testSuite, {
@@ -862,8 +1113,10 @@ async function doEvalWithEnv(
       );
     }
 
+    const { exactHistoricalSelection: _ephemeralHistoricalSelection, ...persistableOptions } =
+      options;
     const runtimeOptions: EvalRuntimeOptions = {
-      ...options,
+      ...persistableOptions,
       ...(providerFilter ? { providerFilter } : {}),
       ...(filterMetadataExact !== undefined && !hasScenarios ? { filterRange: undefined } : {}),
     };
@@ -1025,8 +1278,48 @@ async function doEvalWithEnv(
 
       ret = await evaluate(testSuite, evalRecord, {
         ...options,
+        ...(deferExactHistoricalSelection && {
+          exactHistoricalSelection: {
+            writeEnabled: cmdObj.write !== false,
+            eligible: async (candidates: PreparedHistoricalCandidate[], suite: TestSuite) => {
+              const eligible = await filterTests(
+                { ...suite, tests: candidates.map((candidate) => candidate.test) },
+                {
+                  metadata: cmdObj.filterMetadata,
+                  metadataExact: filterMetadataExact,
+                  inheritedMetadata:
+                    typeof suite.defaultTest === 'object' ? suite.defaultTest.metadata : undefined,
+                },
+              );
+              const selected = new Set(eligible);
+              return candidates.filter((candidate) => selected.has(candidate.test));
+            },
+            select: createExactHistoricalSelector({
+              filters: {
+                failing: cmdObj.filterFailing,
+                failingOnly: cmdObj.filterFailingOnly,
+                errorsOnly: cmdObj.filterErrorsOnly,
+                metadata: cmdObj.filterMetadata,
+                metadataExact: filterMetadataExact,
+                inheritedMetadata:
+                  typeof testSuite.defaultTest === 'object'
+                    ? testSuite.defaultTest.metadata
+                    : undefined,
+                pattern: cmdObj.filterPattern,
+                range: filterRange,
+                firstN: cmdObj.filterFirstN,
+                sample: filterSample,
+                sampleSeed: filterSampleSeed,
+              },
+              scenarioSourceIndices: deferredScenarioSourceIndices,
+              initialScenarios: testSuite.scenarios,
+              basePath: cliState.basePath,
+            }),
+          },
+        }),
         restorePromptColumns: Boolean(resumeEval),
-        filterRange: hasScenarios || resumeEval ? filterRange : undefined,
+        filterRange:
+          hasScenarios || resumeEval || deferExactHistoricalSelection ? filterRange : undefined,
         abortSignal: evaluateOptions.abortSignal,
         pauseSignal: isCliInvocation && cmdObj.write !== false ? abortController.signal : undefined,
         isRedteam: Boolean(config.redteam),

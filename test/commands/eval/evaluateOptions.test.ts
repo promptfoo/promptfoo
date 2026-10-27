@@ -16,6 +16,10 @@ import { mockProcessEnv } from '../../util/utils';
 import type { Command } from 'commander';
 
 import type { CommandLineOptions, EvaluateOptions, TestSuite } from '../../../src/types/index';
+import type {
+  InternalEvaluateOptions,
+  PreparedHistoricalCandidate,
+} from '../../../src/types/internal';
 
 vi.mock('../../../src/evaluator', async (importOriginal) => {
   return {
@@ -1050,9 +1054,215 @@ describe('evaluateOptions behavior', () => {
         );
 
         const testSuite = evaluateMock.mock.calls.at(-1)?.[0] as TestSuite;
-        expect(testSuite.tests).toEqual([]);
+        expect(testSuite.tests?.map((test) => test.metadata?.id)).toEqual(['B']);
+        const selection = (evaluateMock.mock.calls.at(-1)?.[2] as InternalEvaluateOptions)
+          .exactHistoricalSelection;
+        expect(selection).toBeDefined();
+        expect(
+          await selection?.select(
+            [{ test: testSuite.tests![0], source: { kind: 'top-level', testIndex: 0 } }],
+            testSuite,
+          ),
+        ).toEqual([]);
       },
     );
+
+    it('defers historical selection until scenario vars have been transformed', async () => {
+      const configFile = writeTempConfig(tmpDir, 'scenario-transformed-history.yaml', {
+        providers: ['echo'],
+        prompts: ['Hello {{variant}}'],
+        scenarios: [
+          {
+            config: [
+              { vars: { variant: 'a' }, metadata: { role: 'keep' } },
+              { vars: { variant: 'b' }, metadata: { role: 'keep' } },
+            ],
+            tests: [
+              {
+                options: { transformVars: 'return { ...vars, variant: vars.variant + "!" }' },
+              },
+            ],
+          },
+        ],
+      });
+      const resultsPath = path.join(tmpDir, 'scenario-transformed-history.json');
+      fs.writeFileSync(
+        resultsPath,
+        JSON.stringify({
+          results: {
+            results: [
+              {
+                success: false,
+                failureReason: ResultFailureReason.ASSERT,
+                vars: { variant: 'a!' },
+                testCase: {
+                  vars: { variant: 'a!' },
+                  metadata: { role: 'keep', conversationId: '__scenario_0__' },
+                },
+              },
+            ],
+          },
+        }),
+      );
+
+      await doEval(
+        {
+          table: false,
+          write: false,
+          config: [configFile],
+          filterMetadataExact: 'role=keep',
+          filterFailing: resultsPath,
+        },
+        {},
+        undefined,
+        {},
+      );
+
+      const suite = evaluateMock.mock.calls.at(-1)?.[0] as TestSuite;
+      expect(suite.scenarios?.map((scenario) => scenario.tests?.length)).toEqual([1, 1]);
+      expect(evaluateMock.mock.calls.at(-1)?.[2]).toHaveProperty('exactHistoricalSelection');
+    });
+
+    it('applies the top-level range after beforeAll removes scenarios', async () => {
+      const configFile = writeTempConfig(tmpDir, 'exact-history-remove-scenario.yaml', {
+        providers: ['echo'],
+        prompts: ['Hello {{id}}'],
+        tests: ['A', 'B'].map((id) => ({ vars: { id }, metadata: { id } })),
+        scenarios: [{ config: [{}], tests: [{ vars: { id: 'C' }, metadata: { id: 'C' } }] }],
+      });
+      const resultsPath = path.join(tmpDir, 'exact-history-remove-scenario.json');
+      fs.writeFileSync(
+        resultsPath,
+        JSON.stringify({
+          results: {
+            results: ['A', 'B'].map((id) => ({
+              success: false,
+              failureReason: ResultFailureReason.ASSERT,
+              vars: { id },
+              testCase: { vars: { id }, metadata: { id } },
+            })),
+          },
+        }),
+      );
+      await doEval(
+        {
+          table: false,
+          write: false,
+          config: [configFile],
+          filterMetadataExact: 'id=A,B,C',
+          filterFailing: resultsPath,
+          filterRange: '1:2',
+        },
+        {},
+        undefined,
+        {},
+      );
+      const suite = evaluateMock.mock.calls.at(-1)?.[0] as TestSuite;
+      const selection = (evaluateMock.mock.calls.at(-1)?.[2] as InternalEvaluateOptions)
+        .exactHistoricalSelection!;
+      const postHookSuite = { ...suite, scenarios: [] };
+      const candidates: PreparedHistoricalCandidate[] = (suite.tests ?? []).map(
+        (test, testIndex) => ({
+          source: { kind: 'top-level', testIndex },
+          test,
+        }),
+      );
+      expect(
+        (await selection.select(candidates, postHookSuite)).map(
+          (candidate) => candidate.test.vars?.id,
+        ),
+      ).toEqual(['B']);
+    });
+
+    it('keeps a seeded sample tied to the original scenario after beforeAll clones it', async () => {
+      const configFile = writeTempConfig(tmpDir, 'exact-history-cloned-scenarios.yaml', {
+        providers: ['echo'],
+        prompts: ['Hello {{variant}} {{caseId}}'],
+        scenarios: [
+          {
+            config: ['A', 'B'].map((variant) => ({
+              vars: { variant },
+              metadata: { role: 'keep' },
+            })),
+            tests: ['one', 'two'].map((caseId) => ({ vars: { caseId } })),
+          },
+        ],
+      });
+      const resultsPath = path.join(tmpDir, 'exact-history-cloned-scenarios.json');
+      fs.writeFileSync(
+        resultsPath,
+        JSON.stringify({
+          results: {
+            results: ['A', 'B'].flatMap((variant, scenarioIndex) =>
+              ['one', 'two'].map((caseId) => ({
+                success: false,
+                failureReason: ResultFailureReason.ASSERT,
+                vars: { variant, caseId },
+                testCase: {
+                  vars: { variant, caseId },
+                  metadata: { role: 'keep', conversationId: `__scenario_${scenarioIndex}__` },
+                },
+              })),
+            ),
+          },
+        }),
+      );
+      await doEval(
+        {
+          table: false,
+          write: false,
+          config: [configFile],
+          filterMetadataExact: 'role=keep',
+          filterFailing: resultsPath,
+          filterSample: 1,
+          filterSampleSeed: 0,
+        },
+        {},
+        undefined,
+        {},
+      );
+      const suite = evaluateMock.mock.calls.at(-1)?.[0] as TestSuite;
+      const selection = (evaluateMock.mock.calls.at(-1)?.[2] as InternalEvaluateOptions)
+        .exactHistoricalSelection!;
+      const candidates: PreparedHistoricalCandidate[] = (suite.scenarios ?? []).flatMap(
+        (scenario, scenarioIndex) =>
+          scenario.tests.map((test, testIndex) => ({
+            source: { kind: 'scenario', scenarioIndex, variantIndex: 0, testIndex },
+            test: {
+              ...test,
+              vars: { ...scenario.config[0].vars, ...test.vars },
+              metadata: {
+                ...scenario.config[0].metadata,
+                ...test.metadata,
+                conversationId: `__scenario_${scenarioIndex}__`,
+              },
+            },
+          })),
+      );
+      const selectedPairs = async (postHookSuite: TestSuite) =>
+        (await selection.select(candidates, postHookSuite)).map((candidate) => [
+          candidate.test.vars?.variant,
+          candidate.test.vars?.caseId,
+        ]);
+      const expected = await selectedPairs(suite);
+      expect(expected).toHaveLength(2);
+      expect(
+        await selectedPairs({
+          ...suite,
+          scenarios: suite.scenarios?.map((scenario) => ({
+            ...scenario,
+            config: [...scenario.config],
+            tests: [...scenario.tests],
+          })),
+        }),
+      ).toEqual(expected);
+      expect(
+        await selectedPairs({
+          ...suite,
+          scenarios: JSON.parse(JSON.stringify(suite.scenarios)),
+        }),
+      ).toEqual(expected);
+    });
 
     it('should retain distinct failed top-level tests that share vars', async () => {
       const tempConfig = writeTempConfig(tmpDir, 'test-exact-top-level-shared-vars.yaml', {
@@ -1133,7 +1343,79 @@ describe('evaluateOptions behavior', () => {
       );
 
       const testSuite = evaluateMock.mock.calls.at(-1)?.[0] as TestSuite;
-      expect(testSuite.tests?.map((test) => test.vars?.input)).toEqual(['runtime']);
+      const selection = (evaluateMock.mock.calls.at(-1)?.[2] as InternalEvaluateOptions)
+        .exactHistoricalSelection;
+      expect(selection).toBeDefined();
+      expect(
+        (await selection?.select([], testSuite))?.map((candidate) => candidate.test.vars?.input),
+      ).toEqual(['runtime']);
+    });
+
+    it('accepts declarative runtime assertions but rejects executable historical references', async () => {
+      const configFile = writeTempConfig(tmpDir, 'exact-runtime-safe-assert.yaml', {
+        providers: ['echo'],
+        prompts: ['Hello {{input}}'],
+        tests: [],
+        scenarios: [],
+      });
+      const resultsPath = path.join(tmpDir, 'exact-runtime-safe-assert.json');
+      const writeResult = (testCase: Record<string, unknown>) =>
+        fs.writeFileSync(
+          resultsPath,
+          JSON.stringify({
+            results: {
+              results: [
+                {
+                  success: false,
+                  vars: testCase.vars ?? { input: 'runtime' },
+                  testCase: {
+                    vars: { input: 'runtime' },
+                    metadata: { id: 'generated' },
+                    ...testCase,
+                  },
+                },
+              ],
+            },
+          }),
+        );
+      writeResult({ assert: [{ type: 'contains', value: 'ok' }] });
+      await doEval(
+        {
+          table: false,
+          write: false,
+          config: [configFile],
+          filterMetadataExact: 'id=generated',
+          filterFailing: resultsPath,
+        },
+        {},
+        undefined,
+        {},
+      );
+      const suite = evaluateMock.mock.calls.at(-1)?.[0] as TestSuite;
+      const selection = (evaluateMock.mock.calls.at(-1)?.[2] as InternalEvaluateOptions)
+        .exactHistoricalSelection!;
+      expect((await selection.select([], suite))[0].test.assert).toEqual([
+        { type: 'contains', value: 'ok' },
+      ]);
+
+      writeResult({ vars: { provider: 'data-only', type: 'label-only' } });
+      expect((await selection.select([], suite))[0].test.vars).toEqual({
+        provider: 'data-only',
+        type: 'label-only',
+      });
+
+      for (const unsafe of [
+        { options: { provider: 'file://./old-grader.js' } },
+        { assert: [{ type: 'javascript', value: 'true' }] },
+        { assert: [{ type: 'equals', value: 'file://./old-value.js' }] },
+        { assert: [{ type: 'equals', value: 'package:old-grader:check' }] },
+        { vars: { input: 'file://./old-variable.js' } },
+      ]) {
+        writeResult(unsafe);
+        await expect(selection.select([], suite)).rejects.toThrow(
+          'An extracted historical case contains executable or provider references',
+        );
+      }
     });
 
     it('should resume the exact selection and its original order after range and sampling', async () => {
@@ -1360,9 +1642,27 @@ describe('evaluateOptions behavior', () => {
         );
         const testSuite = evaluateMock.mock.calls.at(-1)?.[0] as TestSuite;
         expect(testSuite.tests).toEqual([]);
+        expect(testSuite.scenarios?.map((scenario) => scenario.tests?.length)).toEqual([1, 1]);
+        const selection = (evaluateMock.mock.calls.at(-1)?.[2] as InternalEvaluateOptions)
+          .exactHistoricalSelection;
+        const prepared = (testSuite.scenarios ?? []).map((scenario, scenarioIndex) => ({
+          source: { kind: 'scenario' as const, scenarioIndex, variantIndex: 0, testIndex: 0 },
+          test: {
+            ...scenario.tests![0],
+            vars: { ...scenario.config[0].vars, ...scenario.tests![0].vars },
+            metadata: {
+              ...scenario.config[0].metadata,
+              ...scenario.tests![0].metadata,
+              conversationId: `__scenario_${scenarioIndex}__`,
+            },
+          },
+        })) as PreparedHistoricalCandidate[];
+        const selected = await selection!.select(prepared, testSuite);
         expect(
-          testSuite.scenarios?.map((scenario) => scenario.tests?.map((test) => test.vars?.caseId)),
-        ).toEqual(failedCases.length === 1 ? [['shared'], []] : [['shared'], ['shared']]);
+          selected.flatMap((candidate) =>
+            candidate.source.kind === 'scenario' ? [candidate.source.scenarioIndex] : [],
+          ),
+        ).toEqual(failedCases.length === 1 ? [0] : [0, 1]);
       }
 
       fs.writeFileSync(
@@ -1398,11 +1698,30 @@ describe('evaluateOptions behavior', () => {
       );
       const generatedSuite = evaluateMock.mock.calls.at(-1)?.[0] as TestSuite;
       expect(generatedSuite.tests).toEqual([]);
+      expect(generatedSuite.scenarios?.map((scenario) => scenario.tests?.length)).toEqual([1, 1]);
+      const generatedSelection = (evaluateMock.mock.calls.at(-1)?.[2] as InternalEvaluateOptions)
+        .exactHistoricalSelection;
+      const generatedCandidates = (generatedSuite.scenarios ?? []).map(
+        (scenario, scenarioIndex) => ({
+          source: { kind: 'scenario' as const, scenarioIndex, variantIndex: 0, testIndex: 0 },
+          test: {
+            ...scenario.tests![0],
+            vars: { ...scenario.config[0].vars, ...scenario.tests![0].vars },
+            metadata: {
+              ...scenario.config[0].metadata,
+              ...scenario.tests![0].metadata,
+              conversationId: `__scenario_${scenarioIndex}__`,
+            },
+          },
+        }),
+      ) as PreparedHistoricalCandidate[];
+      const generatedSelected = await generatedSelection!.select(
+        generatedCandidates,
+        generatedSuite,
+      );
       expect(
-        generatedSuite.scenarios?.map((scenario) =>
-          scenario.tests?.map((test) => test.vars?.caseId),
-        ),
-      ).toEqual([['generated'], []]);
+        generatedSelected.map((candidate) => [candidate.source.kind, candidate.test.vars?.caseId]),
+      ).toEqual([['scenario', 'generated']]);
     });
 
     it('should retain distinct failed scenario tests that share vars', async () => {

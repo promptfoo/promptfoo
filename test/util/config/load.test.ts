@@ -1557,7 +1557,7 @@ describe('resolveConfigs', () => {
     vi.restoreAllMocks();
   });
 
-  it('filters exact scenario variants by assertion failure and error while reading one results file', async () => {
+  it('defers exact scenario result filters while retaining metadata-eligible variants', async () => {
     const resultsPath = '/mock/results.json';
     const results = ['A', 'B', 'C'].map((category) => ({
       success: category === 'C',
@@ -1598,20 +1598,20 @@ describe('resolveConfigs', () => {
       );
       expect(
         vi.mocked(fs.readFileSync).mock.calls.filter(([path]) => path === resultsPath),
-      ).toHaveLength(1);
+      ).toHaveLength(0);
       return testSuite.scenarios
         ?.filter((scenario) => scenario.tests.length > 0)
         .map((scenario) => scenario.config[0].metadata?.category);
     };
 
-    expect(await selectedVariants({ filterFailingOnly: resultsPath })).toEqual(['A']);
-    expect(await selectedVariants({ filterErrorsOnly: resultsPath })).toEqual(['B']);
+    expect(await selectedVariants({ filterFailingOnly: resultsPath })).toEqual(['A', 'B', 'C']);
+    expect(await selectedVariants({ filterErrorsOnly: resultsPath })).toEqual(['A', 'B', 'C']);
     expect(
       await selectedVariants({ filterFailingOnly: resultsPath, filterErrorsOnly: resultsPath }),
-    ).toEqual(['A', 'B']);
+    ).toEqual(['A', 'B', 'C']);
   });
 
-  it('uses evaluator global scenario indices across separate scenarios for historical filters', async () => {
+  it('retains separate scenarios until evaluator global indices are assigned', async () => {
     const resultsPath = '/mock/global-scenarios.json';
     const defaultConfig: Partial<UnifiedConfig> = {
       prompts: ['Hello {{caseId}}'],
@@ -1648,10 +1648,10 @@ describe('resolveConfigs', () => {
       defaultConfig,
     );
 
-    expect(testSuite.scenarios?.map((scenario) => scenario.tests.length)).toEqual([0, 1, 0]);
+    expect(testSuite.scenarios?.map((scenario) => scenario.tests.length)).toEqual([1, 1, 1]);
   });
 
-  it('loads a shared eval ID once for combined exact scenario result filters', async () => {
+  it('does not load a shared eval ID before combined exact scenario filters run', async () => {
     const evalId = 'eval-shared-results';
     const results = ['A', 'B'].map((category) => ({
       success: false,
@@ -1691,8 +1691,8 @@ describe('resolveConfigs', () => {
       },
     );
 
-    expect(findById).toHaveBeenCalledTimes(1);
-    expect(toEvaluateSummary).toHaveBeenCalledTimes(1);
+    expect(findById).not.toHaveBeenCalled();
+    expect(toEvaluateSummary).not.toHaveBeenCalled();
     expect(
       testSuite.scenarios
         ?.filter((scenario) => scenario.tests.length > 0)
@@ -1700,7 +1700,7 @@ describe('resolveConfigs', () => {
     ).toEqual(['A', 'B']);
   });
 
-  it('reuses a missing eval ID without selecting any exact scenario variant', async () => {
+  it('defers a missing eval ID until historical selection', async () => {
     const evalId = 'missing-eval';
     const findById = vi.spyOn(Eval, 'findById').mockResolvedValue(undefined);
     vi.mocked(maybeLoadFromExternalFile).mockImplementation(async (value) => value);
@@ -1726,13 +1726,13 @@ describe('resolveConfigs', () => {
 
     const { testSuite } = await loadScenarios();
 
-    expect(findById).toHaveBeenCalledTimes(1);
-    expect(testSuite.scenarios?.every((scenario) => scenario.tests.length === 0)).toBe(true);
+    expect(findById).not.toHaveBeenCalled();
+    expect(testSuite.scenarios?.every((scenario) => scenario.tests.length === 1)).toBe(true);
 
     findById.mockReset().mockRejectedValue(new Error('unavailable'));
     const failedLoad = await loadScenarios();
-    expect(findById).toHaveBeenCalledTimes(1);
-    expect(failedLoad.testSuite.scenarios?.every((scenario) => scenario.tests.length === 0)).toBe(
+    expect(findById).not.toHaveBeenCalled();
+    expect(failedLoad.testSuite.scenarios?.every((scenario) => scenario.tests.length === 1)).toBe(
       true,
     );
   });
@@ -1822,7 +1822,7 @@ describe('resolveConfigs', () => {
           : undefined,
       ),
     ).toEqual(['runtime-A', 'runtime-B']);
-    expect(testSuite.scenarios?.[0].tests[0].vars?.sessionId).toBe('runtime-session');
+    expect(testSuite.scenarios?.[0].tests[0].vars?.sessionId).toBeUndefined();
     expect((config.scenarios as Scenario[])?.[0].tests.map((test) => test.provider)).toEqual([
       providerSource('A'),
       providerSource('B'),

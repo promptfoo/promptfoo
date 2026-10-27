@@ -29,6 +29,8 @@ export interface ResultMatchContext {
   matchesTest: (result: EvaluateResult, test: TestCase, authoredTest?: TestCase) => boolean;
   bindMatchedTest?: (test: TestCase, authoredTest: TestCase) => void;
   authoredTestFor?: (test: TestCase) => TestCase | undefined;
+  /** Deferred selection can reject a historical row that no longer maps to a current input. */
+  shouldExtractResult?: (result: EvaluateResult) => boolean;
   resultLoadCache?: Map<string, Promise<StoredResults | undefined>>;
 }
 
@@ -437,6 +439,9 @@ export async function filterTestsByResults(
 
     // Skip if this result already matched a config test
     if (matchedResultKeys.has(matchedResultKey(result))) {
+      continue;
+    }
+    if (resultMatchContext?.shouldExtractResult?.(result) === false) {
       continue;
     }
 

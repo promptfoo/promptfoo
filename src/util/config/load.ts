@@ -107,7 +107,7 @@ function normalizeConfiguredCommandLineOptions(
   );
 }
 
-function deriveScenarioSampleSeed(seed: number, scenarioIndex: number): number {
+export function deriveScenarioSampleSeed(seed: number, scenarioIndex: number): number {
   const tupleSeed = `${seed}:${scenarioIndex}`;
   let state = 2166136261;
   for (let i = 0; i < tupleSeed.length; i++) {
@@ -938,6 +938,7 @@ export async function resolveConfigs(
   commandLineOptions?: Partial<CommandLineOptions>;
   selectedProviderConfigs?: TestSuiteConfig['providers'];
   testSources?: TestSource[];
+  deferredScenarioSourceIndices?: number[];
 }> {
   let fileConfig: Partial<UnifiedConfig> = {};
   let testSources: TestSource[] | undefined;
@@ -1236,6 +1237,7 @@ async function resolveLoadedConfig(
   };
 
   let parsedScenarios = config.scenarios;
+  let deferredScenarioSourceIndices: number[] | undefined;
   // Parse testCases for each scenario
   if (parsedScenarios && (!Array.isArray(parsedScenarios) || parsedScenarios.length > 0)) {
     parsedScenarios = (await maybeLoadFromExternalFile(parsedScenarios)) as Scenario[];
@@ -1256,6 +1258,7 @@ async function resolveLoadedConfig(
     const filterMetadataExact =
       cmdObj.filterMetadataExact ?? commandLineOptions?.filterMetadataExact;
     const resolvedScenarios: Scenario[] = [];
+    const scenarioSourceIndices: number[] = [];
     const resultLoadCache = new Map<string, Promise<StoredResults | undefined>>();
     let globalScenarioOffset = 0;
     for (const [scenarioIndex, scenario] of parsedScenarios.entries()) {
@@ -1302,6 +1305,7 @@ async function resolveLoadedConfig(
           ),
         });
         resolvedScenarios.push(resolvedScenario);
+        scenarioSourceIndices.push(scenarioIndex);
         continue;
       }
 
@@ -1309,12 +1313,58 @@ async function resolveLoadedConfig(
         const resolvedScenario = { ...scenario, tests: [] };
         config.scenarios.push(clone(resolvedScenario));
         resolvedScenarios.push(resolvedScenario);
+        scenarioSourceIndices.push(scenarioIndex);
         continue;
       }
 
       const hasHistoricalResultFilter = Boolean(
         cmdObj.filterFailing || cmdObj.filterFailingOnly || cmdObj.filterErrorsOnly,
       );
+      // The current evaluator transforms and expands variables after config loading. Historical
+      // selection for exact metadata must see those prepared values, so retain each eligible
+      // current test and defer the result, pattern, and limit filters to that stage.
+      if (hasHistoricalResultFilter) {
+        const loadedBySource = new WeakMap<TestCase, TestCase>();
+        for (const scenarioConfig of scenario.config) {
+          const eligible = await filterTests(
+            { ...scenario, providers: parsedProviders, prompts: parsedPrompts },
+            {
+              metadata: cmdObj.filterMetadata,
+              metadataExact: filterMetadataExact,
+              inheritedMetadata: {
+                ...(parsedDefaultTest?.metadata ?? config.metadata),
+                ...scenarioConfig.metadata,
+              },
+            },
+          );
+          const loaded = await Promise.all(
+            eligible.map(async (test) => {
+              let existing = loadedBySource.get(test);
+              if (!existing) {
+                existing = await readTest(test, basePath, false, runtimeEnv);
+                loadedBySource.set(test, existing);
+              }
+              return existing;
+            }),
+          );
+          const resolvedScenario: Scenario = {
+            ...scenario,
+            config: [scenarioConfig],
+            tests: loaded,
+          };
+          config.scenarios.push(
+            clone({
+              ...resolvedScenario,
+              tests: eligible.map((test) =>
+                isApiProvider(test.provider) ? { ...test, provider: undefined } : test,
+              ),
+            }),
+          );
+          resolvedScenarios.push(resolvedScenario);
+          scenarioSourceIndices.push(scenarioIndex);
+        }
+        continue;
+      }
       const loadedTestBySource = new WeakMap<TestCase, TestCase>();
       const authoredTestByCopy = new WeakMap<TestCase, TestCase>();
       let matchingScenario = scenario;
@@ -1449,9 +1499,11 @@ async function resolveLoadedConfig(
           }),
         );
         resolvedScenarios.push(resolvedScenario);
+        scenarioSourceIndices.push(scenarioIndex);
       }
     }
     parsedScenarios = resolvedScenarios;
+    deferredScenarioSourceIndices = scenarioSourceIndices;
   }
 
   if (parsedPrompts.length === 0) {
@@ -1527,5 +1579,6 @@ async function resolveLoadedConfig(
     basePath,
     commandLineOptions,
     selectedProviderConfigs: filteredProviderConfigs,
+    deferredScenarioSourceIndices,
   };
 }

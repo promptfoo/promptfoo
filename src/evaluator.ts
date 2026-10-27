@@ -23,9 +23,14 @@ import { collectFileMetadata, renderPrompt, runExtensionHook } from './evaluator
 import logger, { globalLogCallback, isDebugEnabled, setLogCallback } from './logger';
 import { selectMaxScore } from './matchers/comparison';
 import {
+  assertUnambiguousHistoricalProviders,
+  createExactHistoricalReplayPlan,
   getResultIndexKey,
+  getStripFlags,
   PROMPTFOO_METADATA_KEY,
+  restoreExactHistoricalReplayCases,
   sanitizeResultForJsonlArtifact,
+  validateExactHistoricalReplayPlan,
 } from './models/evalResult';
 import { generateIdFromPrompt } from './models/prompt';
 import { nodeEvaluatorRuntime } from './node/evaluatorRuntime';
@@ -147,7 +152,7 @@ import type {
   Vars,
   VarValue,
 } from './types/index';
-import type { InternalEvaluateOptions } from './types/internal';
+import type { InternalEvaluateOptions, PreparedHistoricalCandidate } from './types/internal';
 import type { CallApiContextParams, CallApiOptionsParams } from './types/providers';
 
 export class PromptSuggestionsRejectedError extends Error {
@@ -2963,6 +2968,47 @@ function buildTestsFromSuite(testSuite: TestSuite): AtomicTestCase[] {
   return tests;
 }
 
+function buildPreparedHistoricalCandidates(testSuite: TestSuite): PreparedHistoricalCandidate[] {
+  const candidates: PreparedHistoricalCandidate[] = getInitialTests(testSuite).map(
+    (test, testIndex) => ({
+      test,
+      source: { kind: 'top-level', testIndex },
+    }),
+  );
+  let globalScenarioIndex = 0;
+  for (const [scenarioIndex, scenario] of (testSuite.scenarios ?? []).entries()) {
+    for (const [variantIndex, data] of scenario.config.entries()) {
+      for (const [testIndex, test] of (scenario.tests ?? [{}]).entries()) {
+        candidates.push({
+          test: mergeScenarioTest(testSuite, data, test, globalScenarioIndex),
+          source: { kind: 'scenario', scenarioIndex, variantIndex, testIndex },
+        });
+      }
+      globalScenarioIndex++;
+    }
+  }
+  return candidates;
+}
+
+function expandPreparedHistoricalCandidates(
+  candidates: PreparedHistoricalCandidate[],
+  testSuite: TestSuite,
+): PreparedHistoricalCandidate[] {
+  return candidates.flatMap((candidate) => {
+    const disabled =
+      getEnvBool('PROMPTFOO_DISABLE_VAR_EXPANSION') ||
+      (candidate.test.options?.disableVarExpansion ??
+        getDefaultTest(testSuite)?.options?.disableVarExpansion);
+    const combinations = disabled
+      ? [candidate.test.vars]
+      : generateVarCombinations(candidate.test.vars || {});
+    return combinations.map((vars) => ({
+      source: candidate.source,
+      test: { ...candidate.test, vars },
+    }));
+  });
+}
+
 function getInitialTests(testSuite: TestSuite): AtomicTestCase[] {
   if (testSuite.tests && testSuite.tests.length > 0) {
     return testSuite.tests as AtomicTestCase[];
@@ -3066,6 +3112,8 @@ async function applyInputTransform(
 }
 
 async function buildRunEvalOptions({
+  alreadyExpanded,
+  alreadyNormalized,
   concurrency,
   conversations,
   evalId,
@@ -3077,6 +3125,8 @@ async function buildRunEvalOptions({
   testSuite,
   tests,
 }: {
+  alreadyExpanded?: boolean;
+  alreadyNormalized?: boolean;
   concurrency: number;
   conversations: EvalConversations;
   evalId: string;
@@ -3094,9 +3144,12 @@ async function buildRunEvalOptions({
   let testIdx = 0;
   for (let index = 0; index < tests.length; index++) {
     const testCase = tests[index];
-    await prepareTestCaseForEval(testSuite, testCase, index);
+    if (!alreadyNormalized) {
+      await prepareTestCaseForEval(testSuite, testCase, index);
+    }
     resolveRuntimeGradingProviderReferences(testCase, configuredProviderMap);
     testIdx = appendRunEvalOptionsForTestCase({
+      alreadyExpanded,
       concurrency,
       conversations,
       evalId,
@@ -3184,6 +3237,7 @@ async function resolveDefaultTestProvider(
 }
 
 function appendRunEvalOptionsForTestCase({
+  alreadyExpanded,
   concurrency,
   conversations,
   evalId,
@@ -3198,6 +3252,7 @@ function appendRunEvalOptionsForTestCase({
   testCaseIndex,
   testSuite,
 }: {
+  alreadyExpanded?: boolean;
   concurrency: number;
   conversations: EvalConversations;
   evalId: string;
@@ -3215,7 +3270,9 @@ function appendRunEvalOptionsForTestCase({
   const promptPrefix = testCase.options?.prefix || getDefaultTest(testSuite)?.options?.prefix || '';
   const promptSuffix = testCase.options?.suffix || getDefaultTest(testSuite)?.options?.suffix || '';
   const varCombinations =
-    getEnvBool('PROMPTFOO_DISABLE_VAR_EXPANSION') || testCase.options?.disableVarExpansion
+    alreadyExpanded ||
+    getEnvBool('PROMPTFOO_DISABLE_VAR_EXPANSION') ||
+    testCase.options?.disableVarExpansion
       ? [testCase.vars]
       : generateVarCombinations(testCase.vars || {});
 
@@ -5903,14 +5960,66 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     }
     testSuite = await runBeforeAllExtensions(testSuite);
     if (
+      options.generateSuggestions &&
+      (options.exactHistoricalSelection || this.store.readExactHistoricalReplay() !== undefined)
+    ) {
+      throw new Error(
+        'Prompt suggestions cannot run with a prepared exact historical selection. Run suggestions in a fresh evaluation first.',
+      );
+    }
+    if (
       !restorePromptColumns &&
       !(await maybeAddGeneratedPrompts(testSuite, options, providerAbortSignal))
     ) {
       return this.store.evaluation;
     }
 
-    let tests = buildTestsFromSuite(testSuite);
-    tests = filterByRange(tests, options.filterRange, warnEmptyFilterRange);
+    const historicalSelection = options.exactHistoricalSelection;
+    const storedPlan = this.store.readExactHistoricalReplay();
+    const replayPlan =
+      storedPlan === undefined ? undefined : validateExactHistoricalReplayPlan(storedPlan);
+    let currentCandidates =
+      historicalSelection || replayPlan ? buildPreparedHistoricalCandidates(testSuite) : undefined;
+    if (historicalSelection && currentCandidates) {
+      currentCandidates = await historicalSelection.eligible(currentCandidates, testSuite);
+    }
+    if (currentCandidates && (historicalSelection?.writeEnabled || replayPlan)) {
+      assertUnambiguousHistoricalProviders(currentCandidates);
+    }
+    if (replayPlan && currentCandidates) {
+      const selectedSources = new Set(
+        replayPlan.cases
+          .filter((item) => item.source.testIndex >= 0)
+          .map((item) => JSON.stringify(item.source)),
+      );
+      for (const candidate of currentCandidates) {
+        if (selectedSources.has(JSON.stringify(candidate.source))) {
+          // The saved case already contains effective assertions, options and metadata.
+          // Resolve only its current target; normalizing this source would load today's
+          // scorer and other settings that the prepared replay must not execute.
+          candidate.test.provider = await resolveDefaultTestProvider(
+            getDefaultTest(testSuite),
+            candidate.test,
+          );
+        }
+      }
+    }
+    let tests =
+      replayPlan && currentCandidates
+        ? restoreExactHistoricalReplayCases(replayPlan, currentCandidates, testSuite).map(
+            (candidate) => {
+              if (candidate.source.kind === 'scenario') {
+                return { ...candidate.test, [SCENARIO_RESULT_SOURCE]: true } as AtomicTestCase;
+              }
+              return candidate.test;
+            },
+          )
+        : currentCandidates
+          ? currentCandidates.map((candidate) => candidate.test)
+          : buildTestsFromSuite(testSuite);
+    if (!historicalSelection && !replayPlan) {
+      tests = filterByRange(tests, options.filterRange, warnEmptyFilterRange);
+    }
     const { prompts, columnsByProvider } = buildCompletedPrompts(
       testSuite,
       this.store,
@@ -5921,8 +6030,62 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     await this.store.appendPrompts(prompts);
     maybeEmitAzureOpenAiWarning(testSuite, tests);
 
-    const varNames = await prepareTestVariables(tests, testSuite);
-    // Preserve configured/transformed variable order before concurrent rows finish.
+    const varNames = replayPlan
+      ? new Set(tests.flatMap((test) => Object.keys(test.vars ?? {})))
+      : await prepareTestVariables(tests, testSuite);
+    if (historicalSelection && currentCandidates) {
+      let selectedCandidates = await historicalSelection.select(
+        expandPreparedHistoricalCandidates(currentCandidates, testSuite),
+        testSuite,
+      );
+      if (testSuite.scenarios?.length && options.filterRange) {
+        selectedCandidates = filterByRange(
+          selectedCandidates,
+          options.filterRange,
+          warnEmptyFilterRange,
+        );
+      }
+      selectedCandidates = selectedCandidates.map((candidate) =>
+        candidate.source.kind === 'scenario'
+          ? {
+              ...candidate,
+              test: { ...candidate.test, [SCENARIO_RESULT_SOURCE]: true } as AtomicTestCase,
+            }
+          : candidate,
+      );
+      tests = selectedCandidates.map((candidate) => candidate.test);
+      varNames.clear();
+      for (const test of tests) {
+        for (const varName of Object.keys(test.vars ?? {})) {
+          varNames.add(varName);
+        }
+      }
+      for (const [index, test] of tests.entries()) {
+        await prepareTestCaseForEval(testSuite, test, index);
+      }
+      if (historicalSelection.writeEnabled) {
+        const flags = getStripFlags(testSuite.env);
+        const persistedFlags = getStripFlags(this.store.config.env);
+        if (
+          flags.shouldStripTestVars ||
+          flags.shouldStripMetadata ||
+          flags.shouldStripPromptText ||
+          flags.shouldStripResponseOutput ||
+          persistedFlags.shouldStripTestVars ||
+          persistedFlags.shouldStripMetadata ||
+          persistedFlags.shouldStripPromptText ||
+          persistedFlags.shouldStripResponseOutput
+        ) {
+          throw new Error(
+            'Could not safely save the prepared exact historical selection under the active strip policy. Use --no-write for this run.',
+          );
+        }
+        await this.store.saveExactHistoricalReplay(
+          createExactHistoricalReplayPlan(selectedCandidates),
+        );
+      }
+    }
+    // Preserve selected/transformed variable order before concurrent rows finish.
     // Result-only variables discovered at runtime are appended as they appear.
     for (const varName of varNames) {
       vars.add(varName);
@@ -5939,6 +6102,8 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       registers: this.registers,
       testSuite,
       tests,
+      alreadyExpanded: Boolean(historicalSelection || replayPlan),
+      alreadyNormalized: Boolean(historicalSelection || replayPlan),
     });
     markComparisonRows(runEvalOptions, rowsWithSelectBestAssertion, rowsWithMaxScoreAssertion);
     if (cliState.resume && this.store.persisted) {

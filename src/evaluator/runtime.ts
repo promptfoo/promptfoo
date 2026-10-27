@@ -1,4 +1,10 @@
-import type { CompletedPrompt, EvaluateResult, TestSuite, UnifiedConfig } from '../types/index';
+import type {
+  CompletedPrompt,
+  EvaluateResult,
+  ExactHistoricalReplayPlan,
+  TestSuite,
+  UnifiedConfig,
+} from '../types/index';
 
 export type EvaluationStoreResult = Pick<
   EvaluateResult,
@@ -39,6 +45,9 @@ export interface EvaluationStore<
   readonly prompts: CompletedPrompt[];
   readonly results: TResult[];
   readonly resultPersistenceFailed: boolean;
+
+  readExactHistoricalReplay(): unknown;
+  saveExactHistoricalReplay(plan: ExactHistoricalReplayPlan): Promise<void>;
 
   appendResult(result: EvaluateResult): Promise<void>;
   appendPrompts(prompts: CompletedPrompt[]): Promise<void>;

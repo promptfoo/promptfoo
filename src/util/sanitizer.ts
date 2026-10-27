@@ -333,6 +333,12 @@ export function isSecretEnvVarName(name: string): boolean {
  */
 export function sanitizeRuntimeOptions(
   options?: EvalRuntimeOptions,
+  stripFlags?: {
+    shouldStripTestVars?: boolean;
+    shouldStripMetadata?: boolean;
+    shouldStripPromptText?: boolean;
+    shouldStripResponseOutput?: boolean;
+  },
 ): EvalRuntimeOptions | undefined {
   if (!options) {
     return undefined;
@@ -347,6 +353,24 @@ export function sanitizeRuntimeOptions(
   for (const [key, value] of Object.entries(sanitizedEntries)) {
     if (typeof value === 'function' || typeof value === 'symbol') {
       delete sanitizedEntries[key];
+    }
+  }
+
+  if (sanitized.exactHistoricalReplay) {
+    if (
+      stripFlags?.shouldStripTestVars ||
+      stripFlags?.shouldStripMetadata ||
+      stripFlags?.shouldStripPromptText ||
+      stripFlags?.shouldStripResponseOutput
+    ) {
+      delete sanitized.exactHistoricalReplay;
+    } else {
+      sanitized.exactHistoricalReplay = sanitizeObject(sanitized.exactHistoricalReplay, {
+        context: 'prepared exact historical selection',
+        sanitizeUrls: true,
+        maxDepth: Number.POSITIVE_INFINITY,
+        throwOnError: true,
+      });
     }
   }
 
