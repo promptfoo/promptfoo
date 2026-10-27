@@ -1415,6 +1415,277 @@ describe('evaluateOptions behavior', () => {
       ).toEqual(['runtime']);
     });
 
+    it('keeps synthetic scenario routing within current and stored provider and prompt selectors', async () => {
+      const configFile = writeTempConfig(tmpDir, 'exact-history-synthetic-routing.yaml', {
+        providers: [
+          { id: 'echo', label: 'provider-A' },
+          { id: 'echo', label: 'provider-B' },
+        ],
+        prompts: [
+          { raw: 'A {{input}}', label: 'prompt-A' },
+          { raw: 'B {{input}}', label: 'prompt-B' },
+        ],
+        scenarios: [
+          {
+            config: [
+              {
+                metadata: { role: 'keep' },
+                providers: ['provider-A'],
+                prompts: ['prompt-A'],
+              },
+            ],
+            tests: [],
+          },
+        ],
+      });
+      const resultsPath = path.join(tmpDir, 'exact-history-synthetic-routing.json');
+      const writeResult = (providers: string[], prompts: string[]) =>
+        fs.writeFileSync(
+          resultsPath,
+          JSON.stringify({
+            results: {
+              results: [
+                {
+                  success: false,
+                  failureReason: ResultFailureReason.ASSERT,
+                  vars: { input: 'runtime' },
+                  provider: { id: 'echo', label: 'provider-A' },
+                  prompt: { raw: 'A runtime', label: 'prompt-A' },
+                  metadata: { __promptfoo: { evalOrigin: 'scenario' } },
+                  testCase: {
+                    vars: { input: 'runtime' },
+                    metadata: { role: 'keep', conversationId: '__scenario_0__' },
+                    providers,
+                    prompts,
+                  },
+                },
+              ],
+            },
+          }),
+        );
+      writeResult(['provider-A', 'provider-B'], ['prompt-A', 'prompt-B']);
+      await doEval(
+        {
+          table: false,
+          write: false,
+          config: [configFile],
+          filterMetadataExact: 'role=keep',
+          filterFailing: resultsPath,
+        },
+        {},
+        undefined,
+        {},
+      );
+      const suite = evaluateMock.mock.calls.at(-1)?.[0] as TestSuite;
+      const selection = (evaluateMock.mock.calls.at(-1)?.[2] as InternalEvaluateOptions)
+        .exactHistoricalSelection!;
+      const selected = await selection.select([], suite);
+      expect(selected).toHaveLength(1);
+      expect(selected[0].source).toEqual({
+        kind: 'scenario',
+        scenarioIndex: 0,
+        variantIndex: 0,
+        testIndex: -1,
+      });
+      expect(selected[0].test.providers).toEqual(['provider-A']);
+      expect(selected[0].test.prompts).toEqual(['prompt-A']);
+
+      // Historical test-specific selectors remain narrower when the current variant widens.
+      writeResult(['provider-A'], ['prompt-A']);
+      const wideSuite: TestSuite = {
+        ...suite,
+        scenarios: suite.scenarios?.map((scenario) => ({
+          ...scenario,
+          config: scenario.config.map((variant) => ({
+            ...variant,
+            providers: ['provider-A', 'provider-B'],
+            prompts: ['prompt-A', 'prompt-B'],
+          })),
+        })),
+      };
+      expect((await selection.select([], wideSuite))[0].test.providers).toEqual(['provider-A']);
+      expect((await selection.select([], wideSuite))[0].test.prompts).toEqual(['prompt-A']);
+
+      writeResult(['provider-*'], ['prompt-*']);
+      expect((await selection.select([], suite))[0].test.providers).toEqual(['provider-A']);
+      expect((await selection.select([], suite))[0].test.prompts).toEqual(['prompt-A']);
+      writeResult(['provider:A'], ['prompt:A']);
+      const prefixResult = JSON.parse(fs.readFileSync(resultsPath, 'utf8'));
+      prefixResult.results.results[0].provider.label = 'provider:A';
+      prefixResult.results.results[0].prompt.label = 'prompt:A';
+      fs.writeFileSync(resultsPath, JSON.stringify(prefixResult));
+      const prefixSuite: TestSuite = {
+        ...wideSuite,
+        providers: wideSuite.providers.map((provider) => ({
+          id: () => provider.id(),
+          label: provider.label?.replace('-', ':'),
+          callApi: async () => ({ output: 'unused' }),
+        })),
+        prompts: wideSuite.prompts.map((prompt) => ({
+          ...prompt,
+          label: prompt.label.replace('-', ':'),
+        })),
+        scenarios: wideSuite.scenarios?.map((scenario) => ({
+          ...scenario,
+          config: scenario.config.map((variant) => ({
+            ...variant,
+            providers: ['provider'],
+            prompts: ['prompt'],
+          })),
+        })),
+      };
+      expect((await selection.select([], prefixSuite))[0].test.providers).toEqual(['provider:A']);
+      expect((await selection.select([], prefixSuite))[0].test.prompts).toEqual(['prompt:A']);
+
+      // Intersect overlapping lists against current columns; prefer A's safe
+      // label over its credential-bearing URL ID in the prepared plan.
+      writeResult(['provider-A', 'provider-C'], ['prompt-A', 'prompt-C']);
+      const overlappingSuite: TestSuite = {
+        ...wideSuite,
+        providers: [
+          {
+            id: () => 'https://example.invalid/target?api_key=qa-fake-secret',
+            label: 'provider-A',
+            callApi: async () => ({ output: 'unused' }),
+          },
+          ...wideSuite.providers.slice(1),
+          {
+            id: () => 'echo',
+            label: 'provider-C',
+            callApi: async () => ({ output: 'unused' }),
+          },
+        ],
+        prompts: [
+          ...wideSuite.prompts,
+          { raw: 'C {{input}}', label: 'prompt-C', id: 'prompt-id-C' },
+        ],
+      };
+      const overlap = (await selection.select([], overlappingSuite))[0];
+      expect(overlap.test.providers).toEqual(['provider-A']);
+      expect(overlap.test.prompts).toEqual(['prompt-A']);
+
+      // A shared prompt label cannot represent just one prompt; its unique ID can.
+      const stored = JSON.parse(fs.readFileSync(resultsPath, 'utf8'));
+      stored.results.results[0].prompt = { raw: 'A runtime', label: 'shared', id: 'prompt-id-A' };
+      stored.results.results[0].testCase.prompts = ['prompt-id-A', 'prompt-id-C'];
+      fs.writeFileSync(resultsPath, JSON.stringify(stored));
+      const duplicateLabelSuite: TestSuite = {
+        ...overlappingSuite,
+        prompts: [
+          { raw: 'A {{input}}', label: 'shared', id: 'prompt-id-A' },
+          { raw: 'B {{input}}', label: 'shared', id: 'prompt-id-B' },
+          { raw: 'C {{input}}', label: 'prompt-C', id: 'prompt-id-C' },
+        ],
+        scenarios: overlappingSuite.scenarios?.map((scenario) => ({
+          ...scenario,
+          config: scenario.config.map((variant) => ({ ...variant, prompts: ['shared'] })),
+        })),
+      };
+      expect((await selection.select([], duplicateLabelSuite))[0].test.prompts).toEqual([
+        'prompt-id-A',
+      ]);
+
+      // These two OR-lists intersect on one column, but neither its ID nor label
+      // can select it alone without admitting a different excluded column.
+      writeResult(['provider-A'], ['prompt-id-X']);
+      const crossCollisionResult = JSON.parse(fs.readFileSync(resultsPath, 'utf8'));
+      crossCollisionResult.results.results[0].prompt = {
+        raw: 'A runtime',
+        id: 'prompt-id-X',
+        label: 'prompt-label-Y',
+      };
+      fs.writeFileSync(resultsPath, JSON.stringify(crossCollisionResult));
+      const crossCollisionSuite: TestSuite = {
+        ...suite,
+        prompts: [
+          { raw: 'A {{input}}', id: 'prompt-id-X', label: 'prompt-label-Y' },
+          { raw: 'B {{input}}', id: 'prompt-id-X', label: 'prompt-label-Z' },
+          { raw: 'C {{input}}', id: 'prompt-id-W', label: 'prompt-label-Y' },
+        ],
+        scenarios: suite.scenarios?.map((scenario) => ({
+          ...scenario,
+          config: scenario.config.map((variant) => ({
+            ...variant,
+            prompts: ['prompt-label-Y'],
+          })),
+        })),
+      };
+      await expect(selection.select([], crossCollisionSuite)).rejects.toThrow(
+        'Use distinct provider/prompt IDs or labels',
+      );
+
+      const noneSuite: TestSuite = {
+        ...suite,
+        scenarios: suite.scenarios?.map((scenario) => ({
+          ...scenario,
+          config: scenario.config.map((variant) => ({
+            ...variant,
+            providers: [],
+            prompts: [],
+          })),
+        })),
+      };
+      expect(await selection.select([], noneSuite)).toEqual([]);
+    });
+
+    it('keeps synthetic top-level routing within current default selectors', async () => {
+      const configFile = writeTempConfig(tmpDir, 'exact-history-synthetic-default-routing.yaml', {
+        providers: [
+          { id: 'echo', label: 'provider-A' },
+          { id: 'echo', label: 'provider-B' },
+        ],
+        prompts: [
+          { raw: 'A {{input}}', label: 'prompt-A' },
+          { raw: 'B {{input}}', label: 'prompt-B' },
+        ],
+        defaultTest: { providers: ['provider-A'], prompts: ['prompt-A'] },
+        tests: [],
+      });
+      const resultsPath = path.join(tmpDir, 'exact-history-synthetic-default-routing.json');
+      fs.writeFileSync(
+        resultsPath,
+        JSON.stringify({
+          results: {
+            results: [
+              {
+                success: false,
+                failureReason: ResultFailureReason.ASSERT,
+                vars: { input: 'runtime' },
+                provider: { id: 'echo', label: 'provider-A' },
+                prompt: { raw: 'A runtime', label: 'prompt-A' },
+                metadata: { __promptfoo: { evalOrigin: 'top-level' } },
+                testCase: {
+                  vars: { input: 'runtime' },
+                  metadata: { role: 'keep' },
+                  providers: ['provider-A', 'provider-B'],
+                  prompts: ['prompt-A', 'prompt-B'],
+                },
+              },
+            ],
+          },
+        }),
+      );
+      await doEval(
+        {
+          table: false,
+          write: false,
+          config: [configFile],
+          filterMetadataExact: 'role=keep',
+          filterFailing: resultsPath,
+        },
+        {},
+        undefined,
+        {},
+      );
+      const suite = evaluateMock.mock.calls.at(-1)?.[0] as TestSuite;
+      const selection = (evaluateMock.mock.calls.at(-1)?.[2] as InternalEvaluateOptions)
+        .exactHistoricalSelection!;
+      const selected = await selection.select([], suite);
+      expect(selected).toHaveLength(1);
+      expect(selected[0].test.providers).toEqual(['provider-A']);
+      expect(selected[0].test.prompts).toEqual(['prompt-A']);
+    });
+
     it('accepts declarative runtime assertions but rejects executable historical references', async () => {
       const configFile = writeTempConfig(tmpDir, 'exact-runtime-safe-assert.yaml', {
         providers: ['echo'],

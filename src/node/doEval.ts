@@ -61,7 +61,8 @@ import {
   writeMultipleOutputs,
 } from '../util/index';
 import { promptfooCommand } from '../util/promptfooCommand';
-import { checkProviderApiKeys } from '../util/provider';
+import { isPromptAllowed } from '../util/promptMatching';
+import { checkProviderApiKeys, isProviderAllowed } from '../util/provider';
 import { mapTestProviderRefs } from '../util/sanitizer';
 import { shouldShareResults } from '../util/sharing';
 import { resolveTestsWatchPaths } from '../util/testCaseReader';
@@ -152,6 +153,59 @@ function assertSafeExtractedHistoricalTest(test: TestCase): void {
   }
 }
 
+function intersectHistoricalSelectors<T>(
+  columns: T[],
+  stored: string[] | undefined,
+  current: string[] | undefined,
+  isAllowed: (column: T, refs: string[] | undefined) => boolean,
+  refsForColumn: (column: T) => Array<string | undefined>,
+): string[] | undefined {
+  if (!Array.isArray(stored)) {
+    return current;
+  }
+  if (!Array.isArray(current)) {
+    return stored;
+  }
+
+  const allowed = columns.map((column) => isAllowed(column, stored) && isAllowed(column, current));
+  const representsIntersection = (refs: string[]) =>
+    columns.every((column, index) => isAllowed(column, refs) === allowed[index]);
+  if (representsIntersection(stored)) {
+    return stored;
+  }
+  if (representsIntersection(current)) {
+    return current;
+  }
+
+  // A wildcard and a label/ID may overlap. Materialize only current columns that
+  // both selectors allow, and verify that each ref cannot admit an excluded column.
+  const refs: string[] = [];
+  for (const [index, column] of columns.entries()) {
+    if (!allowed[index] || isAllowed(column, refs)) {
+      continue;
+    }
+    const safeRef = refsForColumn(column).find(
+      (ref) =>
+        ref &&
+        columns.every(
+          (candidate, candidateIndex) => allowed[candidateIndex] || !isAllowed(candidate, [ref]),
+        ),
+    );
+    if (!safeRef) {
+      throw new Error(
+        'Could not safely preserve the current routing for an extracted historical case. Use distinct provider/prompt IDs or labels, or declare the case in the current config.',
+      );
+    }
+    refs.push(safeRef);
+  }
+  if (!representsIntersection(refs)) {
+    throw new Error(
+      'Could not safely preserve the current routing for an extracted historical case. Use distinct provider/prompt IDs or labels, or declare the case in the current config.',
+    );
+  }
+  return refs;
+}
+
 function createExactHistoricalSelector({
   filters,
   scenarioSourceIndices,
@@ -225,6 +279,7 @@ function createExactHistoricalSelector({
       resultContext: ResultMatchContext,
       groupFilters: FilterOptions,
       extractedSource: PreparedHistoricalCandidate['source'],
+      currentSelectors: Pick<TestCase, 'providers' | 'prompts'>,
     ): Promise<PreparedHistoricalCandidate[]> => {
       const byTest = new Map(groupCandidates.map((candidate) => [candidate.test, candidate]));
       const originalByCopy = new WeakMap<object, PreparedHistoricalCandidate>();
@@ -290,6 +345,20 @@ function createExactHistoricalSelector({
           test: {
             ...test,
             options,
+            providers: intersectHistoricalSelectors(
+              suite.providers,
+              test.providers,
+              currentSelectors.providers,
+              isProviderAllowed,
+              (provider) => [provider.label, provider.id()],
+            ),
+            prompts: intersectHistoricalSelectors(
+              suite.prompts,
+              test.prompts,
+              currentSelectors.prompts,
+              isPromptAllowed,
+              (prompt) => [prompt.id, prompt.label],
+            ),
           },
         };
       });
@@ -301,6 +370,7 @@ function createExactHistoricalSelector({
       topLevelResultMatchContext(preparedSuite, expansionContext),
       { ...filters, range: suite.scenarios?.length ? undefined : filters.range },
       { kind: 'top-level', testIndex: -1 },
+      typeof suite.defaultTest === 'object' ? suite.defaultTest : {},
     );
     const selectedScenarios: PreparedHistoricalCandidate[] = [];
     for (const group of groups) {
@@ -341,6 +411,14 @@ function createExactHistoricalSelector({
             scenarioIndex: group.scenarioIndex,
             variantIndex: group.variantIndex,
             testIndex: -1,
+          },
+          {
+            providers:
+              group.scenario.config[0].providers ??
+              (typeof suite.defaultTest === 'object' ? suite.defaultTest.providers : undefined),
+            prompts:
+              group.scenario.config[0].prompts ??
+              (typeof suite.defaultTest === 'object' ? suite.defaultTest.prompts : undefined),
           },
         )),
       );
