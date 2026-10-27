@@ -125,6 +125,10 @@ export function getProviderType(
     return undefined;
   }
 
+  if (providerId === 'openai:codex-sdk' || providerId.startsWith('openai:codex-sdk:')) {
+    return 'codex-sdk';
+  }
+
   if (providerId === 'openai:codex-security' || providerId.startsWith('openai:codex-security:')) {
     return 'codex-security';
   }

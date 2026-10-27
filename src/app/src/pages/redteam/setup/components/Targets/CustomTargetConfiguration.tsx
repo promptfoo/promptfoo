@@ -59,6 +59,11 @@ interface ProviderConfig {
 const getProviderConfig = (providerType?: string): ProviderConfig => {
   const initialConfig = providerType ? createDefaultProvider(providerType) : undefined;
   const initialGuidance: Record<string, { title: string; helpText: string }> = {
+    'codex-sdk': {
+      title: 'OpenAI Codex SDK',
+      helpText:
+        'Install @openai/codex-sdk on the Promptfoo server. Use an existing Codex login or configure OPENAI_API_KEY or CODEX_API_KEY. Set model and working_dir in the JSON configuration. Relative working_dir paths resolve from the config file directory.',
+    },
     together: {
       title: 'Together AI',
       helpText: 'Use a Together-hosted model ID. Configure TOGETHER_API_KEY.',
