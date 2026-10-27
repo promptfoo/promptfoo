@@ -1265,6 +1265,11 @@ describe('evaluateOptions behavior', () => {
     });
 
     it('does not extract a stale transformed top-level row with inherited default metadata', async () => {
+      const targetPath = path.join(tmpDir, 'exact-history-current-target.cjs');
+      fs.writeFileSync(
+        targetPath,
+        "module.exports = class { id() { return 'qa-target-B'; } async callApi() { return { output: 'B' }; } };",
+      );
       const configFile = writeTempConfig(tmpDir, 'exact-history-default-metadata.yaml', {
         providers: ['echo'],
         prompts: ['Hello {{id}}'],
@@ -1272,7 +1277,12 @@ describe('evaluateOptions behavior', () => {
           metadata: { role: 'keep' },
           options: { transformVars: 'return { id: vars.id + "?" }' },
         },
-        tests: [{ vars: { id: 'a' } }],
+        tests: [
+          {
+            vars: { id: 'a' },
+            provider: { id: `file://${targetPath}`, label: 'shared-target' },
+          },
+        ],
       });
       const resultsPath = path.join(tmpDir, 'exact-history-default-metadata.json');
       const writeResult = (metadata: Record<string, unknown>) =>
@@ -1285,7 +1295,11 @@ describe('evaluateOptions behavior', () => {
                   success: false,
                   failureReason: ResultFailureReason.ASSERT,
                   vars: { id: 'a!' },
-                  testCase: { vars: { id: 'a!' }, metadata },
+                  testCase: {
+                    vars: { id: 'a!' },
+                    metadata,
+                    provider: { id: 'qa-target-A', label: 'shared-target' },
+                  },
                 },
               ],
             },

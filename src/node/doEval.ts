@@ -313,7 +313,9 @@ function createExactHistoricalSelector({
               ) &&
               resultContext.matchesTest(
                 result,
-                { ...candidate.test, vars: result.vars },
+                // This is only an authored-origin check. A changed target must
+                // not turn a stale transformed row into a providerless new test.
+                { ...candidate.test, vars: result.vars, provider: undefined },
                 candidate.test,
               ),
           );

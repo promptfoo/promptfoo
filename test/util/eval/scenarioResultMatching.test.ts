@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 
 import { describe, expect, it } from 'vitest';
+import { filterTests } from '../../../src/util/eval/filterTests';
 import {
   createScenarioResultClassifier,
   topLevelResultMatchContext,
@@ -19,6 +20,150 @@ function failedResult(vars: Record<string, string>, metadata: Record<string, str
 }
 
 describe('exact scenario result matching', () => {
+  it('keeps distinct per-test target IDs when labels, vars, and metadata are shared', async () => {
+    const targetA = {
+      id: () => 'qa-target-A',
+      label: 'shared-target',
+      callApi: async () => ({ output: 'A' }),
+    };
+    const targetB = {
+      id: () => 'qa-target-B',
+      label: 'shared-target',
+      callApi: async () => ({ output: 'B' }),
+    };
+    const testA: TestCase = {
+      vars: { caseId: 'shared' },
+      metadata: { role: 'common' },
+      provider: targetA,
+    };
+    const testB: TestCase = { ...testA, provider: targetB };
+    const scenario: Scenario = { config: [{}], tests: [testA, testB] };
+    const suite: TestSuite = { prompts: [], providers: [], scenarios: [scenario] };
+    const resultB = {
+      ...failedResult({ caseId: 'shared' }, { role: 'common', conversationId: '__scenario_0__' }),
+      provider: { id: 'echo' },
+      metadata: { __promptfoo: { evalOrigin: 'scenario' } },
+      testCase: {
+        vars: { caseId: 'shared' },
+        metadata: { role: 'common', conversationId: '__scenario_0__' },
+        provider: { id: 'qa-target-B', label: 'shared-target' },
+      },
+    } as EvaluateResult;
+    const context = createScenarioResultClassifier(suite, scenario).forVariant(0);
+    expect(context.matchesTest(resultB, testA)).toBe(false);
+    expect(context.matchesTest(resultB, testB)).toBe(true);
+
+    const dir = await mkdtemp(path.join(tmpdir(), 'promptfoo-target-pair-'));
+    try {
+      const historyPath = path.join(dir, 'history.json');
+      await writeFile(historyPath, JSON.stringify({ results: { results: [resultB] } }));
+      const selected = await filterTests(
+        { ...suite, tests: [testA, testB] },
+        {
+          metadataExact: 'role=common',
+          failing: historyPath,
+          firstN: 1,
+          resultMatchContext: context,
+        },
+      );
+      expect(selected).toEqual([testB]);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+
+    const onlyA: Scenario = { config: [{}], tests: [testA] };
+    const onlyASuite: TestSuite = { prompts: [], providers: [], scenarios: [onlyA] };
+    expect(
+      createScenarioResultClassifier(onlyASuite, onlyA).forVariant(0).includesResult(resultB),
+    ).toBe(false);
+    expect(
+      topLevelResultMatchContext({ ...onlyASuite, tests: [testA] }).includesResult({
+        ...resultB,
+        metadata: { __promptfoo: { evalOrigin: 'top-level' } },
+        testCase: { ...resultB.testCase, metadata: { role: 'common' } },
+      }),
+    ).toBe(false);
+
+    const legacyLabelOnly = {
+      ...resultB,
+      testCase: { ...resultB.testCase, provider: { label: 'shared-target' } },
+    } as EvaluateResult;
+    expect(context.includesResult(legacyLabelOnly)).toBe(false);
+    expect(
+      createScenarioResultClassifier(onlyASuite, onlyA)
+        .forVariant(0)
+        .includesResult(legacyLabelOnly),
+    ).toBe(true);
+
+    const sameIdDifferentLabels: Scenario = {
+      config: [{}],
+      tests: [
+        { ...testA, provider: { ...targetA, label: 'first-label' } },
+        { ...testA, provider: { ...targetA, label: 'second-label' } },
+      ],
+    };
+    const sameIdSuite: TestSuite = {
+      prompts: [],
+      providers: [],
+      scenarios: [sameIdDifferentLabels],
+    };
+    const legacyIdOnly = {
+      ...resultB,
+      testCase: { ...resultB.testCase, provider: { id: 'qa-target-A' } },
+    } as EvaluateResult;
+    const ambiguousIdContext = createScenarioResultClassifier(
+      sameIdSuite,
+      sameIdDifferentLabels,
+    ).forVariant(0);
+    expect(ambiguousIdContext.includesResult(legacyIdOnly)).toBe(false);
+    expect(ambiguousIdContext.matchesTest(legacyIdOnly, sameIdDifferentLabels.tests[0])).toBe(
+      false,
+    );
+    const uniqueIdContext = createScenarioResultClassifier(onlyASuite, onlyA).forVariant(0);
+    expect(uniqueIdContext.includesResult(legacyIdOnly)).toBe(true);
+
+    const sameIdDifferentLabel = {
+      ...resultB,
+      testCase: {
+        ...resultB.testCase,
+        provider: { id: 'qa-target-A', label: 'changed-label' },
+      },
+    } as EvaluateResult;
+    expect(
+      createScenarioResultClassifier(onlyASuite, onlyA)
+        .forVariant(0)
+        .includesResult(sameIdDifferentLabel),
+    ).toBe(false);
+
+    // A fully disjoint historical target can be a runtime-generated test.
+    // The row alone cannot prove it was the authored A test with a changed target.
+    const unrelatedTarget = {
+      ...resultB,
+      testCase: {
+        ...resultB.testCase,
+        provider: { id: 'qa-unrelated-target', label: 'unrelated-target' },
+      },
+    } as EvaluateResult;
+    expect(
+      createScenarioResultClassifier(onlyASuite, onlyA)
+        .forVariant(0)
+        .includesResult(unrelatedTarget),
+    ).toBe(true);
+
+    const runtimeGenerated = {
+      ...resultB,
+      testCase: {
+        ...resultB.testCase,
+        metadata: { ...resultB.testCase.metadata, pluginId: 'runtime-generated' },
+      },
+    } as EvaluateResult;
+    expect(
+      createScenarioResultClassifier(onlyASuite, onlyA)
+        .forVariant(0)
+        .includesResult(runtimeGenerated),
+    ).toBe(true);
+  });
+
   it.each([
     {
       name: 'an unsafe target label',

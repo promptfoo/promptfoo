@@ -7,6 +7,7 @@ import { deduplicateTestCases, extractRuntimeVars, filterRuntimeVars } from '../
 import { readOutput, resultIsForTestCase } from '../../util/index';
 import { isPromptAllowed } from '../promptMatching';
 import { isProviderAllowed, providerToIdentifier } from '../provider';
+import { canonicalizeProviderId } from '../providerRef';
 
 import type {
   EvaluateResult,
@@ -410,9 +411,7 @@ export async function filterTestsByResults(
       ? JSON.stringify({
           vars: filterRuntimeVars(result.vars),
           metadata: result.testCase?.metadata,
-          provider:
-            providerToIdentifier(result.testCase?.provider) ??
-            providerToIdentifier(result.provider),
+          provider: targetIdentity(result.testCase?.provider) ?? targetIdentity(result.provider),
           columnProvider: {
             id: result.provider?.id,
             label: result.provider?.label,
@@ -506,6 +505,99 @@ export async function filterTestsByResults(
 type Variant = Scenario['config'][number];
 type ExpansionContext = { basePath?: string; varExpansionDisabled?: boolean };
 
+function targetIdentity(
+  provider: TestCase['provider'] | { id?: string; label?: string } | undefined,
+) {
+  if (!provider) {
+    return undefined;
+  }
+  const rawId =
+    typeof provider === 'string'
+      ? provider
+      : typeof provider === 'object' && 'id' in provider && typeof provider.id === 'function'
+        ? provider.id()
+        : typeof provider === 'object' && typeof provider.id === 'string'
+          ? provider.id
+          : undefined;
+  const label =
+    typeof provider === 'object' && typeof provider.label === 'string' ? provider.label : undefined;
+  return rawId || label
+    ? { ...(rawId && { id: canonicalizeProviderId(rawId) }), ...(label && { label }) }
+    : undefined;
+}
+
+function knownTargetMatch(
+  saved: ReturnType<typeof targetIdentity>,
+  current: ReturnType<typeof targetIdentity>,
+): boolean | undefined {
+  if (!saved?.id || !current?.id) {
+    return undefined;
+  }
+  return (
+    saved.id === current.id && (!saved.label || !current.label || saved.label === current.label)
+  );
+}
+
+type AuthoredTargetCandidate = {
+  effective: TestCase;
+  metadata: TestCase['metadata'];
+  metadataKeys: string[];
+  generatedScenarioId?: string;
+};
+
+function conflictsWithAuthoredTarget(
+  result: EvaluateResult,
+  candidates: AuthoredTargetCandidate[],
+) {
+  const stored = targetIdentity(result.testCase?.provider);
+  const matching = candidates.filter(
+    (candidate) =>
+      Object.keys(result.testCase?.metadata ?? {}).every(
+        (key) => key === 'conversationId' || key in (candidate.metadata ?? {}),
+      ) &&
+      matchesScenarioCandidate(
+        result,
+        candidate.effective,
+        candidate.metadata,
+        candidate.metadataKeys,
+        candidate.generatedScenarioId,
+        false,
+        false,
+        true,
+      ),
+  );
+  if (matching.length === 0) {
+    return false;
+  }
+  const targets = matching.map((candidate) => targetIdentity(candidate.effective.provider));
+  if (stored?.id) {
+    if (
+      !stored.label &&
+      new Set(
+        targets
+          .filter((target) => target?.id === stored.id)
+          .map((target) => JSON.stringify(target)),
+      ).size > 1
+    ) {
+      return true;
+    }
+    if (targets.some((target) => knownTargetMatch(stored, target) === true)) {
+      return false;
+    }
+    // A shared ID or label proves an identity collision. Completely disjoint
+    // targets may instead be runtime-generated tests and remain extractable.
+    return targets.some(
+      (target) =>
+        !target || target.id === stored.id || (stored.label && target.label === stored.label),
+    );
+  }
+  if (stored?.label) {
+    const sameLabel = targets.filter((target) => target?.label === stored.label);
+    return new Set(sameLabel.map((target) => target?.id)).size > 1;
+  }
+  return new Set(targets.map((target) => JSON.stringify(target))).size > 1;
+}
+
 function scenarioDefaultTest(suite: TestSuite): TestCase | undefined {
   return typeof suite.defaultTest === 'object' ? suite.defaultTest : undefined;
 }
@@ -535,11 +627,19 @@ function matchesScenarioCandidate(
   generatedScenarioId?: string,
   ignoreConversationId = false,
   ignoreColumnSelectors = false,
+  ignoreTestProvider = false,
 ): boolean {
   const resultMetadata = result.testCase?.metadata;
+  const knownTarget = knownTargetMatch(
+    targetIdentity(result.testCase?.provider),
+    targetIdentity(effective.provider),
+  );
+  if (!ignoreTestProvider && knownTarget === false) {
+    return false;
+  }
   const storedTestProviderId = providerToIdentifier(result.testCase?.provider);
   const comparableResult =
-    storedTestProviderId === undefined
+    storedTestProviderId === undefined || knownTarget === true || ignoreTestProvider
       ? result
       : { ...result, provider: { id: storedTestProviderId, label: storedTestProviderId } };
   const storedConversationId = resultMetadata?.conversationId;
@@ -551,7 +651,12 @@ function matchesScenarioCandidate(
         ? storedConversationId == null || deepEqual(storedConversationId, generatedScenarioId)
         : deepEqual(storedConversationId, authoredConversationId);
   return (
-    resultIsForTestCase(comparableResult, effective) &&
+    resultIsForTestCase(
+      comparableResult,
+      knownTarget === true || ignoreTestProvider
+        ? { ...effective, provider: undefined }
+        : effective,
+    ) &&
     (ignoreColumnSelectors || isStoredProviderAllowed(result, effective.providers)) &&
     (ignoreColumnSelectors || isStoredPromptAllowed(result, effective.prompts)) &&
     conversationMatches &&
@@ -616,6 +721,22 @@ export function createScenarioResultClassifier(
       metadataKeys,
     })),
   );
+  const authoredTargetCandidates = candidates.flatMap((variantCandidates, index) =>
+    variantCandidates.map((candidate) => ({
+      ...candidate,
+      generatedScenarioId: `__scenario_${globalScenarioOffset + index}__`,
+    })),
+  );
+  const targetConflictCache = new WeakMap<EvaluateResult, boolean>();
+  const hasTargetConflict = (result: EvaluateResult) => {
+    const cached = targetConflictCache.get(result);
+    if (cached !== undefined) {
+      return cached;
+    }
+    const conflict = conflictsWithAuthoredTarget(result, authoredTargetCandidates);
+    targetConflictCache.set(result, conflict);
+    return conflict;
+  };
   const explicitConversationCandidates = candidates.map((variantCandidates) =>
     variantCandidates.filter((candidate) => candidate.metadata?.conversationId != null),
   );
@@ -631,7 +752,7 @@ export function createScenarioResultClassifier(
   const signatures = scenario.config.map((variant) => ({
     vars: { ...defaults?.vars, ...variant.vars },
     metadata: { ...defaults?.metadata, ...variant.metadata },
-    providerId: providerToIdentifier(variant.provider ?? defaults?.provider),
+    provider: variant.provider ?? defaults?.provider,
     providers: { ...defaults, ...variant }.providers,
     prompts: { ...defaults, ...variant }.prompts,
     conversationId: { ...defaults?.metadata, ...variant.metadata }.conversationId,
@@ -727,6 +848,9 @@ export function createScenarioResultClassifier(
     }
     const resultProviderId =
       providerToIdentifier(result.testCase.provider) ?? providerToIdentifier(result.provider);
+    const signatureTarget = targetIdentity(signatures[index].provider);
+    const storedTarget = targetIdentity(result.testCase.provider ?? result.provider);
+    const knownSignatureTarget = knownTargetMatch(storedTarget, signatureTarget);
     const storedConversationId = result.testCase.metadata?.conversationId;
     if (storedConversationId == null && explicitConversationCandidates[index].length > 0) {
       const matchesIgnoringConversation = (candidate: (typeof candidates)[number][number]) =>
@@ -755,9 +879,11 @@ export function createScenarioResultClassifier(
       conversationMatches &&
       isStoredProviderAllowed(result, signatures[index].providers) &&
       isStoredPromptAllowed(result, signatures[index].prompts) &&
-      (!signatures[index].providerId ||
+      knownSignatureTarget !== false &&
+      (knownSignatureTarget === true ||
+        !signatures[index].provider ||
         !resultProviderId ||
-        signatures[index].providerId === resultProviderId) &&
+        providerToIdentifier(signatures[index].provider) === resultProviderId) &&
       signatureVarKeys.every((key) => deepEqual(resultVars[key], signatures[index].vars[key])) &&
       signatureMetadataKeys.every(
         (key) =>
@@ -794,6 +920,9 @@ export function createScenarioResultClassifier(
         if (hasRedactedTargetIdentity(result)) {
           return false;
         }
+        if (hasTargetConflict(result)) {
+          return false;
+        }
         if (configuredMatch(result, index)) {
           return true;
         }
@@ -808,6 +937,7 @@ export function createScenarioResultClassifier(
         );
       },
       matchesTest: (result, test) =>
+        !hasTargetConflict(result) &&
         matchesScenarioCandidate(
           result,
           effectiveScenarioTest(suite, scenario.config[index], test),
@@ -847,6 +977,16 @@ export function topLevelResultMatchContext(
       metadataKeys: topLevelMetadataKeys,
     };
   });
+  const targetConflictCache = new WeakMap<EvaluateResult, boolean>();
+  const hasTargetConflict = (result: EvaluateResult) => {
+    const cached = targetConflictCache.get(result);
+    if (cached !== undefined) {
+      return cached;
+    }
+    const conflict = conflictsWithAuthoredTarget(result, topLevelCandidates);
+    targetConflictCache.set(result, conflict);
+    return conflict;
+  };
   let globalScenarioOffset = 0;
   const scenarioClassifiers = (suite.scenarios ?? []).map((scenario) => {
     const classifier = createScenarioResultClassifier(
@@ -863,6 +1003,9 @@ export function topLevelResultMatchContext(
     authoredTestFor,
     includesResult: (result, source) => {
       if (hasRedactedTargetIdentity(result)) {
+        return false;
+      }
+      if (hasTargetConflict(result)) {
         return false;
       }
       const topLevelMatch = topLevelCandidates.some((candidate) =>
@@ -930,6 +1073,9 @@ export function topLevelResultMatchContext(
       return !scenarioMatch || Boolean(topLevelMatch) || conversationId === undefined;
     },
     matchesTest: (result, test) => {
+      if (hasTargetConflict(result)) {
+        return false;
+      }
       const metadata = declaredScenarioMetadata(suite, topLevelVariant, test);
       return matchesScenarioCandidate(
         result,
