@@ -1616,8 +1616,11 @@ export function validateExactHistoricalReplayPlan(value: unknown): ExactHistoric
         typeof item.test === 'object' &&
         !Array.isArray(item.test) &&
         Object.getPrototypeOf(item.test) === Object.prototype &&
-        !Object.hasOwn(item.test, 'provider') &&
-        !(item.test.options && Object.hasOwn(item.test.options, 'transformVars')) &&
+        !Object.prototype.hasOwnProperty.call(item.test, 'provider') &&
+        !(
+          item.test.options &&
+          Object.prototype.hasOwnProperty.call(item.test.options, 'transformVars')
+        ) &&
         TestCaseSchema.safeParse(item.test).success &&
         (item.providerIdentity === undefined ||
           (item.providerIdentity !== null &&
@@ -1643,6 +1646,7 @@ export function restoreExactHistoricalReplayCases(
   plan: ExactHistoricalReplayPlan,
   current: PreparedHistoricalCandidate[],
   suite: TestSuite,
+  syntheticProvider?: AtomicTestCase['provider'],
 ): PreparedHistoricalCandidate[] {
   const bySource = new Map(
     current.map((candidate) => [JSON.stringify(candidate.source), candidate]),
@@ -1655,7 +1659,8 @@ export function restoreExactHistoricalReplayCases(
       throw new Error('Could not resolve a prepared historical scenario for replay');
     }
     const currentCase = bySource.get(JSON.stringify(source));
-    const currentProvider = currentCase?.test.provider;
+    const currentProvider =
+      currentCase?.test.provider ?? (source.testIndex === -1 ? syntheticProvider : undefined);
     if (savedProvider) {
       if (
         !currentProvider ||
@@ -1663,7 +1668,7 @@ export function restoreExactHistoricalReplayCases(
       ) {
         throw new Error('Could not resolve a prepared historical provider for replay');
       }
-    } else if (currentProvider && source.testIndex !== -1) {
+    } else if (currentProvider) {
       throw new Error('Prepared historical provider changed before replay');
     }
     if (!currentCase && source.testIndex !== -1) {

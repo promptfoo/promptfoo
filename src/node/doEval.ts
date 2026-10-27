@@ -228,6 +228,17 @@ function createExactHistoricalSelector({
     ): Promise<PreparedHistoricalCandidate[]> => {
       const byTest = new Map(groupCandidates.map((candidate) => [candidate.test, candidate]));
       const originalByCopy = new WeakMap<object, PreparedHistoricalCandidate>();
+      const defaultMetadata =
+        typeof suite.defaultTest === 'object' ? suite.defaultTest.metadata : undefined;
+      const metadataKeysByTest = new Map(
+        groupCandidates.map((candidate) => [
+          candidate.test,
+          new Set([
+            ...Object.keys(defaultMetadata ?? {}),
+            ...Object.keys(candidate.test.metadata ?? {}),
+          ]),
+        ]),
+      );
       const context: ResultMatchContext = {
         ...resultContext,
         resultLoadCache,
@@ -242,8 +253,8 @@ function createExactHistoricalSelector({
               (candidate.test.options?.transformVars ||
                 (typeof suite.defaultTest === 'object' &&
                   suite.defaultTest.options?.transformVars)) &&
-              Object.keys(result.testCase?.metadata ?? {}).every(
-                (key) => key in (candidate.test.metadata ?? {}),
+              Object.keys(result.testCase?.metadata ?? {}).every((key) =>
+                metadataKeysByTest.get(candidate.test)?.has(key),
               ) &&
               resultContext.matchesTest(
                 result,

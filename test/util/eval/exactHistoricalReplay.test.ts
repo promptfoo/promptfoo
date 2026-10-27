@@ -103,7 +103,9 @@ describe('prepared exact historical replay', () => {
     for (const test of [
       [],
       { vars: {}, provider: 'file://./old-target.js' },
+      { vars: {}, provider: undefined },
       { vars: {}, options: { transformVars: 'return vars' } },
+      { vars: {}, options: { transformVars: undefined } },
     ]) {
       expect(() =>
         validateExactHistoricalReplayPlan({

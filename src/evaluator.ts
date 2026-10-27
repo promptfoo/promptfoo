@@ -2990,6 +2990,23 @@ function buildPreparedHistoricalCandidates(testSuite: TestSuite): PreparedHistor
   return candidates;
 }
 
+function assertPreparedHistoryStripPolicy(suiteEnv?: EnvOverrides, storedEnv?: EnvOverrides): void {
+  const stripsProtectedData = (env?: EnvOverrides) => {
+    const flags = getStripFlags(env);
+    return (
+      flags.shouldStripTestVars ||
+      flags.shouldStripMetadata ||
+      flags.shouldStripPromptText ||
+      flags.shouldStripResponseOutput
+    );
+  };
+  if (stripsProtectedData(suiteEnv) || stripsProtectedData(storedEnv)) {
+    throw new Error(
+      'Could not safely save the prepared exact historical selection under the active strip policy. Start a fresh evaluation with --no-write instead.',
+    );
+  }
+}
+
 function expandPreparedHistoricalCandidates(
   candidates: PreparedHistoricalCandidate[],
   testSuite: TestSuite,
@@ -5978,6 +5995,9 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     const storedPlan = this.store.readExactHistoricalReplay();
     const replayPlan =
       storedPlan === undefined ? undefined : validateExactHistoricalReplayPlan(storedPlan);
+    if (replayPlan) {
+      assertPreparedHistoryStripPolicy(testSuite.env, this.store.config.env);
+    }
     let currentCandidates =
       historicalSelection || replayPlan ? buildPreparedHistoricalCandidates(testSuite) : undefined;
     if (historicalSelection && currentCandidates) {
@@ -6004,16 +6024,22 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
         }
       }
     }
+    const syntheticProvider = replayPlan?.cases.some((item) => item.source.testIndex === -1)
+      ? await resolveDefaultTestProvider(getDefaultTest(testSuite), {} as AtomicTestCase)
+      : undefined;
     let tests =
       replayPlan && currentCandidates
-        ? restoreExactHistoricalReplayCases(replayPlan, currentCandidates, testSuite).map(
-            (candidate) => {
-              if (candidate.source.kind === 'scenario') {
-                return { ...candidate.test, [SCENARIO_RESULT_SOURCE]: true } as AtomicTestCase;
-              }
-              return candidate.test;
-            },
-          )
+        ? restoreExactHistoricalReplayCases(
+            replayPlan,
+            currentCandidates,
+            testSuite,
+            syntheticProvider,
+          ).map((candidate) => {
+            if (candidate.source.kind === 'scenario') {
+              return { ...candidate.test, [SCENARIO_RESULT_SOURCE]: true } as AtomicTestCase;
+            }
+            return candidate.test;
+          })
         : currentCandidates
           ? currentCandidates.map((candidate) => candidate.test)
           : buildTestsFromSuite(testSuite);
@@ -6064,22 +6090,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
         await prepareTestCaseForEval(testSuite, test, index);
       }
       if (historicalSelection.writeEnabled) {
-        const flags = getStripFlags(testSuite.env);
-        const persistedFlags = getStripFlags(this.store.config.env);
-        if (
-          flags.shouldStripTestVars ||
-          flags.shouldStripMetadata ||
-          flags.shouldStripPromptText ||
-          flags.shouldStripResponseOutput ||
-          persistedFlags.shouldStripTestVars ||
-          persistedFlags.shouldStripMetadata ||
-          persistedFlags.shouldStripPromptText ||
-          persistedFlags.shouldStripResponseOutput
-        ) {
-          throw new Error(
-            'Could not safely save the prepared exact historical selection under the active strip policy. Use --no-write for this run.',
-          );
-        }
+        assertPreparedHistoryStripPolicy(testSuite.env, this.store.config.env);
         await this.store.saveExactHistoricalReplay(
           createExactHistoricalReplayPlan(selectedCandidates),
         );

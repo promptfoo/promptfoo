@@ -1264,6 +1264,70 @@ describe('evaluateOptions behavior', () => {
       ).toEqual(expected);
     });
 
+    it('does not extract a stale transformed top-level row with inherited default metadata', async () => {
+      const configFile = writeTempConfig(tmpDir, 'exact-history-default-metadata.yaml', {
+        providers: ['echo'],
+        prompts: ['Hello {{id}}'],
+        defaultTest: {
+          metadata: { role: 'keep' },
+          options: { transformVars: 'return { id: vars.id + "?" }' },
+        },
+        tests: [{ vars: { id: 'a' } }],
+      });
+      const resultsPath = path.join(tmpDir, 'exact-history-default-metadata.json');
+      const writeResult = (metadata: Record<string, unknown>) =>
+        fs.writeFileSync(
+          resultsPath,
+          JSON.stringify({
+            results: {
+              results: [
+                {
+                  success: false,
+                  failureReason: ResultFailureReason.ASSERT,
+                  vars: { id: 'a!' },
+                  testCase: { vars: { id: 'a!' }, metadata },
+                },
+              ],
+            },
+          }),
+        );
+      writeResult({ role: 'keep' });
+      await doEval(
+        {
+          table: false,
+          write: false,
+          config: [configFile],
+          filterMetadataExact: 'role=keep',
+          filterFailing: resultsPath,
+        },
+        {},
+        undefined,
+        {},
+      );
+      const suite = evaluateMock.mock.calls.at(-1)?.[0] as TestSuite;
+      const selection = (evaluateMock.mock.calls.at(-1)?.[2] as InternalEvaluateOptions)
+        .exactHistoricalSelection!;
+      const prepared: PreparedHistoricalCandidate[] = [
+        {
+          source: { kind: 'top-level', testIndex: 0 },
+          test: {
+            ...suite.tests![0],
+            vars: { id: 'a?' },
+            options: {
+              ...(typeof suite.defaultTest === 'object' ? suite.defaultTest.options : undefined),
+            },
+          },
+        },
+      ];
+      expect(await selection.select(prepared, suite)).toEqual([]);
+
+      // Extra runtime metadata cannot prove that this was the authored test.
+      writeResult({ role: 'keep', pluginId: 'runtime-generated' });
+      expect((await selection.select(prepared, suite)).map((item) => item.test.vars?.id)).toEqual([
+        'a!',
+      ]);
+    });
+
     it('should retain distinct failed top-level tests that share vars', async () => {
       const tempConfig = writeTempConfig(tmpDir, 'test-exact-top-level-shared-vars.yaml', {
         providers: ['echo'],
