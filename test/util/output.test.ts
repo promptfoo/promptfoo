@@ -2014,6 +2014,11 @@ describe('writeOutput', () => {
     expect(html).not.toContain('Passing <test> description');
     expect(html).toContain('Passing reason');
     expect(html).toContain('Failing reason');
+    expect(html.indexOf('<p class="output-reason">Failing reason</p>')).toBeLessThan(
+      html.indexOf('<div class="output-text">Failing output</div>'),
+    );
+    expect(html).toContain('<details class="output-section output-collapse">');
+    expect(html).not.toContain('<details class="output-section output-collapse" open');
     expect(html).toContain('View detail');
     expect(html).toContain('Result detail - row 1, prompt 1');
     expect(html).toContain('Prompt');

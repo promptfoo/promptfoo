@@ -363,6 +363,20 @@
         line-height: 1.55;
       }
 
+      td[data-status='fail'] .output-reason,
+      td[data-status='error'] .output-reason {
+        border-left-color: var(--fail);
+        color: var(--text);
+      }
+
+      .output-collapse > summary {
+        cursor: pointer;
+      }
+
+      .output-collapse[open] > summary {
+        margin-bottom: 4px;
+      }
+
       .detail-button {
         display: inline-flex;
         align-items: center;
@@ -759,16 +773,21 @@
                       >
                       {% endfor %}
                     </div>
+                    {% if cell.error %}
                     <div class="output-section">
-                      <span class="output-section-label">Output</span>
-                      <div class="output-text">{{ cell.text | escape }}</div>
+                      <span class="output-section-label">Error</span>
+                      <p class="output-reason">{{ cell.error | escape }}</p>
                     </div>
-                    {% if cell.reason %}
+                    {% endif %} {% if cell.reason %}
                     <div class="output-section">
                       <span class="output-section-label">Reason</span>
                       <p class="output-reason">{{ cell.reason | escape }}</p>
                     </div>
                     {% endif %}
+                    <details class="output-section output-collapse">
+                      <summary class="output-section-label">Output</summary>
+                      <div class="output-text">{{ cell.text | escape }}</div>
+                    </details>
                     <div>
                       <button
                         type="button"
@@ -879,22 +898,22 @@
         </section>
         {% endif %}
 
-        <section class="detail-section">
-          <span class="detail-section-title">Output</span>
-          <p class="detail-copy">{{ cell.text | escape }}</p>
-        </section>
-
-        {% if cell.reason %}
-        <section class="detail-section">
-          <span class="detail-section-title">Reason</span>
-          <p class="detail-copy detail-reason">{{ cell.reason | escape }}</p>
-        </section>
-        {% endif %} {% if cell.error %}
+        {% if cell.error %}
         <section class="detail-section">
           <span class="detail-section-title">Error</span>
           <p class="detail-copy detail-reason">{{ cell.error | escape }}</p>
         </section>
+        {% endif %} {% if cell.reason %}
+        <section class="detail-section">
+          <span class="detail-section-title">Reason</span>
+          <p class="detail-copy detail-reason">{{ cell.reason | escape }}</p>
+        </section>
         {% endif %}
+
+        <details class="detail-section output-collapse">
+          <summary class="detail-section-title">Output</summary>
+          <p class="detail-copy">{{ cell.text | escape }}</p>
+        </details>
         <div data-detail-variable-slot></div>
         {% if cell.promptTokensDisplay or cell.completionTokensDisplay %}
         <section class="detail-section">
