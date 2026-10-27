@@ -1,0 +1,51 @@
+# Synthetic paired cases. Labels describe this example's task contract.
+- description: Meeting time needs a timezone
+  vars:
+    id: meeting-missing
+    request: 'Convert my meeting at 09:00 on 2026-10-21 to UTC. The source timezone is unspecified.'
+    expected: clarify
+- description: Meeting time includes a timezone
+  vars:
+    id: meeting-complete
+    request: 'Convert my meeting at 09:00 UTC+02:00 on 2026-10-21 to UTC.'
+    expected: answer
+- description: Translation needs target language
+  vars:
+    id: translation-missing
+    request: 'Translate the English sentence "The train is late." The target language is unspecified.'
+    expected: clarify
+- description: Translation specifies target language
+  vars:
+    id: translation-complete
+    request: 'Translate the English sentence "The train is late." into Spanish.'
+    expected: answer
+- description: Unit conversion needs source unit
+  vars:
+    id: conversion-missing
+    request: 'Convert a length of 10 to centimeters. The source unit is unspecified.'
+    expected: clarify
+- description: Unit conversion specifies source unit
+  vars:
+    id: conversion-complete
+    request: 'Convert a length of 10 inches to centimeters.'
+    expected: answer
+- description: Summary needs source text
+  vars:
+    id: summary-missing
+    request: 'Summarize the following paragraph in one sentence. No paragraph is provided.'
+    expected: clarify
+- description: Summary includes source text
+  vars:
+    id: summary-complete
+    request: 'Summarize this paragraph in one sentence: The library opens at nine. It closes at six. It is closed on Sundays.'
+    expected: answer
+- description: Saving supplied notes needs a destination
+  vars:
+    id: folder-missing
+    request: 'Context: The supplied notes are "Library opens at nine; closes at six." Save them as notes.txt. No default destination is configured. User: 帮我把以上内容整理到文件夹里。'
+    expected: clarify
+- description: Saving supplied notes includes a destination
+  vars:
+    id: folder-complete
+    request: 'Context: The supplied notes are "Library opens at nine; closes at six." Save them as notes.txt. The destination exists and is writable; there is no existing notes.txt. User: 帮我把以上内容整理到 C:\Study\Notes 文件夹里。'
+    expected: answer
