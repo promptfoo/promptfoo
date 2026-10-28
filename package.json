@@ -273,7 +273,7 @@
     "@modelcontextprotocol/server-filesystem": "2026.8.31",
     "@opencode-ai/sdk": "^1.18.34",
     "@smithy/node-http-handler": "^4.4.14",
-    "google-auth-library": "^11.3.0",
+    "google-auth-library": "^11.3.1",
     "hono": "^4.13.12",
     "natural": "^8.1.1",
     "node-sql-parser": "^5.4.0",
