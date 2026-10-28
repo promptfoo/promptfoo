@@ -171,9 +171,13 @@ class CodexCliCleanupError extends Error {
   override name = 'CodexCliCleanupError';
   readonly cleanup: WindowsCleanupDetails;
 
-  constructor(cleanup: WindowsCleanupDetails, options?: ErrorOptions) {
-    super(`Codex CLI process-tree cleanup failed: ${JSON.stringify(cleanup)}`, options);
+  constructor(cleanup: WindowsCleanupDetails, cause?: Error) {
+    super(`Codex CLI process-tree cleanup failed: ${JSON.stringify(cleanup)}`);
     this.cleanup = cleanup;
+    if (cause) {
+      // This module is also typechecked against the app's ES2020 library target.
+      Object.defineProperty(this, 'cause', { value: cause, configurable: true });
+    }
   }
 }
 
@@ -331,7 +335,7 @@ function runVersionProbe(options: CompatibilityOptions): Promise<string> {
         .catch((cleanupError: unknown) => {
           failure =
             cleanupError instanceof CodexCliCleanupError
-              ? new CodexCliCleanupError(cleanupError.cleanup, { cause: failure })
+              ? new CodexCliCleanupError(cleanupError.cleanup, failure)
               : cleanupError instanceof Error
                 ? cleanupError
                 : new Error(String(cleanupError));
@@ -508,10 +512,13 @@ async function runCompatibilityCheck(options: CompatibilityOptions): Promise<voi
       throw aborted;
     }
     const message = error instanceof Error ? error.message : String(error);
-    throw new CodexCliCompatibilityError(
+    const failure = new CodexCliCompatibilityError(
       `Could not verify Codex CLI compatibility for ${options.codexPathOverride}: ${message}. For more information, see: ${CODEX_SDK_DOCS_URL}`,
-      error instanceof CodexCliCleanupError ? { cause: error } : undefined,
     );
+    if (error instanceof CodexCliCleanupError) {
+      Object.defineProperty(failure, 'cause', { value: error, configurable: true });
+    }
+    throw failure;
   }
 
   const version = CODEX_VERSION_PATTERN.exec(output)?.[1];

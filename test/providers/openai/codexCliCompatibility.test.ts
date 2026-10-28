@@ -898,6 +898,15 @@ describe('checkCodexCliCompatibility', () => {
           'error.cause.message',
           expect.not.stringContaining('SYNTHETIC_PRIVATE_UTILITY_OUTPUT'),
         );
+        const error = (outcome as { error: Error & { cause: Error } }).error;
+        expect(Object.getOwnPropertyDescriptor(error, 'cause')).toMatchObject({
+          enumerable: false,
+          value: expect.any(Error),
+        });
+        expect(Object.getOwnPropertyDescriptor(error.cause, 'cause')).toMatchObject({
+          enumerable: false,
+          value: expect.objectContaining({ message: expect.stringContaining('stdout exceeded') }),
+        });
         expect(probe.child.kill).toHaveBeenCalledTimes(exitedFirst || exitsAfterCallback ? 0 : 1);
         expect(mockExecFile).toHaveBeenCalledTimes(1);
         expect(vi.getTimerCount()).toBe(0);
