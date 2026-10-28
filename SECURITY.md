@@ -8,9 +8,9 @@ Promptfoo is a developer tool that runs in your environment with your user permi
 
 Some features intentionally execute user-provided code (custom assertions, custom or script-based providers, transforms, hooks, plugins, and templates in fields that execute code). This code execution is **not sandboxed** and should be treated the same way you would treat running a Node.js script locally.
 
-**The guiding principle:** Promptfoo OSS is a local eval runner, not a sandbox for adversarial eval content. If you explicitly run a config, or select/configure a provider, model, fixture, dataset, prompt pack, remote resource, model-output feedback loop, template, or field that Promptfoo evaluates as code, the result is your responsibility. Running evals against adversarial providers, models, fixtures, remote content, or model-output feedback loops carries inherent risk — use isolation and scoped credentials (see Hardening Recommendations). A vulnerability exists when behavior bypasses a supported isolation boundary or hardening control, affects Cloud/on-prem tenant isolation, or sends data or secrets to a destination the user did not configure for the selected eval, account, reporting, sharing, hosted-feature, or Cloud path.
+When you configure a feature to execute code from a source, you trust that source to supply code. When you select a data source or model as input, you authorize the feature to process its content for the documented purpose. The feature's documented security restrictions take precedence over the general trust placed in eval inputs and apply whenever Promptfoo processes or reuses those inputs.
 
-**Important:** Treat Promptfoo configuration files and everything they reference or evaluate against as **trusted code and data**. This includes referenced scripts, prompt packs, test fixtures or datasets, configured providers, models, remote content, and model-output feedback loops. Run untrusted configs, scripts, prompt packs, fixtures, datasets, providers, models, remote content, model-output feedback loops, or pull requests only when the run is isolated and secrets are scoped for that run.
+Promptfoo OSS provides no general sandbox for adversarial eval content. Run untrusted configs, scripts, prompt packs, fixtures, datasets, providers, models, remote content, model-output feedback loops, or pull requests only when the run is isolated and secrets are scoped for that run. A vulnerability exists when behavior bypasses a supported isolation boundary or hardening control, affects Cloud/on-prem tenant isolation, or sends data or secrets to a destination the user did not configure for the selected eval, account, reporting, sharing, hosted-feature, or Cloud path.
 
 ### Local Developer Interfaces
 
@@ -205,7 +205,7 @@ We request CVEs through GitHub Security Advisories when appropriate. Final advis
 
 **We usually request a CVE for:**
 
-- Code execution that bypasses a supported hardening control or isolation boundary outside the documented local eval pipeline
+- Code execution that bypasses a supported hardening control or isolation boundary
 - Bypasses of Cloud/on-prem isolation boundaries
 - Secret or credential leakage to destinations not configured to participate in the selected eval, account, reporting, sharing, hosted-feature, or Cloud path
 - Bypasses of documented tenant-isolation, authentication, authorization, redaction, or exclusion controls that send secrets, credentials, or sensitive eval data to an external destination
@@ -259,7 +259,7 @@ When a fix is released, we will:
 
 **In scope:**
 
-- Code execution, file access, network access, or secret exposure that bypasses a supported isolation boundary or hardening control outside the documented local eval pipeline
+- Code execution, file access, network access, or secret exposure that bypasses a supported isolation boundary or hardening control
 - Bypasses of documented restrictions or isolation boundaries
 - Data, secret, or credential leakage to destinations not configured to participate in the selected eval, account, reporting, sharing, hosted-feature, or Cloud path, or outside the documented payload for that path
 - Path traversal or arbitrary file read/write that escapes a documented sandbox, authentication/authorization boundary, Cloud/on-prem tenant boundary, or explicit path restriction that Promptfoo identifies as a security boundary
@@ -270,6 +270,8 @@ When a fix is released, we will:
 - Algorithmic complexity DoS (crafted input causing hang/crash with modest input size)
 
 **Out of scope:**
+
+The exclusions for configured code and eval content apply when the feature operates within its documented security restrictions.
 
 - Code execution from **explicitly configured** custom code or templates in code-executing fields (e.g., JS/Python assertions, custom providers, transforms, hooks, plugins, `file://`-backed scripts)
 - Adversarial eval content flowing through the configured template engine, variable loading or reference dereferencing, built-in assertions, graders, providers, transforms, reports, or model-output feedback loops. This includes model outputs, `_conversation` history, grader outputs, fixture values, values saved with `storeOutputAs`, and other stored runtime values later rendered, dereferenced, or passed through configured eval pipeline steps
