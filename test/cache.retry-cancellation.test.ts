@@ -125,6 +125,36 @@ describe('fetchWithCache retry budget and Request cancellation', () => {
   });
 
   it.each([
+    { status: 200, body: { ok: true }, expected: { data: { ok: true } } },
+    {
+      status: 429,
+      body: { error: { code: 'insufficient_quota' } },
+      expected: { kind: 'quota', code: 'insufficient_quota' },
+    },
+  ])(
+    'reads an HTTP $status body with a templated request timeout',
+    async ({ status, body, expected }) => {
+      const clock = vi.spyOn(performance, 'now').mockReturnValue(10.5);
+      transport.mockImplementation(() => {
+        clock.mockReturnValue(12.5);
+        return Response.json(body, { status });
+      });
+      // A numeric provider setting can arrive as a string after template rendering.
+      const timeout = '650' as unknown as number;
+      const result = await fetchWithCache(
+        'https://cache.test/templated-timeout',
+        {},
+        timeout,
+        'json',
+        true,
+        0,
+      ).catch((error: unknown) => error);
+
+      expect(result).toMatchObject(expected);
+    },
+  );
+
+  it.each([
     {
       status: 200,
       headers: undefined,
