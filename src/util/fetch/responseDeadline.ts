@@ -1,5 +1,3 @@
-import { waitForPromiseWithAbort } from '../../providers/shared';
-
 // Buffered readers continue the successful attempt's deadline after headers. Callers
 // that take ownership of a streaming Response still control its lifetime themselves.
 type RequestDeadline = { controller: AbortController; expiresAt: number; timeout: number };
@@ -21,22 +19,23 @@ export async function readWithResponseDeadline<T>(
   responseDeadlines.delete(response);
 
   const { controller, expiresAt, timeout } = deadline;
-  const expire = () => {
-    const error = new Error(`Request timed out after ${timeout} ms`);
-    controller.abort(error);
-    return error;
-  };
-  const remaining = expiresAt - performance.now();
-  if (remaining <= 0) {
-    throw expire();
-  }
-  const timer = setTimeout(expire, remaining);
+  let timer: ReturnType<typeof setTimeout> | undefined;
   try {
-    return await waitForPromiseWithAbort(read(), controller.signal);
-  } catch (error) {
-    // A deadline is a request failure, even if the transport reports AbortError.
-    controller.signal.throwIfAborted();
-    throw error;
+    return await new Promise<T>((resolve, reject) => {
+      const expire = () => {
+        const error = new Error(`Request timed out after ${timeout} ms`);
+        // Report the request timeout before the transport turns it into an AbortError.
+        reject(error);
+        controller.abort(error);
+      };
+      const remaining = expiresAt - performance.now();
+      if (remaining <= 0) {
+        expire();
+        return;
+      }
+      timer = setTimeout(expire, remaining);
+      read().then(resolve, reject);
+    });
   } finally {
     clearTimeout(timer);
   }
