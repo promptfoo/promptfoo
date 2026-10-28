@@ -21,7 +21,7 @@ import {
   preserveCloudAuthRedirects,
 } from './util/fetch/monkeyPatchFetch';
 import { getEffectiveRequestSignal } from './util/fetch/requestSignal';
-import { readResponseTextWithTimeout } from './util/fetch/responseDeadline';
+import { readWithResponseDeadline } from './util/fetch/responseDeadline';
 import { getFetchRetryContextMaxRetries } from './util/fetch/retryContext';
 import { isSecretField, looksLikeSecret, sanitizeUrlForLogging } from './util/sanitizer';
 import { sleep } from './util/time';
@@ -746,7 +746,7 @@ async function fetchAndReadBody(
     const fetchLatencyMs = Date.now() - fetchStart;
 
     try {
-      const respText = await readResponseTextWithTimeout(resp);
+      const respText = await readWithResponseDeadline(resp, () => resp.text());
       return { respText, resp, fetchLatencyMs };
     } catch (err) {
       if (

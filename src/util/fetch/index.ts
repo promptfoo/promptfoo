@@ -24,7 +24,7 @@ import {
 } from './errors';
 import { monkeyPatchFetch, preserveCloudAuthRedirects } from './monkeyPatchFetch';
 import { getEffectiveRequestSignal } from './requestSignal';
-import { trackResponseDeadline } from './responseDeadline';
+import { readWithResponseDeadline, trackResponseDeadline } from './responseDeadline';
 import { getFetchRetryContextMaxRetries } from './retryContext';
 
 import type { FetchOptions } from './types';
@@ -538,7 +538,9 @@ async function peekRateLimitBody(
 
   let text: string;
   try {
-    text = await readBoundedText(cloned, RATE_LIMIT_BODY_PEEK_BYTES, { requireStream: true });
+    text = await readWithResponseDeadline(response, () =>
+      readBoundedText(cloned, RATE_LIMIT_BODY_PEEK_BYTES, { requireStream: true }),
+    );
   } catch (err) {
     if (signal?.aborted) {
       throw getAbortError(signal);

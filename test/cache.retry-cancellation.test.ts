@@ -124,41 +124,63 @@ describe('fetchWithCache retry budget and Request cancellation', () => {
     }
   });
 
-  it('aborts a partial POST response at the original request deadline', async () => {
-    let wireSignal: AbortSignal | null | undefined;
-    transport.mockImplementation(async (_url, options: RequestInit) => {
-      wireSignal = options.signal;
-      await new Promise((resolve) => setTimeout(resolve, 600));
-      return new Response(
-        new ReadableStream<Uint8Array>({
-          start(stream) {
-            stream.enqueue(new TextEncoder().encode('partial body'));
-            options.signal?.addEventListener('abort', () => stream.error(options.signal?.reason), {
-              once: true,
-            });
-          },
-        }),
-      );
-    });
-    const outcome = fetchWithCache(
-      'https://cache.test/stalled-body',
-      { method: 'POST' },
-      1000,
-      'text',
-      true,
-      2,
-    ).catch((error: unknown) => error);
+  it.each([
+    {
+      status: 200,
+      headers: undefined,
+      maxRetries: 2,
+      expected: { message: expect.stringMatching(/timed out after 1000 ms/i) },
+    },
+    {
+      status: 429,
+      headers: { 'Retry-After': '7' },
+      maxRetries: 0,
+      expected: { name: 'HttpRateLimitError', status: 429, kind: 'rate_limit', retryAfterMs: 7000 },
+    },
+  ])(
+    'aborts a partial HTTP $status POST response at the original request deadline',
+    async ({ status, headers, maxRetries, expected }) => {
+      const headersReady = createDeferred<void>();
+      let wireSignal: AbortSignal | null | undefined;
+      transport.mockImplementation(async (_url, options: RequestInit) => {
+        wireSignal = options.signal;
+        await headersReady.promise;
+        return new Response(
+          new ReadableStream<Uint8Array>({
+            start(stream) {
+              stream.enqueue(new TextEncoder().encode('partial body'));
+              options.signal?.addEventListener(
+                'abort',
+                () => stream.error(options.signal?.reason),
+                {
+                  once: true,
+                },
+              );
+            },
+          }),
+          { status, headers },
+        );
+      });
+      const outcome = fetchWithCache(
+        'https://cache.test/stalled-body',
+        { method: 'POST' },
+        1000,
+        'text',
+        true,
+        maxRetries,
+      ).catch((error: unknown) => error);
 
-    await vi.advanceTimersByTimeAsync(999);
-    expect(wireSignal?.aborted).toBe(false);
-    await vi.advanceTimersByTimeAsync(1);
+      await vi.advanceTimersByTimeAsync(600);
+      headersReady.resolve();
+      await vi.advanceTimersByTimeAsync(399);
+      expect(wireSignal?.aborted).toBe(false);
+      await vi.advanceTimersByTimeAsync(1);
 
-    expect(wireSignal?.aborted).toBe(true);
-    expect(await outcome).toMatchObject({
-      message: expect.stringMatching(/timed out after 1000 ms/i),
-    });
-    expect(transport).toHaveBeenCalledOnce();
-  });
+      expect(wireSignal?.aborted).toBe(true);
+      expect(await outcome).toMatchObject(expected);
+      expect(transport).toHaveBeenCalledOnce();
+    },
+  );
 
   it.each([
     [100, 1000],

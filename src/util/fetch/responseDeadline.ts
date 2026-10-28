@@ -10,10 +10,13 @@ export function trackResponseDeadline(response: Response, deadline: RequestDeadl
   responseDeadlines.set(response, deadline);
 }
 
-export async function readResponseTextWithTimeout(response: Response): Promise<string> {
+export async function readWithResponseDeadline<T>(
+  response: Response,
+  read: () => Promise<T>,
+): Promise<T> {
   const deadline = responseDeadlines.get(response);
   if (!deadline) {
-    return response.text();
+    return read();
   }
   responseDeadlines.delete(response);
 
@@ -29,7 +32,7 @@ export async function readResponseTextWithTimeout(response: Response): Promise<s
   }
   const timer = setTimeout(expire, remaining);
   try {
-    return await waitForPromiseWithAbort(response.text(), controller.signal);
+    return await waitForPromiseWithAbort(read(), controller.signal);
   } catch (error) {
     // A deadline is a request failure, even if the transport reports AbortError.
     controller.signal.throwIfAborted();
