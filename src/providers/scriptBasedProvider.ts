@@ -1,5 +1,4 @@
-import { getResolvedRelativePath } from '../util/file';
-import { parseExecutableFileReference } from '../util/fileExtensions';
+import { getResolvedRelativePath, parseExecutableFileReference } from '../util/file';
 
 import type { LoadApiProviderContext } from '../types/index';
 import type { ApiProvider, ProviderOptions } from '../types/providers';

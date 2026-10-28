@@ -475,7 +475,7 @@ export default function BlackHat2026(): React.ReactElement {
               <Link to="/contact/" className={styles.primaryButton}>
                 Request a demo
               </Link>
-              <Link to="https://discord.gg/promptfoo" className={styles.secondaryButton}>
+              <Link to="https://discord.gg/gHPS9jjfbs" className={styles.secondaryButton}>
                 Join our Discord
               </Link>
             </div>
