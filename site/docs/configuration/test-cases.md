@@ -425,6 +425,8 @@ When an exact metadata filter is combined with `--filter-failing`, `--filter-fai
 
 For runtime-generated historical cases, saved and current provider/prompt selectors are both applied. If overlapping IDs or labels cannot express their intersection without allowing an excluded column, the evaluation stops before calling a provider. Use distinct IDs or labels, or declare the intended case in the current config.
 
+If a runtime-generated historical case used a singular test provider, replay requires its saved provider identity to identify one current source test. Missing, changed, or ambiguous identities stop the evaluation before provider calls. Declare the case in the current config or give source tests distinct provider identities; saved provider configuration is never reused.
+
 The selected cases must be saved safely before provider calls. If active data-stripping or redaction settings prevent that, the eval stops; use `--no-write` to run without saving a resumable eval. Distinct test providers need distinguishable IDs or labels for saved recovery; otherwise the eval stops before provider calls. Prompt suggestion generation cannot run with this filter combination; generate prompts separately and reuse them. Historical-only cases can retain simple declarative assertions, but executable assertions, graders, and provider settings must come from current config test cases.
 
 ### JSON in CSV

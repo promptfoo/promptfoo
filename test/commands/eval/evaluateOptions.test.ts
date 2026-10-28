@@ -15,7 +15,12 @@ import { isSafeMode } from '../../../src/util/safeMode';
 import { mockProcessEnv } from '../../util/utils';
 import type { Command } from 'commander';
 
-import type { CommandLineOptions, EvaluateOptions, TestSuite } from '../../../src/types/index';
+import type {
+  CommandLineOptions,
+  EvaluateOptions,
+  TestCase,
+  TestSuite,
+} from '../../../src/types/index';
 import type {
   InternalEvaluateOptions,
   PreparedHistoricalCandidate,
@@ -1285,7 +1290,7 @@ describe('evaluateOptions behavior', () => {
         ],
       });
       const resultsPath = path.join(tmpDir, 'exact-history-default-metadata.json');
-      const writeResult = (metadata: Record<string, unknown>) =>
+      const writeResult = (metadata: Record<string, unknown>, targetId = 'qa-target-A') =>
         fs.writeFileSync(
           resultsPath,
           JSON.stringify({
@@ -1298,7 +1303,7 @@ describe('evaluateOptions behavior', () => {
                   testCase: {
                     vars: { id: 'a!' },
                     metadata,
-                    provider: { id: 'qa-target-A', label: 'shared-target' },
+                    provider: { id: targetId, label: 'shared-target' },
                   },
                 },
               ],
@@ -1335,8 +1340,14 @@ describe('evaluateOptions behavior', () => {
       ];
       expect(await selection.select(prepared, suite)).toEqual([]);
 
-      // Extra runtime metadata cannot prove that this was the authored test.
+      // Extra runtime metadata cannot prove that the old target is safe to reuse.
       writeResult({ role: 'keep', pluginId: 'runtime-generated' });
+      await expect(selection.select(prepared, suite)).rejects.toThrow(
+        'one current singular provider',
+      );
+
+      // A runtime case using the current target may still be selected.
+      writeResult({ role: 'keep', pluginId: 'runtime-generated' }, 'qa-target-B');
       expect((await selection.select(prepared, suite)).map((item) => item.test.vars?.id)).toEqual([
         'a!',
       ]);
@@ -1698,6 +1709,193 @@ describe('evaluateOptions behavior', () => {
       expect(selected).toHaveLength(1);
       expect(selected[0].test.providers).toEqual(['provider-A']);
       expect(selected[0].test.prompts).toEqual(['prompt-A']);
+    });
+
+    it('binds a synthetic scenario row to one current singular target and source', async () => {
+      const targetPath = path.join(tmpDir, 'exact-synthetic-current-target.cjs');
+      fs.writeFileSync(
+        targetPath,
+        "module.exports = class { id() { return 'qa-synthetic-current-target'; } async callApi() { return { output: 'current' }; } };",
+      );
+      const configFile = writeTempConfig(tmpDir, 'exact-synthetic-singular.yaml', {
+        providers: ['echo'],
+        prompts: ['Hello {{caseId}}'],
+        scenarios: [
+          {
+            config: [{ metadata: { role: 'keep' } }],
+            tests: [
+              {
+                vars: { caseId: 'authored' },
+                provider: { id: `file://${targetPath}`, label: 'current-target' },
+              },
+            ],
+          },
+        ],
+      });
+      const resultsPath = path.join(tmpDir, 'exact-synthetic-singular.json');
+      fs.writeFileSync(
+        resultsPath,
+        JSON.stringify({
+          results: {
+            results: [
+              {
+                success: false,
+                failureReason: ResultFailureReason.ASSERT,
+                vars: { caseId: 'generated' },
+                provider: { id: 'echo' },
+                metadata: { __promptfoo: { evalOrigin: 'scenario' } },
+                testCase: {
+                  vars: { caseId: 'generated' },
+                  metadata: {
+                    role: 'keep',
+                    pluginId: 'runtime',
+                    conversationId: '__scenario_0__',
+                  },
+                  provider: { id: 'qa-synthetic-current-target', label: 'current-target' },
+                },
+              },
+            ],
+          },
+        }),
+      );
+
+      await doEval(
+        {
+          table: false,
+          write: false,
+          config: [configFile],
+          filterMetadataExact: 'role=keep',
+          filterFailing: resultsPath,
+        },
+        {},
+        undefined,
+        {},
+      );
+      const suite = evaluateMock.mock.calls.at(-1)?.[0] as TestSuite;
+      const selection = (evaluateMock.mock.calls.at(-1)?.[2] as InternalEvaluateOptions)
+        .exactHistoricalSelection!;
+      const test = suite.scenarios![0].tests[0];
+      const selected = await selection.select(
+        [
+          {
+            source: { kind: 'scenario', scenarioIndex: 0, variantIndex: 0, testIndex: 0 },
+            test: {
+              ...test,
+              vars: { caseId: 'authored' },
+              metadata: { role: 'keep', conversationId: '__scenario_0__' },
+            },
+          },
+        ],
+        suite,
+      );
+
+      expect(selected).toHaveLength(1);
+      expect(selected[0].source).toEqual({
+        kind: 'scenario',
+        scenarioIndex: 0,
+        variantIndex: 0,
+        testIndex: 0,
+      });
+      expect(selected[0].test.vars).toEqual({ caseId: 'generated' });
+      expect(selected[0].test.provider).toBe(test.provider);
+
+      suite.scenarios![0].tests.push({ ...test, vars: { caseId: 'other' } });
+      await expect(
+        selection.select(
+          [
+            {
+              source: { kind: 'scenario', scenarioIndex: 0, variantIndex: 0, testIndex: 0 },
+              test,
+            },
+            {
+              source: { kind: 'scenario', scenarioIndex: 0, variantIndex: 0, testIndex: 1 },
+              test: suite.scenarios![0].tests[1],
+            },
+          ],
+          suite,
+        ),
+      ).rejects.toThrow('one current singular provider');
+    });
+
+    it('keeps a synthetic default target when another scenario source has an override', async () => {
+      const defaultPath = path.join(tmpDir, 'exact-synthetic-default-target.cjs');
+      const overridePath = path.join(tmpDir, 'exact-synthetic-override-target.cjs');
+      fs.writeFileSync(
+        defaultPath,
+        "module.exports = class { id() { return 'qa-default-target'; } async callApi() { return { output: 'default' }; } };",
+      );
+      fs.writeFileSync(
+        overridePath,
+        "module.exports = class { id() { return 'qa-override-target'; } async callApi() { return { output: 'override' }; } };",
+      );
+      const configFile = writeTempConfig(tmpDir, 'exact-synthetic-mixed-target.yaml', {
+        providers: ['echo'],
+        prompts: ['Hello {{caseId}}'],
+        defaultTest: { provider: { id: `file://${defaultPath}` } },
+        scenarios: [
+          {
+            config: [{ metadata: { role: 'keep' } }],
+            tests: [
+              { vars: { caseId: 'default' } },
+              { vars: { caseId: 'override' }, provider: { id: `file://${overridePath}` } },
+            ],
+          },
+        ],
+      });
+      const resultsPath = path.join(tmpDir, 'exact-synthetic-mixed-target.json');
+      fs.writeFileSync(
+        resultsPath,
+        JSON.stringify({
+          results: {
+            results: [
+              {
+                success: false,
+                failureReason: ResultFailureReason.ASSERT,
+                vars: { caseId: 'generated' },
+                provider: { id: 'echo' },
+                metadata: { __promptfoo: { evalOrigin: 'scenario' } },
+                testCase: {
+                  vars: { caseId: 'generated' },
+                  metadata: { role: 'keep', pluginId: 'runtime', conversationId: '__scenario_0__' },
+                  provider: { id: 'qa-default-target' },
+                },
+              },
+            ],
+          },
+        }),
+      );
+      await doEval(
+        {
+          table: false,
+          write: false,
+          config: [configFile],
+          filterMetadataExact: 'role=keep',
+          filterFailing: resultsPath,
+        },
+        {},
+        undefined,
+        {},
+      );
+      const suite = evaluateMock.mock.calls.at(-1)?.[0] as TestSuite;
+      const selection = (evaluateMock.mock.calls.at(-1)?.[2] as InternalEvaluateOptions)
+        .exactHistoricalSelection!;
+      const candidates = suite.scenarios![0].tests.map((test, testIndex) => ({
+        source: { kind: 'scenario' as const, scenarioIndex: 0, variantIndex: 0, testIndex },
+        test: {
+          ...test,
+          provider: test.provider ?? (suite.defaultTest as TestCase).provider,
+          metadata: { role: 'keep', conversationId: '__scenario_0__' },
+        },
+      }));
+      const selected = await selection.select(candidates, suite);
+      expect(selected).toHaveLength(1);
+      expect(selected[0].source).toEqual({
+        kind: 'scenario',
+        scenarioIndex: 0,
+        variantIndex: 0,
+        testIndex: -1,
+      });
+      expect(selected[0].test.provider).toBeUndefined();
     });
 
     it('accepts declarative runtime assertions but rejects executable historical references', async () => {
@@ -2158,6 +2356,37 @@ describe('evaluateOptions behavior', () => {
         id: 'echo',
         config: { response: 'kept-provider-option' },
       });
+    });
+
+    it('marks a persisted exact historical eval as requiring a plan before evaluation starts', async () => {
+      const tempConfig = writeTempConfig(tmpDir, 'test-exact-pending-plan.yaml', {
+        providers: ['echo'],
+        prompts: ['Hello'],
+        tests: [{ metadata: { id: 'selected' } }],
+      });
+      const persistedRecord = new Eval({}, { persisted: true });
+      const create = vi.spyOn(Eval, 'create').mockResolvedValue(persistedRecord);
+      try {
+        await doEval(
+          {
+            table: false,
+            write: true,
+            config: [tempConfig],
+            filterMetadataExact: 'id=selected',
+            filterFailing: 'history.json',
+          },
+          {},
+          undefined,
+          {},
+        );
+        expect(create).toHaveBeenCalledOnce();
+        expect(create.mock.calls[0][2]?.runtimeOptions).toMatchObject({
+          exactHistoricalReplayRequired: true,
+        });
+        expect(create.mock.calls[0][2]?.runtimeOptions?.exactHistoricalReplay).toBeUndefined();
+      } finally {
+        create.mockRestore();
+      }
     });
 
     it('should persist normal exact selections without scanning source tests per selected test', async () => {

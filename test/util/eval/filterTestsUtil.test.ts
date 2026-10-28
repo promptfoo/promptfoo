@@ -7,7 +7,13 @@ import {
 } from '../../../src/util/eval/filterTestsUtil';
 import * as util from '../../../src/util/index';
 
-import type { EvaluateResult, Prompt, ProviderResponse, TestSuite } from '../../../src/types/index';
+import type {
+  EvaluateResult,
+  Prompt,
+  ProviderResponse,
+  TestCase,
+  TestSuite,
+} from '../../../src/types/index';
 
 vi.mock('../../../src/models/eval', () => ({
   default: {
@@ -1838,6 +1844,54 @@ describe('filterTestsUtil', () => {
         ['provider-alpha'],
         ['provider-beta'],
       ]);
+      expect(selected.every((test) => test.provider === undefined)).toBe(true);
+    });
+
+    it('keeps extracted exact-mode rows with distinct singular target identities', async () => {
+      const testSuite: TestSuite = { prompts: [], providers: [], tests: [] };
+      const results = ['target-A', 'target-B'].map((id) => ({
+        vars: { caseId: 'shared' },
+        success: false,
+        failureReason: ResultFailureReason.ASSERT,
+        provider: { id: 'suite-column' },
+        prompt: { raw: 'rendered', label: 'shared' },
+        promptIdx: 0,
+        testIdx: 0,
+        metadata: { __promptfoo: { evalOrigin: 'top-level' } },
+        testCase: {
+          vars: { caseId: 'shared' },
+          metadata: { group: 'common', pluginId: 'runtime' },
+          provider: { id },
+        },
+      })) as unknown as EvaluateResult[];
+      vi.mocked(util.readOutput).mockResolvedValue({
+        evalId: null,
+        results: {
+          version: 3,
+          timestamp: new Date().toISOString(),
+          results,
+          table: { head: { prompts: [], vars: [] }, body: [] },
+          stats: createFailedStats(),
+        },
+        config: {},
+        shareableUrl: null,
+      });
+      const bound: string[] = [];
+      const context = {
+        ...topLevelResultMatchContext(testSuite),
+        bindExtractedTest: (_test: TestCase, result: EvaluateResult) => {
+          bound.push((result.testCase.provider as { id: string }).id);
+        },
+      };
+      const selected = await filterTestsByResults(
+        testSuite,
+        'runtime.json',
+        () => true,
+        undefined,
+        context,
+      );
+      expect(selected).toHaveLength(2);
+      expect(bound).toEqual(['target-A', 'target-B']);
       expect(selected.every((test) => test.provider === undefined)).toBe(true);
     });
 

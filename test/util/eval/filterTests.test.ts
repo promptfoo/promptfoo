@@ -1323,6 +1323,39 @@ describe('filterTests', () => {
       }
     });
 
+    it('does not log inherited secrets when a legacy condition fails after an exact match', async () => {
+      const secret = 'qa-mixed-metadata-secret-sentinel';
+      const debugSpy = vi.spyOn(logger, 'debug');
+
+      try {
+        await filterTests(
+          {
+            prompts: [],
+            providers: [],
+            tests: [
+              {
+                metadata: {
+                  category: 'keep',
+                  role: 'different',
+                  apiKey: secret,
+                  Authorization: `Bearer ${secret}`,
+                },
+              },
+            ],
+          },
+          {
+            metadataExact: 'category=keep',
+            metadata: `role=${secret}`,
+          },
+        );
+
+        const logged = debugSpy.mock.calls.flatMap((call) => call.map(String)).join('\n');
+        expect(logged).not.toContain(secret);
+      } finally {
+        debugSpy.mockRestore();
+      }
+    });
+
     it.each(['invalid', 'id=', 'id=,1', 'id=1,'])(
       'rejects invalid exact filters: %s',
       async (filter) => {

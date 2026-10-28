@@ -87,6 +87,7 @@ function deduplicateTestsWithMetadata(tests: Tests, context: ResultMatchContext)
       vars: filterRuntimeVars(test.vars),
       metadata: test.metadata,
       provider: providerToIdentifier(test.provider),
+      extractedIdentity: context.extractedIdentityFor?.(test),
       prompts: test.prompts,
       providers: test.providers,
     });
@@ -286,9 +287,7 @@ export async function filterTests(testSuite: TestSuite, options: FilterOptions):
 
     const parsedFilters = parseMetadataFilters(metadataFilters, '--filter-metadata');
 
-    logger.debug(
-      `Filtering for metadata conditions (AND across filters, OR within each filter): ${metadataFilters.join('; ')}`,
-    );
+    logger.debug(`Filtering for ${parsedFilters.length} legacy metadata condition(s)`);
     logger.debug(`Before metadata filter: ${tests.length} tests`);
 
     // Preserve legacy-only behavior; mixed mode skips nullish values as exact mode requires.
@@ -321,9 +320,7 @@ export async function filterTests(testSuite: TestSuite, options: FilterOptions):
         });
 
         if (!matches) {
-          logger.debug(
-            `Test "${test.description || 'unnamed test'}" metadata doesn't match. Expected ${key} to include one of [${values.join(', ')}], got ${JSON.stringify(test.metadata)}`,
-          );
+          logger.debug('Test did not match a legacy metadata condition');
           return false;
         }
       }

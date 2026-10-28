@@ -38,6 +38,10 @@ export class EvalEvaluationStore implements EvaluationStore<Eval, EvalResult> {
     return this.evaluation.runtimeOptions?.exactHistoricalReplay;
   }
 
+  requiresExactHistoricalReplay(): boolean {
+    return this.evaluation.runtimeOptions?.exactHistoricalReplayRequired === true;
+  }
+
   async saveExactHistoricalReplay(plan: ExactHistoricalReplayPlan): Promise<void> {
     const original = this.evaluation.runtimeOptions;
     const next = { ...original, exactHistoricalReplay: plan };

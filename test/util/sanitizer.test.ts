@@ -63,6 +63,12 @@ describe('sanitizeRuntimeOptions', () => {
       'shouldStripResponseOutput',
     ] as const) {
       expect(sanitizeRuntimeOptions({ exactHistoricalReplay: plan }, { [flag]: true })).toEqual({});
+      expect(
+        sanitizeRuntimeOptions(
+          { exactHistoricalReplayRequired: true, exactHistoricalReplay: plan },
+          { [flag]: true },
+        ),
+      ).toEqual({ exactHistoricalReplayRequired: true });
     }
     const redacted = sanitizeRuntimeOptions({
       exactHistoricalReplay: {

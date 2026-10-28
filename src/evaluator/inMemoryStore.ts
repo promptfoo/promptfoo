@@ -78,6 +78,10 @@ export class InMemoryEvaluationStore
     return this.evaluation.runtimeOptions?.exactHistoricalReplay;
   }
 
+  requiresExactHistoricalReplay(): boolean {
+    return this.evaluation.runtimeOptions?.exactHistoricalReplayRequired === true;
+  }
+
   async saveExactHistoricalReplay(plan: ExactHistoricalReplayPlan): Promise<void> {
     this.evaluation.runtimeOptions = {
       ...this.evaluation.runtimeOptions,

@@ -5958,6 +5958,18 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     // Add abort checks at key points
     checkAbort();
 
+    const storedPlan = this.store.readExactHistoricalReplay();
+    if (
+      this.store.requiresExactHistoricalReplay() &&
+      storedPlan === undefined &&
+      !options.exactHistoricalSelection
+    ) {
+      throw new Error('A prepared exact historical replay plan is required but was not saved');
+    }
+    // Validate before hooks, prompt generation, or provider calls can run.
+    const replayPlan =
+      storedPlan === undefined ? undefined : validateExactHistoricalReplayPlan(storedPlan);
+
     const assertionTypes = new Set<string>();
     const rowsWithSelectBestAssertion = new Set<number>();
     const rowsWithMaxScoreAssertion = new Set<number>();
@@ -5992,9 +6004,6 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     }
 
     const historicalSelection = options.exactHistoricalSelection;
-    const storedPlan = this.store.readExactHistoricalReplay();
-    const replayPlan =
-      storedPlan === undefined ? undefined : validateExactHistoricalReplayPlan(storedPlan);
     if (replayPlan) {
       assertPreparedHistoryStripPolicy(testSuite.env, this.store.config.env);
     }

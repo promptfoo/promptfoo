@@ -22,7 +22,7 @@ import { cloudConfig } from '../globalConfig/cloud';
 import logger, { getLogLevel } from '../logger';
 import { runDbMigrations } from '../migrate';
 import Eval from '../models/eval';
-import { toSerializableProviderRef } from '../models/evalResult';
+import { toSerializableProviderRef, validateExactHistoricalReplayPlan } from '../models/evalResult';
 import { providerRegistry } from '../providers/providerRegistry';
 import { neverGenerateRemote } from '../redteam/remoteGeneration';
 import { createShareableUrl, isSharingEnabled } from '../share';
@@ -30,7 +30,12 @@ import { generateTable } from '../table';
 import telemetry from '../telemetry';
 import { EMAIL_OK_STATUS } from '../types/email';
 import { isCliEventSource } from '../types/eventSource';
-import { CommandLineOptionsSchema, MAX_SUGGESTIONS_COUNT, TestSuiteSchema } from '../types/index';
+import {
+  CommandLineOptionsSchema,
+  isApiProvider,
+  MAX_SUGGESTIONS_COUNT,
+  TestSuiteSchema,
+} from '../types/index';
 import { checkCloudPermissions, getEvalConfigFromCloud, getOrgContext } from '../util/cloud';
 import { loadDefaultConfig } from '../util/config/default';
 import { DEFAULT_CONFIG_EXTENSIONS } from '../util/config/extensions';
@@ -77,6 +82,7 @@ import type {
   CommandLineOptions,
   EnvOverrides,
   EvalRuntimeOptions,
+  EvaluateResult,
   Scenario,
   TestCase,
   TestSuite,
@@ -206,6 +212,77 @@ function intersectHistoricalSelectors<T>(
   return refs;
 }
 
+function historicalTargetIdentity(provider: TestCase['provider']) {
+  if (!provider) {
+    return undefined;
+  }
+  const id =
+    typeof provider === 'string'
+      ? provider
+      : typeof provider.id === 'function'
+        ? provider.id()
+        : provider.id;
+  if (typeof id !== 'string' || !id) {
+    return undefined;
+  }
+  const label = typeof provider === 'object' ? provider.label : undefined;
+  return { id, ...(typeof label === 'string' && label ? { label } : {}) };
+}
+
+function hasCurrentSingularOverride(
+  source: PreparedHistoricalCandidate['source'],
+  suite: TestSuite,
+) {
+  if (source.kind === 'top-level') {
+    return suite.tests?.[source.testIndex]?.provider !== undefined;
+  }
+  const scenario = suite.scenarios?.[source.scenarioIndex];
+  return (
+    scenario?.config[source.variantIndex]?.provider !== undefined ||
+    scenario?.tests?.[source.testIndex]?.provider !== undefined
+  );
+}
+
+function bindCurrentSyntheticTarget(
+  result: EvaluateResult | undefined,
+  candidates: PreparedHistoricalCandidate[],
+  suite: TestSuite,
+): PreparedHistoricalCandidate | undefined {
+  const singularSources = new Map(
+    candidates
+      .filter((candidate) => hasCurrentSingularOverride(candidate.source, suite))
+      .map((candidate) => [JSON.stringify(candidate.source), candidate]),
+  );
+  if (singularSources.size === 0) {
+    return undefined;
+  }
+  const stored = historicalTargetIdentity(result?.testCase?.provider);
+  const matchesStored = (provider: TestCase['provider']) => {
+    if (!isApiProvider(provider)) {
+      return false;
+    }
+    const current = historicalTargetIdentity(provider);
+    return (
+      stored?.id === current?.id &&
+      (!stored?.label || !current?.label || stored.label === current.label)
+    );
+  };
+  const matching = [...singularSources.values()].filter((candidate) => {
+    return matchesStored(candidate.test.provider);
+  });
+  const defaultProvider =
+    typeof suite.defaultTest === 'object' ? suite.defaultTest.provider : undefined;
+  if (matchesStored(defaultProvider) && matching.length === 0) {
+    return undefined;
+  }
+  if (matching.length !== 1 || matchesStored(defaultProvider)) {
+    throw new Error(
+      'Could not safely bind an extracted historical case to one current singular provider. Declare the generated case in the current config or use distinct source tests.',
+    );
+  }
+  return matching[0];
+}
+
 function createExactHistoricalSelector({
   filters,
   scenarioSourceIndices,
@@ -283,6 +360,7 @@ function createExactHistoricalSelector({
     ): Promise<PreparedHistoricalCandidate[]> => {
       const byTest = new Map(groupCandidates.map((candidate) => [candidate.test, candidate]));
       const originalByCopy = new WeakMap<object, PreparedHistoricalCandidate>();
+      const resultByExtractedTest = new WeakMap<TestCase, EvaluateResult>();
       const defaultMetadata =
         typeof suite.defaultTest === 'object' ? suite.defaultTest.metadata : undefined;
       const metadataKeysByTest = new Map(
@@ -329,6 +407,14 @@ function createExactHistoricalSelector({
         },
         authoredTestFor: (test) =>
           originalByCopy.get(test)?.test ?? resultContext.authoredTestFor?.(test),
+        bindExtractedTest: (test, result) => {
+          resultByExtractedTest.set(test, result);
+          resultContext.bindExtractedTest?.(test, result);
+        },
+        extractedIdentityFor: (test) =>
+          JSON.stringify(
+            historicalTargetIdentity(resultByExtractedTest.get(test)?.testCase?.provider),
+          ),
       };
       const selected = await filterTests(groupSuite, {
         ...groupFilters,
@@ -342,11 +428,17 @@ function createExactHistoricalSelector({
         // Extracted historical cases are already prepared; never execute a saved transform.
         const { transformVars: _historicalTransform, ...options } = test.options ?? {};
         assertSafeExtractedHistoricalTest({ ...test, options });
+        const currentTarget = bindCurrentSyntheticTarget(
+          resultByExtractedTest.get(test),
+          groupCandidates,
+          suite,
+        );
         return {
-          source: extractedSource,
+          source: currentTarget?.source ?? extractedSource,
           test: {
             ...test,
             options,
+            ...(currentTarget && { provider: currentTarget.test.provider }),
             providers: intersectHistoricalSelectors(
               suite.providers,
               test.providers,
@@ -794,6 +886,18 @@ async function doEvalWithEnv(
           logForCli: () => logger.error(message),
         });
       }
+      if (
+        resumeEval.runtimeOptions?.exactHistoricalReplayRequired &&
+        resumeEval.runtimeOptions.exactHistoricalReplay === undefined
+      ) {
+        return failEvalRun(
+          'This evaluation requires a prepared exact historical replay plan that was not saved. Start a fresh evaluation.',
+          isCliInvocation,
+        );
+      }
+      if (resumeEval.runtimeOptions?.exactHistoricalReplay !== undefined) {
+        validateExactHistoricalReplayPlan(resumeEval.runtimeOptions.exactHistoricalReplay);
+      }
       logger.info(chalk.cyan(`Resuming evaluation ${resumeEval.id}...`));
       // Use the saved config as our base to ensure identical test ordering
       ({
@@ -820,6 +924,18 @@ async function doEvalWithEnv(
         return failEvalRun(message, isCliInvocation, {
           logForCli: () => logger.error(message),
         });
+      }
+      if (
+        latestEval.runtimeOptions?.exactHistoricalReplayRequired &&
+        latestEval.runtimeOptions.exactHistoricalReplay === undefined
+      ) {
+        return failEvalRun(
+          'This evaluation requires a prepared exact historical replay plan that was not saved. Start a fresh evaluation.',
+          isCliInvocation,
+        );
+      }
+      if (latestEval.runtimeOptions?.exactHistoricalReplay !== undefined) {
+        validateExactHistoricalReplayPlan(latestEval.runtimeOptions.exactHistoricalReplay);
       }
 
       // Get all ERROR result IDs - capture BEFORE retry so we know what to delete on success
@@ -1209,6 +1325,9 @@ async function doEvalWithEnv(
     const runtimeOptions: EvalRuntimeOptions = {
       ...persistableOptions,
       ...(providerFilter ? { providerFilter } : {}),
+      ...(deferExactHistoricalSelection && cmdObj.write
+        ? { exactHistoricalReplayRequired: true }
+        : {}),
       ...(filterMetadataExact !== undefined && !hasScenarios ? { filterRange: undefined } : {}),
     };
 

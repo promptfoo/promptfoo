@@ -331,6 +331,8 @@ export type EvaluateOptions = z.infer<typeof EvaluateOptionsSchema> & {
 export type EvalRuntimeOptions = Partial<EvaluateOptions> & {
   /** @internal Normalized value of --filter-providers or --filter-targets. */
   providerFilter?: string;
+  /** @internal A persisted exact-history selection must have a committed replay plan. */
+  exactHistoricalReplayRequired?: boolean;
   /** @internal Selected cases after exact historical matching and variable preparation. */
   exactHistoricalReplay?: ExactHistoricalReplayPlan;
 };

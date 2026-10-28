@@ -29,6 +29,8 @@ export interface ResultMatchContext {
   includesResult: (result: EvaluateResult, source?: StoredResultProvenance) => boolean;
   matchesTest: (result: EvaluateResult, test: TestCase, authoredTest?: TestCase) => boolean;
   bindMatchedTest?: (test: TestCase, authoredTest: TestCase) => void;
+  bindExtractedTest?: (test: TestCase, result: EvaluateResult) => void;
+  extractedIdentityFor?: (test: TestCase) => string | undefined;
   authoredTestFor?: (test: TestCase) => TestCase | undefined;
   /** Deferred selection can reject a historical row that no longer maps to a current input. */
   shouldExtractResult?: (result: EvaluateResult) => boolean;
@@ -404,6 +406,9 @@ export async function filterTestsByResults(
           metadata: result.testCase?.metadata,
           prompts: result.testCase?.prompts,
           providers: result.testCase?.providers,
+          ...(resultMatchContext.bindExtractedTest && {
+            target: targetIdentity(result.testCase?.provider),
+          }),
         })
       : JSON.stringify(filterRuntimeVars(result.vars));
   const matchedResultKey = (result: EvaluateResult) =>
@@ -473,6 +478,7 @@ export async function filterTestsByResults(
       // Intentionally omit: provider (security - may contain stale credentials)
     };
     extractedTests.push(extractedTest);
+    resultMatchContext?.bindExtractedTest?.(extractedTest, result);
     extractedTestKeys.add(key);
   }
 

@@ -47,6 +47,7 @@ export interface EvaluationStore<
   readonly resultPersistenceFailed: boolean;
 
   readExactHistoricalReplay(): unknown;
+  requiresExactHistoricalReplay(): boolean;
   saveExactHistoricalReplay(plan: ExactHistoricalReplayPlan): Promise<void>;
 
   appendResult(result: EvaluateResult): Promise<void>;
