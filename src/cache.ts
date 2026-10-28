@@ -11,11 +11,7 @@ import { getRequestTimeoutMs, throwIfAborted, waitForPromiseWithAbort } from './
 import { getConfigDirectoryPath } from './util/config/manage';
 import { sha256 } from './util/createHash';
 import { isAbortError, isTransientConnectionError } from './util/fetch/errors';
-import {
-  fetchWithRetries,
-  getFetchWithProxyHeaders,
-  readResponseTextWithTimeout,
-} from './util/fetch/index';
+import { fetchWithRetries, getFetchWithProxyHeaders } from './util/fetch/index';
 import {
   getCloudAuthHeaderName,
   getCloudBearerToken,
@@ -25,6 +21,7 @@ import {
   preserveCloudAuthRedirects,
 } from './util/fetch/monkeyPatchFetch';
 import { getEffectiveRequestSignal } from './util/fetch/requestSignal';
+import { readResponseTextWithTimeout } from './util/fetch/responseDeadline';
 import { getFetchRetryContextMaxRetries } from './util/fetch/retryContext';
 import { isSecretField, looksLikeSecret, sanitizeUrlForLogging } from './util/sanitizer';
 import { sleep } from './util/time';
