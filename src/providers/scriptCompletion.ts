@@ -148,6 +148,11 @@ export interface ExecFileInputs {
  * when it is a file, or when it is `flag=value` / `key=value` and the value is a file (so
  * `--config="my config.json"` is covered). A part that is itself a file is hashed once.
  *
+ * Files attached with `=` are only hashed as well as the command's own files, never on their
+ * own: a command with no argument that is itself a file (`tool --config=config.json`, with
+ * `tool` found on PATH) gets no hashes, so it stays uncached as it always has. Whether such a
+ * command's output may be replayed depends on more than its files, and this does not try to decide.
+ *
  * Relative files are looked up in `cwd` (the child's working directory; defaults to ours).
  *
  * Files that belong to a credential-like option (`--token-file=t.txt`, or `--token-file t.txt`)
@@ -158,6 +163,7 @@ export interface ExecFileInputs {
 export function getExecFileInputs(scriptParts: string[], cwd?: string): ExecFileInputs {
   const stripQuotes = (value: string) => value.replace(/^['"]|['"]$/g, '');
   const fileHashes: string[] = [];
+  let hasPartFile = false;
 
   for (let i = 0; i < scriptParts.length; i++) {
     const part = scriptParts[i];
@@ -170,6 +176,7 @@ export function getExecFileInputs(scriptParts: string[], cwd?: string): ExecFile
         return { fileHashes: [], hasSecretFile: true };
       }
       fileHashes.push(hashFile(wholePartFile));
+      hasPartFile = true;
       continue;
     }
     if (equalsIndex !== -1) {
@@ -183,7 +190,7 @@ export function getExecFileInputs(scriptParts: string[], cwd?: string): ExecFile
     }
   }
 
-  return { fileHashes, hasSecretFile: false };
+  return { fileHashes: hasPartFile ? fileHashes : [], hasSecretFile: false };
 }
 
 /** File hashes for the command, or none at all when it must not be cached; see getExecFileInputs. */
@@ -208,9 +215,8 @@ export class ScriptCompletionProvider implements ApiProvider {
     const { fileHashes, hasSecretFile } = getExecFileInputs(scriptParts, cwd);
 
     if (hasSecretFile) {
-      logger.warn(
-        `Command ${this.scriptPath} attaches a credential file, caching will not be used`,
-      );
+      // Never interpolate the command: it can carry inline secrets (`--password=...`)
+      logger.warn('The command attaches a credential file, caching will not be used');
     } else if (fileHashes.length === 0) {
       logger.warn(`Could not find any valid files in the command: ${this.scriptPath}`);
     }

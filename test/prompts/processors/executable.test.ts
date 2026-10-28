@@ -6,6 +6,7 @@ import * as path from 'path';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as cacheModule from '../../../src/cache';
 import cliState from '../../../src/cliState';
+import logger from '../../../src/logger';
 import { processExecutableFile } from '../../../src/prompts/processors/executable';
 import { mockProcessEnv } from '../../util/utils';
 
@@ -15,6 +16,8 @@ vi.mock('../../../src/logger', () => ({
   default: {
     debug: vi.fn(),
     error: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
   },
 }));
 
@@ -248,6 +251,42 @@ describe('processExecutableFile', () => {
         expect(cache.get).not.toHaveBeenCalled();
         expect(cache.set).not.toHaveBeenCalled();
       });
+
+      it('does not cache a command whose only file is an attached argument', async () => {
+        fs.writeFileSync(path.join(baseDir, 'config.json'), 'base copy');
+        const [prompt] = await processExecutableFile(
+          `node -e "process.stdout.write('output')" -- --config=config.json`,
+          { config: { basePath: baseDir } },
+        );
+
+        await prompt.function!({ vars: {}, provider: mockProvider });
+
+        expect(cache.get).not.toHaveBeenCalled();
+        expect(cache.set).not.toHaveBeenCalled();
+      });
+
+      it.each([['--token-file="%s" --password=hunter2'], ['--password=hunter2 --token-file %s']])(
+        'never logs the command when a credential file is attached, %s',
+        async (template) => {
+          const secretPath = path.join(tempDir, 'secret.txt');
+          fs.writeFileSync(secretPath, 'file-secret');
+          const [prompt] = await processExecutableFile(
+            `"${process.execPath}" "${scriptPath}" ${template.replace('%s', secretPath)}`,
+            {},
+          );
+
+          await prompt.function!({ vars: {}, provider: mockProvider });
+
+          const logged = JSON.stringify(
+            [logger.error, logger.warn, logger.info, logger.debug].flatMap(
+              (fn) => vi.mocked(fn).mock.calls,
+            ),
+          );
+          expect(logged).not.toContain('hunter2');
+          expect(logged).not.toContain('file-secret');
+          expect(cache.get).not.toHaveBeenCalled();
+        },
+      );
 
       it.each([
         ['--token-file="%s"'],
