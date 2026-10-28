@@ -1078,6 +1078,12 @@ describe('evaluatorHelpers', () => {
       expect(renderedPrompt).toBe(JSON.stringify({ text: 'hello' }, null, 2));
     });
 
+    it('should fail a non-JSON prompt when a referenced var cannot render', async () => {
+      await expect(renderPrompt(toPrompt('{{v}}'), { v: '{% unknown %}' }, {})).rejects.toThrow(
+        'unknown block tag: unknown',
+      );
+    });
+
     it('should pass pre-rendered vars to third-party prompt integrations', async () => {
       vi.mocked(getPortkeyPrompt).mockResolvedValue({
         model: 'gpt-4o',
