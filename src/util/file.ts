@@ -392,13 +392,24 @@ export function parsePathOrGlob(
       const pathWithoutFunction = filename.slice(0, lastColonIndex);
       if (
         isJavascriptFile(pathWithoutFunction) ||
-        pathWithoutFunction.endsWith('.py') ||
+        isPythonFile(pathWithoutFunction) ||
         pathWithoutFunction.endsWith('.go') ||
         pathWithoutFunction.endsWith('.rb')
       ) {
         functionName = filename.slice(lastColonIndex + 1);
         filename = pathWithoutFunction;
       }
+    }
+  }
+
+  if (isPythonFile(filename) && path.extname(filename) !== '.py') {
+    const extension = path.extname(filename);
+    const lowercaseFilename = `${filename.slice(0, -extension.length)}.py`;
+    if (
+      !fs.existsSync(path.join(basePath, filename)) &&
+      fs.existsSync(path.join(basePath, lowercaseFilename))
+    ) {
+      filename = lowercaseFilename;
     }
   }
 

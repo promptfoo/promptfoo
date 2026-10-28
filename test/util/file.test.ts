@@ -1772,6 +1772,31 @@ describe('file utilities', () => {
       });
     });
 
+    it('should parse a mixed-case Python path with a function selector', () => {
+      vi.spyOn(fs, 'existsSync').mockReturnValue(true);
+      vi.spyOn(fs, 'statSync').mockReturnValue({ isDirectory: () => false } as fs.Stats);
+      expect(parsePathOrGlob('/base', 'provider.PY:custom_call')).toEqual({
+        extension: '.PY',
+        functionName: 'custom_call',
+        isPathPattern: false,
+        filePath: path.join('/base', 'provider.PY'),
+      });
+    });
+
+    it('should hash and load the same lowercase fallback used by the Python workers', () => {
+      vi.spyOn(fs, 'existsSync').mockImplementation(
+        (candidate) => candidate === path.join('/base', 'provider.py'),
+      );
+      vi.spyOn(fs, 'statSync').mockReturnValue({ isDirectory: () => false } as fs.Stats);
+
+      expect(parsePathOrGlob('/base', 'provider.PY')).toEqual({
+        extension: '.py',
+        functionName: undefined,
+        isPathPattern: false,
+        filePath: path.join('/base', 'provider.py'),
+      });
+    });
+
     it('should parse a Go file path with function name', async () => {
       vi.spyOn(fs, 'statSync').mockReturnValue({ isDirectory: () => false } as fs.Stats);
       expect(parsePathOrGlob('/base', 'script.go:CallApi')).toEqual({
