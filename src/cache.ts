@@ -1057,7 +1057,8 @@ export async function fetchWithCache<T = unknown>(
     return result;
   }
 
-  const inflightCacheKey = getAbortSignalScopedKey(cacheKey, signal);
+  // Only share an active transport when its deadline works for both callers.
+  const inflightCacheKey = `${timeout}:${getAbortSignalScopedKey(cacheKey, signal)}`;
   let inflightResponse = inflightFetchResponses.get(inflightCacheKey);
   const coalesced = inflightResponse !== undefined;
   if (!inflightResponse) {

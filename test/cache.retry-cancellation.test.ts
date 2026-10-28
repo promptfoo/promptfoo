@@ -160,6 +160,47 @@ describe('fetchWithCache retry budget and Request cancellation', () => {
     expect(transport).toHaveBeenCalledOnce();
   });
 
+  it.each([
+    [100, 1000],
+    [1000, 100],
+  ])(
+    'isolates concurrent %i ms and %i ms deadlines but shares the stored result',
+    async (first, second) => {
+      const releaseBody = createDeferred<void>();
+      transport.mockImplementation(
+        () =>
+          new Response(
+            new ReadableStream<Uint8Array>({
+              async start(stream) {
+                await releaseBody.promise;
+                stream.enqueue(new TextEncoder().encode('ok'));
+                stream.close();
+              },
+            }),
+          ),
+      );
+      const read = (timeout: number) =>
+        fetchWithCache(`https://cache.test/shared-deadline/${first}`, {}, timeout, 'text');
+      const leader = read(first);
+      await vi.advanceTimersByTimeAsync(0);
+      const follower = read(second);
+      const outcomes = Promise.allSettled(first < second ? [leader, follower] : [follower, leader]);
+
+      await vi.advanceTimersByTimeAsync(200);
+      releaseBody.resolve();
+
+      expect(await outcomes).toMatchObject([
+        {
+          status: 'rejected',
+          reason: { message: expect.stringMatching(/timed out after 100 ms/i) },
+        },
+        { status: 'fulfilled', value: { data: 'ok', cached: false } },
+      ]);
+      await expect(read(100)).resolves.toMatchObject({ data: 'ok', cached: true });
+      expect(transport).toHaveBeenCalledTimes(2);
+    },
+  );
+
   it('gives a successful retry its own deadline and clears it when the body finishes', async () => {
     let retrySignal: AbortSignal | null | undefined;
     transport
