@@ -1,17 +1,17 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: OpenAI Sora video generation
+description: Sora video generation on a compatible gateway
 
 prompts:
   - 'A cinematic shot of: {{scene}}'
 
 providers:
-  # Sora 2 - Standard video generation ($0.10/second)
+  # Use OPENAI_API_BASE_URL to select a compatible Videos API gateway.
   - id: openai:video:sora-2
     config:
       size: 1280x720 # Landscape: 1280x720, Portrait: 720x1280
-      seconds: 4 # Video duration: 4, 8, or 12 seconds
+      seconds: 4 # Video duration: 4, 8, 12, 16, or 20 seconds
 
-  # Sora 2 Pro - Higher quality video generation ($0.30/second)
+  # Optional second model for gateways that serve both IDs
   - id: openai:video:sora-2-pro
     config:
       size: 1280x720

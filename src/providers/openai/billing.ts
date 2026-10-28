@@ -40,6 +40,7 @@ export type OpenAIBillingUsage = {
   totalInputTokens: number;
   cachedInputTokens: number;
   cacheWriteInputTokens: number;
+  cacheWrite12hInputTokens: number;
   cachedTextInputTokens: number;
   cachedAudioInputTokens: number;
   cachedImageInputTokens: number;
@@ -77,6 +78,7 @@ const STANDARD_CACHED_INPUT_RATES = buildRateTable<number>([
   { models: ['gpt-6-astra'], rates: perMillion(1) },
   { models: ['gpt-6-sol'], rates: perMillion(0.2) },
   { models: ['gpt-6.1-sol'], rates: perMillion(0.1) },
+  { models: ['gpt-6.1-terra'], rates: perMillion(0.05) },
   { models: ['gpt-6-luna'], rates: perMillion(0.01) },
   { models: ['gpt-5.6', 'gpt-5.6-sol'], rates: perMillion(0.4) },
   { models: ['gpt-5.6-terra'], rates: perMillion(0.2) },
@@ -204,6 +206,7 @@ const LONG_CONTEXT_CACHED_INPUT_RATES = buildRateTable<number>([
   { models: ['gpt-6-astra'], rates: perMillion(2) },
   { models: ['gpt-6-sol'], rates: perMillion(0.4) },
   { models: ['gpt-6.1-sol'], rates: perMillion(0.2) },
+  { models: ['gpt-6.1-terra'], rates: perMillion(0.1) },
   { models: ['gpt-6-luna'], rates: perMillion(0.02) },
   { models: ['gpt-5.6', 'gpt-5.6-sol'], rates: perMillion(0.8) },
   { models: ['gpt-5.6-terra'], rates: perMillion(0.4) },
@@ -216,6 +219,7 @@ const FLEX_SUPPORTED_TEXT_MODELS = new Set([
   'gpt-6-astra',
   'gpt-6-sol',
   'gpt-6.1-sol',
+  'gpt-6.1-terra',
   'gpt-6-luna',
   'gpt-5.6',
   'gpt-5.6-sol',
@@ -280,6 +284,15 @@ const FAST_TEXT_RATES = buildRateTable<OpenAITextRates>([
       cachedInput: perMillion(0.2),
       cacheWriteInput: perMillion(5),
       output: perMillion(20),
+    },
+  },
+  {
+    models: ['gpt-6.1-terra'],
+    rates: {
+      input: perMillion(2),
+      cachedInput: perMillion(0.1),
+      cacheWriteInput: perMillion(2.5),
+      output: perMillion(10),
     },
   },
   {
@@ -612,6 +625,7 @@ const CACHE_WRITE_MODELS = new Set([
   'gpt-6-astra',
   'gpt-6-sol',
   'gpt-6.1-sol',
+  'gpt-6.1-terra',
   'gpt-6-luna',
   'gpt-5.6',
   'gpt-5.6-sol',
@@ -619,9 +633,14 @@ const CACHE_WRITE_MODELS = new Set([
   'gpt-5.6-luna',
 ]);
 const OPENAI_REGIONAL_PROCESSING_MODEL =
-  /^(?:gpt-5\.[456]|gpt-6-(?:astra|sol|luna)|gpt-6\.1-sol)(?:-|$)/;
+  /^(?:gpt-5\.[456]|gpt-6-(?:astra|sol|luna)|gpt-6\.1-(?:sol|terra))(?:-|$)/;
 const OPENAI_REGIONAL_PROCESSING_MULTIPLIER = 1.1;
-const OPENAI_REGIONAL_PROCESSING_HOSTNAMES = new Set(['us.api.openai.com', 'eu.api.openai.com']);
+// FedRAMP applies the same 10% uplift to successful requests for supported models.
+const OPENAI_REGIONAL_PROCESSING_HOSTNAMES = new Set([
+  'us.api.openai.com',
+  'eu.api.openai.com',
+  'gov.api.openai.com',
+]);
 // AWS's GPT-5.6 Terra/Luna model cards price GovCloud 20% above commercial In-Region rates.
 // GovCloud serves them only In-Region on Mantle; Runtime offers only commercial CRIS profiles.
 const BEDROCK_GOVCLOUD_MODELS = new Set(['gpt-5.6-terra', 'gpt-5.6-luna']);
@@ -828,7 +847,7 @@ export function calculateOpenAIUsageCostFromTokenUsage(
   // These models have no published Bedrock rates.
   if (
     modelName.startsWith('openai.') &&
-    (billingModelName === 'gpt-6-astra' || billingModelName === 'gpt-6.1-sol')
+    ['gpt-6-astra', 'gpt-6.1-sol', 'gpt-6.1-terra'].includes(billingModelName)
   ) {
     return undefined;
   }
@@ -892,14 +911,20 @@ function getBaseTextRates(
   };
 }
 
-function getDaybreakModelRates(
+const TRUSTED_ACCESS_MODELS = new Set([
+  ...OPENAI_DAYBREAK_ALIASES.keys(),
+  'gpt-5.6-cyber',
+  'gpt-rosalind-research',
+  'gpt-rosalind-discovery',
+]);
+
+function getTrustedAccessModelRates(
   modelName: string,
   totalInputTokens: number,
   options: { serviceTier?: string | null; apiUrl?: string; regionalProcessing?: boolean },
 ): OpenAIModelRates | undefined {
-  const underlyingModel = OPENAI_DAYBREAK_ALIASES.get(modelName);
+  const underlyingModel = OPENAI_DAYBREAK_ALIASES.get(modelName) ?? modelName;
   if (
-    !underlyingModel ||
     !options.apiUrl ||
     options.regionalProcessing ||
     ![undefined, null, 'default', 'standard'].includes(options.serviceTier)
@@ -919,7 +944,11 @@ function getDaybreakModelRates(
     return text ? { text } : undefined;
   }
 
-  // Red's model card caps input at 272K; its pricing table has no long-context rates.
+  if (underlyingModel === 'gpt-rosalind-research' || underlyingModel === 'gpt-rosalind-discovery') {
+    return { text: { input: perMillion(5), cachedInput: perMillion(0.5), output: perMillion(25) } };
+  }
+
+  // Red's alias card caps input at 272K. Long-context Cyber rates are not listed in the pricing table.
   // https://developers.openai.com/api/docs/models/gpt-daybreak-red-latest
   if (totalInputTokens > 272_000) {
     return undefined;
@@ -1005,10 +1034,12 @@ function getUltrafastModelRates(
   modelName: string,
   totalInputTokens: number,
 ): OpenAIModelRates | undefined {
-  // Only Astra has published Ultrafast rates, at 6x each standard rate.
+  // Astra and GPT-6.1 Sol have published Ultrafast rates at 6x Standard.
   // https://developers.openai.com/api/docs/pricing?latest-pricing=ultrafast
   const text =
-    modelName === 'gpt-6-astra' ? getBaseTextRates(modelName, totalInputTokens) : undefined;
+    modelName === 'gpt-6-astra' || modelName === 'gpt-6.1-sol'
+      ? getBaseTextRates(modelName, totalInputTokens)
+      : undefined;
   return text ? { text: applyRateMultiplier(text, 6) } : undefined;
 }
 
@@ -1141,6 +1172,9 @@ export function extractOpenAIBillingUsage(rawUsage: any): OpenAIBillingUsage {
     totalInputTokens,
     cachedInputTokens: getNumericValue(inputDetails.cached_tokens ?? usage.cached_input_tokens),
     cacheWriteInputTokens: getOpenAICacheWriteInputTokens(usage) ?? 0,
+    cacheWrite12hInputTokens: getNumericValue(
+      inputDetails.cache_write_tokens_details?.ttl_12h_tokens,
+    ),
     cachedTextInputTokens: getNumericValue(cachedInputDetails.text_tokens),
     cachedAudioInputTokens: getNumericValue(cachedInputDetails.audio_tokens),
     cachedImageInputTokens: getNumericValue(cachedInputDetails.image_tokens),
@@ -1223,6 +1257,13 @@ function calculateTextCost(
     usage.cacheWriteInputTokens,
     Math.max(usage.textInputTokens - cachedTextInputTokens, 0),
   );
+  // The lifetime breakdown is a partition of cache_write_tokens. Older responses
+  // report only the total and use the original 30-minute write rate.
+  const writes12h = Math.max(0, Math.min(usage.cacheWrite12hInputTokens, cacheWriteInputTokens));
+  const writeRate12h =
+    config.inputCost ??
+    config.cost ??
+    (rates.cacheWriteInput === undefined ? textInputCost : 2 * rates.cacheWriteInput);
   const uncachedTextInputTokens = Math.max(
     usage.textInputTokens - cachedTextInputTokens - cacheWriteInputTokens,
     0,
@@ -1231,7 +1272,8 @@ function calculateTextCost(
   return (
     uncachedTextInputTokens * textInputCost +
     cachedTextInputTokens * cachedInputCost +
-    cacheWriteInputTokens * cacheWriteInputCost +
+    (cacheWriteInputTokens - writes12h) * cacheWriteInputCost +
+    writes12h * writeRate12h +
     usage.textOutputTokens * outputCost
   );
 }
@@ -1307,11 +1349,15 @@ export function calculateOpenAIUsageCost(
   const usageParts = getOpenAIUsageParts(rawUsage);
   const usage = extractOpenAIBillingUsage(rawUsage);
   const gpt6Variant = getGpt6Variant(modelName);
-  if (gpt6Variant === '6.1-sol' && options.provider === 'bedrock') {
+  if (
+    (gpt6Variant === '6.1-sol' || gpt6Variant === '6.1-terra') &&
+    options.provider === 'bedrock'
+  ) {
     return calculateCustomUsageCost(usage, config, options.cachedResponse);
   }
   if (
-    (gpt6Variant === 'sol' || gpt6Variant === '6.1-sol' || gpt6Variant === 'luna') &&
+    gpt6Variant !== undefined &&
+    gpt6Variant !== 'astra' &&
     usesAzureOpenAiBilling(config, options.apiUrl, options.provider)
   ) {
     const inputRate = config.inputCost ?? config.cost;
@@ -1337,8 +1383,8 @@ export function calculateOpenAIUsageCost(
   );
   const catalogRates = bedrockMantleTextRates
     ? { text: bedrockMantleTextRates }
-    : OPENAI_DAYBREAK_ALIASES.has(modelName)
-      ? getDaybreakModelRates(modelName, usage.totalInputTokens, options)
+    : TRUSTED_ACCESS_MODELS.has(modelName)
+      ? getTrustedAccessModelRates(modelName, usage.totalInputTokens, options)
       : getModelRates(modelName, tier, usage.totalInputTokens);
   const explicitTextRates = getCompleteTextCostOverrides(config);
   const explicitAudioRates = getCompleteAudioCostOverrides(config, usage);
@@ -1449,6 +1495,7 @@ function isReasoningModel(modelName: string): boolean {
   const capabilityModelName = modelName.replace(/^bedrock:/, '').replace(/(^|\/)ft:/, '$1');
   return (
     capabilityModelName.startsWith('gpt-5') ||
+    capabilityModelName === 'gpt-rosalind-research' ||
     /(^|\/)gpt-daybreak-(?:blue|red)-latest$/.test(capabilityModelName) ||
     isGpt6Model(capabilityModelName) ||
     capabilityModelName.startsWith('o1') ||

@@ -766,7 +766,9 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     'gpt-6-sol',
     'gpt-6-luna',
     'gpt-6.1-sol',
+    'gpt-6.1-terra',
     // GPT-5.6 models
+    'gpt-5.6-cyber',
     'gpt-5.6',
     'gpt-5.6-sol',
     'gpt-5.6-terra',
@@ -785,8 +787,6 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     'gpt-5.4-nano-2026-03-17',
     'gpt-5.4-pro',
     'gpt-5.4-pro-2026-03-05',
-    // NOTE: gpt-image-1, gpt-image-1-mini, and gpt-image-1.5 are NOT supported with the Responses API.
-    // Use openai:image:gpt-image-1, openai:image:gpt-image-1-mini, or openai:image:gpt-image-1.5 instead (which uses /images/generations endpoint)
     // Reasoning models
     'o1',
     'o1-2024-12-17',
@@ -915,7 +915,8 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     );
     const variant = getGpt6Variant(billingModelName);
     if (
-      (variant === 'sol' || variant === 'luna' || variant === '6.1-sol') &&
+      variant !== undefined &&
+      variant !== 'astra' &&
       usesAzureOpenAiBilling(config, this.getApiUrl(), this.getGenAISystem())
     ) {
       const { cost: _existingCost, ...unbilled } = result;

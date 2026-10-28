@@ -24,7 +24,7 @@ The SDK is installed separately when you use this provider. Install Promptfoo an
 npm install promptfoo @openai/codex-security@^0.2.0
 ```
 
-The provider requires `@openai/codex-security` version `^0.2.0`. This release includes patched TOML configuration parsing and retains the updated archive extractor, finding validation, and deep-worker usage accounting. Use Node.js `^22.22.0`, `^24.0.0`, or `^26.0.0` to satisfy both Promptfoo and the SDK. Promptfoo loads the SDK only from its own installation; it does not execute SDK packages found in the target repository or evaluation directory. For a global installation, install both packages together with `npm install -g promptfoo @openai/codex-security@^0.2.0`. Use an existing Codex/ChatGPT login, or set `OPENAI_API_KEY` or `CODEX_API_KEY` in the process environment before starting promptfoo. The native SDK does not support provider-scoped API keys or provider environment overrides; credentials must already be present in the Promptfoo process environment.
+Promptfoo supports Codex Security SDK versions from 0.2.0 through 0.8.x. The examples that measure file coverage use 0.2.x. To evaluate the current scan result format, install `@openai/codex-security@^0.8.0`. Use Node.js `^22.22.0`, `^24.0.0`, or `^26.0.0` to satisfy both Promptfoo and the SDK. Promptfoo loads the SDK only from its own installation; it does not execute SDK packages found in the target repository or evaluation directory. For a global installation, install both packages together with `npm install -g promptfoo @openai/codex-security@^0.2.0`. Use an existing Codex/ChatGPT login, or set `OPENAI_API_KEY` or `CODEX_API_KEY` in the process environment before starting promptfoo. The native SDK does not support provider-scoped API keys or provider environment overrides; credentials must already be present in the Promptfoo process environment.
 
 Codex Security access, Trusted Access, and model availability depend on the authenticated account and organization.
 
@@ -186,12 +186,12 @@ Managed Codex Security scans run with the access required by the security SDK. R
 
 ## Results, cost, and assertions
 
-Repository scans return `ScanResult.toJSON()` in `output`, including `manifest`, `findings`, `coverage`, artifact paths, and SDK cost data. Promptfoo also normalizes SDK-reported values into:
+Repository scans return `ScanResult.toJSON()` in `output`, including `manifest`, `findings`, artifact paths, and SDK cost data. SDK 0.2.x–0.7.x expose file coverage in `metadata.coverage` and `metadata.coveragePath`. Starting with 0.8.0, `metadata.review.excludedPaths` lists additional excluded paths. File-coverage metrics require an SDK that reports coverage. Promptfoo also normalizes SDK-reported values into:
 
 - `tokenUsage.prompt`, `tokenUsage.completion`, `tokenUsage.cached`, and `tokenUsage.total`.
 - `tokenUsage.completionDetails.reasoning`, `cacheReadInputTokens`, and `cacheCreationInputTokens` when reported.
 - `cost`, using the security SDK's `estimatedUsd` value.
-- `metadata.operation`, `metadata.mode`, `metadata.model`, `metadata.reasoningEffort`, `metadata.findingsCount`, `metadata.coverage`, artifact paths, warnings, SDK version, and plugin version.
+- `metadata.operation`, `metadata.mode`, `metadata.model`, `metadata.reasoningEffort`, `metadata.findingsCount`, artifact paths, warnings, SDK version, and plugin version.
 - `metadata.skillCalls` for native scan and finding-validation operation routing.
 
 Finding validation does not currently expose reliable token or cost totals, so the provider leaves those fields unset.

@@ -76,13 +76,16 @@ describe('scheduler recovery outside provider transport retries', () => {
     ],
     [
       'completion',
-      (config: any) => new OpenAiCompletionProvider('gpt-3.5-turbo-instruct', { config }),
+      (config: any) =>
+        new OpenAiCompletionProvider('gpt-3.5-turbo-instruct', {
+          config: { ...config, apiBaseUrl: 'https://gateway.example/v1' },
+        }),
       { choices: [{ text: 'recovered' }] },
     ],
     [
       'image',
-      (config: any) => new OpenAiImageProvider('dall-e-3', { config }),
-      { data: [{ url: 'https://image.fixture.test/recovered.png' }] },
+      (config: any) => new OpenAiImageProvider('gpt-image-2.5-flare', { config }),
+      { data: [{ b64_json: 'recovered' }] },
     ],
     [
       'Responses',
@@ -196,7 +199,9 @@ describe('scheduler recovery outside provider transport retries', () => {
     });
     vi.stubGlobal('fetch', fetch);
     const result = await invoke(
-      new OpenAiAssistantProvider('asst_fixture', { config: { apiKey: 'fixture', maxRetries: 1 } }),
+      new OpenAiAssistantProvider('asst_fixture', {
+        config: { apiKey: 'fixture', apiBaseUrl: 'https://gateway.example/v1', maxRetries: 1 },
+      }),
     );
     expect(result.error).toBeUndefined();
     expect(runs).toBe(2);

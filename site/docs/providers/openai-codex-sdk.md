@@ -41,10 +41,10 @@ You can reference this provider using either base ID, and you can inline the mod
 
 ## Installation
 
-Install Promptfoo and the Codex SDK together in your eval project. Use Codex SDK `^0.156.1` (at least `0.156.1`, below `0.157.0`). [Codex 0.156.1](https://github.com/openai/codex/releases/tag/rust-v0.156.1) bundles GPT-6 Sol, Luna, and Astra model metadata, including Sol's Ultra setting:
+Install Promptfoo and the Codex SDK together in your eval project. Promptfoo supports SDK versions from 0.156.1 through 0.165.x. Model availability depends on your Codex version and account. The [0.165.0 catalog](https://github.com/openai/codex/releases/tag/rust-v0.165.0) includes GPT-6.1 Sol and Terra with Ultra reasoning.
 
 ```bash
-npm install promptfoo @openai/codex-sdk@^0.156.1
+npm install promptfoo "@openai/codex-sdk@>=0.156.1 <0.166.0"
 ```
 
 Use Node.js `>=22.22.0`, which matches promptfoo's repo/runtime requirement and the provider's loader checks.
@@ -647,7 +647,7 @@ Promptfoo validates the allowed enum values, but model-specific support is ultim
 `ultra` is Codex-specific and uses subagents; do not send it as a Responses API `reasoning.effort` value. GPT-6 Luna does not support `ultra` in Codex.
 
 :::note GPT-5.6 requires Codex 0.144.0 or later
-Install `@openai/codex-sdk@^0.156.1` using the setup above. An older SDK or Codex binary may silently ignore GPT-5.6 reasoning levels. Confirm the effective reasoning with request tracing. For direct `max` reasoning, you can also use `openai:gpt-5.6-sol`.
+Install a supported Codex SDK using the setup above. An older SDK or Codex binary may silently ignore GPT-5.6 reasoning levels. Confirm the effective reasoning with request tracing. For direct `max` reasoning, you can also use `openai:gpt-5.6-sol`.
 :::
 
 ## Additional Directories

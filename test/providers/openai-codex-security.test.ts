@@ -217,7 +217,7 @@ describe('OpenAICodexSecurityProvider', () => {
       const response = await provider.callApi('Scan');
 
       expect(response).toEqual({
-        error: expect.stringContaining('npm install promptfoo @openai/codex-security'),
+        error: expect.stringContaining('npm install promptfoo "@openai/codex-security'),
       });
       expect(response.error).toContain(
         'If Promptfoo is installed globally with npm, add -g to that command. With pnpm, Yarn or Bun, use its global install instead.',
@@ -232,7 +232,7 @@ describe('OpenAICodexSecurityProvider', () => {
 
       expect(response.error).toContain('Failed to load @openai/codex-security');
       expect(response.error).toContain('even-numbered Node.js');
-      expect(response.error).toContain('npm install promptfoo @openai/codex-security');
+      expect(response.error).toContain('npm install promptfoo "@openai/codex-security');
     });
 
     it('ignores an outdated trusted SDK and loads a compatible Promptfoo installation', async () => {
@@ -316,7 +316,7 @@ describe('OpenAICodexSecurityProvider', () => {
       expect(mockRun).not.toHaveBeenCalled();
     });
 
-    it.each([...incompatibleSdkVersions, '0.3.0', '1.0.0'])(
+    it.each([...incompatibleSdkVersions, '0.9.0', '1.0.0'])(
       'rejects incompatible security SDK %s',
       async (version) => {
         vi.mocked(importModule).mockResolvedValue({
@@ -329,7 +329,7 @@ describe('OpenAICodexSecurityProvider', () => {
 
         expect(response.error).toContain(`package is incompatible (${version})`);
         const suggestedRange = response.error?.match(
-          /npm install promptfoo @openai\/codex-security@(\S+)/,
+          /npm install promptfoo "@openai\/codex-security@([^"]+)"/,
         )?.[1];
         expect(suggestedRange).toBeDefined();
         expect(validRange(suggestedRange)).not.toBeNull();
@@ -341,6 +341,19 @@ describe('OpenAICodexSecurityProvider', () => {
         expect(mockRun).not.toHaveBeenCalled();
       },
     );
+
+    it('preserves review exclusions from SDKs that no longer report coverage', async () => {
+      vi.mocked(importModule).mockResolvedValue({ ...mockModule, VERSION: '0.8.0' });
+      const review = { excludedPaths: ['vendor'] };
+      const result = createScanResult({ coverage: undefined, coveragePath: undefined });
+      mockRun.mockResolvedValue({ ...result, toJSON: () => ({ ...result.toJSON(), review }) });
+
+      const response = await new OpenAICodexSecurityProvider().callApi('Scan');
+      expect(response.error).toBeUndefined();
+      expect(response.metadata?.review).toEqual(review);
+      expect(response.metadata).not.toHaveProperty('coverage');
+      expect(response.metadata).not.toHaveProperty('coveragePath');
+    });
 
     it('reports multiple incompatible trusted SDK versions together', async () => {
       const firstTrustedRoot = path.resolve(getDirectory(), '..');
@@ -361,7 +374,7 @@ describe('OpenAICodexSecurityProvider', () => {
       expect(response.error).toContain(
         `package is incompatible (${incompatibleSdkVersions.slice(0, 2).join(', ')})`,
       );
-      expect(response.error).toContain('npm install promptfoo @openai/codex-security@');
+      expect(response.error).toContain('npm install promptfoo "@openai/codex-security@');
       expect(mockRun).not.toHaveBeenCalled();
     });
 

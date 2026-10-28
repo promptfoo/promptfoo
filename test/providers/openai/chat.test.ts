@@ -308,8 +308,8 @@ describe('OpenAI Provider', () => {
     });
 
     it.each([
-      { reported: 'ultrafast', cost: undefined },
-      { reported: undefined, cost: undefined },
+      { reported: 'ultrafast', cost: 0.018 },
+      { reported: undefined, cost: 0.018 },
       { reported: 'default', cost: 0.003 },
     ])(
       'forwards Ultrafast and bills the actual tier $reported for GPT-6.1 Sol',
@@ -342,11 +342,7 @@ describe('OpenAI Provider', () => {
         });
         expect(result.error).toBeUndefined();
         expect(result.output).toBe('Ready.');
-        if (cost === undefined) {
-          expect(result.cost).toBeUndefined();
-        } else {
-          expect(result.cost).toBeCloseTo(cost, 10);
-        }
+        expect(result.cost).toBeCloseTo(cost, 10);
       },
     );
 
@@ -3107,7 +3103,9 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
     });
 
     it('should treat fine-tuned o-series models as reasoning models', async () => {
-      const provider = new OpenAiChatCompletionProvider('ft:o4-mini-2025-04-16:company::model');
+      const provider = new OpenAiChatCompletionProvider('ft:o4-mini-2025-04-16:company::model', {
+        config: { apiBaseUrl: 'https://gateway.example/v1' },
+      });
 
       const { body } = await provider.getOpenAiBody('Test prompt');
 
@@ -3120,19 +3118,22 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
       mockFetchWithCache.mockResolvedValue(mockResponse);
 
       // Test regular model with temperature
-      const regularProvider = new OpenAiChatCompletionProvider('gpt-4', createTemperatureOptions());
+      const regularProvider = new OpenAiChatCompletionProvider(
+        'gpt-4.1',
+        createTemperatureOptions(),
+      );
       await regularProvider.callApi('Test prompt');
       const regularCall = mockFetchWithCache.mock.calls[0] as [string, { body: string }];
       const regularBody = JSON.parse(regularCall[1].body);
       expect(regularBody.temperature).toBe(0.7);
 
-      // Test O1 model (should omit temperature)
+      // Test O3 model (should omit temperature)
       mockFetchWithCache.mockClear();
-      const o1Provider = new OpenAiChatCompletionProvider('o1', createTemperatureOptions());
-      await o1Provider.callApi('Test prompt');
-      const o1Call = mockFetchWithCache.mock.calls[0] as [string, { body: string }];
-      const o1Body = JSON.parse(o1Call[1].body);
-      expect(o1Body.temperature).toBeUndefined();
+      const o3Provider = new OpenAiChatCompletionProvider('o3', createTemperatureOptions());
+      await o3Provider.callApi('Test prompt');
+      const o3Call = mockFetchWithCache.mock.calls[0] as [string, { body: string }];
+      const o3Body = JSON.parse(o3Call[1].body);
+      expect(o3Body.temperature).toBeUndefined();
     });
 
     it('should correctly send temperature: 0 in the request body', async () => {
@@ -3140,7 +3141,7 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
       mockFetchWithCache.mockResolvedValue(mockResponse);
 
       // Test that temperature: 0 is correctly sent (not filtered out by falsy check)
-      const provider = new OpenAiChatCompletionProvider('gpt-4', {
+      const provider = new OpenAiChatCompletionProvider('gpt-4.1', {
         config: { temperature: 0 },
       });
       await provider.callApi('Test prompt');
@@ -3158,7 +3159,7 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
 
       // Test that max_tokens: 0 is correctly sent (not filtered out by falsy check)
       // Note: While max_tokens: 0 is impractical, it should still be sent if explicitly configured
-      const provider = new OpenAiChatCompletionProvider('gpt-4', {
+      const provider = new OpenAiChatCompletionProvider('gpt-4.1', {
         config: { max_tokens: 0 },
       });
       await provider.callApi('Test prompt');
@@ -3175,7 +3176,7 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
       mockFetchWithCache.mockResolvedValue(mockResponse);
 
       // Test regular model with max_tokens
-      const regularProvider = new OpenAiChatCompletionProvider('gpt-4', {
+      const regularProvider = new OpenAiChatCompletionProvider('gpt-4.1', {
         config: { max_tokens: 100 },
       });
       await regularProvider.callApi('Test prompt');
@@ -3184,16 +3185,16 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
       expect(regularBody.max_tokens).toBe(100);
       expect(regularBody.max_completion_tokens).toBeUndefined();
 
-      // Test O1 model with max_completion_tokens
+      // Test O3 model with max_completion_tokens
       mockFetchWithCache.mockClear();
-      const o1Provider = new OpenAiChatCompletionProvider('o1', {
+      const o3Provider = new OpenAiChatCompletionProvider('o3', {
         config: { max_completion_tokens: 200 },
       });
-      await o1Provider.callApi('Test prompt');
-      const o1Call = mockFetchWithCache.mock.calls[0] as [string, { body: string }];
-      const o1Body = JSON.parse(o1Call[1].body);
-      expect(o1Body.max_tokens).toBeUndefined();
-      expect(o1Body.max_completion_tokens).toBe(200);
+      await o3Provider.callApi('Test prompt');
+      const o3Call = mockFetchWithCache.mock.calls[0] as [string, { body: string }];
+      const o3Body = JSON.parse(o3Call[1].body);
+      expect(o3Body.max_tokens).toBeUndefined();
+      expect(o3Body.max_completion_tokens).toBe(200);
 
       // Test GPT-5 model should not include max_tokens
       mockFetchWithCache.mockClear();
@@ -3314,18 +3315,18 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
       const mockResponse = createMockChatResponse();
       mockFetchWithCache.mockResolvedValue(mockResponse);
 
-      // Test O1 model with reasoning_effort
-      const o1Provider = new OpenAiChatCompletionProvider('o1', {
+      // Test O3 model with reasoning_effort
+      const o3Provider = new OpenAiChatCompletionProvider('o3', {
         config: { reasoning_effort: 'high' } as any,
       });
-      await o1Provider.callApi('Test prompt');
-      const o1Call = mockFetchWithCache.mock.calls[0] as [string, { body: string }];
-      const o1Body = JSON.parse(o1Call[1].body);
-      expect(o1Body.reasoning_effort).toBe('high');
+      await o3Provider.callApi('Test prompt');
+      const o3Call = mockFetchWithCache.mock.calls[0] as [string, { body: string }];
+      const o3Body = JSON.parse(o3Call[1].body);
+      expect(o3Body.reasoning_effort).toBe('high');
 
       // Test regular model (should not include reasoning_effort)
       mockFetchWithCache.mockClear();
-      const regularProvider = new OpenAiChatCompletionProvider('gpt-4', {
+      const regularProvider = new OpenAiChatCompletionProvider('gpt-4.1', {
         config: { reasoning_effort: 'high' } as any,
       });
       await regularProvider.callApi('Test prompt');
@@ -3348,21 +3349,21 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
       },
     );
 
-    it('should handle o4-mini with reasoning_effort and service_tier', async () => {
+    it('should handle o3 with reasoning_effort and service_tier', async () => {
       const mockResponse = createMockChatResponse('Test response');
       mockFetchWithCache.mockResolvedValue(mockResponse);
 
-      // Test O4-mini model with reasoning_effort
-      const o4Provider = new OpenAiChatCompletionProvider('o4-mini', {
+      // Test O3 model with reasoning_effort
+      const o3Provider = new OpenAiChatCompletionProvider('o3', {
         config: {
           reasoning_effort: 'medium',
-          service_tier: 'premium',
+          service_tier: 'priority',
         } as any,
       });
 
-      const { body: o4Body } = await o4Provider.getOpenAiBody('Test prompt');
-      expect(o4Body.reasoning_effort).toBe('medium');
-      expect(o4Body.service_tier).toBe('premium');
+      const { body: o3Body } = await o3Provider.getOpenAiBody('Test prompt');
+      expect(o3Body.reasoning_effort).toBe('medium');
+      expect(o3Body.service_tier).toBe('priority');
     });
 
     it('should handle user, metadata, and store parameters', async () => {
@@ -3393,7 +3394,7 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
       const mockResponse = createMockChatResponse('Test response');
       mockFetchWithCache.mockResolvedValue(mockResponse);
 
-      const o1Provider = new OpenAiChatCompletionProvider('o1', {
+      const o3Provider = new OpenAiChatCompletionProvider('o3', {
         config: {
           reasoning: {
             effort: 'high',
@@ -3402,7 +3403,7 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
         } as any,
       });
 
-      const { body } = await o1Provider.getOpenAiBody('Test prompt');
+      const { body } = await o3Provider.getOpenAiBody('Test prompt');
       expect(body.reasoning).toEqual({
         effort: 'high',
         summary: 'detailed',

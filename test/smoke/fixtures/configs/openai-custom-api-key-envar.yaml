@@ -6,6 +6,7 @@ providers:
     label: 'OpenAI assistant with custom key'
     config:
       # Keep evaluation running so the missing-key message is captured in the output JSON.
+      apiBaseUrl: https://gateway.example/v1
       apiKeyRequired: false
       apiKeyEnvar: CUSTOM_ASSISTANT_KEY
 

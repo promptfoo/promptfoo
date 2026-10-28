@@ -654,7 +654,7 @@ assert.equal(summary.results[0].success, false);
 assert.equal(summary.results[0].score, 0);
 assert.ok(summary.results[0].response.error.includes(mode === 'installed'
   ? 'Repository is not a directory'
-  : 'npm install promptfoo @openai/codex-security@^0.2.0'));
+  : 'npm install promptfoo "@openai/codex-security@>=0.2.0 <0.9.0"'));
 if (mode === 'incompatible') {
   assert.ok(summary.results[0].response.error.includes('incompatible (0.1.31)'));
 }
