@@ -228,6 +228,52 @@ describe('handleNumericMatch', () => {
     expect(runNumericMatch('Final answer -42', 42).pass).toBe(false);
   });
 
+  describe('Markdown bullets and prose (Codex review)', () => {
+    it.each([
+      ['- $42', 42],
+      ['- 42', 42],
+      ['* 42', 42],
+    ])('does not read the bullet in "%s" as a minus sign', (text, expected) => {
+      expect(extractNumbers(text)).toEqual([expected]);
+    });
+
+    it('still reads signs that touch the number', () => {
+      expect(extractNumbers('-$42')).toEqual([-42]);
+      expect(extractNumbers('$-42')).toEqual([-42]);
+      expect(extractNumbers('- -42')).toEqual([-42]);
+    });
+
+    it('grades a positive bullet under a Final answer heading', () => {
+      const output = 'Change was -7.\nFinal answer:\n- $42';
+      expect(runNumericMatch(output, 42).pass).toBe(true);
+      expect(runNumericMatch(output, -42).pass).toBe(false);
+      expect(runNumericMatch('## Final answer\n* 42\n\nNotes: 7', 42, { mode: 'first' }).pass).toBe(
+        true,
+      );
+    });
+
+    it('stops a bare heading block at the next blank line', () => {
+      expect(getStatedAnswerText('Final answer:\n- $42\n- $43\n\nExtra 99')).toBe('\n- $42\n- $43');
+    });
+
+    it('does not treat prose that mentions the phrase as a heading', () => {
+      const output = 'To get the final answer, apply the formula.\nResult: 42';
+      expect(getStatedAnswerText(output)).toBe(output);
+      expect(runNumericMatch(output, 42).pass).toBe(true);
+      expect(getStatedAnswerText('The final answer: 5')).toBe('The final answer: 5');
+    });
+
+    it('requires a word boundary after the phrase', () => {
+      const output = 'Final answers were collected: 7\nTotal: 42';
+      expect(getStatedAnswerText(output)).toBe(output);
+    });
+
+    it('accepts Markdown-decorated headings', () => {
+      expect(getStatedAnswerText('Work...\n**Final answer:** $42')).toBe('$42');
+      expect(getStatedAnswerText('> Final answer: 42')).toBe('42');
+    });
+  });
+
   it('rejects expected values that overflow when scaled', () => {
     expect(() => runNumericMatch('1', `${'9'.repeat(300)} trillion`)).toThrow('overflows');
   });

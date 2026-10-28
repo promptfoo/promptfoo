@@ -29,13 +29,17 @@ const SCALE_MULTIPLIERS: Record<string, number> = {
  * be attached to the number, and `bn`/`mn` may follow a space.
  */
 const NUMBER_TOKEN_REGEX =
-  /(?<![\p{L}\p{N}_.])(\()?([-−])?\s?([$€£¥])?([-−])?((?:\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+(?:\.\d+)?|\.\d+)(?:e[-+]?\d+)?)(?:(?:\s?(thousand|million|billion|trillion|bn|mn)s?\b)|([kmbt])(?![\p{L}\p{N}_]))?(\))?/giu;
+  /(?<![\p{L}\p{N}_.])(\()?([-−])?([$€£¥])?([-−])?((?:\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+(?:\.\d+)?|\.\d+)(?:e[-+]?\d+)?)(?:(?:\s?(thousand|million|billion|trillion|bn|mn)s?\b)|([kmbt])(?![\p{L}\p{N}_]))?(\))?/giu;
 
 /**
- * `Final answer:`, `Final answer - 42` or `Final answer -42`. A dash only counts as a delimiter
- * when whitespace follows it, so a minus sign attached to the number is kept.
+ * A `Final answer` heading line: `Final answer: 42`, `**Final answer:** 42`, `Final answer - 42`
+ * or `Final answer -42`. It must start its line (after optional Markdown markers) and end at a
+ * word boundary, so prose such as "to get the final answer, apply the formula" does not count. A
+ * dash only counts as a delimiter when whitespace follows it, so a minus sign attached to the
+ * number is kept.
  */
-const FINAL_ANSWER_REGEX = /final answer\s*(?::|[-–—](?=\s))?\s*([^\n]*)/gi;
+const FINAL_ANSWER_REGEX =
+  /^[ \t>#*_]*final answer\b[*_]*[ \t]*(?::|[-–—](?=\s))?[*_]*[ \t]*([^\n]*)/gim;
 
 /** SEC form names such as `10-K`, `10-Q`, `8-K`, `20-F` and `6-K`. */
 const SEC_FORM_SUFFIX_REGEX = /^-(?:K|Q|F)(?:T|\/A)?(?![\p{L}\p{N}_])/iu;
@@ -99,12 +103,21 @@ export function extractNumbers(text: string): number[] {
 }
 
 /**
- * Returns the text that holds the stated answer: the content of the last `Final answer:` line
- * when the output has one, otherwise the whole output.
+ * Returns the text that holds the stated answer: the content of the last `Final answer` heading
+ * line (or the block under a bare heading) when the output has one, otherwise the whole output.
  */
 export function getStatedAnswerText(text: string): string {
   const finalAnswers = [...text.matchAll(FINAL_ANSWER_REGEX)];
-  return finalAnswers.length > 0 ? finalAnswers[finalAnswers.length - 1][1] : text;
+  if (finalAnswers.length === 0) {
+    return text;
+  }
+  const last = finalAnswers[finalAnswers.length - 1];
+  if (last[1].trim() !== '') {
+    return last[1];
+  }
+  // A bare heading: the answer is the block (for example a bullet list) up to the next blank line.
+  const afterHeading = text.slice((last.index ?? 0) + last[0].length);
+  return afterHeading.split(/\n[ \t]*\n/)[0];
 }
 
 function parseExpectedValue(value: unknown): number {
