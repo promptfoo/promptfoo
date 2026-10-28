@@ -157,6 +157,26 @@ interface CompatibilityOptions {
   signal?: AbortSignal;
 }
 
+interface WindowsCleanupDetails {
+  phase: 'spawn' | 'callback';
+  code: string | number | null;
+  killed: boolean | null;
+  signal: string | null;
+  elapsedMs: number;
+  directChildExitedAtStart: boolean;
+  directChildExitedAtFailure: boolean;
+}
+
+class CodexCliCleanupError extends Error {
+  override name = 'CodexCliCleanupError';
+  readonly cleanup: WindowsCleanupDetails;
+
+  constructor(cleanup: WindowsCleanupDetails, options?: ErrorOptions) {
+    super(`Codex CLI process-tree cleanup failed: ${JSON.stringify(cleanup)}`, options);
+    this.cleanup = cleanup;
+  }
+}
+
 /** Stop the trusted supervisor, or the direct Windows CLI process tree. */
 async function terminateProbe(child: ChildProcess): Promise<void> {
   if (process.platform !== 'win32') {
@@ -179,6 +199,27 @@ async function terminateProbe(child: ChildProcess): Promise<void> {
   }
   const windowsDir = path.win32.normalize(hostWindowsDir);
   const systemDir = path.win32.join(windowsDir, 'System32');
+  const startedAt = performance.now();
+  const directChildExitedAtStart = child.exitCode !== null || child.signalCode !== null;
+  const cleanupFailure = (error: unknown, phase: WindowsCleanupDetails['phase']) => {
+    const details = error as { code?: unknown; killed?: unknown; signal?: unknown } | null;
+    const code = details?.code;
+    const signal = details?.signal;
+    return new CodexCliCleanupError({
+      phase,
+      code:
+        typeof code === 'number' && Number.isSafeInteger(code)
+          ? code
+          : typeof code === 'string' && /^[A-Z][A-Z0-9_]{0,63}$/.test(code)
+            ? code
+            : null,
+      killed: typeof details?.killed === 'boolean' ? details.killed : null,
+      signal: typeof signal === 'string' && /^SIG[A-Z0-9]{1,20}$/.test(signal) ? signal : null,
+      elapsedMs: Math.max(0, Math.round(performance.now() - startedAt)),
+      directChildExitedAtStart,
+      directChildExitedAtFailure: child.exitCode !== null || child.signalCode !== null,
+    });
+  };
   try {
     await new Promise<void>((resolve, reject) => {
       // Cleanup must not search the checkout or inherit CLI/ambient credentials.
@@ -193,8 +234,9 @@ async function terminateProbe(child: ChildProcess): Promise<void> {
           env: { SystemRoot: windowsDir, WINDIR: windowsDir, PATH: systemDir },
         },
         (error) => {
-          if (error && child.exitCode === null && child.signalCode === null) {
-            reject(error);
+          // A direct-child exit is not proof that its descendants were stopped.
+          if (error) {
+            reject(cleanupFailure(error, 'callback'));
           } else {
             resolve();
           }
@@ -202,10 +244,12 @@ async function terminateProbe(child: ChildProcess): Promise<void> {
       );
     });
   } catch (error) {
+    const cleanupError =
+      error instanceof CodexCliCleanupError ? error : cleanupFailure(error, 'spawn');
     if (child.exitCode === null && child.signalCode === null) {
       child.kill('SIGKILL');
     }
-    throw error;
+    throw cleanupError;
   }
 }
 
@@ -285,7 +329,12 @@ function runVersionProbe(options: CompatibilityOptions): Promise<string> {
       failure ??= error;
       termination ??= terminateProbe(child)
         .catch((cleanupError: unknown) => {
-          failure = cleanupError instanceof Error ? cleanupError : new Error(String(cleanupError));
+          failure =
+            cleanupError instanceof CodexCliCleanupError
+              ? new CodexCliCleanupError(cleanupError.cleanup, { cause: failure })
+              : cleanupError instanceof Error
+                ? cleanupError
+                : new Error(String(cleanupError));
         })
         .finally(() => {
           child.stdout?.destroy();
@@ -452,11 +501,16 @@ async function runCompatibilityCheck(options: CompatibilityOptions): Promise<voi
     output = await runVersionProbe(options);
   } catch (error) {
     if (options.signal?.aborted) {
-      throw new DOMException('Codex compatibility check aborted', 'AbortError');
+      const aborted = new DOMException('Codex compatibility check aborted', 'AbortError');
+      if (error instanceof CodexCliCleanupError) {
+        Object.defineProperty(aborted, 'cause', { value: error, configurable: true });
+      }
+      throw aborted;
     }
     const message = error instanceof Error ? error.message : String(error);
     throw new CodexCliCompatibilityError(
       `Could not verify Codex CLI compatibility for ${options.codexPathOverride}: ${message}. For more information, see: ${CODEX_SDK_DOCS_URL}`,
+      error instanceof CodexCliCleanupError ? { cause: error } : undefined,
     );
   }
 
