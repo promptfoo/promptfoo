@@ -159,7 +159,7 @@ A good report helps us triage and fix issues faster. Please include:
 We may close reports as one of the following:
 
 - **Invalid** — the reported behavior does not reproduce, depends on stale/nonexistent code, or relies on an unrealistic setup
-- **Out of scope** — the behavior matches the documented trust model or requires explicitly configured trusted code or eval content
+- **Out of scope** — the behavior falls within the documented trust model for the configured feature
 - **Duplicate** — the report is materially the same as an earlier advisory
 - **Already fixed** — the issue is valid but no longer affects the latest supported release
 
@@ -218,6 +218,8 @@ We request CVEs through GitHub Security Advisories when appropriate. Final advis
 - Web UI XSS with demonstrable impact beyond self-XSS
 
 **We generally do not request a CVE for:**
+
+The entries about configured code and eval content below assume the feature honors its documented security restrictions.
 
 - Issues in explicitly configured custom code or templates in code-executing fields (e.g., JS/Python assertions, custom providers, transforms, hooks, plugins)
 - Adversarial eval content flowing through the configured template engine and eval pipeline (e.g., model output interpolated into grading prompts, `_conversation` history rendered or passed through built-in assertions/graders, values saved with `storeOutputAs` reused as later eval inputs, variable or file-reference values dereferenced by configured eval steps, or data passed to configured providers)
