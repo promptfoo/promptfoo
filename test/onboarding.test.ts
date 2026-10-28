@@ -1,4 +1,5 @@
 import { rm } from 'fs/promises';
+import path from 'path';
 
 import { AbortPromptError, ExitPromptError } from '@inquirer/core';
 import * as yaml from 'js-yaml';
@@ -410,6 +411,24 @@ describe('createDummyFiles', () => {
       }),
     );
   });
+
+  it.each([
+    ['an absolute', '/fake/temp/dir'],
+    ['a relative', 'my-project'],
+  ])('should write the files into %s directory resolved from the cwd', async (_kind, directory) => {
+    await createDummyFiles(directory, false);
+
+    const expectedDir = path.resolve(directory);
+    expect(mockFs.mkdirSync).toHaveBeenCalledWith(expectedDir, { recursive: true });
+    expect(mockFs.writeFileSync).toHaveBeenCalledWith(
+      path.join(expectedDir, 'promptfooconfig.yaml'),
+      expect.any(String),
+    );
+    expect(mockFs.writeFileSync).toHaveBeenCalledWith(
+      path.join(expectedDir, 'README.md'),
+      expect.any(String),
+    );
+  });
 });
 
 describe('initializeProject', () => {
@@ -461,5 +480,19 @@ describe('initializeProject', () => {
       ]),
     );
     expect(messages.some((msg) => msg.includes('undefined'))).toBe(false);
+  });
+
+  it('should print an absolute target directory without a ./ prefix', async () => {
+    const infoSpy = vi.spyOn(logger, 'info').mockImplementation(() => logger);
+
+    await initializeProject('/fake/temp/dir', false);
+
+    const messages = infoSpy.mock.calls.map((call) => String(call[0]));
+    expect(messages).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining('Wrote promptfooconfig.yaml to /fake/temp/dir\n'),
+        expect.stringContaining('cd /fake/temp/dir'),
+      ]),
+    );
   });
 });
