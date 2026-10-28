@@ -1084,6 +1084,16 @@ describe('evaluatorHelpers', () => {
       );
     });
 
+    it('should check render failures against the prompt returned by a function', async () => {
+      const prompt = {
+        ...toPrompt('function source'),
+        function: async () => '{{v}}',
+      };
+      await expect(renderPrompt(prompt, { v: '{% unknown %}' }, {})).rejects.toThrow(
+        'unknown block tag: unknown',
+      );
+    });
+
     it('should pass pre-rendered vars to third-party prompt integrations', async () => {
       vi.mocked(getPortkeyPrompt).mockResolvedValue({
         model: 'gpt-4o',

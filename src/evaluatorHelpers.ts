@@ -667,9 +667,9 @@ export async function renderPrompt(
     basePrompt,
     jsonAutoescapeDisabled,
   );
-  // Determine which vars the prompt actually references so render failures
-  // on unused values can be suppressed without hiding errors on used ones.
-  const promptReferencedVars = new Set(extractVariablesFromTemplate(prompt.raw));
+  // Determine which vars the resolved prompt actually references so render
+  // failures on unused values can be suppressed without hiding errors on used ones.
+  const promptReferencedVars = new Set(extractVariablesFromTemplate(basePrompt));
   const renderedVars = Object.fromEntries(
     Object.entries(vars).map(([key, value]) => {
       if (
