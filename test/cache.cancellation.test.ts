@@ -13,7 +13,8 @@ const diskWriteBoundary = KeyvFile.prototype as unknown as {
 };
 
 const fetchWithRetries = vi.hoisted(() => vi.fn());
-vi.mock('../src/util/fetch/index', () => ({
+vi.mock('../src/util/fetch/index', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../src/util/fetch/index')>()),
   fetchWithRetries,
   getFetchWithProxyHeaders: () => ({}),
 }));

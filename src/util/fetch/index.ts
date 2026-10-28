@@ -8,7 +8,7 @@ import cliState from '../../cliState';
 import { DEFAULT_MAX_CONCURRENCY, VERSION } from '../../constants';
 import { getEnvBool, getEnvInt, getEnvString } from '../../envars';
 import logger from '../../logger';
-import { getRequestTimeoutMs } from '../../providers/shared';
+import { getRequestTimeoutMs, waitForPromiseWithAbort } from '../../providers/shared';
 import { parseRateLimitHeaders } from '../../scheduler/headerParser';
 import invariant from '../../util/invariant';
 import { sleep } from '../../util/time';
@@ -357,6 +357,42 @@ export async function fetchWithProxy(
   throw new Error('Unexpected end of transient retry loop');
 }
 
+// Buffered readers continue the successful attempt's deadline after headers. Callers
+// that take ownership of a streaming Response still control its lifetime themselves.
+const responseDeadlines = new WeakMap<
+  Response,
+  { controller: AbortController; expiresAt: number; timeout: number }
+>();
+
+export async function readResponseTextWithTimeout(response: Response): Promise<string> {
+  const deadline = responseDeadlines.get(response);
+  if (!deadline) {
+    return response.text();
+  }
+  responseDeadlines.delete(response);
+
+  const { controller, expiresAt, timeout } = deadline;
+  const expire = () => {
+    const error = new Error(`Request timed out after ${timeout} ms`);
+    controller.abort(error);
+    return error;
+  };
+  const remaining = expiresAt - performance.now();
+  if (remaining <= 0) {
+    throw expire();
+  }
+  const timer = setTimeout(expire, remaining);
+  try {
+    return await waitForPromiseWithAbort(response.text(), controller.signal);
+  } catch (error) {
+    // A deadline is a request failure, even if the transport reports AbortError.
+    controller.signal.throwIfAborted();
+    throw error;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 export function fetchWithTimeout(
   url: RequestInfo,
   options: FetchOptions = {},
@@ -371,6 +407,7 @@ export function fetchWithTimeout(
       ? AbortSignal.any([options.signal, timeoutController.signal])
       : timeoutController.signal;
 
+    const expiresAt = performance.now() + timeout;
     const timeoutId = setTimeout(() => {
       timeoutController.abort();
       reject(new Error(`Request timed out after ${timeout} ms`));
@@ -382,6 +419,7 @@ export function fetchWithTimeout(
     })
       .then((response) => {
         clearTimeout(timeoutId);
+        responseDeadlines.set(response, { controller: timeoutController, expiresAt, timeout });
         resolve(response);
       })
       .catch((error) => {

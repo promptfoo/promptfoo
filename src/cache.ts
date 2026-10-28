@@ -11,7 +11,11 @@ import { getRequestTimeoutMs, throwIfAborted, waitForPromiseWithAbort } from './
 import { getConfigDirectoryPath } from './util/config/manage';
 import { sha256 } from './util/createHash';
 import { isAbortError, isTransientConnectionError } from './util/fetch/errors';
-import { fetchWithRetries, getFetchWithProxyHeaders } from './util/fetch/index';
+import {
+  fetchWithRetries,
+  getFetchWithProxyHeaders,
+  readResponseTextWithTimeout,
+} from './util/fetch/index';
 import {
   getCloudAuthHeaderName,
   getCloudBearerToken,
@@ -745,7 +749,7 @@ async function fetchAndReadBody(
     const fetchLatencyMs = Date.now() - fetchStart;
 
     try {
-      const respText = await resp.text();
+      const respText = await readResponseTextWithTimeout(resp);
       return { respText, resp, fetchLatencyMs };
     } catch (err) {
       if (

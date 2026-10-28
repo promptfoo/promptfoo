@@ -124,6 +124,69 @@ describe('fetchWithCache retry budget and Request cancellation', () => {
     }
   });
 
+  it('aborts a partial POST response at the original request deadline', async () => {
+    let wireSignal: AbortSignal | null | undefined;
+    transport.mockImplementation(async (_url, options: RequestInit) => {
+      wireSignal = options.signal;
+      await new Promise((resolve) => setTimeout(resolve, 600));
+      return new Response(
+        new ReadableStream<Uint8Array>({
+          start(stream) {
+            stream.enqueue(new TextEncoder().encode('partial body'));
+            options.signal?.addEventListener('abort', () => stream.error(options.signal?.reason), {
+              once: true,
+            });
+          },
+        }),
+      );
+    });
+    const outcome = fetchWithCache(
+      'https://cache.test/stalled-body',
+      { method: 'POST' },
+      1000,
+      'text',
+      true,
+      2,
+    ).catch((error: unknown) => error);
+
+    await vi.advanceTimersByTimeAsync(999);
+    expect(wireSignal?.aborted).toBe(false);
+    await vi.advanceTimersByTimeAsync(1);
+
+    expect(wireSignal?.aborted).toBe(true);
+    expect(await outcome).toMatchObject({
+      message: expect.stringMatching(/timed out after 1000 ms/i),
+    });
+    expect(transport).toHaveBeenCalledOnce();
+  });
+
+  it('gives a successful retry its own deadline and clears it when the body finishes', async () => {
+    let retrySignal: AbortSignal | null | undefined;
+    transport
+      .mockRejectedValueOnce(new Error('connection reset'))
+      .mockImplementationOnce(async (_url, options: RequestInit) => {
+        retrySignal = options.signal;
+        return new Response(
+          new ReadableStream<Uint8Array>({
+            start(stream) {
+              setTimeout(() => {
+                stream.enqueue(new TextEncoder().encode('ok'));
+                stream.close();
+              }, 500);
+            },
+          }),
+        );
+      });
+    const pending = fetchWithCache('https://cache.test/retry-body', {}, 1000, 'text', true, 1);
+    const result = expect(pending).resolves.toMatchObject({ data: 'ok' });
+
+    await vi.runAllTimersAsync();
+
+    await result;
+    expect(transport).toHaveBeenCalledTimes(2);
+    expect(retrySignal?.aborted).toBe(false);
+  });
+
   it('stops a pending body retry before another transport dispatch', async () => {
     const controller = new AbortController();
     const reason = new Error('stop retrying this request');
