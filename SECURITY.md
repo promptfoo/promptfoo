@@ -86,7 +86,7 @@ Promptfoo stores local artifacts such as logs, cache entries, databases, trace d
 
 Local caches, OAuth/token stores, provider response caches, temporary files, debug logs, report databases, and media/blob stores are scoped to the user's local Promptfoo environment. They are not isolation boundaries between different credentials, providers, endpoints, regions, tenants, accounts, evals, projects, or users running under the same local account unless Promptfoo documents such partitioning for a specific feature. Cache keys, token-store keys, and local artifact paths are not guaranteed to include provider identity, endpoint, region, tenant, account, credential, or project identity unless documented. Cache or token reuse, collision, overwrite, or lookup ambiguity within the same local user environment is generally treated as hardening or privacy behavior rather than a security-boundary bypass. Use separate operating-system users, containers, `PROMPTFOO_CONFIG_DIR` values, cache directories, token stores, and credentials when you need isolation between projects, tenants, or accounts.
 
-Shared or Cloud-backed reports may include the snapshot needed to view, reproduce, or inspect the result, including prompts, vars, outputs, traces, metadata, provider configuration fields, media/blob references, scan artifacts, and derived artifacts. Do not put secrets in prompts, datasets, provider config fields, metadata, or other shareable inputs unless that field is documented as redacted. If a field is documented as redacted or excluded, bypassing that redaction or exclusion is in scope.
+Shared or Cloud-backed reports may include the snapshot needed to view, reproduce, or inspect the result, including prompts, vars, outputs, traces, metadata, provider configuration fields, media/blob references, scan artifacts, and derived artifacts. Automatic detection of common sensitive values is best effort. Keep secrets out of shareable inputs unless the feature documents a rule that covers them or you configure one. Report a bypass if the rule fails to protect a field, format, or category it covers at any point along its documented output path.
 
 Report files, Markdown, HTML, CSV, JSON, screenshots, and other exports are generated artifacts from the user's run. They may contain active markup, formulas, links, media, `data:` URLs, or provider-controlled text. Treat exported artifacts as untrusted when opening them in browsers, spreadsheets, terminals, or other tools.
 
@@ -269,7 +269,7 @@ When a fix is released, we will:
 - Exposure of privileged local developer interfaces only when it bypasses an explicit authentication or authorization control documented for a remote or multi-user deployment
 - Bypasses of documented tenant-isolation, authentication, authorization, redaction, or exclusion controls
 - Sensitive local artifacts that are uploaded, shared, served to other users, or exposed across Cloud/on-prem tenant boundaries outside the documented sharing or Cloud-backed behavior
-- Algorithmic complexity DoS (crafted input causing hang/crash with modest input size)
+- Algorithmic denial of service when a modest input causes disproportionate resource use that stalls or crashes a supported workflow
 
 **Out of scope:**
 
@@ -291,6 +291,7 @@ The exclusions for configured code and eval content apply when the feature opera
 - Local cache, provider response cache, OAuth/token-store, temporary-file, or artifact namespace reuse, collision, overwrite, or lookup ambiguity between credentials, providers, endpoints, regions, accounts, tenants, projects, or evals within the same local user environment, unless Promptfoo documents the namespace as an isolation boundary for that feature
 - Active content, formulas, links, media, `data:` URLs, or markup in local reports, shared reports, screenshots, CSV/JSON exports, Markdown/HTML renderers, citations, or viewer downloads generated from the user's eval data
 - Shared or Cloud-backed report snapshots containing prompts, vars, outputs, traces, metadata, provider configuration fields, media/blob references, scan artifacts, or derived artifacts, unless Promptfoo bypasses a documented redaction or exclusion for that field
+- Requests to extend best-effort detection of sensitive data to names or formats outside the documented or user-configured rules
 - Repository workflows, example CI snippets, code-scan action configuration, package-manager behavior, local agent/editor automation, maintainer scripts, and other developer automation surfaces unless the issue affects Promptfoo-published packages, released product behavior, Cloud/on-prem tenant isolation, or a documented product security boundary
 - Reports based only on spoofed `Origin` or `Sec-Fetch-Site` headers from non-browser clients
 - Third-party dependency issues that don't materially affect Promptfoo's security posture (report upstream)

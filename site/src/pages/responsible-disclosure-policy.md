@@ -28,6 +28,8 @@ Promptfoo OSS is a local eval runner, not a sandbox for adversarial eval content
 
 The [out-of-scope list](#out-of-scope) covers direct access to the local server and the expected effects of running code or processing inputs within a feature's documented security restrictions.
 
+A modest input that causes disproportionate resource use and stalls or crashes a supported workflow is in scope. A redaction or exclusion rule must protect the data it covers throughout its documented output path.
+
 Secret persistence or display that remains confined to the same local user account is generally treated as a hardening or privacy issue rather than a security-boundary bypass. It becomes in scope only when Promptfoo bypasses a documented redaction or disable/opt-out control, or uploads, shares, exports, or otherwise exposes that data beyond the same local account.
 
 ### Cloud Services
@@ -113,6 +115,7 @@ The following are out of scope. The exclusions for configured code and eval cont
 - Sensitive data present only in local logs, databases, caches, reports, exports, or UI views under the same local user account, unless Promptfoo bypasses a documented redaction or disable/opt-out control or uploads, shares, exports, or otherwise exposes that artifact beyond that account
 - Reports based only on spoofed `Origin` or `Sec-Fetch-Site` headers from non-browser clients
 - Social engineering, phishing, or physical attacks
+- Requests to extend best-effort detection of sensitive data beyond the documented or user-configured rules
 - Volumetric denial of service
 - Vulnerabilities in unsupported versions
 - Non-security bugs or feature requests
