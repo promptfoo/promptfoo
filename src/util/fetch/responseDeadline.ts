@@ -4,6 +4,8 @@ type RequestDeadline = { controller: AbortController; expiresAt: number; timeout
 
 const responseDeadlines = new WeakMap<Response, RequestDeadline>();
 
+export class ResponseBodyTimeoutError extends Error {}
+
 export function trackResponseDeadline(response: Response, deadline: RequestDeadline): void {
   responseDeadlines.set(response, deadline);
 }
@@ -23,7 +25,7 @@ export async function readWithResponseDeadline<T>(
   try {
     return await new Promise<T>((resolve, reject) => {
       const expire = () => {
-        const error = new Error(`Request timed out after ${timeout} ms`);
+        const error = new ResponseBodyTimeoutError(`Request timed out after ${timeout} ms`);
         // Report the request timeout before the transport turns it into an AbortError.
         reject(error);
         controller.abort(error);

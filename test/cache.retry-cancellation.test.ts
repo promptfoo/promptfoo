@@ -139,12 +139,10 @@ describe('fetchWithCache retry budget and Request cancellation', () => {
         clock.mockReturnValue(12.5);
         return Response.json(body, { status });
       });
-      // A numeric provider setting can arrive as a string after template rendering.
-      const timeout = '650' as unknown as number;
       const result = await fetchWithCache(
         'https://cache.test/templated-timeout',
         {},
-        timeout,
+        '650',
         'json',
         true,
         0,
@@ -232,7 +230,14 @@ describe('fetchWithCache retry budget and Request cancellation', () => {
           ),
       );
       const read = (timeout: number) =>
-        fetchWithCache(`https://cache.test/shared-deadline/${first}`, {}, timeout, 'text');
+        fetchWithCache(
+          `https://cache.test/shared-deadline/${first}`,
+          {},
+          timeout,
+          'text',
+          false,
+          0,
+        );
       const leader = read(first);
       await vi.advanceTimersByTimeAsync(0);
       const follower = read(second);
@@ -252,6 +257,66 @@ describe('fetchWithCache retry budget and Request cancellation', () => {
       expect(transport).toHaveBeenCalledTimes(2);
     },
   );
+
+  it('coalesces equal numeric and templated deadlines into one transport', async () => {
+    const release = createDeferred<void>();
+    transport.mockImplementation(async () => {
+      await release.promise;
+      return new Response('ok');
+    });
+    const url = 'https://cache.test/equivalent-deadlines';
+    const leader = fetchWithCache(url, {}, 1000, 'text');
+    await vi.advanceTimersByTimeAsync(0);
+    const follower = fetchWithCache(url, {}, '1e3', 'text');
+    await vi.advanceTimersByTimeAsync(0);
+    release.resolve();
+
+    const outcomes = await Promise.all([leader, follower]);
+    expect(transport).toHaveBeenCalledOnce();
+    expect(outcomes).toMatchObject([{ data: 'ok' }, { data: 'ok', coalesced: true }]);
+  });
+
+  it('retries a GET whose response body hits its deadline', async () => {
+    transport
+      .mockResolvedValueOnce(new Response(new ReadableStream()))
+      .mockResolvedValueOnce(new Response('ok'));
+    const outcome = fetchWithCache(
+      'https://cache.test/stalled-get',
+      {},
+      100,
+      'text',
+      true,
+      1,
+    ).catch((error: unknown) => error);
+
+    await vi.runAllTimersAsync();
+
+    expect(await outcome).toMatchObject({ data: 'ok' });
+    expect(transport).toHaveBeenCalledTimes(2);
+    expect(transport.mock.calls[0][1].signal.aborted).toBe(true);
+  });
+
+  it('does not replay a consumed PUT request body when its response stalls', async () => {
+    const request = new Request('https://cache.test/single-use-put', {
+      method: 'PUT',
+      body: 'data',
+    });
+    transport.mockImplementationOnce(async () => {
+      await request.text();
+      return new Response(new ReadableStream());
+    });
+    const outcome = fetchWithCache(request, {}, 100, 'text', true, 1).catch(
+      (error: unknown) => error,
+    );
+
+    await vi.runAllTimersAsync();
+
+    expect(await outcome).toMatchObject({
+      message: expect.stringContaining('timed out after 100 ms'),
+    });
+    expect(request.bodyUsed).toBe(true);
+    expect(transport).toHaveBeenCalledOnce();
+  });
 
   it('gives a successful retry its own deadline and clears it when the body finishes', async () => {
     let retrySignal: AbortSignal | null | undefined;
