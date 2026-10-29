@@ -1,0 +1,46 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Wally open-weight chat models
+
+prompts:
+  - 'Answer in one short sentence: {{question}}'
+
+# Both models run on a single `WALLY_API_KEY`.
+providers:
+  - id: openai:chat:deepseek-v4.1-flash
+    label: 'DeepSeek V4.1 Flash'
+    config:
+      apiBaseUrl: https://inference.runanywhere.ai/v1
+      apiKeyEnvar: WALLY_API_KEY
+      headers:
+        OpenAI-Organization: ''
+      omitDefaults: true
+      temperature: 0
+      max_tokens: 4096
+      showThinking: false
+      passthrough:
+        reasoning_effort: low
+  - id: openai:chat:glm-5.3-flash
+    label: 'GLM-5.3 Flash'
+    config:
+      apiBaseUrl: https://inference.runanywhere.ai/v1
+      apiKeyEnvar: WALLY_API_KEY
+      headers:
+        OpenAI-Organization: ''
+      omitDefaults: true
+      temperature: 0
+      max_tokens: 4096
+      showThinking: false
+      passthrough:
+        reasoning_effort: low
+
+tests:
+  - vars:
+      question: What is the chemical symbol for gold?
+    assert:
+      - type: regex
+        value: \bAu\b
+  - vars:
+      question: Why does ice float on liquid water?
+    assert:
+      - type: icontains-any
+        value: [less dense, lower density]
