@@ -1518,4 +1518,18 @@ describe('CohereEmbeddingProvider', () => {
       });
     },
   );
+
+  it('surfaces Cohere API error messages instead of a generic embedding error', async () => {
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      cached: false,
+      data: { message: 'invalid api token' },
+    } as any);
+    const provider = new CohereEmbeddingProvider('embed-english-v3.0', {
+      apiKey: 'bad-key',
+    });
+
+    await expect(provider.callEmbeddingApi('Embed this')).rejects.toThrow(
+      'Cohere API error: invalid api token',
+    );
+  });
 });

@@ -985,6 +985,10 @@ export class CohereEmbeddingProvider implements ApiEmbeddingProvider {
       throw err;
     }
 
+    if (typeof data?.message === 'string') {
+      throw new Error(`Cohere API error: ${data.message}`);
+    }
+
     const embedding = Array.isArray(data?.embeddings)
       ? data.embeddings[0]
       : data?.embeddings?.float?.[0];
