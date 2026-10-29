@@ -255,11 +255,13 @@ Use trajectory assertions when your spans identify tools, commands, searches, re
 
 For the [hosted OpenAI Agents API](/docs/providers/openai-agents-api#inspect-traces), eval tracing records the provider's `invoke_agent` span. Add `config.hostedTrace: true` to download hosted tool and model spans before session cleanup. With import disabled, check `context.providerResponse.metadata.toolCalls` to require a completed sandbox command. The [OpenAI agent runtime comparison](/docs/guides/evaluate-openai-agent-runtimes) shows the corresponding SDK and Codex app-server assertions.
 
-When regrading a JSON export, built-in argument assertions check the saved target spans. An export can truncate a tool argument even when it contains every span. If you use `PROMPTFOO_STRIP_METADATA=true`, hosted trace details are removed and the export marks the requested trace unavailable for regrading, even when it contains raw spans. [Diagnose missing trace evidence](/docs/providers/openai-agents-api#diagnose-missing-trace-evidence)
+When regrading a JSON export, built-in argument assertions check the saved target spans. An export can truncate a tool argument even when it contains every span. If `PROMPTFOO_STRIP_PROMPT_TEXT` or `PROMPTFOO_STRIP_RESPONSE_OUTPUT` removed a wrapper’s request or response body, a filter on that body alone cannot prove absence. If you use `PROMPTFOO_STRIP_METADATA=true`, hosted trace details are removed and the export marks the requested trace unavailable for regrading, even when it contains raw spans. [Diagnose missing trace evidence](/docs/providers/openai-agents-api#diagnose-missing-trace-evidence)
 
 The three raw-span assertions accept `value.attributes` to select spans by exact attributes in addition to their name pattern. For example, `attributes: { 'gen_ai.tool.name': 'search' }` limits a count, duration, or error-rate check to the search tool even when every tool emits a span named `execute_tool`. All supplied attributes must match. [Attribute filter examples](/docs/configuration/expected-outputs/deterministic/#trace-span-count)
 
 On a complete hosted Agents API trace with its local provider span, `trace-span-count` with only `min: 1` can pass as soon as one saved span matches the filter, even if an unrelated span lacks the attribute or a higher local ancestor is missing. For an upper bound such as `max: 0`, Promptfoo must account for each candidate, including local ancestors, that could match all the filters. If a saved tool name rules out a call, missing arguments on that call do not affect the grade. A candidate whose tool result was discarded cannot establish that a particular result never occurred.
+
+For hosted runs, `trace-error-spans` and `trace-span-duration` with no filters grade the target work completed before assertions run. To include the surrounding Promptfoo test-case span, set an explicit filter such as `pattern: '*'`. If a selected span has no end time, a duration check can pass only when the known durations establish the bound even with the missing measurement.
 
 ### Turn marker spans {#per-llm-turn-spans}
 
@@ -353,7 +355,8 @@ secrets in test variables when traces are retained.
 
 `redactAttributes` is applied by the **OTLP HTTP receiver** as spans are ingested over
 `/v1/traces` and `/v1/logs`, and to traces fetched through a configured **trace provider**
-before they are saved. Spans emitted by Promptfoo's **built-in provider instrumentation**
+before they are saved. The OpenAI hosted Agents API importer also applies the eval’s policy
+to the downloaded native spans. Spans emitted by Promptfoo's **built-in provider instrumentation**
 are exported in-process and are **not** filtered by `redactAttributes`; values like
 `promptfoo.request.body` and request headers can therefore be stored in the local trace DB.
 A built-in sanitizer masks common credential-shaped keys (`authorization`, `api_key`,

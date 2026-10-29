@@ -188,7 +188,7 @@ The provider validates top-level provider config strictly. Prompt-level config i
 | `turn_timeout_ms`          | number        | Overall turn timeout.                                                                                                                                               | None                 |
 | `server_request_policy`    | object        | Deterministic responses for approvals, user input, MCP elicitations, and dynamic tools.                                                                             | Safe declines        |
 
-With `persist_threads: true`, a later row can use `thread_id` to continue a thread Promptfoo started and still has cached. Use the same resume settings, including `environment_access`. Conflicting settings are rejected, and the original conversation stays available. The default ephemeral thread can only be resumed while its subscription is active.
+With `persist_threads: true`, a later row can use `thread_id` to continue a thread Promptfoo started and still has cached. Use the same resume settings, including `environment_access`, and the same settings Codex carries into later turns, such as reasoning effort and collaboration mode. A conflicting request is rejected before the turn starts. A one-off `output_schema` applies only to that turn. The default ephemeral thread can only be resumed while its subscription is active.
 
 The app-server provider does not use the SDK provider's exact-version preflight. If you point both providers at a floating global or custom Codex binary, review the SDK provider's [custom binary compatibility requirements](./openai-codex-sdk.md#custom-binary-path).
 
@@ -334,7 +334,10 @@ Plain text prompts work as usual. To include images, skills, or mentions, pass a
 ```json
 [
   { "type": "text", "text": "$skill-creator Write a test plan for this provider." },
-  { "type": "image", "url": "https://example.com/screenshot.png" },
+  {
+    "type": "image",
+    "url": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAFklEQVR4nGP4Ky/IcsKcYY9cD6/MOQAgWQSO2gWoggAAAABJRU5ErkJggg=="
+  },
   { "type": "local_image", "path": "/Users/me/screenshots/failure.png" },
   {
     "type": "skill",
@@ -349,9 +352,9 @@ Plain text prompts work as usual. To include images, skills, or mentions, pass a
 ]
 ```
 
-Supported input item types are `text`, `image`, `local_image`, `localImage`, `skill`, and `mention`.
+Supply `image.url` as an inline base64 image data URL. Codex rejects HTTP and HTTPS image URLs at turn start. Use `local_image` or `localImage` for a file on the host when local environment access is enabled.
 
-With `environment_access: false`, a structured prompt can contain text, an HTTP(S) or inline `data:image/` image, and mentions with an `app://`, `mcp://`, or `plugin://` identifier. Prompt-supplied local images, filesystem paths and explicit skill attachments are rejected before the turn starts. Configured MCP servers and enabled Codex skills can still read files. The [receipt comparison](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-agents-api/comparison) isolates its Codex home and supplies a single receipt reader.
+With `environment_access: false`, a structured prompt can contain text, an inline base64 image data URL, and mentions with an `app://`, `mcp://`, or `plugin://` identifier. Prompt-supplied local images, filesystem paths and explicit skill attachments are rejected before the turn starts. Configured MCP servers and enabled Codex skills can still read files. The [receipt comparison](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-agents-api/comparison) isolates its Codex home and supplies a single receipt reader.
 
 ## Metadata
 

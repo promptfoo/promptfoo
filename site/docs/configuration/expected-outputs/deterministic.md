@@ -957,6 +957,8 @@ tests:
 
 `mode: in_order` is the default and allows extra tool steps in between the expected ones. `mode: exact` requires the traced tool sequence to match exactly.
 
+Overlapping tool calls are ordered by start time. Imported hosted OpenAI Agents API traces preserve nanosecond differences between starts. When the available start times are equal, the earlier end time sorts first.
+
 #### Asserting batched vs sequential tool calls {#trajectorytool-sequence-batching}
 
 `tool-sequence` checks _which_ tools ran in _which_ order. For providers that expose internal model-generation spans, you can also assert that the agent issued multiple tool calls in a single LLM round-trip (batched/parallel) rather than across separate rounds (sequential). Assert this via the `gen_ai.turn.index` tag on the tool spans — both tool calls must carry the **same** index. See [Turn marker spans](/docs/tracing#per-llm-turn-spans) for the per-provider details.

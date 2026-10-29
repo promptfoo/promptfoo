@@ -125,7 +125,7 @@ For example, a script that printed `READY` and exited with code 17 passed an ans
 
 #### Diagnose missing trace evidence
 
-Look under **Metadata** or inspect `response.metadata.hostedTrace` in the JSON export. Import needs local export enabled for both the eval and its running tracing SDK. Setting `PROMPTFOO_OTEL_LOCAL_EXPORT=false` skips the hosted download. If another eval started an external-only exporter in the same process, rerun the config in a fresh CLI process.
+Look under **Metadata** or inspect `response.metadata.hostedTrace` in the JSON export. Import needs local export enabled for both the eval and its running tracing SDK. Setting `PROMPTFOO_OTEL_LOCAL_EXPORT=false` skips the hosted download. Overlapping evals in one process share the first active tracing SDK. If it has only an external exporter, run the hosted eval after the others finish, or use a separate process.
 
 | What you see                                               | What it means and what to check                                                                                                                                                                                                 |
 | ---------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -158,7 +158,7 @@ With `hostedTrace.includeToolArguments: true`, Promptfoo can retain the followin
 
 Accepted commands are simple invocations of `pwd`, `ls`, `cat`, `wc`, `head`, and `tail` with plain paths and short options such as `wc -l` or `head -n 5`. Simple `sh` and `bash` wrappers also qualify, including the ledger’s `/bin/bash -lc 'cat /workspace/ledger.csv'`. A Python script, pipeline, or command containing redirection is omitted. The same call can still supply `cwd: /workspace`.
 
-Other fields, including free text and nested objects, are omitted. For example, if `lookup_order` receives `{"order_id":"417","note":"rush"}`, a subset assertion can match `order_id: '417'`. The trace cannot grade the note or establish an exact match for that call. Sensitive values may also be withheld. Malformed JSON, duplicate keys, or an oversized payload can leave a span without argument evidence.
+Other fields, including free text and nested objects, are omitted. For example, if `lookup_order` receives `{"order_id":"417","note":"rush"}`, a subset assertion can match `order_id: '417'`. The trace cannot grade the note or establish an exact match for that call. If a value protected by `tracing.otlp.http.redactAttributes` also appears in a tool or model name, the trace becomes unavailable. An argument containing a protected value can be omitted on its own. Malformed JSON, duplicate keys, or an oversized payload can leave a span without argument evidence.
 
 ## Saved agents
 
@@ -223,7 +223,7 @@ For a file deliverable, ask the agent to write to a known path under `/workspace
 
 To select a different file in each row, set `artifactPaths: ['{{outputPath}}']` and give each test an `outputPath` variable. Before starting the session, Promptfoo checks that the rendered list contains at most eight unique file paths under `/workspace/outputs/`.
 
-Each entry in `response.metadata.artifacts` has a `path` and `status`. An `available` entry includes `sha256` and `sizeBytes`. A `missing` entry means the listing establishes that the root turn did not publish that path. An `unavailable` entry means the file could not be verified, for example because its listing omitted the session or turn ID. Promptfoo reads up to 1 MiB per file and allows 10 seconds for all artifact reads combined, within the overall request deadline.
+Each entry in `response.metadata.artifacts` has a `path` and `status`. An `available` entry includes `sha256` and `sizeBytes`. A `missing` entry means the listing establishes that the root turn did not publish that path. An `unavailable` entry means the file could not be verified. Examples include a listing with a duplicate artifact ID or an entry with ambiguous session or turn ownership. Promptfoo reads up to 1 MiB per file and allows 10 seconds for all artifact reads combined, within the overall request deadline.
 
 ### Usage and cost
 
