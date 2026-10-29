@@ -1,5 +1,7 @@
+import { setTimeout as delay } from 'node:timers/promises';
+
 import { asc, eq, sql } from 'drizzle-orm';
-import { getDb } from '../database/index';
+import { getDatabaseLockRetryDelay, getDb } from '../database/index';
 import { spansTable, tracesTable } from '../database/tables';
 import logger from '../logger';
 import { sanitizeTraceAttributes } from './sanitizeAttributes';
@@ -45,6 +47,9 @@ export interface TraceSpanQueryOptions extends TraceAttributeSanitizationOptions
 export interface AddSpansOptions {
   skipTraceCheck?: boolean;
   warnIfMissingTrace?: boolean;
+  abortSignal?: AbortSignal;
+  /** Unix timestamp in milliseconds by which the span insert must finish. */
+  deadline?: number;
 }
 
 function serializeSpan(
@@ -177,11 +182,45 @@ export class TraceStore {
         return { stored: true };
       }
 
-      await db
-        .insert(spansTable)
-        .values(spanRecords)
-        .onConflictDoNothing({ target: [spansTable.traceId, spansTable.spanId] })
-        .run();
+      const insert = (writer: Pick<typeof db, 'insert'>) =>
+        writer
+          .insert(spansTable)
+          .values(spanRecords)
+          .onConflictDoNothing({ target: [spansTable.traceId, spansTable.spanId] })
+          .run();
+      const { abortSignal, deadline } = options ?? {};
+      if (abortSignal || deadline !== undefined) {
+        const checkWrite = () => {
+          abortSignal?.throwIfAborted();
+          // Native SQLite calls can block the event loop past the abort timer.
+          if (deadline !== undefined && Date.now() >= deadline) {
+            throw new DOMException('Span write deadline exceeded', 'TimeoutError');
+          }
+        };
+        // This conflict-ignored insert can safely replay after a lock at BEGIN or COMMIT.
+        for (let attempt = 1; ; attempt++) {
+          checkWrite();
+          try {
+            await db.transaction(async (tx) => {
+              checkWrite();
+              await insert(tx);
+              checkWrite();
+            });
+            break;
+          } catch (error) {
+            checkWrite();
+            const backoff = getDatabaseLockRetryDelay(error, attempt);
+            if (backoff === undefined) {
+              throw error;
+            }
+            await delay(Math.min(backoff, (deadline ?? Infinity) - Date.now()), undefined, {
+              signal: abortSignal,
+            });
+          }
+        }
+      } else {
+        await insert(db);
+      }
       logger.debug(
         `[TraceStore] Successfully added ${spanRecords.length} spans to trace ${traceId}`,
       );

@@ -238,6 +238,14 @@ function isTransientDatabaseLockError(error: unknown): boolean {
   return false;
 }
 
+/** Backoff for replaying an atomic operation that SQLite rejected due to lock contention. */
+export function getDatabaseLockRetryDelay(error: unknown, attempt: number): number | undefined {
+  if (attempt >= TRANSIENT_LOCK_RETRY_ATTEMPTS || !isTransientDatabaseLockError(error)) {
+    return undefined;
+  }
+  return Math.min(TRANSIENT_LOCK_RETRY_BASE_MS * 2 ** (attempt - 1), TRANSIENT_LOCK_RETRY_MAX_MS);
+}
+
 function serializeTopLevelOperations(
   client: Client,
   db: Drizzle,
@@ -278,12 +286,11 @@ function serializeTopLevelOperations(
             }
           }
         }
-        if (!retry || attempt >= TRANSIENT_LOCK_RETRY_ATTEMPTS) {
+        const delay = getDatabaseLockRetryDelay(error, attempt);
+        if (!retry || delay === undefined) {
           throw error;
         }
-        await sleep(
-          Math.min(TRANSIENT_LOCK_RETRY_BASE_MS * 2 ** (attempt - 1), TRANSIENT_LOCK_RETRY_MAX_MS),
-        );
+        await sleep(delay);
       }
     }
   };

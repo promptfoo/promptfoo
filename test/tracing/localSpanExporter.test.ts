@@ -1,6 +1,8 @@
 import { ExportResultCode } from '@opentelemetry/core';
+import { BatchSpanProcessor, NodeTracerProvider } from '@opentelemetry/sdk-trace-node';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { LocalSpanExporter } from '../../src/tracing/localSpanExporter';
+import { createDeferred } from '../util/utils';
 import type { ReadableSpan } from '@opentelemetry/sdk-trace-node';
 
 // Mock the store module
@@ -109,7 +111,7 @@ describe('LocalSpanExporter', () => {
             name: 'test-span',
           }),
         ],
-        { skipTraceCheck: false, warnIfMissingTrace: false },
+        expect.objectContaining({ skipTraceCheck: false, warnIfMissingTrace: false }),
       );
     });
 
@@ -143,7 +145,7 @@ describe('LocalSpanExporter', () => {
           expect.objectContaining({ spanId: 'span-1' }),
           expect.objectContaining({ spanId: 'span-2' }),
         ]),
-        { skipTraceCheck: false, warnIfMissingTrace: false },
+        expect.objectContaining({ skipTraceCheck: false, warnIfMissingTrace: false }),
       );
 
       // Second call for trace-2 with 1 span
@@ -151,7 +153,7 @@ describe('LocalSpanExporter', () => {
         2,
         'trace-2',
         [expect.objectContaining({ spanId: 'span-3' })],
-        { skipTraceCheck: false, warnIfMissingTrace: false },
+        expect.objectContaining({ skipTraceCheck: false, warnIfMissingTrace: false }),
       );
     });
 
@@ -174,13 +176,13 @@ describe('LocalSpanExporter', () => {
           1,
           'trace-id-123',
           [expect.objectContaining({ spanId: 'span-id-456' })],
-          { skipTraceCheck: false, warnIfMissingTrace: false },
+          expect.objectContaining({ skipTraceCheck: false, warnIfMissingTrace: false }),
         );
         expect(mockAddSpans).toHaveBeenNthCalledWith(
           2,
           'trace-id-123',
           [expect.objectContaining({ spanId: 'span-id-456' })],
-          { skipTraceCheck: false, warnIfMissingTrace: false },
+          expect.objectContaining({ skipTraceCheck: false, warnIfMissingTrace: false }),
         );
       } finally {
         vi.useRealTimers();
@@ -207,6 +209,21 @@ describe('LocalSpanExporter', () => {
         ],
         expect.any(Object),
       );
+    });
+
+    it('reports skipped orphan spans to the affected row when the exporter otherwise succeeds', async () => {
+      vi.useFakeTimers();
+      try {
+        const release = exporter.trackTrace('trace-id-123');
+        mockAddSpans.mockResolvedValue({ stored: false, reason: 'Missing trace record' });
+        const result = exportSpans([createMockSpan()]);
+        await vi.advanceTimersByTimeAsync(50);
+        expect((await result).code).toBe(ExportResultCode.SUCCESS);
+        await expect(exporter.forceFlush('trace-id-123')).rejects.toThrow('Missing trace record');
+        release();
+      } finally {
+        vi.useRealTimers();
+      }
     });
 
     it('should include parent span ID when present', async () => {
@@ -345,4 +362,151 @@ describe('LocalSpanExporter', () => {
       await expect(exporter.forceFlush()).resolves.toBeUndefined();
     });
   });
+
+  it('remembers a failed trace group through later success and forgets it on release', async () => {
+    const release = exporter.trackTrace('affected');
+    const releaseAgain = exporter.trackTrace('affected');
+    const releaseHealthy = exporter.trackTrace('healthy');
+    const failure = new Error('SQLITE_BUSY');
+    mockAddSpans.mockRejectedValueOnce(failure);
+    const affected = createMockSpan({ traceId: 'affected' });
+    const healthy = createMockSpan({ traceId: 'healthy' });
+    const mixed = await exportSpans([affected, healthy]);
+    expect(mixed.code).toBe(ExportResultCode.FAILED);
+    expect((await exportSpans([affected])).code).toBe(ExportResultCode.SUCCESS);
+    release();
+    release();
+    await expect(exporter.forceFlush('healthy')).resolves.toBeUndefined();
+    await expect(exporter.forceFlush('affected')).rejects.toBe(failure);
+    releaseAgain();
+    const releaseFresh = exporter.trackTrace('affected');
+    await expect(exporter.forceFlush('affected')).resolves.toBeUndefined();
+    releaseFresh();
+    releaseHealthy();
+  });
+
+  it('withholds only unfinished trace groups when one batch times out', async () => {
+    vi.useFakeTimers();
+    vi.stubEnv('OTEL_BSP_EXPORT_TIMEOUT', '20');
+    try {
+      exporter = new LocalSpanExporter();
+      const ids = ['saved', 'stalled', 'unstarted'];
+      const releases = ids.map((id) => exporter.trackTrace(id));
+      const stalled = createDeferred<{ stored: boolean }>();
+      const started = createDeferred<void>();
+      mockAddSpans.mockResolvedValueOnce({ stored: true }).mockImplementationOnce(() => {
+        started.resolve();
+        return stalled.promise;
+      });
+      const exported = exportSpans(ids.map((traceId) => createMockSpan({ traceId })));
+      await started.promise;
+      // The first group is already available even while the second write remains queued.
+      await expect(exporter.forceFlush('saved')).resolves.toBeUndefined();
+      const drains = Promise.allSettled(ids.map((id) => exporter.forceFlush(id)));
+      await vi.advanceTimersByTimeAsync(21);
+      expect((await exported).code).toBe(ExportResultCode.FAILED);
+      expect(await drains).toEqual([
+        { status: 'fulfilled', value: undefined },
+        { status: 'rejected', reason: expect.objectContaining({ name: 'TimeoutError' }) },
+        { status: 'rejected', reason: expect.objectContaining({ name: 'TimeoutError' }) },
+      ]);
+      stalled.resolve({ stored: true });
+      await vi.advanceTimersByTimeAsync(1);
+      await expect(exporter.forceFlush('stalled')).rejects.toThrow('Local span export timed out');
+      for (const release of releases) {
+        release();
+      }
+    } finally {
+      vi.unstubAllEnvs();
+      vi.useRealTimers();
+    }
+  });
+
+  it('bounds flush and shutdown when an already dispatched write stalls', async () => {
+    vi.useFakeTimers();
+    vi.stubEnv('OTEL_BSP_EXPORT_TIMEOUT', '20');
+    try {
+      exporter = new LocalSpanExporter();
+      const deadline = Date.now() + 20;
+      const queued = createDeferred<{ stored: boolean }>();
+      mockAddSpans.mockReturnValueOnce(queued.promise);
+      const finished = vi.fn();
+      exporter.export([createMockSpan(), createMockSpan({ traceId: 'later-trace' })], finished);
+      const drains = Promise.allSettled([exporter.forceFlush(), exporter.shutdown()]);
+      await vi.advanceTimersByTimeAsync(21);
+      expect(finished).toHaveBeenCalledOnce();
+      expect(finished).toHaveBeenCalledWith({
+        code: ExportResultCode.FAILED,
+        error: expect.objectContaining({ name: 'TimeoutError' }),
+      });
+      expect(await drains).toEqual([
+        { status: 'rejected', reason: expect.objectContaining({ name: 'TimeoutError' }) },
+        { status: 'rejected', reason: expect.objectContaining({ name: 'TimeoutError' }) },
+      ]);
+      const options = mockAddSpans.mock.calls[0][2];
+      expect(options.deadline).toBe(deadline);
+      expect(options.abortSignal.aborted).toBe(true);
+      // A database operation may settle long after the export callback. Don't start another.
+      queued.resolve({ stored: true });
+      await vi.advanceTimersByTimeAsync(1);
+      expect(mockAddSpans).toHaveBeenCalledOnce();
+      expect(finished).toHaveBeenCalledOnce();
+    } finally {
+      vi.unstubAllEnvs();
+      vi.useRealTimers();
+    }
+  });
+
+  it('reports the expired batch when a synchronous write outlasts its timer', async () => {
+    vi.useFakeTimers();
+    vi.stubEnv('OTEL_BSP_EXPORT_TIMEOUT', '20');
+    try {
+      exporter = new LocalSpanExporter();
+      const deadline = Date.now() + 20;
+      mockAddSpans.mockImplementationOnce(async () => {
+        vi.setSystemTime(deadline);
+        return { stored: true };
+      });
+      const result = await exportSpans([createMockSpan()]);
+      expect(result.code).toBe(ExportResultCode.FAILED);
+      expect(result.error?.name).toBe('TimeoutError');
+    } finally {
+      vi.unstubAllEnvs();
+      vi.useRealTimers();
+    }
+  });
+
+  it.each(['forceFlush', 'shutdown'] as const)(
+    'waits for an already dispatched batch on %s',
+    async (method) => {
+      const started = createDeferred<void>();
+      const write = createDeferred<{ stored: boolean }>();
+      mockAddSpans.mockImplementationOnce(() => {
+        started.resolve();
+        return write.promise;
+      });
+      const provider = new NodeTracerProvider({
+        spanProcessors: [
+          new BatchSpanProcessor(exporter, { maxQueueSize: 1, maxExportBatchSize: 1 }),
+        ],
+      });
+      provider.getTracer('test').startSpan('already-dispatched').end();
+      try {
+        await started.promise;
+        // Once the processor dispatches a batch, it is absent from its flush queue.
+        const drained = vi.fn();
+        const pending = (method === 'shutdown' ? provider.shutdown() : exporter.forceFlush()).then(
+          drained,
+        );
+        await new Promise<void>((resolve) => setImmediate(resolve));
+        expect(drained).not.toHaveBeenCalled();
+        write.resolve({ stored: true });
+        await pending;
+        expect(drained).toHaveBeenCalledOnce();
+      } finally {
+        write.resolve({ stored: true });
+        await provider.shutdown();
+      }
+    },
+  );
 });
