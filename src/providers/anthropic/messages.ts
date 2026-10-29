@@ -65,6 +65,8 @@ import type { McpToolCallEntry } from '../mcp/types';
 import type { AnthropicMessageOptions, ClaudeEffort, ClaudeThinkingConfig } from './types';
 
 const DEFAULT_MAX_MCP_TOOL_CALLS = 8;
+// The web search tool's published rate: $10 per 1,000 searches.
+const WEB_SEARCH_COST_PER_REQUEST = 10 / 1000;
 // Each resume re-sends the turn so far, so a pausing run stops after this many.
 const MAX_PAUSE_TURN_RESUMES = 5;
 
@@ -308,7 +310,7 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
     ) {
       return 0;
     }
-    return calculateAnthropicCost(
+    const tokenCost = calculateAnthropicCost(
       modelName,
       config,
       message.usage?.input_tokens,
@@ -317,7 +319,11 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
       message.usage?.cache_creation_input_tokens ?? undefined,
       message.usage?.cache_creation?.ephemeral_1h_input_tokens ?? undefined,
       message.usage?.inference_geo,
+      message.usage?.speed,
     );
+    // Searches bill per request on top of tokens; a search that fails is not counted.
+    const webSearches = message.usage?.server_tool_use?.web_search_requests ?? 0;
+    return tokenCost == null ? tokenCost : tokenCost + webSearches * WEB_SEARCH_COST_PER_REQUEST;
   }
 
   private calculateMessageCosts(

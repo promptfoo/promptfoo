@@ -581,6 +581,18 @@ export const AZURE_MODELS: AzureModelCost[] = [
   ...modelsWithCost(['claude-opus-4-1-20250805'], { input: 15 / 1000000, output: 75 / 1000000 }),
   ...modelsWithCost(['claude-sonnet-4-5'], { input: 3 / 1000000, output: 15 / 1000000 }),
   ...modelsWithCost(['claude-sonnet-4-5-20250929'], { input: 3 / 1000000, output: 15 / 1000000 }),
+  // A prompt over 100K tokens, cache reads included, bills the whole request at the higher rates.
+  ...modelsWithCost(['claude-haiku-5-5'], {
+    input: 0.1 / 1000000,
+    output: 0.5 / 1000000,
+    cacheRead: 0.01 / 1000000,
+    longContext: {
+      threshold: 100_000,
+      input: 0.5 / 1000000,
+      output: 2.5 / 1000000,
+      cacheRead: 0.05 / 1000000,
+    },
+  }),
   ...modelsWithCost(['claude-haiku-4-5'], { input: 1 / 1000000, output: 5 / 1000000 }),
   ...modelsWithCost(['claude-haiku-4-5-20251001'], { input: 1 / 1000000, output: 5 / 1000000 }),
 

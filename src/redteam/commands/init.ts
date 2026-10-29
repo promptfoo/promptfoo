@@ -345,6 +345,10 @@ export async function redteamInit(directory: string | undefined) {
         value: 'anthropic:messages:claude-sonnet-4-6',
       },
       {
+        name: 'anthropic:claude-haiku-5-5',
+        value: 'anthropic:messages:claude-haiku-5-5',
+      },
+      {
         name: 'anthropic:claude-haiku-4-5',
         value: 'anthropic:messages:claude-haiku-4-5',
       },
