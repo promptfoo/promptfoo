@@ -4723,6 +4723,52 @@ describe('GoogleLiveProvider', () => {
     expect(mockAddNumbers).toHaveBeenCalledWith('{"a":5,"b":6}');
   });
 
+  it.each([
+    ['toString', false],
+    ['constructor', false],
+    ['valueOf', false],
+    ['inheritedTool', false],
+    ['toString', true],
+    ['constructor', true],
+    ['__proto__', true],
+  ])('dispatches %s only when configured as an own callback (%s)', async (name, own) => {
+    const callback = vi.fn().mockResolvedValue({ ok: true });
+    const inheritedGetter = vi.fn(() => callback);
+    const callbacks = own
+      ? Object.defineProperty({}, name, { value: callback, enumerable: true })
+      : Object.create(Object.defineProperty({}, name, { get: inheritedGetter }));
+    provider = new GoogleLiveProvider('gemini-2.0-flash-exp', {
+      config: {
+        apiKey: 'test-api-key',
+        generationConfig: { response_modalities: ['text'] },
+        functionToolCallbacks: callbacks,
+      },
+    });
+    vi.mocked(WebSocket).mockImplementation(function () {
+      setImmediate(() => {
+        mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
+        simulateSetupMessage(mockWs);
+        simulateFunctionCallMessage(mockWs, [{ name, args: {}, id: 'call-1' }]);
+        simulateTextMessage(mockWs, 'Done');
+        simulateCompletionMessage(mockWs);
+      });
+      return mockWs;
+    });
+
+    const response = await provider.callApi('Run the tool');
+
+    expect(response.error).toBeUndefined();
+    expect(callback).toHaveBeenCalledTimes(own ? 1 : 0);
+    expect(inheritedGetter).not.toHaveBeenCalled();
+    expect(mockWs.send).toHaveBeenCalledWith(
+      JSON.stringify({
+        tool_response: {
+          function_responses: { id: 'call-1', name, response: own ? { ok: true } : {} },
+        },
+      }),
+    );
+  });
+
   it('should handle errors in function tool callbacks', async () => {
     vi.mocked(WebSocket).mockImplementation(function () {
       setImmediate(() => {
