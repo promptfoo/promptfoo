@@ -1239,19 +1239,6 @@ describe('CohereEmbeddingProvider', () => {
     vi.unstubAllEnvs();
   });
 
-  it('reports a cached embedding as cached', async () => {
-    vi.mocked(fetchWithCache).mockResolvedValue({
-      cached: true,
-      data: { embeddings: [[0.1, 0.2]], meta: { billed_units: { input_tokens: 2 } } },
-    } as any);
-    const provider = new CohereEmbeddingProvider('embed-english-v3.0', { apiKey: 'test-key' });
-
-    await expect(provider.callEmbeddingApi('Embed this')).resolves.toMatchObject({
-      embedding: [0.1, 0.2],
-      cached: true,
-    });
-  });
-
   it('surfaces the API error when the embeddings request is rejected', async () => {
     vi.mocked(fetchWithCache).mockResolvedValue({
       cached: false,
@@ -1281,7 +1268,6 @@ describe('CohereEmbeddingProvider', () => {
 
     await expect(provider.callEmbeddingApi('Embed this')).resolves.toEqual({
       embedding: [0.1, 0.2],
-      cached: false,
       tokenUsage: { prompt: 2, total: 2, numRequests: 1 },
     });
 

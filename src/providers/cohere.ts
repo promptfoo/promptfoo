@@ -957,11 +957,10 @@ export class CohereEmbeddingProvider implements ApiEmbeddingProvider {
     };
 
     let data,
-      cached = false,
       status: number | undefined,
       statusText = '';
     try {
-      ({ data, cached, status, statusText } = (await fetchWithCache(
+      ({ data, status, statusText } = (await fetchWithCache(
         apiUrl,
         {
           method: 'POST',
@@ -1006,7 +1005,6 @@ export class CohereEmbeddingProvider implements ApiEmbeddingProvider {
     }
     return {
       embedding,
-      cached,
       tokenUsage: {
         prompt: data.meta?.billed_units?.input_tokens || 0,
         total: data.meta?.billed_units?.input_tokens || 0,
