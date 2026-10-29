@@ -125,7 +125,7 @@ For example, a script that printed `READY` and exited with code 17 passed an ans
 
 #### Diagnose missing trace evidence
 
-Look under **Metadata** or inspect `response.metadata.hostedTrace` in the JSON export. Promptfoo polls for up to 15 seconds by default, bounded by the provider's overall timeout. At either deadline it can keep a validated partial tree. Once it has downloaded the tree, Promptfoo can delete the session while it saves the spans locally. Setting `PROMPTFOO_OTEL_LOCAL_EXPORT=false` skips the hosted trace request and local import.
+Look under **Metadata** or inspect `response.metadata.hostedTrace` in the JSON export. Promptfoo polls for up to 15 seconds by default, bounded by the provider's overall timeout. A complete tree must be saved within the remaining deadlines. If polling ends with a validated partial tree, Promptfoo allows one final local write of up to 250 ms, also capped by the configured timeouts. A storage timeout leaves the trace unavailable and the completed answer available to grade. Setting `PROMPTFOO_OTEL_LOCAL_EXPORT=false` skips the hosted trace request and local import.
 
 | What you see                                               | What it means and what to check                                                                                                                                                                                                 |
 | ---------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

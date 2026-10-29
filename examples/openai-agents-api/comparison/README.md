@@ -10,7 +10,7 @@ Every provider receives the same prompt and receipt bytes. The receipt contains 
 
 The answer check remains independent of the action checks. A recorded tool invocation can still fail. The SDK and app-server share a file reader, while the hosted runtime chooses a sandbox command. Each runtime supplies its own system instructions. This comparison tests their integration with Promptfoo.
 
-In a live run on commit `204cf8f2`, all three answers passed. The hosted trace lacked its command span, and the app-server trace marked the successful MCP read as an error because the protocol returned `error: null`. Only the SDK passed every check. With native hosted trace import and the MCP status fix, all three passed. The hosted command was `cat receipt.txt` in `/workspace`; the app-server MCP span ended with OpenTelemetry status `OK`.
+In a live run on commit `204cf8f2`, all three answers passed. The hosted trace lacked its command span, and the app-server trace marked the successful MCP read as an error because the protocol returned `error: null`. Only the SDK passed every check. With native hosted trace import and the MCP status fix, all three passed. The hosted command was `cat receipt.txt` in `/workspace`, and the app-server MCP span ended with OpenTelemetry status `OK`.
 
 ## Run
 
