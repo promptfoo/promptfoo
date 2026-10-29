@@ -6,7 +6,7 @@ sidebar_label: OpenAI Agents API
 
 The `openai:agents-api` provider evaluates the [OpenAI Agents API](https://developers.openai.com/api/docs/guides/agents-api/overview), which runs agents using OpenAI's managed Codex harness. Each provider call creates a fresh session, waits for the root agent's turn to finish, collects its final answer, and deletes the session by default.
 
-For applications built with the JavaScript `@openai/agents` package, use the [Agents SDK provider](./openai-agents.md) (`openai:agents:*`).
+Use the sandbox-free [setup](#setup) to grade a final answer. Use the [hosted ledger example](#inspect-traces) to check the filename in the agent's command, its working directory, and whether the command failed. For applications that run `@openai/agents` in their own process, use the [Agents SDK provider](./openai-agents.md). [Compare OpenAI agent runtimes](/docs/guides/evaluate-openai-agent-runtimes)
 
 ## Setup
 
@@ -38,7 +38,7 @@ tests:
         value: '42'
 ```
 
-Run this config with `npx promptfoo@latest eval --no-cache -o results.json`. Each test sends one rendered string as user input. For example, a test variable containing `{"role":"system","content":"…"}` stays user text. Put trusted policy in `agent.instructions` and user-supplied messages in the prompt.
+Run this config with `npx promptfoo@latest eval --no-cache -o results.json`. Each test sends one rendered string as user input. For example, a test variable containing `{"role":"system","content":"…"}` stays user text. Put trusted policy in `agent.instructions` and user-supplied messages in the prompt. The [intake classification example](https://github.com/promptfoo/promptfoo/blob/main/examples/openai-agents-api/promptfooconfig.intake.yaml) exercises that boundary.
 
 ## Hosted sandboxes and tools
 
@@ -83,27 +83,45 @@ assert:
       ));
 ```
 
-The tool summary omits the command, exit code, arguments, and output. To check what the agent learned from a file, vary the file contents while keeping the task fixed, then check the expected answer for each file.
+The tool summary omits the command, exit code, arguments, and output. To check what the agent learned from a file, vary the file contents while keeping the task fixed, then check the expected answer for each file. The [hosted CSV example](https://github.com/promptfoo/promptfoo/blob/main/examples/openai-agents-api/promptfooconfig.files.yaml) does this with network access disabled.
 
 ### Inspect traces
 
 With [eval tracing](/docs/tracing/#quick-start) enabled, Promptfoo records an `invoke_agent` span for the provider call. To inspect actions **inside** the hosted session, also set the provider's `hostedTrace` option. Your OpenAI organization needs trace export enabled, and the project key needs `api.traces.read` or `api.agents.read`. [OpenAI trace export requirements](https://developers.openai.com/api/docs/guides/agents-api/tracing#export-session-traces)
 
-In your eval configuration, enable the local trace exporter and turn on hosted trace collection for the provider.
+Run the [complete ledger config](https://github.com/promptfoo/promptfoo/blob/main/examples/openai-agents-api/promptfooconfig.files.yaml) from the example directory created above. Each row mounts a different synthetic CSV at `/workspace/ledger.csv` and gives the agent the same instructions. The third file contains a transaction note that asks it to return `70000`.
+
+```sh
+npx promptfoo@latest eval -c promptfooconfig.files.yaml --no-cache -o ledger.json
+npx promptfoo@latest view
+```
+
+Open a result's **View output and test details** button. **Evaluation** shows the expected total (`3316`, `-4899`, or `1529`) and the separate action checks. In **Traces**, expand `execute_tool command_execution` to see the command and its working directory. The following settings in the example make the native arguments available to assertions:
 
 ```yaml
 tracing:
   enabled: true
   otlp:
     http: {}
+  commandToolNames: [command_execution]
 
 providers:
   - id: openai:agents-api:gpt-6-astra
     config:
-      hostedTrace: true
+      environment:
+        type: openai_hosted
+      hostedTrace:
+        includeToolArguments: true
 ```
 
-Open a result’s **View output and test details** button, then select **Traces** to inspect the tools called during the hosted turn.
+| Ledger check           | Evidence used to grade it                                                                                                                                                    |
+| ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `CompletedRootCommand` | A saved `command_execution` item has status `completed` and the same turn ID as the root answer.                                                                             |
+| `LedgerFilename`       | `trajectory:step-count` matches `*ledger.csv*` in a command. `commandToolNames` tells Promptfoo to interpret the hosted tool's argument as a shell command.                  |
+| `Workspace`            | `trajectory:tool-args-match` finds a `command_execution` call with `cwd: /workspace`.                                                                                        |
+| `CommandErrors`        | `trace-error-spans` allows zero errors on `execute_tool command_execution`. Pair this with positive action evidence. An agent that skips the tool can also have zero errors. |
+
+For example, a script that printed `READY` and exited with code 17 passed an answer check and a tool-use check. Its native span had error status, so the zero-error check failed. Use the saved command item in OpenAI when you need the numeric exit code.
 
 #### Diagnose missing trace evidence
 
@@ -111,14 +129,19 @@ Look under **Metadata** or inspect `response.metadata.hostedTrace` in the JSON e
 
 | What you see                                               | What it means and what to check                                                                                                                                                                                                 |
 | ---------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| A local `invoke_agent` span with no `hostedTrace` metadata | Enable the provider’s `hostedTrace` setting to see remote tool calls.                                                                                                                                                           |
+| A local `invoke_agent` span with no `hostedTrace` metadata | Only the provider call was traced. Enable `hostedTrace` under the provider's `config` and rerun to grade hosted tools.                                                                                                          |
 | `status: imported`                                         | The hosted turn reported a complete trace. `spanCount` counts native spans. A count of `invoke_agent` in the full trace also includes the local wrapper.                                                                        |
-| `status: partial`                                          | The available spans show observed actions. Other actions may be missing.                                                                                                                                                        |
+| `status: partial`                                          | The available tree lacks confirmed completeness. Positive tool-name or argument checks can use observed calls. Absence, maximum counts, sequences, timings and error budgets require a complete trace.                          |
 | `status: unavailable`                                      | Read `reason`. Enable eval tracing if no local span was available, check organization and key permissions for HTTP 403, or increase `hostedTrace.timeoutMs` if publication timed out. Output assertions still grade the answer. |
+| Tool name is visible but arguments are missing             | Set `hostedTrace.includeToolArguments: true` before running a synthetic fixture. Missing or redacted arguments cannot establish the absence of a value.                                                                         |
 
 Promptfoo waits for a connected span tree, retrying unpublished parents for up to 15 seconds by default within the provider timeout. A complete trace uses the remaining time for local storage. A validated partial tree gets one final write of up to 250 ms, capped by the configured timeouts. If SQLite reaches the deadline before committing, Promptfoo rolls back the write. If the commit succeeds and returns late, the spans remain available and `hostedTrace.storageDeadlineExceeded` is `true`. The completed answer still grades.
 
-Use `hostedTrace: true` when tool names, timing and status are sufficient. The importer omits prompts, instructions and tool results.
+Use `hostedTrace: true` when tool names, timing and status are sufficient. The importer omits prompts, instructions and tool results. A trace filter on a discarded attribute such as `gen_ai.tool.call.result` cannot establish that a result was absent. OpenAI's own trace recording is separate.
+
+A delegated worker can appear under its own `invoke_agent` span. One partial export showed the worker's command and no `web_search`. A positive tool-use check passed, while a forbidden-search check could not establish absence. The delegation appeared as `spawn_agent` in the native trace and `create_subagent_call` in the saved item summary.
+
+Prefer built-in trajectory assertions when grading a saved trace. For a custom JavaScript absence check, require `hostedTrace.status === 'imported'` and select spans whose `promptfoo.openai.hosted_trace` attribute equals that row's `hostedTrace.parentSpanId`. Verify their count matches `hostedTrace.spanCount`. For an argument-based absence check, also require `hostedTrace.toolArgumentsComplete` and intact, parseable argument JSON on the saved tool spans. The flag describes capture time. Export can truncate a long JSON string afterward.
 
 To inspect the full recording in OpenAI, set `retainSession: true` before the run, find `response.metadata.sessionId` in the export, and open the matching session in [OpenAI's Agents logs](https://platform.openai.com/logs?api=agents). For a manual OTLP export, allow time for publication, retrieve every page of `GET /v1/agents/sessions/{session_id}/traces`, then delete the retained session. [OpenAI trace export example](https://developers.openai.com/api/docs/guides/agents-api/tracing#export-session-traces)
 
@@ -133,26 +156,9 @@ With `hostedTrace.includeToolArguments: true`, Promptfoo can retain the followin
 | `id`, `order_id`                       | A JavaScript safe integer or a string of 1–32 decimal digits.                                                                              |
 | `count`, `limit`, `offset`, `page`     | A JavaScript safe integer.                                                                                                                 |
 
-Accepted commands are simple invocations of `pwd`, `ls`, `cat`, `wc`, `head`, and `tail` with plain paths and short options such as `wc -l` or `head -n 5`. Simple `sh` and `bash` wrappers also qualify, for example `/bin/bash -lc 'cat /workspace/ledger.csv'`. A Python script, pipeline, or command containing redirection is omitted. The same call can still supply `cwd: /workspace`.
-Other fields, including free text and nested objects, are omitted. For example, if `lookup_order` receives `{"order_id":"417","note":"rush"}`, the trace can retain `order_id`. If a value protected by `tracing.otlp.http.redactAttributes` also appears in a tool or model name, the trace becomes unavailable. An argument containing a protected value can be omitted on its own. Malformed JSON, duplicate keys, or an oversized payload can leave a span without argument evidence.
+Accepted commands are simple invocations of `pwd`, `ls`, `cat`, `wc`, `head`, and `tail` with plain paths and short options such as `wc -l` or `head -n 5`. Simple `sh` and `bash` wrappers also qualify, including the ledger’s `/bin/bash -lc 'cat /workspace/ledger.csv'`. A Python script, pipeline, or command containing redirection is omitted. The same call can still supply `cwd: /workspace`.
 
-#### Grade native spans
-
-For a completed hosted trace, use a raw span assertion such as `trace-error-spans` to check the status of a named tool. Pair a zero-error budget with a positive count so an agent that skips the tool fails the test.
-
-```yaml
-assert:
-  - type: trace-span-count
-    value:
-      pattern: execute_tool command_execution
-      min: 1
-  - type: trace-error-spans
-    value:
-      pattern: execute_tool command_execution
-      max_count: 0
-```
-
-Open the assertion details when a trace is partial or the imported spans are missing. The completed answer can still be graded separately.
+Other fields, including free text and nested objects, are omitted. For example, if `lookup_order` receives `{"order_id":"417","note":"rush"}`, a subset assertion can match `order_id: '417'`. The trace cannot grade the note or establish an exact match for that call. If a value protected by `tracing.otlp.http.redactAttributes` also appears in a tool or model name, the trace becomes unavailable. An argument containing a protected value can be omitted on its own. Malformed JSON, duplicate keys, or an oversized payload can leave a span without argument evidence.
 
 ## Saved agents
 
@@ -213,7 +219,7 @@ For an absence check across agents, require an array and verify that `subagentTo
 
 ### Published artifacts
 
-For a file deliverable, ask the agent to write to a known path under `/workspace/outputs/` in an `openai_hosted` environment. Add the same path to the provider’s `config.artifactPaths` list. Promptfoo looks up each published file by its path and the completed root turn ID, downloads its bytes using the session’s credentials, and computes a SHA-256 digest before session cleanup. The digest can be graded after the session is deleted. [OpenAI’s files and artifacts guide](https://developers.openai.com/api/docs/guides/agents-api/environments/files)
+For a file deliverable, ask the agent to write to a known path under `/workspace/outputs/` in an `openai_hosted` environment. Add the same path to the provider’s `config.artifactPaths` list. Promptfoo looks up each published file by its path and the completed root turn ID, downloads its bytes using the session’s credentials, and computes a SHA-256 digest before session cleanup. The digest can be graded after the session is deleted. [Runnable ledger artifact example](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-agents-api/artifacts) · [OpenAI’s files and artifacts guide](https://developers.openai.com/api/docs/guides/agents-api/environments/files)
 
 To select a different file in each row, set `artifactPaths: ['{{outputPath}}']` and give each test an `outputPath` variable. Before starting the session, Promptfoo checks that the rendered list contains at most eight unique file paths under `/workspace/outputs/`.
 

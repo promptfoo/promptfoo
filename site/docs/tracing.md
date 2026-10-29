@@ -220,7 +220,7 @@ After running an evaluation, view traces in the web UI:
    ```
 
 3. Click the magnifying glass (🔎) icon on any test result
-4. Scroll to the "Trace Timeline" section
+4. Select **Traces** to open the trace timeline for the result.
 
 ### 4. Assert on Traced Workflows
 
@@ -253,25 +253,31 @@ tests:
 
 Use trajectory assertions when your spans identify tools, commands, searches, reasoning steps, or messages. Promptfoo also normalizes common command-like tool spans, including OpenAI Agents SDK `exec_command` calls with `cmd` arguments and `shell` calls with `commands` arrays, into command trajectory steps. For traced tool calls, Promptfoo recognizes both generic attributes such as `tool.name` and `tool.arguments` and framework-specific ones such as Vercel AI SDK's `ai.toolCall.name`, `ai.toolCall.args`, `ai.toolCall.arguments`, and `ai.toolCall.input`. If you only need raw span counts, durations, or error detection, use [`trace-span-count`](/docs/configuration/expected-outputs/deterministic/#trace-span-count), [`trace-span-duration`](/docs/configuration/expected-outputs/deterministic/#trace-span-duration), or [`trace-error-spans`](/docs/configuration/expected-outputs/deterministic/#trace-error-spans).
 
-The three raw-span assertions accept `value.attributes` to select spans by exact attributes in addition to their name pattern. For example, `attributes: { 'gen_ai.tool.name': 'search' }` limits a count, duration, or error-rate check to the search tool even when every tool emits a span named `execute_tool`. All supplied attributes must match; missing attributes are excluded. See the [attribute-filter examples](/docs/configuration/expected-outputs/deterministic/#trace-span-count) for supported values and presence checks.
+For the [hosted OpenAI Agents API](/docs/providers/openai-agents-api#inspect-traces), eval tracing records the provider's `invoke_agent` span. Add `config.hostedTrace: true` to download hosted tool and model spans before session cleanup. With import disabled, check `context.providerResponse.metadata.toolCalls` to require a completed sandbox command. The [OpenAI agent runtime comparison](/docs/guides/evaluate-openai-agent-runtimes) shows the corresponding SDK and Codex app-server assertions.
 
-Before grading a locally traced row, Promptfoo waits up to 30 seconds for pending exports. If a local write for the row fails or the flush exceeds that budget, built-in trace and trajectory assertions report unavailable evidence. Output assertions still run. The local exporter uses `OTEL_BSP_EXPORT_TIMEOUT` for each batch (30,000 ms by default).
+When regrading a JSON export, built-in argument assertions check the saved target spans. An export can truncate a tool argument even when it contains every span. If `PROMPTFOO_STRIP_PROMPT_TEXT` or `PROMPTFOO_STRIP_RESPONSE_OUTPUT` removed a wrapper’s request or response body, a filter on that body alone cannot prove absence. If you use `PROMPTFOO_STRIP_METADATA=true`, hosted trace details are removed and the export marks the requested trace unavailable for regrading, even when it contains raw spans. [Diagnose missing trace evidence](/docs/providers/openai-agents-api#diagnose-missing-trace-evidence)
 
-Overlapping programmatic evaluations share the first active OpenTelemetry exporter configuration. When an evaluation finishes, it flushes its spans. The last evaluation drains and closes the SDK, and a subsequent evaluation can choose a new configuration.
+The three raw-span assertions accept `value.attributes` to select spans by exact attributes in addition to their name pattern. For example, `attributes: { 'gen_ai.tool.name': 'search' }` limits a count, duration, or error-rate check to the search tool even when every tool emits a span named `execute_tool`. All supplied attributes must match. [Attribute filter examples](/docs/configuration/expected-outputs/deterministic/#trace-span-count)
+
+On a complete hosted Agents API trace with its local provider span, `trace-span-count` with only `min: 1` can pass as soon as one saved span matches the filter, even if an unrelated span lacks the attribute or a higher local ancestor is missing. For an upper bound such as `max: 0`, Promptfoo must account for each candidate, including local ancestors, that could match all the filters. If a saved tool name rules out a call, missing arguments on that call do not affect the grade. A candidate whose tool result was discarded cannot establish that a particular result never occurred.
+
+Before grading, Promptfoo waits up to 30 seconds for pending spans and local writes. If local export fails or exceeds that budget, built-in trace and trajectory assertions report unavailable evidence. Output assertions still run. A synchronous SQLite write can return after its export deadline, in which case the local exporter reports a timeout even if the spans were committed.
+
+For hosted runs, `trace-error-spans` and `trace-span-duration` with no filters grade the target work completed before assertions run. To include the surrounding Promptfoo test-case span, set an explicit filter such as `pattern: '*'`. If a selected span has no end time, a duration check can pass only when the known durations establish the bound even with the missing measurement.
 
 ### Turn marker spans {#per-llm-turn-spans}
 
 Several first-party providers expose turn marker spans to trace assertions. Some markers correspond to internal model generations; Codex SDK and app-server markers correspond to the protocol turn exposed by those APIs. The span name and convention depend on the provider:
 
-| Provider                         | Turn span name pattern                     | What a counted span represents                                                                                                              |
-| -------------------------------- | ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------- |
-| `anthropic:claude-agent-sdk`     | `gen_ai.turn *`                            | One `assistant` message from the SDK stream; an internal LLM round (includes subagent rounds — see the caveat below)                        |
-| `azure:foundry-agent`            | `gen_ai.turn *`                            | One Responses API invocation in the function-call loop; an internal LLM round (cache hits emit no turn span — see the caveat below)         |
-| `openai:agents` (TypeScript)     | `response *` (preferred) or `generation *` | `openai-agents-js` emits `response <id>` per LLM round; `generation *` is also produced when the SDK includes a `generation`-typed span     |
-| `openai-agents` Python (example) | `turn *` (preferred) or `response *`       | `promptfoo_tracing.py` emits `turn N <agent>` per LLM round, plus `response <id>`                                                           |
-| Google ADK (via `google.adk`)    | `generate_content *` or `call_llm`         | `generate_content *` counts model calls in the bundled example. Legacy `call_llm` steps can finish in a callback without calling the model. |
-| `openai:codex-sdk`               | `gen_ai.turn *`                            | One SDK `thread.runStreamed()` turn, including its intermediate tool items                                                                  |
-| `openai:codex-app-server`        | `gen_ai.turn *`                            | One app-server `turn/start` lifecycle, including its internal model generations and tool items                                              |
+| Provider                         | Turn span name pattern               | What a counted span represents                                                                                                              |
+| -------------------------------- | ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| `anthropic:claude-agent-sdk`     | `gen_ai.turn *`                      | One `assistant` message from the SDK stream; an internal LLM round (includes subagent rounds — see the caveat below)                        |
+| `azure:foundry-agent`            | `gen_ai.turn *`                      | One Responses API invocation in the function-call loop; an internal LLM round (cache hits emit no turn span — see the caveat below)         |
+| `openai:agents` (TypeScript)     | `chat *`                             | The SDK exporter names both response and generation spans `chat <model>`. Filter on `openai.agents.span_type` to count one kind.            |
+| `openai-agents` Python (example) | `turn *` (preferred) or `response *` | `promptfoo_tracing.py` emits `turn N <agent>` per LLM round, plus `response <id>`                                                           |
+| Google ADK (via `google.adk`)    | `generate_content *` or `call_llm`   | `generate_content *` counts model calls in the bundled example. Legacy `call_llm` steps can finish in a callback without calling the model. |
+| `openai:codex-sdk`               | `gen_ai.turn *`                      | One SDK `thread.runStreamed()` turn, including its intermediate tool items                                                                  |
+| `openai:codex-app-server`        | `gen_ai.turn *`                      | One app-server `turn/start` lifecycle, including its internal model generations and tool items                                              |
 
 For providers whose rows above identify an internal LLM round, counting these spans tells you how many model round-trips an agent took. Note that a tool-using task normally spans **at least two** rounds — one generation emits the tool calls and a later generation folds the results into the answer — so a low total turn count alone does **not** prove the tools were batched.
 
@@ -351,7 +357,8 @@ secrets in test variables when traces are retained.
 
 `redactAttributes` is applied by the **OTLP HTTP receiver** as spans are ingested over
 `/v1/traces` and `/v1/logs`, and to traces fetched through a configured **trace provider**
-before they are saved. Spans emitted by Promptfoo's **built-in provider instrumentation**
+before they are saved. The OpenAI hosted Agents API importer also applies the eval’s policy
+to the downloaded native spans. Spans emitted by Promptfoo's **built-in provider instrumentation**
 are exported in-process and are **not** filtered by `redactAttributes`; values like
 `promptfoo.request.body` and request headers can therefore be stored in the local trace DB.
 A built-in sanitizer masks common credential-shaped keys (`authorization`, `api_key`,
@@ -379,7 +386,7 @@ registered evaluation policy from `evaluation.id`, then fall back to the active 
 startup defaults. Similarly, `acceptFormats` configures the active HTTP receiver endpoint
 and is not changed by an overlapping evaluation.
 
-Target-only trace queries keep application spans that arrive over OTLP HTTP or through an external trace provider, even when the application supplies a grader role. The receiver preserves roles from Promptfoo's own OpenTelemetry exporter when it sends wrapper spans directly to the receiver. Older exports may contain roles supplied by the application. Use a trusted sender or collect a fresh trace when relying on those roles to exclude grader activity.
+Promptfoo keeps application spans in the target trace whether they arrive over OTLP HTTP or are fetched from an external trace provider. The receiver recognizes evaluator roles when Promptfoo’s own OpenTelemetry exporter sends its wrapper spans directly to it. Older exports can contain ownership fields supplied by the sending application. To rely on those roles when checking that a tool was absent, use a trusted historical sender or collect a fresh trace.
 
 The OTLP receiver `host` defaults to loopback (`127.0.0.1`). If your exporter runs in a
 different container or host and must reach the receiver over the network, set
