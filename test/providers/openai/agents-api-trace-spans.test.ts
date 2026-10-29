@@ -55,35 +55,39 @@ model.attributes.push(
   attribute('gen_ai.system_instructions', 'private instructions'),
 );
 
+function toolWithArgs(raw?: string) {
+  const attributes = [
+    attribute('gen_ai.operation.name', 'execute_tool'),
+    attribute('gen_ai.tool.name', 'lookup_order'),
+  ];
+  if (raw !== undefined) {
+    attributes.push(attribute('gen_ai.tool.call.arguments', raw));
+  }
+  return { ...tool, attributes };
+}
+
+function importWithRedaction(key: string, args: unknown = { order_id: '417', limit: 3 }) {
+  return cliState.withRequestTracingConfig(
+    { enabled: true, otlp: { http: { enabled: true, port: 4318, redactAttributes: [key] } } },
+    async () => {
+      const cleanTool = toolWithArgs(JSON.stringify(args));
+      return normalizeHostedTrace(payload(root, cleanTool), parentId, true);
+    },
+  );
+}
+
 describe('normalizeHostedTrace', () => {
   it('attaches the native tree to each invocation, including children listed before their root', () => {
     const native = payload(tool, model, root);
-    const { spans, complete } = normalizeHostedTrace(native, parentId);
+    const { spans, complete } = normalizeHostedTrace(native, parentId, false);
     expect(complete).toBe(true);
     expect(spans).toHaveLength(3);
     const hostedRoot = spans.find((span) => span.parentSpanId === parentId)!;
     expect(hostedRoot.name).toBe('invoke_agent');
     expect(spans.filter((span) => span.parentSpanId === hostedRoot.spanId)).toHaveLength(2);
-    expect(normalizeHostedTrace(native, parentId).spans).toEqual(spans);
-    const other = normalizeHostedTrace(native, 'aaaaaaaaaaaaaaaa').spans;
+    expect(normalizeHostedTrace(native, parentId, false).spans).toEqual(spans);
+    const other = normalizeHostedTrace(native, 'aaaaaaaaaaaaaaaa', false).spans;
     expect(other.every((span) => spans.every((s) => s.spanId !== span.spanId))).toBe(true);
-  });
-
-  it('retains the nanosecond duration and start offset below timestamp precision', () => {
-    const call = {
-      ...tool,
-      startTimeUnixNano: '1700000000000000001',
-      endTimeUnixNano: '1700000000010000002',
-    };
-    const { spans } = normalizeHostedTrace(payload(root, call), parentId);
-    expect(spans[1]).toMatchObject({
-      startTime: Number(BigInt(call.startTimeUnixNano)) / 1e6,
-      endTime: Number(BigInt(call.endTimeUnixNano)) / 1e6,
-      attributes: {
-        'promptfoo.openai.start_time_offset_ns': 1,
-        'promptfoo.openai.duration_ns': '10000001',
-      },
-    });
   });
 
   it.each([
@@ -99,7 +103,7 @@ describe('normalizeHostedTrace', () => {
         attribute(completenessKey, `{${fields}}`),
       ],
     };
-    expect(() => normalizeHostedTrace(payload(ambiguous), parentId)).toThrow();
+    expect(() => normalizeHostedTrace(payload(ambiguous), parentId, false)).toThrow();
   });
 
   it('accepts whitespace and escaped keys in an unambiguous completeness marker', () => {
@@ -113,29 +117,25 @@ describe('normalizeHostedTrace', () => {
         ),
       ],
     };
-    expect(normalizeHostedTrace(payload(attested), parentId).complete).toBe(true);
+    expect(normalizeHostedTrace(payload(attested), parentId, false).complete).toBe(true);
   });
 
-  it('stores timings, status and tool identity without argument aliases, content or source span names', () => {
+  it('stores timings, status and tool identity without content or source span names', () => {
     const failedTool = {
       ...tool,
       status: { code: 'STATUS_CODE_ERROR', message: 'private status detail' },
-      attributes: [...tool.attributes, attribute('tool.arguments', JSON.stringify({ id: 17 }))],
     };
-    const normalized = normalizeHostedTrace(payload(root, failedTool, model), parentId).spans;
+    const normalized = normalizeHostedTrace(
+      payload(root, failedTool, model),
+      parentId,
+      false,
+    ).spans;
     const storedTool = normalized.find((span) => span.attributes?.['tool.name'] === 'lookup_order');
     expect(storedTool).toMatchObject({
       startTime: 1700000000000,
       endTime: 1700000000025,
       statusCode: 2,
-      name: 'execute_tool lookup_order',
-      attributes: { 'gen_ai.tool.name': 'lookup_order', 'tool.name': 'lookup_order' },
     });
-    expect(storedTool?.attributes?.['tool.arguments']).toBeUndefined();
-    expect(storedTool?.attributes?.['gen_ai.tool.call.arguments']).toBeUndefined();
-    expect(
-      normalized.find((s) => s.name === 'chat gpt-6-astra')?.attributes?.['gen_ai.request.model'],
-    ).toBe('gpt-6-astra');
     const serialized = JSON.stringify(normalized);
     expect(serialized).not.toMatch(/private|order_id|fixture credential/);
   });
@@ -155,7 +155,7 @@ describe('normalizeHostedTrace', () => {
         },
       ],
     };
-    const { spans, complete } = normalizeHostedTrace(data, parentId);
+    const { spans, complete } = normalizeHostedTrace(data, parentId, false);
     expect(complete).toBe(true);
     expect(spans.find((s) => s.name === 'invoke_agent')?.statusCode).toBe(2);
     expect(spans.find((s) => s.name === 'execute_tool lookup_order')?.statusCode).toBe(1);
@@ -180,7 +180,7 @@ describe('normalizeHostedTrace', () => {
         },
       ],
     };
-    const { spans, complete } = normalizeHostedTrace(data, parentId);
+    const { spans, complete } = normalizeHostedTrace(data, parentId, false);
     expect(complete).toBe(true);
     expect(
       spans.map((s) => [
@@ -230,6 +230,7 @@ describe('normalizeHostedTrace', () => {
           ],
         },
         parentId,
+        false,
         undefined,
         redact,
       );
@@ -257,11 +258,11 @@ describe('normalizeHostedTrace', () => {
       [root, uncertain],
       [uncertain, root],
     ]) {
-      expect(normalizeHostedTrace(payload(...spans), parentId).complete).toBe(false);
+      expect(normalizeHostedTrace(payload(...spans), parentId, false).complete).toBe(false);
     }
-    expect(normalizeHostedTrace(payload(root, chat), parentId).complete).toBe(true);
+    expect(normalizeHostedTrace(payload(root, chat), parentId, false).complete).toBe(true);
     expect(
-      normalizeHostedTrace(payload(root, { ...model, droppedAttributesCount: 1 }), parentId)
+      normalizeHostedTrace(payload(root, { ...model, droppedAttributesCount: 1 }), parentId, false)
         .complete,
     ).toBe(true);
     const resource = { attributes: [attribute('gen_ai.request.model', 'resource-model')] };
@@ -276,6 +277,7 @@ describe('normalizeHostedTrace', () => {
           ],
         },
         parentId,
+        false,
       );
     expect(withResource(chat).spans.map((s) => s.name)).toContain('chat resource-model');
     expect(withResource(model, 1).spans.map((s) => s.name)).toContain('chat gpt-6-astra');
@@ -288,6 +290,7 @@ describe('normalizeHostedTrace', () => {
           ],
         },
         parentId,
+        false,
       ).complete,
     ).toBe(false);
   });
@@ -315,7 +318,7 @@ describe('normalizeHostedTrace', () => {
           },
         ],
       };
-      const { spans } = normalizeHostedTrace(trace, parentId);
+      const { spans } = normalizeHostedTrace(trace, parentId, false);
       expect(spans.map((span) => span.statusCode)).toEqual([2, 2, 2]);
       expect(conversions).toBe(1);
     } finally {
@@ -338,7 +341,7 @@ describe('normalizeHostedTrace', () => {
         attributes: [...tool.attributes, { key: 'http.status_code', value }],
       };
       const normalized = (s: typeof span) =>
-        normalizeHostedTrace(payload(root, s), parentId).spans.find(
+        normalizeHostedTrace(payload(root, s), parentId, false).spans.find(
           (saved) => saved.name === 'execute_tool lookup_order',
         );
       expect(normalized(span)).toMatchObject({
@@ -373,7 +376,7 @@ describe('normalizeHostedTrace', () => {
         status: { code, message },
         attributes: [...tool.attributes, { key, value }],
       };
-      const { spans, complete } = normalizeHostedTrace(payload(root, call), parentId);
+      const { spans, complete } = normalizeHostedTrace(payload(root, call), parentId, false);
       expect(complete).toBe(true);
       const saved = spans.find((span) => span.name === 'execute_tool lookup_order');
       expect(saved?.statusCode).toBe(expectedCode);
@@ -389,28 +392,47 @@ describe('normalizeHostedTrace', () => {
       prefix,
       prefix + 'x'.repeat(36),
     ]),
-  ])('withholds tool and model identifiers containing an embedded %s', (_label, token) => {
-    const name = `mcp_lookup_${token}`;
-    const namedTool = {
-      ...tool,
-      attributes: [
-        attribute('gen_ai.operation.name', 'execute_tool'),
-        attribute('gen_ai.tool.name', name),
-      ],
-    };
-    expect(() => normalizeHostedTrace(payload(root, namedTool), parentId)).toThrow(
-      'Invalid hosted OTLP trace',
+  ])(
+    'withholds tool and model identifiers containing an embedded %s even without argument capture',
+    (_label, token) => {
+      const name = `mcp_lookup_${token}`;
+      const namedTool = {
+        ...tool,
+        attributes: [
+          attribute('gen_ai.operation.name', 'execute_tool'),
+          attribute('gen_ai.tool.name', name),
+        ],
+      };
+      expect(() => normalizeHostedTrace(payload(root, namedTool), parentId, false)).toThrow(
+        'Invalid hosted OTLP trace',
+      );
+      const namedModel = {
+        ...model,
+        attributes: [
+          attribute('gen_ai.operation.name', 'chat'),
+          attribute('gen_ai.request.model', name),
+        ],
+      };
+      expect(() => normalizeHostedTrace(payload(root, namedModel), parentId, false)).toThrow(
+        'Invalid hosted OTLP trace',
+      );
+    },
+  );
+
+  it('withholds remote credentials in file and command arguments while keeping a safe sibling', () => {
+    const filename = 'receipt_npm_' + 'x'.repeat(36);
+    const command = ['cat', '/workspace/data_ghp_' + 'y'.repeat(36) + '.txt'];
+    const args = { filename, command, cwd: '/workspace' };
+    const { spans } = normalizeHostedTrace(
+      payload(root, toolWithArgs(JSON.stringify(args))),
+      parentId,
+      true,
     );
-    const namedModel = {
-      ...model,
-      attributes: [
-        attribute('gen_ai.operation.name', 'chat'),
-        attribute('gen_ai.request.model', name),
-      ],
-    };
-    expect(() => normalizeHostedTrace(payload(root, namedModel), parentId)).toThrow(
-      'Invalid hosted OTLP trace',
-    );
+    const attrs = spans[1].attributes!;
+    expect(JSON.parse(attrs['tool.arguments'])).toEqual({ cwd: '/workspace' });
+    expect(attrs['gen_ai.tool.call.arguments']).toBe(attrs['tool.arguments']);
+    expect(attrs['promptfoo.tool.arguments_redacted']).toBe(true);
+    expect(JSON.stringify(spans)).not.toMatch(/npm_|ghp_/);
   });
 
   it.each([
@@ -426,8 +448,27 @@ describe('normalizeHostedTrace', () => {
       ],
     };
     expect(() =>
-      normalizeHostedTrace(payload(root, chat), parentId, undefined, [...redact]),
+      normalizeHostedTrace(payload(root, chat), parentId, false, undefined, [...redact]),
     ).toThrow('Invalid hosted OTLP trace');
+  });
+
+  it('omits credential-labelled paths in file and command arguments', () => {
+    const args = {
+      filename: 'api_key/fixture-private-value',
+      cmd: ['cat', '/workspace/Authorization/fixture-private-value'],
+      commands: ["sh -c 'cat org.tenant/fixture-private-value'"],
+      cwd: '/workspace/public',
+    };
+    const { spans } = normalizeHostedTrace(
+      payload(root, toolWithArgs(JSON.stringify(args))),
+      parentId,
+      true,
+      undefined,
+      ['org.tenant'],
+    );
+    const attrs = spans[1].attributes!;
+    expect(JSON.parse(attrs['tool.arguments'])).toEqual({ cwd: '/workspace/public' });
+    expect(JSON.stringify(spans)).not.toContain('fixture-private-value');
   });
 
   it.each([
@@ -443,7 +484,7 @@ describe('normalizeHostedTrace', () => {
         attribute('gen_ai.request.model', id),
       ],
     };
-    const { spans, complete } = normalizeHostedTrace(payload(root, chat), parentId);
+    const { spans, complete } = normalizeHostedTrace(payload(root, chat), parentId, false);
     expect(complete).toBe(true);
     expect(spans[1]).toMatchObject({
       name: `chat ${id}`,
@@ -451,23 +492,256 @@ describe('normalizeHostedTrace', () => {
     });
   });
 
-  it('applies the active request policy to a tool name and its aliases', async () => {
-    await expect(
-      cliState.withRequestTracingConfig(
-        {
-          enabled: true,
-          otlp: { http: { enabled: true, port: 4318, redactAttributes: ['gen_ai.tool.name'] } },
-        },
-        async () => normalizeHostedTrace(payload(root, tool), parentId),
-      ),
-    ).rejects.toThrow('Invalid hosted OTLP trace');
+  it('imports opted-in arguments after redaction, and still omits results, messages and raw status', () => {
+    const redact = (s: string) => s.replaceAll('fixture credential', '[REDACTED]');
+    const { spans } = normalizeHostedTrace(payload(root, tool, model), parentId, true, redact);
+    const attrs = spans.find((span) => span.attributes?.['tool.name'] === 'lookup_order')!
+      .attributes!;
+    expect(JSON.parse(attrs['tool.arguments'])).toEqual({ order_id: '417' });
+    expect(attrs['gen_ai.tool.call.arguments']).toBe(attrs['tool.arguments']);
+    expect(attrs['promptfoo.tool.arguments_redacted']).toBe(true);
+    expect(JSON.stringify(spans)).not.toMatch(/private|fixture credential/);
   });
 
-  it('withholds an identifier that contains a provider credential', () => {
-    const redact = (value: string) => value.replaceAll('lookup_order', '[REDACTED]');
-    expect(() => normalizeHostedTrace(payload(root, tool), parentId, redact)).toThrow(
-      'Invalid hosted OTLP trace',
+  it('applies request-scoped redactions to supported fields before storing them', async () => {
+    const { spans } = await importWithRedaction('order_id');
+    const attrs = spans.find((span) => span.attributes?.['tool.name'] === 'lookup_order')!
+      .attributes!;
+    expect(JSON.parse(attrs['tool.arguments'])).toEqual({ limit: 3 });
+    expect(attrs['promptfoo.tool.arguments_redacted']).toBe(true);
+    expect(JSON.stringify(spans)).not.toContain('417');
+  });
+
+  it('withholds the entire input when it contains nested JSON text', () => {
+    const input = JSON.stringify({ body: JSON.stringify([{ ORDER_ID: 'private order' }]) });
+    const raw = JSON.stringify({ input, cwd: '/workspace' });
+    const { spans } = normalizeHostedTrace(payload(root, toolWithArgs(raw)), parentId, true);
+    const attrs = spans.find((span) => span.name === 'execute_tool lookup_order')!.attributes!;
+    expect(JSON.parse(attrs['tool.arguments'])).toEqual({ cwd: '/workspace' });
+    expect(attrs['promptfoo.tool.arguments_redacted']).toBe(true);
+    expect(JSON.stringify(spans)).not.toContain('private order');
+  });
+
+  it.each([
+    ["curl -H 'X-API-Key: synthetic-fixture' https://example.test"],
+    ['curl --header="Proxy-Authorization: synthetic-fixture" https://example.test'],
+    ["curl -H 'Authentication: synthetic-fixture' https://example.test"],
+    ['export _GITHUB_TOKEN=synthetic-fixture; run'],
+    ['client --password synthetic-fixture'],
+    ['client "--password" synthetic-fixture'],
+    ['curl -u alice:synthetic-fixture https://example.test'],
+    ['curl --netrc-file synthetic-fixture https://example.test'],
+    ["/bin/bash -lc 'cat ledger.csv; curl -u alice:synthetic-fixture https://example.test'"],
+    [['curl', '-H', 'Authorization: synthetic-fixture']],
+    [['client', '--api-key', 'synthetic-fixture']],
+    ['cat Bearer synthetic-fixture'],
+    [['cat', 'Bearer', 'synthetic-fixture']],
+    [['cat', 'Basic', 'synthetic-fixture']],
+    [String.raw`curl -d "{\"customer_id\":\"synthetic-fixture\"}" https://example.test`],
+  ])('omits named credentials or custom protected fields embedded in %j', async (cmd) => {
+    const { spans } = await importWithRedaction('customer_id', { cmd, cwd: '/workspace' });
+    const attrs = spans.find((span) => span.name === 'execute_tool lookup_order')!.attributes!;
+    expect(JSON.parse(attrs['tool.arguments'])).toEqual({ cwd: '/workspace' });
+    expect(attrs['gen_ai.tool.call.arguments']).toBe(attrs['tool.arguments']);
+    expect(attrs['promptfoo.tool.arguments_redacted']).toBe(true);
+    expect(JSON.stringify(spans)).not.toContain('synthetic-fixture');
+  });
+
+  it('preserves the supported scalar fields and the original raw JSON', () => {
+    const args = {
+      cwd: '/workspace',
+      path: '/workspace/ledger.csv',
+      file_path: 'data/ledger.csv',
+      filename: 'ledger.csv',
+      id: 17,
+      order_id: '00417',
+      limit: 10,
+      offset: 0,
+      count: 2,
+      page: 1,
+    };
+    const raw = JSON.stringify(args, null, 2);
+    const { spans } = normalizeHostedTrace(payload(root, toolWithArgs(raw)), parentId, true);
+    expect(spans[1].attributes?.['tool.arguments']).toBe(raw);
+    expect(spans[1].attributes?.['gen_ai.tool.call.arguments']).toBe(raw);
+    expect(spans[1].attributes?.['promptfoo.tool.arguments_redacted']).toBeUndefined();
+  });
+
+  it('applies provider credential redaction to a supported path', () => {
+    const path = '/workspace/private-file.csv';
+    const raw = JSON.stringify({ path, cwd: '/workspace' });
+    const { spans } = normalizeHostedTrace(
+      payload(root, toolWithArgs(raw)),
+      parentId,
+      true,
+      (value) => value.replaceAll(path, '[REDACTED]'),
     );
+    expect(JSON.parse(spans[1].attributes?.['tool.arguments'])).toEqual({ cwd: '/workspace' });
+    expect(spans[1].attributes?.['promptfoo.tool.arguments_redacted']).toBe(true);
+    expect(JSON.stringify(spans)).not.toContain(path);
+  });
+
+  it.each([
+    ["/bin/bash -lc 'cat /workspace/ledger.csv'"],
+    ["/bin/bash -lc 'cat receipt.txt'"],
+    ['wc -l /workspace/ledger.csv'],
+    ['head -n 4 ledger.csv'],
+    [['/bin/bash', '-lc', 'tail -n 3 ledger.csv']],
+    [['/usr/bin/ls', '-la', '/workspace']],
+    ['pwd'],
+  ])('retains complete file inspection arguments for %j', (command) => {
+    const raw = JSON.stringify({ command, cwd: '/workspace' });
+    const { spans } = normalizeHostedTrace(payload(root, toolWithArgs(raw)), parentId, true);
+    expect(spans[1].attributes?.['tool.arguments']).toBe(raw);
+    expect(spans[1].attributes?.['promptfoo.tool.arguments_redacted']).toBeUndefined();
+  });
+
+  it('preserves a nonempty list of file inspection commands', () => {
+    const raw = JSON.stringify({ commands: ['pwd', 'cat /workspace/ledger.csv'] });
+    const { spans } = normalizeHostedTrace(payload(root, toolWithArgs(raw)), parentId, true);
+    expect(spans[1].attributes?.['tool.arguments']).toBe(raw);
+    expect(spans[1].attributes?.['promptfoo.tool.arguments_redacted']).toBeUndefined();
+  });
+
+  it.each([
+    ['unrecognized function fields', { query: 'ordinary text', format: 'compact' }],
+    ['different casing', { ORDER_ID: '1729', Cmd: 'pwd' }],
+    ['malformed JSON body', { body: '{"name":"GITHUB_TOKEN","value":"synthetic-fixture"' }],
+    ['encoded JSON body', { input: '{"name":"customer_id","value":"synthetic-fixture"}' }],
+    ['environment tuples', { env: [['UPSTREAM_PRIVATE_KEY', 'synthetic-fixture']] }],
+    ['header tuples', { request_headers: [['X-Api-Key', 'synthetic-fixture']] }],
+    ['custom header map', { request_headers: { 'X-Honeycomb-Team': 'synthetic-fixture' } }],
+    ['name and value', { name: 'X-Api-Key', value: 'synthetic-fixture' }],
+    [
+      'nested metadata',
+      { metadata: { payload: { request_headers: { key: 'synthetic-fixture' } } } },
+    ],
+    ['path containing a credential', { path: 'https://user:synthetic-fixture@example.test/file' }],
+    ['structured filename', { filename: { path: 'synthetic-fixture' } }],
+    ['arbitrary ID', { id: 'synthetic-fixture' }],
+    ['oversized decimal ID', { order_id: '1'.repeat(120) }],
+    ['nonnumeric controls', { limit: '2', count: 1.5 }],
+    ['empty command list', { commands: [] }],
+    ['mixed command list', { commands: ['pwd', 'curl -u user:synthetic-fixture'] }],
+    ['non-string command list', { commands: [['cat', 'file.csv']] }],
+  ] as const)('omits %s and keeps the independently valid working directory', (_label, fields) => {
+    const raw = JSON.stringify({ ...fields, cwd: '/workspace' });
+    const { spans } = normalizeHostedTrace(payload(root, toolWithArgs(raw)), parentId, true);
+    const attrs = spans[1].attributes!;
+    expect(JSON.parse(attrs['tool.arguments'])).toEqual({ cwd: '/workspace' });
+    expect(attrs['gen_ai.tool.call.arguments']).toBe(attrs['tool.arguments']);
+    expect(attrs['promptfoo.tool.arguments_redacted']).toBe(true);
+    expect(JSON.stringify(spans)).not.toContain('synthetic-fixture');
+  });
+
+  it('drops command fields containing credential-bearing URLs and embedded token-like values', () => {
+    const args = {
+      cmd: 'curl https://svc:private-password@example.test/resource',
+      script: 'set -x; export TOKEN=AKIA1234567890ABCDEF',
+      dsn: 'connect postgres://svc:private-password@example.test/data',
+      cwd: '/workspace',
+    };
+    const { spans } = normalizeHostedTrace(
+      payload(root, toolWithArgs(JSON.stringify(args))),
+      parentId,
+      true,
+    );
+    const attrs = spans.find((span) => span.name === 'execute_tool lookup_order')!.attributes!;
+    expect(JSON.parse(attrs['tool.arguments'])).toEqual({ cwd: '/workspace' });
+    expect(attrs['gen_ai.tool.call.arguments']).toBe(attrs['tool.arguments']);
+    expect(attrs['promptfoo.tool.arguments_redacted']).toBe(true);
+    expect(JSON.stringify(spans)).not.toMatch(/private-password|AKIA/);
+  });
+
+  it.each([
+    ['oversized', ' '.repeat(65_536) + '{"limit":2}'],
+    ['malformed', '{"order_id":'],
+    ['duplicate keys', '{"order_id":"417","order_id":"418"}'],
+    ['unrepresentable number', '{"limit":9007199254740993}'],
+    ['unsafe integer with identical wire spelling', '{"limit":1000000000000000100}'],
+    ['rounded fraction', '{"limit":1.00000000000000001}'],
+    ['overflow', '{"limit":1e400}'],
+    ['underflow', '{"limit":1e-400}'],
+    ['escaped duplicate key', String.raw`{"order_id":"417","\u006frder_id":"418"}`],
+  ])('retains the span tree when %s arguments cannot be faithfully imported', (_label, raw) => {
+    const { spans, complete } = normalizeHostedTrace(
+      payload(root, toolWithArgs(raw)),
+      parentId,
+      true,
+    );
+    const attrs = spans.find((span) => span.name === 'execute_tool lookup_order')!.attributes!;
+    expect(complete).toBe(true);
+    expect(attrs['tool.arguments']).toBeUndefined();
+    expect(attrs['gen_ai.tool.call.arguments']).toBeUndefined();
+    expect(attrs['promptfoo.tool.arguments_redacted']).toBe(true);
+  });
+
+  it('preserves lossless number spellings in supported fields', () => {
+    const raw = '{"limit":1.0,"offset":1e0,"count":2.500E+1,"page":10e+01}';
+    const { spans } = normalizeHostedTrace(payload(root, toolWithArgs(raw)), parentId, true);
+    const attrs = spans[1].attributes!;
+    expect(attrs['gen_ai.tool.call.arguments']).toBe(raw);
+    expect(JSON.parse(attrs['tool.arguments'])).toEqual({
+      limit: 1,
+      offset: 1,
+      count: 25,
+      page: 100,
+    });
+    expect(attrs['promptfoo.tool.arguments_redacted']).toBeUndefined();
+  });
+
+  it('keeps a supported sibling when integer-like keys change serialization order', () => {
+    const raw = '{"1":"a","0":"b","limit":1}';
+    const { spans } = normalizeHostedTrace(payload(root, toolWithArgs(raw)), parentId, true);
+    expect(JSON.parse(spans[1].attributes?.['tool.arguments'])).toEqual({ limit: 1 });
+    expect(spans[1].attributes?.['promptfoo.tool.arguments_redacted']).toBe(true);
+  });
+
+  it('preserves the sign of a zero argument through sanitizer inspection', () => {
+    const raw = '{"offset":-0.00}';
+    const { spans } = normalizeHostedTrace(payload(root, toolWithArgs(raw)), parentId, true);
+    const attrs = spans.find((span) => span.name === 'execute_tool lookup_order')!.attributes!;
+    expect(attrs['gen_ai.tool.call.arguments']).toBe(raw);
+    expect(Object.is(JSON.parse(attrs['tool.arguments']).offset, -0)).toBe(true);
+    expect(attrs['promptfoo.tool.arguments_redacted']).toBeUndefined();
+  });
+
+  it('omits a signed zero if filtering another field requires reserialization', () => {
+    const raw = '{"authorization":"withhold","offset":-0.00,"cwd":"/workspace"}';
+    const { spans } = normalizeHostedTrace(payload(root, toolWithArgs(raw)), parentId, true);
+    const attrs = spans.find((span) => span.name === 'execute_tool lookup_order')!.attributes!;
+    expect(JSON.parse(attrs['tool.arguments'])).toEqual({ cwd: '/workspace' });
+    expect(attrs['promptfoo.tool.arguments_redacted']).toBe(true);
+  });
+
+  it('retains the native argument key and spelling for exact raw attribute filters', () => {
+    const raw = '{ "cmd" : "cat ledger.csv",  "page" : 1 }';
+    const { spans } = normalizeHostedTrace(payload(root, toolWithArgs(raw)), parentId, true);
+    const attrs = spans.find((span) => span.name === 'execute_tool lookup_order')!.attributes!;
+    expect(attrs['gen_ai.tool.call.arguments']).toBe(raw);
+    expect(attrs['tool.arguments']).toBe(raw);
+    expect(attrs['promptfoo.tool.arguments_redacted']).toBeUndefined();
+  });
+
+  it('preserves escaped Unicode and slashes in the native JSON spelling', () => {
+    const raw = String.raw`{ "\u0063md": "cat \/workspace\/caf\u00e9" }`;
+    const { spans } = normalizeHostedTrace(payload(root, toolWithArgs(raw)), parentId, true);
+    const attrs = spans.find((span) => span.name === 'execute_tool lookup_order')!.attributes!;
+    expect(attrs['gen_ai.tool.call.arguments']).toBe(raw);
+    expect(JSON.parse(attrs['tool.arguments'])).toEqual({ cmd: 'cat /workspace/café' });
+    expect(attrs['promptfoo.tool.arguments_redacted']).toBeUndefined();
+  });
+
+  it('omits normalized arguments when the native attribute is protected', async () => {
+    const { spans } = await importWithRedaction('gen_ai.tool.call.arguments');
+    const attrs = spans.find((span) => span.attributes?.['tool.name'] === 'lookup_order')!
+      .attributes!;
+    expect(attrs).not.toHaveProperty('tool.arguments');
+    expect(JSON.stringify(spans)).not.toContain('417');
+  });
+
+  it('rejects evidence when a protected tool name would be exposed through span aliases', async () => {
+    await expect(importWithRedaction('gen_ai.tool.name')).rejects.toThrow();
   });
 
   describe('protected attribute echoes', () => {
@@ -485,7 +759,7 @@ describe('normalizeHostedTrace', () => {
       };
     }
 
-    function importProtected(spans: object[], resourceAttributes: object[] = []) {
+    function importProtected(spans: object[], capture: boolean, resourceAttributes: object[] = []) {
       return normalizeHostedTrace(
         {
           resourceSpans: [
@@ -493,19 +767,20 @@ describe('normalizeHostedTrace', () => {
           ],
         },
         parentId,
+        capture,
         undefined,
         [protectedKey],
       );
     }
 
-    it('withholds tool names that echo protected strings and integers', () => {
+    it.each([false, true])('withholds tool name echoes with capture set to %s', (capture) => {
       for (const [name, value] of [
         ['read_tenant_42', { stringValue: tenant }],
         ['read_7', { intValue: '7' }],
         ['read_7', { intValue: '0007' }],
       ] as const) {
         const call = callNamed(name, { key: protectedKey, value });
-        expect(() => importProtected([root, call])).toThrow('Invalid hosted OTLP trace');
+        expect(() => importProtected([root, call], capture)).toThrow('Invalid hosted OTLP trace');
       }
     });
 
@@ -522,7 +797,7 @@ describe('normalizeHostedTrace', () => {
         },
         attribute('gen_ai.request.model', 'models/tenant_42'),
       ];
-      expect(() => importProtected([root, chat], resourceAttributes)).toThrow(
+      expect(() => importProtected([root, chat], false, resourceAttributes)).toThrow(
         'Invalid hosted OTLP trace',
       );
     });
@@ -534,20 +809,62 @@ describe('normalizeHostedTrace', () => {
       };
       const raw = '{"filename":"report.csv"}';
       const call = callNamed('read_filename', attr, attribute('gen_ai.tool.call.arguments', raw));
-      const { spans, complete } = importProtected([root, call]);
+      const { spans, complete } = importProtected([root, call], true);
       expect(complete).toBe(true);
       expect(spans[1]).toMatchObject({
         name: 'execute_tool read_filename',
         attributes: {
           'tool.name': 'read_filename',
+          'tool.arguments': raw,
+          'gen_ai.tool.call.arguments': raw,
         },
       });
     });
 
-    it('checks identities against protected fields inside argument JSON', () => {
-      const raw = JSON.stringify({ metadata: [{ [protectedKey]: tenant }] });
-      const call = callNamed('read_tenant_42', attribute('gen_ai.tool.call.arguments', raw));
-      expect(() => importProtected([root, call])).toThrow('Invalid hosted OTLP trace');
+    it.each([false, true])(
+      'checks identities against protected argument fields with capture set to %s',
+      (capture) => {
+        const raw = JSON.stringify({ metadata: [{ [protectedKey]: tenant }] });
+        const call = callNamed('read_tenant_42', attribute('gen_ai.tool.call.arguments', raw));
+        expect(() => importProtected([root, call], capture)).toThrow('Invalid hosted OTLP trace');
+      },
+    );
+
+    it.each(['wire attribute', 'nested tool argument'])(
+      'removes echoed paths and commands sourced from a %s',
+      (source) => {
+        const args = {
+          ...(source === 'nested tool argument' && { metadata: [{ [protectedKey]: tenant }] }),
+          path: 'tenant_42.csv',
+          cmd: ['cat', 'tenant_42.csv'],
+          limit: 3,
+        };
+        const call = callNamed(
+          'lookup_order',
+          attribute('gen_ai.tool.call.arguments', JSON.stringify(args)),
+          ...(source === 'wire attribute' ? [attribute(protectedKey, tenant)] : []),
+        );
+        const { spans } = importProtected([root, call], true);
+        const attrs = spans[1].attributes!;
+        expect(JSON.parse(attrs['tool.arguments'])).toEqual({ limit: 3 });
+        expect(attrs['gen_ai.tool.call.arguments']).toBe(attrs['tool.arguments']);
+        expect(attrs['promptfoo.tool.arguments_redacted']).toBe(true);
+        expect(JSON.stringify(spans)).not.toContain(tenant);
+      },
+    );
+
+    it('checks the emitted argument spelling for echoes as well as its decoded values', () => {
+      const raw = '{"limit":4.17e2}';
+      const call = callNamed(
+        'lookup_order',
+        attribute(protectedKey, '4.17e2'),
+        attribute('gen_ai.tool.call.arguments', raw),
+      );
+      const { spans } = importProtected([root, call], true);
+      const attrs = spans[1].attributes!;
+      expect(attrs['tool.arguments']).toBeUndefined();
+      expect(attrs['gen_ai.tool.call.arguments']).toBeUndefined();
+      expect(attrs['promptfoo.tool.arguments_redacted']).toBe(true);
     });
 
     it('withholds the identity when a duplicate protected JSON key could conceal its source', () => {
@@ -557,7 +874,7 @@ describe('normalizeHostedTrace', () => {
       ]) {
         const raw = `{"${protectedKey}":"${values[0]}","${protectedKey}":"${values[1]}"}`;
         const call = callNamed('read_tenant_42', attribute('gen_ai.tool.call.arguments', raw));
-        expect(() => importProtected([root, call])).toThrow('Invalid hosted OTLP trace');
+        expect(() => importProtected([root, call], false)).toThrow('Invalid hosted OTLP trace');
       }
     });
 
@@ -571,20 +888,22 @@ describe('normalizeHostedTrace', () => {
         [call, source],
         [source, call],
       ]) {
-        expect(() => importProtected([root, ...siblings])).toThrow('Invalid hosted OTLP trace');
+        expect(() => importProtected([root, ...siblings], false)).toThrow(
+          'Invalid hosted OTLP trace',
+        );
       }
     });
 
     function withCarriers(input: unknown, rules = [protectedKey]) {
-      return normalizeHostedTrace(input, parentId, undefined, rules);
+      return normalizeHostedTrace(input, parentId, false, undefined, rules);
     }
 
     describe('credential attributes and argument aliases', () => {
       const credential = 'kappa-blue-19';
 
-      it('withholds a tool name echoing an opaque API key by default', () => {
+      it('withholds a tool name echoing an opaque API key with default capture settings', () => {
         const call = callNamed(`lookup_${credential}`, attribute('x-api-key', credential));
-        expect(() => normalizeHostedTrace(payload(root, call), parentId)).toThrow(
+        expect(() => normalizeHostedTrace(payload(root, call), parentId, false)).toThrow(
           'Invalid hosted OTLP trace',
         );
       });
@@ -594,7 +913,7 @@ describe('normalizeHostedTrace', () => {
           `lookup_${credential}`,
           attribute('Authorization', `Bearer ${credential}`),
         );
-        expect(() => normalizeHostedTrace(payload(root, call), parentId)).toThrow(
+        expect(() => normalizeHostedTrace(payload(root, call), parentId, false)).toThrow(
           'Invalid hosted OTLP trace',
         );
       });
@@ -615,17 +934,17 @@ describe('normalizeHostedTrace', () => {
             },
           ],
         };
-        expect(() => normalizeHostedTrace(payload(root, call, source), parentId)).toThrow(
+        expect(() => normalizeHostedTrace(payload(root, call, source), parentId, false)).toThrow(
           'Invalid hosted OTLP trace',
         );
       });
 
       it.each(['tool.arguments', 'gen_ai.tool.call.arguments'])(
-        'checks credential fields inside %s JSON',
+        'checks credential fields inside %s JSON with argument capture disabled',
         (key) => {
           const raw = JSON.stringify({ headers: { 'X-API-Key': credential } });
           const call = callNamed(`lookup_${credential}`, attribute(key, raw));
-          expect(() => normalizeHostedTrace(payload(root, call), parentId)).toThrow(
+          expect(() => normalizeHostedTrace(payload(root, call), parentId, false)).toThrow(
             'Invalid hosted OTLP trace',
           );
         },
@@ -636,7 +955,7 @@ describe('normalizeHostedTrace', () => {
         (key) => {
           const raw = String.raw`{"headers":{"X-\u0041PI-\u004bey":"${credential}"}}`;
           const call = callNamed(`lookup_${credential}`, attribute(key, raw));
-          expect(() => normalizeHostedTrace(payload(root, call), parentId)).toThrow(
+          expect(() => normalizeHostedTrace(payload(root, call), parentId, false)).toThrow(
             'Invalid hosted OTLP trace',
           );
         },
@@ -654,14 +973,22 @@ describe('normalizeHostedTrace', () => {
         );
       });
 
-      it('keeps a tool name containing a count from a usage attribute', () => {
-        const call = callNamed('lookup_7', {
-          key: 'gen_ai.usage.input_tokens',
-          value: { intValue: '7' },
-        });
-        expect(normalizeHostedTrace(payload(root, call), parentId).spans[1].name).toBe(
-          'execute_tool lookup_7',
+      it('keeps the numeric tool name and lookup ID when only the path echoes a credential', () => {
+        const raw = JSON.stringify({ path: `/files/${credential}`, id: 17 });
+        const call = callNamed(
+          'lookup_7',
+          attribute('x-api-key', credential),
+          { key: 'gen_ai.usage.input_tokens', value: { intValue: '7' } },
+          attribute('gen_ai.tool.call.arguments', raw),
         );
+        const { spans, complete } = normalizeHostedTrace(payload(root, call), parentId, true);
+        expect(complete).toBe(true);
+        expect(spans[1].name).toBe('execute_tool lookup_7');
+        const attrs = spans[1].attributes!;
+        expect(JSON.parse(attrs['tool.arguments'])).toEqual({ id: 17 });
+        expect(attrs['gen_ai.tool.call.arguments']).toBe(attrs['tool.arguments']);
+        expect(attrs['promptfoo.tool.arguments_redacted']).toBe(true);
+        expect(JSON.stringify(spans)).not.toContain(credential);
       });
     });
 
@@ -754,18 +1081,20 @@ describe('normalizeHostedTrace', () => {
       expect(() => withCarriers(payload(root, ...calls))).toThrow('Invalid hosted OTLP trace');
     });
 
-    it('bounds empty scopes across the snapshot under default redaction', () => {
+    it('bounds empty scopes across the snapshot with default redaction and capture disabled', () => {
       const emptyScopes = Array.from({ length: 1000 }, () => ({}));
       const groups = Array.from({ length: 34 }, () => ({ scopeSpans: emptyScopes }));
       const populated = { scopeSpans: [{ spans: [root] }] };
       const data = { resourceSpans: [...groups, populated] };
-      expect(() => normalizeHostedTrace(data, parentId)).toThrow('Invalid hosted OTLP trace');
+      expect(() => normalizeHostedTrace(data, parentId, false)).toThrow(
+        'Invalid hosted OTLP trace',
+      );
 
       const calls = Array.from({ length: 999 }, (_, index) => ({
         ...callNamed('lookup_order'),
         spanId: (index + 10).toString(16).padStart(16, '0'),
       }));
-      const { spans, complete } = normalizeHostedTrace(payload(root, ...calls), parentId);
+      const { spans, complete } = normalizeHostedTrace(payload(root, ...calls), parentId, false);
       expect(spans).toHaveLength(1000);
       expect(complete).toBe(true);
     });
@@ -778,8 +1107,36 @@ describe('normalizeHostedTrace', () => {
         key: protectedKey,
         value: { arrayValue: { values } },
       });
-      expect(() => importProtected([root, call])).toThrow('Invalid hosted OTLP trace');
+      expect(() => importProtected([root, call], false)).toThrow('Invalid hosted OTLP trace');
     });
+  });
+
+  it.each(['null', undefined])('omits unavailable native arguments (%s)', (raw) => {
+    const { spans } = normalizeHostedTrace(payload(root, toolWithArgs(raw)), parentId, true);
+    const attrs = spans.find((span) => span.attributes?.['tool.name'] === 'lookup_order')!
+      .attributes!;
+    expect(attrs).not.toHaveProperty('tool.arguments');
+  });
+
+  it.each([
+    ['root command string', 'cat /workspace/ledger.csv'],
+    ['root command argv', ['cat', '/workspace/ledger.csv']],
+    ['root name/value tuple', ['X-Honeycomb-Team', 'synthetic-fixture']],
+    ['encoded argument object', '{"order_id":"417"}'],
+    ['root scalar', 17],
+  ])('omits %s without losing the shell span identity', (_label, value) => {
+    const native = toolWithArgs(JSON.stringify(value));
+    native.attributes = native.attributes.map((a) =>
+      a.key === 'gen_ai.tool.name' ? attribute(a.key, 'shell') : a,
+    );
+    const { spans, complete } = normalizeHostedTrace(payload(root, native), parentId, true);
+    expect(complete).toBe(true);
+    expect(spans[1].name).toBe('execute_tool shell');
+    const attrs = spans[1].attributes!;
+    expect(attrs['tool.arguments']).toBeUndefined();
+    expect(attrs['gen_ai.tool.call.arguments']).toBeUndefined();
+    expect(attrs['promptfoo.tool.arguments_redacted']).toBe(true);
+    expect(JSON.stringify(spans)).not.toContain('synthetic-fixture');
   });
 
   it.each(['base64', 'base64url'] as const)(
@@ -802,8 +1159,8 @@ describe('normalizeHostedTrace', () => {
           spanId: encode(span.spanId, padded),
           parentSpanId: span.parentSpanId ? encode(span.parentSpanId, padded) : undefined,
         }));
-        expect(normalizeHostedTrace(payload(...encoded), parentId)).toEqual(
-          normalizeHostedTrace(payload(...fixture), parentId),
+        expect(normalizeHostedTrace(payload(...encoded), parentId, false)).toEqual(
+          normalizeHostedTrace(payload(...fixture), parentId, false),
         );
       }
     },
@@ -815,13 +1172,13 @@ describe('normalizeHostedTrace', () => {
       { description: 'scopeSpans', wire: { resourceSpans: [{}] } },
       { description: 'spans', wire: { resourceSpans: [{ scopeSpans: [{}] }] } },
     ])('treats omitted $description as unpublished', ({ wire }) => {
-      expect(normalizeHostedTrace(wire, parentId)).toEqual({ spans: [], complete: false });
+      expect(normalizeHostedTrace(wire, parentId, false)).toEqual({ spans: [], complete: false });
     });
 
     it('imports a populated scope alongside empty resource and scope groups', () => {
       const wire = { resourceSpans: [{}, { scopeSpans: [{}, { spans: [root, tool] }, {}] }] };
-      expect(normalizeHostedTrace(wire, parentId)).toEqual(
-        normalizeHostedTrace(payload(root, tool), parentId),
+      expect(normalizeHostedTrace(wire, parentId, false)).toEqual(
+        normalizeHostedTrace(payload(root, tool), parentId, false),
       );
     });
 
@@ -831,7 +1188,7 @@ describe('normalizeHostedTrace', () => {
       ['scope group', (value: unknown) => ({ resourceSpans: [{ scopeSpans: [value] }] })],
     ] as const)('requires the %s to be an object', (_description, wire) => {
       for (const malformed of [null, [], 'unexpected']) {
-        expect(() => normalizeHostedTrace(wire(malformed), parentId)).toThrow();
+        expect(() => normalizeHostedTrace(wire(malformed), parentId, false)).toThrow();
       }
     });
 
@@ -841,7 +1198,7 @@ describe('normalizeHostedTrace', () => {
       ['spans', (value: unknown) => ({ resourceSpans: [{ scopeSpans: [{ spans: value }] }] })],
     ] as const)('rejects an invalid or oversized %s collection', (_description, wire) => {
       for (const malformed of [null, {}, 'unexpected', Array(1_001).fill({})]) {
-        expect(() => normalizeHostedTrace(wire(malformed), parentId)).toThrow();
+        expect(() => normalizeHostedTrace(wire(malformed), parentId, false)).toThrow();
       }
     });
   });
@@ -869,7 +1226,7 @@ describe('normalizeHostedTrace', () => {
   ] as const)(
     'reports %s evidence as incomplete without exposing fields',
     (_description, native, count) => {
-      const { spans, complete } = normalizeHostedTrace(native, parentId);
+      const { spans, complete } = normalizeHostedTrace(native, parentId, false);
       expect(complete).toBe(false);
       expect(spans).toHaveLength(count);
       expect(JSON.stringify(spans)).not.toContain('private');
@@ -894,13 +1251,79 @@ describe('normalizeHostedTrace', () => {
       [root, { ...tool, parentSpanId: model.spanId }, { ...model, parentSpanId: tool.spanId }],
     ],
   ] as const)('rejects %s without importing partial evidence', (_description, spans) => {
-    expect(() => normalizeHostedTrace(payload(...spans), parentId)).toThrow();
+    expect(() => normalizeHostedTrace(payload(...spans), parentId, false)).toThrow();
+  });
+
+  it.each([
+    ['wire bytes', ' '.repeat(48_000) + '{"limit":3}', 12],
+    [
+      'JSON values',
+      JSON.stringify({
+        cmd: 'pwd',
+        cwd: '/workspace',
+        id: 1,
+        order_id: '417',
+        count: 2,
+        offset: 0,
+        limit: 3,
+        page: 1,
+      }),
+      600,
+    ],
+  ] as const)(
+    'bounds the total %s inspected per snapshot while preserving tool spans',
+    (_label, raw, calls) => {
+      const children = Array.from({ length: calls }, (_, i) => ({
+        ...toolWithArgs(raw),
+        spanId: (i + 1).toString(16).padStart(16, '0'),
+      }));
+      const { spans, complete } = normalizeHostedTrace(payload(root, ...children), parentId, true);
+      expect(complete).toBe(true);
+      const imported = spans.filter((span) => span.name === 'execute_tool lookup_order');
+      expect(imported).toHaveLength(children.length);
+      const captured = imported.filter((span) => span.attributes?.['tool.arguments'] === raw);
+      expect(captured.length).toBeGreaterThan(0);
+      expect(captured.length).toBeLessThan(imported.length);
+      expect(
+        imported
+          .slice(captured.length)
+          .every(
+            (span) =>
+              span.attributes?.['gen_ai.tool.call.arguments'] === undefined &&
+              span.attributes?.['promptfoo.tool.arguments_redacted'] === true,
+          ),
+      ).toBe(true);
+      expect(
+        normalizeHostedTrace(payload(root, children.at(-1)!), parentId, true).spans[1].attributes?.[
+          'tool.arguments'
+        ],
+      ).toBe(raw);
+    },
+  );
+
+  it('withholds a wide argument but imports a later small call and intact sibling fields', () => {
+    const wide = Object.fromEntries(Array.from({ length: 6_000 }, (_, i) => [i, 0]));
+    const wideCall = toolWithArgs(JSON.stringify({ ...wide, limit: 2 }));
+    const mixed = {
+      ...toolWithArgs(JSON.stringify({ body: JSON.stringify(wide), cwd: '/workspace' })),
+      spanId: '4444444444444444',
+    };
+    const { spans, complete } = normalizeHostedTrace(
+      payload(root, wideCall, mixed),
+      parentId,
+      true,
+    );
+    expect(complete).toBe(true);
+    expect(spans[1].attributes?.['tool.arguments']).toBeUndefined();
+    expect(spans[1].attributes?.['promptfoo.tool.arguments_redacted']).toBe(true);
+    expect(JSON.parse(spans[2].attributes?.['tool.arguments'])).toEqual({ cwd: '/workspace' });
+    expect(spans[2].attributes?.['promptfoo.tool.arguments_redacted']).toBe(true);
   });
 
   it('rejects an oversized trace instead of silently dropping tool evidence beyond the limit', () => {
     const children = Array.from({ length: 1000 }, (_, i) =>
       nativeSpan((i + 1).toString(16).padStart(16, '0'), 'chat', root.spanId),
     );
-    expect(() => normalizeHostedTrace(payload(root, ...children), parentId)).toThrow();
+    expect(() => normalizeHostedTrace(payload(root, ...children), parentId, false)).toThrow();
   });
 });

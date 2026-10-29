@@ -17,7 +17,11 @@ import {
 import { HOSTED_DURATION_NS, HOSTED_START_TIME_OFFSET_NS } from '../../tracing/spanTiming';
 import { getNormalizedToolAttributes } from '../../tracing/toolAttributes';
 import { isCredentialHeader, isSecretEnvVarName } from '../../util/sanitizer';
-import { hasRecognizableOpenAiCredential, hasSensitiveOpenAiCacheString } from './util';
+import {
+  hasRecognizableOpenAiCredential,
+  hasSensitiveOpenAiCachePath,
+  hasSensitiveOpenAiCacheString,
+} from './util';
 
 import type { SpanData } from '../../tracing/store';
 
@@ -206,6 +210,7 @@ function decodeId(value: string, bytes: number): string {
 type Redact = (text: string) => string;
 interface ImportPolicy {
   parentSpanId: string;
+  includeToolArguments: boolean;
   redact: Redact;
   redactAttributes: string[];
   echoesProtectedValue: (text: string) => boolean;
@@ -349,6 +354,7 @@ function roundTrips(
 // Protobuf field names and JSON object keys are labels, not protected values.
 function protectedEchoMatcher(policy: ImportPolicy) {
   const needles = new Set<string>();
+  const jsonBudget = { ...policy };
   let nodesLeft = 32_768;
   let needleBytes = 0;
   // Bound both key matching and repeated searches in otherwise safe retained fields.
@@ -448,12 +454,12 @@ function protectedEchoMatcher(policy: ImportPolicy) {
           return;
         }
       }
-      if (!reserveArgumentJson(raw, policy)) {
+      if (!reserveArgumentJson(raw, jsonBudget)) {
         invalid();
       }
       try {
         const parsed: unknown = JSON.parse(raw);
-        if (!roundTrips(raw, parsed, policy)) {
+        if (!roundTrips(raw, parsed, jsonBudget)) {
           invalid();
         }
         jsonLeaves(parsed, hidden, 0);
@@ -488,7 +494,7 @@ function protectedEchoMatcher(policy: ImportPolicy) {
   return { collect, collectSpan, matches };
 }
 
-// A credential can follow a named component in a namespaced identifier.
+// Both identifiers and paths can carry a credential after a named component.
 function hasProtectedComponent(value: string, policy: ImportPolicy): boolean {
   return value
     .split(/[:/]/)
@@ -502,6 +508,168 @@ function canRetainText(
   isSensitive = hasSensitiveOpenAiCacheString,
 ): boolean {
   return !policy.echoesProtectedValue(text) && policy.redact(text) === text && !isSensitive(text);
+}
+
+const PATH_FIELDS = new Set(['cwd', 'path', 'file_path', 'filename']);
+const ID_FIELDS = new Set(['id', 'order_id']);
+const INTEGER_FIELDS = new Set(['limit', 'offset', 'count', 'page']);
+
+function isLiteralPath(value: unknown, policy: ImportPolicy): value is string {
+  return (
+    typeof value === 'string' &&
+    value.length > 0 &&
+    value.length <= 1024 &&
+    !value.startsWith('-') &&
+    !/[^\p{L}\p{N}_./-]/u.test(value) &&
+    !hasSensitiveOpenAiCachePath(value) &&
+    !hasProtectedComponent(value, policy)
+  );
+}
+
+const INSPECTION_FLAGS = new Map([
+  ['pwd', /^-[LP]$/],
+  ['ls', /^-[aAhl1]+$/],
+  ['cat', /^-[bn]+$/],
+  ['wc', /^-[clmw]+$/],
+  ['head', /^-(?:[nc]\d*|\d+)$/],
+  ['tail', /^-(?:[nc]\d*|\d+)$/],
+]);
+const BIN_PREFIX = /^\/(?:usr\/)?bin\//;
+
+// Keep filenames available to grading without interpreting arbitrary shell, flag values or scripts.
+function isInspectionCommand(value: unknown, policy: ImportPolicy): boolean {
+  let words: string[];
+  if (typeof value === 'string') {
+    if (/[\r\n]/.test(value)) {
+      return false;
+    }
+    const text = value.trim();
+    const wrapper = /^(?:\/(?:usr\/)?bin\/)?(?:bash|sh)[ \t]+-l?c[ \t]+(['"])([^\r\n]*)\1$/.exec(
+      text,
+    );
+    words = (wrapper?.[2] ?? text).split(/[ \t]+/);
+  } else if (Array.isArray(value) && value.every((word) => typeof word === 'string')) {
+    if (
+      value.length === 3 &&
+      /^(?:\/(?:usr\/)?bin\/)?(?:bash|sh)$/.test(value[0]) &&
+      /^-l?c$/.test(value[1])
+    ) {
+      words = value[2].trim().split(/[ \t]+/);
+    } else {
+      words = value;
+    }
+  } else {
+    return false;
+  }
+  const command = words[0]?.replace(BIN_PREFIX, '');
+  const flags = INSPECTION_FLAGS.get(command);
+  if (!flags) {
+    return false;
+  }
+  let needsCount = false;
+  for (const word of words.slice(1)) {
+    if (needsCount) {
+      if (!/^\d+$/.test(word)) {
+        return false;
+      }
+      needsCount = false;
+    } else if ((command === 'head' || command === 'tail') && /^-[nc]$/.test(word)) {
+      needsCount = true;
+    } else if (
+      word !== '--' &&
+      !flags.test(word) &&
+      (command === 'pwd' || !isLiteralPath(word, policy))
+    ) {
+      return false;
+    }
+  }
+  return !needsCount;
+}
+
+// Only project fields with a known shape. Unrecognized strings, nested objects, and
+// tuples can carry arbitrary data, including a credential name paired with an opaque value.
+function canCaptureField(key: string, value: unknown, policy: ImportPolicy): boolean {
+  if (protectsKey([key], policy)) {
+    return false;
+  }
+  let allowed: boolean;
+  if (PATH_FIELDS.has(key)) {
+    allowed = isLiteralPath(value, policy);
+  } else if (ID_FIELDS.has(key)) {
+    allowed =
+      Number.isSafeInteger(value) ||
+      (typeof value === 'string' && value.length <= 32 && value.length > 0 && !/\D/.test(value));
+  } else if (INTEGER_FIELDS.has(key)) {
+    allowed = Number.isSafeInteger(value);
+  } else if (key === 'cmd' || key === 'command') {
+    allowed = isInspectionCommand(value, policy);
+  } else if (key === 'commands') {
+    allowed =
+      Array.isArray(value) &&
+      value.length > 0 &&
+      value.every((item) => typeof item === 'string' && isInspectionCommand(item, policy));
+  } else {
+    return false;
+  }
+  if (!allowed) {
+    return false;
+  }
+  const texts = Array.isArray(value) ? value.map(String) : [String(value)];
+  // An auth scheme and its value can occupy distinct words of one inspection command.
+  if (Array.isArray(value) && (key === 'cmd' || key === 'command')) {
+    texts.push(texts.join(' '));
+  }
+  return texts.every((text) => canRetainText(text, policy));
+}
+
+function toolAttributes(
+  name: string,
+  value: Record<string, unknown> | undefined,
+  policy: ImportPolicy,
+): Record<string, unknown> {
+  const identity = getNormalizedToolAttributes(name);
+  const argsKey = 'gen_ai.tool.call.arguments';
+  if (!policy.includeToolArguments || !value || protectsKey([argsKey, 'tool.arguments'], policy)) {
+    return identity;
+  }
+  const unavailable = { ...identity, 'promptfoo.tool.arguments_redacted': true };
+  const raw = wireString(value);
+  if (typeof raw !== 'string' || !reserveArgumentJson(raw, policy)) {
+    return unavailable;
+  }
+  try {
+    const args: unknown = JSON.parse(raw);
+    if (
+      !args ||
+      typeof args !== 'object' ||
+      Array.isArray(args) ||
+      !roundTrips(raw, args, policy)
+    ) {
+      return unavailable;
+    }
+    const entries = Object.entries(args);
+    let fields = entries.filter(([key, item]) => canCaptureField(key, item, policy));
+    const intact = fields.length === entries.length;
+    if (!intact) {
+      // Reserializing a partial object changes -0 to +0; omit that field as well.
+      fields = fields.filter(([, item]) => !Object.is(item, -0));
+      if (fields.length === 0) {
+        return unavailable;
+      }
+    }
+    const json = intact ? raw : JSON.stringify(Object.fromEntries(fields));
+    // Intact wire spelling can echo a protected value through a numeric literal or escape.
+    if (!canRetainText(json, policy)) {
+      return unavailable;
+    }
+    return {
+      ...getNormalizedToolAttributes(name, json),
+      [argsKey]: json,
+      ...(!intact && { 'promptfoo.tool.arguments_redacted': true }),
+    };
+  } catch {
+    return unavailable;
+  }
 }
 
 function safeIdentifier(value: unknown, policy: ImportPolicy): value is string {
@@ -632,7 +800,10 @@ function normalizeSpan(
     if (!safeIdentifier(tool, policy)) {
       invalid();
     }
-    Object.assign(attributes, getNormalizedToolAttributes(tool));
+    Object.assign(
+      attributes,
+      toolAttributes(tool, attrs.get('gen_ai.tool.call.arguments'), policy),
+    );
     name = `execute_tool ${tool}`;
   } else {
     const span = normalizeNonToolSpan(
@@ -647,7 +818,12 @@ function normalizeSpan(
   }
   // Identity attributes also appear in span names and aliases. Withhold the trace
   // when the eval's policy suppresses one so absence checks cannot silently pass.
-  if (protectsKey(Object.keys(attributes), policy)) {
+  if (
+    protectsKey(
+      Object.keys(attributes).filter((key) => key !== 'tool.arguments'),
+      policy,
+    )
+  ) {
     invalid();
   }
   // Preserve the same error verdict as an ordinary span without storing tool diagnostics.
@@ -796,6 +972,7 @@ function* readSpans(otlp: unknown, echoes: ReturnType<typeof protectedEchoMatche
 export function normalizeHostedTrace(
   otlp: unknown,
   parentSpanId: string,
+  includeToolArguments: boolean,
   redact: Redact = (text) => text,
   traceRedactAttributes: string[] = [],
 ): { spans: SpanData[]; complete: boolean } {
@@ -804,6 +981,7 @@ export function normalizeHostedTrace(
   }
   const policy: ImportPolicy = {
     parentSpanId,
+    includeToolArguments,
     argumentBytesLeft: MAX_TRACE_ARGUMENT_BYTES,
     argumentValuesLeft: MAX_TRACE_ARGUMENT_VALUES,
     redact,

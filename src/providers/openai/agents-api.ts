@@ -53,7 +53,7 @@ interface AgentsApiOptions extends OpenAiSharedOptions {
   usageTimeoutMs?: number;
   retainSession?: boolean;
   artifactPaths?: string[];
-  hostedTrace?: boolean | { timeoutMs?: number };
+  hostedTrace?: boolean | { includeToolArguments?: boolean; timeoutMs?: number };
 }
 
 interface Usage {
@@ -539,7 +539,10 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
       if (!hostedTrace || typeof hostedTrace !== 'object' || Array.isArray(hostedTrace)) {
         throw new Error('Agents API hostedTrace must be a boolean or an options object');
       }
-      const { timeoutMs } = hostedTrace;
+      const { includeToolArguments, timeoutMs } = hostedTrace;
+      if (includeToolArguments !== undefined && typeof includeToolArguments !== 'boolean') {
+        throw new Error('Agents API hostedTrace.includeToolArguments must be a boolean');
+      }
       if (
         timeoutMs !== undefined &&
         (!Number.isSafeInteger(timeoutMs) || timeoutMs <= 0 || timeoutMs > MAX_TIMER_MS)
@@ -1279,6 +1282,7 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
     }
 
     const options = typeof this.config.hostedTrace === 'object' ? this.config.hostedTrace : {};
+    const includeToolArguments = options.includeToolArguments === true;
     const timeoutMs = options.timeoutMs ?? 15_000;
     const deadline = Math.min(providerDeadline, Date.now() + timeoutMs);
     const controller = new AbortController();
@@ -1326,6 +1330,7 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
             snapshot = normalizeHostedTrace(
               published.otlp,
               parent.spanId,
+              includeToolArguments,
               (value) => this.redact(value),
               redactAttributes,
             );
@@ -1401,6 +1406,13 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
     } finally {
       clearTimeout(writeTimer);
     }
+    const toolArgumentsComplete =
+      includeToolArguments &&
+      spans.every(
+        ({ attributes }) =>
+          attributes?.['gen_ai.operation.name'] !== 'execute_tool' ||
+          ('tool.arguments' in attributes && !attributes['promptfoo.tool.arguments_redacted']),
+      );
     return {
       source,
       status: complete ? 'imported' : 'partial',
@@ -1412,8 +1424,8 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
         ({ attributes }) =>
           attributes?.[HOSTED_ERROR_STATUS_COMPLETE] === HOSTED_ERROR_STATUS_VERSION,
       ),
-      includeToolArguments: false,
-      toolArgumentsComplete: false,
+      includeToolArguments,
+      toolArgumentsComplete,
     };
   }
 

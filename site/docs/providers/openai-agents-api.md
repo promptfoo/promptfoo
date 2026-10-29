@@ -122,6 +122,20 @@ Use `hostedTrace: true` when tool names, timing and status are sufficient. The i
 
 To inspect the full recording in OpenAI, set `retainSession: true` before the run, find `response.metadata.sessionId` in the export, and open the matching session in [OpenAI's Agents logs](https://platform.openai.com/logs?api=agents). For a manual OTLP export, allow time for publication, retrieve every page of `GET /v1/agents/sessions/{session_id}/traces`, then delete the retained session. [OpenAI trace export example](https://developers.openai.com/api/docs/guides/agents-api/tracing#export-session-traces)
 
+#### Captured tool arguments
+
+With `hostedTrace.includeToolArguments: true`, Promptfoo can retain the following fields of a top-level tool argument object. Paths and identifiers can contain sensitive data. Use synthetic fixtures when enabling capture.
+
+| Field                                  | Accepted value                                                                                                                             |
+| -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| `cmd`, `command`, `commands`           | A file-inspection command string or argv array for `cmd` or `command`. For `commands`, a nonempty list of file-inspection command strings. |
+| `cwd`, `path`, `file_path`, `filename` | A literal path up to 1,024 characters, using letters, numbers, underscores, dots, slashes or hyphens, without a leading hyphen.            |
+| `id`, `order_id`                       | A JavaScript safe integer or a string of 1–32 decimal digits.                                                                              |
+| `count`, `limit`, `offset`, `page`     | A JavaScript safe integer.                                                                                                                 |
+
+Accepted commands are simple invocations of `pwd`, `ls`, `cat`, `wc`, `head`, and `tail` with plain paths and short options such as `wc -l` or `head -n 5`. Simple `sh` and `bash` wrappers also qualify, for example `/bin/bash -lc 'cat /workspace/ledger.csv'`. A Python script, pipeline, or command containing redirection is omitted. The same call can still supply `cwd: /workspace`.
+Other fields, including free text and nested objects, are omitted. For example, if `lookup_order` receives `{"order_id":"417","note":"rush"}`, the trace can retain `order_id`. If a value protected by `tracing.otlp.http.redactAttributes` also appears in a tool or model name, the trace becomes unavailable. An argument containing a protected value can be omitted on its own. Malformed JSON, duplicate keys, or an oversized payload can leave a span without argument evidence.
+
 ## Saved agents
 
 Set `agent_id` to evaluate an existing saved agent in a new session. Omitted agent settings, including the model, are inherited. An `agent` object supplies session-only overrides; arrays and objects replace their saved fields rather than merging.
@@ -150,7 +164,7 @@ providers:
 | `pollIntervalMs`                                   | Delay between status checks in milliseconds                                                                                                                         | `1000`                                               |
 | `usageTimeoutMs`                                   | Deadline for polling final usage after the turn completes. Set to `0` to skip polling.                                                                              | `15000`                                              |
 | `cleanupTimeoutMs`                                 | Deadline for cancelling unfinished work and deleting the session                                                                                                    | `60000`                                              |
-| `hostedTrace`                                      | Download the hosted turn's trace before cleanup. Use `true` or an object with `timeoutMs`.                                                                          | `false`                                              |
+| `hostedTrace`                                      | Download the hosted turn's trace before cleanup. Use `true` or an object with `includeToolArguments` and `timeoutMs`.                                               | `false`                                              |
 | `artifactPaths`                                    | Collect digests for up to eight exact output paths published by the root turn. See [Published artifacts](#published-artifacts).                                     | None                                                 |
 | `retainSession`                                    | Keep successful sessions for later inspection or artifact download                                                                                                  | `false`                                              |
 | `maxRetries`                                       | Retries for status reads, turn cancellation, and session deletion after network errors, HTTP 429, and HTTP 500, 502, 503, or 504; session creation is never retried | `4`                                                  |
