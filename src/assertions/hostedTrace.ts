@@ -341,9 +341,10 @@ export function prepareHostedTraceAssertion(params: AssertionParams): string | u
   if (!trace) {
     return 'The imported OpenAI Agents API spans are unavailable for this assertion.';
   }
-  const native = trace.spans
-    .map(withoutReceivedHostedOwner)
-    .filter((span) => span.attributes?.['promptfoo.openai.hosted_trace'] === parentId);
+  const spans = trace.spans.map(withoutReceivedHostedOwner);
+  const native = spans.filter(
+    (span) => span.attributes?.['promptfoo.openai.hosted_trace'] === parentId,
+  );
   if (native.length !== spanCount) {
     return 'The stored OpenAI Agents API spans are incomplete for this provider call.';
   }
@@ -360,7 +361,7 @@ export function prepareHostedTraceAssertion(params: AssertionParams): string | u
   // Raw span assertions can inspect the local case/target/provider wrappers.
   // A sibling tool or grader in the same row cannot establish an action in this turn.
   const ancestors = baseType.startsWith('trace-')
-    ? getLocalAncestors(trace.spans, parentId)
+    ? getLocalAncestors(spans, parentId)
     : undefined;
   if (ancestors && !ancestors.spans.length) {
     return 'The local provider wrapper is missing from the stored OpenAI Agents API trace.';
