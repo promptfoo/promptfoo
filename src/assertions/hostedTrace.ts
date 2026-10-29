@@ -1,4 +1,5 @@
 import { getGraderOwnedSpanIds } from '../tracing/spanFilter';
+import { TEST_CASE_SPAN_NAME } from '../tracing/spanRoles';
 import { COMMAND_ATTRIBUTE_KEYS, TOOL_ARGUMENT_ATTRIBUTE_KEYS } from '../tracing/toolAttributes';
 import { matchesPattern } from './traceUtils';
 
@@ -67,15 +68,21 @@ function provesObservedTool(type: AssertionType, value: AssertionValue | undefin
   );
 }
 
-function getLocalAncestors(spans: TraceSpan[], parentId: string): Set<string> {
+function getLocalAncestors(spans: TraceSpan[], parentId: string) {
   const byId = new Map(spans.map((span) => [span.spanId, span]));
-  const ancestors = new Set<string>();
+  const ancestors: TraceSpan[] = [];
+  const seen = new Set<string>();
   let id: string | undefined = parentId;
-  while (id && !ancestors.has(id)) {
-    ancestors.add(id);
-    id = byId.get(id)?.parentSpanId;
+  while (id && !seen.has(id)) {
+    const span = byId.get(id);
+    if (!span) {
+      break;
+    }
+    seen.add(id);
+    ancestors.push(span);
+    id = span.parentSpanId;
   }
-  return ancestors;
+  return { spans: ancestors, unresolvedId: id };
 }
 
 function getArgumentCoverageError(
@@ -200,25 +207,66 @@ export function prepareHostedTraceAssertion(params: AssertionParams): string | u
   const ancestors = baseType.startsWith('trace-')
     ? getLocalAncestors(trace.spans, parentId)
     : undefined;
-  if (ancestors && !trace.spans.some((span) => span.spanId === parentId)) {
+  if (ancestors && !ancestors.spans.length) {
     return 'The local provider wrapper is missing from the stored OpenAI Agents API trace.';
   }
   assertionValueContext.trace = {
     ...trace,
-    spans: ancestors
-      ? [...native, ...trace.spans.filter((span) => ancestors.has(span.spanId))]
-      : native,
+    spans: ancestors ? [...native, ...ancestors.spans] : native,
   };
   const rawFilter =
-    ancestors && renderedValue && typeof renderedValue === 'object' && 'attributes' in renderedValue
-      ? renderedValue
-      : undefined;
-  const attributeFilters = rawFilter?.attributes;
+    ancestors && renderedValue && typeof renderedValue === 'object' ? renderedValue : undefined;
+  const attributeFilters =
+    rawFilter && 'attributes' in rawFilter ? rawFilter.attributes : undefined;
+  const pattern =
+    rawFilter &&
+    'pattern' in rawFilter &&
+    typeof rawFilter.pattern === 'string' &&
+    rawFilter.pattern
+      ? rawFilter.pattern
+      : '*';
+  if (
+    rawFilter &&
+    baseType === 'trace-span-count' &&
+    !inverse &&
+    'min' in rawFilter &&
+    typeof rawFilter.min === 'number' &&
+    rawFilter.min > 0 &&
+    !('max' in rawFilter)
+  ) {
+    // Missing spans or attributes can only raise this count. An exact raw argument
+    // filter, however, must never count a truncated or partially redacted payload.
+    if (
+      attributeFilters &&
+      Object.keys(attributeFilters).some((key) => ARGUMENT_FILTER_KEYS.has(key))
+    ) {
+      assertionValueContext.trace.spans = assertionValueContext.trace.spans.filter(
+        ({ attributes }) =>
+          !attributes ||
+          attributes['promptfoo.openai.hosted_trace'] !== parentId ||
+          (hostedTrace.includeToolArguments &&
+            !attributes['promptfoo.tool.arguments_redacted'] &&
+            getHostedToolArguments(attributes) !== undefined),
+      );
+    }
+    return undefined;
+  }
+  if (
+    ancestors?.unresolvedId &&
+    !(
+      attributeFilters &&
+      typeof attributeFilters === 'object' &&
+      'promptfoo.openai.hosted_trace' in attributeFilters &&
+      attributeFilters['promptfoo.openai.hosted_trace'] === parentId
+    ) &&
+    (ancestors.unresolvedId !== trace.metadata?.testCaseSpanId ||
+      matchesPattern(TEST_CASE_SPAN_NAME, pattern))
+  ) {
+    // The evaluator's case root remains open during live grading. Its recorded
+    // identity lets a pattern excluding that name grade without waiting for itself.
+    return 'A local ancestor is missing from the stored OpenAI Agents API trace.';
+  }
   if (rawFilter && attributeFilters && typeof attributeFilters === 'object') {
-    const pattern =
-      'pattern' in rawFilter && typeof rawFilter.pattern === 'string' && rawFilter.pattern
-        ? rawFilter.pattern
-        : '*';
     const candidates = native.filter((span) => matchesPattern(span.name, pattern));
     if (!candidates.length) {
       // This pattern only inspects local spans, which do not use the hosted projection.

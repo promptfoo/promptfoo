@@ -6,7 +6,7 @@ import { getEnvBool } from '../envars';
 import logger from '../logger';
 import telemetry from '../telemetry';
 import { getGenAITracer, PromptfooAttributes } from './genaiTracer';
-import { SPAN_ROLE_ATTRIBUTE } from './spanRoles';
+import { SPAN_ROLE_ATTRIBUTE, TEST_CASE_SPAN_NAME } from './spanRoles';
 
 import type { TestCase, TestSuite } from '../types/index';
 import type { InternalEvaluateOptions } from '../types/internal';
@@ -377,7 +377,7 @@ export async function generateTraceContextIfNeeded(
   }
 
   const candidateRootSpan = getGenAITracer().startSpan(
-    'promptfoo.test_case',
+    TEST_CASE_SPAN_NAME,
     { kind: SpanKind.INTERNAL, attributes: rootAttributes },
     ROOT_CONTEXT,
   );
@@ -400,6 +400,7 @@ export async function generateTraceContextIfNeeded(
       evaluationId: evaluationId || '',
       testCaseId: testCaseId || '',
       metadata: {
+        testCaseSpanId: spanId,
         testIdx,
         promptIdx,
         ...(executionMetadata.providerId && { providerId: executionMetadata.providerId }),

@@ -1,4 +1,9 @@
-import { filterTraceSpans, withTraceAttributeFilterContext } from './traceUtils';
+import { isSpanError } from '../tracing/spanError';
+import {
+  filterTraceSpans,
+  finishTraceAssertion,
+  withTraceAttributeFilterContext,
+} from './traceUtils';
 
 import type { AssertionParams, GradingResult } from '../types/index';
 import type { TraceSpan } from '../types/tracing';
@@ -11,68 +16,13 @@ interface TraceErrorSpansValue {
   attributes?: TraceSpanAttributeFilter;
 }
 
-function isErrorSpan(span: TraceSpan): boolean {
-  // Check various ways a span might indicate an error
-  if (span.statusCode === 2) {
-    return true;
-  }
-
-  if (span.statusCode && span.statusCode >= 400) {
-    return true;
-  }
-
-  // Check for error-related attributes
-  if (span.attributes) {
-    // Common attribute names that might indicate errors
-    const errorKeys = ['error', 'exception', 'failed', 'failure'];
-    for (const key of errorKeys) {
-      if (
-        span.attributes[key] === true ||
-        span.attributes[key] === 'true' ||
-        (typeof span.attributes[key] === 'object' && span.attributes[key] !== null)
-      ) {
-        return true;
-      }
-    }
-
-    // Check for HTTP status codes in attributes (handle both string and number types)
-    const httpStatusCode = span.attributes['http.status_code'];
-    if (httpStatusCode !== undefined && httpStatusCode !== null) {
-      const statusCodeNum = Number(httpStatusCode);
-      if (!isNaN(statusCodeNum) && statusCodeNum >= 400) {
-        return true;
-      }
-    }
-
-    // Check for OTEL standard error attributes
-    if (
-      span.attributes['otel.status_code'] === 'ERROR' ||
-      span.attributes['status.code'] === 'ERROR'
-    ) {
-      return true;
-    }
-  }
-
-  // Check status message for error indicators
-  if (span.statusMessage) {
-    const errorPatterns = /error|failed|failure|exception|timeout|abort/i;
-    if (errorPatterns.test(span.statusMessage)) {
-      return true;
-    }
-  }
-
-  return false;
-}
-
-export const handleTraceErrorSpans = ({
-  assertion,
-  assertionValueContext,
-}: AssertionParams): GradingResult => {
+export const handleTraceErrorSpans = (params: AssertionParams): GradingResult => {
+  const { assertion, assertionValueContext, providerResponse } = params;
   if (!assertionValueContext.trace || !assertionValueContext.trace.spans) {
     throw new Error('No trace data available for trace-error-spans assertion');
   }
 
-  const value = assertion.value;
+  const value = params.renderedValue ?? assertion.value;
   let maxCount: number | undefined;
   let maxPercentage: number | undefined;
   let pattern = '*';
@@ -99,19 +49,18 @@ export const handleTraceErrorSpans = ({
   const matchingSpans = filterTraceSpans(spans, pattern, attributes);
 
   if (matchingSpans.length === 0) {
-    return {
-      pass: true,
-      score: 1,
-      reason: withTraceAttributeFilterContext(
-        `No spans found matching pattern "${pattern}"`,
-        attributes,
-      ),
-      assertion,
-    };
+    return finishTraceAssertion(
+      params,
+      true,
+      `No spans found matching pattern "${pattern}"`,
+      attributes,
+    );
   }
 
   // Find error spans
-  const errorSpans = matchingSpans.filter(isErrorSpan);
+  const errorSpans = matchingSpans.filter((span) =>
+    isSpanError(span.statusCode, span.statusMessage, (key) => span.attributes?.[key]),
+  );
   const errorCount = errorSpans.length;
   const errorPercentage = (errorCount / matchingSpans.length) * 100;
 
@@ -151,10 +100,29 @@ export const handleTraceErrorSpans = ({
     }
   }
 
-  return {
-    pass,
-    score: pass ? 1 : 0,
-    reason: withTraceAttributeFilterContext(reason, attributes),
-    assertion,
-  };
+  const hosted = providerResponse?.metadata?.hostedTrace;
+  if (pass && hosted?.source === 'openai:agents-api' && hosted.errorStatusComplete !== true) {
+    // Older imports kept explicit OTLP error codes, but dropped other failure indicators.
+    const observedErrors = new Set(errorSpans);
+    const possibleErrors = matchingSpans.filter(
+      (span) =>
+        observedErrors.has(span) ||
+        span.attributes?.['promptfoo.openai.hosted_trace'] === hosted.parentSpanId,
+    ).length;
+    if (
+      (maxCount !== undefined && possibleErrors > maxCount) ||
+      (maxPercentage !== undefined && (possibleErrors / matchingSpans.length) * 100 > maxPercentage)
+    ) {
+      return {
+        pass: false,
+        score: 0,
+        reason: withTraceAttributeFilterContext(
+          'This saved hosted trace did not preserve all error indicators. It cannot establish the requested error limit.',
+          attributes,
+        ),
+        assertion,
+      };
+    }
+  }
+  return finishTraceAssertion(params, pass, reason, attributes);
 };

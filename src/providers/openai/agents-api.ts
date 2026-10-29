@@ -107,6 +107,7 @@ interface Page<T> {
 }
 
 const MAX_TIMER_MS = 2_147_483_647;
+const PARTIAL_TRACE_WRITE_GRACE_MS = 250;
 const MAX_LIST_PAGES = 100;
 const MAX_SESSION_LIST_PAGES = 1_000;
 const MAX_LIST_ITEMS = 10_000;
@@ -1137,6 +1138,7 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
           endpoint,
           headers,
           signal,
+          deadline,
           () => releaseSession(false),
           parent,
           options?.abortSignal,
@@ -1234,6 +1236,7 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
     endpoint: string,
     headers: Headers,
     signal: AbortSignal,
+    providerDeadline: number,
     releaseSession: () => void,
     parent?: SpanContext,
     abortSignal?: AbortSignal,
@@ -1249,8 +1252,10 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
 
     const options = typeof this.config.hostedTrace === 'object' ? this.config.hostedTrace : {};
     const includeToolArguments = options.includeToolArguments === true;
+    const timeoutMs = options.timeoutMs ?? 15_000;
+    const deadline = Math.min(providerDeadline, Date.now() + timeoutMs);
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), options.timeoutMs ?? 15_000);
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
     const traceSignal = AbortSignal.any([signal, controller.signal]);
     let snapshot: ReturnType<typeof normalizeHostedTrace> | undefined;
     try {
@@ -1311,19 +1316,36 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
     }
 
     const { spans, complete } = snapshot;
+    // A partial tree leaves the polling loop only after a deadline. Give that
+    // validated evidence one bounded local write even when polling used its budget.
+    const writeBudgetMs = complete
+      ? deadline - Date.now()
+      : Math.min(PARTIAL_TRACE_WRITE_GRACE_MS, timeoutMs, this.config.timeoutMs ?? Infinity);
+    if (writeBudgetMs <= 0) {
+      return unavailable('Timed out storing the hosted trace');
+    }
+    const writer = new AbortController();
+    const writeTimer = setTimeout(() => writer.abort(), writeBudgetMs);
+    const writeSignal = abortSignal ? AbortSignal.any([abortSignal, writer.signal]) : writer.signal;
     try {
       // The complete or partial snapshot is now local. SQLite can queue this write
       // behind another transaction, so release the remote session independently.
       releaseSession();
       const stored = await runProviderCallWithAbort(
-        () => getTraceStore().addSpans(parent.traceId, spans, { abortSignal }),
-        abortSignal,
+        () => getTraceStore().addSpans(parent.traceId, spans, { abortSignal: writeSignal }),
+        writeSignal,
       );
       if (!stored.stored) {
         return unavailable('The local eval trace was unavailable');
       }
     } catch {
-      return unavailable('Unable to store the hosted trace');
+      return unavailable(
+        writeSignal.aborted
+          ? 'Timed out storing the hosted trace'
+          : 'Unable to store the hosted trace',
+      );
+    } finally {
+      clearTimeout(writeTimer);
     }
     const toolArgumentsComplete =
       includeToolArguments &&
@@ -1338,6 +1360,7 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
       ...(!complete && { reason: 'The published root turn did not attest to a complete trace' }),
       parentSpanId: parent.spanId,
       spanCount: spans.length,
+      errorStatusComplete: true,
       includeToolArguments,
       toolArgumentsComplete,
     };

@@ -579,6 +579,7 @@ describe('OpenAiAgentsApiProvider', () => {
             source: 'openai:agents-api',
             status: 'imported',
             spanCount: 1,
+            errorStatusComplete: true,
             includeToolArguments: false,
             toolArgumentsComplete: false,
           },
@@ -589,7 +590,7 @@ describe('OpenAiAgentsApiProvider', () => {
       expect(addSpans).toHaveBeenCalledWith(
         localTraceId,
         [expect.objectContaining({ name: 'invoke_agent', parentSpanId: wrapperId })],
-        { abortSignal: undefined },
+        { abortSignal: expect.any(AbortSignal) },
       );
     });
 
@@ -672,7 +673,7 @@ describe('OpenAiAgentsApiProvider', () => {
             expect(addSpans).toHaveBeenCalledWith(
               localTraceId,
               expect.arrayContaining([expect.objectContaining({ name: 'execute_tool lookup' })]),
-              { abortSignal: controller.signal },
+              { abortSignal: expect.any(AbortSignal) },
             );
           } else {
             expect(result.metadata?.hostedTrace).toMatchObject({ status: 'unavailable' });
@@ -885,6 +886,57 @@ describe('OpenAiAgentsApiProvider', () => {
         queued.reject(new Error('late database failure'));
       },
     );
+
+    it.each([
+      { budget: 'provider', complete: true, providerMs: 25, hostedMs: 100, expires: 25 },
+      { budget: 'hosted', complete: true, providerMs: 100, hostedMs: 25, expires: 25 },
+      {
+        budget: 'short partial write',
+        complete: false,
+        providerMs: 25,
+        hostedMs: 100,
+        expires: 50,
+      },
+      {
+        budget: 'partial write cap',
+        complete: false,
+        providerMs: 600,
+        hostedMs: 400,
+        expires: 650,
+      },
+    ])('bounds a queued local write by the $budget deadline', async (rowBudget) => {
+      vi.useFakeTimers();
+      recordWrapper();
+      const queued = createDeferred<{ stored: boolean }>();
+      const addSpans = vi.spyOn(getTraceStore(), 'addSpans').mockReturnValue(queued.promise);
+      vi.mocked(fetchWithRetries).mockImplementation(async (url, options) => {
+        const path = new URL(String(url)).pathname;
+        if (path.endsWith('/traces')) {
+          await new Promise((resolve) => setTimeout(resolve, 10));
+          return json(page([published(rowBudget.complete ? 'complete' : 'partial')]));
+        }
+        return defaultResponse(path, options?.method);
+      });
+      const pending = provider({
+        timeoutMs: rowBudget.providerMs,
+        hostedTrace: { timeoutMs: rowBudget.hostedMs },
+      }).callApi('hi', row);
+      await vi.advanceTimersByTimeAsync(rowBudget.expires - 1);
+      expect(addSpans).toHaveBeenCalledOnce();
+      const signal = addSpans.mock.calls[0][2]?.abortSignal;
+      expect(signal?.aborted).toBe(false);
+      await vi.advanceTimersByTimeAsync(2);
+      await expect(pending).resolves.toMatchObject({
+        output: '42',
+        metadata: {
+          sessionDeleted: true,
+          hostedTrace: { status: 'unavailable', reason: 'Timed out storing the hosted trace' },
+        },
+      });
+      expect(signal?.aborted).toBe(true);
+      expect(calls().filter((request) => request.method === 'DELETE')).toHaveLength(1);
+      queued.reject(new Error('late write rejection'));
+    });
 
     it('rejects invalid options before creating a session', () => {
       expect(() => provider({ hostedTrace: { timeoutMs: -1 } })).toThrow('hostedTrace.timeoutMs');

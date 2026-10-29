@@ -1,6 +1,7 @@
 import { context, createContextKey, trace } from '@opentelemetry/api';
 
 export const SPAN_ROLE_ATTRIBUTE = 'promptfoo.span.role';
+export const TEST_CASE_SPAN_NAME = 'promptfoo.test_case';
 
 export type PromptfooSpanRole = 'test_case' | 'target' | 'grader';
 

@@ -2,6 +2,8 @@
  * Shared utilities for trace assertions
  */
 
+import type { AssertionParams, GradingResult } from '../types/index';
+
 export type TraceSpanAttributeFilter = Record<string, string | number | boolean>;
 
 export function withTraceAttributeFilterContext(
@@ -12,6 +14,25 @@ export function withTraceAttributeFilterContext(
   return keys.length > 0
     ? `${reason}. Attribute filters applied to keys: ${JSON.stringify(keys)}.`
     : reason;
+}
+
+/** Apply inversion only after the trace has established whether the condition holds. */
+export function finishTraceAssertion(
+  { assertion, inverse }: Pick<AssertionParams, 'assertion' | 'inverse'>,
+  observedPass: boolean,
+  reason: string,
+  attributes?: TraceSpanAttributeFilter,
+): GradingResult {
+  const pass = inverse ? !observedPass : observedPass;
+  const detail = inverse
+    ? `The trace ${observedPass ? 'satisfied' : 'did not satisfy'} the forbidden condition. ${reason}`
+    : reason;
+  return {
+    pass,
+    score: pass ? 1 : 0,
+    reason: withTraceAttributeFilterContext(detail, attributes),
+    assertion,
+  };
 }
 
 export function filterTraceSpans<T extends { name: string; attributes?: Record<string, unknown> }>(

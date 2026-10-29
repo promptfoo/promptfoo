@@ -5,8 +5,9 @@ import { tokenizer, tokTypes } from 'acorn';
 import { z } from 'zod';
 import cliState from '../../cliState';
 import { sanitizeTraceAttributes } from '../../tracing/sanitizeAttributes';
+import { isSpanError } from '../../tracing/spanError';
 import { getNormalizedToolAttributes } from '../../tracing/toolAttributes';
-import { sanitizeObject } from '../../util/sanitizer';
+import { isCredentialHeader, isSecretEnvVarName, sanitizeObject } from '../../util/sanitizer';
 import { hasSensitiveOpenAiCacheString } from './util';
 
 import type { SpanData } from '../../tracing/store';
@@ -23,7 +24,12 @@ const wireSpan = z.object({
   attributes: z
     .array(z.object({ key: z.string(), value: z.record(z.string(), z.unknown()) }))
     .optional(),
-  status: z.object({ code: z.union([z.number(), z.string()]).optional() }).nullish(),
+  status: z
+    .object({
+      code: z.union([z.number(), z.string()]).optional(),
+      message: z.string().nullish(),
+    })
+    .nullish(),
 });
 const completion = z.object({
   status: z.enum(['complete', 'partial', 'incomplete']),
@@ -137,9 +143,44 @@ function roundTrips(raw: string, value: unknown): boolean {
   return members === 0;
 }
 
+function protectsValueName(name: string, policy: ImportPolicy, header: boolean): boolean {
+  return (
+    protectsKey([name.toLowerCase()], policy) ||
+    (header ? isCredentialHeader(name, '') : isSecretEnvVarName(name.replace(/-/g, '_')))
+  );
+}
+
+// Some tools receive environment entries or headers as { name, value } or { key, value }.
+function protectsPairValue(record: object, policy: ImportPolicy): boolean {
+  return (
+    Object.prototype.hasOwnProperty.call(record, 'value') &&
+    ['name', 'key'].some((key) => {
+      const field = Reflect.get(record, key);
+      return typeof field === 'string' && protectsValueName(field, policy, field.includes('-'));
+    })
+  );
+}
+
+// Inspect names at token boundaries, so a long token without a delimiter is scanned once.
+// This also catches quoted JSON keys in a command body and credential options in argv arrays.
+function hasProtectedAssignment(value: string, policy: ImportPolicy): boolean {
+  const fields = value.matchAll(
+    /(?<![\w.-])(?:(--[\w.-]+)(?=\s|$)|([\w.-]+)(\\*["'])?\s*([:=])(?=\s*\S))/g,
+  );
+  for (const [, flag, field, quote, separator] of fields) {
+    const name = (flag ?? field).replace(/^--/, '');
+    const header = separator === ':' && (!quote || name.includes('-'));
+    if (protectsValueName(name, policy, header)) {
+      return true;
+    }
+  }
+  return false;
+}
+
 function sensitiveText(value: string, policy: ImportPolicy): boolean {
   return (
     policy.redact(value) !== value ||
+    hasProtectedAssignment(value, policy) ||
     hasSensitiveOpenAiCacheString(value) ||
     /:\/\/[^\s"'<>/@]+@/.test(value)
   );
@@ -154,6 +195,9 @@ function inspectArgument(value: unknown, policy: ImportPolicy, depth = 0): unkno
     return value.map((item) => inspectArgument(item, policy, depth + 1));
   }
   if (value && typeof value === 'object') {
+    if (protectsPairValue(value, policy)) {
+      invalid();
+    }
     return Object.fromEntries(
       Object.entries(value).map(([key, item]) => {
         if (sensitiveText(key, policy) || protectsKey([key.toLowerCase()], policy)) {
@@ -225,8 +269,12 @@ function toolAttributes(
     // unchanged sibling parameters when, for example, a command contained credentials.
     let captured = args;
     if (typeof args === 'object' && !Array.isArray(args)) {
+      const protectedValue = protectsPairValue(args, policy);
       captured = Object.fromEntries(
-        Object.entries(args).filter(([key, item]) => canStoreArgument({ [key]: item }, policy)),
+        Object.entries(args).filter(
+          ([key, item]) =>
+            !(protectedValue && key === 'value') && canStoreArgument({ [key]: item }, policy),
+        ),
       );
     } else if (!canStoreArgument(args, policy)) {
       return unavailable;
@@ -339,12 +387,32 @@ function normalizeSpan(wire: z.infer<typeof wireSpan>, policy: ImportPolicy): Sp
   ) {
     invalid();
   }
+  // Preserve the same error verdict as an ordinary span without storing tool diagnostics.
+  const code = statusCode(wire.status?.code);
+  const failed = isSpanError(code, wire.status?.message ?? undefined, (key) => {
+    const value = attrs.get(key);
+    if (!value) {
+      return undefined;
+    }
+    if (key === 'http.status_code' && (value.kvlistValue || value.arrayValue)) {
+      // A compound HTTP status cannot establish a numeric status code.
+      return invalid();
+    }
+    return (
+      value.stringValue ??
+      value.boolValue ??
+      value.doubleValue ??
+      (value.intValue === undefined
+        ? (value.kvlistValue ?? value.arrayValue)
+        : Number(value.intValue))
+    );
+  });
   return {
     spanId,
     parentSpanId,
     name,
     attributes,
-    statusCode: statusCode(wire.status?.code),
+    statusCode: failed ? 2 : code,
     startTime: Number(start) / 1e6,
     endTime: Number(end) / 1e6,
   };

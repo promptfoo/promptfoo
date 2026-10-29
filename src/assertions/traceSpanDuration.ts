@@ -1,4 +1,4 @@
-import { filterTraceSpans, withTraceAttributeFilterContext } from './traceUtils';
+import { filterTraceSpans, finishTraceAssertion } from './traceUtils';
 
 import type { AssertionParams, GradingResult } from '../types/index';
 import type { TraceSpan } from '../types/tracing';
@@ -21,15 +21,13 @@ function calculatePercentile(durations: number[], percentile: number): number {
   return sorted[Math.max(0, index)];
 }
 
-export const handleTraceSpanDuration = ({
-  assertion,
-  assertionValueContext,
-}: AssertionParams): GradingResult => {
+export const handleTraceSpanDuration = (params: AssertionParams): GradingResult => {
+  const { assertion, assertionValueContext, renderedValue } = params;
   if (!assertionValueContext.trace || !assertionValueContext.trace.spans) {
     throw new Error('No trace data available for trace-span-duration assertion');
   }
 
-  const value = assertion.value as TraceSpanDurationValue;
+  const value = (renderedValue ?? assertion.value) as TraceSpanDurationValue;
   if (!value || typeof value !== 'object' || typeof value.max !== 'number') {
     throw new Error('trace-span-duration assertion must have a value object with max property');
   }
@@ -51,15 +49,12 @@ export const handleTraceSpanDuration = ({
   );
 
   if (matchingSpans.length === 0) {
-    return {
-      pass: true,
-      score: 1,
-      reason: withTraceAttributeFilterContext(
-        `No spans found matching pattern "${pattern}" with complete timing data`,
-        attributes,
-      ),
-      assertion,
-    };
+    return finishTraceAssertion(
+      params,
+      true,
+      `No spans found matching pattern "${pattern}" with complete timing data`,
+      attributes,
+    );
   }
 
   const spanDurations = matchingSpans.map((span) => {
@@ -105,10 +100,5 @@ export const handleTraceSpanDuration = ({
     }
   }
 
-  return {
-    pass,
-    score: pass ? 1 : 0,
-    reason: withTraceAttributeFilterContext(reason, attributes),
-    assertion,
-  };
+  return finishTraceAssertion(params, pass, reason, attributes);
 };

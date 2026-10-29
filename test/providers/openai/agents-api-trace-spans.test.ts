@@ -22,7 +22,7 @@ function nativeSpan(spanId: string, operation: string, parentSpanId?: string) {
   };
 }
 
-function payload(...spans: ReturnType<typeof nativeSpan>[]) {
+function payload(...spans: object[]) {
   return { resourceSpans: [{ scopeSpans: [{ spans }] }] };
 }
 
@@ -114,6 +114,38 @@ describe('normalizeHostedTrace', () => {
   });
 
   it.each([
+    ['error', { boolValue: true }, 'UNSET', '', 2],
+    ['http.status_code', { intValue: '500' }, 'UNSET', '', 2],
+    ['failed', { stringValue: 'true' }, 'OK', '', 2],
+    [
+      'exception',
+      { kvlistValue: { values: [attribute('message', 'private exception')] } },
+      'UNSET',
+      '',
+      2,
+    ],
+    ['otel.status_code', { stringValue: 'ERROR' }, 'UNSET', '', 2],
+    ['failure', { boolValue: false }, 'UNSET', 'private timeout detail', 2],
+    ['error', { boolValue: false }, 'UNSET', '', 0],
+    ['http.status_code', { intValue: '200' }, 'OK', '', 1],
+  ] as const)(
+    'classifies %s with status %s without persisting diagnostic text',
+    (key, value, code, message, expectedCode) => {
+      const call = {
+        ...tool,
+        status: { code, message },
+        attributes: [...tool.attributes, { key, value }],
+      };
+      const { spans, complete } = normalizeHostedTrace(payload(root, call), parentId, false);
+      expect(complete).toBe(true);
+      const saved = spans.find((span) => span.name === 'execute_tool lookup_order');
+      expect(saved?.statusCode).toBe(expectedCode);
+      expect(saved?.attributes).not.toHaveProperty(key);
+      expect(JSON.stringify(spans)).not.toContain('private');
+    },
+  );
+
+  it.each([
     ['API key', 'AIza' + 'x'.repeat(35)],
     ['JWT', 'eyJfixture.payload.signature'],
   ])(
@@ -183,6 +215,59 @@ describe('normalizeHostedTrace', () => {
     expect(JSON.parse(attrs['tool.arguments'])).toEqual({ cwd: '/workspace' });
     expect(attrs['promptfoo.tool.arguments_redacted']).toBe(true);
     expect(JSON.stringify(spans)).not.toContain('private order');
+  });
+
+  it.each([
+    ["curl -H 'X-API-Key: synthetic-fixture' https://example.test"],
+    ['curl --header="Proxy-Authorization: synthetic-fixture" https://example.test'],
+    ["curl -H 'Authentication: synthetic-fixture' https://example.test"],
+    ['export _GITHUB_TOKEN=synthetic-fixture; run'],
+    ['client --password synthetic-fixture'],
+    [['curl', '-H', 'Authorization: synthetic-fixture']],
+    [['client', '--api-key', 'synthetic-fixture']],
+    [String.raw`curl -d "{\"customer_id\":\"synthetic-fixture\"}" https://example.test`],
+  ])('omits named credentials or custom protected fields embedded in %j', async (cmd) => {
+    const { spans } = await importWithRedaction('customer_id', { cmd, cwd: '/workspace' });
+    const attrs = spans.find((span) => span.name === 'execute_tool lookup_order')!.attributes!;
+    expect(JSON.parse(attrs['tool.arguments'])).toEqual({ cwd: '/workspace' });
+    expect(attrs['gen_ai.tool.call.arguments']).toBe(attrs['tool.arguments']);
+    expect(attrs['promptfoo.tool.arguments_redacted']).toBe(true);
+    expect(JSON.stringify(spans)).not.toContain('synthetic-fixture');
+  });
+
+  it('preserves ordinary headers, assignments, flags, and JSON inside commands', () => {
+    const cmd = `MAX_TOKENS=50 MONKEY=banana curl --silent -H 'Idempotency-Key: public-id' -H 'Accept: text/plain' -d '{"author":"reader","order_id":417}' https://example.test`;
+    const raw = JSON.stringify({ cmd });
+    const { spans } = normalizeHostedTrace(payload(root, toolWithArgs(raw)), parentId, true);
+    expect(spans[1].attributes?.['tool.arguments']).toBe(raw);
+    expect(spans[1].attributes?.['promptfoo.tool.arguments_redacted']).toBeUndefined();
+  });
+
+  it('withholds values paired with protected names without dropping unrelated argument pairs', async () => {
+    const args = {
+      env: [{ name: 'UPSTREAM_PRIVATE_KEY', value: 'synthetic-fixture' }],
+      body: JSON.stringify({ key: 'customer_id', value: 'synthetic-fixture' }),
+      lookup: { name: 'MONKEY', value: 'banana' },
+      cwd: '/workspace',
+    };
+    const { spans } = await importWithRedaction('customer_id', args);
+    const attrs = spans[1].attributes!;
+    expect(JSON.parse(attrs['tool.arguments'])).toEqual({ lookup: args.lookup, cwd: args.cwd });
+    expect(attrs['promptfoo.tool.arguments_redacted']).toBe(true);
+    expect(JSON.stringify(spans)).not.toContain('synthetic-fixture');
+
+    const direct = await importWithRedaction('customer_id', {
+      key: 'X-Api-Key',
+      value: 'synthetic-fixture',
+      cwd: '/workspace',
+    });
+    const directAttrs = direct.spans[1].attributes!;
+    expect(JSON.parse(directAttrs['tool.arguments'])).toEqual({
+      key: 'X-Api-Key',
+      cwd: '/workspace',
+    });
+    expect(directAttrs['promptfoo.tool.arguments_redacted']).toBe(true);
+    expect(JSON.stringify(direct.spans)).not.toContain('synthetic-fixture');
   });
 
   it('drops command fields containing credential-bearing URLs and embedded token-like values', () => {

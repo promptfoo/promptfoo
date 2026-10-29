@@ -219,12 +219,13 @@ describe('evaluatorTracing', () => {
       } as unknown as ReturnType<typeof traceStoreModule.getTraceStore>);
 
       try {
-        await generateTraceContextIfNeeded(test, {}, 2, 4, testSuite);
+        const context = await generateTraceContextIfNeeded(test, {}, 2, 4, testSuite);
 
         expect(mockCreateTrace).toHaveBeenCalledWith(
           expect.objectContaining({
             metadata: expect.objectContaining({
               commandToolNames: ['bash'],
+              testCaseSpanId: context!.traceparent!.split('-')[2],
             }),
           }),
         );

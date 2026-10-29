@@ -1,4 +1,4 @@
-import { filterTraceSpans, withTraceAttributeFilterContext } from './traceUtils';
+import { filterTraceSpans, finishTraceAssertion } from './traceUtils';
 
 import type { AssertionParams, GradingResult } from '../types/index';
 import type { TraceSpan } from '../types/tracing';
@@ -11,15 +11,13 @@ interface TraceSpanCountValue {
   attributes?: TraceSpanAttributeFilter;
 }
 
-export const handleTraceSpanCount = ({
-  assertion,
-  assertionValueContext,
-}: AssertionParams): GradingResult => {
+export const handleTraceSpanCount = (params: AssertionParams): GradingResult => {
+  const { assertion, assertionValueContext, renderedValue } = params;
   if (!assertionValueContext.trace || !assertionValueContext.trace.spans) {
     throw new Error('No trace data available for trace-span-count assertion');
   }
 
-  const value = assertion.value as TraceSpanCountValue;
+  const value = (renderedValue ?? assertion.value) as TraceSpanCountValue;
   if (!value || typeof value !== 'object' || !value.pattern) {
     throw new Error('trace-span-count assertion must have a value object with pattern property');
   }
@@ -58,10 +56,5 @@ export const handleTraceSpanCount = ({
     reason += `. Matched spans: ${spanNames.join(', ')}`;
   }
 
-  return {
-    pass,
-    score: pass ? 1 : 0,
-    reason: withTraceAttributeFilterContext(reason, attributes),
-    assertion,
-  };
+  return finishTraceAssertion(params, pass, reason, attributes);
 };

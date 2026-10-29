@@ -144,6 +144,7 @@ describe('trace assertions', () => {
     const imported = {
       source: 'openai:agents-api',
       status: 'imported',
+      errorStatusComplete: true,
       includeToolArguments: false,
       toolArgumentsComplete: false,
       parentSpanId: 'wrapper',
@@ -209,6 +210,35 @@ describe('trace assertions', () => {
       },
     );
 
+    it('retains known failures but cannot prove zero errors from an older hosted projection', async () => {
+      const legacy = { ...imported, errorStatusComplete: undefined };
+      const zero: Assertion = {
+        type: 'trace-error-spans',
+        value: { pattern: 'execute_tool *', max_count: 0 },
+      };
+      const call = tool('lookup');
+      await expect(grade(zero, legacy, [call])).resolves.toMatchObject({
+        pass: false,
+        reason: expect.stringContaining('did not preserve all error indicators'),
+      });
+      await expect(grade(zero, legacy, [{ ...call, statusCode: 2 }])).resolves.toMatchObject({
+        pass: false,
+        reason: expect.stringContaining('Found 1 error'),
+      });
+      const someErrors: Assertion = { ...zero, type: 'not-trace-error-spans' };
+      await expect(grade(someErrors, legacy, [call])).resolves.toMatchObject({ pass: false });
+      await expect(grade(someErrors, legacy, [{ ...call, statusCode: 2 }])).resolves.toMatchObject({
+        pass: true,
+      });
+      await expect(
+        grade(
+          { type: 'trace-error-spans', value: { pattern: 'execute_tool *', max_count: 1 } },
+          legacy,
+          [call],
+        ),
+      ).resolves.toMatchObject({ pass: true });
+    });
+
     it.each<{ assertion: Assertion; pass: boolean }>([
       { assertion: { type: 'trajectory:tool-used', value: ['lookup'] }, pass: true },
       {
@@ -257,6 +287,99 @@ describe('trace assertions', () => {
           imported,
         ),
       ).resolves.toMatchObject({ pass: false });
+    });
+
+    it('proves a positive raw count from observed attributes on otherwise incomplete candidates', async () => {
+      const chat = tool('chat');
+      chat.name = 'chat gpt-test';
+      chat.attributes!['gen_ai.request.model'] = 'gpt-test';
+      const calls = [
+        chat,
+        tool('lookup', { order_id: '123' }),
+        tool('other', { short: true }, true),
+      ];
+      const check = (attributes: Record<string, string>, min: number, max?: number) =>
+        grade(
+          {
+            type: 'trace-span-count',
+            value: { pattern: '*', attributes, min, ...(max === undefined ? {} : { max }) },
+          },
+          { ...incomplete, spanCount: calls.length },
+          calls,
+        );
+      const model = { 'gen_ai.request.model': 'gpt-test' };
+      await expect(check(model, 1)).resolves.toMatchObject({ pass: true });
+      await expect(check(model, 2)).resolves.toMatchObject({ pass: false });
+      await expect(check(model, 1, 1)).resolves.toMatchObject({ pass: false });
+      await expect(check(model, 0)).resolves.toMatchObject({ pass: false });
+      await expect(
+        grade(
+          { type: 'not-trace-span-count', value: { pattern: '*', attributes: model, min: 1 } },
+          { ...incomplete, spanCount: calls.length },
+          calls,
+        ),
+      ).resolves.toMatchObject({ pass: false });
+      await expect(check({ 'tool.arguments': '{"order_id":"123"}' }, 1)).resolves.toMatchObject({
+        pass: true,
+      });
+      await expect(check({ 'tool.arguments': '{"short":true}' }, 1)).resolves.toMatchObject({
+        pass: false,
+      });
+    });
+
+    it('distinguishes an open test-case root from an unknown missing local ancestor', async () => {
+      const call = tool('lookup');
+      const check = (assertion: Assertion, testCaseSpanId?: string) =>
+        runAssertion({
+          assertion,
+          test: mockTest,
+          providerResponse: { output: 'ok', metadata: { hostedTrace: imported } },
+          traceId: mockTraceData.traceId,
+          traceData: {
+            ...mockTraceData,
+            metadata: { testCaseSpanId },
+            spans: [
+              call,
+              {
+                spanId: 'wrapper',
+                parentSpanId: 'missing',
+                name: 'invoke_agent',
+                startTime: 0,
+                attributes: { local: 'yes' },
+              },
+            ],
+          },
+        });
+      const noError: Assertion = {
+        type: 'trace-error-spans',
+        value: { pattern: 'execute_tool *', max_count: 0 },
+      };
+      await expect(check(noError, 'missing')).resolves.toMatchObject({ pass: true });
+      for (const rootId of [undefined, 'other', 'missing']) {
+        await expect(
+          check({ type: 'trace-span-count', value: { pattern: '*', max: 2 } }, rootId),
+        ).resolves.toMatchObject({ pass: false, reason: expect.stringContaining('ancestor') });
+        await expect(
+          check(
+            {
+              type: 'trace-span-count',
+              value: { pattern: '*', attributes: { local: 'yes' }, min: 1 },
+            },
+            rootId,
+          ),
+        ).resolves.toMatchObject({ pass: true });
+        await expect(
+          check({ type: 'trajectory:tool-used', value: 'lookup' }, rootId),
+        ).resolves.toMatchObject({ pass: true });
+      }
+      // User-provided local target labels may also start with execute_tool.
+      await expect(check(noError, 'other')).resolves.toMatchObject({ pass: false });
+      await expect(
+        check({
+          type: 'trace-error-spans',
+          value: { max_count: 0, attributes: { 'promptfoo.openai.hosted_trace': 'wrapper' } },
+        }),
+      ).resolves.toMatchObject({ pass: true });
     });
 
     it('cannot grade raw filters on discarded native fields, even with complete argument capture', async () => {
