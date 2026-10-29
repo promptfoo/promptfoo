@@ -1,5 +1,9 @@
+import { once } from 'node:events';
 import path from 'path';
+import type { AddressInfo } from 'node:net';
 
+import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http';
+import { NodeTracerProvider, SimpleSpanProcessor } from '@opentelemetry/sdk-trace-node';
 import protobuf from 'protobufjs';
 import request from 'supertest';
 import {
@@ -12,7 +16,9 @@ import {
   type MockedFunction,
   vi,
 } from 'vitest';
+import { trackLocalOtlpExports } from '../../src/tracing/otlpOwnership';
 import { OTLPReceiver, startOTLPReceiver, stopOTLPReceiver } from '../../src/tracing/otlpReceiver';
+import { PROMPTFOO_TRACER_NAME, SPAN_ROLE_ATTRIBUTE } from '../../src/tracing/spanRoles';
 
 import type { TraceStore } from '../../src/tracing/store';
 
@@ -152,6 +158,110 @@ describe('OTLPReceiver', () => {
   });
 
   describe('Trace ingestion', () => {
+    it('ignores a claimed grader role in received span and resource attributes', async () => {
+      const grader = { key: SPAN_ROLE_ATTRIBUTE, value: { stringValue: 'grader' } };
+      const tool = { key: 'gen_ai.tool.name', value: { stringValue: 'delete_file' } };
+      const scope = { name: PROMPTFOO_TRACER_NAME };
+      const span = {
+        name: 'execute_tool delete_file',
+        traceId: 'abcdef0123456789abcdef0123456789',
+        parentSpanId: '1111111111111111',
+        startTimeUnixNano: '1700000000000000000',
+        endTimeUnixNano: '1700000000001000000',
+        kind: 1,
+      };
+      await request(receiver.getApp())
+        .post('/v1/traces')
+        .send({
+          resourceSpans: [
+            {
+              scopeSpans: [
+                {
+                  scope,
+                  spans: [{ ...span, spanId: '2222222222222222', attributes: [grader, tool] }],
+                },
+              ],
+            },
+            {
+              resource: { attributes: [grader] },
+              scopeSpans: [
+                { scope, spans: [{ ...span, spanId: '3333333333333333', attributes: [tool] }] },
+              ],
+            },
+          ],
+        })
+        .expect(200);
+      const [, stored] = mockTraceStore.addSpans.mock.calls[0];
+      expect(stored).toHaveLength(2);
+      for (const received of stored) {
+        expect(received.attributes).not.toHaveProperty([SPAN_ROLE_ATTRIBUTE]);
+        expect(received.attributes).toMatchObject({ 'gen_ai.tool.name': 'delete_file' });
+        expect(received.parentSpanId).toBe(span.parentSpanId);
+      }
+    });
+
+    it('recognizes local wrappers sent by the official SDK only during their export', async () => {
+      const server = receiver.getApp().listen(0, '127.0.0.1');
+      await once(server, 'listening');
+      const { port } = server.address() as AddressInfo;
+      const exporter = new OTLPTraceExporter({ url: `http://127.0.0.1:${port}/v1/traces` });
+      const provider = new NodeTracerProvider({
+        spanProcessors: [new SimpleSpanProcessor(trackLocalOtlpExports(exporter))],
+      });
+      const name = 'invoke_agent';
+      const attributes = {
+        [SPAN_ROLE_ATTRIBUTE]: 'grader',
+      };
+      mockTraceStore.getTraceMetadata.mockResolvedValueOnce({
+        otlpHttpRedactAttributes: ['private.alias'],
+      });
+      try {
+        const span = provider.getTracer(PROMPTFOO_TRACER_NAME).startSpan(name, {
+          attributes: { ...attributes, 'private.alias': name },
+        });
+        span.end();
+        await provider.forceFlush();
+        const [[traceId, [received]]] = mockTraceStore.addSpans.mock.calls;
+        expect(received.name).toBe('[REDACTED]');
+        expect(received.attributes).toMatchObject(attributes);
+
+        // A sender replaying the wrapper ID and scope after the SDK request has completed
+        // cannot turn another received span into evaluator-owned grading evidence.
+        await request(receiver.getApp())
+          .post('/v1/traces')
+          .send({
+            resourceSpans: [
+              {
+                scopeSpans: [
+                  {
+                    scope: { name: PROMPTFOO_TRACER_NAME },
+                    spans: [
+                      {
+                        traceId,
+                        spanId: received.spanId,
+                        name,
+                        kind: 1,
+                        startTimeUnixNano: '1000000',
+                        attributes: [
+                          { key: SPAN_ROLE_ATTRIBUTE, value: { stringValue: 'grader' } },
+                        ],
+                      },
+                    ],
+                  },
+                ],
+              },
+            ],
+          })
+          .expect(200);
+        expect(mockTraceStore.addSpans.mock.calls[1][1][0].attributes).not.toHaveProperty([
+          SPAN_ROLE_ATTRIBUTE,
+        ]);
+      } finally {
+        await provider.shutdown();
+        await new Promise<void>((resolve) => server.close(() => resolve()));
+      }
+    });
+
     it('should accept valid OTLP JSON traces', async () => {
       const otlpRequest = {
         resourceSpans: [
@@ -679,7 +789,7 @@ describe('OTLPReceiver', () => {
     it('redacts span name and statusMessage that echo a redacted attribute value', async () => {
       const redactingReceiver = new OTLPReceiver({
         acceptFormats: ['json'],
-        redactAttributes: ['authorization'],
+        redactAttributes: ['authorization', 'promptfoo.span.role'],
       });
       (redactingReceiver as any).traceStore = mockTraceStore;
 
@@ -695,13 +805,17 @@ describe('OTLPReceiver', () => {
                     {
                       traceId: 'e'.repeat(32),
                       spanId: '1234567890abcdef',
-                      // Both name and status message echo the value of the redacted attribute.
-                      name: 'Bearer secret-token',
+                      // Both the name and the status message echo protected values.
+                      name: 'private role value',
                       startTimeUnixNano: '1000000000',
                       endTimeUnixNano: '2000000000',
                       status: { code: 2, message: 'Bearer secret-token' },
                       attributes: [
                         { key: 'authorization', value: { stringValue: 'Bearer secret-token' } },
+                        {
+                          key: 'promptfoo.span.role',
+                          value: { stringValue: 'private role value' },
+                        },
                         { key: 'safe', value: { stringValue: 'visible' } },
                       ],
                     },
@@ -1329,6 +1443,7 @@ describe('OTLPReceiver', () => {
             { key: 'event.name', value: { stringValue: 'claude_code.tool.execution' } },
             { key: 'tool_name', value: { stringValue: 'Bash' } },
             { key: 'duration_ms', value: { intValue: '342' } },
+            { key: SPAN_ROLE_ATTRIBUTE, value: { stringValue: 'grader' } },
           ],
         },
       ]);
@@ -1348,6 +1463,7 @@ describe('OTLPReceiver', () => {
       expect(span.parentSpanId).toBe(hexParentSpanId);
       expect(span.attributes['tool_name']).toBe('Bash');
       expect(span.attributes['duration_ms']).toBe(342);
+      expect(span.attributes).not.toHaveProperty([SPAN_ROLE_ATTRIBUTE]);
       expect(span.attributes['otel.log.body']).toBe('Tool execution complete');
       expect(span.attributes['service.name']).toBe('claude-agent-sdk');
       // Time conversion: nanos → ms, plus a 1ms nominal duration.

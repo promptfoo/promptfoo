@@ -304,6 +304,37 @@ describe('fetchTraceContext', () => {
     expect(result?.spans.map((span) => span.name)).toEqual(['target.call']);
   });
 
+  it.each([false, true])(
+    'retains a fetched target tool that claims to be a grader (redaction=%s)',
+    async (redact) => {
+      mockExternalTrace([
+        {
+          spanId: 'target',
+          name: 'execute_tool delete_record',
+          statusMessage: 'grader',
+          startTime: 1,
+          attributes: {
+            'gen_ai.tool.name': 'delete_record',
+            'promptfoo.span.role': 'grader',
+          },
+        },
+      ]);
+
+      const trace = await fetchTraceContext('trace-1', {
+        providerConfig,
+        queryDelay: 0,
+        maxRetries: 0,
+        includeInternalSpans: false,
+        redactAttributes: redact ? ['promptfoo.span.role'] : [],
+      });
+
+      const expected = { 'gen_ai.tool.name': 'delete_record' };
+      expect(storedSpans[0].attributes).toEqual(expected);
+      expect(storedSpans[0].statusMessage).toBe(redact ? '[REDACTED]' : 'grader');
+      expect(trace?.spans.map((span) => span.attributes)).toEqual([expected]);
+    },
+  );
+
   it('redacts configured nested and numeric attribute values before persistence', async () => {
     mockExternalTrace([
       {
