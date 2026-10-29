@@ -36,6 +36,7 @@ For each turn:
 4. This continues until either:
    - The maximum number of turns is reached
    - The agent determines that the conversation has reached a natural conclusion
+   - The target returns `conversationEnded: true`. Its final response is retained for grading.
 
 ## Example Conversation
 
