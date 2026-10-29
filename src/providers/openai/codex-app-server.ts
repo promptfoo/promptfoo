@@ -3760,7 +3760,7 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
     return (
       item?.status === 'failed' ||
       item?.status === 'declined' ||
-      item?.error !== undefined ||
+      item?.error != null ||
       (item?.type === 'commandExecution' &&
         typeof item.exitCode === 'number' &&
         item.exitCode !== 0)

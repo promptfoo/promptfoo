@@ -4,7 +4,7 @@ import os from 'os';
 import path from 'path';
 import { PassThrough } from 'stream';
 
-import { trace } from '@opentelemetry/api';
+import { SpanStatusCode, trace } from '@opentelemetry/api';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import cliState from '../../src/cliState';
 import logger from '../../src/logger';
@@ -263,6 +263,26 @@ describe('OpenAICodexAppServerProvider', () => {
       'gen_ai.operation.name': 'execute_tool',
       'gen_ai.tool.name': expectedToolName,
     });
+  });
+
+  it.each([
+    { status: 'completed', error: null, spanStatus: { code: SpanStatusCode.OK } },
+    {
+      status: 'failed',
+      error: { message: 'Lookup failed' },
+      spanStatus: { code: SpanStatusCode.ERROR, message: 'Lookup failed' },
+    },
+  ])('records the span status for a $status MCP tool call', ({ status, error, spanStatus }) => {
+    const spans = installSpanRecorder();
+    const provider = new OpenAICodexAppServerProvider(createNoCleanupOptions());
+    const state = (provider as any).createTurnState('key', 'instance', 'thread', [], {}, {});
+    const item = { type: 'mcpToolCall', id: 'call', server: 'inventory', tool: 'lookup_order' };
+
+    (provider as any).handleItemCompleted(state, { ...item, status, error }, Date.now());
+
+    expect(spans).toMatchObject([
+      { name: 'mcp inventory/lookup_order', status: spanStatus, ended: true },
+    ]);
   });
 
   it.each([false, true])('honors inherit_process_env=%s for file defaults', (inheritProcessEnv) => {
