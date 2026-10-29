@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache } from '../../src/cache';
 import cliState from '../../src/cliState';
 import { getEnvBool, getEnvInt, getEnvString } from '../../src/envars';
@@ -35,6 +35,11 @@ describe('materializeMcpToolCallRemote', () => {
     vi.mocked(getEnvInt).mockReturnValue(300_000);
     vi.mocked(getEnvString).mockReturnValue('');
     vi.mocked(getEnvBool).mockReturnValue(false);
+  });
+
+  afterEach(() => {
+    vi.resetAllMocks();
+    cliState.remote = undefined;
   });
 
   it('returns normalized MCP JSON from the remote task server', async () => {
@@ -101,12 +106,12 @@ describe('materializeMcpToolCallRemote', () => {
     expect(fetchWithCache).not.toHaveBeenCalled();
   });
 
-  it('preserves cache provenance from remote MCP materialization responses', async () => {
+  it('bypasses the local response cache for remote MCP materialization', async () => {
     vi.mocked(getEnvString).mockImplementation((key: string) =>
       key === 'PROMPTFOO_REMOTE_GENERATION_URL' ? 'https://remote.example.test/task' : '',
     );
     vi.mocked(fetchWithCache).mockResolvedValue({
-      cached: true,
+      cached: false,
       data: {
         result: {
           tool: 'search_companies',
@@ -124,9 +129,16 @@ describe('materializeMcpToolCallRemote', () => {
         value: 'Find clean energy companies.',
       }),
     ).resolves.toMatchObject({
-      cached: true,
+      cached: false,
       tokenUsage: { total: 16, prompt: 12, completion: 4, numRequests: 1 },
     });
+    expect(fetchWithCache).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.any(Object),
+      expect.any(Number),
+      'json',
+      true,
+    );
   });
 
   it('returns undefined when remote generation is explicitly disabled', async () => {
@@ -190,5 +202,79 @@ describe('materializeMcpToolCallRemote', () => {
         value: 'Find clean energy companies.',
       }),
     ).rejects.toThrow('Remote MCP materialization failed');
+  });
+
+  it.each([
+    {
+      description: 'the remote service rejects the request after model execution',
+      result: undefined,
+      status: 500,
+      statusText: 'Internal Server Error',
+    },
+    {
+      description: 'the generated tool call fails validation',
+      result: { tool: 'unknown_tool', args: {} },
+      status: 200,
+      statusText: 'OK',
+    },
+  ])('preserves reported token usage when $description', async ({ result, status, statusText }) => {
+    vi.mocked(getEnvString).mockImplementation((key: string) =>
+      key === 'PROMPTFOO_REMOTE_GENERATION_URL' ? 'https://remote.example.test/task' : '',
+    );
+    const tokenUsage = { prompt: 12, completion: 4, total: 16, numRequests: 1 };
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      data: { result, tokenUsage },
+      cached: false,
+      status,
+      statusText,
+    } as Awaited<ReturnType<typeof fetchWithCache>>);
+
+    await expect(
+      materializeMcpToolCallRemote({
+        tools: [searchCompaniesTool],
+        value: 'Find clean energy companies.',
+      }),
+    ).rejects.toMatchObject({
+      cause: expect.any(Error),
+      message: expect.stringContaining('Remote MCP materialization failed'),
+      tokenUsage,
+    });
+  });
+
+  it('preserves paid token usage carried by a rejected remote request', async () => {
+    vi.mocked(getEnvString).mockImplementation((key: string) =>
+      key === 'PROMPTFOO_REMOTE_GENERATION_URL' ? 'https://remote.example.test/task' : '',
+    );
+    const tokenUsage = { prompt: 12, completion: 4, total: 16, numRequests: 1 };
+    const upstreamError = Object.assign(new Error('Remote request failed'), { tokenUsage });
+    vi.mocked(fetchWithCache).mockRejectedValueOnce(upstreamError);
+
+    await expect(
+      materializeMcpToolCallRemote({
+        tools: [searchCompaniesTool],
+        value: 'Find clean energy companies.',
+      }),
+    ).rejects.toMatchObject({
+      cause: upstreamError,
+      message: expect.stringContaining('Remote MCP materialization failed'),
+      tokenUsage,
+    });
+  });
+
+  it('preserves abort errors without wrapping them', async () => {
+    vi.mocked(getEnvString).mockImplementation((key: string) =>
+      key === 'PROMPTFOO_REMOTE_GENERATION_URL' ? 'https://remote.example.test/task' : '',
+    );
+    const abortError = Object.assign(new Error('Remote request was cancelled'), {
+      name: 'AbortError',
+    });
+    vi.mocked(fetchWithCache).mockRejectedValueOnce(abortError);
+
+    await expect(
+      materializeMcpToolCallRemote({
+        tools: [searchCompaniesTool],
+        value: 'Find clean energy companies.',
+      }),
+    ).rejects.toBe(abortError);
   });
 });
