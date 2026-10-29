@@ -6,12 +6,15 @@
  */
 export function ellipsize(str: string, maxLen: number): string {
   if (str.length > maxLen) {
-    if (maxLen < 3) {
-      // Not enough room for the ellipsis; hard-truncate so the result still
-      // respects maxLen instead of slicing with a negative index.
-      return str.slice(0, Math.max(0, maxLen));
-    }
-    return str.slice(0, maxLen - 3) + '...';
+    const ellipsis = maxLen < 3 ? '' : '...';
+    const prefix = str.slice(0, Math.max(0, maxLen - ellipsis.length));
+    const lastCodeUnit = prefix.charCodeAt(prefix.length - 1);
+
+    // Avoid leaving an unpaired high surrogate when truncation cuts an emoji.
+    const safePrefix =
+      lastCodeUnit >= 0xd800 && lastCodeUnit <= 0xdbff ? prefix.slice(0, -1) : prefix;
+
+    return safePrefix + ellipsis;
   }
   return str;
 }
