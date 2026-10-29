@@ -833,7 +833,6 @@ export class HydraProvider implements ApiProvider {
           turn,
           backtrackCount,
           conversationLength: this.conversationHistory.length,
-          willDecrementTurn: turn > 1,
         });
 
         if (backtrackCount >= this.maxBacktracks) {
@@ -848,9 +847,8 @@ export class HydraProvider implements ApiProvider {
           break;
         }
 
-        if (turn > 1) {
-          turn--; // Decrement turn to retry
-        }
+        // Retry this turn. The loop increment brings a first-turn retry back to turn 1.
+        turn--;
         continue;
       }
 
