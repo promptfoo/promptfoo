@@ -1006,12 +1006,6 @@ describe('OpenAI Realtime Provider', () => {
           ),
         );
 
-        // Manually set the previousItemId since the mock doesn't properly handle this
-        provider.previousItemId = assistantId;
-        if (!provider.assistantMessageIds.includes(assistantId)) {
-          provider.assistantMessageIds.push(assistantId);
-        }
-
         // Response created
         await Promise.resolve(
           lastHandler(
@@ -1084,7 +1078,6 @@ describe('OpenAI Realtime Provider', () => {
       // Verify first response
       expect(firstResponse.output).toBe('First response');
       expect(provider.previousItemId).toBe('assistant_1');
-      expect(provider.assistantMessageIds).toContain('assistant_1');
 
       // Second message
       const secondResponsePromise = provider.callApi('Second message', context);
@@ -1092,7 +1085,14 @@ describe('OpenAI Realtime Provider', () => {
       // Wait for microtask to process so handler is registered
       await flushMicrotasks();
 
-      // Skip the WebSocket send assertion as it's not reliable in the test
+      const conversationItems = vi
+        .mocked(provider.persistentConnection!.send)
+        .mock.calls.map(([data]) => JSON.parse(data as string))
+        .filter((event) => event.type === 'conversation.item.create');
+      expect(conversationItems.map((event) => event.previous_item_id)).toEqual([
+        null,
+        'assistant_1',
+      ]);
 
       await simulateMessageSequence('msg_2', 'assistant_2', 'resp_2', 'Second response');
       const secondResponse = await secondResponsePromise;
@@ -1100,8 +1100,6 @@ describe('OpenAI Realtime Provider', () => {
       // Verify second response
       expect(secondResponse.output).toBe('Second response');
       expect(provider.previousItemId).toBe('assistant_2');
-      expect(provider.assistantMessageIds).toContain('assistant_2');
-      expect(provider.assistantMessageIds).toHaveLength(2);
 
       // Verify connection state
       expect(provider.persistentConnection?.close).not.toHaveBeenCalled();
@@ -2392,7 +2390,6 @@ describe('OpenAI Realtime Provider', () => {
           item: { id: 'assistant-timeout', role: 'assistant' },
         });
         expect(provider.previousItemId).toBe('assistant-timeout');
-        expect(provider.assistantMessageIds).toEqual(['assistant-timeout']);
         await vi.advanceTimersByTimeAsync(100);
 
         const result = await turnPromise;
@@ -2404,7 +2401,6 @@ describe('OpenAI Realtime Provider', () => {
         expect(provider.persistentConnection).toBeNull();
         expect((provider as any).connectionReady).toBeNull();
         expect(provider.previousItemId).toBeNull();
-        expect(provider.assistantMessageIds).toEqual([]);
       } finally {
         vi.useRealTimers();
       }
