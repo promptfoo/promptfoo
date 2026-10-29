@@ -522,6 +522,31 @@ describe('OpenAICodexAppServerProvider', () => {
     },
   );
 
+  it('reuses the automatic thread when a row spells out default environment access', async () => {
+    const server = createMockAppServer({
+      autoCompleteThread: 'thr_default',
+      threadStartIds: ['thr_default', 'thr_restricted'],
+      threadEnvironments: [],
+    });
+    mocks.spawn.mockReturnValue(server.proc);
+    const provider = new OpenAICodexAppServerProvider({ config: { persist_threads: true } });
+    const prompt = 'Continue the conversation';
+    for (const environment_access of [undefined, true, undefined, false]) {
+      const result = await provider.callApi(prompt, {
+        prompt: { raw: prompt, label: 'access', config: { environment_access } },
+        vars: {},
+      });
+      expect(result.metadata?.codexAppServer.threadId).toBe(
+        environment_access === false ? 'thr_restricted' : 'thr_default',
+      );
+    }
+    const starts = server.messages().filter((msg) => msg.method === 'thread/start');
+    expect(starts).toHaveLength(2);
+    expect(starts[0].params).not.toHaveProperty('environments');
+    expect(starts[1].params.environments).toEqual([]);
+    await provider.cleanup();
+  });
+
   it('requires the experimental protocol to disable environment access', () => {
     expect(
       () =>
@@ -616,13 +641,58 @@ describe('OpenAICodexAppServerProvider', () => {
   );
 
   it.each([
-    { ephemeral: true, variant: 'matching' },
-    { ephemeral: true, variant: 'restricted' },
-    { ephemeral: false, variant: 'matching' },
-    { ephemeral: false, variant: 'changed instructions' },
+    { ephemeral: true, variant: 'matching', overrides: {}, allowed: true },
+    {
+      ephemeral: true,
+      variant: 'restricted',
+      overrides: { environment_access: false },
+      allowed: false,
+    },
+    { ephemeral: false, variant: 'matching', overrides: {}, allowed: true },
+    {
+      ephemeral: false,
+      variant: 'changed instructions',
+      overrides: { developer_instructions: 'Use new instructions' },
+      allowed: false,
+    },
+    {
+      ephemeral: true,
+      variant: 'higher reasoning effort',
+      overrides: { model_reasoning_effort: 'high' },
+      allowed: false,
+    },
+    {
+      ephemeral: true,
+      variant: 'reasoning summary',
+      overrides: { reasoning_summary: 'detailed' },
+      allowed: false,
+    },
+    {
+      ephemeral: true,
+      variant: 'network access',
+      overrides: { network_access_enabled: true },
+      allowed: false,
+    },
+    {
+      ephemeral: true,
+      variant: 'collaboration mode',
+      overrides: {
+        collaboration_mode: {
+          mode: 'plan',
+          settings: { model: 'gpt-5.4', reasoning_effort: 'low', developer_instructions: null },
+        },
+      },
+      allowed: false,
+    },
+    {
+      ephemeral: true,
+      variant: 'per-turn output schema',
+      overrides: { output_schema: { type: 'string' } },
+      allowed: true,
+    },
   ])(
     'preserves the automatic conversation ID after a $variant explicit call (ephemeral: $ephemeral)',
-    async ({ ephemeral, variant }) => {
+    async ({ ephemeral, overrides, allowed }) => {
       const originalId = 'thr_original';
       const server = createMockAppServer({
         autoCompleteThread: originalId,
@@ -643,15 +713,12 @@ describe('OpenAICodexAppServerProvider', () => {
           config: {
             thread_id: first.metadata?.codexAppServer.threadId,
             persist_threads: false,
-            ...(variant === 'restricted' && { environment_access: false }),
-            ...(variant === 'changed instructions' && {
-              developer_instructions: 'Use new instructions',
-            }),
+            ...overrides,
           },
         },
         vars: {},
       });
-      if (variant === 'matching') {
+      if (allowed) {
         expect(explicit.metadata?.codexAppServer.threadId).toBe(originalId);
       } else {
         expect(explicit.error).toContain('Cannot change resume settings');
@@ -662,6 +729,12 @@ describe('OpenAICodexAppServerProvider', () => {
       expect(methods.filter((method) => method === 'thread/start')).toHaveLength(1);
       expect(methods).not.toContain('thread/resume');
       expect(methods).not.toContain('thread/unsubscribe');
+      const turns = server.messages().filter((msg) => msg.method === 'turn/start');
+      expect(turns).toHaveLength(allowed ? 3 : 2);
+      if ('output_schema' in overrides) {
+        expect(turns[1].params.outputSchema).toEqual(overrides.output_schema);
+        expect(turns[2].params).not.toHaveProperty('outputSchema');
+      }
       await provider.cleanup();
     },
   );
@@ -2184,6 +2257,9 @@ describe('OpenAICodexAppServerProvider', () => {
   it.each([
     { type: 'localImage', path: '/private/screenshot.png' },
     { type: 'local_image', path: '../screenshot.png' },
+    { type: 'image', url: 'https://example.com/screenshot.png' },
+    { type: 'image', url: 'http://example.com/screenshot.png' },
+    { type: 'image', url: 'data:image/png' },
     { type: 'image', url: 'file:///private/screenshot.png' },
     { type: 'image', url: '/private/screenshot.png' },
     { type: 'image', url: '../screenshot.png' },
@@ -2191,7 +2267,7 @@ describe('OpenAICodexAppServerProvider', () => {
     { type: 'mention', name: 'file', path: 'file:///private/screenshot.png' },
     { type: 'mention', name: 'file', path: '/private/screenshot.png' },
   ])(
-    'rejects a host attachment ($type) before starting Codex with environment access disabled',
+    'rejects an unsupported attachment ($type) before starting Codex with environment access disabled',
     async (attachment) => {
       const provider = new OpenAICodexAppServerProvider({ config: { environment_access: false } });
       const prompt = JSON.stringify([
@@ -2203,13 +2279,15 @@ describe('OpenAICodexAppServerProvider', () => {
     },
   );
 
-  it('forwards inline and remote inputs with environment access disabled', async () => {
+  it('forwards inline images and configured mentions with environment access disabled', async () => {
     const server = createMockAppServer({ autoCompleteThread: 'thr_safe', threadEnvironments: [] });
     mocks.spawn.mockReturnValue(server.proc);
     const provider = new OpenAICodexAppServerProvider({ config: { environment_access: false } });
     const attachments = [
-      { type: 'image', url: 'https://example.com/screenshot.png' },
-      { type: 'image', url: 'data:image/png;base64,iVBORw0KGgo=' },
+      {
+        type: 'image',
+        url: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAFklEQVR4nGP4Ky/IcsKcYY9cD6/MOQAgWQSO2gWoggAAAABJRU5ErkJggg==',
+      },
       { type: 'mention', name: 'connector', path: 'app://connector/resource' },
       { type: 'mention', name: 'reader', path: 'mcp://receipt' },
       { type: 'mention', name: 'plugin', path: 'plugin://my-plugin' },

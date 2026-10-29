@@ -20,6 +20,7 @@ import {
   openTurnSpan,
   withGenAISpan,
 } from '../../tracing/genaiTracer';
+import { parseDataUrl } from '../../util/dataUrl';
 import { renderVarsInObject } from '../../util/render';
 import { normalizeFieldName, REDACTED, sanitizeObject } from '../../util/sanitizer';
 import { VERSION } from '../../version';
@@ -1487,7 +1488,7 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
       const unsupported = promptInput.find((item) => !this.canSendWithoutEnvironment(item));
       if (unsupported) {
         return {
-          error: `OpenAI Codex app-server cannot send this ${unsupported.type} input with environment_access: false. Use text, an HTTP(S) or inline data:image URL, or an app://, mcp://, or plugin:// mention.`,
+          error: `OpenAI Codex app-server cannot send this ${unsupported.type} input with environment_access: false. Use text, an inline base64 image data URL, or an app://, mcp://, or plugin:// mention.`,
         };
       }
     }
@@ -2010,7 +2011,7 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
       service_tier: config.service_tier,
       sandbox_mode: config.sandbox_mode,
       sandbox_policy: config.sandbox_policy,
-      environment_access: config.environment_access,
+      environment_access: config.environment_access ?? true,
       network_access_enabled: config.network_access_enabled,
       approval_policy: config.approval_policy,
       approvals_reviewer: config.approvals_reviewer,
@@ -2039,6 +2040,7 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
     connectionInstanceId: string,
     threadId: string,
     config: CodexAppServerConfig,
+    purpose: 'resume' | 'borrow' = 'resume',
   ): string {
     const resumeHash = crypto
       .createHash('sha256')
@@ -2047,6 +2049,7 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
           connectionInstanceId,
           resume: this.buildThreadResumeParams(threadId, config),
           environment_access: config.environment_access ?? true,
+          ...(purpose === 'borrow' && { turn: this.buildStickyTurnParams(config) }),
         }),
       )
       .digest('hex');
@@ -2059,7 +2062,7 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
     keepKey: string,
     connection: CodexAppServerConnection,
     connectionKey: string,
-    timeoutMs: number,
+    config: CodexAppServerConfig,
   ): Promise<ThreadHandle | undefined> {
     for (const [key, stale] of this.threads) {
       // An explicit resume can also address an automatically started thread by its returned ID.
@@ -2069,7 +2072,11 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
       if (key === keepKey || (!staleVariant && !sharesSubscription)) {
         continue;
       }
-      if (stale.autoResumeKey === keepKey) {
+      if (
+        stale.autoResumeKey &&
+        stale.autoResumeKey ===
+          this.generateExplicitThreadCacheKey(connection.instanceId, threadId, config, 'borrow')
+      ) {
         return stale;
       }
       if (this.isThreadProtected(stale.threadId)) {
@@ -2090,7 +2097,7 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
           await staleConnection.request(
             'thread/unsubscribe',
             { threadId: stale.threadId },
-            { timeoutMs },
+            { timeoutMs: this.getRequestTimeoutMs(config) },
           );
         } catch (error) {
           logger.warn('[CodexAppServer] Failed to unsubscribe stale explicit thread variant', {
@@ -2152,7 +2159,7 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
           variantKey,
           connection,
           connectionKey,
-          this.getRequestTimeoutMs(config),
+          config,
         );
         if (autoThread) {
           return autoThread;
@@ -2260,6 +2267,7 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
           connection.instanceId,
           threadId,
           config,
+          'borrow',
         );
       }
       this.threads.set(cacheKey, handle);
@@ -2514,6 +2522,14 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
     return {
       threadId,
       input,
+      ...this.buildStickyTurnParams(config),
+      ...(config.output_schema ? { outputSchema: config.output_schema } : {}),
+    };
+  }
+
+  // Codex applies these overrides to this turn and subsequent turns on the thread.
+  private buildStickyTurnParams(config: CodexAppServerConfig): Record<string, unknown> {
+    return {
       ...(config.environment_access === false ? { environments: [] } : {}),
       ...(config.working_dir ? { cwd: config.working_dir } : {}),
       approvalPolicy: config.approval_policy ?? 'never',
@@ -2527,7 +2543,6 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
       ...(config.reasoning_summary ? { summary: config.reasoning_summary } : {}),
       ...(config.personality ? { personality: config.personality } : {}),
       ...(config.collaboration_mode ? { collaborationMode: config.collaboration_mode } : {}),
-      ...(config.output_schema ? { outputSchema: config.output_schema } : {}),
     };
   }
 
@@ -2632,7 +2647,7 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
       case 'text':
         return true;
       case 'image':
-        return /^(?:https?:\/\/|data:image\/)/i.test(item.url);
+        return parseDataUrl(item.url)?.mimeType.toLowerCase().startsWith('image/') ?? false;
       case 'mention':
         return /^(?:app|mcp|plugin):\/\//.test(item.path);
       default:
