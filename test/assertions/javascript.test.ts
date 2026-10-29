@@ -2681,7 +2681,8 @@ describe('not-javascript: GradingResult reason preservation on inversion', () =>
   });
 
   it('preserves custom reason when function returns pass:false and assertion is inverted (test passes)', async () => {
-    // Function says output does NOT contain "foo" — not-javascript should pass.
+    // The function checks whether output contains "foo"; it returns pass:false for "hello world".
+    // Inversion makes not-javascript pass because the output does not contain "foo".
     const assertion: Assertion = {
       type: 'not-javascript',
       value: async (output: string) => ({
