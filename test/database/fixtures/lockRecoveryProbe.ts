@@ -1,7 +1,8 @@
 import { pathToFileURL } from 'node:url';
 
 import { createClient } from '@libsql/client/node';
-import { Sqlite3Client } from '@libsql/client/sqlite3';
+import { Sqlite3Client, Sqlite3Transaction } from '@libsql/client/sqlite3';
+import { integer, sqliteTable } from 'drizzle-orm/sqlite-core';
 import { closeDb, getDb, getDbPath } from '../../../src/database/index';
 import type { Client } from '@libsql/client/node';
 
@@ -89,7 +90,26 @@ try {
   // Exercise the JS retry/recovery path without blocking this process's lock holder.
   await db.run('PRAGMA busy_timeout = 0');
 
-  if (mode === 'root-in-transaction') {
+  if (mode.startsWith('guarded-commit')) {
+    const table = sqliteTable('lock_recovery_test', { id: integer('id') });
+    const insert = db.insert(table).values({ id: 2 });
+    const reader = await contender.transaction('read');
+    const close = Sqlite3Transaction.prototype.close;
+    if (mode === 'guarded-commit-rollback-failure') {
+      Sqlite3Transaction.prototype.close = function () {
+        close.call(this);
+        throw new Error('Injected transaction cleanup error');
+      };
+    }
+    try {
+      await reader.execute('SELECT id FROM lock_recovery_test');
+      result.firstError = await captureError(() => db.runGuardedWrite(insert, () => {}));
+    } finally {
+      Sqlite3Transaction.prototype.close = close;
+      await reader.rollback();
+    }
+    await db.runGuardedWrite(insert, () => {});
+  } else if (mode === 'root-in-transaction') {
     await db.transaction(async (tx) => {
       result.callbackCalls++;
       await tx.run('INSERT INTO lock_recovery_test VALUES (2)');

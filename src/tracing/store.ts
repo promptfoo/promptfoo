@@ -182,12 +182,10 @@ export class TraceStore {
         return { stored: true };
       }
 
-      const insert = (writer: Pick<typeof db, 'insert'>) =>
-        writer
-          .insert(spansTable)
-          .values(spanRecords)
-          .onConflictDoNothing({ target: [spansTable.traceId, spansTable.spanId] })
-          .run();
+      const insert = db
+        .insert(spansTable)
+        .values(spanRecords)
+        .onConflictDoNothing({ target: [spansTable.traceId, spansTable.spanId] });
       const { abortSignal, deadline } = options ?? {};
       if (abortSignal || deadline !== undefined) {
         const checkWrite = () => {
@@ -201,11 +199,7 @@ export class TraceStore {
         for (let attempt = 1; ; attempt++) {
           checkWrite();
           try {
-            await db.transaction(async (tx) => {
-              checkWrite();
-              await insert(tx);
-              checkWrite();
-            });
+            await db.runGuardedWrite(insert, checkWrite);
             break;
           } catch (error) {
             checkWrite();
@@ -219,7 +213,7 @@ export class TraceStore {
           }
         }
       } else {
-        await insert(db);
+        await insert.run();
       }
       logger.debug(
         `[TraceStore] Successfully added ${spanRecords.length} spans to trace ${traceId}`,

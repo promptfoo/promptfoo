@@ -110,7 +110,8 @@ async function runDatabaseProbe<T>(
         IS_TESTING: 'false',
         LOG_LEVEL: 'error',
         PROMPTFOO_CONFIG_DIR: tempConfigDir,
-        PROMPTFOO_DISABLE_WAL_MODE: mode === 'wal-disabled' ? 'true' : 'false',
+        PROMPTFOO_DISABLE_WAL_MODE:
+          mode === 'wal-disabled' || mode.startsWith('guarded-commit') ? 'true' : 'false',
         PROMPTFOO_DISABLE_TELEMETRY: 'true',
         PROMPTFOO_DISABLE_UPDATE_CHECK: 'true',
       },
@@ -889,6 +890,22 @@ describe('database', () => {
   });
 
   describe('file-backed lock recovery', () => {
+    it.each(['guarded-commit', 'guarded-commit-rollback-failure'])(
+      'recovers after a rollback-journal reader blocks %s',
+      async (mode) => {
+        const result = await runDatabaseProbe<LockRecoveryProbeResult>(
+          'lockRecoveryProbe',
+          tempConfigDir,
+          mode,
+        );
+
+        expect(result.initialJournalMode).toBe('delete');
+        expect(result.firstError).toMatch(/SQLITE_BUSY/);
+        expect(result.followupError).toBeNull();
+        expect(result.afterCloseIds).toEqual([1, 2, 3]);
+      },
+    );
+
     it.each(['wal-failure', 'wal-refused'])(
       'preserves FULL synchronization at startup and after lock recovery when %s',
       async (mode) => {
