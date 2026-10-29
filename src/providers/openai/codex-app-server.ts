@@ -379,6 +379,7 @@ interface ThreadHandle {
   threadId: string;
   response: any;
   cacheKey?: string;
+  autoResumeKey?: string;
   persistent: boolean;
 }
 
@@ -1549,10 +1550,8 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
         this.protectThread(threadHandle.threadId);
         let turnStarted = false;
         try {
-          const queueKey = explicitThreadQueueKey
-            ? undefined
-            : this.getThreadRunQueueKey(resolvedConfig, threadHandle);
-
+          // An explicit caller borrowing an auto-started thread shares the automatic caller's queue.
+          const queueKey = threadHandle.autoResumeKey ? threadHandle.cacheKey : undefined;
           return await this.runSerializedThreadTurn(
             queueKey,
             callOptions?.abortSignal,
@@ -2047,21 +2046,21 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
         JSON.stringify({
           connectionInstanceId,
           resume: this.buildThreadResumeParams(threadId, config),
-          environment_access: config.environment_access,
+          environment_access: config.environment_access ?? true,
         }),
       )
       .digest('hex');
     return `${this.generateExplicitThreadCachePrefix(threadId)}${resumeHash}`;
   }
 
-  private async discardOtherExplicitThreadVariants(
+  private async prepareExplicitThread(
     threadId: string,
     persistentVariantPrefix: string | undefined,
     keepKey: string,
     connection: CodexAppServerConnection,
     connectionKey: string,
     timeoutMs: number,
-  ): Promise<void> {
+  ): Promise<ThreadHandle | undefined> {
     for (const [key, stale] of this.threads) {
       // An explicit resume can also address an automatically started thread by its returned ID.
       const sharesSubscription =
@@ -2070,8 +2069,17 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
       if (key === keepKey || (!staleVariant && !sharesSubscription)) {
         continue;
       }
+      if (stale.autoResumeKey === keepKey) {
+        return stale;
+      }
       if (this.isThreadProtected(stale.threadId)) {
         throw new Error('Cannot resume the Codex thread while another turn is using it');
+      }
+      if (stale.autoResumeKey) {
+        // Unsubscribing would unload the conversation; ephemeral threads cannot be resumed from disk.
+        throw new Error(
+          'Cannot change resume settings for an auto-started persistent Codex thread',
+        );
       }
       this.threads.delete(key);
       const staleConnection =
@@ -2095,6 +2103,7 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
         }
       }
     }
+    return undefined;
   }
 
   private async settleOtherExplicitThreadVariants(
@@ -2137,7 +2146,7 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
       const cacheKey = canPersistThread ? variantKey : undefined;
       await this.settleOtherExplicitThreadVariants(prefix, variantKey, callOptions?.abortSignal);
       if (allowThreadPersistence) {
-        await this.discardOtherExplicitThreadVariants(
+        const autoThread = await this.prepareExplicitThread(
           config.thread_id,
           canPersistThread ? prefix : undefined,
           variantKey,
@@ -2145,6 +2154,9 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
           connectionKey,
           this.getRequestTimeoutMs(config),
         );
+        if (autoThread) {
+          return autoThread;
+        }
       }
       // A reusable process has one subscription per thread. A transient caller may use an
       // existing matching subscription, but must not take ownership of its cleanup.
@@ -2224,7 +2236,7 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
       throw new Error('codex app-server did not return a thread id');
     }
 
-    const handle = { connectionKey, threadId, response, cacheKey, persistent: false };
+    const handle: ThreadHandle = { connectionKey, threadId, response, cacheKey, persistent: false };
     const environments = response?.thread?.environments;
     if (
       config.environment_access === false &&
@@ -2243,6 +2255,13 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
     }
     if (cacheKey) {
       handle.persistent = true;
+      if (!config.thread_id) {
+        handle.autoResumeKey = this.generateExplicitThreadCacheKey(
+          connection.instanceId,
+          threadId,
+          config,
+        );
+      }
       this.threads.set(cacheKey, handle);
     }
     return handle;
@@ -3219,22 +3238,6 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
         error,
       });
     }
-  }
-
-  private getThreadRunQueueKey(
-    config: CodexAppServerConfig,
-    threadHandle: ThreadHandle,
-  ): string | undefined {
-    if (config.thread_id) {
-      return `thread_id:${threadHandle.threadId}`;
-    }
-    if (config.deep_tracing) {
-      return undefined;
-    }
-    if (threadHandle.persistent && threadHandle.cacheKey) {
-      return threadHandle.cacheKey;
-    }
-    return undefined;
   }
 
   private async runSerializedThreadTurn<T>(

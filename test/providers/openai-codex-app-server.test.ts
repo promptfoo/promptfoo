@@ -83,6 +83,7 @@ function createMockAppServer(
     configReadResult?: unknown;
     configReadError?: unknown;
     autoCompleteThread?: string;
+    threadStartIds?: string[];
     threadEnvironments?: { environmentId: string }[] | null;
   } = {},
 ): MockAppServer {
@@ -120,7 +121,10 @@ function createMockAppServer(
       });
     } else if (options.autoCompleteThread && message.id !== undefined) {
       queueMicrotask(() => {
-        const threadId = options.autoCompleteThread;
+        const threadId =
+          (message.method === 'thread/start'
+            ? options.threadStartIds?.shift()
+            : message.params?.threadId) ?? options.autoCompleteThread;
         const turn = { id: 'turn_mock', status: 'completed', items: [], error: null };
         const result =
           message.method === 'turn/start'
@@ -559,13 +563,9 @@ describe('OpenAICodexAppServerProvider', () => {
     },
   );
 
-  it.each([
-    { cachedExplicit: true, reject: true },
-    { cachedExplicit: true, reject: false },
-    { cachedExplicit: false, reject: true },
-  ])(
-    'restores the cached subscription after a nonpersistent resume (explicit: $cachedExplicit, rejected: $reject)',
-    async ({ cachedExplicit, reject }) => {
+  it.each([{ reject: true }, { reject: false }])(
+    'restores an explicit subscription after a nonpersistent resume (rejected: $reject)',
+    async ({ reject }) => {
       const threadId = 'thr_shared';
       const server = createMockAppServer({
         autoCompleteThread: threadId,
@@ -575,7 +575,7 @@ describe('OpenAICodexAppServerProvider', () => {
       const provider = new OpenAICodexAppServerProvider({
         config: {
           persist_threads: true,
-          thread_id: cachedExplicit ? threadId : undefined,
+          thread_id: threadId,
           developer_instructions: 'original instructions',
         },
       });
@@ -611,6 +611,57 @@ describe('OpenAICodexAppServerProvider', () => {
       expect(retry.findIndex((msg) => msg.method === 'turn/start')).toBeGreaterThan(
         retry.indexOf(reacquired),
       );
+      await provider.cleanup();
+    },
+  );
+
+  it.each([
+    { ephemeral: true, variant: 'matching' },
+    { ephemeral: true, variant: 'restricted' },
+    { ephemeral: false, variant: 'matching' },
+    { ephemeral: false, variant: 'changed instructions' },
+  ])(
+    'preserves the automatic conversation ID after a $variant explicit call (ephemeral: $ephemeral)',
+    async ({ ephemeral, variant }) => {
+      const originalId = 'thr_original';
+      const server = createMockAppServer({
+        autoCompleteThread: originalId,
+        threadStartIds: [originalId, 'thr_replacement'],
+        threadEnvironments: [{ environmentId: 'local' }],
+      });
+      mocks.spawn.mockReturnValue(server.proc);
+      const provider = new OpenAICodexAppServerProvider({
+        config: { persist_threads: true, ephemeral },
+      });
+      const prompt = 'Continue the conversation';
+      const first = await provider.callApi(prompt);
+      expect(first.metadata?.codexAppServer.threadId).toBe(originalId);
+      const explicit = await provider.callApi(prompt, {
+        prompt: {
+          raw: prompt,
+          label: 'explicit resume',
+          config: {
+            thread_id: first.metadata?.codexAppServer.threadId,
+            persist_threads: false,
+            ...(variant === 'restricted' && { environment_access: false }),
+            ...(variant === 'changed instructions' && {
+              developer_instructions: 'Use new instructions',
+            }),
+          },
+        },
+        vars: {},
+      });
+      if (variant === 'matching') {
+        expect(explicit.metadata?.codexAppServer.threadId).toBe(originalId);
+      } else {
+        expect(explicit.error).toContain('Cannot change resume settings');
+      }
+      const next = await provider.callApi(prompt);
+      expect(next.metadata?.codexAppServer.threadId).toBe(originalId);
+      const methods = server.messages().map((msg) => msg.method);
+      expect(methods.filter((method) => method === 'thread/start')).toHaveLength(1);
+      expect(methods).not.toContain('thread/resume');
+      expect(methods).not.toContain('thread/unsubscribe');
       await provider.cleanup();
     },
   );
@@ -666,7 +717,7 @@ describe('OpenAICodexAppServerProvider', () => {
     await provider.cleanup();
   });
 
-  it('keeps an active auto-started thread subscribed when an explicit caller changes its settings', async () => {
+  it('preserves an active automatic turn and queues a matching explicit caller behind it', async () => {
     const server = createMockAppServer();
     mocks.spawn.mockReturnValue(server.proc);
     const provider = new OpenAICodexAppServerProvider({ config: { persist_threads: true } });
@@ -684,12 +735,22 @@ describe('OpenAICodexAppServerProvider', () => {
       prompt: {
         raw: prompt,
         label: 'one-off',
-        config: { thread_id: threadId, persist_threads: false },
+        config: {
+          thread_id: threadId,
+          persist_threads: false,
+          developer_instructions: 'Different instructions',
+        },
       },
       vars: {},
     });
     expect(conflicting.error).toContain('another turn is using it');
     expect(server.messages().map((msg) => msg.method)).not.toContain('thread/unsubscribe');
+    const matching = provider.callApi(prompt, {
+      prompt: { raw: prompt, label: 'matching', config: { thread_id: threadId } },
+      vars: {},
+    });
+    await flushMicrotasks();
+    expect(server.messages().filter((msg) => msg.method === 'turn/start')).toHaveLength(1);
     server.send({
       method: 'turn/completed',
       params: {
@@ -698,6 +759,18 @@ describe('OpenAICodexAppServerProvider', () => {
       },
     });
     expect((await inFlight).error).toBeUndefined();
+    const nextTurn = await waitForMessage(
+      server,
+      (msg) => msg.method === 'turn/start' && msg.id !== turn.id,
+    );
+    expect(nextTurn.params.threadId).toBe(threadId);
+    server.send({ id: nextTurn.id, result: { turn: { id: 'turn_next', status: 'inProgress' } } });
+    server.send({
+      method: 'turn/completed',
+      params: { threadId, turn: { id: 'turn_next', status: 'completed', items: [], error: null } },
+    });
+    expect((await matching).error).toBeUndefined();
+    expect(server.messages().some((msg) => msg.method === 'thread/resume')).toBe(false);
     await provider.cleanup();
   });
 
