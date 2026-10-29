@@ -67,6 +67,7 @@ import { handleIsValidFunctionCall } from './functionToolCall';
 import { handleGEval } from './geval';
 import { handleGleuScore } from './gleu';
 import { handleGuardrails } from './guardrails';
+import { prepareHostedTraceAssertion } from './hostedTrace';
 import { handleContainsHtml, handleIsHtml } from './html';
 import { handleJavascript } from './javascript';
 import { handleContainsJson, handleIsJson } from './json';
@@ -636,7 +637,7 @@ async function runAssertionInternal({
 
   const assertionParams: AssertionParams = {
     assertion,
-    baseType: getAssertionBaseType(assertion),
+    baseType,
     providerCallContext,
     assertionValueContext: context,
     cost,
@@ -660,18 +661,14 @@ async function runAssertionInternal({
 
   const handler = ASSERTION_HANDLERS[assertionParams.baseType as keyof typeof ASSERTION_HANDLERS];
   if (handler) {
-    const traceUnavailableForAssertion =
+    const traceError =
       traceUnavailable &&
       (assertionParams.baseType.startsWith('trace-') ||
-        assertionParams.baseType.startsWith('trajectory:'));
-    const result: GradingResult = traceUnavailableForAssertion
-      ? {
-          pass: false,
-          score: 0,
-          reason:
-            'Local trace export did not complete before grading. Trace evidence is unavailable.',
-          assertion,
-        }
+        assertionParams.baseType.startsWith('trajectory:'))
+        ? 'Local trace export did not complete before grading. Trace evidence is unavailable.'
+        : prepareHostedTraceAssertion(assertionParams);
+    const result: GradingResult = traceError
+      ? { pass: false, score: 0, reason: traceError, assertion }
       : await handler(assertionParams);
 
     // Store rendered assertion value in metadata if it differs from the original template

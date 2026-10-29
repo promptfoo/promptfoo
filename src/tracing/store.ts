@@ -5,8 +5,7 @@ import { getDatabaseLockRetryDelay, getDb } from '../database/index';
 import { spansTable, tracesTable } from '../database/tables';
 import logger from '../logger';
 import { sanitizeTraceAttributes } from './sanitizeAttributes';
-import { isRelevantSpan, matchesSpanFilter } from './spanFilter';
-import { SPAN_ROLE_ATTRIBUTE } from './spanRoles';
+import { filterTargetSpans, isRelevantSpan, matchesSpanFilter } from './spanFilter';
 
 import type { TraceData } from '../types/tracing';
 
@@ -388,47 +387,16 @@ export class TraceStore {
         .where(eq(spansTable.traceId, traceId))
         .orderBy(asc(spansTable.startTime), asc(spansTable.spanId));
 
-      const rowsBySpanId = new Map(rows.map((row) => [row.spanId, row]));
-      const graderOwnedSpanIds = new Map<string, boolean>();
+      const candidates = includeInternalSpans ? rows : filterTargetSpans(rows);
       const spanMap = new Map<string, SpanData>();
       const depthCache = new Map<string, number>();
 
-      for (const row of rows) {
+      for (const row of candidates) {
         if (earliestStartTime && row.startTime < earliestStartTime) {
           continue;
         }
 
         const rawAttributes = row.attributes ?? {};
-
-        if (!includeInternalSpans) {
-          let ancestor: typeof spansTable.$inferSelect | undefined = row;
-          const visitedSpanIds = new Set<string>();
-          let belongsToGrader = false;
-
-          while (ancestor && !visitedSpanIds.has(ancestor.spanId)) {
-            const cached = graderOwnedSpanIds.get(ancestor.spanId);
-            if (cached !== undefined) {
-              belongsToGrader = cached;
-              break;
-            }
-
-            visitedSpanIds.add(ancestor.spanId);
-            if (ancestor.attributes?.[SPAN_ROLE_ATTRIBUTE] === 'grader') {
-              belongsToGrader = true;
-              break;
-            }
-
-            ancestor = ancestor.parentSpanId ? rowsBySpanId.get(ancestor.parentSpanId) : undefined;
-          }
-
-          for (const spanId of visitedSpanIds) {
-            graderOwnedSpanIds.set(spanId, belongsToGrader);
-          }
-
-          if (belongsToGrader) {
-            continue;
-          }
-        }
 
         const spanData = serializeSpan(row, shouldSanitize, rawAttributes);
 

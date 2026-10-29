@@ -63,7 +63,7 @@ const completion = z.object({
 });
 
 /** The exporter can publish children before publishing their parent. */
-class UnpublishedTraceParentError extends Error {}
+export class UnpublishedTraceParentError extends Error {}
 
 function invalid(): never {
   // Wire values can include credentials. Never echo them in diagnostics.

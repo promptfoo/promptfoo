@@ -1,7 +1,10 @@
+import { trace } from '@opentelemetry/api';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import logger from '../../../src/logger';
 import { OpenAiAgentsApiProvider } from '../../../src/providers/openai/agents-api';
 import { withGenAISpan } from '../../../src/providers/tracing';
+import * as otelSdk from '../../../src/tracing/otelSdk';
+import { getTraceStore } from '../../../src/tracing/store';
 import { fetchWithRetries } from '../../../src/util/fetch/index';
 import { checkProviderApiKeys } from '../../../src/util/provider';
 import { createDeferred, mockProcessEnv } from '../../util/utils';
@@ -509,6 +512,641 @@ describe('OpenAiAgentsApiProvider', () => {
         metadata: { sessionDeleted: true, artifacts: [{ path, status: 'unavailable' }] },
       });
       expect(cancel).toHaveBeenCalledOnce();
+    });
+  });
+
+  describe('hosted trace export', () => {
+    const localTraceId = 'f'.repeat(32);
+    const wrapperId = 'e'.repeat(16);
+    const row = {
+      vars: {},
+      prompt: { raw: 'hi', label: 'hi' },
+      traceparent: `00-${localTraceId}-${'a'.repeat(16)}-01`,
+    };
+    function recordWrapper(localExporter = true) {
+      vi.spyOn(otelSdk, 'hasLocalSpanExporter').mockReturnValue(localExporter);
+      vi.spyOn(getTraceStore(), 'getTraceMetadata').mockResolvedValue({});
+      const span = trace.wrapSpanContext({
+        traceId: localTraceId,
+        spanId: wrapperId,
+        traceFlags: 1,
+      });
+      vi.spyOn(span, 'isRecording').mockReturnValue(true);
+      vi.mocked(withGenAISpan).mockImplementationOnce((_ctx, run) => run(span));
+      return vi.spyOn(span, 'setAttribute');
+    }
+
+    function published(status = 'complete') {
+      const root = {
+        name: 'invoke_agent',
+        traceId: 'b'.repeat(32),
+        spanId: 'c'.repeat(16),
+        startTimeUnixNano: '1700000000000000000',
+        endTimeUnixNano: '1700000000025000000',
+        attributes: [
+          { key: 'gen_ai.operation.name', value: { stringValue: 'invoke_agent' } },
+          {
+            key: 'openai.managed_agents.trace.completeness',
+            value: {
+              stringValue: JSON.stringify({ status, missing_outputs: [], ordering_issues: [] }),
+            },
+          },
+        ],
+      };
+      return {
+        id: turn.id,
+        session_id: session.id,
+        otlp: { resourceSpans: [{ scopeSpans: [{ spans: [root] }] }] },
+      };
+    }
+
+    it.each([undefined, null, '', ' ', '..'])(
+      'rejects a completed root turn with invalid ID %j before collecting evidence',
+      async (id) => {
+        recordWrapper();
+        const addSpans = vi.spyOn(getTraceStore(), 'addSpans').mockResolvedValue({ stored: true });
+        mockApi((pathname) => {
+          if (pathname.endsWith('/turns')) {
+            return json(page([{ ...turn, id }]));
+          }
+          if (pathname.endsWith('/items')) {
+            return json(page([{ ...message, turn_id: id }]));
+          }
+          if (pathname.endsWith('/traces')) {
+            return json(page([{ ...published(), id }]));
+          }
+          return pathname.endsWith('/artifacts') ? json(page([])) : undefined;
+        });
+        const result = await provider({
+          hostedTrace: true,
+          artifactPaths: ['/workspace/outputs/file'],
+          retainSession: true,
+        }).callApi('hi', row);
+        expect(result.error).toMatch(/turn ID/i);
+        expect(result.output).toBeUndefined();
+        expect(result.metadata).toMatchObject({ sessionCancelled: true, sessionDeleted: true });
+        expect(calls().some(({ pathname }) => /\/(items|traces|artifacts)$/.test(pathname))).toBe(
+          false,
+        );
+        expect(addSpans).not.toHaveBeenCalled();
+      },
+    );
+
+    it('requests no native traces for wrapper-only and untraced rows', async () => {
+      const attributes = recordWrapper();
+      const wrapperOnly = await provider().callApi('hi', row);
+      expect(attributes).not.toHaveBeenCalledWith('promptfoo.openai.hosted_trace_requested', true);
+      expect(wrapperOnly.metadata).not.toHaveProperty('hostedTrace');
+      const untraced = await provider({ hostedTrace: true }).callApi('hi');
+      expect(untraced).toMatchObject({
+        output: '42',
+        metadata: { sessionDeleted: true, hostedTrace: { status: 'unavailable' } },
+      });
+      expect(calls().some((request) => request.pathname.endsWith('/traces'))).toBe(false);
+    });
+
+    it('skips the hosted export when the local span exporter is disabled', async () => {
+      vi.stubEnv('PROMPTFOO_OTEL_LOCAL_EXPORT', 'false');
+      const attributes = recordWrapper();
+      const addSpans = vi.spyOn(getTraceStore(), 'addSpans');
+      const result = await provider({ hostedTrace: true }).callApi('hi', row);
+      expect(attributes).toHaveBeenCalledWith('promptfoo.openai.hosted_trace_requested', true);
+      expect(result).toMatchObject({
+        output: '42',
+        metadata: {
+          sessionDeleted: true,
+          hostedTrace: { status: 'unavailable', reason: expect.stringContaining('local') },
+        },
+      });
+      expect(calls().some((request) => request.pathname.endsWith('/traces'))).toBe(false);
+      expect(addSpans).not.toHaveBeenCalled();
+    });
+
+    it('skips an import when a concurrent evaluation initialized an external-only SDK', async () => {
+      vi.stubEnv('PROMPTFOO_OTEL_LOCAL_EXPORT', 'true');
+      recordWrapper(false);
+      const result = await provider({ hostedTrace: true }).callApi('hi', row);
+      expect(result).toMatchObject({
+        output: '42',
+        metadata: {
+          sessionDeleted: true,
+          hostedTrace: {
+            status: 'unavailable',
+            reason: expect.stringContaining('no local span exporter'),
+          },
+        },
+      });
+      expect(calls().some((request) => request.pathname.endsWith('/traces'))).toBe(false);
+      expect(getTraceStore().getTraceMetadata).not.toHaveBeenCalled();
+    });
+
+    it('downloads this session and root turn on later pages before deleting it', async () => {
+      vi.useFakeTimers();
+      recordWrapper();
+      const addSpans = vi.spyOn(getTraceStore(), 'addSpans').mockResolvedValue({ stored: true });
+      const requests = vi.mocked(fetchWithRetries);
+      let poll = 0;
+      requests.mockImplementation(async (url, options) => {
+        const { pathname, searchParams } = new URL(String(url));
+        if (pathname.endsWith('/traces')) {
+          const after = searchParams.get('after');
+          if (!after) {
+            poll++;
+            if (poll === 1) {
+              return json(page([]));
+            }
+            if (poll === 2) {
+              return json(page([published('partial')]));
+            }
+            return json({ data: [{ id: 'other-turn', session_id: session.id }], has_more: true });
+          }
+          if (after === 'other-turn') {
+            return json(
+              page([{ id: 'foreign-turn', session_id: 'other-session' }], true, 'foreign-turn'),
+            );
+          }
+          expect(after).toBe('foreign-turn');
+          return json(page([published()]));
+        }
+        if (options?.method === 'DELETE') {
+          expect(poll).toBe(3);
+        }
+        return defaultResponse(pathname, options?.method);
+      });
+      const pending = provider({ hostedTrace: true, pollIntervalMs: 10 }).callApi('hi', row);
+      await vi.advanceTimersByTimeAsync(20);
+      await expect(pending).resolves.toMatchObject({
+        output: '42',
+        metadata: {
+          sessionDeleted: true,
+          hostedTrace: {
+            source: 'openai:agents-api',
+            status: 'imported',
+            spanCount: 1,
+            errorStatusComplete: true,
+            includeToolArguments: false,
+            toolArgumentsComplete: false,
+          },
+        },
+      });
+      expect(poll).toBe(3);
+      expect(addSpans).toHaveBeenCalledOnce();
+      expect(addSpans).toHaveBeenCalledWith(
+        localTraceId,
+        [expect.objectContaining({ name: 'invoke_agent', parentSpanId: wrapperId })],
+        { abortSignal: expect.any(AbortSignal), deadline: expect.any(Number) },
+      );
+    });
+
+    it('rejects a hosted trace page with conflicting continuation IDs before storing it', async () => {
+      recordWrapper();
+      const addSpans = vi.spyOn(getTraceStore(), 'addSpans').mockResolvedValue({ stored: true });
+      let pages = 0;
+      mockApi((pathname) => {
+        if (!pathname.endsWith('/traces')) {
+          return undefined;
+        }
+        return ++pages === 1 ? json(page([published()], true, 'unrelated-turn')) : json(page([]));
+      });
+      const result = await provider({ hostedTrace: true }).callApi('hi', row);
+      expect(result.metadata).toMatchObject({
+        hostedTrace: { status: 'unavailable' },
+        sessionDeleted: true,
+      });
+      expect(pages).toBe(1);
+      expect(addSpans).not.toHaveBeenCalled();
+    });
+
+    it.each([false, true])(
+      'rejects duplicate trace IDs before storing spans (across pages: %s)',
+      async (acrossPages) => {
+        recordWrapper();
+        const addSpans = vi.spyOn(getTraceStore(), 'addSpans').mockResolvedValue({ stored: true });
+        const valid = published();
+        const otherSession = { ...valid, session_id: 'other-session' };
+        let reads = 0;
+        mockApi((pathname) => {
+          if (!pathname.endsWith('/traces')) {
+            return undefined;
+          }
+          reads++;
+          if (!acrossPages) {
+            return json(page([otherSession, valid]));
+          }
+          return reads === 1 ? json(page([otherSession], true, valid.id)) : json(page([valid]));
+        });
+        const result = await provider({ hostedTrace: true }).callApi('hi', row);
+        expect(result.metadata).toMatchObject({
+          hostedTrace: { status: 'unavailable' },
+          sessionDeleted: true,
+        });
+        expect(addSpans).not.toHaveBeenCalled();
+      },
+    );
+
+    it.each([
+      { owner: session.id, expected: 'unavailable' },
+      { owner: 'other-session', expected: 'imported' },
+    ])(
+      'checks ownership before ignoring a missing trace ID ($owner)',
+      async ({ owner, expected }) => {
+        recordWrapper();
+        const addSpans = vi.spyOn(getTraceStore(), 'addSpans').mockResolvedValue({ stored: true });
+        const records = [published(), { session_id: owner }];
+        mockApi((pathname) => (pathname.endsWith('/traces') ? json(page(records)) : undefined));
+        const result = await provider({ hostedTrace: true }).callApi('hi', row);
+        expect(result.metadata).toMatchObject({
+          hostedTrace: { status: expected },
+          sessionDeleted: true,
+        });
+        expect(addSpans).toHaveBeenCalledTimes(expected === 'imported' ? 1 : 0);
+      },
+    );
+
+    it.each(['parent arrives', 'parent absent', 'cycle', 'duplicate'])(
+      'polls only repairable disconnected snapshots (%s)',
+      async (outcome) => {
+        vi.useFakeTimers();
+        recordWrapper();
+        const addSpans = vi.spyOn(getTraceStore(), 'addSpans').mockResolvedValue({ stored: true });
+        let polls = 0;
+        mockApi((pathname) => {
+          if (!pathname.endsWith('/traces')) {
+            return undefined;
+          }
+          polls++;
+          const resource = published();
+          const spans = resource.otlp.resourceSpans[0].scopeSpans[0].spans;
+          const [root] = spans;
+          const parentSpanId = '8'.repeat(16);
+          const child = {
+            ...root,
+            spanId: 'd'.repeat(16),
+            parentSpanId,
+            attributes: [{ key: 'gen_ai.operation.name', value: { stringValue: 'chat' } }],
+          };
+          spans.push(child);
+          if (outcome === 'parent arrives' && polls > 1) {
+            const parent = { ...child, spanId: parentSpanId, parentSpanId: root.spanId };
+            spans.push(parent);
+          } else if (outcome === 'cycle') {
+            const cycle = { ...child, spanId: '9'.repeat(16), parentSpanId: '9'.repeat(16) };
+            spans.push(cycle);
+          } else if (outcome === 'duplicate') {
+            spans.push(child);
+          }
+          return json(page([resource]));
+        });
+        const pending = provider({ hostedTrace: { timeoutMs: 25 }, pollIntervalMs: 10 }).callApi(
+          'hi',
+          row,
+        );
+        await vi.advanceTimersByTimeAsync(0);
+        expect(addSpans).not.toHaveBeenCalled();
+        await vi.advanceTimersByTimeAsync(25);
+        const result = await pending;
+        expect(result).toMatchObject({ output: '42', metadata: { sessionDeleted: true } });
+        if (outcome === 'parent arrives') {
+          expect(polls).toBe(2);
+          expect(result.metadata?.hostedTrace).toMatchObject({ status: 'imported', spanCount: 3 });
+          expect(addSpans).toHaveBeenCalledOnce();
+        } else {
+          expect(polls).toBe(outcome === 'parent absent' ? 3 : 1);
+          expect(result.metadata?.hostedTrace).toMatchObject({ status: 'unavailable' });
+          expect(addSpans).not.toHaveBeenCalled();
+        }
+      },
+    );
+
+    it.each([
+      'latest',
+      'provider deadline',
+      'later empty page',
+      'denied',
+      'orphan',
+      'unmatched',
+      'cancelled',
+    ] as const)(
+      'retains only validated partial evidence after a deadline (%s)',
+      async (outcome) => {
+        vi.useFakeTimers();
+        recordWrapper();
+        const addSpans = vi.spyOn(getTraceStore(), 'addSpans').mockResolvedValue({ stored: true });
+        const controller = new AbortController();
+        const expectPartial =
+          outcome === 'latest' || outcome === 'provider deadline' || outcome === 'later empty page';
+        let polls = 0;
+        mockApi((path) => {
+          if (!path.endsWith('/traces')) {
+            return undefined;
+          }
+          polls++;
+          if (outcome === 'later empty page' && polls > 2) {
+            return json(page([]));
+          }
+          const resource = published();
+          const spans = resource.otlp.resourceSpans[0].scopeSpans[0].spans;
+          const [root] = spans;
+          root.attributes = root.attributes.filter((attr) => attr.key === 'gen_ai.operation.name');
+          if (outcome === 'unmatched') {
+            return json(page([{ ...resource, id: 'other-turn' }]));
+          }
+          if (polls > 1) {
+            if (outcome === 'denied') {
+              return apiError(403, 'Export disabled');
+            }
+            const tool = {
+              ...root,
+              spanId: 'd'.repeat(16),
+              parentSpanId: outcome === 'orphan' ? '9'.repeat(16) : root.spanId,
+              attributes: [
+                { key: 'gen_ai.operation.name', value: { stringValue: 'execute_tool' } },
+                { key: 'gen_ai.tool.name', value: { stringValue: 'lookup' } },
+              ],
+            };
+            spans.push(tool);
+          }
+          return json(page([resource]));
+        });
+
+        const pending = provider({
+          hostedTrace: { timeoutMs: outcome === 'provider deadline' ? 75 : 25 },
+          timeoutMs: outcome === 'provider deadline' ? 25 : 100,
+          pollIntervalMs: 10,
+        }).callApi('hi', row, { abortSignal: controller.signal });
+        await vi.advanceTimersByTimeAsync(0);
+        expect(polls).toBe(1);
+        expect(addSpans).not.toHaveBeenCalled();
+        if (outcome === 'cancelled') {
+          const rejected = expect(pending).rejects.toThrow('stop while partial');
+          controller.abort(new Error('stop while partial'));
+          await rejected;
+        } else {
+          await vi.advanceTimersByTimeAsync(24);
+          expect(addSpans).not.toHaveBeenCalled();
+          await vi.advanceTimersByTimeAsync(1);
+          const result = await pending;
+          expect(result).toMatchObject({ output: '42', metadata: { sessionDeleted: true } });
+          if (expectPartial) {
+            expect(result.metadata?.hostedTrace).toMatchObject({
+              status: 'partial',
+              spanCount: 2,
+              parentSpanId: wrapperId,
+            });
+            expect(addSpans).toHaveBeenCalledOnce();
+            expect(addSpans).toHaveBeenCalledWith(
+              localTraceId,
+              expect.arrayContaining([expect.objectContaining({ name: 'execute_tool lookup' })]),
+              { abortSignal: expect.any(AbortSignal), deadline: expect.any(Number) },
+            );
+          } else {
+            expect(result.metadata?.hostedTrace).toMatchObject({ status: 'unavailable' });
+          }
+        }
+        if (!expectPartial) {
+          expect(addSpans).not.toHaveBeenCalled();
+        }
+        expect(calls().at(-1)?.method).toBe('DELETE');
+      },
+    );
+
+    function publishedWithTool(args?: Record<string, unknown>) {
+      const resource = published();
+      const spans = resource.otlp.resourceSpans[0].scopeSpans[0].spans;
+      const [root] = spans;
+      const tool = {
+        ...root,
+        parentSpanId: root.spanId,
+        spanId: 'd'.repeat(16),
+        name: 'execute_tool lookup',
+        attributes: [
+          { key: 'gen_ai.operation.name', value: { stringValue: 'execute_tool' } },
+          { key: 'gen_ai.tool.name', value: { stringValue: 'lookup' } },
+          ...(args
+            ? [{ key: 'gen_ai.tool.call.arguments', value: { stringValue: JSON.stringify(args) } }]
+            : []),
+        ],
+      };
+      spans.push(tool);
+      return resource;
+    }
+
+    it('imports tool identity without recording the hosted argument payload', async () => {
+      recordWrapper();
+      const addSpans = vi.spyOn(getTraceStore(), 'addSpans').mockResolvedValue({ stored: true });
+      mockApi((path) =>
+        path.endsWith('/traces')
+          ? json(page([publishedWithTool({ query: 'sensitive-input' })]))
+          : undefined,
+      );
+      const result = await provider({ hostedTrace: true }).callApi('hi', row);
+      expect(result.metadata?.hostedTrace).toMatchObject({
+        status: 'imported',
+        spanCount: 2,
+        includeToolArguments: false,
+        toolArgumentsComplete: false,
+      });
+      const spans = addSpans.mock.calls[0][1];
+      expect(spans).toContainEqual(expect.objectContaining({ name: 'execute_tool lookup' }));
+      expect(JSON.stringify(spans)).not.toContain('sensitive-input');
+    });
+
+    it('keeps the answer and deletes the session when export is denied', async () => {
+      recordWrapper();
+      mockApi((path) =>
+        path.endsWith('/traces') ? apiError(403, 'sensitive remote detail') : undefined,
+      );
+      const result = await provider({ hostedTrace: true }).callApi('hi', row);
+      expect(result).toMatchObject({
+        output: '42',
+        metadata: {
+          sessionDeleted: true,
+          hostedTrace: { status: 'unavailable', reason: expect.stringContaining('403') },
+        },
+      });
+      expect(JSON.stringify(result)).not.toContain('sensitive remote detail');
+      expect(calls().filter((request) => request.pathname.endsWith('/traces'))).toHaveLength(1);
+    });
+
+    it.each(['deadline', 'cancellation'] as const)(
+      'bounds a stalled export on %s and cleans up',
+      async (cause) => {
+        vi.useFakeTimers();
+        recordWrapper();
+        const controller = new AbortController();
+        const requestStarted = createDeferred<void>();
+        vi.mocked(fetchWithRetries).mockImplementation(async (url, options) => {
+          const { pathname } = new URL(String(url));
+          if (pathname.endsWith('/traces')) {
+            const signal = options!.signal!;
+            requestStarted.resolve();
+            return new Promise<Response>((_, reject) => {
+              signal.addEventListener('abort', () => reject(signal.reason), { once: true });
+            });
+          }
+          return defaultResponse(pathname, options?.method);
+        });
+        const pending = provider({ hostedTrace: { timeoutMs: 25 } }).callApi('hi', row, {
+          abortSignal: controller.signal,
+        });
+        await requestStarted.promise;
+        if (cause === 'cancellation') {
+          const rejected = expect(pending).rejects.toThrow('cancel eval');
+          controller.abort(new Error('cancel eval'));
+          await rejected;
+        } else {
+          await vi.advanceTimersByTimeAsync(25);
+          await expect(pending).resolves.toMatchObject({
+            output: '42',
+            metadata: {
+              sessionDeleted: true,
+              hostedTrace: { status: 'unavailable', reason: expect.stringContaining('Timed out') },
+            },
+          });
+        }
+        expect(calls().at(-1)?.method).toBe('DELETE');
+      },
+    );
+
+    it('deletes the session on the hosted deadline while the local policy read is queued', async () => {
+      recordWrapper();
+      const queued = createDeferred<Record<string, unknown>>();
+      vi.mocked(getTraceStore().getTraceMetadata).mockReturnValue(queued.promise);
+      const result = await provider({ hostedTrace: { timeoutMs: 25 } }).callApi('hi', row);
+      expect(result).toMatchObject({
+        output: '42',
+        metadata: { sessionDeleted: true, hostedTrace: { status: 'unavailable' } },
+      });
+      queued.resolve({});
+      expect(calls().some((request) => request.pathname.endsWith('/traces'))).toBe(false);
+    });
+
+    it.each([true, false])(
+      'releases the session on cancellation while the local write is queued (retainSession=%s)',
+      async (retainSession) => {
+        recordWrapper();
+        const controller = new AbortController();
+        const started = createDeferred<void>();
+        const queued = createDeferred<{ stored: boolean }>();
+        vi.spyOn(getTraceStore(), 'addSpans').mockImplementation(() => {
+          started.resolve();
+          return queued.promise;
+        });
+        mockApi((path) => (path.endsWith('/traces') ? json(page([published()])) : undefined));
+        const pending = provider({ hostedTrace: true, retainSession }).callApi('hi', row, {
+          abortSignal: controller.signal,
+        });
+        await started.promise;
+        const deletions = () => calls().filter((request) => request.method === 'DELETE');
+        expect(deletions()).toHaveLength(retainSession ? 0 : 1);
+        controller.abort(new Error('cancel while storing'));
+        await expect(pending).rejects.toThrow('cancel while storing');
+        expect(deletions()).toHaveLength(1);
+        queued.reject(new Error('late database failure'));
+      },
+    );
+
+    it.each([
+      { budget: 'provider', complete: true, providerMs: 25, hostedMs: 100, expires: 25 },
+      { budget: 'hosted', complete: true, providerMs: 100, hostedMs: 25, expires: 25 },
+      {
+        budget: 'short partial write',
+        complete: false,
+        providerMs: 25,
+        hostedMs: 100,
+        expires: 50,
+      },
+      {
+        budget: 'partial write cap',
+        complete: false,
+        providerMs: 600,
+        hostedMs: 400,
+        expires: 650,
+      },
+    ])('bounds a queued local write by the $budget deadline', async (rowBudget) => {
+      vi.useFakeTimers();
+      recordWrapper();
+      const requestStarted = createDeferred<void>();
+      const publication = createDeferred<void>();
+      const queued = createDeferred<{ stored: boolean }>();
+      const addSpans = vi.spyOn(getTraceStore(), 'addSpans').mockReturnValue(queued.promise);
+      vi.mocked(fetchWithRetries).mockImplementation(async (url, options) => {
+        const path = new URL(String(url)).pathname;
+        if (path.endsWith('/traces')) {
+          requestStarted.resolve();
+          await publication.promise;
+          return json(page([published(rowBudget.complete ? 'complete' : 'partial')]));
+        }
+        return defaultResponse(path, options?.method);
+      });
+      const pending = provider({
+        timeoutMs: rowBudget.providerMs,
+        hostedTrace: { timeoutMs: rowBudget.hostedMs },
+      }).callApi('hi', row);
+      await requestStarted.promise;
+      const publicationDelayMs = 10;
+      await vi.advanceTimersByTimeAsync(publicationDelayMs);
+      expect(addSpans).not.toHaveBeenCalled();
+      publication.resolve();
+      await vi.advanceTimersByTimeAsync(rowBudget.expires - publicationDelayMs - 1);
+      expect(addSpans).toHaveBeenCalledOnce();
+      const signal = addSpans.mock.calls[0][2]?.abortSignal;
+      expect(signal?.aborted).toBe(false);
+      await vi.advanceTimersByTimeAsync(2);
+      expect(signal?.aborted).toBe(true);
+      await expect(pending).resolves.toMatchObject({
+        output: '42',
+        metadata: {
+          sessionDeleted: true,
+          hostedTrace: { status: 'unavailable', reason: 'Timed out storing the hosted trace' },
+        },
+      });
+      expect(calls().filter((request) => request.method === 'DELETE')).toHaveLength(1);
+      queued.reject(new Error('late write rejection'));
+    });
+
+    it('keeps a successful trace import and flags a late commit receipt', async () => {
+      vi.useFakeTimers();
+      recordWrapper();
+      const deadline = Date.now() + 100;
+      vi.spyOn(getTraceStore(), 'addSpans').mockImplementation(async () => {
+        vi.setSystemTime(deadline + 1);
+        return { stored: true };
+      });
+      mockApi((path) => (path.endsWith('/traces') ? json(page([published()])) : undefined));
+      const result = await provider({ hostedTrace: true, timeoutMs: 100 }).callApi('hi', row);
+      expect(result).toMatchObject({
+        output: '42',
+        metadata: {
+          sessionDeleted: true,
+          hostedTrace: { status: 'imported', spanCount: 1, storageDeadlineExceeded: true },
+        },
+      });
+    });
+
+    it('reports a local write deadline that expires before the timer callback runs', async () => {
+      vi.useFakeTimers();
+      recordWrapper();
+      const deadline = Date.now() + 100;
+      const addSpans = vi.spyOn(getTraceStore(), 'addSpans').mockImplementation(async () => {
+        vi.setSystemTime(deadline);
+        throw new Error('Database locked');
+      });
+      mockApi((path) => (path.endsWith('/traces') ? json(page([published()])) : undefined));
+      const result = await provider({ hostedTrace: true, timeoutMs: 100 }).callApi('hi', row);
+      expect(result).toMatchObject({
+        output: '42',
+        metadata: {
+          sessionDeleted: true,
+          hostedTrace: { status: 'unavailable', reason: 'Timed out storing the hosted trace' },
+        },
+      });
+      expect(addSpans.mock.calls[0][2]?.deadline).toBe(deadline);
+    });
+
+    it('rejects invalid options before creating a session', () => {
+      expect(() => provider({ hostedTrace: { timeoutMs: -1 } })).toThrow('hostedTrace.timeoutMs');
+      expect(fetchWithRetries).not.toHaveBeenCalled();
     });
   });
 
@@ -1748,23 +2386,6 @@ describe('OpenAiAgentsApiProvider', () => {
     expect(result.error).toBe('Agents API did not return a session ID');
     expect(fetchWithRetries).toHaveBeenCalledTimes(1);
   });
-
-  it.each([undefined, null, '', ' ', '..'])(
-    'rejects a completed root turn with invalid ID %j before reading its messages',
-    async (id) => {
-      mockApi((pathname) => {
-        if (pathname.endsWith('/turns')) {
-          return json(page([{ ...turn, id }]));
-        }
-        return pathname.endsWith('/items') ? json(page([{ ...message, turn_id: id }])) : undefined;
-      });
-      const result = await provider({ retainSession: true }).callApi('hi');
-      expect(result.error).toMatch(/turn ID/i);
-      expect(result.output).toBeUndefined();
-      expect(result.metadata).toMatchObject({ sessionCancelled: true, sessionDeleted: true });
-      expect(calls().some(({ pathname }) => pathname.endsWith('/items'))).toBe(false);
-    },
-  );
 
   it('reports an invalid list response', async () => {
     vi.mocked(fetchWithRetries)

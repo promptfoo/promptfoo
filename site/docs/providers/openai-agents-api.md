@@ -85,6 +85,43 @@ assert:
 
 The tool summary omits the command, exit code, arguments, and output. To check what the agent learned from a file, vary the file contents while keeping the task fixed, then check the expected answer for each file.
 
+### Inspect traces
+
+With [eval tracing](/docs/tracing/#quick-start) enabled, Promptfoo records an `invoke_agent` span for the provider call. To inspect actions **inside** the hosted session, also set the provider's `hostedTrace` option. Your OpenAI organization needs trace export enabled, and the project key needs `api.traces.read` or `api.agents.read`. [OpenAI trace export requirements](https://developers.openai.com/api/docs/guides/agents-api/tracing#export-session-traces)
+
+In your eval configuration, enable the local trace exporter and turn on hosted trace collection for the provider.
+
+```yaml
+tracing:
+  enabled: true
+  otlp:
+    http: {}
+
+providers:
+  - id: openai:agents-api:gpt-6-astra
+    config:
+      hostedTrace: true
+```
+
+Open a result’s **View output and test details** button, then select **Traces** to inspect the tools called during the hosted turn.
+
+#### Diagnose missing trace evidence
+
+Look under **Metadata** or inspect `response.metadata.hostedTrace` in the JSON export. Import needs local export enabled for both the eval and its running tracing SDK. Setting `PROMPTFOO_OTEL_LOCAL_EXPORT=false` skips the hosted download. Overlapping evals in one process share the first active tracing SDK. If it has only an external exporter, run the hosted eval after the others finish, or use a separate process.
+
+| What you see                                               | What it means and what to check                                                                                                                                                                                                 |
+| ---------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| A local `invoke_agent` span with no `hostedTrace` metadata | Enable the provider’s `hostedTrace` setting to see remote tool calls.                                                                                                                                                           |
+| `status: imported`                                         | The hosted turn reported a complete trace. `spanCount` counts native spans. A count of `invoke_agent` in the full trace also includes the local wrapper.                                                                        |
+| `status: partial`                                          | The available spans show observed actions. Other actions may be missing.                                                                                                                                                        |
+| `status: unavailable`                                      | Read `reason`. Enable eval tracing if no local span was available, check organization and key permissions for HTTP 403, or increase `hostedTrace.timeoutMs` if publication timed out. Output assertions still grade the answer. |
+
+Promptfoo waits for a connected span tree, retrying unpublished parents for up to 15 seconds by default within the provider timeout. A complete trace uses the remaining time for local storage. A validated partial tree gets one final write of up to 250 ms, capped by the configured timeouts. If SQLite reaches the deadline before committing, Promptfoo rolls back the write. If the commit succeeds and returns late, the spans remain available and `hostedTrace.storageDeadlineExceeded` is `true`. The completed answer still grades.
+
+Use `hostedTrace: true` when tool names, timing and status are sufficient. The importer omits prompts, instructions and tool results.
+
+To inspect the full recording in OpenAI, set `retainSession: true` before the run, find `response.metadata.sessionId` in the export, and open the matching session in [OpenAI's Agents logs](https://platform.openai.com/logs?api=agents). For a manual OTLP export, allow time for publication, retrieve every page of `GET /v1/agents/sessions/{session_id}/traces`, then delete the retained session. [OpenAI trace export example](https://developers.openai.com/api/docs/guides/agents-api/tracing#export-session-traces)
+
 ## Saved agents
 
 Set `agent_id` to evaluate an existing saved agent in a new session. Omitted agent settings, including the model, are inherited. An `agent` object supplies session-only overrides; arrays and objects replace their saved fields rather than merging.
@@ -113,6 +150,7 @@ providers:
 | `pollIntervalMs`                                   | Delay between status checks in milliseconds                                                                                                                         | `1000`                                               |
 | `usageTimeoutMs`                                   | Deadline for polling final usage after the turn completes. Set to `0` to skip polling.                                                                              | `15000`                                              |
 | `cleanupTimeoutMs`                                 | Deadline for cancelling unfinished work and deleting the session                                                                                                    | `60000`                                              |
+| `hostedTrace`                                      | Download the hosted turn's trace before cleanup. Use `true` or an object with `timeoutMs`.                                                                          | `false`                                              |
 | `artifactPaths`                                    | Collect digests for up to eight exact output paths published by the root turn. See [Published artifacts](#published-artifacts).                                     | None                                                 |
 | `retainSession`                                    | Keep successful sessions for later inspection or artifact download                                                                                                  | `false`                                              |
 | `maxRetries`                                       | Retries for status reads, turn cancellation, and session deletion after network errors, HTTP 429, and HTTP 500, 502, 503, or 504; session creation is never retried | `4`                                                  |

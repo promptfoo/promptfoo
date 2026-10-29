@@ -1736,7 +1736,10 @@ describe('EvalResult', () => {
           response: {
             output: 'provider output',
             latencyMs: 42,
-            metadata: createNestedAuthorizationFixture(),
+            metadata: {
+              ...createNestedAuthorizationFixture(),
+              hostedTrace: { source: 'custom', status: 'imported' },
+            },
           },
           gradingResult: null,
           provider: mockProvider,
@@ -1759,6 +1762,37 @@ describe('EvalResult', () => {
         restoreEnv();
       }
     });
+
+    it.each(['imported', 'partial', 'unavailable'])(
+      'keeps only the capture request after stripping a %s hosted response',
+      (status) => {
+        const flags = { ...getStripFlags(), shouldStripMetadata: true };
+        const original = createEvaluateResult({
+          provider: { id: 'custom-target' },
+          response: {
+            output: 'done',
+            metadata: {
+              ...createNestedAuthorizationFixture(),
+              hostedTrace: {
+                source: 'openai:agents-api',
+                status,
+                reason: 'private diagnostic',
+                parentSpanId: 'private-span',
+                includeToolArguments: true,
+                toolArgumentsComplete: true,
+                spanCount: 3,
+              },
+            },
+          },
+        });
+        const stripped = sanitizeResultForJsonlArtifact(original, flags);
+        expect(stripped.response).toEqual({
+          output: 'done',
+          metadata: { hostedTrace: { source: 'openai:agents-api', status: 'unavailable' } },
+        });
+        expect(sanitizeResultForJsonlArtifact(stripped, flags).response).toEqual(stripped.response);
+      },
+    );
 
     it('should strip nested test-case metadata when metadata stripping is enabled', () => {
       const restoreEnv = mockProcessEnv({

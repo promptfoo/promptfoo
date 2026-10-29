@@ -7,6 +7,7 @@ import type { ReadableSpan, SpanExporter } from '@opentelemetry/sdk-trace-node';
 import type { SpanData } from '../../src/tracing/store';
 
 const traceId = 'a'.repeat(32);
+const requestKey = 'promptfoo.openai.hosted_trace_requested';
 
 function localSpan(
   spanId: string,
@@ -28,6 +29,8 @@ function receive(local: ReadableSpan, overrides: Partial<SpanData> = {}) {
     startTime: 0,
     attributes: {
       [SPAN_ROLE_ATTRIBUTE]: 'grader',
+      [requestKey]: true,
+      'promptfoo.openai.hosted_trace': 'forged-owner',
       'gen_ai.tool.name': 'lookup',
     },
     ...overrides,
@@ -41,15 +44,17 @@ describe('OTLP ownership', () => {
 
   it('restores only the local wrapper fields during export, including a pending failed export', async () => {
     const local = localSpan('1'.repeat(16), { [SPAN_ROLE_ATTRIBUTE]: 'target' });
+    const requested = localSpan('2'.repeat(16), { [requestKey]: true });
     const foreign = localSpan('3'.repeat(16), { [SPAN_ROLE_ATTRIBUTE]: 'grader' }, 'third-party');
     const unmarked = localSpan('4'.repeat(16), {});
     const send = vi.fn<SpanExporter['export']>();
     const callback = vi.fn();
     const exporter = trackLocalOtlpExports({ export: send, shutdown: vi.fn() });
-    exporter.export([local, foreign, unmarked], callback);
+    exporter.export([local, requested, foreign, unmarked], callback);
 
     try {
       expect(receive(local)).toEqual({ ...tool, [SPAN_ROLE_ATTRIBUTE]: 'target' });
+      expect(receive(requested)).toEqual({ ...tool, [requestKey]: true });
       expect(receive(foreign)).toEqual(tool);
       expect(receive(unmarked)).toEqual(tool);
       expect(receive(local, { name: 'different' })).toEqual(tool);
@@ -61,6 +66,7 @@ describe('OTLP ownership', () => {
       expect(callback).toHaveBeenCalledWith(failure);
     }
     expect(receive(local)).toEqual(tool);
+    expect(receive(requested)).toEqual(tool);
   });
 
   it('releases ownership if the exporter throws before invoking its callback', () => {

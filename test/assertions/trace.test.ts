@@ -136,6 +136,112 @@ describe('trace assertions', () => {
     ],
   };
 
+  describe('hosted trace ownership', () => {
+    const targetTool = {
+      spanId: 'lookup',
+      name: 'execute_tool lookup',
+      startTime: 1000,
+      attributes: { 'gen_ai.tool.name': 'lookup' },
+    };
+    const grade = (
+      assertion: Assertion,
+      spans: TraceData['spans'],
+      providerResponse = mockProviderResponse,
+    ) =>
+      runAssertion({
+        assertion,
+        test: mockTest,
+        traceId: mockTraceData.traceId,
+        traceData: { ...mockTraceData, spans },
+        providerResponse,
+      });
+
+    const hostedResponse: ProviderResponse = {
+      ...mockProviderResponse,
+      metadata: {
+        hostedTrace: {
+          source: 'openai:agents-api',
+          status: 'imported',
+          parentSpanId: 'wrapper',
+          spanCount: 1,
+          includeToolArguments: false,
+          toolArgumentsComplete: false,
+        },
+      },
+    };
+    const imported = [
+      { spanId: 'wrapper', name: 'invoke_agent', startTime: 1000 },
+      {
+        ...targetTool,
+        parentSpanId: 'wrapper',
+        attributes: { ...targetTool.attributes, 'promptfoo.openai.hosted_trace': 'wrapper' },
+      },
+    ];
+
+    it.each<Assertion>([
+      { type: 'trace-span-count', value: { pattern: 'execute_tool lookup', min: 1 } },
+      { type: 'not-trace-span-count', value: { pattern: 'execute_tool delete', min: 1 } },
+      { type: 'trajectory:tool-used', value: 'lookup' },
+      { type: 'not-trajectory:tool-used', value: 'delete' },
+    ])('declines $type on a declared hosted capture', async (assertion) => {
+      await expect(grade(assertion, imported, hostedResponse)).resolves.toMatchObject({
+        pass: false,
+        score: 0,
+        reason: 'Hosted trace evidence is unavailable for this assertion.',
+      });
+    });
+
+    it('still grades an ordinary output assertion on a declared hosted capture', async () => {
+      await expect(
+        grade({ type: 'contains', value: 'Test' }, imported, hostedResponse),
+      ).resolves.toMatchObject({ pass: true, score: 1 });
+    });
+
+    it('limits generic target assertions to their own tools when a hosted grader shares the trace', async () => {
+      const graderTool = {
+        spanId: 'delete',
+        parentSpanId: 'hosted-grader',
+        name: 'execute_tool delete',
+        startTime: 1100,
+        attributes: {
+          'gen_ai.tool.name': 'delete',
+          'promptfoo.openai.hosted_trace': 'hosted-grader',
+        },
+      };
+      const spans = [
+        targetTool,
+        {
+          spanId: 'grader',
+          name: 'judge',
+          startTime: 1050,
+          attributes: { 'promptfoo.span.role': 'grader' },
+        },
+        {
+          spanId: 'hosted-grader',
+          parentSpanId: 'grader',
+          name: 'invoke_agent',
+          startTime: 1050,
+          attributes: { 'promptfoo.openai.hosted_trace_requested': true },
+        },
+        graderTool,
+      ];
+      for (const [name, pass] of [
+        ['lookup', true],
+        ['delete', false],
+      ] as const) {
+        await expect(
+          grade({ type: 'trajectory:tool-used', value: name }, spans),
+        ).resolves.toMatchObject({ pass });
+        await expect(
+          grade(
+            { type: 'trace-span-count', value: { pattern: `execute_tool ${name}`, min: 1 } },
+            spans,
+          ),
+        ).resolves.toMatchObject({ pass });
+      }
+    });
+  });
+
   describe('deterministic assertions with span attribute filters', () => {
     it.each<{ assertion: Assertion; pass: boolean }>([
       { assertion: { type: 'trace-span-count', value: { max: 2 } }, pass: true },
