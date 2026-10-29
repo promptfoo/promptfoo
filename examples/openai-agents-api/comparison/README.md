@@ -20,6 +20,8 @@ From the repository root, install dependencies and put a Codex CLI with GPT-6 As
 npm run local -- eval -c examples/openai-agents-api/promptfooconfig.compare.mjs --no-cache -o receipt-results.json
 ```
 
+On a proxy-only network, the hosted and SDK rows can pass while Codex reports a DNS or connection error. The app-server starts with a minimal process environment. Add the proxy address and CA certificate path it needs to its existing `cli_env` alongside `CODEX_HOME`. Use a proxy URL without embedded credentials because provider configuration is included in eval exports. [Codex app-server configuration](https://www.promptfoo.dev/docs/providers/openai-codex-app-server/#configuration)
+
 If you downloaded the example separately, run these commands in its `openai-agents-api` directory:
 
 ```sh
