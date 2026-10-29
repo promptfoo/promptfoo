@@ -360,9 +360,7 @@ export function prepareHostedTraceAssertion(params: AssertionParams): string | u
   }
   // Raw span assertions can inspect the local case/target/provider wrappers.
   // A sibling tool or grader in the same row cannot establish an action in this turn.
-  const ancestors = baseType.startsWith('trace-')
-    ? getLocalAncestors(spans, parentId)
-    : undefined;
+  const ancestors = baseType.startsWith('trace-') ? getLocalAncestors(spans, parentId) : undefined;
   if (ancestors && !ancestors.spans.length) {
     return 'The local provider wrapper is missing from the stored OpenAI Agents API trace.';
   }
