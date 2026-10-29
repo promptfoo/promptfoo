@@ -1,0 +1,43 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Verify a published ledger artifact
+
+prompts:
+  - |-
+    Read /workspace/ledger.csv and sum its amount_cents column. Write
+    /workspace/outputs/summary.csv as UTF-8 with the header net_cents, one row
+    containing the signed integer total, Unix line endings and a final newline.
+    Reply with exactly READY.
+
+providers:
+  - id: openai:agents-api:gpt-6-astra
+    config:
+      apiBaseUrl: https://api.openai.com/v1
+      retainSession: true
+      agent:
+        reasoning:
+          effort: low
+      environment:
+        type: openai_hosted
+        network: { access: disabled }
+        files:
+          - type: inline
+            path: /workspace/ledger.csv
+            data: '{{ledgerBase64}}'
+
+defaultTest:
+  assert:
+    - type: equals
+      value: READY
+    - type: javascript
+      metric: PublishedArtifact
+      value: file://./verify-artifact.mjs
+      config:
+        expectedCsv: |
+          net_cents
+          147
+
+tests:
+  - description: Publish the net amount in cents
+    vars:
+      # amount_cents rows are 150, -20, 17.
+      ledgerBase64: YW1vdW50X2NlbnRzCjE1MAotMjAKMTcK
