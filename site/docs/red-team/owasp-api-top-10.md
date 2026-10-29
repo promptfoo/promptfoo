@@ -444,9 +444,9 @@ The OWASP API Security Top 10 and OWASP LLM Top 10 are complementary frameworks:
 
 | API Security Risk               | Related LLM Risk                        |
 | ------------------------------- | --------------------------------------- |
-| API1: BOLA                      | LLM06: Excessive Agency                 |
-| API5: BFLA                      | LLM06: Excessive Agency                 |
-| API7: SSRF                      | LLM05: Improper Output Handling         |
+| API1: BOLA                      | LLM03: Excessive Agency                 |
+| API5: BFLA                      | LLM03: Excessive Agency                 |
+| API7: SSRF                      | LLM10: Improper Output Handling         |
 | API8: Security Misconfiguration | LLM02: Sensitive Information Disclosure |
 
 Test both frameworks together:
