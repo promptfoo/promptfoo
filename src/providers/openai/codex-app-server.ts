@@ -381,6 +381,7 @@ interface ThreadHandle {
   response: any;
   cacheKey?: string;
   autoResumeKey?: string;
+  stickyTurnKey?: string;
   persistent: boolean;
 }
 
@@ -664,6 +665,25 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 }
 
+function hashSettings(settings: Record<string, unknown>): string {
+  const json = JSON.stringify(settings, (_key, value: unknown) =>
+    isPlainObject(value)
+      ? Object.fromEntries(
+          Object.keys(value)
+            .sort()
+            .map((key) => [key, value[key]]),
+        )
+      : value,
+  );
+  return crypto.createHash('sha256').update(json).digest('hex');
+}
+
+function checkBorrowedTurn(handle: ThreadHandle, stickyTurnKey: string): void {
+  if (handle.stickyTurnKey !== stickyTurnKey) {
+    throw new Error('Cannot change turn settings when borrowing a persistent Codex thread');
+  }
+}
+
 function flattenConfig(
   value: Record<string, unknown>,
   prefix = '',
@@ -680,6 +700,24 @@ function flattenConfig(
   }
 
   return entries;
+}
+
+function getCliConfigIdentity(config: Record<string, unknown>) {
+  const overrides = flattenConfig(config);
+  const paths = new Set(overrides.map(({ key }) => key));
+  // A nested key and a dotted override can address the same path or overwrite its parent.
+  // Those -c flags are applied in order, even when the input objects have the same members.
+  const overlapping =
+    paths.size !== overrides.length ||
+    overrides.some(({ key }) => {
+      for (let i = key.indexOf('.'); i !== -1; i = key.indexOf('.', i + 1)) {
+        if (paths.has(key.slice(0, i))) {
+          return true;
+        }
+      }
+      return false;
+    });
+  return overlapping ? overrides : config;
 }
 
 function getCodexTraceExporterSettings(config: unknown): CodexTraceExporterSettings | undefined {
@@ -1569,6 +1607,16 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
               );
               this.registerTurnState(state);
               try {
+                const ownerTurnKey =
+                  threadHandle.persistent &&
+                  !threadHandle.autoResumeKey &&
+                  resolvedConfig.persist_threads
+                    ? hashSettings(this.buildStickyTurnParams(resolvedConfig))
+                    : undefined;
+                if (ownerTurnKey && ownerTurnKey !== threadHandle.stickyTurnKey) {
+                  // A cancelled or failed request may still have reached the server.
+                  threadHandle.stickyTurnKey = undefined;
+                }
                 const turnResponse = await connection.request(
                   'turn/start',
                   this.buildTurnStartParams(threadHandle.threadId, promptInput, resolvedConfig),
@@ -1576,6 +1624,9 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
                     abortSignal: callOptions?.abortSignal,
                     timeoutMs: this.getRequestTimeoutMs(resolvedConfig),
                     onResponse: (response) => {
+                      if (ownerTurnKey) {
+                        threadHandle.stickyTurnKey = ownerTurnKey;
+                      }
                       const turnId = (response as any)?.turn?.id;
                       if (typeof turnId === 'string') {
                         this.updateTurnStateId(state, turnId);
@@ -1989,10 +2040,10 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
     const keyData = {
       env: stableEnv,
       codex_path_override: config.codex_path_override,
-      cli_config: this.getResolvedCliConfig(config, env),
+      cli_config: getCliConfigIdentity(this.getResolvedCliConfig(config, env)),
       experimental_api: config.experimental_api,
     };
-    const hash = crypto.createHash('sha256').update(JSON.stringify(keyData)).digest('hex');
+    const hash = hashSettings(keyData);
     return `openai:codex-app-server:connection:${hash}`;
   }
 
@@ -2027,7 +2078,7 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
       experimental_raw_events: config.experimental_raw_events,
       persist_extended_history: config.persist_extended_history,
     };
-    const hash = crypto.createHash('sha256').update(JSON.stringify(keyData)).digest('hex');
+    const hash = hashSettings(keyData);
     return `openai:codex-app-server:thread:${hash}`;
   }
 
@@ -2040,19 +2091,12 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
     connectionInstanceId: string,
     threadId: string,
     config: CodexAppServerConfig,
-    purpose: 'resume' | 'borrow' = 'resume',
   ): string {
-    const resumeHash = crypto
-      .createHash('sha256')
-      .update(
-        JSON.stringify({
-          connectionInstanceId,
-          resume: this.buildThreadResumeParams(threadId, config),
-          environment_access: config.environment_access ?? true,
-          ...(purpose === 'borrow' && { turn: this.buildStickyTurnParams(config) }),
-        }),
-      )
-      .digest('hex');
+    const resumeHash = hashSettings({
+      connectionInstanceId,
+      resume: this.buildThreadResumeParams(threadId, config),
+      environment_access: config.environment_access ?? true,
+    });
     return `${this.generateExplicitThreadCachePrefix(threadId)}${resumeHash}`;
   }
 
@@ -2060,6 +2104,7 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
     threadId: string,
     persistentVariantPrefix: string | undefined,
     keepKey: string,
+    stickyTurnKey: string,
     connection: CodexAppServerConnection,
     connectionKey: string,
     config: CodexAppServerConfig,
@@ -2072,11 +2117,7 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
       if (key === keepKey || (!staleVariant && !sharesSubscription)) {
         continue;
       }
-      if (
-        stale.autoResumeKey &&
-        stale.autoResumeKey ===
-          this.generateExplicitThreadCacheKey(connection.instanceId, threadId, config, 'borrow')
-      ) {
+      if (stale.autoResumeKey === keepKey && stale.stickyTurnKey === stickyTurnKey) {
         return stale;
       }
       if (this.isThreadProtected(stale.threadId)) {
@@ -2087,6 +2128,9 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
         throw new Error(
           'Cannot change resume settings for an auto-started persistent Codex thread',
         );
+      }
+      if (!persistentVariantPrefix) {
+        checkBorrowedTurn(stale, stickyTurnKey);
       }
       this.threads.delete(key);
       const staleConnection =
@@ -2151,12 +2195,14 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
         config,
       );
       const cacheKey = canPersistThread ? variantKey : undefined;
+      const stickyTurnKey = hashSettings(this.buildStickyTurnParams(config));
       await this.settleOtherExplicitThreadVariants(prefix, variantKey, callOptions?.abortSignal);
       if (allowThreadPersistence) {
         const autoThread = await this.prepareExplicitThread(
           config.thread_id,
           canPersistThread ? prefix : undefined,
           variantKey,
+          stickyTurnKey,
           connection,
           connectionKey,
           config,
@@ -2169,7 +2215,11 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
       // existing matching subscription, but must not take ownership of its cleanup.
       const cachedOrPending = this.getCachedOrPendingThread(variantKey);
       if (cachedOrPending !== undefined) {
-        return this.waitForThreadHandle(cachedOrPending, callOptions?.abortSignal);
+        const handle = await this.waitForThreadHandle(cachedOrPending, callOptions?.abortSignal);
+        if (handle.persistent && !canPersistThread) {
+          checkBorrowedTurn(handle, stickyTurnKey);
+        }
+        return handle;
       }
 
       this.throwIfThreadWaitAborted(callOptions?.abortSignal);
@@ -2267,8 +2317,8 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
           connection.instanceId,
           threadId,
           config,
-          'borrow',
         );
+        handle.stickyTurnKey = hashSettings(this.buildStickyTurnParams(config));
       }
       this.threads.set(cacheKey, handle);
     }
@@ -2522,6 +2572,8 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
     return {
       threadId,
       input,
+      // The resume key and server response separately enforce the environment selection.
+      ...(config.environment_access === false ? { environments: [] } : {}),
       ...this.buildStickyTurnParams(config),
       ...(config.output_schema ? { outputSchema: config.output_schema } : {}),
     };
@@ -2530,7 +2582,6 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
   // Codex applies these overrides to this turn and subsequent turns on the thread.
   private buildStickyTurnParams(config: CodexAppServerConfig): Record<string, unknown> {
     return {
-      ...(config.environment_access === false ? { environments: [] } : {}),
       ...(config.working_dir ? { cwd: config.working_dir } : {}),
       approvalPolicy: config.approval_policy ?? 'never',
       ...(config.approvals_reviewer ? { approvalsReviewer: config.approvals_reviewer } : {}),

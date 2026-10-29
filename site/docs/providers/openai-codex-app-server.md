@@ -188,7 +188,9 @@ The provider validates top-level provider config strictly. Prompt-level config i
 | `turn_timeout_ms`          | number        | Overall turn timeout.                                                                                                                                               | None                 |
 | `server_request_policy`    | object        | Deterministic responses for approvals, user input, MCP elicitations, and dynamic tools.                                                                             | Safe declines        |
 
-With `persist_threads: true`, a later row can use `thread_id` to continue a thread Promptfoo started and still has cached. Use the same resume settings, including `environment_access`, and the same settings Codex carries into later turns, such as reasoning effort and collaboration mode. A conflicting request is rejected before the turn starts. A one-off `output_schema` applies only to that turn. The default ephemeral thread can only be resumed while its subscription is active.
+With `persist_threads: true`, a later row can use `thread_id` to continue a thread Promptfoo started and still has cached. Use the same resume settings, including `environment_access`, and the same settings Codex carries into later turns, such as reasoning effort and collaboration mode. The default ephemeral thread can only be resumed while its subscription is active.
+
+A one-off row with `persist_threads: false` can borrow a cached explicit `thread_id` too. Keep the settings that carry over between turns consistent with the last persistent turn. Promptfoo rejects conflicting settings before sending the borrowed turn. A borrower can set its own `output_schema`, which applies only to that turn.
 
 The app-server provider does not use the SDK provider's exact-version preflight. If you point both providers at a floating global or custom Codex binary, review the SDK provider's [custom binary compatibility requirements](./openai-codex-sdk.md#custom-binary-path).
 

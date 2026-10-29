@@ -739,6 +739,106 @@ describe('OpenAICodexAppServerProvider', () => {
     },
   );
 
+  it('compares nested settings by value when borrowing an automatic subscription', async () => {
+    const threadId = 'thr_canonical_settings';
+    const server = createMockAppServer({
+      autoCompleteThread: threadId,
+      threadStartIds: [threadId],
+    });
+    mocks.spawn.mockReturnValue(server.proc);
+    const provider = new OpenAICodexAppServerProvider({
+      config: {
+        persist_threads: true,
+        sandbox_policy: { type: 'readOnly', networkAccess: false },
+        cli_config: { history: { persistence: 'none', max_bytes: 1000 } },
+      },
+    });
+    const prompt = 'Read the receipt';
+    expect((await provider.callApi(prompt)).metadata?.codexAppServer.threadId).toBe(threadId);
+
+    const borrower = await provider.callApi(prompt, {
+      prompt: {
+        raw: prompt,
+        label: 'equivalent settings',
+        config: {
+          thread_id: threadId,
+          persist_threads: false,
+          sandbox_policy: { networkAccess: false, type: 'readOnly' },
+          cli_config: { history: { max_bytes: 1000, persistence: 'none' } },
+        },
+      },
+      vars: {},
+    });
+    expect(borrower.error).toBeUndefined();
+    expect(mocks.spawn).toHaveBeenCalledTimes(1);
+    expect(server.messages().filter((msg) => msg.method === 'thread/start')).toHaveLength(1);
+    expect(server.messages().filter((msg) => msg.method === 'thread/resume')).toHaveLength(0);
+    expect(server.messages().filter((msg) => msg.method === 'turn/start')).toHaveLength(2);
+    await provider.cleanup();
+  });
+
+  it('keeps processes separate when changing the order of overriding CLI flags', async () => {
+    const threadId = 'thr_cli_order';
+    const first = createMockAppServer({ autoCompleteThread: threadId });
+    const second = createMockAppServer({ autoCompleteThread: threadId });
+    mocks.spawn.mockReturnValueOnce(first.proc).mockReturnValueOnce(second.proc);
+    const provider = new OpenAICodexAppServerProvider();
+    const prompt = 'Read the receipt';
+    const call = (cli_config: Record<string, unknown>) =>
+      provider.callApi(prompt, {
+        prompt: { raw: prompt, label: 'flags', config: { cli_config } },
+        vars: {},
+      });
+    expect(
+      (await call({ 'history.max_bytes': 1000, history: { max_bytes: 2000 } })).error,
+    ).toBeUndefined();
+    expect(
+      (await call({ history: { max_bytes: 2000 }, 'history.max_bytes': 1000 })).error,
+    ).toBeUndefined();
+    expect(mocks.spawn).toHaveBeenCalledTimes(2);
+    const flags = mocks.spawn.mock.calls.map(([, args]) =>
+      (args as string[]).filter((arg) => arg.startsWith('history.max_bytes=')),
+    );
+    expect(flags).toEqual([
+      ['history.max_bytes=1000', 'history.max_bytes=2000'],
+      ['history.max_bytes=2000', 'history.max_bytes=1000'],
+    ]);
+    await provider.cleanup();
+  });
+
+  it('checks a transient caller against the latest sticky settings of an explicit owner', async () => {
+    const threadId = 'thr_explicit_settings';
+    const server = createMockAppServer({ autoCompleteThread: threadId });
+    mocks.spawn.mockReturnValue(server.proc);
+    const provider = new OpenAICodexAppServerProvider({
+      config: { thread_id: threadId, persist_threads: true },
+    });
+    const prompt = 'Read the receipt';
+    const call = (config: Record<string, unknown>) =>
+      provider.callApi(prompt, { prompt: { raw: prompt, label: 'same ID', config }, vars: {} });
+    expect((await call({})).error).toBeUndefined();
+
+    for (const overrides of [
+      { model_reasoning_effort: 'high' },
+      { sandbox_policy: { type: 'dangerFullAccess' } },
+      { developer_instructions: 'One-off profile', model_reasoning_effort: 'high' },
+    ]) {
+      expect((await call({ persist_threads: false, ...overrides })).error).toBeDefined();
+    }
+    expect((await call({})).error).toBeUndefined();
+    expect((await call({ model_reasoning_effort: 'high' })).error).toBeUndefined();
+    expect(
+      (await call({ persist_threads: false, model_reasoning_effort: 'high' })).error,
+    ).toBeUndefined();
+
+    const turns = server.messages().filter((msg) => msg.method === 'turn/start');
+    expect(turns.map((msg) => msg.params.effort)).toEqual([undefined, undefined, 'high', 'high']);
+    expect(turns.every((msg) => msg.params.sandboxPolicy.type === 'readOnly')).toBe(true);
+    expect(server.messages().filter((msg) => msg.method === 'thread/resume')).toHaveLength(1);
+    expect(server.messages().some((msg) => msg.method === 'thread/unsubscribe')).toBe(false);
+    await provider.cleanup();
+  });
+
   it('keeps a cached explicit subscription when a one-off caller requests the same settings', async () => {
     const threadId = 'thr_borrowed';
     const server = createMockAppServer({ autoCompleteThread: threadId, threadEnvironments: [] });
