@@ -153,6 +153,28 @@ describe('LlamaProvider', () => {
       expect(result).toEqual({ error: `API call error: ${String(error)}` });
     });
 
+    it('returns the server error instead of an empty output on a non-2xx response', async () => {
+      vi.mocked(fetchWithCache).mockResolvedValue(
+        createMockFetchResponse(
+          {
+            error: {
+              code: 400,
+              message: 'the request exceeds the available context size, try increasing it',
+              type: 'exceed_context_size_error',
+            },
+          },
+          { status: 400, statusText: 'Bad Request' },
+        ),
+      );
+
+      const provider = new LlamaProvider(modelName, { config });
+      const result = await provider.callApi(prompt);
+      expect(result).toEqual({
+        error:
+          'API response error: 400 Bad Request: the request exceeds the available context size, try increasing it',
+      });
+    });
+
     it('should return an error if response data is malformed', async () => {
       const malformedResponse = createMockFetchResponse(null);
       vi.mocked(fetchWithCache).mockResolvedValue(malformedResponse);

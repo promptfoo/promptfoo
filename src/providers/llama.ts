@@ -75,27 +75,36 @@ export class LlamaProvider implements ApiProvider {
 
     interface LlamaCompletionResponse {
       content: string;
+      error?: { message?: string };
     }
 
     let data: LlamaCompletionResponse;
     let cached = false;
     let latencyMs: number | undefined;
+    let status: number | undefined;
+    let statusText = '';
     try {
-      ({ data, cached, latencyMs } = await fetchWithCache<LlamaCompletionResponse>(
-        `${url}/completion`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
+      ({ data, cached, latencyMs, status, statusText } =
+        await fetchWithCache<LlamaCompletionResponse>(
+          `${url}/completion`,
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(body),
           },
-          body: JSON.stringify(body),
-        },
-        getRequestTimeoutMs(),
-      ));
+          getRequestTimeoutMs(),
+        ));
     } catch (err) {
       return {
         error: `API call error: ${String(err)}`,
       };
+    }
+
+    if (status !== undefined && (status < 200 || status >= 300)) {
+      const detail = data?.error?.message ?? JSON.stringify(data);
+      return { error: `API response error: ${status} ${statusText}: ${detail}` };
     }
 
     try {
