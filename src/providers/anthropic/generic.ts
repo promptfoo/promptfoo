@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from 'crypto';
 
 import Anthropic from '@anthropic-ai/sdk';
-import { getEnvOverrides, getEnvString, getProviderEnvString } from '../../envars';
+import { type EnvVarKey, getEnvOverrides, getEnvString, getProviderEnvString } from '../../envars';
 import { getExplicitProviderEnv } from '../../envOverrides';
 import logger from '../../logger';
 import { resolveProviderApiKey } from '../credentials';
@@ -15,7 +15,6 @@ import {
 import type { ClientOptions } from '@anthropic-ai/sdk';
 import type { Cache } from 'cache-manager';
 
-import type { EnvVarKey } from '../../envars';
 import type { EnvOverrides } from '../../types/env';
 import type { ApiProvider, CallApiContextParams, ProviderResponse } from '../../types/index';
 import type { ClaudeCodeOAuthCredential } from './claudeCodeAuth';

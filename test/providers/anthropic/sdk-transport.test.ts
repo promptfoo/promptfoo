@@ -347,7 +347,7 @@ describe('Anthropic Messages SDK transport', () => {
     },
   );
 
-  it.each([
+  it.each<Record<string, string>>([
     { traceparent: '00-11111111111111111111111111111111-2222222222222222-01' },
     { tracestate: 'vendor=configured' },
   ])('leaves trace context headers that the config sets: %j', async (configured) => {
