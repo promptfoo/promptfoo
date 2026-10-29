@@ -949,7 +949,7 @@ describe('OpenAI Realtime Provider', () => {
 
       expect(directRequest).toHaveBeenCalledOnce();
       expect(persistentRequest).not.toHaveBeenCalled();
-      expect(provider.config.maintainContext).toBe(false);
+      expect(provider.config.maintainContext).toBe(true);
     });
 
     it('should maintain conversation context across multiple messages', async () => {
@@ -2900,6 +2900,35 @@ describe('OpenAI Realtime Provider', () => {
         }
       },
     );
+
+    it('separates conversations after a header change rotates the persistent socket', async () => {
+      const provider = new OpenAiRealtimeProvider('gpt-realtime', {
+        config: { apiKey: 'fixture-key', maintainContext: true },
+      });
+      try {
+        for (const [conversationId, safety_identifier] of [
+          ['first-conversation', 'first-user'],
+          ['first-conversation', 'second-user'],
+          ['second-conversation', 'second-user'],
+          ['second-conversation', 'second-user'],
+        ]) {
+          const pending = provider.callApi('hi', {
+            vars: {},
+            prompt: { raw: 'hi', label: 'hi', config: { safety_identifier } },
+            test: { metadata: { conversationId } },
+          });
+          await flushMicrotasks();
+          mockHandlers.open.forEach((handler) => handler());
+          await flushMicrotasks();
+          simulateGaFlow();
+          expect(await pending).toMatchObject({ output: 'ok' });
+        }
+        expect(safetyIdentifiers()).toEqual(['first-user', 'second-user', 'second-user']);
+        expect(mockWs.close).toHaveBeenCalledTimes(2);
+      } finally {
+        provider.cleanup();
+      }
+    });
 
     it('uses default OpenAI base for direct WebSocket', async () => {
       const provider = new OpenAiRealtimeProvider('gpt-realtime-1.5');
