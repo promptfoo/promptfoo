@@ -1407,6 +1407,7 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
       clearTimeout(writeTimer);
     }
     const toolArgumentsComplete =
+      complete &&
       includeToolArguments &&
       spans.every(
         ({ attributes }) =>
