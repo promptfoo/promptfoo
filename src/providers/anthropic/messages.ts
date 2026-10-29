@@ -1,5 +1,6 @@
 import { APIError } from '@anthropic-ai/sdk';
-import { context as otelContext, propagation, type Span } from '@opentelemetry/api';
+import { defaultTextMapSetter, context as otelContext, type Span } from '@opentelemetry/api';
+import { W3CTraceContextPropagator } from '@opentelemetry/core';
 import {
   getCache,
   getCacheClearGeneration,
@@ -109,21 +110,22 @@ async function finalMessageWithStreamedStopDetails(
   return message;
 }
 
+// The Claude API reads W3C trace context. Writing only that, rather than whatever the
+// application's registered propagator writes, keeps baggage off every host.
+const traceContextPropagator = new W3CTraceContextPropagator();
+const TRACE_CONTEXT_HEADERS = new Set(['traceparent', 'tracestate']);
+
 /**
- * The trace context of the active span, as the registered propagator writes it, for a request
- * the SDK sends without a span of its own. Trace context headers that the config sets win.
+ * The active span's W3C trace context, for a request the SDK sends without a span of its own.
+ * Trace context that the config sets is left alone.
  */
 function getTraceContextHeaders(headers: Record<string, string>): Record<string, string> {
-  const carrier: Record<string, string> = {};
-  try {
-    propagation.inject(otelContext.active(), carrier);
-  } catch (error) {
-    // Like the SDK's own tracing, a telemetry failure must never fail the API call.
-    logger.debug('[Anthropic] Could not inject trace context', { error });
+  if (Object.keys(headers).some((name) => TRACE_CONTEXT_HEADERS.has(name.toLowerCase()))) {
     return {};
   }
-  const configured = new Set(Object.keys(headers).map((name) => name.toLowerCase()));
-  return Object.keys(carrier).some((name) => configured.has(name.toLowerCase())) ? {} : carrier;
+  const carrier: Record<string, string> = {};
+  traceContextPropagator.inject(otelContext.active(), carrier, defaultTextMapSetter);
+  return carrier;
 }
 
 /** The request parameters as sent, which can differ from the config (defaults, dropped params). */
@@ -459,12 +461,8 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
     responses: Anthropic.Messages.Message[],
     signal?: AbortSignal,
   ): Promise<Anthropic.Messages.Message> {
-    // Added here rather than to `headers`, which also key the response cache.
-    const requestHeaders = this.propagatesTraceContext()
-      ? { ...headers, ...getTraceContextHeaders(headers) }
-      : headers;
     const requestOptions = {
-      ...(Object.keys(requestHeaders).length > 0 && { headers: requestHeaders }),
+      ...(Object.keys(headers).length > 0 && { headers }),
       ...(signal && { signal }),
     };
     const send = async (requestParams: Anthropic.Messages.MessageCreateParams) => {
@@ -730,24 +728,6 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
   /** Independent of authentication: adapters decide whether their response cache is safe. */
   protected shouldCacheResponses(): boolean {
     return true;
-  }
-
-  /**
-   * Whether promptfoo sends its span's trace context with each request. The SDK sends trace
-   * context only from spans of its own, so promptfoo sends it whenever those are off, unless
-   * `openTelemetry` or the SDK's `ANTHROPIC_OPEN_TELEMETRY_PROPAGATION` variable turns it off.
-   */
-  private propagatesTraceContext(): boolean {
-    const option = this.config.openTelemetry;
-    // Settled by the client from `openTelemetry`, or from the SDK's variables for `true`.
-    const sdkOption = this.anthropic.openTelemetry;
-    if (option === false || sdkOption.traces.enabled) {
-      return false;
-    }
-    if (option === true || (typeof option === 'object' && option !== null)) {
-      return sdkOption.propagation;
-    }
-    return getEnvString('ANTHROPIC_OPEN_TELEMETRY_PROPAGATION')?.toLowerCase() !== 'false';
   }
 
   async callApi(
@@ -1245,12 +1225,18 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
       }
     }
 
+    // A traced call sends its span's context, so Claude API tracing places the API's spans in the
+    // eval's trace. Kept out of `headers`, which key the response cache.
+    const requestHeaders =
+      context?.traceparent && this.propagatesTraceContext
+        ? { ...headers, ...getTraceContextHeaders(headers) }
+        : headers;
     const responses: Anthropic.Messages.Message[] = [];
     try {
       const signal = options?.abortSignal;
       const initialMessage = await this.sendMessage(
         params,
-        headers,
+        requestHeaders,
         shouldStream,
         responses,
         signal,
@@ -1263,7 +1249,7 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
         toolCalls,
       } = await this.resolveMcpToolUse({
         config,
-        headers,
+        headers: requestHeaders,
         initialResponse: initialMessage,
         params,
         responses,

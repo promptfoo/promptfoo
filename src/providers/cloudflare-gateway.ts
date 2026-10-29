@@ -377,7 +377,10 @@ function getAnthropicPassthroughConfig(config?: CloudflareGatewayConfig): Anthro
   }
 
   const { apiKey, max_tokens, temperature, top_p, cost } = config;
-  const top_k = (config as Record<string, unknown>).top_k as number | undefined;
+  const { top_k, openTelemetry } = config as Pick<
+    AnthropicMessageOptions,
+    'top_k' | 'openTelemetry'
+  >;
 
   return {
     ...(apiKey !== undefined && { apiKey }),
@@ -386,6 +389,7 @@ function getAnthropicPassthroughConfig(config?: CloudflareGatewayConfig): Anthro
     ...(top_p !== undefined && { top_p }),
     ...(top_k !== undefined && { top_k }),
     ...(cost !== undefined && { cost }),
+    ...(openTelemetry !== undefined && { openTelemetry }),
   };
 }
 

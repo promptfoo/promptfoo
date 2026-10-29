@@ -9,10 +9,12 @@ import {
   SimpleSpanProcessor,
 } from '@opentelemetry/sdk-trace-node';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { clearCache } from '../../../src/cache';
 import { AnthropicMessagesProvider } from '../../../src/providers/anthropic/messages';
 import { mockProcessEnv } from '../../util/utils';
 
 import type { AnthropicMessageOptions } from '../../../src/providers/anthropic/types';
+import type { EnvOverrides } from '../../../src/types/env';
 import type { CallApiContextParams } from '../../../src/types/index';
 
 const servers: Server[] = [];
@@ -68,6 +70,7 @@ async function createMessagesServer({ status = 200, stopReasons = ['end_turn'] }
     apiKey: string | undefined;
     traceparent: string | undefined;
     tracestate: string | undefined;
+    baggage: string | undefined;
     body: any;
   }[] = [];
   const server = createServer(async (request, response) => {
@@ -82,6 +85,7 @@ async function createMessagesServer({ status = 200, stopReasons = ['end_turn'] }
       apiKey: request.headers['x-api-key'] as string | undefined,
       traceparent: request.headers.traceparent as string | undefined,
       tracestate: request.headers.tracestate as string | undefined,
+      baggage: request.headers.baggage as string | undefined,
       body,
     });
     const requestId = `req_local_${requests.length}`;
@@ -132,6 +136,14 @@ describe('Anthropic Messages SDK transport', () => {
   const tracerProvider = new NodeTracerProvider({
     spanProcessors: [new SimpleSpanProcessor(exporter)],
   });
+  // The trace context the evaluator gives a traced test case's provider calls.
+  const EVAL_TRACE_ID = '0af7651916cd43dd8448eb211c80319c';
+  const TEST_CASE_SPAN_ID = 'b7ad6b7169203331';
+  const tracedCall: CallApiContextParams = {
+    prompt: { raw: 'ping', label: 'ping' },
+    vars: {},
+    traceparent: `00-${EVAL_TRACE_ID}-${TEST_CASE_SPAN_ID}-01`,
+  };
   let restoreEnv: () => void;
 
   beforeAll(() => {
@@ -144,6 +156,8 @@ describe('Anthropic Messages SDK transport', () => {
     restoreEnv = mockProcessEnv({
       ANTHROPIC_OPEN_TELEMETRY: 'true',
       ANTHROPIC_OPEN_TELEMETRY_PROPAGATION: undefined,
+      ANTHROPIC_OPEN_TELEMETRY_TRACES_CONTENT_MODE: undefined,
+      ANTHROPIC_OPEN_TELEMETRY_TRACES_MAX_CONTENT_BYTES: undefined,
     });
   });
 
@@ -163,13 +177,18 @@ describe('Anthropic Messages SDK transport', () => {
 
   async function callProvider(
     config: AnthropicMessageOptions = {},
-    { callContext, ...serverOptions }: ServerOptions & { callContext?: CallApiContextParams } = {},
+    {
+      callContext = tracedCall,
+      env,
+      ...serverOptions
+    }: ServerOptions & { callContext?: CallApiContextParams | null; env?: EnvOverrides } = {},
   ) {
     const { baseUrl, requests } = await createMessagesServer(serverOptions);
     const provider = new AnthropicMessagesProvider('claude-sonnet-4-6', {
       config: { apiKey: 'local-qa-key', apiBaseUrl: baseUrl, ...config },
+      ...(env && { env }),
     });
-    const result = await provider.callApi('ping', callContext);
+    const result = await provider.callApi('ping', callContext ?? undefined);
     await tracerProvider.forceFlush();
     const spans = exporter.getFinishedSpans();
     const chatSpan = spans.find((span) => span.name === 'chat claude-sonnet-4-6');
@@ -270,65 +289,96 @@ describe('Anthropic Messages SDK transport', () => {
   });
 
   it("keeps the API's spans in the evaluation's trace", async () => {
-    const traceId = '0af7651916cd43dd8448eb211c80319c';
-    const testCaseSpanId = 'b7ad6b7169203331';
-    const { chatSpan, requests } = await callProvider(
-      {},
-      {
-        callContext: {
-          prompt: { raw: 'ping', label: 'ping' },
-          vars: {},
-          traceparent: `00-${traceId}-${testCaseSpanId}-01`,
-        },
-      },
-    );
+    const { chatSpan, requests } = await callProvider();
 
-    expect(chatSpan?.spanContext().traceId).toBe(traceId);
-    expect(chatSpan?.parentSpanContext?.spanId).toBe(testCaseSpanId);
-    expect(requests[0].traceparent).toBe(`00-${traceId}-${chatSpan!.spanContext().spanId}-01`);
+    expect(chatSpan?.spanContext().traceId).toBe(EVAL_TRACE_ID);
+    expect(chatSpan?.parentSpanContext?.spanId).toBe(TEST_CASE_SPAN_ID);
+    expect(requests[0].traceparent).toBe(
+      `00-${EVAL_TRACE_ID}-${chatSpan!.spanContext().spanId}-01`,
+    );
   });
 
-  it('sends no trace context when openTelemetry is false', async () => {
-    const { requests, spans } = await callProvider({ openTelemetry: false });
+  it('sends no trace context for a call that promptfoo is not tracing', async () => {
+    // A tracer provider left registered by an earlier traced eval must not make this call traced.
+    const { requests, spans } = await callProvider({}, { callContext: null });
 
     expect(spans.map((span) => span.name)).toEqual(['chat claude-sonnet-4-6']);
     expect(requests[0].traceparent).toBeUndefined();
   });
 
-  it('sends no trace context when ANTHROPIC_OPEN_TELEMETRY_PROPAGATION is false', async () => {
-    const restorePropagation = mockProcessEnv({ ANTHROPIC_OPEN_TELEMETRY_PROPAGATION: 'false' });
-    try {
-      const { requests, spans } = await callProvider();
+  it("sends W3C trace context but never the application's baggage", async () => {
+    const baggage = propagation.createBaggage({ 'user.email': { value: 'alice@example.com' } });
 
-      expect(spans.map((span) => span.name)).toEqual(['chat claude-sonnet-4-6']);
-      expect(requests[0].traceparent).toBeUndefined();
-    } finally {
-      restorePropagation();
-    }
+    const { chatSpan, requests } = await context.with(
+      propagation.setBaggage(context.active(), baggage),
+      () => callProvider(),
+    );
+
+    expect(requests[0].traceparent).toBe(traceparentOf(chatSpan!.spanContext()));
+    expect(requests[0].baggage).toBeUndefined();
   });
 
-  it('keeps trace context headers that the config sets', async () => {
-    const configured = '00-11111111111111111111111111111111-2222222222222222-01';
-
-    const { requests } = await callProvider({ headers: { Traceparent: configured } });
-
-    expect(requests[0].traceparent).toBe(configured);
-  });
-
-  it('nests the SDK spans under the promptfoo span when openTelemetry is true', async () => {
-    const { chatSpan, requests, result, spans } = await callProvider({ openTelemetry: true });
-
-    expect(result.output).toBe('pong');
-    const sdkSpan = sdkSpanOf(spans);
-    expect(spans).toHaveLength(2);
-    expect(sdkSpan).toMatchObject({
-      instrumentationScope: { name: 'com.anthropic.sdk.typescript' },
-      attributes: { 'anthropic.request.id': 'req_local_1' },
+  it.each([false, 'false'])('sends no trace context when openTelemetry is %j', async (option) => {
+    const { requests, spans } = await callProvider({
+      openTelemetry: option as AnthropicMessageOptions['openTelemetry'],
     });
-    expect(sdkSpan?.parentSpanContext?.spanId).toBe(chatSpan?.spanContext().spanId);
-    // The SDK sends its own span's context, so the API's spans nest under it.
-    expect(requests[0].traceparent).toBe(traceparentOf(sdkSpan!.spanContext()));
+
+    expect(spans.map((span) => span.name)).toEqual(['chat claude-sonnet-4-6']);
+    expect(requests[0].traceparent).toBeUndefined();
   });
+
+  it.each([
+    ['the process environment', undefined],
+    ['the provider env', { ANTHROPIC_OPEN_TELEMETRY_PROPAGATION: 'false' }],
+  ])(
+    'sends no trace context when ANTHROPIC_OPEN_TELEMETRY_PROPAGATION is false in %s',
+    async (_source, env) => {
+      const restorePropagation = env
+        ? () => {}
+        : mockProcessEnv({ ANTHROPIC_OPEN_TELEMETRY_PROPAGATION: 'false' });
+      try {
+        const { requests, spans } = await callProvider({}, { env });
+
+        expect(spans.map((span) => span.name)).toEqual(['chat claude-sonnet-4-6']);
+        expect(requests[0].traceparent).toBeUndefined();
+      } finally {
+        restorePropagation();
+      }
+    },
+  );
+
+  it.each([
+    { traceparent: '00-11111111111111111111111111111111-2222222222222222-01' },
+    { tracestate: 'vendor=configured' },
+  ])('leaves trace context headers that the config sets: %j', async (configured) => {
+    const { requests } = await callProvider({ headers: configured });
+
+    expect(requests[0]).toMatchObject({
+      traceparent: configured.traceparent,
+      tracestate: configured.tracestate,
+    });
+  });
+
+  it.each([false, true])(
+    'nests the SDK spans under the promptfoo span when openTelemetry is true (stream: %s)',
+    async (stream) => {
+      const { chatSpan, requests, result, spans } = await callProvider({
+        openTelemetry: true,
+        stream,
+      });
+
+      expect(result.output).toBe('pong');
+      const sdkSpan = sdkSpanOf(spans);
+      expect(spans).toHaveLength(2);
+      expect(sdkSpan).toMatchObject({
+        instrumentationScope: { name: 'com.anthropic.sdk.typescript' },
+        attributes: { 'anthropic.request.id': 'req_local_1' },
+      });
+      expect(sdkSpan?.parentSpanContext?.spanId).toBe(chatSpan?.spanContext().spanId);
+      // The SDK sends its own span's context, so the API's spans nest under it.
+      expect(requests[0].traceparent).toBe(traceparentOf(sdkSpan!.spanContext()));
+    },
+  );
 
   it('passes an openTelemetry object to the SDK as its client option', async () => {
     const { spans } = await callProvider({
@@ -337,6 +387,48 @@ describe('Anthropic Messages SDK transport', () => {
 
     expect(sdkSpanOf(spans)?.attributes['gen_ai.input.messages']).toContain('ping');
   });
+
+  it('reads the SDK variables for openTelemetry true through the provider env', async () => {
+    const spansOff = await callProvider(
+      { openTelemetry: true },
+      { env: { ANTHROPIC_OPEN_TELEMETRY: 'false' } },
+    );
+    // With the SDK's spans off, promptfoo sends its own span's context instead.
+    expect(spansOff.spans.map((span) => span.name)).toEqual(['chat claude-sonnet-4-6']);
+    expect(spansOff.requests[0].traceparent).toBe(traceparentOf(spansOff.chatSpan!.spanContext()));
+
+    exporter.reset();
+    const configured = await callProvider(
+      { openTelemetry: true },
+      {
+        env: {
+          ANTHROPIC_OPEN_TELEMETRY_PROPAGATION: 'FALSE ',
+          ANTHROPIC_OPEN_TELEMETRY_TRACES_CONTENT_MODE: 'content',
+        },
+      },
+    );
+    expect(sdkSpanOf(configured.spans)?.attributes['gen_ai.input.messages']).toContain('ping');
+    expect(configured.requests[0].traceparent).toBeUndefined();
+  });
+
+  it.each([
+    [{ traces: { contentMode: 'content' } }, false],
+    [{ traces: { contentMode: 'content' }, propagation: true }, true],
+  ] as const)(
+    'with ANTHROPIC_OPEN_TELEMETRY_PROPAGATION=false and openTelemetry %j, sends trace context: %s',
+    async (openTelemetry, sends) => {
+      const { requests, spans } = await callProvider(
+        { openTelemetry },
+        { env: { ANTHROPIC_OPEN_TELEMETRY_PROPAGATION: 'false' } },
+      );
+
+      const sdkSpan = sdkSpanOf(spans);
+      expect(sdkSpan).toBeDefined();
+      expect(requests[0].traceparent).toBe(
+        sends ? traceparentOf(sdkSpan!.spanContext()) : undefined,
+      );
+    },
+  );
 
   it.each([
     [{ traces: false }, true],
@@ -353,4 +445,25 @@ describe('Anthropic Messages SDK transport', () => {
       );
     },
   );
+
+  it('keeps trace context out of the response cache key', async () => {
+    const { baseUrl, requests } = await createMessagesServer({});
+    const provider = new AnthropicMessagesProvider('claude-sonnet-4-6', {
+      label: 'sdk-transport-cache-key',
+      config: { apiKey: 'local-qa-key', apiBaseUrl: baseUrl },
+    });
+    try {
+      const first = await provider.callApi('ping', tracedCall);
+      const second = await provider.callApi('ping', {
+        ...tracedCall,
+        traceparent: '00-1af7651916cd43dd8448eb211c80319c-c7ad6b7169203331-01',
+      });
+
+      expect(first.cached).toBeFalsy();
+      expect(second).toMatchObject({ output: 'pong', cached: true });
+      expect(requests).toHaveLength(1);
+    } finally {
+      await clearCache();
+    }
+  });
 });

@@ -15,10 +15,11 @@ import {
 import type { ClientOptions } from '@anthropic-ai/sdk';
 import type { Cache } from 'cache-manager';
 
+import type { EnvVarKey } from '../../envars';
 import type { EnvOverrides } from '../../types/env';
 import type { ApiProvider, CallApiContextParams, ProviderResponse } from '../../types/index';
 import type { ClaudeCodeOAuthCredential } from './claudeCodeAuth';
-import type { AnthropicBaseOptions } from './types';
+import type { AnthropicBaseOptions, AnthropicOpenTelemetryOptions } from './types';
 
 function getScopedCustomHeaders(env?: EnvOverrides): string | undefined {
   return (
@@ -104,19 +105,65 @@ function parseAnthropicCustomHeaders(value: string | undefined): Record<string, 
   return headers;
 }
 
-/**
- * The SDK's `openTelemetry` client option for a provider's `openTelemetry` config. Promptfoo
- * records its own span for every call, so the SDK's spans, which would repeat it, stay off
- * unless the config asks for them. `true` leaves the option unset, so the SDK reads its own
- * environment variables.
- */
-function getSdkOpenTelemetryOption(
-  option: AnthropicBaseOptions['openTelemetry'],
-): ClientOptions['openTelemetry'] {
-  if (option === true) {
-    return undefined;
+/** A config value as `true`, `false`, an options object, or unset; templated booleans are strings. */
+function normalizeOpenTelemetryOption(
+  option: unknown,
+): boolean | AnthropicOpenTelemetryOptions | undefined {
+  if (typeof option === 'string') {
+    const value = option.trim().toLowerCase();
+    return value === 'true' ? true : value === 'false' ? false : undefined;
   }
-  return typeof option === 'object' && option !== null ? option : false;
+  if (typeof option === 'boolean') {
+    return option;
+  }
+  return typeof option === 'object' && option !== null && !Array.isArray(option)
+    ? (option as AnthropicOpenTelemetryOptions)
+    : undefined;
+}
+
+/**
+ * The SDK's `openTelemetry` client option for a provider's `openTelemetry` config, and whether
+ * promptfoo sends trace context itself. Promptfoo records its own span for every call, so the
+ * SDK's spans, which would repeat it, stay off unless the config asks for them. The SDK sends
+ * trace context only from spans of its own, so promptfoo sends its span's while the SDK's are
+ * off. The SDK's `ANTHROPIC_OPEN_TELEMETRY*` variables are read through promptfoo's environment
+ * layers, like other provider settings, and `ANTHROPIC_OPEN_TELEMETRY_PROPAGATION=false` stops
+ * trace context unless an options object sets `propagation`.
+ */
+function resolveOpenTelemetry(
+  option: unknown,
+  env: EnvOverrides | undefined,
+): { client: ClientOptions['openTelemetry']; propagatesTraceContext: boolean } {
+  const read = (key: EnvVarKey) =>
+    (getProviderEnvString(env, key) ?? getEnvString(key))?.trim().toLowerCase();
+  const propagation = read('ANTHROPIC_OPEN_TELEMETRY_PROPAGATION') !== 'false';
+  const value = normalizeOpenTelemetryOption(option);
+  if (value === undefined || value === false) {
+    return { client: false, propagatesTraceContext: value === undefined && propagation };
+  }
+
+  let client: Exclude<ClientOptions['openTelemetry'], false | undefined>;
+  if (value === true) {
+    const maxContentBytes = read('ANTHROPIC_OPEN_TELEMETRY_TRACES_MAX_CONTENT_BYTES');
+    client = {
+      propagation,
+      traces: {
+        enabled: read('ANTHROPIC_OPEN_TELEMETRY') !== 'false',
+        contentMode:
+          read('ANTHROPIC_OPEN_TELEMETRY_TRACES_CONTENT_MODE') === 'content'
+            ? 'content'
+            : 'metadata_only',
+        ...(maxContentBytes && /^\d+$/.test(maxContentBytes)
+          ? { maxContentBytes: Number(maxContentBytes) }
+          : {}),
+      },
+    };
+  } else {
+    client = { ...value, propagation: value.propagation ?? propagation };
+  }
+  const { traces } = client;
+  const spans = traces !== false && (typeof traces !== 'object' || traces.enabled !== false);
+  return { client, propagatesTraceContext: !spans && client.propagation !== false };
 }
 
 function setCaseInsensitiveHeaderValue(
@@ -232,6 +279,8 @@ export class AnthropicGenericProvider implements ApiProvider {
   claudeCodeCredential?: ClaudeCodeOAuthCredential;
   anthropic: Anthropic;
   label?: string;
+  /** Whether requests of a traced call carry promptfoo's span context (see `openTelemetry`). */
+  protected readonly propagatesTraceContext: boolean;
   private readonly clientHasCustomHeaders: boolean;
   private readonly ephemeralCacheNamespace = randomUUID();
   private readonly ephemeralResponseCache = new Map<
@@ -326,12 +375,14 @@ export class AnthropicGenericProvider implements ApiProvider {
       setCaseInsensitiveHeaderValue(clientDefaultHeaders, 'authorization', `Bearer ${authToken}`);
     }
 
+    const openTelemetry = resolveOpenTelemetry(this.config.openTelemetry, this.env);
+    this.propagatesTraceContext = openTelemetry.propagatesTraceContext;
     this.anthropic = new Anthropic(
       this.buildAnthropicClientOptions({
         apiKey: this.apiKey ?? null,
         authToken: authToken ?? null,
         baseURL: this.getApiBaseUrl(),
-        openTelemetry: getSdkOpenTelemetryOption(this.config.openTelemetry),
+        openTelemetry: openTelemetry.client,
         ...(Object.keys(clientDefaultHeaders).length > 0
           ? { defaultHeaders: clientDefaultHeaders }
           : {}),

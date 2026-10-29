@@ -1094,9 +1094,10 @@ the request parameters as sent, `gen_ai.response.id`, `gen_ai.response.model`,
 `anthropic.message.stop_reason`, and `anthropic.request.id`. The request ID is the API's
 `request-id` header, which Anthropic support asks for; failed requests record it too.
 
-Promptfoo sends the span's W3C trace context (`traceparent`) with each Messages API request. If
-your organization exports [Claude API traces](https://platform.claude.com/docs/en/manage-claude/opentelemetry/api)
-to an OpenTelemetry backend, the API's spans, such as its model requests and server tool runs like
+For a traced test case, promptfoo sends the span's W3C trace context (`traceparent`, and
+`tracestate` when set, never baggage) with each Messages API request. If your organization exports
+[Claude API traces](https://platform.claude.com/docs/en/manage-claude/opentelemetry/api) to an
+OpenTelemetry backend, the API's spans, such as its model requests and server tool runs like
 `web_search`, land in the eval's trace under promptfoo's span instead of in a trace of their own.
 The API skips requests whose trace context is not sampled. To assert on these spans, pull them from
 that backend with a [trace provider](/docs/tracing/#pulling-traces-from-another-service), and set
@@ -1105,16 +1106,16 @@ that backend with a [trace provider](/docs/tracing/#pulling-traces-from-another-
 The `openTelemetry` option controls the Anthropic SDK's own
 [OpenTelemetry tracing](https://platform.claude.com/docs/en/manage-claude/opentelemetry/sdk):
 
-| `openTelemetry` | SDK spans                                                              | Trace context sent                                       |
-| --------------- | ---------------------------------------------------------------------- | -------------------------------------------------------- |
-| Not set         | Off, since promptfoo's span covers each call                           | Promptfoo's span                                         |
-| `true`          | On, set by the SDK's `ANTHROPIC_OPEN_TELEMETRY*` environment variables | The SDK's span                                           |
-| An object       | Set by the object, which the SDK takes as its `openTelemetry` option   | The SDK's span, or promptfoo's if the object omits spans |
-| `false`         | Off                                                                    | None                                                     |
+| `openTelemetry` | SDK spans                                                                   | Trace context sent                                              |
+| --------------- | --------------------------------------------------------------------------- | --------------------------------------------------------------- |
+| Not set         | Off, since promptfoo's span covers each call                                | Promptfoo's span                                                |
+| `true`          | On, configured by the SDK's `ANTHROPIC_OPEN_TELEMETRY*` variables           | The SDK's span; promptfoo's if `ANTHROPIC_OPEN_TELEMETRY=false` |
+| An object       | Configured by the object, which the SDK takes as its `openTelemetry` option | The SDK's span; promptfoo's if the object turns SDK spans off   |
+| `false`         | Off                                                                         | None                                                            |
 
-The SDK creates one `anthropic.messages.create` span per HTTP request, under promptfoo's span. These
-spans add the SDK's attributes, such as `http.request.resend_count` for retries, and count in
-[trace assertions](/docs/tracing/#4-assert-on-traced-workflows). Both spans carry token usage, so a
+The SDK's spans are named `anthropic.messages.create`, one per request under promptfoo's span, with
+retries recorded on it as `http.request.resend_count`. They count in
+[trace assertions](/docs/tracing/#4-assert-on-traced-workflows), and they carry token usage too, so a
 backend that adds up tokens across spans counts each request twice.
 
 To record prompts and responses on the SDK's spans, set the SDK's content mode. Promptfoo stores the
@@ -1129,8 +1130,11 @@ providers:
           contentMode: content
 ```
 
-Set `ANTHROPIC_OPEN_TELEMETRY_PROPAGATION=false` to stop sending trace context, for example when an
-HTTP client instrumentation already sends it.
+Promptfoo reads the SDK's variables from the environment or the config's `env`. Set
+`ANTHROPIC_OPEN_TELEMETRY_PROPAGATION=false` to stop sending trace context; an `openTelemetry`
+object can set `propagation` itself. Do this when an HTTP client instrumentation, such as
+OpenTelemetry's undici instrumentation, already sends trace context: a request with two
+`traceparent` values links to neither.
 
 ## Model-Graded Tests
 
