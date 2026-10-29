@@ -1,7 +1,14 @@
 import { useSyncExternalStore } from 'react';
 
 import { HUMAN_ASSERTION_TYPE } from '@promptfoo/providers/constants';
-import type { EvaluateTableOutput, PromptMetrics } from '@promptfoo/types';
+import {
+  type DefaultColumnVisibility,
+  DefaultColumnVisibilitySchema,
+  type EvaluateTableOutput,
+  type PromptMetrics,
+  type UnifiedConfig,
+} from '@promptfoo/types';
+import type { VisibilityState } from '@tanstack/react-table';
 
 const EVAL_OUTPUT_PROMPT_HASH_PATTERN = /^#details-row-(\d+)-prompt-(\d+)$/;
 
@@ -200,4 +207,69 @@ export function getNamedMetricTotals(
     ...(metrics.namedScoresCount ?? {}),
     ...(metrics.namedScoreWeights ?? {}),
   };
+}
+
+export interface ResolveColumnVisibilityParams {
+  allColumns: string[];
+  varNames: string[];
+  perEvalColumnState?: VisibilityState;
+  hiddenVarNames?: string[];
+  hasSchemaPreference?: boolean;
+  configDefaults?: DefaultColumnVisibility;
+}
+
+export function getVariableNameFromColumnId(columnId: string, varNames: string[]): string | null {
+  const match = columnId.match(/^Variable (\d+)$/);
+  if (!match) {
+    return null;
+  }
+  const varIndex = parseInt(match[1], 10) - 1;
+  return varNames[varIndex] ?? null;
+}
+
+export function resolveColumnVisibility({
+  allColumns,
+  varNames,
+  perEvalColumnState,
+  hiddenVarNames = [],
+  hasSchemaPreference = false,
+  configDefaults,
+}: ResolveColumnVisibilityParams) {
+  const columnVisibility: VisibilityState = {};
+  const selectedColumns: string[] = [];
+  const shownColumns = new Set(configDefaults?.showColumns ?? []);
+  const hiddenColumns = new Set(configDefaults?.hideColumns ?? []);
+  const hiddenVariables = new Set(hiddenVarNames);
+
+  for (const columnId of allColumns) {
+    const varName = getVariableNameFromColumnId(columnId, varNames);
+    const selector = varName === null ? columnId : `var:${varName}`;
+    const groupVisible =
+      varName === null
+        ? !columnId.startsWith('Prompt ') || configDefaults?.prompts !== 'hidden'
+        : configDefaults?.variables !== 'hidden';
+    const configuredVisibility =
+      shownColumns.has(selector) || (!hiddenColumns.has(selector) && groupVisible);
+    const savedVisibility =
+      varName === null
+        ? perEvalColumnState?.[columnId]
+        : hasSchemaPreference
+          ? !hiddenVariables.has(varName)
+          : undefined;
+    const isVisible = savedVisibility ?? configuredVisibility;
+
+    columnVisibility[columnId] = isVisible;
+    if (isVisible) {
+      selectedColumns.push(columnId);
+    }
+  }
+
+  return { columnVisibility, selectedColumns };
+}
+
+export function getConfigColumnVisibility(
+  config?: Partial<UnifiedConfig> | null,
+): DefaultColumnVisibility | undefined {
+  const result = DefaultColumnVisibilitySchema.safeParse(config?.defaultColumnVisibility);
+  return result.success ? result.data : undefined;
 }

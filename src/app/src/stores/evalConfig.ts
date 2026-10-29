@@ -1344,6 +1344,7 @@ export const useStore = create<EvalConfigState>()(
           tracing: config.tracing,
           evaluateOptions: config.evaluateOptions,
           defaultTest: config.defaultTest,
+          defaultColumnVisibility: config.defaultColumnVisibility,
           derivedMetrics: config.derivedMetrics,
         } as EvaluateTestSuiteWithEvaluateOptions;
       },
