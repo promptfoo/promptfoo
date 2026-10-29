@@ -31,6 +31,8 @@ let users = 0;
 // unregisters on shutdown. An application that registered its own keeps them.
 let registeredTracerProvider = false;
 let registeredPropagator = false;
+// The settings of the evaluation that created the provider, which later ones share.
+let activeConfig: OtelConfig | undefined;
 
 // Use a global symbol to track handlers across module resets (important for tests)
 const OTEL_HANDLERS_KEY = Symbol.for('promptfoo.otelHandlers');
@@ -75,6 +77,16 @@ export function initializeOtel(config: OtelConfig): void {
   if (initialized) {
     users += 1;
     logger.debug(`[OtelSdk] Already initialized, sharing it with ${users} evaluations`);
+    if (
+      activeConfig &&
+      (activeConfig.endpoint !== config.endpoint ||
+        activeConfig.localExport !== config.localExport ||
+        activeConfig.serviceName !== config.serviceName)
+    ) {
+      logger.warn(
+        '[OtelSdk] Another evaluation is already tracing in this process, so this one uses its tracing settings (service name, local export, and OTLP endpoint).',
+      );
+    }
     return;
   }
 
@@ -128,6 +140,7 @@ export function initializeOtel(config: OtelConfig): void {
 
   initialized = true;
   users = 1;
+  activeConfig = config;
   logger.info('[OtelSdk] OpenTelemetry SDK initialized successfully');
 
   // Set up graceful shutdown
@@ -173,6 +186,22 @@ export function initializeOtel(config: OtelConfig): void {
   handlers.registered = true;
 }
 
+/** Remove the signal handlers registered by initializeOtel. */
+function removeShutdownHandlers(): void {
+  const handlers = getHandlers();
+  for (const [event, key] of [
+    ['SIGTERM', 'sigTermHandler'],
+    ['SIGINT', 'sigIntHandler'],
+    ['beforeExit', 'beforeExitHandler'],
+  ] as const) {
+    if (handlers[key]) {
+      process.removeListener(event, handlers[key]);
+      handlers[key] = null;
+    }
+  }
+  handlers.registered = false;
+}
+
 /**
  * Shutdown the OpenTelemetry SDK.
  * Flushes any pending spans and releases resources once the last evaluation using it is done,
@@ -191,42 +220,34 @@ export async function shutdownOtel({ force = false }: { force?: boolean } = {}):
     return;
   }
 
+  // Detach the provider before awaiting its shutdown, so an evaluation that starts meanwhile
+  // registers a fresh provider instead of joining this one.
+  const current = provider;
+  // An application may have registered its own provider since; leave that one in place.
+  if (
+    registeredTracerProvider &&
+    (trace.getTracerProvider() as ProxyTracerProvider).getDelegate?.() === current
+  ) {
+    trace.disable();
+  }
+  if (registeredPropagator) {
+    propagation.disable();
+  }
+  registeredTracerProvider = false;
+  registeredPropagator = false;
+  provider = null;
+  initialized = false;
+  users = 0;
+  activeConfig = undefined;
+  removeShutdownHandlers();
+
   logger.debug('[OtelSdk] Shutting down OpenTelemetry SDK');
 
   try {
-    await provider.shutdown();
+    await current.shutdown();
     logger.info('[OtelSdk] OpenTelemetry SDK shut down successfully');
   } catch (error) {
     logger.error('[OtelSdk] Error shutting down OpenTelemetry SDK', { error });
-  } finally {
-    if (registeredTracerProvider) {
-      trace.disable();
-    }
-    if (registeredPropagator) {
-      propagation.disable();
-    }
-    registeredTracerProvider = false;
-    registeredPropagator = false;
-    provider = null;
-    initialized = false;
-    users = 0;
-    /**
-     * Clean up shutdown handlers.
-     * Called during shutdown to prevent duplicate registrations on reinit.
-     */
-    const handlers = getHandlers();
-
-    for (const [event, key] of [
-      ['SIGTERM', 'sigTermHandler'],
-      ['SIGINT', 'sigIntHandler'],
-      ['beforeExit', 'beforeExitHandler'],
-    ] as const) {
-      if (handlers[key]) {
-        process.removeListener(event, handlers[key]);
-        handlers[key] = null;
-      }
-    }
-    handlers.registered = false;
   }
 }
 

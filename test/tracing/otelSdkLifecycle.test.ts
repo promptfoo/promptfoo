@@ -38,6 +38,21 @@ describe('OpenTelemetry SDK lifecycle', () => {
     expect(providers[1]).not.toBe(providers[0]);
   });
 
+  it('gives an evaluation that starts during the final shutdown its own provider', async () => {
+    initializeOtel(config);
+    const first = globalDelegate();
+    const shuttingDown = shutdownOtel();
+
+    initializeOtel(config);
+    const second = globalDelegate();
+    await shuttingDown;
+
+    expect(second).not.toBe(first);
+    expect(globalDelegate()).toBe(second);
+    expect(trace.getTracer('promptfoo.providers').startSpan('traced').isRecording()).toBe(true);
+    await shutdownOtel();
+  });
+
   it('keeps tracing for an evaluation that is still running when another finishes', async () => {
     const shutdown = vi.spyOn(NodeTracerProvider.prototype, 'shutdown');
     initializeOtel(config);

@@ -320,6 +320,48 @@ describe('otelSdk', () => {
       expect(globalDelegate).not.toBe(firstProvider);
     });
 
+    it('gives an evaluation that starts during the final shutdown its own provider', async () => {
+      let finishShutdown!: () => void;
+      mockShutdown.mockReturnValueOnce(
+        new Promise<void>((resolve) => {
+          finishShutdown = resolve;
+        }),
+      );
+      initializeOtel(defaultConfig);
+      const shuttingDown = shutdownOtel();
+
+      initializeOtel(defaultConfig);
+      expect(nodeTracerProviderCalls).toHaveLength(2);
+      const secondProvider = globalDelegate;
+
+      finishShutdown();
+      await shuttingDown;
+      expect(isOtelInitialized()).toBe(true);
+      expect(globalDelegate).toBe(secondProvider);
+      expect(mockTraceDisable).toHaveBeenCalledTimes(1);
+    });
+
+    it('leaves a tracer provider that the application registered during the evaluation', async () => {
+      initializeOtel(defaultConfig);
+      globalDelegate = { applicationProvider: true };
+
+      await shutdownOtel();
+
+      expect(mockTraceDisable).not.toHaveBeenCalled();
+    });
+
+    it('warns when an evaluation joins one with different tracing settings', async () => {
+      const { default: logger } = await import('../../src/logger');
+      initializeOtel(defaultConfig);
+      initializeOtel(defaultConfig);
+      expect(logger.warn).not.toHaveBeenCalled();
+
+      initializeOtel({ ...defaultConfig, endpoint: 'http://collector:4318/v1/traces' });
+
+      expect(logger.warn).toHaveBeenCalledTimes(1);
+      expect(nodeTracerProviderCalls).toHaveLength(1);
+    });
+
     it("leaves an application's tracer provider and propagator registered", async () => {
       globalDelegate = { applicationProvider: true };
       mockSetGlobalPropagator.mockReturnValue(false);
