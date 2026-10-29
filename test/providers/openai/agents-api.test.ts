@@ -862,6 +862,7 @@ describe('OpenAiAgentsApiProvider', () => {
               attributes: [
                 { key: 'gen_ai.operation.name', value: { stringValue: 'execute_tool' } },
                 { key: 'gen_ai.tool.name', value: { stringValue: 'lookup' } },
+                { key: 'gen_ai.tool.call.arguments', value: { stringValue: '{"order_id":"123"}' } },
               ],
             };
             spans.push(tool);
@@ -870,7 +871,10 @@ describe('OpenAiAgentsApiProvider', () => {
         });
 
         const pending = provider({
-          hostedTrace: { timeoutMs: outcome === 'provider deadline' ? 75 : 25 },
+          hostedTrace: {
+            includeToolArguments: true,
+            timeoutMs: outcome === 'provider deadline' ? 75 : 25,
+          },
           timeoutMs: outcome === 'provider deadline' ? 25 : 100,
           pollIntervalMs: 10,
         }).callApi('hi', row, { abortSignal: controller.signal });
@@ -890,13 +894,20 @@ describe('OpenAiAgentsApiProvider', () => {
           if (expectPartial) {
             expect(result.metadata?.hostedTrace).toMatchObject({
               status: 'partial',
+              includeToolArguments: true,
+              toolArgumentsComplete: false,
               spanCount: 2,
               parentSpanId: wrapperId,
             });
             expect(addSpans).toHaveBeenCalledOnce();
             expect(addSpans).toHaveBeenCalledWith(
               localTraceId,
-              expect.arrayContaining([expect.objectContaining({ name: 'execute_tool lookup' })]),
+              expect.arrayContaining([
+                expect.objectContaining({
+                  name: 'execute_tool lookup',
+                  attributes: expect.objectContaining({ 'tool.arguments': '{"order_id":"123"}' }),
+                }),
+              ]),
               { abortSignal: expect.any(AbortSignal), deadline: expect.any(Number) },
             );
           } else {
@@ -931,25 +942,90 @@ describe('OpenAiAgentsApiProvider', () => {
       return resource;
     }
 
-    it('imports tool identity without recording the hosted argument payload', async () => {
+    it('redacts hosted llm-rubric grader spans using the owning trace policy', async () => {
+      const { runAssertions } = await import('../../../src/assertions');
       recordWrapper();
-      const addSpans = vi.spyOn(getTraceStore(), 'addSpans').mockResolvedValue({ stored: true });
-      mockApi((path) =>
-        path.endsWith('/traces')
-          ? json(page([publishedWithTool({ query: 'sensitive-input' })]))
-          : undefined,
-      );
-      const result = await provider({ hostedTrace: true }).callApi('hi', row);
-      expect(result.metadata?.hostedTrace).toMatchObject({
-        status: 'imported',
-        spanCount: 2,
-        includeToolArguments: false,
-        toolArgumentsComplete: false,
+      const store = getTraceStore();
+      vi.spyOn(store, 'getTraceMetadata').mockResolvedValue({
+        otlpHttpRedactAttributes: ['order_id'],
       });
-      const spans = addSpans.mock.calls[0][1];
-      expect(spans).toContainEqual(expect.objectContaining({ name: 'execute_tool lookup' }));
-      expect(JSON.stringify(spans)).not.toContain('sensitive-input');
+      const addSpans = vi.spyOn(store, 'addSpans').mockResolvedValue({ stored: true });
+      mockApi((path) => {
+        if (path.endsWith('/traces')) {
+          return json(page([publishedWithTool({ order_id: '8163940275', limit: 3 })]));
+        }
+        if (path.endsWith('/items')) {
+          return json(
+            page([
+              {
+                ...message,
+                content: [
+                  { type: 'output_text', text: '{"pass":true,"score":1,"reason":"correct"}' },
+                ],
+              },
+            ]),
+          );
+        }
+        return undefined;
+      });
+      const grader = provider({ hostedTrace: { includeToolArguments: true } });
+      const result = await runAssertions({
+        provider: { id: () => 'target', callApi: async () => ({ output: '42' }) },
+        providerResponse: { output: '42' },
+        test: { assert: [{ type: 'llm-rubric', value: 'The answer is 42', provider: grader }] },
+        traceId: localTraceId,
+      });
+      expect(result.pass).toBe(true);
+      expect(store.getTraceMetadata).toHaveBeenCalledWith(localTraceId);
+      expect(addSpans).toHaveBeenCalledWith(localTraceId, expect.any(Array), expect.any(Object));
+      const stored = addSpans.mock.calls[0][1];
+      expect(JSON.stringify(stored)).not.toContain('8163940275');
+      expect(stored.find((span) => span.name === 'execute_tool lookup')?.attributes).toMatchObject({
+        'promptfoo.tool.arguments_redacted': true,
+      });
     });
+
+    it.each([undefined, { otlpHttpRedactAttributes: 'customer_id' }])(
+      'skips hosted import when the owning trace policy cannot be read (%j)',
+      async (metadata) => {
+        recordWrapper();
+        const store = getTraceStore();
+        vi.mocked(store.getTraceMetadata).mockResolvedValue(metadata);
+        const addSpans = vi.spyOn(store, 'addSpans');
+        const result = await provider({ hostedTrace: true }).callApi('hi', row);
+        expect(result).toMatchObject({
+          output: '42',
+          metadata: { sessionDeleted: true, hostedTrace: { status: 'unavailable' } },
+        });
+        expect(addSpans).not.toHaveBeenCalled();
+        expect(calls().some((request) => request.pathname.endsWith('/traces'))).toBe(false);
+      },
+    );
+
+    it.each([
+      { args: { order_id: '123' }, complete: true },
+      { args: { order_id: '123', apiKey: 'private-value' }, complete: false },
+      { args: undefined, complete: false },
+    ])(
+      'marks tool arguments complete only when the import preserves them ($args)',
+      async ({ args, complete }) => {
+        recordWrapper();
+        const addSpans = vi.spyOn(getTraceStore(), 'addSpans').mockResolvedValue({ stored: true });
+        const resource = publishedWithTool(args);
+        mockApi((path) => (path.endsWith('/traces') ? json(page([resource])) : undefined));
+        const result = await provider({ hostedTrace: { includeToolArguments: true } }).callApi(
+          'hi',
+          row,
+        );
+        expect(result.metadata?.hostedTrace).toMatchObject({
+          status: 'imported',
+          spanCount: 2,
+          includeToolArguments: true,
+          toolArgumentsComplete: complete,
+        });
+        expect(JSON.stringify(addSpans.mock.calls)).not.toContain('private-value');
+      },
+    );
 
     it('keeps the answer and deletes the session when export is denied', async () => {
       recordWrapper();
@@ -1146,6 +1222,9 @@ describe('OpenAiAgentsApiProvider', () => {
 
     it('rejects invalid options before creating a session', () => {
       expect(() => provider({ hostedTrace: { timeoutMs: -1 } })).toThrow('hostedTrace.timeoutMs');
+      expect(() => provider({ hostedTrace: { includeToolArguments: 'false' as never } })).toThrow(
+        'hostedTrace.includeToolArguments',
+      );
       expect(fetchWithRetries).not.toHaveBeenCalled();
     });
   });
