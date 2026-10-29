@@ -745,11 +745,13 @@ describe('checkCodexCliCompatibility', () => {
         expect(mockExecFile).not.toHaveBeenCalled();
         expect(probe.child.kill).toHaveBeenCalledExactlyOnceWith('SIGKILL');
         await expect(probe.result).resolves.toMatchObject({
-          error: expect.objectContaining({
-            message: expect.stringContaining(
-              'Cannot locate the Windows system directory for Codex version cleanup',
-            ),
-          }),
+          error: {
+            cause: {
+              name: 'CodexCliCleanupError',
+              cleanup: { phase: 'preflight', code: 'INVALID_SYSTEM_ROOT' },
+              cause: { message: expect.stringContaining('timed out after 10000ms') },
+            },
+          },
         });
         const outcome = await probe.result;
         expect(outcome).toHaveProperty(
@@ -769,12 +771,74 @@ describe('checkCodexCliCompatibility', () => {
         controller.abort();
         expect(mockExecFile).not.toHaveBeenCalled();
         expect(probe.child.kill).toHaveBeenCalledExactlyOnceWith('SIGKILL');
-        await expect(probe.result).resolves.toMatchObject({
-          error: expect.objectContaining({ name: 'AbortError' }),
+        const outcome = await probe.result;
+        expect(outcome).toMatchObject({
+          error: {
+            name: 'AbortError',
+            cause: {
+              name: 'CodexCliCleanupError',
+              cleanup: { phase: 'preflight', code: 'INVALID_SYSTEM_ROOT' },
+              cause: { name: 'AbortError' },
+            },
+          },
         });
+        expect(outcome).toHaveProperty(
+          'error.cause.message',
+          expect.not.stringContaining('relative'),
+        );
       } finally {
         restoreRoot();
       }
+    });
+
+    it.each(['abort', 'stdout', 'stderr'] as const)(
+      'reports unverified tree cleanup for %s after the direct child exits without targeting its PID',
+      async (trigger) => {
+        const controller = new AbortController();
+        const probe = startProbe(controller.signal);
+        probe.exit(0);
+        if (trigger === 'abort') {
+          controller.abort();
+        } else {
+          probe[trigger].write('x'.repeat(1024 * 1024 + 1));
+        }
+
+        await expect(probe.result).resolves.toMatchObject({
+          error: {
+            name: trigger === 'abort' ? 'AbortError' : 'CodexCliCompatibilityError',
+            cause: {
+              name: 'CodexCliCleanupError',
+              cleanup: {
+                phase: 'preflight',
+                code: 'DIRECT_CHILD_EXITED',
+                directChildExitedAtStart: true,
+                directChildExitedAtFailure: true,
+              },
+              cause: {
+                message: expect.stringContaining(
+                  trigger === 'abort' ? 'aborted' : `${trigger} exceeded`,
+                ),
+              },
+            },
+          },
+        });
+        expect(mockExecFile).not.toHaveBeenCalled();
+        expect(probe.child.kill).not.toHaveBeenCalled();
+        expect(vi.getTimerCount()).toBe(0);
+      },
+    );
+
+    it('accepts an ordinary successful Windows close without a cleanup failure', async () => {
+      const probe = startProbe();
+      probe.stdout.write('codex-cli 0.130.0');
+      probe.exit(0);
+      probe.stdout.end();
+      probe.stderr.end();
+
+      await expect(probe.result).resolves.toEqual({ success: true });
+      expect(mockExecFile).not.toHaveBeenCalled();
+      expect(probe.child.kill).not.toHaveBeenCalled();
+      expect(vi.getTimerCount()).toBe(0);
     });
 
     it('accepts a fully qualified host system directory with spaces and a trailing separator', async () => {

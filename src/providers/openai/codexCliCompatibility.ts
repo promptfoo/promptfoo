@@ -158,7 +158,7 @@ interface CompatibilityOptions {
 }
 
 interface WindowsCleanupDetails {
-  phase: 'spawn' | 'callback';
+  phase: 'preflight' | 'spawn' | 'callback';
   code: string | number | null;
   killed: boolean | null;
   signal: string | null;
@@ -193,16 +193,6 @@ async function terminateProbe(child: ChildProcess): Promise<void> {
   if (pid === undefined) {
     return;
   }
-  if (child.exitCode !== null || child.signalCode !== null) {
-    return;
-  }
-  const hostWindowsDir = process.env.SystemRoot;
-  if (!hostWindowsDir || !/^[a-z]:[\\/]/i.test(hostWindowsDir) || hostWindowsDir.includes('\0')) {
-    child.kill('SIGKILL');
-    throw new Error('Cannot locate the Windows system directory for Codex version cleanup');
-  }
-  const windowsDir = path.win32.normalize(hostWindowsDir);
-  const systemDir = path.win32.join(windowsDir, 'System32');
   const startedAt = performance.now();
   const directChildExitedAtStart = child.exitCode !== null || child.signalCode !== null;
   const cleanupFailure = (error: unknown, phase: WindowsCleanupDetails['phase']) => {
@@ -224,6 +214,19 @@ async function terminateProbe(child: ChildProcess): Promise<void> {
       directChildExitedAtFailure: child.exitCode !== null || child.signalCode !== null,
     });
   };
+  if (directChildExitedAtStart) {
+    // The PID may have been reused. Report unverified tree cleanup without
+    // risking a taskkill against a process this probe no longer owns.
+    throw cleanupFailure({ code: 'DIRECT_CHILD_EXITED' }, 'preflight');
+  }
+  const hostWindowsDir = process.env.SystemRoot;
+  if (!hostWindowsDir || !/^[a-z]:[\\/]/i.test(hostWindowsDir) || hostWindowsDir.includes('\0')) {
+    const error = cleanupFailure({ code: 'INVALID_SYSTEM_ROOT' }, 'preflight');
+    child.kill('SIGKILL');
+    throw error;
+  }
+  const windowsDir = path.win32.normalize(hostWindowsDir);
+  const systemDir = path.win32.join(windowsDir, 'System32');
   try {
     await new Promise<void>((resolve, reject) => {
       // Cleanup must not search the checkout or inherit CLI/ambient credentials.
@@ -463,7 +466,9 @@ function runVersionProbe(options: CompatibilityOptions): Promise<string> {
       clearTimeout(timeout);
       options.signal?.removeEventListener('abort', onAbort);
       try {
-        await (termination ?? (supervised ? undefined : terminateProbe(child)));
+        // Natural close follows exit and closed pipes. Only a requested stop
+        // owns a pending cleanup operation; never target an already-exited PID.
+        await termination;
       } catch (error) {
         failure = error instanceof Error ? error : new Error(String(error));
       }
