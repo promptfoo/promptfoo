@@ -13,6 +13,8 @@ const mockPropagationDisable = vi.fn();
 const mockTraceDisable = vi.fn();
 // The delegate of the global tracer provider: the provider that registered first.
 let globalDelegate: unknown;
+// The global propagator: the one that registered first.
+let globalPropagator: unknown;
 
 // Track constructor calls
 let nodeTracerProviderCalls: unknown[] = [];
@@ -87,6 +89,7 @@ vi.mock('@opentelemetry/api', () => ({
   propagation: {
     setGlobalPropagator: mockSetGlobalPropagator,
     disable: mockPropagationDisable,
+    _getGlobalPropagator: () => globalPropagator,
   },
   trace: {
     getTracerProvider: () => ({ getDelegate: () => globalDelegate }),
@@ -149,7 +152,14 @@ describe('otelSdk', () => {
     mockRegister.mockImplementation(function (this: unknown) {
       globalDelegate ??= this;
     });
-    mockSetGlobalPropagator.mockReturnValue(true);
+    globalPropagator = undefined;
+    mockSetGlobalPropagator.mockImplementation((propagator: unknown) => {
+      globalPropagator ??= propagator;
+      return globalPropagator === propagator;
+    });
+    mockPropagationDisable.mockImplementation(() => {
+      globalPropagator = undefined;
+    });
     mockTraceDisable.mockImplementation(() => {
       globalDelegate = undefined;
     });
@@ -350,6 +360,16 @@ describe('otelSdk', () => {
       expect(mockTraceDisable).not.toHaveBeenCalled();
     });
 
+    it('leaves a propagator that the application registered during the evaluation', async () => {
+      initializeOtel(defaultConfig);
+      globalPropagator = { applicationPropagator: true };
+
+      await shutdownOtel();
+
+      expect(mockPropagationDisable).not.toHaveBeenCalled();
+      expect(globalPropagator).toEqual({ applicationPropagator: true });
+    });
+
     it('warns when an evaluation joins one with different tracing settings', async () => {
       const { default: logger } = await import('../../src/logger');
       initializeOtel(defaultConfig);
@@ -364,7 +384,7 @@ describe('otelSdk', () => {
 
     it("leaves an application's tracer provider and propagator registered", async () => {
       globalDelegate = { applicationProvider: true };
-      mockSetGlobalPropagator.mockReturnValue(false);
+      globalPropagator = { applicationPropagator: true };
 
       initializeOtel(defaultConfig);
       await shutdownOtel();

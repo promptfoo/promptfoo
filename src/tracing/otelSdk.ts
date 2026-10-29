@@ -6,6 +6,7 @@ import {
   diag,
   type ProxyTracerProvider,
   propagation,
+  type TextMapPropagator,
   trace,
 } from '@opentelemetry/api';
 import { W3CTraceContextPropagator } from '@opentelemetry/core';
@@ -27,10 +28,10 @@ let initialized = false;
 // Evaluations that initialized tracing and have not shut it down yet. Concurrent traced
 // evaluations share one provider, which is shut down when the last of them finishes.
 let users = 0;
-// Whether promptfoo registered the global tracer provider and propagator, which it then
-// unregisters on shutdown. An application that registered its own keeps them.
+// Whether promptfoo registered the global tracer provider, and the propagator it registered,
+// which it unregisters on shutdown. An application that registered its own keeps them.
 let registeredTracerProvider = false;
-let registeredPropagator = false;
+let registeredPropagator: TextMapPropagator | undefined;
 // The settings of the evaluation that created the provider, which later ones share.
 let activeConfig: OtelConfig | undefined;
 
@@ -102,7 +103,8 @@ export function initializeOtel(config: OtelConfig): void {
   }
 
   // Register W3C Trace Context propagator for traceparent header support
-  registeredPropagator = propagation.setGlobalPropagator(new W3CTraceContextPropagator());
+  const propagator = new W3CTraceContextPropagator();
+  registeredPropagator = propagation.setGlobalPropagator(propagator) ? propagator : undefined;
   logger.debug('[OtelSdk] Registered W3C Trace Context propagator');
 
   // Create resource with service info
@@ -186,6 +188,15 @@ export function initializeOtel(config: OtelConfig): void {
   handlers.registered = true;
 }
 
+/**
+ * Whether `propagator` is still the global one. The API has no public getter for it, so this uses
+ * the API's own accessor and answers false when that is unavailable, leaving the global in place.
+ */
+function isGlobalPropagator(propagator: TextMapPropagator): boolean {
+  const api = propagation as unknown as { _getGlobalPropagator?: () => TextMapPropagator };
+  return api._getGlobalPropagator?.() === propagator;
+}
+
 /** Remove the signal handlers registered by initializeOtel. */
 function removeShutdownHandlers(): void {
   const handlers = getHandlers();
@@ -230,11 +241,11 @@ export async function shutdownOtel({ force = false }: { force?: boolean } = {}):
   ) {
     trace.disable();
   }
-  if (registeredPropagator) {
+  if (registeredPropagator && isGlobalPropagator(registeredPropagator)) {
     propagation.disable();
   }
   registeredTracerProvider = false;
-  registeredPropagator = false;
+  registeredPropagator = undefined;
   provider = null;
   initialized = false;
   users = 0;

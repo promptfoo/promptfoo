@@ -53,6 +53,22 @@ describe('OpenTelemetry SDK lifecycle', () => {
     await shutdownOtel();
   });
 
+  it('leaves a propagator that the application registered during the evaluation', async () => {
+    initializeOtel(config);
+    const applicationPropagator = {
+      inject: () => {},
+      extract: (activeContext: unknown) => activeContext,
+      fields: () => ['host-trace'],
+    } as unknown as Parameters<typeof propagation.setGlobalPropagator>[0];
+    propagation.disable();
+    propagation.setGlobalPropagator(applicationPropagator);
+
+    await shutdownOtel();
+
+    expect(propagation.fields()).toEqual(['host-trace']);
+    propagation.disable();
+  });
+
   it('keeps tracing for an evaluation that is still running when another finishes', async () => {
     const shutdown = vi.spyOn(NodeTracerProvider.prototype, 'shutdown');
     initializeOtel(config);
