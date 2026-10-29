@@ -2988,6 +2988,18 @@ export class AwsBedrockCompletionProvider extends AwsBedrockGenericProvider impl
 
 interface BedrockEmbeddingOptions extends BedrockOptions {
   input_type?: 'search_document' | 'search_query' | 'classification' | 'clustering';
+  embeddingPurpose?:
+    | 'GENERIC_INDEX'
+    | 'GENERIC_RETRIEVAL'
+    | 'TEXT_RETRIEVAL'
+    | 'IMAGE_RETRIEVAL'
+    | 'VIDEO_RETRIEVAL'
+    | 'DOCUMENT_RETRIEVAL'
+    | 'AUDIO_RETRIEVAL'
+    | 'CLASSIFICATION'
+    | 'CLUSTERING';
+  embeddingDimension?: 256 | 384 | 1024 | 3072;
+  truncationMode?: 'START' | 'END' | 'NONE';
 }
 
 export class AwsBedrockEmbeddingProvider
@@ -3018,14 +3030,25 @@ export class AwsBedrockEmbeddingProvider
     _context?: CallApiContextParams,
     options?: CallApiOptionsParams,
   ): Promise<ProviderEmbeddingResponse> {
-    const params = this.modelName.includes('cohere.embed')
-      ? {
-          texts: [text],
-          input_type: this.config.input_type ?? 'search_document',
-        }
-      : {
-          inputText: text,
-        };
+    const isNovaEmbedding = this.modelName.includes('amazon.nova-2-multimodal-embeddings-v1:0');
+    const isMarengo3 = this.modelName.includes('twelvelabs.marengo-embed-3-0-v1:0');
+    let params: Record<string, unknown>;
+    if (isNovaEmbedding) {
+      params = {
+        taskType: 'SINGLE_EMBEDDING',
+        singleEmbeddingParams: {
+          embeddingPurpose: this.config.embeddingPurpose ?? 'GENERIC_INDEX',
+          embeddingDimension: this.config.embeddingDimension ?? 3072,
+          text: { value: text, truncationMode: this.config.truncationMode ?? 'NONE' },
+        },
+      };
+    } else if (isMarengo3) {
+      params = { inputType: 'text', text: { inputText: text } };
+    } else if (this.modelName.includes('cohere.embed')) {
+      params = { texts: [text], input_type: this.config.input_type ?? 'search_document' };
+    } else {
+      params = { inputText: text };
+    }
 
     logger.debug('Calling AWS Bedrock API for embeddings', { params });
     let response;
@@ -3052,12 +3075,21 @@ export class AwsBedrockEmbeddingProvider
 
     try {
       const data = JSON.parse(response.body.transformToString());
-      // Titan Text API returns embeddings in the `embedding` field
-      // Cohere API returns embeddings in the `embeddings` field
       const embeddings = data?.embeddings?.float ?? data?.embeddings;
-      const embedding =
-        data?.embedding ??
-        (Array.isArray(embeddings) && embeddings.length === 1 ? embeddings[0] : undefined);
+      const singleEmbedding =
+        Array.isArray(embeddings) && embeddings.length === 1 ? embeddings[0] : undefined;
+      // Marengo returns a one-element data array in live InvokeModel responses;
+      // its documented single-object form is accepted as well.
+      const marengoData = Array.isArray(data?.data)
+        ? data.data.length === 1
+          ? data.data[0]
+          : undefined
+        : data?.data;
+      const embedding = isNovaEmbedding
+        ? singleEmbedding?.embedding
+        : isMarengo3
+          ? marengoData?.embedding
+          : (data?.embedding ?? singleEmbedding);
       if (
         !Array.isArray(embedding) ||
         embedding.length === 0 ||

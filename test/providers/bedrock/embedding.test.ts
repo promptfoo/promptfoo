@@ -54,6 +54,91 @@ describe('AwsBedrockEmbeddingProvider wire contract', () => {
     expect(JSON.parse(invokeModel.mock.calls[0][0].body)).toEqual({ inputText: 'A quiet garden' });
   });
 
+  it('uses the Nova single-text schema and configured purpose/dimensions', async () => {
+    const { provider, invokeModel } = mockEmbedding('amazon.nova-2-multimodal-embeddings-v1:0', {
+      embeddings: [{ embeddingType: 'TEXT', embedding: [0.1, 0.2] }],
+    });
+    Object.assign(provider.config, {
+      embeddingPurpose: 'TEXT_RETRIEVAL',
+      embeddingDimension: 256,
+      truncationMode: 'NONE',
+    });
+    expect(await provider.callEmbeddingApi('A quiet garden')).toEqual({ embedding: [0.1, 0.2] });
+    expect(JSON.parse(invokeModel.mock.calls[0][0].body)).toEqual({
+      taskType: 'SINGLE_EMBEDDING',
+      singleEmbeddingParams: {
+        embeddingPurpose: 'TEXT_RETRIEVAL',
+        embeddingDimension: 256,
+        text: { value: 'A quiet garden', truncationMode: 'NONE' },
+      },
+    });
+  });
+
+  it('defaults Nova to generic indexing without truncation', async () => {
+    const { provider, invokeModel } = mockEmbedding('amazon.nova-2-multimodal-embeddings-v1:0', {
+      embeddings: [{ embeddingType: 'TEXT', embedding: [0.1] }],
+    });
+    await provider.callEmbeddingApi('A quiet garden');
+    expect(JSON.parse(invokeModel.mock.calls[0][0].body)).toEqual({
+      taskType: 'SINGLE_EMBEDDING',
+      singleEmbeddingParams: {
+        embeddingPurpose: 'GENERIC_INDEX',
+        embeddingDimension: 3072,
+        text: { value: 'A quiet garden', truncationMode: 'NONE' },
+      },
+    });
+  });
+
+  it.each(['twelvelabs.marengo-embed-3-0-v1:0', 'us.twelvelabs.marengo-embed-3-0-v1:0'])(
+    'sends nested text and normalizes the live Marengo 3 response for %s',
+    async (model) => {
+      const { provider, invokeModel } = mockEmbedding(model, { data: [{ embedding: [0.1, 0.2] }] });
+      expect(await provider.callEmbeddingApi('A quiet garden')).toEqual({ embedding: [0.1, 0.2] });
+      expect(JSON.parse(invokeModel.mock.calls[0][0].body)).toEqual({
+        inputType: 'text',
+        text: { inputText: 'A quiet garden' },
+      });
+    },
+  );
+
+  it('accepts the documented Marengo single-object response', async () => {
+    const { provider } = mockEmbedding('twelvelabs.marengo-embed-3-0-v1:0', {
+      data: { embedding: [0.1] },
+    });
+    expect(await provider.callEmbeddingApi('A quiet garden')).toEqual({ embedding: [0.1] });
+  });
+
+  it.each([
+    [
+      'amazon.nova-2-multimodal-embeddings-v1:0',
+      { embeddings: [{ embedding: [0.1] }, { embedding: [0.2] }] },
+    ],
+    ['amazon.nova-2-multimodal-embeddings-v1:0', { embeddings: [{ embedding: ['invalid'] }] }],
+    ['twelvelabs.marengo-embed-3-0-v1:0', { data: [{ embedding: [0.1] }, { embedding: [0.2] }] }],
+    ['twelvelabs.marengo-embed-3-0-v1:0', { data: [{ embedding: [null] }] }],
+  ])('rejects ambiguous or malformed model-specific vectors for %s', async (model, data) => {
+    const { provider } = mockEmbedding(model, data);
+    expect(await provider.callEmbeddingApi('A quiet garden')).toEqual({
+      error: expect.stringContaining('No valid embedding found'),
+    });
+  });
+
+  it('forwards cancellation for Nova embeddings', async () => {
+    const { provider, invokeModel } = mockEmbedding('amazon.nova-2-multimodal-embeddings-v1:0', {});
+    const controller = new AbortController();
+    const reason = new Error('cancelled');
+    invokeModel.mockImplementation(() => {
+      controller.abort(reason);
+      throw reason;
+    });
+    await expect(
+      provider.callEmbeddingApi('A quiet garden', undefined, { abortSignal: controller.signal }),
+    ).rejects.toThrow('cancelled');
+    expect(invokeModel).toHaveBeenCalledWith(expect.any(Object), {
+      abortSignal: controller.signal,
+    });
+  });
+
   it.each([
     {},
     { embeddings: [] },

@@ -1772,6 +1772,24 @@ set `config.input_type: search_query` when embedding retrieval queries. The embe
 provider returns a single numeric vector for each input text. Titan continues to use
 its separate `inputText` request format.
 
+The `bedrock:embeddings:` route accepts **text input** and returns one numeric vector.
+It also supports these models through synchronous InvokeModel:
+
+| Model ID                                   | Configuration                                                                                                                                                            |
+| ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `amazon.nova-2-multimodal-embeddings-v1:0` | `embeddingPurpose` (default `GENERIC_INDEX`), `embeddingDimension` (256, 384, 1024, or 3072; default 3072), `truncationMode` (`NONE`, `START`, or `END`; default `NONE`) |
+| `twelvelabs.marengo-embed-3-0-v1:0`        | 512-dimensional text embeddings; use a supported regional or `us.`/`eu.` inference profile ID                                                                            |
+
+For Nova retrieval queries, choose `TEXT_RETRIEVAL` for a text-only index or
+`GENERIC_RETRIEVAL` for mixed modalities. `NONE` rejects oversized text instead of
+silently truncating it. See the [Nova embedding schema](https://docs.aws.amazon.com/nova/latest/userguide/embeddings-schema.html).
+Marengo 3 accepts up to 500 text tokens; its vectors are incompatible with Marengo 2.7,
+so re-embed existing indexes when migrating. See [AWS's Marengo migration guide](https://docs.aws.amazon.com/bedrock/latest/userguide/model-parameters-marengo-3.html).
+
+These models also offer media and asynchronous embedding APIs on AWS, which this
+text embedding route does not expose. Use a [custom provider](/docs/providers/custom-api/)
+for those workflows.
+
 To override the embeddings provider for all assertions that require embeddings (such as similarity), use `defaultTest`:
 
 ```yaml
