@@ -1,0 +1,37 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+
+description: Cheaper Inference Provider Example
+
+prompts:
+  - |
+    You are a helpful assistant. Answer the following question concisely:
+    {{question}}
+
+providers:
+  - id: openai:chat:claude-sonnet-5
+    label: 'Claude Sonnet 5 via Cheaper Inference'
+    config:
+      apiBaseUrl: https://api.cheaperinference.com/v1
+      apiKeyEnvar: CHEAPERINFERENCE_API_KEY
+      max_tokens: 500
+  - id: openai:chat:gemini-3.7-flash
+    label: 'Gemini 3.7 Flash via Cheaper Inference'
+    config:
+      apiBaseUrl: https://api.cheaperinference.com/v1
+      apiKeyEnvar: CHEAPERINFERENCE_API_KEY
+      max_tokens: 500
+
+tests:
+  - description: 'Basic knowledge test'
+    vars:
+      question: 'What is the capital of France?'
+    assert:
+      - type: contains
+        value: 'Paris'
+
+  - description: 'Technical explanation'
+    vars:
+      question: 'Explain machine learning in simple terms'
+    assert:
+      - type: icontains
+        value: 'machine learning'
