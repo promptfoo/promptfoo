@@ -45,6 +45,39 @@ describe('MetadataPanel', () => {
     }
   });
 
+  it.each([
+    'javascript:globalThis.metadataProbe = true',
+    ' \u0000JaVaScRiPt:globalThis.metadataProbe = true',
+    'java\tscript:globalThis.metadataProbe = true',
+    'java\nscript:globalThis.metadataProbe = true',
+    'data:text/html,<script>globalThis.metadataProbe = true</script>',
+    'file:///private/file',
+    'mailto:user@example.com',
+    's3://bucket/key',
+    'vscode://file/private/file',
+    'blob:https://example.com/id',
+    'ftp://example.com/file',
+    '//example.com/path',
+  ])('renders non-HTTP metadata as text: %j', (value) => {
+    renderWithProviders(<MetadataPanel {...defaultProps} metadata={{ source: value }} />);
+    const cell = screen.getByText('source').nextElementSibling;
+    expect(cell?.textContent).toBe(value);
+    expect(cell?.querySelector('a')).toBeNull();
+  });
+
+  it.each([
+    'http://example.com/path?query=value#fragment',
+    'HTTPS://example.com/path with spaces',
+    ' \nhttps://example.com/path\t',
+    'ht\ttps://example.com/path',
+  ])('keeps parsed HTTP(S) links clickable: %j', (value) => {
+    renderWithProviders(<MetadataPanel {...defaultProps} metadata={{ source: value }} />);
+    const link = screen.getByRole('link');
+    expect(link).toHaveAttribute('href', value);
+    expect(link).toHaveAttribute('target', '_blank');
+    expect(link).toHaveAttribute('rel', 'noopener noreferrer');
+  });
+
   it('should handle malformed URLs by rendering them as plain text instead of a link', () => {
     const malformedUrl = 'http://';
     const mockMetadata = {
@@ -150,46 +183,55 @@ describe('MetadataPanel', () => {
     expect(linkElement).toHaveAttribute('href', 'https://www.example.com');
   });
 
-  it('should display a truncated value for long metadata strings and expand on click', async () => {
-    const user = userEvent.setup();
-    const longString = 'This is a very long string. '.repeat(50);
-    const mockMetadata = {
-      longKey: longString,
-    };
+  it.each(['This is a very long string. '.repeat(50), `data:text/plain,${'x'.repeat(400)}`])(
+    'keeps long text inspectable, copyable and filterable',
+    async (longString) => {
+      const user = userEvent.setup();
+      const mockMetadata = {
+        longKey: longString,
+      };
 
-    const mockExpandedMetadata: ExpandedMetadataState = {
-      longKey: { expanded: false, lastClickTime: 0 },
-    };
+      const mockExpandedMetadata: ExpandedMetadataState = {
+        longKey: { expanded: false, lastClickTime: 0 },
+      };
 
-    const { rerender } = renderWithProviders(
-      <MetadataPanel
-        {...defaultProps}
-        metadata={mockMetadata}
-        expandedMetadata={mockExpandedMetadata}
-      />,
-    );
+      const { rerender } = renderWithProviders(
+        <MetadataPanel
+          {...defaultProps}
+          metadata={mockMetadata}
+          expandedMetadata={mockExpandedMetadata}
+        />,
+      );
 
-    const truncatedValue = screen.getByText((content) => content.endsWith('...'));
-    expect(truncatedValue).toBeInTheDocument();
-    expect(truncatedValue.textContent?.length).toBeLessThanOrEqual(300);
+      const truncatedValue = screen.getByText((content) => content.endsWith('...'));
+      expect(truncatedValue).toBeInTheDocument();
+      expect(truncatedValue.textContent?.length).toBeLessThanOrEqual(300);
 
-    await user.click(truncatedValue);
+      await user.click(truncatedValue);
 
-    const updatedExpandedMetadata: ExpandedMetadataState = {
-      longKey: { expanded: true, lastClickTime: Date.now() },
-    };
+      const updatedExpandedMetadata: ExpandedMetadataState = {
+        longKey: { expanded: true, lastClickTime: Date.now() },
+      };
 
-    rerender(
-      <MetadataPanel
-        {...defaultProps}
-        metadata={mockMetadata}
-        expandedMetadata={updatedExpandedMetadata}
-      />,
-    );
+      rerender(
+        <MetadataPanel
+          {...defaultProps}
+          metadata={mockMetadata}
+          expandedMetadata={updatedExpandedMetadata}
+        />,
+      );
 
-    const fullValue = screen.getByText((content) => content?.includes(longString.substring(0, 50)));
-    expect(fullValue).toBeInTheDocument();
-  });
+      const fullValue = screen.getByText((content) =>
+        content?.includes(longString.substring(0, 50)),
+      );
+      expect(fullValue.textContent).toBe(longString);
+      expect(screen.queryByRole('link')).not.toBeInTheDocument();
+      await user.click(screen.getByRole('button', { name: 'Copy metadata value for longKey' }));
+      expect(mockOnCopy).toHaveBeenCalledWith('longKey', longString);
+      await user.click(screen.getByRole('button', { name: 'Filter by longKey' }));
+      expect(mockOnApplyFilter).toHaveBeenCalledWith('longKey', longString);
+    },
+  );
 
   it('should call onCopy with the correct key and value when the copy icon is clicked, and show a checkmark icon if the field is marked as copied', async () => {
     const user = userEvent.setup();
