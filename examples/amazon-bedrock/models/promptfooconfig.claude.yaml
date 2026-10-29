@@ -27,6 +27,11 @@ providers:
     config:
       max_tokens: 2048
       region: us-east-1
+  - id: bedrock:global.anthropic.claude-haiku-5-5
+    label: Claude Haiku 5.5
+    config:
+      max_tokens: 2048
+      region: us-east-1
   - id: bedrock:global.anthropic.claude-opus-5
     label: Claude Opus 5
     config:

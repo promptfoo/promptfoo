@@ -81,9 +81,9 @@ const BEDROCK_PRICING: Record<string, BedrockPricing> = {
   // explicit entry here for any future 4.x release for the same reason.
   'anthropic.claude-sonnet-4-6': { input: 3, output: 15 },
   'anthropic.claude-sonnet-4-5': { input: 3, output: 15 },
-  // Claude Sonnet 4 is the only Bedrock Claude model with published long-context meters
-  // (verified 2026-09-01 in us-east-1, us-east-2, us-west-2, eu-west-1 and ap-northeast-1):
-  // above 200K input tokens input doubles to $6 and output is 1.5x at $22.50. The matching
+  // Claude Sonnet 4 publishes long-context meters, like Haiku 5.5 below (verified 2026-09-01
+  // in us-east-1, us-east-2, us-west-2, eu-west-1 and ap-northeast-1): above 200K input
+  // tokens input doubles to $6 and output is 1.5x at $22.50. The matching
   // `-cache-read/-cache-write-...-long-context-...` meters are 10% and 1.25x of the tier's
   // input rate, which falls out of deriving the cache rates from it.
   'anthropic.claude-sonnet-4': {

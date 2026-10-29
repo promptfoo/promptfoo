@@ -2046,6 +2046,32 @@ Third line`;
       expect(call?.inferenceConfig?.maxTokens).toBe(1024);
     });
 
+    it('omits temperature and topP for Claude Haiku 5.5', async () => {
+      // Verified live: temperature 0 returns 400 "deprecated for this model" on Haiku 5.5.
+      const provider = new AwsBedrockConverseProvider('us.anthropic.claude-haiku-5-5', {
+        config: {
+          region: 'us-east-1',
+          max_tokens: 1024,
+          temperature: 0,
+          topP: 0.9,
+        },
+      });
+
+      mockSend.mockResolvedValueOnce(createMockConverseResponse('Test'));
+
+      await provider.callApi('Test');
+
+      const { ConverseCommand } = (await import(
+        '@aws-sdk/client-bedrock-runtime'
+      )) as unknown as MockBedrockModule;
+      const call = (ConverseCommand as unknown as { mock: { calls: unknown[][] } }).mock.calls.at(
+        -1,
+      )?.[0] as { inferenceConfig?: Record<string, unknown> };
+      expect(call?.inferenceConfig?.temperature).toBeUndefined();
+      expect(call?.inferenceConfig?.topP).toBeUndefined();
+      expect(call?.inferenceConfig?.maxTokens).toBe(1024);
+    });
+
     it.each(['any', { tool: { name: 'test_tool' } }])(
       'omits forced tool choice for Claude Fable 5 while preserving tools: %j',
       async (toolChoice) => {
@@ -2499,7 +2525,11 @@ Third line`;
       );
     });
 
-    it.each(['global.anthropic.claude-sonnet-5-5', 'anthropic.claude-opus-5'])(
+    it.each([
+      'global.anthropic.claude-sonnet-5-5',
+      'anthropic.claude-opus-5',
+      'global.anthropic.claude-haiku-5-5',
+    ])(
       'drops config thinking "disabled" for %s when raw fields carry a capped effort',
       async (model) => {
         // Turning thinking off at xhigh/max is a 400 on both models, and the raw

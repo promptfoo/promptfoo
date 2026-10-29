@@ -118,7 +118,7 @@ export const ANTHROPIC_MODELS = [
   ...modelsWithCost(['claude-haiku-5-5'], {
     input: 0.1 / 1e6, // $0.10 / MTok
     output: 0.5 / 1e6, // $0.50 / MTok
-    longPrompt: { threshold: 100_000, input: 0.5 / 1e6, output: 2.5 / 1e6 },
+    longContext: { threshold: 100_000, input: 0.5 / 1e6, output: 2.5 / 1e6 },
   }),
   ...modelsWithCost(['claude-haiku-4-5', 'claude-haiku-4-5-20251001'], {
     input: 1 / 1e6, // $1 / MTok
@@ -944,13 +944,13 @@ export function calculateAnthropicCost(
   const cacheCreation1h = cacheCreation1hTokens ?? 0;
   // A model's long-prompt rates replace its standard rates for the whole request once the prompt,
   // cache reads and writes included, is over the threshold.
-  const longPrompt = modelInfo?.cost.longPrompt;
+  const longContext = modelInfo?.cost.longContext;
   const pricedModel =
     modelInfo &&
-    longPrompt &&
+    longContext &&
     (Number.isFinite(promptTokens) ? Number(promptTokens) : 0) + cacheRead + cacheCreation >
-      longPrompt.threshold
-      ? { id: modelInfo.id, cost: { input: longPrompt.input, output: longPrompt.output } }
+      longContext.threshold
+      ? { id: modelInfo.id, cost: { input: longContext.input, output: longContext.output } }
       : modelInfo;
 
   // Other size-based tiers are provider-specific, and callers supply them as explicit
@@ -1207,13 +1207,16 @@ export function processAnthropicTools(
 interface AnthropicModelCost {
   input: number;
   output: number;
-  /** The rates for a whole request whose prompt, cache reads and writes included, is longer. */
-  longPrompt?: { threshold: number; input: number; output: number };
+  /**
+   * The rates for a whole request whose prompt, cache reads and writes included, is longer than
+   * `threshold` tokens. `getModelPricing` returns them too.
+   */
+  longContext?: { threshold: number; input: number; output: number };
 }
 
 function modelsWithCost(ids: string[], cost: AnthropicModelCost) {
   return ids.map((id) => ({
     id,
-    cost: { ...cost, ...(cost.longPrompt && { longPrompt: { ...cost.longPrompt } }) },
+    cost: { ...cost, ...(cost.longContext && { longContext: { ...cost.longContext } }) },
   }));
 }
