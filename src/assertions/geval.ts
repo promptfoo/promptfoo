@@ -74,7 +74,7 @@ export const handleGEval = async ({
 
     const averageScore = responses.reduce((acc, r) => acc + r.score, 0) / responses.length;
     const combinedReason = responses.map((r) => r.reason).join('\n\n');
-    const passed = averageScore >= threshold !== inverse;
+    const passed = averageScore >= threshold - Number.EPSILON !== inverse;
 
     return {
       assertion,

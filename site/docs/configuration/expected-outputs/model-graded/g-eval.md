@@ -41,6 +41,8 @@ G-Eval uses `gpt-4.1-2025-04-14` by default to evaluate outputs based on your sp
 
 The assertion passes if the score meets or exceeds the threshold (default 0.7). When `value` is an array, each criterion is graded independently and the scores are averaged; the averaged score is compared against the threshold. An empty array is a configuration error and fails with a clear reason.
 
+For multiple criteria, the threshold comparison includes a machine-precision tolerance for floating-point error. Reported average scores retain their full numeric precision.
+
 ## Negation with `not-g-eval`
 
 Prepend `not-` to invert the assertion — useful for "must not" criteria:
