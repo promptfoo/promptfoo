@@ -255,6 +255,10 @@ Use trajectory assertions when your spans identify tools, commands, searches, re
 
 The three raw-span assertions accept `value.attributes` to select spans by exact attributes in addition to their name pattern. For example, `attributes: { 'gen_ai.tool.name': 'search' }` limits a count, duration, or error-rate check to the search tool even when every tool emits a span named `execute_tool`. All supplied attributes must match; missing attributes are excluded. See the [attribute-filter examples](/docs/configuration/expected-outputs/deterministic/#trace-span-count) for supported values and presence checks.
 
+Before grading a locally traced row, Promptfoo waits up to 30 seconds for pending exports. If a local write for the row fails or the flush exceeds that budget, built-in trace and trajectory assertions report unavailable evidence. Output assertions still run. The local exporter uses `OTEL_BSP_EXPORT_TIMEOUT` for each batch (30,000 ms by default).
+
+Overlapping programmatic evaluations share the first active OpenTelemetry exporter configuration. When an evaluation finishes, it flushes its spans. The last evaluation drains and closes the SDK, and a subsequent evaluation can choose a new configuration.
+
 ### Turn marker spans {#per-llm-turn-spans}
 
 Several first-party providers expose turn marker spans to trace assertions. Some markers correspond to internal model generations; Codex SDK and app-server markers correspond to the protocol turn exposed by those APIs. The span name and convention depend on the provider:

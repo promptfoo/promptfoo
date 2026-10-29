@@ -14,6 +14,13 @@ import {
   registerTestDatabaseClient,
   unregisterTestDatabaseClient,
 } from './testing';
+import type { InValue } from '@libsql/client/node';
+import type { Query, SQLWrapper } from 'drizzle-orm';
+
+type GuardedStatement = SQLWrapper & { toSQL(): Query };
+type Database = Drizzle & {
+  runGuardedWrite(statement: GuardedStatement, checkWrite: () => void): Promise<void>;
+};
 
 // Lazy types; the runtime modules below are imported inside getDb() so that a
 // missing libsql platform binding (`@libsql/<target>`) surfaces as a catchable
@@ -30,8 +37,8 @@ export class DrizzleLogWriter implements LogWriter {
   }
 }
 
-let dbInstance: Drizzle | null = null;
-let dbPromise: Promise<Drizzle> | null = null;
+let dbInstance: Database | null = null;
+let dbPromise: Promise<Database> | null = null;
 let sqliteInstance: Client | null = null;
 let sqliteInstanceIsTesting = false;
 let closePromise: Promise<void> | null = null;
@@ -238,11 +245,19 @@ function isTransientDatabaseLockError(error: unknown): boolean {
   return false;
 }
 
+/** Backoff for replaying an atomic operation that SQLite rejected due to lock contention. */
+export function getDatabaseLockRetryDelay(error: unknown, attempt: number): number | undefined {
+  if (attempt >= TRANSIENT_LOCK_RETRY_ATTEMPTS || !isTransientDatabaseLockError(error)) {
+    return undefined;
+  }
+  return Math.min(TRANSIENT_LOCK_RETRY_BASE_MS * 2 ** (attempt - 1), TRANSIENT_LOCK_RETRY_MAX_MS);
+}
+
 function serializeTopLevelOperations(
   client: Client,
   db: Drizzle,
   { reconnectOnLockFailure }: { reconnectOnLockFailure: boolean },
-): Drizzle {
+): Database {
   const rawExecute = client.execute.bind(client);
 
   const withLockRecovery = async <T>(operation: () => Promise<T>, retry: boolean): Promise<T> => {
@@ -278,12 +293,11 @@ function serializeTopLevelOperations(
             }
           }
         }
-        if (!retry || attempt >= TRANSIENT_LOCK_RETRY_ATTEMPTS) {
+        const delay = getDatabaseLockRetryDelay(error, attempt);
+        if (!retry || delay === undefined) {
           throw error;
         }
-        await sleep(
-          Math.min(TRANSIENT_LOCK_RETRY_BASE_MS * 2 ** (attempt - 1), TRANSIENT_LOCK_RETRY_MAX_MS),
-        );
+        await sleep(delay);
       }
     }
   };
@@ -367,7 +381,43 @@ function serializeTopLevelOperations(
     );
   }) as typeof db.transaction;
 
-  return db;
+  const runGuardedWrite = serializeClientMethod(
+    async (statement: GuardedStatement, checkWrite: () => void) => {
+      checkWrite();
+      const tx = await client.transaction();
+      try {
+        checkWrite();
+        const { sql, params } = statement.toSQL();
+        await tx.execute({ sql, args: params as InValue[] });
+        checkWrite();
+        // libSQL's prepared commit() releases its connection even on SQLITE_BUSY.
+        // Keep the transaction open so close() can roll it back before recovery.
+        await tx.executeMultiple('COMMIT');
+      } catch (error) {
+        try {
+          tx.close();
+        } catch (rollbackError) {
+          logger.warn('Could not roll back guarded database write', { error: rollbackError });
+        }
+        throw error;
+      }
+      tx.close();
+    },
+    false,
+  );
+
+  return Object.assign(db, {
+    async runGuardedWrite(statement: GuardedStatement, checkWrite: () => void) {
+      const current = activeTransaction.getStore()?.transaction;
+      if (!current) {
+        return runGuardedWrite(statement, checkWrite);
+      }
+      // As with nested db.transaction(), the caller owns commit or rollback.
+      checkWrite();
+      await current.run(statement);
+      checkWrite();
+    },
+  });
 }
 
 export async function getDb() {

@@ -53,7 +53,7 @@ import {
   stopOtlpReceiverIfNeeded,
 } from './tracing/evaluatorTracing';
 import { getDefaultOtelConfig } from './tracing/otelConfig';
-import { flushOtel, initializeOtel, shutdownOtel } from './tracing/otelSdk';
+import { flushOtel, initializeOtel, trackLocalTrace } from './tracing/otelSdk';
 import { isExternalTraceProvider } from './tracing/providers';
 import { getActiveTraceparent } from './tracing/spanRoles';
 import { withGraderSpan, withTestCaseSpan, withTracedProviderCall } from './tracing/targetTracer';
@@ -1579,13 +1579,11 @@ async function gradeRunEvalResponse({
     vars,
   });
   const traceId = getTraceId(traceContext);
-  if (
+  const localTraceUnavailable =
     traceId &&
     hasTraceAwareAssertions(test.assert) &&
-    !isExternalTraceProvider(testSuite?.tracing?.provider)
-  ) {
-    await flushOtel();
-  }
+    !isExternalTraceProvider(testSuite?.tracing?.provider) &&
+    (await (traceContext?.localExport?.flush() ?? flushOtel())) === false;
 
   const assertionProviderResponse = {
     ...processedResponse,
@@ -1610,6 +1608,7 @@ async function gradeRunEvalResponse({
           latencyMs: response.latencyMs ?? latencyMs,
           assertScoringFunction: test.assertScoringFunction as ScoringFunction,
           traceId,
+          traceUnavailable: !!localTraceUnavailable,
         }).then((checkResult) => applyGradingResult(ret, checkResult)),
     ).catch((error) => {
       applyGradingError(ret, error, deferredGradingAbortSignal);
@@ -1631,6 +1630,7 @@ async function gradeRunEvalResponse({
           latencyMs: response.latencyMs ?? latencyMs,
           assertScoringFunction: test.assertScoringFunction as ScoringFunction,
           traceId,
+          traceUnavailable: !!localTraceUnavailable,
         }),
     );
     applyGradingResult(ret, checkResult);
@@ -1858,6 +1858,15 @@ async function runEvalInternal(
             repeatIndex,
           },
         );
+    const traceId = getTraceId(traceContext);
+    if (
+      traceContext &&
+      traceId &&
+      hasTraceAwareAssertions(test.assert) &&
+      !isExternalTraceProvider(testSuite?.tracing?.provider)
+    ) {
+      traceContext = { ...traceContext, localExport: trackLocalTrace(traceId) };
+    }
     const executionTraceContext = traceContext;
     const runExecution = () =>
       withTestCaseSpan(
@@ -2030,6 +2039,7 @@ async function runEvalInternal(
       },
     ];
   } finally {
+    traceContext?.localExport?.release();
     await workspace?.remove();
   }
 }
@@ -6114,7 +6124,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       (typeof this.testSuite.defaultTest === 'object' &&
         this.testSuite.defaultTest?.metadata?.tracingEnabled === true) ||
       this.testSuite.tests?.some((t) => t.metadata?.tracingEnabled === true);
-    let otelInitialized = false;
+    let releaseOtel: ReturnType<typeof initializeOtel>;
     let otlpReceiverAcquired = false;
 
     let evaluationError: unknown;
@@ -6129,8 +6139,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       if (tracingEnabled) {
         logger.debug('[Evaluator] Initializing OTEL SDK for tracing');
         const otelConfig = getDefaultOtelConfig();
-        initializeOtel(otelConfig);
-        otelInitialized = true;
+        releaseOtel = initializeOtel(otelConfig);
       }
 
       return await this._runEvaluation(deadline);
@@ -6151,12 +6160,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
 
       let cleanupError: unknown;
       try {
-        // Flush and shutdown OTEL SDK
-        if (otelInitialized) {
-          logger.debug('[Evaluator] Flushing OTEL spans...');
-          await flushOtel();
-          await shutdownOtel();
-        }
+        await releaseOtel?.();
 
         if (otlpReceiverAcquired && isOtlpReceiverStarted()) {
           // Add a delay to allow providers to finish exporting spans

@@ -4,14 +4,15 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
 
+import { createClient } from '@libsql/client/node';
 import { eq } from 'drizzle-orm';
-import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getDb } from '../../src/database/index';
 import { spansTable, tracesTable } from '../../src/database/tables';
 import { runDbMigrations } from '../../src/migrate';
 import { TraceStore } from '../../src/tracing/store';
 import EvalFactory from '../factories/evalFactory';
-import { removeTempDir } from '../util/utils';
+import { createDeferred, removeTempDir } from '../util/utils';
 
 const execFileAsync = promisify(execFile);
 
@@ -67,6 +68,125 @@ describe('TraceStore span persistence', () => {
       .where(eq(spansTable.traceId, 'concurrent-insertions'));
     expect(spans).toHaveLength(1);
     expect(spans[0]).toMatchObject({ name: 'target.call', spanId: 'shared-span' });
+  });
+
+  it('retries a locked span transaction while its deadline permits', async () => {
+    const traceId = 'contended-insertion';
+    const traceStore = await createTrace(traceId);
+    const db = await getDb();
+    const transaction = vi.spyOn(db, 'runGuardedWrite');
+    const blocker = createClient({ url: 'file::memory:?cache=shared' });
+    const lock = await blocker.transaction('write');
+    try {
+      const pending = traceStore.addSpans(
+        traceId,
+        [{ spanId: 'target', name: 'work', startTime: 1 }],
+        {
+          deadline: Date.now() + 5_000,
+        },
+      );
+      const stored = pending.catch((error: unknown) => error);
+      await vi.waitFor(() => expect(transaction).toHaveBeenCalled());
+      await expect(transaction.mock.results[0].value).rejects.toThrow(/locked|busy/i);
+      await lock.rollback();
+      await expect(stored).resolves.toEqual({ stored: true });
+      await expect(traceStore.getSpans(traceId)).resolves.toHaveLength(1);
+    } finally {
+      lock.close();
+      blocker.close();
+      transaction.mockRestore();
+    }
+  });
+
+  it.each([false, true])(
+    'discards a cancelled span write queued behind a transaction (skipTraceCheck=%s)',
+    async (skipTraceCheck) => {
+      const traceId = 'cancelled-insertion';
+      const traceStore = await createTrace(traceId);
+      const db = await getDb();
+      const started = createDeferred<void>();
+      const release = createDeferred<void>();
+      const holding = db.transaction(async () => {
+        started.resolve();
+        await release.promise;
+      });
+      await started.promise;
+
+      const controller = new AbortController();
+      const queued = traceStore
+        .addSpans(traceId, [{ spanId: 'late', name: 'target.call', startTime: 1 }], {
+          abortSignal: controller.signal,
+          skipTraceCheck,
+        })
+        .catch((error: unknown) => error);
+      // Let addSpans reach the database queue before cancellation.
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      controller.abort(new Error('Import deadline reached'));
+      release.resolve();
+      await holding;
+
+      const outcome = await queued;
+      await expect(traceStore.getSpans(traceId)).resolves.toEqual([]);
+      expect(outcome).toBe(controller.signal.reason);
+    },
+  );
+
+  it('rolls back an insert that crosses its deadline before the abort timer can run', async () => {
+    const traceId = 'late-native-insertion';
+    const traceStore = await createTrace(traceId);
+    const deadline = Date.now() + 1000;
+    const clock = vi.spyOn(Date, 'now').mockReturnValue(deadline - 1);
+    const signal = new AbortController().signal;
+    try {
+      const span = {
+        spanId: 'late',
+        name: 'target.call',
+        startTime: 1,
+        // The SQLite driver serializes attributes during the insert.
+        attributes: {
+          toJSON: () => {
+            clock.mockReturnValue(deadline);
+            return {};
+          },
+        },
+      };
+      await expect(
+        traceStore.addSpans(traceId, [span], { abortSignal: signal, deadline }),
+      ).rejects.toMatchObject({ name: 'TimeoutError' });
+      expect(signal.aborted).toBe(false);
+      await expect(traceStore.getSpans(traceId)).resolves.toEqual([]);
+    } finally {
+      clock.mockRestore();
+    }
+  });
+
+  it('joins concurrent guarded span writes to the outer transaction', async () => {
+    const traceId = 'nested-guarded-write';
+    const traceStore = await createTrace(traceId);
+    const db = await getDb();
+    const span = { spanId: 'healthy', name: 'work', startTime: 1 };
+    const options = { deadline: Date.now() + 5000, skipTraceCheck: true };
+    const cancelled = new Error('Cancel one write');
+    await expect(
+      db.transaction(async (tx) => {
+        const outcomes = await Promise.allSettled([
+          traceStore.addSpans(traceId, [span], options),
+          traceStore.addSpans(traceId, [{ ...span, spanId: 'cancelled' }], {
+            ...options,
+            abortSignal: AbortSignal.abort(cancelled),
+          }),
+        ]);
+        expect(outcomes).toEqual([
+          { status: 'fulfilled', value: { stored: true } },
+          { status: 'rejected', reason: cancelled },
+        ]);
+        const rows = await tx.select().from(spansTable).where(eq(spansTable.traceId, traceId));
+        expect(rows.map((row) => row.spanId)).toEqual(['healthy']);
+        throw new Error('Rollback outer transaction');
+      }),
+    ).rejects.toThrow('Rollback outer transaction');
+
+    await expect(traceStore.getSpans(traceId)).resolves.toEqual([]);
   });
 
   it('allows the same span ID in different traces', async () => {
