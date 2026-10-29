@@ -585,6 +585,17 @@ describe('Anthropic Messages SDK transport', () => {
     expect(sdkSpanOf(spans)?.attributes['gen_ai.input.messages']).toContain('ping');
   });
 
+  it('treats a null openTelemetry.traces as unset, as the SDK does', async () => {
+    // YAML reads `traces:` with its children commented out as null.
+    const { requests, spans } = await callProvider({
+      openTelemetry: { traces: null } as unknown as AnthropicMessageOptions['openTelemetry'],
+    });
+
+    const sdkSpan = sdkSpanOf(spans);
+    expect(sdkSpan).toBeDefined();
+    expect(requests[0].traceparent).toBe(traceparentOf(sdkSpan!.spanContext()));
+  });
+
   it('reads the SDK variables for openTelemetry true through the provider env', async () => {
     const spansOff = await callProvider(
       { openTelemetry: true },

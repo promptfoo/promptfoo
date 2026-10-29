@@ -197,7 +197,8 @@ function resolveOpenTelemetry(
     client = { ...value, propagation: value.propagation ?? propagation };
   }
   const { traces } = client;
-  const spans = traces !== false && (typeof traces !== 'object' || traces.enabled !== false);
+  // A null `traces`, which YAML gives for a key with no value, is unset to the SDK.
+  const spans = traces !== false && (typeof traces !== 'object' || traces?.enabled !== false);
   // The SDK replaces trace context headers with its own span's; the config's win, as they do
   // when promptfoo sends trace context, and the SDK still records its spans.
   if (spans && configuresTraceContext) {
