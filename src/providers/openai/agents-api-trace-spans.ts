@@ -368,7 +368,24 @@ function protectedEchoMatcher(policy: ImportPolicy) {
       invalid();
     }
   }
-  function remember(value: unknown) {
+  function isStructuredJson(text: string): boolean {
+    return /^\s*["[{]/.test(text);
+  }
+  function inspectJson(raw: string, hidden: boolean, depth: number) {
+    if (!reserveArgumentJson(raw, policy)) {
+      invalid();
+    }
+    try {
+      const parsed: unknown = JSON.parse(raw);
+      if (!roundTrips(raw, parsed, policy)) {
+        invalid();
+      }
+      jsonLeaves(parsed, hidden, depth);
+    } catch {
+      invalid();
+    }
+  }
+  function remember(value: unknown, depth: number) {
     if (value === null || value === undefined || value === '') {
       return;
     }
@@ -382,10 +399,15 @@ function protectedEchoMatcher(policy: ImportPolicy) {
         invalid();
       }
       needles.add(text);
+      // A protected OTLP or JSON string may itself encode structured data. Inspect
+      // it once, preserving the original text and charging the shared JSON budgets.
+      if (typeof value === 'string' && isStructuredJson(text)) {
+        inspectJson(text, true, depth + 1);
+      }
       // The credential alone can appear in a tool or model name.
       const auth = /^(?:Bearer|Basic|Token|Api[-_]?Key)[ \t]+(\S+)$/i.exec(text.trim());
       if (auth) {
-        remember(auth[1]);
+        remember(auth[1], depth);
       }
     }
   }
@@ -400,7 +422,7 @@ function protectedEchoMatcher(policy: ImportPolicy) {
         jsonLeaves(item, hidden || protectedKey(key), depth + 1);
       }
     } else if (hidden) {
-      remember(value);
+      remember(value, depth);
     }
   }
   function wireLeaves(value: WireValue, hidden: boolean, depth: number): void {
@@ -423,10 +445,10 @@ function protectedEchoMatcher(policy: ImportPolicy) {
       if (value.bytesValue !== undefined) {
         invalid();
       }
-      remember(value.stringValue ?? value.boolValue ?? value.doubleValue ?? value.intValue);
+      remember(value.stringValue ?? value.boolValue ?? value.doubleValue ?? value.intValue, depth);
       if (typeof value.intValue === 'string') {
         // Protobuf JSON accepts integer strings with leading zeros or a negative zero.
-        remember(BigInt(value.intValue).toString());
+        remember(BigInt(value.intValue).toString(), depth);
       }
     }
   }
@@ -442,24 +464,16 @@ function protectedEchoMatcher(policy: ImportPolicy) {
     wireLeaves(value, hidden, 0);
     if (args && typeof value.stringValue === 'string') {
       const raw = value.stringValue;
+      if (hidden && isStructuredJson(raw)) {
+        return; // Already inspected as a protected leaf.
+      }
       if (!hidden && !policy.redactAttributes.length) {
         chargeSearch(raw, 1);
         if (!mayContainCredentialField(raw, () => visit(0))) {
           return;
         }
       }
-      if (!reserveArgumentJson(raw, policy)) {
-        invalid();
-      }
-      try {
-        const parsed: unknown = JSON.parse(raw);
-        if (!roundTrips(raw, parsed, policy)) {
-          invalid();
-        }
-        jsonLeaves(parsed, hidden, 0);
-      } catch {
-        invalid();
-      }
+      inspectJson(raw, hidden, 0);
     }
   }
   function collect(attributes: z.infer<typeof attributeList> | undefined) {
@@ -490,10 +504,28 @@ function protectedEchoMatcher(policy: ImportPolicy) {
 
 // A credential can follow a named component in a namespaced identifier.
 function hasProtectedComponent(value: string, policy: ImportPolicy): boolean {
-  return value
-    .split(/[:/]/)
-    .slice(0, -1)
-    .some((label) => protectsKey([label.toLowerCase()], policy) || isHostedCredentialField(label));
+  const components = value.split(/[:/]/);
+  const protectedLabel = (label: string) =>
+    protectsKey([label.toLowerCase()], policy) || isHostedCredentialField(label);
+  let checked = 0;
+  return components.some((component, index) => {
+    if (index < components.length - 1 && protectedLabel(component)) {
+      return true;
+    }
+    if (!policy.redactAttributes.length && !mayNameCredential(component)) {
+      return false;
+    }
+    // The value of a labelled identifier can contain its own separators. Bound prefix
+    // checks even for paths with many components and an active custom redaction policy.
+    for (const separator of component.matchAll(/[._-]+/g)) {
+      if (separator.index > 0 && separator.index + separator[0].length < component.length) {
+        if (++checked > 32 || protectedLabel(component.slice(0, separator.index))) {
+          return true;
+        }
+      }
+    }
+    return false;
+  });
 }
 
 function canRetainText(
