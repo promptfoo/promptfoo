@@ -12,6 +12,7 @@ import { resolveConfigs } from '../../util/config/load';
 import { printBorder, setupEnv } from '../../util/index';
 import { promptfooCommand } from '../../util/promptfooCommand';
 import { loadYaml } from '../../util/yamlLoad';
+import { parseGenerationCount, validateGenerationOutput } from './options';
 import type { Command } from 'commander';
 
 interface DatasetGenerateOptions {
@@ -29,6 +30,9 @@ interface DatasetGenerateOptions {
 }
 
 export async function doGenerateAssertions(options: DatasetGenerateOptions): Promise<void> {
+  const numQuestions = parseGenerationCount(options.numAssertions ?? '5', '--numAssertions');
+  validateGenerationOutput(options.output, ['.yaml']);
+
   setupEnv(options.envFile);
   if (!options.cache) {
     logger.info('Cache is disabled.');
@@ -63,7 +67,7 @@ export async function doGenerateAssertions(options: DatasetGenerateOptions): Pro
 
   const results = await synthesizeFromTestSuite(testSuite, {
     instructions: options.instructions,
-    numQuestions: Number.parseInt(options.numAssertions || '5', 10),
+    numQuestions,
     provider: options.provider,
     type: options.type,
   });
@@ -72,12 +76,7 @@ export async function doGenerateAssertions(options: DatasetGenerateOptions): Pro
   };
   const yamlString = yaml.dump(configAddition);
   if (options.output) {
-    // Should the output be written as a YAML or CSV?
-    if (options.output.endsWith('.yaml')) {
-      await fs.writeFile(options.output, yamlString);
-    } else {
-      throw new Error(`Unsupported output file type: ${options.output}`);
-    }
+    await fs.writeFile(options.output, yamlString);
     printBorder();
     logger.info(`Wrote ${results.length} new assertions to ${options.output}`);
     printBorder();
