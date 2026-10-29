@@ -472,8 +472,26 @@ describe('normalizeHostedTrace', () => {
   });
 
   it.each([
+    ['execute_tool', 'gen_ai.tool.name', 'api_key_abcdefgh'],
+    ['chat', 'gen_ai.request.model', 'vendor/token_abcdefgh'],
+    ['chat', 'gen_ai.request.model', 'vendor/X-Honeycomb-Team_abc-def'],
+    ['execute_tool', 'gen_ai.tool.name', 'mcp:api-key-abc.def'],
+  ] as const)('withholds %s when a terminal label includes its value', (operation, key, id) => {
+    const call = {
+      ...tool,
+      attributes: [attribute('gen_ai.operation.name', operation), attribute(key, id)],
+    };
+    expect(() => normalizeHostedTrace(payload(root, call), parentId, false)).toThrow(
+      'Invalid hosted OTLP trace',
+    );
+  });
+
+  it.each([
     'vendor/model',
+    'gpt-4.1-mini-2025-04-14',
+    'ft:gpt-4.1-mini-2025-04-14',
     'vendor/npm_package_registry_metadata',
+    'vendor/get_access_token',
     'ft:vendor/research/gpt-mini-2026-09-30:run-17',
     'organization/vendor-very-long-but-human-readable-model-name-2026-10-20-0000003',
   ])('preserves safe model ID %s in attributes and span names', (id) => {
@@ -897,6 +915,65 @@ describe('normalizeHostedTrace', () => {
     function withCarriers(input: unknown, rules = [protectedKey]) {
       return normalizeHostedTrace(input, parentId, false, undefined, rules);
     }
+
+    describe('JSON in protected string attributes', () => {
+      it.each([
+        ['object', JSON.stringify({ tenant })],
+        ['array', JSON.stringify([tenant])],
+        ['escaped scalar', String.raw`"ten\u0061nt_42"`],
+        ['encoded nested value', JSON.stringify({ record: JSON.stringify({ tenant }) })],
+      ])('withholds a tool name echoing the protected %s', (_kind, raw) => {
+        const call = callNamed('read_tenant_42', attribute(protectedKey, raw));
+        expect(() => withCarriers(payload(root, call))).toThrow('Invalid hosted OTLP trace');
+      });
+
+      it('withholds a model name echoing protected JSON inside an event kvlist', () => {
+        const chat = {
+          ...model,
+          attributes: [
+            attribute('gen_ai.operation.name', 'chat'),
+            attribute('gen_ai.request.model', tenant),
+          ],
+          events: [
+            {
+              name: 'request',
+              attributes: [
+                {
+                  key: 'labels',
+                  value: {
+                    kvlistValue: { values: [attribute(protectedKey, JSON.stringify({ tenant }))] },
+                  },
+                },
+              ],
+            },
+          ],
+        };
+        expect(() => withCarriers(payload(root, chat))).toThrow('Invalid hosted OTLP trace');
+      });
+
+      it.each([
+        ['malformed object', '{"tenant":"tenant_42"'],
+        ['overwritten key', '{"tenant":"tenant_42","ten\\u0061nt":"other"}'],
+        ['truncated nested string', JSON.stringify({ record: '{"tenant":"tenant_42"' })],
+      ])('rejects a protected %s that cannot be inspected', (_kind, raw) => {
+        const call = callNamed('lookup_order', attribute(protectedKey, raw));
+        expect(() => withCarriers(payload(root, call))).toThrow('Invalid hosted OTLP trace');
+      });
+
+      it('counts repeated protected documents once and keeps unrelated identities', () => {
+        const raw = ' '.repeat(5_000) + JSON.stringify({ tenant });
+        const attrs = {
+          key: protectedKey,
+          value: {
+            arrayValue: { values: Array.from({ length: 64 }, () => ({ stringValue: raw })) },
+          },
+        };
+        const { spans, complete } = withCarriers(payload(root, callNamed('lookup_order', attrs)));
+        expect(complete).toBe(true);
+        expect(spans[1].name).toBe('execute_tool lookup_order');
+        expect(JSON.stringify(spans)).not.toContain(tenant);
+      });
+    });
 
     describe('credential attributes and argument aliases', () => {
       const credential = 'kappa-blue-19';
