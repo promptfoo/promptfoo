@@ -300,6 +300,36 @@ describe('trace assertions', () => {
       },
     );
 
+    it('distinguishes an unproven tool requirement from a complete capture that disproves it', async () => {
+      const partial = { ...complete, status: 'partial' };
+      const checks: Assertion[] = [
+        { type: 'trajectory:tool-used', value: 'delete' },
+        { type: 'trajectory:tool-used', value: ['lookup', 'delete'] },
+        { type: 'trajectory:tool-used', value: { name: 'lookup', min: 2 } },
+        {
+          type: 'trajectory:tool-args-match',
+          value: { name: 'lookup', args: { order_id: '456' } },
+        },
+      ];
+      for (const assertion of checks) {
+        await expect(grade(assertion, partial)).resolves.toMatchObject({
+          pass: false,
+          score: 0,
+          reason: expect.stringContaining('hosted trace is partial'),
+        });
+        await expect(grade(assertion, complete)).resolves.toMatchObject({
+          pass: false,
+          reason: expect.not.stringContaining('hosted trace is partial'),
+        });
+      }
+      await expect(
+        grade({ type: 'not-trajectory:tool-used', value: 'delete' }, partial),
+      ).resolves.toMatchObject({
+        pass: false,
+        reason: expect.stringContaining('hosted trace is partial'),
+      });
+    });
+
     it('keeps the local provider wrapper but excludes tools outside this hosted turn', async () => {
       for (const status of [imported, { ...imported, status: 'partial' }]) {
         await expect(
