@@ -139,6 +139,15 @@ function resolveToolMatchers(
   );
 }
 
+function observedToolResult(params: AssertionParams, pass: boolean, reason: string): GradingResult {
+  return {
+    pass,
+    score: pass ? 1 : 0,
+    reason: pass ? reason : (params.traceSpanUncertainty?.reason ?? reason),
+    assertion: params.assertion,
+  };
+}
+
 export const handleTrajectoryToolUsed = (params: AssertionParams): GradingResult => {
   const steps = getToolSteps(params);
   const expected = resolveToolMatchers(params.renderedValue ?? params.assertion.value);
@@ -176,12 +185,7 @@ export const handleTrajectoryToolUsed = (params: AssertionParams): GradingResult
       reason = `Missing required tool(s): ${missingTools.join(', ')}. Actual tools: ${formatStepList(actualTools)}`;
     }
 
-    return {
-      pass,
-      score: pass ? 1 : 0,
-      reason,
-      assertion: params.assertion,
-    };
+    return observedToolResult(params, pass, reason);
   }
 
   const matcher = expected.matcher;
@@ -215,12 +219,7 @@ export const handleTrajectoryToolUsed = (params: AssertionParams): GradingResult
       : `Tool "${matcherLabel}" did not satisfy the forbidden match condition`;
   }
 
-  return {
-    pass,
-    score: pass ? 1 : 0,
-    reason,
-    assertion: params.assertion,
-  };
+  return observedToolResult(params, pass, reason);
 };
 
 function resolveSequenceValue(value: unknown): TrajectorySequenceValue {
@@ -554,12 +553,7 @@ export const handleTrajectoryToolArgsMatch = (params: AssertionParams): GradingR
     reason = `No call to tool "${matcherLabel}" matched expected arguments (${mode}): ${expectedArgsLabel}. Observed args: ${observedArgsLabel}`;
   }
 
-  return {
-    pass,
-    score: pass ? 1 : 0,
-    reason,
-    assertion: params.assertion,
-  };
+  return observedToolResult(params, pass, reason);
 };
 
 function resolveStepCountValue(value: unknown): TrajectoryCountValue {

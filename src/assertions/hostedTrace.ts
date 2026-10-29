@@ -348,8 +348,14 @@ export function prepareHostedTraceAssertion(params: AssertionParams): string | u
     return 'The stored OpenAI Agents API spans are incomplete for this provider call.';
   }
   const partial = hostedTrace.status === 'partial' || native.some(hasUncertainHostedChatName);
-  if (partial && (inverse || !provesObservedTool(baseType, renderedValue))) {
-    return 'The hosted trace is partial. It can only establish an observed tool call or matching arguments.';
+  if (partial) {
+    const reason =
+      'The hosted trace is partial. It can only establish an observed tool call or matching arguments.';
+    if (inverse || !provesObservedTool(baseType, renderedValue)) {
+      return reason;
+    }
+    // A positive matcher can prove a pass. Missing calls could still satisfy an unmet requirement.
+    params.traceSpanUncertainty = { missing: Infinity, candidates: [], reason };
   }
   // Raw span assertions can inspect the local case/target/provider wrappers.
   // A sibling tool or grader in the same row cannot establish an action in this turn.
