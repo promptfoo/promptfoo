@@ -60,8 +60,6 @@ env:
   IMAGE_NAME: ${{ github.repository }}
   RELEASE_TAG: ${{ inputs.tag_name || github.event.release.tag_name || '' }}
   SOURCE_REF: ${{ inputs.tag_name || github.event.release.tag_name || github.ref }}
-  BUILD_VERSION: ${{ inputs.tag_name || github.event.release.tag_name || github.ref_name }}
-  BUILD_DATE: ${{ github.event_name == 'pull_request' && github.event.pull_request.updated_at || github.event_name == 'release' && github.event.release.published_at || github.event.head_commit.timestamp || github.event.repository.updated_at }}
   # Fallback release paths build a specific tag outside release-please.yml.
   IS_RELEASE_FALLBACK: ${{ (github.event_name == 'workflow_dispatch' && inputs.tag_name != '') || github.event_name == 'release' }}
 
@@ -72,8 +70,22 @@ jobs:
   test:
     # Bot-authored releases are already handled by release-please.yml after npm publish.
     # The release event path is for human-published fallback releases and backfills.
-    if: github.event_name != 'release' || github.event.release.author.type != 'Bot'
-    runs-on: ubuntu-latest
+    # release-please.yml also builds the image for a release commit, so the push of that
+    # commit is skipped. The call from release-please.yml has the same push event; it is
+    # told apart by its tag input and must always run.
+    if: >-
+      (github.event_name != 'release' || github.event.release.author.type != 'Bot') &&
+      !(github.event_name == 'push' && !inputs.tag_name &&
+      startsWith(github.event.head_commit.message, 'chore(main): release '))
+    name: test (${{ matrix.platforms.platform }})
+    strategy:
+      fail-fast: false
+      # Each image is built and run on a runner of its own architecture.
+      matrix:
+        platforms: &image-platforms
+          - { runner: ubuntu-latest, platform: linux/amd64, digest-suffix: linux-amd64 }
+          - { runner: ubuntu-24.04-arm, platform: linux/arm64, digest-suffix: linux-arm64 }
+    runs-on: ${{ matrix.platforms.runner }}
     timeout-minutes: 60
     permissions: *read-only-permissions
 
@@ -87,64 +99,42 @@ jobs:
             exit 1
           fi
 
-      - name: Free disk space
-        run: |
-          sudo rm -rf /usr/share/dotnet
-          sudo rm -rf /usr/local/lib/android
-          sudo rm -rf /opt/ghc
-          sudo rm -rf "/usr/local/share/boost"
-          sudo rm -rf "$AGENT_TOOLSDIRECTORY"
-          sudo apt-get clean
-          df -h
-
       - name: Checkout repository
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           ref: ${{ env.SOURCE_REF }}
           persist-credentials: false
 
-      # github.sha is the trigger SHA; SOURCE_REF can point checkout at a different tag.
-      - &resolve-source-commit
-        name: Resolve source commit
-        id: source
-        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
-
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@ce360397dd3f832beb865e1373c09c0e9f86d70a # v4
-
       - &set-up-docker-buildx
         name: Set up Docker Buildx
         uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # v4
+        with:
+          # The runner is discarded after the job, so removing the builder is wasted time.
+          cleanup: false
 
       - name: Build official Docker image for testing
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7
         with:
-          cache-from: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:buildcache-linux-amd64
+          cache-from: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:buildcache-${{ matrix.platforms.digest-suffix }}
           context: .
           push: false
           load: true
           tags: local-test-image:official
-          platforms: linux/amd64
+          platforms: ${{ matrix.platforms.platform }}
           build-args: |
-            BUILD_VERSION=${{ env.BUILD_VERSION }}
-            BUILD_DATE=${{ env.BUILD_DATE }}
-            GIT_SHA=${{ steps.source.outputs.sha }}
             PROMPTFOO_OFFICIAL_DOCKER_IMAGE=1
             OS_PACKAGE_REFRESH=${{ github.run_id }}-${{ github.run_attempt }}
 
       - name: Build custom Docker image for contract testing
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7
         with:
-          cache-from: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:buildcache-linux-amd64
+          cache-from: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:buildcache-${{ matrix.platforms.digest-suffix }}
           context: .
           push: false
           load: true
           tags: local-test-image:custom
-          platforms: linux/amd64
+          platforms: ${{ matrix.platforms.platform }}
           build-args: |
-            BUILD_VERSION=${{ env.BUILD_VERSION }}
-            BUILD_DATE=${{ env.BUILD_DATE }}
-            GIT_SHA=${{ steps.source.outputs.sha }}
             PROMPTFOO_OFFICIAL_DOCKER_IMAGE=0
             OS_PACKAGE_REFRESH=${{ github.run_id }}-${{ github.run_attempt }}
 
@@ -263,26 +253,20 @@ jobs:
             exit 1
           fi
 
-      - name: Stop and remove Docker container
-        if: always()
-        run: docker rm -f promptfoo-container promptfoo-custom-container || true
-
-      - name: Clean up Docker images
-        if: always()
+      - name: Show container logs
+        if: failure()
         run: |
-          docker system prune -af
-          docker volume prune -f
-          df -h
+          for container in promptfoo-container promptfoo-custom-container; do
+            echo "::group::${container}"
+            docker logs "$container" || true
+            echo "::endgroup::"
+          done
 
   build-docker-and-push-digests:
     if: (github.event_name != 'pull_request')
     strategy:
       matrix:
-        platforms:
-          [
-            { runner: ubuntu-latest, platform: linux/amd64, digest-suffix: linux-amd64 },
-            { runner: ubuntu-24.04-arm, platform: linux/arm64, digest-suffix: linux-arm64 },
-          ]
+        platforms: *image-platforms
     runs-on: ${{ matrix.platforms.runner }}
     timeout-minutes: 60
     needs: [test]
@@ -296,12 +280,12 @@ jobs:
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           ref: ${{ env.SOURCE_REF }}
+          persist-credentials: false
 
       # github.sha is the trigger SHA; SOURCE_REF can point checkout at a different tag.
-      - *resolve-source-commit
-
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@ce360397dd3f832beb865e1373c09c0e9f86d70a # v4
+      - name: Resolve source commit
+        id: source
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
       - *set-up-docker-buildx
 
@@ -332,9 +316,6 @@ jobs:
           tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
-            BUILD_VERSION=${{ env.BUILD_VERSION }}
-            BUILD_DATE=${{ env.BUILD_DATE }}
-            GIT_SHA=${{ steps.source.outputs.sha }}
             PROMPTFOO_OFFICIAL_DOCKER_IMAGE=${{ github.repository == 'promptfoo/promptfoo' && '1' || '0' }}
             OS_PACKAGE_REFRESH=${{ github.run_id }}-${{ github.run_attempt }}
           outputs: |
