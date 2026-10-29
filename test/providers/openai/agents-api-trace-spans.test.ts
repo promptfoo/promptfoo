@@ -66,10 +66,7 @@ function toolWithArgs(raw?: string) {
   return { ...tool, attributes };
 }
 
-function importWithRedaction(
-  key: string,
-  args: unknown = { lookup: { order_id: '417' }, limit: 3 },
-) {
+function importWithRedaction(key: string, args: unknown = { order_id: '417', limit: 3 }) {
   return cliState.withRequestTracingConfig(
     { enabled: true, otlp: { http: { enabled: true, port: 4318, redactAttributes: [key] } } },
     async () => {
@@ -168,6 +165,50 @@ describe('normalizeHostedTrace', () => {
     ]);
   });
 
+  it('accepts a bare chat name only when the exporter could not have dropped its model', () => {
+    const chat = nativeSpan(model.spanId, 'chat', root.spanId);
+    const uncertain = { ...chat, droppedAttributesCount: 1 };
+    for (const spans of [
+      [root, uncertain],
+      [uncertain, root],
+    ]) {
+      expect(normalizeHostedTrace(payload(...spans), parentId, false).complete).toBe(false);
+    }
+    expect(normalizeHostedTrace(payload(root, chat), parentId, false).complete).toBe(true);
+    expect(
+      normalizeHostedTrace(payload(root, { ...model, droppedAttributesCount: 1 }), parentId, false)
+        .complete,
+    ).toBe(true);
+    const resource = { attributes: [attribute('gen_ai.request.model', 'resource-model')] };
+    const withResource = (span: object, droppedAttributesCount = 0) =>
+      normalizeHostedTrace(
+        {
+          resourceSpans: [
+            {
+              resource: { ...resource, droppedAttributesCount },
+              scopeSpans: [{ spans: [root, span] }],
+            },
+          ],
+        },
+        parentId,
+        false,
+      );
+    expect(withResource(chat).spans.map((s) => s.name)).toContain('chat resource-model');
+    expect(withResource(model, 1).spans.map((s) => s.name)).toContain('chat gpt-6-astra');
+    expect(withResource(uncertain).complete).toBe(false);
+    expect(
+      normalizeHostedTrace(
+        {
+          resourceSpans: [
+            { resource: { droppedAttributesCount: 1 }, scopeSpans: [{ spans: [root, chat] }] },
+          ],
+        },
+        parentId,
+        false,
+      ).complete,
+    ).toBe(false);
+  });
+
   it.each([
     ['error', { boolValue: true }, 'UNSET', '', 2],
     ['http.status_code', { intValue: '500' }, 'UNSET', '', 2],
@@ -251,14 +292,15 @@ describe('normalizeHostedTrace', () => {
 
   it('scans a bounded trace containing many JWT prefixes without retrying every prefix', () => {
     const text = ' ' + 'eyJ'.repeat(20_000) + '.onlyone';
-    const raw = JSON.stringify({ text });
+    const raw = JSON.stringify({ cmd: 'curl ' + text, cwd: '/workspace' });
     const calls = Array.from({ length: 4 }, (_, i) => ({
       ...toolWithArgs(raw),
       spanId: (i + 10).toString(16).padStart(16, '0'),
     }));
     const { spans } = normalizeHostedTrace(payload(root, ...calls), parentId, true);
     for (const span of spans.slice(1)) {
-      expect(span.attributes?.['tool.arguments']).toBe(raw);
+      expect(JSON.parse(span.attributes?.['tool.arguments'])).toEqual({ cwd: '/workspace' });
+      expect(span.attributes?.['promptfoo.tool.arguments_redacted']).toBe(true);
     }
   }, 3000);
 
@@ -273,7 +315,7 @@ describe('normalizeHostedTrace', () => {
     expect(JSON.stringify(spans)).not.toMatch(/private|fixture credential/);
   });
 
-  it('applies request-scoped redactions to nested arguments before storing them', async () => {
+  it('applies request-scoped redactions to supported fields before storing them', async () => {
     const { spans } = await importWithRedaction('order_id');
     const attrs = spans.find((span) => span.attributes?.['tool.name'] === 'lookup_order')!
       .attributes!;
@@ -282,9 +324,10 @@ describe('normalizeHostedTrace', () => {
     expect(JSON.stringify(spans)).not.toContain('417');
   });
 
-  it('applies the redaction policy through multiple layers of JSON-encoded arguments', async () => {
+  it('withholds the entire input when it contains nested JSON text', () => {
     const input = JSON.stringify({ body: JSON.stringify([{ ORDER_ID: 'private order' }]) });
-    const { spans } = await importWithRedaction('order_id', { input, cwd: '/workspace' });
+    const raw = JSON.stringify({ input, cwd: '/workspace' });
+    const { spans } = normalizeHostedTrace(payload(root, toolWithArgs(raw)), parentId, true);
     const attrs = spans.find((span) => span.name === 'execute_tool lookup_order')!.attributes!;
     expect(JSON.parse(attrs['tool.arguments'])).toEqual({ cwd: '/workspace' });
     expect(attrs['promptfoo.tool.arguments_redacted']).toBe(true);
@@ -313,15 +356,38 @@ describe('normalizeHostedTrace', () => {
     expect(JSON.stringify(spans)).not.toContain('synthetic-fixture');
   });
 
-  it('retains benign text and parameters for non-shell function inputs', () => {
-    const raw = JSON.stringify({
-      query: 'look for ordinary user text',
-      format: 'compact',
-      opts: 'MAX_TOKENS=50 MONKEY=banana',
-    });
+  it('preserves the supported scalar fields and the original raw JSON', () => {
+    const args = {
+      cwd: '/workspace',
+      path: '/workspace/ledger.csv',
+      file_path: 'data/ledger.csv',
+      filename: 'ledger.csv',
+      id: 17,
+      order_id: '00417',
+      limit: 10,
+      offset: 0,
+      count: 2,
+      page: 1,
+    };
+    const raw = JSON.stringify(args, null, 2);
     const { spans } = normalizeHostedTrace(payload(root, toolWithArgs(raw)), parentId, true);
     expect(spans[1].attributes?.['tool.arguments']).toBe(raw);
+    expect(spans[1].attributes?.['gen_ai.tool.call.arguments']).toBe(raw);
     expect(spans[1].attributes?.['promptfoo.tool.arguments_redacted']).toBeUndefined();
+  });
+
+  it('applies provider credential redaction to a supported path', () => {
+    const path = '/workspace/private-file.csv';
+    const raw = JSON.stringify({ path, cwd: '/workspace' });
+    const { spans } = normalizeHostedTrace(
+      payload(root, toolWithArgs(raw)),
+      parentId,
+      true,
+      (value) => value.replaceAll(path, '[REDACTED]'),
+    );
+    expect(JSON.parse(spans[1].attributes?.['tool.arguments'])).toEqual({ cwd: '/workspace' });
+    expect(spans[1].attributes?.['promptfoo.tool.arguments_redacted']).toBe(true);
+    expect(JSON.stringify(spans)).not.toContain(path);
   });
 
   it.each([
@@ -339,33 +405,42 @@ describe('normalizeHostedTrace', () => {
     expect(spans[1].attributes?.['promptfoo.tool.arguments_redacted']).toBeUndefined();
   });
 
-  it('withholds values paired with protected names without dropping unrelated argument pairs', async () => {
-    const args = {
-      env: [{ name: 'UPSTREAM_PRIVATE_KEY', value: 'synthetic-fixture' }],
-      request_headers: [{ name: 'Authentication', value: 'synthetic-fixture' }],
-      subscription_key: 'synthetic-fixture',
-      body: JSON.stringify({ key: 'customer_id', value: 'synthetic-fixture' }),
-      lookup: { name: 'MONKEY', value: 'banana' },
-      cwd: '/workspace',
-    };
-    const { spans } = await importWithRedaction('customer_id', args);
+  it('preserves a nonempty list of file inspection commands', () => {
+    const raw = JSON.stringify({ commands: ['pwd', 'cat /workspace/ledger.csv'] });
+    const { spans } = normalizeHostedTrace(payload(root, toolWithArgs(raw)), parentId, true);
+    expect(spans[1].attributes?.['tool.arguments']).toBe(raw);
+    expect(spans[1].attributes?.['promptfoo.tool.arguments_redacted']).toBeUndefined();
+  });
+
+  it.each([
+    ['unrecognized function fields', { query: 'ordinary text', format: 'compact' }],
+    ['different casing', { ORDER_ID: '1729', Cmd: 'pwd' }],
+    ['malformed JSON body', { body: '{"name":"GITHUB_TOKEN","value":"synthetic-fixture"' }],
+    ['encoded JSON body', { input: '{"name":"customer_id","value":"synthetic-fixture"}' }],
+    ['environment tuples', { env: [['UPSTREAM_PRIVATE_KEY', 'synthetic-fixture']] }],
+    ['header tuples', { request_headers: [['X-Api-Key', 'synthetic-fixture']] }],
+    ['custom header map', { request_headers: { 'X-Honeycomb-Team': 'synthetic-fixture' } }],
+    ['name and value', { name: 'X-Api-Key', value: 'synthetic-fixture' }],
+    [
+      'nested metadata',
+      { metadata: { payload: { request_headers: { key: 'synthetic-fixture' } } } },
+    ],
+    ['path containing a credential', { path: 'https://user:synthetic-fixture@example.test/file' }],
+    ['structured filename', { filename: { path: 'synthetic-fixture' } }],
+    ['arbitrary ID', { id: 'synthetic-fixture' }],
+    ['oversized decimal ID', { order_id: '1'.repeat(120) }],
+    ['nonnumeric controls', { limit: '2', count: 1.5 }],
+    ['empty command list', { commands: [] }],
+    ['mixed command list', { commands: ['pwd', 'curl -u user:synthetic-fixture'] }],
+    ['non-string command list', { commands: [['cat', 'file.csv']] }],
+  ] as const)('omits %s and keeps the independently valid working directory', (_label, fields) => {
+    const raw = JSON.stringify({ ...fields, cwd: '/workspace' });
+    const { spans } = normalizeHostedTrace(payload(root, toolWithArgs(raw)), parentId, true);
     const attrs = spans[1].attributes!;
-    expect(JSON.parse(attrs['tool.arguments'])).toEqual({ lookup: args.lookup, cwd: args.cwd });
+    expect(JSON.parse(attrs['tool.arguments'])).toEqual({ cwd: '/workspace' });
+    expect(attrs['gen_ai.tool.call.arguments']).toBe(attrs['tool.arguments']);
     expect(attrs['promptfoo.tool.arguments_redacted']).toBe(true);
     expect(JSON.stringify(spans)).not.toContain('synthetic-fixture');
-
-    const direct = await importWithRedaction('customer_id', {
-      key: 'X-Api-Key',
-      value: 'synthetic-fixture',
-      cwd: '/workspace',
-    });
-    const directAttrs = direct.spans[1].attributes!;
-    expect(JSON.parse(directAttrs['tool.arguments'])).toEqual({
-      key: 'X-Api-Key',
-      cwd: '/workspace',
-    });
-    expect(directAttrs['promptfoo.tool.arguments_redacted']).toBe(true);
-    expect(JSON.stringify(direct.spans)).not.toContain('synthetic-fixture');
   });
 
   it('drops command fields containing credential-bearing URLs and embedded token-like values', () => {
@@ -388,15 +463,15 @@ describe('normalizeHostedTrace', () => {
   });
 
   it.each([
-    ['oversized', JSON.stringify({ text: 'x'.repeat(65_536) })],
-    ['malformed', '{"text":'],
-    ['duplicate keys', '{"text":"private overwritten value","text":"public"}'],
-    ['unrepresentable number', '{"n":9007199254740993}'],
-    ['unsafe integer with identical wire spelling', '{"n":1000000000000000100}'],
-    ['rounded fraction', '{"n":0.10000000000000001}'],
-    ['overflow', '{"n":1e400}'],
-    ['underflow', '{"n":1e-400}'],
-    ['escaped duplicate key', String.raw`{"inputs":[{"0":1,"\u0030":2}]}`],
+    ['oversized', ' '.repeat(65_536) + '{"limit":2}'],
+    ['malformed', '{"order_id":'],
+    ['duplicate keys', '{"order_id":"417","order_id":"418"}'],
+    ['unrepresentable number', '{"limit":9007199254740993}'],
+    ['unsafe integer with identical wire spelling', '{"limit":1000000000000000100}'],
+    ['rounded fraction', '{"limit":1.00000000000000001}'],
+    ['overflow', '{"limit":1e400}'],
+    ['underflow', '{"limit":1e-400}'],
+    ['escaped duplicate key', String.raw`{"order_id":"417","\u006frder_id":"418"}`],
   ])('retains the span tree when %s arguments cannot be faithfully imported', (_label, raw) => {
     const { spans, complete } = normalizeHostedTrace(
       payload(root, toolWithArgs(raw)),
@@ -410,36 +485,46 @@ describe('normalizeHostedTrace', () => {
     expect(attrs['promptfoo.tool.arguments_redacted']).toBe(true);
   });
 
-  it.each([
-    '{"rate":1.0,"scales":[1e0,-2.500E-3,0.00100,10e+01]}',
-    '{"1":"a","0":"b","colon:in:key":"string:with:colons","nested":{"2":1,"1":2}}',
-  ])('preserves lossless JSON spelling and parsed arguments (%s)', (raw) => {
+  it('preserves lossless number spellings in supported fields', () => {
+    const raw = '{"limit":1.0,"offset":1e0,"count":2.500E+1,"page":10e+01}';
     const { spans } = normalizeHostedTrace(payload(root, toolWithArgs(raw)), parentId, true);
-    const attrs = spans.find((span) => span.name === 'execute_tool lookup_order')!.attributes!;
+    const attrs = spans[1].attributes!;
     expect(attrs['gen_ai.tool.call.arguments']).toBe(raw);
-    expect(JSON.parse(attrs['tool.arguments'])).toEqual(JSON.parse(raw));
+    expect(JSON.parse(attrs['tool.arguments'])).toEqual({
+      limit: 1,
+      offset: 1,
+      count: 25,
+      page: 100,
+    });
     expect(attrs['promptfoo.tool.arguments_redacted']).toBeUndefined();
   });
 
+  it('keeps a supported sibling when integer-like keys change serialization order', () => {
+    const raw = '{"1":"a","0":"b","limit":1}';
+    const { spans } = normalizeHostedTrace(payload(root, toolWithArgs(raw)), parentId, true);
+    expect(JSON.parse(spans[1].attributes?.['tool.arguments'])).toEqual({ limit: 1 });
+    expect(spans[1].attributes?.['promptfoo.tool.arguments_redacted']).toBe(true);
+  });
+
   it('preserves the sign of a zero argument through sanitizer inspection', () => {
-    const raw = '{"measurement":-0.00}';
+    const raw = '{"offset":-0.00}';
     const { spans } = normalizeHostedTrace(payload(root, toolWithArgs(raw)), parentId, true);
     const attrs = spans.find((span) => span.name === 'execute_tool lookup_order')!.attributes!;
     expect(attrs['gen_ai.tool.call.arguments']).toBe(raw);
-    expect(Object.is(JSON.parse(attrs['tool.arguments']).measurement, -0)).toBe(true);
+    expect(Object.is(JSON.parse(attrs['tool.arguments']).offset, -0)).toBe(true);
     expect(attrs['promptfoo.tool.arguments_redacted']).toBeUndefined();
   });
 
   it('omits a signed zero if filtering another field requires reserialization', () => {
-    const raw = '{"authorization":"withhold","sensor":[-0.00],"unit":"m"}';
+    const raw = '{"authorization":"withhold","offset":-0.00,"cwd":"/workspace"}';
     const { spans } = normalizeHostedTrace(payload(root, toolWithArgs(raw)), parentId, true);
     const attrs = spans.find((span) => span.name === 'execute_tool lookup_order')!.attributes!;
-    expect(JSON.parse(attrs['tool.arguments'])).toEqual({ unit: 'm' });
+    expect(JSON.parse(attrs['tool.arguments'])).toEqual({ cwd: '/workspace' });
     expect(attrs['promptfoo.tool.arguments_redacted']).toBe(true);
   });
 
   it('retains the native argument key and spelling for exact raw attribute filters', () => {
-    const raw = '{ "text" : "contains  spaces" }';
+    const raw = '{ "cmd" : "cat ledger.csv",  "page" : 1 }';
     const { spans } = normalizeHostedTrace(payload(root, toolWithArgs(raw)), parentId, true);
     const attrs = spans.find((span) => span.name === 'execute_tool lookup_order')!.attributes!;
     expect(attrs['gen_ai.tool.call.arguments']).toBe(raw);
@@ -475,16 +560,25 @@ describe('normalizeHostedTrace', () => {
     expect(attrs).not.toHaveProperty('tool.arguments');
   });
 
-  it('preserves a string argument containing JSON text across storage', () => {
-    const text = '{ "order_id" : "417" }';
-    const { spans } = normalizeHostedTrace(
-      payload(root, toolWithArgs(JSON.stringify(text))),
-      parentId,
-      true,
+  it.each([
+    ['root command string', 'cat /workspace/ledger.csv'],
+    ['root command argv', ['cat', '/workspace/ledger.csv']],
+    ['root name/value tuple', ['X-Honeycomb-Team', 'synthetic-fixture']],
+    ['encoded argument object', '{"order_id":"417"}'],
+    ['root scalar', 17],
+  ])('omits %s without losing the shell span identity', (_label, value) => {
+    const native = toolWithArgs(JSON.stringify(value));
+    native.attributes = native.attributes.map((a) =>
+      a.key === 'gen_ai.tool.name' ? attribute(a.key, 'shell') : a,
     );
-    const attrs = spans.find((span) => span.attributes?.['tool.name'] === 'lookup_order')!
-      .attributes!;
-    expect(JSON.parse(attrs['tool.arguments'])).toBe(text);
+    const { spans, complete } = normalizeHostedTrace(payload(root, native), parentId, true);
+    expect(complete).toBe(true);
+    expect(spans[1].name).toBe('execute_tool shell');
+    const attrs = spans[1].attributes!;
+    expect(attrs['tool.arguments']).toBeUndefined();
+    expect(attrs['gen_ai.tool.call.arguments']).toBeUndefined();
+    expect(attrs['promptfoo.tool.arguments_redacted']).toBe(true);
+    expect(JSON.stringify(spans)).not.toContain('synthetic-fixture');
   });
 
   it('canonicalizes standard hex IDs and protobuf JSON base64 IDs to the same tree', () => {
@@ -550,40 +644,55 @@ describe('normalizeHostedTrace', () => {
   });
 
   it.each([
-    ['wire bytes', { text: 'word pair '.repeat(4_800) }],
-    ['JSON values', { values: Array.from({ length: 600 }, (_, i) => i) }],
-  ])('bounds the total %s inspected per snapshot while preserving tool spans', (_label, args) => {
-    const raw = JSON.stringify(args);
-    const children = Array.from({ length: 12 }, (_, i) => ({
-      ...toolWithArgs(raw),
-      spanId: (i + 1).toString(16).padStart(16, '0'),
-    }));
-    const { spans, complete } = normalizeHostedTrace(payload(root, ...children), parentId, true);
-    expect(complete).toBe(true);
-    const imported = spans.filter((span) => span.name === 'execute_tool lookup_order');
-    expect(imported).toHaveLength(children.length);
-    const captured = imported.filter((span) => span.attributes?.['tool.arguments'] === raw);
-    expect(captured.length).toBeGreaterThan(0);
-    expect(captured.length).toBeLessThan(imported.length);
-    expect(
-      imported
-        .slice(captured.length)
-        .every(
-          (span) =>
-            span.attributes?.['gen_ai.tool.call.arguments'] === undefined &&
-            span.attributes?.['promptfoo.tool.arguments_redacted'] === true,
-        ),
-    ).toBe(true);
-    expect(
-      normalizeHostedTrace(payload(root, children.at(-1)!), parentId, true).spans[1].attributes?.[
-        'tool.arguments'
-      ],
-    ).toBe(raw);
-  });
+    ['wire bytes', ' '.repeat(48_000) + '{"limit":3}', 12],
+    [
+      'JSON values',
+      JSON.stringify({
+        cmd: 'pwd',
+        cwd: '/workspace',
+        id: 1,
+        order_id: '417',
+        count: 2,
+        offset: 0,
+        limit: 3,
+        page: 1,
+      }),
+      600,
+    ],
+  ] as const)(
+    'bounds the total %s inspected per snapshot while preserving tool spans',
+    (_label, raw, calls) => {
+      const children = Array.from({ length: calls }, (_, i) => ({
+        ...toolWithArgs(raw),
+        spanId: (i + 1).toString(16).padStart(16, '0'),
+      }));
+      const { spans, complete } = normalizeHostedTrace(payload(root, ...children), parentId, true);
+      expect(complete).toBe(true);
+      const imported = spans.filter((span) => span.name === 'execute_tool lookup_order');
+      expect(imported).toHaveLength(children.length);
+      const captured = imported.filter((span) => span.attributes?.['tool.arguments'] === raw);
+      expect(captured.length).toBeGreaterThan(0);
+      expect(captured.length).toBeLessThan(imported.length);
+      expect(
+        imported
+          .slice(captured.length)
+          .every(
+            (span) =>
+              span.attributes?.['gen_ai.tool.call.arguments'] === undefined &&
+              span.attributes?.['promptfoo.tool.arguments_redacted'] === true,
+          ),
+      ).toBe(true);
+      expect(
+        normalizeHostedTrace(payload(root, children.at(-1)!), parentId, true).spans[1].attributes?.[
+          'tool.arguments'
+        ],
+      ).toBe(raw);
+    },
+  );
 
   it('withholds a wide argument but imports a later small call and intact sibling fields', () => {
     const wide = Object.fromEntries(Array.from({ length: 6_000 }, (_, i) => [i, 0]));
-    const wideCall = toolWithArgs(JSON.stringify(wide));
+    const wideCall = toolWithArgs(JSON.stringify({ ...wide, limit: 2 }));
     const mixed = {
       ...toolWithArgs(JSON.stringify({ body: JSON.stringify(wide), cwd: '/workspace' })),
       spanId: '4444444444444444',

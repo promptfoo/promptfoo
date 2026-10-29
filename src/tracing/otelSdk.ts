@@ -170,30 +170,31 @@ export async function shutdownOtel(): Promise<void> {
 
   logger.debug('[OtelSdk] Shutting down OpenTelemetry SDK');
 
+  const { provider } = sdk;
+  sdk = undefined;
+  if (ownsGlobalTracerProvider(provider)) {
+    trace.disable();
+  }
+  // Release this registration before awaiting the exporter flush. A new eval can
+  // initialize its own SDK while the previous provider finishes shutting down.
+  const handlers = getHandlers();
+  for (const [event, key] of [
+    ['SIGTERM', 'sigTermHandler'],
+    ['SIGINT', 'sigIntHandler'],
+    ['beforeExit', 'beforeExitHandler'],
+  ] as const) {
+    if (handlers[key]) {
+      process.removeListener(event, handlers[key]);
+      handlers[key] = null;
+    }
+  }
+  handlers.registered = false;
+
   try {
-    await sdk.provider.shutdown();
+    await provider.shutdown();
     logger.info('[OtelSdk] OpenTelemetry SDK shut down successfully');
   } catch (error) {
     logger.error('[OtelSdk] Error shutting down OpenTelemetry SDK', { error });
-  } finally {
-    sdk = undefined;
-    /**
-     * Clean up shutdown handlers.
-     * Called during shutdown to prevent duplicate registrations on reinit.
-     */
-    const handlers = getHandlers();
-
-    for (const [event, key] of [
-      ['SIGTERM', 'sigTermHandler'],
-      ['SIGINT', 'sigIntHandler'],
-      ['beforeExit', 'beforeExitHandler'],
-    ] as const) {
-      if (handlers[key]) {
-        process.removeListener(event, handlers[key]);
-        handlers[key] = null;
-      }
-    }
-    handlers.registered = false;
   }
 }
 
@@ -223,12 +224,13 @@ export function isOtelInitialized(): boolean {
   return sdk !== undefined;
 }
 
-/** Whether the running SDK exports provider invocation spans to the local TraceStore. */
-export function hasLocalSpanExporter(): boolean {
-  if (!sdk?.localExport) {
-    return false;
-  }
+function ownsGlobalTracerProvider(provider: NodeTracerProvider): boolean {
   // OTel leaves the first global provider registered if the host app already set one.
   const active = trace.getTracerProvider();
-  return (active instanceof ProxyTracerProvider ? active.getDelegate() : active) === sdk.provider;
+  return (active instanceof ProxyTracerProvider ? active.getDelegate() : active) === provider;
+}
+
+/** Whether the running SDK exports provider invocation spans to the local TraceStore. */
+export function hasLocalSpanExporter(): boolean {
+  return sdk?.localExport === true && ownsGlobalTracerProvider(sdk.provider);
 }

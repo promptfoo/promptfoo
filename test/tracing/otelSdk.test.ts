@@ -1,10 +1,17 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { createDeferred } from '../util/utils';
 
 import type { OtelConfig } from '../../src/tracing/otelConfig';
 
 // Create mock functions that will be used across tests
-const mockRegister = vi.fn();
-const mockGetTracerProvider = vi.fn(() => mockRegister.mock.contexts[0]);
+let registeredProvider: object | undefined;
+const mockRegister = vi.fn(function (this: object) {
+  registeredProvider ??= this;
+});
+const mockGetTracerProvider = vi.fn(() => registeredProvider);
+const mockTraceDisable = vi.fn(() => {
+  registeredProvider = undefined;
+});
 const mockShutdown = vi.fn().mockResolvedValue(undefined);
 const mockForceFlush = vi.fn().mockResolvedValue(undefined);
 const mockAddSpanProcessor = vi.fn();
@@ -74,7 +81,7 @@ vi.mock('@opentelemetry/semantic-conventions', () => ({
 
 vi.mock('@opentelemetry/api', () => ({
   ProxyTracerProvider: class {},
-  trace: { getTracerProvider: mockGetTracerProvider },
+  trace: { getTracerProvider: mockGetTracerProvider, disable: mockTraceDisable },
   diag: {
     setLogger: mockSetLogger,
   },
@@ -129,6 +136,7 @@ describe('otelSdk', () => {
       },
     });
     vi.clearAllMocks();
+    registeredProvider = undefined;
     nodeTracerProviderCalls = [];
     otlpExporterCalls = [];
     localExporterCalls = [];
@@ -251,9 +259,13 @@ describe('otelSdk', () => {
 
     it('does not claim local export for another global tracer provider', async () => {
       const { hasLocalSpanExporter } = await import('../../src/tracing/otelSdk');
+      const host = {};
+      registeredProvider = host;
       initializeOtel(defaultConfig);
-      mockGetTracerProvider.mockReturnValueOnce({});
       expect(hasLocalSpanExporter()).toBe(false);
+      await shutdownOtel();
+      expect(registeredProvider).toBe(host);
+      expect(mockTraceDisable).not.toHaveBeenCalled();
     });
 
     it('should create resource with service name and version', () => {
@@ -268,6 +280,24 @@ describe('otelSdk', () => {
   });
 
   describe('shutdownOtel', () => {
+    it('lets a new SDK register while the previous exporter finishes shutdown', async () => {
+      const { hasLocalSpanExporter } = await import('../../src/tracing/otelSdk');
+      const flushing = createDeferred<void>();
+      mockShutdown.mockReturnValueOnce(flushing.promise);
+      initializeOtel(defaultConfig);
+      const first = registeredProvider;
+      const pendingShutdown = shutdownOtel();
+      initializeOtel(defaultConfig);
+      expect(registeredProvider).toBeDefined();
+      expect(registeredProvider).not.toBe(first);
+      expect(hasLocalSpanExporter()).toBe(true);
+      flushing.resolve();
+      await pendingShutdown;
+      expect(hasLocalSpanExporter()).toBe(true);
+      await shutdownOtel();
+      expect(registeredProvider).toBeUndefined();
+    });
+
     it('should not fail when not initialized', async () => {
       await expect(shutdownOtel()).resolves.toBeUndefined();
     });

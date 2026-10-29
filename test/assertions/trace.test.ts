@@ -531,9 +531,48 @@ describe('trace assertions', () => {
       await expect(check(args)).resolves.toMatchObject({ pass: false });
     });
 
-    it('grades bounds that hold or fail for every possible count of filtered native spans', async () => {
+    it('cannot infer model absence from a legacy chat name without its capture evidence', async () => {
       const chat: TraceSpan = {
         name: 'chat',
+        spanId: 'chat',
+        parentSpanId: 'wrapper',
+        startTime: 1010,
+        statusCode: 2,
+        attributes: {
+          'gen_ai.operation.name': 'chat',
+          'promptfoo.openai.hosted_trace': 'wrapper',
+          'promptfoo.openai.error_status_complete': true,
+        },
+      };
+      const pattern = 'chat gpt-6-astra';
+      const checks: Assertion[] = [
+        { type: 'trace-span-count', value: { pattern, max: 0 } },
+        { type: 'trace-error-spans', value: { pattern, max_count: 0 } },
+        { type: 'trajectory:step-count', value: { type: 'span', pattern, max: 0 } },
+        {
+          type: 'trace-span-count',
+          value: { pattern: 'chat', attributes: { 'gen_ai.request.model': 'gpt-6-astra' }, max: 0 },
+        },
+      ];
+      for (const assertion of checks) {
+        await expect(grade(assertion, imported, [chat])).resolves.toMatchObject({ pass: false });
+        const attested = {
+          ...chat,
+          attributes: { ...chat.attributes, 'promptfoo.openai.chat_model_absent': true },
+        };
+        await expect(grade(assertion, imported, [attested])).resolves.toMatchObject({ pass: true });
+      }
+      await expect(
+        grade({ type: 'trajectory:tool-used', value: 'lookup' }, { ...imported, spanCount: 2 }, [
+          chat,
+          tool('lookup'),
+        ]),
+      ).resolves.toMatchObject({ pass: true });
+    });
+
+    it('grades bounds that hold or fail for every possible count of filtered native spans', async () => {
+      const chat: TraceSpan = {
+        name: 'chat gpt-test',
         spanId: 'chat',
         parentSpanId: 'wrapper',
         startTime: 1010,
@@ -565,6 +604,67 @@ describe('trace assertions', () => {
         await expect(check({ max: 1 }, inverse)).resolves.toMatchObject({ pass: false });
         await expect(check({ min: 2 }, inverse)).resolves.toMatchObject({ pass: false });
       }
+    });
+
+    it('cannot prove presence or absence from sanitized local wrapper attributes', async () => {
+      const prefix = 'x'.repeat(400);
+      const original = {
+        'promptfoo.prompt.label': `${prefix}long label`,
+        'promptfoo.span.role': 'target',
+        'app.secret': 'fixture value',
+        'app.private': 7,
+      };
+      const saved = JSON.parse(
+        JSON.stringify(sanitizeTraceAttributes(original, { redactAttributes: ['app.private'] })),
+      );
+      expect(saved).toMatchObject({
+        'promptfoo.prompt.label': `${prefix}…`,
+        'app.secret': '<redacted>',
+        'app.private': '[REDACTED]',
+      });
+      const count = (
+        local: Record<string, string | number>,
+        attributes: Record<string, string | number>,
+        bounds: { min?: number; max?: number },
+      ) =>
+        runAssertion({
+          assertion: {
+            type: 'trace-span-count',
+            value: { pattern: 'target', attributes, ...bounds },
+          },
+          test: mockTest,
+          providerResponse: { output: 'ok', metadata: { hostedTrace: imported } },
+          traceId: mockTraceData.traceId,
+          traceData: {
+            ...mockTraceData,
+            spans: [
+              { spanId: 'wrapper', name: 'target', startTime: 0, attributes: local },
+              tool('lookup'),
+            ],
+          },
+        });
+      for (const key of ['promptfoo.prompt.label', 'app.secret', 'app.private'] as const) {
+        const expected = { [key]: original[key] };
+        await expect(count(original, expected, { min: 1 })).resolves.toMatchObject({ pass: true });
+        await expect(count(original, expected, { max: 0 })).resolves.toMatchObject({
+          pass: false,
+          reason: expect.stringContaining('expected at most 0'),
+        });
+        await expect(count(saved, expected, { max: 0 })).resolves.toMatchObject({
+          pass: false,
+          reason: expect.stringContaining('truncated or redacted'),
+        });
+        await expect(count(saved, { [key]: saved[key] }, { min: 1 })).resolves.toMatchObject({
+          pass: false,
+        });
+        await expect(count(saved, expected, { max: 1 })).resolves.toMatchObject({ pass: true });
+        await expect(
+          count(saved, { ...expected, 'promptfoo.span.role': 'grader' }, { max: 0 }),
+        ).resolves.toMatchObject({ pass: true });
+      }
+      await expect(
+        count(saved, { 'promptfoo.prompt.label': `another prefix${prefix}` }, { max: 0 }),
+      ).resolves.toMatchObject({ pass: true });
     });
 
     it('cannot grade raw filters on discarded native fields, even with complete argument capture', async () => {
@@ -816,6 +916,45 @@ describe('trace assertions', () => {
       await expect(
         check({ url: 'https://***:***@example.test/' }, 'partial', [legacy]),
       ).resolves.toMatchObject({ pass: false });
+    });
+
+    it('grades saved shell command strings, argv, and command objects consistently', async () => {
+      const command: Assertion = {
+        type: 'trajectory:step-count',
+        value: { type: 'command', pattern: '*ledger.csv', min: 1, max: 1 },
+      };
+      const forbidden: Assertion = {
+        type: 'trajectory:step-count',
+        value: { type: 'command', pattern: '*ledger.csv', max: 0 },
+      };
+      for (const args of [
+        'cat ledger.csv',
+        ['cat', 'ledger.csv'],
+        { cmd: 'cat ledger.csv' },
+        { command: ['cat', 'ledger.csv'] },
+        { commands: ['pwd', 'cat ledger.csv'] },
+      ]) {
+        const saved = [tool('shell', args)];
+        await expect(grade(command, complete, saved)).resolves.toMatchObject({ pass: true });
+        await expect(grade(forbidden, complete, saved)).resolves.toMatchObject({ pass: false });
+      }
+      for (const args of [{ script: 'cat ledger.csv' }, ['cat', { path: 'ledger.csv' }]]) {
+        await expect(grade(forbidden, complete, [tool('shell', args)])).resolves.toMatchObject({
+          pass: false,
+          reason: expect.stringContaining('unavailable'),
+        });
+      }
+    });
+
+    it.each([null, undefined])('treats an optional step type of %s as untyped', async (type) => {
+      const forbidden = {
+        type: 'trajectory:step-count',
+        value: { type, pattern: 'rm*', max: 0 },
+      } as Assertion;
+      await expect(grade(forbidden, imported, [tool('shell')])).resolves.toMatchObject({
+        pass: false,
+        reason: expect.stringContaining('excludes tool arguments'),
+      });
     });
 
     it('cannot infer the absence of an argument from a truncated export', async () => {

@@ -104,7 +104,7 @@ interface ToolCallSummary {
 interface Page<T> {
   data: T[];
   has_more: boolean;
-  last_id: string | null;
+  last_id?: string | null;
 }
 
 const MAX_TIMER_MS = 2_147_483_647;
@@ -649,7 +649,7 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
     return (text ? JSON.parse(text) : undefined) as T;
   }
 
-  private async list<T>(
+  private async list<T extends { id?: unknown }>(
     endpoint: string,
     headers: Headers,
     signal: AbortSignal,
@@ -707,14 +707,19 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
       if (!page.has_more) {
         return items;
       }
-      if (
-        !page.last_id ||
-        cursors.has(page.last_id) ||
-        (requirePageInfo && (typeof page.last_id !== 'string' || !page.last_id.trim()))
-      ) {
+      let cursor = page.last_id;
+      if (requirePageInfo) {
+        // The artifact and trace APIs use the last resource ID as the SDK's "after" cursor.
+        const id = page.data[page.data.length - 1]?.id;
+        if (!isResourceId(id) || (cursor != null && cursor !== id)) {
+          throw new Error('Agents API returned an invalid pagination cursor');
+        }
+        cursor = id;
+      }
+      if (!cursor || cursors.has(cursor)) {
         throw new Error('Agents API returned an invalid pagination cursor');
       }
-      after = page.last_id;
+      after = cursor;
       cursors.add(after);
     }
     throw new Error(`Agents API pagination limit exceeded (${MAX_LIST_PAGES} pages)`);
@@ -1347,6 +1352,7 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
     const writer = new AbortController();
     const writeTimer = setTimeout(() => writer.abort(), writeBudgetMs);
     const writeSignal = abortSignal ? AbortSignal.any([abortSignal, writer.signal]) : writer.signal;
+    let storageDeadlineExceeded: boolean;
     try {
       // The complete or partial snapshot is now local. SQLite can queue this write
       // behind another transaction, so release the remote session independently.
@@ -1362,6 +1368,9 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
       if (!stored.stored) {
         return unavailable('The local eval trace was unavailable');
       }
+      // SQLite can finish a synchronous COMMIT after the transaction's final check.
+      // The spans are durable even when the store confirms the write after the deadline.
+      storageDeadlineExceeded = Date.now() >= writeDeadline;
     } catch {
       return unavailable(
         writeSignal.aborted || Date.now() >= writeDeadline
@@ -1381,7 +1390,8 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
     return {
       source,
       status: complete ? 'imported' : 'partial',
-      ...(!complete && { reason: 'The published root turn did not attest to a complete trace' }),
+      ...(storageDeadlineExceeded && { storageDeadlineExceeded: true }),
+      ...(!complete && { reason: 'The published trace did not establish complete span coverage' }),
       parentSpanId: parent.spanId,
       spanCount: spans.length,
       errorStatusComplete: spans.every(
@@ -1462,6 +1472,7 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
     );
     const usageSignal = AbortSignal.any([signal, usageController.signal]);
     let turnUsageSeenAt: number | undefined;
+    let firstRead = true;
     try {
       while (!isUsage(latest.session.usage) && Date.now() < waitUntil) {
         if (isUsage(latest.turn.usage) && !hasSubagents) {
@@ -1470,10 +1481,13 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
             break;
           }
         }
-        await sleepWithAbort(Math.min(pollIntervalMs, waitUntil - Date.now()), usageSignal);
-        if (Date.now() >= waitUntil) {
-          break;
+        if (!firstRead) {
+          await sleepWithAbort(Math.min(pollIntervalMs, waitUntil - Date.now()), usageSignal);
+          if (Date.now() >= waitUntil) {
+            break;
+          }
         }
+        firstRead = false;
         // Keep either completed read when its sibling outlasts the usage deadline.
         await Promise.all([
           this.request<Session | undefined>(endpoint, 'GET', headers, usageSignal).then((next) => {

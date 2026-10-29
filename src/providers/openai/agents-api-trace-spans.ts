@@ -1,20 +1,23 @@
 import { createHash } from 'node:crypto';
-import { isDeepStrictEqual } from 'node:util';
 
 import { tokenizer, tokTypes } from 'acorn';
 import { z } from 'zod';
 import cliState from '../../cliState';
-import { sanitizeTraceAttributes } from '../../tracing/sanitizeAttributes';
 import { HOSTED_ERROR_STATUS_COMPLETE, isSpanError } from '../../tracing/spanError';
+import { HOSTED_CHAT_MODEL_ABSENT, hasUncertainHostedChatName } from '../../tracing/spanFilter';
 import { getNormalizedToolAttributes } from '../../tracing/toolAttributes';
-import { isCredentialHeader, isSecretEnvVarName, sanitizeObject } from '../../util/sanitizer';
-import { hasRecognizableOpenAiCredential, hasSensitiveOpenAiCacheString } from './util';
+import { isCredentialHeader, isSecretEnvVarName } from '../../util/sanitizer';
+import {
+  hasRecognizableOpenAiCredential,
+  hasSensitiveOpenAiCachePath,
+  hasSensitiveOpenAiCacheString,
+} from './util';
 
 import type { SpanData } from '../../tracing/store';
 
 const MAX_SPANS = 1_000;
 const MAX_ARGUMENT_BYTES = 64 * 1024;
-// Snapshot-wide limits keep synchronous inspection bounded across tools and JSON-encoded values.
+// Snapshot-wide limits keep synchronous inspection bounded across tools.
 const MAX_TRACE_ARGUMENT_BYTES = 256 * 1024;
 const MAX_TRACE_ARGUMENT_VALUES = 4_096;
 const nanos = z.union([z.string().regex(/^\d{1,20}$/), z.number().int().nonnegative().safe()]);
@@ -185,56 +188,35 @@ function roundTrips(raw: string, value: unknown, policy: ImportPolicy): boolean 
   return members === 0;
 }
 
-function protectsValueName(name: string, policy: ImportPolicy, header: boolean): boolean {
+// Tool and model identifiers may be namespaced with a colon. A credential-named
+// component followed by a value must not be copied into a span name or attribute.
+function hasProtectedIdentifierLabel(value: string, policy: ImportPolicy): boolean {
+  return value
+    .split(':')
+    .slice(0, -1)
+    .some(
+      (label) =>
+        protectsKey([label.toLowerCase()], policy) ||
+        isCredentialHeader(label, '') ||
+        isSecretEnvVarName(label),
+    );
+}
+
+const PATH_FIELDS = new Set(['cwd', 'path', 'file_path', 'filename']);
+const ID_FIELDS = new Set(['id', 'order_id']);
+const INTEGER_FIELDS = new Set(['limit', 'offset', 'count', 'page']);
+
+function isLiteralPath(value: unknown): value is string {
   return (
-    protectsKey([name.toLowerCase()], policy) ||
-    (header ? isCredentialHeader(name, '') : isSecretEnvVarName(name.replace(/-/g, '_')))
+    typeof value === 'string' &&
+    value.length > 0 &&
+    value.length <= 1024 &&
+    !value.startsWith('-') &&
+    !/[^\p{L}\p{N}_./-]/u.test(value) &&
+    !hasSensitiveOpenAiCachePath(value)
   );
 }
 
-// Some tools receive environment entries or headers as { name, value } or { key, value }.
-function protectsPairValue(record: object, policy: ImportPolicy): boolean {
-  return (
-    Object.prototype.hasOwnProperty.call(record, 'value') &&
-    ['name', 'key'].some((key) => {
-      const field = Reflect.get(record, key);
-      return (
-        typeof field === 'string' &&
-        (protectsValueName(field, policy, false) ||
-          // A bare uppercase env name such as MONKEY can end in KEY without naming a key.
-          (!/^[A-Z]+KEY$/.test(field) && isCredentialHeader(field, '')))
-      );
-    })
-  );
-}
-
-// Inspect names at token boundaries, so a long token without a delimiter is scanned once.
-// This also catches quoted JSON keys in a command body and credential options in argv arrays.
-function hasProtectedAssignment(value: string, policy: ImportPolicy): boolean {
-  const fields = value.matchAll(
-    /(?<![\w.-])(?:(--[\w.-]+)(?=(?:\\*["'])?(?:\s|$))|([\w.-]+)(\\*["'])?\s*([:=])(?=\s*\S))/g,
-  );
-  for (const [, flag, field, quote, separator] of fields) {
-    const name = (flag ?? field).replace(/^--/, '');
-    const header = separator === ':' && (!quote || name.includes('-'));
-    if (protectsValueName(name, policy, header)) {
-      return true;
-    }
-  }
-  return false;
-}
-
-function sensitiveText(value: string, policy: ImportPolicy): boolean {
-  return (
-    policy.redact(value) !== value ||
-    hasProtectedAssignment(value, policy) ||
-    hasSensitiveOpenAiCacheString(value) ||
-    /:\/\/[^\s"'<>/@]+@/.test(value)
-  );
-}
-
-const COMMAND_FIELDS = new Set(['cmd', 'command', 'commands', 'argv', 'script', 'shell_command']);
-const SHELL_TOOLS = new Set(['command_execution', 'exec_command', 'local_shell', 'shell']);
 const INSPECTION_FLAGS = new Map([
   ['pwd', /^-[LP]$/],
   ['ls', /^-[aAhl1]+$/],
@@ -249,6 +231,9 @@ const BIN_PREFIX = /^\/(?:usr\/)?bin\//;
 function isInspectionCommand(value: unknown): boolean {
   let words: string[];
   if (typeof value === 'string') {
+    if (/[\r\n]/.test(value)) {
+      return false;
+    }
     const text = value.trim();
     const wrapper = /^(?:\/(?:usr\/)?bin\/)?(?:bash|sh)[ \t]+-l?c[ \t]+(['"])([^\r\n]*)\1$/.exec(
       text,
@@ -281,110 +266,44 @@ function isInspectionCommand(value: unknown): boolean {
       needsCount = false;
     } else if ((command === 'head' || command === 'tail') && /^-[nc]$/.test(word)) {
       needsCount = true;
-    } else if (
-      word !== '--' &&
-      !flags.test(word) &&
-      (command === 'pwd' || !/^[\p{L}\p{N}_./][\p{L}\p{N}_./-]*$/u.test(word))
-    ) {
+    } else if (word !== '--' && !flags.test(word) && (command === 'pwd' || !isLiteralPath(word))) {
       return false;
     }
   }
   return !needsCount;
 }
 
-// Decode JSON-valued strings only for inspection. Persist the original argument type and text.
-function inspectArgument(value: unknown, policy: ImportPolicy, depth = 0): unknown {
-  if (depth > 16) {
-    invalid();
+// Only project fields with a known shape. Unrecognized strings, nested objects, and
+// tuples can carry arbitrary data, including a credential name paired with an opaque value.
+function canCaptureField(key: string, value: unknown, policy: ImportPolicy): boolean {
+  if (protectsKey([key], policy)) {
+    return false;
   }
-  if (Array.isArray(value)) {
-    return value.map((item) => inspectArgument(item, policy, depth + 1));
+  let allowed: boolean;
+  if (PATH_FIELDS.has(key)) {
+    allowed = isLiteralPath(value);
+  } else if (ID_FIELDS.has(key)) {
+    allowed =
+      Number.isSafeInteger(value) ||
+      (typeof value === 'string' && value.length <= 32 && value.length > 0 && !/\D/.test(value));
+  } else if (INTEGER_FIELDS.has(key)) {
+    allowed = Number.isSafeInteger(value);
+  } else if (key === 'cmd' || key === 'command') {
+    allowed = isInspectionCommand(value);
+  } else if (key === 'commands') {
+    allowed =
+      Array.isArray(value) &&
+      value.length > 0 &&
+      value.every((item) => typeof item === 'string' && isInspectionCommand(item));
+  } else {
+    return false;
   }
-  if (value && typeof value === 'object') {
-    if (protectsPairValue(value, policy)) {
-      invalid();
-    }
-    return Object.fromEntries(
-      Object.entries(value).map(([key, item]) => {
-        const field = key.toLowerCase();
-        if (
-          sensitiveText(key, policy) ||
-          (field === 'key'
-            ? protectsKey([field], policy)
-            : protectsValueName(key, policy, false)) ||
-          (COMMAND_FIELDS.has(field) &&
-            !(field === 'commands' && Array.isArray(item)
-              ? item.every(isInspectionCommand)
-              : isInspectionCommand(item)))
-        ) {
-          invalid();
-        }
-        return [key, inspectArgument(item, policy, depth + 1)];
-      }),
-    );
-  }
-  if (typeof value !== 'string') {
-    // The sanitizer JSON-serializes its input and would turn -0 into +0.
-    return Object.is(value, -0) ? 0 : value;
-  }
-  if (sensitiveText(value, policy)) {
-    invalid();
-  }
-  if (/^\s*[[{"]/.test(value)) {
-    if (!reserveArgumentJson(value, policy)) {
-      invalid();
-    }
-    let decoded: unknown;
-    try {
-      decoded = JSON.parse(value);
-    } catch {
-      return value;
-    }
-    if (!roundTrips(value, decoded, policy)) {
-      invalid();
-    }
-    return inspectArgument(decoded, policy, depth + 1);
-  }
-  return value;
-}
-
-function sanitizeArgumentProjection(value: unknown, policy: ImportPolicy): unknown {
-  const filtered = sanitizeTraceAttributes(
-    { '': value },
-    {
-      redactAttributes: policy.redactAttributes,
-      truncateValues: false,
-    },
-  );
-  return sanitizeObject(filtered, { sanitizeUrls: true, throwOnError: true })[''];
-}
-
-function captureObjectArguments(args: object, policy: ImportPolicy): object {
-  const protectedValue = protectsPairValue(args, policy);
-  const inspected = new Map<string, unknown>();
-  for (const [key, item] of Object.entries(args)) {
-    if (protectedValue && key === 'value') {
-      continue;
-    }
-    try {
-      const field = inspectArgument({ [key]: item }, policy) as Record<string, unknown>;
-      inspected.set(key, field[key]);
-    } catch {
-      // Withhold this whole field. Its unchanged siblings can still support a subset assertion.
-    }
-  }
-  // Run the shared sanitizers once, then compare fields so their replacements never become evidence.
-  const sanitized = sanitizeArgumentProjection(Object.fromEntries(inspected), policy);
-  if (!sanitized || typeof sanitized !== 'object' || Array.isArray(sanitized)) {
-    invalid();
-  }
-  return Object.fromEntries(
-    Object.entries(args).filter(
-      ([key]) =>
-        inspected.has(key) &&
-        Object.prototype.hasOwnProperty.call(sanitized, key) &&
-        isDeepStrictEqual(inspected.get(key), Reflect.get(sanitized, key)),
-    ),
+  return (
+    allowed &&
+    (Array.isArray(value) ? value : [value]).every((item) => {
+      const text = String(item);
+      return policy.redact(text) === text && !hasSensitiveOpenAiCacheString(text);
+    })
   );
 }
 
@@ -405,34 +324,25 @@ function toolAttributes(
   }
   try {
     const args: unknown = JSON.parse(raw);
-    if (args === null || !roundTrips(raw, args, policy)) {
+    if (
+      !args ||
+      typeof args !== 'object' ||
+      Array.isArray(args) ||
+      !roundTrips(raw, args, policy)
+    ) {
       return unavailable;
     }
-    // A scrubbed value is unsuitable as evidence. For objects we can still grade
-    // unchanged sibling parameters when, for example, a command contained credentials.
-    let captured = args;
-    if (typeof args === 'object' && !Array.isArray(args)) {
-      captured = captureObjectArguments(args, policy);
-    } else {
-      if (SHELL_TOOLS.has(name) && !isInspectionCommand(args)) {
-        return unavailable;
-      }
-      const inspected = inspectArgument(args, policy);
-      if (!isDeepStrictEqual(inspected, sanitizeArgumentProjection(inspected, policy))) {
+    const entries = Object.entries(args);
+    let fields = entries.filter(([key, item]) => canCaptureField(key, item, policy));
+    const intact = fields.length === entries.length;
+    if (!intact) {
+      // Reserializing a partial object changes -0 to +0; omit that field as well.
+      fields = fields.filter(([, item]) => !Object.is(item, -0));
+      if (fields.length === 0) {
         return unavailable;
       }
     }
-    const intact = isDeepStrictEqual(captured, args);
-    if (!intact && typeof captured === 'object') {
-      // Retained fields now need fresh JSON. Omit a field if serializing it would
-      // change the evidence, for example a nested -0 that JSON.stringify writes as 0.
-      captured = Object.fromEntries(
-        Object.entries(captured).filter(([, item]) =>
-          isDeepStrictEqual(item, JSON.parse(JSON.stringify(item))),
-        ),
-      );
-    }
-    const json = intact ? raw : JSON.stringify(captured);
+    const json = intact ? raw : JSON.stringify(Object.fromEntries(fields));
     if (policy.redact(json) !== json) {
       return unavailable;
     }
@@ -448,7 +358,11 @@ function toolAttributes(
 
 function safeIdentifier(value: unknown, policy: ImportPolicy): value is string {
   return (
-    typeof value === 'string' && /^[\w.:-]{1,256}$/.test(value) && !sensitiveText(value, policy)
+    typeof value === 'string' &&
+    /^[\w.:-]{1,256}$/.test(value) &&
+    policy.redact(value) === value &&
+    !hasProtectedIdentifierLabel(value, policy) &&
+    !hasSensitiveOpenAiCacheString(value)
   );
 }
 
@@ -458,7 +372,7 @@ function safeModelIdentifier(value: unknown, policy: ImportPolicy): value is str
     value.length <= 256 &&
     /^(?:[\w.:-]+\/)*[\w.:-]+$/.test(value) &&
     policy.redact(value) === value &&
-    !hasProtectedAssignment(value, policy) &&
+    !hasProtectedIdentifierLabel(value, policy) &&
     !hasRecognizableOpenAiCredential(value) &&
     // Preserve dated, fine-tuned and namespaced IDs. A single long opaque token is ambiguous.
     !/(?:^|\/)[a-z\d_]{64,}(?:\/|$)/i.test(value)
@@ -534,7 +448,10 @@ function normalizeSpan(
     );
     name = `execute_tool ${tool}`;
   } else {
-    const model = attrs.get('gen_ai.request.model');
+    // A dropped span attribute might have overridden a model set on the OTLP resource.
+    const model =
+      attrs.get('gen_ai.request.model') ??
+      (!wire.droppedAttributesCount && resource.attributes.get('gen_ai.request.model'));
     if (model) {
       if (!safeModelIdentifier(model.stringValue, policy)) {
         invalid();
@@ -543,6 +460,8 @@ function normalizeSpan(
       if (operation === 'chat') {
         name = `chat ${model.stringValue}`;
       }
+    } else if (operation === 'chat' && !wire.droppedAttributesCount && !resource.dropped) {
+      attributes[HOSTED_CHAT_MODEL_ABSENT] = true;
     }
   }
   // Identity attributes also appear in span names and aliases. Withhold the trace
@@ -725,5 +644,5 @@ export function normalizeHostedTrace(
     spanId: localId(node.spanId),
     parentSpanId: node.parentSpanId ? localId(node.parentSpanId) : parentSpanId,
   }));
-  return { spans, complete };
+  return { spans, complete: complete && !spans.some(hasUncertainHostedChatName) };
 }

@@ -6,6 +6,9 @@ export interface AttributeSanitizationOptions {
 
 // Match normalized names; the cookie pattern also covers set-cookie.
 const SENSITIVE_ATTRIBUTE_PATTERN = /authorization|cookie|token|apikey|secret|password|passphrase/;
+const MAX_ATTRIBUTE_LENGTH = 400;
+const CUSTOM_REDACTION = '[REDACTED]';
+const SENSITIVE_REDACTION = '<redacted>';
 
 const SAFE_TOKEN_ATTRIBUTE_KEYS = new Set([
   'gen_ai.request.max_tokens',
@@ -32,6 +35,21 @@ const SAFE_TOKEN_ATTRIBUTE_KEYS = new Set([
   'gen_ai.usage.cache_creation_input_tokens',
 ]);
 
+/** Replaced values can only rule out matches incompatible with the retained prefix. */
+export function isUncertainTraceAttributeMatch(stored: unknown, expected: unknown): boolean {
+  if (stored === CUSTOM_REDACTION || stored === SENSITIVE_REDACTION) {
+    return true;
+  }
+  return (
+    typeof stored === 'string' &&
+    stored.length === MAX_ATTRIBUTE_LENGTH + 1 &&
+    stored.endsWith('…') &&
+    typeof expected === 'string' &&
+    expected.length > MAX_ATTRIBUTE_LENGTH &&
+    expected.startsWith(stored.slice(0, -1))
+  );
+}
+
 export function sanitizeTraceAttributes(
   attributes: Record<string, any> | null | undefined,
   options: AttributeSanitizationOptions = {},
@@ -55,7 +73,9 @@ export function sanitizeTraceAttributes(
 
   const sanitizeValue = (value: any): any => {
     if (typeof value === 'string') {
-      return truncateValues && value.length > 400 ? `${value.slice(0, 400)}…` : value;
+      return truncateValues && value.length > MAX_ATTRIBUTE_LENGTH
+        ? `${value.slice(0, MAX_ATTRIBUTE_LENGTH)}…`
+        : value;
     }
     if (Array.isArray(value)) {
       return value.map(sanitizeValue);
@@ -69,7 +89,7 @@ export function sanitizeTraceAttributes(
   const sanitized: Record<string, any> = {};
   for (const [key, value] of Object.entries(attributes)) {
     if (customPatterns.some((pattern) => key.toLowerCase().includes(pattern))) {
-      sanitized[key] = '[REDACTED]';
+      sanitized[key] = CUSTOM_REDACTION;
       continue;
     }
     if (sanitizeSensitiveAttributes) {
@@ -78,7 +98,7 @@ export function sanitizeTraceAttributes(
         !SAFE_TOKEN_ATTRIBUTE_KEYS.has(lowerKey) &&
         SENSITIVE_ATTRIBUTE_PATTERN.test(lowerKey.replace(/[^a-z0-9]/g, ''))
       ) {
-        sanitized[key] = '<redacted>';
+        sanitized[key] = SENSITIVE_REDACTION;
         continue;
       }
     }

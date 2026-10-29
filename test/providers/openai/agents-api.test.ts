@@ -274,16 +274,13 @@ describe('OpenAiAgentsApiProvider', () => {
         const { pathname, searchParams } = new URL(String(url));
         if (pathname === endpoint) {
           if (!searchParams.has('after')) {
-            return json(
-              page(
-                [
-                  { ...artifact, id: 'art_foreign', session_id: 'sess_other' },
-                  { ...artifact, id: 'art_child', turn_id: 'turn_child' },
-                ],
-                true,
-                'art_child',
-              ),
-            );
+            return json({
+              data: [
+                { ...artifact, id: 'art_foreign', session_id: 'sess_other' },
+                { ...artifact, id: 'art_child', turn_id: 'turn_child' },
+              ],
+              has_more: true,
+            });
           }
           expect(searchParams.get('after')).toBe('art_child');
           return json(
@@ -368,7 +365,15 @@ describe('OpenAiAgentsApiProvider', () => {
       expect(calls().some(({ pathname }) => pathname.endsWith('/content'))).toBe(false);
     });
 
-    it.each([{ data: [] }, { data: [], has_more: true, last_id: 123 }])(
+    it.each([
+      { data: [] },
+      { data: [], has_more: true, last_id: 123 },
+      { data: [], has_more: true },
+      { data: [{ ...artifact, id: ' ' }], has_more: true },
+      { data: [{ ...artifact, id: undefined }], has_more: true, last_id: 'art_other' },
+      { data: [artifact], has_more: true, last_id: ' ' },
+      { data: [artifact], has_more: true, last_id: 'art_other' },
+    ])(
       'requires valid pagination information to attest to a missing artifact: %j',
       async (listing) => {
         mockApi((pathname) => (pathname === endpoint ? json(listing) : undefined));
@@ -380,6 +385,25 @@ describe('OpenAiAgentsApiProvider', () => {
         expect(calls().filter(({ pathname }) => pathname === endpoint)).toHaveLength(1);
       },
     );
+
+    it('rejects a repeated artifact cursor derived from the final item', async () => {
+      const cursors: (string | null)[] = [];
+      vi.mocked(fetchWithRetries).mockImplementation(async (url, options) => {
+        const { pathname, searchParams } = new URL(String(url));
+        if (pathname === endpoint) {
+          cursors.push(searchParams.get('after'));
+          return json({ data: [artifact], has_more: true });
+        }
+        return defaultResponse(pathname, options?.method);
+      });
+      const result = await provider({ artifactPaths: [path] }).callApi('hi');
+      expect(result.metadata).toMatchObject({
+        artifacts: [{ path, status: 'unavailable' }],
+        sessionDeleted: true,
+      });
+      expect(cursors).toEqual([null, artifact.id]);
+      expect(calls().some(({ pathname }) => pathname.endsWith('/content'))).toBe(false);
+    });
 
     it.each([
       { field: 'session', data: [{ ...artifact, session_id: undefined }], status: 'unavailable' },
@@ -608,12 +632,12 @@ describe('OpenAiAgentsApiProvider', () => {
             if (poll === 2) {
               return json(page([published('partial')]));
             }
-            return json(page([{ id: 'other-turn', session_id: session.id }], true, 'cursor-1'));
+            return json({ data: [{ id: 'other-turn', session_id: session.id }], has_more: true });
           }
-          if (after === 'cursor-1') {
-            return json(page([{ id: turn.id, session_id: 'other-session' }], true, 'cursor-2'));
+          if (after === 'other-turn') {
+            return json(page([{ id: turn.id, session_id: 'other-session' }], true, turn.id));
           }
-          expect(after).toBe('cursor-2');
+          expect(after).toBe(turn.id);
           return json(page([published()]));
         }
         if (options?.method === 'DELETE') {
@@ -644,6 +668,25 @@ describe('OpenAiAgentsApiProvider', () => {
         [expect.objectContaining({ name: 'invoke_agent', parentSpanId: wrapperId })],
         { abortSignal: expect.any(AbortSignal), deadline: expect.any(Number) },
       );
+    });
+
+    it('rejects a hosted trace page with conflicting continuation IDs before storing it', async () => {
+      recordWrapper();
+      const addSpans = vi.spyOn(getTraceStore(), 'addSpans').mockResolvedValue({ stored: true });
+      let pages = 0;
+      mockApi((pathname) => {
+        if (!pathname.endsWith('/traces')) {
+          return undefined;
+        }
+        return ++pages === 1 ? json(page([published()], true, 'unrelated-turn')) : json(page([]));
+      });
+      const result = await provider({ hostedTrace: true }).callApi('hi', row);
+      expect(result.metadata).toMatchObject({
+        hostedTrace: { status: 'unavailable' },
+        sessionDeleted: true,
+      });
+      expect(pages).toBe(1);
+      expect(addSpans).not.toHaveBeenCalled();
     });
 
     it.each(['parent arrives', 'parent absent', 'cycle', 'duplicate'])(
@@ -819,12 +862,12 @@ describe('OpenAiAgentsApiProvider', () => {
       recordWrapper();
       const store = getTraceStore();
       vi.spyOn(store, 'getTraceMetadata').mockResolvedValue({
-        otlpHttpRedactAttributes: ['customer_id'],
+        otlpHttpRedactAttributes: ['order_id'],
       });
       const addSpans = vi.spyOn(store, 'addSpans').mockResolvedValue({ stored: true });
       mockApi((path) => {
         if (path.endsWith('/traces')) {
-          return json(page([publishedWithTool({ customer_id: 'private-customer', limit: 3 })]));
+          return json(page([publishedWithTool({ order_id: '8163940275', limit: 3 })]));
         }
         if (path.endsWith('/items')) {
           return json(
@@ -851,7 +894,7 @@ describe('OpenAiAgentsApiProvider', () => {
       expect(store.getTraceMetadata).toHaveBeenCalledWith(localTraceId);
       expect(addSpans).toHaveBeenCalledWith(localTraceId, expect.any(Array), expect.any(Object));
       const stored = addSpans.mock.calls[0][1];
-      expect(JSON.stringify(stored)).not.toContain('private-customer');
+      expect(JSON.stringify(stored)).not.toContain('8163940275');
       expect(stored.find((span) => span.name === 'execute_tool lookup')?.attributes).toMatchObject({
         'promptfoo.tool.arguments_redacted': true,
       });
@@ -875,8 +918,8 @@ describe('OpenAiAgentsApiProvider', () => {
     );
 
     it.each([
-      { args: { order: '123' }, complete: true },
-      { args: { order: '123', apiKey: 'private-value' }, complete: false },
+      { args: { order_id: '123' }, complete: true },
+      { args: { order_id: '123', apiKey: 'private-value' }, complete: false },
       { args: undefined, complete: false },
     ])(
       'marks tool arguments complete only when the import preserves them ($args)',
@@ -1051,6 +1094,25 @@ describe('OpenAiAgentsApiProvider', () => {
       });
       expect(calls().filter((request) => request.method === 'DELETE')).toHaveLength(1);
       queued.reject(new Error('late write rejection'));
+    });
+
+    it('keeps a successful trace import and flags a late commit receipt', async () => {
+      vi.useFakeTimers();
+      recordWrapper();
+      const deadline = Date.now() + 100;
+      vi.spyOn(getTraceStore(), 'addSpans').mockImplementation(async () => {
+        vi.setSystemTime(deadline + 1);
+        return { stored: true };
+      });
+      mockApi((path) => (path.endsWith('/traces') ? json(page([published()])) : undefined));
+      const result = await provider({ hostedTrace: true, timeoutMs: 100 }).callApi('hi', row);
+      expect(result).toMatchObject({
+        output: '42',
+        metadata: {
+          sessionDeleted: true,
+          hostedTrace: { status: 'imported', spanCount: 1, storageDeadlineExceeded: true },
+        },
+      });
     });
 
     it('reports a local write deadline that expires before the timer callback runs', async () => {
@@ -3549,11 +3611,11 @@ describe('OpenAiAgentsApiProvider', () => {
     });
   });
 
-  it.each([0, 5])('starts no usage reads after a %i ms budget expires', async (usageTimeoutMs) => {
+  it('starts no optional usage reads with a zero budget', async () => {
     vi.useFakeTimers();
     mockApi(withoutUsage);
-    const pending = provider({ usageTimeoutMs, pollIntervalMs: 100 }).callApi('hi');
-    await vi.advanceTimersByTimeAsync(usageTimeoutMs);
+    const pending = provider({ usageTimeoutMs: 0 }).callApi('hi');
+    await vi.advanceTimersByTimeAsync(0);
     const result = await pending;
     expect(result.metadata).toMatchObject({ usageUnavailable: true, sessionDeleted: true });
     expect(
@@ -3561,6 +3623,26 @@ describe('OpenAiAgentsApiProvider', () => {
         (request) => request.method === 'GET' && request.pathname.endsWith('/sess_test'),
       ),
     ).toHaveLength(1);
+    expect(calls().some((request) => request.pathname.endsWith('/turns/turn_test'))).toBe(false);
+  });
+
+  it('refreshes usage immediately when its budget is shorter than the poll interval', async () => {
+    vi.useFakeTimers();
+    let sessionReads = 0;
+    mockApi((path, method) => {
+      if (method === 'GET' && path.endsWith('/sess_test') && ++sessionReads > 1) {
+        return json(session);
+      }
+      return withoutUsage(path, method);
+    });
+    const pending = provider({ usageTimeoutMs: 500, pollIntervalMs: 1_000 }).callApi('hi');
+    await vi.advanceTimersByTimeAsync(0);
+    expect(sessionReads).toBe(2);
+    await expect(pending).resolves.toMatchObject({
+      output: '42',
+      tokenUsage: { total: usage.total_tokens },
+      metadata: { sessionDeleted: true },
+    });
   });
 
   it.each(['usage deadline', 'eval cancellation'] as const)(

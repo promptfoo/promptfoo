@@ -11,6 +11,13 @@ interface SpanRelevanceInput {
   statusCode?: number;
 }
 
+export const HOSTED_CHAT_MODEL_ABSENT = 'promptfoo.openai.chat_model_absent';
+
+/** Older imports also used a bare chat name when OTLP had dropped its model attribute. */
+export function hasUncertainHostedChatName(span: SpanRelevanceInput & { name: string }): boolean {
+  return span.name === 'chat' && span.attributes?.[HOSTED_CHAT_MODEL_ABSENT] !== true;
+}
+
 /** Internal grader activity can include imported spans without their own role attribute. */
 export function getGraderOwnedSpanIds(
   spans: ReadonlyArray<{

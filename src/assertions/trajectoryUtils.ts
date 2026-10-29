@@ -5,7 +5,6 @@ import {
   SEARCH_ATTRIBUTE_KEYS,
   TOOL_ARGUMENT_ATTRIBUTE_KEYS,
 } from '../tracing/toolAttributes';
-import { getHostedToolArguments } from './hostedTrace';
 import { matchesPattern } from './traceUtils';
 
 import type { TraceData, TraceSpan } from '../types/tracing';
@@ -188,6 +187,25 @@ function extractToolName(span: TraceSpan): string | undefined {
   return undefined;
 }
 
+/** The hosted importer writes JSON text. Exported or redacted text must still parse as JSON. */
+export function getHostedToolArguments(attributes: Record<string, unknown>): unknown {
+  const json = attributes['tool.arguments'];
+  const native = attributes['gen_ai.tool.call.arguments'];
+  if (
+    typeof json !== 'string' ||
+    ((native !== undefined || attributes['promptfoo.tool.arguments_redacted']) && native !== json)
+  ) {
+    // Older imports only have tool.arguments. Their redacted values did not preserve
+    // which fields were original, so even a positive match cannot rely on them.
+    return undefined;
+  }
+  try {
+    return JSON.parse(json) ?? undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 function extractToolArgs(span: TraceSpan): unknown {
   const attributes = span.attributes || {};
   if (typeof attributes['promptfoo.openai.hosted_trace'] === 'string') {
@@ -226,6 +244,46 @@ function hasRedactedHostedArguments(span: TraceSpan): boolean {
   );
 }
 
+function commandFromToolArguments(
+  toolArgs: unknown,
+  hosted: boolean,
+  redacted: boolean,
+): string | undefined {
+  const args =
+    toolArgs && typeof toolArgs === 'object' && !Array.isArray(toolArgs)
+      ? (toolArgs as Record<string, unknown>)
+      : undefined;
+  // A removed cmd or command could have taken precedence over a surviving fallback.
+  if (redacted && args?.cmd === undefined) {
+    return undefined;
+  }
+  let command = hosted ? toolArgs : undefined;
+  let separator = ' ';
+  if (args) {
+    if (args.cmd !== undefined) {
+      command = args.cmd;
+    } else if (args.command === undefined) {
+      command = args.commands;
+      separator = '; ';
+    } else {
+      command = args.command;
+    }
+  }
+  if (typeof command === 'string' && command.trim()) {
+    return command.trim();
+  }
+  if (Array.isArray(command) && (!hosted || command.every((part) => typeof part === 'string'))) {
+    const joined = command
+      .map((part) => String(part).trim())
+      .filter(Boolean)
+      .join(separator);
+    if (joined) {
+      return joined;
+    }
+  }
+  return undefined;
+}
+
 function extractCommand(
   span: TraceSpan,
   toolName = extractToolName(span),
@@ -249,33 +307,15 @@ function extractCommand(
     }
   }
 
-  const toolArgs = getToolArgs();
-  if (isCommandToolName(toolName, commandToolNames) && toolArgs && typeof toolArgs === 'object') {
-    const args = toolArgs as Record<string, unknown>;
-    // A removed cmd or command could have taken precedence over a surviving fallback.
-    if (hasRedactedHostedArguments(span) && args.cmd === undefined) {
-      return undefined;
-    }
-    const commandSource =
-      args.cmd === undefined
-        ? args.command === undefined
-          ? args.commands === undefined
-            ? undefined
-            : { value: args.commands, separator: '; ' }
-          : { value: args.command, separator: ' ' }
-        : { value: args.cmd, separator: ' ' };
-    const command = commandSource?.value;
-    if (typeof command === 'string' && command.trim()) {
-      return command.trim();
-    }
-    if (Array.isArray(command)) {
-      const joined = command
-        .map((part) => String(part).trim())
-        .filter(Boolean)
-        .join(commandSource?.separator ?? ' ');
-      if (joined) {
-        return joined;
-      }
+  if (isCommandToolName(toolName, commandToolNames)) {
+    const hosted = typeof attributes['promptfoo.openai.hosted_trace'] === 'string';
+    const command = commandFromToolArguments(
+      getToolArgs(),
+      hosted,
+      hasRedactedHostedArguments(span),
+    );
+    if (command || hosted) {
+      return command;
     }
   }
 
@@ -284,6 +324,15 @@ function extractCommand(
   }
 
   return undefined;
+}
+
+// An intact but unrecognized shell payload cannot prove that a command did not run.
+export function hasUnresolvedHostedCommand(trace: TraceData): boolean {
+  const names = getTraceCommandToolNames(trace);
+  return trace.spans.some((span) => {
+    const tool = extractToolName(span);
+    return isCommandToolName(tool, names) && !extractCommand(span, tool, undefined, names);
+  });
 }
 
 function extractSearchQuery(span: TraceSpan): string | undefined {
