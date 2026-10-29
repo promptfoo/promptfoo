@@ -193,6 +193,325 @@ describe('OpenAiAgentsApiProvider', () => {
     expect(vi.mocked(fetchWithRetries).mock.calls.at(-1)?.[1]?.method).toBe('DELETE');
   });
 
+  describe('published artifacts', () => {
+    const path = '/workspace/outputs/report.bin';
+    const artifact = {
+      id: 'art_test',
+      session_id: session.id,
+      turn_id: turn.id,
+      path,
+      size_bytes: 7,
+    };
+    const endpoint = `/v1/agents/sessions/${session.id}/artifacts`;
+
+    it.each([
+      { paths: [path, path] },
+      { paths: ['/workspace/outputs/../secret'] },
+      { paths: ['relative.bin'] },
+      { paths: Array.from({ length: 9 }, (_, i) => `/workspace/outputs/${i}.bin`) },
+    ])('rejects invalid artifact paths: $paths', ({ paths }) => {
+      expect(() => provider({ artifactPaths: paths })).toThrow('artifactPaths');
+      expect(fetchWithRetries).not.toHaveBeenCalled();
+    });
+
+    it('renders a whole artifact path from the test row before collecting it', async () => {
+      mockApi((pathname) => {
+        if (pathname === endpoint) {
+          return json(page([artifact]));
+        }
+        return pathname.endsWith('/art_test/content') ? new Response('example') : undefined;
+      });
+      const agent = provider({ artifactPaths: ['{{outputPath}}'] });
+      const result = await agent.callApi('hi', {
+        vars: { outputPath: path },
+        prompt: { raw: 'hi', label: 'hi' },
+      });
+      expect(result.error).toBeUndefined();
+      expect(result.metadata?.artifacts).toMatchObject([
+        { path, status: 'available', sizeBytes: 7 },
+      ]);
+    });
+
+    it.each(['unresolved', 'traversal'])(
+      'rejects an %s path before creating a session',
+      async (kind) => {
+        const agent = provider({ artifactPaths: ['{{outputPath}}'] });
+        const context =
+          kind === 'unresolved'
+            ? undefined
+            : {
+                vars: { outputPath: '/workspace/outputs/../secret' },
+                prompt: { raw: 'hi', label: 'hi' },
+              };
+        const result = await agent.callApi('hi', context);
+        expect(result.error).toContain('artifactPaths');
+        expect(fetchWithRetries).not.toHaveBeenCalled();
+      },
+    );
+
+    it('rejects a prompt override whose two variables render to the same path', async () => {
+      const result = await provider({ artifactPaths: [path] }).callApi('hi', {
+        vars: { first: path, second: path },
+        prompt: { raw: 'hi', label: 'hi', config: { artifactPaths: ['{{first}}', '{{second}}'] } },
+      });
+      expect(result.error).toContain('artifactPaths');
+      expect(fetchWithRetries).not.toHaveBeenCalled();
+    });
+
+    it('does not request or record artifacts by default', async () => {
+      const result = await provider().callApi('hi');
+      expect(result.metadata).not.toHaveProperty('artifacts');
+      expect(calls().some(({ pathname }) => pathname.includes('/artifacts'))).toBe(false);
+    });
+
+    it('hashes the requested root-turn bytes using the session credentials before deletion', async () => {
+      const missing = '/workspace/outputs/missing.bin';
+      const bytes = Uint8Array.from([0, 128, 255, 97, 114, 116, 10]);
+      vi.mocked(fetchWithRetries).mockImplementation(async (url, options) => {
+        const { pathname, searchParams } = new URL(String(url));
+        if (pathname === endpoint) {
+          if (!searchParams.has('after')) {
+            return json({
+              data: [
+                { ...artifact, id: 'art_foreign', session_id: 'sess_other' },
+                { ...artifact, id: 'art_child', turn_id: 'turn_child' },
+              ],
+              has_more: true,
+            });
+          }
+          expect(searchParams.get('after')).toBe('art_child');
+          return json(
+            page([
+              artifact,
+              { ...artifact, id: 'art_other', path: missing, turn_id: 'turn_child' },
+            ]),
+          );
+        }
+        if (pathname === `${endpoint}/art_test/content`) {
+          return new Response(bytes);
+        }
+        return defaultResponse(pathname, options?.method);
+      });
+      const agent = new OpenAiAgentsApiProvider('', {
+        env: { OPENAI_API_KEY: 'provider-scoped-key' },
+        config: { apiBaseUrl: 'https://gateway.example/v1', artifactPaths: [path, missing] },
+      });
+      const result = await agent.callApi('hi');
+      expect(result.error).toBeUndefined();
+      expect(result.metadata?.sessionDeleted).toBe(true);
+      expect(result.metadata?.artifacts).toEqual([
+        {
+          path,
+          status: 'available',
+          sizeBytes: bytes.length,
+          sha256: '7b16924509e220adba59ed291ae37641a335bb3ae7e619afc868c1e65f72cb6e',
+        },
+        { path: missing, status: 'missing' },
+      ]);
+      expect(
+        calls()
+          .filter(({ pathname }) => pathname.endsWith('/content'))
+          .map(({ pathname }) => pathname),
+      ).toEqual([`${endpoint}/art_test/content`]);
+      for (const [url, options] of vi.mocked(fetchWithRetries).mock.calls) {
+        expect(new URL(String(url)).origin).toBe('https://gateway.example');
+        expect(new Headers(options!.headers).get('authorization')).toBe(
+          'Bearer provider-scoped-key',
+        );
+        expect(options?.restrictCloudAuthRedirects).toBe(true);
+      }
+      expect(calls().at(-1)?.method).toBe('DELETE');
+      expect(JSON.stringify(result)).not.toContain('provider-scoped-key');
+    });
+
+    it.each(['list', 'content'])(
+      'preserves the answer and cleanup on %s failure',
+      async (stage) => {
+        mockApi((pathname) => {
+          if (pathname === endpoint) {
+            return stage === 'list'
+              ? apiError(403, 'sensitive backend detail')
+              : json(page([artifact]));
+          }
+          return pathname.endsWith('/content')
+            ? apiError(403, 'sensitive backend detail')
+            : undefined;
+        });
+        const result = await provider({ artifactPaths: [path] }).callApi('hi');
+        expect(result.error).toBeUndefined();
+        expect(result).toMatchObject({
+          output: '42',
+          metadata: { sessionDeleted: true, artifacts: [{ path, status: 'unavailable' }] },
+        });
+        expect(JSON.stringify(result)).not.toContain('sensitive backend detail');
+      },
+    );
+
+    it.each([
+      { description: 'unsafe ID', data: [{ ...artifact, id: '..' }] },
+      { description: 'file over 1 MiB', data: [{ ...artifact, size_bytes: 1024 * 1024 + 1 }] },
+      { description: 'ambiguous path', data: [artifact, { ...artifact, id: 'art_duplicate' }] },
+    ])('rejects $description before requesting content', async ({ data }) => {
+      mockApi((pathname) => (pathname === endpoint ? json(page(data)) : undefined));
+      const result = await provider({ artifactPaths: [path] }).callApi('hi');
+      expect(result.error).toBeUndefined();
+      expect(result.metadata).toMatchObject({
+        sessionDeleted: true,
+        artifacts: [{ path, status: 'unavailable' }],
+      });
+      expect(calls().some(({ pathname }) => pathname.endsWith('/content'))).toBe(false);
+    });
+
+    it.each([
+      { data: [] },
+      { data: [], has_more: true, last_id: 123 },
+      { data: [], has_more: true },
+      { data: [{ ...artifact, id: ' ' }], has_more: true },
+      { data: [{ ...artifact, id: undefined }], has_more: true, last_id: 'art_other' },
+      { data: [artifact], has_more: true, last_id: ' ' },
+      { data: [artifact], has_more: true, last_id: 'art_other' },
+    ])(
+      'requires valid pagination information to attest to a missing artifact: %j',
+      async (listing) => {
+        mockApi((pathname) => (pathname === endpoint ? json(listing) : undefined));
+        const result = await provider({ artifactPaths: [path] }).callApi('hi');
+        expect(result.metadata).toMatchObject({
+          artifacts: [{ path, status: 'unavailable' }],
+          sessionDeleted: true,
+        });
+        expect(calls().filter(({ pathname }) => pathname === endpoint)).toHaveLength(1);
+      },
+    );
+
+    it('rejects a repeated artifact cursor derived from the final item', async () => {
+      const cursors: (string | null)[] = [];
+      vi.mocked(fetchWithRetries).mockImplementation(async (url, options) => {
+        const { pathname, searchParams } = new URL(String(url));
+        if (pathname === endpoint) {
+          cursors.push(searchParams.get('after'));
+          return json({ data: [artifact], has_more: true });
+        }
+        return defaultResponse(pathname, options?.method);
+      });
+      const result = await provider({ artifactPaths: [path] }).callApi('hi');
+      expect(result.metadata).toMatchObject({
+        artifacts: [{ path, status: 'unavailable' }],
+        sessionDeleted: true,
+      });
+      expect(cursors).toEqual([null, artifact.id]);
+      expect(calls().some(({ pathname }) => pathname.endsWith('/content'))).toBe(false);
+    });
+
+    it.each([false, true])(
+      'rejects duplicate artifact IDs before reading content (across pages: %s)',
+      async (acrossPages) => {
+        const otherPath = { ...artifact, path: '/workspace/outputs/other.bin' };
+        let reads = 0;
+        mockApi((pathname) => {
+          if (pathname === endpoint) {
+            reads++;
+            if (!acrossPages) {
+              return json(page([otherPath, artifact]));
+            }
+            return reads === 1
+              ? json(page([otherPath], true, artifact.id))
+              : json(page([artifact]));
+          }
+          return pathname.endsWith('/content') ? new Response('example') : undefined;
+        });
+        const result = await provider({ artifactPaths: [path] }).callApi('hi');
+        expect(result.metadata).toMatchObject({
+          artifacts: [{ path, status: 'unavailable' }],
+          sessionDeleted: true,
+        });
+        expect(calls().some(({ pathname }) => pathname.endsWith('/content'))).toBe(false);
+      },
+    );
+
+    it.each([
+      { field: 'session', data: [{ ...artifact, session_id: undefined }], status: 'unavailable' },
+      { field: 'relative path', data: [{ ...artifact, path: 'other' }], status: 'unavailable' },
+      { field: 'turn', data: [{ ...artifact, turn_id: undefined }], status: 'unavailable' },
+      { field: 'path', data: [{ ...artifact, path: undefined }], status: 'unavailable' },
+      { field: 'record', data: [null], status: 'unavailable' },
+      {
+        field: 'unknown session alongside exact match',
+        data: [{ ...artifact, session_id: undefined }, artifact],
+        status: 'unavailable',
+      },
+      {
+        field: 'session with known different path',
+        data: [{ ...artifact, path: '/workspace/outputs/other', session_id: undefined }],
+        status: 'missing',
+      },
+      {
+        field: 'path with known different session',
+        data: [{ ...artifact, path: undefined, session_id: 'sess_other' }],
+        status: 'missing',
+      },
+    ])(
+      'handles an incomplete $field without downloading an unidentified artifact',
+      async ({ data, status }) => {
+        mockApi((pathname) => (pathname === endpoint ? json(page(data)) : undefined));
+        const result = await provider({ artifactPaths: [path] }).callApi('hi');
+        expect(result.error).toBeUndefined();
+        expect(result.metadata).toMatchObject({
+          sessionDeleted: true,
+          artifacts: [{ path, status }],
+        });
+        expect(calls().some(({ pathname }) => pathname.endsWith('/content'))).toBe(false);
+      },
+    );
+
+    it('preserves the completed turn if the session deadline expires during collection', async () => {
+      vi.useFakeTimers();
+      vi.mocked(fetchWithRetries).mockImplementation(async (url, options) => {
+        const { pathname } = new URL(String(url));
+        if (pathname === endpoint) {
+          return json(page([artifact]));
+        }
+        if (pathname.endsWith('/content')) {
+          const signal = options!.signal!;
+          return new Promise<Response>((_resolve, reject) => {
+            signal.addEventListener('abort', () => reject(signal.reason), { once: true });
+          });
+        }
+        return defaultResponse(pathname, options?.method);
+      });
+      const pending = provider({ artifactPaths: [path], timeoutMs: 25 }).callApi('hi');
+      await vi.advanceTimersByTimeAsync(25);
+      const result = await pending;
+      expect(result.error).toBeUndefined();
+      expect(result).toMatchObject({
+        output: '42',
+        metadata: { sessionDeleted: true, artifacts: [{ path, status: 'unavailable' }] },
+      });
+    });
+
+    it('cancels an oversized download even when the list advertises a small file', async () => {
+      const cancel = vi.fn();
+      const body = new ReadableStream<Uint8Array>({
+        pull(controller) {
+          controller.enqueue(new Uint8Array(256 * 1024));
+        },
+        cancel,
+      });
+      mockApi((pathname) => {
+        if (pathname === endpoint) {
+          return json(page([artifact]));
+        }
+        return pathname.endsWith('/content') ? new Response(body) : undefined;
+      });
+      const result = await provider({ artifactPaths: [path] }).callApi('hi');
+      expect(result.error).toBeUndefined();
+      expect(result).toMatchObject({
+        output: '42',
+        metadata: { sessionDeleted: true, artifacts: [{ path, status: 'unavailable' }] },
+      });
+      expect(cancel).toHaveBeenCalledOnce();
+    });
+  });
+
   it('preserves saved-agent configuration without injecting a default model', async () => {
     const agentProvider = provider({
       agent_id: 'agent_saved',
