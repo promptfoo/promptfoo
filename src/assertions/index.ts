@@ -498,8 +498,17 @@ async function runAssertionInternal({
       filePath = path.resolve(basePath, filePath);
 
       if (isJavascriptFile(filePath)) {
-        valueFromScript = await loadFromJavaScriptFile(filePath, functionName, [output, context]);
-        logger.debug(`Javascript script ${filePath} output: ${valueFromScript}`);
+        try {
+          valueFromScript = await loadFromJavaScriptFile(filePath, functionName, [output, context]);
+          logger.debug(`Javascript script ${filePath} output: ${valueFromScript}`);
+        } catch (error) {
+          return {
+            pass: false,
+            score: 0,
+            reason: (error as Error).message,
+            assertion,
+          };
+        }
       } else if (filePath.endsWith('.py')) {
         try {
           const pythonScriptOutput = await runPython<ValueFromScriptType>(
@@ -539,15 +548,24 @@ async function runAssertionInternal({
         renderedValue = processFileReference(renderedValue);
       }
     } else if (isPackagePath(renderedValue)) {
-      const basePath = cliState.basePath || '';
-      const requiredModule = await loadFromPackage(renderedValue, basePath);
-      if (typeof requiredModule !== 'function') {
-        throw new Error(
-          `Assertion malformed: ${renderedValue} must be a function. Received: ${typeof requiredModule}`,
-        );
-      }
+      try {
+        const basePath = cliState.basePath || '';
+        const requiredModule = await loadFromPackage(renderedValue, basePath);
+        if (typeof requiredModule !== 'function') {
+          throw new Error(
+            `Assertion malformed: ${renderedValue} must be a function. Received: ${typeof requiredModule}`,
+          );
+        }
 
-      valueFromScript = await Promise.resolve(requiredModule(output, context));
+        valueFromScript = await Promise.resolve(requiredModule(output, context));
+      } catch (error) {
+        return {
+          pass: false,
+          score: 0,
+          reason: (error as Error).message,
+          assertion,
+        };
+      }
     } else {
       // It's a normal string value
       renderedValue = nunjucks.renderString(renderedValue, resolvedVars);

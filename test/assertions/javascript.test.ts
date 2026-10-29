@@ -2649,6 +2649,77 @@ return s >= 0.5 && s <= 0.75;`,
       expect(result).toMatchObject({ pass: true });
     });
   });
+
+  it('returns a failed assertion instead of erroring the row when a file:// JS assertion throws', async () => {
+    const assertion: Assertion = {
+      type: 'javascript',
+      value: 'file:///path/to/throws.js',
+    };
+
+    vi.mocked(path.resolve).mockReturnValue('/path/to/throws.js');
+    vi.mocked(path.extname).mockReturnValue('.js');
+    vi.mocked(isPackagePath).mockReturnValue(false);
+
+    const throwingFn = vi.fn(() => {
+      throw new Error('boom');
+    });
+    vi.mocked(importModule).mockImplementationOnce(() => {
+      return Promise.resolve(throwingFn);
+    });
+
+    const output = 'Expected output';
+    const provider = new OpenAiChatCompletionProvider('gpt-4o-mini');
+    const providerResponse = { output };
+
+    const result = await runAssertion({
+      prompt: 'Some prompt',
+      provider,
+      assertion,
+      test: {} as AtomicTestCase,
+      providerResponse,
+    });
+
+    expect(result).toMatchObject({
+      pass: false,
+      score: 0,
+      reason: expect.stringContaining('boom'),
+    });
+    expect(result.reason).not.toContain('ERROR');
+  });
+
+  it('returns a failed assertion instead of erroring the row when a package: assertion throws', async () => {
+    const assertion: Assertion = {
+      type: 'javascript',
+      value: 'package:some-pkg',
+    };
+
+    vi.mocked(isPackagePath).mockReturnValue(true);
+    const throwingFn = vi.fn(() => {
+      throw new Error('pkg boom');
+    });
+    vi.mocked(loadFromPackage).mockImplementationOnce(() => {
+      return Promise.resolve(throwingFn);
+    });
+
+    const output = 'Expected output';
+    const provider = new OpenAiChatCompletionProvider('gpt-4o-mini');
+    const providerResponse = { output };
+
+    const result = await runAssertion({
+      prompt: 'Some prompt',
+      provider,
+      assertion,
+      test: {} as AtomicTestCase,
+      providerResponse,
+    });
+
+    expect(result).toMatchObject({
+      pass: false,
+      score: 0,
+      reason: expect.stringContaining('pkg boom'),
+    });
+    expect(result.reason).not.toContain('ERROR');
+  });
 });
 
 describe('not-javascript: GradingResult reason preservation on inversion', () => {
