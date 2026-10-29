@@ -220,6 +220,7 @@ export async function filterTestsByResults(
       description: result.testCase.description,
       vars: filterRuntimeVars(result.testCase.vars) || {},
       assert: result.testCase.assert,
+      threshold: result.testCase.threshold,
       metadata: result.testCase.metadata,
       options: result.testCase.options,
       // Intentionally omit: provider (security - may contain stale credentials)
