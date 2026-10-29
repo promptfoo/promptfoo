@@ -18,21 +18,33 @@ export function createReadlineInterface(): readline.Interface {
 export async function promptUser(question: string): Promise<string> {
   return new Promise((resolve, reject) => {
     let rl: readline.Interface | null = null;
+    let settled = false;
 
     try {
       rl = createReadlineInterface();
 
       // Handle errors
       rl.on('error', (err) => {
+        settled = true;
         rl!.close();
         reject(err);
       });
 
+      // Readline closes on EOF without invoking the question callback.
+      rl.on('close', () => {
+        if (!settled) {
+          settled = true;
+          reject(new Error('Input closed before an answer was received'));
+        }
+      });
+
       rl.question(question, (answer) => {
+        settled = true;
         rl!.close();
         resolve(answer);
       });
     } catch (err) {
+      settled = true;
       if (rl) {
         rl.close();
       }
