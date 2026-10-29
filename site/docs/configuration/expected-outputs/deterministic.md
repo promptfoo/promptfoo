@@ -770,6 +770,8 @@ The `trajectory:tool-used` assertion checks traced tool steps rather than the mo
 Trajectory assertions require trace data. Enable tracing for the eval and use a provider that emits tool-oriented spans or attributes.
 :::
 
+For the hosted OpenAI Agents API, enable `hostedTrace` to grade native tool spans. A partial import can establish that a tool or a matching argument was observed. It cannot establish that a tool never ran or that the observed count was the total. [Hosted trace settings and import statuses](/docs/providers/openai-agents-api#inspect-traces)
+
 Promptfoo identifies tool names from attributes such as `tool.name`, `function.name`, and Vercel AI SDK telemetry's `ai.toolCall.name`.
 
 Example:
@@ -1235,6 +1237,8 @@ The `trace-error-spans` assertion detects error spans in a trace and ensures the
 :::note
 This assertion requires trace data to be available. If tracing is not enabled or trace data is missing, the assertion will throw an error.
 :::
+
+Pair a zero-error check with a positive tool check when the tool is required. A successful provider wrapper can hide errors inside the hosted agent. When an OpenAI hosted import is requested, `trace-error-spans` requires a complete imported trace. [Hosted command example](/docs/providers/openai-agents-api#inspect-traces)
 
 Example:
 
