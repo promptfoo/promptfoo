@@ -1,8 +1,8 @@
+import { getNativeSpanDurationNs, nativeStartOffsetNs } from '../tracing/spanTiming';
 import {
   COMMAND_ATTRIBUTE_KEYS,
   getFirstStringAttribute,
   getToolNameFromAttributes,
-  HOSTED_START_TIME_OFFSET_NS,
   SEARCH_ATTRIBUTE_KEYS,
   TOOL_ARGUMENT_ATTRIBUTE_KEYS,
 } from '../tracing/toolAttributes';
@@ -374,14 +374,6 @@ function isMessageSpan(span: TraceSpan): boolean {
   return span.name === 'agent response' || span.name === 'send input';
 }
 
-function nativeStartOffsetNs(span: TraceSpan): number {
-  const offset = span.attributes?.[HOSTED_START_TIME_OFFSET_NS];
-  return typeof span.attributes?.['promptfoo.openai.hosted_trace'] === 'string' &&
-    Number.isSafeInteger(offset)
-    ? offset
-    : 0;
-}
-
 export function extractTrajectorySteps(trace: TraceData): TrajectoryStep[] {
   const commandToolNames = getTraceCommandToolNames(trace);
 
@@ -404,6 +396,16 @@ export function extractTrajectorySteps(trace: TraceData): TrajectoryStep[] {
         return endDiff;
       }
 
+      // For equal native starts, exact duration determines which tool ended first.
+      const leftDuration = getNativeSpanDurationNs(left.span);
+      const rightDuration = getNativeSpanDurationNs(right.span);
+      if (
+        leftDuration !== undefined &&
+        rightDuration !== undefined &&
+        leftDuration !== rightDuration
+      ) {
+        return leftDuration < rightDuration ? -1 : 1;
+      }
       return left.index - right.index;
     })
     .map(({ span }) => {

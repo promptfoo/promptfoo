@@ -86,6 +86,12 @@ function getRawFilterCoverageError(
   return reason;
 }
 
+// Use the count defaults from the trajectory handlers. A bare tool matcher requires one call.
+function hasPositiveMinimum(value: object, defaultMin: number): boolean {
+  const min = 'min' in value && typeof value.min === 'number' ? value.min : defaultMin;
+  return min > 0 && !('max' in value && typeof value.max === 'number');
+}
+
 function provesObservedTool(type: AssertionType, value: AssertionValue | undefined): boolean {
   if (type === 'trajectory:tool-args-match') {
     return true;
@@ -96,12 +102,7 @@ function provesObservedTool(type: AssertionType, value: AssertionValue | undefin
   if (typeof value === 'string' || Array.isArray(value)) {
     return true;
   }
-  return (
-    !!value &&
-    typeof value === 'object' &&
-    !('max' in value) &&
-    (!('min' in value) || (typeof value.min === 'number' && value.min > 0))
-  );
+  return !!value && typeof value === 'object' && hasPositiveMinimum(value, 1);
 }
 
 function getLocalAncestors(spans: TraceSpan[], parentId: string) {
@@ -168,12 +169,9 @@ function getArgumentCoverageError(
     }
     if (
       !inverse &&
-      baseType === 'trajectory:step-count' &&
       (includeToolArguments || untypedStep) &&
-      'min' in value &&
-      typeof value.min === 'number' &&
-      value.min > 0 &&
-      !('max' in value)
+      (provesObservedTool(baseType, value) ||
+        (baseType === 'trajectory:step-count' && hasPositiveMinimum(value, 0)))
     ) {
       // Untyped patterns can match preserved span names even when arguments were never captured.
       return undefined;
@@ -282,10 +280,12 @@ function prepareRawTraceAssertion(
   }
   if (
     reason &&
-    (params.baseType === 'trace-span-count' || params.baseType === 'trace-error-spans')
+    (params.baseType === 'trace-span-count' ||
+      params.baseType === 'trace-error-spans' ||
+      params.baseType === 'trace-span-duration')
   ) {
-    // A lossy raw argument can still equal a filter in the stored JSON. It can
-    // only contribute to the possible upper bound, never to the definite count.
+    // A lossy value can equal a filter in the stored JSON. Only the handler's
+    // possible matches may use it when calculating the count, error or timing bounds.
     trace.spans = trace.spans.filter((span) => !uncertain.has(span));
     params.traceSpanUncertainty = { missing: possible, candidates: [...uncertain], reason };
     return undefined;

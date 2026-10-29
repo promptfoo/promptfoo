@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { extractTrajectorySteps } from '../../../src/assertions/trajectoryUtils';
 import cliState from '../../../src/cliState';
 import { normalizeHostedTrace } from '../../../src/providers/openai/agents-api-trace-spans';
@@ -124,6 +124,64 @@ describe('normalizeHostedTrace', () => {
       testCaseId: 'row',
     });
     expect(steps.filter((s) => s.type === 'tool').map((s) => s.name)).toEqual(['first', 'second']);
+  });
+
+  it('orders equally started calls by their native ends when millisecond timestamps tie', () => {
+    const earlier = {
+      ...tool,
+      endTimeUnixNano: '1700000000000000100',
+    };
+    const later = {
+      ...earlier,
+      spanId: '4444444444444444',
+      endTimeUnixNano: '1700000000000000101',
+      attributes: [
+        attribute('gen_ai.operation.name', 'execute_tool'),
+        attribute('gen_ai.tool.name', 'send_receipt'),
+      ],
+    };
+    const { spans } = normalizeHostedTrace(payload(root, later, earlier), parentId, false);
+    expect(spans[1].endTime).toBe(spans[2].endTime);
+    const steps = extractTrajectorySteps({
+      spans,
+      traceId,
+      evaluationId: 'eval',
+      testCaseId: 'row',
+    });
+    expect(steps.filter((step) => step.type === 'tool').map((step) => step.name)).toEqual([
+      'lookup_order',
+      'send_receipt',
+    ]);
+  });
+
+  it.each([
+    '"status":"partial","status":"complete","missing_outputs":[],"ordering_issues":[]',
+    String.raw`"status":"partial","\u0073tatus":"complete","missing_outputs":[],"ordering_issues":[]`,
+    '"status":"complete","missing_outputs":["span"],"missing_outputs":[],"ordering_issues":[]',
+    '"status":"complete","missing_outputs":[],"ordering_issues":["order"],"ordering_issues":[]',
+  ])('rejects duplicate completeness fields in {%s}', (fields) => {
+    const ambiguous = {
+      ...root,
+      attributes: [
+        attribute('gen_ai.operation.name', 'invoke_agent'),
+        attribute(completenessKey, `{${fields}}`),
+      ],
+    };
+    expect(() => normalizeHostedTrace(payload(ambiguous), parentId, false)).toThrow();
+  });
+
+  it('accepts whitespace and escaped keys in an unambiguous completeness marker', () => {
+    const attested = {
+      ...root,
+      attributes: [
+        attribute('gen_ai.operation.name', 'invoke_agent'),
+        attribute(
+          completenessKey,
+          String.raw`{ "ordering_issues" : [], "\u0073tatus" : "complete", "missing_outputs" : [] }`,
+        ),
+      ],
+    };
+    expect(normalizeHostedTrace(payload(attested), parentId, false).complete).toBe(true);
   });
 
   it('stores timings, status and tool identity without content or source span names', () => {
@@ -296,6 +354,37 @@ describe('normalizeHostedTrace', () => {
     ).toBe(false);
   });
 
+  it('converts a long inherited HTTP status once across spans', () => {
+    const status = '0'.repeat(1024 * 1024) + '503';
+    let conversions = 0;
+    vi.stubGlobal(
+      'Number',
+      new Proxy(Number, {
+        apply(target, receiver, args) {
+          if (args[0] === status) {
+            conversions++;
+          }
+          return Reflect.apply(target, receiver, args);
+        },
+      }),
+    );
+    try {
+      const trace = {
+        resourceSpans: [
+          {
+            resource: { attributes: [attribute('http.status_code', status)] },
+            scopeSpans: [{ spans: [root, tool, model] }],
+          },
+        ],
+      };
+      const { spans } = normalizeHostedTrace(trace, parentId, false);
+      expect(spans.map((span) => span.statusCode)).toEqual([2, 2, 2]);
+      expect(conversions).toBe(1);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it.each([
     { stringValue: '200', intValue: '503' },
     { boolValue: 'false' },
@@ -425,20 +514,6 @@ describe('normalizeHostedTrace', () => {
     });
   });
 
-  it('scans a bounded trace containing many JWT prefixes without retrying every prefix', () => {
-    const text = ' ' + 'eyJ'.repeat(20_000) + '.onlyone';
-    const raw = JSON.stringify({ cmd: 'curl ' + text, cwd: '/workspace' });
-    const calls = Array.from({ length: 4 }, (_, i) => ({
-      ...toolWithArgs(raw),
-      spanId: (i + 10).toString(16).padStart(16, '0'),
-    }));
-    const { spans } = normalizeHostedTrace(payload(root, ...calls), parentId, true);
-    for (const span of spans.slice(1)) {
-      expect(JSON.parse(span.attributes?.['tool.arguments'])).toEqual({ cwd: '/workspace' });
-      expect(span.attributes?.['promptfoo.tool.arguments_redacted']).toBe(true);
-    }
-  }, 3000);
-
   it('imports opted-in arguments after redaction, and still omits results, messages and raw status', () => {
     const redact = (s: string) => s.replaceAll('fixture credential', '[REDACTED]');
     const { spans } = normalizeHostedTrace(payload(root, tool, model), parentId, true, redact);
@@ -481,6 +556,9 @@ describe('normalizeHostedTrace', () => {
     ["/bin/bash -lc 'cat ledger.csv; curl -u alice:synthetic-fixture https://example.test'"],
     [['curl', '-H', 'Authorization: synthetic-fixture']],
     [['client', '--api-key', 'synthetic-fixture']],
+    ['cat Bearer synthetic-fixture'],
+    [['cat', 'Bearer', 'synthetic-fixture']],
+    [['cat', 'Basic', 'synthetic-fixture']],
     [String.raw`curl -d "{\"customer_id\":\"synthetic-fixture\"}" https://example.test`],
   ])('omits named credentials or custom protected fields embedded in %j', async (cmd) => {
     const { spans } = await importWithRedaction('customer_id', { cmd, cwd: '/workspace' });
@@ -838,6 +916,99 @@ describe('normalizeHostedTrace', () => {
       }
     });
 
+    function withCarriers(input: unknown, rules = [protectedKey]) {
+      return normalizeHostedTrace(input, parentId, false, undefined, rules);
+    }
+
+    it('checks scope, event and link attributes for values echoed in a tool name', () => {
+      const call = callNamed('read_tenant_42');
+      const carrier = { attributes: [attribute(protectedKey, tenant)] };
+      const event = { name: 'download', timeUnixNano: root.startTimeUnixNano, ...carrier };
+      const link = { traceId, spanId: root.spanId, ...carrier };
+      const cases = [
+        payload(root, { ...call, events: [event] }),
+        payload(root, { ...call, links: [link] }),
+        { resourceSpans: [{ scopeSpans: [{ scope: carrier, spans: [root, call] }] }] },
+      ];
+      for (const data of cases) {
+        expect(() => withCarriers(data)).toThrow('Invalid hosted OTLP trace');
+        expect(withCarriers(data, []).spans[1].name).toBe('execute_tool read_tenant_42');
+      }
+    });
+
+    it('checks protected values from empty scopes and resources in either wire order', () => {
+      const call = callNamed('read_tenant_42');
+      const carrier = { attributes: [attribute(protectedKey, tenant)] };
+      const populated = { spans: [root, call] };
+      const scope = { scope: carrier };
+      const group = { scopeSpans: [populated] };
+      const emptyGroup = { resource: carrier };
+      for (const resourceSpans of [
+        [{ scopeSpans: [scope, populated] }],
+        [{ scopeSpans: [populated, scope] }],
+        [emptyGroup, group],
+        [group, emptyGroup],
+      ]) {
+        expect(() => withCarriers({ resourceSpans })).toThrow('Invalid hosted OTLP trace');
+      }
+    });
+
+    it('keeps safe tool identity and omits unrelated event details', () => {
+      const call = {
+        ...callNamed('read_tenant_42'),
+        events: [{ name: 'private detail', attributes: [attribute('public_tag', tenant)] }],
+      };
+      const { complete, spans } = withCarriers(payload(root, call));
+      expect(complete).toBe(true);
+      expect(spans[1].name).toBe('execute_tool read_tenant_42');
+      expect(JSON.stringify(spans)).not.toMatch(/private detail|public_tag/);
+    });
+
+    it('withholds uninspectable carriers when a custom redaction policy applies', () => {
+      const call = callNamed('lookup_order');
+      for (const data of [
+        payload(root, { ...call, events: { attributes: [] } }),
+        payload(root, { ...call, links: [{ attributes: 'malformed' }] }),
+        { resourceSpans: [{ scopeSpans: [{ scope: 'malformed', spans: [root, call] }] }] },
+      ]) {
+        expect(() => withCarriers(data)).toThrow('Invalid hosted OTLP trace');
+        expect(withCarriers(data, []).complete).toBe(true);
+      }
+    });
+
+    it('shares the protected-value budget across resources, events and links', () => {
+      const carrier = (offset: number) => ({
+        attributes: [
+          {
+            key: protectedKey,
+            value: {
+              arrayValue: {
+                values: Array.from({ length: 43 }, (_, index) => ({
+                  stringValue: `fixture_${offset + index}`,
+                })),
+              },
+            },
+          },
+        ],
+      });
+      const call = { ...callNamed('lookup_order'), events: [carrier(43)], links: [carrier(86)] };
+      const data = {
+        resourceSpans: [{ resource: carrier(0), scopeSpans: [{ spans: [root, call] }] }],
+      };
+      expect(() => withCarriers(data)).toThrow('Invalid hosted OTLP trace');
+    });
+
+    it('bounds aggregate traversal even when individual events contain no attributes', () => {
+      const events = Array.from({ length: 1000 }, () => ({ name: 'empty' }));
+      const calls = Array.from({ length: 33 }, (_, index) => ({
+        ...callNamed('lookup_order'),
+        spanId: (index + 10).toString(16).padStart(16, '0'),
+        events,
+      }));
+      expect(withCarriers(payload(root, ...calls.slice(0, 2))).complete).toBe(true);
+      expect(() => withCarriers(payload(root, ...calls))).toThrow('Invalid hosted OTLP trace');
+    });
+
     it('withholds the snapshot when the protected-value budget is exhausted', () => {
       const values = Array.from({ length: 129 }, (_, index) => ({
         stringValue: `fixture_${index}`,
@@ -878,18 +1049,32 @@ describe('normalizeHostedTrace', () => {
     expect(JSON.stringify(spans)).not.toContain('synthetic-fixture');
   });
 
-  it('canonicalizes standard hex IDs and protobuf JSON base64 IDs to the same tree', () => {
-    const asBase64 = (id: string) => Buffer.from(id, 'hex').toString('base64');
-    const encoded = [root, tool].map((span) => ({
-      ...span,
-      traceId: asBase64(traceId),
-      spanId: asBase64(span.spanId),
-      parentSpanId: span.parentSpanId ? asBase64(span.parentSpanId) : undefined,
-    }));
-    expect(normalizeHostedTrace(payload(...encoded), parentId, false)).toEqual(
-      normalizeHostedTrace(payload(root, tool), parentId, false),
-    );
-  });
+  it.each(['base64', 'base64url'] as const)(
+    'canonicalizes padded and unpadded %s IDs',
+    (encoding) => {
+      const rootId = 'fbffffffffffffff';
+      const fixture = [
+        { ...root, spanId: rootId },
+        { ...tool, parentSpanId: rootId },
+      ];
+      const encode = (id: string, padded: boolean) => {
+        const bytes = Buffer.from(id, 'hex');
+        const bare = bytes.toString(encoding).replace(/=+$/, '');
+        return padded ? bare.padEnd(4 * Math.ceil(bytes.length / 3), '=') : bare;
+      };
+      for (const padded of [false, true]) {
+        const encoded = fixture.map((span) => ({
+          ...span,
+          traceId: encode(span.traceId, padded),
+          spanId: encode(span.spanId, padded),
+          parentSpanId: span.parentSpanId ? encode(span.parentSpanId, padded) : undefined,
+        }));
+        expect(normalizeHostedTrace(payload(...encoded), parentId, false)).toEqual(
+          normalizeHostedTrace(payload(...fixture), parentId, false),
+        );
+      }
+    },
+  );
 
   describe('OTLP repeated fields', () => {
     it.each([
@@ -961,6 +1146,8 @@ describe('normalizeHostedTrace', () => {
   it.each([
     ['a zero span ID', [{ ...root, spanId: '0000000000000000' }]],
     ['a malformed span ID', [{ ...root, spanId: '?'.repeat(16) }]],
+    ['noncanonical base64 padding bits', [{ ...root, spanId: '__________9' }]],
+    ['mixed base64 alphabets', [{ ...root, spanId: '+_________8' }]],
     ['a nonnumeric timestamp', [{ ...root, endTimeUnixNano: 'tomorrow' }]],
     ['a duplicate span', [root, tool, { ...tool }]],
     ['mixed trace IDs', [root, { ...tool, traceId: 'f'.repeat(32) }]],

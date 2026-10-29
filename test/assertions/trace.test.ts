@@ -415,6 +415,49 @@ describe('trace assertions', () => {
       await expect(check(1, true)).resolves.toMatchObject({ pass: true });
     });
 
+    it('grades hosted duration across all possible tool argument matches', async () => {
+      const args = { query: 'ledger' };
+      const fast = tool('fast', args);
+      const maybeFast = tool('maybe-fast', args, true);
+      const slow = { ...tool('slow', args), endTime: 1200 };
+      const maybeSlow = { ...tool('maybe-slow', args, true), endTime: 1200 };
+      const otherSlow = { ...tool('other-slow', { query: 'other' }), endTime: 1200 };
+      const check = (calls: TraceSpan[], inverse = false, percentile?: number) =>
+        grade(
+          {
+            type: inverse ? 'not-trace-span-duration' : 'trace-span-duration',
+            value: {
+              pattern: 'execute_tool *',
+              attributes: { 'tool.arguments': JSON.stringify(args) },
+              max: 100,
+              percentile,
+            },
+          },
+          { ...incomplete, spanCount: calls.length },
+          calls,
+        );
+
+      await expect(check([fast, maybeFast, otherSlow])).resolves.toMatchObject({ pass: true });
+      await expect(check([slow, maybeFast], true)).resolves.toMatchObject({ pass: true });
+      // An empty selection satisfies the duration ceiling, as does a single fast match.
+      await expect(check([otherSlow])).resolves.toMatchObject({ pass: true });
+      await expect(check([maybeFast])).resolves.toMatchObject({ pass: true });
+      for (const inverse of [false, true]) {
+        await expect(check([maybeSlow], inverse)).resolves.toMatchObject({ pass: false });
+        await expect(check([fast, maybeSlow], inverse)).resolves.toMatchObject({ pass: false });
+      }
+
+      // Nearest rank needs two fast matches at p50 and three at p51 if all four tools matched.
+      const twoFast = [fast, tool('fast-2', args), slow, maybeSlow];
+      await expect(check(twoFast, false, 50)).resolves.toMatchObject({ pass: true });
+      const twoSlow = [fast, slow, { ...slow, spanId: 'slow-2' }, maybeFast];
+      await expect(check(twoSlow, true, 51)).resolves.toMatchObject({ pass: true });
+      for (const inverse of [false, true]) {
+        await expect(check(twoFast, inverse, 51)).resolves.toMatchObject({ pass: false });
+        await expect(check(twoSlow, inverse, 50)).resolves.toMatchObject({ pass: false });
+      }
+    });
+
     it('distinguishes an open test-case root from an unknown missing local ancestor', async () => {
       const call = tool('lookup');
       call.attributes!['gen_ai.tool.name'] = 'lookup';
@@ -1210,6 +1253,30 @@ describe('trace assertions', () => {
           [replayed],
         ),
       ).resolves.toMatchObject({ pass: false });
+    });
+
+    it('credits a witnessed tool-use minimum when another call has redacted arguments', async () => {
+      const calls = [tool('shell', { cmd: 'cat receipt.txt' }), tool('lookup', undefined, true)];
+      const check = (
+        bounds: { min?: number; max?: number },
+        status = 'imported',
+        inverse = false,
+      ) =>
+        grade(
+          {
+            type: inverse ? 'not-trajectory:tool-used' : 'trajectory:tool-used',
+            value: { type: 'command', name: 'cat', ...bounds },
+          },
+          { ...incomplete, status, spanCount: calls.length },
+          calls,
+        );
+      for (const status of ['imported', 'partial']) {
+        await expect(check({ min: 1 }, status)).resolves.toMatchObject({ pass: true });
+        await expect(check({}, status)).resolves.toMatchObject({ pass: true });
+        await expect(check({ min: 2 }, status)).resolves.toMatchObject({ pass: false });
+        await expect(check({ max: 1 }, status)).resolves.toMatchObject({ pass: false });
+        await expect(check({ min: 2 }, status, true)).resolves.toMatchObject({ pass: false });
+      }
     });
 
     it('an observed command establishes a positive lower bound despite missing arguments elsewhere', async () => {

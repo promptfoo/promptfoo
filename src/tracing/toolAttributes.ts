@@ -6,8 +6,6 @@ type ToolAttributeFamily = {
   extraArgKeys?: readonly string[];
 };
 
-export const HOSTED_START_TIME_OFFSET_NS = 'promptfoo.openai.start_time_offset_ns';
-
 export const COMMAND_ATTRIBUTE_KEYS = [
   'codex.command',
   'command',

@@ -13,10 +13,8 @@ import {
   HOSTED_CHAT_MODEL_ABSENT,
   hasUncertainHostedChatName,
 } from '../../tracing/spanFilter';
-import {
-  getNormalizedToolAttributes,
-  HOSTED_START_TIME_OFFSET_NS,
-} from '../../tracing/toolAttributes';
+import { HOSTED_DURATION_NS, HOSTED_START_TIME_OFFSET_NS } from '../../tracing/spanTiming';
+import { getNormalizedToolAttributes } from '../../tracing/toolAttributes';
 import { isCredentialHeader, isSecretEnvVarName } from '../../util/sanitizer';
 import {
   hasRecognizableOpenAiCredential,
@@ -170,7 +168,13 @@ function isComplete(wire: z.infer<typeof wireSpan>): boolean {
     invalid();
   }
   try {
-    const info = completion.parse(JSON.parse(value));
+    const parsed = JSON.parse(value);
+    // A duplicate status or issue list disappears during JSON.parse. Verify the
+    // source before granting evidence for the absence of any calls.
+    if (!roundTrips(value, parsed, { argumentValuesLeft: MAX_TRACE_ARGUMENT_VALUES })) {
+      invalid();
+    }
+    const info = completion.parse(parsed);
     return (
       info.status === 'complete' &&
       info.missing_outputs?.length === 0 &&
@@ -186,12 +190,17 @@ function decodeId(value: string, bytes: number): string {
   if (value.length === bytes * 2 && /^[a-f\d]+$/i.test(value)) {
     return value.toLowerCase();
   }
-  if (value.length > 4 * Math.ceil(bytes / 3)) {
+  const paddedLength = 4 * Math.ceil(bytes / 3);
+  if (value.length > paddedLength) {
     invalid();
   }
   const decoded = Buffer.from(value, 'base64');
-  const canonical = decoded.toString('base64');
-  if (decoded.length !== bytes || (value !== canonical && value !== canonical.replace(/=+$/, ''))) {
+  const encoding = /[-_]/.test(value) ? 'base64url' : 'base64';
+  const canonical = decoded.toString(encoding).replace(/=+$/, '');
+  if (
+    decoded.length !== bytes ||
+    (value !== canonical && value !== canonical.padEnd(paddedLength, '='))
+  ) {
     invalid();
   }
   return decoded.toString('hex');
@@ -204,7 +213,7 @@ interface ImportPolicy {
   redact: Redact;
   redactAttributes: string[];
   echoesProtectedValue: (text: string) => boolean;
-  errorValueValidity: WeakMap<object, boolean>;
+  errorValues: WeakMap<object, { valid: boolean; httpStatus?: number }>;
   argumentBytesLeft: number;
   argumentValuesLeft: number;
 }
@@ -248,7 +257,11 @@ function reserveArgumentJson(raw: string, policy: ImportPolicy): boolean {
   return true;
 }
 
-function roundTrips(raw: string, value: unknown, policy: ImportPolicy): boolean {
+function roundTrips(
+  raw: string,
+  value: unknown,
+  policy: Pick<ImportPolicy, 'argumentValuesLeft'>,
+): boolean {
   let members = 0;
   let safeNumbers = true;
   const canonical = JSON.stringify(value, (_key, item) => {
@@ -288,15 +301,9 @@ function roundTrips(raw: string, value: unknown, policy: ImportPolicy): boolean 
   return members === 0;
 }
 
-// Collect leaves before projecting any span. A resource, or a later span, can supply
-// the value echoed in a tool name. Protobuf field names and JSON object keys are labels.
-function protectedEchoMatcher(
-  records: {
-    wire: z.infer<typeof wireSpan>;
-    resource: { attributes: ReturnType<typeof attributeMap> };
-  }[],
-  policy: ImportPolicy,
-) {
+// Collect leaves from every OTLP attribute carrier before projecting any span.
+// Protobuf field names and JSON object keys are labels, not protected values.
+function protectedEchoMatcher(policy: ImportPolicy) {
   const needles = new Set<string>();
   const jsonBudget = { ...policy };
   let nodesLeft = 32_768;
@@ -370,7 +377,7 @@ function protectedEchoMatcher(
       }
     }
   }
-  function collect(key: string, value: WireValue) {
+  function collectAttribute(key: string, value: WireValue) {
     const args = key === 'gen_ai.tool.call.arguments';
     const hidden = protectedKey(key) || (args && protectedKey('tool.arguments'));
     if (!isValidWireValue(value)) {
@@ -393,19 +400,21 @@ function protectedEchoMatcher(
       }
     }
   }
-  const resources = new Set<ReturnType<typeof attributeMap>>();
-  for (const { wire, resource } of records) {
-    if (!resources.has(resource.attributes)) {
-      resources.add(resource.attributes);
-      for (const [key, value] of resource.attributes) {
-        collect(key, value);
-      }
-    }
-    for (const { key, value } of wire.attributes ?? []) {
-      collect(key, value);
+  function collect(attributes: z.infer<typeof attributeList> | undefined) {
+    visit(0); // Charge empty carriers too.
+    for (const { key, value } of attributes ?? []) {
+      collectAttribute(key, value);
     }
   }
-  return (text: string) => {
+  function collectSpan(span: unknown, attributes: z.infer<typeof attributeList> | undefined) {
+    collect(attributes);
+    for (const key of ['events', 'links']) {
+      for (const carrier of collection(span, key)) {
+        collect(readAttributes(carrier).attributes);
+      }
+    }
+  }
+  function matches(text: string) {
     chargeSearch(text, needles.size);
     for (const needle of needles) {
       if (text.includes(needle)) {
@@ -413,7 +422,8 @@ function protectedEchoMatcher(
       }
     }
     return false;
-  };
+  }
+  return { collect, collectSpan, matches };
 }
 
 // Tool and model identifiers may be namespaced with a colon. A credential-named
@@ -526,16 +536,19 @@ function canCaptureField(key: string, value: unknown, policy: ImportPolicy): boo
   } else {
     return false;
   }
-  return (
-    allowed &&
-    (Array.isArray(value) ? value : [value]).every((item) => {
-      const text = String(item);
-      return (
-        !policy.echoesProtectedValue(text) &&
-        policy.redact(text) === text &&
-        !hasSensitiveOpenAiCacheString(text)
-      );
-    })
+  if (!allowed) {
+    return false;
+  }
+  const texts = Array.isArray(value) ? value.map(String) : [String(value)];
+  // An auth scheme and its value can occupy distinct words of one inspection command.
+  if (Array.isArray(value) && (key === 'cmd' || key === 'command')) {
+    texts.push(texts.join(' '));
+  }
+  return texts.every(
+    (text) =>
+      !policy.echoesProtectedValue(text) &&
+      policy.redact(text) === text &&
+      !hasSensitiveOpenAiCacheString(text),
   );
 }
 
@@ -706,6 +719,7 @@ function normalizeSpan(
   let name: string = operation;
   const attributes: Record<string, unknown> = {
     'promptfoo.openai.hosted_trace': policy.parentSpanId,
+    [HOSTED_DURATION_NS]: (end - start).toString(),
     'gen_ai.provider.name': 'openai',
     'gen_ai.operation.name': operation,
   };
@@ -758,12 +772,12 @@ function normalizeSpan(
       return undefined;
     }
     // Every span in a resource can inherit the same compound diagnostic.
-    let valid = policy.errorValueValidity.get(value);
-    if (valid === undefined) {
-      valid = isValidWireValue(value);
-      policy.errorValueValidity.set(value, valid);
+    let checked = policy.errorValues.get(value);
+    if (!checked) {
+      checked = { valid: isValidWireValue(value) };
+      policy.errorValues.set(value, checked);
     }
-    if (!valid) {
+    if (!checked.valid) {
       validErrorAttributes = false;
       return undefined;
     }
@@ -771,14 +785,19 @@ function normalizeSpan(
       // A compound HTTP status cannot establish a numeric status code.
       return invalid();
     }
-    return (
+    const scalar =
       value.stringValue ??
       value.boolValue ??
       value.doubleValue ??
       (value.intValue === undefined
         ? (value.kvlistValue ?? value.arrayValue)
-        : Number(value.intValue))
-    );
+        : Number(value.intValue));
+    // Number() can scan arbitrarily long string spellings of an inherited status.
+    if (key === 'http.status_code') {
+      checked.httpStatus ??= Number(scalar);
+      return checked.httpStatus;
+    }
+    return scalar;
   });
   if (!protectsKey([HOSTED_ERROR_STATUS_COMPLETE], policy)) {
     attributes[HOSTED_ERROR_STATUS_COMPLETE] =
@@ -827,11 +846,15 @@ function validateTree(nodes: Map<string, SpanData>): void {
   }
 }
 
-function collection(value: unknown, key: string): unknown[] {
+function wireField(value: unknown, key: string): unknown {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     invalid();
   }
-  const list = Reflect.get(value, key);
+  return Reflect.get(value, key);
+}
+
+function collection(value: unknown, key: string): unknown[] {
+  const list = wireField(value, key);
   // ProtoJSON omits empty repeated fields, including the span list in an empty scope.
   if (list === undefined) {
     return [];
@@ -842,25 +865,25 @@ function collection(value: unknown, key: string): unknown[] {
   return list;
 }
 
-function* readSpans(otlp: unknown) {
+function readAttributes(source: unknown) {
+  collection(source, 'attributes');
+  const parsed = wireAttributes.safeParse(source);
+  return parsed.success ? parsed.data : invalid();
+}
+
+function* readSpans(otlp: unknown, echoes?: ReturnType<typeof protectedEchoMatcher>) {
   // Bound collections before schema validation; malformed entries must not cause an
   // unbounded allocation of validation errors for a large but byte-limited response.
   let count = 0;
   for (const group of collection(otlp, 'resourceSpans')) {
-    const data =
-      group && typeof group === 'object' && 'resource' in group ? group.resource : undefined;
-    if (data && typeof data === 'object' && 'attributes' in data) {
-      collection(data, 'attributes');
-    }
-    const parsedResource = wireAttributes.safeParse(data ?? {});
-    if (!parsedResource.success) {
-      invalid();
-    }
+    const parsedResource = readAttributes(wireField(group, 'resource') ?? {});
+    echoes?.collect(parsedResource.attributes);
     const resource = {
-      attributes: attributeMap(parsedResource.data.attributes),
-      dropped: !!parsedResource.data.droppedAttributesCount,
+      attributes: attributeMap(parsedResource.attributes),
+      dropped: !!parsedResource.droppedAttributesCount,
     };
     for (const scope of collection(group, 'scopeSpans')) {
+      echoes?.collect(readAttributes(wireField(scope, 'scope') ?? {}).attributes);
       for (const value of collection(scope, 'spans')) {
         if (++count > MAX_SPANS || !value || typeof value !== 'object') {
           invalid();
@@ -872,6 +895,7 @@ function* readSpans(otlp: unknown) {
         if (!parsed.success) {
           invalid();
         }
+        echoes?.collectSpan(value, parsed.data.attributes);
         yield { wire: parsed.data, resource };
       }
     }
@@ -896,7 +920,7 @@ export function normalizeHostedTrace(
     argumentValuesLeft: MAX_TRACE_ARGUMENT_VALUES,
     redact,
     echoesProtectedValue: () => false,
-    errorValueValidity: new WeakMap(),
+    errorValues: new WeakMap(),
     redactAttributes: [
       ...traceRedactAttributes,
       ...(cliState.requestTracingConfig?.otlp?.http?.redactAttributes ?? []),
@@ -907,10 +931,11 @@ export function normalizeHostedTrace(
   const nodes = new Map<string, SpanData>();
   let nativeTraceId: string | undefined;
   let complete = false;
-  const source = readSpans(otlp);
-  const records = policy.redactAttributes.length ? [...source] : source;
-  if (Array.isArray(records)) {
-    policy.echoesProtectedValue = protectedEchoMatcher(records, policy);
+  const echoes = policy.redactAttributes.length ? protectedEchoMatcher(policy) : undefined;
+  const source = readSpans(otlp, echoes);
+  const records = echoes ? [...source] : source;
+  if (echoes) {
+    policy.echoesProtectedValue = echoes.matches;
   }
   for (const { wire, resource } of records) {
     const traceId = decodeId(wire.traceId, 16);
