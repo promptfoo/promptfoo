@@ -67,7 +67,7 @@ promptfoo eval \
  -c /data/promptfooconfig.yaml \
  --prompts "/data/prompts/**/*.json" \
  --output /tmp/pf-results.json \
- --share --fail-on-error
+ --share
 cat /tmp/pf-results.json
 ```
 

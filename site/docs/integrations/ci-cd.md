@@ -111,8 +111,8 @@ SonarQube integration is available in [Promptfoo Enterprise](/docs/enterprise/).
 Fail the build when quality thresholds aren't met:
 
 ```bash
-# Fail on any test failures
-npx promptfoo@latest eval --fail-on-error
+# Fail on any test failure (exit code 100)
+npx promptfoo@latest eval
 
 # Custom threshold checking
 npx promptfoo@latest eval -o results.json
