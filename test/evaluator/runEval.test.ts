@@ -797,6 +797,31 @@ describe('runEval', () => {
     expect(registers).toHaveProperty('myOutput', 'Test output');
   });
 
+  it.each([0, false, ''])(
+    'preserves falsy provider output in evaluation state: %j',
+    async (output) => {
+      const provider: ApiProvider = {
+        id: () => 'falsy-output-provider',
+        callApi: vi.fn().mockResolvedValue({ output }),
+      };
+      const conversations = {} as Record<string, any>;
+      const registers = {};
+
+      const [result] = await runEval({
+        ...defaultOptions,
+        provider,
+        prompt: { raw: 'Test prompt', label: 'test-label' },
+        test: { options: { storeOutputAs: 'myOutput' } },
+        conversations,
+        registers,
+      });
+
+      expect(result.success).toBe(true);
+      expect(registers).toHaveProperty('myOutput', output);
+      expect(Object.values(conversations)[0][0].output).toBe(output);
+    },
+  );
+
   it('should handle provider errors', async () => {
     const errorProvider: ApiProvider = {
       id: vi.fn().mockReturnValue('error-provider'),
