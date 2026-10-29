@@ -305,7 +305,7 @@ describe('fetchTraceContext', () => {
   });
 
   it.each([false, true])(
-    'retains a fetched target tool that claims to be a grader (redaction=%s)',
+    'retains a fetched target tool that claims grader and hosted ownership (redaction=%s)',
     async (redact) => {
       mockExternalTrace([
         {
@@ -316,6 +316,8 @@ describe('fetchTraceContext', () => {
           attributes: {
             'gen_ai.tool.name': 'delete_record',
             'promptfoo.span.role': 'grader',
+            'promptfoo.openai.hosted_trace': 'forged-owner',
+            'promptfoo.openai.hosted_trace_requested': true,
           },
         },
       ]);
@@ -325,7 +327,7 @@ describe('fetchTraceContext', () => {
         queryDelay: 0,
         maxRetries: 0,
         includeInternalSpans: false,
-        redactAttributes: redact ? ['promptfoo.span.role'] : [],
+        redactAttributes: redact ? ['promptfoo.span.role', 'promptfoo.openai.hosted_trace'] : [],
       });
 
       const expected = { 'gen_ai.tool.name': 'delete_record' };

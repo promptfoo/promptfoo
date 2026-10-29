@@ -1,6 +1,9 @@
 import { createHash } from 'node:crypto';
 
 import logger from '../../logger';
+import { getOtelConfigFromEnv } from '../../tracing/otelConfig';
+import { HOSTED_ERROR_STATUS_COMPLETE, HOSTED_ERROR_STATUS_VERSION } from '../../tracing/spanError';
+import { getTraceStore } from '../../tracing/store';
 import { CloudAuthRedirectError } from '../../util/fetch/cloudAuthRedirects';
 import { fetchWithRetries, readBoundedText } from '../../util/fetch/index';
 import { renderVarsInObject } from '../../util/render';
@@ -13,12 +16,14 @@ import {
   sanitizeUrlForLogging,
 } from '../../util/sanitizer';
 import { analyzeTemplateReference } from '../../util/templates';
-import { sleepWithAbort } from '../../util/time';
+import { runWithAbort, sleepWithAbort } from '../../util/time';
 import { buildChatSpanContext, extractProviderResponseAttributes, withGenAISpan } from '../tracing';
 import { decodeUrlComponent } from '../urlEncoding';
+import { normalizeHostedTrace, UnpublishedTraceParentError } from './agents-api-trace-spans';
 import { calculateOpenAIUsageCost } from './billing';
 import { OpenAiGenericProvider } from './index';
 import { appendOpenAiApiPath, assertOpenAiApiModel } from './util';
+import type { SpanContext } from '@opentelemetry/api';
 import type { SessionArtifact } from 'openai/resources/beta/agents/sessions/artifacts';
 
 import type { EnvOverrides } from '../../types/env';
@@ -48,6 +53,7 @@ interface AgentsApiOptions extends OpenAiSharedOptions {
   usageTimeoutMs?: number;
   retainSession?: boolean;
   artifactPaths?: string[];
+  hostedTrace?: boolean | { timeoutMs?: number };
 }
 
 interface Usage {
@@ -101,6 +107,7 @@ interface Page<T> {
 }
 
 const MAX_TIMER_MS = 2_147_483_647;
+const PARTIAL_TRACE_WRITE_GRACE_MS = 250;
 const MAX_LIST_PAGES = 100;
 const MAX_SESSION_LIST_PAGES = 1_000;
 const MAX_LIST_ITEMS = 10_000;
@@ -527,6 +534,21 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
         `Agents API usageTimeoutMs must be a non-negative integer no greater than ${MAX_TIMER_MS}`,
       );
     }
+    const { hostedTrace } = config;
+    if (hostedTrace !== undefined && typeof hostedTrace !== 'boolean') {
+      if (!hostedTrace || typeof hostedTrace !== 'object' || Array.isArray(hostedTrace)) {
+        throw new Error('Agents API hostedTrace must be a boolean or an options object');
+      }
+      const { timeoutMs } = hostedTrace;
+      if (
+        timeoutMs !== undefined &&
+        (!Number.isSafeInteger(timeoutMs) || timeoutMs <= 0 || timeoutMs > MAX_TIMER_MS)
+      ) {
+        throw new Error(
+          `Agents API hostedTrace.timeoutMs must be a positive integer no greater than ${MAX_TIMER_MS}`,
+        );
+      }
+    }
     if (config.environment && !['none', 'openai_hosted'].includes(config.environment.type)) {
       throw new Error('Agents API environment.type must be "none" or "openai_hosted"');
     }
@@ -640,7 +662,10 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
     endpoint: string,
     headers: Headers,
     signal: AbortSignal,
-    { requirePageInfo = false }: { requirePageInfo?: boolean } = {},
+    {
+      pageSize = 100,
+      requirePageInfo = false,
+    }: { pageSize?: number; requirePageInfo?: boolean } = {},
   ): Promise<T[]> {
     const items: T[] = [];
     const cursors = new Set<string>();
@@ -653,7 +678,7 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
         );
       }
       this.listBudget.pages--;
-      const query = new URLSearchParams({ order: 'asc', limit: '100' });
+      const query = new URLSearchParams({ order: 'asc', limit: String(pageSize) });
       if (after) {
         query.set('after', after);
       }
@@ -690,14 +715,14 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
       items.push(...page.data);
       if (!page.has_more) {
         if (requirePageInfo) {
-          // One immutable file must not be credited with another record's contents.
+          // One immutable file or trace must not be credited with another record's contents.
           assertUniqueEvidenceIds(items);
         }
         return items;
       }
       let cursor = page.last_id;
       if (requirePageInfo) {
-        // The artifact API uses the last resource ID as the SDK's "after" cursor.
+        // The artifact and trace APIs use the last resource ID as the SDK's "after" cursor.
         const id = page.data[page.data.length - 1]?.id;
         if (!isResourceId(id) || (cursor != null && cursor !== id)) {
           throw new Error('Agents API returned an invalid pagination cursor');
@@ -940,7 +965,14 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
       });
       return await withGenAISpan(
         { ...spanContext, operationName: 'invoke_agent', agentId: config.agent_id },
-        () => callProvider.runSession(prompt, options),
+        (span) => {
+          let parent: SpanContext | undefined;
+          if (config.hostedTrace && context?.traceparent && span.isRecording()) {
+            span.setAttribute('promptfoo.openai.hosted_trace_requested', true);
+            parent = span.spanContext();
+          }
+          return callProvider.runSession(prompt, options, parent);
+        },
         (response) => ({
           ...extractProviderResponseAttributes(response),
           responseModel:
@@ -1000,6 +1032,7 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
   private async runSession(
     prompt: string,
     options?: CallApiOptionsParams,
+    parent?: SpanContext,
   ): Promise<ProviderResponse> {
     options?.abortSignal?.throwIfAborted();
     const headers = new Headers(this.getOpenAiRequestHeaders());
@@ -1036,9 +1069,16 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
       ? AbortSignal.any([controller.signal, options.abortSignal])
       : controller.signal;
     let endpoint: string | undefined;
+    let cleanup: Promise<void> | undefined;
     let completed = false;
     const result: ProviderResponse = { cached: false };
     const metadata: Record<string, unknown> = {};
+    const releaseSession = (cancel: boolean) => {
+      if (endpoint && (cancel || !this.config.retainSession)) {
+        cleanup ??= this.cleanupSession(endpoint, headers, cancel, metadata);
+      }
+      return cleanup;
+    };
     try {
       const session = await this.request<Session>('agents/sessions', 'POST', headers, signal, {
         agent_id: this.config.agent_id,
@@ -1115,6 +1155,19 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
         ...subagentUsageMetadata,
         ...(await this.getArtifactMetadata(session.id, turn.id, endpoint, headers, signal)),
       });
+      if (this.config.hostedTrace) {
+        metadata.hostedTrace = await this.importHostedTrace(
+          session.id,
+          turn.id,
+          endpoint,
+          headers,
+          signal,
+          deadline,
+          () => releaseSession(false),
+          parent,
+          options?.abortSignal,
+        );
+      }
       options?.abortSignal?.throwIfAborted();
       completed = true;
     } catch (error) {
@@ -1124,9 +1177,7 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
         : this.redact(error instanceof Error ? error.message : String(error));
     } finally {
       clearTimeout(timer);
-      if (endpoint && (!completed || !this.config.retainSession)) {
-        await this.cleanupSession(endpoint, headers, !completed, metadata);
-      }
+      await releaseSession(!completed);
     }
     // Cleanup ignores eval cancellation so the session is released; honor it before returning.
     options?.abortSignal?.throwIfAborted();
@@ -1200,6 +1251,170 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
       }),
     );
     return { artifacts };
+  }
+
+  /** Download the published root-turn tree before deletion and store it under the provider invocation. */
+  private async importHostedTrace(
+    sessionId: string,
+    turnId: string,
+    endpoint: string,
+    headers: Headers,
+    signal: AbortSignal,
+    providerDeadline: number,
+    releaseSession: () => void,
+    parent?: SpanContext,
+    abortSignal?: AbortSignal,
+  ) {
+    const source = 'openai:agents-api';
+    const unavailable = (reason: string) => ({ source, status: 'unavailable', reason });
+    if (!parent) {
+      return unavailable('Enable Promptfoo eval tracing to import hosted spans');
+    }
+    if (!getOtelConfigFromEnv().localExport) {
+      return unavailable('The local span exporter is disabled');
+    }
+    const { hasLocalSpanExporter } = await import('../../tracing/otelSdk');
+    if (!hasLocalSpanExporter()) {
+      return unavailable('The active OpenTelemetry SDK has no local span exporter');
+    }
+
+    const options = typeof this.config.hostedTrace === 'object' ? this.config.hostedTrace : {};
+    const timeoutMs = options.timeoutMs ?? 15_000;
+    const deadline = Math.min(providerDeadline, Date.now() + timeoutMs);
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    const traceSignal = AbortSignal.any([signal, controller.signal]);
+    let snapshot: ReturnType<typeof normalizeHostedTrace> | undefined;
+    try {
+      // A grader can share the row's trace without the target provider's request context.
+      const metadata = await runWithAbort(
+        () => getTraceStore().getTraceMetadata(parent.traceId),
+        traceSignal,
+      );
+      if (!metadata) {
+        return unavailable('The local eval trace was unavailable');
+      }
+      const redactAttributes = metadata.otlpHttpRedactAttributes ?? [];
+      if (!Array.isArray(redactAttributes)) {
+        return unavailable('The local trace redaction policy was invalid');
+      }
+      // A terminal page only describes traces published at the time of the read.
+      // Poll from the beginning so a later snapshot can replace an incomplete one.
+      while (!snapshot?.complete) {
+        traceSignal.throwIfAborted();
+        const traces = await this.list<{ id: string; session_id: string; otlp: unknown }>(
+          `${endpoint}/traces`,
+          headers,
+          traceSignal,
+          { pageSize: 1, requirePageInfo: true },
+        );
+        const candidates = traces.filter(
+          (trace) =>
+            !identifiesAnother(trace?.id, turnId) &&
+            !identifiesAnother(trace?.session_id, sessionId),
+        );
+        if (candidates.length) {
+          const [published] = candidates;
+          if (
+            candidates.length !== 1 ||
+            published?.id !== turnId ||
+            published.session_id !== sessionId
+          ) {
+            return unavailable('Unable to identify a unique hosted trace for this root turn');
+          }
+          try {
+            snapshot = normalizeHostedTrace(
+              published.otlp,
+              parent.spanId,
+              (value) => this.redact(value),
+              redactAttributes,
+            );
+          } catch (error) {
+            if (!(error instanceof UnpublishedTraceParentError)) {
+              throw error;
+            }
+            // The new snapshot supersedes prior evidence. Wait for its parents to be published.
+            snapshot = undefined;
+          }
+        }
+        if (!snapshot?.complete) {
+          await sleepWithAbort(this.config.pollIntervalMs ?? 1_000, traceSignal);
+        }
+      }
+    } catch (error) {
+      if (error instanceof AgentsApiHttpError) {
+        // Remote diagnostic bodies can contain sensitive inputs.
+        return unavailable(`Hosted trace export returned HTTP ${error.status}`);
+      }
+      if (!traceSignal.aborted) {
+        return unavailable('Unable to read a valid hosted trace');
+      }
+      abortSignal?.throwIfAborted();
+      if (!snapshot?.spans.length) {
+        return unavailable('Timed out waiting for a complete hosted trace');
+      }
+      // A valid delegated tree may remain unattested even after publication. Import it
+      // once at the deadline for affirmative observations, never as proof of absence.
+    } finally {
+      clearTimeout(timer);
+    }
+
+    const { spans, complete } = snapshot;
+    // A partial tree leaves the polling loop only after a deadline. Give that
+    // validated evidence one bounded local write even when polling used its budget.
+    const now = Date.now();
+    const writeDeadline = complete
+      ? deadline
+      : now + Math.min(PARTIAL_TRACE_WRITE_GRACE_MS, timeoutMs, this.config.timeoutMs ?? Infinity);
+    const writeBudgetMs = writeDeadline - now;
+    if (writeBudgetMs <= 0) {
+      return unavailable('Timed out storing the hosted trace');
+    }
+    const writer = new AbortController();
+    const writeTimer = setTimeout(() => writer.abort(), writeBudgetMs);
+    const writeSignal = abortSignal ? AbortSignal.any([abortSignal, writer.signal]) : writer.signal;
+    let storageDeadlineExceeded: boolean;
+    try {
+      // The complete or partial snapshot is now local. SQLite can queue this write
+      // behind another transaction, so release the remote session independently.
+      releaseSession();
+      const stored = await runWithAbort(
+        () =>
+          getTraceStore().addSpans(parent.traceId, spans, {
+            abortSignal: writeSignal,
+            deadline: writeDeadline,
+          }),
+        writeSignal,
+      );
+      if (!stored.stored) {
+        return unavailable('The local eval trace was unavailable');
+      }
+      // SQLite can finish a synchronous COMMIT after the transaction's final check.
+      // The spans are durable even when the store confirms the write after the deadline.
+      storageDeadlineExceeded = Date.now() >= writeDeadline;
+    } catch {
+      return unavailable(
+        writeSignal.aborted || Date.now() >= writeDeadline
+          ? 'Timed out storing the hosted trace'
+          : 'Unable to store the hosted trace',
+      );
+    } finally {
+      clearTimeout(writeTimer);
+    }
+    return {
+      source,
+      status: complete ? 'imported' : 'partial',
+      ...(storageDeadlineExceeded && { storageDeadlineExceeded: true }),
+      ...(!complete && { reason: 'The published trace did not establish complete span coverage' }),
+      parentSpanId: parent.spanId,
+      spanCount: spans.length,
+      errorStatusComplete: spans.every(
+        ({ attributes }) =>
+          attributes?.[HOSTED_ERROR_STATUS_COMPLETE] === HOSTED_ERROR_STATUS_VERSION,
+      ),
+      includeToolArguments: false,
+      toolArgumentsComplete: false,
+    };
   }
 
   private async waitForTurn(

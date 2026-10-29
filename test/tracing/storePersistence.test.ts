@@ -337,6 +337,40 @@ describe('TraceStore span persistence', () => {
     expect(spans.map((span) => span.name)).toEqual(['chat gpt-4.1-mini', 'execute_tool search']);
   });
 
+  it('withholds hosted tools from target-only reads until their local owners are stored', async () => {
+    const traceId = 'delayed-hosted-owners';
+    const traceStore = await createTrace(traceId);
+    await traceStore.addSpans(
+      traceId,
+      ['target', 'grader'].map((owner) => ({
+        spanId: owner + '-tool',
+        parentSpanId: owner,
+        name: 'execute_tool ' + owner,
+        startTime: 2,
+        attributes: { 'promptfoo.openai.hosted_trace': owner, 'gen_ai.tool.name': owner },
+      })),
+    );
+    const options = { includeInternalSpans: false };
+    await expect(traceStore.getSpans(traceId, options)).resolves.toEqual([]);
+    await expect(
+      traceStore.getSpans(traceId, { ...options, spanFilter: ['*tool*'] }),
+    ).resolves.toEqual([]);
+    await expect(traceStore.getSpans(traceId)).resolves.toHaveLength(2);
+
+    await traceStore.addSpans(
+      traceId,
+      ['target', 'grader'].map((role) => ({
+        spanId: role,
+        name: 'invoke_agent',
+        startTime: 1,
+        attributes: { 'promptfoo.span.role': role },
+      })),
+    );
+    await expect(
+      traceStore.getSpans(traceId, { ...options, spanFilter: ['*tool*'] }),
+    ).resolves.toEqual([expect.objectContaining({ spanId: 'target-tool' })]);
+  });
+
   it('excludes descendants of grading spans even when external SDKs omit role attributes', async () => {
     const traceStore = await createTrace('grader-descendants');
     await traceStore.addSpans('grader-descendants', [
