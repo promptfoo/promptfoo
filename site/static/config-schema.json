@@ -195,6 +195,18 @@
         "ANTHROPIC_CUSTOM_HEADERS": {
           "type": "string"
         },
+        "ANTHROPIC_OPEN_TELEMETRY": {
+          "type": "string"
+        },
+        "ANTHROPIC_OPEN_TELEMETRY_PROPAGATION": {
+          "type": "string"
+        },
+        "ANTHROPIC_OPEN_TELEMETRY_TRACES_CONTENT_MODE": {
+          "type": "string"
+        },
+        "ANTHROPIC_OPEN_TELEMETRY_TRACES_MAX_CONTENT_BYTES": {
+          "type": "string"
+        },
         "ANTHROPIC_TEMPERATURE": {
           "type": "string"
         },

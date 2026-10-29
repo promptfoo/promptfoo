@@ -104,6 +104,41 @@ function parseAnthropicCustomHeaders(value: string | undefined): Record<string, 
   return headers;
 }
 
+/** The W3C trace context headers, which the Claude API reads. */
+export const TRACE_CONTEXT_HEADERS = new Set(['traceparent', 'tracestate']);
+
+function hasHeader(headers: Record<string, unknown> | undefined, names: Set<string>): boolean {
+  return Object.keys(headers ?? {}).some((name) => names.has(name.toLowerCase()));
+}
+
+/**
+ * A fetch that sends only the `baggage` the config sets. With its spans on, the SDK writes trace
+ * headers with the application's registered propagator, which can add the application's baggage
+ * or replace the config's; Anthropic reads only W3C trace context, so that never needs to leave
+ * the process.
+ */
+function withConfiguredBaggage(
+  configured: string | undefined,
+): NonNullable<ClientOptions['fetch']> {
+  return (input, init) => {
+    const headers = new Headers(init?.headers);
+    if (configured === undefined) {
+      headers.delete('baggage');
+    } else {
+      headers.set('baggage', configured);
+    }
+    return globalThis.fetch(input, { ...init, headers });
+  };
+}
+
+function getHeaderValue(
+  headers: Record<string, string | null | undefined> | undefined,
+  name: string,
+): string | undefined {
+  const entry = Object.entries(headers ?? {}).find(([key]) => key.toLowerCase() === name);
+  return entry?.[1] ?? undefined;
+}
+
 /** A config value as `true`, `false`, an options object, or unset; templated booleans are strings. */
 function normalizeOpenTelemetryOption(
   option: unknown,
@@ -132,13 +167,22 @@ function normalizeOpenTelemetryOption(
 function resolveOpenTelemetry(
   option: unknown,
   env: EnvOverrides | undefined,
-): { client: ClientOptions['openTelemetry']; propagatesTraceContext: boolean } {
+  headers: Record<string, unknown> | undefined,
+): {
+  client: ClientOptions['openTelemetry'];
+  propagatesTraceContext: boolean;
+  sdkSpans: boolean;
+} {
   const read = (key: EnvVarKey) =>
     (getProviderEnvString(env, key) ?? getEnvString(key))?.trim().toLowerCase();
   const propagation = read('ANTHROPIC_OPEN_TELEMETRY_PROPAGATION') !== 'false';
   const value = normalizeOpenTelemetryOption(option);
   if (value === undefined || value === false) {
-    return { client: false, propagatesTraceContext: value === undefined && propagation };
+    return {
+      client: false,
+      propagatesTraceContext: value === undefined && propagation,
+      sdkSpans: false,
+    };
   }
 
   let client: Exclude<ClientOptions['openTelemetry'], false | undefined>;
@@ -162,7 +206,16 @@ function resolveOpenTelemetry(
   }
   const { traces } = client;
   const spans = traces !== false && (typeof traces !== 'object' || traces.enabled !== false);
-  return { client, propagatesTraceContext: !spans && client.propagation !== false };
+  // The SDK replaces trace context headers with its own span's; the config's win, as they do
+  // when promptfoo sends trace context, and the SDK still records its spans.
+  if (spans && hasHeader(headers, TRACE_CONTEXT_HEADERS)) {
+    client = { ...client, propagation: false };
+  }
+  return {
+    client,
+    propagatesTraceContext: !spans && client.propagation !== false,
+    sdkSpans: spans,
+  };
 }
 
 function setCaseInsensitiveHeaderValue(
@@ -374,7 +427,11 @@ export class AnthropicGenericProvider implements ApiProvider {
       setCaseInsensitiveHeaderValue(clientDefaultHeaders, 'authorization', `Bearer ${authToken}`);
     }
 
-    const openTelemetry = resolveOpenTelemetry(this.config.openTelemetry, this.env);
+    const openTelemetry = resolveOpenTelemetry(
+      this.config.openTelemetry,
+      this.env,
+      this.config.headers,
+    );
     this.propagatesTraceContext = openTelemetry.propagatesTraceContext;
     this.anthropic = new Anthropic(
       this.buildAnthropicClientOptions({
@@ -382,6 +439,14 @@ export class AnthropicGenericProvider implements ApiProvider {
         authToken: authToken ?? null,
         baseURL: this.getApiBaseUrl(),
         openTelemetry: openTelemetry.client,
+        ...(openTelemetry.sdkSpans
+          ? {
+              fetch: withConfiguredBaggage(
+                getHeaderValue(this.config.headers, 'baggage') ??
+                  getHeaderValue(clientDefaultHeaders, 'baggage'),
+              ),
+            }
+          : {}),
         ...(Object.keys(clientDefaultHeaders).length > 0
           ? { defaultHeaders: clientDefaultHeaders }
           : {}),

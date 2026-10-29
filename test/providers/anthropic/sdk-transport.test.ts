@@ -10,6 +10,7 @@ import {
 } from '@opentelemetry/sdk-trace-node';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { clearCache } from '../../../src/cache';
+import { AnthropicLlmRubricProvider } from '../../../src/providers/anthropic/defaults';
 import { AnthropicMessagesProvider } from '../../../src/providers/anthropic/messages';
 import { mockProcessEnv } from '../../util/utils';
 
@@ -195,6 +196,26 @@ describe('Anthropic Messages SDK transport', () => {
     return { chatSpan, provider, requests, result, spans };
   }
 
+  /**
+   * Call from inside an application's span that carries baggage, passing that span's trace context
+   * as the call's, so the provider's span and its context, baggage included, descend from it.
+   */
+  async function callInsideApplicationSpan(config: AnthropicMessageOptions) {
+    const baggage = propagation.createBaggage({ 'user.email': { value: 'alice@example.com' } });
+    return context.with(propagation.setBaggage(context.active(), baggage), () =>
+      trace.getTracer('application').startActiveSpan('application request', async (span) => {
+        try {
+          const { traceId, spanId } = span.spanContext();
+          return await callProvider(config, {
+            callContext: { ...tracedCall, traceparent: `00-${traceId}-${spanId}-01` },
+          });
+        } finally {
+          span.end();
+        }
+      }),
+    );
+  }
+
   function sdkSpanOf(spans: ReadableSpan[]) {
     return spans.find((span) => span.name === 'anthropic.messages.create');
   }
@@ -307,12 +328,8 @@ describe('Anthropic Messages SDK transport', () => {
   });
 
   it("sends W3C trace context but never the application's baggage", async () => {
-    const baggage = propagation.createBaggage({ 'user.email': { value: 'alice@example.com' } });
-
-    const { chatSpan, requests } = await context.with(
-      propagation.setBaggage(context.active(), baggage),
-      () => callProvider(),
-    );
+    // The registered propagator writes baggage, as the default Node SDK's does.
+    const { chatSpan, requests } = await callInsideApplicationSpan({});
 
     expect(requests[0].traceparent).toBe(traceparentOf(chatSpan!.spanContext()));
     expect(requests[0].baggage).toBeUndefined();
@@ -379,6 +396,50 @@ describe('Anthropic Messages SDK transport', () => {
       expect(requests[0].traceparent).toBe(traceparentOf(sdkSpan!.spanContext()));
     },
   );
+
+  it("keeps the application's baggage off requests when the SDK's spans are on", async () => {
+    const sdkMode = await callInsideApplicationSpan({ openTelemetry: true });
+    expect(sdkMode.requests[0].traceparent).toBe(
+      traceparentOf(sdkSpanOf(sdkMode.spans)!.spanContext()),
+    );
+    expect(sdkMode.requests[0].baggage).toBeUndefined();
+
+    // Baggage that the config sets is still sent.
+    exporter.reset();
+    const configured = await callInsideApplicationSpan({
+      openTelemetry: true,
+      headers: { baggage: 'tenant=acme' },
+    });
+    expect(configured.requests[0].baggage).toBe('tenant=acme');
+  });
+
+  it("keeps trace context headers that the config sets when the SDK's spans are on", async () => {
+    const configured = '00-11111111111111111111111111111111-2222222222222222-01';
+
+    const { requests, spans } = await callProvider({
+      openTelemetry: true,
+      headers: { traceparent: configured },
+    });
+
+    expect(sdkSpanOf(spans)).toBeDefined();
+    expect(requests[0].traceparent).toBe(configured);
+  });
+
+  it('sends the trace context of the default Anthropic rubric grader', async () => {
+    const { baseUrl, requests } = await createMessagesServer({});
+    const grader = new AnthropicLlmRubricProvider('claude-sonnet-4-6', {
+      config: { apiKey: 'local-qa-key', apiBaseUrl: baseUrl },
+    });
+
+    await grader.callApi('Grade this output', tracedCall);
+    await tracerProvider.forceFlush();
+
+    const chatSpan = exporter
+      .getFinishedSpans()
+      .find((span) => span.name === 'chat claude-sonnet-4-6');
+    expect(chatSpan?.spanContext().traceId).toBe(EVAL_TRACE_ID);
+    expect(requests[0].traceparent).toBe(traceparentOf(chatSpan!.spanContext()));
+  });
 
   it('passes an openTelemetry object to the SDK as its client option', async () => {
     const { spans } = await callProvider({

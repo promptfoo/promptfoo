@@ -31,7 +31,11 @@ import {
   CLAUDE_CODE_X_APP,
   isCredentialExpired,
 } from './claudeCodeAuth';
-import { AnthropicGenericProvider, hashAnthropicCacheValue } from './generic';
+import {
+  AnthropicGenericProvider,
+  hashAnthropicCacheValue,
+  TRACE_CONTEXT_HEADERS,
+} from './generic';
 import {
   ANTHROPIC_MODELS,
   calculateAnthropicCost,
@@ -113,7 +117,6 @@ async function finalMessageWithStreamedStopDetails(
 // The Claude API reads W3C trace context. Writing only that, rather than whatever the
 // application's registered propagator writes, keeps baggage off every host.
 const traceContextPropagator = new W3CTraceContextPropagator();
-const TRACE_CONTEXT_HEADERS = new Set(['traceparent', 'tracestate']);
 
 /**
  * The active span's W3C trace context, for a request the SDK sends without a span of its own.
