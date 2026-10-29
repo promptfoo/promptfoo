@@ -2119,7 +2119,7 @@ See the [Knowledge Base contextTransform example](https://github.com/promptfoo/p
 
 ## Bedrock Agents
 
-Amazon Bedrock Agents uses the reasoning of foundation models (FMs), APIs, and data to break down user requests, gathers relevant information, and efficiently completes tasks—freeing teams to focus on high-value work. For detailed information on testing and evaluating deployed agents, see the [AWS Bedrock Agents Provider](./bedrock-agents.md) documentation.
+The `bedrock-agent:` provider invokes existing Bedrock Agents Classic deployments. AWS has [closed Agents Classic to new customers](https://docs.aws.amazon.com/bedrock/latest/userguide/agents-classic-maintenance-mode.html); this provider does not invoke AgentCore Runtime. See the [AWS Bedrock Agents Provider](./bedrock-agents.md) guide for session, memory, and trace evaluation.
 
 Quick example:
 
