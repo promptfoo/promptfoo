@@ -2,8 +2,9 @@
 description: Reconcile a ledger in a hosted sandbox
 
 prompts:
-  - >-
-    Read {{ledgerPath}} with a shell command and sum the amount_cents column.
+  - |-
+    From /workspace, run cat {{ledgerPath}} as a separate command to read the ledger.
+    Sum the amount_cents column.
     Return only the net amount in cents as a signed integer, omitting the plus sign
     for a positive total.
 
@@ -24,9 +25,12 @@ providers:
           - type: inline
             path: '{{ledgerPath}}'
             data: '{{ledgerBase64}}'
+      hostedTrace:
+        includeToolArguments: true
 
 tracing:
   enabled: true
+  commandToolNames: [command_execution]
   otlp:
     http: {}
 
@@ -43,10 +47,22 @@ defaultTest:
         return Boolean(turnId && toolCalls?.some(call =>
           call.turnId === turnId && call.type === 'command_execution' && call.status === 'completed'
         ));
-    - type: trace-span-count
+    - type: trajectory:step-count
+      metric: LedgerFilename
       value:
-        pattern: invoke_agent
+        type: command
+        pattern: '*ledger.csv*'
         min: 1
+    - type: trajectory:tool-args-match
+      metric: Workspace
+      value:
+        name: command_execution
+        args: { cwd: /workspace }
+    - type: trace-error-spans
+      metric: CommandErrors
+      value:
+        pattern: execute_tool command_execution
+        max_count: 0
 
 tests:
   - description: Payments exceed refunds

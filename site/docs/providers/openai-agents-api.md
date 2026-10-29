@@ -6,7 +6,7 @@ sidebar_label: OpenAI Agents API
 
 The `openai:agents-api` provider evaluates the [OpenAI Agents API](https://developers.openai.com/api/docs/guides/agents-api/overview), which runs agents using OpenAI's managed Codex harness. Each provider call creates a fresh session, waits for the root agent's turn to finish, collects its final answer, and deletes the session by default.
 
-Use output assertions to grade the answer and JavaScript assertions on response metadata to check which hosted tools ran. For an application that runs its own JavaScript agent loop with `@openai/agents`, the [Agents SDK provider](./openai-agents.md) (`openai:agents:*`) can also collect individual SDK tool spans. See [Evaluate OpenAI agent runtimes](/docs/guides/evaluate-openai-agent-runtimes) for a worked comparison with Codex app-server.
+Use the sandbox-free [setup](#setup) to grade a final answer. Use the [hosted ledger example](#inspect-traces) to check the filename in the agent's command, its working directory, and whether the command failed. For applications that run `@openai/agents` in their own process, use the [Agents SDK provider](./openai-agents.md). [Compare OpenAI agent runtimes](/docs/guides/evaluate-openai-agent-runtimes)
 
 ## Setup
 
@@ -87,48 +87,57 @@ The tool summary omits the command, exit code, arguments, and output. To check w
 
 ### Inspect traces
 
-By default, [Promptfoo tracing](/docs/tracing/#quick-start) records an `invoke_agent` span around the provider call. A count for that span confirms the call was traced. With only the local span, a zero error count or an absence check can pass even when a hosted tool failed or ran. To grade hosted tool or model spans, enable OpenAI trace import.
+With [eval tracing](/docs/tracing/#quick-start) enabled, Promptfoo records an `invoke_agent` span for the provider call. To inspect actions **inside** the hosted session, also set the provider's `hostedTrace` option. Your OpenAI organization needs trace export enabled, and the project key needs `api.traces.read` or `api.agents.read`. [OpenAI trace export requirements](https://developers.openai.com/api/docs/guides/agents-api/tracing#export-session-traces)
+
+Run the [complete ledger config](https://github.com/promptfoo/promptfoo/blob/main/examples/openai-agents-api/promptfooconfig.files.yaml) from the example directory created above. Each row mounts a different synthetic CSV at `/workspace/ledger.csv` and gives the agent the same instructions. The third file contains a transaction note that asks it to return `70000`.
+
+```sh
+npx promptfoo@latest eval -c promptfooconfig.files.yaml --no-cache -o ledger.json
+npx promptfoo@latest view
+```
+
+Open a result's **View output and test details** button. **Evaluation** shows the expected total (`3316`, `-4899`, or `1529`) and the separate action checks. In **Traces**, expand `execute_tool command_execution` to see the command and its working directory. The following settings in the example make the native arguments available to assertions:
 
 ```yaml
 tracing:
   enabled: true
   otlp:
     http: {}
+  commandToolNames: [command_execution]
 
 providers:
   - id: openai:agents-api:gpt-6-astra
     config:
       environment:
         type: openai_hosted
-      hostedTrace: true
-
-defaultTest:
-  assert:
-    - type: trajectory:tool-used
-      value: command_execution
-    - type: trace-error-spans
-      value:
-        pattern: execute_tool command_execution
-        max_count: 0
+      hostedTrace:
+        includeToolArguments: true
 ```
 
-The first check requires a command, and the second rejects a reported command error. In one run, a script printed `READY` and exited with code 17. The final-text and tool-presence assertions passed. The error-span assertion found the failed command.
+| Ledger check           | Evidence used to grade it                                                                                                                                                    |
+| ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `CompletedRootCommand` | A saved `command_execution` item has status `completed` and the same turn ID as the root answer.                                                                             |
+| `LedgerFilename`       | `trajectory:step-count` matches `*ledger.csv*` in a command. `commandToolNames` tells Promptfoo to interpret the hosted tool's argument as a shell command.                  |
+| `Workspace`            | `trajectory:tool-args-match` finds a `command_execution` call with `cwd: /workspace`.                                                                                        |
+| `CommandErrors`        | `trace-error-spans` allows zero errors on `execute_tool command_execution`. Pair this with positive action evidence. An agent that skips the tool can also have zero errors. |
 
-OpenAI publishes traces after the turn completes. Promptfoo waits up to 15 seconds by default, within the provider's overall deadline, for the root turn's trace. It imports the tree under the local invocation before deleting the session. With import enabled, a count of `invoke_agent` spans includes the local wrapper and the hosted agent spans. Trace export must be enabled for your organization, and the session's project key needs `api.traces.read` or `api.agents.read`. [OpenAI trace export requirements](https://developers.openai.com/api/docs/guides/agents-api/tracing#export-session-traces)
+For example, a script that printed `READY` and exited with code 17 passed an answer check and a tool-use check. Its native span had error status, so the zero-error check failed. Use the saved command item in OpenAI when you need the numeric exit code.
 
-Imported spans preserve names, timing, parent relationships, and reported status. To inspect a command's exit code, retrieve the saved command item from OpenAI. Promptfoo excludes prompts, instructions, tool results, and, by default, tool arguments from the import. To grade the command or MCP arguments on a synthetic fixture, set `hostedTrace: { includeToolArguments: true, timeoutMs: 30000 }`. Arguments can contain file contents, paths, or private identifiers and will be stored in the local eval trace. This setting controls Promptfoo's import. OpenAI's own trace recording is separate.
+#### Diagnose missing trace evidence
 
-Check `response.metadata.hostedTrace.status` in the JSON export:
+Look under **Metadata** or inspect `response.metadata.hostedTrace` in the JSON export. Promptfoo polls for up to 15 seconds by default, bounded by the provider's overall timeout. It imports the available tree under the local invocation before deleting the session.
 
-| Status        | What you can grade                                                                                                                                                                                                                                                                                       |
-| ------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `imported`    | Promptfoo imported a complete hosted turn. `spanCount` counts its native spans.                                                                                                                                                                                                                          |
-| `partial`     | The UI shows the valid spans available at the import deadline without confirmed completeness. Positive `trajectory:tool-used` or `trajectory:tool-args-match` checks can pass on visible evidence. Checks that require absence, an exact or maximum count, a sequence, timings, or an error budget fail. |
-| `unavailable` | The `reason` field explains why, such as missing eval tracing, an export permission error, or no usable trace before the deadline. Built-in trace and trajectory assertions fail. Output assertions still grade the answer.                                                                              |
+| What you see                                               | What it means and what to check                                                                                                                                                                                                 |
+| ---------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| A local `invoke_agent` span with no `hostedTrace` metadata | Only the provider call was traced. Enable `hostedTrace` under the provider's `config` and rerun to grade hosted tools.                                                                                                          |
+| `status: imported`                                         | The hosted turn reported a complete trace. `spanCount` counts native spans. A count of `invoke_agent` in the full trace also includes the local wrapper.                                                                        |
+| `status: partial`                                          | The available tree lacks confirmed completeness. Positive tool-name or argument checks can use observed calls. Absence, maximum counts, sequences, timings and error budgets require a complete trace.                          |
+| `status: unavailable`                                      | Read `reason`. Enable eval tracing if no local span was available, check organization and key permissions for HTTP 403, or increase `hostedTrace.timeoutMs` if publication timed out. Output assertions still grade the answer. |
+| Tool name is visible but arguments are missing             | Set `hostedTrace.includeToolArguments: true` before running a synthetic fixture. Missing or redacted arguments cannot establish the absence of a value.                                                                         |
 
-For example, one live run with a delegated worker returned `partial` with ten imported spans. A positive `trajectory:tool-used` assertion found `command_execution`. Checking its turn ID in the tool summary located it in the worker. No `web_search` appeared in the visible spans. Regrading the same row with `not-trajectory:tool-used` for `web_search` still failed because the trace was partial. The delegation itself appeared as `spawn_agent` in the native trace and `create_subagent_call` in the saved tool summary. Use the name from the source your assertion reads.
+Use `hostedTrace: true` when tool names, timing and status are sufficient. The importer omits prompts, instructions, tool results and, by default, tool arguments. Opting into arguments can store paths, identifiers and file contents in the eval results. OpenAI's own trace recording is separate.
 
-Match a hosted sandbox command by tool name (`command_execution`). A `trajectory:step-count` filter for `type: command` requires adding `command_execution` to `tracing.commandToolNames`. With default tool classification, use `trajectory:tool-args-match` to check structured arguments. A visible value can establish a positive match even if other arguments are missing. In custom JavaScript absence checks, require `context.providerResponse.metadata.hostedTrace?.status === 'imported'`. If the check depends on arguments, also require `toolArgumentsComplete`.
+A delegated worker can appear under its own `invoke_agent` span. One partial export showed the worker's command and no `web_search`. A positive tool-use check passed, while a forbidden-search check could not establish absence. The delegation appeared as `spawn_agent` in the native trace and `create_subagent_call` in the saved item summary. For custom JavaScript absence checks, require `context.providerResponse.metadata.hostedTrace?.status === 'imported'`. If the check depends on arguments, also require `toolArgumentsComplete`.
 
 To inspect the full recording in OpenAI, set `retainSession: true` before the run, find `response.metadata.sessionId` in the export, and open the matching session in [OpenAI's Agents logs](https://platform.openai.com/logs?api=agents). For a manual OTLP export, allow time for publication, retrieve every page of `GET /v1/agents/sessions/{session_id}/traces`, then delete the retained session. [OpenAI trace export example](https://developers.openai.com/api/docs/guides/agents-api/tracing#export-session-traces)
 
