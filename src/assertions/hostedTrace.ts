@@ -229,7 +229,9 @@ export function prepareHostedTraceAssertion(params: AssertionParams): string | u
       keys.some(
         (key) =>
           !NORMALIZED_HOSTED_ATTRIBUTES.has(key) &&
-          candidates.some((span) => !Object.hasOwn(span.attributes ?? {}, key)),
+          candidates.some(
+            (span) => !Object.prototype.hasOwnProperty.call(span.attributes ?? {}, key),
+          ),
       )
     ) {
       return 'A filtered attribute was not retained on the matching hosted spans. The trace cannot establish this assertion.';
