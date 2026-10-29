@@ -1,4 +1,5 @@
 import type Anthropic from '@anthropic-ai/sdk';
+import type { ClientOptions } from '@anthropic-ai/sdk';
 
 import type { MCPConfig } from '../mcp/types';
 import type { OpenAIToolChoice } from '../shared';
@@ -69,7 +70,23 @@ export interface AnthropicBaseOptions {
   cost?: number;
   inputCost?: number;
   outputCost?: number;
+  /**
+   * OpenTelemetry tracing by the Anthropic SDK. Promptfoo records a span for every call, so
+   * by default the SDK's own spans are off and promptfoo sends its span's trace context
+   * (`traceparent`) with each request, which puts Claude API tracing spans in the eval's
+   * trace. `true` turns the SDK's spans on with the SDK's defaults and its
+   * `ANTHROPIC_OPEN_TELEMETRY*` environment variables. An object is the SDK's
+   * `openTelemetry` client option. `false` turns the SDK's spans off and sends no trace
+   * context.
+   */
+  openTelemetry?: boolean | AnthropicOpenTelemetryOptions;
 }
+
+/** The Anthropic SDK's `openTelemetry` client option, such as `{ traces: { contentMode } }`. */
+export type AnthropicOpenTelemetryOptions = Exclude<
+  ClientOptions['openTelemetry'],
+  false | undefined
+>;
 
 export interface AnthropicMessageOptions extends AnthropicBaseOptions {
   cache_control?: Anthropic.Messages.CacheControlEphemeral | null; // Top-level cache control - auto-applies to last cacheable block

@@ -267,6 +267,8 @@ type EnvVars = {
   // (newline-separated `Name: value` lines).
   ANTHROPIC_CUSTOM_HEADERS?: string;
   ANTHROPIC_MAX_TOKENS?: number;
+  // `false` stops trace context headers on Anthropic requests, whether the SDK or promptfoo sends them.
+  ANTHROPIC_OPEN_TELEMETRY_PROPAGATION?: string;
   ANTHROPIC_STOP?: string;
   ANTHROPIC_TEMPERATURE?: number;
 

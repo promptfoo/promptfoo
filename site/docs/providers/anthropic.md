@@ -169,6 +169,7 @@ Claude models are available across multiple platforms. Here's how the model name
 | service_tier    | -                     | Priority tier: `auto` (default) or `standard_only`                                                                                                                                    |
 | beta            | -                     | Array of `anthropic-beta` feature flags to send with the request                                                                                                                      |
 | headers         | -                     | Additional headers to be sent with the API request                                                                                                                                    |
+| openTelemetry   | -                     | The Anthropic SDK's own tracing: `true` or an object adds the SDK's spans, `false` also stops sending trace context. See [Tracing](#tracing)                                          |
 | extra_body      | -                     | Additional parameters to be included in the API request body                                                                                                                          |
 
 For [MCP tools](#model-context-protocol-mcp), set `mcp.enabled: true`. The
@@ -1085,6 +1086,51 @@ providers:
 **Incompatible with:** citations, message prefilling
 
 See [Anthropic's guide](https://platform.claude.com/docs/en/build-with-claude/structured-outputs) and the [structured outputs example](https://github.com/promptfoo/promptfoo/tree/main/examples/anthropic/structured-outputs).
+
+### Tracing
+
+When [tracing](/docs/tracing/) is enabled, each call gets a `chat <model>` span with token usage,
+the request parameters as sent, `gen_ai.response.id`, `gen_ai.response.model`,
+`anthropic.message.stop_reason`, and `anthropic.request.id`. The request ID is the API's
+`request-id` header, which Anthropic support asks for; failed requests record it too.
+
+Promptfoo sends the span's W3C trace context (`traceparent`) with each Messages API request. If
+your organization exports [Claude API traces](https://platform.claude.com/docs/en/manage-claude/opentelemetry/api)
+to an OpenTelemetry backend, the API's spans, such as its model requests and server tool runs like
+`web_search`, land in the eval's trace under promptfoo's span instead of in a trace of their own.
+The API skips requests whose trace context is not sampled. To assert on these spans, pull them from
+that backend with a [trace provider](/docs/tracing/#pulling-traces-from-another-service), and set
+`tracing.queryDelay` long enough for the API to deliver them.
+
+The `openTelemetry` option controls the Anthropic SDK's own
+[OpenTelemetry tracing](https://platform.claude.com/docs/en/manage-claude/opentelemetry/sdk):
+
+| `openTelemetry` | SDK spans                                                              | Trace context sent                                       |
+| --------------- | ---------------------------------------------------------------------- | -------------------------------------------------------- |
+| Not set         | Off, since promptfoo's span covers each call                           | Promptfoo's span                                         |
+| `true`          | On, set by the SDK's `ANTHROPIC_OPEN_TELEMETRY*` environment variables | The SDK's span                                           |
+| An object       | Set by the object, which the SDK takes as its `openTelemetry` option   | The SDK's span, or promptfoo's if the object omits spans |
+| `false`         | Off                                                                    | None                                                     |
+
+The SDK creates one `anthropic.messages.create` span per HTTP request, under promptfoo's span. These
+spans add the SDK's attributes, such as `http.request.resend_count` for retries, and count in
+[trace assertions](/docs/tracing/#4-assert-on-traced-workflows). Both spans carry token usage, so a
+backend that adds up tokens across spans counts each request twice.
+
+To record prompts and responses on the SDK's spans, set the SDK's content mode. Promptfoo stores the
+content with the trace, up to `maxContentBytes` per span (default 750,000):
+
+```yaml
+providers:
+  - id: anthropic:messages:claude-sonnet-5-5
+    config:
+      openTelemetry:
+        traces:
+          contentMode: content
+```
+
+Set `ANTHROPIC_OPEN_TELEMETRY_PROPAGATION=false` to stop sending trace context, for example when an
+HTTP client instrumentation already sends it.
 
 ## Model-Graded Tests
 

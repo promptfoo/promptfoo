@@ -104,6 +104,21 @@ function parseAnthropicCustomHeaders(value: string | undefined): Record<string, 
   return headers;
 }
 
+/**
+ * The SDK's `openTelemetry` client option for a provider's `openTelemetry` config. Promptfoo
+ * records its own span for every call, so the SDK's spans, which would repeat it, stay off
+ * unless the config asks for them. `true` leaves the option unset, so the SDK reads its own
+ * environment variables.
+ */
+function getSdkOpenTelemetryOption(
+  option: AnthropicBaseOptions['openTelemetry'],
+): ClientOptions['openTelemetry'] {
+  if (option === true) {
+    return undefined;
+  }
+  return typeof option === 'object' && option !== null ? option : false;
+}
+
 function setCaseInsensitiveHeaderValue(
   headers: Record<string, string | null>,
   headerName: string,
@@ -316,8 +331,7 @@ export class AnthropicGenericProvider implements ApiProvider {
         apiKey: this.apiKey ?? null,
         authToken: authToken ?? null,
         baseURL: this.getApiBaseUrl(),
-        // Promptfoo owns generation spans; SDK spans would duplicate traced requests.
-        openTelemetry: false,
+        openTelemetry: getSdkOpenTelemetryOption(this.config.openTelemetry),
         ...(Object.keys(clientDefaultHeaders).length > 0
           ? { defaultHeaders: clientDefaultHeaders }
           : {}),
