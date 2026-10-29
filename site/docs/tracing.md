@@ -255,6 +255,8 @@ Use trajectory assertions when your spans identify tools, commands, searches, re
 
 For the [hosted OpenAI Agents API](/docs/providers/openai-agents-api#inspect-traces), eval tracing records the provider's `invoke_agent` span. Add `config.hostedTrace: true` to import hosted tool and model spans before session cleanup. With import disabled, check `context.providerResponse.metadata.toolCalls` to require a completed sandbox command. The [OpenAI agent runtime comparison](/docs/guides/evaluate-openai-agent-runtimes) shows the corresponding SDK and Codex app-server assertions.
 
+When regrading a JSON export, a hosted trace can have all its spans while an individual argument string was truncated. Built-in argument assertions check the saved tool spans. [Diagnose missing trace evidence](/docs/providers/openai-agents-api#diagnose-missing-trace-evidence)
+
 The three raw-span assertions accept `value.attributes` to select spans by exact attributes in addition to their name pattern. For example, `attributes: { 'gen_ai.tool.name': 'search' }` limits a count, duration, or error-rate check to the search tool even when every tool emits a span named `execute_tool`. All supplied attributes must match; missing attributes are excluded. See the [attribute-filter examples](/docs/configuration/expected-outputs/deterministic/#trace-span-count) for supported values and presence checks.
 
 ### Turn marker spans {#per-llm-turn-spans}

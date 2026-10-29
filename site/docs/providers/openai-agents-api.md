@@ -125,7 +125,7 @@ For example, a script that printed `READY` and exited with code 17 passed an ans
 
 #### Diagnose missing trace evidence
 
-Look under **Metadata** or inspect `response.metadata.hostedTrace` in the JSON export. Promptfoo polls for up to 15 seconds by default, bounded by the provider's overall timeout. It imports the available tree under the local invocation before deleting the session.
+Look under **Metadata** or inspect `response.metadata.hostedTrace` in the JSON export. Promptfoo polls for up to 15 seconds by default, bounded by the provider's overall timeout. At either deadline it can save a validated partial tree under the local invocation before deleting the session. Setting `PROMPTFOO_OTEL_LOCAL_EXPORT=false` skips the hosted trace request and local import.
 
 | What you see                                               | What it means and what to check                                                                                                                                                                                                 |
 | ---------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -135,9 +135,11 @@ Look under **Metadata** or inspect `response.metadata.hostedTrace` in the JSON e
 | `status: unavailable`                                      | Read `reason`. Enable eval tracing if no local span was available, check organization and key permissions for HTTP 403, or increase `hostedTrace.timeoutMs` if publication timed out. Output assertions still grade the answer. |
 | Tool name is visible but arguments are missing             | Set `hostedTrace.includeToolArguments: true` before running a synthetic fixture. Missing or redacted arguments cannot establish the absence of a value.                                                                         |
 
-Use `hostedTrace: true` when tool names, timing and status are sufficient. The importer omits prompts, instructions, tool results and, by default, tool arguments. Opting into arguments can store paths, identifiers and file contents in the eval results. OpenAI's own trace recording is separate.
+Use `hostedTrace: true` when tool names, timing and status are sufficient. The importer omits prompts, instructions, tool results and, by default, tool arguments. Opting into arguments can store sensitive text, including command lines and file contents, in the eval results. If sanitizing an argument would change it, Promptfoo omits the whole top-level field. A subset check can still match an unchanged sibling such as `cwd`. An exact argument check requires an intact matching call. OpenAI's own trace recording is separate.
 
-A delegated worker can appear under its own `invoke_agent` span. One partial export showed the worker's command and no `web_search`. A positive tool-use check passed, while a forbidden-search check could not establish absence. The delegation appeared as `spawn_agent` in the native trace and `create_subagent_call` in the saved item summary. For custom JavaScript absence checks, require `context.providerResponse.metadata.hostedTrace?.status === 'imported'`. If the check depends on arguments, also require `toolArgumentsComplete`.
+A delegated worker can appear under its own `invoke_agent` span. One partial export showed the worker's command and no `web_search`. A positive tool-use check passed, while a forbidden-search check could not establish absence. The delegation appeared as `spawn_agent` in the native trace and `create_subagent_call` in the saved item summary.
+
+Prefer built-in trajectory assertions when grading a saved trace. For a custom JavaScript absence check, require `hostedTrace.status === 'imported'` and select spans whose `promptfoo.openai.hosted_trace` attribute equals that row's `hostedTrace.parentSpanId`. Verify their count matches `hostedTrace.spanCount`. For an argument-based absence check, also require `hostedTrace.toolArgumentsComplete` and intact, parseable argument JSON on the saved tool spans. The flag describes capture time. Export can truncate a long JSON string afterward.
 
 To inspect the full recording in OpenAI, set `retainSession: true` before the run, find `response.metadata.sessionId` in the export, and open the matching session in [OpenAI's Agents logs](https://platform.openai.com/logs?api=agents). For a manual OTLP export, allow time for publication, retrieve every page of `GET /v1/agents/sessions/{session_id}/traces`, then delete the retained session. [OpenAI trace export example](https://developers.openai.com/api/docs/guides/agents-api/tracing#export-session-traces)
 
@@ -170,6 +172,7 @@ providers:
 | `usageTimeoutMs`                                   | Deadline for polling final usage after the turn completes. Set to `0` to skip polling.                                                                              | `15000`                                              |
 | `cleanupTimeoutMs`                                 | Deadline for cancelling unfinished work and deleting the session                                                                                                    | `60000`                                              |
 | `hostedTrace`                                      | Import the hosted turn's trace before cleanup. Use `true` or an object with `includeToolArguments` and `timeoutMs`.                                                 | `false`                                              |
+| `artifactPaths`                                    | Collect digests for up to eight exact output paths published by the root turn. See [Published artifacts](#published-artifacts).                                     | None                                                 |
 | `retainSession`                                    | Keep successful sessions for later inspection or artifact download                                                                                                  | `false`                                              |
 | `maxRetries`                                       | Retries for status reads, turn cancellation, and session deletion after network errors, HTTP 429, and HTTP 500, 502, 503, or 504; session creation is never retried | `4`                                                  |
 | `apiKey`, `apiKeyEnvar`                            | OpenAI project API key or environment variable name                                                                                                                 | `OPENAI_API_KEY`                                     |
@@ -197,6 +200,12 @@ Use `response.metadata.turnId` for the root turn and `response.metadata.toolCall
 
 For an absence check across agents, require an array and verify that `subagentToolCallsUnavailable` is absent before checking for the forbidden tool. The provider can return a completed answer when a child history is unreadable.
 
+### Published artifacts
+
+For a file deliverable, ask the agent to write to a known path under `/workspace/outputs/` in an `openai_hosted` environment. Add the same path to the provider’s `config.artifactPaths` list. Promptfoo looks up each published file by its path and the completed root turn ID, downloads its bytes using the session’s credentials, and computes a SHA-256 digest before session cleanup. The digest can be graded after the session is deleted. [Runnable ledger artifact example](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-agents-api/artifacts) · [OpenAI’s files and artifacts guide](https://developers.openai.com/api/docs/guides/agents-api/environments/files)
+
+Each entry in `response.metadata.artifacts` has a `path` and `status`. An `available` entry includes `sha256` and `sizeBytes`. A `missing` entry means the root turn did not publish that path. An `unavailable` entry means Promptfoo could not verify it. Promptfoo reads up to 1 MiB per file and allows 10 seconds for all artifact reads combined, within the overall request deadline. An assertion can require an available digest and still grade the final answer separately.
+
 ### Usage and cost
 
 The provider polls for session usage after the root turn completes. `usageTimeoutMs` bounds this wait, including in-flight usage reads, within the overall request deadline. A single-agent run can use root-turn usage after a short grace period. If subagents are enabled or observed, the provider allows the full window for session totals before falling back to root-turn usage.
@@ -221,6 +230,6 @@ Request debug logs contain the method, endpoint, and status. The provider redact
 
 - Client-side function callbacks and self-hosted executors are not supported. A session requesting client-side actions returns an error; use hosted tools or remote MCP servers.
 - This provider polls saved state and items; it does not expose live streaming events or resume existing sessions.
-- Hosted artifacts are not downloaded automatically. Retain a successful session if you need its files.
+- Promptfoo saves artifact digests in the eval result. To keep the file contents, set `retainSession: true`, download the files, and delete the session.
 
 See the [OpenAI quickstart](https://developers.openai.com/api/docs/guides/agents-api/quickstart) for API prerequisites and the [session guide](https://developers.openai.com/api/docs/guides/agents-api/sessions) for lifecycle details.

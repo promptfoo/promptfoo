@@ -833,6 +833,8 @@ tests:
 
 In `partial` mode, object properties are matched recursively as a subset. In `exact` mode, the entire argument payload must match exactly.
 
+With hosted OpenAI Agents API traces, a positive subset match can use an unchanged field such as `cwd` even if another argument was omitted. An exact match needs one call with intact arguments, including when `ignore` or `defaults` is set. An inverse match requires complete argument evidence across the hosted call.
+
 #### Tolerating default arguments {#trajectory-tool-args-match-defaults}
 
 Use `defaults` when an agent may or may not include arguments whose values match the tool's documented defaults (for example, pagination parameters that the API would fill in anyway). Before matching, any actual argument whose value equals its declared default is stripped from the payload.
@@ -988,6 +990,8 @@ For `anthropic:claude-agent-sdk`, subagent rounds also emit `gen_ai.turn` spans 
 The `trajectory:step-count` assertion counts normalized trajectory steps. It can filter by step type (`tool`, `command`, `search`, `reasoning`, `message`, or `span`) and by glob-style name pattern.
 
 Command steps are detected from command attributes such as `command` and `codex.command`, and from command-like tool spans such as OpenAI Agents SDK `exec_command`, `local_shell`, or `shell` calls whose arguments include `cmd`, `command`, or `commands`.
+
+On a complete hosted OpenAI Agents API trace, a command count with only a positive `min` can use the commands that were captured even if another call's arguments were lost. An upper bound or an inverse count requires full argument capture. Step counts require a complete hosted trace.
 
 Example:
 
