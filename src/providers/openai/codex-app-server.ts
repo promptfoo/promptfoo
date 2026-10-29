@@ -1482,6 +1482,14 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
     const apiKey = this.getApiKey(resolvedConfig);
     const env = this.prepareEnvironment(resolvedConfig, currentTraceparent, apiKey);
     const promptInput = this.parsePromptInput(prompt);
+    if (resolvedConfig.environment_access === false) {
+      const unsupported = promptInput.find((item) => !this.canSendWithoutEnvironment(item));
+      if (unsupported) {
+        return {
+          error: `OpenAI Codex app-server cannot send this ${unsupported.type} input with environment_access: false. Use text, an HTTP(S) or inline data:image URL, or an app://, mcp://, or plugin:// mention.`,
+        };
+      }
+    }
     const connectionKey = this.generateConnectionKey(env, resolvedConfig);
     const useReusableConnection =
       resolvedConfig.reuse_server !== false && !resolvedConfig.deep_tracing;
@@ -1536,15 +1544,6 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
         this.protectThread(threadHandle.threadId);
         let turnStarted = false;
         try {
-          if (resolvedConfig.environment_access === false) {
-            // Older servers can silently ignore the experimental environments field.
-            const environments = threadHandle.response?.thread?.environments;
-            if (!Array.isArray(environments) || environments.length !== 0) {
-              throw new Error(
-                'Codex did not confirm an empty thread environment list. Update Codex or start a new thread with environment_access: false.',
-              );
-            }
-          }
           const queueKey = explicitThreadQueueKey
             ? undefined
             : this.getThreadRunQueueKey(resolvedConfig, threadHandle);
@@ -2154,17 +2153,7 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
           this.buildThreadResumeParams(config.thread_id as string, config),
           { timeoutMs: this.getRequestTimeoutMs(config) },
         );
-        const handle = {
-          connectionKey,
-          threadId: response?.thread?.id ?? config.thread_id,
-          response,
-          cacheKey,
-          persistent: canPersistThread,
-        };
-        if (cacheKey) {
-          this.threads.set(cacheKey, handle);
-        }
-        return handle;
+        return this.acceptThread(connection, connectionKey, cacheKey, response, config);
       });
       return cacheKey
         ? this.waitForThreadHandle(threadPromise, callOptions?.abortSignal)
@@ -2204,22 +2193,7 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
           timeoutMs: this.getRequestTimeoutMs(config),
         },
       );
-      const threadId = response?.thread?.id;
-      if (typeof threadId !== 'string' || !threadId) {
-        throw new Error('codex app-server did not return a thread id');
-      }
-
-      const handle = {
-        connectionKey,
-        threadId,
-        response,
-        cacheKey,
-        persistent: canPersistThread,
-      };
-      if (cacheKey) {
-        this.threads.set(cacheKey, handle);
-      }
-      return handle;
+      return this.acceptThread(connection, connectionKey, cacheKey, response, config);
     });
     return cacheKey
       ? this.waitForThreadHandle(threadPromise, callOptions?.abortSignal)
@@ -2229,6 +2203,42 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
               skipIfProtected: true,
             }),
         });
+  }
+
+  private async acceptThread(
+    connection: CodexAppServerConnection,
+    connectionKey: string,
+    cacheKey: string | undefined,
+    response: ThreadHandle['response'],
+    config: CodexAppServerConfig,
+  ): Promise<ThreadHandle> {
+    const threadId = response?.thread?.id ?? config.thread_id;
+    if (typeof threadId !== 'string' || !threadId) {
+      throw new Error('codex app-server did not return a thread id');
+    }
+
+    const handle = { connectionKey, threadId, response, cacheKey, persistent: false };
+    const environments = response?.thread?.environments;
+    if (
+      config.environment_access === false &&
+      (!Array.isArray(environments) || environments.length)
+    ) {
+      // Older servers can silently ignore the experimental environments field. Release the
+      // subscription before publishing the handle to other callers, preserving caller-owned threads.
+      await this.cleanupThreadAfterTurn(connection, handle, {
+        ...config,
+        thread_cleanup:
+          !config.thread_id && config.thread_cleanup === 'archive' ? 'archive' : 'unsubscribe',
+      });
+      throw new Error(
+        'Codex did not confirm an empty thread environment list. Update Codex or start a new thread with environment_access: false.',
+      );
+    }
+    if (cacheKey) {
+      handle.persistent = true;
+      this.threads.set(cacheKey, handle);
+    }
+    return handle;
   }
 
   private getCachedOrPendingThread(
@@ -2587,6 +2597,20 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
         return { type: 'skill', name: item.name, path: item.path };
       case 'mention':
         return { type: 'mention', name: item.name, path: item.path };
+    }
+  }
+
+  private canSendWithoutEnvironment(item: CodexAppServerUserInput): boolean {
+    // Codex resolves local attachments before it applies the turn's environment restrictions.
+    switch (item.type) {
+      case 'text':
+        return true;
+      case 'image':
+        return /^(?:https?:\/\/|data:image\/)/i.test(item.url);
+      case 'mention':
+        return /^(?:app|mcp|plugin):\/\//.test(item.path);
+      default:
+        return false;
     }
   }
 

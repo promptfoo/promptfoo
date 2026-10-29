@@ -527,6 +527,38 @@ describe('OpenAICodexAppServerProvider', () => {
     ).toThrow(/requires the experimental/);
   });
 
+  it.each([undefined, 'thr_receipt'])(
+    'releases a rejected persistent thread and verifies it again on retry (thread_id: %s)',
+    async (threadId) => {
+      const threadEnvironments = [{ environmentId: 'local' }];
+      const server = createMockAppServer({ autoCompleteThread: 'thr_receipt', threadEnvironments });
+      mocks.spawn.mockReturnValue(server.proc);
+      const provider = new OpenAICodexAppServerProvider({
+        config: {
+          environment_access: false,
+          persist_threads: true,
+          thread_id: threadId,
+          thread_cleanup: threadId ? 'archive' : 'none',
+        },
+      });
+      const prompt = 'Read the receipt';
+      expect((await provider.callApi(prompt)).error).toContain(
+        'did not confirm an empty thread environment list',
+      );
+      const requests = () => server.messages().map((message) => message.method);
+      expect(requests()).toContain('thread/unsubscribe');
+      expect(requests()).not.toContain('thread/archive');
+      expect(requests()).not.toContain('turn/start');
+
+      threadEnvironments.length = 0;
+      expect((await provider.callApi(prompt)).error).toBeUndefined();
+      const acquire = threadId ? 'thread/resume' : 'thread/start';
+      expect(requests().filter((method) => method === acquire)).toHaveLength(2);
+      expect(requests().filter((method) => method === 'turn/start')).toHaveLength(1);
+      await provider.cleanup();
+    },
+  );
+
   it('runs a complete stdio app-server turn and normalizes the response', async () => {
     const server = createMockAppServer();
     mocks.spawn.mockReturnValue(server.proc);
@@ -1932,6 +1964,48 @@ describe('OpenAICodexAppServerProvider', () => {
         response: elicitationResponse,
       }),
     ]);
+  });
+
+  it.each([
+    { type: 'localImage', path: '/private/screenshot.png' },
+    { type: 'local_image', path: '../screenshot.png' },
+    { type: 'image', url: 'file:///private/screenshot.png' },
+    { type: 'image', url: '/private/screenshot.png' },
+    { type: 'image', url: '../screenshot.png' },
+    { type: 'skill', name: 'skill', path: '/private/SKILL.md' },
+    { type: 'mention', name: 'file', path: 'file:///private/screenshot.png' },
+    { type: 'mention', name: 'file', path: '/private/screenshot.png' },
+  ])(
+    'rejects a host attachment ($type) before starting Codex with environment access disabled',
+    async (attachment) => {
+      const provider = new OpenAICodexAppServerProvider({ config: { environment_access: false } });
+      const prompt = JSON.stringify([
+        { type: 'text', text: 'Describe the attachment' },
+        attachment,
+      ]);
+      expect((await provider.callApi(prompt)).error).toContain('environment_access: false');
+      expect(mocks.spawn).not.toHaveBeenCalled();
+    },
+  );
+
+  it('forwards inline and remote inputs with environment access disabled', async () => {
+    const server = createMockAppServer({ autoCompleteThread: 'thr_safe', threadEnvironments: [] });
+    mocks.spawn.mockReturnValue(server.proc);
+    const provider = new OpenAICodexAppServerProvider({ config: { environment_access: false } });
+    const attachments = [
+      { type: 'image', url: 'https://example.com/screenshot.png' },
+      { type: 'image', url: 'data:image/png;base64,iVBORw0KGgo=' },
+      { type: 'mention', name: 'connector', path: 'app://connector/resource' },
+      { type: 'mention', name: 'reader', path: 'mcp://receipt' },
+      { type: 'mention', name: 'plugin', path: 'plugin://my-plugin' },
+    ];
+    const text = { type: 'text', text: 'Review these inputs' };
+    expect((await provider.callApi(JSON.stringify([text, ...attachments]))).error).toBeUndefined();
+    expect(server.messages().find((msg) => msg.method === 'turn/start').params.input).toEqual([
+      { ...text, text_elements: [] },
+      ...attachments,
+    ]);
+    await provider.cleanup();
   });
 
   it('uses thread/resume and normalizes structured prompt input items', async () => {
