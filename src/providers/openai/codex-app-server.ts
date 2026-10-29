@@ -1541,6 +1541,11 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
             callOptions,
           );
         }
+        if (threadHandle.cacheKey && this.threads.get(threadHandle.cacheKey) !== threadHandle) {
+          throw new Error(
+            'Codex thread subscription changed before the turn could start. Retry the call.',
+          );
+        }
         this.protectThread(threadHandle.threadId);
         let turnStarted = false;
         try {
@@ -2032,7 +2037,7 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
   }
 
   private generateExplicitThreadCacheKey(
-    connectionKey: string,
+    connectionInstanceId: string,
     threadId: string,
     config: CodexAppServerConfig,
   ): string {
@@ -2040,7 +2045,7 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
       .createHash('sha256')
       .update(
         JSON.stringify({
-          connectionKey,
+          connectionInstanceId,
           resume: this.buildThreadResumeParams(threadId, config),
           environment_access: config.environment_access,
         }),
@@ -2050,21 +2055,25 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
   }
 
   private async discardOtherExplicitThreadVariants(
-    prefix: string,
+    threadId: string,
+    persistentVariantPrefix: string | undefined,
     keepKey: string,
     connection: CodexAppServerConnection,
     connectionKey: string,
     timeoutMs: number,
   ): Promise<void> {
-    const staleKeys = Array.from(this.threads.keys()).filter(
-      (key) => key.startsWith(prefix) && key !== keepKey,
-    );
-    for (const key of staleKeys) {
-      const stale = this.threads.get(key);
-      this.threads.delete(key);
-      if (!stale) {
+    for (const [key, stale] of this.threads) {
+      // An explicit resume can also address an automatically started thread by its returned ID.
+      const sharesSubscription =
+        stale.connectionKey === connectionKey && stale.threadId === threadId;
+      const staleVariant = persistentVariantPrefix && key.startsWith(persistentVariantPrefix);
+      if (key === keepKey || (!staleVariant && !sharesSubscription)) {
         continue;
       }
+      if (this.isThreadProtected(stale.threadId)) {
+        throw new Error('Cannot resume the Codex thread while another turn is using it');
+      }
+      this.threads.delete(key);
       const staleConnection =
         this.connections.get(stale.connectionKey) ??
         (stale.connectionKey === connectionKey ? connection : undefined);
@@ -2119,29 +2128,27 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
     const canPersistThread = allowThreadPersistence && config.persist_threads === true;
 
     if (config.thread_id) {
+      const prefix = this.generateExplicitThreadCachePrefix(config.thread_id);
       const variantKey = this.generateExplicitThreadCacheKey(
-        connectionKey,
+        connection.instanceId,
         config.thread_id,
         config,
       );
       const cacheKey = canPersistThread ? variantKey : undefined;
-      await this.settleOtherExplicitThreadVariants(
-        this.generateExplicitThreadCachePrefix(config.thread_id),
-        variantKey,
-        callOptions?.abortSignal,
-      );
-      if (cacheKey) {
+      await this.settleOtherExplicitThreadVariants(prefix, variantKey, callOptions?.abortSignal);
+      if (allowThreadPersistence) {
         await this.discardOtherExplicitThreadVariants(
-          this.generateExplicitThreadCachePrefix(config.thread_id),
-          cacheKey,
+          config.thread_id,
+          canPersistThread ? prefix : undefined,
+          variantKey,
           connection,
           connectionKey,
           this.getRequestTimeoutMs(config),
         );
       }
-      const cachedOrPending =
-        (cacheKey ? this.threads.get(cacheKey) : undefined) ??
-        this.threadPromises.get(variantKey)?.promise;
+      // A reusable process has one subscription per thread. A transient caller may use an
+      // existing matching subscription, but must not take ownership of its cleanup.
+      const cachedOrPending = this.getCachedOrPendingThread(variantKey);
       if (cachedOrPending !== undefined) {
         return this.waitForThreadHandle(cachedOrPending, callOptions?.abortSignal);
       }

@@ -559,6 +559,148 @@ describe('OpenAICodexAppServerProvider', () => {
     },
   );
 
+  it.each([
+    { cachedExplicit: true, reject: true },
+    { cachedExplicit: true, reject: false },
+    { cachedExplicit: false, reject: true },
+  ])(
+    'restores the cached subscription after a nonpersistent resume (explicit: $cachedExplicit, rejected: $reject)',
+    async ({ cachedExplicit, reject }) => {
+      const threadId = 'thr_shared';
+      const server = createMockAppServer({
+        autoCompleteThread: threadId,
+        threadEnvironments: [{ environmentId: 'local' }],
+      });
+      mocks.spawn.mockReturnValue(server.proc);
+      const provider = new OpenAICodexAppServerProvider({
+        config: {
+          persist_threads: true,
+          thread_id: cachedExplicit ? threadId : undefined,
+          developer_instructions: 'original instructions',
+        },
+      });
+      const prompt = 'Read the receipt';
+      expect((await provider.callApi(prompt)).error).toBeUndefined();
+      const oneOff = await provider.callApi(prompt, {
+        prompt: {
+          raw: prompt,
+          label: 'one-off',
+          config: {
+            thread_id: threadId,
+            persist_threads: false,
+            environment_access: !reject,
+            developer_instructions: 'one-off instructions',
+          },
+        },
+        vars: {},
+      });
+      if (reject) {
+        expect(oneOff.error).toContain('did not confirm an empty thread environment list');
+      } else {
+        expect(oneOff.error).toBeUndefined();
+      }
+
+      // The one-off resume changed the active instructions, even if it never started a turn.
+      const beforeRetry = server.messages().length;
+      expect((await provider.callApi(prompt)).error).toBeUndefined();
+      const retry = server.messages().slice(beforeRetry);
+      const reacquired = retry.find((msg) =>
+        ['thread/start', 'thread/resume'].includes(msg.method),
+      );
+      expect(reacquired?.params.developerInstructions).toBe('original instructions');
+      expect(retry.findIndex((msg) => msg.method === 'turn/start')).toBeGreaterThan(
+        retry.indexOf(reacquired),
+      );
+      await provider.cleanup();
+    },
+  );
+
+  it('keeps a cached explicit subscription when a one-off caller requests the same settings', async () => {
+    const threadId = 'thr_borrowed';
+    const server = createMockAppServer({ autoCompleteThread: threadId, threadEnvironments: [] });
+    mocks.spawn.mockReturnValue(server.proc);
+    const provider = new OpenAICodexAppServerProvider({
+      config: { thread_id: threadId, persist_threads: true, environment_access: false },
+    });
+    const prompt = 'Read the receipt';
+    expect((await provider.callApi(prompt)).error).toBeUndefined();
+    expect(
+      (
+        await provider.callApi(prompt, {
+          prompt: { raw: prompt, label: 'one-off', config: { persist_threads: false } },
+          vars: {},
+        })
+      ).error,
+    ).toBeUndefined();
+    expect((await provider.callApi(prompt)).error).toBeUndefined();
+    const methods = server.messages().map((msg) => msg.method);
+    expect(methods.filter((method) => method === 'thread/resume')).toHaveLength(1);
+    expect(methods.filter((method) => method === 'turn/start')).toHaveLength(3);
+    expect(methods).not.toContain('thread/unsubscribe');
+    await provider.cleanup();
+  });
+
+  it('leaves a cached subscription on another process intact during a one-off resume', async () => {
+    const threadId = 'thr_two_processes';
+    const original = createMockAppServer({ autoCompleteThread: threadId });
+    const other = createMockAppServer({ autoCompleteThread: threadId });
+    mocks.spawn.mockReturnValueOnce(original.proc).mockReturnValueOnce(other.proc);
+    const provider = new OpenAICodexAppServerProvider({
+      config: { thread_id: threadId, persist_threads: true },
+    });
+    const prompt = 'Read the receipt';
+    expect((await provider.callApi(prompt)).error).toBeUndefined();
+    const result = await provider.callApi(prompt, {
+      prompt: {
+        raw: prompt,
+        label: 'other process',
+        config: { persist_threads: false, cli_env: { RECEIPT_PROFILE: 'other' } },
+      },
+      vars: {},
+    });
+    expect(result.error).toBeUndefined();
+    expect((await provider.callApi(prompt)).error).toBeUndefined();
+    expect(original.messages().filter((msg) => msg.method === 'thread/resume')).toHaveLength(1);
+    expect(original.messages().some((msg) => msg.method === 'thread/unsubscribe')).toBe(false);
+    expect(other.messages().some((msg) => msg.method === 'thread/unsubscribe')).toBe(true);
+    await provider.cleanup();
+  });
+
+  it('keeps an active auto-started thread subscribed when an explicit caller changes its settings', async () => {
+    const server = createMockAppServer();
+    mocks.spawn.mockReturnValue(server.proc);
+    const provider = new OpenAICodexAppServerProvider({ config: { persist_threads: true } });
+    const prompt = 'Read the receipt';
+    const inFlight = provider.callApi(prompt);
+    const init = await waitForMessage(server, (msg) => msg.method === 'initialize');
+    server.send({ id: init.id, result: {} });
+    const start = await waitForMessage(server, (msg) => msg.method === 'thread/start');
+    const threadId = 'thr_in_use';
+    server.send({ id: start.id, result: { thread: { id: threadId } } });
+    const turn = await waitForMessage(server, (msg) => msg.method === 'turn/start');
+    server.send({ id: turn.id, result: { turn: { id: 'turn_active', status: 'inProgress' } } });
+
+    const conflicting = await provider.callApi(prompt, {
+      prompt: {
+        raw: prompt,
+        label: 'one-off',
+        config: { thread_id: threadId, persist_threads: false },
+      },
+      vars: {},
+    });
+    expect(conflicting.error).toContain('another turn is using it');
+    expect(server.messages().map((msg) => msg.method)).not.toContain('thread/unsubscribe');
+    server.send({
+      method: 'turn/completed',
+      params: {
+        threadId,
+        turn: { id: 'turn_active', status: 'completed', items: [], error: null },
+      },
+    });
+    expect((await inFlight).error).toBeUndefined();
+    await provider.cleanup();
+  });
+
   it('runs a complete stdio app-server turn and normalizes the response', async () => {
     const server = createMockAppServer();
     mocks.spawn.mockReturnValue(server.proc);
