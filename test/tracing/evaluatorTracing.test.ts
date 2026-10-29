@@ -1,3 +1,4 @@
+import { detectResources, resourceFromAttributes } from '@opentelemetry/resources';
 import { AlwaysOffSampler, NodeTracerProvider } from '@opentelemetry/sdk-trace-node';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import cliState from '../../src/cliState';
@@ -201,7 +202,7 @@ describe('evaluatorTracing', () => {
       expect(result!.testCaseId).toBe('3-7');
     });
 
-    it('should persist command tool-name overrides in trace metadata', async () => {
+    it('persists command tool names and prospective root attribute keys, including its resource', async () => {
       const test: TestCase = {
         vars: { foo: 'bar' },
       };
@@ -217,6 +218,12 @@ describe('evaluatorTracing', () => {
       const getTraceStoreSpy = vi.spyOn(traceStoreModule, 'getTraceStore').mockReturnValue({
         createTrace: mockCreateTrace,
       } as unknown as ReturnType<typeof traceStoreModule.getTraceStore>);
+      const provider = new NodeTracerProvider({
+        resource: resourceFromAttributes({ 'gen_ai.tool.name': 'resource-tool' }),
+      });
+      const tracer = vi
+        .spyOn(genaiTracer, 'getGenAITracer')
+        .mockReturnValue(provider.getTracer('test'));
 
       try {
         const context = await generateTraceContextIfNeeded(test, {}, 2, 4, testSuite);
@@ -226,11 +233,38 @@ describe('evaluatorTracing', () => {
             metadata: expect.objectContaining({
               commandToolNames: ['bash'],
               testCaseSpanId: context!.traceparent!.split('-')[2],
+              testCaseSpanAttributeKeys: expect.arrayContaining([
+                'promptfoo.span.role',
+                'promptfoo.test.score',
+                'promptfoo.test.success',
+                'gen_ai.tool.name',
+                'otel.scope.name',
+              ]),
             }),
           }),
         );
       } finally {
         getTraceStoreSpy.mockRestore();
+        tracer.mockRestore();
+        await provider.shutdown();
+      }
+    });
+
+    it('leaves root attribute coverage unknown while resource detection is pending', async () => {
+      const resource = detectResources({
+        detectors: [{ detect: () => ({ attributes: { late: Promise.resolve('resource') } }) }],
+      });
+      const provider = new NodeTracerProvider({ resource });
+      const tracer = vi
+        .spyOn(genaiTracer, 'getGenAITracer')
+        .mockReturnValue(provider.getTracer('test'));
+      try {
+        await generateTraceContextIfNeeded({ metadata: { tracingEnabled: true } }, {}, 0, 0);
+        expect(mockCreateTrace).toHaveBeenCalledOnce();
+        expect(mockCreateTrace.mock.calls[0][0].metadata.testCaseSpanAttributeKeys).toBeUndefined();
+      } finally {
+        tracer.mockRestore();
+        await provider.shutdown();
       }
     });
 

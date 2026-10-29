@@ -1,6 +1,13 @@
 import { createRequire } from 'node:module';
 
-import { DiagConsoleLogger, DiagLogLevel, diag, propagation } from '@opentelemetry/api';
+import {
+  DiagConsoleLogger,
+  DiagLogLevel,
+  diag,
+  ProxyTracerProvider,
+  propagation,
+  trace,
+} from '@opentelemetry/api';
 import { W3CTraceContextPropagator } from '@opentelemetry/core';
 import { resourceFromAttributes } from '@opentelemetry/resources';
 import { BatchSpanProcessor, NodeTracerProvider } from '@opentelemetry/sdk-trace-node';
@@ -14,9 +21,7 @@ import type { OtelConfig } from './otelConfig';
 
 const require = createRequire(import.meta.url);
 
-// Singleton instances
-let provider: NodeTracerProvider | null = null;
-let initialized = false;
+let sdk: { provider: NodeTracerProvider; localExport: boolean } | undefined;
 
 // Use a global symbol to track handlers across module resets (important for tests)
 const OTEL_HANDLERS_KEY = Symbol.for('promptfoo.otelHandlers');
@@ -53,7 +58,7 @@ function getHandlers(): OtelHandlers {
  * @param config - OTEL configuration
  */
 export function initializeOtel(config: OtelConfig): void {
-  if (initialized) {
+  if (sdk) {
     logger.debug('[OtelSdk] Already initialized, skipping');
     return;
   }
@@ -103,12 +108,12 @@ export function initializeOtel(config: OtelConfig): void {
   }
 
   // Create trace provider with resource and span processors
-  provider = new NodeTracerProvider({ resource, spanProcessors });
+  const provider = new NodeTracerProvider({ resource, spanProcessors });
 
   // Register the provider globally
   provider.register();
 
-  initialized = true;
+  sdk = { provider, localExport: config.localExport };
   logger.info('[OtelSdk] OpenTelemetry SDK initialized successfully');
 
   // Set up graceful shutdown
@@ -159,20 +164,19 @@ export function initializeOtel(config: OtelConfig): void {
  * Flushes any pending spans and releases resources.
  */
 export async function shutdownOtel(): Promise<void> {
-  if (!initialized || !provider) {
+  if (!sdk) {
     return;
   }
 
   logger.debug('[OtelSdk] Shutting down OpenTelemetry SDK');
 
   try {
-    await provider.shutdown();
+    await sdk.provider.shutdown();
     logger.info('[OtelSdk] OpenTelemetry SDK shut down successfully');
   } catch (error) {
     logger.error('[OtelSdk] Error shutting down OpenTelemetry SDK', { error });
   } finally {
-    provider = null;
-    initialized = false;
+    sdk = undefined;
     /**
      * Clean up shutdown handlers.
      * Called during shutdown to prevent duplicate registrations on reinit.
@@ -198,14 +202,14 @@ export async function shutdownOtel(): Promise<void> {
  * Useful before process exit to ensure all spans are exported.
  */
 export async function flushOtel(): Promise<void> {
-  if (!initialized || !provider) {
+  if (!sdk) {
     return;
   }
 
   logger.debug('[OtelSdk] Flushing pending spans');
 
   try {
-    await provider.forceFlush();
+    await sdk.provider.forceFlush();
     logger.debug('[OtelSdk] Spans flushed successfully');
   } catch (error) {
     logger.error('[OtelSdk] Error flushing spans', { error });
@@ -216,5 +220,15 @@ export async function flushOtel(): Promise<void> {
  * Check if OTEL SDK is initialized and enabled.
  */
 export function isOtelInitialized(): boolean {
-  return initialized;
+  return sdk !== undefined;
+}
+
+/** Whether the running SDK exports provider invocation spans to the local TraceStore. */
+export function hasLocalSpanExporter(): boolean {
+  if (!sdk?.localExport) {
+    return false;
+  }
+  // OTel leaves the first global provider registered if the host app already set one.
+  const active = trace.getTracerProvider();
+  return (active instanceof ProxyTracerProvider ? active.getDelegate() : active) === sdk.provider;
 }

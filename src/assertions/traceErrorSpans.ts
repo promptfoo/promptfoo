@@ -1,4 +1,4 @@
-import { isSpanError } from '../tracing/spanError';
+import { HOSTED_ERROR_STATUS_COMPLETE, isSpanError } from '../tracing/spanError';
 import {
   filterTraceSpans,
   finishTraceAssertion,
@@ -101,13 +101,16 @@ export const handleTraceErrorSpans = (params: AssertionParams): GradingResult =>
   }
 
   const hosted = providerResponse?.metadata?.hostedTrace;
-  if (pass && hosted?.source === 'openai:agents-api' && hosted.errorStatusComplete !== true) {
-    // Older imports kept explicit OTLP error codes, but dropped other failure indicators.
+  if (pass && hosted?.source === 'openai:agents-api') {
+    // Older imports could omit resource-level errors. On new imports, use each
+    // matching span's coverage: a dropped attribute on an unrelated span cannot affect this budget.
     const observedErrors = new Set(errorSpans);
     const possibleErrors = matchingSpans.filter(
       (span) =>
         observedErrors.has(span) ||
-        span.attributes?.['promptfoo.openai.hosted_trace'] === hosted.parentSpanId,
+        (span.attributes?.['promptfoo.openai.hosted_trace'] === hosted.parentSpanId &&
+          (span.attributes?.[HOSTED_ERROR_STATUS_COMPLETE] !== true ||
+            (span.statusCode !== 0 && span.statusCode !== 1))),
     ).length;
     if (
       (maxCount !== undefined && possibleErrors > maxCount) ||

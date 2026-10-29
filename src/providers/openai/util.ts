@@ -227,15 +227,18 @@ function hasInlineJwt(value: string): boolean {
   return false;
 }
 
-function hasInlineSecret(value: string): boolean {
+export function hasRecognizableOpenAiCredential(value: string): boolean {
   return (
-    looksLikeSecret(value) ||
     /(?:^|\s)(?:Bearer|Basic)\s+\S+/i.test(value) ||
     hasInlineJwt(value) ||
     /(?:sk-(?:proj-|ant-)?[a-zA-Z0-9-_]{20,}|key-[a-zA-Z0-9]{20,}|AKIA[A-Z0-9]{16}|AIza[a-zA-Z0-9_-]{35})/.test(
       value,
     )
   );
+}
+
+function hasInlineSecret(value: string): boolean {
+  return looksLikeSecret(value) || hasRecognizableOpenAiCredential(value);
 }
 
 export function hasSensitiveOpenAiCacheString(value: string): boolean {

@@ -45,6 +45,8 @@ export interface AddSpansOptions {
   skipTraceCheck?: boolean;
   warnIfMissingTrace?: boolean;
   abortSignal?: AbortSignal;
+  /** Unix timestamp in milliseconds by which the span insert must finish. */
+  deadline?: number;
 }
 
 function serializeSpan(
@@ -183,15 +185,20 @@ export class TraceStore {
           .values(spanRecords)
           .onConflictDoNothing({ target: [spansTable.traceId, spansTable.spanId] })
           .run();
-      const signal = options?.abortSignal;
-      if (signal) {
-        signal.throwIfAborted();
-        // A cancelled caller can stop waiting while SQLite is queued. Recheck
-        // inside the transaction and roll back if the insert crossed cancellation.
+      const { abortSignal, deadline } = options ?? {};
+      if (abortSignal || deadline !== undefined) {
+        const checkWrite = () => {
+          abortSignal?.throwIfAborted();
+          // Native SQLite calls can block the event loop past the abort timer.
+          if (deadline !== undefined && Date.now() >= deadline) {
+            throw new DOMException('Span write deadline exceeded', 'TimeoutError');
+          }
+        };
+        checkWrite();
         await db.transaction(async (tx) => {
-          signal.throwIfAborted();
+          checkWrite();
           await insert(tx);
-          signal.throwIfAborted();
+          checkWrite();
         });
       } else {
         await insert(db);

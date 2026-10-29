@@ -4,6 +4,7 @@ import type { OtelConfig } from '../../src/tracing/otelConfig';
 
 // Create mock functions that will be used across tests
 const mockRegister = vi.fn();
+const mockGetTracerProvider = vi.fn(() => mockRegister.mock.contexts[0]);
 const mockShutdown = vi.fn().mockResolvedValue(undefined);
 const mockForceFlush = vi.fn().mockResolvedValue(undefined);
 const mockAddSpanProcessor = vi.fn();
@@ -72,6 +73,8 @@ vi.mock('@opentelemetry/semantic-conventions', () => ({
 }));
 
 vi.mock('@opentelemetry/api', () => ({
+  ProxyTracerProvider: class {},
+  trace: { getTracerProvider: mockGetTracerProvider },
   diag: {
     setLogger: mockSetLogger,
   },
@@ -230,6 +233,27 @@ describe('otelSdk', () => {
       initializeOtel(defaultConfig);
 
       expect(mockRegister.mock.calls.length).toBe(firstCallCount);
+    });
+
+    it.each([true, false])(
+      'reports the first active exporter configuration (localExport=%s)',
+      async (localExport) => {
+        const { hasLocalSpanExporter } = await import('../../src/tracing/otelSdk');
+        expect(hasLocalSpanExporter()).toBe(false);
+        initializeOtel({ ...defaultConfig, localExport });
+        initializeOtel({ ...defaultConfig, localExport: !localExport });
+        expect(hasLocalSpanExporter()).toBe(localExport);
+        expect(localExporterCalls).toHaveLength(localExport ? 1 : 0);
+        await shutdownOtel();
+        expect(hasLocalSpanExporter()).toBe(false);
+      },
+    );
+
+    it('does not claim local export for another global tracer provider', async () => {
+      const { hasLocalSpanExporter } = await import('../../src/tracing/otelSdk');
+      initializeOtel(defaultConfig);
+      mockGetTracerProvider.mockReturnValueOnce({});
+      expect(hasLocalSpanExporter()).toBe(false);
     });
 
     it('should create resource with service name and version', () => {

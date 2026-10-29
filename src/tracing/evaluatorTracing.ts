@@ -6,7 +6,12 @@ import { getEnvBool } from '../envars';
 import logger from '../logger';
 import telemetry from '../telemetry';
 import { getGenAITracer, PromptfooAttributes } from './genaiTracer';
-import { SPAN_ROLE_ATTRIBUTE, TEST_CASE_SPAN_NAME } from './spanRoles';
+import {
+  SPAN_ROLE_ATTRIBUTE,
+  TEST_CASE_OUTCOME_ATTRIBUTES,
+  TEST_CASE_SPAN_NAME,
+} from './spanRoles';
+import type { ReadableSpan } from '@opentelemetry/sdk-trace-node';
 
 import type { TestCase, TestSuite } from '../types/index';
 import type { InternalEvaluateOptions } from '../types/internal';
@@ -19,6 +24,31 @@ let otlpReceiverStartPromise: Promise<void> | null = null;
 let otlpReceiverStopPromise: Promise<void> | null = null;
 let otlpReceiverUsers = 0;
 const DEFAULT_OTLP_ACCEPT_FORMATS = ['json', 'protobuf'] as const;
+
+/** Keys that a local export or OTLP ingestion could put on this still-open case span. */
+function getTestCaseSpanAttributeKeys(span: Span | undefined): string[] | undefined {
+  const recorded = span as (Span & Partial<ReadableSpan>) | undefined;
+  if (
+    !recorded?.isRecording() ||
+    recorded.attributes?.[SPAN_ROLE_ATTRIBUTE] !== 'test_case' ||
+    !recorded.resource ||
+    recorded.resource.asyncAttributesPending ||
+    !recorded.resource.attributes
+  ) {
+    return undefined;
+  }
+  return [
+    ...new Set([
+      ...Object.keys(recorded.resource.attributes),
+      ...Object.keys(recorded.attributes),
+      ...Object.values(TEST_CASE_OUTCOME_ATTRIBUTES),
+      'otel.scope.name',
+      'otel.scope.version',
+      'otel.span.kind',
+      'otel.span.kind_code',
+    ]),
+  ];
+}
 
 /**
  * Reset module state (for testing purposes).
@@ -395,12 +425,14 @@ export async function generateTraceContextIfNeeded(
   // Store trace association in trace store
   try {
     logger.debug(`[EvaluatorTracing] Creating trace record for traceId=${traceId}`);
+    const testCaseSpanAttributeKeys = getTestCaseSpanAttributeKeys(rootSpan);
     await traceStore.createTrace({
       traceId,
       evaluationId: evaluationId || '',
       testCaseId: testCaseId || '',
       metadata: {
         testCaseSpanId: spanId,
+        ...(testCaseSpanAttributeKeys && { testCaseSpanAttributeKeys }),
         testIdx,
         promptIdx,
         ...(executionMetadata.providerId && { providerId: executionMetadata.providerId }),

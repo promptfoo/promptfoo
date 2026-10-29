@@ -5,25 +5,41 @@ import { tokenizer, tokTypes } from 'acorn';
 import { z } from 'zod';
 import cliState from '../../cliState';
 import { sanitizeTraceAttributes } from '../../tracing/sanitizeAttributes';
-import { isSpanError } from '../../tracing/spanError';
+import { HOSTED_ERROR_STATUS_COMPLETE, isSpanError } from '../../tracing/spanError';
 import { getNormalizedToolAttributes } from '../../tracing/toolAttributes';
 import { isCredentialHeader, isSecretEnvVarName, sanitizeObject } from '../../util/sanitizer';
-import { hasSensitiveOpenAiCacheString } from './util';
+import { hasRecognizableOpenAiCredential, hasSensitiveOpenAiCacheString } from './util';
 
 import type { SpanData } from '../../tracing/store';
 
 const MAX_SPANS = 1_000;
 const MAX_ARGUMENT_BYTES = 64 * 1024;
+// Snapshot-wide limits keep synchronous inspection bounded across tools and JSON-encoded values.
+const MAX_TRACE_ARGUMENT_BYTES = 256 * 1024;
+const MAX_TRACE_ARGUMENT_VALUES = 4_096;
 const nanos = z.union([z.string().regex(/^\d{1,20}$/), z.number().int().nonnegative().safe()]);
-const wireSpan = z.object({
+const attributeList = z.array(
+  z.object({ key: z.string(), value: z.record(z.string(), z.unknown()) }),
+);
+const wireAttributes = z.object({
+  attributes: attributeList.optional(),
+  droppedAttributesCount: z
+    .union([
+      z.number(),
+      z
+        .string()
+        .regex(/^\d{1,10}$/)
+        .transform(Number),
+    ])
+    .pipe(z.number().int().min(0).max(0xffffffff))
+    .nullish(),
+});
+const wireSpan = wireAttributes.extend({
   traceId: z.string(),
   spanId: z.string(),
   parentSpanId: z.string().nullish(),
   startTimeUnixNano: nanos,
   endTimeUnixNano: nanos,
-  attributes: z
-    .array(z.object({ key: z.string(), value: z.record(z.string(), z.unknown()) }))
-    .optional(),
   status: z
     .object({
       code: z.union([z.number(), z.string()]).optional(),
@@ -36,6 +52,9 @@ const completion = z.object({
   missing_outputs: z.array(z.unknown()).optional(),
   ordering_issues: z.array(z.unknown()).optional(),
 });
+
+/** The exporter can publish children before publishing their parent. */
+export class UnpublishedTraceParentError extends Error {}
 
 function invalid(): never {
   // Wire values can include credentials. Never echo them in diagnostics.
@@ -88,6 +107,8 @@ interface ImportPolicy {
   includeToolArguments: boolean;
   redact: Redact;
   redactAttributes: string[];
+  argumentBytesLeft: number;
+  argumentValuesLeft: number;
 }
 
 function protectsKey(keys: string[], policy: ImportPolicy): boolean {
@@ -110,12 +131,33 @@ function decimalSpelling(literal: string): string {
   return `${digits.slice(0, end)}e${Number(exponent) - fraction.length + digits.length - end}`;
 }
 
-function roundTrips(raw: string, value: unknown): boolean {
+function reserveArgumentJson(raw: string, policy: ImportPolicy): boolean {
+  const limit = Math.min(MAX_ARGUMENT_BYTES, policy.argumentBytesLeft);
+  if (policy.argumentValuesLeft < 1 || raw.length > limit) {
+    return false;
+  }
+  const bytes = Buffer.byteLength(raw);
+  if (bytes > limit) {
+    return false;
+  }
+  policy.argumentBytesLeft -= bytes;
+  policy.argumentValuesLeft--; // The root value. Charge each container's children in roundTrips.
+  return true;
+}
+
+function roundTrips(raw: string, value: unknown, policy: ImportPolicy): boolean {
   let members = 0;
   let safeNumbers = true;
   const canonical = JSON.stringify(value, (_key, item) => {
-    if (item && typeof item === 'object' && !Array.isArray(item)) {
-      members += Object.keys(item).length;
+    if (item && typeof item === 'object') {
+      const children = Array.isArray(item) ? item.length : Object.keys(item).length;
+      if (children > policy.argumentValuesLeft) {
+        invalid();
+      }
+      policy.argumentValuesLeft -= children;
+      if (!Array.isArray(item)) {
+        members += children;
+      }
     } else if (
       typeof item === 'number' &&
       (!Number.isFinite(item) || (Number.isInteger(item) && !Number.isSafeInteger(item)))
@@ -156,7 +198,12 @@ function protectsPairValue(record: object, policy: ImportPolicy): boolean {
     Object.prototype.hasOwnProperty.call(record, 'value') &&
     ['name', 'key'].some((key) => {
       const field = Reflect.get(record, key);
-      return typeof field === 'string' && protectsValueName(field, policy, field.includes('-'));
+      return (
+        typeof field === 'string' &&
+        (protectsValueName(field, policy, false) ||
+          // A bare uppercase env name such as MONKEY can end in KEY without naming a key.
+          (!/^[A-Z]+KEY$/.test(field) && isCredentialHeader(field, '')))
+      );
     })
   );
 }
@@ -165,7 +212,7 @@ function protectsPairValue(record: object, policy: ImportPolicy): boolean {
 // This also catches quoted JSON keys in a command body and credential options in argv arrays.
 function hasProtectedAssignment(value: string, policy: ImportPolicy): boolean {
   const fields = value.matchAll(
-    /(?<![\w.-])(?:(--[\w.-]+)(?=\s|$)|([\w.-]+)(\\*["'])?\s*([:=])(?=\s*\S))/g,
+    /(?<![\w.-])(?:(--[\w.-]+)(?=(?:\\*["'])?(?:\s|$))|([\w.-]+)(\\*["'])?\s*([:=])(?=\s*\S))/g,
   );
   for (const [, flag, field, quote, separator] of fields) {
     const name = (flag ?? field).replace(/^--/, '');
@@ -186,6 +233,65 @@ function sensitiveText(value: string, policy: ImportPolicy): boolean {
   );
 }
 
+const COMMAND_FIELDS = new Set(['cmd', 'command', 'commands', 'argv', 'script', 'shell_command']);
+const SHELL_TOOLS = new Set(['command_execution', 'exec_command', 'local_shell', 'shell']);
+const INSPECTION_FLAGS = new Map([
+  ['pwd', /^-[LP]$/],
+  ['ls', /^-[aAhl1]+$/],
+  ['cat', /^-[bn]+$/],
+  ['wc', /^-[clmw]+$/],
+  ['head', /^-(?:[nc]\d*|\d+)$/],
+  ['tail', /^-(?:[nc]\d*|\d+)$/],
+]);
+const BIN_PREFIX = /^\/(?:usr\/)?bin\//;
+
+// Keep filenames available to grading without interpreting arbitrary shell, flag values or scripts.
+function isInspectionCommand(value: unknown): boolean {
+  let words: string[];
+  if (typeof value === 'string') {
+    const text = value.trim();
+    const wrapper = /^(?:\/(?:usr\/)?bin\/)?(?:bash|sh)[ \t]+-l?c[ \t]+(['"])([^\r\n]*)\1$/.exec(
+      text,
+    );
+    words = (wrapper?.[2] ?? text).split(/[ \t]+/);
+  } else if (Array.isArray(value) && value.every((word) => typeof word === 'string')) {
+    if (
+      value.length === 3 &&
+      /^(?:\/(?:usr\/)?bin\/)?(?:bash|sh)$/.test(value[0]) &&
+      /^-l?c$/.test(value[1])
+    ) {
+      words = value[2].trim().split(/[ \t]+/);
+    } else {
+      words = value;
+    }
+  } else {
+    return false;
+  }
+  const command = words[0]?.replace(BIN_PREFIX, '');
+  const flags = INSPECTION_FLAGS.get(command);
+  if (!flags) {
+    return false;
+  }
+  let needsCount = false;
+  for (const word of words.slice(1)) {
+    if (needsCount) {
+      if (!/^\d+$/.test(word)) {
+        return false;
+      }
+      needsCount = false;
+    } else if ((command === 'head' || command === 'tail') && /^-[nc]$/.test(word)) {
+      needsCount = true;
+    } else if (
+      word !== '--' &&
+      !flags.test(word) &&
+      (command === 'pwd' || !/^[\p{L}\p{N}_./][\p{L}\p{N}_./-]*$/u.test(word))
+    ) {
+      return false;
+    }
+  }
+  return !needsCount;
+}
+
 // Decode JSON-valued strings only for inspection. Persist the original argument type and text.
 function inspectArgument(value: unknown, policy: ImportPolicy, depth = 0): unknown {
   if (depth > 16) {
@@ -200,7 +306,17 @@ function inspectArgument(value: unknown, policy: ImportPolicy, depth = 0): unkno
     }
     return Object.fromEntries(
       Object.entries(value).map(([key, item]) => {
-        if (sensitiveText(key, policy) || protectsKey([key.toLowerCase()], policy)) {
+        const field = key.toLowerCase();
+        if (
+          sensitiveText(key, policy) ||
+          (field === 'key'
+            ? protectsKey([field], policy)
+            : protectsValueName(key, policy, false)) ||
+          (COMMAND_FIELDS.has(field) &&
+            !(field === 'commands' && Array.isArray(item)
+              ? item.every(isInspectionCommand)
+              : isInspectionCommand(item)))
+        ) {
           invalid();
         }
         return [key, inspectArgument(item, policy, depth + 1)];
@@ -215,13 +331,16 @@ function inspectArgument(value: unknown, policy: ImportPolicy, depth = 0): unkno
     invalid();
   }
   if (/^\s*[[{"]/.test(value)) {
+    if (!reserveArgumentJson(value, policy)) {
+      invalid();
+    }
     let decoded: unknown;
     try {
       decoded = JSON.parse(value);
     } catch {
       return value;
     }
-    if (!roundTrips(value, decoded)) {
+    if (!roundTrips(value, decoded, policy)) {
       invalid();
     }
     return inspectArgument(decoded, policy, depth + 1);
@@ -229,20 +348,44 @@ function inspectArgument(value: unknown, policy: ImportPolicy, depth = 0): unkno
   return value;
 }
 
-function canStoreArgument(value: unknown, policy: ImportPolicy): boolean {
-  try {
-    const inspected = { '': inspectArgument(value, policy) };
-    const filtered = sanitizeTraceAttributes(inspected, {
+function sanitizeArgumentProjection(value: unknown, policy: ImportPolicy): unknown {
+  const filtered = sanitizeTraceAttributes(
+    { '': value },
+    {
       redactAttributes: policy.redactAttributes,
       truncateValues: false,
-    });
-    return isDeepStrictEqual(
-      inspected,
-      sanitizeObject(filtered, { sanitizeUrls: true, throwOnError: true }),
-    );
-  } catch {
-    return false;
+    },
+  );
+  return sanitizeObject(filtered, { sanitizeUrls: true, throwOnError: true })[''];
+}
+
+function captureObjectArguments(args: object, policy: ImportPolicy): object {
+  const protectedValue = protectsPairValue(args, policy);
+  const inspected = new Map<string, unknown>();
+  for (const [key, item] of Object.entries(args)) {
+    if (protectedValue && key === 'value') {
+      continue;
+    }
+    try {
+      const field = inspectArgument({ [key]: item }, policy) as Record<string, unknown>;
+      inspected.set(key, field[key]);
+    } catch {
+      // Withhold this whole field. Its unchanged siblings can still support a subset assertion.
+    }
   }
+  // Run the shared sanitizers once, then compare fields so their replacements never become evidence.
+  const sanitized = sanitizeArgumentProjection(Object.fromEntries(inspected), policy);
+  if (!sanitized || typeof sanitized !== 'object' || Array.isArray(sanitized)) {
+    invalid();
+  }
+  return Object.fromEntries(
+    Object.entries(args).filter(
+      ([key]) =>
+        inspected.has(key) &&
+        Object.prototype.hasOwnProperty.call(sanitized, key) &&
+        isDeepStrictEqual(inspected.get(key), Reflect.get(sanitized, key)),
+    ),
+  );
 }
 
 function toolAttributes(
@@ -257,27 +400,27 @@ function toolAttributes(
   }
   const unavailable = { ...identity, 'promptfoo.tool.arguments_redacted': true };
   const raw = value.stringValue;
-  if (typeof raw !== 'string' || Buffer.byteLength(raw) > MAX_ARGUMENT_BYTES) {
+  if (typeof raw !== 'string' || !reserveArgumentJson(raw, policy)) {
     return unavailable;
   }
   try {
     const args: unknown = JSON.parse(raw);
-    if (args === null || !roundTrips(raw, args)) {
+    if (args === null || !roundTrips(raw, args, policy)) {
       return unavailable;
     }
     // A scrubbed value is unsuitable as evidence. For objects we can still grade
     // unchanged sibling parameters when, for example, a command contained credentials.
     let captured = args;
     if (typeof args === 'object' && !Array.isArray(args)) {
-      const protectedValue = protectsPairValue(args, policy);
-      captured = Object.fromEntries(
-        Object.entries(args).filter(
-          ([key, item]) =>
-            !(protectedValue && key === 'value') && canStoreArgument({ [key]: item }, policy),
-        ),
-      );
-    } else if (!canStoreArgument(args, policy)) {
-      return unavailable;
+      captured = captureObjectArguments(args, policy);
+    } else {
+      if (SHELL_TOOLS.has(name) && !isInspectionCommand(args)) {
+        return unavailable;
+      }
+      const inspected = inspectArgument(args, policy);
+      if (!isDeepStrictEqual(inspected, sanitizeArgumentProjection(inspected, policy))) {
+        return unavailable;
+      }
     }
     const intact = isDeepStrictEqual(captured, args);
     if (!intact && typeof captured === 'object') {
@@ -309,6 +452,19 @@ function safeIdentifier(value: unknown, policy: ImportPolicy): value is string {
   );
 }
 
+function safeModelIdentifier(value: unknown, policy: ImportPolicy): value is string {
+  return (
+    typeof value === 'string' &&
+    value.length <= 256 &&
+    /^(?:[\w.:-]+\/)*[\w.:-]+$/.test(value) &&
+    policy.redact(value) === value &&
+    !hasProtectedAssignment(value, policy) &&
+    !hasRecognizableOpenAiCredential(value) &&
+    // Preserve dated, fine-tuned and namespaced IDs. A single long opaque token is ambiguous.
+    !/(?:^|\/)[a-z\d_]{64,}(?:\/|$)/i.test(value)
+  );
+}
+
 function statusCode(code: number | string = 0): number {
   switch (code) {
     case 0:
@@ -331,7 +487,19 @@ function statusCode(code: number | string = 0): number {
   }
 }
 
-function normalizeSpan(wire: z.infer<typeof wireSpan>, policy: ImportPolicy): SpanData {
+function attributeMap(attributes: z.infer<typeof attributeList> | undefined) {
+  const result = new Map(attributes?.map(({ key, value }) => [key, value]));
+  if (result.size !== (attributes?.length ?? 0)) {
+    invalid();
+  }
+  return result;
+}
+
+function normalizeSpan(
+  wire: z.infer<typeof wireSpan>,
+  policy: ImportPolicy,
+  resource: { attributes: ReturnType<typeof attributeMap>; dropped: boolean },
+): SpanData {
   const spanId = decodeId(wire.spanId, 8);
   const parent = wire.parentSpanId ? decodeId(wire.parentSpanId, 8) : undefined;
   const parentSpanId = parent && !/^0+$/.test(parent) ? parent : undefined;
@@ -340,10 +508,7 @@ function normalizeSpan(wire: z.infer<typeof wireSpan>, policy: ImportPolicy): Sp
   if (/^0+$/.test(spanId) || !start || end < start || end > 0xffffffffffffffffn) {
     invalid();
   }
-  const attrs = new Map(wire.attributes?.map(({ key, value }) => [key, value]));
-  if (attrs.size !== (wire.attributes?.length ?? 0)) {
-    invalid();
-  }
+  const attrs = attributeMap(wire.attributes);
   const operation = attrs.get('gen_ai.operation.name')?.stringValue;
   if (operation !== 'execute_tool' && operation !== 'invoke_agent' && operation !== 'chat') {
     // Fail closed if the API introduces new kinds of tool telemetry.
@@ -369,11 +534,14 @@ function normalizeSpan(wire: z.infer<typeof wireSpan>, policy: ImportPolicy): Sp
     );
     name = `execute_tool ${tool}`;
   } else {
-    const model = attrs.get('gen_ai.request.model')?.stringValue;
-    if (safeIdentifier(model, policy)) {
-      attributes['gen_ai.request.model'] = model;
+    const model = attrs.get('gen_ai.request.model');
+    if (model) {
+      if (!safeModelIdentifier(model.stringValue, policy)) {
+        invalid();
+      }
+      attributes['gen_ai.request.model'] = model.stringValue;
       if (operation === 'chat') {
-        name = `chat ${model}`;
+        name = `chat ${model.stringValue}`;
       }
     }
   }
@@ -390,7 +558,10 @@ function normalizeSpan(wire: z.infer<typeof wireSpan>, policy: ImportPolicy): Sp
   // Preserve the same error verdict as an ordinary span without storing tool diagnostics.
   const code = statusCode(wire.status?.code);
   const failed = isSpanError(code, wire.status?.message ?? undefined, (key) => {
-    const value = attrs.get(key);
+    // OTLP span attributes override resource defaults. A dropped span attribute may
+    // have overridden that default, so only intact inheritance is evidence.
+    const value =
+      attrs.get(key) ?? (wire.droppedAttributesCount ? undefined : resource.attributes.get(key));
     if (!value) {
       return undefined;
     }
@@ -407,6 +578,10 @@ function normalizeSpan(wire: z.infer<typeof wireSpan>, policy: ImportPolicy): Sp
         : Number(value.intValue))
     );
   });
+  if (!protectsKey([HOSTED_ERROR_STATUS_COMPLETE], policy)) {
+    attributes[HOSTED_ERROR_STATUS_COMPLETE] =
+      failed || (!wire.droppedAttributesCount && !resource.dropped);
+  }
   return {
     spanId,
     parentSpanId,
@@ -419,23 +594,32 @@ function normalizeSpan(wire: z.infer<typeof wireSpan>, policy: ImportPolicy): Sp
 }
 
 function validateTree(nodes: Map<string, SpanData>): void {
-  if ([...nodes.values()].filter((s) => !s.parentSpanId).length !== 1) {
+  if ([...nodes.values()].filter((s) => !s.parentSpanId).length > 1) {
     invalid();
   }
-  const verified = new Set<string>();
+  const visited = new Set<string>();
+  let missingParent = false;
   for (const id of nodes.keys()) {
     let cursor: string | undefined = id;
     const path = new Set<string>();
-    while (cursor && !verified.has(cursor)) {
-      if (!nodes.has(cursor) || path.has(cursor)) {
+    while (cursor && !visited.has(cursor)) {
+      if (path.has(cursor)) {
         invalid();
       }
+      const span = nodes.get(cursor);
+      if (!span) {
+        missingParent = true;
+        break;
+      }
       path.add(cursor);
-      cursor = nodes.get(cursor)?.parentSpanId;
+      cursor = span.parentSpanId;
     }
     for (const ancestor of path) {
-      verified.add(ancestor);
+      visited.add(ancestor);
     }
+  }
+  if (missingParent) {
+    throw new UnpublishedTraceParentError('Hosted trace parent not published');
   }
 }
 
@@ -451,8 +635,21 @@ function* readSpans(otlp: unknown) {
   // Bound collections before schema validation; malformed entries must not cause an
   // unbounded allocation of validation errors for a large but byte-limited response.
   let count = 0;
-  for (const resource of collection(otlp, 'resourceSpans')) {
-    for (const scope of collection(resource, 'scopeSpans')) {
+  for (const group of collection(otlp, 'resourceSpans')) {
+    const data =
+      group && typeof group === 'object' && 'resource' in group ? group.resource : undefined;
+    if (data && typeof data === 'object' && 'attributes' in data) {
+      collection(data, 'attributes');
+    }
+    const parsedResource = wireAttributes.safeParse(data ?? {});
+    if (!parsedResource.success) {
+      invalid();
+    }
+    const resource = {
+      attributes: attributeMap(parsedResource.data.attributes),
+      dropped: !!parsedResource.data.droppedAttributesCount,
+    };
+    for (const scope of collection(group, 'scopeSpans')) {
       for (const value of collection(scope, 'spans')) {
         if (++count > MAX_SPANS || !value || typeof value !== 'object') {
           invalid();
@@ -464,7 +661,7 @@ function* readSpans(otlp: unknown) {
         if (!parsed.success) {
           invalid();
         }
-        yield parsed.data;
+        yield { wire: parsed.data, resource };
       }
     }
   }
@@ -484,6 +681,8 @@ export function normalizeHostedTrace(
   const policy = {
     parentSpanId,
     includeToolArguments,
+    argumentBytesLeft: MAX_TRACE_ARGUMENT_BYTES,
+    argumentValuesLeft: MAX_TRACE_ARGUMENT_VALUES,
     redact,
     redactAttributes: [
       ...traceRedactAttributes,
@@ -495,9 +694,9 @@ export function normalizeHostedTrace(
   const nodes = new Map<string, SpanData>();
   let nativeTraceId: string | undefined;
   let complete = false;
-  for (const wire of readSpans(otlp)) {
+  for (const { wire, resource } of readSpans(otlp)) {
     const traceId = decodeId(wire.traceId, 16);
-    const node = normalizeSpan(wire, policy);
+    const node = normalizeSpan(wire, policy, resource);
     if (
       nodes.has(node.spanId) ||
       /^0+$/.test(traceId) ||

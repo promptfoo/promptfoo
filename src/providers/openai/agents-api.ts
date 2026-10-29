@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto';
 import logger from '../../logger';
 import { runProviderCallWithAbort } from '../../scheduler/providerCallExecutionContext';
 import { getOtelConfigFromEnv } from '../../tracing/otelConfig';
+import { HOSTED_ERROR_STATUS_COMPLETE } from '../../tracing/spanError';
 import { getTraceStore } from '../../tracing/store';
 import { CloudAuthRedirectError } from '../../util/fetch/cloudAuthRedirects';
 import { fetchWithRetries, readBoundedText } from '../../util/fetch/index';
@@ -19,7 +20,7 @@ import { analyzeTemplateReference } from '../../util/templates';
 import { sleepWithAbort } from '../../util/time';
 import { buildChatSpanContext, extractProviderResponseAttributes, withGenAISpan } from '../tracing';
 import { decodeUrlComponent } from '../urlEncoding';
-import { normalizeHostedTrace } from './agents-api-trace-spans';
+import { normalizeHostedTrace, UnpublishedTraceParentError } from './agents-api-trace-spans';
 import { calculateOpenAIUsageCost } from './billing';
 import { OpenAiGenericProvider } from './index';
 import { appendOpenAiApiPath, assertOpenAiApiModel } from './util';
@@ -443,9 +444,14 @@ function isArtifactOutputPath(path: unknown): path is string {
   );
 }
 
+/** Opaque IDs must identify a resource and stay in their own URL path segment. */
+function isResourceId(value: unknown): value is string {
+  return typeof value === 'string' && value.trim().length > 0 && value !== '.' && value !== '..';
+}
+
 /** An absent or malformed field cannot prove that this record belongs elsewhere. */
 function identifiesAnother(value: unknown, expected: string): boolean {
-  return typeof value === 'string' && value.trim().length > 0 && value !== expected;
+  return isResourceId(value) && value !== expected;
 }
 
 /** Render only strings that reference test vars, preserving literal braces in commands and code. */
@@ -1068,7 +1074,7 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
         vault_ids: this.config.vault_ids,
         stream: false,
       });
-      if (!session?.id || typeof session.id !== 'string') {
+      if (!isResourceId(session?.id)) {
         throw new Error('Agents API did not return a session ID');
       }
       endpoint = `agents/sessions/${encodeURIComponent(session.id)}`;
@@ -1249,6 +1255,10 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
     if (!getOtelConfigFromEnv().localExport) {
       return unavailable('The local span exporter is disabled');
     }
+    const { hasLocalSpanExporter } = await import('../../tracing/otelSdk');
+    if (!hasLocalSpanExporter()) {
+      return unavailable('The active OpenTelemetry SDK has no local span exporter');
+    }
 
     const options = typeof this.config.hostedTrace === 'object' ? this.config.hostedTrace : {};
     const includeToolArguments = options.includeToolArguments === true;
@@ -1285,13 +1295,21 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
           (trace) => trace.id === turnId && trace.session_id === sessionId,
         );
         if (published) {
-          snapshot = normalizeHostedTrace(
-            published.otlp,
-            parent.spanId,
-            includeToolArguments,
-            (value) => this.redact(value),
-            redactAttributes,
-          );
+          try {
+            snapshot = normalizeHostedTrace(
+              published.otlp,
+              parent.spanId,
+              includeToolArguments,
+              (value) => this.redact(value),
+              redactAttributes,
+            );
+          } catch (error) {
+            if (!(error instanceof UnpublishedTraceParentError)) {
+              throw error;
+            }
+            // The new snapshot supersedes prior evidence. Wait for its parents to be published.
+            snapshot = undefined;
+          }
         }
         if (!snapshot?.complete) {
           await sleepWithAbort(this.config.pollIntervalMs ?? 1_000, traceSignal);
@@ -1318,9 +1336,11 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
     const { spans, complete } = snapshot;
     // A partial tree leaves the polling loop only after a deadline. Give that
     // validated evidence one bounded local write even when polling used its budget.
-    const writeBudgetMs = complete
-      ? deadline - Date.now()
-      : Math.min(PARTIAL_TRACE_WRITE_GRACE_MS, timeoutMs, this.config.timeoutMs ?? Infinity);
+    const now = Date.now();
+    const writeDeadline = complete
+      ? deadline
+      : now + Math.min(PARTIAL_TRACE_WRITE_GRACE_MS, timeoutMs, this.config.timeoutMs ?? Infinity);
+    const writeBudgetMs = writeDeadline - now;
     if (writeBudgetMs <= 0) {
       return unavailable('Timed out storing the hosted trace');
     }
@@ -1332,7 +1352,11 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
       // behind another transaction, so release the remote session independently.
       releaseSession();
       const stored = await runProviderCallWithAbort(
-        () => getTraceStore().addSpans(parent.traceId, spans, { abortSignal: writeSignal }),
+        () =>
+          getTraceStore().addSpans(parent.traceId, spans, {
+            abortSignal: writeSignal,
+            deadline: writeDeadline,
+          }),
         writeSignal,
       );
       if (!stored.stored) {
@@ -1340,7 +1364,7 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
       }
     } catch {
       return unavailable(
-        writeSignal.aborted
+        writeSignal.aborted || Date.now() >= writeDeadline
           ? 'Timed out storing the hosted trace'
           : 'Unable to store the hosted trace',
       );
@@ -1360,7 +1384,9 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
       ...(!complete && { reason: 'The published root turn did not attest to a complete trace' }),
       parentSpanId: parent.spanId,
       spanCount: spans.length,
-      errorStatusComplete: true,
+      errorStatusComplete: spans.every(
+        ({ attributes }) => attributes?.[HOSTED_ERROR_STATUS_COMPLETE] === true,
+      ),
       includeToolArguments,
       toolArgumentsComplete,
     };
@@ -1388,6 +1414,9 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
       const turns = await this.list<Turn>(`${endpoint}/turns`, headers, signal);
       // Subagent completion and an idle session are not proof that the root turn succeeded.
       const turn = turns.find((candidate) => candidate.subagent_id === null);
+      if (turn && !isResourceId(turn.id)) {
+        throw new Error('Agents API returned an invalid root turn ID');
+      }
       if (turn?.status === 'failed' || turn?.status === 'cancelled') {
         const error = this.redact(turn.error?.message ?? turn.id);
         throw new Error(

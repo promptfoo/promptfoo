@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import logger from '../../../src/logger';
 import { OpenAiAgentsApiProvider } from '../../../src/providers/openai/agents-api';
 import { withGenAISpan } from '../../../src/providers/tracing';
+import * as otelSdk from '../../../src/tracing/otelSdk';
 import { getTraceStore } from '../../../src/tracing/store';
 import { fetchWithRetries } from '../../../src/util/fetch/index';
 import { checkProviderApiKeys } from '../../../src/util/provider';
@@ -472,7 +473,8 @@ describe('OpenAiAgentsApiProvider', () => {
       prompt: { raw: 'hi', label: 'hi' },
       traceparent: `00-${localTraceId}-${'a'.repeat(16)}-01`,
     };
-    function recordWrapper() {
+    function recordWrapper(localExporter = true) {
+      vi.spyOn(otelSdk, 'hasLocalSpanExporter').mockReturnValue(localExporter);
       vi.spyOn(getTraceStore(), 'getTraceMetadata').mockResolvedValue({});
       const span = trace.wrapSpanContext({
         traceId: localTraceId,
@@ -508,6 +510,38 @@ describe('OpenAiAgentsApiProvider', () => {
       };
     }
 
+    it.each([undefined, null, '', ' ', '..'])(
+      'rejects a completed root turn with invalid ID %j before collecting evidence',
+      async (id) => {
+        recordWrapper();
+        const addSpans = vi.spyOn(getTraceStore(), 'addSpans').mockResolvedValue({ stored: true });
+        mockApi((pathname) => {
+          if (pathname.endsWith('/turns')) {
+            return json(page([{ ...turn, id }]));
+          }
+          if (pathname.endsWith('/items')) {
+            return json(page([{ ...message, turn_id: id }]));
+          }
+          if (pathname.endsWith('/traces')) {
+            return json(page([{ ...published(), id }]));
+          }
+          return pathname.endsWith('/artifacts') ? json(page([])) : undefined;
+        });
+        const result = await provider({
+          hostedTrace: true,
+          artifactPaths: ['/workspace/outputs/file'],
+          retainSession: true,
+        }).callApi('hi', row);
+        expect(result.error).toMatch(/turn ID/i);
+        expect(result.output).toBeUndefined();
+        expect(result.metadata).toMatchObject({ sessionCancelled: true, sessionDeleted: true });
+        expect(calls().some(({ pathname }) => /\/(items|traces|artifacts)$/.test(pathname))).toBe(
+          false,
+        );
+        expect(addSpans).not.toHaveBeenCalled();
+      },
+    );
+
     it('requests no native traces for wrapper-only and untraced rows', async () => {
       const attributes = recordWrapper();
       const wrapperOnly = await provider().callApi('hi', row);
@@ -536,6 +570,24 @@ describe('OpenAiAgentsApiProvider', () => {
       });
       expect(calls().some((request) => request.pathname.endsWith('/traces'))).toBe(false);
       expect(addSpans).not.toHaveBeenCalled();
+    });
+
+    it('skips an import when a concurrent evaluation initialized an external-only SDK', async () => {
+      vi.stubEnv('PROMPTFOO_OTEL_LOCAL_EXPORT', 'true');
+      recordWrapper(false);
+      const result = await provider({ hostedTrace: true }).callApi('hi', row);
+      expect(result).toMatchObject({
+        output: '42',
+        metadata: {
+          sessionDeleted: true,
+          hostedTrace: {
+            status: 'unavailable',
+            reason: expect.stringContaining('no local span exporter'),
+          },
+        },
+      });
+      expect(calls().some((request) => request.pathname.endsWith('/traces'))).toBe(false);
+      expect(getTraceStore().getTraceMetadata).not.toHaveBeenCalled();
     });
 
     it('downloads this session and root turn on later pages before deleting it', async () => {
@@ -590,9 +642,64 @@ describe('OpenAiAgentsApiProvider', () => {
       expect(addSpans).toHaveBeenCalledWith(
         localTraceId,
         [expect.objectContaining({ name: 'invoke_agent', parentSpanId: wrapperId })],
-        { abortSignal: expect.any(AbortSignal) },
+        { abortSignal: expect.any(AbortSignal), deadline: expect.any(Number) },
       );
     });
+
+    it.each(['parent arrives', 'parent absent', 'cycle', 'duplicate'])(
+      'polls only repairable disconnected snapshots (%s)',
+      async (outcome) => {
+        vi.useFakeTimers();
+        recordWrapper();
+        const addSpans = vi.spyOn(getTraceStore(), 'addSpans').mockResolvedValue({ stored: true });
+        let polls = 0;
+        mockApi((pathname) => {
+          if (!pathname.endsWith('/traces')) {
+            return undefined;
+          }
+          polls++;
+          const resource = published();
+          const spans = resource.otlp.resourceSpans[0].scopeSpans[0].spans;
+          const [root] = spans;
+          const parentSpanId = '8'.repeat(16);
+          const child = {
+            ...root,
+            spanId: 'd'.repeat(16),
+            parentSpanId,
+            attributes: [{ key: 'gen_ai.operation.name', value: { stringValue: 'chat' } }],
+          };
+          spans.push(child);
+          if (outcome === 'parent arrives' && polls > 1) {
+            const parent = { ...child, spanId: parentSpanId, parentSpanId: root.spanId };
+            spans.push(parent);
+          } else if (outcome === 'cycle') {
+            const cycle = { ...child, spanId: '9'.repeat(16), parentSpanId: '9'.repeat(16) };
+            spans.push(cycle);
+          } else if (outcome === 'duplicate') {
+            spans.push(child);
+          }
+          return json(page([resource]));
+        });
+        const pending = provider({ hostedTrace: { timeoutMs: 25 }, pollIntervalMs: 10 }).callApi(
+          'hi',
+          row,
+        );
+        await vi.advanceTimersByTimeAsync(0);
+        expect(addSpans).not.toHaveBeenCalled();
+        await vi.advanceTimersByTimeAsync(25);
+        const result = await pending;
+        expect(result).toMatchObject({ output: '42', metadata: { sessionDeleted: true } });
+        if (outcome === 'parent arrives') {
+          expect(polls).toBe(2);
+          expect(result.metadata?.hostedTrace).toMatchObject({ status: 'imported', spanCount: 3 });
+          expect(addSpans).toHaveBeenCalledOnce();
+        } else {
+          expect(polls).toBe(outcome === 'parent absent' ? 3 : 1);
+          expect(result.metadata?.hostedTrace).toMatchObject({ status: 'unavailable' });
+          expect(addSpans).not.toHaveBeenCalled();
+        }
+      },
+    );
 
     it.each([
       'latest',
@@ -673,7 +780,7 @@ describe('OpenAiAgentsApiProvider', () => {
             expect(addSpans).toHaveBeenCalledWith(
               localTraceId,
               expect.arrayContaining([expect.objectContaining({ name: 'execute_tool lookup' })]),
-              { abortSignal: expect.any(AbortSignal) },
+              { abortSignal: expect.any(AbortSignal), deadline: expect.any(Number) },
             );
           } else {
             expect(result.metadata?.hostedTrace).toMatchObject({ status: 'unavailable' });
@@ -907,12 +1014,15 @@ describe('OpenAiAgentsApiProvider', () => {
     ])('bounds a queued local write by the $budget deadline', async (rowBudget) => {
       vi.useFakeTimers();
       recordWrapper();
+      const requestStarted = createDeferred<void>();
+      const publication = createDeferred<void>();
       const queued = createDeferred<{ stored: boolean }>();
       const addSpans = vi.spyOn(getTraceStore(), 'addSpans').mockReturnValue(queued.promise);
       vi.mocked(fetchWithRetries).mockImplementation(async (url, options) => {
         const path = new URL(String(url)).pathname;
         if (path.endsWith('/traces')) {
-          await new Promise((resolve) => setTimeout(resolve, 10));
+          requestStarted.resolve();
+          await publication.promise;
           return json(page([published(rowBudget.complete ? 'complete' : 'partial')]));
         }
         return defaultResponse(path, options?.method);
@@ -921,11 +1031,17 @@ describe('OpenAiAgentsApiProvider', () => {
         timeoutMs: rowBudget.providerMs,
         hostedTrace: { timeoutMs: rowBudget.hostedMs },
       }).callApi('hi', row);
-      await vi.advanceTimersByTimeAsync(rowBudget.expires - 1);
+      await requestStarted.promise;
+      const publicationDelayMs = 10;
+      await vi.advanceTimersByTimeAsync(publicationDelayMs);
+      expect(addSpans).not.toHaveBeenCalled();
+      publication.resolve();
+      await vi.advanceTimersByTimeAsync(rowBudget.expires - publicationDelayMs - 1);
       expect(addSpans).toHaveBeenCalledOnce();
       const signal = addSpans.mock.calls[0][2]?.abortSignal;
       expect(signal?.aborted).toBe(false);
       await vi.advanceTimersByTimeAsync(2);
+      expect(signal?.aborted).toBe(true);
       await expect(pending).resolves.toMatchObject({
         output: '42',
         metadata: {
@@ -933,9 +1049,28 @@ describe('OpenAiAgentsApiProvider', () => {
           hostedTrace: { status: 'unavailable', reason: 'Timed out storing the hosted trace' },
         },
       });
-      expect(signal?.aborted).toBe(true);
       expect(calls().filter((request) => request.method === 'DELETE')).toHaveLength(1);
       queued.reject(new Error('late write rejection'));
+    });
+
+    it('reports a local write deadline that expires before the timer callback runs', async () => {
+      vi.useFakeTimers();
+      recordWrapper();
+      const deadline = Date.now() + 100;
+      const addSpans = vi.spyOn(getTraceStore(), 'addSpans').mockImplementation(async () => {
+        vi.setSystemTime(deadline);
+        throw new Error('Database locked');
+      });
+      mockApi((path) => (path.endsWith('/traces') ? json(page([published()])) : undefined));
+      const result = await provider({ hostedTrace: true, timeoutMs: 100 }).callApi('hi', row);
+      expect(result).toMatchObject({
+        output: '42',
+        metadata: {
+          sessionDeleted: true,
+          hostedTrace: { status: 'unavailable', reason: 'Timed out storing the hosted trace' },
+        },
+      });
+      expect(addSpans.mock.calls[0][2]?.deadline).toBe(deadline);
     });
 
     it('rejects invalid options before creating a session', () => {

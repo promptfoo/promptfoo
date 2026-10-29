@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { promisify } from 'node:util';
 
 import { eq } from 'drizzle-orm';
-import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getDb } from '../../src/database/index';
 import { spansTable, tracesTable } from '../../src/database/tables';
 import { runDbMigrations } from '../../src/migrate';
@@ -101,6 +101,35 @@ describe('TraceStore span persistence', () => {
       expect(outcome).toBe(controller.signal.reason);
     },
   );
+
+  it('rolls back an insert that crosses its deadline before the abort timer can run', async () => {
+    const traceId = 'late-native-insertion';
+    const traceStore = await createTrace(traceId);
+    const deadline = Date.now() + 1000;
+    const clock = vi.spyOn(Date, 'now').mockReturnValue(deadline - 1);
+    const signal = new AbortController().signal;
+    try {
+      const span = {
+        spanId: 'late',
+        name: 'target.call',
+        startTime: 1,
+        // The SQLite driver serializes attributes during the insert.
+        attributes: {
+          toJSON: () => {
+            clock.mockReturnValue(deadline);
+            return {};
+          },
+        },
+      };
+      await expect(
+        traceStore.addSpans(traceId, [span], { abortSignal: signal, deadline }),
+      ).rejects.toMatchObject({ name: 'TimeoutError' });
+      expect(signal.aborted).toBe(false);
+      await expect(traceStore.getSpans(traceId)).resolves.toEqual([]);
+    } finally {
+      clock.mockRestore();
+    }
+  });
 
   it('allows the same span ID in different traces', async () => {
     const firstTraceStore = await createTrace('first-trace');

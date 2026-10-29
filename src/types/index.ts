@@ -862,6 +862,8 @@ export interface AssertionParams {
   providerCallContext?: CallApiContextParams;
   /** Context passed to assertion value functions */
   assertionValueContext: AssertionValueFunctionContext;
+  /** Upper bound on additional raw span matches when a trace filter lost evidence. */
+  traceSpanCountUncertainty?: { additional: number; reason: string };
   cost?: number;
   inverse: boolean;
   logProbs?: number[];

@@ -1,3 +1,5 @@
+export const HOSTED_ERROR_STATUS_COMPLETE = 'promptfoo.openai.error_status_complete';
+
 /** Classify a span before persisting, or from its decoded trace attributes during grading. */
 export function isSpanError(
   statusCode: number | undefined,

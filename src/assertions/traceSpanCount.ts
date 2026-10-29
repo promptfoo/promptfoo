@@ -1,4 +1,8 @@
-import { filterTraceSpans, finishTraceAssertion } from './traceUtils';
+import {
+  filterTraceSpans,
+  finishTraceAssertion,
+  withTraceAttributeFilterContext,
+} from './traceUtils';
 
 import type { AssertionParams, GradingResult } from '../types/index';
 import type { TraceSpan } from '../types/tracing';
@@ -29,18 +33,40 @@ export const handleTraceSpanCount = (params: AssertionParams): GradingResult => 
   const matchingSpans = filterTraceSpans(spans, pattern, attributes);
   const count = matchingSpans.length;
 
-  // Check against constraints
+  let found = `Found ${count} spans matching pattern "${pattern}"`;
+  const uncertainty = params.traceSpanCountUncertainty;
+  if (uncertainty) {
+    const upper = count + uncertainty.additional;
+    found = Number.isFinite(upper)
+      ? `Between ${count} and ${upper} spans match pattern "${pattern}"`
+      : `At least ${count} spans match pattern "${pattern}"`;
+    const minCount = Math.ceil(min ?? 0);
+    const maxCount = Math.floor(max ?? Infinity);
+    const couldSatisfy = minCount <= maxCount && upper >= minCount && count <= maxCount;
+    const mustSatisfy = count >= minCount && upper <= maxCount;
+    if (couldSatisfy && !mustSatisfy) {
+      // The possible counts give different grades, even after inversion.
+      return {
+        pass: false,
+        score: 0,
+        reason: withTraceAttributeFilterContext(`${uncertainty.reason} ${found}.`, attributes),
+        assertion,
+      };
+    }
+  }
+
+  // Every possible count has the same grade as the definite matches.
   let pass = true;
   let reason = '';
 
   if (min !== undefined && count < min) {
     pass = false;
-    reason = `Found ${count} spans matching pattern "${pattern}", expected at least ${min}`;
+    reason = `${found}, expected at least ${min}`;
   } else if (max !== undefined && count > max) {
     pass = false;
-    reason = `Found ${count} spans matching pattern "${pattern}", expected at most ${max}`;
+    reason = `${found}, expected at most ${max}`;
   } else {
-    reason = `Found ${count} spans matching pattern "${pattern}"`;
+    reason = found;
     if (min !== undefined && max !== undefined) {
       reason += ` (expected ${min}-${max})`;
     } else if (min !== undefined) {
