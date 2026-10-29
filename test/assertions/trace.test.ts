@@ -9,6 +9,7 @@ import { getTraceStore } from '../../src/tracing/store';
 import { mockProcessEnv } from '../util/utils';
 
 import type {
+  ApiProvider,
   Assertion,
   AtomicTestCase,
   GradingResult,
@@ -172,9 +173,11 @@ describe('trace assertions', () => {
       assertion: Assertion,
       hostedTrace?: object,
       calls = [tool('lookup', { order_id: '123' })],
+      provider?: ApiProvider,
     ) =>
       runAssertion({
         assertion,
+        provider,
         test: mockTest,
         providerResponse: { output: 'ok', metadata: { hostedTrace } },
         traceId: mockTraceData.traceId,
@@ -256,6 +259,51 @@ describe('trace assertions', () => {
       ).resolves.toMatchObject({ pass: false });
     });
 
+    it('cannot grade raw filters on discarded native fields, even with complete argument capture', async () => {
+      const value = {
+        pattern: 'execute_tool *',
+        attributes: { 'gen_ai.tool.call.result': 'private result' },
+      };
+      for (const assertion of [
+        { type: 'trace-span-count', value: { ...value, max: 0 } },
+        { type: 'trace-span-duration', value: { ...value, max: 1 } },
+        { type: 'trace-error-spans', value: { ...value, pattern: '', max_count: 0 } },
+      ] satisfies Assertion[]) {
+        await expect(grade(assertion, complete)).resolves.toMatchObject({
+          pass: false,
+          reason: expect.stringContaining('not retained'),
+        });
+      }
+      await expect(
+        grade(
+          { type: 'trace-span-count', value: { ...value, pattern: 'invoke_agent', max: 0 } },
+          imported,
+        ),
+      ).resolves.toMatchObject({ pass: true });
+    });
+
+    it('requires the local provider wrapper for raw counts and still grades witnessed tool arguments without it', async () => {
+      const orphan = tool('lookup', { order_id: '123' });
+      orphan.parentSpanId = 'missing-wrapper';
+      orphan.attributes!['promptfoo.openai.hosted_trace'] = orphan.parentSpanId;
+      const manifest = { ...complete, parentSpanId: orphan.parentSpanId };
+      for (const pattern of ['invoke_agent', 'execute_tool *']) {
+        await expect(
+          grade({ type: 'trace-span-count', value: { pattern, max: 1 } }, manifest, [orphan]),
+        ).resolves.toMatchObject({ pass: false, reason: expect.stringContaining('wrapper') });
+      }
+      await expect(
+        grade(
+          {
+            type: 'trajectory:tool-args-match',
+            value: { name: 'lookup', args: { order_id: '123' }, mode: 'exact' },
+          },
+          manifest,
+          [orphan],
+        ),
+      ).resolves.toMatchObject({ pass: true });
+    });
+
     it('fails if a replay contains only hosted spans belonging to a different provider call', async () => {
       await expect(
         grade(noDelete, { ...imported, parentSpanId: 'other-call' }),
@@ -276,12 +324,72 @@ describe('trace assertions', () => {
           'promptfoo.openai.hosted_trace_requested': true,
         },
       });
-      await expect(grade(noDelete, undefined, [wrapper('target')])).resolves.toMatchObject({
+      const provider = { id: () => 'custom-agent-id', callApi: async () => ({ output: 'ok' }) };
+      await expect(
+        grade(noDelete, undefined, [wrapper('target')], provider),
+      ).resolves.toMatchObject({
         pass: false,
         reason: expect.stringContaining('capture metadata'),
       });
       await expect(grade(noDelete, undefined, [wrapper('grader')])).resolves.toMatchObject({
         pass: true,
+      });
+    });
+
+    it('does not attribute a hosted grader or its detached tools to another target on replay', async () => {
+      const importedTool = {
+        ...tool('read_receipt'),
+        parentSpanId: 'hosted-grader',
+        attributes: {
+          'promptfoo.openai.hosted_trace': 'hosted-grader',
+          'tool.name': 'read_receipt',
+        },
+      };
+      const grader: TraceSpan = {
+        spanId: 'rubric',
+        name: 'llm-rubric',
+        startTime: 1000,
+        attributes: { 'promptfoo.span.role': 'grader' },
+      };
+      const graderWrapper: TraceSpan = {
+        spanId: 'hosted-grader',
+        parentSpanId: grader.spanId,
+        name: 'invoke_agent',
+        startTime: 1010,
+        attributes: { 'promptfoo.openai.hosted_trace_requested': true },
+      };
+      for (const calls of [[grader, graderWrapper, importedTool], [importedTool]]) {
+        await expect(
+          grade({ type: 'trajectory:tool-used', value: 'read_receipt' }, undefined, calls),
+        ).resolves.toMatchObject({ pass: false });
+        await expect(
+          grade({ type: 'not-trajectory:tool-used', value: 'read_receipt' }, undefined, calls),
+        ).resolves.toMatchObject({ pass: true });
+        await expect(
+          grade({ type: 'trajectory:tool-used', value: 'other_provider' }, undefined, calls),
+        ).resolves.toMatchObject({ pass: true });
+        await expect(
+          grade(
+            { type: 'trace-span-count', value: { pattern: 'invoke_agent', min: 1, max: 1 } },
+            undefined,
+            calls,
+          ),
+        ).resolves.toMatchObject({ pass: true });
+      }
+    });
+
+    it('proves a positive step minimum from stored names without argument capture', async () => {
+      const count = (bounds: { min?: number; max?: number }) =>
+        grade(
+          { type: 'trajectory:step-count', value: { pattern: 'execute_tool *', ...bounds } },
+          imported,
+          [tool('lookup')],
+        );
+      await expect(count({ min: 1 })).resolves.toMatchObject({ pass: true });
+      await expect(count({ min: 2 })).resolves.toMatchObject({ pass: false });
+      await expect(count({ max: 1 })).resolves.toMatchObject({
+        pass: false,
+        reason: expect.stringContaining('includeToolArguments'),
       });
     });
 
@@ -295,7 +403,7 @@ describe('trace assertions', () => {
       },
       {
         type: 'trace-error-spans',
-        value: { attributes: { command: 'rm' }, max_count: 0 },
+        value: { attributes: { 'gen_ai.tool.call.arguments': '{"cmd":"rm"}' }, max_count: 0 },
       },
       {
         type: 'trace-span-count',

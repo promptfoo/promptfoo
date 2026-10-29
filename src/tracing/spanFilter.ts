@@ -11,6 +11,42 @@ interface SpanRelevanceInput {
   statusCode?: number;
 }
 
+/** Internal grader activity can include imported spans without their own role attribute. */
+export function getGraderOwnedSpanIds(
+  spans: ReadonlyArray<{
+    spanId: string;
+    parentSpanId?: string | null;
+    attributes?: Record<string, unknown> | null;
+  }>,
+): Set<string> {
+  const graders = new Set(
+    spans
+      .filter((span) => span.attributes?.[SPAN_ROLE_ATTRIBUTE] === 'grader')
+      .map((s) => s.spanId),
+  );
+  if (!graders.size) {
+    return graders;
+  }
+  const children = new Map<string, string[]>();
+  for (const { parentSpanId, spanId } of spans) {
+    if (parentSpanId) {
+      const siblings = children.get(parentSpanId);
+      if (siblings) {
+        siblings.push(spanId);
+      } else {
+        children.set(parentSpanId, [spanId]);
+      }
+    }
+  }
+  // Set iteration also visits newly added descendants and terminates on cyclic input.
+  for (const id of graders) {
+    for (const child of children.get(id) ?? []) {
+      graders.add(child);
+    }
+  }
+  return graders;
+}
+
 /** Identifies spans that describe model, tool, command, search, guardrail, or error activity. */
 export function isRelevantSpan(span: SpanRelevanceInput): boolean {
   if (span.attributes?.[SPAN_ROLE_ATTRIBUTE] === 'grader') {

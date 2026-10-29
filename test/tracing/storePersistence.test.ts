@@ -11,7 +11,7 @@ import { spansTable, tracesTable } from '../../src/database/tables';
 import { runDbMigrations } from '../../src/migrate';
 import { TraceStore } from '../../src/tracing/store';
 import EvalFactory from '../factories/evalFactory';
-import { removeTempDir } from '../util/utils';
+import { createDeferred, removeTempDir } from '../util/utils';
 
 const execFileAsync = promisify(execFile);
 
@@ -68,6 +68,39 @@ describe('TraceStore span persistence', () => {
     expect(spans).toHaveLength(1);
     expect(spans[0]).toMatchObject({ name: 'target.call', spanId: 'shared-span' });
   });
+
+  it.each([false, true])(
+    'discards a cancelled span write queued behind a transaction (skipTraceCheck=%s)',
+    async (skipTraceCheck) => {
+      const traceId = 'cancelled-insertion';
+      const traceStore = await createTrace(traceId);
+      const db = await getDb();
+      const started = createDeferred<void>();
+      const release = createDeferred<void>();
+      const holding = db.transaction(async () => {
+        started.resolve();
+        await release.promise;
+      });
+      await started.promise;
+
+      const controller = new AbortController();
+      const queued = traceStore
+        .addSpans(traceId, [{ spanId: 'late', name: 'target.call', startTime: 1 }], {
+          abortSignal: controller.signal,
+          skipTraceCheck,
+        })
+        .catch((error: unknown) => error);
+      // Let addSpans reach the database queue before cancellation.
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      controller.abort(new Error('Import deadline reached'));
+      release.resolve();
+      await holding;
+
+      const outcome = await queued;
+      await expect(traceStore.getSpans(traceId)).resolves.toEqual([]);
+      expect(outcome).toBe(controller.signal.reason);
+    },
+  );
 
   it('allows the same span ID in different traces', async () => {
     const firstTraceStore = await createTrace('first-trace');

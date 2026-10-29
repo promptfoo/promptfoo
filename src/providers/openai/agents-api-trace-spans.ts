@@ -1,11 +1,12 @@
 import { createHash } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 
+import { tokenizer, tokTypes } from 'acorn';
 import { z } from 'zod';
 import cliState from '../../cliState';
 import { sanitizeTraceAttributes } from '../../tracing/sanitizeAttributes';
 import { getNormalizedToolAttributes } from '../../tracing/toolAttributes';
-import { looksLikeSecret, sanitizeObject } from '../../util/sanitizer';
+import { sanitizeObject } from '../../util/sanitizer';
 import { hasSensitiveOpenAiCacheString } from './util';
 
 import type { SpanData } from '../../tracing/store';
@@ -87,18 +88,53 @@ function protectsKey(keys: string[], policy: ImportPolicy): boolean {
   return policy.redactAttributes.some((pattern) => keys.some((key) => key.includes(pattern)));
 }
 
-// Keep wire spelling for exact attribute filters only when every token survives parsing.
-// In particular, JSON.parse silently discards duplicate keys and rounds large integers.
-function roundTrips(raw: string, value: unknown): boolean {
-  const canonical = JSON.stringify(value);
-  if (raw === canonical) {
-    return true;
+// Acorn returns unsigned number tokens. Compare their decimal digits and scale so
+// 1.0 and 1e0 match 1, while a fraction rounded by JSON.parse remains unavailable.
+function decimalSpelling(literal: string): string {
+  const [mantissa, exponent = '0'] = literal.toLowerCase().split('e');
+  const [integer, fraction = ''] = mantissa.split('.');
+  const digits = (integer + fraction).replace(/^0+/, '');
+  if (!digits) {
+    return '0';
   }
-  // JSON.stringify normalizes string escapes and removes insignificant whitespace.
-  const normalized = raw.replace(/"(?:[^"\\]|\\.)*"|\s+/g, (part) =>
-    part.startsWith('"') ? JSON.stringify(JSON.parse(part)) : '',
-  );
-  return normalized === canonical;
+  let end = digits.length;
+  while (digits[end - 1] === '0') {
+    end--;
+  }
+  return `${digits.slice(0, end)}e${Number(exponent) - fraction.length + digits.length - end}`;
+}
+
+function roundTrips(raw: string, value: unknown): boolean {
+  let members = 0;
+  let safeNumbers = true;
+  const canonical = JSON.stringify(value, (_key, item) => {
+    if (item && typeof item === 'object' && !Array.isArray(item)) {
+      members += Object.keys(item).length;
+    } else if (
+      typeof item === 'number' &&
+      (!Number.isFinite(item) || (Number.isInteger(item) && !Number.isSafeInteger(item)))
+    ) {
+      safeNumbers = false;
+    }
+    return item;
+  });
+  if (!safeNumbers || raw === canonical) {
+    return safeNumbers;
+  }
+
+  // The input already passed JSON.parse. Every overwritten key removes at least one
+  // member; integer-key reordering, string escaping, and whitespace preserve the count.
+  for (const token of tokenizer(raw, { ecmaVersion: 2022 })) {
+    if (token.type === tokTypes.colon) {
+      members--;
+    } else if (token.type === tokTypes.num) {
+      const literal = raw.slice(token.start, token.end);
+      if (decimalSpelling(literal) !== decimalSpelling(String(Number(literal)))) {
+        return false;
+      }
+    }
+  }
+  return members === 0;
 }
 
 function sensitiveText(value: string, policy: ImportPolicy): boolean {
@@ -128,7 +164,8 @@ function inspectArgument(value: unknown, policy: ImportPolicy, depth = 0): unkno
     );
   }
   if (typeof value !== 'string') {
-    return value;
+    // The sanitizer JSON-serializes its input and would turn -0 into +0.
+    return Object.is(value, -0) ? 0 : value;
   }
   if (sensitiveText(value, policy)) {
     invalid();
@@ -195,6 +232,15 @@ function toolAttributes(
       return unavailable;
     }
     const intact = isDeepStrictEqual(captured, args);
+    if (!intact && typeof captured === 'object') {
+      // Retained fields now need fresh JSON. Omit a field if serializing it would
+      // change the evidence, for example a nested -0 that JSON.stringify writes as 0.
+      captured = Object.fromEntries(
+        Object.entries(captured).filter(([, item]) =>
+          isDeepStrictEqual(item, JSON.parse(JSON.stringify(item))),
+        ),
+      );
+    }
     const json = intact ? raw : JSON.stringify(captured);
     if (policy.redact(json) !== json) {
       return unavailable;
@@ -209,12 +255,9 @@ function toolAttributes(
   }
 }
 
-function safeIdentifier(value: unknown, redact: (text: string) => string): value is string {
+function safeIdentifier(value: unknown, policy: ImportPolicy): value is string {
   return (
-    typeof value === 'string' &&
-    /^[\w.:-]{1,256}$/.test(value) &&
-    !looksLikeSecret(value) &&
-    redact(value) === value
+    typeof value === 'string' && /^[\w.:-]{1,256}$/.test(value) && !sensitiveText(value, policy)
   );
 }
 
@@ -269,7 +312,7 @@ function normalizeSpan(wire: z.infer<typeof wireSpan>, policy: ImportPolicy): Sp
   };
   if (operation === 'execute_tool') {
     const tool = attrs.get('gen_ai.tool.name')?.stringValue;
-    if (!safeIdentifier(tool, policy.redact)) {
+    if (!safeIdentifier(tool, policy)) {
       invalid();
     }
     Object.assign(
@@ -279,7 +322,7 @@ function normalizeSpan(wire: z.infer<typeof wireSpan>, policy: ImportPolicy): Sp
     name = `execute_tool ${tool}`;
   } else {
     const model = attrs.get('gen_ai.request.model')?.stringValue;
-    if (safeIdentifier(model, policy.redact)) {
+    if (safeIdentifier(model, policy)) {
       attributes['gen_ai.request.model'] = model;
       if (operation === 'chat') {
         name = `chat ${model}`;

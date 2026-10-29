@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 
 import logger from '../../logger';
+import { runProviderCallWithAbort } from '../../scheduler/providerCallExecutionContext';
 import { getOtelConfigFromEnv } from '../../tracing/otelConfig';
 import { getTraceStore } from '../../tracing/store';
 import { CloudAuthRedirectError } from '../../util/fetch/cloudAuthRedirects';
@@ -424,6 +425,28 @@ function referencesVariable(template: string, names: string[]): boolean {
   });
 }
 
+function containsTemplate(value: string): boolean {
+  return value.includes('{{') || value.includes('{%');
+}
+
+function isArtifactOutputPath(path: unknown): path is string {
+  return (
+    typeof path === 'string' &&
+    path.startsWith('/workspace/outputs/') &&
+    path.length <= 4096 &&
+    !path.includes('\0') &&
+    path
+      .slice(1)
+      .split('/')
+      .every((part) => part.length > 0 && part !== '.' && part !== '..')
+  );
+}
+
+/** An absent or malformed field cannot prove that this record belongs elsewhere. */
+function identifiesAnother(value: unknown, expected: string): boolean {
+  return typeof value === 'string' && value.trim().length > 0 && value !== expected;
+}
+
 /** Render only strings that reference test vars, preserving literal braces in commands and code. */
 function renderConfigTemplates(
   value: unknown,
@@ -431,7 +454,7 @@ function renderConfigTemplates(
   names: string[],
 ): unknown {
   if (typeof value === 'string') {
-    return (value.includes('{{') || value.includes('{%')) && referencesVariable(value, names)
+    return containsTemplate(value) && referencesVariable(value, names)
       ? renderVarsInObject(value, vars)
       : value;
   }
@@ -521,14 +544,7 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
         new Set(paths).size !== paths.length ||
         paths.some(
           (path) =>
-            typeof path !== 'string' ||
-            !path.startsWith('/workspace/outputs/') ||
-            path.length > 4096 ||
-            path.includes('\0') ||
-            path
-              .slice(1)
-              .split('/')
-              .some((part) => !part || part === '.' || part === '..'),
+            typeof path !== 'string' || (!containsTemplate(path) && !isArtifactOutputPath(path)),
         ))
     ) {
       throw new Error(
@@ -630,7 +646,10 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
     endpoint: string,
     headers: Headers,
     signal: AbortSignal,
-    pageSize = 100,
+    {
+      pageSize = 100,
+      requirePageInfo = false,
+    }: { pageSize?: number; requirePageInfo?: boolean } = {},
   ): Promise<T[]> {
     const items: T[] = [];
     const cursors = new Set<string>();
@@ -655,7 +674,7 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
         undefined,
         query.toString(),
       );
-      if (!Array.isArray(page?.data)) {
+      if (!Array.isArray(page?.data) || (requirePageInfo && typeof page.has_more !== 'boolean')) {
         throw new Error('Agents API returned an invalid list response');
       }
       // Polls replace an endpoint's snapshot; charge only growth beyond its previous peak.
@@ -681,7 +700,11 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
       if (!page.has_more) {
         return items;
       }
-      if (!page.last_id || cursors.has(page.last_id)) {
+      if (
+        !page.last_id ||
+        cursors.has(page.last_id) ||
+        (requirePageInfo && (typeof page.last_id !== 'string' || !page.last_id.trim()))
+      ) {
         throw new Error('Agents API returned an invalid pagination cursor');
       }
       after = page.last_id;
@@ -889,6 +912,12 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
         config,
         env: this.env,
       });
+      // A template was allowed during provider loading. Check the actual path before opening a session.
+      if (callProvider.config.artifactPaths?.some((path) => !isArtifactOutputPath(path))) {
+        throw new Error(
+          'Agents API artifactPaths must resolve to file paths under /workspace/outputs/',
+        );
+      }
       if (removedInheritedHeaders && !callProvider.sendsToOpenAiApi()) {
         const { hasCustomHeader } = scanRequestHeaders(
           new Headers(callProvider.getOpenAiRequestHeaders()),
@@ -1015,9 +1044,16 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
       ? AbortSignal.any([controller.signal, options.abortSignal])
       : controller.signal;
     let endpoint: string | undefined;
+    let cleanup: Promise<void> | undefined;
     let completed = false;
     const result: ProviderResponse = { cached: false };
     const metadata: Record<string, unknown> = {};
+    const releaseSession = (cancel: boolean) => {
+      if (endpoint && (cancel || !this.config.retainSession)) {
+        cleanup ??= this.cleanupSession(endpoint, headers, cancel, metadata);
+      }
+      return cleanup;
+    };
     try {
       const session = await this.request<Session>('agents/sessions', 'POST', headers, signal, {
         agent_id: this.config.agent_id,
@@ -1101,6 +1137,7 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
           endpoint,
           headers,
           signal,
+          () => releaseSession(false),
           parent,
           options?.abortSignal,
         );
@@ -1114,9 +1151,7 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
         : this.redact(error instanceof Error ? error.message : String(error));
     } finally {
       clearTimeout(timer);
-      if (endpoint && (!completed || !this.config.retainSession)) {
-        await this.cleanupSession(endpoint, headers, !completed, metadata);
-      }
+      await releaseSession(!completed);
     }
     // Cleanup ignores eval cancellation so the session is released; honor it before returning.
     options?.abortSignal?.throwIfAborted();
@@ -1140,9 +1175,9 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
     }
     const artifactSignal = AbortSignal.any([signal, AbortSignal.timeout(10_000)]);
     const collection = `${endpoint}/artifacts`;
-    const published = await this.list<SessionArtifact>(collection, headers, artifactSignal).catch(
-      () => undefined,
-    );
+    const published = await this.list<SessionArtifact>(collection, headers, artifactSignal, {
+      requirePageInfo: true,
+    }).catch(() => undefined);
     const artifacts = await Promise.all(
       paths.map(async (path) => {
         const evidence = { path: this.redact(path) };
@@ -1152,7 +1187,9 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
         try {
           const matches = published.filter(
             (item) =>
-              item.session_id === sessionId && item.turn_id === turnId && item.path === path,
+              !identifiesAnother(item?.session_id, sessionId) &&
+              !identifiesAnother(item?.turn_id, turnId) &&
+              (!isArtifactOutputPath(item?.path) || item.path === path),
           );
           if (!matches.length) {
             return { ...evidence, status: 'missing' };
@@ -1160,6 +1197,9 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
           const [artifact] = matches;
           if (
             matches.length !== 1 ||
+            artifact?.session_id !== sessionId ||
+            artifact.turn_id !== turnId ||
+            artifact.path !== path ||
             typeof artifact.id !== 'string' ||
             !/^[A-Za-z0-9_-]+$/.test(artifact.id) ||
             !isNonNegativeSafeInteger(artifact.size_bytes) ||
@@ -1187,13 +1227,14 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
     return { artifacts };
   }
 
-  /** Import the published root-turn tree under this provider invocation before session deletion. */
+  /** Download the published root-turn tree before deletion and store it under the provider invocation. */
   private async importHostedTrace(
     sessionId: string,
     turnId: string,
     endpoint: string,
     headers: Headers,
     signal: AbortSignal,
+    releaseSession: () => void,
     parent?: SpanContext,
     abortSignal?: AbortSignal,
   ) {
@@ -1214,7 +1255,10 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
     let snapshot: ReturnType<typeof normalizeHostedTrace> | undefined;
     try {
       // A grader can share the row's trace without the target provider's request context.
-      const metadata = await getTraceStore().getTraceMetadata(parent.traceId);
+      const metadata = await runProviderCallWithAbort(
+        () => getTraceStore().getTraceMetadata(parent.traceId),
+        traceSignal,
+      );
       if (!metadata) {
         return unavailable('The local eval trace was unavailable');
       }
@@ -1230,7 +1274,7 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
           `${endpoint}/traces`,
           headers,
           traceSignal,
-          1,
+          { pageSize: 1, requirePageInfo: true },
         );
         const published = traces.find(
           (trace) => trace.id === turnId && trace.session_id === sessionId,
@@ -1268,7 +1312,13 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
 
     const { spans, complete } = snapshot;
     try {
-      const stored = await getTraceStore().addSpans(parent.traceId, spans);
+      // The complete or partial snapshot is now local. SQLite can queue this write
+      // behind another transaction, so release the remote session independently.
+      releaseSession();
+      const stored = await runProviderCallWithAbort(
+        () => getTraceStore().addSpans(parent.traceId, spans, { abortSignal }),
+        abortSignal,
+      );
       if (!stored.stored) {
         return unavailable('The local eval trace was unavailable');
       }
@@ -1374,13 +1424,13 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
         }
         // Keep either completed read when its sibling outlasts the usage deadline.
         await Promise.all([
-          this.request<Session>(endpoint, 'GET', headers, usageSignal).then((next) => {
-            latest.session = next;
+          this.request<Session | undefined>(endpoint, 'GET', headers, usageSignal).then((next) => {
+            latest.session = next ?? latest.session;
           }),
           // Root-turn usage is only a fallback; a failed turn read must not stop session polling.
-          this.request<Turn>(turnEndpoint, 'GET', headers, usageSignal)
+          this.request<Turn | undefined>(turnEndpoint, 'GET', headers, usageSignal)
             .then((next) => {
-              latest.turn = next;
+              latest.turn = next ?? latest.turn;
             })
             .catch((error: unknown) => {
               usageSignal.throwIfAborted();

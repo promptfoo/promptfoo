@@ -1,4 +1,6 @@
+import { getGraderOwnedSpanIds } from '../tracing/spanFilter';
 import { COMMAND_ATTRIBUTE_KEYS, TOOL_ARGUMENT_ATTRIBUTE_KEYS } from '../tracing/toolAttributes';
+import { matchesPattern } from './traceUtils';
 
 import type { AssertionParams, AssertionType, AssertionValue } from '../types/index';
 import type { TraceSpan } from '../types/tracing';
@@ -6,6 +8,19 @@ import type { TraceSpan } from '../types/tracing';
 const ARGUMENT_FILTER_KEYS = new Set<string>([
   ...COMMAND_ATTRIBUTE_KEYS,
   ...TOOL_ARGUMENT_ATTRIBUTE_KEYS,
+]);
+
+// The importer defines these attributes on normalized spans; argument coverage is checked
+// separately below. Other wire attributes can be discarded, including tool results.
+const NORMALIZED_HOSTED_ATTRIBUTES = new Set([
+  'gen_ai.operation.name',
+  'gen_ai.provider.name',
+  'gen_ai.tool.name',
+  'gen_ai.tool.call.arguments',
+  'tool.name',
+  'tool.arguments',
+  'promptfoo.openai.hosted_trace',
+  'promptfoo.tool.arguments_redacted',
 ]);
 
 /** The hosted importer writes JSON text. Exported or redacted text must still parse as JSON. */
@@ -94,21 +109,62 @@ function getArgumentCoverageError(
       return undefined;
     }
     if (
-      includeToolArguments &&
       !inverse &&
       baseType === 'trajectory:step-count' &&
+      (includeToolArguments || !('type' in value)) &&
       'min' in value &&
       typeof value.min === 'number' &&
       value.min > 0 &&
       !('max' in value)
     ) {
-      // An unavailable argument can hide additional commands, but cannot erase an observed one.
+      // Untyped patterns can match preserved span names even when arguments were never captured.
       return undefined;
     }
   }
   return includeToolArguments
     ? 'Some hosted tool arguments were unavailable or redacted. The trace cannot establish the requested argument check.'
     : 'The imported OpenAI Agents API trace excludes tool arguments. Enable includeToolArguments to grade this assertion.';
+}
+
+/** A generic target can share its trace with an OpenAI-hosted grader. */
+function excludeHostedGraderEvidence({
+  assertionValueContext,
+  providerResponse,
+}: AssertionParams): string | undefined {
+  const trace = assertionValueContext.trace;
+  if (!trace) {
+    return undefined;
+  }
+  const hosted = trace.spans.filter(
+    ({ attributes }) =>
+      attributes?.['promptfoo.openai.hosted_trace_requested'] === true ||
+      typeof attributes?.['promptfoo.openai.hosted_trace'] === 'string',
+  );
+  if (!hosted.length) {
+    return undefined;
+  }
+  const graderSpans = getGraderOwnedSpanIds(trace.spans);
+  if (
+    !providerResponse.metadata?.hostedTrace &&
+    hosted.some(
+      ({ spanId, attributes }) =>
+        attributes?.['promptfoo.openai.hosted_trace_requested'] === true &&
+        !graderSpans.has(spanId),
+    )
+  ) {
+    return 'The OpenAI Agents API trace capture metadata is unavailable for this assertion.';
+  }
+  const targetSpans = trace.spans.filter(({ spanId }) => !graderSpans.has(spanId));
+  const targetIds = new Set(targetSpans.map(({ spanId }) => spanId));
+  assertionValueContext.trace = {
+    ...trace,
+    spans: targetSpans.filter(({ attributes }) => {
+      // Without its owning wrapper a detached native tool cannot be attributed to this target.
+      const owner = attributes?.['promptfoo.openai.hosted_trace'];
+      return typeof owner !== 'string' || targetIds.has(owner);
+    }),
+  };
+  return undefined;
 }
 
 /** A wrapper span alone cannot establish that an action never occurred inside the hosted turn. */
@@ -120,18 +176,7 @@ export function prepareHostedTraceAssertion(params: AssertionParams): string | u
   const trace = assertionValueContext.trace;
   const hostedTrace = providerResponse.metadata?.hostedTrace;
   if (hostedTrace?.source !== 'openai:agents-api') {
-    if (
-      !hostedTrace &&
-      trace?.spans.some(
-        ({ attributes }) =>
-          attributes?.['promptfoo.openai.hosted_trace_requested'] === true &&
-          attributes['promptfoo.span.role'] !== 'grader',
-      ) &&
-      (!params.provider || /^openai:agents-api(?::|$)/.test(params.provider.id()))
-    ) {
-      return 'The OpenAI Agents API trace capture metadata is unavailable for this assertion.';
-    }
-    return undefined;
+    return excludeHostedGraderEvidence(params);
   }
   if (hostedTrace.status !== 'imported' && hostedTrace.status !== 'partial') {
     return 'The requested OpenAI Agents API trace was unavailable.';
@@ -155,12 +200,41 @@ export function prepareHostedTraceAssertion(params: AssertionParams): string | u
   const ancestors = baseType.startsWith('trace-')
     ? getLocalAncestors(trace.spans, parentId)
     : undefined;
+  if (ancestors && !trace.spans.some((span) => span.spanId === parentId)) {
+    return 'The local provider wrapper is missing from the stored OpenAI Agents API trace.';
+  }
   assertionValueContext.trace = {
     ...trace,
     spans: ancestors
       ? [...native, ...trace.spans.filter((span) => ancestors.has(span.spanId))]
       : native,
   };
+  const rawFilter =
+    ancestors && renderedValue && typeof renderedValue === 'object' && 'attributes' in renderedValue
+      ? renderedValue
+      : undefined;
+  const attributeFilters = rawFilter?.attributes;
+  if (rawFilter && attributeFilters && typeof attributeFilters === 'object') {
+    const pattern =
+      'pattern' in rawFilter && typeof rawFilter.pattern === 'string' && rawFilter.pattern
+        ? rawFilter.pattern
+        : '*';
+    const candidates = native.filter((span) => matchesPattern(span.name, pattern));
+    if (!candidates.length) {
+      // This pattern only inspects local spans, which do not use the hosted projection.
+      return undefined;
+    }
+    const keys = Object.keys(attributeFilters);
+    if (
+      keys.some(
+        (key) =>
+          !NORMALIZED_HOSTED_ATTRIBUTES.has(key) &&
+          candidates.some((span) => !Object.hasOwn(span.attributes ?? {}, key)),
+      )
+    ) {
+      return 'A filtered attribute was not retained on the matching hosted spans. The trace cannot establish this assertion.';
+    }
+  }
   const coverageError = getArgumentCoverageError(params, hostedTrace.includeToolArguments);
   if (!coverageError) {
     return undefined;
@@ -168,12 +242,9 @@ export function prepareHostedTraceAssertion(params: AssertionParams): string | u
   // The row describes capture time. JSON export can truncate or redact a stored argument
   // without changing that row or the number of spans.
   const requiresNativeAlias =
-    renderedValue &&
-    typeof renderedValue === 'object' &&
-    'attributes' in renderedValue &&
-    renderedValue.attributes &&
-    typeof renderedValue.attributes === 'object' &&
-    'gen_ai.tool.call.arguments' in renderedValue.attributes;
+    attributeFilters &&
+    typeof attributeFilters === 'object' &&
+    'gen_ai.tool.call.arguments' in attributeFilters;
   const complete =
     hostedTrace.includeToolArguments &&
     hostedTrace.toolArgumentsComplete === true &&

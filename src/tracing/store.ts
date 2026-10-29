@@ -3,8 +3,7 @@ import { getDb } from '../database/index';
 import { spansTable, tracesTable } from '../database/tables';
 import logger from '../logger';
 import { sanitizeTraceAttributes } from './sanitizeAttributes';
-import { isRelevantSpan, matchesSpanFilter } from './spanFilter';
-import { SPAN_ROLE_ATTRIBUTE } from './spanRoles';
+import { getGraderOwnedSpanIds, isRelevantSpan, matchesSpanFilter } from './spanFilter';
 
 import type { TraceData } from '../types/tracing';
 
@@ -45,6 +44,7 @@ export interface TraceSpanQueryOptions extends TraceAttributeSanitizationOptions
 export interface AddSpansOptions {
   skipTraceCheck?: boolean;
   warnIfMissingTrace?: boolean;
+  abortSignal?: AbortSignal;
 }
 
 function serializeSpan(
@@ -177,11 +177,25 @@ export class TraceStore {
         return { stored: true };
       }
 
-      await db
-        .insert(spansTable)
-        .values(spanRecords)
-        .onConflictDoNothing({ target: [spansTable.traceId, spansTable.spanId] })
-        .run();
+      const insert = (writer: Pick<typeof db, 'insert'>) =>
+        writer
+          .insert(spansTable)
+          .values(spanRecords)
+          .onConflictDoNothing({ target: [spansTable.traceId, spansTable.spanId] })
+          .run();
+      const signal = options?.abortSignal;
+      if (signal) {
+        signal.throwIfAborted();
+        // A cancelled caller can stop waiting while SQLite is queued. Recheck
+        // inside the transaction and roll back if the insert crossed cancellation.
+        await db.transaction(async (tx) => {
+          signal.throwIfAborted();
+          await insert(tx);
+          signal.throwIfAborted();
+        });
+      } else {
+        await insert(db);
+      }
       logger.debug(
         `[TraceStore] Successfully added ${spanRecords.length} spans to trace ${traceId}`,
       );
@@ -355,8 +369,7 @@ export class TraceStore {
         .where(eq(spansTable.traceId, traceId))
         .orderBy(asc(spansTable.startTime), asc(spansTable.spanId));
 
-      const rowsBySpanId = new Map(rows.map((row) => [row.spanId, row]));
-      const graderOwnedSpanIds = new Map<string, boolean>();
+      const graderOwnedSpanIds = includeInternalSpans ? undefined : getGraderOwnedSpanIds(rows);
       const spanMap = new Map<string, SpanData>();
       const depthCache = new Map<string, number>();
 
@@ -367,34 +380,8 @@ export class TraceStore {
 
         const rawAttributes = row.attributes ?? {};
 
-        if (!includeInternalSpans) {
-          let ancestor: typeof spansTable.$inferSelect | undefined = row;
-          const visitedSpanIds = new Set<string>();
-          let belongsToGrader = false;
-
-          while (ancestor && !visitedSpanIds.has(ancestor.spanId)) {
-            const cached = graderOwnedSpanIds.get(ancestor.spanId);
-            if (cached !== undefined) {
-              belongsToGrader = cached;
-              break;
-            }
-
-            visitedSpanIds.add(ancestor.spanId);
-            if (ancestor.attributes?.[SPAN_ROLE_ATTRIBUTE] === 'grader') {
-              belongsToGrader = true;
-              break;
-            }
-
-            ancestor = ancestor.parentSpanId ? rowsBySpanId.get(ancestor.parentSpanId) : undefined;
-          }
-
-          for (const spanId of visitedSpanIds) {
-            graderOwnedSpanIds.set(spanId, belongsToGrader);
-          }
-
-          if (belongsToGrader) {
-            continue;
-          }
+        if (graderOwnedSpanIds?.has(row.spanId)) {
+          continue;
         }
 
         const spanData = serializeSpan(row, shouldSanitize, rawAttributes);

@@ -216,6 +216,50 @@ describe('OpenAiAgentsApiProvider', () => {
       expect(fetchWithRetries).not.toHaveBeenCalled();
     });
 
+    it('renders a whole artifact path from the test row before collecting it', async () => {
+      mockApi((pathname) => {
+        if (pathname === endpoint) {
+          return json(page([artifact]));
+        }
+        return pathname.endsWith('/art_test/content') ? new Response('example') : undefined;
+      });
+      const agent = provider({ artifactPaths: ['{{outputPath}}'] });
+      const result = await agent.callApi('hi', {
+        vars: { outputPath: path },
+        prompt: { raw: 'hi', label: 'hi' },
+      });
+      expect(result.error).toBeUndefined();
+      expect(result.metadata?.artifacts).toMatchObject([
+        { path, status: 'available', sizeBytes: 7 },
+      ]);
+    });
+
+    it.each(['unresolved', 'traversal'])(
+      'rejects an %s path before creating a session',
+      async (kind) => {
+        const agent = provider({ artifactPaths: ['{{outputPath}}'] });
+        const context =
+          kind === 'unresolved'
+            ? undefined
+            : {
+                vars: { outputPath: '/workspace/outputs/../secret' },
+                prompt: { raw: 'hi', label: 'hi' },
+              };
+        const result = await agent.callApi('hi', context);
+        expect(result.error).toContain('artifactPaths');
+        expect(fetchWithRetries).not.toHaveBeenCalled();
+      },
+    );
+
+    it('rejects a prompt override whose two variables render to the same path', async () => {
+      const result = await provider({ artifactPaths: [path] }).callApi('hi', {
+        vars: { first: path, second: path },
+        prompt: { raw: 'hi', label: 'hi', config: { artifactPaths: ['{{first}}', '{{second}}'] } },
+      });
+      expect(result.error).toContain('artifactPaths');
+      expect(fetchWithRetries).not.toHaveBeenCalled();
+    });
+
     it('does not request or record artifacts by default', async () => {
       const result = await provider().callApi('hi');
       expect(result.metadata).not.toHaveProperty('artifacts');
@@ -322,6 +366,54 @@ describe('OpenAiAgentsApiProvider', () => {
       });
       expect(calls().some(({ pathname }) => pathname.endsWith('/content'))).toBe(false);
     });
+
+    it.each([{ data: [] }, { data: [], has_more: true, last_id: 123 }])(
+      'requires valid pagination information to attest to a missing artifact: %j',
+      async (listing) => {
+        mockApi((pathname) => (pathname === endpoint ? json(listing) : undefined));
+        const result = await provider({ artifactPaths: [path] }).callApi('hi');
+        expect(result.metadata).toMatchObject({
+          artifacts: [{ path, status: 'unavailable' }],
+          sessionDeleted: true,
+        });
+        expect(calls().filter(({ pathname }) => pathname === endpoint)).toHaveLength(1);
+      },
+    );
+
+    it.each([
+      { field: 'session', data: [{ ...artifact, session_id: undefined }], status: 'unavailable' },
+      { field: 'relative path', data: [{ ...artifact, path: 'other' }], status: 'unavailable' },
+      { field: 'turn', data: [{ ...artifact, turn_id: undefined }], status: 'unavailable' },
+      { field: 'path', data: [{ ...artifact, path: undefined }], status: 'unavailable' },
+      { field: 'record', data: [null], status: 'unavailable' },
+      {
+        field: 'unknown session alongside exact match',
+        data: [{ ...artifact, session_id: undefined }, artifact],
+        status: 'unavailable',
+      },
+      {
+        field: 'session with known different path',
+        data: [{ ...artifact, path: '/workspace/outputs/other', session_id: undefined }],
+        status: 'missing',
+      },
+      {
+        field: 'path with known different session',
+        data: [{ ...artifact, path: undefined, session_id: 'sess_other' }],
+        status: 'missing',
+      },
+    ])(
+      'handles an incomplete $field without downloading an unidentified artifact',
+      async ({ data, status }) => {
+        mockApi((pathname) => (pathname === endpoint ? json(page(data)) : undefined));
+        const result = await provider({ artifactPaths: [path] }).callApi('hi');
+        expect(result.error).toBeUndefined();
+        expect(result.metadata).toMatchObject({
+          sessionDeleted: true,
+          artifacts: [{ path, status }],
+        });
+        expect(calls().some(({ pathname }) => pathname.endsWith('/content'))).toBe(false);
+      },
+    );
 
     it('preserves the completed turn if the session deadline expires during collection', async () => {
       vi.useFakeTimers();
@@ -446,7 +538,7 @@ describe('OpenAiAgentsApiProvider', () => {
       expect(addSpans).not.toHaveBeenCalled();
     });
 
-    it('waits for this session and root turn on later pages, stores once, then deletes', async () => {
+    it('downloads this session and root turn on later pages before deleting it', async () => {
       vi.useFakeTimers();
       recordWrapper();
       const addSpans = vi.spyOn(getTraceStore(), 'addSpans').mockResolvedValue({ stored: true });
@@ -473,7 +565,7 @@ describe('OpenAiAgentsApiProvider', () => {
           return json(page([published()]));
         }
         if (options?.method === 'DELETE') {
-          expect(addSpans).toHaveBeenCalledOnce();
+          expect(poll).toBe(3);
         }
         return defaultResponse(pathname, options?.method);
       });
@@ -493,9 +585,12 @@ describe('OpenAiAgentsApiProvider', () => {
         },
       });
       expect(poll).toBe(3);
-      expect(addSpans).toHaveBeenCalledWith(localTraceId, [
-        expect.objectContaining({ name: 'invoke_agent', parentSpanId: wrapperId }),
-      ]);
+      expect(addSpans).toHaveBeenCalledOnce();
+      expect(addSpans).toHaveBeenCalledWith(
+        localTraceId,
+        [expect.objectContaining({ name: 'invoke_agent', parentSpanId: wrapperId })],
+        { abortSignal: undefined },
+      );
     });
 
     it.each([
@@ -577,6 +672,7 @@ describe('OpenAiAgentsApiProvider', () => {
             expect(addSpans).toHaveBeenCalledWith(
               localTraceId,
               expect.arrayContaining([expect.objectContaining({ name: 'execute_tool lookup' })]),
+              { abortSignal: controller.signal },
             );
           } else {
             expect(result.metadata?.hostedTrace).toMatchObject({ status: 'unavailable' });
@@ -645,7 +741,7 @@ describe('OpenAiAgentsApiProvider', () => {
       });
       expect(result.pass).toBe(true);
       expect(store.getTraceMetadata).toHaveBeenCalledWith(localTraceId);
-      expect(addSpans).toHaveBeenCalledWith(localTraceId, expect.any(Array));
+      expect(addSpans).toHaveBeenCalledWith(localTraceId, expect.any(Array), expect.any(Object));
       const stored = addSpans.mock.calls[0][1];
       expect(JSON.stringify(stored)).not.toContain('private-customer');
       expect(stored.find((span) => span.name === 'execute_tool lookup')?.attributes).toMatchObject({
@@ -749,6 +845,44 @@ describe('OpenAiAgentsApiProvider', () => {
           });
         }
         expect(calls().at(-1)?.method).toBe('DELETE');
+      },
+    );
+
+    it('deletes the session on the hosted deadline while the local policy read is queued', async () => {
+      recordWrapper();
+      const queued = createDeferred<Record<string, unknown>>();
+      vi.mocked(getTraceStore().getTraceMetadata).mockReturnValue(queued.promise);
+      const result = await provider({ hostedTrace: { timeoutMs: 25 } }).callApi('hi', row);
+      expect(result).toMatchObject({
+        output: '42',
+        metadata: { sessionDeleted: true, hostedTrace: { status: 'unavailable' } },
+      });
+      queued.resolve({});
+      expect(calls().some((request) => request.pathname.endsWith('/traces'))).toBe(false);
+    });
+
+    it.each([true, false])(
+      'releases the session on cancellation while the local write is queued (retainSession=%s)',
+      async (retainSession) => {
+        recordWrapper();
+        const controller = new AbortController();
+        const started = createDeferred<void>();
+        const queued = createDeferred<{ stored: boolean }>();
+        vi.spyOn(getTraceStore(), 'addSpans').mockImplementation(() => {
+          started.resolve();
+          return queued.promise;
+        });
+        mockApi((path) => (path.endsWith('/traces') ? json(page([published()])) : undefined));
+        const pending = provider({ hostedTrace: true, retainSession }).callApi('hi', row, {
+          abortSignal: controller.signal,
+        });
+        await started.promise;
+        const deletions = () => calls().filter((request) => request.method === 'DELETE');
+        expect(deletions()).toHaveLength(retainSession ? 0 : 1);
+        controller.abort(new Error('cancel while storing'));
+        await expect(pending).rejects.toThrow('cancel while storing');
+        expect(deletions()).toHaveLength(1);
+        queued.reject(new Error('late database failure'));
       },
     );
 
@@ -2844,6 +2978,44 @@ describe('OpenAiAgentsApiProvider', () => {
     }).callApi('hi');
     expect(priority.cost).toBeCloseTo(standard.cost! * 2);
   });
+
+  it.each([
+    { resource: 'session', status: 200 },
+    { resource: 'turn', status: 204 },
+  ])(
+    'keeps the completed turn when an optional $resource usage read is empty ($status)',
+    async ({ resource, status }) => {
+      vi.useFakeTimers();
+      let sessionReads = 0;
+      let emptyReads = 0;
+      mockApi((path, method) => {
+        if (method !== 'GET') {
+          return undefined;
+        }
+        if (path.endsWith('/sess_test')) {
+          sessionReads++;
+          if (resource !== 'session' || sessionReads === 1) {
+            return json({ ...session, usage: null });
+          }
+        } else if (resource !== 'turn' || !path.endsWith('/turns/turn_test')) {
+          return undefined;
+        }
+        emptyReads++;
+        return new Response(null, { status });
+      });
+      const pending = provider({ usageTimeoutMs: 25, pollIntervalMs: 5 }).callApi('hi');
+      await vi.advanceTimersByTimeAsync(25);
+      const result = await pending;
+      expect(emptyReads).toBeGreaterThan(0);
+      expect(result.error).toBeUndefined();
+      expect(result).toMatchObject({
+        output: '42',
+        tokenUsage: { total: usage.total_tokens },
+        metadata: { sessionDeleted: true },
+      });
+      expect(result.metadata).not.toHaveProperty('sessionCancelled');
+    },
+  );
 
   it('keeps a successful answer when final usage stays unavailable', async () => {
     vi.useFakeTimers();
