@@ -956,9 +956,11 @@ export class CohereEmbeddingProvider implements ApiEmbeddingProvider {
       ...(isCohereV2EmbeddingApiUrl(apiUrl) && { embedding_types: ['float'] }),
     };
 
-    let data;
+    let data,
+      status: number | undefined,
+      statusText = '';
     try {
-      ({ data } = (await fetchWithCache(
+      ({ data, status, statusText } = (await fetchWithCache(
         apiUrl,
         {
           method: 'POST',
@@ -983,6 +985,14 @@ export class CohereEmbeddingProvider implements ApiEmbeddingProvider {
       options?.abortSignal?.throwIfAborted();
       logger.error(`API call error: ${err}`);
       throw err;
+    }
+
+    if (status !== undefined && (status < 200 || status >= 300)) {
+      const errorMessage = `API error: ${status} ${statusText}\n${
+        typeof data === 'string' ? data : JSON.stringify(data)
+      }`;
+      logger.error(errorMessage);
+      return { error: errorMessage };
     }
 
     const embedding = Array.isArray(data?.embeddings)

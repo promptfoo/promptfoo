@@ -1518,4 +1518,40 @@ describe('CohereEmbeddingProvider', () => {
       });
     },
   );
+
+  it.each([
+    { status: 401, statusText: 'Unauthorized', message: 'invalid api token' },
+    { status: 429, statusText: 'Too Many Requests', message: 'rate limit exceeded' },
+  ])(
+    'surfaces the HTTP $status response instead of a missing-embedding error',
+    async ({ status, statusText, message }) => {
+      vi.mocked(fetchWithCache).mockResolvedValue({
+        cached: false,
+        status,
+        statusText,
+        data: { message },
+      } as any);
+      const provider = new CohereEmbeddingProvider('embed-english-v3.0', {
+        apiKey: 'test-key',
+      });
+
+      await expect(provider.callEmbeddingApi('Embed this')).resolves.toEqual({
+        error: `API error: ${status} ${statusText}\n${JSON.stringify({ message })}`,
+      });
+    },
+  );
+
+  it('keeps the missing-embedding error for a successful response without embeddings', async () => {
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+      data: { meta: { billed_units: { input_tokens: 0 } } },
+    } as any);
+    const provider = new CohereEmbeddingProvider('embed-english-v3.0', { apiKey: 'test-key' });
+
+    await expect(provider.callEmbeddingApi('Embed this')).rejects.toThrow(
+      'No embedding found in Cohere embeddings API response',
+    );
+  });
 });
