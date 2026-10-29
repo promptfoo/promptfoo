@@ -53,6 +53,12 @@ describe('filterTraceSpans', () => {
     expect(filterTraceSpans(spans, 'EXECUTE_*', {})).toEqual(expected);
   });
 
+  it('includes multiline span names in wildcard selections', () => {
+    const multilineSpan = { ...spans[0], name: 'exec printf first\nprintf second' };
+    expect(filterTraceSpans([multilineSpan], '*')).toEqual([multilineSpan]);
+    expect(filterTraceSpans([multilineSpan], 'exec *', { cached: false })).toEqual([multilineSpan]);
+  });
+
   it('only reads own literal attribute keys', () => {
     const inherited = Object.create({ 'gen_ai.tool.name': 'search' });
     const own = JSON.parse('{"__proto__":"literal","gen_ai.tool.name":"search"}');
@@ -96,6 +102,17 @@ describe('filterTraceSpans', () => {
 
 describe('tracing utilities', () => {
   describe('matchesPattern', () => {
+    it.each(['\n', '\r', '\u2028', '\u2029'])(
+      'matches wildcard characters across line terminator %j',
+      (separator) => {
+        const name = `first${separator}second`;
+        expect(matchesPattern(name, '*')).toBe(true);
+        expect(matchesPattern(name, 'first*second')).toBe(true);
+        expect(matchesPattern(name, 'first?second')).toBe(true);
+        expect(matchesPattern(name, '*third')).toBe(false);
+      },
+    );
+
     it('should match exact span names', () => {
       expect(matchesPattern('llm.completion', 'llm.completion')).toBe(true);
       expect(matchesPattern('database.query', 'database.query')).toBe(true);
