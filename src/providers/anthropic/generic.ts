@@ -112,6 +112,25 @@ function hasHeader(headers: Record<string, unknown> | undefined, names: Set<stri
   return Object.keys(headers ?? {}).some((name) => names.has(name.toLowerCase()));
 }
 
+/**
+ * Whether the client's default headers carry W3C trace context, merged as the SDK merges them: the
+ * process's `ANTHROPIC_CUSTOM_HEADERS` first, then `defaultHeaders`, where `null` drops a header.
+ */
+function defaultHeadersSetTraceContext(defaultHeaders: ClientOptions['defaultHeaders']): boolean {
+  const names = new Set<string>();
+  for (const [name, value] of Object.entries({
+    ...parseAnthropicCustomHeaders(process.env.ANTHROPIC_CUSTOM_HEADERS),
+    ...(defaultHeaders as Record<string, string | null | undefined> | undefined),
+  })) {
+    if (value === null) {
+      names.delete(name.toLowerCase());
+    } else if (typeof value === 'string') {
+      names.add(name.toLowerCase());
+    }
+  }
+  return [...TRACE_CONTEXT_HEADERS].some((name) => names.has(name));
+}
+
 /** A config value as `true`, `false`, an options object, or unset; templated booleans are strings. */
 function normalizeOpenTelemetryOption(
   option: unknown,
@@ -140,7 +159,7 @@ function normalizeOpenTelemetryOption(
 function resolveOpenTelemetry(
   option: unknown,
   env: EnvOverrides | undefined,
-  headers: Record<string, unknown> | undefined,
+  configuresTraceContext: boolean,
 ): {
   client: ClientOptions['openTelemetry'];
   propagatesTraceContext: boolean;
@@ -153,7 +172,7 @@ function resolveOpenTelemetry(
   if (value === undefined || value === false) {
     return {
       client: false,
-      propagatesTraceContext: value === undefined && propagation,
+      propagatesTraceContext: value === undefined && propagation && !configuresTraceContext,
       sdkPropagatesTraceContext: false,
     };
   }
@@ -181,12 +200,12 @@ function resolveOpenTelemetry(
   const spans = traces !== false && (typeof traces !== 'object' || traces.enabled !== false);
   // The SDK replaces trace context headers with its own span's; the config's win, as they do
   // when promptfoo sends trace context, and the SDK still records its spans.
-  if (spans && hasHeader(headers, TRACE_CONTEXT_HEADERS)) {
+  if (spans && configuresTraceContext) {
     client = { ...client, propagation: false };
   }
   return {
     client,
-    propagatesTraceContext: !spans && client.propagation !== false,
+    propagatesTraceContext: !spans && client.propagation !== false && !configuresTraceContext,
     sdkPropagatesTraceContext: spans && client.propagation !== false,
   };
 }
@@ -402,24 +421,25 @@ export class AnthropicGenericProvider implements ApiProvider {
       setCaseInsensitiveHeaderValue(clientDefaultHeaders, 'authorization', `Bearer ${authToken}`);
     }
 
+    const clientOptions = this.buildAnthropicClientOptions({
+      apiKey: this.apiKey ?? null,
+      authToken: authToken ?? null,
+      baseURL: this.getApiBaseUrl(),
+      ...(Object.keys(clientDefaultHeaders).length > 0
+        ? { defaultHeaders: clientDefaultHeaders }
+        : {}),
+    });
+    // Trace context that the config sets, in `headers` or in custom headers that reach this host
+    // (read after a subclass isolates them), is sent as set.
     const openTelemetry = resolveOpenTelemetry(
       this.config.openTelemetry,
       this.env,
-      this.config.headers,
+      hasHeader(this.config.headers, TRACE_CONTEXT_HEADERS) ||
+        defaultHeadersSetTraceContext(clientOptions.defaultHeaders),
     );
     this.propagatesTraceContext = openTelemetry.propagatesTraceContext;
     this.sdkPropagatesTraceContext = openTelemetry.sdkPropagatesTraceContext;
-    this.anthropic = new Anthropic(
-      this.buildAnthropicClientOptions({
-        apiKey: this.apiKey ?? null,
-        authToken: authToken ?? null,
-        baseURL: this.getApiBaseUrl(),
-        openTelemetry: openTelemetry.client,
-        ...(Object.keys(clientDefaultHeaders).length > 0
-          ? { defaultHeaders: clientDefaultHeaders }
-          : {}),
-      }),
-    );
+    this.anthropic = new Anthropic({ ...clientOptions, openTelemetry: openTelemetry.client });
     this.id = id ? () => id : this.id;
   }
 

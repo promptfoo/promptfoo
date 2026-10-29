@@ -1095,7 +1095,8 @@ the request parameters as sent, `gen_ai.response.id`, `gen_ai.response.model`,
 `request-id` header, which Anthropic support asks for; failed requests record it too.
 
 For a traced test case, promptfoo sends the span's W3C trace context (`traceparent`, and
-`tracestate` when set, never baggage) with each Messages API request. If your organization exports
+`tracestate` when set, never baggage) with each Messages API request. Trace context that you set
+yourself, in `headers` or `ANTHROPIC_CUSTOM_HEADERS`, is sent as set instead. If your organization exports
 [Claude API traces](https://platform.claude.com/docs/en/manage-claude/opentelemetry/api) to an
 OpenTelemetry backend, the API's spans, such as its model requests and server tool runs like
 `web_search`, land in the eval's trace under promptfoo's span instead of in a trace of their own.

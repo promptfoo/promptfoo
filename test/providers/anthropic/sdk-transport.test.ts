@@ -453,7 +453,7 @@ describe('Anthropic Messages SDK transport', () => {
     }
   });
 
-  it('sends no baggage that a third-party host suppresses when the SDK spans are on', async () => {
+  it("sends a third-party host none of the custom headers it suppresses when the SDK's spans are on", async () => {
     const { baseUrl, requests } = await createMessagesServer({});
     // The gateway's URL is fixed, so its requests go to the loopback server instead.
     const loopbackFetch = globalThis.fetch;
@@ -471,19 +471,52 @@ describe('Anthropic Messages SDK transport', () => {
           apiKey: 'local-qa-key',
           openTelemetry: true,
         } as CloudflareGatewayConfig,
-        env: { ANTHROPIC_CUSTOM_HEADERS: 'baggage: tenant=private' },
+        env: {
+          ANTHROPIC_CUSTOM_HEADERS:
+            'baggage: tenant=private\ntraceparent: 00-11111111111111111111111111111111-2222222222222222-01',
+        },
       });
       await insideApplicationSpan((callContext) => gateway.callApi('ping', callContext));
     } finally {
       fetchSpy.mockRestore();
     }
+    await tracerProvider.forceFlush();
 
     expect(gatewayUrls).toEqual([
       'https://gateway.ai.cloudflare.com/v1/account/gateway/anthropic/v1/messages',
     ]);
-    expect(requests[0].traceparent).toBeDefined();
+    // The suppressed trace context leaves the SDK to send its own.
+    expect(requests[0].traceparent).toBe(
+      traceparentOf(sdkSpanOf(exporter.getFinishedSpans())!.spanContext()),
+    );
     expect(requests[0].baggage).toBeUndefined();
   });
+
+  it.each([
+    { spans: 'promptfoo', openTelemetry: undefined, source: 'provider env' },
+    { spans: 'promptfoo', openTelemetry: undefined, source: 'process env' },
+    { spans: 'SDK', openTelemetry: true, source: 'provider env' },
+    { spans: 'SDK', openTelemetry: true, source: 'process env' },
+  ])(
+    'keeps trace context that ANTHROPIC_CUSTOM_HEADERS sets in the $source ($spans spans)',
+    async ({ openTelemetry, source }) => {
+      const traceparent = '00-11111111111111111111111111111111-2222222222222222-01';
+      const customHeaders = `traceparent: ${traceparent}\ntracestate: vendor=configured`;
+      const restoreCustomHeaders = mockProcessEnv(
+        source === 'process env' ? { ANTHROPIC_CUSTOM_HEADERS: customHeaders } : {},
+      );
+      try {
+        const { requests } = await callProvider(
+          openTelemetry === undefined ? {} : { openTelemetry },
+          source === 'provider env' ? { env: { ANTHROPIC_CUSTOM_HEADERS: customHeaders } } : {},
+        );
+
+        expect(requests[0]).toMatchObject({ traceparent, tracestate: 'vendor=configured' });
+      } finally {
+        restoreCustomHeaders();
+      }
+    },
+  );
 
   it("keeps trace context headers that the config sets when the SDK's spans are on", async () => {
     const configured = '00-11111111111111111111111111111111-2222222222222222-01';
