@@ -18,6 +18,7 @@ interface YamlEditorProps {
   initialConfig?: unknown;
   readOnly?: boolean;
   initialYaml?: string;
+  onDirtyChange?: (dirty: boolean) => void;
 }
 
 // Schema comment that should always be at the top of the YAML file
@@ -39,11 +40,16 @@ const formatYamlWithSchema = (config: unknown): string => {
   return ensureSchemaComment(yamlContent);
 };
 
-const YamlEditorComponent = ({ initialConfig, readOnly = false, initialYaml }: YamlEditorProps) => {
+const YamlEditorComponent = ({
+  initialConfig,
+  readOnly = false,
+  initialYaml,
+  onDirtyChange,
+}: YamlEditorProps) => {
   const [code, setCode] = React.useState('');
   const [originalCode, setOriginalCode] = React.useState('');
   const [parseError, setParseError] = React.useState<string | null>(null);
-  const [hasUnsavedChanges, setHasUnsavedChanges] = React.useState(false);
+  const hasUnsavedChanges = code !== originalCode;
   const textareaId = React.useId();
   const editorContainerRef = React.useRef<HTMLDivElement>(null);
   const { showToast } = useToast();
@@ -80,13 +86,11 @@ const YamlEditorComponent = ({ initialConfig, readOnly = false, initialYaml }: Y
     const success = parseAndUpdateStore(code);
     if (success) {
       setOriginalCode(code);
-      setHasUnsavedChanges(false);
     }
   };
 
   const handleCancel = () => {
     setCode(originalCode);
-    setHasUnsavedChanges(false);
     setParseError(null);
     showToast('Changes discarded', 'info');
   };
@@ -136,10 +140,9 @@ const YamlEditorComponent = ({ initialConfig, readOnly = false, initialYaml }: Y
     // Deliberately omitting getTestSuite from dependencies to avoid potential re-render loops
   }, [initialYaml, initialConfig]);
 
-  // Track unsaved changes
   React.useEffect(() => {
-    setHasUnsavedChanges(code !== originalCode);
-  }, [code, originalCode]);
+    onDirtyChange?.(hasUnsavedChanges);
+  }, [hasUnsavedChanges, onDirtyChange]);
 
   React.useEffect(() => {
     // react-simple-code-editor does not expose arbitrary textarea props directly.
