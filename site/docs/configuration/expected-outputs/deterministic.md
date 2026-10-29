@@ -770,6 +770,8 @@ The `trajectory:tool-used` assertion checks traced tool steps rather than the mo
 Trajectory assertions require trace data. Enable tracing for the eval and use a provider that emits tool-oriented spans or attributes.
 :::
 
+For the hosted OpenAI Agents API, enable `hostedTrace` to grade native tool spans. A partial import can establish that a tool or a matching argument was observed. It cannot establish that a tool never ran or that the observed count was the total. [Hosted trace settings and import statuses](/docs/providers/openai-agents-api#inspect-traces)
+
 Promptfoo identifies tool names from attributes such as `tool.name`, `function.name`, and Vercel AI SDK telemetry's `ai.toolCall.name`.
 
 Example:
@@ -830,6 +832,8 @@ tests:
 - optional `ignore`, an argument name or list of names to drop before matching, regardless of value
 
 In `partial` mode, object properties are matched recursively as a subset. In `exact` mode, the entire argument payload must match exactly.
+
+With hosted OpenAI Agents API traces, a positive subset match can use an unchanged field such as `cwd` even if another argument was omitted. An exact match needs one call with intact arguments, including when `ignore` or `defaults` is set. An inverse match requires complete argument evidence across the hosted call.
 
 #### Tolerating default arguments {#trajectory-tool-args-match-defaults}
 
@@ -953,6 +957,8 @@ tests:
 
 `mode: in_order` is the default and allows extra tool steps in between the expected ones. `mode: exact` requires the traced tool sequence to match exactly.
 
+Overlapping tool calls are ordered by start time. Imported hosted OpenAI Agents API traces preserve nanosecond differences between starts. When the available start times are equal, the earlier end time sorts first.
+
 #### Asserting batched vs sequential tool calls {#trajectorytool-sequence-batching}
 
 `tool-sequence` checks _which_ tools ran in _which_ order. For providers that expose internal model-generation spans, you can also assert that the agent issued multiple tool calls in a single LLM round-trip (batched/parallel) rather than across separate rounds (sequential). Assert this via the `gen_ai.turn.index` tag on the tool spans — both tool calls must carry the **same** index. See [Turn marker spans](/docs/tracing#per-llm-turn-spans) for the per-provider details.
@@ -986,6 +992,8 @@ For `anthropic:claude-agent-sdk`, subagent rounds also emit `gen_ai.turn` spans 
 The `trajectory:step-count` assertion counts normalized trajectory steps. It can filter by step type (`tool`, `command`, `search`, `reasoning`, `message`, or `span`) and by glob-style name pattern.
 
 Command steps are detected from command attributes such as `command` and `codex.command`, and from command-like tool spans such as OpenAI Agents SDK `exec_command`, `local_shell`, or `shell` calls whose arguments include `cmd`, `command`, or `commands`.
+
+Hosted OpenAI Agents API step counts require a complete trace. To check for a recorded tool span without capturing arguments, use a name pattern and a positive minimum, such as `{ pattern: 'execute_tool *', min: 1 }`. A command count with only a positive `min` can use captured commands even if another call's arguments were lost. An upper bound or inverse check on an untyped name pattern or a command count requires full argument capture, since missing command text can hide additional matches.
 
 Example:
 
@@ -1186,6 +1194,8 @@ assert:
       max: 2000
 ```
 
+Target assertions include application tool calls from OTLP telemetry and external trace providers even when the application supplies Promptfoo ownership attributes.
+
 A span must match both `pattern` and every attribute. Attribute keys are literal, including dots; values use case-sensitive exact equality without glob matching or type conversion. Values must be strings, booleans, or finite numbers. Missing attributes do not match, while an empty object adds no restriction. Duration percentiles and error percentages use only the selected spans. If matching spans must exist, include a `trace-span-count` assertion with `min: 1`; duration and error assertions retain their existing behavior when no spans match.
 
 ### Trace-Span-Duration
@@ -1226,7 +1236,7 @@ Key features:
 - `max`: Maximum allowed duration in milliseconds
 - `percentile` (optional): Check percentile instead of all spans (e.g., 50 for median, 95 for 95th percentile). Must be a number from 0 to 100 inclusive; out-of-range values cause an assertion error. Use the 0-100 scale, not 0-1 — `0.95` is accepted as the 0.95th percentile (effectively the fastest span), not p95
 
-The assertion will show the slowest spans when a threshold is exceeded, making it easy to identify performance bottlenecks.
+For new hosted OpenAI Agents API traces, Promptfoo compares the integer nanosecond duration with your millisecond threshold before rounding for display. If a redacted field leaves a span’s membership in the filter uncertain, a maximum or percentile can still be graded when including or excluding that span yields the same verdict. Add a `trace-span-count` minimum if the selected group must contain a span.
 
 ### Trace-Error-Spans
 
@@ -1235,6 +1245,8 @@ The `trace-error-spans` assertion detects error spans in a trace and ensures the
 :::note
 This assertion requires trace data to be available. If tracing is not enabled or trace data is missing, the assertion will throw an error.
 :::
+
+Pair a zero-error check with a positive tool check when the tool is required. When an OpenAI hosted import is requested, `trace-error-spans` requires a complete imported trace. The importer recognizes signals such as `error: true` and `http.status_code: 500` on the span or its resource, with span attributes taking precedence. It saves the error status and omits diagnostic text. A tool can have an observed error even when telemetry dropped other attributes. A zero-error check needs enough evidence for every selected span. If an older export lacks that evidence, run the eval again. [Hosted command example](/docs/providers/openai-agents-api#inspect-traces)
 
 Example:
 

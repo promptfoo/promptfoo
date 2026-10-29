@@ -54,6 +54,7 @@ Compare LLM performance on your own data to make informed model selection decisi
 Use promptfoo with popular frameworks and services.
 
 - [Using LangChain PromptTemplate](/docs/guides/langchain-prompttemplate) — Integrate LangChain prompt templates with promptfoo
+- [Evaluating OpenAI Agent Runtimes](/docs/guides/evaluate-openai-agent-runtimes) — Grade answers and tool use across the hosted Agents API, TypeScript Agents SDK, and Codex app-server
 - [Evaluating OpenAI Assistants](/docs/guides/evaluate-openai-assistants) — Evaluate OpenAI's Assistants API
 - [Evaluating CrewAI Agents](/docs/guides/evaluate-crewai) — Red team and evaluate CrewAI multi-agent workflows
 - [Evaluating LangGraph](/docs/guides/evaluate-langgraph) — Test LangGraph agent applications
