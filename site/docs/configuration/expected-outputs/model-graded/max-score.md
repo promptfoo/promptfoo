@@ -51,6 +51,8 @@ tests:
       - type: max-score
 ```
 
+The comparison does not publish a named metric from a `metric` field on `max-score`. Assign `metric` to the regular assertions that supply its scores. The comparison result’s `maxScore`, `assertionCount`, and `totalWeight` values are grading details, not aggregate named metrics.
+
 ## Configuration options
 
 ### Aggregation method
