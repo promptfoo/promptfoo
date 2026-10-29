@@ -35,7 +35,10 @@ import {
   type ResultsFile,
   type UnifiedConfig,
 } from '../types/index';
-import { calculateFilteredMetrics } from '../util/calculateFilteredMetrics';
+import {
+  calculateFilteredMetrics,
+  MAX_RESULTS_FOR_METRICS,
+} from '../util/calculateFilteredMetrics';
 import { convertResultsToTable } from '../util/convertEvalResultsToTable';
 import { randomSequence, sha256 } from '../util/createHash';
 import { calculateRepeatStability, RepeatStabilityCalculator } from '../util/eval/repeatStability';
@@ -59,6 +62,7 @@ import {
   notifyEvaluationsDeleted,
 } from './evalMutation';
 import {
+  buildResponseSearchCondition,
   getCachedResultsCount,
   getTotalResultRowCount,
   queryTestIndicesOptimized,
@@ -164,6 +168,20 @@ export function combineFilterConditions(
     const isOr = typeof logicOperator === 'string' && logicOperator.toUpperCase() === 'OR';
     return isOr ? sql`${acc} OR ${cond}` : sql`${acc} AND ${cond}`;
   }, filterConditions[0].condition);
+}
+
+function buildFullSearchCondition(searchQuery: string): SQL {
+  const pattern = `%${searchQuery}%`;
+  // Keep internal trace linkage out of searches of result metadata.
+  return sql`(
+    ${buildResponseSearchCondition(searchQuery)}
+    OR json_extract(grading_result, '$.reason') LIKE ${pattern}
+    OR json_extract(grading_result, '$.comment') LIKE ${pattern}
+    OR json_extract(named_scores, '$') LIKE ${pattern}
+    OR json_remove(metadata, ${`$.${PROMPTFOO_METADATA_KEY}`}) LIKE ${pattern}
+    OR json_extract(test_case, '$.vars') LIKE ${pattern}
+    OR json_extract(test_case, '$.metadata') LIKE ${pattern}
+  )`;
 }
 
 export class EvalQueries {
@@ -939,23 +957,9 @@ export default class Eval {
     return await EvalResult.findManyByEvalId(this.id, { testIdx });
   }
 
-  /**
-   * CRITICAL: Builds the WHERE SQL clause for filtering results.
-   * This is the single source of truth for all filtering logic.
-   * Used by both queryTestIndices() (pagination) and getFilteredMetrics().
-   *
-   * SECURITY: This method uses Drizzle's sql template strings for parameterized queries
-   * to prevent SQL injection. All user-provided values are passed as parameters,
-   * not interpolated into the SQL string.
-   *
-   * Any changes to filter logic MUST be made here to ensure consistency
-   * between displayed rows and calculated metrics.
-   *
-   * @returns SQL fragment (without "WHERE" keyword) that can be used in queries
-   */
+  /** Restrict individual results to the eval, display mode, and structured filters. */
   private buildFilterWhereSql(opts: {
     filterMode?: EvalResultsFilterMode;
-    searchQuery?: string;
     filters?: string[];
   }): SQL<unknown> {
     const mode: EvalResultsFilterMode = opts.filterMode ?? 'all';
@@ -1191,27 +1195,6 @@ export default class Eval {
       }
     }
 
-    // Add search condition if searchQuery is provided
-    if (opts.searchQuery && opts.searchQuery.trim() !== '') {
-      const searchPattern = `%${opts.searchQuery}%`;
-
-      const searchConditions = [
-        sql`response LIKE ${searchPattern}`,
-        sql`json_extract(grading_result, '$.reason') LIKE ${searchPattern}`,
-        sql`json_extract(grading_result, '$.comment') LIKE ${searchPattern}`,
-        sql`json_extract(named_scores, '$') LIKE ${searchPattern}`,
-        // Search user-visible metadata only — drop the reserved `__promptfoo` namespace
-        // (trace linkage) so a query can't match on internal data the UI never shows.
-        sql`json_remove(metadata, ${`$.${PROMPTFOO_METADATA_KEY}`}) LIKE ${searchPattern}`,
-        sql`json_extract(test_case, '$.vars') LIKE ${searchPattern}`,
-        sql`json_extract(test_case, '$.metadata') LIKE ${searchPattern}`,
-      ];
-
-      const searchClause = sql.join(searchConditions, sql` OR `);
-      conditions.push(sql`(${searchClause})`);
-    }
-
-    // Build final WHERE clause by joining conditions with AND
     return sql.join(conditions, sql` AND `);
   }
 
@@ -1232,12 +1215,10 @@ export default class Eval {
     const offset = opts.offset ?? 0;
     const limit = opts.limit ?? 50;
 
-    // CRITICAL: Use single source of truth for WHERE clause (now returns SQL fragment)
-    const whereSql = this.buildFilterWhereSql({
-      filterMode: opts.filterMode,
-      searchQuery: opts.searchQuery,
-      filters: opts.filters,
-    });
+    let whereSql = this.buildFilterWhereSql(opts);
+    if (opts.searchQuery?.trim()) {
+      whereSql = sql`${whereSql} AND ${buildFullSearchCondition(opts.searchQuery)}`;
+    }
 
     // Get filtered count using parameterized query
     const filteredCountQuery = sql`
@@ -1271,24 +1252,22 @@ export default class Eval {
     return { testIndices, filteredCount };
   }
 
-  /**
-   * CRITICAL: Calculates metrics for filtered results.
-   * Uses the SAME WHERE clause as queryTestIndices() to ensure consistency.
-   *
-   * SECURITY: Uses parameterized SQL queries to prevent SQL injection.
-   *
-   * This method is called from the API route when filters are active to provide
-   * metrics that accurately reflect the filtered dataset.
-   *
-   * @returns Array of PromptMetrics, one per prompt
-   */
+  /** Aggregate eligible outputs from all matching test rows, not just the current page. */
   async getFilteredMetrics(opts: {
     filterMode?: EvalResultsFilterMode;
     searchQuery?: string;
     filters?: string[];
   }): Promise<import('../types').PromptMetrics[]> {
-    // CRITICAL: Use the SAME WHERE clause as queryTestIndices (now returns SQL fragment)
-    const whereSql = this.buildFilterWhereSql(opts);
+    let whereSql = this.buildFilterWhereSql(opts);
+    if (opts.searchQuery?.trim()) {
+      const search = opts.filters?.length
+        ? buildFullSearchCondition(opts.searchQuery)
+        : buildResponseSearchCondition(opts.searchQuery);
+      // Each match is itself an eligible output, so one past the cap already makes metrics unavailable.
+      whereSql = sql`${whereSql} AND test_idx IN (
+        SELECT test_idx FROM eval_results WHERE ${whereSql} AND ${search} LIMIT ${MAX_RESULTS_FOR_METRICS + 1}
+      )`;
+    }
 
     return calculateFilteredMetrics({
       evalId: this.id,

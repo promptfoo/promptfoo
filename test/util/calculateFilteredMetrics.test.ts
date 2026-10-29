@@ -6,6 +6,7 @@ import { clearEvalTables } from '../util/evalDb';
  * on filtered evaluation results.
  */
 
+import { createClient } from '@libsql/client/node';
 import { sql } from 'drizzle-orm';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getDb } from '../../src/database/index';
@@ -763,79 +764,85 @@ describe('calculateFilteredMetrics', () => {
     });
   });
 
-  describe('OOM protection', () => {
-    it('should throw error when result count exceeds limit', async () => {
-      const eval_ = await EvalFactory.create({
-        numResults: 10,
-        resultTypes: ['success'],
+  it('aggregates up to 50,000 matching outputs and rejects one more', async () => {
+    const { id } = await EvalFactory.create({ numResults: 0 });
+    const db = await getDb();
+    await db.run(sql`
+      WITH RECURSIVE outputs(idx) AS (
+        VALUES (0) UNION ALL SELECT idx + 1 FROM outputs WHERE idx < 50000
+      )
+      INSERT INTO eval_results (id, eval_id, test_idx, prompt_idx, test_case, prompt, provider, success, score)
+      SELECT idx, ${id}, idx / 2, idx % 2, '{}', '{}', '{}', 1, 1 FROM outputs
+    `);
+    const metrics = (testCases: number) =>
+      calculateFilteredMetrics({
+        evalId: id,
+        numPrompts: 2,
+        whereSql: sql`eval_id = ${id} AND test_idx < ${testCases}`,
       });
 
-      // Mock a WHERE clause that would return too many results
-      // We can't actually create 50k+ results in the test, but we can test the check
-      const whereSql = sql`eval_id = ${eval_.id}`;
-
-      // This should succeed (10 results < 50000)
-      await expect(
-        calculateFilteredMetrics({
-          evalId: eval_.id,
-          numPrompts: 1,
-          whereSql,
-        }),
-      ).resolves.toBeDefined();
-    });
+    expect((await metrics(25000)).map((prompt) => prompt.testPassCount)).toEqual([25000, 25000]);
+    await expect(metrics(25001)).rejects.toThrow('Filtered result count exceeds 50000');
   });
 
   describe('error handling', () => {
-    it('should return empty metrics array on database error', async () => {
-      // Invalid eval ID
+    it('returns zero counts when the eval has no results', async () => {
       const metrics = await calculateFilteredMetrics({
-        evalId: 'nonexistent-eval-id',
+        evalId: 'no-results',
         numPrompts: 2,
-        whereSql: sql`eval_id = ${'nonexistent-eval-id'}`,
+        whereSql: sql`eval_id = ${'no-results'}`,
       });
-
-      expect(metrics).toHaveLength(2);
-      expect(metrics[0]).toMatchObject({
-        score: 0,
-        testPassCount: 0,
-        testFailCount: 0,
-        testErrorCount: 0,
-        assertPassCount: 0,
-        assertFailCount: 0,
-        totalLatencyMs: 0,
-        tokenUsage: {
-          total: 0,
-          prompt: 0,
-          completion: 0,
-          cached: 0,
-          numRequests: 0,
-        },
-        namedScores: {},
-        namedScoresCount: {},
-        cost: 0,
-      });
+      expect(metrics.map((prompt) => prompt.testPassCount)).toEqual([0, 0]);
     });
 
-    it('should handle invalid WHERE SQL gracefully', async () => {
+    it('does not retry malformed JSON when the search term resembles a SQLite lock', async () => {
       const eval_ = await EvalFactory.create({
-        numResults: 10,
-        resultTypes: ['success'],
+        numResults: 1,
+        resultTypes: ['failure'],
+        withNamedScores: true,
+        searchableContent: 'SQLITE_BUSY',
       });
-
-      // Invalid SQL syntax - using sql.raw to simulate malformed SQL fragment
-      // Note: In practice, with SQL fragments this is harder to achieve,
-      // but we test the error handling path
-      const whereSql = sql`INVALID SQL SYNTAX HERE`;
-
-      const metrics = await calculateFilteredMetrics({
-        evalId: eval_.id,
-        numPrompts: 1,
-        whereSql,
+      const db = await getDb();
+      await db.run(sql`UPDATE eval_results
+        SET grading_result = json_set(grading_result, '$.namedScoreWeights', 'not JSON')
+        WHERE eval_id = ${eval_.id}`);
+      using attempts = vi.spyOn(db.$client, 'transaction');
+      const metrics = eval_.getFilteredMetrics({ searchQuery: 'SQLITE_BUSY' });
+      await expect(metrics).rejects.toMatchObject({
+        cause: { code: 'SQLITE_ERROR', message: expect.stringContaining('malformed JSON') },
       });
+      expect(attempts).toHaveBeenCalledTimes(1);
+    });
 
-      // Should fallback to empty metrics
-      expect(metrics).toHaveLength(1);
-      expect(metrics[0].testPassCount).toBe(0);
+    it.each(['released', 'held'])('retries a read lock that is %s', async (lock) => {
+      const { id } = await EvalFactory.create({ numResults: 1, resultTypes: ['success'] });
+      const holder = createClient({ url: 'file::memory:?cache=shared' });
+      const writer = await holder.transaction('write');
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+      try {
+        await writer.execute({
+          sql: 'UPDATE eval_results SET success = 0 WHERE eval_id = ?',
+          args: [id],
+        });
+        const outcome = calculateFilteredMetrics({
+          evalId: id,
+          numPrompts: 1,
+          whereSql: sql`eval_id = ${id}`,
+        }).then(
+          ([metrics]) => metrics.testPassCount,
+          (error: unknown) => error,
+        );
+        if (lock === 'released') {
+          await vi.advanceTimersByTimeAsync(30);
+          await writer.rollback();
+        }
+        await vi.runAllTimersAsync();
+        expect(await outcome).toEqual(lock === 'released' ? 1 : expect.any(Error));
+      } finally {
+        vi.useRealTimers();
+        writer.close();
+        holder.close();
+      }
     });
   });
 
