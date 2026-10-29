@@ -991,7 +991,7 @@ The `trajectory:step-count` assertion counts normalized trajectory steps. It can
 
 Command steps are detected from command attributes such as `command` and `codex.command`, and from command-like tool spans such as OpenAI Agents SDK `exec_command`, `local_shell`, or `shell` calls whose arguments include `cmd`, `command`, or `commands`.
 
-On a complete hosted OpenAI Agents API trace, a command count with only a positive `min` can use the commands that were captured even if another call's arguments were lost. An upper bound or an inverse count requires full argument capture. Step counts require a complete hosted trace.
+Hosted OpenAI Agents API step counts require a complete trace. To check for a recorded tool span without capturing arguments, use a name pattern and a positive minimum, such as `{ pattern: 'execute_tool *', min: 1 }`. A command count with only a positive `min` can use captured commands even if another call's arguments were lost. An upper bound or inverse check on an untyped name pattern or a command count requires full argument capture, since missing command text can hide additional matches.
 
 Example:
 

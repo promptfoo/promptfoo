@@ -157,7 +157,7 @@ The provider validates top-level provider config strictly. Prompt-level config i
 | `model_provider`           | string        | App-server model provider override for `thread/start` and `thread/resume`.                                                                                          | None                 |
 | `service_tier`             | string        | `fast` or `flex`.                                                                                                                                                   | App-server default   |
 | `sandbox_mode`             | string        | `read-only`, `workspace-write`, or `danger-full-access`.                                                                                                            | `read-only`          |
-| `environment_access`       | boolean       | Set to `false` to disable local environment access while keeping configured MCP servers. Requires experimental thread environment support.                          | `true`               |
+| `environment_access`       | boolean       | When false, disables local execution environments and restricts [prompt attachments](#prompt-inputs). Requires experimental thread environment support.             | `true`               |
 | `sandbox_policy`           | object        | Raw app-server sandbox policy override for `turn/start`.                                                                                                            | Generated from mode  |
 | `network_access_enabled`   | boolean       | Adds network access to generated sandbox policies.                                                                                                                  | `false`              |
 | `approval_policy`          | string/object | `never`, `on-request`, `on-failure`, `untrusted`, or granular approval policy object. `on-failure` is accepted for compatibility but deprecated by Codex.           | `never`              |
@@ -348,6 +348,8 @@ Plain text prompts work as usual. To include images, skills, or mentions, pass a
 ```
 
 Supported input item types are `text`, `image`, `local_image`, `localImage`, `skill`, and `mention`.
+
+With `environment_access: false`, a structured prompt can contain text, an HTTP(S) or inline `data:image/` image, and mentions with an `app://`, `mcp://`, or `plugin://` identifier. Prompt-supplied local images, filesystem paths and explicit skill attachments are rejected before the turn starts. Configured MCP servers and enabled Codex skills can still read files. The [receipt comparison](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-agents-api/comparison) isolates its Codex home and supplies a single receipt reader.
 
 ## Metadata
 
