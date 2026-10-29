@@ -347,6 +347,33 @@ describe('trace assertions', () => {
       ).resolves.toMatchObject({ pass: false });
     });
 
+    it('counts only the native span when an older receiver stored a wrapper with a claimed owner', async () => {
+      const owner = { 'promptfoo.openai.hosted_trace': 'wrapper' };
+      const result = await runAssertion({
+        assertion: {
+          type: 'trace-span-count',
+          value: { pattern: '*', attributes: owner, min: 1, max: 1 },
+        },
+        test: mockTest,
+        providerResponse: { output: 'ok', metadata: { hostedTrace: imported } },
+        traceId: mockTraceData.traceId,
+        traceData: {
+          ...mockTraceData,
+          spans: [
+            tool('lookup'),
+            {
+              spanId: 'wrapper',
+              name: 'invoke_agent',
+              startTime: 1000,
+              endTime: 1100,
+              attributes: { ...owner, 'otel.scope.name': 'promptfoo.providers' },
+            },
+          ],
+        },
+      });
+      expect(result.pass).toBe(true);
+    });
+
     it('proves a positive raw count from observed attributes on otherwise incomplete candidates', async () => {
       const chat = tool('chat');
       chat.name = 'chat gpt-test';
