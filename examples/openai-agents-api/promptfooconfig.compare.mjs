@@ -1,15 +1,18 @@
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { mkdirSync, readFileSync } from 'node:fs';
+import { homedir } from 'node:os';
+import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const model = 'gpt-6-astra';
 const workspace = new URL('./comparison/workspace/', import.meta.url);
 const receipt = readFileSync(new URL('receipt.txt', workspace));
 
-// Codex signs in with the eval's API key. Keep its login and user configuration isolated.
-const codexHome = mkdtempSync(join(tmpdir(), 'promptfoo-receipt-codex-'));
-process.once('exit', () => rmSync(codexHome, { recursive: true, force: true }));
+// Replays load the saved provider config in a fresh process, so the private home must outlive this run.
+const codexHome = resolve(
+  process.env.PROMPTFOO_CONFIG_DIR || join(homedir(), '.promptfoo'),
+  'receipt-comparison-codex',
+);
+mkdirSync(codexHome, { recursive: true, mode: 0o700 });
 
 export default {
   description: 'Compare three agent runtimes on the same receipt',
@@ -52,11 +55,21 @@ export default {
         working_dir: fileURLToPath(workspace),
         model_reasoning_effort: 'low',
         sandbox_mode: 'read-only',
+        environment_access: false,
         approval_policy: 'never',
         skip_git_repo_check: true,
         turn_timeout_ms: 120000,
         cli_env: { CODEX_HOME: codexHome },
         cli_config: {
+          cli_auth_credentials_store: 'ephemeral',
+          features: {
+            apps: false,
+            plugins: false,
+            multi_agent: false,
+            skip_host_skill_discovery: true,
+          },
+          web_search: 'disabled',
+          project_doc_max_bytes: 0,
           mcp_servers: {
             receipt: {
               command: process.execPath,

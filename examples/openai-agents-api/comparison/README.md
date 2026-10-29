@@ -1,12 +1,12 @@
-# Compare three agent runtimes on one receipt
+# openai-agents-api/comparison (Compare three agent runtimes on one receipt)
 
 Every provider receives the same prompt and receipt bytes. The receipt contains a synthetic ID, two charges, and one refund. Each provider requests `gpt-6-astra` with low reasoning effort. The shared `ReceiptAnswer` assertion compares the parsed JSON with `{"receipt_id":"PF-7Q2K","net_cents":3316}`.
 
-| Runtime               | How it obtains the receipt                                                                                                                                        | Additional assertion                                                                                                                                  |
-| --------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Hosted Agents API     | Opens an inline file in an OpenAI-hosted sandbox with network access disabled.                                                                                    | A native `command_execution` span records the working directory `/workspace`.                                                                         |
-| TypeScript Agents SDK | Calls a local function that reads a single fixed file.                                                                                                            | A `read_receipt` tool call included the argument `filename: receipt.txt`.                                                                             |
-| Codex app-server      | Calls the same reader through a local stdio MCP server. Its workspace is read-only and its temporary Codex home keeps this run separate from your other sessions. | A `read_receipt` tool span was recorded and the MCP span has no error. Inspect `response.metadata.codexAppServer.items` for its arguments and status. |
+| Runtime               | How it obtains the receipt                                                                                                                     | Additional assertion                                                                                                                                  |
+| --------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Hosted Agents API     | Opens an inline file in an OpenAI-hosted sandbox with network access disabled.                                                                 | A native `command_execution` span records the working directory `/workspace`.                                                                         |
+| TypeScript Agents SDK | Calls a local function that reads a single fixed file.                                                                                         | A `read_receipt` tool call included the argument `filename: receipt.txt`.                                                                             |
+| Codex app-server      | Calls the same reader through a local stdio MCP server. The thread starts with an empty environment list to disable local filesystem commands. | A `read_receipt` tool span was recorded and the MCP span has no error. Inspect `response.metadata.codexAppServer.items` for its arguments and status. |
 
 The answer check remains independent of the action checks. A recorded tool invocation can still fail. The SDK and app-server share a file reader, while the hosted runtime chooses a sandbox command. Each runtime supplies its own system instructions. This comparison tests their integration with Promptfoo.
 
@@ -19,6 +19,8 @@ From the repository root, install dependencies and put a Codex CLI with GPT-6 As
 ```sh
 npm run local -- eval -c examples/openai-agents-api/promptfooconfig.compare.mjs --no-cache -o receipt-results.json
 ```
+
+The example keeps Codex settings in `receipt-comparison-codex` inside the Promptfoo configuration directory (by default `~/.promptfoo`). This directory stays available for `--resume` and `--retry-errors`. The app-server keeps its API key in memory for the lifetime of the process.
 
 On a proxy-only network, the hosted and SDK rows can pass while Codex reports a DNS or connection error. The app-server starts with a minimal process environment. Add the proxy address and CA certificate path it needs to its existing `cli_env` alongside `CODEX_HOME`. Use a proxy URL without embedded credentials because provider configuration is included in eval exports. [Codex app-server configuration](https://www.promptfoo.dev/docs/providers/openai-codex-app-server/#configuration)
 

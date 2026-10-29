@@ -83,6 +83,7 @@ function createMockAppServer(
     configReadResult?: unknown;
     configReadError?: unknown;
     autoCompleteThread?: string;
+    threadEnvironments?: { environmentId: string }[] | null;
   } = {},
 ): MockAppServer {
   const proc = new EventEmitter() as any;
@@ -125,7 +126,7 @@ function createMockAppServer(
           message.method === 'turn/start'
             ? { turn: { ...turn, status: 'inProgress' } }
             : ['thread/start', 'thread/resume'].includes(message.method)
-              ? { thread: { id: threadId } }
+              ? { thread: { id: threadId, environments: options.threadEnvironments } }
               : {};
         stdout.write(`${JSON.stringify({ id: message.id, result })}\n`);
         if (message.method === 'turn/start') {
@@ -471,6 +472,61 @@ describe('OpenAICodexAppServerProvider', () => {
     ).toThrow(/Invalid OpenAI Codex app-server config: personality/);
   });
 
+  it.each([undefined, 'thr_receipt'])(
+    'disables environment access for every turn on thread %s',
+    async (threadId) => {
+      const server = createMockAppServer({
+        autoCompleteThread: 'thr_receipt',
+        threadEnvironments: [],
+      });
+      mocks.spawn.mockReturnValue(server.proc);
+      const provider = new OpenAICodexAppServerProvider({
+        config: { environment_access: false, thread_id: threadId },
+      });
+
+      expect((await provider.callApi('Read the receipt')).error).toBeUndefined();
+      const threadRequest = server
+        .messages()
+        .find((msg) => msg.method === (threadId ? 'thread/resume' : 'thread/start'));
+      if (threadId) {
+        expect(threadRequest.params).not.toHaveProperty('environments');
+      } else {
+        expect(threadRequest.params.environments).toEqual([]);
+      }
+      expect(
+        server.messages().find((msg) => msg.method === 'turn/start').params.environments,
+      ).toEqual([]);
+      await provider.cleanup();
+    },
+  );
+
+  it.each([
+    { threadEnvironments: undefined },
+    { threadEnvironments: null },
+    { threadEnvironments: [{ environmentId: 'local' }] },
+  ])(
+    'refuses to run a turn if the server reports $threadEnvironments for disabled environment access',
+    async ({ threadEnvironments }) => {
+      const server = createMockAppServer({ autoCompleteThread: 'thr_receipt', threadEnvironments });
+      mocks.spawn.mockReturnValue(server.proc);
+      const provider = new OpenAICodexAppServerProvider({ config: { environment_access: false } });
+      expect((await provider.callApi('Read the receipt')).error).toContain(
+        'did not confirm an empty thread environment list',
+      );
+      expect(server.messages().some((msg) => msg.method === 'turn/start')).toBe(false);
+      await provider.cleanup();
+    },
+  );
+
+  it('requires the experimental protocol to disable environment access', () => {
+    expect(
+      () =>
+        new OpenAICodexAppServerProvider({
+          config: { environment_access: false, experimental_api: false },
+        }),
+    ).toThrow(/requires the experimental/);
+  });
+
   it('runs a complete stdio app-server turn and normalizes the response', async () => {
     const server = createMockAppServer();
     mocks.spawn.mockReturnValue(server.proc);
@@ -529,6 +585,7 @@ describe('OpenAICodexAppServerProvider', () => {
       personality: 'friendly',
       approvalsReviewer: 'auto_review',
     });
+    expect(threadStart.params).not.toHaveProperty('environments');
     server.send({
       id: threadStart.id,
       result: {
@@ -541,6 +598,7 @@ describe('OpenAICodexAppServerProvider', () => {
     });
 
     const turnStart = await waitForMessage(server, (message) => message.method === 'turn/start');
+    expect(turnStart.params).not.toHaveProperty('environments');
     expect(turnStart.params).toMatchObject({
       threadId: 'thr_test',
       input: [{ type: 'text', text: 'Summarize this repo', text_elements: [] }],

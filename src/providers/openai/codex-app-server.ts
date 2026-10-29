@@ -247,6 +247,7 @@ export interface CodexAppServerConfig {
   service_tier?: CodexAppServerServiceTier;
   sandbox_mode?: CodexAppServerSandboxMode;
   sandbox_policy?: Record<string, unknown>;
+  environment_access?: boolean;
   network_access_enabled?: boolean;
   approval_policy?: CodexAppServerApprovalPolicy;
   approvals_reviewer?: 'user' | 'auto_review' | 'guardian_subagent';
@@ -522,6 +523,7 @@ const CodexAppServerConfigShape = {
   service_tier: z.enum(['fast', 'flex']).optional(),
   sandbox_mode: z.enum(['read-only', 'workspace-write', 'danger-full-access']).optional(),
   sandbox_policy: z.record(z.string(), z.unknown()).optional(),
+  environment_access: z.boolean().optional(),
   network_access_enabled: z.boolean().optional(),
   approval_policy: CodexAppServerApprovalPolicySchema.optional(),
   approvals_reviewer: z.enum(['user', 'auto_review', 'guardian_subagent']).optional(),
@@ -574,7 +576,11 @@ function parseCodexAppServerConfig(
     : CodexAppServerConfigSchema;
 
   try {
-    return schema.parse(config ?? {});
+    const parsed = schema.parse(config ?? {});
+    if (parsed.environment_access === false && parsed.experimental_api === false) {
+      throw new Error('environment_access: false requires the experimental Codex app-server API');
+    }
+    return parsed;
   } catch (error) {
     if (error instanceof z.ZodError) {
       const issues = error.issues
@@ -1530,6 +1536,15 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
         this.protectThread(threadHandle.threadId);
         let turnStarted = false;
         try {
+          if (resolvedConfig.environment_access === false) {
+            // Older servers can silently ignore the experimental environments field.
+            const environments = threadHandle.response?.thread?.environments;
+            if (!Array.isArray(environments) || environments.length !== 0) {
+              throw new Error(
+                'Codex did not confirm an empty thread environment list. Update Codex or start a new thread with environment_access: false.',
+              );
+            }
+          }
           const queueKey = explicitThreadQueueKey
             ? undefined
             : this.getThreadRunQueueKey(resolvedConfig, threadHandle);
@@ -1992,6 +2007,7 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
       service_tier: config.service_tier,
       sandbox_mode: config.sandbox_mode,
       sandbox_policy: config.sandbox_policy,
+      environment_access: config.environment_access,
       network_access_enabled: config.network_access_enabled,
       approval_policy: config.approval_policy,
       approvals_reviewer: config.approvals_reviewer,
@@ -2027,6 +2043,7 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
         JSON.stringify({
           connectionKey,
           resume: this.buildThreadResumeParams(threadId, config),
+          environment_access: config.environment_access,
         }),
       )
       .digest('hex');
@@ -2410,6 +2427,7 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
       approvalPolicy: config.approval_policy ?? 'never',
       ...(config.approvals_reviewer ? { approvalsReviewer: config.approvals_reviewer } : {}),
       sandbox: config.sandbox_mode ?? 'read-only',
+      ...(config.environment_access === false ? { environments: [] } : {}),
       ...(Object.keys(config.cli_config ?? {}).length > 0 ? { config: config.cli_config } : {}),
       serviceName: 'promptfoo',
       ...(config.base_instructions ? { baseInstructions: config.base_instructions } : {}),
@@ -2460,6 +2478,7 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
     return {
       threadId,
       input,
+      ...(config.environment_access === false ? { environments: [] } : {}),
       ...(config.working_dir ? { cwd: config.working_dir } : {}),
       approvalPolicy: config.approval_policy ?? 'never',
       ...(config.approvals_reviewer ? { approvalsReviewer: config.approvals_reviewer } : {}),
