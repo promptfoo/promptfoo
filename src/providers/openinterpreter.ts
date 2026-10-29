@@ -44,20 +44,24 @@ const NUMERIC_PROMPT_OPTION_KEYS = new Set([
   'startup_timeout_ms',
   'turn_timeout_ms',
 ]);
-const BOOLEAN_PROMPT_OPTION_KEYS = new Set([
-  'skip_git_repo_check',
-  'network_access_enabled',
-  'persist_threads',
-  'ephemeral',
-  'persist_extended_history',
-  'experimental_raw_events',
-  'experimental_api',
-  'include_raw_events',
-  'inherit_process_env',
-  'reuse_server',
-  'deep_tracing',
-  'harness_guidance',
-]);
+const OpenInterpreterConfigSchema = CodexAppServerConfigSchema.omit({
+  codex_path_override: true,
+})
+  .extend({
+    interpreter_path: z.string().min(1).optional(),
+    interpreter_home: z.string().min(1).optional(),
+    harness: z.string().min(1).optional(),
+    harness_guidance: z.boolean().optional(),
+  })
+  .strict();
+
+const BOOLEAN_PROMPT_OPTION_KEYS = new Set(
+  Object.entries(OpenInterpreterConfigSchema.shape)
+    .filter(
+      ([, option]) => option instanceof z.ZodOptional && option.unwrap() instanceof z.ZodBoolean,
+    )
+    .map(([key]) => key),
+);
 const ENUM_PROMPT_OPTION_KEYS = new Set([
   'service_tier',
   'sandbox_mode',
@@ -102,17 +106,6 @@ function isSchemaDefinedBooleanPath(path: string[]): boolean {
       path[3] === 'success')
   );
 }
-
-const OpenInterpreterConfigSchema = CodexAppServerConfigSchema.omit({
-  codex_path_override: true,
-})
-  .extend({
-    interpreter_path: z.string().min(1).optional(),
-    interpreter_home: z.string().min(1).optional(),
-    harness: z.string().min(1).optional(),
-    harness_guidance: z.boolean().optional(),
-  })
-  .strict();
 
 export interface OpenInterpreterConfig extends Omit<CodexAppServerConfig, 'codex_path_override'> {
   interpreter_path?: string;
