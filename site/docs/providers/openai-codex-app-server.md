@@ -188,6 +188,8 @@ The provider validates top-level provider config strictly. Prompt-level config i
 | `turn_timeout_ms`          | number        | Overall turn timeout.                                                                                                                                               | None                 |
 | `server_request_policy`    | object        | Deterministic responses for approvals, user input, MCP elicitations, and dynamic tools.                                                                             | Safe declines        |
 
+With `persist_threads: true`, a later row can use `thread_id` to continue a thread Promptfoo started and still has cached. Use the same resume settings, including `environment_access`. Conflicting settings are rejected, and the original conversation stays available. The default ephemeral thread can only be resumed while its subscription is active.
+
 The app-server provider does not use the SDK provider's exact-version preflight. If you point both providers at a floating global or custom Codex binary, review the SDK provider's [custom binary compatibility requirements](./openai-codex-sdk.md#custom-binary-path).
 
 :::note GPT-5.6 requires Codex 0.144.0 or later

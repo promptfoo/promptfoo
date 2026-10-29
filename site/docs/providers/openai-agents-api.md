@@ -135,17 +135,30 @@ Look under **Metadata** or inspect `response.metadata.hostedTrace` in the JSON e
 | `status: unavailable`                                      | Read `reason`. Enable eval tracing if no local span was available, check organization and key permissions for HTTP 403, or increase `hostedTrace.timeoutMs` if publication timed out. Output assertions still grade the answer. |
 | Tool name is visible but arguments are missing             | Set `hostedTrace.includeToolArguments: true` before running a synthetic fixture. Missing or redacted arguments cannot establish the absence of a value.                                                                         |
 
-Promptfoo waits for a connected span tree, retrying unpublished parents for up to 15 seconds by default within the provider timeout. SQLite must save a complete trace within the remaining time. A validated partial tree gets one final write of up to 250 ms, capped by the configured timeouts. A write that crosses its deadline is rolled back. A synchronous SQLite lock can delay the return, but the completed answer still grades.
+Promptfoo waits for a connected span tree, retrying unpublished parents for up to 15 seconds by default within the provider timeout. A complete trace uses the remaining time for local storage. A validated partial tree gets one final write of up to 250 ms, capped by the configured timeouts. If SQLite reaches the deadline before committing, Promptfoo rolls back the write. If the commit succeeds and returns late, the spans remain available and `hostedTrace.storageDeadlineExceeded` is `true`. The completed answer still grades.
 
 Use `hostedTrace: true` when tool names, timing and status are sufficient. The importer omits prompts, instructions and tool results. A trace filter on a discarded attribute such as `gen_ai.tool.call.result` cannot establish that a result was absent. OpenAI's own trace recording is separate.
-
-Tool arguments are opt-in because paths and other fields can contain sensitive data. For shell commands, Promptfoo captures simple invocations of `pwd`, `ls`, `cat`, `wc`, `head`, and `tail` with plain paths and short options such as `wc -l` or `head -n 5`. Simple `sh` and `bash` wrappers also qualify, including the ledger’s `/bin/bash -lc 'cat /workspace/ledger.csv'`. A Python script, pipeline or command containing redirection is omitted. Its other fields can still be graded. A subset check for `cwd: /workspace` can pass, while an exact check needs one intact matching call. Malformed JSON, duplicate keys, unrepresentable numbers or an oversized payload can leave a tool span without any argument evidence.
 
 A delegated worker can appear under its own `invoke_agent` span. One partial export showed the worker's command and no `web_search`. A positive tool-use check passed, while a forbidden-search check could not establish absence. The delegation appeared as `spawn_agent` in the native trace and `create_subagent_call` in the saved item summary.
 
 Prefer built-in trajectory assertions when grading a saved trace. For a custom JavaScript absence check, require `hostedTrace.status === 'imported'` and select spans whose `promptfoo.openai.hosted_trace` attribute equals that row's `hostedTrace.parentSpanId`. Verify their count matches `hostedTrace.spanCount`. For an argument-based absence check, also require `hostedTrace.toolArgumentsComplete` and intact, parseable argument JSON on the saved tool spans. The flag describes capture time. Export can truncate a long JSON string afterward.
 
 To inspect the full recording in OpenAI, set `retainSession: true` before the run, find `response.metadata.sessionId` in the export, and open the matching session in [OpenAI's Agents logs](https://platform.openai.com/logs?api=agents). For a manual OTLP export, allow time for publication, retrieve every page of `GET /v1/agents/sessions/{session_id}/traces`, then delete the retained session. [OpenAI trace export example](https://developers.openai.com/api/docs/guides/agents-api/tracing#export-session-traces)
+
+#### Captured tool arguments
+
+With `hostedTrace.includeToolArguments: true`, Promptfoo can retain the following fields of a top-level tool argument object. Paths and identifiers can contain sensitive data. Use synthetic fixtures when enabling capture.
+
+| Field                                  | Accepted value                                                                                                                             |
+| -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| `cmd`, `command`, `commands`           | A file-inspection command string or argv array for `cmd` or `command`. For `commands`, a nonempty list of file-inspection command strings. |
+| `cwd`, `path`, `file_path`, `filename` | A literal path up to 1,024 characters, using letters, numbers, underscores, dots, slashes or hyphens, without a leading hyphen.            |
+| `id`, `order_id`                       | A JavaScript safe integer or a string of 1–32 decimal digits.                                                                              |
+| `count`, `limit`, `offset`, `page`     | A JavaScript safe integer.                                                                                                                 |
+
+Accepted commands are simple invocations of `pwd`, `ls`, `cat`, `wc`, `head`, and `tail` with plain paths and short options such as `wc -l` or `head -n 5`. Simple `sh` and `bash` wrappers also qualify, including the ledger’s `/bin/bash -lc 'cat /workspace/ledger.csv'`. A Python script, pipeline, or command containing redirection is omitted. The same call can still supply `cwd: /workspace`.
+
+Other fields, including free text and nested objects, are omitted. For example, if `lookup_order` receives `{"order_id":"417","note":"rush"}`, a subset assertion can match `order_id: '417'`. The trace cannot grade the note or establish an exact match for that call. Sensitive values may also be withheld. Malformed JSON, duplicate keys, or an oversized payload can leave a span without argument evidence.
 
 ## Saved agents
 
