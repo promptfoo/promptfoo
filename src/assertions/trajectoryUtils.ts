@@ -5,6 +5,7 @@ import {
   SEARCH_ATTRIBUTE_KEYS,
   TOOL_ARGUMENT_ATTRIBUTE_KEYS,
 } from '../tracing/toolAttributes';
+import { getHostedToolArguments } from './hostedTrace';
 import { matchesPattern } from './traceUtils';
 
 import type { TraceData, TraceSpan } from '../types/tracing';
@@ -20,6 +21,7 @@ export interface TrajectoryStepMatcher {
 export interface TrajectoryStep {
   aliases: string[];
   args?: unknown;
+  argumentsRedacted?: boolean;
   hostedToolName?: string;
   name: string;
   spanName: string;
@@ -188,6 +190,9 @@ function extractToolName(span: TraceSpan): string | undefined {
 
 function extractToolArgs(span: TraceSpan): unknown {
   const attributes = span.attributes || {};
+  if (typeof attributes['promptfoo.openai.hosted_trace'] === 'string') {
+    return getHostedToolArguments(attributes);
+  }
 
   for (const key of TOOL_ARGUMENT_ATTRIBUTE_KEYS) {
     const value = normalizeStructuredAttribute(attributes[key]);
@@ -212,6 +217,13 @@ function extractToolArgs(span: TraceSpan): unknown {
   }
 
   return undefined;
+}
+
+function hasRedactedHostedArguments(span: TraceSpan): boolean {
+  return (
+    typeof span.attributes?.['promptfoo.openai.hosted_trace'] === 'string' &&
+    span.attributes['promptfoo.tool.arguments_redacted'] === true
+  );
 }
 
 function extractCommand(
@@ -240,6 +252,10 @@ function extractCommand(
   const toolArgs = getToolArgs();
   if (isCommandToolName(toolName, commandToolNames) && toolArgs && typeof toolArgs === 'object') {
     const args = toolArgs as Record<string, unknown>;
+    // A removed cmd or command could have taken precedence over a surviving fallback.
+    if (hasRedactedHostedArguments(span) && args.cmd === undefined) {
+      return undefined;
+    }
     const commandSource =
       args.cmd === undefined
         ? args.command === undefined
@@ -393,6 +409,7 @@ export function extractTrajectorySteps(trace: TraceData): TrajectoryStep[] {
             hostedToolName: toolName,
           }),
         ...(args === undefined ? {} : { args }),
+        ...(hasRedactedHostedArguments(span) && { argumentsRedacted: true }),
         attributes: span.attributes || {},
         endTime: span.endTime,
         name,

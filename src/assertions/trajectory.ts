@@ -512,8 +512,10 @@ export const handleTrajectoryToolArgsMatch = (params: AssertionParams): GradingR
   const actualTools = toolSteps.map(formatTrajectoryStep);
   const matchingSteps = toolSteps.filter((step) => matchesTrajectoryStep(step, matcher));
   const stepsWithArgs = matchingSteps.filter((step) => step.args !== undefined);
-  const matchedStep = stepsWithArgs.find((step) =>
-    matchesToolArgs(step.args, expectedArgs, mode, defaults, ignore),
+  const matchedStep = stepsWithArgs.find(
+    (step) =>
+      !(mode === 'exact' && step.argumentsRedacted) &&
+      matchesToolArgs(step.args, expectedArgs, mode, defaults, ignore),
   );
   const basePass = matchedStep !== undefined;
   const pass = applyInverse(basePass, params.inverse);

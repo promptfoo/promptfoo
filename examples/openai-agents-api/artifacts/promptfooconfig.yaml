@@ -11,8 +11,8 @@ prompts:
 providers:
   - id: openai:agents-api:gpt-6-astra
     config:
-      apiBaseUrl: https://api.openai.com/v1
-      retainSession: true
+      artifactPaths:
+        - /workspace/outputs/summary.csv
       agent:
         reasoning:
           effort: low

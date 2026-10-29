@@ -195,6 +195,183 @@ describe('OpenAiAgentsApiProvider', () => {
     expect(vi.mocked(fetchWithRetries).mock.calls.at(-1)?.[1]?.method).toBe('DELETE');
   });
 
+  describe('published artifacts', () => {
+    const path = '/workspace/outputs/report.bin';
+    const artifact = {
+      id: 'art_test',
+      session_id: session.id,
+      turn_id: turn.id,
+      path,
+      size_bytes: 7,
+    };
+    const endpoint = `/v1/agents/sessions/${session.id}/artifacts`;
+
+    it.each([
+      { paths: [path, path] },
+      { paths: ['/workspace/outputs/../secret'] },
+      { paths: ['relative.bin'] },
+      { paths: Array.from({ length: 9 }, (_, i) => `/workspace/outputs/${i}.bin`) },
+    ])('rejects invalid artifact paths: $paths', ({ paths }) => {
+      expect(() => provider({ artifactPaths: paths })).toThrow('artifactPaths');
+      expect(fetchWithRetries).not.toHaveBeenCalled();
+    });
+
+    it('does not request or record artifacts by default', async () => {
+      const result = await provider().callApi('hi');
+      expect(result.metadata).not.toHaveProperty('artifacts');
+      expect(calls().some(({ pathname }) => pathname.includes('/artifacts'))).toBe(false);
+    });
+
+    it('hashes the requested root-turn bytes using the session credentials before deletion', async () => {
+      const missing = '/workspace/outputs/missing.bin';
+      const bytes = Uint8Array.from([0, 128, 255, 97, 114, 116, 10]);
+      vi.mocked(fetchWithRetries).mockImplementation(async (url, options) => {
+        const { pathname, searchParams } = new URL(String(url));
+        if (pathname === endpoint) {
+          if (!searchParams.has('after')) {
+            return json(
+              page(
+                [
+                  { ...artifact, id: 'art_foreign', session_id: 'sess_other' },
+                  { ...artifact, id: 'art_child', turn_id: 'turn_child' },
+                ],
+                true,
+                'art_child',
+              ),
+            );
+          }
+          expect(searchParams.get('after')).toBe('art_child');
+          return json(
+            page([
+              artifact,
+              { ...artifact, id: 'art_other', path: missing, turn_id: 'turn_child' },
+            ]),
+          );
+        }
+        if (pathname === `${endpoint}/art_test/content`) {
+          return new Response(bytes);
+        }
+        return defaultResponse(pathname, options?.method);
+      });
+      const agent = new OpenAiAgentsApiProvider('', {
+        env: { OPENAI_API_KEY: 'provider-scoped-key' },
+        config: { apiBaseUrl: 'https://gateway.example/v1', artifactPaths: [path, missing] },
+      });
+      const result = await agent.callApi('hi');
+      expect(result.error).toBeUndefined();
+      expect(result.metadata?.sessionDeleted).toBe(true);
+      expect(result.metadata?.artifacts).toEqual([
+        {
+          path,
+          status: 'available',
+          sizeBytes: bytes.length,
+          sha256: '7b16924509e220adba59ed291ae37641a335bb3ae7e619afc868c1e65f72cb6e',
+        },
+        { path: missing, status: 'missing' },
+      ]);
+      expect(
+        calls()
+          .filter(({ pathname }) => pathname.endsWith('/content'))
+          .map(({ pathname }) => pathname),
+      ).toEqual([`${endpoint}/art_test/content`]);
+      for (const [url, options] of vi.mocked(fetchWithRetries).mock.calls) {
+        expect(new URL(String(url)).origin).toBe('https://gateway.example');
+        expect(new Headers(options!.headers).get('authorization')).toBe(
+          'Bearer provider-scoped-key',
+        );
+        expect(options?.restrictCloudAuthRedirects).toBe(true);
+      }
+      expect(calls().at(-1)?.method).toBe('DELETE');
+      expect(JSON.stringify(result)).not.toContain('provider-scoped-key');
+    });
+
+    it.each(['list', 'content'])(
+      'preserves the answer and cleanup on %s failure',
+      async (stage) => {
+        mockApi((pathname) => {
+          if (pathname === endpoint) {
+            return stage === 'list'
+              ? apiError(403, 'sensitive backend detail')
+              : json(page([artifact]));
+          }
+          return pathname.endsWith('/content')
+            ? apiError(403, 'sensitive backend detail')
+            : undefined;
+        });
+        const result = await provider({ artifactPaths: [path] }).callApi('hi');
+        expect(result.error).toBeUndefined();
+        expect(result).toMatchObject({
+          output: '42',
+          metadata: { sessionDeleted: true, artifacts: [{ path, status: 'unavailable' }] },
+        });
+        expect(JSON.stringify(result)).not.toContain('sensitive backend detail');
+      },
+    );
+
+    it.each([
+      { description: 'unsafe ID', data: [{ ...artifact, id: '..' }] },
+      { description: 'file over 1 MiB', data: [{ ...artifact, size_bytes: 1024 * 1024 + 1 }] },
+      { description: 'ambiguous path', data: [artifact, { ...artifact, id: 'art_duplicate' }] },
+    ])('rejects $description before requesting content', async ({ data }) => {
+      mockApi((pathname) => (pathname === endpoint ? json(page(data)) : undefined));
+      const result = await provider({ artifactPaths: [path] }).callApi('hi');
+      expect(result.error).toBeUndefined();
+      expect(result.metadata).toMatchObject({
+        sessionDeleted: true,
+        artifacts: [{ path, status: 'unavailable' }],
+      });
+      expect(calls().some(({ pathname }) => pathname.endsWith('/content'))).toBe(false);
+    });
+
+    it('preserves the completed turn if the session deadline expires during collection', async () => {
+      vi.useFakeTimers();
+      vi.mocked(fetchWithRetries).mockImplementation(async (url, options) => {
+        const { pathname } = new URL(String(url));
+        if (pathname === endpoint) {
+          return json(page([artifact]));
+        }
+        if (pathname.endsWith('/content')) {
+          const signal = options!.signal!;
+          return new Promise<Response>((_resolve, reject) => {
+            signal.addEventListener('abort', () => reject(signal.reason), { once: true });
+          });
+        }
+        return defaultResponse(pathname, options?.method);
+      });
+      const pending = provider({ artifactPaths: [path], timeoutMs: 25 }).callApi('hi');
+      await vi.advanceTimersByTimeAsync(25);
+      const result = await pending;
+      expect(result.error).toBeUndefined();
+      expect(result).toMatchObject({
+        output: '42',
+        metadata: { sessionDeleted: true, artifacts: [{ path, status: 'unavailable' }] },
+      });
+    });
+
+    it('cancels an oversized download even when the list advertises a small file', async () => {
+      const cancel = vi.fn();
+      const body = new ReadableStream<Uint8Array>({
+        pull(controller) {
+          controller.enqueue(new Uint8Array(256 * 1024));
+        },
+        cancel,
+      });
+      mockApi((pathname) => {
+        if (pathname === endpoint) {
+          return json(page([artifact]));
+        }
+        return pathname.endsWith('/content') ? new Response(body) : undefined;
+      });
+      const result = await provider({ artifactPaths: [path] }).callApi('hi');
+      expect(result.error).toBeUndefined();
+      expect(result).toMatchObject({
+        output: '42',
+        metadata: { sessionDeleted: true, artifacts: [{ path, status: 'unavailable' }] },
+      });
+      expect(cancel).toHaveBeenCalledOnce();
+    });
+  });
+
   describe('hosted trace export', () => {
     const localTraceId = 'f'.repeat(32);
     const wrapperId = 'e'.repeat(16);
@@ -204,6 +381,7 @@ describe('OpenAiAgentsApiProvider', () => {
       traceparent: `00-${localTraceId}-${'a'.repeat(16)}-01`,
     };
     function recordWrapper() {
+      vi.spyOn(getTraceStore(), 'getTraceMetadata').mockResolvedValue({});
       const span = trace.wrapSpanContext({
         traceId: localTraceId,
         spanId: wrapperId,
@@ -211,6 +389,7 @@ describe('OpenAiAgentsApiProvider', () => {
       });
       vi.spyOn(span, 'isRecording').mockReturnValue(true);
       vi.mocked(withGenAISpan).mockImplementationOnce((_ctx, run) => run(span));
+      return vi.spyOn(span, 'setAttribute');
     }
 
     function published(status = 'complete') {
@@ -238,8 +417,9 @@ describe('OpenAiAgentsApiProvider', () => {
     }
 
     it('requests no native traces for wrapper-only and untraced rows', async () => {
-      recordWrapper();
+      const attributes = recordWrapper();
       const wrapperOnly = await provider().callApi('hi', row);
+      expect(attributes).not.toHaveBeenCalledWith('promptfoo.openai.hosted_trace_requested', true);
       expect(wrapperOnly.metadata).not.toHaveProperty('hostedTrace');
       const untraced = await provider({ hostedTrace: true }).callApi('hi');
       expect(untraced).toMatchObject({
@@ -247,6 +427,23 @@ describe('OpenAiAgentsApiProvider', () => {
         metadata: { sessionDeleted: true, hostedTrace: { status: 'unavailable' } },
       });
       expect(calls().some((request) => request.pathname.endsWith('/traces'))).toBe(false);
+    });
+
+    it('skips the hosted export when the local span exporter is disabled', async () => {
+      vi.stubEnv('PROMPTFOO_OTEL_LOCAL_EXPORT', 'false');
+      const attributes = recordWrapper();
+      const addSpans = vi.spyOn(getTraceStore(), 'addSpans');
+      const result = await provider({ hostedTrace: true }).callApi('hi', row);
+      expect(attributes).toHaveBeenCalledWith('promptfoo.openai.hosted_trace_requested', true);
+      expect(result).toMatchObject({
+        output: '42',
+        metadata: {
+          sessionDeleted: true,
+          hostedTrace: { status: 'unavailable', reason: expect.stringContaining('local') },
+        },
+      });
+      expect(calls().some((request) => request.pathname.endsWith('/traces'))).toBe(false);
+      expect(addSpans).not.toHaveBeenCalled();
     });
 
     it('waits for this session and root turn on later pages, stores once, then deletes', async () => {
@@ -301,19 +498,32 @@ describe('OpenAiAgentsApiProvider', () => {
       ]);
     });
 
-    it.each(['latest', 'denied', 'orphan', 'unmatched', 'cancelled'] as const)(
-      'retains only validated partial evidence after the export deadline (%s)',
+    it.each([
+      'latest',
+      'provider deadline',
+      'later empty page',
+      'denied',
+      'orphan',
+      'unmatched',
+      'cancelled',
+    ] as const)(
+      'retains only validated partial evidence after a deadline (%s)',
       async (outcome) => {
         vi.useFakeTimers();
         recordWrapper();
         const addSpans = vi.spyOn(getTraceStore(), 'addSpans').mockResolvedValue({ stored: true });
         const controller = new AbortController();
+        const expectPartial =
+          outcome === 'latest' || outcome === 'provider deadline' || outcome === 'later empty page';
         let polls = 0;
         mockApi((path) => {
           if (!path.endsWith('/traces')) {
             return undefined;
           }
           polls++;
+          if (outcome === 'later empty page' && polls > 2) {
+            return json(page([]));
+          }
           const resource = published();
           const spans = resource.otlp.resourceSpans[0].scopeSpans[0].spans;
           const [root] = spans;
@@ -339,11 +549,11 @@ describe('OpenAiAgentsApiProvider', () => {
           return json(page([resource]));
         });
 
-        const pending = provider({ hostedTrace: { timeoutMs: 25 }, pollIntervalMs: 10 }).callApi(
-          'hi',
-          row,
-          { abortSignal: controller.signal },
-        );
+        const pending = provider({
+          hostedTrace: { timeoutMs: outcome === 'provider deadline' ? 75 : 25 },
+          timeoutMs: outcome === 'provider deadline' ? 25 : 100,
+          pollIntervalMs: 10,
+        }).callApi('hi', row, { abortSignal: controller.signal });
         await vi.advanceTimersByTimeAsync(0);
         expect(polls).toBe(1);
         expect(addSpans).not.toHaveBeenCalled();
@@ -357,7 +567,7 @@ describe('OpenAiAgentsApiProvider', () => {
           await vi.advanceTimersByTimeAsync(1);
           const result = await pending;
           expect(result).toMatchObject({ output: '42', metadata: { sessionDeleted: true } });
-          if (outcome === 'latest') {
+          if (expectPartial) {
             expect(result.metadata?.hostedTrace).toMatchObject({
               status: 'partial',
               spanCount: 2,
@@ -372,10 +582,91 @@ describe('OpenAiAgentsApiProvider', () => {
             expect(result.metadata?.hostedTrace).toMatchObject({ status: 'unavailable' });
           }
         }
-        if (outcome !== 'latest') {
+        if (!expectPartial) {
           expect(addSpans).not.toHaveBeenCalled();
         }
         expect(calls().at(-1)?.method).toBe('DELETE');
+      },
+    );
+
+    function publishedWithTool(args?: Record<string, unknown>) {
+      const resource = published();
+      const spans = resource.otlp.resourceSpans[0].scopeSpans[0].spans;
+      const [root] = spans;
+      const tool = {
+        ...root,
+        parentSpanId: root.spanId,
+        spanId: 'd'.repeat(16),
+        name: 'execute_tool lookup',
+        attributes: [
+          { key: 'gen_ai.operation.name', value: { stringValue: 'execute_tool' } },
+          { key: 'gen_ai.tool.name', value: { stringValue: 'lookup' } },
+          ...(args
+            ? [{ key: 'gen_ai.tool.call.arguments', value: { stringValue: JSON.stringify(args) } }]
+            : []),
+        ],
+      };
+      spans.push(tool);
+      return resource;
+    }
+
+    it('redacts hosted llm-rubric grader spans using the owning trace policy', async () => {
+      const { runAssertions } = await import('../../../src/assertions');
+      recordWrapper();
+      const store = getTraceStore();
+      vi.spyOn(store, 'getTraceMetadata').mockResolvedValue({
+        otlpHttpRedactAttributes: ['customer_id'],
+      });
+      const addSpans = vi.spyOn(store, 'addSpans').mockResolvedValue({ stored: true });
+      mockApi((path) => {
+        if (path.endsWith('/traces')) {
+          return json(page([publishedWithTool({ customer_id: 'private-customer', limit: 3 })]));
+        }
+        if (path.endsWith('/items')) {
+          return json(
+            page([
+              {
+                ...message,
+                content: [
+                  { type: 'output_text', text: '{"pass":true,"score":1,"reason":"correct"}' },
+                ],
+              },
+            ]),
+          );
+        }
+        return undefined;
+      });
+      const grader = provider({ hostedTrace: { includeToolArguments: true } });
+      const result = await runAssertions({
+        provider: { id: () => 'target', callApi: async () => ({ output: '42' }) },
+        providerResponse: { output: '42' },
+        test: { assert: [{ type: 'llm-rubric', value: 'The answer is 42', provider: grader }] },
+        traceId: localTraceId,
+      });
+      expect(result.pass).toBe(true);
+      expect(store.getTraceMetadata).toHaveBeenCalledWith(localTraceId);
+      expect(addSpans).toHaveBeenCalledWith(localTraceId, expect.any(Array));
+      const stored = addSpans.mock.calls[0][1];
+      expect(JSON.stringify(stored)).not.toContain('private-customer');
+      expect(stored.find((span) => span.name === 'execute_tool lookup')?.attributes).toMatchObject({
+        'promptfoo.tool.arguments_redacted': true,
+      });
+    });
+
+    it.each([undefined, { otlpHttpRedactAttributes: 'customer_id' }])(
+      'skips hosted import when the owning trace policy cannot be read (%j)',
+      async (metadata) => {
+        recordWrapper();
+        const store = getTraceStore();
+        vi.mocked(store.getTraceMetadata).mockResolvedValue(metadata);
+        const addSpans = vi.spyOn(store, 'addSpans');
+        const result = await provider({ hostedTrace: true }).callApi('hi', row);
+        expect(result).toMatchObject({
+          output: '42',
+          metadata: { sessionDeleted: true, hostedTrace: { status: 'unavailable' } },
+        });
+        expect(addSpans).not.toHaveBeenCalled();
+        expect(calls().some((request) => request.pathname.endsWith('/traces'))).toBe(false);
       },
     );
 
@@ -388,27 +679,7 @@ describe('OpenAiAgentsApiProvider', () => {
       async ({ args, complete }) => {
         recordWrapper();
         const addSpans = vi.spyOn(getTraceStore(), 'addSpans').mockResolvedValue({ stored: true });
-        const resource = published();
-        const [root] = resource.otlp.resourceSpans[0].scopeSpans[0].spans;
-        const tool = {
-          ...root,
-          parentSpanId: root.spanId,
-          spanId: 'd'.repeat(16),
-          name: 'execute_tool lookup',
-          attributes: [
-            { key: 'gen_ai.operation.name', value: { stringValue: 'execute_tool' } },
-            { key: 'gen_ai.tool.name', value: { stringValue: 'lookup' } },
-            ...(args
-              ? [
-                  {
-                    key: 'gen_ai.tool.call.arguments',
-                    value: { stringValue: JSON.stringify(args) },
-                  },
-                ]
-              : []),
-          ],
-        };
-        resource.otlp.resourceSpans[0].scopeSpans[0].spans.push(tool);
+        const resource = publishedWithTool(args);
         mockApi((path) => (path.endsWith('/traces') ? json(page([resource])) : undefined));
         const result = await provider({ hostedTrace: { includeToolArguments: true } }).callApi(
           'hi',

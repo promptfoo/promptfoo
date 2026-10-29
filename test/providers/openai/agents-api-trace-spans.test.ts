@@ -66,11 +66,14 @@ function toolWithArgs(raw?: string) {
   return { ...tool, attributes };
 }
 
-function importWithRedaction(key: string) {
+function importWithRedaction(
+  key: string,
+  args: unknown = { lookup: { order_id: '417' }, limit: 3 },
+) {
   return cliState.withRequestTracingConfig(
     { enabled: true, otlp: { http: { enabled: true, port: 4318, redactAttributes: [key] } } },
     async () => {
-      const cleanTool = toolWithArgs(JSON.stringify({ lookup: { order_id: '417' }, limit: 3 }));
+      const cleanTool = toolWithArgs(JSON.stringify(args));
       return normalizeHostedTrace(payload(root, cleanTool), parentId, true);
     },
   );
@@ -115,10 +118,8 @@ describe('normalizeHostedTrace', () => {
     const { spans } = normalizeHostedTrace(payload(root, tool, model), parentId, true, redact);
     const attrs = spans.find((span) => span.attributes?.['tool.name'] === 'lookup_order')!
       .attributes!;
-    expect(JSON.parse(attrs['tool.arguments'])).toMatchObject({
-      order_id: '417',
-      note: 'uses a [REDACTED]',
-    });
+    expect(JSON.parse(attrs['tool.arguments'])).toEqual({ order_id: '417' });
+    expect(attrs['gen_ai.tool.call.arguments']).toBe(attrs['tool.arguments']);
     expect(attrs['promptfoo.tool.arguments_redacted']).toBe(true);
     expect(JSON.stringify(spans)).not.toMatch(/private|fixture credential/);
   });
@@ -127,12 +128,73 @@ describe('normalizeHostedTrace', () => {
     const { spans } = await importWithRedaction('order_id');
     const attrs = spans.find((span) => span.attributes?.['tool.name'] === 'lookup_order')!
       .attributes!;
-    expect(JSON.parse(attrs['tool.arguments'])).toEqual({
-      lookup: { order_id: '[REDACTED]' },
-      limit: 3,
-    });
+    expect(JSON.parse(attrs['tool.arguments'])).toEqual({ limit: 3 });
     expect(attrs['promptfoo.tool.arguments_redacted']).toBe(true);
     expect(JSON.stringify(spans)).not.toContain('417');
+  });
+
+  it('applies the redaction policy through multiple layers of JSON-encoded arguments', async () => {
+    const input = JSON.stringify({ body: JSON.stringify([{ ORDER_ID: 'private order' }]) });
+    const { spans } = await importWithRedaction('order_id', { input, cwd: '/workspace' });
+    const attrs = spans.find((span) => span.name === 'execute_tool lookup_order')!.attributes!;
+    expect(JSON.parse(attrs['tool.arguments'])).toEqual({ cwd: '/workspace' });
+    expect(attrs['promptfoo.tool.arguments_redacted']).toBe(true);
+    expect(JSON.stringify(spans)).not.toContain('private order');
+  });
+
+  it('drops command fields containing credential-bearing URLs and embedded token-like values', () => {
+    const args = {
+      cmd: 'curl https://svc:private-password@example.test/resource',
+      script: 'set -x; export TOKEN=AKIA1234567890ABCDEF',
+      dsn: 'connect postgres://svc:private-password@example.test/data',
+      cwd: '/workspace',
+    };
+    const { spans } = normalizeHostedTrace(
+      payload(root, toolWithArgs(JSON.stringify(args))),
+      parentId,
+      true,
+    );
+    const attrs = spans.find((span) => span.name === 'execute_tool lookup_order')!.attributes!;
+    expect(JSON.parse(attrs['tool.arguments'])).toEqual({ cwd: '/workspace' });
+    expect(attrs['gen_ai.tool.call.arguments']).toBe(attrs['tool.arguments']);
+    expect(attrs['promptfoo.tool.arguments_redacted']).toBe(true);
+    expect(JSON.stringify(spans)).not.toMatch(/private-password|AKIA/);
+  });
+
+  it.each([
+    ['oversized', JSON.stringify({ text: 'x'.repeat(65_536) })],
+    ['malformed', '{"text":'],
+    ['duplicate keys', '{"text":"private overwritten value","text":"public"}'],
+    ['unrepresentable number', '{"n":9007199254740993}'],
+  ])('retains the span tree when %s arguments cannot be faithfully imported', (_label, raw) => {
+    const { spans, complete } = normalizeHostedTrace(
+      payload(root, toolWithArgs(raw)),
+      parentId,
+      true,
+    );
+    const attrs = spans.find((span) => span.name === 'execute_tool lookup_order')!.attributes!;
+    expect(complete).toBe(true);
+    expect(attrs['tool.arguments']).toBeUndefined();
+    expect(attrs['gen_ai.tool.call.arguments']).toBeUndefined();
+    expect(attrs['promptfoo.tool.arguments_redacted']).toBe(true);
+  });
+
+  it('retains the native argument key and spelling for exact raw attribute filters', () => {
+    const raw = '{ "text" : "contains  spaces" }';
+    const { spans } = normalizeHostedTrace(payload(root, toolWithArgs(raw)), parentId, true);
+    const attrs = spans.find((span) => span.name === 'execute_tool lookup_order')!.attributes!;
+    expect(attrs['gen_ai.tool.call.arguments']).toBe(raw);
+    expect(attrs['tool.arguments']).toBe(raw);
+    expect(attrs['promptfoo.tool.arguments_redacted']).toBeUndefined();
+  });
+
+  it('preserves escaped Unicode and slashes in the native JSON spelling', () => {
+    const raw = String.raw`{ "\u0063md": "cat \/workspace\/caf\u00e9" }`;
+    const { spans } = normalizeHostedTrace(payload(root, toolWithArgs(raw)), parentId, true);
+    const attrs = spans.find((span) => span.name === 'execute_tool lookup_order')!.attributes!;
+    expect(attrs['gen_ai.tool.call.arguments']).toBe(raw);
+    expect(JSON.parse(attrs['tool.arguments'])).toEqual({ cmd: 'cat /workspace/café' });
+    expect(attrs['promptfoo.tool.arguments_redacted']).toBeUndefined();
   });
 
   it('omits normalized arguments when the native attribute is protected', async () => {
@@ -155,7 +217,7 @@ describe('normalizeHostedTrace', () => {
   });
 
   it('preserves a string argument containing JSON text across storage', () => {
-    const text = '{"order_id":"417"}';
+    const text = '{ "order_id" : "417" }';
     const { spans } = normalizeHostedTrace(
       payload(root, toolWithArgs(JSON.stringify(text))),
       parentId,

@@ -6,6 +6,7 @@ import cliState from '../../cliState';
 import { sanitizeTraceAttributes } from '../../tracing/sanitizeAttributes';
 import { getNormalizedToolAttributes } from '../../tracing/toolAttributes';
 import { looksLikeSecret, sanitizeObject } from '../../util/sanitizer';
+import { hasSensitiveOpenAiCacheString } from './util';
 
 import type { SpanData } from '../../tracing/store';
 
@@ -86,6 +87,83 @@ function protectsKey(keys: string[], policy: ImportPolicy): boolean {
   return policy.redactAttributes.some((pattern) => keys.some((key) => key.includes(pattern)));
 }
 
+// Keep wire spelling for exact attribute filters only when every token survives parsing.
+// In particular, JSON.parse silently discards duplicate keys and rounds large integers.
+function roundTrips(raw: string, value: unknown): boolean {
+  const canonical = JSON.stringify(value);
+  if (raw === canonical) {
+    return true;
+  }
+  // JSON.stringify normalizes string escapes and removes insignificant whitespace.
+  const normalized = raw.replace(/"(?:[^"\\]|\\.)*"|\s+/g, (part) =>
+    part.startsWith('"') ? JSON.stringify(JSON.parse(part)) : '',
+  );
+  return normalized === canonical;
+}
+
+function sensitiveText(value: string, policy: ImportPolicy): boolean {
+  return (
+    policy.redact(value) !== value ||
+    hasSensitiveOpenAiCacheString(value) ||
+    /:\/\/[^\s"'<>/@]+@/.test(value)
+  );
+}
+
+// Decode JSON-valued strings only for inspection. Persist the original argument type and text.
+function inspectArgument(value: unknown, policy: ImportPolicy, depth = 0): unknown {
+  if (depth > 16) {
+    invalid();
+  }
+  if (Array.isArray(value)) {
+    return value.map((item) => inspectArgument(item, policy, depth + 1));
+  }
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value).map(([key, item]) => {
+        if (sensitiveText(key, policy) || protectsKey([key.toLowerCase()], policy)) {
+          invalid();
+        }
+        return [key, inspectArgument(item, policy, depth + 1)];
+      }),
+    );
+  }
+  if (typeof value !== 'string') {
+    return value;
+  }
+  if (sensitiveText(value, policy)) {
+    invalid();
+  }
+  if (/^\s*[[{"]/.test(value)) {
+    let decoded: unknown;
+    try {
+      decoded = JSON.parse(value);
+    } catch {
+      return value;
+    }
+    if (!roundTrips(value, decoded)) {
+      invalid();
+    }
+    return inspectArgument(decoded, policy, depth + 1);
+  }
+  return value;
+}
+
+function canStoreArgument(value: unknown, policy: ImportPolicy): boolean {
+  try {
+    const inspected = { '': inspectArgument(value, policy) };
+    const filtered = sanitizeTraceAttributes(inspected, {
+      redactAttributes: policy.redactAttributes,
+      truncateValues: false,
+    });
+    return isDeepStrictEqual(
+      inspected,
+      sanitizeObject(filtered, { sanitizeUrls: true, throwOnError: true }),
+    );
+  } catch {
+    return false;
+  }
+}
+
 function toolAttributes(
   name: string,
   value: Record<string, unknown> | undefined,
@@ -96,34 +174,38 @@ function toolAttributes(
   if (!policy.includeToolArguments || !value || protectsKey([argsKey, 'tool.arguments'], policy)) {
     return identity;
   }
-  // The hosted API serializes tool arguments as JSON in an OTLP string.
+  const unavailable = { ...identity, 'promptfoo.tool.arguments_redacted': true };
   const raw = value.stringValue;
   if (typeof raw !== 'string' || Buffer.byteLength(raw) > MAX_ARGUMENT_BYTES) {
-    invalid();
+    return unavailable;
   }
   try {
     const args: unknown = JSON.parse(raw);
-    if (args === null) {
-      return identity;
+    if (args === null || !roundTrips(raw, args)) {
+      return unavailable;
     }
-    const filtered = sanitizeTraceAttributes(
-      { args },
-      {
-        redactAttributes: policy.redactAttributes,
-        truncateValues: false,
-      },
-    );
-    const sanitized = sanitizeObject(filtered, { sanitizeUrls: true, throwOnError: true }).args;
-    const json = JSON.stringify(sanitized, (_key, v) =>
-      typeof v === 'string' ? policy.redact(v) : v,
-    );
-    const safeArgs = JSON.parse(policy.redact(json));
+    // A scrubbed value is unsuitable as evidence. For objects we can still grade
+    // unchanged sibling parameters when, for example, a command contained credentials.
+    let captured = args;
+    if (typeof args === 'object' && !Array.isArray(args)) {
+      captured = Object.fromEntries(
+        Object.entries(args).filter(([key, item]) => canStoreArgument({ [key]: item }, policy)),
+      );
+    } else if (!canStoreArgument(args, policy)) {
+      return unavailable;
+    }
+    const intact = isDeepStrictEqual(captured, args);
+    const json = intact ? raw : JSON.stringify(captured);
+    if (policy.redact(json) !== json) {
+      return unavailable;
+    }
     return {
-      ...getNormalizedToolAttributes(name, JSON.stringify(safeArgs)),
-      ...(!isDeepStrictEqual(args, safeArgs) && { 'promptfoo.tool.arguments_redacted': true }),
+      ...getNormalizedToolAttributes(name, json),
+      [argsKey]: json,
+      ...(!intact && { 'promptfoo.tool.arguments_redacted': true }),
     };
   } catch {
-    return invalid();
+    return unavailable;
   }
 }
 
@@ -283,6 +365,7 @@ export function normalizeHostedTrace(
   parentSpanId: string,
   includeToolArguments: boolean,
   redact: Redact = (text) => text,
+  traceRedactAttributes: string[] = [],
 ): { spans: SpanData[]; complete: boolean } {
   if (!/^(?!0+$)[a-f\d]{16}$/i.test(parentSpanId)) {
     invalid();
@@ -291,7 +374,10 @@ export function normalizeHostedTrace(
     parentSpanId,
     includeToolArguments,
     redact,
-    redactAttributes: (cliState.requestTracingConfig?.otlp?.http?.redactAttributes ?? [])
+    redactAttributes: [
+      ...traceRedactAttributes,
+      ...(cliState.requestTracingConfig?.otlp?.http?.redactAttributes ?? []),
+    ]
       .map((s) => s.toLowerCase().trim())
       .filter(Boolean),
   };

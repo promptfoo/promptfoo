@@ -8,6 +8,25 @@ const ARGUMENT_FILTER_KEYS = new Set<string>([
   ...TOOL_ARGUMENT_ATTRIBUTE_KEYS,
 ]);
 
+/** The hosted importer writes JSON text. Exported or redacted text must still parse as JSON. */
+export function getHostedToolArguments(attributes: Record<string, unknown>): unknown {
+  const json = attributes['tool.arguments'];
+  const native = attributes['gen_ai.tool.call.arguments'];
+  if (
+    typeof json !== 'string' ||
+    ((native !== undefined || attributes['promptfoo.tool.arguments_redacted']) && native !== json)
+  ) {
+    // Older imports only have tool.arguments. Their redacted values did not preserve
+    // which fields were original, so even a positive match cannot rely on them.
+    return undefined;
+  }
+  try {
+    return JSON.parse(json) ?? undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 function isCommandMatcher(value: unknown): boolean {
   if (!value || typeof value !== 'object' || !('type' in value)) {
     return false;
@@ -52,12 +71,8 @@ function getArgumentCoverageError(
     return undefined;
   }
   if (baseType === 'trajectory:tool-args-match') {
-    // Visible fields can establish a positive match even when another argument was redacted.
-    if (
-      includeToolArguments &&
-      !inverse &&
-      !/(?:\[redacted\]|<redacted>|%5bredacted%5d)/i.test(JSON.stringify(value))
-    ) {
+    // The matcher grades preserved fields and skips lossy candidates in exact mode.
+    if (includeToolArguments && !inverse) {
       return undefined;
     }
   } else {
@@ -78,6 +93,18 @@ function getArgumentCoverageError(
     if (!commandFilter && !attributeFilter) {
       return undefined;
     }
+    if (
+      includeToolArguments &&
+      !inverse &&
+      baseType === 'trajectory:step-count' &&
+      'min' in value &&
+      typeof value.min === 'number' &&
+      value.min > 0 &&
+      !('max' in value)
+    ) {
+      // An unavailable argument can hide additional commands, but cannot erase an observed one.
+      return undefined;
+    }
   }
   return includeToolArguments
     ? 'Some hosted tool arguments were unavailable or redacted. The trace cannot establish the requested argument check.'
@@ -87,21 +114,32 @@ function getArgumentCoverageError(
 /** A wrapper span alone cannot establish that an action never occurred inside the hosted turn. */
 export function prepareHostedTraceAssertion(params: AssertionParams): string | undefined {
   const { assertionValueContext, providerResponse, baseType, renderedValue, inverse } = params;
-  const hostedTrace = providerResponse.metadata?.hostedTrace;
-  if (
-    hostedTrace?.source !== 'openai:agents-api' ||
-    !(baseType.startsWith('trajectory:') || baseType.startsWith('trace-'))
-  ) {
+  if (!(baseType.startsWith('trajectory:') || baseType.startsWith('trace-'))) {
     return undefined;
   }
-  if (hostedTrace.status === 'unavailable') {
+  const trace = assertionValueContext.trace;
+  const hostedTrace = providerResponse.metadata?.hostedTrace;
+  if (hostedTrace?.source !== 'openai:agents-api') {
+    if (
+      !hostedTrace &&
+      trace?.spans.some(
+        ({ attributes }) =>
+          attributes?.['promptfoo.openai.hosted_trace_requested'] === true &&
+          attributes['promptfoo.span.role'] !== 'grader',
+      ) &&
+      (!params.provider || /^openai:agents-api(?::|$)/.test(params.provider.id()))
+    ) {
+      return 'The OpenAI Agents API trace capture metadata is unavailable for this assertion.';
+    }
+    return undefined;
+  }
+  if (hostedTrace.status !== 'imported' && hostedTrace.status !== 'partial') {
     return 'The requested OpenAI Agents API trace was unavailable.';
   }
   const partial = hostedTrace.status === 'partial';
   if (partial && (inverse || !provesObservedTool(baseType, renderedValue))) {
     return 'The hosted trace is partial. It can only establish an observed tool call or matching arguments.';
   }
-  const trace = assertionValueContext.trace;
   const parentId = hostedTrace.parentSpanId;
   if (!trace || !parentId || !hostedTrace.spanCount) {
     return 'The imported OpenAI Agents API spans are unavailable for this assertion.';
@@ -123,7 +161,35 @@ export function prepareHostedTraceAssertion(params: AssertionParams): string | u
       ? [...native, ...trace.spans.filter((span) => ancestors.has(span.spanId))]
       : native,
   };
-  return hostedTrace.toolArgumentsComplete === true
-    ? undefined
-    : getArgumentCoverageError(params, hostedTrace.includeToolArguments);
+  const coverageError = getArgumentCoverageError(params, hostedTrace.includeToolArguments);
+  if (!coverageError) {
+    return undefined;
+  }
+  // The row describes capture time. JSON export can truncate or redact a stored argument
+  // without changing that row or the number of spans.
+  const requiresNativeAlias =
+    renderedValue &&
+    typeof renderedValue === 'object' &&
+    'attributes' in renderedValue &&
+    renderedValue.attributes &&
+    typeof renderedValue.attributes === 'object' &&
+    'gen_ai.tool.call.arguments' in renderedValue.attributes;
+  const complete =
+    hostedTrace.includeToolArguments &&
+    hostedTrace.toolArgumentsComplete === true &&
+    native.every(({ attributes, name }) => {
+      if (
+        attributes?.['gen_ai.operation.name'] !== 'execute_tool' &&
+        !name.startsWith('execute_tool ')
+      ) {
+        return true;
+      }
+      return (
+        attributes &&
+        !attributes['promptfoo.tool.arguments_redacted'] &&
+        (!requiresNativeAlias || attributes['gen_ai.tool.call.arguments'] !== undefined) &&
+        getHostedToolArguments(attributes) !== undefined
+      );
+    });
+  return complete ? undefined : coverageError;
 }

@@ -1,4 +1,7 @@
+import { createHash } from 'node:crypto';
+
 import logger from '../../logger';
+import { getOtelConfigFromEnv } from '../../tracing/otelConfig';
 import { getTraceStore } from '../../tracing/store';
 import { CloudAuthRedirectError } from '../../util/fetch/cloudAuthRedirects';
 import { fetchWithRetries, readBoundedText } from '../../util/fetch/index';
@@ -20,6 +23,7 @@ import { calculateOpenAIUsageCost } from './billing';
 import { OpenAiGenericProvider } from './index';
 import { appendOpenAiApiPath, assertOpenAiApiModel } from './util';
 import type { SpanContext } from '@opentelemetry/api';
+import type { SessionArtifact } from 'openai/resources/beta/agents/sessions/artifacts';
 
 import type { EnvOverrides } from '../../types/env';
 import type {
@@ -47,6 +51,7 @@ interface AgentsApiOptions extends OpenAiSharedOptions {
   cleanupTimeoutMs?: number;
   usageTimeoutMs?: number;
   retainSession?: boolean;
+  artifactPaths?: string[];
   hostedTrace?: boolean | { includeToolArguments?: boolean; timeoutMs?: number };
 }
 
@@ -106,6 +111,8 @@ const MAX_SESSION_LIST_PAGES = 1_000;
 const MAX_LIST_ITEMS = 10_000;
 const MAX_ERROR_DETAIL_LENGTH = 1_024;
 const MAX_RESPONSE_BODY_BYTES = 16 * 1024 * 1024;
+const MAX_ARTIFACT_PATHS = 8;
+const MAX_ARTIFACT_BYTES = 1024 * 1024;
 const TRANSIENT_STATUS_CODES = new Set([500, 502, 503, 504]);
 // Assistant messages, messages between agents, and reasoning are not tool activity.
 const MESSAGE_ITEM_TYPES = new Set(['message', 'agent_message', 'reasoning']);
@@ -120,6 +127,34 @@ const MIN_CREDENTIAL_LENGTH = 8;
 const MIN_TOKEN_CREDENTIAL_LENGTH = 2;
 const CREDENTIAL_NAME =
   /(?:authorization|api[-_]?key|token|secret|signature|credential|cookie|password|(?:^|[-_])key$)/i;
+
+async function digestArtifact(response: Response | undefined, expectedSize: number) {
+  if (!response?.body) {
+    throw new Error('Missing artifact content');
+  }
+  const reader = response.body.getReader();
+  const hash = createHash('sha256');
+  let sizeBytes = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) {
+        break;
+      }
+      sizeBytes += value.byteLength;
+      if (sizeBytes > expectedSize) {
+        throw new Error('Artifact exceeded its published size');
+      }
+      hash.update(value);
+    }
+  } finally {
+    await reader.cancel();
+  }
+  if (sizeBytes !== expectedSize) {
+    throw new Error('Artifact content was incomplete');
+  }
+  return { sizeBytes, sha256: hash.digest('hex') };
+}
 
 class AgentsApiHttpError extends Error {
   constructor(
@@ -478,6 +513,28 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
     if (config.environment && !['none', 'openai_hosted'].includes(config.environment.type)) {
       throw new Error('Agents API environment.type must be "none" or "openai_hosted"');
     }
+    const paths = config.artifactPaths;
+    if (
+      paths !== undefined &&
+      (!Array.isArray(paths) ||
+        paths.length > MAX_ARTIFACT_PATHS ||
+        new Set(paths).size !== paths.length ||
+        paths.some(
+          (path) =>
+            typeof path !== 'string' ||
+            !path.startsWith('/workspace/outputs/') ||
+            path.length > 4096 ||
+            path.includes('\0') ||
+            path
+              .slice(1)
+              .split('/')
+              .some((part) => !part || part === '.' || part === '..'),
+        ))
+    ) {
+      throw new Error(
+        `Agents API artifactPaths must contain at most ${MAX_ARTIFACT_PATHS} unique file paths under /workspace/outputs/`,
+      );
+    }
     if (this.modelName) {
       assertOpenAiApiModel(this.modelName, this.getApiUrl());
     }
@@ -496,7 +553,7 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
     return redactCredentials(text, this.credentials);
   }
 
-  private async request<T>(
+  private async requestRaw(
     endpoint: string,
     method: 'GET' | 'POST' | 'DELETE',
     headers: Headers,
@@ -505,7 +562,7 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
     query?: string,
     // Replaying a session creation can start another billable agent task.
     idempotent = method !== 'POST',
-  ): Promise<T> {
+  ): Promise<Response | undefined> {
     const maxRetries = Math.max(0, this.config.maxRetries ?? 4);
     for (let attempt = 0; ; attempt++) {
       signal.throwIfAborted();
@@ -540,7 +597,7 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
       if (method === 'DELETE' && response.status === 404) {
         // A previous deletion may have succeeded even if its response was lost.
         await response.body?.cancel();
-        return undefined as T;
+        return undefined;
       }
       if (!response.ok) {
         let detail = '';
@@ -559,12 +616,14 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
           response.status,
         );
       }
-      if (response.status === 204) {
-        return undefined as T;
-      }
-      const text = await readBoundedText(response, MAX_RESPONSE_BODY_BYTES);
-      return (text ? JSON.parse(text) : undefined) as T;
+      return response.status === 204 ? undefined : response;
     }
+  }
+
+  private async request<T>(...args: Parameters<OpenAiAgentsApiProvider['requestRaw']>): Promise<T> {
+    const response = await this.requestRaw(...args);
+    const text = response && (await readBoundedText(response, MAX_RESPONSE_BODY_BYTES));
+    return (text ? JSON.parse(text) : undefined) as T;
   }
 
   private async list<T>(
@@ -853,10 +912,11 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
       return await withGenAISpan(
         { ...spanContext, operationName: 'invoke_agent', agentId: config.agent_id },
         (span) => {
-          const parent =
-            config.hostedTrace && context?.traceparent && span.isRecording()
-              ? span.spanContext()
-              : undefined;
+          let parent: SpanContext | undefined;
+          if (config.hostedTrace && context?.traceparent && span.isRecording()) {
+            span.setAttribute('promptfoo.openai.hosted_trace_requested', true);
+            parent = span.spanContext();
+          }
           return callProvider.runSession(prompt, options, parent);
         },
         (response) => ({
@@ -1032,6 +1092,7 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
         ...toolActivity,
         ...usageMetadata,
         ...subagentUsageMetadata,
+        ...(await this.getArtifactMetadata(session.id, turn.id, endpoint, headers, signal)),
       });
       if (this.config.hostedTrace) {
         metadata.hostedTrace = await this.importHostedTrace(
@@ -1041,9 +1102,10 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
           headers,
           signal,
           parent,
+          options?.abortSignal,
         );
-        options?.abortSignal?.throwIfAborted();
       }
+      options?.abortSignal?.throwIfAborted();
       completed = true;
     } catch (error) {
       options?.abortSignal?.throwIfAborted();
@@ -1064,6 +1126,67 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
     return result;
   }
 
+  /** Read only requested immutable files while the provider still owns the session. */
+  private async getArtifactMetadata(
+    sessionId: string,
+    turnId: string,
+    endpoint: string,
+    headers: Headers,
+    signal: AbortSignal,
+  ) {
+    const paths = this.config.artifactPaths;
+    if (!paths?.length) {
+      return {};
+    }
+    const artifactSignal = AbortSignal.any([signal, AbortSignal.timeout(10_000)]);
+    const collection = `${endpoint}/artifacts`;
+    const published = await this.list<SessionArtifact>(collection, headers, artifactSignal).catch(
+      () => undefined,
+    );
+    const artifacts = await Promise.all(
+      paths.map(async (path) => {
+        const evidence = { path: this.redact(path) };
+        if (!published) {
+          return { ...evidence, status: 'unavailable' };
+        }
+        try {
+          const matches = published.filter(
+            (item) =>
+              item.session_id === sessionId && item.turn_id === turnId && item.path === path,
+          );
+          if (!matches.length) {
+            return { ...evidence, status: 'missing' };
+          }
+          const [artifact] = matches;
+          if (
+            matches.length !== 1 ||
+            typeof artifact.id !== 'string' ||
+            !/^[A-Za-z0-9_-]+$/.test(artifact.id) ||
+            !isNonNegativeSafeInteger(artifact.size_bytes) ||
+            artifact.size_bytes > MAX_ARTIFACT_BYTES
+          ) {
+            return { ...evidence, status: 'unavailable' };
+          }
+          const response = await this.requestRaw(
+            `${collection}/${artifact.id}/content`,
+            'GET',
+            headers,
+            artifactSignal,
+          );
+          return {
+            ...evidence,
+            status: 'available',
+            ...(await digestArtifact(response, artifact.size_bytes)),
+          };
+        } catch {
+          // A download or transport error must not disclose its raw body or discard the answer.
+          return { ...evidence, status: 'unavailable' };
+        }
+      }),
+    );
+    return { artifacts };
+  }
+
   /** Import the published root-turn tree under this provider invocation before session deletion. */
   private async importHostedTrace(
     sessionId: string,
@@ -1072,11 +1195,15 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
     headers: Headers,
     signal: AbortSignal,
     parent?: SpanContext,
+    abortSignal?: AbortSignal,
   ) {
     const source = 'openai:agents-api';
     const unavailable = (reason: string) => ({ source, status: 'unavailable', reason });
     if (!parent) {
       return unavailable('Enable Promptfoo eval tracing to import hosted spans');
+    }
+    if (!getOtelConfigFromEnv().localExport) {
+      return unavailable('The local span exporter is disabled');
     }
 
     const options = typeof this.config.hostedTrace === 'object' ? this.config.hostedTrace : {};
@@ -1086,6 +1213,15 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
     const traceSignal = AbortSignal.any([signal, controller.signal]);
     let snapshot: ReturnType<typeof normalizeHostedTrace> | undefined;
     try {
+      // A grader can share the row's trace without the target provider's request context.
+      const metadata = await getTraceStore().getTraceMetadata(parent.traceId);
+      if (!metadata) {
+        return unavailable('The local eval trace was unavailable');
+      }
+      const redactAttributes = metadata.otlpHttpRedactAttributes ?? [];
+      if (!Array.isArray(redactAttributes)) {
+        return unavailable('The local trace redaction policy was invalid');
+      }
       // A terminal page only describes traces published at the time of the read.
       // Poll from the beginning so a later snapshot can replace an incomplete one.
       while (!snapshot?.complete) {
@@ -1099,11 +1235,15 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
         const published = traces.find(
           (trace) => trace.id === turnId && trace.session_id === sessionId,
         );
-        snapshot = published
-          ? normalizeHostedTrace(published.otlp, parent.spanId, includeToolArguments, (value) =>
-              this.redact(value),
-            )
-          : undefined;
+        if (published) {
+          snapshot = normalizeHostedTrace(
+            published.otlp,
+            parent.spanId,
+            includeToolArguments,
+            (value) => this.redact(value),
+            redactAttributes,
+          );
+        }
         if (!snapshot?.complete) {
           await sleepWithAbort(this.config.pollIntervalMs ?? 1_000, traceSignal);
         }
@@ -1116,7 +1256,8 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
       if (!traceSignal.aborted) {
         return unavailable('Unable to read a valid hosted trace');
       }
-      if (signal.aborted || !snapshot?.spans.length) {
+      abortSignal?.throwIfAborted();
+      if (!snapshot?.spans.length) {
         return unavailable('Timed out waiting for a complete hosted trace');
       }
       // A valid delegated tree may remain unattested even after publication. Import it

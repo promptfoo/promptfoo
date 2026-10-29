@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { assertionUsesTrace, runAssertion, runAssertions } from '../../src/assertions/index';
 import cliState from '../../src/cliState';
 import { withProviderCallTracingContext } from '../../src/scheduler/providerCallExecutionContext';
+import { sanitizeTraceAttributes } from '../../src/tracing/sanitizeAttributes';
 import { getTraceStore } from '../../src/tracing/store';
 import { mockProcessEnv } from '../util/utils';
 
@@ -13,7 +14,7 @@ import type {
   GradingResult,
   ProviderResponse,
 } from '../../src/types/index';
-import type { TraceData } from '../../src/types/tracing';
+import type { TraceData, TraceSpan } from '../../src/types/tracing';
 
 const createSpanCountAssertion = (value: string = 'context.trace === undefined') => ({
   type: 'javascript' as const,
@@ -150,7 +151,28 @@ describe('trace assertions', () => {
     const incomplete = { ...imported, includeToolArguments: true };
     const complete = { ...incomplete, toolArgumentsComplete: true };
     const unavailable = { source: 'openai:agents-api', status: 'unavailable' };
-    const grade = (assertion: Assertion, hostedTrace?: object) =>
+    const tool = (name: string, args?: unknown, redacted = false): TraceSpan => ({
+      spanId: name,
+      parentSpanId: 'wrapper',
+      name: `execute_tool ${name}`,
+      startTime: 1010,
+      endTime: 1050,
+      attributes: {
+        'promptfoo.openai.hosted_trace': 'wrapper',
+        'gen_ai.operation.name': 'execute_tool',
+        'tool.name': name,
+        ...(args !== undefined && {
+          'tool.arguments': JSON.stringify(args),
+          'gen_ai.tool.call.arguments': JSON.stringify(args),
+        }),
+        ...(redacted && { 'promptfoo.tool.arguments_redacted': true }),
+      },
+    });
+    const grade = (
+      assertion: Assertion,
+      hostedTrace?: object,
+      calls = [tool('lookup', { order_id: '123' })],
+    ) =>
       runAssertion({
         assertion,
         test: mockTest,
@@ -166,18 +188,7 @@ describe('trace assertions', () => {
               startTime: 1000,
               attributes: { 'tool.name': 'other_provider' },
             },
-            {
-              spanId: 'lookup',
-              parentSpanId: 'wrapper',
-              name: 'execute_tool lookup',
-              startTime: 1010,
-              endTime: 1050,
-              attributes: {
-                'promptfoo.openai.hosted_trace': 'wrapper',
-                'tool.name': 'lookup',
-                'tool.arguments': '{"order_id":"123","token":"[REDACTED]"}',
-              },
-            },
+            ...calls,
           ],
         },
       });
@@ -252,6 +263,25 @@ describe('trace assertions', () => {
         pass: false,
         score: 0,
         reason: expect.stringContaining('incomplete'),
+      });
+    });
+
+    it('fails closed when export stripped the target capture metadata, even with no native spans', async () => {
+      const wrapper = (role: string): TraceSpan => ({
+        name: 'invoke_agent',
+        spanId: 'requested-call',
+        startTime: 1010,
+        attributes: {
+          'promptfoo.span.role': role,
+          'promptfoo.openai.hosted_trace_requested': true,
+        },
+      });
+      await expect(grade(noDelete, undefined, [wrapper('target')])).resolves.toMatchObject({
+        pass: false,
+        reason: expect.stringContaining('capture metadata'),
+      });
+      await expect(grade(noDelete, undefined, [wrapper('grader')])).resolves.toMatchObject({
+        pass: true,
       });
     });
 
@@ -345,14 +375,85 @@ describe('trace assertions', () => {
       },
     );
 
-    it('can verify a visible argument without treating a redacted marker as its original value', async () => {
-      const check = (args: object) =>
-        grade({ type: 'trajectory:tool-args-match', value: { name: 'lookup', args } }, incomplete);
+    it('grades preserved fields on a lossy call and requires an intact candidate for exact matching', async () => {
+      const lossy = tool('lookup', { order_id: '123' }, true);
+      const intact = tool('lookup', { order_id: '123' });
+      const check = (args: unknown, mode = 'partial', calls = [lossy]) =>
+        grade(
+          { type: 'trajectory:tool-args-match', value: { name: 'lookup', args, mode } },
+          { ...incomplete, spanCount: calls.length },
+          calls,
+        );
       await expect(check({ order_id: '123' })).resolves.toMatchObject({ pass: true });
-      await expect(check({ token: '[REDACTED]' })).resolves.toMatchObject({
-        pass: false,
-        score: 0,
+      await expect(check({ order_id: '123' }, 'exact')).resolves.toMatchObject({ pass: false });
+      await expect(check({ order_id: '123' }, 'exact', [lossy, intact])).resolves.toMatchObject({
+        pass: true,
       });
+      await expect(check({ token: '[REDACTED]' })).resolves.toMatchObject({ pass: false });
+      await expect(
+        check(true, 'partial', [tool('lookup', undefined, true)]),
+      ).resolves.toMatchObject({ pass: false });
+      const legacy = tool('lookup', { url: 'https://***:***@example.test/' }, true);
+      delete legacy.attributes!['gen_ai.tool.call.arguments'];
+      await expect(
+        check({ url: 'https://***:***@example.test/' }, 'partial', [legacy]),
+      ).resolves.toMatchObject({ pass: false });
+    });
+
+    it('cannot infer the absence of an argument from a truncated export', async () => {
+      const args = { cmd: 'cat ledger.csv', padding: 'a'.repeat(500) };
+      const shell = tool('shell', args);
+      const replayed = { ...shell, attributes: sanitizeTraceAttributes(shell.attributes) };
+      expect(JSON.parse(JSON.stringify(replayed.attributes))['tool.arguments']).toMatch(/…$/);
+      const forbidden: Assertion = {
+        type: 'not-trajectory:tool-args-match',
+        value: { name: 'shell', args: { cmd: args.cmd } },
+      };
+      await expect(grade(forbidden, complete, [shell])).resolves.toMatchObject({ pass: false });
+      await expect(grade(forbidden, complete, [replayed])).resolves.toMatchObject({
+        pass: false,
+        reason: expect.stringContaining('unavailable'),
+      });
+      await expect(
+        grade(
+          {
+            type: 'trajectory:tool-args-match',
+            value: { name: 'shell', args: replayed.attributes['tool.arguments'] },
+          },
+          complete,
+          [replayed],
+        ),
+      ).resolves.toMatchObject({ pass: false });
+      await expect(
+        grade(
+          {
+            type: 'trace-span-count',
+            value: { max: 0, attributes: { 'gen_ai.tool.call.arguments': JSON.stringify(args) } },
+          },
+          complete,
+          [replayed],
+        ),
+      ).resolves.toMatchObject({ pass: false });
+    });
+
+    it('an observed command establishes a positive lower bound despite missing arguments elsewhere', async () => {
+      const calls = [tool('shell', { cmd: 'cat /workspace/ledger.csv' }), tool('lookup')];
+      const check = (bounds: { min?: number; max?: number }, observed = calls) =>
+        grade(
+          {
+            type: 'trajectory:step-count',
+            value: { type: 'command', pattern: '*ledger.csv', ...bounds },
+          },
+          { ...incomplete, spanCount: observed.length },
+          observed,
+        );
+      await expect(check({ min: 1 })).resolves.toMatchObject({ pass: true });
+      await expect(check({ min: 2 })).resolves.toMatchObject({ pass: false });
+      await expect(check({ max: 1 })).resolves.toMatchObject({ pass: false });
+      // Redaction could have removed a higher-precedence cmd from the same call.
+      await expect(
+        check({ min: 1 }, [tool('shell', { command: 'cat /workspace/ledger.csv' }, true)]),
+      ).resolves.toMatchObject({ pass: false });
     });
 
     it('preserves output checks, metric-only scoring, and unrelated provider metadata', async () => {
