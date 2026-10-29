@@ -420,6 +420,7 @@ async function runAssertionInternal({
   providerResponse,
   traceId,
   traceData,
+  traceUnavailable,
   claimStoredGradingUsage,
 }: {
   prompt?: string;
@@ -432,6 +433,7 @@ async function runAssertionInternal({
   assertIndex?: number;
   traceId?: string;
   traceData?: TraceData | null;
+  traceUnavailable?: boolean;
   claimStoredGradingUsage?: () => boolean;
 }): Promise<GradingResult> {
   // Use resolved vars if provided, otherwise fall back to test.vars
@@ -659,7 +661,12 @@ async function runAssertionInternal({
 
   const handler = ASSERTION_HANDLERS[assertionParams.baseType as keyof typeof ASSERTION_HANDLERS];
   if (handler) {
-    const traceError = prepareHostedTraceAssertion(assertionParams);
+    const traceError =
+      traceUnavailable &&
+      (assertionParams.baseType.startsWith('trace-') ||
+        assertionParams.baseType.startsWith('trajectory:'))
+        ? 'Local trace export did not complete before grading. Trace evidence is unavailable.'
+        : prepareHostedTraceAssertion(assertionParams);
     const result: GradingResult = traceError
       ? { pass: false, score: 0, reason: traceError, assertion }
       : await handler(assertionParams);
@@ -767,6 +774,7 @@ export async function runAssertions({
   test,
   vars,
   traceId,
+  traceUnavailable,
 }: {
   assertScoringFunction?: ScoringFunction;
   latencyMs?: number;
@@ -776,6 +784,7 @@ export async function runAssertions({
   test: AtomicTestCase;
   vars?: Record<string, VarValue>;
   traceId?: string;
+  traceUnavailable?: boolean;
 }): Promise<GradingResult> {
   if (!test.assert || test.assert.length < 1) {
     return AssertionsResult.noAssertsResult();
@@ -817,8 +826,8 @@ export async function runAssertions({
 
   const shouldPreloadTrace =
     !!traceId && hasTraceAwareAssertions(asserts.map(({ assertion }) => assertion));
-  let preloadedTraceData: TraceData | null | undefined;
-  if (shouldPreloadTrace && traceId) {
+  let preloadedTraceData: TraceData | null | undefined = traceUnavailable ? null : undefined;
+  if (!traceUnavailable && shouldPreloadTrace && traceId) {
     try {
       preloadedTraceData = await loadTraceData(traceId);
     } catch (error) {
@@ -870,6 +879,7 @@ export async function runAssertions({
       assertIndex: index,
       traceId,
       traceData: preloadedTraceData,
+      traceUnavailable,
       claimStoredGradingUsage,
     });
 

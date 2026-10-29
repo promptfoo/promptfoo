@@ -1579,13 +1579,11 @@ async function gradeRunEvalResponse({
     vars,
   });
   const traceId = getTraceId(traceContext);
-  if (
+  const localTraceUnavailable =
     traceId &&
     hasTraceAwareAssertions(test.assert) &&
-    !isExternalTraceProvider(testSuite?.tracing?.provider)
-  ) {
-    await flushOtel();
-  }
+    !isExternalTraceProvider(testSuite?.tracing?.provider) &&
+    (await flushOtel()) === false;
 
   const assertionProviderResponse = {
     ...processedResponse,
@@ -1610,6 +1608,7 @@ async function gradeRunEvalResponse({
           latencyMs: response.latencyMs ?? latencyMs,
           assertScoringFunction: test.assertScoringFunction as ScoringFunction,
           traceId,
+          traceUnavailable: !!localTraceUnavailable,
         }).then((checkResult) => applyGradingResult(ret, checkResult)),
     ).catch((error) => {
       applyGradingError(ret, error, deferredGradingAbortSignal);
@@ -1631,6 +1630,7 @@ async function gradeRunEvalResponse({
           latencyMs: response.latencyMs ?? latencyMs,
           assertScoringFunction: test.assertScoringFunction as ScoringFunction,
           traceId,
+          traceUnavailable: !!localTraceUnavailable,
         }),
     );
     applyGradingResult(ret, checkResult);

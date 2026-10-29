@@ -386,6 +386,8 @@ registered evaluation policy from `evaluation.id`, then fall back to the active 
 startup defaults. Similarly, `acceptFormats` configures the active HTTP receiver endpoint
 and is not changed by an overlapping evaluation.
 
+The HTTP receiver keeps application spans in the target trace even if the sender supplies Promptfoo ownership fields. It recognizes evaluator roles when Promptfoo’s own OpenTelemetry exporter sends its wrapper spans directly to the receiver. Older exports can contain grader roles supplied by the sending application. To rely on those roles when checking that a tool was absent, use a trusted historical sender or collect a fresh trace.
+
 The OTLP receiver `host` defaults to loopback (`127.0.0.1`). If your exporter runs in a
 different container or host and must reach the receiver over the network, set
 `host: '0.0.0.0'` explicitly and restrict access to trusted networks.

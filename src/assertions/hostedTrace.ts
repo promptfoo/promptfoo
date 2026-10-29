@@ -7,6 +7,7 @@ import {
   HOSTED_ABSENT_TOOL_ATTRIBUTES,
   HOSTED_CHAT_MODEL_ABSENT,
   hasUncertainHostedChatName,
+  withoutReceivedHostedOwner,
 } from '../tracing/spanFilter';
 import { SPAN_ROLE_ATTRIBUTE, TEST_CASE_SPAN_NAME } from '../tracing/spanRoles';
 import { matchesPattern } from './traceUtils';
@@ -311,9 +312,9 @@ export function prepareHostedTraceAssertion(params: AssertionParams): string | u
   if (!trace || !parentId || !hostedTrace.spanCount) {
     return 'The imported OpenAI Agents API spans are unavailable for this assertion.';
   }
-  const native = trace.spans.filter(
-    (span) => span.attributes?.['promptfoo.openai.hosted_trace'] === parentId,
-  );
+  const native = trace.spans
+    .map(withoutReceivedHostedOwner)
+    .filter((span) => span.attributes?.['promptfoo.openai.hosted_trace'] === parentId);
   if (native.length !== hostedTrace.spanCount) {
     return 'The stored OpenAI Agents API spans are incomplete for this provider call.';
   }

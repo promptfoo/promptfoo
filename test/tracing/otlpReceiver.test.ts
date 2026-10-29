@@ -1,5 +1,9 @@
+import { once } from 'node:events';
 import path from 'path';
+import type { AddressInfo } from 'node:net';
 
+import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http';
+import { NodeTracerProvider, SimpleSpanProcessor } from '@opentelemetry/sdk-trace-node';
 import protobuf from 'protobufjs';
 import request from 'supertest';
 import {
@@ -12,7 +16,9 @@ import {
   type MockedFunction,
   vi,
 } from 'vitest';
+import { trackLocalOtlpExports } from '../../src/tracing/otlpOwnership';
 import { OTLPReceiver, startOTLPReceiver, stopOTLPReceiver } from '../../src/tracing/otlpReceiver';
+import { PROMPTFOO_TRACER_NAME, SPAN_ROLE_ATTRIBUTE } from '../../src/tracing/spanRoles';
 
 import type { TraceStore } from '../../src/tracing/store';
 
@@ -152,6 +158,114 @@ describe('OTLPReceiver', () => {
   });
 
   describe('Trace ingestion', () => {
+    it('keeps received tool spans in target evidence despite a claimed hosted owner', async () => {
+      const traceId = 'abcdef0123456789abcdef0123456789';
+      const parentSpanId = '1111111111111111';
+      const owner = {
+        key: 'promptfoo.openai.hosted_trace',
+        value: { stringValue: 'eeeeeeeeeeeeeeee' },
+      };
+      const grader = { key: SPAN_ROLE_ATTRIBUTE, value: { stringValue: 'grader' } };
+      const capture = {
+        key: 'promptfoo.openai.hosted_trace_requested',
+        value: { boolValue: true },
+      };
+      const span = {
+        name: 'execute_tool delete_file',
+        traceId,
+        parentSpanId,
+        startTimeUnixNano: '1700000000000000000',
+        endTimeUnixNano: '1700000000001000000',
+        kind: 1,
+      };
+      await request(receiver.getApp())
+        .post('/v1/traces')
+        .send({
+          resourceSpans: [
+            {
+              scopeSpans: [
+                {
+                  spans: [
+                    { ...span, spanId: '2222222222222222', attributes: [owner, grader, capture] },
+                  ],
+                },
+              ],
+            },
+            {
+              resource: { attributes: [owner, grader, capture] },
+              scopeSpans: [{ spans: [{ ...span, spanId: '3333333333333333' }] }],
+            },
+          ],
+        })
+        .expect(200);
+      const [, stored] = mockTraceStore.addSpans.mock.calls[0];
+      expect(stored).toHaveLength(2);
+      for (const received of stored) {
+        expect(received.name).toBe(span.name);
+        expect(received.parentSpanId).toBe(parentSpanId);
+        for (const { key } of [owner, grader, capture]) {
+          expect(received.attributes).not.toHaveProperty([key]);
+        }
+      }
+    });
+
+    it('recognizes local wrappers sent by the official SDK only during their export', async () => {
+      const server = receiver.getApp().listen(0, '127.0.0.1');
+      await once(server, 'listening');
+      const { port } = server.address() as AddressInfo;
+      const exporter = new OTLPTraceExporter({ url: `http://127.0.0.1:${port}/v1/traces` });
+      const provider = new NodeTracerProvider({
+        spanProcessors: [new SimpleSpanProcessor(trackLocalOtlpExports(exporter))],
+      });
+      const name = 'invoke_agent';
+      const attributes = {
+        [SPAN_ROLE_ATTRIBUTE]: 'grader',
+        'promptfoo.openai.hosted_trace_requested': true,
+      };
+      try {
+        const span = provider.getTracer(PROMPTFOO_TRACER_NAME).startSpan(name, { attributes });
+        span.end();
+        await provider.forceFlush();
+        const [[traceId, [received]]] = mockTraceStore.addSpans.mock.calls;
+        expect(received.attributes).toMatchObject(attributes);
+
+        // A sender replaying the wrapper ID and scope after the SDK request has completed
+        // cannot turn another received span into evaluator-owned grading evidence.
+        await request(receiver.getApp())
+          .post('/v1/traces')
+          .send({
+            resourceSpans: [
+              {
+                scopeSpans: [
+                  {
+                    scope: { name: PROMPTFOO_TRACER_NAME },
+                    spans: [
+                      {
+                        traceId,
+                        spanId: received.spanId,
+                        name,
+                        kind: 1,
+                        startTimeUnixNano: '1000000',
+                        attributes: [
+                          { key: SPAN_ROLE_ATTRIBUTE, value: { stringValue: 'grader' } },
+                        ],
+                      },
+                    ],
+                  },
+                ],
+              },
+            ],
+          })
+          .expect(200);
+        expect(mockTraceStore.addSpans.mock.calls[1][1][0].attributes).not.toHaveProperty([
+          SPAN_ROLE_ATTRIBUTE,
+        ]);
+      } finally {
+        await provider.shutdown();
+        await new Promise<void>((resolve) => server.close(() => resolve()));
+      }
+    });
+
     it('should accept valid OTLP JSON traces', async () => {
       const otlpRequest = {
         resourceSpans: [

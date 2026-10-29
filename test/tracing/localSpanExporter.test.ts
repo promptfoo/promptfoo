@@ -111,7 +111,7 @@ describe('LocalSpanExporter', () => {
             name: 'test-span',
           }),
         ],
-        { skipTraceCheck: false, warnIfMissingTrace: false },
+        expect.objectContaining({ skipTraceCheck: false, warnIfMissingTrace: false }),
       );
     });
 
@@ -145,7 +145,7 @@ describe('LocalSpanExporter', () => {
           expect.objectContaining({ spanId: 'span-1' }),
           expect.objectContaining({ spanId: 'span-2' }),
         ]),
-        { skipTraceCheck: false, warnIfMissingTrace: false },
+        expect.objectContaining({ skipTraceCheck: false, warnIfMissingTrace: false }),
       );
 
       // Second call for trace-2 with 1 span
@@ -153,7 +153,7 @@ describe('LocalSpanExporter', () => {
         2,
         'trace-2',
         [expect.objectContaining({ spanId: 'span-3' })],
-        { skipTraceCheck: false, warnIfMissingTrace: false },
+        expect.objectContaining({ skipTraceCheck: false, warnIfMissingTrace: false }),
       );
     });
 
@@ -176,13 +176,13 @@ describe('LocalSpanExporter', () => {
           1,
           'trace-id-123',
           [expect.objectContaining({ spanId: 'span-id-456' })],
-          { skipTraceCheck: false, warnIfMissingTrace: false },
+          expect.objectContaining({ skipTraceCheck: false, warnIfMissingTrace: false }),
         );
         expect(mockAddSpans).toHaveBeenNthCalledWith(
           2,
           'trace-id-123',
           [expect.objectContaining({ spanId: 'span-id-456' })],
-          { skipTraceCheck: false, warnIfMissingTrace: false },
+          expect.objectContaining({ skipTraceCheck: false, warnIfMissingTrace: false }),
         );
       } finally {
         vi.useRealTimers();
@@ -346,6 +346,60 @@ describe('LocalSpanExporter', () => {
     it('should resolve successfully', async () => {
       await expect(exporter.forceFlush()).resolves.toBeUndefined();
     });
+  });
+
+  it('bounds flush and shutdown when an already dispatched write stalls', async () => {
+    vi.useFakeTimers();
+    vi.stubEnv('OTEL_BSP_EXPORT_TIMEOUT', '20');
+    try {
+      exporter = new LocalSpanExporter();
+      const deadline = Date.now() + 20;
+      const queued = createDeferred<{ stored: boolean }>();
+      mockAddSpans.mockReturnValueOnce(queued.promise);
+      const finished = vi.fn();
+      exporter.export([createMockSpan(), createMockSpan({ traceId: 'later-trace' })], finished);
+      const drains = Promise.allSettled([exporter.forceFlush(), exporter.shutdown()]);
+      await vi.advanceTimersByTimeAsync(21);
+      expect(finished).toHaveBeenCalledOnce();
+      expect(finished).toHaveBeenCalledWith({
+        code: ExportResultCode.FAILED,
+        error: expect.objectContaining({ name: 'TimeoutError' }),
+      });
+      expect(await drains).toEqual([
+        { status: 'rejected', reason: expect.objectContaining({ name: 'TimeoutError' }) },
+        { status: 'rejected', reason: expect.objectContaining({ name: 'TimeoutError' }) },
+      ]);
+      const options = mockAddSpans.mock.calls[0][2];
+      expect(options.deadline).toBe(deadline);
+      expect(options.abortSignal.aborted).toBe(true);
+      // A database operation may settle long after the export callback. Don't start another.
+      queued.resolve({ stored: true });
+      await vi.advanceTimersByTimeAsync(1);
+      expect(mockAddSpans).toHaveBeenCalledOnce();
+      expect(finished).toHaveBeenCalledOnce();
+    } finally {
+      vi.unstubAllEnvs();
+      vi.useRealTimers();
+    }
+  });
+
+  it('reports the expired batch when a synchronous write outlasts its timer', async () => {
+    vi.useFakeTimers();
+    vi.stubEnv('OTEL_BSP_EXPORT_TIMEOUT', '20');
+    try {
+      exporter = new LocalSpanExporter();
+      const deadline = Date.now() + 20;
+      mockAddSpans.mockImplementationOnce(async () => {
+        vi.setSystemTime(deadline);
+        return { stored: true };
+      });
+      const result = await exportSpans([createMockSpan()]);
+      expect(result.code).toBe(ExportResultCode.FAILED);
+      expect(result.error?.name).toBe('TimeoutError');
+    } finally {
+      vi.unstubAllEnvs();
+      vi.useRealTimers();
+    }
   });
 
   it.each(['forceFlush', 'shutdown'] as const)(

@@ -1,5 +1,7 @@
-import { ExportResultCode } from '@opentelemetry/core';
+import { ExportResultCode, getNumberFromEnv } from '@opentelemetry/core';
 import logger from '../logger';
+import { runProviderCallWithAbort } from '../scheduler/providerCallExecutionContext';
+import { sleepWithAbort } from '../util/time';
 import { getTraceStore, type SpanData, type TraceStore } from './store';
 import type { ExportResult } from '@opentelemetry/core';
 import type { ReadableSpan, SpanExporter } from '@opentelemetry/sdk-trace-node';
@@ -11,14 +13,26 @@ const MISSING_TRACE_RETRY_DELAY_MS = 50;
  * This allows OTEL spans to be stored locally for analysis in the promptfoo UI.
  */
 export class LocalSpanExporter implements SpanExporter {
-  private readonly pendingExports = new Set<Promise<void>>();
+  // Use the same environment fallback and default as the SDK's BatchSpanProcessor.
+  private readonly exportTimeoutMs = getNumberFromEnv('OTEL_BSP_EXPORT_TIMEOUT') ?? 30_000;
+  private readonly pendingExports = new Set<Promise<Error | undefined>>();
 
   /**
    * Export spans to the local TraceStore.
    * Spans are grouped by trace ID and inserted into the database.
    */
   export(spans: ReadableSpan[], resultCallback: (result: ExportResult) => void): void {
-    // Handle async export
+    const deadline = Date.now() + this.exportTimeoutMs;
+    const controller = new AbortController();
+    const timeout = new DOMException('Local span export timed out', 'TimeoutError');
+    const timer = setTimeout(() => controller.abort(timeout), this.exportTimeoutMs);
+    const options = {
+      skipTraceCheck: false,
+      warnIfMissingTrace: false,
+      abortSignal: controller.signal,
+      deadline,
+    };
+
     /**
      * Async implementation of span export.
      * Returns the first non-FK error encountered, or undefined if successful.
@@ -75,15 +89,17 @@ export class LocalSpanExporter implements SpanExporter {
       let firstError: Error | undefined;
 
       for (const [traceId, spanDataList] of spansByTrace) {
+        if (controller.signal.aborted || Date.now() >= deadline) {
+          return timeout;
+        }
         try {
           const addSpansWithTraceRetry = async (): ReturnType<TraceStore['addSpans']> => {
-            const options = { skipTraceCheck: false, warnIfMissingTrace: false };
             const result = await traceStore.addSpans(traceId, spanDataList, options);
             if (result.stored) {
               return result;
             }
 
-            await new Promise((resolve) => setTimeout(resolve, MISSING_TRACE_RETRY_DELAY_MS));
+            await sleepWithAbort(MISSING_TRACE_RETRY_DELAY_MS, controller.signal);
             return traceStore.addSpans(traceId, spanDataList, options);
           };
 
@@ -116,30 +132,23 @@ export class LocalSpanExporter implements SpanExporter {
         }
       }
 
-      return firstError;
+      return controller.signal.aborted || Date.now() >= deadline ? timeout : firstError;
     };
 
-    const pending = exportAsync()
-      .then((error) => {
-        if (error) {
-          // An error occurred during export
-          resultCallback({
-            code: ExportResultCode.FAILED,
-            error,
-          });
-        } else {
-          resultCallback({ code: ExportResultCode.SUCCESS });
-        }
-      })
-      .catch((error) => {
+    const pending = runProviderCallWithAbort(exportAsync, controller.signal).catch(
+      (error: unknown) => {
         logger.error('[LocalSpanExporter] Failed to export spans', { error });
-        resultCallback({
-          code: ExportResultCode.FAILED,
-          error: error instanceof Error ? error : new Error(String(error)),
-        });
-      })
-      .finally(() => this.pendingExports.delete(pending));
+        return error instanceof Error ? error : new Error(String(error));
+      },
+    );
     this.pendingExports.add(pending);
+    void pending.then((error) => {
+      clearTimeout(timer);
+      this.pendingExports.delete(pending);
+      resultCallback(
+        error ? { code: ExportResultCode.FAILED, error } : { code: ExportResultCode.SUCCESS },
+      );
+    });
   }
 
   /**
@@ -154,6 +163,9 @@ export class LocalSpanExporter implements SpanExporter {
    * Wait for the batches submitted before this flush.
    */
   async forceFlush(): Promise<void> {
-    await Promise.all(this.pendingExports);
+    const error = (await Promise.all(this.pendingExports)).find(Boolean);
+    if (error) {
+      throw error;
+    }
   }
 }

@@ -260,6 +260,53 @@ describe('evaluator trace integration', () => {
     );
   });
 
+  it('grades ordinary output but withholds incomplete local evidence after a flush timeout', async () => {
+    const traceId = 'abcdef1234567890abcdef1234567890';
+    vi.mocked(evaluatorTracing.generateTraceContextIfNeeded).mockResolvedValue({
+      traceparent: `00-${traceId}-0123456789abcdef-01`,
+      evaluationId: 'test-eval-id',
+      testCaseId: 'test-case-id',
+    });
+    mockFlushOtel.mockResolvedValueOnce(false);
+    mockTraceStore.getTrace.mockResolvedValue({ traceId, spans: [] });
+    await evaluate(
+      {
+        providers: [createMockProvider(createTraceProviderConfig())],
+        prompts: [{ raw: 'Test prompt', label: 'test' }],
+        tests: [
+          {
+            metadata: createTracingContext(),
+            assert: [
+              { type: 'contains', value: 'Test response' },
+              { type: 'trace-span-count', value: { pattern: 'execute_tool *', max: 0 } },
+            ],
+          },
+        ],
+        tracing: { enabled: true },
+      },
+      mockEval,
+      createSerialOptions(),
+    );
+    expect(mockTraceStore.getTrace).not.toHaveBeenCalled();
+    expect(mockEval.addResult).toHaveBeenCalledWith(
+      expect.objectContaining({
+        success: false,
+        gradingResult: expect.objectContaining({
+          componentResults: expect.arrayContaining([
+            expect.objectContaining({
+              pass: true,
+              assertion: expect.objectContaining({ type: 'contains' }),
+            }),
+            expect.objectContaining({
+              pass: false,
+              reason: expect.stringContaining('Trace evidence is unavailable'),
+            }),
+          ]),
+        }),
+      }),
+    );
+  });
+
   it('closes writers but skips OTEL shutdown when initialization fails', async () => {
     const writer = {
       write: vi.fn().mockResolvedValue(undefined),

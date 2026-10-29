@@ -10,7 +10,7 @@ import {
   trace,
 } from '@opentelemetry/api';
 import logger from '../logger';
-import { getActiveSpanRole, SPAN_ROLE_ATTRIBUTE } from './spanRoles';
+import { getActiveSpanRole, PROMPTFOO_TRACER_NAME, SPAN_ROLE_ATTRIBUTE } from './spanRoles';
 
 import type { CallApiContextParams, ProviderResponse } from '../types/index';
 import type { TokenUsage } from '../types/shared';
@@ -20,7 +20,6 @@ export {
   PROMPTFOO_RESOURCE_ATTR_TRACE_ID,
 } from './resourceAttributes';
 
-const TRACER_NAME = 'promptfoo.providers';
 const TRACER_VERSION = '1.0.0';
 
 // GenAI Semantic Convention attribute names
@@ -214,7 +213,7 @@ export interface GenAIToolSpanContext {
  * Get the tracer instance for GenAI operations.
  */
 export function getGenAITracer(): Tracer {
-  return trace.getTracer(TRACER_NAME, TRACER_VERSION);
+  return trace.getTracer(PROMPTFOO_TRACER_NAME, TRACER_VERSION);
 }
 
 /** Preserve whether provider-created child spans belong to the target or the grader. */

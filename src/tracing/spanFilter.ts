@@ -1,4 +1,4 @@
-import { SPAN_ROLE_ATTRIBUTE } from './spanRoles';
+import { PROMPTFOO_TRACER_NAME, SPAN_ROLE_ATTRIBUTE } from './spanRoles';
 import {
   COMMAND_ATTRIBUTE_KEYS,
   getFirstStringAttribute,
@@ -23,6 +23,37 @@ interface SpanOwnership {
   spanId: string;
   parentSpanId?: string | null;
   attributes?: Record<string, unknown> | null;
+}
+
+/** Older receivers persisted ownership from the wire. Discard claims that the export itself contradicts. */
+export function withoutReceivedHostedOwner<T extends SpanOwnership>(span: T): T {
+  const attributes = span.attributes;
+  if (!attributes) {
+    return span;
+  }
+  const scope = attributes['otel.scope.name'];
+  const foreignRole =
+    (attributes[SPAN_ROLE_ATTRIBUTE] || attributes['promptfoo.openai.hosted_trace_requested']) &&
+    typeof scope === 'string' &&
+    scope !== '[REDACTED]' &&
+    scope !== PROMPTFOO_TRACER_NAME;
+  const receivedNativeOwner =
+    typeof attributes['promptfoo.openai.hosted_trace'] === 'string' &&
+    Object.keys(attributes).some(
+      (key) => key.startsWith('otel.') || key === 'event.name' || key === 'claude_code.event.name',
+    );
+  if (!foreignRole && !receivedNativeOwner) {
+    return span;
+  }
+  const clean = { ...attributes };
+  if (foreignRole) {
+    delete clean[SPAN_ROLE_ATTRIBUTE];
+    delete clean['promptfoo.openai.hosted_trace_requested'];
+  }
+  if (receivedNativeOwner) {
+    delete clean['promptfoo.openai.hosted_trace'];
+  }
+  return { ...span, attributes: clean };
 }
 
 /** Internal grader activity can include imported spans without their own role attribute. */
@@ -56,8 +87,9 @@ function getGraderOwnedSpanIds(spans: readonly SpanOwnership[]): Set<string> {
 }
 
 export function filterTargetSpans<T extends SpanOwnership>(spans: T[]): T[] {
-  const graderIds = getGraderOwnedSpanIds(spans);
-  const targets = spans.filter(({ spanId }) => !graderIds.has(spanId));
+  const normalized = spans.map(withoutReceivedHostedOwner);
+  const graderIds = getGraderOwnedSpanIds(normalized);
+  const targets = normalized.filter(({ spanId }) => !graderIds.has(spanId));
   const targetIds = new Set(targets.map(({ spanId }) => spanId));
   return targets.filter(({ attributes }) => {
     // A hosted grader can store its tools before its own wrapper has been exported.

@@ -64,7 +64,8 @@ vi.mock('node:module', async (importOriginal) => {
   };
 });
 
-vi.mock('@opentelemetry/core', () => ({
+vi.mock('@opentelemetry/core', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@opentelemetry/core')>()),
   W3CTraceContextPropagator: class MockW3CTraceContextPropagator {},
 }));
 
@@ -81,6 +82,7 @@ vi.mock('@opentelemetry/semantic-conventions', () => ({
 }));
 
 vi.mock('@opentelemetry/api', () => ({
+  createContextKey: Symbol.for,
   ProxyTracerProvider: class {},
   trace: { getTracerProvider: mockGetTracerProvider, disable: mockTraceDisable },
   diag: {
@@ -147,6 +149,7 @@ describe('otelSdk', () => {
 
     // Reset mock implementations
     mockShutdown.mockResolvedValue(undefined);
+    mockLocalFlush.mockResolvedValue(undefined);
     mockForceFlush.mockResolvedValue(undefined);
 
     // Reset modules to clear singleton state
@@ -161,6 +164,7 @@ describe('otelSdk', () => {
   });
 
   afterEach(async () => {
+    await shutdownOtel();
     vi.resetAllMocks();
   });
 
@@ -335,6 +339,26 @@ describe('otelSdk', () => {
       expect(registeredProvider).toBeUndefined();
     });
 
+    it('keeps signal listeners through the last export and rearms a replacement SDK', async () => {
+      const flushing = createDeferred<void>();
+      mockShutdown.mockReturnValueOnce(flushing.promise);
+      const previous = process.rawListeners('SIGTERM');
+      const releaseA = initializeOtel(defaultConfig)!;
+      const drain = releaseA();
+      const consumed = process
+        .rawListeners('SIGTERM')
+        .find((listener) => !previous.includes(listener));
+      expect(consumed).toBeDefined();
+      consumed!.call(process, 'SIGTERM'); // invoke only Promptfoo's real once-wrapper
+      const releaseB = initializeOtel(defaultConfig)!;
+      expect(process.rawListeners('SIGTERM')).toEqual(previous);
+      flushing.resolve();
+      await drain;
+      expect(process.rawListeners('SIGTERM')).toHaveLength(previous.length + 1);
+      await releaseB();
+      expect(process.rawListeners('SIGTERM')).toEqual(previous);
+    });
+
     it('should not fail when not initialized', async () => {
       await expect(shutdownOtel()).resolves.toBeUndefined();
     });
@@ -359,7 +383,30 @@ describe('otelSdk', () => {
 
   describe('flushOtel', () => {
     it('should not fail when not initialized', async () => {
-      await expect(flushOtel()).resolves.toBeUndefined();
+      await expect(flushOtel()).resolves.toBe(true);
+    });
+
+    it('bounds an in-flight local write by the remaining SDK flush budget', async () => {
+      vi.useFakeTimers();
+      const external = createDeferred<void>();
+      const local = createDeferred<void>();
+      mockForceFlush.mockReturnValueOnce(external.promise);
+      mockLocalFlush.mockReturnValueOnce(local.promise);
+      initializeOtel(defaultConfig);
+      try {
+        const flushed = vi.fn();
+        const flush = flushOtel().then(flushed);
+        await vi.advanceTimersByTimeAsync(29_999);
+        external.reject(new Error('external exporter timed out'));
+        await vi.advanceTimersByTimeAsync(0);
+        expect(flushed).not.toHaveBeenCalled();
+        await vi.advanceTimersByTimeAsync(1);
+        await flush;
+        expect(flushed).toHaveBeenCalledWith(false);
+      } finally {
+        local.resolve();
+        vi.useRealTimers();
+      }
     });
 
     it('should call provider forceFlush when initialized', async () => {
@@ -373,7 +420,7 @@ describe('otelSdk', () => {
       mockForceFlush.mockRejectedValue(new Error('Flush failed'));
 
       initializeOtel(defaultConfig);
-      await expect(flushOtel()).resolves.toBeUndefined();
+      await expect(flushOtel()).resolves.toBe(true);
       expect(mockLocalFlush).toHaveBeenCalledOnce();
     });
   });

@@ -2,6 +2,7 @@ import crypto from 'node:crypto';
 
 import express from 'express';
 import logger from '../logger';
+import { setReceivedSpanOwnership } from './otlpOwnership';
 import {
   bytesToHex,
   type DecodedAttribute,
@@ -554,6 +555,7 @@ export class OTLPReceiver {
     const grouped = new Map<string, { spans: SpanData[]; info: TraceInfo }>();
 
     for (const trace of traces) {
+      setReceivedSpanOwnership(trace);
       const group = grouped.get(trace.traceId) ?? { spans: [], info: {} };
       group.spans.push(trace.span);
       const evaluationId = trace.span.attributes?.['evaluation.id'] as string | undefined;
