@@ -261,7 +261,7 @@ The three raw-span assertions accept `value.attributes` to select spans by exact
 
 On a complete hosted Agents API trace with its local provider span, `trace-span-count` with only `min: 1` can pass as soon as one saved span matches the filter, even if an unrelated span lacks the attribute or a higher local ancestor is missing. For an upper bound such as `max: 0`, Promptfoo must account for each candidate, including local ancestors, that could match all the filters. If a saved tool name rules out a call, missing arguments on that call do not affect the grade. A candidate whose tool result was discarded cannot establish that a particular result never occurred.
 
-Before grading, Promptfoo waits up to 30 seconds for pending spans and local writes. If local export fails or exceeds that budget, built-in trace and trajectory assertions report unavailable evidence. Output assertions still run.
+Before grading, Promptfoo waits up to 30 seconds for pending spans and local writes. If local export fails or exceeds that budget, built-in trace and trajectory assertions report unavailable evidence. Output assertions still run. A synchronous SQLite write can return after its export deadline, in which case the local exporter reports a timeout even if the spans were committed.
 
 For hosted runs, `trace-error-spans` and `trace-span-duration` with no filters grade the target work completed before assertions run. To include the surrounding Promptfoo test-case span, set an explicit filter such as `pattern: '*'`. If a selected span has no end time, a duration check can pass only when the known durations establish the bound even with the missing measurement.
 
