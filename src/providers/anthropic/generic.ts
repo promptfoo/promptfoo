@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from 'crypto';
 
 import Anthropic from '@anthropic-ai/sdk';
+import { context as otelContext, propagation } from '@opentelemetry/api';
 import { type EnvVarKey, getEnvOverrides, getEnvString, getProviderEnvString } from '../../envars';
 import { getExplicitProviderEnv } from '../../envOverrides';
 import logger from '../../logger';
@@ -111,34 +112,6 @@ function hasHeader(headers: Record<string, unknown> | undefined, names: Set<stri
   return Object.keys(headers ?? {}).some((name) => names.has(name.toLowerCase()));
 }
 
-/**
- * A fetch that sends only the `baggage` the config sets. With its spans on, the SDK writes trace
- * headers with the application's registered propagator, which can add the application's baggage
- * or replace the config's; Anthropic reads only W3C trace context, so that never needs to leave
- * the process.
- */
-function withConfiguredBaggage(
-  configured: string | undefined,
-): NonNullable<ClientOptions['fetch']> {
-  return (input, init) => {
-    const headers = new Headers(init?.headers);
-    if (configured === undefined) {
-      headers.delete('baggage');
-    } else {
-      headers.set('baggage', configured);
-    }
-    return globalThis.fetch(input, { ...init, headers });
-  };
-}
-
-function getHeaderValue(
-  headers: Record<string, string | null | undefined> | undefined,
-  name: string,
-): string | undefined {
-  const entry = Object.entries(headers ?? {}).find(([key]) => key.toLowerCase() === name);
-  return entry?.[1] ?? undefined;
-}
-
 /** A config value as `true`, `false`, an options object, or unset; templated booleans are strings. */
 function normalizeOpenTelemetryOption(
   option: unknown,
@@ -171,7 +144,7 @@ function resolveOpenTelemetry(
 ): {
   client: ClientOptions['openTelemetry'];
   propagatesTraceContext: boolean;
-  sdkSpans: boolean;
+  sdkPropagatesTraceContext: boolean;
 } {
   const read = (key: EnvVarKey) =>
     (getProviderEnvString(env, key) ?? getEnvString(key))?.trim().toLowerCase();
@@ -181,7 +154,7 @@ function resolveOpenTelemetry(
     return {
       client: false,
       propagatesTraceContext: value === undefined && propagation,
-      sdkSpans: false,
+      sdkPropagatesTraceContext: false,
     };
   }
 
@@ -214,7 +187,7 @@ function resolveOpenTelemetry(
   return {
     client,
     propagatesTraceContext: !spans && client.propagation !== false,
-    sdkSpans: spans,
+    sdkPropagatesTraceContext: spans && client.propagation !== false,
   };
 }
 
@@ -333,6 +306,8 @@ export class AnthropicGenericProvider implements ApiProvider {
   label?: string;
   /** Whether requests of a traced call carry promptfoo's span context (see `openTelemetry`). */
   protected readonly propagatesTraceContext: boolean;
+  /** Whether the SDK sends its own span's trace context (see `withoutApplicationBaggage`). */
+  private readonly sdkPropagatesTraceContext: boolean;
   private readonly clientHasCustomHeaders: boolean;
   private readonly ephemeralCacheNamespace = randomUUID();
   private readonly ephemeralResponseCache = new Map<
@@ -433,20 +408,13 @@ export class AnthropicGenericProvider implements ApiProvider {
       this.config.headers,
     );
     this.propagatesTraceContext = openTelemetry.propagatesTraceContext;
+    this.sdkPropagatesTraceContext = openTelemetry.sdkPropagatesTraceContext;
     this.anthropic = new Anthropic(
       this.buildAnthropicClientOptions({
         apiKey: this.apiKey ?? null,
         authToken: authToken ?? null,
         baseURL: this.getApiBaseUrl(),
         openTelemetry: openTelemetry.client,
-        ...(openTelemetry.sdkSpans
-          ? {
-              fetch: withConfiguredBaggage(
-                getHeaderValue(this.config.headers, 'baggage') ??
-                  getHeaderValue(clientDefaultHeaders, 'baggage'),
-              ),
-            }
-          : {}),
         ...(Object.keys(clientDefaultHeaders).length > 0
           ? { defaultHeaders: clientDefaultHeaders }
           : {}),
@@ -464,6 +432,18 @@ export class AnthropicGenericProvider implements ApiProvider {
    */
   protected buildAnthropicClientOptions(options: ClientOptions): ClientOptions {
     return options;
+  }
+
+  /**
+   * Runs SDK calls without the application's baggage while the SDK sends trace context: it writes
+   * it with the application's registered propagator, which would also send the application's
+   * baggage, and the Claude API reads only W3C trace context. Headers that the config sets,
+   * `baggage` included, go out as configured.
+   */
+  protected withoutApplicationBaggage<T>(call: () => T): T {
+    return this.sdkPropagatesTraceContext
+      ? otelContext.with(propagation.deleteBaggage(otelContext.active()), call)
+      : call();
   }
 
   id(): string {

@@ -8,13 +8,15 @@ import {
   type ReadableSpan,
   SimpleSpanProcessor,
 } from '@opentelemetry/sdk-trace-node';
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { clearCache } from '../../../src/cache';
 import { AnthropicLlmRubricProvider } from '../../../src/providers/anthropic/defaults';
 import { AnthropicMessagesProvider } from '../../../src/providers/anthropic/messages';
+import { CloudflareGatewayAnthropicProvider } from '../../../src/providers/cloudflare-gateway';
 import { mockProcessEnv } from '../../util/utils';
 
 import type { AnthropicMessageOptions } from '../../../src/providers/anthropic/types';
+import type { CloudflareGatewayConfig } from '../../../src/providers/cloudflare-gateway';
 import type { EnvOverrides } from '../../../src/types/env';
 import type { CallApiContextParams } from '../../../src/types/index';
 
@@ -197,18 +199,17 @@ describe('Anthropic Messages SDK transport', () => {
   }
 
   /**
-   * Call from inside an application's span that carries baggage, passing that span's trace context
-   * as the call's, so the provider's span and its context, baggage included, descend from it.
+   * Run `call` inside an application's span that carries baggage, giving it that span's trace
+   * context as the call's, so the provider's span and its context, baggage included, descend from
+   * it. The registered propagator writes baggage, as the default Node SDK's does.
    */
-  async function callInsideApplicationSpan(config: AnthropicMessageOptions) {
+  function insideApplicationSpan<T>(call: (callContext: CallApiContextParams) => Promise<T>) {
     const baggage = propagation.createBaggage({ 'user.email': { value: 'alice@example.com' } });
     return context.with(propagation.setBaggage(context.active(), baggage), () =>
       trace.getTracer('application').startActiveSpan('application request', async (span) => {
         try {
           const { traceId, spanId } = span.spanContext();
-          return await callProvider(config, {
-            callContext: { ...tracedCall, traceparent: `00-${traceId}-${spanId}-01` },
-          });
+          return await call({ ...tracedCall, traceparent: `00-${traceId}-${spanId}-01` });
         } finally {
           span.end();
         }
@@ -328,8 +329,9 @@ describe('Anthropic Messages SDK transport', () => {
   });
 
   it("sends W3C trace context but never the application's baggage", async () => {
-    // The registered propagator writes baggage, as the default Node SDK's does.
-    const { chatSpan, requests } = await callInsideApplicationSpan({});
+    const { chatSpan, requests } = await insideApplicationSpan((callContext) =>
+      callProvider({}, { callContext }),
+    );
 
     expect(requests[0].traceparent).toBe(traceparentOf(chatSpan!.spanContext()));
     expect(requests[0].baggage).toBeUndefined();
@@ -398,19 +400,89 @@ describe('Anthropic Messages SDK transport', () => {
   );
 
   it("keeps the application's baggage off requests when the SDK's spans are on", async () => {
-    const sdkMode = await callInsideApplicationSpan({ openTelemetry: true });
-    expect(sdkMode.requests[0].traceparent).toBe(
-      traceparentOf(sdkSpanOf(sdkMode.spans)!.spanContext()),
+    const { requests, spans } = await insideApplicationSpan((callContext) =>
+      callProvider({ openTelemetry: true }, { callContext }),
     );
-    expect(sdkMode.requests[0].baggage).toBeUndefined();
 
-    // Baggage that the config sets is still sent.
-    exporter.reset();
-    const configured = await callInsideApplicationSpan({
-      openTelemetry: true,
-      headers: { baggage: 'tenant=acme' },
+    expect(requests[0].traceparent).toBe(traceparentOf(sdkSpanOf(spans)!.spanContext()));
+    expect(requests[0].baggage).toBeUndefined();
+  });
+
+  it.each([
+    { source: 'headers', config: { headers: { baggage: 'tenant=acme' } }, processEnv: {} },
+    {
+      source: 'ANTHROPIC_CUSTOM_HEADERS',
+      config: {},
+      processEnv: { ANTHROPIC_CUSTOM_HEADERS: 'baggage: tenant=acme' },
+    },
+  ])(
+    "sends baggage that $source sets when the SDK's spans are on",
+    async ({ config, processEnv }) => {
+      const restoreCustomHeaders = mockProcessEnv(processEnv);
+      try {
+        const { requests } = await insideApplicationSpan((callContext) =>
+          callProvider({ openTelemetry: true, ...config }, { callContext }),
+        );
+
+        expect(requests[0].baggage).toBe('tenant=acme');
+      } finally {
+        restoreCustomHeaders();
+      }
+    },
+  );
+
+  it("leaves the application's HTTP instrumentation its baggage when the SDK does not propagate", async () => {
+    // Like an HTTP client instrumentation, send the active context's trace headers with requests.
+    const loopbackFetch = globalThis.fetch;
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation((input, init) => {
+      const headers = new Headers(init?.headers);
+      propagation.inject(context.active(), headers, {
+        set: (carrier, key, value) => carrier.set(key, value),
+      });
+      return loopbackFetch(input, { ...init, headers });
     });
-    expect(configured.requests[0].baggage).toBe('tenant=acme');
+    try {
+      const { requests, spans } = await insideApplicationSpan((callContext) =>
+        callProvider({ openTelemetry: { propagation: false } }, { callContext }),
+      );
+
+      expect(requests[0].traceparent).toBe(traceparentOf(sdkSpanOf(spans)!.spanContext()));
+      expect(requests[0].baggage).toBe('user.email=alice%40example.com');
+    } finally {
+      fetchSpy.mockRestore();
+    }
+  });
+
+  it('sends no baggage that a third-party host suppresses when the SDK spans are on', async () => {
+    const { baseUrl, requests } = await createMessagesServer({});
+    // The gateway's URL is fixed, so its requests go to the loopback server instead.
+    const loopbackFetch = globalThis.fetch;
+    const gatewayUrls: string[] = [];
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation((input, init) => {
+      gatewayUrls.push(String(input));
+      return loopbackFetch(`${baseUrl}/v1/messages`, init);
+    });
+    try {
+      // Anthropic-scoped custom headers never reach a third-party host.
+      const gateway = new CloudflareGatewayAnthropicProvider('claude-sonnet-4-6', {
+        config: {
+          accountId: 'account',
+          gatewayId: 'gateway',
+          apiKey: 'local-qa-key',
+          openTelemetry: true,
+        } as CloudflareGatewayConfig,
+        env: { ANTHROPIC_CUSTOM_HEADERS: 'baggage: tenant=private' },
+      });
+      await insideApplicationSpan((callContext) => gateway.callApi('ping', callContext));
+    } finally {
+      fetchSpy.mockRestore();
+    }
+
+    expect(gatewayUrls).toEqual([
+      'https://gateway.ai.cloudflare.com/v1/account/gateway/anthropic/v1/messages',
+    ]);
+    expect(requests[0].traceparent).toBeDefined();
+    expect(requests[0].baggage).toBeUndefined();
   });
 
   it("keeps trace context headers that the config sets when the SDK's spans are on", async () => {

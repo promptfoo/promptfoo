@@ -809,7 +809,8 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
     // Wrap the API call in a span
     return withGenAISpan(
       spanContext,
-      (span) => this.callApiInternal(prompt, span, context, options),
+      (span) =>
+        this.withoutApplicationBaggage(() => this.callApiInternal(prompt, span, context, options)),
       resultExtractor,
     );
   }

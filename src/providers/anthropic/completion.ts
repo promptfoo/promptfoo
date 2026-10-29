@@ -122,7 +122,9 @@ export class AnthropicCompletionProvider extends AnthropicGenericProvider {
 
     let response;
     try {
-      response = await this.anthropic.completions.create(params);
+      response = await this.withoutApplicationBaggage(() =>
+        this.anthropic.completions.create(params),
+      );
     } catch (err) {
       return {
         error: `API call error: ${String(err)}`,
