@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { execFile, execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
+import { once } from 'node:events';
 import fs from 'node:fs';
 import { createServer } from 'node:http';
 import { createRequire } from 'node:module';
@@ -863,6 +864,79 @@ async function runInstalledCompressionEval(consumerDir: string, configDir: strin
   }
 }
 
+async function runInstalledNoCacheExtensionEval(
+  consumerDir: string,
+  consumerEnv: NodeJS.ProcessEnv,
+): Promise<void> {
+  let requests = 0;
+  const server = createServer((_request, response) => {
+    response.writeHead(200, { 'content-type': 'application/json' });
+    response.end(JSON.stringify({ output: ++requests === 1 ? 'A' : 'B' }));
+  });
+  server.listen(0, '127.0.0.1');
+  await once(server, 'listening');
+  try {
+    const address = server.address();
+    assert(address && typeof address !== 'string');
+    fs.writeFileSync(
+      path.join(consumerDir, 'cache hook.mjs'),
+      `import assert from 'node:assert/strict';
+import { cache, loadApiProvider } from 'promptfoo';
+export async function beforeEach({ test }) {
+  assert.equal(cache.isCacheEnabled(), !process.argv.includes('--no-cache'));
+  const provider = await loadApiProvider(test.vars.url, {
+    options: { config: { method: 'GET', maxRetries: 0, transformResponse: 'json.output' } },
+  });
+  return { test: { ...test, provider } };
+}`,
+    );
+    fs.writeFileSync(
+      path.join(consumerDir, 'hook-config.json'),
+      JSON.stringify({
+        prompts: ['fallback echo output'],
+        providers: ['echo'],
+        extensions: ['file://./cache hook.mjs:beforeEach'],
+        tests: [{ vars: { url: `http://127.0.0.1:${address.port}` } }],
+      }),
+    );
+
+    const entrypoint = path.join('node_modules', 'promptfoo', 'dist', 'src', 'entrypoint.js');
+    const runEval = async (name: string, expected: string, ...flags: string[]) => {
+      const output = `${name}-results.json`;
+      await runAsync(
+        process.execPath,
+        [entrypoint, 'eval', '-c', 'hook-config.json', '-o', output, '--no-write', ...flags],
+        consumerDir,
+        {
+          ...consumerEnv,
+          NO_PROXY: '127.0.0.1',
+          no_proxy: '127.0.0.1',
+          DOTENV_PATH: os.devNull,
+          PROMPTFOO_API_KEY: '',
+          PROMPTFOO_DISABLE_SHARING: 'true',
+          PROMPTFOO_CACHE_TTL: '3600',
+          PROMPTFOO_CACHE_ENABLED: 'true',
+          PROMPTFOO_CACHE_TYPE: 'disk',
+          PROMPTFOO_CACHE_PATH: path.join(consumerDir, 'hook-cache'),
+        },
+      );
+      const file = JSON.parse(
+        fs.readFileSync(path.join(consumerDir, output), 'utf8'),
+      ) as ArtifactEvalOutput;
+      const results = file.results?.results;
+      assert(results && results.length === 1, `Expected one ${name} result`);
+      assert.equal(results[0].success, true, name);
+      assert.equal(results[0].response?.output, expected, name);
+    };
+    await runEval('warm', 'A');
+    await runEval('bypass', 'B', '--no-cache');
+    await runEval('cached', 'A');
+    assert.equal(requests, 2);
+  } finally {
+    await server[Symbol.asyncDispose]();
+  }
+}
+
 async function runInstalledCodingSdkEval(
   consumerDir: string,
   configDir: string,
@@ -1646,6 +1720,9 @@ async function main(): Promise<void> {
       );
       await timeAsyncPhase('check response compression', () =>
         runInstalledCompressionEval(consumerDir, configDir),
+      );
+      await timeAsyncPhase('check no-cache extension provider', () =>
+        runInstalledNoCacheExtensionEval(consumerDir, consumerEnv),
       );
     }
     await timeAsyncPhase('check optional browser dependencies', () =>
