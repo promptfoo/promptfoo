@@ -7,6 +7,9 @@ export interface AttributeSanitizationOptions {
 // Match normalized names; the cookie pattern also covers set-cookie.
 const SENSITIVE_ATTRIBUTE_PATTERN = /authorization|cookie|token|apikey|secret|password|passphrase/;
 
+// Token usage counters that stay readable when their value is a number. Only exact names are
+// listed: a key elsewhere in a span, such as `access_tokens` or `llm.token_count.pin_token`,
+// may hold a numeric credential and stays redacted.
 const SAFE_TOKEN_ATTRIBUTE_KEYS = new Set([
   'gen_ai.request.max_tokens',
   'gen_ai.usage.input_tokens',
@@ -30,7 +33,36 @@ const SAFE_TOKEN_ATTRIBUTE_KEYS = new Set([
   'gen_ai.usage.rejected_prediction_tokens',
   'gen_ai.usage.cache_read_input_tokens',
   'gen_ai.usage.cache_creation_input_tokens',
+  // Counters used in the application examples in the tracing docs.
+  'prompt.tokens',
+  'response.tokens',
+  'completion.tokens',
+  // Vercel AI SDK (`ai.usage.*`), v4 and v5 names, matched case-insensitively.
+  'ai.usage.prompttokens',
+  'ai.usage.completiontokens',
+  'ai.usage.inputtokens',
+  'ai.usage.outputtokens',
+  'ai.usage.totaltokens',
+  'ai.usage.reasoningtokens',
+  'ai.usage.cachedinputtokens',
+  // OpenInference (`llm.token_count.*`), used by Arize Phoenix instrumentors.
+  'llm.token_count.prompt',
+  'llm.token_count.completion',
+  'llm.token_count.total',
+  'llm.token_count.prompt_details.cache_read',
+  'llm.token_count.prompt_details.cache_write',
+  'llm.token_count.prompt_details.cache_input',
+  'llm.token_count.prompt_details.audio',
+  'llm.token_count.completion_details.reasoning',
+  'llm.token_count.completion_details.audio',
 ]);
+
+// A count is a finite number. Any other value under a counter name could be a credential.
+function isTokenCountAttribute(lowerKey: string, value: unknown): boolean {
+  return (
+    SAFE_TOKEN_ATTRIBUTE_KEYS.has(lowerKey) && typeof value === 'number' && Number.isFinite(value)
+  );
+}
 
 export function sanitizeTraceAttributes(
   attributes: Record<string, any> | null | undefined,
@@ -75,7 +107,7 @@ export function sanitizeTraceAttributes(
     if (sanitizeSensitiveAttributes) {
       const lowerKey = key.toLowerCase();
       if (
-        !SAFE_TOKEN_ATTRIBUTE_KEYS.has(lowerKey) &&
+        !isTokenCountAttribute(lowerKey, value) &&
         SENSITIVE_ATTRIBUTE_PATTERN.test(lowerKey.replace(/[^a-z0-9]/g, ''))
       ) {
         sanitized[key] = '<redacted>';
