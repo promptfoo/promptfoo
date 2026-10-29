@@ -7,6 +7,8 @@ description: Red team SQL injection vulnerabilities by simulating malicious data
 
 Use the SQL Injection plugin to test whether prompts can steer a database-connected system into unsafe query construction or apparent execution of injected SQL. It is most relevant for agents that translate natural language into database operations.
 
+This risk falls under [OWASP A05:2025 Injection](https://top10.owasp.org/2025/A05_2025-Injection/). When an application executes generated output without validation, [LLM05:2025 Improper Output Handling](https://genai.owasp.org/llmrisk/llm052025-improper-output-handling/) also applies.
+
 ## Purpose
 
 It focuses on whether the system:
