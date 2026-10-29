@@ -25,6 +25,24 @@ describe('handleCost', () => {
     );
   });
 
+  it.each([Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY, -1])(
+    'throws for invalid cost %s with a threshold',
+    (cost) => {
+      expect(() => handleCost(params({ cost }))).toThrow(
+        'requires a finite, non-negative provider cost',
+      );
+    },
+  );
+
+  it.each([Number.NaN, Number.POSITIVE_INFINITY, -1])(
+    'throws for invalid cost %s with a threshold when inverted',
+    (cost) => {
+      expect(() => handleCost(params({ cost, inverse: true }))).toThrow(
+        'requires a finite, non-negative provider cost',
+      );
+    },
+  );
+
   describe('named cost metric', () => {
     const assertion = { type: 'cost' as const, metric: 'inference_cost', weight: 0 };
 
