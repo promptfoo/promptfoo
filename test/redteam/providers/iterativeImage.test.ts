@@ -30,7 +30,8 @@ vi.mock('../../../src/evaluatorHelpers', () => ({
   renderPrompt: vi.fn().mockResolvedValue('rendered prompt'),
 }));
 
-vi.mock('../../../src/util/time', () => ({
+vi.mock('../../../src/util/time', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../../src/util/time')>()),
   sleep: vi.fn().mockResolvedValue(undefined),
 }));
 
