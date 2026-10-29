@@ -1234,7 +1234,7 @@ Key features:
 - `max`: Maximum allowed duration in milliseconds
 - `percentile` (optional): Check percentile instead of all spans (e.g., 50 for median, 95 for 95th percentile). Must be a number from 0 to 100 inclusive; out-of-range values cause an assertion error. Use the 0-100 scale, not 0-1 — `0.95` is accepted as the 0.95th percentile (effectively the fastest span), not p95
 
-The assertion will show the slowest spans when a threshold is exceeded, making it easy to identify performance bottlenecks.
+For new hosted OpenAI Agents API traces, Promptfoo compares the integer nanosecond duration with your millisecond threshold before rounding for display. If a redacted field leaves a span’s membership in the filter uncertain, a maximum or percentile can still be graded when including or excluding that span yields the same verdict. Add a `trace-span-count` minimum if the selected group must contain a span.
 
 ### Trace-Error-Spans
 

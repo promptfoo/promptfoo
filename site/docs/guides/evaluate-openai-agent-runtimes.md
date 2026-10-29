@@ -30,7 +30,9 @@ jq '.results.results[] | {provider: .provider.id, success, score, output: .respo
   error: (.error // .response.error), checks: [.gradingResult.componentResults[]? | {pass, reason}]}' receipts.json
 ```
 
-In two live runs, every agent returned the expected receipt. Before hosted trace import, the hosted row passed one of three checks because the two tool assertions saw no command. In the second run it imported four native spans and passed all three, including the check for `cwd: /workspace`. The SDK passed both checks in each run. Codex initially passed two of three because its completed MCP call had `error: null` and Promptfoo marked its span as failed. After Promptfoo recognized that successful protocol response, Codex passed all three.
+In a live before-and-after comparison, every agent returned the expected receipt. Before hosted trace import, the hosted row passed only the answer check. After importing four native spans it also passed the tool and working-directory checks. Codex initially lost a point because Promptfoo interpreted `error: null` on a completed MCP call as a failure. With both fixes, the rerun passed all eight checks across the three runtimes.
+
+In another run, Codex called `read_receipt` with `{}`, then retried successfully with `{"filename":"receipt.txt"}`. The receipt answer and tool-use checks passed. The zero-error check failed because the first call failed. Open both MCP spans in **Traces** to see how the agent recovered.
 
 Open a result in the local eval viewer and select **Traces** to inspect the spans. To check whether a hosted command completed, inspect `response.metadata.toolCalls`. A completed agent turn can contain a failed command. To check the command's arguments, explicitly opt in to recording them. [Hosted trace settings, permissions, and latency](/docs/providers/openai-agents-api#inspect-traces)
 

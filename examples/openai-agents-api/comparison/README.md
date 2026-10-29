@@ -14,9 +14,13 @@ In a live run on commit `204cf8f2`, all three answers passed. The hosted trace l
 
 ## Run
 
-From the repository root, install dependencies and put a Codex CLI with GPT-6 Astra support on your PATH. Use the repo's Node version. Set `OPENAI_API_KEY` for a project with Agents API and Responses API permissions. Your OpenAI organization must enable native trace export for the hosted action check. See the [Codex app-server prerequisites](https://www.promptfoo.dev/docs/providers/openai-codex-app-server/) and [OpenAI trace export permissions](https://developers.openai.com/api/docs/guides/agents-api/tracing#export-session-traces).
+To test unreleased changes, use the Promptfoo checkout that contains them. The local CLI runs the provider code from that checkout. Put a Codex CLI with GPT-6 Astra support on your PATH. Set `OPENAI_API_KEY` for a project with Agents API and Responses API permissions. Your OpenAI organization must enable native trace export for the hosted action check. See the [Codex app-server prerequisites](https://www.promptfoo.dev/docs/providers/openai-codex-app-server/) and [OpenAI trace export permissions](https://developers.openai.com/api/docs/guides/agents-api/tracing#export-session-traces).
+
+Run these commands from the repository root.
 
 ```sh
+nvm use
+npm ci
 npm run local -- eval -c examples/openai-agents-api/promptfooconfig.compare.mjs --no-cache -o receipt-results.json
 ```
 
