@@ -20,6 +20,7 @@ export interface TrajectoryStepMatcher {
 export interface TrajectoryStep {
   aliases: string[];
   args?: unknown;
+  hostedToolName?: string;
   name: string;
   spanName: string;
   statusCode?: number;
@@ -386,6 +387,11 @@ export function extractTrajectorySteps(trace: TraceData): TrajectoryStep[] {
 
       return {
         aliases: [...aliases],
+        // A hosted shell call is both an API tool invocation and a command trajectory step.
+        ...(type === 'command' &&
+          typeof span.attributes?.['promptfoo.openai.hosted_trace'] === 'string' && {
+            hostedToolName: toolName,
+          }),
         ...(args === undefined ? {} : { args }),
         attributes: span.attributes || {},
         endTime: span.endTime,
@@ -424,15 +430,23 @@ export function matchesTrajectoryStep(
 ): boolean {
   const normalizedMatcher = normalizeTrajectoryMatcher(matcher, defaultType);
   const { type, pattern, name } = normalizedMatcher;
+  const matchPattern = pattern || name;
 
   if (type) {
     const allowedTypes = Array.isArray(type) ? type : [type];
+    if (
+      step.hostedToolName &&
+      allowedTypes.includes('tool') &&
+      (!matchPattern ||
+        [step.hostedToolName, step.spanName].some((alias) => matchesPattern(alias, matchPattern)))
+    ) {
+      return true;
+    }
     if (!allowedTypes.includes(step.type)) {
       return false;
     }
   }
 
-  const matchPattern = pattern || name;
   if (!matchPattern) {
     return true;
   }

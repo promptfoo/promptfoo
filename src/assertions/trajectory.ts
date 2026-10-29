@@ -46,6 +46,12 @@ function getTraceOrThrow(params: AssertionParams) {
   return trace;
 }
 
+function getToolSteps(params: AssertionParams) {
+  return extractTrajectorySteps(getTraceOrThrow(params)).filter(
+    (step) => step.type === 'tool' || step.hostedToolName !== undefined,
+  );
+}
+
 function applyInverse(pass: boolean, inverse: boolean) {
   return inverse ? !pass : pass;
 }
@@ -134,8 +140,7 @@ function resolveToolMatchers(
 }
 
 export const handleTrajectoryToolUsed = (params: AssertionParams): GradingResult => {
-  const trace = getTraceOrThrow(params);
-  const steps = extractTrajectorySteps(trace).filter((step) => step.type === 'tool');
+  const steps = getToolSteps(params);
   const expected = resolveToolMatchers(params.renderedValue ?? params.assertion.value);
 
   if (expected.kind === 'list') {
@@ -429,8 +434,7 @@ function resolveToolArgsMatchValue(value: unknown) {
 }
 
 export const handleTrajectoryToolSequence = (params: AssertionParams): GradingResult => {
-  const trace = getTraceOrThrow(params);
-  const toolSteps = extractTrajectorySteps(trace).filter((step) => step.type === 'tool');
+  const toolSteps = getToolSteps(params);
   const value = resolveSequenceValue(params.renderedValue ?? params.assertion.value);
   const expectedMatchers = value.steps.map((step, index) => {
     const matcher = normalizeTrajectoryMatcher(step, 'tool');
@@ -500,8 +504,7 @@ export const handleTrajectoryToolSequence = (params: AssertionParams): GradingRe
 };
 
 export const handleTrajectoryToolArgsMatch = (params: AssertionParams): GradingResult => {
-  const trace = getTraceOrThrow(params);
-  const toolSteps = extractTrajectorySteps(trace).filter((step) => step.type === 'tool');
+  const toolSteps = getToolSteps(params);
   const { matcher, expectedArgs, mode, defaults, ignore } = resolveToolArgsMatchValue(
     params.renderedValue ?? params.assertion.value,
   );

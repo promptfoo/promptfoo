@@ -1,4 +1,6 @@
 import logger from '../../logger';
+import { getTraceStore } from '../../tracing/store';
+import { CloudAuthRedirectError } from '../../util/fetch/cloudAuthRedirects';
 import { fetchWithRetries, readBoundedText } from '../../util/fetch/index';
 import { renderVarsInObject } from '../../util/render';
 import {
@@ -13,9 +15,11 @@ import { analyzeTemplateReference } from '../../util/templates';
 import { sleepWithAbort } from '../../util/time';
 import { buildChatSpanContext, extractProviderResponseAttributes, withGenAISpan } from '../tracing';
 import { decodeUrlComponent } from '../urlEncoding';
+import { normalizeHostedTrace } from './agents-api-trace-spans';
 import { calculateOpenAIUsageCost } from './billing';
 import { OpenAiGenericProvider } from './index';
 import { appendOpenAiApiPath, assertOpenAiApiModel } from './util';
+import type { SpanContext } from '@opentelemetry/api';
 
 import type { EnvOverrides } from '../../types/env';
 import type {
@@ -43,6 +47,7 @@ interface AgentsApiOptions extends OpenAiSharedOptions {
   cleanupTimeoutMs?: number;
   usageTimeoutMs?: number;
   retainSession?: boolean;
+  hostedTrace?: boolean | { includeToolArguments?: boolean; timeoutMs?: number };
 }
 
 interface Usage {
@@ -452,6 +457,24 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
         `Agents API usageTimeoutMs must be a non-negative integer no greater than ${MAX_TIMER_MS}`,
       );
     }
+    const { hostedTrace } = config;
+    if (hostedTrace !== undefined && typeof hostedTrace !== 'boolean') {
+      if (!hostedTrace || typeof hostedTrace !== 'object' || Array.isArray(hostedTrace)) {
+        throw new Error('Agents API hostedTrace must be a boolean or an options object');
+      }
+      const { includeToolArguments, timeoutMs } = hostedTrace;
+      if (includeToolArguments !== undefined && typeof includeToolArguments !== 'boolean') {
+        throw new Error('Agents API hostedTrace.includeToolArguments must be a boolean');
+      }
+      if (
+        timeoutMs !== undefined &&
+        (!Number.isSafeInteger(timeoutMs) || timeoutMs <= 0 || timeoutMs > MAX_TIMER_MS)
+      ) {
+        throw new Error(
+          `Agents API hostedTrace.timeoutMs must be a positive integer no greater than ${MAX_TIMER_MS}`,
+        );
+      }
+    }
     if (config.environment && !['none', 'openai_hosted'].includes(config.environment.type)) {
       throw new Error('Agents API environment.type must be "none" or "openai_hosted"');
     }
@@ -492,11 +515,18 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
           method,
           headers,
           signal,
+          // A redirect must not forward gateway headers or credentials in the session body.
+          restrictCloudAuthRedirects: true,
           ...(body === undefined ? {} : { body: JSON.stringify(body) }),
         },
         30_000,
         idempotent ? this.config.maxRetries : 0,
-      );
+      ).catch((error: unknown) => {
+        if (error instanceof CloudAuthRedirectError) {
+          throw new Error('Agents API cannot follow a redirect to a different origin.');
+        }
+        throw error;
+      });
       // Bodies stay out of debug logs; the status is enough to follow the session lifecycle.
       logger.debug('[OpenAI Agents API] Response', { method, endpoint, status: response.status });
       if (idempotent && TRANSIENT_STATUS_CODES.has(response.status) && attempt < maxRetries) {
@@ -537,7 +567,12 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
     }
   }
 
-  private async list<T>(endpoint: string, headers: Headers, signal: AbortSignal): Promise<T[]> {
+  private async list<T>(
+    endpoint: string,
+    headers: Headers,
+    signal: AbortSignal,
+    pageSize = 100,
+  ): Promise<T[]> {
     const items: T[] = [];
     const cursors = new Set<string>();
     let after: string | undefined;
@@ -549,7 +584,7 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
         );
       }
       this.listBudget.pages--;
-      const query = new URLSearchParams({ order: 'asc', limit: '100' });
+      const query = new URLSearchParams({ order: 'asc', limit: String(pageSize) });
       if (after) {
         query.set('after', after);
       }
@@ -817,7 +852,13 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
       });
       return await withGenAISpan(
         { ...spanContext, operationName: 'invoke_agent', agentId: config.agent_id },
-        () => callProvider.runSession(prompt, options),
+        (span) => {
+          const parent =
+            config.hostedTrace && context?.traceparent && span.isRecording()
+              ? span.spanContext()
+              : undefined;
+          return callProvider.runSession(prompt, options, parent);
+        },
         (response) => ({
           ...extractProviderResponseAttributes(response),
           responseModel:
@@ -877,6 +918,7 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
   private async runSession(
     prompt: string,
     options?: CallApiOptionsParams,
+    parent?: SpanContext,
   ): Promise<ProviderResponse> {
     options?.abortSignal?.throwIfAborted();
     const headers = new Headers(this.getOpenAiRequestHeaders());
@@ -991,6 +1033,17 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
         ...usageMetadata,
         ...subagentUsageMetadata,
       });
+      if (this.config.hostedTrace) {
+        metadata.hostedTrace = await this.importHostedTrace(
+          session.id,
+          turn.id,
+          endpoint,
+          headers,
+          signal,
+          parent,
+        );
+        options?.abortSignal?.throwIfAborted();
+      }
       completed = true;
     } catch (error) {
       options?.abortSignal?.throwIfAborted();
@@ -1009,6 +1062,94 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
       result.metadata = metadata;
     }
     return result;
+  }
+
+  /** Import the published root-turn tree under this provider invocation before session deletion. */
+  private async importHostedTrace(
+    sessionId: string,
+    turnId: string,
+    endpoint: string,
+    headers: Headers,
+    signal: AbortSignal,
+    parent?: SpanContext,
+  ) {
+    const source = 'openai:agents-api';
+    const unavailable = (reason: string) => ({ source, status: 'unavailable', reason });
+    if (!parent) {
+      return unavailable('Enable Promptfoo eval tracing to import hosted spans');
+    }
+
+    const options = typeof this.config.hostedTrace === 'object' ? this.config.hostedTrace : {};
+    const includeToolArguments = options.includeToolArguments === true;
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), options.timeoutMs ?? 15_000);
+    const traceSignal = AbortSignal.any([signal, controller.signal]);
+    let snapshot: ReturnType<typeof normalizeHostedTrace> | undefined;
+    try {
+      // A terminal page only describes traces published at the time of the read.
+      // Poll from the beginning so a later snapshot can replace an incomplete one.
+      while (!snapshot?.complete) {
+        traceSignal.throwIfAborted();
+        const traces = await this.list<{ id: string; session_id: string; otlp: unknown }>(
+          `${endpoint}/traces`,
+          headers,
+          traceSignal,
+          1,
+        );
+        const published = traces.find(
+          (trace) => trace.id === turnId && trace.session_id === sessionId,
+        );
+        snapshot = published
+          ? normalizeHostedTrace(published.otlp, parent.spanId, includeToolArguments, (value) =>
+              this.redact(value),
+            )
+          : undefined;
+        if (!snapshot?.complete) {
+          await sleepWithAbort(this.config.pollIntervalMs ?? 1_000, traceSignal);
+        }
+      }
+    } catch (error) {
+      if (error instanceof AgentsApiHttpError) {
+        // Remote diagnostic bodies can contain sensitive inputs.
+        return unavailable(`Hosted trace export returned HTTP ${error.status}`);
+      }
+      if (!traceSignal.aborted) {
+        return unavailable('Unable to read a valid hosted trace');
+      }
+      if (signal.aborted || !snapshot?.spans.length) {
+        return unavailable('Timed out waiting for a complete hosted trace');
+      }
+      // A valid delegated tree may remain unattested even after publication. Import it
+      // once at the deadline for affirmative observations, never as proof of absence.
+    } finally {
+      clearTimeout(timer);
+    }
+
+    const { spans, complete } = snapshot;
+    try {
+      const stored = await getTraceStore().addSpans(parent.traceId, spans);
+      if (!stored.stored) {
+        return unavailable('The local eval trace was unavailable');
+      }
+    } catch {
+      return unavailable('Unable to store the hosted trace');
+    }
+    const toolArgumentsComplete =
+      includeToolArguments &&
+      spans.every(
+        ({ attributes }) =>
+          attributes?.['gen_ai.operation.name'] !== 'execute_tool' ||
+          ('tool.arguments' in attributes && !attributes['promptfoo.tool.arguments_redacted']),
+      );
+    return {
+      source,
+      status: complete ? 'imported' : 'partial',
+      ...(!complete && { reason: 'The published root turn did not attest to a complete trace' }),
+      parentSpanId: parent.spanId,
+      spanCount: spans.length,
+      includeToolArguments,
+      toolArgumentsComplete,
+    };
   }
 
   private async waitForTurn(
@@ -1071,6 +1212,12 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
     const pollIntervalMs = Math.min(this.config.pollIntervalMs ?? 1_000, 1_000);
     const turnEndpoint = `${endpoint}/turns/${encodeURIComponent(turn.id)}`;
     const latest = { session, turn };
+    const usageController = new AbortController();
+    const usageTimer = setTimeout(
+      () => usageController.abort(),
+      Math.max(0, waitUntil - Date.now()),
+    );
+    const usageSignal = AbortSignal.any([signal, usageController.signal]);
     let turnUsageSeenAt: number | undefined;
     try {
       while (!isUsage(latest.session.usage) && Date.now() < waitUntil) {
@@ -1080,21 +1227,28 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
             break;
           }
         }
-        await sleepWithAbort(Math.min(pollIntervalMs, waitUntil - Date.now()), signal);
-        const [nextSession, nextTurn] = await Promise.all([
-          this.request<Session>(endpoint, 'GET', headers, signal),
-          // Root-turn usage is only a fallback; a failed turn read must not stop session polling.
-          this.request<Turn>(turnEndpoint, 'GET', headers, signal).catch((error: unknown) => {
-            signal.throwIfAborted();
-            logger.debug('[OpenAI Agents API] Root turn usage read failed', {
-              sessionId: session.id,
-              error: this.redact(error instanceof Error ? error.message : String(error)),
-            });
-            return undefined;
+        await sleepWithAbort(Math.min(pollIntervalMs, waitUntil - Date.now()), usageSignal);
+        if (Date.now() >= waitUntil) {
+          break;
+        }
+        // Keep either completed read when its sibling outlasts the usage deadline.
+        await Promise.all([
+          this.request<Session>(endpoint, 'GET', headers, usageSignal).then((next) => {
+            latest.session = next;
           }),
+          // Root-turn usage is only a fallback; a failed turn read must not stop session polling.
+          this.request<Turn>(turnEndpoint, 'GET', headers, usageSignal)
+            .then((next) => {
+              latest.turn = next;
+            })
+            .catch((error: unknown) => {
+              usageSignal.throwIfAborted();
+              logger.debug('[OpenAI Agents API] Root turn usage read failed', {
+                sessionId: session.id,
+                error: this.redact(error instanceof Error ? error.message : String(error)),
+              });
+            }),
         ]);
-        latest.session = nextSession;
-        latest.turn = nextTurn ?? latest.turn;
       }
     } catch (error) {
       evalSignal?.throwIfAborted();
@@ -1103,6 +1257,9 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
         sessionId: session.id,
         error: this.redact(error instanceof Error ? error.message : String(error)),
       });
+    } finally {
+      clearTimeout(usageTimer);
+      usageController.abort();
     }
     const sessionUsage = isUsage(latest.session.usage) ? latest.session.usage : undefined;
     const usage = sessionUsage ?? (isUsage(latest.turn.usage) ? latest.turn.usage : undefined);

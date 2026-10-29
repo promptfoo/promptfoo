@@ -136,6 +136,239 @@ describe('trace assertions', () => {
     ],
   };
 
+  describe('OpenAI Agents API trace evidence', () => {
+    const noErrors: Assertion = { type: 'trace-error-spans', value: { max_count: 0 } };
+    const noDelete: Assertion = { type: 'not-trajectory:tool-used', value: 'delete_record' };
+    const imported = {
+      source: 'openai:agents-api',
+      status: 'imported',
+      includeToolArguments: false,
+      toolArgumentsComplete: false,
+      parentSpanId: 'wrapper',
+      spanCount: 1,
+    };
+    const incomplete = { ...imported, includeToolArguments: true };
+    const complete = { ...incomplete, toolArgumentsComplete: true };
+    const unavailable = { source: 'openai:agents-api', status: 'unavailable' };
+    const grade = (assertion: Assertion, hostedTrace?: object) =>
+      runAssertion({
+        assertion,
+        test: mockTest,
+        providerResponse: { output: 'ok', metadata: { hostedTrace } },
+        traceId: mockTraceData.traceId,
+        traceData: {
+          ...mockTraceData,
+          spans: [
+            { spanId: 'wrapper', name: 'invoke_agent', startTime: 1000, endTime: 1100 },
+            {
+              spanId: 'sibling',
+              name: 'execute_tool other_provider',
+              startTime: 1000,
+              attributes: { 'tool.name': 'other_provider' },
+            },
+            {
+              spanId: 'lookup',
+              parentSpanId: 'wrapper',
+              name: 'execute_tool lookup',
+              startTime: 1010,
+              endTime: 1050,
+              attributes: {
+                'promptfoo.openai.hosted_trace': 'wrapper',
+                'tool.name': 'lookup',
+                'tool.arguments': '{"order_id":"123","token":"[REDACTED]"}',
+              },
+            },
+          ],
+        },
+      });
+
+    it.each([noErrors, noDelete])(
+      'cannot infer absence for $type after a failed import',
+      async (assertion) => {
+        await expect(grade(assertion, unavailable)).resolves.toMatchObject({
+          pass: false,
+          score: 0,
+          reason: expect.stringContaining('unavailable'),
+        });
+        await expect(grade(assertion, imported)).resolves.toMatchObject({ pass: true });
+        await expect(grade(assertion)).resolves.toMatchObject({ pass: true });
+      },
+    );
+
+    it.each<{ assertion: Assertion; pass: boolean }>([
+      { assertion: { type: 'trajectory:tool-used', value: ['lookup'] }, pass: true },
+      {
+        assertion: { type: 'trajectory:tool-used', value: { name: 'lookup', min: 1 } },
+        pass: true,
+      },
+      {
+        assertion: {
+          type: 'trajectory:tool-args-match',
+          value: { name: 'lookup', args: { order_id: '123' } },
+        },
+        pass: true,
+      },
+      { assertion: noErrors, pass: false },
+      { assertion: noDelete, pass: false },
+      {
+        assertion: { type: 'trajectory:tool-used', value: { name: 'other', min: 0 } },
+        pass: false,
+      },
+      {
+        assertion: { type: 'trajectory:tool-used', value: { name: 'lookup', max: 1 } },
+        pass: false,
+      },
+      { assertion: { type: 'trajectory:tool-sequence', value: ['lookup'] }, pass: false },
+    ])(
+      'grades only observed tool evidence from a partial trace: $assertion.type',
+      async ({ assertion, pass }) => {
+        await expect(grade(assertion, { ...incomplete, status: 'partial' })).resolves.toMatchObject(
+          { pass },
+        );
+      },
+    );
+
+    it('keeps the local provider wrapper but excludes tools outside this hosted turn', async () => {
+      for (const status of [imported, { ...imported, status: 'partial' }]) {
+        await expect(
+          grade({ type: 'trajectory:tool-used', value: 'other_provider' }, status),
+        ).resolves.toMatchObject({ pass: false });
+      }
+      await expect(
+        grade({ type: 'trace-span-count', value: { pattern: 'invoke_agent', min: 1 } }, imported),
+      ).resolves.toMatchObject({ pass: true });
+      await expect(
+        grade(
+          { type: 'trace-span-count', value: { pattern: 'execute_tool other_provider', min: 1 } },
+          imported,
+        ),
+      ).resolves.toMatchObject({ pass: false });
+    });
+
+    it('fails if a replay contains only hosted spans belonging to a different provider call', async () => {
+      await expect(
+        grade(noDelete, { ...imported, parentSpanId: 'other-call' }),
+      ).resolves.toMatchObject({
+        pass: false,
+        score: 0,
+        reason: expect.stringContaining('incomplete'),
+      });
+    });
+
+    it.each<Assertion>([
+      { type: 'not-trajectory:tool-args-match', value: { name: 'shell', args: { cmd: 'rm' } } },
+      { type: 'trajectory:step-count', value: { type: 'command', max: 0 } },
+      { type: 'trajectory:step-count', value: { pattern: 'rm*', max: 0 } },
+      {
+        type: 'not-trajectory:tool-sequence',
+        value: { steps: [{ type: ['command'], name: 'rm' }] },
+      },
+      {
+        type: 'trace-error-spans',
+        value: { attributes: { command: 'rm' }, max_count: 0 },
+      },
+      {
+        type: 'trace-span-count',
+        value: { pattern: '*', attributes: { 'tool.arguments': '{}' }, max: 0 },
+      },
+    ])('requires captured tool arguments for $type', async (assertion) => {
+      await expect(grade(assertion, imported)).resolves.toMatchObject({
+        pass: false,
+        score: 0,
+        reason: expect.stringContaining('includeToolArguments'),
+      });
+      await expect(grade(assertion, incomplete)).resolves.toMatchObject({
+        pass: false,
+        score: 0,
+        reason: expect.stringContaining('redacted'),
+      });
+      await expect(grade(assertion, complete)).resolves.toMatchObject({ pass: true });
+    });
+
+    it.each(['shell', 'configured-command'])(
+      'keeps %s visible as both hosted tool and command',
+      async (name) => {
+        const cmd = 'rm receipt';
+        const gradeTool = (assertion: Assertion, capture: boolean) =>
+          runAssertion({
+            assertion,
+            test: mockTest,
+            providerResponse: {
+              output: 'ok',
+              metadata: { hostedTrace: capture ? complete : imported },
+            },
+            traceId: mockTraceData.traceId,
+            traceData: {
+              ...mockTraceData,
+              metadata: { commandToolNames: ['configured-command'] },
+              spans: [
+                {
+                  spanId: 'shell',
+                  name: 'execute_tool ' + name,
+                  startTime: 10,
+                  endTime: 20,
+                  attributes: {
+                    'promptfoo.openai.hosted_trace': 'wrapper',
+                    'tool.name': name,
+                    ...(capture && { 'tool.arguments': JSON.stringify({ cmd }) }),
+                  },
+                },
+              ],
+            },
+          });
+        for (const capture of [false, true]) {
+          await expect(
+            gradeTool({ type: 'trajectory:tool-used', value: name }, capture),
+          ).resolves.toMatchObject({ pass: true });
+          await expect(
+            gradeTool({ type: 'not-trajectory:tool-used', value: name }, capture),
+          ).resolves.toMatchObject({ pass: false });
+          await expect(
+            gradeTool({ type: 'trajectory:tool-sequence', value: [name] }, capture),
+          ).resolves.toMatchObject({ pass: true });
+          await expect(
+            gradeTool(
+              { type: 'not-trajectory:tool-args-match', value: { name, args: { cmd } } },
+              capture,
+            ),
+          ).resolves.toMatchObject({ pass: false });
+        }
+        await expect(
+          gradeTool({ type: 'trajectory:tool-args-match', value: { name, args: { cmd } } }, true),
+        ).resolves.toMatchObject({ pass: true });
+        await expect(
+          gradeTool(
+            { type: 'trajectory:step-count', value: { type: 'command', pattern: 'rm*', min: 1 } },
+            true,
+          ),
+        ).resolves.toMatchObject({ pass: true });
+      },
+    );
+
+    it('can verify a visible argument without treating a redacted marker as its original value', async () => {
+      const check = (args: object) =>
+        grade({ type: 'trajectory:tool-args-match', value: { name: 'lookup', args } }, incomplete);
+      await expect(check({ order_id: '123' })).resolves.toMatchObject({ pass: true });
+      await expect(check({ token: '[REDACTED]' })).resolves.toMatchObject({
+        pass: false,
+        score: 0,
+      });
+    });
+
+    it('preserves output checks, metric-only scoring, and unrelated provider metadata', async () => {
+      await expect(
+        grade({ type: 'javascript', value: 'output === "ok"' }, unavailable),
+      ).resolves.toMatchObject({ pass: true });
+      await expect(grade({ ...noErrors, weight: 0 }, unavailable)).resolves.toMatchObject({
+        pass: true,
+        score: 0,
+      });
+      await expect(
+        grade(noDelete, { status: 'unavailable', source: 'custom' }),
+      ).resolves.toMatchObject({ pass: true });
+    });
+  });
+
   describe('deterministic assertions with span attribute filters', () => {
     it.each<{ assertion: Assertion; pass: boolean }>([
       { assertion: { type: 'trace-span-count', value: { max: 2 } }, pass: true },

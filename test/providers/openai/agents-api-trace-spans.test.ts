@@ -1,0 +1,237 @@
+import { describe, expect, it } from 'vitest';
+import cliState from '../../../src/cliState';
+import { normalizeHostedTrace } from '../../../src/providers/openai/agents-api-trace-spans';
+
+const traceId = 'b94f3ef2d9574e71a3084b13865d60b8';
+const parentId = '6f3b409971b19c81';
+
+function attribute(key: string, stringValue: string) {
+  return { key, value: { stringValue } };
+}
+
+function nativeSpan(spanId: string, operation: string, parentSpanId?: string) {
+  return {
+    traceId,
+    spanId,
+    parentSpanId,
+    name: 'private source span name',
+    startTimeUnixNano: '1700000000000000000',
+    endTimeUnixNano: '1700000000025000000',
+    status: { code: 'STATUS_CODE_OK', message: 'private status detail' },
+    attributes: [attribute('gen_ai.operation.name', operation)],
+  };
+}
+
+function payload(...spans: ReturnType<typeof nativeSpan>[]) {
+  return { resourceSpans: [{ scopeSpans: [{ spans }] }] };
+}
+
+const root = nativeSpan('1111111111111111', 'invoke_agent');
+const completenessKey = 'openai.managed_agents.trace.completeness';
+root.attributes.push(
+  attribute(
+    completenessKey,
+    JSON.stringify({ status: 'complete', missing_outputs: [], ordering_issues: [] }),
+  ),
+);
+const tool = nativeSpan('2222222222222222', 'execute_tool', root.spanId);
+tool.attributes.push(
+  attribute('gen_ai.tool.name', 'lookup_order'),
+  attribute(
+    'gen_ai.tool.call.arguments',
+    JSON.stringify({
+      order_id: '417',
+      headers: { Authorization: 'private authentication' },
+      note: 'uses a fixture credential',
+    }),
+  ),
+  attribute('gen_ai.tool.call.result', 'private tool result'),
+);
+const model = nativeSpan('3333333333333333', 'chat', root.spanId);
+model.attributes.push(
+  attribute('gen_ai.request.model', 'gpt-6-astra'),
+  attribute('gen_ai.input.messages', 'private input'),
+  attribute('gen_ai.output.messages', 'private answer'),
+  attribute('gen_ai.system_instructions', 'private instructions'),
+);
+
+function toolWithArgs(raw?: string) {
+  const attributes = [
+    attribute('gen_ai.operation.name', 'execute_tool'),
+    attribute('gen_ai.tool.name', 'lookup_order'),
+  ];
+  if (raw !== undefined) {
+    attributes.push(attribute('gen_ai.tool.call.arguments', raw));
+  }
+  return { ...tool, attributes };
+}
+
+function importWithRedaction(key: string) {
+  return cliState.withRequestTracingConfig(
+    { enabled: true, otlp: { http: { enabled: true, port: 4318, redactAttributes: [key] } } },
+    async () => {
+      const cleanTool = toolWithArgs(JSON.stringify({ lookup: { order_id: '417' }, limit: 3 }));
+      return normalizeHostedTrace(payload(root, cleanTool), parentId, true);
+    },
+  );
+}
+
+describe('normalizeHostedTrace', () => {
+  it('attaches the native tree to each invocation, including children listed before their root', () => {
+    const native = payload(tool, model, root);
+    const { spans, complete } = normalizeHostedTrace(native, parentId, false);
+    expect(complete).toBe(true);
+    expect(spans).toHaveLength(3);
+    const hostedRoot = spans.find((span) => span.parentSpanId === parentId)!;
+    expect(hostedRoot.name).toBe('invoke_agent');
+    expect(spans.filter((span) => span.parentSpanId === hostedRoot.spanId)).toHaveLength(2);
+    expect(normalizeHostedTrace(native, parentId, false).spans).toEqual(spans);
+    const other = normalizeHostedTrace(native, 'aaaaaaaaaaaaaaaa', false).spans;
+    expect(other.every((span) => spans.every((s) => s.spanId !== span.spanId))).toBe(true);
+  });
+
+  it('stores timings, status and tool identity without content or source span names', () => {
+    const failedTool = {
+      ...tool,
+      status: { code: 'STATUS_CODE_ERROR', message: 'private status detail' },
+    };
+    const normalized = normalizeHostedTrace(
+      payload(root, failedTool, model),
+      parentId,
+      false,
+    ).spans;
+    const storedTool = normalized.find((span) => span.attributes?.['tool.name'] === 'lookup_order');
+    expect(storedTool).toMatchObject({
+      startTime: 1700000000000,
+      endTime: 1700000000025,
+      statusCode: 2,
+    });
+    const serialized = JSON.stringify(normalized);
+    expect(serialized).not.toMatch(/private|order_id|fixture credential/);
+  });
+
+  it('imports opted-in arguments after redaction, and still omits results, messages and raw status', () => {
+    const redact = (s: string) => s.replaceAll('fixture credential', '[REDACTED]');
+    const { spans } = normalizeHostedTrace(payload(root, tool, model), parentId, true, redact);
+    const attrs = spans.find((span) => span.attributes?.['tool.name'] === 'lookup_order')!
+      .attributes!;
+    expect(JSON.parse(attrs['tool.arguments'])).toMatchObject({
+      order_id: '417',
+      note: 'uses a [REDACTED]',
+    });
+    expect(attrs['promptfoo.tool.arguments_redacted']).toBe(true);
+    expect(JSON.stringify(spans)).not.toMatch(/private|fixture credential/);
+  });
+
+  it('applies request-scoped redactions to nested arguments before storing them', async () => {
+    const { spans } = await importWithRedaction('order_id');
+    const attrs = spans.find((span) => span.attributes?.['tool.name'] === 'lookup_order')!
+      .attributes!;
+    expect(JSON.parse(attrs['tool.arguments'])).toEqual({
+      lookup: { order_id: '[REDACTED]' },
+      limit: 3,
+    });
+    expect(attrs['promptfoo.tool.arguments_redacted']).toBe(true);
+    expect(JSON.stringify(spans)).not.toContain('417');
+  });
+
+  it('omits normalized arguments when the native attribute is protected', async () => {
+    const { spans } = await importWithRedaction('gen_ai.tool.call.arguments');
+    const attrs = spans.find((span) => span.attributes?.['tool.name'] === 'lookup_order')!
+      .attributes!;
+    expect(attrs).not.toHaveProperty('tool.arguments');
+    expect(JSON.stringify(spans)).not.toContain('417');
+  });
+
+  it('rejects evidence when a protected tool name would be exposed through span aliases', async () => {
+    await expect(importWithRedaction('gen_ai.tool.name')).rejects.toThrow();
+  });
+
+  it.each(['null', undefined])('omits unavailable native arguments (%s)', (raw) => {
+    const { spans } = normalizeHostedTrace(payload(root, toolWithArgs(raw)), parentId, true);
+    const attrs = spans.find((span) => span.attributes?.['tool.name'] === 'lookup_order')!
+      .attributes!;
+    expect(attrs).not.toHaveProperty('tool.arguments');
+  });
+
+  it('preserves a string argument containing JSON text across storage', () => {
+    const text = '{"order_id":"417"}';
+    const { spans } = normalizeHostedTrace(
+      payload(root, toolWithArgs(JSON.stringify(text))),
+      parentId,
+      true,
+    );
+    const attrs = spans.find((span) => span.attributes?.['tool.name'] === 'lookup_order')!
+      .attributes!;
+    expect(JSON.parse(attrs['tool.arguments'])).toBe(text);
+  });
+
+  it('canonicalizes standard hex IDs and protobuf JSON base64 IDs to the same tree', () => {
+    const asBase64 = (id: string) => Buffer.from(id, 'hex').toString('base64');
+    const encoded = [root, tool].map((span) => ({
+      ...span,
+      traceId: asBase64(traceId),
+      spanId: asBase64(span.spanId),
+      parentSpanId: span.parentSpanId ? asBase64(span.parentSpanId) : undefined,
+    }));
+    expect(normalizeHostedTrace(payload(...encoded), parentId, false)).toEqual(
+      normalizeHostedTrace(payload(root, tool), parentId, false),
+    );
+  });
+
+  it.each([
+    ['unpublished', payload(), 0],
+    ['missing completeness', payload(nativeSpan(root.spanId, 'invoke_agent'), tool), 2],
+    [
+      'partial',
+      payload(
+        {
+          ...root,
+          attributes: [
+            attribute('gen_ai.operation.name', 'invoke_agent'),
+            attribute(
+              completenessKey,
+              JSON.stringify({ status: 'partial', missing_outputs: ['private missing output'] }),
+            ),
+          ],
+        },
+        tool,
+      ),
+      2,
+    ],
+  ] as const)(
+    'reports %s evidence as incomplete without exposing fields',
+    (_description, native, count) => {
+      const { spans, complete } = normalizeHostedTrace(native, parentId, false);
+      expect(complete).toBe(false);
+      expect(spans).toHaveLength(count);
+      expect(JSON.stringify(spans)).not.toContain('private');
+    },
+  );
+
+  it.each([
+    ['a zero span ID', [{ ...root, spanId: '0000000000000000' }]],
+    ['a malformed span ID', [{ ...root, spanId: '?'.repeat(16) }]],
+    ['a nonnumeric timestamp', [{ ...root, endTimeUnixNano: 'tomorrow' }]],
+    ['a duplicate span', [root, tool, { ...tool }]],
+    ['mixed trace IDs', [root, { ...tool, traceId: 'f'.repeat(32) }]],
+    ['a missing parent', [root, { ...tool, parentSpanId: model.spanId }]],
+    [
+      'a missing parent in an incomplete root',
+      [nativeSpan(root.spanId, 'invoke_agent'), { ...tool, parentSpanId: model.spanId }],
+    ],
+    [
+      'a cycle alongside a valid root',
+      [root, { ...tool, parentSpanId: model.spanId }, { ...model, parentSpanId: tool.spanId }],
+    ],
+  ] as const)('rejects %s without importing partial evidence', (_description, spans) => {
+    expect(() => normalizeHostedTrace(payload(...spans), parentId, false)).toThrow();
+  });
+
+  it('rejects an oversized trace instead of silently dropping tool evidence beyond the limit', () => {
+    const children = Array.from({ length: 1000 }, (_, i) =>
+      nativeSpan((i + 1).toString(16).padStart(16, '0'), 'chat', root.spanId),
+    );
+    expect(() => normalizeHostedTrace(payload(root, ...children), parentId, false)).toThrow();
+  });
+});
