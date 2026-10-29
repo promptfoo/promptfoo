@@ -10,6 +10,7 @@ import {
   getOpenAiEffectiveServiceTier,
   getTokenUsage,
   getTokenUsageWithRequestCount,
+  hasSensitiveOpenAiCacheString,
   normalizeOpenAiServiceTierForWire,
   OPENAI_BILLING_MODELS,
   OPENAI_CHAT_MODELS,
@@ -26,6 +27,12 @@ import {
 } from '../../../src/providers/openai/util';
 
 vi.mock('../../../src/cache');
+
+it('recognizes a complete JWT after repeated header prefixes', () => {
+  const text = 'eyJ'.repeat(40_000) + '.payload';
+  expect(hasSensitiveOpenAiCacheString(text)).toBe(false);
+  expect(hasSensitiveOpenAiCacheString(text + '.signature')).toBe(true);
+});
 
 describe('getOpenAiEffectiveServiceTier', () => {
   it('preserves layer precedence when prompt passthrough replaces provider passthrough', () => {

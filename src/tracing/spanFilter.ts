@@ -11,6 +11,14 @@ interface SpanRelevanceInput {
   statusCode?: number;
 }
 
+export const HOSTED_CHAT_MODEL_ABSENT = 'promptfoo.openai.chat_model_absent';
+export const HOSTED_ABSENT_TOOL_ATTRIBUTES = 'promptfoo.openai.absent_tool_attributes';
+
+/** Older imports also used a bare chat name when OTLP had dropped its model attribute. */
+export function hasUncertainHostedChatName(span: SpanRelevanceInput & { name: string }): boolean {
+  return span.name === 'chat' && span.attributes?.[HOSTED_CHAT_MODEL_ABSENT] !== true;
+}
+
 /** Identifies spans that describe model, tool, command, search, guardrail, or error activity. */
 export function isRelevantSpan(span: SpanRelevanceInput): boolean {
   if (span.attributes?.[SPAN_ROLE_ATTRIBUTE] === 'grader') {

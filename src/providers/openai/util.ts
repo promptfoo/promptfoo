@@ -212,15 +212,35 @@ export function classifyOpenAiGatewayStreamError(
   }
 }
 
-function hasInlineSecret(value: string): boolean {
+// Each base64url segment is scanned once, even when the text contains many
+// header prefixes but no JWT signature. A header can be embedded in an identifier.
+function hasInlineJwt(value: string): boolean {
+  if (!value.includes('eyJ') || !value.includes('.')) {
+    return false;
+  }
+  for (const [candidate] of value.matchAll(/[A-Za-z0-9_.-]+/g)) {
+    const parts = candidate.split('.');
+    if (parts.some((part, i) => parts[i + 1] && parts[i + 2] && part.includes('eyJ'))) {
+      return true;
+    }
+  }
+  return false;
+}
+
+export function hasRecognizableOpenAiCredential(value: string): boolean {
   return (
-    looksLikeSecret(value) ||
     /(?:^|\s)(?:Bearer|Basic)\s+\S+/i.test(value) ||
-    /eyJ[a-zA-Z0-9_-]*\.[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+/.test(value) ||
+    hasInlineJwt(value) ||
+    // GitHub and npm tokens can be embedded in a remote tool name or filename.
+    /(?:github_pat_|gh[pousr]_)[A-Za-z0-9_.-]{20,}|npm_[A-Za-z0-9]{20,}/.test(value) ||
     /(?:sk-(?:proj-|ant-)?[a-zA-Z0-9-_]{20,}|key-[a-zA-Z0-9]{20,}|AKIA[A-Z0-9]{16}|AIza[a-zA-Z0-9_-]{35})/.test(
       value,
     )
   );
+}
+
+function hasInlineSecret(value: string): boolean {
+  return looksLikeSecret(value) || hasRecognizableOpenAiCredential(value);
 }
 
 export function hasSensitiveOpenAiCacheString(value: string): boolean {
