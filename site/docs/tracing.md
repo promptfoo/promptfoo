@@ -259,7 +259,7 @@ When regrading a JSON export, built-in argument assertions check the saved targe
 
 The three raw-span assertions accept `value.attributes` to select spans by exact attributes in addition to their name pattern. For example, `attributes: { 'gen_ai.tool.name': 'search' }` limits a count, duration, or error-rate check to the search tool even when every tool emits a span named `execute_tool`. All supplied attributes must match. [Attribute filter examples](/docs/configuration/expected-outputs/deterministic/#trace-span-count)
 
-On a complete hosted Agents API trace with its local provider span, `trace-span-count` with only `min: 1` can pass as soon as one saved span matches the filter, even if an unrelated span lacks the attribute or a higher local ancestor is missing. To assert absence, such as `max: 0`, Promptfoo must account for all local ancestors the filter could match and have enough attribute evidence on candidate spans. A discarded tool result cannot establish that a particular result never occurred.
+On a complete hosted Agents API trace with its local provider span, `trace-span-count` with only `min: 1` can pass as soon as one saved span matches the filter, even if an unrelated span lacks the attribute or a higher local ancestor is missing. For an upper bound such as `max: 0`, Promptfoo must account for each candidate, including local ancestors, that could match all the filters. If a saved tool name rules out a call, missing arguments on that call do not affect the grade. A candidate whose tool result was discarded cannot establish that a particular result never occurred.
 
 ### Turn marker spans {#per-llm-turn-spans}
 

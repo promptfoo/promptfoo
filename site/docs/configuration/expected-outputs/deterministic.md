@@ -1242,7 +1242,7 @@ The `trace-error-spans` assertion detects error spans in a trace and ensures the
 This assertion requires trace data to be available. If tracing is not enabled or trace data is missing, the assertion will throw an error.
 :::
 
-Pair a zero-error check with a positive tool check when the tool is required. When an OpenAI hosted import is requested, `trace-error-spans` requires a complete imported trace. The importer grades signals such as `error: true` or `http.status_code: 500` as errors even when the span's OpenTelemetry status was unset. The saved span records the error status and omits the diagnostic text. Older exports without `hostedTrace.errorStatusComplete` can show observed errors. If a zero-error check cannot verify those saved spans, run the eval again. [Hosted command example](/docs/providers/openai-agents-api#inspect-traces)
+Pair a zero-error check with a positive tool check when the tool is required. When an OpenAI hosted import is requested, `trace-error-spans` requires a complete imported trace. The importer recognizes signals such as `error: true` and `http.status_code: 500` on the span or its resource, with span attributes taking precedence. It saves the error status and omits diagnostic text. A tool can have an observed error even when telemetry dropped other attributes. A zero-error check needs enough evidence for every selected span. If an older export lacks that evidence, run the eval again. [Hosted command example](/docs/providers/openai-agents-api#inspect-traces)
 
 Example:
 

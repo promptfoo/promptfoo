@@ -34,7 +34,7 @@ In two live runs, every agent returned the expected receipt. Before hosted trace
 
 Open a result in the local eval viewer and select **Traces** to inspect the spans. To check whether a hosted command completed, inspect `response.metadata.toolCalls`. A completed agent turn can contain a failed command. To check the command's arguments, explicitly opt in to recording them. [Hosted trace settings, permissions, and latency](/docs/providers/openai-agents-api#inspect-traces)
 
-The hosted receipt check asks for `cwd: /workspace` as a subset. It can pass if that field was captured even when another argument was omitted. To verify every argument, choose `mode: exact` and require an intact matching call. [Tool argument assertions](/docs/configuration/expected-outputs/deterministic#trajectorytool-args-match)
+In the hosted receipt run, the trace recorded `/bin/bash -lc 'cat receipt.txt'` and `cwd: /workspace`. The assertion checks only the working directory. It could still pass for a Python reader whose script was omitted. Use a separate command or file assertion when the method or deliverable matters. [Tool argument assertions](/docs/configuration/expected-outputs/deterministic#trajectorytool-args-match)
 
 ## Separate instructions, input, and state
 
