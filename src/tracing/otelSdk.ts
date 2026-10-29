@@ -15,6 +15,7 @@ import { ATTR_SERVICE_NAME, ATTR_SERVICE_VERSION } from '@opentelemetry/semantic
 import logger from '../logger';
 import { VERSION } from '../version';
 import { LocalSpanExporter } from './localSpanExporter';
+import { trackLocalOtlpExports } from './otlpOwnership';
 import type { SpanProcessor } from '@opentelemetry/sdk-trace-node';
 
 import type { OtelConfig } from './otelConfig';
@@ -132,7 +133,7 @@ export function initializeOtel(config: OtelConfig): (() => Promise<void>) | unde
     // Local-only tracing does not need the external exporter and its transports.
     const { OTLPTraceExporter } =
       require('@opentelemetry/exporter-trace-otlp-http') as typeof import('@opentelemetry/exporter-trace-otlp-http');
-    const exporter = new OTLPTraceExporter({ url: config.endpoint });
+    const exporter = trackLocalOtlpExports(new OTLPTraceExporter({ url: config.endpoint }));
     spanProcessors.push(new BatchSpanProcessor(exporter));
     logger.debug(`[OtelSdk] Added OTLP exporter to ${config.endpoint}`);
   }
