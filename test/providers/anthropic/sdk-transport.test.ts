@@ -530,6 +530,37 @@ describe('Anthropic Messages SDK transport', () => {
     expect(requests[0].traceparent).toBe(configured);
   });
 
+  it.each([false, true])(
+    "keeps trace context headers that a prompt's config sets when the SDK's spans are on (stream: %s)",
+    async (stream) => {
+      const configured = '00-11111111111111111111111111111111-2222222222222222-01';
+      const { provider, requests, spans } = await callProvider(
+        { openTelemetry: true, stream },
+        {
+          callContext: {
+            ...tracedCall,
+            prompt: {
+              ...tracedCall.prompt,
+              config: { headers: { traceparent: configured, tracestate: 'vendor=prompt' } },
+            },
+          },
+        },
+      );
+
+      expect(sdkSpanOf(spans)).toBeDefined();
+      expect(requests[0]).toMatchObject({ traceparent: configured, tracestate: 'vendor=prompt' });
+
+      // A prompt that sets none still gets the SDK's span context from the same provider.
+      exporter.reset();
+      await provider.callApi('ping', tracedCall);
+      await tracerProvider.forceFlush();
+      expect(requests[1].traceparent).toBe(
+        traceparentOf(sdkSpanOf(exporter.getFinishedSpans())!.spanContext()),
+      );
+      expect(requests[1].tracestate).toBeUndefined();
+    },
+  );
+
   it('sends the trace context of the default Anthropic rubric grader', async () => {
     const { baseUrl, requests } = await createMessagesServer({});
     const grader = new AnthropicLlmRubricProvider('claude-sonnet-4-6', {

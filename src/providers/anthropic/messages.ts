@@ -464,6 +464,7 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
     responses: Anthropic.Messages.Message[],
     signal?: AbortSignal,
   ): Promise<Anthropic.Messages.Message> {
+    const client = this.clientForHeaders(headers);
     const requestOptions = {
       ...(Object.keys(headers).length > 0 && { headers }),
       ...(signal && { signal }),
@@ -473,9 +474,9 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
       requestParams = withTurnContainer(requestParams, responses);
       const message = shouldStream
         ? await finalMessageWithStreamedStopDetails(
-            await this.anthropic.messages.stream(requestParams, requestOptions),
+            await client.messages.stream(requestParams, requestOptions),
           )
-        : ((await this.anthropic.messages.create(
+        : ((await client.messages.create(
             requestParams,
             requestOptions,
           )) as Anthropic.Messages.Message);

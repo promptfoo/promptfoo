@@ -327,6 +327,8 @@ export class AnthropicGenericProvider implements ApiProvider {
   protected readonly propagatesTraceContext: boolean;
   /** Whether the SDK sends its own span's trace context (see `withoutApplicationBaggage`). */
   private readonly sdkPropagatesTraceContext: boolean;
+  /** `anthropic` without trace context propagation (see `clientForHeaders`). */
+  private anthropicWithoutPropagation?: Anthropic;
   private readonly clientHasCustomHeaders: boolean;
   private readonly ephemeralCacheNamespace = randomUUID();
   private readonly ephemeralResponseCache = new Map<
@@ -464,6 +466,21 @@ export class AnthropicGenericProvider implements ApiProvider {
     return this.sdkPropagatesTraceContext
       ? otelContext.with(propagation.deleteBaggage(otelContext.active()), call)
       : call();
+  }
+
+  /**
+   * The client for a request with `headers`. While the SDK sends trace context, a request whose
+   * headers set it, such as from a prompt's `config.headers`, goes through a copy of the client
+   * that does not, so its headers go out as set and the SDK still records its spans.
+   */
+  protected clientForHeaders(headers: Record<string, string>): Anthropic {
+    if (!this.sdkPropagatesTraceContext || !hasHeader(headers, TRACE_CONTEXT_HEADERS)) {
+      return this.anthropic;
+    }
+    this.anthropicWithoutPropagation ??= this.anthropic.withOptions({
+      openTelemetry: { ...this.anthropic.openTelemetry, propagation: false },
+    });
+    return this.anthropicWithoutPropagation;
   }
 
   id(): string {
