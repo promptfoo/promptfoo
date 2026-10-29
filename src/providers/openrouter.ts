@@ -240,6 +240,7 @@ export class OpenRouterProvider extends OpenAiChatCompletionProvider {
     let status: number;
     let statusText: string;
     let cached = false;
+    let latencyMs: number | undefined;
     let deleteFromCache: (() => Promise<void>) | undefined;
     let responseHeaders: Record<string, string> | undefined;
 
@@ -247,6 +248,7 @@ export class OpenRouterProvider extends OpenAiChatCompletionProvider {
       ({
         data,
         cached,
+        latencyMs,
         status,
         statusText,
         deleteFromCache,
@@ -525,6 +527,7 @@ export class OpenRouterProvider extends OpenAiChatCompletionProvider {
       cached,
       cost: this.calculateResponseCost(data, config),
       metadata: getOpenRouterBillingMetadata(data),
+      ...(latencyMs !== undefined && { latencyMs }),
       ...(finishReason && { finishReason }),
     };
   }
