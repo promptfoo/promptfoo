@@ -954,6 +954,7 @@ async function runRedteamConversation({
           // Track the transformed prompt for the best scoring turn (e.g., fetchPrompt)
           bestFinalAttackPrompt = finalInjectVar;
           bestTransformDisplayVars = lastTransformDisplayVars;
+          noImprovementCount = 0;
           logger.debug(`[Depth ${depth}, Attempt ${attempts}] New max score: ${maxScore}`);
         } else if (score > bestScore) {
           bestScore = score;
