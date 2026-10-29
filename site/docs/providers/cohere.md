@@ -79,6 +79,8 @@ providers:
 Cohere chat requests bypass Promptfoo’s local response cache. Repeated evals call the API again,
 even when caching is enabled, and may incur additional charges.
 
+For v1 responses, token usage includes `meta.tokens` (or `meta.billed_units` when raw token counts are unavailable). Legacy endpoints that return `token_count` retain their existing usage mapping.
+
 ## Control over prompting
 
 By default, a regular string prompt is wrapped in the appropriate chat format. Command A+ and North
