@@ -5,6 +5,7 @@ import { assertionUsesTrace, runAssertion, runAssertions } from '../../src/asser
 import cliState from '../../src/cliState';
 import { withProviderCallTracingContext } from '../../src/scheduler/providerCallExecutionContext';
 import { getTraceStore } from '../../src/tracing/store';
+import { AssertionSchema } from '../../src/types/index';
 import { mockProcessEnv } from '../util/utils';
 
 import type {
@@ -135,6 +136,28 @@ describe('trace assertions', () => {
       },
     ],
   };
+
+  describe.each(['trajectory:tool-used', 'trajectory:step-count'] as const)(
+    '%s count validation through runAssertion',
+    (baseType) => {
+      it.each([false, true])('rejects invalid bounds with inverse=%s', async (inverse) => {
+        const assertion = AssertionSchema.parse({
+          type: inverse ? `not-${baseType}` : baseType,
+          value: { pattern: '*', min: 0, max: 'invalid' },
+        });
+
+        await expect(
+          runAssertion({
+            assertion,
+            test: mockTest,
+            providerResponse: mockProviderResponse,
+            traceId: mockTraceData.traceId,
+            traceData: mockTraceData,
+          }),
+        ).rejects.toThrow(`${baseType} assertion max must be a finite, non-negative integer`);
+      });
+    },
+  );
 
   describe('deterministic assertions with span attribute filters', () => {
     it.each<{ assertion: Assertion; pass: boolean }>([

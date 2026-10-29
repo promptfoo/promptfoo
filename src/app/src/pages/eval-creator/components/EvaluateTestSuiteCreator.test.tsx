@@ -301,6 +301,19 @@ describe('EvaluateTestSuiteCreator', () => {
     expect(screen.getByRole('button', { name: 'Test Cases: 1 ready' })).toBeInTheDocument();
   });
 
+  it('does not mark invalid trajectory count bounds ready to run', () => {
+    useStore.getState().updateConfig({
+      providers: ['echo'],
+      prompts: ['Use a tool'],
+      tests: [{ assert: [{ type: 'trajectory:step-count', value: { max: 1.5 } }] }],
+    });
+
+    render(<EvaluateTestSuiteCreator />);
+
+    expect(screen.queryByText('Ready to run')).not.toBeInTheDocument();
+    expect(screen.getByText(/whole numbers, 0 or greater/)).toBeInTheDocument();
+  });
+
   it('should let users jump between required steps from the progress summary', async () => {
     render(<EvaluateTestSuiteCreator />);
 
