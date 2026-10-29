@@ -87,6 +87,8 @@ The `scenarios` configuration is an array of `Scenario` objects. Each `Scenario`
 - `config`: an array of `vars` objects. Each `vars` object represents a set of variables that will be passed to the tests.
 - `tests`: an array of `TestCase` objects. These are the tests that will be run for each set of variables in the `config`.
 
+`--filter-metadata` matches metadata merged from `defaultTest`, each scenario `config` entry, and the test, with later values overriding earlier ones. It runs before `--filter-pattern`, `--filter-first-n`, and `--filter-sample` for each config entry.
+
 Here is the structure of a `Scenario`:
 
 | Property    | Type                  | Required | Description                                                        |
