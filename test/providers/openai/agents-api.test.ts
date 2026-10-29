@@ -862,6 +862,7 @@ describe('OpenAiAgentsApiProvider', () => {
               attributes: [
                 { key: 'gen_ai.operation.name', value: { stringValue: 'execute_tool' } },
                 { key: 'gen_ai.tool.name', value: { stringValue: 'lookup' } },
+                { key: 'gen_ai.tool.call.arguments', value: { stringValue: '{"order_id":"123"}' } },
               ],
             };
             spans.push(tool);
@@ -870,7 +871,10 @@ describe('OpenAiAgentsApiProvider', () => {
         });
 
         const pending = provider({
-          hostedTrace: { timeoutMs: outcome === 'provider deadline' ? 75 : 25 },
+          hostedTrace: {
+            includeToolArguments: true,
+            timeoutMs: outcome === 'provider deadline' ? 75 : 25,
+          },
           timeoutMs: outcome === 'provider deadline' ? 25 : 100,
           pollIntervalMs: 10,
         }).callApi('hi', row, { abortSignal: controller.signal });
@@ -890,13 +894,20 @@ describe('OpenAiAgentsApiProvider', () => {
           if (expectPartial) {
             expect(result.metadata?.hostedTrace).toMatchObject({
               status: 'partial',
+              includeToolArguments: true,
+              toolArgumentsComplete: false,
               spanCount: 2,
               parentSpanId: wrapperId,
             });
             expect(addSpans).toHaveBeenCalledOnce();
             expect(addSpans).toHaveBeenCalledWith(
               localTraceId,
-              expect.arrayContaining([expect.objectContaining({ name: 'execute_tool lookup' })]),
+              expect.arrayContaining([
+                expect.objectContaining({
+                  name: 'execute_tool lookup',
+                  attributes: expect.objectContaining({ 'tool.arguments': '{"order_id":"123"}' }),
+                }),
+              ]),
               { abortSignal: expect.any(AbortSignal), deadline: expect.any(Number) },
             );
           } else {
