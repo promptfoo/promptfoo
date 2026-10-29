@@ -432,6 +432,7 @@ export async function generateTraceContextIfNeeded(
       testCaseId: testCaseId || '',
       metadata: {
         testCaseSpanId: spanId,
+        localBodyAttributeLossTracked: true,
         ...(testCaseSpanAttributeKeys && { testCaseSpanAttributeKeys }),
         testIdx,
         promptIdx,

@@ -1,6 +1,8 @@
 import { ExportResultCode } from '@opentelemetry/core';
+import { BatchSpanProcessor, NodeTracerProvider } from '@opentelemetry/sdk-trace-node';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { LocalSpanExporter } from '../../src/tracing/localSpanExporter';
+import { createDeferred } from '../util/utils';
 import type { ReadableSpan } from '@opentelemetry/sdk-trace-node';
 
 // Mock the store module
@@ -345,4 +347,38 @@ describe('LocalSpanExporter', () => {
       await expect(exporter.forceFlush()).resolves.toBeUndefined();
     });
   });
+
+  it.each(['forceFlush', 'shutdown'] as const)(
+    'waits for an already dispatched batch on %s',
+    async (method) => {
+      const started = createDeferred<void>();
+      const write = createDeferred<{ stored: boolean }>();
+      mockAddSpans.mockImplementationOnce(() => {
+        started.resolve();
+        return write.promise;
+      });
+      const provider = new NodeTracerProvider({
+        spanProcessors: [
+          new BatchSpanProcessor(exporter, { maxQueueSize: 1, maxExportBatchSize: 1 }),
+        ],
+      });
+      provider.getTracer('test').startSpan('already-dispatched').end();
+      try {
+        await started.promise;
+        // Once the processor dispatches a batch, it is absent from its flush queue.
+        const drained = vi.fn();
+        const pending = (method === 'shutdown' ? provider.shutdown() : exporter.forceFlush()).then(
+          drained,
+        );
+        await new Promise<void>((resolve) => setImmediate(resolve));
+        expect(drained).not.toHaveBeenCalled();
+        write.resolve({ stored: true });
+        await pending;
+        expect(drained).toHaveBeenCalledOnce();
+      } finally {
+        write.resolve({ stored: true });
+        await provider.shutdown();
+      }
+    },
+  );
 });

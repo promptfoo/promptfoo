@@ -2,6 +2,7 @@ import {
   COMMAND_ATTRIBUTE_KEYS,
   getFirstStringAttribute,
   getToolNameFromAttributes,
+  HOSTED_START_TIME_OFFSET_NS,
   SEARCH_ATTRIBUTE_KEYS,
   TOOL_ARGUMENT_ATTRIBUTE_KEYS,
 } from '../tracing/toolAttributes';
@@ -373,6 +374,14 @@ function isMessageSpan(span: TraceSpan): boolean {
   return span.name === 'agent response' || span.name === 'send input';
 }
 
+function nativeStartOffsetNs(span: TraceSpan): number {
+  const offset = span.attributes?.[HOSTED_START_TIME_OFFSET_NS];
+  return typeof span.attributes?.['promptfoo.openai.hosted_trace'] === 'string' &&
+    Number.isSafeInteger(offset)
+    ? offset
+    : 0;
+}
+
 export function extractTrajectorySteps(trace: TraceData): TrajectoryStep[] {
   const commandToolNames = getTraceCommandToolNames(trace);
 
@@ -382,6 +391,11 @@ export function extractTrajectorySteps(trace: TraceData): TrajectoryStep[] {
       const timeDiff = left.span.startTime - right.span.startTime;
       if (timeDiff !== 0) {
         return timeDiff;
+      }
+
+      const offsetDiff = nativeStartOffsetNs(left.span) - nativeStartOffsetNs(right.span);
+      if (offsetDiff !== 0) {
+        return offsetDiff;
       }
 
       const endDiff =

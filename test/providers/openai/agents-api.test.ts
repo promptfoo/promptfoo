@@ -405,6 +405,32 @@ describe('OpenAiAgentsApiProvider', () => {
       expect(calls().some(({ pathname }) => pathname.endsWith('/content'))).toBe(false);
     });
 
+    it.each([false, true])(
+      'rejects duplicate artifact IDs before reading content (across pages: %s)',
+      async (acrossPages) => {
+        const otherPath = { ...artifact, path: '/workspace/outputs/other.bin' };
+        let reads = 0;
+        mockApi((pathname) => {
+          if (pathname === endpoint) {
+            reads++;
+            if (!acrossPages) {
+              return json(page([otherPath, artifact]));
+            }
+            return reads === 1
+              ? json(page([otherPath], true, artifact.id))
+              : json(page([artifact]));
+          }
+          return pathname.endsWith('/content') ? new Response('example') : undefined;
+        });
+        const result = await provider({ artifactPaths: [path] }).callApi('hi');
+        expect(result.metadata).toMatchObject({
+          artifacts: [{ path, status: 'unavailable' }],
+          sessionDeleted: true,
+        });
+        expect(calls().some(({ pathname }) => pathname.endsWith('/content'))).toBe(false);
+      },
+    );
+
     it.each([
       { field: 'session', data: [{ ...artifact, session_id: undefined }], status: 'unavailable' },
       { field: 'relative path', data: [{ ...artifact, path: 'other' }], status: 'unavailable' },
@@ -635,9 +661,11 @@ describe('OpenAiAgentsApiProvider', () => {
             return json({ data: [{ id: 'other-turn', session_id: session.id }], has_more: true });
           }
           if (after === 'other-turn') {
-            return json(page([{ id: turn.id, session_id: 'other-session' }], true, turn.id));
+            return json(
+              page([{ id: 'foreign-turn', session_id: 'other-session' }], true, 'foreign-turn'),
+            );
           }
-          expect(after).toBe(turn.id);
+          expect(after).toBe('foreign-turn');
           return json(page([published()]));
         }
         if (options?.method === 'DELETE') {
@@ -688,6 +716,52 @@ describe('OpenAiAgentsApiProvider', () => {
       expect(pages).toBe(1);
       expect(addSpans).not.toHaveBeenCalled();
     });
+
+    it.each([false, true])(
+      'rejects duplicate trace IDs before storing spans (across pages: %s)',
+      async (acrossPages) => {
+        recordWrapper();
+        const addSpans = vi.spyOn(getTraceStore(), 'addSpans').mockResolvedValue({ stored: true });
+        const valid = published();
+        const otherSession = { ...valid, session_id: 'other-session' };
+        let reads = 0;
+        mockApi((pathname) => {
+          if (!pathname.endsWith('/traces')) {
+            return undefined;
+          }
+          reads++;
+          if (!acrossPages) {
+            return json(page([otherSession, valid]));
+          }
+          return reads === 1 ? json(page([otherSession], true, valid.id)) : json(page([valid]));
+        });
+        const result = await provider({ hostedTrace: true }).callApi('hi', row);
+        expect(result.metadata).toMatchObject({
+          hostedTrace: { status: 'unavailable' },
+          sessionDeleted: true,
+        });
+        expect(addSpans).not.toHaveBeenCalled();
+      },
+    );
+
+    it.each([
+      { owner: session.id, expected: 'unavailable' },
+      { owner: 'other-session', expected: 'imported' },
+    ])(
+      'checks ownership before ignoring a missing trace ID ($owner)',
+      async ({ owner, expected }) => {
+        recordWrapper();
+        const addSpans = vi.spyOn(getTraceStore(), 'addSpans').mockResolvedValue({ stored: true });
+        const records = [published(), { session_id: owner }];
+        mockApi((pathname) => (pathname.endsWith('/traces') ? json(page(records)) : undefined));
+        const result = await provider({ hostedTrace: true }).callApi('hi', row);
+        expect(result.metadata).toMatchObject({
+          hostedTrace: { status: expected },
+          sessionDeleted: true,
+        });
+        expect(addSpans).toHaveBeenCalledTimes(expected === 'imported' ? 1 : 0);
+      },
+    );
 
     it.each(['parent arrives', 'parent absent', 'cycle', 'duplicate'])(
       'polls only repairable disconnected snapshots (%s)',

@@ -11,6 +11,8 @@ const MISSING_TRACE_RETRY_DELAY_MS = 50;
  * This allows OTEL spans to be stored locally for analysis in the promptfoo UI.
  */
 export class LocalSpanExporter implements SpanExporter {
+  private readonly pendingExports = new Set<Promise<void>>();
+
   /**
    * Export spans to the local TraceStore.
    * Spans are grouped by trace ID and inserted into the database.
@@ -117,7 +119,7 @@ export class LocalSpanExporter implements SpanExporter {
       return firstError;
     };
 
-    exportAsync()
+    const pending = exportAsync()
       .then((error) => {
         if (error) {
           // An error occurred during export
@@ -135,21 +137,23 @@ export class LocalSpanExporter implements SpanExporter {
           code: ExportResultCode.FAILED,
           error: error instanceof Error ? error : new Error(String(error)),
         });
-      });
+      })
+      .finally(() => this.pendingExports.delete(pending));
+    this.pendingExports.add(pending);
   }
 
   /**
-   * Shutdown the exporter. No-op for local storage.
+   * Wait for local writes that the span processor already dispatched.
    */
   shutdown(): Promise<void> {
     logger.debug('[LocalSpanExporter] Shutting down');
-    return Promise.resolve();
+    return this.forceFlush();
   }
 
   /**
-   * Force flush any pending spans. No-op as we export immediately.
+   * Wait for the batches submitted before this flush.
    */
-  forceFlush(): Promise<void> {
-    return Promise.resolve();
+  async forceFlush(): Promise<void> {
+    await Promise.all(this.pendingExports);
   }
 }

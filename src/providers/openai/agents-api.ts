@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto';
 import logger from '../../logger';
 import { runProviderCallWithAbort } from '../../scheduler/providerCallExecutionContext';
 import { getOtelConfigFromEnv } from '../../tracing/otelConfig';
-import { HOSTED_ERROR_STATUS_COMPLETE } from '../../tracing/spanError';
+import { HOSTED_ERROR_STATUS_COMPLETE, HOSTED_ERROR_STATUS_VERSION } from '../../tracing/spanError';
 import { getTraceStore } from '../../tracing/store';
 import { CloudAuthRedirectError } from '../../util/fetch/cloudAuthRedirects';
 import { fetchWithRetries, readBoundedText } from '../../util/fetch/index';
@@ -454,6 +454,19 @@ function identifiesAnother(value: unknown, expected: string): boolean {
   return isResourceId(value) && value !== expected;
 }
 
+function assertUniqueEvidenceIds(items: { id?: unknown }[]): void {
+  const seen = new Set<string>();
+  for (const item of items) {
+    const id = item?.id;
+    if (isResourceId(id)) {
+      if (seen.has(id)) {
+        throw new Error('Agents API returned duplicate evidence resource IDs');
+      }
+      seen.add(id);
+    }
+  }
+}
+
 /** Render only strings that reference test vars, preserving literal braces in commands and code. */
 function renderConfigTemplates(
   value: unknown,
@@ -705,6 +718,10 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
       this.listBytePeaks.set(endpoint, Math.max(previousBytePeak, bytes));
       items.push(...page.data);
       if (!page.has_more) {
+        if (requirePageInfo) {
+          // One immutable file or trace must not be credited with another record's contents.
+          assertUniqueEvidenceIds(items);
+        }
         return items;
       }
       let cursor = page.last_id;
@@ -1296,10 +1313,20 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
           traceSignal,
           { pageSize: 1, requirePageInfo: true },
         );
-        const published = traces.find(
-          (trace) => trace.id === turnId && trace.session_id === sessionId,
+        const candidates = traces.filter(
+          (trace) =>
+            !identifiesAnother(trace?.id, turnId) &&
+            !identifiesAnother(trace?.session_id, sessionId),
         );
-        if (published) {
+        if (candidates.length) {
+          const [published] = candidates;
+          if (
+            candidates.length !== 1 ||
+            published?.id !== turnId ||
+            published.session_id !== sessionId
+          ) {
+            return unavailable('Unable to identify a unique hosted trace for this root turn');
+          }
           try {
             snapshot = normalizeHostedTrace(
               published.otlp,
@@ -1395,7 +1422,8 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
       parentSpanId: parent.spanId,
       spanCount: spans.length,
       errorStatusComplete: spans.every(
-        ({ attributes }) => attributes?.[HOSTED_ERROR_STATUS_COMPLETE] === true,
+        ({ attributes }) =>
+          attributes?.[HOSTED_ERROR_STATUS_COMPLETE] === HOSTED_ERROR_STATUS_VERSION,
       ),
       includeToolArguments,
       toolArgumentsComplete,

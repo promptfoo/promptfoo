@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { extractTrajectorySteps } from '../../../src/assertions/trajectoryUtils';
 import cliState from '../../../src/cliState';
 import { normalizeHostedTrace } from '../../../src/providers/openai/agents-api-trace-spans';
 
@@ -90,6 +91,41 @@ describe('normalizeHostedTrace', () => {
     expect(other.every((span) => spans.every((s) => s.spanId !== span.spanId))).toBe(true);
   });
 
+  it.each([
+    ['1699999999999999999', '1700000000000000000'],
+    ['1700000000000000001', '1700000000000000002'],
+    [9007199254740961, 9007199254740962],
+  ])('orders overlapping calls by native starts %s and %s', (firstStart, secondStart) => {
+    const first = {
+      ...nativeSpan('aaaaaaaaaaaaaaaa', 'execute_tool', root.spanId),
+      startTimeUnixNano: firstStart,
+      endTimeUnixNano: '1700000000020000000',
+      attributes: [
+        attribute('gen_ai.operation.name', 'execute_tool'),
+        attribute('gen_ai.tool.name', 'first'),
+      ],
+    };
+    const second = {
+      ...first,
+      spanId: 'bbbbbbbbbbbbbbbb',
+      startTimeUnixNano: secondStart,
+      endTimeUnixNano: '1700000000010000000',
+      attributes: [
+        attribute('gen_ai.operation.name', 'execute_tool'),
+        attribute('gen_ai.tool.name', 'second'),
+      ],
+    };
+    const { spans } = normalizeHostedTrace(payload(root, second, first), parentId, false);
+    expect(spans[1].startTime).toBe(spans[2].startTime);
+    const steps = extractTrajectorySteps({
+      spans,
+      traceId,
+      evaluationId: 'eval',
+      testCaseId: 'row',
+    });
+    expect(steps.filter((s) => s.type === 'tool').map((s) => s.name)).toEqual(['first', 'second']);
+  });
+
   it('stores timings, status and tool identity without content or source span names', () => {
     const failedTool = {
       ...tool,
@@ -159,10 +195,61 @@ describe('normalizeHostedTrace', () => {
         s.attributes?.['promptfoo.openai.error_status_complete'],
       ]),
     ).toEqual([
-      ['invoke_agent', 2, true],
+      ['invoke_agent', 2, 'otlp-v2'],
       ['execute_tool lookup_order', 1, false],
       ['chat gpt-6-astra', 1, false],
     ]);
+  });
+
+  it('records only verified absent raw tool fields on chat and agent spans', () => {
+    const evidenceKey = 'promptfoo.openai.absent_tool_attributes';
+    const capture = (spanLoss = 0, resourceLoss = 0, redact: string[] = []) =>
+      normalizeHostedTrace(
+        {
+          resourceSpans: [
+            {
+              resource: {
+                attributes: [attribute('tool.arguments', 'private resource arguments')],
+                droppedAttributesCount: resourceLoss,
+              },
+              scopeSpans: [
+                {
+                  spans: [
+                    root,
+                    {
+                      ...model,
+                      droppedAttributesCount: spanLoss,
+                      attributes: [
+                        ...model.attributes,
+                        attribute('gen_ai.tool.name', 'private tool label'),
+                      ],
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+        parentId,
+        false,
+        undefined,
+        redact,
+      );
+    const { spans, complete } = capture();
+    expect(complete).toBe(true);
+    expect(spans[0].attributes?.[evidenceKey]).toEqual([
+      'gen_ai.tool.name',
+      'tool.name',
+      'gen_ai.tool.call.arguments',
+    ]);
+    expect(spans[1].attributes?.[evidenceKey]).toEqual(['tool.name', 'gen_ai.tool.call.arguments']);
+    expect(JSON.stringify(spans)).not.toMatch(/private tool label|private resource arguments/);
+    expect(capture(1).spans[1].attributes?.[evidenceKey]).toBeUndefined();
+    expect(capture(0, 1).spans[0].attributes?.[evidenceKey]).toBeUndefined();
+    expect(capture(0, 0, ['tool.name']).spans[1].attributes?.[evidenceKey]).toEqual([
+      'gen_ai.tool.call.arguments',
+    ]);
+    expect(capture(0, 0, [evidenceKey]).spans[1].attributes?.[evidenceKey]).toBeUndefined();
   });
 
   it('accepts a bare chat name only when the exporter could not have dropped its model', () => {
@@ -210,6 +297,33 @@ describe('normalizeHostedTrace', () => {
   });
 
   it.each([
+    { stringValue: '200', intValue: '503' },
+    { boolValue: 'false' },
+    { intValue: 'bad' },
+    { intValue: '9223372036854775808' },
+    { doubleValue: {} },
+    { kvlistValue: { values: [{ key: 'nested', value: { intValue: false } }] } },
+  ])(
+    'withholds error coverage for a malformed OTLP value but preserves observed failures',
+    (value) => {
+      const span = {
+        ...tool,
+        attributes: [...tool.attributes, { key: 'http.status_code', value }],
+      };
+      const normalized = (s: typeof span) =>
+        normalizeHostedTrace(payload(root, s), parentId, false).spans.find(
+          (saved) => saved.name === 'execute_tool lookup_order',
+        );
+      expect(normalized(span)).toMatchObject({
+        attributes: { 'promptfoo.openai.error_status_complete': false },
+      });
+      expect(normalized({ ...span, status: { code: 'ERROR', message: '' } })).toMatchObject({
+        statusCode: 2,
+      });
+    },
+  );
+
+  it.each([
     ['error', { boolValue: true }, 'UNSET', '', 2],
     ['http.status_code', { intValue: '500' }, 'UNSET', '', 2],
     ['failed', { stringValue: 'true' }, 'OK', '', 2],
@@ -244,6 +358,10 @@ describe('normalizeHostedTrace', () => {
   it.each([
     ['API key', 'AIza' + 'x'.repeat(35)],
     ['JWT', 'eyJfixture.payload.signature'],
+    ...['ghp_', 'gho_', 'ghu_', 'ghs_', 'ghr_', 'github_pat_', 'npm_'].map((prefix) => [
+      prefix,
+      prefix + 'x'.repeat(36),
+    ]),
   ])(
     'withholds tool and model identifiers containing an embedded %s even without argument capture',
     (_label, token) => {
@@ -271,8 +389,25 @@ describe('normalizeHostedTrace', () => {
     },
   );
 
+  it('withholds remote credentials in file and command arguments while keeping a safe sibling', () => {
+    const filename = 'receipt_npm_' + 'x'.repeat(36);
+    const command = ['cat', '/workspace/data_ghp_' + 'y'.repeat(36) + '.txt'];
+    const args = { filename, command, cwd: '/workspace' };
+    const { spans } = normalizeHostedTrace(
+      payload(root, toolWithArgs(JSON.stringify(args))),
+      parentId,
+      true,
+    );
+    const attrs = spans[1].attributes!;
+    expect(JSON.parse(attrs['tool.arguments'])).toEqual({ cwd: '/workspace' });
+    expect(attrs['gen_ai.tool.call.arguments']).toBe(attrs['tool.arguments']);
+    expect(attrs['promptfoo.tool.arguments_redacted']).toBe(true);
+    expect(JSON.stringify(spans)).not.toMatch(/npm_|ghp_/);
+  });
+
   it.each([
     'vendor/model',
+    'vendor/npm_package_registry_metadata',
     'organization/vendor-very-long-but-human-readable-model-name-2026-10-20-0000003',
   ])('preserves safe model ID %s in attributes and span names', (id) => {
     const chat = {
@@ -553,6 +688,168 @@ describe('normalizeHostedTrace', () => {
     await expect(importWithRedaction('gen_ai.tool.name')).rejects.toThrow();
   });
 
+  describe('protected attribute echoes', () => {
+    const protectedKey = 'org.private_tenant';
+    const tenant = 'tenant_42';
+
+    function callNamed(name: string, ...attributes: object[]) {
+      return {
+        ...tool,
+        attributes: [
+          attribute('gen_ai.operation.name', 'execute_tool'),
+          attribute('gen_ai.tool.name', name),
+          ...attributes,
+        ],
+      };
+    }
+
+    function importProtected(spans: object[], capture: boolean, resourceAttributes: object[] = []) {
+      return normalizeHostedTrace(
+        {
+          resourceSpans: [
+            { resource: { attributes: resourceAttributes }, scopeSpans: [{ spans }] },
+          ],
+        },
+        parentId,
+        capture,
+        undefined,
+        [protectedKey],
+      );
+    }
+
+    it.each([false, true])('withholds tool name echoes with capture set to %s', (capture) => {
+      for (const [name, value] of [
+        ['read_tenant_42', { stringValue: tenant }],
+        ['read_7', { intValue: '7' }],
+        ['read_7', { intValue: '0007' }],
+      ] as const) {
+        const call = callNamed(name, { key: protectedKey, value });
+        expect(() => importProtected([root, call], capture)).toThrow('Invalid hosted OTLP trace');
+      }
+    });
+
+    it('recognizes protected keys in a resource kvlist when constructing an inherited model name', () => {
+      const chat = nativeSpan(model.spanId, 'chat', root.spanId);
+      const resourceAttributes = [
+        {
+          key: 'labels',
+          value: {
+            arrayValue: {
+              values: [{ kvlistValue: { values: [attribute(protectedKey, tenant)] } }],
+            },
+          },
+        },
+        attribute('gen_ai.request.model', 'models/tenant_42'),
+      ];
+      expect(() => importProtected([root, chat], false, resourceAttributes)).toThrow(
+        'Invalid hosted OTLP trace',
+      );
+    });
+
+    it('keeps a tool name matching a kvlist field name rather than a protected leaf value', () => {
+      const attr = {
+        key: protectedKey,
+        value: { kvlistValue: { values: [attribute('filename', tenant)] } },
+      };
+      const raw = '{"filename":"report.csv"}';
+      const call = callNamed('read_filename', attr, attribute('gen_ai.tool.call.arguments', raw));
+      const { spans, complete } = importProtected([root, call], true);
+      expect(complete).toBe(true);
+      expect(spans[1]).toMatchObject({
+        name: 'execute_tool read_filename',
+        attributes: {
+          'tool.name': 'read_filename',
+          'tool.arguments': raw,
+          'gen_ai.tool.call.arguments': raw,
+        },
+      });
+    });
+
+    it.each([false, true])(
+      'checks identities against protected argument fields with capture set to %s',
+      (capture) => {
+        const raw = JSON.stringify({ metadata: [{ [protectedKey]: tenant }] });
+        const call = callNamed('read_tenant_42', attribute('gen_ai.tool.call.arguments', raw));
+        expect(() => importProtected([root, call], capture)).toThrow('Invalid hosted OTLP trace');
+      },
+    );
+
+    it.each(['wire attribute', 'nested tool argument'])(
+      'removes echoed paths and commands sourced from a %s',
+      (source) => {
+        const args = {
+          ...(source === 'nested tool argument' && { metadata: [{ [protectedKey]: tenant }] }),
+          path: 'tenant_42.csv',
+          cmd: ['cat', 'tenant_42.csv'],
+          limit: 3,
+        };
+        const call = callNamed(
+          'lookup_order',
+          attribute('gen_ai.tool.call.arguments', JSON.stringify(args)),
+          ...(source === 'wire attribute' ? [attribute(protectedKey, tenant)] : []),
+        );
+        const { spans } = importProtected([root, call], true);
+        const attrs = spans[1].attributes!;
+        expect(JSON.parse(attrs['tool.arguments'])).toEqual({ limit: 3 });
+        expect(attrs['gen_ai.tool.call.arguments']).toBe(attrs['tool.arguments']);
+        expect(attrs['promptfoo.tool.arguments_redacted']).toBe(true);
+        expect(JSON.stringify(spans)).not.toContain(tenant);
+      },
+    );
+
+    it('checks the emitted argument spelling for echoes as well as its decoded values', () => {
+      const raw = '{"limit":4.17e2}';
+      const call = callNamed(
+        'lookup_order',
+        attribute(protectedKey, '4.17e2'),
+        attribute('gen_ai.tool.call.arguments', raw),
+      );
+      const { spans } = importProtected([root, call], true);
+      const attrs = spans[1].attributes!;
+      expect(attrs['tool.arguments']).toBeUndefined();
+      expect(attrs['gen_ai.tool.call.arguments']).toBeUndefined();
+      expect(attrs['promptfoo.tool.arguments_redacted']).toBe(true);
+    });
+
+    it('withholds the identity when a duplicate protected JSON key could conceal its source', () => {
+      for (const values of [
+        [tenant, 'other'],
+        ['other', tenant],
+      ]) {
+        const raw = `{"${protectedKey}":"${values[0]}","${protectedKey}":"${values[1]}"}`;
+        const call = callNamed('read_tenant_42', attribute('gen_ai.tool.call.arguments', raw));
+        expect(() => importProtected([root, call], false)).toThrow('Invalid hosted OTLP trace');
+      }
+    });
+
+    it('withholds an echo regardless of when the protected span appears in the snapshot', () => {
+      const call = callNamed('read_tenant_42');
+      const source = {
+        ...model,
+        attributes: [...model.attributes, attribute(protectedKey, tenant)],
+      };
+      for (const siblings of [
+        [call, source],
+        [source, call],
+      ]) {
+        expect(() => importProtected([root, ...siblings], false)).toThrow(
+          'Invalid hosted OTLP trace',
+        );
+      }
+    });
+
+    it('withholds the snapshot when the protected-value budget is exhausted', () => {
+      const values = Array.from({ length: 129 }, (_, index) => ({
+        stringValue: `fixture_${index}`,
+      }));
+      const call = callNamed('lookup_order', {
+        key: protectedKey,
+        value: { arrayValue: { values } },
+      });
+      expect(() => importProtected([root, call], false)).toThrow('Invalid hosted OTLP trace');
+    });
+  });
+
   it.each(['null', undefined])('omits unavailable native arguments (%s)', (raw) => {
     const { spans } = normalizeHostedTrace(payload(root, toolWithArgs(raw)), parentId, true);
     const attrs = spans.find((span) => span.attributes?.['tool.name'] === 'lookup_order')!
@@ -592,6 +889,43 @@ describe('normalizeHostedTrace', () => {
     expect(normalizeHostedTrace(payload(...encoded), parentId, false)).toEqual(
       normalizeHostedTrace(payload(root, tool), parentId, false),
     );
+  });
+
+  describe('OTLP repeated fields', () => {
+    it.each([
+      { description: 'resourceSpans', wire: {} },
+      { description: 'scopeSpans', wire: { resourceSpans: [{}] } },
+      { description: 'spans', wire: { resourceSpans: [{ scopeSpans: [{}] }] } },
+    ])('treats omitted $description as unpublished', ({ wire }) => {
+      expect(normalizeHostedTrace(wire, parentId, false)).toEqual({ spans: [], complete: false });
+    });
+
+    it('imports a populated scope alongside empty resource and scope groups', () => {
+      const wire = { resourceSpans: [{}, { scopeSpans: [{}, { spans: [root, tool] }, {}] }] };
+      expect(normalizeHostedTrace(wire, parentId, false)).toEqual(
+        normalizeHostedTrace(payload(root, tool), parentId, false),
+      );
+    });
+
+    it.each([
+      ['root', (value: unknown) => value],
+      ['resource group', (value: unknown) => ({ resourceSpans: [value] })],
+      ['scope group', (value: unknown) => ({ resourceSpans: [{ scopeSpans: [value] }] })],
+    ] as const)('requires the %s to be an object', (_description, wire) => {
+      for (const malformed of [null, [], 'unexpected']) {
+        expect(() => normalizeHostedTrace(wire(malformed), parentId, false)).toThrow();
+      }
+    });
+
+    it.each([
+      ['resourceSpans', (value: unknown) => ({ resourceSpans: value })],
+      ['scopeSpans', (value: unknown) => ({ resourceSpans: [{ scopeSpans: value }] })],
+      ['spans', (value: unknown) => ({ resourceSpans: [{ scopeSpans: [{ spans: value }] }] })],
+    ] as const)('rejects an invalid or oversized %s collection', (_description, wire) => {
+      for (const malformed of [null, {}, 'unexpected', Array(1_001).fill({})]) {
+        expect(() => normalizeHostedTrace(wire(malformed), parentId, false)).toThrow();
+      }
+    });
   });
 
   it.each([

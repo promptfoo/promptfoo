@@ -1,4 +1,5 @@
 export const HOSTED_ERROR_STATUS_COMPLETE = 'promptfoo.openai.error_status_complete';
+export const HOSTED_ERROR_STATUS_VERSION = 'otlp-v2';
 
 /** Classify a span before persisting, or from its decoded trace attributes during grading. */
 export function isSpanError(

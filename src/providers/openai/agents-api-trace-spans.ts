@@ -3,9 +3,20 @@ import { createHash } from 'node:crypto';
 import { tokenizer, tokTypes } from 'acorn';
 import { z } from 'zod';
 import cliState from '../../cliState';
-import { HOSTED_ERROR_STATUS_COMPLETE, isSpanError } from '../../tracing/spanError';
-import { HOSTED_CHAT_MODEL_ABSENT, hasUncertainHostedChatName } from '../../tracing/spanFilter';
-import { getNormalizedToolAttributes } from '../../tracing/toolAttributes';
+import {
+  HOSTED_ERROR_STATUS_COMPLETE,
+  HOSTED_ERROR_STATUS_VERSION,
+  isSpanError,
+} from '../../tracing/spanError';
+import {
+  HOSTED_ABSENT_TOOL_ATTRIBUTES,
+  HOSTED_CHAT_MODEL_ABSENT,
+  hasUncertainHostedChatName,
+} from '../../tracing/spanFilter';
+import {
+  getNormalizedToolAttributes,
+  HOSTED_START_TIME_OFFSET_NS,
+} from '../../tracing/toolAttributes';
 import { isCredentialHeader, isSecretEnvVarName } from '../../util/sanitizer';
 import {
   hasRecognizableOpenAiCredential,
@@ -64,6 +75,88 @@ function invalid(): never {
   throw new Error('Invalid hosted OTLP trace');
 }
 
+function validInt64(value: unknown): boolean {
+  if (typeof value === 'number') {
+    return Number.isSafeInteger(value);
+  }
+  if (typeof value !== 'string' || !/^-?\d{1,19}$/.test(value)) {
+    return false;
+  }
+  const integer = BigInt(value);
+  return integer >= -(2n ** 63n) && integer < 2n ** 63n;
+}
+
+const scalarWireTypes = new Map<string, z.ZodType>([
+  ['stringValue', z.string()],
+  ['boolValue', z.boolean()],
+  ['intValue', z.custom(validInt64)],
+  ['doubleValue', z.union([z.number(), z.enum(['NaN', 'Infinity', '-Infinity'])])],
+  [
+    'bytesValue',
+    z.string().regex(/^(?:[a-z\d+/_-]{4})*(?:[a-z\d+/_-]{2}(?:==)?|[a-z\d+/_-]{3}=?)?$/i),
+  ],
+]);
+
+// Validate only values used as evidence or for redaction. Inspect compounds iteratively
+// so an untrusted nested diagnostic cannot overflow the stack or exhaust the grading budget.
+function isValidWireValue(value: unknown): boolean {
+  const pending = [value];
+  let remaining = MAX_TRACE_ARGUMENT_VALUES;
+  while (pending.length) {
+    const item = pending.pop();
+    if (!item || typeof item !== 'object' || Array.isArray(item) || --remaining < 0) {
+      return false;
+    }
+    const entries = Object.entries(item);
+    if (!entries.length) {
+      continue; // OTLP permits an empty AnyValue.
+    }
+    if (entries.length !== 1) {
+      return false;
+    }
+    const [[type, data]] = entries;
+    const scalar = scalarWireTypes.get(type);
+    if (scalar) {
+      if (!scalar.safeParse(data).success) {
+        return false;
+      }
+      continue;
+    }
+    if (
+      (type !== 'arrayValue' && type !== 'kvlistValue') ||
+      !data ||
+      typeof data !== 'object' ||
+      Array.isArray(data) ||
+      Object.keys(data).some((key) => key !== 'values')
+    ) {
+      return false;
+    }
+    const children = data.values ?? [];
+    if (!Array.isArray(children) || children.length > remaining - pending.length) {
+      return false;
+    }
+    if (type === 'arrayValue') {
+      pending.push(...children);
+    } else {
+      const keys = new Set<string>();
+      for (const pair of children) {
+        if (!pair || typeof pair.key !== 'string' || keys.has(pair.key)) {
+          return false;
+        }
+        keys.add(pair.key);
+        pending.push(pair.value);
+      }
+    }
+  }
+  return true;
+}
+
+function wireString(value: Record<string, unknown> | undefined): string | undefined {
+  return value && typeof value.stringValue === 'string' && Object.keys(value).length === 1
+    ? value.stringValue
+    : undefined;
+}
+
 function isComplete(wire: z.infer<typeof wireSpan>): boolean {
   const marker = wire.attributes?.find(
     ({ key }) => key === 'openai.managed_agents.trace.completeness',
@@ -72,7 +165,7 @@ function isComplete(wire: z.infer<typeof wireSpan>): boolean {
   if (!marker) {
     return false;
   }
-  const value = marker.value.stringValue;
+  const value = wireString(marker.value);
   if (typeof value !== 'string') {
     invalid();
   }
@@ -110,9 +203,16 @@ interface ImportPolicy {
   includeToolArguments: boolean;
   redact: Redact;
   redactAttributes: string[];
+  echoesProtectedValue: (text: string) => boolean;
+  errorValueValidity: WeakMap<object, boolean>;
   argumentBytesLeft: number;
   argumentValuesLeft: number;
 }
+
+type WireValue = {
+  arrayValue?: { values?: WireValue[] };
+  kvlistValue?: { values?: { key: string; value: WireValue }[] };
+} & Record<string, unknown>;
 
 function protectsKey(keys: string[], policy: ImportPolicy): boolean {
   return policy.redactAttributes.some((pattern) => keys.some((key) => key.includes(pattern)));
@@ -186,6 +286,134 @@ function roundTrips(raw: string, value: unknown, policy: ImportPolicy): boolean 
     }
   }
   return members === 0;
+}
+
+// Collect leaves before projecting any span. A resource, or a later span, can supply
+// the value echoed in a tool name. Protobuf field names and JSON object keys are labels.
+function protectedEchoMatcher(
+  records: {
+    wire: z.infer<typeof wireSpan>;
+    resource: { attributes: ReturnType<typeof attributeMap> };
+  }[],
+  policy: ImportPolicy,
+) {
+  const needles = new Set<string>();
+  const jsonBudget = { ...policy };
+  let nodesLeft = 32_768;
+  let needleBytes = 0;
+  // Bound both key matching and repeated searches in otherwise safe retained fields.
+  let workLeft = 8 * 1024 * 1024;
+  const chargeSearch = (text: string, count: number) => {
+    workLeft -= (1 + text.length) * count;
+    if (workLeft < 0) {
+      invalid();
+    }
+  };
+  const protectedKey = (key: string) => {
+    chargeSearch(key, policy.redactAttributes.length);
+    return protectsKey([key.toLowerCase()], policy);
+  };
+  function visit(depth: number) {
+    if (--nodesLeft < 0 || depth > 32) {
+      invalid();
+    }
+  }
+  function remember(value: unknown) {
+    if (value === null || value === undefined || value === '') {
+      return;
+    }
+    const text = String(value);
+    if (!needles.has(text)) {
+      if (
+        text.length > MAX_ARGUMENT_BYTES ||
+        (needleBytes += Buffer.byteLength(text)) > MAX_ARGUMENT_BYTES ||
+        needles.size >= 128
+      ) {
+        invalid();
+      }
+      needles.add(text);
+    }
+  }
+  function jsonLeaves(value: unknown, hidden: boolean, depth: number): void {
+    visit(depth);
+    if (Array.isArray(value)) {
+      for (const item of value) {
+        jsonLeaves(item, hidden, depth + 1);
+      }
+    } else if (value && typeof value === 'object') {
+      for (const [key, item] of Object.entries(value)) {
+        jsonLeaves(item, hidden || protectedKey(key), depth + 1);
+      }
+    } else if (hidden) {
+      remember(value);
+    }
+  }
+  function wireLeaves(value: WireValue, hidden: boolean, depth: number): void {
+    visit(depth);
+    if (value.arrayValue) {
+      for (const item of value.arrayValue.values ?? []) {
+        wireLeaves(item, hidden, depth + 1);
+      }
+    } else if (value.kvlistValue) {
+      for (const entry of value.kvlistValue.values ?? []) {
+        wireLeaves(entry.value, hidden || protectedKey(entry.key), depth + 1);
+      }
+    } else if (hidden) {
+      // Byte sequences have no unique textual interpretation for matching echoes.
+      if (value.bytesValue !== undefined) {
+        invalid();
+      }
+      remember(value.stringValue ?? value.boolValue ?? value.doubleValue ?? value.intValue);
+      if (typeof value.intValue === 'string') {
+        // Protobuf JSON accepts integer strings with leading zeros or a negative zero.
+        remember(BigInt(value.intValue).toString());
+      }
+    }
+  }
+  function collect(key: string, value: WireValue) {
+    const args = key === 'gen_ai.tool.call.arguments';
+    const hidden = protectedKey(key) || (args && protectedKey('tool.arguments'));
+    if (!isValidWireValue(value)) {
+      invalid();
+    }
+    wireLeaves(value, hidden, 0);
+    if (args && typeof value.stringValue === 'string') {
+      const raw = value.stringValue;
+      if (!reserveArgumentJson(raw, jsonBudget)) {
+        invalid();
+      }
+      try {
+        const parsed: unknown = JSON.parse(raw);
+        if (!roundTrips(raw, parsed, jsonBudget)) {
+          invalid();
+        }
+        jsonLeaves(parsed, hidden, 0);
+      } catch {
+        invalid();
+      }
+    }
+  }
+  const resources = new Set<ReturnType<typeof attributeMap>>();
+  for (const { wire, resource } of records) {
+    if (!resources.has(resource.attributes)) {
+      resources.add(resource.attributes);
+      for (const [key, value] of resource.attributes) {
+        collect(key, value);
+      }
+    }
+    for (const { key, value } of wire.attributes ?? []) {
+      collect(key, value);
+    }
+  }
+  return (text: string) => {
+    chargeSearch(text, needles.size);
+    for (const needle of needles) {
+      if (text.includes(needle)) {
+        return true;
+      }
+    }
+    return false;
+  };
 }
 
 // Tool and model identifiers may be namespaced with a colon. A credential-named
@@ -302,7 +530,11 @@ function canCaptureField(key: string, value: unknown, policy: ImportPolicy): boo
     allowed &&
     (Array.isArray(value) ? value : [value]).every((item) => {
       const text = String(item);
-      return policy.redact(text) === text && !hasSensitiveOpenAiCacheString(text);
+      return (
+        !policy.echoesProtectedValue(text) &&
+        policy.redact(text) === text &&
+        !hasSensitiveOpenAiCacheString(text)
+      );
     })
   );
 }
@@ -318,7 +550,7 @@ function toolAttributes(
     return identity;
   }
   const unavailable = { ...identity, 'promptfoo.tool.arguments_redacted': true };
-  const raw = value.stringValue;
+  const raw = wireString(value);
   if (typeof raw !== 'string' || !reserveArgumentJson(raw, policy)) {
     return unavailable;
   }
@@ -343,7 +575,8 @@ function toolAttributes(
       }
     }
     const json = intact ? raw : JSON.stringify(Object.fromEntries(fields));
-    if (policy.redact(json) !== json) {
+    // Intact wire spelling can echo a protected value through a numeric literal or escape.
+    if (policy.echoesProtectedValue(json) || policy.redact(json) !== json) {
       return unavailable;
     }
     return {
@@ -360,6 +593,7 @@ function safeIdentifier(value: unknown, policy: ImportPolicy): value is string {
   return (
     typeof value === 'string' &&
     /^[\w.:-]{1,256}$/.test(value) &&
+    !policy.echoesProtectedValue(value) &&
     policy.redact(value) === value &&
     !hasProtectedIdentifierLabel(value, policy) &&
     !hasSensitiveOpenAiCacheString(value)
@@ -371,6 +605,7 @@ function safeModelIdentifier(value: unknown, policy: ImportPolicy): value is str
     typeof value === 'string' &&
     value.length <= 256 &&
     /^(?:[\w.:-]+\/)*[\w.:-]+$/.test(value) &&
+    !policy.echoesProtectedValue(value) &&
     policy.redact(value) === value &&
     !hasProtectedIdentifierLabel(value, policy) &&
     !hasRecognizableOpenAiCredential(value) &&
@@ -409,10 +644,47 @@ function attributeMap(attributes: z.infer<typeof attributeList> | undefined) {
   return result;
 }
 
+type HostedResource = { attributes: ReturnType<typeof attributeMap>; dropped: boolean };
+
+function normalizeNonToolSpan(
+  operation: 'chat' | 'invoke_agent',
+  attrs: ReturnType<typeof attributeMap>,
+  resource: HostedResource,
+  spanDropped: boolean,
+  policy: ImportPolicy,
+) {
+  const attributes: Record<string, unknown> = {};
+  const intact = !spanDropped && !resource.dropped;
+  // Non-tool spans can carry raw tool fields. Record their verified absence without
+  // copying discarded values or making this span look like a tool trajectory step.
+  if (intact && !protectsKey([HOSTED_ABSENT_TOOL_ATTRIBUTES], policy)) {
+    const keys = ['gen_ai.tool.name', 'tool.name', 'gen_ai.tool.call.arguments', 'tool.arguments'];
+    attributes[HOSTED_ABSENT_TOOL_ATTRIBUTES] = keys.filter(
+      (key) => !attrs.has(key) && !resource.attributes.has(key) && !protectsKey([key], policy),
+    );
+  }
+  // A dropped span attribute might have overridden a model set on the OTLP resource.
+  const model =
+    attrs.get('gen_ai.request.model') ??
+    (!spanDropped && resource.attributes.get('gen_ai.request.model'));
+  if (model) {
+    const modelName = wireString(model);
+    if (!safeModelIdentifier(modelName, policy)) {
+      invalid();
+    }
+    attributes['gen_ai.request.model'] = modelName;
+    return { name: operation === 'chat' ? `chat ${modelName}` : operation, attributes };
+  }
+  if (operation === 'chat' && intact) {
+    attributes[HOSTED_CHAT_MODEL_ABSENT] = true;
+  }
+  return { name: operation, attributes };
+}
+
 function normalizeSpan(
   wire: z.infer<typeof wireSpan>,
   policy: ImportPolicy,
-  resource: { attributes: ReturnType<typeof attributeMap>; dropped: boolean },
+  resource: HostedResource,
 ): SpanData {
   const spanId = decodeId(wire.spanId, 8);
   const parent = wire.parentSpanId ? decodeId(wire.parentSpanId, 8) : undefined;
@@ -423,7 +695,7 @@ function normalizeSpan(
     invalid();
   }
   const attrs = attributeMap(wire.attributes);
-  const operation = attrs.get('gen_ai.operation.name')?.stringValue;
+  const operation = wireString(attrs.get('gen_ai.operation.name'));
   if (operation !== 'execute_tool' && operation !== 'invoke_agent' && operation !== 'chat') {
     // Fail closed if the API introduces new kinds of tool telemetry.
     invalid();
@@ -437,8 +709,14 @@ function normalizeSpan(
     'gen_ai.provider.name': 'openai',
     'gen_ai.operation.name': operation,
   };
+  // Millisecond numbers can round nearby native starts to the same instant.
+  const startTime = Number(start) / 1e6;
+  const offsetNs: bigint = start - BigInt(Math.round(startTime * 1e6));
+  if (offsetNs !== 0n) {
+    attributes[HOSTED_START_TIME_OFFSET_NS] = Number(offsetNs);
+  }
   if (operation === 'execute_tool') {
-    const tool = attrs.get('gen_ai.tool.name')?.stringValue;
+    const tool = wireString(attrs.get('gen_ai.tool.name'));
     if (!safeIdentifier(tool, policy)) {
       invalid();
     }
@@ -448,21 +726,15 @@ function normalizeSpan(
     );
     name = `execute_tool ${tool}`;
   } else {
-    // A dropped span attribute might have overridden a model set on the OTLP resource.
-    const model =
-      attrs.get('gen_ai.request.model') ??
-      (!wire.droppedAttributesCount && resource.attributes.get('gen_ai.request.model'));
-    if (model) {
-      if (!safeModelIdentifier(model.stringValue, policy)) {
-        invalid();
-      }
-      attributes['gen_ai.request.model'] = model.stringValue;
-      if (operation === 'chat') {
-        name = `chat ${model.stringValue}`;
-      }
-    } else if (operation === 'chat' && !wire.droppedAttributesCount && !resource.dropped) {
-      attributes[HOSTED_CHAT_MODEL_ABSENT] = true;
-    }
+    const span = normalizeNonToolSpan(
+      operation,
+      attrs,
+      resource,
+      !!wire.droppedAttributesCount,
+      policy,
+    );
+    name = span.name;
+    Object.assign(attributes, span.attributes);
   }
   // Identity attributes also appear in span names and aliases. Withhold the trace
   // when the eval's policy suppresses one so absence checks cannot silently pass.
@@ -476,12 +748,23 @@ function normalizeSpan(
   }
   // Preserve the same error verdict as an ordinary span without storing tool diagnostics.
   const code = statusCode(wire.status?.code);
+  let validErrorAttributes = true;
   const failed = isSpanError(code, wire.status?.message ?? undefined, (key) => {
     // OTLP span attributes override resource defaults. A dropped span attribute may
     // have overridden that default, so only intact inheritance is evidence.
     const value =
       attrs.get(key) ?? (wire.droppedAttributesCount ? undefined : resource.attributes.get(key));
     if (!value) {
+      return undefined;
+    }
+    // Every span in a resource can inherit the same compound diagnostic.
+    let valid = policy.errorValueValidity.get(value);
+    if (valid === undefined) {
+      valid = isValidWireValue(value);
+      policy.errorValueValidity.set(value, valid);
+    }
+    if (!valid) {
+      validErrorAttributes = false;
       return undefined;
     }
     if (key === 'http.status_code' && (value.kvlistValue || value.arrayValue)) {
@@ -499,7 +782,9 @@ function normalizeSpan(
   });
   if (!protectsKey([HOSTED_ERROR_STATUS_COMPLETE], policy)) {
     attributes[HOSTED_ERROR_STATUS_COMPLETE] =
-      failed || (!wire.droppedAttributesCount && !resource.dropped);
+      failed || (validErrorAttributes && !wire.droppedAttributesCount && !resource.dropped)
+        ? HOSTED_ERROR_STATUS_VERSION
+        : false;
   }
   return {
     spanId,
@@ -507,7 +792,7 @@ function normalizeSpan(
     name,
     attributes,
     statusCode: failed ? 2 : code,
-    startTime: Number(start) / 1e6,
+    startTime,
     endTime: Number(end) / 1e6,
   };
 }
@@ -543,7 +828,14 @@ function validateTree(nodes: Map<string, SpanData>): void {
 }
 
 function collection(value: unknown, key: string): unknown[] {
-  const list = value && typeof value === 'object' ? Reflect.get(value, key) : undefined;
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    invalid();
+  }
+  const list = Reflect.get(value, key);
+  // ProtoJSON omits empty repeated fields, including the span list in an empty scope.
+  if (list === undefined) {
+    return [];
+  }
   if (!Array.isArray(list) || list.length > MAX_SPANS) {
     invalid();
   }
@@ -597,12 +889,14 @@ export function normalizeHostedTrace(
   if (!/^(?!0+$)[a-f\d]{16}$/i.test(parentSpanId)) {
     invalid();
   }
-  const policy = {
+  const policy: ImportPolicy = {
     parentSpanId,
     includeToolArguments,
     argumentBytesLeft: MAX_TRACE_ARGUMENT_BYTES,
     argumentValuesLeft: MAX_TRACE_ARGUMENT_VALUES,
     redact,
+    echoesProtectedValue: () => false,
+    errorValueValidity: new WeakMap(),
     redactAttributes: [
       ...traceRedactAttributes,
       ...(cliState.requestTracingConfig?.otlp?.http?.redactAttributes ?? []),
@@ -613,7 +907,12 @@ export function normalizeHostedTrace(
   const nodes = new Map<string, SpanData>();
   let nativeTraceId: string | undefined;
   let complete = false;
-  for (const { wire, resource } of readSpans(otlp)) {
+  const source = readSpans(otlp);
+  const records = policy.redactAttributes.length ? [...source] : source;
+  if (Array.isArray(records)) {
+    policy.echoesProtectedValue = protectedEchoMatcher(records, policy);
+  }
+  for (const { wire, resource } of records) {
     const traceId = decodeId(wire.traceId, 16);
     const node = normalizeSpan(wire, policy, resource);
     if (

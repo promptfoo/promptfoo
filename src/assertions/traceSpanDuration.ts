@@ -1,4 +1,8 @@
-import { filterTraceSpans, finishTraceAssertion } from './traceUtils';
+import {
+  filterTraceSpans,
+  finishTraceAssertion,
+  withTraceAttributeFilterContext,
+} from './traceUtils';
 
 import type { AssertionParams, GradingResult } from '../types/index';
 import type { TraceSpan } from '../types/tracing';
@@ -43,10 +47,32 @@ export const handleTraceSpanDuration = (params: AssertionParams): GradingResult 
 
   const spans = assertionValueContext.trace.spans as TraceSpan[];
 
-  // Filter spans by pattern and calculate durations
-  const matchingSpans = filterTraceSpans(spans, pattern, attributes).filter(
-    (span) => span.startTime !== undefined && span.endTime !== undefined,
+  const hosted = params.providerResponse.metadata?.hostedTrace?.source === 'openai:agents-api';
+  const matches = filterTraceSpans(spans, pattern, attributes);
+  const matchingSpans = matches.filter(
+    (span) =>
+      span.startTime !== undefined &&
+      span.endTime !== undefined &&
+      (!hosted ||
+        (Number.isFinite(span.startTime) &&
+          Number.isFinite(span.endTime) &&
+          span.endTime >= span.startTime)),
   );
+  const missing = matches.length - matchingSpans.length;
+  if (hosted && missing > 0) {
+    const required = Math.max(1, Math.ceil(((percentile ?? 100) / 100) * matches.length));
+    const within = matchingSpans.filter((span) => span.endTime! - span.startTime <= max).length;
+    const reason = `${within} of ${matches.length} matching spans are known to finish within ${max}ms, ${required} required. ${missing} span(s) have incomplete timing data.`;
+    if (within < required && within + missing >= required) {
+      return {
+        pass: false,
+        score: 0,
+        reason: withTraceAttributeFilterContext(reason, attributes),
+        assertion,
+      };
+    }
+    return finishTraceAssertion(params, within >= required, reason, attributes);
+  }
 
   if (matchingSpans.length === 0) {
     return finishTraceAssertion(

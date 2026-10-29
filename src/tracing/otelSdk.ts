@@ -21,7 +21,30 @@ import type { OtelConfig } from './otelConfig';
 
 const require = createRequire(import.meta.url);
 
-let sdk: { provider: NodeTracerProvider; localExport: boolean } | undefined;
+interface OtelSdk {
+  provider: NodeTracerProvider;
+  localExporter?: LocalSpanExporter;
+  owners: number;
+  shutdown?: Promise<void>;
+}
+
+let sdk: OtelSdk | undefined;
+const pendingShutdowns = new Set<Promise<void>>();
+
+// Each evaluator releases the generation it acquired, even if a signal handler
+// has since shut it down and another evaluation has registered a replacement.
+function acquire(sdk: OtelSdk): () => Promise<void> {
+  sdk.owners++;
+  let released: Promise<void> | undefined;
+  return () => {
+    if (!released) {
+      sdk.owners--;
+      released =
+        sdk.shutdown ?? (sdk.owners === 0 ? shutdownGeneration(sdk) : flushGeneration(sdk));
+    }
+    return released;
+  };
+}
 
 // Use a global symbol to track handlers across module resets (important for tests)
 const OTEL_HANDLERS_KEY = Symbol.for('promptfoo.otelHandlers');
@@ -55,17 +78,19 @@ function getHandlers(): OtelHandlers {
  * - LocalSpanExporter for storing spans in TraceStore (SQLite)
  * - Optional OTLPTraceExporter for external backends (Jaeger, Honeycomb, etc.)
  *
+ * Returns a release callback for this evaluation. Process shutdown can still
+ * force all active exports to drain via shutdownOtel.
+ *
  * @param config - OTEL configuration
  */
-export function initializeOtel(config: OtelConfig): void {
-  if (sdk) {
-    logger.debug('[OtelSdk] Already initialized, skipping');
-    return;
-  }
-
+export function initializeOtel(config: OtelConfig): (() => Promise<void>) | undefined {
   if (!config.enabled) {
     logger.debug('[OtelSdk] OTEL tracing is disabled');
     return;
+  }
+
+  if (sdk) {
+    return acquire(sdk);
   }
 
   logger.debug('[OtelSdk] Initializing OpenTelemetry SDK', {
@@ -93,8 +118,9 @@ export function initializeOtel(config: OtelConfig): void {
   const spanProcessors: SpanProcessor[] = [];
 
   // Add local exporter (writes to TraceStore/SQLite)
-  if (config.localExport) {
-    spanProcessors.push(new BatchSpanProcessor(new LocalSpanExporter()));
+  const localExporter = config.localExport ? new LocalSpanExporter() : undefined;
+  if (localExporter) {
+    spanProcessors.push(new BatchSpanProcessor(localExporter));
     logger.debug('[OtelSdk] Added local span exporter');
   }
 
@@ -113,7 +139,7 @@ export function initializeOtel(config: OtelConfig): void {
   // Register the provider globally
   provider.register();
 
-  sdk = { provider, localExport: config.localExport };
+  sdk = { provider, localExporter, owners: 0 };
   logger.info('[OtelSdk] OpenTelemetry SDK initialized successfully');
 
   // Set up graceful shutdown
@@ -126,7 +152,7 @@ export function initializeOtel(config: OtelConfig): void {
 
   // Skip if handlers are already registered
   if (handlers.registered) {
-    return;
+    return acquire(sdk);
   }
 
   const shutdown = async (signal: string) => {
@@ -157,20 +183,28 @@ export function initializeOtel(config: OtelConfig): void {
   process.once('beforeExit', handlers.beforeExitHandler);
 
   handlers.registered = true;
+  return acquire(sdk);
 }
 
-/**
- * Shutdown the OpenTelemetry SDK.
- * Flushes any pending spans and releases resources.
- */
-export async function shutdownOtel(): Promise<void> {
-  if (!sdk) {
-    return;
+function shutdownGeneration(generation: OtelSdk): Promise<void> {
+  if (generation.shutdown) {
+    return generation.shutdown;
   }
 
   logger.debug('[OtelSdk] Shutting down OpenTelemetry SDK');
 
-  const { provider } = sdk;
+  const { provider } = generation;
+  const drain: Promise<void> = Promise.resolve()
+    .then(() => provider.shutdown())
+    .finally(() => generation.localExporter?.forceFlush())
+    .then(
+      () => logger.info('[OtelSdk] OpenTelemetry SDK shut down successfully'),
+      (error) => logger.error('[OtelSdk] Error shutting down OpenTelemetry SDK', { error }),
+    )
+    .finally(() => pendingShutdowns.delete(drain));
+  generation.shutdown = drain;
+  pendingShutdowns.add(drain);
+
   sdk = undefined;
   if (ownsGlobalTracerProvider(provider)) {
     trace.disable();
@@ -190,27 +224,28 @@ export async function shutdownOtel(): Promise<void> {
   }
   handlers.registered = false;
 
-  try {
-    await provider.shutdown();
-    logger.info('[OtelSdk] OpenTelemetry SDK shut down successfully');
-  } catch (error) {
-    logger.error('[OtelSdk] Error shutting down OpenTelemetry SDK', { error });
-  }
+  return drain;
 }
 
-/**
- * Force flush any pending spans.
- * Useful before process exit to ensure all spans are exported.
- */
-export async function flushOtel(): Promise<void> {
-  if (!sdk) {
-    return;
+/** Force shutdown on process exit and wait for any exporters already draining. */
+export async function shutdownOtel(): Promise<void> {
+  if (sdk) {
+    void shutdownGeneration(sdk);
   }
+  await Promise.all(pendingShutdowns);
+}
 
+/** Flush the active exporter and wait for previously started exports. */
+export async function flushOtel(): Promise<void> {
+  await Promise.all([...pendingShutdowns, ...(sdk ? [flushGeneration(sdk)] : [])]);
+}
+
+async function flushGeneration(generation: OtelSdk): Promise<void> {
   logger.debug('[OtelSdk] Flushing pending spans');
 
   try {
-    await sdk.provider.forceFlush();
+    // Already dispatched SQLite writes still need to finish if a peer exporter fails.
+    await generation.provider.forceFlush().finally(() => generation.localExporter?.forceFlush());
     logger.debug('[OtelSdk] Spans flushed successfully');
   } catch (error) {
     logger.error('[OtelSdk] Error flushing spans', { error });
@@ -232,5 +267,5 @@ function ownsGlobalTracerProvider(provider: NodeTracerProvider): boolean {
 
 /** Whether the running SDK exports provider invocation spans to the local TraceStore. */
 export function hasLocalSpanExporter(): boolean {
-  return sdk?.localExport === true && ownsGlobalTracerProvider(sdk.provider);
+  return !!sdk?.localExporter && ownsGlobalTracerProvider(sdk.provider);
 }

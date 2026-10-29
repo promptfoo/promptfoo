@@ -49,7 +49,7 @@ import type {
   ProviderResponse,
   ProvidersConfig,
 } from './providers';
-import type { TraceData } from './tracing';
+import type { TraceData, TraceSpan } from './tracing';
 
 /**
  * Minimal interface for RateLimitRegistry to avoid circular dependency.
@@ -862,8 +862,8 @@ export interface AssertionParams {
   providerCallContext?: CallApiContextParams;
   /** Context passed to assertion value functions */
   assertionValueContext: AssertionValueFunctionContext;
-  /** Upper bound on additional raw span matches when a trace filter lost evidence. */
-  traceSpanCountUncertainty?: { additional: number; reason: string };
+  /** Missing ancestors and recorded spans whose raw filters could not be resolved. */
+  traceSpanUncertainty?: { missing: number; candidates: TraceSpan[]; reason: string };
   cost?: number;
   inverse: boolean;
   logProbs?: number[];

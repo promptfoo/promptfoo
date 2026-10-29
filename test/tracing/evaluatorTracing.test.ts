@@ -232,6 +232,7 @@ describe('evaluatorTracing', () => {
           expect.objectContaining({
             metadata: expect.objectContaining({
               commandToolNames: ['bash'],
+              localBodyAttributeLossTracked: true,
               testCaseSpanId: context!.traceparent!.split('-')[2],
               testCaseSpanAttributeKeys: expect.arrayContaining([
                 'promptfoo.span.role',

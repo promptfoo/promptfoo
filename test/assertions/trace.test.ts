@@ -162,7 +162,7 @@ describe('trace assertions', () => {
       statusCode: 0,
       attributes: {
         'promptfoo.openai.hosted_trace': 'wrapper',
-        'promptfoo.openai.error_status_complete': true,
+        'promptfoo.openai.error_status_complete': 'otlp-v2',
         'gen_ai.operation.name': 'execute_tool',
         'tool.name': name,
         ...(args !== undefined && {
@@ -219,6 +219,11 @@ describe('trace assertions', () => {
         value: { pattern: 'execute_tool *', max_count: 0 },
       };
       const call = tool('lookup');
+      const oldBoolean = {
+        ...call,
+        attributes: { ...call.attributes, 'promptfoo.openai.error_status_complete': true },
+      };
+      await expect(grade(zero, imported, [oldBoolean])).resolves.toMatchObject({ pass: false });
       await expect(
         grade(zero, imported, [{ ...call, statusCode: undefined }]),
       ).resolves.toMatchObject({ pass: false });
@@ -343,6 +348,73 @@ describe('trace assertions', () => {
       });
     });
 
+    it('scopes default hosted timing and error checks to target work both live and on replay', async () => {
+      const caseSpan: TraceSpan = {
+        spanId: 'case',
+        name: 'promptfoo.test_case',
+        startTime: 900,
+        endTime: 5000,
+        statusCode: 2,
+        attributes: { 'promptfoo.span.role': 'test_case' },
+      };
+      const check = (assertion: Assertion, closed: boolean, rootId: string | undefined) =>
+        runAssertion({
+          assertion,
+          test: mockTest,
+          providerResponse: { output: 'ok', metadata: { hostedTrace: imported } },
+          traceId: mockTraceData.traceId,
+          traceData: {
+            ...mockTraceData,
+            metadata: { testCaseSpanId: rootId },
+            spans: [
+              {
+                spanId: 'wrapper',
+                parentSpanId: 'case',
+                name: 'invoke_agent',
+                startTime: 1000,
+                endTime: 1100,
+              },
+              tool('lookup'),
+              ...(closed ? [caseSpan] : []),
+            ],
+          },
+        });
+      const duration: Assertion = { type: 'trace-span-duration', value: { max: 200 } };
+      const errors: Assertion = { type: 'trace-error-spans', value: 0 };
+      for (const assertion of [duration, errors]) {
+        await expect(check(assertion, false, 'case')).resolves.toMatchObject({ pass: true });
+        await expect(check(assertion, true, 'case')).resolves.toMatchObject({ pass: true });
+        await expect(check(assertion, true, undefined)).resolves.toMatchObject({ pass: true });
+        await expect(check(assertion, false, undefined)).resolves.toMatchObject({ pass: false });
+        const explicit = { ...assertion, value: { max: 200, max_count: 0, pattern: '*' } };
+        await expect(check(explicit, true, 'case')).resolves.toMatchObject({ pass: false });
+        await expect(check(explicit, false, 'case')).resolves.toMatchObject({ pass: false });
+      }
+    });
+
+    it('treats a matching saved hosted span with no end time as unknown duration', async () => {
+      const fast = tool('fast');
+      const unknown = tool('unknown');
+      delete unknown.endTime;
+      const check = (max: number, inverse = false, percentile?: number) =>
+        grade(
+          {
+            type: inverse ? 'not-trace-span-duration' : 'trace-span-duration',
+            value: { pattern: 'execute_tool *', max, percentile },
+          },
+          { ...imported, spanCount: 2 },
+          [fast, unknown],
+        );
+      for (const inverse of [false, true]) {
+        await expect(check(100, inverse)).resolves.toMatchObject({
+          pass: false,
+          reason: expect.stringContaining('incomplete timing'),
+        });
+      }
+      await expect(check(100, false, 50)).resolves.toMatchObject({ pass: true });
+      await expect(check(1, true)).resolves.toMatchObject({ pass: true });
+    });
+
     it('distinguishes an open test-case root from an unknown missing local ancestor', async () => {
       const call = tool('lookup');
       call.attributes!['gen_ai.tool.name'] = 'lookup';
@@ -406,6 +478,38 @@ describe('trace assertions', () => {
           'missing',
         ),
       ).resolves.toMatchObject({ pass: false, reason: expect.stringContaining('ancestor') });
+      const budget = (
+        limits: { max_count?: number; max_percentage?: number },
+        inverse = false,
+      ): Assertion => ({
+        type: inverse ? 'not-trace-error-spans' : 'trace-error-spans',
+        value: { pattern: '*', ...limits },
+      });
+      await expect(check(budget({ max_count: 1 }), 'missing')).resolves.toMatchObject({
+        pass: true,
+      });
+      await expect(check(budget({ max_percentage: 34 }), 'missing')).resolves.toMatchObject({
+        pass: true,
+      });
+      await expect(check(budget({ max_percentage: 33 }), 'missing')).resolves.toMatchObject({
+        pass: false,
+      });
+      await expect(check(budget({ max_count: 0 }, true), 'missing')).resolves.toMatchObject({
+        pass: false,
+      });
+      call.statusCode = 2;
+      // The missing root could dilute one observed error from 1/2 to 1/3.
+      await expect(check(budget({ max_percentage: 40 }, true), 'missing')).resolves.toMatchObject({
+        pass: false,
+      });
+      await expect(check(budget({ max_percentage: 30 }, true), 'missing')).resolves.toMatchObject({
+        pass: true,
+      });
+      // Even an arbitrarily long missing chain cannot dilute an observed error to zero.
+      await expect(check(budget({ max_percentage: 0 }, true), 'other')).resolves.toMatchObject({
+        pass: true,
+      });
+      call.statusCode = 0;
       const atMostThree: Assertion = { type: 'trace-span-count', value: { pattern: '*', max: 3 } };
       await expect(check(atMostThree, 'missing')).resolves.toMatchObject({ pass: true });
       await expect(check(atMostThree, 'other')).resolves.toMatchObject({ pass: false });
@@ -531,6 +635,47 @@ describe('trace assertions', () => {
       await expect(check(args)).resolves.toMatchObject({ pass: false });
     });
 
+    it('requires per-key absence evidence for raw tool filters on non-tool spans', async () => {
+      const chat: TraceSpan = {
+        name: 'chat gpt-test',
+        spanId: 'chat',
+        startTime: 1010,
+        statusCode: 2,
+        attributes: {
+          'gen_ai.operation.name': 'chat',
+          'promptfoo.openai.hosted_trace': 'wrapper',
+          'promptfoo.openai.absent_tool_attributes': ['tool.name', 'gen_ai.tool.call.arguments'],
+        },
+      };
+      for (const [key, absent] of [
+        ['gen_ai.tool.name', false],
+        ['tool.name', true],
+        ['gen_ai.tool.call.arguments', true],
+        ['tool.arguments', false],
+      ] as const) {
+        const filter = { pattern: 'chat *', attributes: { [key]: 'lookup' } };
+        for (const assertion of [
+          { type: 'trace-span-count', value: { ...filter, max: 0 } },
+          { type: 'trace-error-spans', value: { ...filter, max_count: 0 } },
+        ] satisfies Assertion[]) {
+          await expect(grade(assertion, imported, [chat])).resolves.toMatchObject({ pass: absent });
+          const legacy = { ...chat, attributes: { 'promptfoo.openai.hosted_trace': 'wrapper' } };
+          await expect(grade(assertion, imported, [legacy])).resolves.toMatchObject({
+            pass: false,
+          });
+        }
+        for (const assertion of [
+          { type: 'trace-span-count', value: { ...filter, max: 1 } },
+          { type: 'trace-error-spans', value: { ...filter, max_count: 1 } },
+        ] satisfies Assertion[]) {
+          await expect(grade(assertion, imported, [chat])).resolves.toMatchObject({ pass: true });
+        }
+      }
+      await expect(
+        grade({ type: 'trajectory:tool-used', value: 'lookup' }, imported, [chat]),
+      ).resolves.toMatchObject({ pass: false });
+    });
+
     it('cannot infer model absence from a legacy chat name without its capture evidence', async () => {
       const chat: TraceSpan = {
         name: 'chat',
@@ -541,7 +686,7 @@ describe('trace assertions', () => {
         attributes: {
           'gen_ai.operation.name': 'chat',
           'promptfoo.openai.hosted_trace': 'wrapper',
-          'promptfoo.openai.error_status_complete': true,
+          'promptfoo.openai.error_status_complete': 'otlp-v2',
         },
       };
       const pattern = 'chat gpt-6-astra';
@@ -604,6 +749,46 @@ describe('trace assertions', () => {
         await expect(check({ max: 1 }, inverse)).resolves.toMatchObject({ pass: false });
         await expect(check({ min: 2 }, inverse)).resolves.toMatchObject({ pass: false });
       }
+    });
+
+    it('grades missing local bodies only when absence or another mismatch is known', async () => {
+      const assertAbsent = (local: Record<string, unknown>, tracked: boolean, model: string) =>
+        runAssertion({
+          assertion: {
+            type: 'trace-span-count',
+            value: {
+              pattern: 'target',
+              attributes: {
+                'promptfoo.request.body': 'check this body',
+                'gen_ai.request.model': model,
+              },
+              max: 0,
+            },
+          },
+          test: mockTest,
+          providerResponse: { output: 'ok', metadata: { hostedTrace: imported } },
+          traceId: mockTraceData.traceId,
+          traceData: {
+            ...mockTraceData,
+            metadata: tracked ? { localBodyAttributeLossTracked: true } : undefined,
+            spans: [
+              { spanId: 'wrapper', name: 'target', startTime: 0, attributes: local },
+              tool('lookup'),
+            ],
+          },
+        });
+      const attrs = { 'gen_ai.request.model': 'test-model' };
+      await expect(assertAbsent(attrs, true, 'test-model')).resolves.toMatchObject({ pass: true });
+      await expect(assertAbsent(attrs, false, 'test-model')).resolves.toMatchObject({
+        pass: false,
+      });
+      const stripped = { ...attrs, 'promptfoo.request.body_stripped': true };
+      await expect(assertAbsent(stripped, true, 'another-model')).resolves.toMatchObject({
+        pass: true,
+      });
+      await expect(assertAbsent(stripped, true, 'test-model')).resolves.toMatchObject({
+        pass: false,
+      });
     });
 
     it('cannot prove presence or absence from sanitized local wrapper attributes', async () => {
@@ -677,7 +862,9 @@ describe('trace assertions', () => {
         { type: 'trace-span-duration', value: { ...value, max: 1 } },
         { type: 'trace-error-spans', value: { ...value, pattern: '', max_count: 0 } },
       ] satisfies Assertion[]) {
-        await expect(grade(assertion, complete)).resolves.toMatchObject({
+        await expect(
+          grade(assertion, complete, [{ ...tool('lookup'), statusCode: 2 }]),
+        ).resolves.toMatchObject({
           pass: false,
           reason: expect.stringContaining('not retained'),
         });
@@ -818,13 +1005,17 @@ describe('trace assertions', () => {
         value: { pattern: '*', attributes: { 'tool.arguments': '{}' }, max: 0 },
       },
     ])('requires captured tool arguments for $type', async (assertion) => {
-      await expect(grade(assertion, imported)).resolves.toMatchObject({
+      await expect(
+        grade(assertion, imported, [{ ...tool('lookup'), statusCode: 2 }]),
+      ).resolves.toMatchObject({
         pass: false,
         score: 0,
         reason: expect.stringContaining('includeToolArguments'),
       });
       await expect(
-        grade(assertion, incomplete, [tool('lookup', { visible: true }, true)]),
+        grade(assertion, incomplete, [
+          { ...tool('lookup', { visible: true }, true), statusCode: 2 },
+        ]),
       ).resolves.toMatchObject({
         pass: false,
         score: 0,
@@ -943,6 +1134,30 @@ describe('trace assertions', () => {
           pass: false,
           reason: expect.stringContaining('unavailable'),
         });
+      }
+    });
+
+    it('requires a resolvable command for inverse command argument matches', async () => {
+      const calls = [tool('shell', { script: 'cat ledger.csv', cwd: '/workspace' })];
+      for (const type of ['command', ['tool', 'command']]) {
+        await expect(
+          grade(
+            {
+              type: 'not-trajectory:tool-args-match',
+              value: { type, pattern: 'cat*', args: { cwd: '/workspace' } },
+            },
+            complete,
+            calls,
+          ),
+        ).resolves.toMatchObject({ pass: false, reason: expect.stringContaining('unavailable') });
+      }
+      for (const [type, cwd] of [
+        ['trajectory:tool-args-match', '/workspace'],
+        ['not-trajectory:tool-args-match', '/missing'],
+      ] as const) {
+        await expect(
+          grade({ type, value: { name: 'shell', args: { cwd } } }, complete, calls),
+        ).resolves.toMatchObject({ pass: true });
       }
     });
 

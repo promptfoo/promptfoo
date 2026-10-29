@@ -12,20 +12,21 @@ interface SpanRelevanceInput {
 }
 
 export const HOSTED_CHAT_MODEL_ABSENT = 'promptfoo.openai.chat_model_absent';
+export const HOSTED_ABSENT_TOOL_ATTRIBUTES = 'promptfoo.openai.absent_tool_attributes';
 
 /** Older imports also used a bare chat name when OTLP had dropped its model attribute. */
 export function hasUncertainHostedChatName(span: SpanRelevanceInput & { name: string }): boolean {
   return span.name === 'chat' && span.attributes?.[HOSTED_CHAT_MODEL_ABSENT] !== true;
 }
 
+interface SpanOwnership {
+  spanId: string;
+  parentSpanId?: string | null;
+  attributes?: Record<string, unknown> | null;
+}
+
 /** Internal grader activity can include imported spans without their own role attribute. */
-export function getGraderOwnedSpanIds(
-  spans: ReadonlyArray<{
-    spanId: string;
-    parentSpanId?: string | null;
-    attributes?: Record<string, unknown> | null;
-  }>,
-): Set<string> {
+function getGraderOwnedSpanIds(spans: readonly SpanOwnership[]): Set<string> {
   const graders = new Set(
     spans
       .filter((span) => span.attributes?.[SPAN_ROLE_ATTRIBUTE] === 'grader')
@@ -52,6 +53,17 @@ export function getGraderOwnedSpanIds(
     }
   }
   return graders;
+}
+
+export function filterTargetSpans<T extends SpanOwnership>(spans: T[]): T[] {
+  const graderIds = getGraderOwnedSpanIds(spans);
+  const targets = spans.filter(({ spanId }) => !graderIds.has(spanId));
+  const targetIds = new Set(targets.map(({ spanId }) => spanId));
+  return targets.filter(({ attributes }) => {
+    // A hosted grader can store its tools before its own wrapper has been exported.
+    const owner = attributes?.['promptfoo.openai.hosted_trace'];
+    return typeof owner !== 'string' || targetIds.has(owner);
+  });
 }
 
 /** Identifies spans that describe model, tool, command, search, guardrail, or error activity. */

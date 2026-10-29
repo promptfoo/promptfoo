@@ -72,6 +72,8 @@ export const PromptfooAttributes = {
   CACHE_HIT: 'promptfoo.cache_hit',
   REQUEST_BODY: 'promptfoo.request.body',
   RESPONSE_BODY: 'promptfoo.response.body',
+  REQUEST_BODY_STRIPPED: 'promptfoo.request.body_stripped',
+  RESPONSE_BODY_STRIPPED: 'promptfoo.response.body_stripped',
   USAGE_TOTAL_TOKENS: 'promptfoo.usage.total_tokens',
   USAGE_CACHED_RESPONSE_TOKENS: 'promptfoo.usage.cached_response_tokens',
   USAGE_ACCEPTED_PREDICTION_TOKENS: 'promptfoo.usage.accepted_prediction_tokens',

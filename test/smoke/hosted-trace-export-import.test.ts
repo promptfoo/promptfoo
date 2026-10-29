@@ -94,6 +94,7 @@ beforeAll(() => {
       traceId,
       evaluationId: evalId,
       testCaseId: 'case',
+      metadata: { localBodyAttributeLossTracked: true },
       spans: [
         {
           spanId: parentSpanId,
@@ -103,6 +104,8 @@ beforeAll(() => {
           attributes: {
             'promptfoo.openai.hosted_trace_requested': true,
             'promptfoo.span.role': 'target',
+            'promptfoo.request.body': 'input body fixture',
+            'promptfoo.response.body': 'output body fixture',
           },
         },
         {
@@ -167,5 +170,55 @@ it('preserves the unavailable verdict when metadata is stripped and the trace is
   expect(row.response.metadata).toEqual(unavailable);
   expect(regrade('detached', file, [noDelete])).toMatchObject([
     { pass: false, reason: expect.stringContaining('OpenAI Agents API trace was unavailable') },
+  ]);
+});
+
+it('keeps the request loss marker when a later export strips the response', () => {
+  const promptStripped = exportEval('source', { PROMPTFOO_STRIP_PROMPT_TEXT: 'true' });
+  runNode('prompt-stripped', [cli, 'import', promptStripped]);
+  const bothStripped = exportEval('prompt-stripped', { PROMPTFOO_STRIP_RESPONSE_OUTPUT: 'true' });
+  const saved = JSON.parse(fs.readFileSync(bothStripped, 'utf8'));
+  const wrapper = saved.traces[0].spans.find((span: TraceSpan) => span.spanId === parentSpanId);
+  for (const direction of ['request', 'response']) {
+    expect(wrapper.attributes[`promptfoo.${direction}.body`]).toBeUndefined();
+    expect(wrapper.attributes[`promptfoo.${direction}.body_stripped`]).toBe(true);
+  }
+});
+
+it.each(['tracked', 'legacy'])('regrades missing bodies from a %s CLI export', (format) => {
+  const stripBodies = {
+    PROMPTFOO_STRIP_PROMPT_TEXT: 'true',
+    PROMPTFOO_STRIP_RESPONSE_OUTPUT: 'true',
+  };
+  const stripped =
+    format === 'legacy' ? path.join(tempDir, 'legacy.json') : exportEval('source', stripBodies);
+  if (format === 'legacy') {
+    const saved = JSON.parse(fs.readFileSync(path.join(tempDir, 'seed.json'), 'utf8'));
+    const wrapper = saved.traces[0].spans.find((span: TraceSpan) => span.spanId === parentSpanId);
+    delete saved.traces[0].metadata.localBodyAttributeLossTracked;
+    delete wrapper.attributes['promptfoo.request.body'];
+    delete wrapper.attributes['promptfoo.response.body'];
+    fs.writeFileSync(stripped, JSON.stringify(saved));
+  }
+  runNode(format, [cli, 'import', stripped]);
+  const bodyChecks: Assertion[] = ['request', 'response'].flatMap((direction) =>
+    [{ min: 1 }, { max: 0 }].map((bound) => ({
+      type: 'trace-span-count' as const,
+      value: {
+        pattern: 'provider',
+        attributes: {
+          [`promptfoo.${direction}.body`]:
+            direction === 'request' ? 'input body fixture' : 'output body fixture',
+        },
+        ...bound,
+      },
+    })),
+  );
+  const resultFile = format === 'legacy' ? exportEval(format, stripBodies) : stripped;
+  expect(regrade(format, resultFile, bodyChecks).map((grade) => grade.pass)).toEqual([
+    false,
+    false,
+    false,
+    false,
   ]);
 });

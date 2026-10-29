@@ -1,6 +1,10 @@
-import { isUncertainTraceAttributeMatch } from '../tracing/sanitizeAttributes';
 import {
-  getGraderOwnedSpanIds,
+  isMissingTraceBodyUncertain,
+  isUncertainTraceAttributeMatch,
+} from '../tracing/sanitizeAttributes';
+import {
+  filterTargetSpans,
+  HOSTED_ABSENT_TOOL_ATTRIBUTES,
   HOSTED_CHAT_MODEL_ABSENT,
   hasUncertainHostedChatName,
 } from '../tracing/spanFilter';
@@ -45,13 +49,16 @@ function missingArgumentsReason(includeToolArguments: boolean): string {
 function getRawFilterCoverageError(
   span: TraceSpan,
   filters: [string, unknown][],
-  capture: { native: boolean; includeToolArguments: boolean },
+  capture: { native: boolean; includeToolArguments: boolean; metadata?: Record<string, unknown> },
 ): string | undefined {
   const attrs = span.attributes ?? {};
+  const absentToolAttributes = attrs[HOSTED_ABSENT_TOOL_ATTRIBUTES];
   const tool = capture.native && isHostedToolSpan(span);
   let reason: string | undefined;
   for (const [key, expected] of filters) {
-    if (!capture.native && isUncertainTraceAttributeMatch(attrs[key], expected)) {
+    if (!capture.native && isMissingTraceBodyUncertain(key, attrs, capture.metadata)) {
+      reason ??= 'A local span body used by this filter may have been stripped from the export.';
+    } else if (!capture.native && isUncertainTraceAttributeMatch(attrs[key], expected)) {
       reason ??= 'A local span attribute used by this filter may have been truncated or redacted.';
     } else if (
       ARGUMENT_FILTER_KEYS.has(key) &&
@@ -67,8 +74,7 @@ function getRawFilterCoverageError(
       !capture.native ||
       key === 'promptfoo.tool.arguments_redacted' ||
       (key === 'gen_ai.request.model' && attrs[HOSTED_CHAT_MODEL_ABSENT] === true) ||
-      (!tool &&
-        (key === 'tool.name' || key === 'gen_ai.tool.name' || ARGUMENT_FILTER_KEYS.has(key)))
+      (!tool && Array.isArray(absentToolAttributes) && absentToolAttributes.includes(key))
     ) {
       // Missing local keys and known absences in the native projection rule out this span.
       return undefined;
@@ -185,35 +191,24 @@ function excludeHostedGraderEvidence({
   if (!trace) {
     return undefined;
   }
-  const hosted = trace.spans.filter(
+  const hosted = trace.spans.some(
     ({ attributes }) =>
       attributes?.['promptfoo.openai.hosted_trace_requested'] === true ||
       typeof attributes?.['promptfoo.openai.hosted_trace'] === 'string',
   );
-  if (!hosted.length) {
+  if (!hosted) {
     return undefined;
   }
-  const graderSpans = getGraderOwnedSpanIds(trace.spans);
+  const targetSpans = filterTargetSpans(trace.spans);
   if (
     !providerResponse.metadata?.hostedTrace &&
-    hosted.some(
-      ({ spanId, attributes }) =>
-        attributes?.['promptfoo.openai.hosted_trace_requested'] === true &&
-        !graderSpans.has(spanId),
+    targetSpans.some(
+      ({ attributes }) => attributes?.['promptfoo.openai.hosted_trace_requested'] === true,
     )
   ) {
     return 'The OpenAI Agents API trace capture metadata is unavailable for this assertion.';
   }
-  const targetSpans = trace.spans.filter(({ spanId }) => !graderSpans.has(spanId));
-  const targetIds = new Set(targetSpans.map(({ spanId }) => spanId));
-  assertionValueContext.trace = {
-    ...trace,
-    spans: targetSpans.filter(({ attributes }) => {
-      // Without its owning wrapper a detached native tool cannot be attributed to this target.
-      const owner = attributes?.['promptfoo.openai.hosted_trace'];
-      return typeof owner !== 'string' || targetIds.has(owner);
-    }),
-  };
+  assertionValueContext.trace = { ...trace, spans: targetSpans };
   return undefined;
 }
 
@@ -232,6 +227,23 @@ function prepareRawTraceAssertion(
   const pattern = typeof filter.pattern === 'string' && filter.pattern ? filter.pattern : '*';
   const attrs = filter.attributes;
   const filters = attrs && typeof attrs === 'object' ? Object.entries(attrs) : [];
+  // The case root includes grading itself and closes after the live assertions.
+  // Explicit filters may select it, while default operational checks measure target work.
+  const targetWorkOnly =
+    (params.baseType === 'trace-span-duration' || params.baseType === 'trace-error-spans') &&
+    filter.pattern === undefined &&
+    filters.length === 0;
+  if (targetWorkOnly) {
+    trace.spans = trace.spans.filter(
+      (span) =>
+        span.spanId !== trace.metadata?.testCaseSpanId &&
+        !(
+          !span.parentSpanId &&
+          span.name === TEST_CASE_SPAN_NAME &&
+          span.attributes?.[SPAN_ROLE_ATTRIBUTE] === 'test_case'
+        ),
+    );
+  }
   let possible = 0;
   let reason: string | undefined;
   if (
@@ -242,7 +254,10 @@ function prepareRawTraceAssertion(
     // in the local parent chain can hide an unknown number of ancestors.
     if (unresolvedId !== trace.metadata?.testCaseSpanId) {
       possible = Infinity;
-    } else if (couldMatchTestCaseRoot(pattern, attrs, trace.metadata?.testCaseSpanAttributeKeys)) {
+    } else if (
+      !targetWorkOnly &&
+      couldMatchTestCaseRoot(pattern, attrs, trace.metadata?.testCaseSpanAttributeKeys)
+    ) {
       possible = 1;
     }
     if (possible) {
@@ -256,6 +271,7 @@ function prepareRawTraceAssertion(
         const missing = getRawFilterCoverageError(span, filters, {
           native: span.attributes?.['promptfoo.openai.hosted_trace'] === parentId,
           includeToolArguments,
+          metadata: trace.metadata,
         });
         if (missing) {
           reason ??= missing;
@@ -264,11 +280,14 @@ function prepareRawTraceAssertion(
       }
     }
   }
-  if (reason && params.baseType === 'trace-span-count') {
+  if (
+    reason &&
+    (params.baseType === 'trace-span-count' || params.baseType === 'trace-error-spans')
+  ) {
     // A lossy raw argument can still equal a filter in the stored JSON. It can
     // only contribute to the possible upper bound, never to the definite count.
     trace.spans = trace.spans.filter((span) => !uncertain.has(span));
-    params.traceSpanCountUncertainty = { additional: possible + uncertain.size, reason };
+    params.traceSpanUncertainty = { missing: possible, candidates: [...uncertain], reason };
     return undefined;
   }
   return reason;
@@ -332,7 +351,7 @@ export function prepareHostedTraceAssertion(params: AssertionParams): string | u
     hostedTrace.includeToolArguments &&
     hostedTrace.toolArgumentsComplete === true &&
     native.every((span) => !isHostedToolSpan(span) || hasIntactArguments(span.attributes)) &&
-    (baseType === 'trajectory:tool-args-match' ||
+    ((baseType === 'trajectory:tool-args-match' && !isCommandMatcher(renderedValue)) ||
       !hasUnresolvedHostedCommand(assertionValueContext.trace));
   return complete ? undefined : coverageError;
 }

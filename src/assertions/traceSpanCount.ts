@@ -34,9 +34,9 @@ export const handleTraceSpanCount = (params: AssertionParams): GradingResult => 
   const count = matchingSpans.length;
 
   let found = `Found ${count} spans matching pattern "${pattern}"`;
-  const uncertainty = params.traceSpanCountUncertainty;
+  const uncertainty = params.traceSpanUncertainty;
   if (uncertainty) {
-    const upper = count + uncertainty.additional;
+    const upper = count + uncertainty.missing + uncertainty.candidates.length;
     found = Number.isFinite(upper)
       ? `Between ${count} and ${upper} spans match pattern "${pattern}"`
       : `At least ${count} spans match pattern "${pattern}"`;

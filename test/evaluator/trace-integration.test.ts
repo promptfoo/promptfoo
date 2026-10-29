@@ -40,13 +40,12 @@ vi.mock('../../src/telemetry', () => ({
 vi.mock('../../src/tracing/store');
 const mockFlushOtel = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
 const mockFetchTraceContext = vi.hoisted(() => vi.fn());
-const mockInitializeOtel = vi.hoisted(() => vi.fn());
-const mockShutdownOtel = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
+const mockReleaseOtel = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
+const mockInitializeOtel = vi.hoisted(() => vi.fn(() => mockReleaseOtel));
 
 vi.mock('../../src/tracing/otelSdk', () => ({
   flushOtel: mockFlushOtel,
   initializeOtel: mockInitializeOtel,
-  shutdownOtel: mockShutdownOtel,
 }));
 
 vi.mock('../../src/tracing/otlpReceiver', () => ({
@@ -250,7 +249,7 @@ describe('evaluator trace integration', () => {
       sanitizeAttributes: false,
     });
     expect(mockFlushOtel).toHaveBeenCalled();
-    expect(mockShutdownOtel).toHaveBeenCalledOnce();
+    expect(mockReleaseOtel).toHaveBeenCalledOnce();
 
     // Verify result was added with passing assertion
     expect(mockEval.addResult).toHaveBeenCalledWith(
@@ -290,7 +289,7 @@ describe('evaluator trace integration', () => {
 
     expect(writer.close).toHaveBeenCalledOnce();
     expect(mockFlushOtel).not.toHaveBeenCalled();
-    expect(mockShutdownOtel).not.toHaveBeenCalled();
+    expect(mockReleaseOtel).not.toHaveBeenCalled();
   });
 
   it('flushes and shuts down OTEL after successful tracing initialization', async () => {
@@ -306,8 +305,7 @@ describe('evaluator trace integration', () => {
     );
 
     expect(mockInitializeOtel).toHaveBeenCalledOnce();
-    expect(mockFlushOtel).toHaveBeenCalledOnce();
-    expect(mockShutdownOtel).toHaveBeenCalledOnce();
+    expect(mockReleaseOtel).toHaveBeenCalledOnce();
   });
 
   it('should handle assertions gracefully when tracing is disabled', async () => {
@@ -344,7 +342,7 @@ describe('evaluator trace integration', () => {
     expect(mockTraceStore.createTrace).not.toHaveBeenCalled();
     expect(mockTraceStore.getTrace).not.toHaveBeenCalled();
     expect(mockFlushOtel).not.toHaveBeenCalled();
-    expect(mockShutdownOtel).not.toHaveBeenCalled();
+    expect(mockReleaseOtel).not.toHaveBeenCalled();
 
     // Verify result was added with passing assertion
     expect(mockEval.addResult).toHaveBeenCalledWith(
@@ -442,7 +440,7 @@ describe('evaluator trace integration', () => {
     await expect(evaluate(testSuite, mockEval, {})).rejects.toThrow('receiver failed');
     expect(evaluatorTracing.stopOtlpReceiverIfNeeded).toHaveBeenCalled();
     expect(mockFlushOtel).not.toHaveBeenCalled();
-    expect(mockShutdownOtel).not.toHaveBeenCalled();
+    expect(mockReleaseOtel).not.toHaveBeenCalled();
   });
 
   describe('external trace collection after provider calls', () => {

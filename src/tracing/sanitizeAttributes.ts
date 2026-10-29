@@ -1,7 +1,30 @@
+import { PromptfooAttributes } from './genaiTracer';
+
 export interface AttributeSanitizationOptions {
   redactAttributes?: string[];
   sanitizeSensitiveAttributes?: boolean;
   truncateValues?: boolean;
+}
+
+/** Older exports could remove a body without recording whether the span originally had one. */
+export function isMissingTraceBodyUncertain(
+  key: string,
+  attributes: Record<string, unknown>,
+  metadata?: Record<string, unknown>,
+): boolean {
+  if (Object.prototype.hasOwnProperty.call(attributes, key)) {
+    return false;
+  }
+  const { REQUEST_BODY, RESPONSE_BODY, REQUEST_BODY_STRIPPED, RESPONSE_BODY_STRIPPED } =
+    PromptfooAttributes;
+  if (key !== REQUEST_BODY && key !== RESPONSE_BODY) {
+    return false;
+  }
+  const marker = key === REQUEST_BODY ? REQUEST_BODY_STRIPPED : RESPONSE_BODY_STRIPPED;
+  return (
+    metadata?.localBodyAttributeLossTracked !== true ||
+    Object.prototype.hasOwnProperty.call(attributes, marker)
+  );
 }
 
 // Match normalized names; the cookie pattern also covers set-cookie.

@@ -1,4 +1,8 @@
-import { HOSTED_ERROR_STATUS_COMPLETE, isSpanError } from '../tracing/spanError';
+import {
+  HOSTED_ERROR_STATUS_COMPLETE,
+  HOSTED_ERROR_STATUS_VERSION,
+  isSpanError,
+} from '../tracing/spanError';
 import {
   filterTraceSpans,
   finishTraceAssertion,
@@ -48,6 +52,66 @@ export const handleTraceErrorSpans = (params: AssertionParams): GradingResult =>
   // Filter spans by pattern
   const matchingSpans = filterTraceSpans(spans, pattern, attributes);
 
+  const hasError = (span: TraceSpan) =>
+    isSpanError(span.statusCode, span.statusMessage, (key) => span.attributes?.[key]);
+  const errorSpans = matchingSpans.filter(hasError);
+  const errorCount = errorSpans.length;
+  const hosted = providerResponse?.metadata?.hostedTrace;
+  if (hosted?.source === 'openai:agents-api') {
+    // Older imports can have a known match without recording every error indicator.
+    const unknownStatus = (span: TraceSpan) =>
+      span.attributes?.['promptfoo.openai.hosted_trace'] === hosted.parentSpanId &&
+      (span.attributes?.[HOSTED_ERROR_STATUS_COMPLETE] !== HOSTED_ERROR_STATUS_VERSION ||
+        (span.statusCode !== 0 && span.statusCode !== 1));
+    const unknownMatching = matchingSpans.filter(
+      (span) => !hasError(span) && unknownStatus(span),
+    ).length;
+    const uncertainty = params.traceSpanUncertainty;
+    const missing = uncertainty?.missing ?? 0;
+    const optional = uncertainty?.candidates ?? [];
+    // The worst case includes every optional error and omits optional healthy spans.
+    // The best case does the reverse, and treats every unknown status as healthy.
+    const optionalErrors =
+      missing + optional.filter((span) => hasError(span) || unknownStatus(span)).length;
+    const optionalHealthy = missing + optional.filter((span) => !hasError(span)).length;
+    const exceedsBudget = (errors: number, total: number) => {
+      const percent = errors === Infinity ? 100 : (errors / Math.max(total, 1)) * 100;
+      return (
+        (maxCount !== undefined && errors > maxCount) ||
+        (maxPercentage !== undefined &&
+          (maxPercentage === 0 ? errors > 0 : percent > maxPercentage))
+      );
+    };
+    const couldFail = exceedsBudget(
+      errorCount + unknownMatching + optionalErrors,
+      matchingSpans.length + optionalErrors,
+    );
+    const couldPass =
+      matchingSpans.length === 0 ||
+      !exceedsBudget(errorCount, matchingSpans.length + optionalHealthy);
+    if (couldPass && couldFail && (uncertainty || unknownMatching > 0)) {
+      return {
+        pass: false,
+        score: 0,
+        reason: withTraceAttributeFilterContext(
+          uncertainty?.reason ??
+            'This saved hosted trace did not preserve all error indicators. It cannot establish the requested error limit.',
+          attributes,
+        ),
+        assertion,
+      };
+    }
+    if (uncertainty) {
+      const verdict = couldFail ? 'exceed' : 'satisfy';
+      return finishTraceAssertion(
+        params,
+        !couldFail,
+        `Observed ${errorCount} errors in ${matchingSpans.length} definite matches. All possible outcomes ${verdict} the requested error budget`,
+        attributes,
+      );
+    }
+  }
+
   if (matchingSpans.length === 0) {
     return finishTraceAssertion(
       params,
@@ -56,12 +120,6 @@ export const handleTraceErrorSpans = (params: AssertionParams): GradingResult =>
       attributes,
     );
   }
-
-  // Find error spans
-  const errorSpans = matchingSpans.filter((span) =>
-    isSpanError(span.statusCode, span.statusMessage, (key) => span.attributes?.[key]),
-  );
-  const errorCount = errorSpans.length;
   const errorPercentage = (errorCount / matchingSpans.length) * 100;
 
   let pass = true;
@@ -100,32 +158,5 @@ export const handleTraceErrorSpans = (params: AssertionParams): GradingResult =>
     }
   }
 
-  const hosted = providerResponse?.metadata?.hostedTrace;
-  if (pass && hosted?.source === 'openai:agents-api') {
-    // Older imports could omit resource-level errors. On new imports, use each
-    // matching span's coverage: a dropped attribute on an unrelated span cannot affect this budget.
-    const observedErrors = new Set(errorSpans);
-    const possibleErrors = matchingSpans.filter(
-      (span) =>
-        observedErrors.has(span) ||
-        (span.attributes?.['promptfoo.openai.hosted_trace'] === hosted.parentSpanId &&
-          (span.attributes?.[HOSTED_ERROR_STATUS_COMPLETE] !== true ||
-            (span.statusCode !== 0 && span.statusCode !== 1))),
-    ).length;
-    if (
-      (maxCount !== undefined && possibleErrors > maxCount) ||
-      (maxPercentage !== undefined && (possibleErrors / matchingSpans.length) * 100 > maxPercentage)
-    ) {
-      return {
-        pass: false,
-        score: 0,
-        reason: withTraceAttributeFilterContext(
-          'This saved hosted trace did not preserve all error indicators. It cannot establish the requested error limit.',
-          attributes,
-        ),
-        assertion,
-      };
-    }
-  }
   return finishTraceAssertion(params, pass, reason, attributes);
 };

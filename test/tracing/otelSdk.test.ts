@@ -14,6 +14,7 @@ const mockTraceDisable = vi.fn(() => {
 });
 const mockShutdown = vi.fn().mockResolvedValue(undefined);
 const mockForceFlush = vi.fn().mockResolvedValue(undefined);
+const mockLocalFlush = vi.fn().mockResolvedValue(undefined);
 const mockAddSpanProcessor = vi.fn();
 const mockSetLogger = vi.fn();
 
@@ -114,6 +115,7 @@ vi.mock('../../src/tracing/localSpanExporter', () => ({
     }
     export = vi.fn();
     shutdown = vi.fn();
+    forceFlush = mockLocalFlush;
   },
 }));
 
@@ -280,6 +282,41 @@ describe('otelSdk', () => {
   });
 
   describe('shutdownOtel', () => {
+    it('keeps a shared provider recording until its last evaluator releases it', async () => {
+      const releaseA = initializeOtel(defaultConfig)!;
+      const releaseB = initializeOtel(defaultConfig)!;
+      await releaseA();
+      await releaseA();
+      expect(mockForceFlush).toHaveBeenCalledOnce();
+      expect(mockLocalFlush).toHaveBeenCalledOnce();
+      expect(mockShutdown).not.toHaveBeenCalled();
+      expect(isOtelInitialized()).toBe(true);
+      await releaseB();
+      expect(mockShutdown).toHaveBeenCalledOnce();
+      expect(isOtelInitialized()).toBe(false);
+    });
+
+    it('joins a draining generation without allowing its evaluator to close the next one', async () => {
+      const flushing = createDeferred<void>();
+      mockShutdown.mockReturnValueOnce(flushing.promise);
+      const releaseA = initializeOtel(defaultConfig)!;
+      const signalShutdown = shutdownOtel();
+      const finished = vi.fn();
+      const concurrentShutdown = shutdownOtel().then(() => finished('shutdown'));
+      const concurrentFlush = flushOtel().then(() => finished('flush'));
+      const releaseB = initializeOtel(defaultConfig)!;
+      const lateRelease = releaseA().then(() => finished('release'));
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      expect(finished).not.toHaveBeenCalled();
+      expect(mockShutdown).toHaveBeenCalledOnce();
+      flushing.resolve();
+      await Promise.all([signalShutdown, concurrentShutdown, concurrentFlush, lateRelease]);
+      expect(finished).toHaveBeenCalledTimes(3);
+      expect(isOtelInitialized()).toBe(true);
+      await releaseB();
+      expect(mockShutdown).toHaveBeenCalledTimes(2);
+    });
+
     it('lets a new SDK register while the previous exporter finishes shutdown', async () => {
       const { hasLocalSpanExporter } = await import('../../src/tracing/otelSdk');
       const flushing = createDeferred<void>();
@@ -315,6 +352,7 @@ describe('otelSdk', () => {
 
       initializeOtel(defaultConfig);
       await expect(shutdownOtel()).resolves.toBeUndefined();
+      expect(mockLocalFlush).toHaveBeenCalledOnce();
       expect(isOtelInitialized()).toBe(false);
     });
   });
@@ -336,6 +374,7 @@ describe('otelSdk', () => {
 
       initializeOtel(defaultConfig);
       await expect(flushOtel()).resolves.toBeUndefined();
+      expect(mockLocalFlush).toHaveBeenCalledOnce();
     });
   });
 
