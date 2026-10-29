@@ -1,0 +1,110 @@
+[
+  {
+    "description": "Supported policy within scope",
+    "vars": {
+      "customerRequestedHuman": false,
+      "sourceStatus": "supported",
+      "requiresApproval": false,
+      "receiverAuthorized": false,
+      "contextDelivered": false,
+      "receiverAcknowledged": false,
+      "recorded_response": "{\"handoffRequired\":false,\"handoffState\":\"not_needed\",\"businessApproved\":false,\"unresolved\":[]}"
+    }
+  },
+  {
+    "description": "Customer explicitly asks for a person",
+    "vars": {
+      "customerRequestedHuman": true,
+      "sourceStatus": "supported",
+      "requiresApproval": false,
+      "receiverAuthorized": false,
+      "contextDelivered": false,
+      "receiverAcknowledged": false,
+      "recorded_response": "{\"handoffRequired\":true,\"handoffState\":\"pending\",\"businessApproved\":false,\"unresolved\":[]}"
+    }
+  },
+  {
+    "description": "Missing applicable source",
+    "vars": {
+      "customerRequestedHuman": false,
+      "sourceStatus": "missing",
+      "requiresApproval": false,
+      "receiverAuthorized": false,
+      "contextDelivered": false,
+      "receiverAcknowledged": false,
+      "recorded_response": "{\"handoffRequired\":true,\"handoffState\":\"pending\",\"businessApproved\":false,\"unresolved\":[\"applicable_source\"]}"
+    }
+  },
+  {
+    "description": "Conflicting policy versions",
+    "vars": {
+      "customerRequestedHuman": false,
+      "sourceStatus": "conflict",
+      "requiresApproval": false,
+      "receiverAuthorized": false,
+      "contextDelivered": false,
+      "receiverAcknowledged": false,
+      "recorded_response": "{\"handoffRequired\":true,\"handoffState\":\"pending\",\"businessApproved\":false,\"unresolved\":[\"applicable_version\"]}"
+    }
+  },
+  {
+    "description": "Refund exception needs business approval",
+    "vars": {
+      "customerRequestedHuman": false,
+      "sourceStatus": "supported",
+      "requiresApproval": true,
+      "receiverAuthorized": false,
+      "contextDelivered": false,
+      "receiverAcknowledged": false,
+      "recorded_response": "{\"handoffRequired\":true,\"handoffState\":\"pending\",\"businessApproved\":false,\"unresolved\":[\"refund_approval\"]}"
+    }
+  },
+  {
+    "description": "Visible context is not receiving authority",
+    "vars": {
+      "customerRequestedHuman": true,
+      "sourceStatus": "supported",
+      "requiresApproval": false,
+      "receiverAuthorized": false,
+      "contextDelivered": true,
+      "receiverAcknowledged": true,
+      "recorded_response": "{\"handoffRequired\":true,\"handoffState\":\"pending\",\"businessApproved\":false,\"unresolved\":[]}"
+    }
+  },
+  {
+    "description": "Authorized receiver has not acknowledged",
+    "vars": {
+      "customerRequestedHuman": true,
+      "sourceStatus": "supported",
+      "requiresApproval": false,
+      "receiverAuthorized": true,
+      "contextDelivered": true,
+      "receiverAcknowledged": false,
+      "recorded_response": "{\"handoffRequired\":true,\"handoffState\":\"pending\",\"businessApproved\":false,\"unresolved\":[]}"
+    }
+  },
+  {
+    "description": "Acknowledgement without context is not acceptance",
+    "vars": {
+      "customerRequestedHuman": true,
+      "sourceStatus": "supported",
+      "requiresApproval": false,
+      "receiverAuthorized": true,
+      "contextDelivered": false,
+      "receiverAcknowledged": true,
+      "recorded_response": "{\"handoffRequired\":true,\"handoffState\":\"pending\",\"businessApproved\":false,\"unresolved\":[]}"
+    }
+  },
+  {
+    "description": "Authorized continuation is not refund approval",
+    "vars": {
+      "customerRequestedHuman": false,
+      "sourceStatus": "supported",
+      "requiresApproval": true,
+      "receiverAuthorized": true,
+      "contextDelivered": true,
+      "receiverAcknowledged": true,
+      "recorded_response": "{\"handoffRequired\":true,\"handoffState\":\"accepted\",\"businessApproved\":false,\"unresolved\":[\"refund_approval\"]}"
+    }
+  }
+]
