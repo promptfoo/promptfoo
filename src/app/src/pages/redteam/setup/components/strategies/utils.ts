@@ -69,6 +69,7 @@ const STRATEGY_PROBE_MULTIPLIER: Record<Strategy, number> = {
   basic: 0, // The base cases are counted separately below.
   'best-of-n': 1,
   camelcase: 1,
+  'char-split': 1,
   citation: 1,
   crescendo: 10,
   custom: 10,
@@ -78,6 +79,7 @@ const STRATEGY_PROBE_MULTIPLIER: Record<Strategy, number> = {
   hex: 1,
   homoglyph: 1,
   image: 1,
+  'image-stego': 1,
   'indirect-web-pwn': 3,
   jailbreak: 10,
   'jailbreak:composite': 5,
