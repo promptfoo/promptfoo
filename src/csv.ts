@@ -161,8 +161,13 @@ export function testCaseFromCsvRow(row: CsvRow): TestCase {
   const asserts: Assertion[] = [];
   const options: TestCase['options'] = {};
   const metadata: Record<string, unknown> = {};
-  // Map from assertion index (or '*' for all) to config properties
-  const assertionConfigs: Record<string | number, Record<string, unknown>> = {};
+  // Keep numbered source columns separate from compacted assertion positions.
+  const assertionIndicesBySource = new Map<string, number>();
+  const pendingAssertionConfigs: {
+    target: string;
+    key: string;
+    value: number;
+  }[] = [];
   let providerOutput: string | Record<string, unknown> | undefined;
   let description: string | undefined;
   let metric: string | undefined;
@@ -197,6 +202,13 @@ export function testCaseFromCsvRow(row: CsvRow): TestCase {
     }
     if (key.startsWith('__expected')) {
       if (value.trim() !== '') {
+        const indexMatch = key.match(/^__expected(\d+)$/);
+        // Keep source numbers as strings so large integers remain distinct.
+        const sourceIndex = key === '__expected' ? '1' : indexMatch?.[1].replace(/^0+/, '');
+        // Numeric aliases such as __expected01 retain the first populated match.
+        if (sourceIndex && !assertionIndicesBySource.has(sourceIndex)) {
+          assertionIndicesBySource.set(sourceIndex, asserts.length);
+        }
         asserts.push(assertionFromString(value.trim()));
       }
     } else if (key === '__prefix') {
@@ -242,21 +254,18 @@ export function testCaseFromCsvRow(row: CsvRow): TestCase {
       if (configParts.length === 2) {
         const [expectedKey, configKey] = configParts;
 
-        // Parse the expected key to determine which assertion(s) to target
-        let targetIndex: number | undefined;
+        // Numbered configs identify source columns; the unnumbered form keeps
+        // its existing first-populated-assertion behavior.
+        let targetIndex: string | undefined;
         if (expectedKey === '__expected') {
-          // There is only one expected assertion, so we target it directly.
-          targetIndex = 0;
+          targetIndex = 'first';
         } else if (expectedKey.startsWith('__expected')) {
-          // Extract the numeric index (e.g., __expected1 -> 0, __expected2 -> 1)
           const indexMatch = expectedKey.match(/^__expected(\d+)$/);
           if (indexMatch) {
-            const oneBasedIndex = Number.parseInt(indexMatch[1], 10);
-            // Indices are 1-based (__expected1 -> 0). Reject 0 so it falls
-            // through to the "positive integer" error below instead of
-            // silently writing the config to assertionConfigs[-1].
-            if (oneBasedIndex >= 1) {
-              targetIndex = oneBasedIndex - 1;
+            const sourceIndex = indexMatch[1].replace(/^0+/, '');
+            // An all-zero suffix is invalid; other positive integers have no size limit.
+            if (sourceIndex) {
+              targetIndex = sourceIndex;
             }
           }
         }
@@ -278,11 +287,6 @@ export function testCaseFromCsvRow(row: CsvRow): TestCase {
           throw new Error(`Invalid config key "${configKey}" in __config column`);
         }
 
-        // Initialize config object for this index if it doesn't exist
-        if (!assertionConfigs[targetIndex]) {
-          assertionConfigs[targetIndex] = {};
-        }
-
         const parsedValue = parseFiniteNumber(value);
         if (parsedValue === undefined) {
           logger.error(
@@ -291,7 +295,7 @@ export function testCaseFromCsvRow(row: CsvRow): TestCase {
           throw new Error(`Invalid numeric value for ${configKey}`);
         }
 
-        assertionConfigs[targetIndex][configKey] = parsedValue;
+        pendingAssertionConfigs.push({ target: targetIndex, key: configKey, value: parsedValue });
       } else {
         logger.warn(
           `Invalid __config column format: "${key}". Expected format: __config:__expected:threshold or __config:__expected<N>:threshold`,
@@ -299,6 +303,17 @@ export function testCaseFromCsvRow(row: CsvRow): TestCase {
       }
     } else {
       vars[key] = value;
+    }
+  }
+
+  // Resolve after reading every column, including configs before their target.
+  // Applying in column order preserves the last config when aliases overlap.
+  const assertionConfigs: Record<number, Record<string, unknown>> = {};
+  for (const { target, key, value } of pendingAssertionConfigs) {
+    const index = target === 'first' ? 0 : assertionIndicesBySource.get(target);
+    if (index !== undefined && asserts[index]) {
+      assertionConfigs[index] ??= {};
+      assertionConfigs[index][key] = value;
     }
   }
 

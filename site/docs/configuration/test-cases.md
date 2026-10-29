@@ -360,7 +360,9 @@ At the assertion-string level, escape a literal double quote inside a quoted val
 | `__metric`                                                  | Display name in reports (does not change assertion type) | `accuracy`                                                        |
 | `__threshold`                                               | Pass threshold (applies to all asserts)                  | `0.8`                                                             |
 | `__metadata:*`                                              | Filterable metadata                                      | See below                                                         |
-| `__config:__expected:<key>` or `__config:__expectedN:<key>` | Set configuration for all or specific assertions         | `__config:__expected:threshold`, `__config:__expected2:threshold` |
+| `__config:__expected:<key>` or `__config:__expectedN:<key>` | Set configuration for the first or a named assertion     | `__config:__expected:threshold`, `__config:__expected2:threshold` |
+
+Numbered configs target the matching `__expectedN` column, even when assertion columns are reordered or earlier cells are empty. Configs for missing or empty assertion columns are ignored. The unnumbered `__config:__expected:threshold` form targets only the first nonempty assertion.
 
 Using `__metadata` without a key is not supported. Specify the metadata field like `__metadata:category`.
 If a CSV file includes a `__metadata` column without a key, Promptfoo logs a warning and ignores the column.
