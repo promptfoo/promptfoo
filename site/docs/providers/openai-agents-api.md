@@ -136,6 +136,24 @@ With `hostedTrace.includeToolArguments: true`, Promptfoo can retain the followin
 Accepted commands are simple invocations of `pwd`, `ls`, `cat`, `wc`, `head`, and `tail` with plain paths and short options such as `wc -l` or `head -n 5`. Simple `sh` and `bash` wrappers also qualify, for example `/bin/bash -lc 'cat /workspace/ledger.csv'`. A Python script, pipeline, or command containing redirection is omitted. The same call can still supply `cwd: /workspace`.
 Other fields, including free text and nested objects, are omitted. For example, if `lookup_order` receives `{"order_id":"417","note":"rush"}`, the trace can retain `order_id`. If a value protected by `tracing.otlp.http.redactAttributes` also appears in a tool or model name, the trace becomes unavailable. An argument containing a protected value can be omitted on its own. Malformed JSON, duplicate keys, or an oversized payload can leave a span without argument evidence.
 
+#### Grade native spans
+
+For a completed hosted trace, use a raw span assertion such as `trace-error-spans` to check the status of a named tool. Pair a zero-error budget with a positive count so an agent that skips the tool fails the test.
+
+```yaml
+assert:
+  - type: trace-span-count
+    value:
+      pattern: execute_tool command_execution
+      min: 1
+  - type: trace-error-spans
+    value:
+      pattern: execute_tool command_execution
+      max_count: 0
+```
+
+Open the assertion details when a trace is partial or the imported spans are missing. The completed answer can still be graded separately.
+
 ## Saved agents
 
 Set `agent_id` to evaluate an existing saved agent in a new session. Omitted agent settings, including the model, are inherited. An `agent` object supplies session-only overrides; arrays and objects replace their saved fields rather than merging.

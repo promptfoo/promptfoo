@@ -1,11 +1,37 @@
+import { hasBodyCaptureMarker, PromptfooAttributes, truncateBody } from './genaiTracer';
+
 export interface AttributeSanitizationOptions {
   redactAttributes?: string[];
   sanitizeSensitiveAttributes?: boolean;
   truncateValues?: boolean;
 }
 
+/** Older exports could remove a body without recording whether the span originally had one. */
+export function isMissingTraceBodyUncertain(
+  key: string,
+  attributes: Record<string, unknown>,
+  metadata?: Record<string, unknown>,
+): boolean {
+  if (Object.prototype.hasOwnProperty.call(attributes, key)) {
+    return false;
+  }
+  const { REQUEST_BODY, RESPONSE_BODY, REQUEST_BODY_STRIPPED, RESPONSE_BODY_STRIPPED } =
+    PromptfooAttributes;
+  if (key !== REQUEST_BODY && key !== RESPONSE_BODY) {
+    return false;
+  }
+  const marker = key === REQUEST_BODY ? REQUEST_BODY_STRIPPED : RESPONSE_BODY_STRIPPED;
+  return (
+    metadata?.localBodyAttributeLossTracked !== true ||
+    Object.prototype.hasOwnProperty.call(attributes, marker)
+  );
+}
+
 // Match normalized names; the cookie pattern also covers set-cookie.
 const SENSITIVE_ATTRIBUTE_PATTERN = /authorization|cookie|token|apikey|secret|password|passphrase/;
+const MAX_ATTRIBUTE_LENGTH = 400;
+const CUSTOM_REDACTION = '[REDACTED]';
+const SENSITIVE_REDACTION = '<redacted>';
 
 const SAFE_TOKEN_ATTRIBUTE_KEYS = new Set([
   'gen_ai.request.max_tokens',
@@ -45,6 +71,34 @@ export function isSensitiveTraceAttribute(
   );
 }
 
+/** Replaced values can only rule out matches incompatible with the retained prefix. */
+export function isUncertainTraceAttributeMatch(stored: unknown, expected: unknown): boolean {
+  if (stored === CUSTOM_REDACTION || stored === SENSITIVE_REDACTION) {
+    return true;
+  }
+  if (typeof stored !== 'string' || typeof expected !== 'string') {
+    return false;
+  }
+  const truncated = stored.length === MAX_ATTRIBUTE_LENGTH + 1 && stored.endsWith('…');
+  const matchesStored = (value: string) =>
+    truncated
+      ? value.length > MAX_ATTRIBUTE_LENGTH && value.startsWith(stored.slice(0, -1))
+      : value === stored;
+  if (truncated && matchesStored(expected)) {
+    return true;
+  }
+  if (!hasBodyCaptureMarker(stored) && !(truncated && stored.includes('<'))) {
+    return false;
+  }
+  // GenAI sanitizes bodies and provider-specific attributes before export shortens them again.
+  // The export may have cut a redaction placeholder after its opening '<'.
+  return (
+    stored === expected ||
+    matchesStored(truncateBody(expected, false)) ||
+    matchesStored(truncateBody(expected))
+  );
+}
+
 export function sanitizeTraceAttributes(
   attributes: Record<string, any> | null | undefined,
   options: AttributeSanitizationOptions = {},
@@ -68,7 +122,9 @@ export function sanitizeTraceAttributes(
 
   const sanitizeValue = (value: any): any => {
     if (typeof value === 'string') {
-      return truncateValues && value.length > 400 ? `${value.slice(0, 400)}…` : value;
+      return truncateValues && value.length > MAX_ATTRIBUTE_LENGTH
+        ? `${value.slice(0, MAX_ATTRIBUTE_LENGTH)}…`
+        : value;
     }
     if (Array.isArray(value)) {
       return value.map(sanitizeValue);
@@ -82,11 +138,11 @@ export function sanitizeTraceAttributes(
   const sanitized: Record<string, any> = {};
   for (const [key, value] of Object.entries(attributes)) {
     if (customPatterns.some((pattern) => key.toLowerCase().includes(pattern))) {
-      sanitized[key] = '[REDACTED]';
+      sanitized[key] = CUSTOM_REDACTION;
       continue;
     }
     if (sanitizeSensitiveAttributes && isSensitiveTraceAttribute(key)) {
-      sanitized[key] = '<redacted>';
+      sanitized[key] = SENSITIVE_REDACTION;
       continue;
     }
     sanitized[key] = sanitizeValue(value);

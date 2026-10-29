@@ -2,6 +2,11 @@ import { context, createContextKey, trace } from '@opentelemetry/api';
 
 export const PROMPTFOO_TRACER_NAME = 'promptfoo.providers';
 export const SPAN_ROLE_ATTRIBUTE = 'promptfoo.span.role';
+export const TEST_CASE_SPAN_NAME = 'promptfoo.test_case';
+export const TEST_CASE_OUTCOME_ATTRIBUTES = {
+  success: 'promptfoo.test.success',
+  score: 'promptfoo.test.score',
+} as const;
 
 export type PromptfooSpanRole = 'test_case' | 'target' | 'grader';
 

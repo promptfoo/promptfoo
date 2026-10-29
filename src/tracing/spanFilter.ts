@@ -26,7 +26,7 @@ interface SpanOwnership {
 }
 
 /** Older receivers persisted ownership from the wire. Discard claims that the export itself contradicts. */
-function withoutReceivedHostedOwner<T extends SpanOwnership>(span: T): T {
+export function withoutReceivedHostedOwner<T extends SpanOwnership>(span: T): T {
   const attributes = span.attributes;
   if (!attributes) {
     return span;

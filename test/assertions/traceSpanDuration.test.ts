@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { handleTraceSpanDuration } from '../../src/assertions/traceSpanDuration';
+import { normalizeHostedTrace } from '../../src/providers/openai/agents-api-trace-spans';
 import { createMockProvider, createProviderResponse } from '../factories/provider';
 
 import type { AssertionParams, AtomicTestCase } from '../../src/types/index';
@@ -80,6 +81,62 @@ const defaultParams = {
 };
 
 describe('handleTraceSpanDuration', () => {
+  function gradeHostedDuration(spans: TraceData['spans'], max: number) {
+    const renderedValue = { max };
+    return handleTraceSpanDuration({
+      ...defaultParams,
+      providerResponse: {
+        metadata: { hostedTrace: { source: 'openai:agents-api', status: 'imported' } },
+      },
+      assertion: { type: 'trace-span-duration', value: renderedValue },
+      renderedValue,
+      assertionValueContext: {
+        ...defaultParams.assertionValueContext,
+        trace: { ...mockTraceData, spans },
+      },
+    });
+  }
+
+  it.each([
+    [25, 24_999_999n, true],
+    [25, 25_000_000n, true],
+    [25, 25_000_001n, false],
+    [9_007_199_255, 9_007_199_254_999_999n, true],
+    [9_007_199_255, 9_007_199_255_000_000n, true],
+    [9_007_199_255, 9_007_199_255_000_001n, false],
+    [9_007_199_256, 9_007_199_256_000_001n, false],
+  ] as const)('grades a native %sms threshold with duration %s ns', (max, duration, pass) => {
+    const start = 1_700_000_000_000_000_100n;
+    const span = {
+      name: 'invoke_agent',
+      traceId: 'b'.repeat(32),
+      spanId: 'c'.repeat(16),
+      startTimeUnixNano: start.toString(),
+      endTimeUnixNano: (start + duration).toString(),
+      attributes: [{ key: 'gen_ai.operation.name', value: { stringValue: 'invoke_agent' } }],
+    };
+    const otlp = { resourceSpans: [{ scopeSpans: [{ spans: [span] }] }] };
+    const { spans } = normalizeHostedTrace(otlp, 'a'.repeat(16), false);
+    expect(gradeHostedDuration(spans, max).pass).toBe(pass);
+  });
+
+  it('grades a malformed persisted native duration as incomplete timing evidence', () => {
+    const span = {
+      spanId: '1',
+      name: 'invoke_agent',
+      startTime: 100,
+      endTime: 100,
+      attributes: {
+        'promptfoo.openai.hosted_trace': 'wrapper',
+        'promptfoo.openai.duration_ns': 'invalid',
+      },
+    };
+    expect(gradeHostedDuration([span], 25)).toMatchObject({
+      pass: false,
+      reason: expect.stringContaining('incomplete timing data'),
+    });
+  });
+
   it('should pass when all spans are within duration limit', () => {
     const params: AssertionParams = {
       ...defaultParams,

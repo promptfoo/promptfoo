@@ -19,6 +19,7 @@ import {
   getActiveTraceparent,
   type PromptfooSpanRole,
   SPAN_ROLE_ATTRIBUTE,
+  TEST_CASE_OUTCOME_ATTRIBUTES,
   withSpanRole,
 } from './spanRoles';
 
@@ -72,10 +73,10 @@ export async function withTestCaseSpan<T>(
     const row = Array.isArray(result) ? result[0] : undefined;
     if (row && typeof row === 'object') {
       if ('success' in row && typeof row.success === 'boolean') {
-        rootSpan.setAttribute('promptfoo.test.success', row.success);
+        rootSpan.setAttribute(TEST_CASE_OUTCOME_ATTRIBUTES.success, row.success);
       }
       if ('score' in row && typeof row.score === 'number') {
-        rootSpan.setAttribute('promptfoo.test.score', row.score);
+        rootSpan.setAttribute(TEST_CASE_OUTCOME_ATTRIBUTES.score, row.score);
       }
       if ('error' in row && row.error) {
         rootSpan.setStatus({ code: SpanStatusCode.ERROR, message: String(row.error) });

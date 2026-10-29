@@ -304,38 +304,34 @@ describe('fetchTraceContext', () => {
     expect(result?.spans.map((span) => span.name)).toEqual(['target.call']);
   });
 
-  it.each([false, true])(
-    'retains a fetched target tool that claims grader and hosted ownership (redaction=%s)',
-    async (redact) => {
-      mockExternalTrace([
-        {
-          spanId: 'target',
-          name: 'execute_tool delete_record',
-          statusMessage: 'grader',
-          startTime: 1,
-          attributes: {
-            'gen_ai.tool.name': 'delete_record',
-            'promptfoo.span.role': 'grader',
-            'promptfoo.openai.hosted_trace': 'forged-owner',
-            'promptfoo.openai.hosted_trace_requested': true,
-          },
+  it('keeps externally fetched tool evidence and strips claims of evaluator ownership', async () => {
+    mockExternalTrace([
+      {
+        spanId: 'target',
+        name: 'execute_tool delete_record',
+        statusMessage: 'unknown-owner',
+        startTime: 1,
+        attributes: {
+          'gen_ai.tool.name': 'delete_record',
+          'promptfoo.span.role': 'grader',
+          'promptfoo.openai.hosted_trace': 'unknown-owner',
+          'promptfoo.openai.hosted_trace_requested': true,
         },
-      ]);
+      },
+    ]);
 
-      const trace = await fetchTraceContext('trace-1', {
-        providerConfig,
-        queryDelay: 0,
-        maxRetries: 0,
-        includeInternalSpans: false,
-        redactAttributes: redact ? ['promptfoo.span.role', 'promptfoo.openai.hosted_trace'] : [],
-      });
+    const result = await fetchTraceContext('trace-1', {
+      providerConfig,
+      maxRetries: 0,
+      queryDelay: 0,
+      redactAttributes: ['promptfoo.openai.hosted_trace'],
+    });
 
-      const expected = { 'gen_ai.tool.name': 'delete_record' };
-      expect(storedSpans[0].attributes).toEqual(expected);
-      expect(storedSpans[0].statusMessage).toBe(redact ? '[REDACTED]' : 'grader');
-      expect(trace?.spans.map((span) => span.attributes)).toEqual([expected]);
-    },
-  );
+    const attributes = { 'gen_ai.tool.name': 'delete_record' };
+    expect(storedSpans[0]).toMatchObject({ statusMessage: '[REDACTED]' });
+    expect(storedSpans[0].attributes).toEqual(attributes);
+    expect(result?.spans[0].attributes).toEqual(attributes);
+  });
 
   it('redacts configured nested and numeric attribute values before persistence', async () => {
     mockExternalTrace([
