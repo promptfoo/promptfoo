@@ -4,6 +4,7 @@ import { getCache, isCacheEnabled } from '../cache';
 import { getEnvString, getProviderEnvString } from '../envars';
 import logger from '../logger';
 import { ellipsize } from '../util/text';
+import { shouldBustProviderCache } from './shared';
 import type { Cache } from 'cache-manager';
 
 import type { EnvOverrides } from '../types/env';
@@ -153,7 +154,7 @@ class FalProvider<Input = Record<string, unknown>> implements ApiProvider {
       ...getFalModelInput((context?.prompt?.config ?? {}) as FalProviderOptions),
     };
 
-    const cacheEnabled = isCacheEnabled();
+    const cacheEnabled = isCacheEnabled() && !shouldBustProviderCache(context);
     let cacheKey: string | undefined;
     if (cacheEnabled) {
       cacheKey = `fal:${this.modelName}:${generateConfigHash(this.config)}:${getAuthCacheNamespace(
