@@ -319,6 +319,31 @@ describe('is-sql assertion', () => {
       });
     });
 
+    describe.each([false, true])('backticks outside identifiers (inverse: %s)', (inverse) => {
+      it.each([
+        {
+          databaseType: 'MySQL',
+          outputString: "SELECT * FROM posts WHERE body LIKE '%`%'",
+        },
+        { databaseType: 'MySQL', outputString: 'SELECT "`" AS marker' },
+        { databaseType: 'MySQL', outputString: 'SELECT 1 /* ` is a literal character */' },
+        { databaseType: 'MySQL', outputString: 'SELECT 1 -- ` is a literal character\n' },
+        { databaseType: 'MySQL', outputString: 'SELECT 1 # ` is a literal character\n' },
+        { databaseType: 'PostgreSQL', outputString: 'SELECT $$`$$ AS marker' },
+        { databaseType: 'PostgreSQL', outputString: 'SELECT "a`b" FROM users' },
+        { databaseType: 'TransactSQL', outputString: 'SELECT [a`b] FROM users' },
+      ])('validates $databaseType SQL: $outputString', async ({ databaseType, outputString }) => {
+        const result = await handleIsSql({
+          assertion: { type: inverse ? 'not-is-sql' : 'is-sql' },
+          renderedValue: { databaseType },
+          outputString,
+          inverse,
+        } as AssertionParams);
+
+        expect(result).toMatchObject({ pass: !inverse, score: inverse ? 0 : 1 });
+      });
+    });
+
     it('should fail when the SQL statement contains mismatched backticks', async () => {
       const renderedValue = undefined;
       const outputString = 'SELECT * FROM `employees';
@@ -715,6 +740,17 @@ describe('contains-sql assertion', () => {
       outputString,
       inverse,
     } as AssertionParams);
+
+  it.each([
+    "SELECT * FROM posts WHERE body LIKE '%`%'",
+    "Here is the query:\n```sql\nSELECT * FROM posts WHERE body LIKE '%`%'\n```",
+  ])('validates SQL containing a backtick literal: %s', async (outputString) => {
+    await expect(runContainsSql(outputString)).resolves.toMatchObject({ pass: true, score: 1 });
+    await expect(runContainsSql(outputString, true)).resolves.toMatchObject({
+      pass: false,
+      score: 0,
+    });
+  });
 
   it('should extract fenced SQL that uses backtick-quoted identifiers', async () => {
     // Before the fix, the [^`]+ fence regex could not contain backticks, so this
