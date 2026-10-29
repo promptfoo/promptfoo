@@ -147,10 +147,7 @@ describe('trace assertions', () => {
 
   describe('OpenAI Agents API trace evidence', () => {
     const noErrors: Assertion = { type: 'trace-error-spans', value: { max_count: 0 } };
-    const noDelete: Assertion = {
-      type: 'not-trace-span-count',
-      value: { pattern: 'execute_tool delete_record', min: 1 },
-    };
+    const noDelete: Assertion = { type: 'not-trajectory:tool-used', value: 'delete_record' };
     const imported = {
       source: 'openai:agents-api',
       status: 'imported',
@@ -208,21 +205,6 @@ describe('trace assertions', () => {
           ],
         },
       });
-
-    it('reports hosted trajectory evidence as unavailable while generic trajectories still grade', async () => {
-      const used: Assertion = { type: 'trajectory:tool-used', value: 'lookup' };
-      const absent: Assertion = { type: 'not-trajectory:tool-used', value: 'delete_record' };
-      for (const assertion of [used, absent]) {
-        await expect(grade(assertion, imported)).resolves.toMatchObject({
-          pass: false,
-          score: 0,
-          reason: expect.stringContaining('Hosted trajectory evidence is unavailable'),
-        });
-      }
-      await expect(
-        grade({ ...used, value: 'other_provider' }, undefined, []),
-      ).resolves.toMatchObject({ pass: true });
-    });
 
     it.each([noErrors, noDelete])(
       'cannot infer absence for $type after a failed import',
@@ -286,15 +268,74 @@ describe('trace assertions', () => {
     });
 
     it.each<{ assertion: Assertion; pass: boolean }>([
+      { assertion: { type: 'trajectory:tool-used', value: ['lookup'] }, pass: true },
+      {
+        assertion: { type: 'trajectory:tool-used', value: { name: 'lookup', min: 1 } },
+        pass: true,
+      },
+      {
+        assertion: {
+          type: 'trajectory:tool-args-match',
+          value: { name: 'lookup', args: { order_id: '123' } },
+        },
+        pass: true,
+      },
       { assertion: noErrors, pass: false },
       { assertion: noDelete, pass: false },
-    ])('requires a complete trace for $assertion.type', async ({ assertion, pass }) => {
-      await expect(grade(assertion, { ...incomplete, status: 'partial' })).resolves.toMatchObject({
-        pass,
+      {
+        assertion: { type: 'trajectory:tool-used', value: { name: 'other', min: 0 } },
+        pass: false,
+      },
+      {
+        assertion: { type: 'trajectory:tool-used', value: { name: 'lookup', max: 1 } },
+        pass: false,
+      },
+      { assertion: { type: 'trajectory:tool-sequence', value: ['lookup'] }, pass: false },
+    ])(
+      'grades only observed tool evidence from a partial trace: $assertion.type',
+      async ({ assertion, pass }) => {
+        await expect(grade(assertion, { ...incomplete, status: 'partial' })).resolves.toMatchObject(
+          { pass },
+        );
+      },
+    );
+
+    it('distinguishes an unproven tool requirement from a complete capture that disproves it', async () => {
+      const partial = { ...complete, status: 'partial' };
+      const checks: Assertion[] = [
+        { type: 'trajectory:tool-used', value: 'delete' },
+        { type: 'trajectory:tool-used', value: ['lookup', 'delete'] },
+        { type: 'trajectory:tool-used', value: { name: 'lookup', min: 2 } },
+        {
+          type: 'trajectory:tool-args-match',
+          value: { name: 'lookup', args: { order_id: '456' } },
+        },
+      ];
+      for (const assertion of checks) {
+        await expect(grade(assertion, partial)).resolves.toMatchObject({
+          pass: false,
+          score: 0,
+          reason: expect.stringContaining('hosted trace is partial'),
+        });
+        await expect(grade(assertion, complete)).resolves.toMatchObject({
+          pass: false,
+          reason: expect.not.stringContaining('hosted trace is partial'),
+        });
+      }
+      await expect(
+        grade({ type: 'not-trajectory:tool-used', value: 'delete' }, partial),
+      ).resolves.toMatchObject({
+        pass: false,
+        reason: expect.stringContaining('hosted trace is partial'),
       });
     });
 
     it('keeps the local provider wrapper but excludes tools outside this hosted turn', async () => {
+      for (const status of [imported, { ...imported, status: 'partial' }]) {
+        await expect(
+          grade({ type: 'trajectory:tool-used', value: 'other_provider' }, status),
+        ).resolves.toMatchObject({ pass: false });
+      }
       await expect(
         grade({ type: 'trace-span-count', value: { pattern: 'invoke_agent', min: 1 } }, imported),
       ).resolves.toMatchObject({ pass: true });
@@ -592,6 +633,9 @@ describe('trace assertions', () => {
             rootId,
           ),
         ).resolves.toMatchObject({ pass: true });
+        await expect(
+          check({ type: 'trajectory:tool-used', value: 'lookup' }, rootId),
+        ).resolves.toMatchObject({ pass: true });
       }
       // User-provided local target labels may also start with execute_tool.
       await expect(check(noError, 'other')).resolves.toMatchObject({ pass: false });
@@ -734,6 +778,9 @@ describe('trace assertions', () => {
           await expect(grade(assertion, imported, [chat])).resolves.toMatchObject({ pass: true });
         }
       }
+      await expect(
+        grade({ type: 'trajectory:tool-used', value: 'lookup' }, imported, [chat]),
+      ).resolves.toMatchObject({ pass: false });
     });
 
     it('cannot infer model absence from a legacy chat name without its capture evidence', async () => {
@@ -753,6 +800,7 @@ describe('trace assertions', () => {
       const checks: Assertion[] = [
         { type: 'trace-span-count', value: { pattern, max: 0 } },
         { type: 'trace-error-spans', value: { pattern, max_count: 0 } },
+        { type: 'trajectory:step-count', value: { type: 'span', pattern, max: 0 } },
         {
           type: 'trace-span-count',
           value: { pattern: 'chat', attributes: { 'gen_ai.request.model': 'gpt-6-astra' }, max: 0 },
@@ -766,6 +814,12 @@ describe('trace assertions', () => {
         };
         await expect(grade(assertion, imported, [attested])).resolves.toMatchObject({ pass: true });
       }
+      await expect(
+        grade({ type: 'trajectory:tool-used', value: 'lookup' }, { ...imported, spanCount: 2 }, [
+          chat,
+          tool('lookup'),
+        ]),
+      ).resolves.toMatchObject({ pass: true });
     });
 
     it('grades bounds that hold or fail for every possible count of filtered native spans', async () => {
@@ -859,6 +913,7 @@ describe('trace assertions', () => {
             max: 1,
           },
         },
+        { type: 'trajectory:tool-used', value: 'lookup' },
       ] satisfies Assertion[]) {
         await expect(check(assertion)).resolves.toMatchObject({ pass: true });
       }
@@ -1067,7 +1122,7 @@ describe('trace assertions', () => {
       ).resolves.toMatchObject({ pass: true });
     });
 
-    it('requires the local provider wrapper for raw counts', async () => {
+    it('requires the local provider wrapper for raw counts and still grades witnessed tool arguments without it', async () => {
       const orphan = tool('lookup', { order_id: '123' });
       orphan.parentSpanId = 'missing-wrapper';
       orphan.attributes!['promptfoo.openai.hosted_trace'] = orphan.parentSpanId;
@@ -1077,6 +1132,16 @@ describe('trace assertions', () => {
           grade({ type: 'trace-span-count', value: { pattern, max: 1 } }, manifest, [orphan]),
         ).resolves.toMatchObject({ pass: false, reason: expect.stringContaining('wrapper') });
       }
+      await expect(
+        grade(
+          {
+            type: 'trajectory:tool-args-match',
+            value: { name: 'lookup', args: { order_id: '123' }, mode: 'exact' },
+          },
+          manifest,
+          [orphan],
+        ),
+      ).resolves.toMatchObject({ pass: true });
     });
 
     it('fails if a replay contains only hosted spans belonging to a different provider call', async () => {
@@ -1151,6 +1216,15 @@ describe('trace assertions', () => {
       };
       for (const calls of [[grader, graderWrapper, importedTool], [importedTool]]) {
         await expect(
+          grade({ type: 'trajectory:tool-used', value: 'read_receipt' }, undefined, calls),
+        ).resolves.toMatchObject({ pass: false });
+        await expect(
+          grade({ type: 'not-trajectory:tool-used', value: 'read_receipt' }, undefined, calls),
+        ).resolves.toMatchObject({ pass: true });
+        await expect(
+          grade({ type: 'trajectory:tool-used', value: 'other_provider' }, undefined, calls),
+        ).resolves.toMatchObject({ pass: true });
+        await expect(
           grade(
             { type: 'trace-span-count', value: { pattern: 'invoke_agent', min: 1, max: 1 } },
             undefined,
@@ -1160,7 +1234,29 @@ describe('trace assertions', () => {
       }
     });
 
+    it('proves a positive step minimum from stored names without argument capture', async () => {
+      const count = (bounds: { min?: number; max?: number }) =>
+        grade(
+          { type: 'trajectory:step-count', value: { pattern: 'execute_tool *', ...bounds } },
+          imported,
+          [tool('lookup')],
+        );
+      await expect(count({ min: 1 })).resolves.toMatchObject({ pass: true });
+      await expect(count({ min: 2 })).resolves.toMatchObject({ pass: false });
+      await expect(count({ max: 1 })).resolves.toMatchObject({
+        pass: false,
+        reason: expect.stringContaining('includeToolArguments'),
+      });
+    });
+
     it.each<Assertion>([
+      { type: 'not-trajectory:tool-args-match', value: { name: 'shell', args: { cmd: 'rm' } } },
+      { type: 'trajectory:step-count', value: { type: 'command', max: 0 } },
+      { type: 'trajectory:step-count', value: { pattern: 'rm*', max: 0 } },
+      {
+        type: 'not-trajectory:tool-sequence',
+        value: { steps: [{ type: ['command'], name: 'rm' }] },
+      },
       {
         type: 'trace-error-spans',
         value: { attributes: { 'gen_ai.tool.call.arguments': '{"cmd":"rm"}' }, max_count: 0 },
@@ -1189,11 +1285,178 @@ describe('trace assertions', () => {
       await expect(grade(assertion, complete)).resolves.toMatchObject({ pass: true });
     });
 
+    it.each(['shell', 'configured-command'])(
+      'keeps %s visible as both hosted tool and command',
+      async (name) => {
+        const cmd = 'rm receipt';
+        const gradeTool = (assertion: Assertion, capture: boolean) =>
+          runAssertion({
+            assertion,
+            test: mockTest,
+            providerResponse: {
+              output: 'ok',
+              metadata: { hostedTrace: capture ? complete : imported },
+            },
+            traceId: mockTraceData.traceId,
+            traceData: {
+              ...mockTraceData,
+              metadata: { commandToolNames: ['configured-command'] },
+              spans: [
+                {
+                  spanId: 'shell',
+                  name: 'execute_tool ' + name,
+                  startTime: 10,
+                  endTime: 20,
+                  attributes: {
+                    'promptfoo.openai.hosted_trace': 'wrapper',
+                    'tool.name': name,
+                    ...(capture && { 'tool.arguments': JSON.stringify({ cmd }) }),
+                  },
+                },
+              ],
+            },
+          });
+        for (const capture of [false, true]) {
+          await expect(
+            gradeTool({ type: 'trajectory:tool-used', value: name }, capture),
+          ).resolves.toMatchObject({ pass: true });
+          await expect(
+            gradeTool({ type: 'not-trajectory:tool-used', value: name }, capture),
+          ).resolves.toMatchObject({ pass: false });
+          await expect(
+            gradeTool({ type: 'trajectory:tool-sequence', value: [name] }, capture),
+          ).resolves.toMatchObject({ pass: true });
+          await expect(
+            gradeTool(
+              { type: 'not-trajectory:tool-args-match', value: { name, args: { cmd } } },
+              capture,
+            ),
+          ).resolves.toMatchObject({ pass: false });
+        }
+        await expect(
+          gradeTool({ type: 'trajectory:tool-args-match', value: { name, args: { cmd } } }, true),
+        ).resolves.toMatchObject({ pass: true });
+        await expect(
+          gradeTool(
+            { type: 'trajectory:step-count', value: { type: 'command', pattern: 'rm*', min: 1 } },
+            true,
+          ),
+        ).resolves.toMatchObject({ pass: true });
+      },
+    );
+
+    it('grades preserved fields on a lossy call and requires an intact candidate for exact matching', async () => {
+      const lossy = tool('lookup', { order_id: '123' }, true);
+      const intact = tool('lookup', { order_id: '123' });
+      const check = (args: unknown, mode = 'partial', calls = [lossy]) =>
+        grade(
+          { type: 'trajectory:tool-args-match', value: { name: 'lookup', args, mode } },
+          { ...incomplete, spanCount: calls.length },
+          calls,
+        );
+      await expect(check({ order_id: '123' })).resolves.toMatchObject({ pass: true });
+      await expect(check({ order_id: '123' }, 'exact')).resolves.toMatchObject({ pass: false });
+      await expect(check({ order_id: '123' }, 'exact', [lossy, intact])).resolves.toMatchObject({
+        pass: true,
+      });
+      await expect(check({ token: '[REDACTED]' })).resolves.toMatchObject({ pass: false });
+      await expect(
+        check(true, 'partial', [tool('lookup', undefined, true)]),
+      ).resolves.toMatchObject({ pass: false });
+      const legacy = tool('lookup', { url: 'https://***:***@example.test/' }, true);
+      delete legacy.attributes!['gen_ai.tool.call.arguments'];
+      await expect(
+        check({ url: 'https://***:***@example.test/' }, 'partial', [legacy]),
+      ).resolves.toMatchObject({ pass: false });
+    });
+
+    it('grades saved shell command strings, argv, and command objects consistently', async () => {
+      const command: Assertion = {
+        type: 'trajectory:step-count',
+        value: { type: 'command', pattern: '*ledger.csv', min: 1, max: 1 },
+      };
+      const forbidden: Assertion = {
+        type: 'trajectory:step-count',
+        value: { type: 'command', pattern: '*ledger.csv', max: 0 },
+      };
+      for (const args of [
+        'cat ledger.csv',
+        ['cat', 'ledger.csv'],
+        { cmd: 'cat ledger.csv' },
+        { command: ['cat', 'ledger.csv'] },
+        { commands: ['pwd', 'cat ledger.csv'] },
+      ]) {
+        const saved = [tool('shell', args)];
+        await expect(grade(command, complete, saved)).resolves.toMatchObject({ pass: true });
+        await expect(grade(forbidden, complete, saved)).resolves.toMatchObject({ pass: false });
+      }
+      for (const args of [{ script: 'cat ledger.csv' }, ['cat', { path: 'ledger.csv' }]]) {
+        await expect(grade(forbidden, complete, [tool('shell', args)])).resolves.toMatchObject({
+          pass: false,
+          reason: expect.stringContaining('unavailable'),
+        });
+      }
+    });
+
+    it('requires a resolvable command for inverse command argument matches', async () => {
+      const calls = [tool('shell', { script: 'cat ledger.csv', cwd: '/workspace' })];
+      for (const type of ['command', ['tool', 'command']]) {
+        await expect(
+          grade(
+            {
+              type: 'not-trajectory:tool-args-match',
+              value: { type, pattern: 'cat*', args: { cwd: '/workspace' } },
+            },
+            complete,
+            calls,
+          ),
+        ).resolves.toMatchObject({ pass: false, reason: expect.stringContaining('unavailable') });
+      }
+      for (const [type, cwd] of [
+        ['trajectory:tool-args-match', '/workspace'],
+        ['not-trajectory:tool-args-match', '/missing'],
+      ] as const) {
+        await expect(
+          grade({ type, value: { name: 'shell', args: { cwd } } }, complete, calls),
+        ).resolves.toMatchObject({ pass: true });
+      }
+    });
+
+    it.each([null, undefined])('treats an optional step type of %s as untyped', async (type) => {
+      const forbidden = {
+        type: 'trajectory:step-count',
+        value: { type, pattern: 'rm*', max: 0 },
+      } as Assertion;
+      await expect(grade(forbidden, imported, [tool('shell')])).resolves.toMatchObject({
+        pass: false,
+        reason: expect.stringContaining('excludes tool arguments'),
+      });
+    });
+
     it('cannot infer the absence of an argument from a truncated export', async () => {
       const args = { cmd: 'cat ledger.csv', padding: 'a'.repeat(500) };
       const shell = tool('shell', args);
       const replayed = { ...shell, attributes: sanitizeTraceAttributes(shell.attributes) };
       expect(JSON.parse(JSON.stringify(replayed.attributes))['tool.arguments']).toMatch(/…$/);
+      const forbidden: Assertion = {
+        type: 'not-trajectory:tool-args-match',
+        value: { name: 'shell', args: { cmd: args.cmd } },
+      };
+      await expect(grade(forbidden, complete, [shell])).resolves.toMatchObject({ pass: false });
+      await expect(grade(forbidden, complete, [replayed])).resolves.toMatchObject({
+        pass: false,
+        reason: expect.stringContaining('unavailable'),
+      });
+      await expect(
+        grade(
+          {
+            type: 'trajectory:tool-args-match',
+            value: { name: 'shell', args: replayed.attributes['tool.arguments'] },
+          },
+          complete,
+          [replayed],
+        ),
+      ).resolves.toMatchObject({ pass: false });
       await expect(
         grade(
           {
@@ -1207,6 +1470,50 @@ describe('trace assertions', () => {
           complete,
           [replayed],
         ),
+      ).resolves.toMatchObject({ pass: false });
+    });
+
+    it('credits a witnessed tool-use minimum when another call has redacted arguments', async () => {
+      const calls = [tool('shell', { cmd: 'cat receipt.txt' }), tool('lookup', undefined, true)];
+      const check = (
+        bounds: { min?: number; max?: number },
+        status = 'imported',
+        inverse = false,
+      ) =>
+        grade(
+          {
+            type: inverse ? 'not-trajectory:tool-used' : 'trajectory:tool-used',
+            value: { type: 'command', name: 'cat', ...bounds },
+          },
+          { ...incomplete, status, spanCount: calls.length },
+          calls,
+        );
+      for (const status of ['imported', 'partial']) {
+        await expect(check({ min: 1 }, status)).resolves.toMatchObject({ pass: true });
+        await expect(check({}, status)).resolves.toMatchObject({ pass: true });
+        await expect(check({ min: 2 }, status)).resolves.toMatchObject({ pass: false });
+        await expect(check({ max: 1 }, status)).resolves.toMatchObject({ pass: false });
+        await expect(check({ min: 2 }, status, true)).resolves.toMatchObject({ pass: false });
+      }
+    });
+
+    it('an observed command establishes a positive lower bound despite missing arguments elsewhere', async () => {
+      const calls = [tool('shell', { cmd: 'cat /workspace/ledger.csv' }), tool('lookup')];
+      const check = (bounds: { min?: number; max?: number }, observed = calls) =>
+        grade(
+          {
+            type: 'trajectory:step-count',
+            value: { type: 'command', pattern: '*ledger.csv', ...bounds },
+          },
+          { ...incomplete, spanCount: observed.length },
+          observed,
+        );
+      await expect(check({ min: 1 })).resolves.toMatchObject({ pass: true });
+      await expect(check({ min: 2 })).resolves.toMatchObject({ pass: false });
+      await expect(check({ max: 1 })).resolves.toMatchObject({ pass: false });
+      // Redaction could have removed a higher-precedence cmd from the same call.
+      await expect(
+        check({ min: 1 }, [tool('shell', { command: 'cat /workspace/ledger.csv' }, true)]),
       ).resolves.toMatchObject({ pass: false });
     });
 

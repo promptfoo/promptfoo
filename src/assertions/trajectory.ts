@@ -46,6 +46,12 @@ function getTraceOrThrow(params: AssertionParams) {
   return trace;
 }
 
+function getToolSteps(params: AssertionParams) {
+  return extractTrajectorySteps(getTraceOrThrow(params)).filter(
+    (step) => step.type === 'tool' || step.hostedToolName !== undefined,
+  );
+}
+
 function applyInverse(pass: boolean, inverse: boolean) {
   return inverse ? !pass : pass;
 }
@@ -133,9 +139,17 @@ function resolveToolMatchers(
   );
 }
 
+function observedToolResult(params: AssertionParams, pass: boolean, reason: string): GradingResult {
+  return {
+    pass,
+    score: pass ? 1 : 0,
+    reason: pass ? reason : (params.traceSpanUncertainty?.reason ?? reason),
+    assertion: params.assertion,
+  };
+}
+
 export const handleTrajectoryToolUsed = (params: AssertionParams): GradingResult => {
-  const trace = getTraceOrThrow(params);
-  const steps = extractTrajectorySteps(trace).filter((step) => step.type === 'tool');
+  const steps = getToolSteps(params);
   const expected = resolveToolMatchers(params.renderedValue ?? params.assertion.value);
 
   if (expected.kind === 'list') {
@@ -171,12 +185,7 @@ export const handleTrajectoryToolUsed = (params: AssertionParams): GradingResult
       reason = `Missing required tool(s): ${missingTools.join(', ')}. Actual tools: ${formatStepList(actualTools)}`;
     }
 
-    return {
-      pass,
-      score: pass ? 1 : 0,
-      reason,
-      assertion: params.assertion,
-    };
+    return observedToolResult(params, pass, reason);
   }
 
   const matcher = expected.matcher;
@@ -210,12 +219,7 @@ export const handleTrajectoryToolUsed = (params: AssertionParams): GradingResult
       : `Tool "${matcherLabel}" did not satisfy the forbidden match condition`;
   }
 
-  return {
-    pass,
-    score: pass ? 1 : 0,
-    reason,
-    assertion: params.assertion,
-  };
+  return observedToolResult(params, pass, reason);
 };
 
 function resolveSequenceValue(value: unknown): TrajectorySequenceValue {
@@ -429,8 +433,7 @@ function resolveToolArgsMatchValue(value: unknown) {
 }
 
 export const handleTrajectoryToolSequence = (params: AssertionParams): GradingResult => {
-  const trace = getTraceOrThrow(params);
-  const toolSteps = extractTrajectorySteps(trace).filter((step) => step.type === 'tool');
+  const toolSteps = getToolSteps(params);
   const value = resolveSequenceValue(params.renderedValue ?? params.assertion.value);
   const expectedMatchers = value.steps.map((step, index) => {
     const matcher = normalizeTrajectoryMatcher(step, 'tool');
@@ -500,8 +503,7 @@ export const handleTrajectoryToolSequence = (params: AssertionParams): GradingRe
 };
 
 export const handleTrajectoryToolArgsMatch = (params: AssertionParams): GradingResult => {
-  const trace = getTraceOrThrow(params);
-  const toolSteps = extractTrajectorySteps(trace).filter((step) => step.type === 'tool');
+  const toolSteps = getToolSteps(params);
   const { matcher, expectedArgs, mode, defaults, ignore } = resolveToolArgsMatchValue(
     params.renderedValue ?? params.assertion.value,
   );
@@ -509,8 +511,10 @@ export const handleTrajectoryToolArgsMatch = (params: AssertionParams): GradingR
   const actualTools = toolSteps.map(formatTrajectoryStep);
   const matchingSteps = toolSteps.filter((step) => matchesTrajectoryStep(step, matcher));
   const stepsWithArgs = matchingSteps.filter((step) => step.args !== undefined);
-  const matchedStep = stepsWithArgs.find((step) =>
-    matchesToolArgs(step.args, expectedArgs, mode, defaults, ignore),
+  const matchedStep = stepsWithArgs.find(
+    (step) =>
+      !(mode === 'exact' && step.argumentsRedacted) &&
+      matchesToolArgs(step.args, expectedArgs, mode, defaults, ignore),
   );
   const basePass = matchedStep !== undefined;
   const pass = applyInverse(basePass, params.inverse);
@@ -549,12 +553,7 @@ export const handleTrajectoryToolArgsMatch = (params: AssertionParams): GradingR
     reason = `No call to tool "${matcherLabel}" matched expected arguments (${mode}): ${expectedArgsLabel}. Observed args: ${observedArgsLabel}`;
   }
 
-  return {
-    pass,
-    score: pass ? 1 : 0,
-    reason,
-    assertion: params.assertion,
-  };
+  return observedToolResult(params, pass, reason);
 };
 
 function resolveStepCountValue(value: unknown): TrajectoryCountValue {

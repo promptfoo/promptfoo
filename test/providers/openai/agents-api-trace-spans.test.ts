@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { extractTrajectorySteps } from '../../../src/assertions/trajectoryUtils';
 import cliState from '../../../src/cliState';
 import { normalizeHostedTrace } from '../../../src/providers/openai/agents-api-trace-spans';
 
@@ -88,6 +89,69 @@ describe('normalizeHostedTrace', () => {
     expect(normalizeHostedTrace(native, parentId, false).spans).toEqual(spans);
     const other = normalizeHostedTrace(native, 'aaaaaaaaaaaaaaaa', false).spans;
     expect(other.every((span) => spans.every((s) => s.spanId !== span.spanId))).toBe(true);
+  });
+
+  it.each([
+    ['1699999999999999999', '1700000000000000000'],
+    ['1700000000000000001', '1700000000000000002'],
+    [9007199254740961, 9007199254740962],
+  ])('orders overlapping calls by native starts %s and %s', (firstStart, secondStart) => {
+    const first = {
+      ...nativeSpan('aaaaaaaaaaaaaaaa', 'execute_tool', root.spanId),
+      startTimeUnixNano: firstStart,
+      endTimeUnixNano: '1700000000020000000',
+      attributes: [
+        attribute('gen_ai.operation.name', 'execute_tool'),
+        attribute('gen_ai.tool.name', 'first'),
+      ],
+    };
+    const second = {
+      ...first,
+      spanId: 'bbbbbbbbbbbbbbbb',
+      startTimeUnixNano: secondStart,
+      endTimeUnixNano: '1700000000010000000',
+      attributes: [
+        attribute('gen_ai.operation.name', 'execute_tool'),
+        attribute('gen_ai.tool.name', 'second'),
+      ],
+    };
+    const { spans } = normalizeHostedTrace(payload(root, second, first), parentId, false);
+    expect(spans[1].startTime).toBe(spans[2].startTime);
+    const steps = extractTrajectorySteps({
+      spans,
+      traceId,
+      evaluationId: 'eval',
+      testCaseId: 'row',
+    });
+    expect(steps.filter((s) => s.type === 'tool').map((s) => s.name)).toEqual(['first', 'second']);
+  });
+
+  it('orders equally started calls by their native ends when millisecond timestamps tie', () => {
+    const earlier = {
+      ...tool,
+      endTimeUnixNano: '1700000000000000100',
+    };
+    const later = {
+      ...earlier,
+      spanId: '4444444444444444',
+      endTimeUnixNano: '1700000000000000101',
+      attributes: [
+        attribute('gen_ai.operation.name', 'execute_tool'),
+        attribute('gen_ai.tool.name', 'send_receipt'),
+      ],
+    };
+    const { spans } = normalizeHostedTrace(payload(root, later, earlier), parentId, false);
+    expect(spans[1].endTime).toBe(spans[2].endTime);
+    const steps = extractTrajectorySteps({
+      spans,
+      traceId,
+      evaluationId: 'eval',
+      testCaseId: 'row',
+    });
+    expect(steps.filter((step) => step.type === 'tool').map((step) => step.name)).toEqual([
+      'lookup_order',
+      'send_receipt',
+    ]);
   });
 
   it.each([
