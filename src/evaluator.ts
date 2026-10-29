@@ -548,6 +548,15 @@ function hasProviderGroupedAssertion(assertion: AssertionOrSet): boolean {
   return PROVIDER_GROUPED_ASSERTION_TYPES.has(getAssertionBaseType(assertion));
 }
 
+function assertionNeedsLogProbs(assertion: AssertionOrSet): boolean {
+  if (assertion.type === 'assert-set') {
+    return assertion.assert.some(assertionNeedsLogProbs);
+  }
+
+  const type = getAssertionBaseType(assertion);
+  return type === 'perplexity' || type === 'perplexity-score';
+}
+
 function shouldDeferGradingForTest(test: AtomicTestCase): boolean {
   return Boolean(test.assert?.some(hasProviderGroupedAssertion));
 }
@@ -1136,13 +1145,20 @@ async function callActiveProvider({
     traceContext,
     vars,
   });
+  const includeLogProbs = Boolean(test.assert?.some(assertionNeedsLogProbs));
   let completedResponse: ProviderResponse | undefined;
   const completedTargets: { prompt: string; response: ProviderResponse }[] = [];
   const callApi = (onResponseHeaders?: CallApiOptionsParams['onResponseHeaders']) => {
     // A previous response belongs only to backoff until the next attempt starts.
     completedResponse = undefined;
     const callApiOptions =
-      abortSignal || onResponseHeaders ? { abortSignal, onResponseHeaders } : undefined;
+      abortSignal || onResponseHeaders || includeLogProbs
+        ? {
+            abortSignal,
+            onResponseHeaders,
+            ...(includeLogProbs ? { includeLogProbs: true } : {}),
+          }
+        : undefined;
     const invoke = () =>
       providerRegistry.withProvider(
         cleanupOwner,

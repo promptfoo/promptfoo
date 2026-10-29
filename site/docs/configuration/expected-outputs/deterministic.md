@@ -1079,6 +1079,8 @@ assert:
 
 :::warning
 Perplexity requires the LLM API to output `logprobs`. Currently only more recent versions of OpenAI GPT and Azure OpenAI GPT APIs support this.
+
+Promptfoo automatically requests log probabilities from OpenAI and Azure OpenAI chat providers for `perplexity` and `perplexity-score`, including their `not-` variants and assertions nested inside `assert-set`. The selected model must support log-probability output.
 :::
 
 #### Comparing different outputs from the same LLM
