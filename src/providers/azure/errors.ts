@@ -25,13 +25,17 @@ export function isContentFilterError(errorMessage: string): boolean {
   );
 }
 
+// Word-bounded: a bare "429" substring also matches token counts and request
+// IDs, e.g. "resulted in 204291 tokens".
+const HTTP_429_RE = /\b429\b/;
+
 export function isRateLimitError(errorMessage: string): boolean {
   const lower = errorMessage.toLowerCase();
   return (
     lower.includes('rate limit') ||
     lower.includes('quota exceeded') ||
     lower.includes('too many requests') ||
-    errorMessage.includes('429')
+    HTTP_429_RE.test(errorMessage)
   );
 }
 
