@@ -74,7 +74,7 @@ describe('TraceStore span persistence', () => {
     const traceId = 'contended-insertion';
     const traceStore = await createTrace(traceId);
     const db = await getDb();
-    const transaction = vi.spyOn(db, 'transaction');
+    const transaction = vi.spyOn(db, 'runGuardedWrite');
     const blocker = createClient({ url: 'file::memory:?cache=shared' });
     const lock = await blocker.transaction('write');
     try {
@@ -158,6 +158,35 @@ describe('TraceStore span persistence', () => {
     } finally {
       clock.mockRestore();
     }
+  });
+
+  it('joins concurrent guarded span writes to the outer transaction', async () => {
+    const traceId = 'nested-guarded-write';
+    const traceStore = await createTrace(traceId);
+    const db = await getDb();
+    const span = { spanId: 'healthy', name: 'work', startTime: 1 };
+    const options = { deadline: Date.now() + 5000, skipTraceCheck: true };
+    const cancelled = new Error('Cancel one write');
+    await expect(
+      db.transaction(async (tx) => {
+        const outcomes = await Promise.allSettled([
+          traceStore.addSpans(traceId, [span], options),
+          traceStore.addSpans(traceId, [{ ...span, spanId: 'cancelled' }], {
+            ...options,
+            abortSignal: AbortSignal.abort(cancelled),
+          }),
+        ]);
+        expect(outcomes).toEqual([
+          { status: 'fulfilled', value: { stored: true } },
+          { status: 'rejected', reason: cancelled },
+        ]);
+        const rows = await tx.select().from(spansTable).where(eq(spansTable.traceId, traceId));
+        expect(rows.map((row) => row.spanId)).toEqual(['healthy']);
+        throw new Error('Rollback outer transaction');
+      }),
+    ).rejects.toThrow('Rollback outer transaction');
+
+    await expect(traceStore.getSpans(traceId)).resolves.toEqual([]);
   });
 
   it('allows the same span ID in different traces', async () => {
