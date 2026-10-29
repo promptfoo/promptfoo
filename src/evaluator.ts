@@ -14,6 +14,7 @@ import {
   runAssertions,
   runCompareAssertion,
 } from './assertions/index';
+import { validateAssertions } from './assertions/validateAssertions';
 import { extractAndStoreBinaryData } from './blobs/extractor';
 import { getCache, isCacheEnabled, withCacheEnabled, withCacheNamespace } from './cache';
 import cliState from './cliState';
@@ -65,6 +66,7 @@ import {
   type AssertionType,
   type AtomicTestCase,
   type CompletedPrompt,
+  countedComponentResults,
   type EnvOverrides,
   type EvaluateResult,
   type EvaluateStats,
@@ -2405,6 +2407,8 @@ async function runBeforeAllExtensions(testSuite: TestSuite): Promise<TestSuite> 
   }
 
   const { suite } = await runExtensionHook(testSuite.extensions, 'beforeAll', { suite: testSuite });
+  // Hooks can replace assertions after config validation; check the final suite before execution.
+  validateAssertions(suite.tests ?? [], getDefaultTest(suite), suite.scenarios);
   if (seededMap) {
     // Hooks may mutate legacy map arrays. Only changed entries override instance filters;
     // untouched seeds must not merge duplicate providers or exclude newly added prompts.
@@ -4292,10 +4296,9 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     }
 
     updatePromptResultCounts(metrics, row);
-    metrics.assertPassCount +=
-      row.gradingResult?.componentResults?.filter((r) => r.pass).length || 0;
-    metrics.assertFailCount +=
-      row.gradingResult?.componentResults?.filter((r) => !r.pass).length || 0;
+    const countedAssertResults = countedComponentResults(row.gradingResult?.componentResults);
+    metrics.assertPassCount += countedAssertResults.filter((r) => r.pass).length;
+    metrics.assertFailCount += countedAssertResults.filter((r) => !r.pass).length;
     metrics.totalLatencyMs += row.latencyMs || 0;
     accumulateResponseTokenUsage(metrics.tokenUsage, row.response, {
       countCachedAsRequest: (row.tokenUsage?.numRequests ?? 0) > 0,
@@ -4363,10 +4366,14 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       testSuite: TestSuite;
     },
   ) {
+    const hasExtensions = Boolean(testSuite.extensions?.length);
     const beforeEachOut = await runExtensionHook(testSuite.extensions, 'beforeEach', {
       test: evalStep.test,
     });
     evalStep.test = beforeEachOut.test;
+    if (hasExtensions) {
+      validateAssertions([evalStep.test]);
+    }
 
     const rows = await runEvalInternal(
       {
