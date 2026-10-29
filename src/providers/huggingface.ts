@@ -655,18 +655,17 @@ export class HuggingfaceTokenExtractionProvider implements ApiProvider {
     interface HuggingfaceTokenClassificationResponse {
       error?: string;
     }
+    type TokenClassificationItem = { entity_group?: string; entity?: string; score: number };
 
     let response:
-      | FetchWithCacheResult<
-          HuggingfaceTokenClassificationResponse | Array<{ entity_group: string; score: number }>
-        >
+      | FetchWithCacheResult<HuggingfaceTokenClassificationResponse | TokenClassificationItem[]>
       | undefined;
     try {
       const url = this.config.apiEndpoint
         ? this.config.apiEndpoint
         : `${HF_INFERENCE_API_URL}/models/${this.modelName}`;
       response = await fetchWithCache<
-        HuggingfaceTokenClassificationResponse | Array<{ entity_group: string; score: number }>
+        HuggingfaceTokenClassificationResponse | TokenClassificationItem[]
       >(
         url,
         {
@@ -691,11 +690,18 @@ export class HuggingfaceTokenExtractionProvider implements ApiProvider {
         };
       }
 
-      // Take the highest score of each entity group
+      // Take the highest score of each label: entity_group for aggregated tokens, entity for
+      // aggregation_strategy "none". The unused field may be absent or null.
       const classification: Record<string, number> = {};
       for (const item of response.data) {
-        if (!classification[item.entity_group] || classification[item.entity_group] < item.score) {
-          classification[item.entity_group] = item.score;
+        const label = item.entity_group ?? item.entity;
+        if (!label) {
+          return {
+            error: `Malformed response data: ${JSON.stringify(item)}`,
+          };
+        }
+        if (!classification[label] || classification[label] < item.score) {
+          classification[label] = item.score;
         }
       }
       return { classification };

@@ -3,6 +3,7 @@ import { fetchWithCache } from '../../src/cache';
 import {
   HuggingfaceFeatureExtractionProvider,
   HuggingfaceTextClassificationProvider,
+  HuggingfaceTokenExtractionProvider,
 } from '../../src/providers/huggingface';
 
 vi.mock('../../src/cache', async (importOriginal) => ({
@@ -81,5 +82,43 @@ describe('Hugging Face task response compatibility', () => {
     expect((await embedding.callEmbeddingApi('Hello')).error).toContain(
       'Fixture model unavailable',
     );
+  });
+});
+
+describe('Hugging Face token classification labels', () => {
+  const tokens = new HuggingfaceTokenExtractionProvider('fixture/ner');
+
+  it.each([
+    {
+      shape: 'aggregated groups',
+      data: [
+        { entity_group: 'PER', score: 0.6 },
+        { entity_group: 'LOC', score: 0 },
+        { entity_group: 'PER', score: 0.9 },
+      ],
+      classification: { PER: 0.9, LOC: 0 },
+    },
+    {
+      shape: 'unaggregated tokens',
+      data: [
+        { entity: 'B-PER', score: 0.6 },
+        { entity: 'I-PER', score: 0 },
+        { entity: 'B-PER', score: 0.9 },
+      ],
+      classification: { 'B-PER': 0.9, 'I-PER': 0 },
+    },
+    {
+      shape: 'unaggregated tokens with a null entity_group',
+      data: [{ entity_group: null, entity: 'B-PER', score: 0.9 }],
+      classification: { 'B-PER': 0.9 },
+    },
+  ])('keeps the highest score per label for $shape', async ({ data, classification }) => {
+    reply(data);
+    expect(await tokens.callClassificationApi('Alice visits Paris')).toEqual({ classification });
+  });
+
+  it('rejects tokens without an entity label', async () => {
+    reply([{ label: 'PER', score: 0.9 }]);
+    expect((await tokens.callClassificationApi('Alice')).error).toContain('Malformed response');
   });
 });
