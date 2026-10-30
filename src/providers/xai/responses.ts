@@ -477,12 +477,15 @@ export class XAIResponsesProvider implements ApiProvider {
               data = text;
             }
           } else {
-            data = await readResponsesStream(response, 'xAI', logger);
+            data = await readResponsesStream(response, 'xAI', logger, undefined, {
+              signal: controller.signal,
+            });
           }
         } catch (err) {
           if (err instanceof Error && err.name === 'AbortError') {
             throw new Error(`xAI streaming response timed out after ${timeoutMs}ms`);
           }
+          controller.abort();
           throw err;
         } finally {
           clearTimeout(timeoutHandle);
