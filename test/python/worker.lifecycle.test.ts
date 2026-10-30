@@ -123,7 +123,10 @@ def call_api(mode, marker):
     return os.getpid()
 `,
     );
-    const pool = new PythonWorkerPool(script, 'call_api', 1, undefined, 1000);
+    // Only the timeout case needs a short request deadline. The shutdown case
+    // starts a real child process before its separate cleanup deadline begins.
+    const requestTimeout = mode === 'timeout' ? 1000 : undefined;
+    const pool = new PythonWorkerPool(script, 'call_api', 1, undefined, requestTimeout);
     const deadline = new AbortController();
     let operation: Promise<unknown> | undefined;
     try {
