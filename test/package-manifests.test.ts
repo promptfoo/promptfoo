@@ -214,6 +214,7 @@ const KNOWN_BAD_RELEASES = new Map([
   ['ibm-cloud-sdk-core', '5.6.3'], // Escaped quotes expose JSON secret suffixes in debug logs (#11472)
   ['js-yaml', '<3.15.2 || >=4.0.0 <4.3.2 || >=5.0.0 <5.2.3'], // #10356, GHSA-2883-xcg3-v3hh
   ['keyv', '6.0.0'], // Shai-Hulud compromise (#10301)
+  ['postcss-selector-parser', '<6.1.5 || >=7.0.0 <7.1.6'], // GHSA-rj75-hqrm-r3gf
   ['serialize-javascript', '7.1.1'], // GHSA-gfhx-hw2g-v5hg
   ['sharp', '<0.35.5'], // GHSA-wq5f-xc86-pv6w (bundled librsvg)
   ['simple-git', '<=3.36.0'], // GHSA-858h-whjf-mvg5
