@@ -75,6 +75,7 @@ import { handleLevenshtein } from './levenshtein';
 import { handleLlmRubric } from './llmRubric';
 import { handleModelGradedClosedQa } from './modelGradedClosedQa';
 import { handleModeration } from './moderation';
+import { handleNumericMatch } from './numericMatch';
 import { handleIsValidOpenAiToolsCall } from './openai';
 import { handlePerplexity, handlePerplexityScore } from './perplexity';
 import { handlePiScorer } from './pi';
@@ -292,6 +293,7 @@ const ASSERTION_HANDLERS: Record<
   'model-graded-closedqa': handleModelGradedClosedQa,
   'model-graded-factuality': handleFactuality,
   moderation: handleModeration,
+  'numeric-match': handleNumericMatch,
   perplexity: handlePerplexity,
   'perplexity-score': handlePerplexityScore,
   pi: handlePiScorer,
