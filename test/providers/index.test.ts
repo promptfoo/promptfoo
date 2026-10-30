@@ -939,6 +939,27 @@ describe('loadApiProvider', () => {
     expect(provider.getApiKey()).toBe('provider-key');
   });
 
+  it('loadApiProvider with nace:modelName', async () => {
+    const max = await loadApiProvider('nace:drex-max');
+    expect(max.id()).toBe('nace:drex-max');
+    expect(max).toHaveProperty('callClassificationApi');
+    const pinned = await loadApiProvider('nace:drex-v2.0');
+    expect(pinned.id()).toBe('nace:drex-v2.0');
+  });
+
+  it('loadApiProvider with nace defaults to drex-max', async () => {
+    expect((await loadApiProvider('nace')).id()).toBe('nace:drex-max');
+    expect((await loadApiProvider('nace:')).id()).toBe('nace:drex-max');
+  });
+
+  it('loadApiProvider with nace prefers provider-level env over context env', async () => {
+    const provider = (await loadApiProvider('nace:drex-max', {
+      options: { env: { NACE_API_KEY: 'provider-key' } },
+      env: { NACE_API_KEY: 'context-key' } as any,
+    })) as ApiProvider & { getApiKey: () => string | undefined };
+    expect(provider.getApiKey()).toBe('provider-key');
+  });
+
   it('loadApiProvider with moonshot prefers provider-level env over context env', async () => {
     const provider = (await loadApiProvider('moonshot:kimi-k2.6', {
       options: { env: { MOONSHOT_API_KEY: 'provider-key' } },
