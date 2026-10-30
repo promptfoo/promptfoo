@@ -157,6 +157,7 @@ The provider validates top-level provider config strictly. Prompt-level config i
 | `model_provider`           | string        | App-server model provider override for `thread/start` and `thread/resume`.                                                                                          | None                 |
 | `service_tier`             | string        | `fast` or `flex`.                                                                                                                                                   | App-server default   |
 | `sandbox_mode`             | string        | `read-only`, `workspace-write`, or `danger-full-access`.                                                                                                            | `read-only`          |
+| `environment_access`       | boolean       | When false, disables local execution environments and restricts [prompt attachments](#prompt-inputs). Requires experimental thread environment support.             | `true`               |
 | `sandbox_policy`           | object        | Raw app-server sandbox policy override for `turn/start`.                                                                                                            | Generated from mode  |
 | `network_access_enabled`   | boolean       | Adds network access to generated sandbox policies.                                                                                                                  | `false`              |
 | `approval_policy`          | string/object | `never`, `on-request`, `on-failure`, `untrusted`, or granular approval policy object. `on-failure` is accepted for compatibility but deprecated by Codex.           | `never`              |
@@ -186,6 +187,10 @@ The provider validates top-level provider config strictly. Prompt-level config i
 | `startup_timeout_ms`       | number        | `initialize` timeout.                                                                                                                                               | `30000`              |
 | `turn_timeout_ms`          | number        | Overall turn timeout.                                                                                                                                               | None                 |
 | `server_request_policy`    | object        | Deterministic responses for approvals, user input, MCP elicitations, and dynamic tools.                                                                             | Safe declines        |
+
+With `persist_threads: true`, a later row can use `thread_id` to continue a thread Promptfoo started and still has cached. Use the same resume settings, including `environment_access`, and the same settings Codex carries into later turns, such as reasoning effort and collaboration mode. The default ephemeral thread can only be resumed while its subscription is active.
+
+A one-off row with `persist_threads: false` can borrow a cached explicit `thread_id` too. Repeat the turn settings the owner has established on this subscription. For example, if the owner set `model_reasoning_effort: high` and later omitted it, Codex still uses `high`. The borrower should specify `high`. If Codex did not acknowledge an owner's change, have the owner set that option again before borrowing. Promptfoo rejects conflicting settings before sending the borrowed turn. A borrower can set its own `output_schema`, which applies only to that turn.
 
 The app-server provider does not use the SDK provider's exact-version preflight. If you point both providers at a floating global or custom Codex binary, review the SDK provider's [custom binary compatibility requirements](./openai-codex-sdk.md#custom-binary-path).
 
@@ -227,6 +232,8 @@ providers:
 `collaboration_mode` is experimental and is sent on `turn/start`. App-server may let the selected mode override model, reasoning effort, or developer instructions for the turn.
 
 ### Goals and Subagents
+
+Codex applies `cli_config` overrides in order. Keep them in the same order across rows that need to share an app-server process.
 
 Codex gates optional capabilities behind [feature flags](https://developers.openai.com/codex/config-basic#feature-flags). Set them under `cli_config.features`, which Promptfoo forwards as `codex app-server -c features.<name>=...` overrides.
 
@@ -331,7 +338,10 @@ Plain text prompts work as usual. To include images, skills, or mentions, pass a
 ```json
 [
   { "type": "text", "text": "$skill-creator Write a test plan for this provider." },
-  { "type": "image", "url": "https://example.com/screenshot.png" },
+  {
+    "type": "image",
+    "url": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAFklEQVR4nGP4Ky/IcsKcYY9cD6/MOQAgWQSO2gWoggAAAABJRU5ErkJggg=="
+  },
   { "type": "local_image", "path": "/Users/me/screenshots/failure.png" },
   {
     "type": "skill",
@@ -346,7 +356,9 @@ Plain text prompts work as usual. To include images, skills, or mentions, pass a
 ]
 ```
 
-Supported input item types are `text`, `image`, `local_image`, `localImage`, `skill`, and `mention`.
+Supply `image.url` as an inline base64 image data URL. Codex rejects HTTP and HTTPS image URLs at turn start. Use `local_image` or `localImage` for a file on the host when local environment access is enabled.
+
+With `environment_access: false`, a structured prompt can contain text, an inline base64 image data URL, and mentions with an `app://`, `mcp://`, or `plugin://` identifier. Prompt-supplied local images, filesystem paths and explicit skill attachments are rejected before the turn starts. Configured MCP servers and enabled Codex skills can still read files. The [receipt comparison](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-agents-api/comparison) isolates its Codex home and supplies a single receipt reader.
 
 ## Metadata
 

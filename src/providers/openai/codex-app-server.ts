@@ -1,3 +1,4 @@
+import { isDeepStrictEqual } from 'node:util';
 import { type ChildProcessWithoutNullStreams, spawn } from 'child_process';
 import crypto from 'crypto';
 import fs from 'fs';
@@ -20,6 +21,7 @@ import {
   openTurnSpan,
   withGenAISpan,
 } from '../../tracing/genaiTracer';
+import { parseDataUrl } from '../../util/dataUrl';
 import { renderVarsInObject } from '../../util/render';
 import { normalizeFieldName, REDACTED, sanitizeObject } from '../../util/sanitizer';
 import { VERSION } from '../../version';
@@ -247,6 +249,7 @@ export interface CodexAppServerConfig {
   service_tier?: CodexAppServerServiceTier;
   sandbox_mode?: CodexAppServerSandboxMode;
   sandbox_policy?: Record<string, unknown>;
+  environment_access?: boolean;
   network_access_enabled?: boolean;
   approval_policy?: CodexAppServerApprovalPolicy;
   approvals_reviewer?: 'user' | 'auto_review' | 'guardian_subagent';
@@ -378,6 +381,9 @@ interface ThreadHandle {
   threadId: string;
   response: any;
   cacheKey?: string;
+  autoResumeKey?: string;
+  // Fingerprints of acknowledged fields. Null means a change was sent without an acknowledgement.
+  stickyTurnSettings?: Record<string, string | null>;
   persistent: boolean;
 }
 
@@ -522,6 +528,7 @@ const CodexAppServerConfigShape = {
   service_tier: z.enum(['fast', 'flex']).optional(),
   sandbox_mode: z.enum(['read-only', 'workspace-write', 'danger-full-access']).optional(),
   sandbox_policy: z.record(z.string(), z.unknown()).optional(),
+  environment_access: z.boolean().optional(),
   network_access_enabled: z.boolean().optional(),
   approval_policy: CodexAppServerApprovalPolicySchema.optional(),
   approvals_reviewer: z.enum(['user', 'auto_review', 'guardian_subagent']).optional(),
@@ -574,7 +581,11 @@ function parseCodexAppServerConfig(
     : CodexAppServerConfigSchema;
 
   try {
-    return schema.parse(config ?? {});
+    const parsed = schema.parse(config ?? {});
+    if (parsed.environment_access === false && parsed.experimental_api === false) {
+      throw new Error('environment_access: false requires the experimental Codex app-server API');
+    }
+    return parsed;
   } catch (error) {
     if (error instanceof z.ZodError) {
       const issues = error.issues
@@ -654,6 +665,25 @@ function mergeCodexAppServerConfig(
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
+
+function hashSettings(settings: Record<string, unknown>): string {
+  const json = JSON.stringify(settings, (_key, value: unknown) =>
+    isPlainObject(value)
+      ? Object.fromEntries(
+          Object.keys(value)
+            .sort()
+            .map((key) => [key, value[key]]),
+        )
+      : value,
+  );
+  return crypto.createHash('sha256').update(json).digest('hex');
+}
+
+function checkBorrowedTurn(handle: ThreadHandle, stickyTurnSettings: Record<string, string>): void {
+  if (!isDeepStrictEqual(handle.stickyTurnSettings, stickyTurnSettings)) {
+    throw new Error('Cannot change turn settings when borrowing a persistent Codex thread');
+  }
 }
 
 function flattenConfig(
@@ -1476,6 +1506,14 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
     const apiKey = this.getApiKey(resolvedConfig);
     const env = this.prepareEnvironment(resolvedConfig, currentTraceparent, apiKey);
     const promptInput = this.parsePromptInput(prompt);
+    if (resolvedConfig.environment_access === false) {
+      const unsupported = promptInput.find((item) => !this.canSendWithoutEnvironment(item));
+      if (unsupported) {
+        return {
+          error: `OpenAI Codex app-server cannot send this ${unsupported.type} input with environment_access: false. Use text, an inline base64 image data URL, or an app://, mcp://, or plugin:// mention.`,
+        };
+      }
+    }
     const connectionKey = this.generateConnectionKey(env, resolvedConfig);
     const useReusableConnection =
       resolvedConfig.reuse_server !== false && !resolvedConfig.deep_tracing;
@@ -1527,13 +1565,16 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
             callOptions,
           );
         }
+        if (threadHandle.cacheKey && this.threads.get(threadHandle.cacheKey) !== threadHandle) {
+          throw new Error(
+            'Codex thread subscription changed before the turn could start. Retry the call.',
+          );
+        }
         this.protectThread(threadHandle.threadId);
         let turnStarted = false;
         try {
-          const queueKey = explicitThreadQueueKey
-            ? undefined
-            : this.getThreadRunQueueKey(resolvedConfig, threadHandle);
-
+          // An explicit caller borrowing an auto-started thread shares the automatic caller's queue.
+          const queueKey = threadHandle.autoResumeKey ? threadHandle.cacheKey : undefined;
           return await this.runSerializedThreadTurn(
             queueKey,
             callOptions?.abortSignal,
@@ -1550,6 +1591,21 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
               );
               this.registerTurnState(state);
               try {
+                const ownerOverrides =
+                  threadHandle.persistent &&
+                  !threadHandle.autoResumeKey &&
+                  resolvedConfig.persist_threads
+                    ? this.getStickyTurnSettings(resolvedConfig)
+                    : undefined;
+                if (ownerOverrides) {
+                  const settings = (threadHandle.stickyTurnSettings ??= {});
+                  for (const [key, value] of Object.entries(ownerOverrides)) {
+                    if (settings[key] !== value) {
+                      // A cancelled request may still have changed this field on the server.
+                      settings[key] = null;
+                    }
+                  }
+                }
                 const turnResponse = await connection.request(
                   'turn/start',
                   this.buildTurnStartParams(threadHandle.threadId, promptInput, resolvedConfig),
@@ -1557,6 +1613,13 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
                     abortSignal: callOptions?.abortSignal,
                     timeoutMs: this.getRequestTimeoutMs(resolvedConfig),
                     onResponse: (response) => {
+                      if (ownerOverrides) {
+                        // Omitted overrides retain their previous value, including unknown ones.
+                        threadHandle.stickyTurnSettings = {
+                          ...threadHandle.stickyTurnSettings,
+                          ...ownerOverrides,
+                        };
+                      }
                       const turnId = (response as any)?.turn?.id;
                       if (typeof turnId === 'string') {
                         this.updateTurnStateId(state, turnId);
@@ -1970,10 +2033,11 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
     const keyData = {
       env: stableEnv,
       codex_path_override: config.codex_path_override,
-      cli_config: this.getResolvedCliConfig(config, env),
+      // Codex applies CLI overrides in order, including aliases for the same setting.
+      args: this.buildAppServerArgs(config, env),
       experimental_api: config.experimental_api,
     };
-    const hash = crypto.createHash('sha256').update(JSON.stringify(keyData)).digest('hex');
+    const hash = hashSettings(keyData);
     return `openai:codex-app-server:connection:${hash}`;
   }
 
@@ -1992,6 +2056,7 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
       service_tier: config.service_tier,
       sandbox_mode: config.sandbox_mode,
       sandbox_policy: config.sandbox_policy,
+      environment_access: config.environment_access ?? true,
       network_access_enabled: config.network_access_enabled,
       approval_policy: config.approval_policy,
       approvals_reviewer: config.approvals_reviewer,
@@ -2007,7 +2072,7 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
       experimental_raw_events: config.experimental_raw_events,
       persist_extended_history: config.persist_extended_history,
     };
-    const hash = crypto.createHash('sha256').update(JSON.stringify(keyData)).digest('hex');
+    const hash = hashSettings(keyData);
     return `openai:codex-app-server:thread:${hash}`;
   }
 
@@ -2017,38 +2082,54 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
   }
 
   private generateExplicitThreadCacheKey(
-    connectionKey: string,
+    connectionInstanceId: string,
     threadId: string,
     config: CodexAppServerConfig,
   ): string {
-    const resumeHash = crypto
-      .createHash('sha256')
-      .update(
-        JSON.stringify({
-          connectionKey,
-          resume: this.buildThreadResumeParams(threadId, config),
-        }),
-      )
-      .digest('hex');
+    const resumeHash = hashSettings({
+      connectionInstanceId,
+      resume: this.buildThreadResumeParams(threadId, config),
+      environment_access: config.environment_access ?? true,
+    });
     return `${this.generateExplicitThreadCachePrefix(threadId)}${resumeHash}`;
   }
 
-  private async discardOtherExplicitThreadVariants(
-    prefix: string,
+  private async prepareExplicitThread(
+    threadId: string,
+    persistentVariantPrefix: string | undefined,
     keepKey: string,
+    stickyTurnSettings: Record<string, string>,
     connection: CodexAppServerConnection,
     connectionKey: string,
-    timeoutMs: number,
-  ): Promise<void> {
-    const staleKeys = Array.from(this.threads.keys()).filter(
-      (key) => key.startsWith(prefix) && key !== keepKey,
-    );
-    for (const key of staleKeys) {
-      const stale = this.threads.get(key);
-      this.threads.delete(key);
-      if (!stale) {
+    config: CodexAppServerConfig,
+  ): Promise<ThreadHandle | undefined> {
+    for (const [key, stale] of this.threads) {
+      // An explicit resume can also address an automatically started thread by its returned ID.
+      const sharesSubscription =
+        stale.connectionKey === connectionKey && stale.threadId === threadId;
+      const staleVariant = persistentVariantPrefix && key.startsWith(persistentVariantPrefix);
+      if (key === keepKey || (!staleVariant && !sharesSubscription)) {
         continue;
       }
+      if (
+        stale.autoResumeKey === keepKey &&
+        isDeepStrictEqual(stale.stickyTurnSettings, stickyTurnSettings)
+      ) {
+        return stale;
+      }
+      if (this.isThreadProtected(stale.threadId)) {
+        throw new Error('Cannot resume the Codex thread while another turn is using it');
+      }
+      if (stale.autoResumeKey) {
+        // Unsubscribing would unload the conversation; ephemeral threads cannot be resumed from disk.
+        throw new Error(
+          'Cannot change resume settings for an auto-started persistent Codex thread',
+        );
+      }
+      if (!persistentVariantPrefix) {
+        checkBorrowedTurn(stale, stickyTurnSettings);
+      }
+      this.threads.delete(key);
       const staleConnection =
         this.connections.get(stale.connectionKey) ??
         (stale.connectionKey === connectionKey ? connection : undefined);
@@ -2057,7 +2138,7 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
           await staleConnection.request(
             'thread/unsubscribe',
             { threadId: stale.threadId },
-            { timeoutMs },
+            { timeoutMs: this.getRequestTimeoutMs(config) },
           );
         } catch (error) {
           logger.warn('[CodexAppServer] Failed to unsubscribe stale explicit thread variant', {
@@ -2070,6 +2151,7 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
         }
       }
     }
+    return undefined;
   }
 
   private async settleOtherExplicitThreadVariants(
@@ -2103,31 +2185,38 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
     const canPersistThread = allowThreadPersistence && config.persist_threads === true;
 
     if (config.thread_id) {
+      const prefix = this.generateExplicitThreadCachePrefix(config.thread_id);
       const variantKey = this.generateExplicitThreadCacheKey(
-        connectionKey,
+        connection.instanceId,
         config.thread_id,
         config,
       );
       const cacheKey = canPersistThread ? variantKey : undefined;
-      await this.settleOtherExplicitThreadVariants(
-        this.generateExplicitThreadCachePrefix(config.thread_id),
-        variantKey,
-        callOptions?.abortSignal,
-      );
-      if (cacheKey) {
-        await this.discardOtherExplicitThreadVariants(
-          this.generateExplicitThreadCachePrefix(config.thread_id),
-          cacheKey,
+      const stickyTurnSettings = this.getStickyTurnSettings(config);
+      await this.settleOtherExplicitThreadVariants(prefix, variantKey, callOptions?.abortSignal);
+      if (allowThreadPersistence) {
+        const autoThread = await this.prepareExplicitThread(
+          config.thread_id,
+          canPersistThread ? prefix : undefined,
+          variantKey,
+          stickyTurnSettings,
           connection,
           connectionKey,
-          this.getRequestTimeoutMs(config),
+          config,
         );
+        if (autoThread) {
+          return autoThread;
+        }
       }
-      const cachedOrPending =
-        (cacheKey ? this.threads.get(cacheKey) : undefined) ??
-        this.threadPromises.get(variantKey)?.promise;
+      // A reusable process has one subscription per thread. A transient caller may use an
+      // existing matching subscription, but must not take ownership of its cleanup.
+      const cachedOrPending = this.getCachedOrPendingThread(variantKey);
       if (cachedOrPending !== undefined) {
-        return this.waitForThreadHandle(cachedOrPending, callOptions?.abortSignal);
+        const handle = await this.waitForThreadHandle(cachedOrPending, callOptions?.abortSignal);
+        if (handle.persistent && !canPersistThread) {
+          checkBorrowedTurn(handle, stickyTurnSettings);
+        }
+        return handle;
       }
 
       this.throwIfThreadWaitAborted(callOptions?.abortSignal);
@@ -2137,17 +2226,7 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
           this.buildThreadResumeParams(config.thread_id as string, config),
           { timeoutMs: this.getRequestTimeoutMs(config) },
         );
-        const handle = {
-          connectionKey,
-          threadId: response?.thread?.id ?? config.thread_id,
-          response,
-          cacheKey,
-          persistent: canPersistThread,
-        };
-        if (cacheKey) {
-          this.threads.set(cacheKey, handle);
-        }
-        return handle;
+        return this.acceptThread(connection, connectionKey, cacheKey, response, config);
       });
       return cacheKey
         ? this.waitForThreadHandle(threadPromise, callOptions?.abortSignal)
@@ -2187,22 +2266,7 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
           timeoutMs: this.getRequestTimeoutMs(config),
         },
       );
-      const threadId = response?.thread?.id;
-      if (typeof threadId !== 'string' || !threadId) {
-        throw new Error('codex app-server did not return a thread id');
-      }
-
-      const handle = {
-        connectionKey,
-        threadId,
-        response,
-        cacheKey,
-        persistent: canPersistThread,
-      };
-      if (cacheKey) {
-        this.threads.set(cacheKey, handle);
-      }
-      return handle;
+      return this.acceptThread(connection, connectionKey, cacheKey, response, config);
     });
     return cacheKey
       ? this.waitForThreadHandle(threadPromise, callOptions?.abortSignal)
@@ -2212,6 +2276,50 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
               skipIfProtected: true,
             }),
         });
+  }
+
+  private async acceptThread(
+    connection: CodexAppServerConnection,
+    connectionKey: string,
+    cacheKey: string | undefined,
+    response: ThreadHandle['response'],
+    config: CodexAppServerConfig,
+  ): Promise<ThreadHandle> {
+    const threadId = response?.thread?.id ?? config.thread_id;
+    if (typeof threadId !== 'string' || !threadId) {
+      throw new Error('codex app-server did not return a thread id');
+    }
+
+    const handle: ThreadHandle = { connectionKey, threadId, response, cacheKey, persistent: false };
+    const environments = response?.thread?.environments;
+    if (
+      config.environment_access === false &&
+      (!Array.isArray(environments) || environments.length)
+    ) {
+      // Older servers can silently ignore the experimental environments field. Release the
+      // subscription before publishing the handle to other callers, preserving caller-owned threads.
+      await this.cleanupThreadAfterTurn(connection, handle, {
+        ...config,
+        thread_cleanup:
+          !config.thread_id && config.thread_cleanup === 'archive' ? 'archive' : 'unsubscribe',
+      });
+      throw new Error(
+        'Codex did not confirm an empty thread environment list. Update Codex or start a new thread with environment_access: false.',
+      );
+    }
+    if (cacheKey) {
+      handle.persistent = true;
+      if (!config.thread_id) {
+        handle.autoResumeKey = this.generateExplicitThreadCacheKey(
+          connection.instanceId,
+          threadId,
+          config,
+        );
+        handle.stickyTurnSettings = this.getStickyTurnSettings(config);
+      }
+      this.threads.set(cacheKey, handle);
+    }
+    return handle;
   }
 
   private getCachedOrPendingThread(
@@ -2410,6 +2518,7 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
       approvalPolicy: config.approval_policy ?? 'never',
       ...(config.approvals_reviewer ? { approvalsReviewer: config.approvals_reviewer } : {}),
       sandbox: config.sandbox_mode ?? 'read-only',
+      ...(config.environment_access === false ? { environments: [] } : {}),
       ...(Object.keys(config.cli_config ?? {}).length > 0 ? { config: config.cli_config } : {}),
       serviceName: 'promptfoo',
       ...(config.base_instructions ? { baseInstructions: config.base_instructions } : {}),
@@ -2460,6 +2569,33 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
     return {
       threadId,
       input,
+      // The resume key and server response separately enforce the environment selection.
+      ...(config.environment_access === false ? { environments: [] } : {}),
+      ...this.buildStickyTurnParams(config),
+      ...(config.output_schema ? { outputSchema: config.output_schema } : {}),
+    };
+  }
+
+  private getStickyTurnSettings(config: CodexAppServerConfig): Record<string, string> {
+    const settings = this.buildStickyTurnParams(config);
+    if (config.collaboration_mode) {
+      // A collaboration preset sets the same model and effort that a later turn can override.
+      const preset = config.collaboration_mode;
+      settings.model = preset.settings.model;
+      settings.effort = preset.settings.reasoning_effort;
+      settings.collaborationMode = {
+        mode: preset.mode,
+        developerInstructions: preset.settings.developer_instructions,
+      };
+    }
+    return Object.fromEntries(
+      Object.entries(settings).map(([key, value]) => [key, hashSettings({ value })]),
+    );
+  }
+
+  // Codex applies these overrides to this turn and subsequent turns on the thread.
+  private buildStickyTurnParams(config: CodexAppServerConfig): Record<string, unknown> {
+    return {
       ...(config.working_dir ? { cwd: config.working_dir } : {}),
       approvalPolicy: config.approval_policy ?? 'never',
       ...(config.approvals_reviewer ? { approvalsReviewer: config.approvals_reviewer } : {}),
@@ -2472,7 +2608,6 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
       ...(config.reasoning_summary ? { summary: config.reasoning_summary } : {}),
       ...(config.personality ? { personality: config.personality } : {}),
       ...(config.collaboration_mode ? { collaborationMode: config.collaboration_mode } : {}),
-      ...(config.output_schema ? { outputSchema: config.output_schema } : {}),
     };
   }
 
@@ -2568,6 +2703,20 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
         return { type: 'skill', name: item.name, path: item.path };
       case 'mention':
         return { type: 'mention', name: item.name, path: item.path };
+    }
+  }
+
+  private canSendWithoutEnvironment(item: CodexAppServerUserInput): boolean {
+    // Codex resolves local attachments before it applies the turn's environment restrictions.
+    switch (item.type) {
+      case 'text':
+        return true;
+      case 'image':
+        return parseDataUrl(item.url)?.mimeType.toLowerCase().startsWith('image/') ?? false;
+      case 'mention':
+        return /^(?:app|mcp|plugin):\/\//.test(item.path);
+      default:
+        return false;
     }
   }
 
@@ -3171,22 +3320,6 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
     }
   }
 
-  private getThreadRunQueueKey(
-    config: CodexAppServerConfig,
-    threadHandle: ThreadHandle,
-  ): string | undefined {
-    if (config.thread_id) {
-      return `thread_id:${threadHandle.threadId}`;
-    }
-    if (config.deep_tracing) {
-      return undefined;
-    }
-    if (threadHandle.persistent && threadHandle.cacheKey) {
-      return threadHandle.cacheKey;
-    }
-    return undefined;
-  }
-
   private async runSerializedThreadTurn<T>(
     queueKey: string | undefined,
     abortSignal: AbortSignal | undefined,
@@ -3760,7 +3893,7 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
     return (
       item?.status === 'failed' ||
       item?.status === 'declined' ||
-      item?.error !== undefined ||
+      item?.error != null ||
       (item?.type === 'commandExecution' &&
         typeof item.exitCode === 'number' &&
         item.exitCode !== 0)
