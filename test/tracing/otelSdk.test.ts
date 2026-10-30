@@ -8,6 +8,13 @@ const mockShutdown = vi.fn().mockResolvedValue(undefined);
 const mockForceFlush = vi.fn().mockResolvedValue(undefined);
 const mockAddSpanProcessor = vi.fn();
 const mockSetLogger = vi.fn();
+const mockSetGlobalPropagator = vi.fn();
+const mockPropagationDisable = vi.fn();
+const mockTraceDisable = vi.fn();
+// The delegate of the global tracer provider: the provider that registered first.
+let globalDelegate: unknown;
+// The global propagator: the one that registered first.
+let globalPropagator: unknown;
 
 // Track constructor calls
 let nodeTracerProviderCalls: unknown[] = [];
@@ -80,7 +87,13 @@ vi.mock('@opentelemetry/api', () => ({
     DEBUG: 0,
   },
   propagation: {
-    setGlobalPropagator: vi.fn(),
+    setGlobalPropagator: mockSetGlobalPropagator,
+    disable: mockPropagationDisable,
+    _getGlobalPropagator: () => globalPropagator,
+  },
+  trace: {
+    getTracerProvider: () => ({ getDelegate: () => globalDelegate }),
+    disable: mockTraceDisable,
   },
 }));
 
@@ -135,6 +148,21 @@ describe('otelSdk', () => {
     // Reset mock implementations
     mockShutdown.mockResolvedValue(undefined);
     mockForceFlush.mockResolvedValue(undefined);
+    globalDelegate = undefined;
+    mockRegister.mockImplementation(function (this: unknown) {
+      globalDelegate ??= this;
+    });
+    globalPropagator = undefined;
+    mockSetGlobalPropagator.mockImplementation((propagator: unknown) => {
+      globalPropagator ??= propagator;
+      return globalPropagator === propagator;
+    });
+    mockPropagationDisable.mockImplementation(() => {
+      globalPropagator = undefined;
+    });
+    mockTraceDisable.mockImplementation(() => {
+      globalDelegate = undefined;
+    });
 
     // Reset modules to clear singleton state
     vi.resetModules();
@@ -262,6 +290,107 @@ describe('otelSdk', () => {
       initializeOtel(defaultConfig);
       await expect(shutdownOtel()).resolves.toBeUndefined();
       expect(isOtelInitialized()).toBe(false);
+    });
+
+    it('shares one provider across concurrent evaluations until the last one shuts down', async () => {
+      initializeOtel(defaultConfig);
+      initializeOtel(defaultConfig);
+      expect(nodeTracerProviderCalls).toHaveLength(1);
+
+      await shutdownOtel();
+      expect(mockShutdown).not.toHaveBeenCalled();
+      expect(isOtelInitialized()).toBe(true);
+
+      await shutdownOtel();
+      expect(mockShutdown).toHaveBeenCalledTimes(1);
+      expect(isOtelInitialized()).toBe(false);
+    });
+
+    it('shuts down at once when forced', async () => {
+      initializeOtel(defaultConfig);
+      initializeOtel(defaultConfig);
+
+      await shutdownOtel({ force: true });
+
+      expect(mockShutdown).toHaveBeenCalledTimes(1);
+      expect(isOtelInitialized()).toBe(false);
+    });
+
+    it('unregisters its globals so the next evaluation registers a new provider', async () => {
+      initializeOtel(defaultConfig);
+      const firstProvider = globalDelegate;
+      await shutdownOtel();
+
+      expect(mockTraceDisable).toHaveBeenCalledTimes(1);
+      expect(mockPropagationDisable).toHaveBeenCalledTimes(1);
+
+      initializeOtel(defaultConfig);
+      expect(nodeTracerProviderCalls).toHaveLength(2);
+      expect(globalDelegate).toBeDefined();
+      expect(globalDelegate).not.toBe(firstProvider);
+    });
+
+    it('gives an evaluation that starts during the final shutdown its own provider', async () => {
+      let finishShutdown!: () => void;
+      mockShutdown.mockReturnValueOnce(
+        new Promise<void>((resolve) => {
+          finishShutdown = resolve;
+        }),
+      );
+      initializeOtel(defaultConfig);
+      const shuttingDown = shutdownOtel();
+
+      initializeOtel(defaultConfig);
+      expect(nodeTracerProviderCalls).toHaveLength(2);
+      const secondProvider = globalDelegate;
+
+      finishShutdown();
+      await shuttingDown;
+      expect(isOtelInitialized()).toBe(true);
+      expect(globalDelegate).toBe(secondProvider);
+      expect(mockTraceDisable).toHaveBeenCalledTimes(1);
+    });
+
+    it('leaves a tracer provider that the application registered during the evaluation', async () => {
+      initializeOtel(defaultConfig);
+      globalDelegate = { applicationProvider: true };
+
+      await shutdownOtel();
+
+      expect(mockTraceDisable).not.toHaveBeenCalled();
+    });
+
+    it('leaves a propagator that the application registered during the evaluation', async () => {
+      initializeOtel(defaultConfig);
+      globalPropagator = { applicationPropagator: true };
+
+      await shutdownOtel();
+
+      expect(mockPropagationDisable).not.toHaveBeenCalled();
+      expect(globalPropagator).toEqual({ applicationPropagator: true });
+    });
+
+    it('warns when an evaluation joins one with different tracing settings', async () => {
+      const { default: logger } = await import('../../src/logger');
+      initializeOtel(defaultConfig);
+      initializeOtel(defaultConfig);
+      expect(logger.warn).not.toHaveBeenCalled();
+
+      initializeOtel({ ...defaultConfig, endpoint: 'http://collector:4318/v1/traces' });
+
+      expect(logger.warn).toHaveBeenCalledTimes(1);
+      expect(nodeTracerProviderCalls).toHaveLength(1);
+    });
+
+    it("leaves an application's tracer provider and propagator registered", async () => {
+      globalDelegate = { applicationProvider: true };
+      globalPropagator = { applicationPropagator: true };
+
+      initializeOtel(defaultConfig);
+      await shutdownOtel();
+
+      expect(mockTraceDisable).not.toHaveBeenCalled();
+      expect(mockPropagationDisable).not.toHaveBeenCalled();
     });
   });
 
