@@ -418,10 +418,23 @@ jobs:
     defaults:
       run:
         shell: bash
-    env:
-      npm_config_cache: ${{ github.workspace }}/.artifact-npm-cache
     steps:
       - *require-package-build
+      # Windows: npm cache and temp on a Dev Drive (ReFS, Defender performance mode); the
+      # packed-consumer install drops from ~16 min to ~7 min. Set via GITHUB_ENV rather than
+      # job env, because job-level env would override the drive mapping.
+      - name: Use a Dev Drive for npm cache and temp (Windows)
+        if: runner.os == 'Windows'
+        uses: samypr100/setup-dev-drive@cf663fdf88945e3faaa980ec525b5bc2350fbf9d # v3
+        with:
+          drive-size: 8GB
+          env-mapping: |
+            npm_config_cache,{{ DEV_DRIVE }}/npm-cache
+            TEMP,{{ DEV_DRIVE }}/tmp
+            TMP,{{ DEV_DRIVE }}/tmp
+      - name: Use a workspace npm cache
+        if: runner.os != 'Windows'
+        run: echo "npm_config_cache=$GITHUB_WORKSPACE/.artifact-npm-cache" >> "$GITHUB_ENV"
       - &checkout-source-read-only
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with: *no-persisted-credentials
