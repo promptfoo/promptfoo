@@ -47,6 +47,7 @@ import {
   sanitizeRuntimeOptions,
   sanitizeTracingConfigForPersistence,
 } from '../util/sanitizer';
+import { escapeLikePattern } from '../util/sqlLike';
 import { getCurrentTimestamp } from '../util/time';
 import {
   accumulateGenerationTokenUsage,
@@ -1100,18 +1101,19 @@ export default class Eval {
                 AND json_each.value = ${value}
             )`;
           } else if (operator === 'contains') {
+            // `%` and `_` in the filter value are literal text, not LIKE wildcards.
             condition = sql`EXISTS (
               SELECT 1
               FROM json_each(metadata)
               WHERE json_each.key = ${field}
-                AND json_each.value LIKE ${`%${value}%`}
+                AND json_each.value LIKE ${`%${escapeLikePattern(String(value))}%`} ESCAPE '\\'
             )`;
           } else if (operator === 'not_contains') {
             condition = sql`NOT EXISTS (
               SELECT 1
               FROM json_each(metadata)
               WHERE json_each.key = ${field}
-                AND json_each.value LIKE ${`%${value}%`}
+                AND json_each.value LIKE ${`%${escapeLikePattern(String(value))}%`} ESCAPE '\\'
             )`;
           } else if (operator === 'exists') {
             // For exists, check if the field is present AND not empty
