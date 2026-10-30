@@ -70,6 +70,30 @@ vi.mock('../../src/redteam/remoteGeneration', async (importOriginal) => {
 });
 
 describe('Provider Registry', () => {
+  describe('Google Cloud OpenAI Responses', () => {
+    it('loads the explicit Vertex Responses route and preserves the model and label', async () => {
+      const provider = await loadApiProvider('vertex:responses:gpt-6-luna', {
+        options: { id: 'Google preview', config: { projectId: 'test-project' } },
+      });
+      expect(provider.constructor.name).toBe('VertexResponsesProvider');
+      expect(provider.id()).toBe('Google preview');
+      expect(provider).toHaveProperty('modelName', 'gpt-6-luna');
+    });
+
+    it.each(['google', 'palm'])(
+      'rejects %s:responses rather than routing it to Gemini',
+      async (prefix) => {
+        await expect(loadApiProvider(`${prefix}:responses:gpt-6-luna`)).rejects.toThrow(
+          'vertex:responses:<model>',
+        );
+      },
+    );
+
+    it('rejects an empty Responses model', async () => {
+      await expect(loadApiProvider('vertex:responses:')).rejects.toThrow('Missing model name');
+    });
+  });
+
   describe('OpenAI Decisions', () => {
     it.each([
       ['openai:decisions:gpt-6-luna', undefined, 'gpt-6-luna'],

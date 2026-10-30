@@ -10,6 +10,8 @@ import Link from '@docusaurus/Link';
 
 Use Promptfoo to compare OpenAI models, test prompts, and check your application's outputs. Start with the Responses API for new text and image-input evals, following [OpenAI's recommendation](https://developers.openai.com/api/docs/guides/migrate-to-responses). Use Chat Completions when that is the API your application calls.
 
+For OpenAI models hosted on Google Cloud, use [`vertex:responses:<model>`](./vertex.md#openai-models-private-preview) with Google Application Default Credentials (ADC). The Vertex guide covers project setup and preview access.
+
 ## Quickstart
 
 1. Set `OPENAI_API_KEY` in your shell or secret manager. You can create a key in the [OpenAI dashboard](https://platform.openai.com/api-keys).
