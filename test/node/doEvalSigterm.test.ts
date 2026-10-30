@@ -108,41 +108,47 @@ describe('CLI SIGTERM handling', () => {
     expect(kill).toHaveBeenCalledWith(process.pid, 'SIGTERM');
   });
 
-  it('keeps the handler until the CLI run settles, including writing outputs', async () => {
-    const restoreEnv = mockProcessEnv({
-      PROMPTFOO_DISABLE_TELEMETRY: 'true',
-      PROMPTFOO_DISABLE_SHARING: 'true',
-    });
-    const previousExitCode = process.exitCode;
-    const writing = createDeferred<void>();
-    const written = createDeferred<void>();
-    vi.mocked(writeMultipleOutputs).mockImplementation(async () => {
-      writing.resolve();
-      await written.promise;
-    });
-    try {
-      const run = doEval(
-        {
-          write: false,
-          share: false,
-          table: false,
-          progressBar: false,
-          output: ['sigterm-unit-output.json'],
-        },
-        { prompts: ['hello'], providers: ['echo'], tests: [{ vars: {} }] },
-        undefined,
-        { eventSource: 'cli', cache: false },
-      );
-      await writing.promise;
-      const whileWriting = process.listenerCount('SIGTERM');
-      written.resolve();
-      await run;
+  it.each([
+    ['cli', 1],
+    ['library', 0],
+  ] as const)(
+    '%s eval keeps %i temporary SIGTERM listeners while writing outputs',
+    async (eventSource, expectedListeners) => {
+      const restoreEnv = mockProcessEnv({
+        PROMPTFOO_DISABLE_TELEMETRY: 'true',
+        PROMPTFOO_DISABLE_SHARING: 'true',
+      });
+      const previousExitCode = process.exitCode;
+      const writing = createDeferred<void>();
+      const written = createDeferred<void>();
+      vi.mocked(writeMultipleOutputs).mockImplementation(async () => {
+        writing.resolve();
+        await written.promise;
+      });
+      try {
+        const run = doEval(
+          {
+            write: false,
+            share: false,
+            table: false,
+            progressBar: false,
+            output: ['sigterm-unit-output.json'],
+          },
+          { prompts: ['hello'], providers: ['echo'], tests: [{ vars: {} }] },
+          undefined,
+          { eventSource, cache: false },
+        );
+        await writing.promise;
+        const whileWriting = process.listenerCount('SIGTERM');
+        written.resolve();
+        await run;
 
-      // evaluate() has returned while outputs are written; SIGTERM must still end the process.
-      expect(whileWriting - process.listenerCount('SIGTERM')).toBe(1);
-    } finally {
-      process.exitCode = previousExitCode;
-      restoreEnv();
-    }
-  });
+        // Only the CLI run adds a temporary listener on top of process-wide cleanup.
+        expect(whileWriting - process.listenerCount('SIGTERM')).toBe(expectedListeners);
+      } finally {
+        process.exitCode = previousExitCode;
+        restoreEnv();
+      }
+    },
+  );
 });
