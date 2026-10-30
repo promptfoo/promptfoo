@@ -359,6 +359,25 @@ describe('CloudflareGateway Provider', () => {
       expect(provider['getGenAISystem']()).toBe('anthropic');
     });
 
+    it('passes openTelemetry through to the Anthropic client', () => {
+      const off = new CloudflareGatewayAnthropicProvider('claude-sonnet-4-20250514', {
+        config: { ...minimumConfig, openTelemetry: false } as CloudflareGatewayConfig,
+      });
+      const content = new CloudflareGatewayAnthropicProvider('claude-sonnet-4-20250514', {
+        config: {
+          ...minimumConfig,
+          openTelemetry: { traces: { contentMode: 'content' } },
+        } as CloudflareGatewayConfig,
+      });
+
+      expect(off['propagatesTraceContext']).toBe(false);
+      expect(off.anthropic.openTelemetry.traces.enabled).toBe(false);
+      expect(content.anthropic.openTelemetry.traces).toMatchObject({
+        enabled: true,
+        contentMode: 'content',
+      });
+    });
+
     it('should return correct toString()', () => {
       const provider = new CloudflareGatewayAnthropicProvider('claude-sonnet-4-20250514', {
         config: minimumConfig,
