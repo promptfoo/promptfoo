@@ -82,21 +82,30 @@ describe('otelConfig', () => {
       expect(config.endpoint).toBe('http://custom:4318');
     });
 
-    it('should fall back to OTEL_EXPORTER_OTLP_ENDPOINT', () => {
-      mockedGetEnvBool.mockImplementation((_key, defaultVal) => defaultVal ?? false);
-      mockedGetEnvString.mockImplementation(((key: string, defaultVal?: string) => {
-        if (key === 'PROMPTFOO_OTEL_ENDPOINT') {
-          return defaultVal;
-        }
-        if (key === 'OTEL_EXPORTER_OTLP_ENDPOINT') {
-          return 'http://standard:4318';
-        }
-        return defaultVal;
-      }) as typeof getEnvString);
+    describe('OTLP traces endpoint resolution', () => {
+      const withEnv = (values: Record<string, string>) => {
+        mockedGetEnvBool.mockImplementation((_key, defaultVal) => defaultVal ?? false);
+        mockedGetEnvString.mockImplementation(
+          ((key: string, defaultVal?: string) => values[key] ?? defaultVal) as typeof getEnvString,
+        );
+      };
 
-      const config = getOtelConfigFromEnv();
+      it.each([
+        ['http://standard:4318', 'http://standard:4318/v1/traces'],
+        ['http://standard:4318/', 'http://standard:4318/v1/traces'],
+        ['http://standard:4318/custom/v1/traces', 'http://standard:4318/custom/v1/traces'],
+      ])('treats generic OTEL_EXPORTER_OTLP_ENDPOINT %s as a base URL', (generic, expected) => {
+        withEnv({ OTEL_EXPORTER_OTLP_ENDPOINT: generic });
+        expect(getOtelConfigFromEnv().endpoint).toBe(expected);
+      });
 
-      expect(config.endpoint).toBe('http://standard:4318');
+      it('uses signal-specific OTEL_EXPORTER_OTLP_TRACES_ENDPOINT verbatim, ahead of the generic one', () => {
+        withEnv({
+          OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: 'http://traces:4318',
+          OTEL_EXPORTER_OTLP_ENDPOINT: 'http://standard:4318',
+        });
+        expect(getOtelConfigFromEnv().endpoint).toBe('http://traces:4318');
+      });
     });
 
     it('should read PROMPTFOO_OTEL_LOCAL_EXPORT', () => {
