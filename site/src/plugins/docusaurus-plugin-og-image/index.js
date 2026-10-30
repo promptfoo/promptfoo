@@ -287,6 +287,7 @@ async function generatePricingTemplate() {
       style: {
         width: WIDTH,
         height: HEIGHT,
+        boxSizing: 'border-box',
         display: 'flex',
         flexDirection: 'column',
         background: 'linear-gradient(135deg, #10191c 0%, #17252b 100%)',
@@ -369,6 +370,7 @@ function createCompanyPageTemplate(logoBase64, headline, subtitle) {
       style: {
         width: WIDTH,
         height: HEIGHT,
+        boxSizing: 'border-box',
         display: 'flex',
         flexDirection: 'column',
         background: 'linear-gradient(135deg, #10191c 0%, #17252b 100%)',
@@ -607,6 +609,7 @@ async function generateEventsTemplate() {
       style: {
         width: WIDTH,
         height: HEIGHT,
+        boxSizing: 'border-box',
         display: 'flex',
         flexDirection: 'column',
         background: 'linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%)',
