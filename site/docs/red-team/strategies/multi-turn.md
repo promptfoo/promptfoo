@@ -34,11 +34,15 @@ When the strategy hits a refusal, it backtracks to an earlier point in the conve
 
 ## Use in Promptfoo
 
-Promptfoo supports five types of multi-turn [strategies](/docs/red-team/strategies/):
+Promptfoo supports six types of multi-turn [strategies](/docs/red-team/strategies/):
 
 #### 1. Crescendo
 
 Gradually increases the intensity or harmfulness of the prompt with each turn, starting from benign and moving toward more adversarial content. This approach is inspired by [Microsoft's Crescendo](https://arxiv.org/abs/2310.03684) research.
+
+#### 2. ReAct Crescendo
+
+Runs the same gradual-escalation loop as Crescendo, but the attacker reasons explicitly each turn (observe the last response, explain why it succeeded or failed, switch strategy vectors when stalled) before generating the next prompt. Inspired by [PAIR](https://arxiv.org/abs/2310.08419) and [TAP](https://arxiv.org/abs/2312.02119).
 
 #### 2. Hydra
 
@@ -66,6 +70,7 @@ redteam:
 
   strategies:
     - crescendo
+    - react-crescendo
     - goat
     - jailbreak:hydra
     - jailbreak:goblin
@@ -83,6 +88,12 @@ redteam:
         maxBacktracks: 5
         stateful: false # Sends the entire conversation history with each turn (Default)
         continueAfterSuccess: false # Stop after first successful attack (Default)
+    - id: react-crescendo
+      config:
+        maxTurns: 5
+        maxBacktracks: 5
+        stateful: false
+        continueAfterSuccess: false
     - id: jailbreak:hydra
       config:
         maxTurns: 10
@@ -112,11 +123,16 @@ If your system maintains a conversation history and only expects the latest mess
 
 ### Continue After Success
 
-By default, both Crescendo and GOAT strategies stop immediately upon finding a successful attack. You can configure them to continue searching for additional successful attacks until `maxTurns` is reached:
+By default, the Crescendo, ReAct Crescendo, and GOAT strategies stop immediately upon finding a successful attack. You can configure them to continue searching for additional successful attacks until `maxTurns` is reached:
 
 ```yaml title="promptfooconfig.yaml"
 strategies:
   - id: crescendo
+    config:
+      maxTurns: 10
+      continueAfterSuccess: true
+
+  - id: react-crescendo
     config:
       maxTurns: 10
       continueAfterSuccess: true

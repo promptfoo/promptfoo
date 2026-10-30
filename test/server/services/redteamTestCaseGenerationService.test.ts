@@ -126,6 +126,28 @@ describe('redteamTestCaseGenerationService', () => {
       await expectTaskRequest(fetchWithRetries, 'crescendo');
     });
 
+    it('should request ReAct reasoning for React Crescendo strategy previews', async () => {
+      const fetchWithRetries = mockRemoteGeneration({
+        result: {
+          generatedQuestion: 'test question',
+          lastResponseSummary: 'summary',
+          rationaleBehindJailbreak: 'rationale',
+          observation: 'observed refusal',
+          reasoning: 'switch vectors',
+          strategyVector: 'hypothetical-reframing',
+        },
+      });
+
+      await generatePromptForStrategy('react-crescendo');
+
+      await expectTaskRequest(fetchWithRetries, 'crescendo');
+      const [, request] = fetchWithRetries.mock.calls[0]!;
+      const body = JSON.parse(String(request.body));
+      expect(body.prompt).toContain('ReAct Crescendo Multi-turn');
+      expect(body.prompt).toContain('OBSERVE');
+      expect(body.prompt).toContain('strategyVector');
+    });
+
     it('should call fetchWithRetries with correct parameters for Hydra strategy', async () => {
       const fetchWithRetries = mockRemoteGeneration({
         result: { prompt: 'test prompt' },
