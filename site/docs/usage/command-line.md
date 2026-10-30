@@ -46,6 +46,7 @@ The `promptfoo` command line utility includes these command groups:
 - `show [id]` - Show details of a specific resource (eval, prompt, or dataset).
 - `delete <id>` - Delete an eval by ID; accepts `latest` or `all`.
 - `retry <evalId>` - Retry ERROR results from a previous eval in place.
+- `compare <evalA> <evalB>` - Compare two evals row by row.
 - `validate` - Validate a promptfoo configuration file.
   - `validate config`
   - `validate target`
@@ -476,6 +477,32 @@ If the retry operation fails (network error, API timeout, etc.), your original E
 
 :::tip
 Unlike `--filter-errors-only` which creates a new eval, `promptfoo retry` updates the original eval in place. Use `retry` when you want to fix errors in an existing eval without creating duplicates.
+:::
+
+## `promptfoo compare <evalA> <evalB>`
+
+Compare two evals row by row. Each argument is an eval ID, `latest`, or a JSON results file written by `promptfoo eval -o` or `promptfoo export eval`.
+
+Rows are matched by test, prompt position, and provider. A test is identified by its `description`, or by its vars if it has none. A provider is identified by its `label`, or by its ID if it has no label, so give providers the same `label` in both configs to compare across a model change.
+
+Only rows graded in both evals count toward the pass rate, mean score, median latency, and per-provider pass rates. This way an eval with more errors isn't scored on an easier subset. Errors and rows with no counterpart are counted separately. The output also lists every row that passed in one eval and failed in the other.
+
+| Option   | Description                   |
+| -------- | ----------------------------- |
+| `--json` | Output the comparison as JSON |
+
+Examples:
+
+```sh
+# Compare two stored evals
+promptfoo compare eval-abc123 eval-def456
+
+# Compare a saved results file with the most recent eval, as JSON
+promptfoo compare baseline.json latest --json
+```
+
+:::tip
+If either eval has errors, run `promptfoo retry <evalId>` first. Retried rows replace the errors in the same eval, so the next comparison covers them.
 :::
 
 ## `promptfoo import <filepath>`
