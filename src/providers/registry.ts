@@ -1499,6 +1499,22 @@ export const providerMap: ProviderFactory[] = [
       });
     },
   },
+  {
+    test: (providerPath: string) => providerPath === 'nace' || providerPath.startsWith('nace:'),
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      context: LoadApiProviderContext,
+    ) => {
+      const { NaceProvider } = await import('./nace');
+      // Drex Max by default: `drex-latest` points to the text-only drex-v2.0, not to Drex Max.
+      const modelName = modelNameFromProviderPath(providerPath, 1) || 'drex-max';
+      return new NaceProvider(modelName, {
+        ...providerOptions,
+        env: providerOptions.env ?? context.env,
+      });
+    },
+  },
   configuredProviderFactory('llamaapi:', () => createLlamaApiProvider),
   {
     test: (providerPath: string) => providerPath.startsWith('aimlapi:'),

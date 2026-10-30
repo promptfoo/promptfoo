@@ -1191,6 +1191,7 @@ describe('Provider Registry', () => {
       ['ai21:jamba:custom:v2', 'AI21ChatCompletionProvider', 'jamba:custom:v2'],
       ['voyage:custom:model:v2', 'VoyageEmbeddingProvider', 'custom:model:v2'],
       ['typesafe:jev-1.13.0', 'TypeSafeProvider', 'jev-1.13.0'],
+      ['nace:drex-max', 'NaceProvider', 'drex-max'],
       [
         'anthropic:messages:anthropic.claude-3-5-sonnet-20241022-v2:0',
         'AnthropicMessagesProvider',

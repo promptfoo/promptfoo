@@ -169,6 +169,24 @@ describe('TypeSafeProvider', () => {
       });
     });
 
+    it('grades a Score answer that carries an object legend and loosely rounded probabilities', async () => {
+      mockAnswer({
+        type: 'score',
+        score: 1.43,
+        legend: { '0': 'Calm', '1': 'Frustrated', '2': 'Very angry' },
+        probabilities: { '0': 0.1, '1': 0.55, '2': 0.35 },
+        confidence: 0.5,
+      });
+
+      const result = await createProvider({ levels: LEVELS }).callApi(
+        '',
+        rubricContext('How frustrated is the customer?', 'Fix this now.'),
+      );
+
+      expect(result.error).toBeUndefined();
+      expect(result.output).toMatchObject({ pass: true, score: 0.715 });
+    });
+
     it('asks a Score question when levels are configured and normalizes the score', async () => {
       mockAnswer({ type: 'score', score: 1.43, confidence: 0.5 });
 
@@ -366,7 +384,12 @@ describe('TypeSafeProvider', () => {
           },
         },
       });
-      expect(result).toEqual({ classification: TEAM_PROBABILITIES });
+      expect(result).toEqual({
+        classification: TEAM_PROBABILITIES,
+        cached: false,
+        tokenUsage: { total: 316, prompt: 296, completion: 20, numRequests: 1 },
+        metadata: { typesafe: { model: 'jev-1.13.0', requestId: 'req_123' } },
+      });
     });
 
     it('sends label descriptions when labels is a map', async () => {
@@ -388,7 +411,12 @@ describe('TypeSafeProvider', () => {
         labels: ['billing', 'technical', 'sales'],
       }).callClassificationApi('text');
 
-      expect(result).toEqual({ classification: probabilities });
+      expect(result).toEqual({
+        classification: probabilities,
+        cached: false,
+        tokenUsage: { total: 316, prompt: 296, completion: 20, numRequests: 1 },
+        metadata: { typesafe: { model: 'jev-1.13.0', requestId: 'req_123' } },
+      });
     });
 
     it.each([[{ labels: ['a', 'b'] }], [{ instructions }], [{}]])(
@@ -412,6 +440,15 @@ describe('TypeSafeProvider', () => {
         pass: true,
         score: 0.88,
         reason: 'Classification billing has score 0.88 >= 0.5',
+        metadata: { typesafe: { model: 'jev-1.13.0', requestId: 'req_123' } },
+        tokensUsed: {
+          total: 316,
+          prompt: 296,
+          completion: 20,
+          cached: 0,
+          numRequests: 1,
+          completionDetails: { reasoning: 0, acceptedPrediction: 0, rejectedPrediction: 0 },
+        },
       });
     });
   });

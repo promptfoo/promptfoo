@@ -35,6 +35,16 @@ export async function matchesClassification(
       : finalProvider.callClassificationApi(output),
   );
 
+  const {
+    cachedResponse: _untrustedCachedResponse,
+    graderError: _untrustedGraderError,
+    ...providerMetadata
+  } = resp.metadata ?? {};
+  const metadata = {
+    ...providerMetadata,
+    ...(resp.cached && { cachedResponse: true }),
+  };
+
   const scores = Object.values(resp.classification ?? {});
   if (!resp.classification || scores.length === 0) {
     const failure = graderFail(
@@ -45,7 +55,7 @@ export async function matchesClassification(
     );
     return {
       ...failure,
-      ...(resp.cached && { metadata: { ...failure.metadata, cachedResponse: true } }),
+      metadata: { ...metadata, ...failure.metadata },
     };
   }
 
@@ -60,6 +70,6 @@ export async function matchesClassification(
     score,
     reason: `${subject} ${score.toFixed(2)} ${pass ? '>=' : '<'} ${threshold}`,
     ...(resp.tokenUsage && { tokensUsed: normalizeMatcherTokenUsage(resp.tokenUsage) }),
-    ...(resp.cached && { metadata: { cachedResponse: true } }),
+    ...(Object.keys(metadata).length > 0 && { metadata }),
   };
 }
