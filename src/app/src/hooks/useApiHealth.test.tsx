@@ -8,8 +8,8 @@ import {
   resetCallApiMock,
 } from '@app/tests/apiMocks';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { renderHook, waitFor } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { act, renderHook, waitFor } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useApiHealth } from './useApiHealth';
 
 // Mock the API call
@@ -34,6 +34,11 @@ describe('useApiHealth', () => {
         },
       },
     });
+  });
+
+  afterEach(() => {
+    queryClient.clear();
+    vi.resetAllMocks();
   });
 
   const wrapper = ({ children }: { children: React.ReactNode }) => (
@@ -135,47 +140,29 @@ describe('useApiHealth', () => {
     });
   });
 
-  it('shows loading state transitions correctly', async () => {
-    // Start with a slow response
-    let resolvePromise: (value: Response) => void;
-    const slowPromise = new Promise<Response>((resolve) => {
-      resolvePromise = resolve;
-    });
-
-    getCallApiMock().mockReturnValue(slowPromise);
-
+  it('reports background fetching while retaining initial data, then updates the result', async () => {
+    let resolveResponse!: (value: Response) => void;
+    getCallApiMock().mockReturnValue(
+      new Promise<Response>((resolve) => {
+        resolveResponse = resolve;
+      }),
+    );
     const { result } = renderHook(() => useApiHealth(), { wrapper });
-
-    // Initial state should be unknown and not loading
     expect(result.current.data.status).toBe('unknown');
     expect(result.current.isLoading).toBe(false);
 
-    // Trigger refetch - this starts the loading state
-    const refetchPromise = result.current.refetch();
-
-    // Immediately check if loading (synchronously, right after calling refetch)
-    // Note: Due to React Query's internal batching, isLoading might not be true yet
-    // So we wait for it to become true
-    await waitFor(
-      () => {
-        expect(result.current.isLoading).toBe(true);
-      },
-      { timeout: 100 },
-    ).catch(() => {
-      // If we can't catch the loading state, that's okay - it may be too fast
-      // The important thing is that the query eventually completes
+    expect(result.current.isFetching).toBe(false);
+    act(() => {
+      void result.current.refetch();
     });
+    await waitFor(() => expect(result.current.isFetching).toBe(true));
+    expect(result.current.isLoading).toBe(false);
+    expect(result.current.data.status).toBe('unknown');
 
-    // Resolve the promise
-    resolvePromise!(createMockResponse({ status: 'OK', message: 'test' }));
-
-    // Wait for the refetch to complete
-    await refetchPromise;
-
-    // Wait for the state to update after the promise resolves
-    await waitFor(() => {
-      expect(result.current.isLoading).toBe(false);
-      expect(result.current.data.status).toBe('connected');
+    await act(async () => {
+      resolveResponse(createMockResponse({ status: 'OK', message: 'healthy' }));
     });
+    await waitFor(() => expect(result.current.isFetching).toBe(false));
+    expect(result.current.data).toEqual({ status: 'connected', message: 'healthy' });
   });
 });
