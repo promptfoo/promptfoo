@@ -420,7 +420,6 @@ describe('OpenAI Image Provider Functions', () => {
       const mockDeleteFromCache = vi.fn();
       const data = {
         error: { message: 'Some API error' },
-        deleteFromCache: mockDeleteFromCache,
       };
 
       const result = await processApiResponse(
@@ -431,6 +430,11 @@ describe('OpenAI Image Provider Functions', () => {
         'dall-e-2',
         '512x512',
         undefined,
+        undefined,
+        1,
+        undefined,
+        {},
+        mockDeleteFromCache,
       );
 
       expect(mockDeleteFromCache).toHaveBeenCalledWith();
@@ -555,7 +559,6 @@ describe('OpenAI Image Provider Functions', () => {
       const mockDeleteFromCache = vi.fn();
       const data = {
         data: undefined,
-        deleteFromCache: mockDeleteFromCache,
       };
 
       const result = await processApiResponse(
@@ -566,11 +569,16 @@ describe('OpenAI Image Provider Functions', () => {
         'dall-e-2',
         '512x512',
         undefined,
+        undefined,
+        1,
+        undefined,
+        {},
+        mockDeleteFromCache,
       );
 
       expect(result).toHaveProperty('error');
-      expect(result.error).toContain('API error: TypeError');
-      expect(result.error).toContain('Cannot read properties of undefined');
+      expect(result.error).toContain('No image URL found in response');
+      expect(result.error).not.toContain('TypeError');
       expect(mockDeleteFromCache).toHaveBeenCalledWith();
     });
 
@@ -578,7 +586,6 @@ describe('OpenAI Image Provider Functions', () => {
       const mockDeleteFromCache = vi.fn();
       const data = {
         data: { data: 'not-an-array' },
-        deleteFromCache: mockDeleteFromCache,
       };
 
       const result = await processApiResponse(
@@ -589,10 +596,16 @@ describe('OpenAI Image Provider Functions', () => {
         'dall-e-2',
         '512x512',
         undefined,
+        undefined,
+        1,
+        undefined,
+        {},
+        mockDeleteFromCache,
       );
 
       expect(result).toHaveProperty('error');
-      expect(result.error).toContain('API error:');
+      expect(result.error).toContain('No image URL found in response');
+      expect(result.error).not.toContain('TypeError');
       expect(mockDeleteFromCache).toHaveBeenCalledWith();
     });
   });
