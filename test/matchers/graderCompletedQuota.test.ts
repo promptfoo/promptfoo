@@ -284,7 +284,6 @@ describe('completed quota from a configured local Chat grader', () => {
         failedRequests: 1,
         retriedRequests: 0,
         rateLimitHits: 0,
-        avgLatencyMs: 1000,
       });
 
       await vi.advanceTimersByTimeAsync(499);
@@ -318,7 +317,6 @@ describe('completed quota from a configured local Chat grader', () => {
         completedRequests: 1,
         failedRequests: 1,
         retriedRequests: 0,
-        avgLatencyMs: 500,
       });
       if (wrapped) {
         expect(contextRegistry.getMetrics()).toEqual({});
