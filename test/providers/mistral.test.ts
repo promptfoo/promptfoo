@@ -991,6 +991,21 @@ describe('Mistral', () => {
       });
     });
 
+    it('should surface the API error when the embeddings request is rejected', async () => {
+      vi.mocked(isCacheEnabled).mockReturnValue(false);
+      vi.mocked(fetchWithCache).mockResolvedValue(
+        createMockFetchResponse(
+          { message: 'Unauthorized', request_id: 'req-1' },
+          { status: 401, statusText: 'Unauthorized' },
+        ),
+      );
+
+      const result = await provider.callApi('Test text');
+
+      expect(result.error).toContain('Mistral embeddings API error: 401 Unauthorized');
+      expect(result.error).not.toContain('No embedding found');
+    });
+
     it('should use cache for embedding when enabled', async () => {
       const mockResponse = createMistralEmbeddingResponse();
       vi.mocked(isCacheEnabled).mockReturnValue(true);
