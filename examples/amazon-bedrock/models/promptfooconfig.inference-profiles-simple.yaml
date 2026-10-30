@@ -1,23 +1,20 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: 'Simple Inference Profile Example - High Availability Setup'
+description: 'Simple Inference Profile Example - Usage Tracking'
 
 # This example demonstrates a typical production setup using inference profiles
-# for high availability and automatic failover across regions
+# for usage tracking; cross-region routing depends on the profile source
 
 prompts:
   - 'Answer this customer support question professionally: {{question}}'
 
 providers:
-  # Production inference profile with automatic failover
-  # This profile might route to us-east-1 primarily, with failover to us-west-2
-  - id: bedrock:arn:aws:bedrock:us-east-1:YOUR_ACCOUNT_ID:application-inference-profile/prod-claude-ha
-    label: 'Production Claude (HA)'
+  # Production profile for one model
+  # Copy a system cross-region profile to enable routing among its regions
+  - id: bedrock:converse:arn:aws:bedrock:us-east-1:YOUR_ACCOUNT_ID:application-inference-profile/prod-claude-ha
+    label: 'Production Claude'
     config:
-      inferenceModelType: 'claude' # Required for inference profiles
       region: 'us-east-1'
-      temperature: 0.3 # Lower temperature for consistent customer support
-      max_tokens: 500
-      anthropic_version: 'bedrock-2023-05-31'
+      maxTokens: 500
 
   # System inference profile for comparison
   - id: bedrock:us.anthropic.claude-sonnet-5
@@ -51,13 +48,11 @@ tests:
 defaultTest:
   options:
     provider:
-      id: bedrock:arn:aws:bedrock:us-east-1:YOUR_ACCOUNT_ID:application-inference-profile/grading-claude
+      id: bedrock:converse:arn:aws:bedrock:us-east-1:YOUR_ACCOUNT_ID:application-inference-profile/grading-claude
       config:
-        inferenceModelType: 'claude'
-        temperature: 0 # Zero temperature for consistent grading
-        max_tokens: 256
+        maxTokens: 256
   assert:
     - type: not-contains
       value: 'I cannot'
-    - type: min-length
-      value: 50
+    - type: javascript
+      value: output.length >= 50

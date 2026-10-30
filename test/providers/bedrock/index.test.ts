@@ -2119,6 +2119,33 @@ Hello<|eot|><|header_start|>assistant<|header_end|>`;
 describe('BEDROCK_MODEL AMAZON_NOVA', () => {
   const modelHandler = BEDROCK_MODEL.AMAZON_NOVA;
 
+  it.each([
+    ['canonical config', { maxTokens: 256 }, '512', 256],
+    ['legacy config', { max_new_tokens: 128 }, '512', 128],
+    ['canonical and legacy config', { maxTokens: 256, max_new_tokens: 128 }, '512', 256],
+    ['environment default', {}, '512', 512],
+    ['no token limit', {}, undefined, undefined],
+  ] as const)(
+    'normalizes the token limit from %s',
+    async (_name, interfaceConfig, env, expected) => {
+      const restoreEnv = mockProcessEnv(
+        { AWS_BEDROCK_MAX_TOKENS: env },
+        { clearPrefixes: ['AWS_BEDROCK_'] },
+      );
+      try {
+        const params = await modelHandler.params({ interfaceConfig }, 'Hello');
+        expect(params.inferenceConfig).not.toHaveProperty('max_new_tokens');
+        if (expected === undefined) {
+          expect(params.inferenceConfig).not.toHaveProperty('maxTokens');
+        } else {
+          expect(params.inferenceConfig.maxTokens).toBe(expected);
+        }
+      } finally {
+        restoreEnv();
+      }
+    },
+  );
+
   it('should format system message correctly when using JSON array input', async () => {
     const config = {};
     const prompt = JSON.stringify([
