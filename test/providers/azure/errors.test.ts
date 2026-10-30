@@ -32,8 +32,22 @@ describe('isRateLimitError', () => {
     'Rate limit reached',
     'HTTP 429 Too Many Requests',
     'Quota exceeded for daily tokens',
+    '429 Too Many Requests',
+    'Request failed with status code 429.',
+    'API error (429)',
+    'API error: 429 Too Many Requests',
   ])('matches %j', (msg) => {
     expect(isRateLimitError(msg)).toBe(true);
+  });
+
+  it.each([
+    'API error: 400 Bad Request: your messages resulted in 204291 tokens.',
+    'API error: 400 Bad Request: your messages resulted in 14291 tokens.',
+    'request_id: req_a4290f',
+    'connect ECONNREFUSED 10.0.4.29:443',
+    'port 4290 refused',
+  ])('does not match 429 embedded in a longer token: %j', (msg) => {
+    expect(isRateLimitError(msg)).toBe(false);
   });
 
   it('returns false for unrelated errors', () => {
