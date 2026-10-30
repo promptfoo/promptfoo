@@ -6013,10 +6013,9 @@ describe('ClaudeCodeSDKProvider', () => {
         expect(mockQuery).toHaveBeenCalledTimes(2); // Still only 2 calls total
       });
 
-      it('should handle working directory fingerprinting', async () => {
-        mockQuery.mockReturnValue(createMockResponse('Response'));
+      it('should invalidate cached responses when the working directory fingerprint changes', async () => {
+        mockQuery.mockReturnValue(createMockResponse('Response v1'));
 
-        // Mock filesystem for working directory fingerprinting
         const readdirSyncSpy = vi.spyOn(fs, 'readdirSync');
         readdirSyncSpy.mockReturnValue([
           { name: 'file1.txt', isFile: () => true, isDirectory: () => false },
@@ -6024,6 +6023,7 @@ describe('ClaudeCodeSDKProvider', () => {
         ] as any);
 
         const originalStatSync = statSyncSpy.getMockImplementation();
+        let file1Mtime = 1234567890;
         statSyncSpy.mockImplementation(function (path: any) {
           if (path === '/custom/dir') {
             return {
@@ -6034,7 +6034,7 @@ describe('ClaudeCodeSDKProvider', () => {
           if (path.includes('file1.txt') || path.includes('file2.txt')) {
             return {
               isFile: () => true,
-              mtimeMs: 1234567890,
+              mtimeMs: path.includes('file1.txt') ? file1Mtime : 1234567890,
             } as fs.Stats;
           }
           return originalStatSync?.(path) ?? ({} as fs.Stats);
@@ -6042,47 +6042,32 @@ describe('ClaudeCodeSDKProvider', () => {
 
         const provider = new ClaudeCodeSDKProvider(createWorkingDirectoryOptions('/custom/dir'));
 
-        // First call with working directory
-        await provider.callApi('Test prompt');
+        const first = await provider.callApi('Test prompt');
+        expect(first.output).toBe('Response v1');
+        const unchanged = await provider.callApi('Test prompt');
+        expect(unchanged.output).toBe('Response v1');
+        expect(unchanged.cached).toBe(true);
         expect(mockQuery).toHaveBeenCalledTimes(1);
 
-        // Second call with same working directory - should use cache
-        await provider.callApi('Test prompt');
-        expect(mockQuery).toHaveBeenCalledTimes(1);
+        file1Mtime = 9999999999;
+        mockQuery.mockReturnValue(createMockResponse('Response v2'));
 
-        // Simulate file change by updating mtime
-        statSyncSpy.mockImplementation(function (path: any) {
-          if (path === '/custom/dir') {
-            return {
-              isDirectory: () => true,
-              mtimeMs: 1234567890,
-            } as fs.Stats;
-          }
-          if (path.includes('file1.txt')) {
-            return {
-              isFile: () => true,
-              mtimeMs: 9999999999, // Changed mtime
-            } as fs.Stats;
-          }
-          if (path.includes('file2.txt')) {
-            return {
-              isFile: () => true,
-              mtimeMs: 1234567890,
-            } as fs.Stats;
-          }
-          return originalStatSync?.(path) ?? ({} as fs.Stats);
-        });
-
-        // Clear cache to simulate new provider instance
-        await clearCache();
-
-        const provider2 = new ClaudeCodeSDKProvider(createWorkingDirectoryOptions('/custom/dir'));
-
-        // Third call with changed file - should NOT use cache
-        await provider2.callApi('Test prompt');
+        // Keep both the existing cache entry and the provider's credential cache scope.
+        const changed = await provider.callApi('Test prompt');
+        expect(changed.output).toBe('Response v2');
+        expect(changed.cached).not.toBe(true);
         expect(mockQuery).toHaveBeenCalledTimes(2);
 
-        readdirSyncSpy.mockRestore();
+        const changedAgain = await provider.callApi('Test prompt');
+        expect(changedAgain.output).toBe('Response v2');
+        expect(changedAgain.cached).toBe(true);
+
+        // Restoring the old fingerprint finds the original entry, proving it was retained.
+        file1Mtime = 1234567890;
+        const restored = await provider.callApi('Test prompt');
+        expect(restored.output).toBe('Response v1');
+        expect(restored.cached).toBe(true);
+        expect(mockQuery).toHaveBeenCalledTimes(2);
       });
 
       it('should handle cache disabled globally', async () => {
@@ -7869,6 +7854,16 @@ describe('ClaudeCodeSDKProvider', () => {
       });
 
       it('picks gen_ai.response.model by largest usage, not iteration order', async () => {
+        const setAttribute = vi.fn();
+        vi.spyOn(otelTrace, 'getTracer').mockReturnValue({
+          startActiveSpan: (
+            _name: string,
+            _options: unknown,
+            _parentContext: unknown,
+            callback: (span: unknown) => unknown,
+          ) => callback({ setAttribute, setStatus: vi.fn(), end: vi.fn() }),
+        } as any);
+
         mockQuery.mockReturnValue(
           createMockQuery([
             {
@@ -7905,9 +7900,7 @@ describe('ClaudeCodeSDKProvider', () => {
         const provider = new ClaudeCodeSDKProvider(createAnthropicEnvOptions());
         const result = await provider.callApi('prompt');
         expect(result.metadata?.modelUsage).toHaveProperty('claude-sonnet-4-5');
-        // The extractor (not directly returned) uses modelUsage; this test proves
-        // our modelUsage payload reached metadata so the new tie-break logic can
-        // operate on it.
+        expect(setAttribute).toHaveBeenCalledWith('gen_ai.response.model', 'claude-sonnet-4-5');
       });
 
       describe('gen_ai.turn marker spans', () => {
