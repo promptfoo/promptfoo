@@ -100,7 +100,7 @@ function EnterpriseTabContent({
 
       <Button variant="outline" asChild>
         <a
-          href="https://promptfoo.dev/docs/guides/enterprise"
+          href="https://www.promptfoo.dev/docs/enterprise/"
           target="_blank"
           rel="noopener noreferrer"
         >
