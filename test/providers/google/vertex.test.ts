@@ -9,6 +9,7 @@ import logger from '../../../src/logger';
 import { GoogleAuthManager } from '../../../src/providers/google/auth';
 import * as vertexUtil from '../../../src/providers/google/util';
 import { VertexChatProvider, VertexEmbeddingProvider } from '../../../src/providers/google/vertex';
+import * as genaiTracer from '../../../src/tracing/genaiTracer';
 import { fetchWithProxy } from '../../../src/util/fetch';
 import type { JSONClient } from 'google-auth-library/build/src/auth/googleauth';
 
@@ -3466,6 +3467,100 @@ describe('VertexChatProvider.callLlamaApi', () => {
         }),
       }),
     );
+  });
+
+  it('sends generationConfig sampling options to Llama models', async () => {
+    provider = new VertexChatProvider('llama-3.3-70b-instruct-maas', {
+      config: {
+        region: 'us-central1',
+        temperature: 0.7,
+        maxOutputTokens: 250,
+        generationConfig: {
+          temperature: 0.2,
+          maxOutputTokens: 64,
+          topP: 0.9,
+          topK: 40,
+        },
+      },
+    });
+
+    const mockRequest = vi.fn().mockResolvedValue({
+      data: { choices: [{ message: { content: 'Llama response content' } }] },
+    });
+    vi.spyOn(vertexUtil, 'getGoogleClient').mockResolvedValue({
+      client: { request: mockRequest } as unknown as JSONClient,
+      projectId: 'test-project-id',
+    });
+    vi.spyOn(vertexUtil, 'resolveProjectId').mockResolvedValue('test-project-id');
+
+    await provider.callLlamaApi('test prompt');
+
+    const body = mockRequest.mock.calls[0][0].data;
+    expect(body.temperature).toBe(0.2);
+    expect(body.max_tokens).toBe(64);
+    expect(body.top_p).toBe(0.9);
+    expect(body.top_k).toBe(40);
+  });
+
+  it('sends an explicit zero generationConfig.maxOutputTokens to Llama models', async () => {
+    provider = new VertexChatProvider('llama-3.3-70b-instruct-maas', {
+      config: {
+        region: 'us-central1',
+        maxOutputTokens: 250,
+        generationConfig: { maxOutputTokens: 0 },
+      },
+    });
+
+    const mockRequest = vi.fn().mockResolvedValue({
+      data: { choices: [{ message: { content: 'Llama response content' } }] },
+    });
+    vi.spyOn(vertexUtil, 'getGoogleClient').mockResolvedValue({
+      client: { request: mockRequest } as unknown as JSONClient,
+      projectId: 'test-project-id',
+    });
+    vi.spyOn(vertexUtil, 'resolveProjectId').mockResolvedValue('test-project-id');
+
+    await provider.callLlamaApi('test prompt');
+
+    expect(mockRequest.mock.calls[0][0].data.max_tokens).toBe(0);
+  });
+
+  it('traces the Llama sampling values that the request body sends', async () => {
+    let spanContext: genaiTracer.GenAISpanContext | undefined;
+    const spanSpy = vi
+      .spyOn(genaiTracer, 'withGenAISpan')
+      .mockImplementation(async (context: any, fn: any) => {
+        spanContext = context;
+        return await fn();
+      });
+    provider = new VertexChatProvider('llama-3.3-70b-instruct-maas', {
+      config: {
+        region: 'us-central1',
+        temperature: 0.9,
+        topP: 0.9,
+        maxOutputTokens: 250,
+        generationConfig: { temperature: 0.2, topP: 0.5, maxOutputTokens: 0 },
+      },
+    });
+
+    const mockRequest = vi.fn().mockResolvedValue({
+      data: { choices: [{ message: { content: 'Llama response content' } }] },
+    });
+    vi.spyOn(vertexUtil, 'getGoogleClient').mockResolvedValue({
+      client: { request: mockRequest } as unknown as JSONClient,
+      projectId: 'test-project-id',
+    });
+    vi.spyOn(vertexUtil, 'resolveProjectId').mockResolvedValue('test-project-id');
+
+    try {
+      await provider.callApi('test prompt');
+    } finally {
+      spanSpy.mockRestore();
+    }
+
+    const { data } = mockRequest.mock.calls[0][0];
+    expect(data).toMatchObject({ temperature: 0.2, top_p: 0.5, max_tokens: 0 });
+    expect(spanContext).toMatchObject({ temperature: 0.2, topP: 0.5, maxTokens: 0 });
   });
 
   it('hashes Llama request body cache keys without leaking prompts', async () => {

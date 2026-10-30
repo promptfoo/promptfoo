@@ -354,15 +354,17 @@ export class VertexChatProvider extends GoogleGenericProvider {
           ? 'vertex:llama'
           : 'vertex:palm2';
 
+    // A Llama span reports the sampling values its request body sends.
+    const llama = system === 'vertex:llama' ? this.getLlamaSamplingOptions() : undefined;
     // Set up tracing context
     const spanContext: GenAISpanContext = {
       system,
       operationName: 'chat',
       model: this.modelName,
       providerId: this.id(),
-      temperature: this.config.temperature,
-      topP: this.config.topP,
-      maxTokens: this.config.maxOutputTokens || this.config.max_tokens,
+      temperature: llama ? llama.temperature : this.config.temperature,
+      topP: llama ? llama.top_p : this.config.topP,
+      maxTokens: llama ? llama.max_tokens : this.config.maxOutputTokens || this.config.max_tokens,
       testIndex: context?.testIdx ?? (context?.test?.vars?.__testIdx as number | undefined),
       promptLabel: context?.prompt?.label,
       // W3C Trace Context for linking to evaluation trace
@@ -1199,6 +1201,17 @@ export class VertexChatProvider extends GoogleGenericProvider {
     }
   }
 
+  // generationConfig overrides the top-level options, as it does for Gemini.
+  private getLlamaSamplingOptions() {
+    const generationConfig = this.config.generationConfig;
+    return {
+      max_tokens: generationConfig?.maxOutputTokens ?? (this.config.maxOutputTokens || 1024),
+      temperature: generationConfig?.temperature ?? this.config.temperature,
+      top_p: generationConfig?.topP ?? this.config.topP,
+      top_k: generationConfig?.topK ?? this.config.topK,
+    };
+  }
+
   async callLlamaApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
     const region = this.getRegion();
     const regionError = getVertexLlamaRegionError(this.modelName, region);
@@ -1222,15 +1235,16 @@ export class VertexChatProvider extends GoogleGenericProvider {
       return { error: safetyRequestConfig.error };
     }
 
+    const { max_tokens, temperature, top_p, top_k } = this.getLlamaSamplingOptions();
     // Prepare the request body for Llama models
     const body = {
       model: `meta/${this.modelName}`,
       messages,
-      max_tokens: this.config.maxOutputTokens || 1024,
+      max_tokens,
       stream: false,
-      temperature: this.config.temperature,
-      top_p: this.config.topP,
-      top_k: this.config.topK,
+      temperature,
+      top_p,
+      top_k,
       ...safetyRequestConfig.bodyFields,
     };
 

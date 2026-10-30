@@ -699,11 +699,10 @@ providers:
       generationConfig:
         temperature: 0.7
         maxOutputTokens: 1024
-        extra_body:
-          google:
-            model_safety_settings:
-              enabled: true
-              llama_guard_settings: {}
+      llamaConfig:
+        safetySettings:
+          enabled: true
+          llama_guard_settings: {}
 
   # For Claude models (set an enabled region, or `global` for Claude 5)
   - id: vertex:claude-sonnet-5
