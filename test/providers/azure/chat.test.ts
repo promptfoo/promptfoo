@@ -138,7 +138,7 @@ describe('AzureChatCompletionProvider', () => {
       setAuthHeaders(provider);
     });
 
-    registerAzureConfigTests(() => provider, true);
+    registerAzureConfigTests(() => provider);
 
     it('should omit default parameters when omitDefaults is true', async () => {
       provider = new AzureChatCompletionProvider('test-deployment', {
