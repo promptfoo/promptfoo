@@ -1,0 +1,8 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Provider call that never returns
+prompts:
+  - 'Say hello'
+providers:
+  - file://hanging-provider.mjs
+tests:
+  - description: hangs
