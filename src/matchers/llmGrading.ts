@@ -32,6 +32,7 @@ import { graderFail, normalizeMatcherTokenUsage, tryParse } from './shared';
 import type {
   Assertion,
   CallApiContextParams,
+  EvidenceEntry,
   GradingConfig,
   GradingResult,
   ProviderResponse,
@@ -188,6 +189,14 @@ export async function matchesLlmRubric(
     throwOnError?: boolean;
     preferRemote?: boolean;
     providerResponse?: ProviderResponse;
+    /**
+     * Optional supplementary evidence entries (already bounded, cycle-broken,
+     * serialised, and byte-truncated). These are exposed to the grader as
+     * a structured `evidence` variable alongside the candidate `output` —
+     * they are NOT spliced into `llmOutput`, which would corrupt
+     * structured-json outputs and break image normalisation below.
+     */
+    evidence?: EvidenceEntry[];
   },
   providerCallContext?: CallApiContextParams,
 ): Promise<GradingResult> {
@@ -205,6 +214,8 @@ export async function matchesLlmRubric(
     !grading.provider;
   const { imageOutputs } = materializeImageOutputsForGrading(options?.providerResponse?.images);
   const audio = options?.providerResponse?.audio;
+  // Output normalisation runs against the ORIGINAL llmOutput (no evidence
+  // prepended) so image/data-uri comparisons stay correct.
   const gradingOutput = getGradingOutputForImages(
     getGradingOutputForAudio(llmOutput, audio),
     imageOutputs,
@@ -221,6 +232,7 @@ export async function matchesLlmRubric(
         ...(await doRemoteGrading({
           task: 'llm-rubric',
           rubric,
+          evidence: options?.evidence ? JSON.stringify(options.evidence) : undefined,
           output: gradingOutput,
           vars: vars || {},
           ...(imageOutputs.length ? { images: imageOutputs } : {}),
@@ -247,6 +259,7 @@ export async function matchesLlmRubric(
       throwOnError: options?.throwOnError,
       images: imageOutputs,
       audio,
+      evidence: options?.evidence,
       vars: {
         ...(vars || {}),
         output: tryParse(gradingOutput),
