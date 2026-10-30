@@ -26,3 +26,16 @@ export const removeEmpty = (obj: any): any => {
 
   return copy;
 };
+
+/**
+ * True for plain data objects (literals, `Object.create(null)`, parsed mappings); false for `Date`,
+ * `Buffer`, `Map`, class instances, etc., which `Object.keys` cannot faithfully rebuild.
+ * Checks the prototype chain length rather than `Object.prototype` so cross-realm objects pass.
+ */
+export function isPlainObject(value: unknown): value is Record<string, unknown> {
+  if (typeof value !== 'object' || value === null) {
+    return false;
+  }
+  const proto = Object.getPrototypeOf(value);
+  return proto === null || Object.getPrototypeOf(proto) === null;
+}
