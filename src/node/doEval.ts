@@ -228,56 +228,34 @@ function watchUntilTerminated(watcher: FSWatcher): Promise<void> {
 /** How long a CLI eval waits for provider and tracing cleanup after SIGTERM before it ends. */
 export const SIGTERM_CLEANUP_TIMEOUT_MS = 3_000;
 
-/**
- * CLI policy: end the process on SIGTERM after bounded cleanup.
- *
- * The provider registry and the OpenTelemetry SDK listen for SIGTERM so they can clean up, and
- * any listener suppresses Node's default termination. Neither exits, because a library host owns
- * its own process. A CLI eval does own it, so within one {@link SIGTERM_CLEANUP_TIMEOUT_MS}
- * budget this listener flushes spans that have already ended, drains active provider calls, and
- * then shuts the OpenTelemetry SDK down, so spans ended by calls that settle during the drain
- * are exported too. It then removes every SIGTERM listener and re-raises the signal, so the
- * process ends on it as it would by default.
- *
- * @returns A function that removes the listener once the evaluation no longer needs it.
- */
-export function terminateOnSigterm(): () => void {
-  const onSigterm = () => {
-    void (async () => {
-      const deadline = Date.now() + SIGTERM_CLEANUP_TIMEOUT_MS;
-      await untilDeadline(() => flushOtel(), deadline);
-      await untilDeadline(() => providerRegistry.shutdownForProcess(), deadline);
-      await untilDeadline(() => shutdownOtel(), deadline);
-      process.removeAllListeners('SIGTERM');
-      process.kill(process.pid, 'SIGTERM');
-    })();
-  };
-  process.once('SIGTERM', onSigterm);
-  return () => {
-    process.removeListener('SIGTERM', onSigterm);
-  };
+async function cleanupOnSigterm(): Promise<void> {
+  // Flush buffered spans first, then keep tracing open for calls that settle during the drain.
+  for (const step of [flushOtel, () => providerRegistry.shutdownForProcess(), shutdownOtel]) {
+    try {
+      await step();
+    } catch (error) {
+      logger.debug('Cleanup failed during SIGTERM', { error });
+    }
+  }
 }
 
-/** Runs one SIGTERM cleanup step for whatever remains of the shared budget, if anything does. */
-async function untilDeadline(step: () => Promise<void>, deadline: number): Promise<void> {
-  const remaining = deadline - Date.now();
-  if (remaining <= 0) {
-    return;
-  }
-  let timer: NodeJS.Timeout | undefined;
-  try {
-    await Promise.race([
-      step().catch((error) => {
-        logger.debug('Cleanup failed during SIGTERM', { error });
-      }),
-      // Referenced on purpose: the process must survive until it ends on the signal.
-      new Promise<void>((resolve) => {
-        timer = setTimeout(resolve, remaining);
-      }),
-    ]);
-  } finally {
-    clearTimeout(timer);
-  }
+/** CLI evals own process termination. Library hosts keep their own SIGTERM policy. */
+export function terminateOnSigterm(): () => void {
+  const onSigterm = async () => {
+    let timer: NodeJS.Timeout | undefined;
+    const timeout = new Promise<void>((resolve) => {
+      timer = setTimeout(resolve, SIGTERM_CLEANUP_TIMEOUT_MS);
+    });
+    try {
+      await Promise.race([cleanupOnSigterm(), timeout]);
+    } finally {
+      clearTimeout(timer);
+      process.removeAllListeners('SIGTERM');
+      process.kill(process.pid, 'SIGTERM');
+    }
+  };
+  process.once('SIGTERM', onSigterm);
+  return () => process.removeListener('SIGTERM', onSigterm);
 }
 
 function resolveSuggestionOptions(
