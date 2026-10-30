@@ -130,6 +130,13 @@ export class SnowflakeCortexProvider extends OpenAiChatCompletionProvider {
       callApiOptions?.abortSignal,
     );
     throwIfAborted(callApiOptions?.abortSignal);
+    const apiKey = this.getApiKey();
+    const hasAuthorization = Object.entries(config.headers ?? {}).some(
+      ([name, value]) => name.toLowerCase() === 'authorization' && value.trim(),
+    );
+    if (this.requiresApiKey() && !apiKey && !hasAuthorization) {
+      throw new Error(this.getMissingApiKeyErrorMessage());
+    }
 
     // Make the API call to Snowflake Cortex endpoint
     logger.debug('[Snowflake Cortex] Calling API', {
@@ -171,7 +178,7 @@ export class SnowflakeCortexProvider extends OpenAiChatCompletionProvider {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
-              Authorization: `Bearer ${this.getApiKey()}`,
+              ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
               ...config.headers,
             },
             body: JSON.stringify(body),
