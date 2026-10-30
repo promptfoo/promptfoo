@@ -33,7 +33,10 @@ import { testProviderConnectivity, testProviderSession } from '../../../src/node
 import { loadApiProvider } from '../../../src/providers/index';
 import { doTargetPurposeDiscovery } from '../../../src/redteam/commands/discover';
 import { neverGenerateRemote } from '../../../src/redteam/remoteGeneration';
-import { getAvailableProviders } from '../../../src/server/config/serverConfig';
+import {
+  getAvailableProviders,
+  hasCustomProviderConfig,
+} from '../../../src/server/config/serverConfig';
 import { fetchWithProxy } from '../../../src/util/fetch/index';
 
 const mockedLoadApiProvider = vi.mocked(loadApiProvider);
@@ -49,6 +52,7 @@ describe('Providers Routes', () => {
 
   beforeEach(() => {
     vi.resetAllMocks();
+    vi.mocked(hasCustomProviderConfig).mockReturnValue(false);
     // Default to the non-cloud path so host-dependent assertions are deterministic
     // regardless of the machine's cloud-login state.
     vi.mocked(cloudConfig.isEnabled).mockReturnValue(false);
@@ -100,6 +104,69 @@ describe('Providers Routes', () => {
 
       expect(response.status).toBe(500);
       expect(response.body).toEqual({ error: 'Failed to load provider config status' });
+    });
+  });
+
+  describe('GET /providers', () => {
+    it('should return an empty catalog when no custom config exists', async () => {
+      mockedGetAvailableProviders.mockReturnValue([]);
+
+      const response = await api.get('/api/providers');
+
+      expect(response.status).toBe(200);
+      expect(response.body).toEqual({
+        success: true,
+        data: { providers: [], hasCustomConfig: false },
+      });
+    });
+
+    it('should return configured providers with id, label, and config preserved', async () => {
+      vi.mocked(hasCustomProviderConfig).mockReturnValue(true);
+      mockedGetAvailableProviders.mockReturnValue([
+        { id: 'openai:gpt-4o-mini' },
+        {
+          id: 'http://llm-gateway.internal/v1',
+          label: 'Internal Gateway',
+          config: { method: 'POST', headers: { Authorization: 'Bearer x' } },
+        },
+      ]);
+
+      const response = await api.get('/api/providers');
+
+      expect(response.status).toBe(200);
+      expect(response.body).toEqual({
+        success: true,
+        data: {
+          providers: [
+            { id: 'openai:gpt-4o-mini' },
+            {
+              id: 'http://llm-gateway.internal/v1',
+              label: 'Internal Gateway',
+              config: { method: 'POST', headers: { Authorization: 'Bearer x' } },
+            },
+          ],
+          hasCustomConfig: true,
+        },
+      });
+    });
+
+    it('keeps an empty or all-invalid catalog restricted', async () => {
+      vi.mocked(hasCustomProviderConfig).mockReturnValue(true);
+      mockedGetAvailableProviders.mockReturnValue([]);
+      const response = await api.get('/api/providers');
+      expect(response.status).toBe(200);
+      expect(response.body.data).toEqual({ providers: [], hasCustomConfig: true });
+    });
+
+    it('should return standardized 500 errors when catalog loading fails', async () => {
+      mockedGetAvailableProviders.mockImplementation(() => {
+        throw new Error('catalog unavailable');
+      });
+
+      const response = await api.get('/api/providers');
+
+      expect(response.status).toBe(500);
+      expect(response.body).toEqual({ error: 'Failed to load providers' });
     });
   });
 
