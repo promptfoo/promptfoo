@@ -1,0 +1,4 @@
+title: 'External JavaScript Assertions'
+description: 'Use external JavaScript files with named exports for custom assertion logic'
+tags:
+  - Evaluation

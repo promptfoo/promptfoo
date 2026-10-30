@@ -1,0 +1,5 @@
+title: 'Medical Agent Red Team'
+description: 'Comprehensive red team testing of a medical chatbot with patient PII, using 40+ plugins and multi-turn attack strategies'
+tags:
+  - Red Teaming
+  - Multi-turn

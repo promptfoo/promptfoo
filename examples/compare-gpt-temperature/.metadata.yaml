@@ -1,0 +1,5 @@
+title: 'GPT Temperature Comparison'
+description: 'Compare GPT model behavior at different temperature settings (low vs high) on various prompts.'
+tags:
+  - Model Comparison
+  - Configuration
