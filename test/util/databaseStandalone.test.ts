@@ -1,12 +1,18 @@
 import { eq, sql } from 'drizzle-orm';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import { getDb } from '../../src/database/index';
+import { DrizzleLogWriter, getDb } from '../../src/database/index';
 import { updateSignalFile } from '../../src/database/signal';
 import { evalsTable } from '../../src/database/tables';
 import { runDbMigrations } from '../../src/migrate';
 import Eval from '../../src/models/eval';
 import EvalResult from '../../src/models/evalResult';
-import { type CompletedPrompt, type Prompt, ResultFailureReason } from '../../src/types/index';
+import { generateIdFromPrompt } from '../../src/models/prompt';
+import {
+  type CompletedPrompt,
+  type EvaluateSummaryV2,
+  type Prompt,
+  ResultFailureReason,
+} from '../../src/types/index';
 import {
   clearStandaloneEvalCache,
   deleteEval,
@@ -16,11 +22,13 @@ import {
   getStandaloneEvals,
   getTestCases,
   updateResult,
+  writeResultsToDatabase,
 } from '../../src/util/database';
 import {
   getCachedStandaloneEvals,
   getStandaloneEvalCacheKey,
 } from '../../src/util/standaloneEvalCache';
+import { createEmptyTokenUsage } from '../../src/util/tokenUsageUtils';
 import { clearEvalTables } from '../util/evalDb';
 
 vi.mock('../../src/database/signal', async () => {
@@ -85,6 +93,181 @@ describe('getStandaloneEvals', () => {
   afterEach(() => {
     vi.resetAllMocks();
     vi.unstubAllEnvs();
+  });
+
+  it('limits evaluations before expanding prompts, without multiplying rows by tags', async () => {
+    const prompts = [completedPrompt, { ...completedPrompt, raw: 'goodbye', label: 'goodbye' }];
+    const older = await Eval.create({}, renderedPrompts, {
+      createdAt: new Date('2026-01-01'),
+      completedPrompts: [completedPrompt],
+    });
+    const newer = await Eval.create({ tags: { team: 'red', owner: 'alice' } }, prompts, {
+      createdAt: new Date('2026-01-02'),
+      completedPrompts: prompts,
+    });
+
+    const rows = await getStandaloneEvals({ limit: 2 });
+    expect(rows.map((row) => row.evalId)).toEqual([newer.id, newer.id, older.id]);
+    expect(rows.slice(0, 2).map((row) => row.promptId)).toEqual(prompts.map(generateIdFromPrompt));
+    expect(new Set(rows.map((row) => row.uuid)).size).toBe(3);
+    expect((await getStandaloneEvals({ limit: 1 })).map((row) => row.raw)).toEqual([
+      'hello',
+      'goodbye',
+    ]);
+  });
+
+  it('applies tag and description filters before the evaluation limit', async () => {
+    const matching = await createEvalWithPrompts({
+      description: 'matching',
+      tags: { team: 'red', owner: 'alice' },
+    });
+    await createEvalWithPrompts({ description: 'other', tags: { team: 'red' } });
+    await createEvalWithPrompts({ description: 'matching', tags: { team: 'blue' } });
+
+    const rows = await getStandaloneEvals({
+      limit: 1,
+      description: 'matching',
+      tag: { key: 'team', value: 'red' },
+    });
+    expect(rows.map((row) => row.evalId)).toEqual([matching.id]);
+    expect(await getStandaloneEvals({ tag: { key: 'team', value: 'missing' } })).toEqual([]);
+  });
+
+  it('counts completed plugin results by column, including sparse and repeated result cells', async () => {
+    const prompts = [completedPrompt, { ...completedPrompt, provider: 'other-provider' }];
+    const eval_ = await Eval.create({}, renderedPrompts, { completedPrompts: prompts });
+    const addResult = (testIdx: number, promptIdx: number, success: boolean) =>
+      eval_.addResult({
+        promptIdx,
+        testIdx,
+        testCase: { metadata: { pluginId: 'plugin-a' } },
+        promptId: generateIdFromPrompt(completedPrompt),
+        provider: { id: prompts[promptIdx].provider },
+        prompt: renderedPrompts[0],
+        vars: {},
+        response: { output: 'result' },
+        error: success ? null : 'failed',
+        failureReason: success ? ResultFailureReason.NONE : ResultFailureReason.ERROR,
+        success,
+        score: success ? 1 : 0,
+        latencyMs: 1,
+        gradingResult: null,
+        namedScores: {},
+        cost: 0,
+        metadata: {},
+      });
+    await addResult(0, 0, false);
+    await addResult(0, 1, true);
+    await addResult(0, 0, true);
+    await addResult(1, 1, false);
+
+    const rows = await getStandaloneEvals();
+    expect(rows).toHaveLength(2);
+    expect(rows[0].pluginPassCount).toEqual({ 'plugin-a': 1 });
+    expect(rows[0].pluginFailCount).toEqual({ 'plugin-a': 0 });
+    expect(rows[1].pluginPassCount).toEqual({ 'plugin-a': 1 });
+    expect(rows[1].pluginFailCount).toEqual({ 'plugin-a': 1 });
+  });
+
+  it('preserves legacy table prompts, authored IDs, and plugin counts', async () => {
+    const legacyPrompt = { ...completedPrompt, raw: 'legacy', label: '', id: 'authored-id' };
+    const legacyResults: EvaluateSummaryV2 = {
+      version: 2,
+      timestamp: '2026-01-01T00:00:00.000Z',
+      results: [],
+      stats: { successes: 1, failures: 1, errors: 0, tokenUsage: createEmptyTokenUsage() },
+      table: {
+        head: { prompts: [legacyPrompt], vars: [] },
+        body: [true, false].map((pass, testIdx) => ({
+          testIdx,
+          vars: [],
+          test: { metadata: { pluginId: 'legacy-plugin' } },
+          outputs: [
+            {
+              id: `legacy-${testIdx}`,
+              pass,
+              cost: 0,
+              latencyMs: 1,
+              score: Number(pass),
+              text: 'legacy output',
+              prompt: legacyPrompt.raw,
+              testCase: {},
+              namedScores: {},
+              failureReason: pass ? ResultFailureReason.NONE : ResultFailureReason.ASSERT,
+            },
+          ],
+        })),
+      },
+    };
+    await writeResultsToDatabase(legacyResults, { env: { PROMPTFOO_STRIP_METADATA: 'true' } });
+
+    const [row] = await getStandaloneEvals();
+    expect(row.raw).toBe('legacy');
+    expect(row.promptId).toBe(generateIdFromPrompt(legacyPrompt));
+    expect(row.pluginPassCount).toEqual({ 'legacy-plugin': 1 });
+    expect(row.pluginFailCount).toEqual({ 'legacy-plugin': 1 });
+  });
+
+  it('uses persisted prompt identities without hashing generated IDs again', async () => {
+    const prompt = { raw: 'unlabeled', label: '' };
+    const id = generateIdFromPrompt(prompt);
+    await Eval.create({}, [prompt], {
+      completedPrompts: [{ ...prompt, id, provider: 'test-provider' }],
+    });
+
+    expect((await getStandaloneEvals())[0].promptId).toBe(id);
+  });
+
+  it.each([true, false])(
+    'honors per-eval metadata stripping when configured as %s',
+    async (strip) => {
+      vi.stubEnv('PROMPTFOO_STRIP_METADATA', String(!strip));
+      const eval_ = await createEvalWithPrompts({
+        env: { PROMPTFOO_STRIP_METADATA: String(strip) },
+      });
+      await eval_.addResult({
+        promptIdx: 0,
+        testIdx: 0,
+        testCase: { metadata: { pluginId: 'constructor' } },
+        promptId: generateIdFromPrompt(completedPrompt),
+        provider: { id: 'test-provider' },
+        prompt: renderedPrompts[0],
+        vars: {},
+        response: { output: 'result' },
+        error: null,
+        failureReason: ResultFailureReason.NONE,
+        success: true,
+        score: 1,
+        latencyMs: 1,
+        gradingResult: null,
+        namedScores: {},
+        cost: 0,
+        metadata: {},
+      });
+
+      const [row] = await getStandaloneEvals();
+      expect(Object.entries(row.pluginPassCount)).toEqual(strip ? [] : [['constructor', 1]]);
+      expect(Object.entries(row.pluginFailCount)).toEqual(strip ? [] : [['constructor', 0]]);
+    },
+  );
+
+  it('keeps history query count bounded as the number of evaluations grows', async () => {
+    await createEvalWithPrompts({});
+    const queries = vi.spyOn(DrizzleLogWriter.prototype, 'write');
+    try {
+      await getStandaloneEvals();
+      const singleEvalQueries = queries.mock.calls.length;
+      for (let index = 0; index < 5; index++) {
+        await createEvalWithPrompts({});
+      }
+      queries.mockClear();
+      const rows = await getStandaloneEvals();
+      expect(rows).toHaveLength(6);
+      expect(queries.mock.calls.length).toBe(singleEvalQueries);
+      expect(queries.mock.calls.length).toBeLessThanOrEqual(3);
+    } finally {
+      queries.mockRestore();
+    }
   });
 
   it.each([false, true])('keeps dataset identities when output stripping is %s', async (strip) => {
