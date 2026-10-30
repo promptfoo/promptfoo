@@ -83,6 +83,92 @@ describe('OpenAI Provider', () => {
       expect(result.tokenUsage).toEqual({ total: 10, prompt: 5, completion: 5, numRequests: 1 });
     });
 
+    it('requests numeric logprobs when includeLogProbs is enabled', async () => {
+      mockFetchWithCache.mockResolvedValue(mockResponse);
+      const provider = new OpenAiCompletionProvider('text-davinci-003');
+
+      await provider.callApi('Test prompt', undefined, { includeLogProbs: true });
+
+      const body = JSON.parse(mockFetchWithCache.mock.calls[0][1]?.body as string);
+      expect(body.logprobs).toBe(0);
+    });
+
+    it.each([undefined, false])(
+      'omits logprobs when includeLogProbs is %s',
+      async (includeLogProbs) => {
+        mockFetchWithCache.mockResolvedValue(mockResponse);
+        const provider = new OpenAiCompletionProvider('text-davinci-003');
+
+        await provider.callApi('Test prompt', undefined, { includeLogProbs });
+
+        const body = JSON.parse(mockFetchWithCache.mock.calls[0][1]?.body as string);
+        expect(body).not.toHaveProperty('logprobs');
+      },
+    );
+
+    it.each([false, true])(
+      'returns completion token log probabilities when cached=%s',
+      async (cached) => {
+        mockFetchWithCache.mockResolvedValue({
+          ...mockResponse,
+          cached,
+          data: {
+            ...mockResponse.data,
+            choices: [
+              { text: 'Test output', logprobs: { token_logprobs: [-0.2, -0.3] } },
+              { text: 'Other output', logprobs: { token_logprobs: [-5] } },
+            ],
+          },
+        });
+        const provider = new OpenAiCompletionProvider('text-davinci-003');
+
+        const result = await provider.callApi('Test prompt');
+
+        expect(result.output).toBe('Test output');
+        expect(result.logProbs).toEqual([-0.2, -0.3]);
+        expect(result.cached).toBe(cached);
+      },
+    );
+
+    it.each([undefined, null, {}])(
+      'handles missing token log probabilities: %j',
+      async (logprobs) => {
+        mockFetchWithCache.mockResolvedValue({
+          ...mockResponse,
+          data: {
+            ...mockResponse.data,
+            choices: [{ text: 'Test output', logprobs }],
+          },
+        });
+        const provider = new OpenAiCompletionProvider('text-davinci-003');
+
+        const result = await provider.callApi('Test prompt');
+
+        expect(result.output).toBe('Test output');
+        expect(result.logProbs).toBeUndefined();
+        expect(result.error).toBeUndefined();
+      },
+    );
+
+    it('skips null token log probabilities, such as the first echoed prompt token', async () => {
+      mockFetchWithCache.mockResolvedValue({
+        ...mockResponse,
+        data: {
+          ...mockResponse.data,
+          choices: [
+            { text: 'Test prompt Test output', logprobs: { token_logprobs: [null, -0.2, -0.3] } },
+          ],
+        },
+      });
+      const provider = new OpenAiCompletionProvider('text-davinci-003', {
+        config: { passthrough: { echo: true, logprobs: 0 } },
+      });
+
+      const result = await provider.callApi('Test prompt');
+
+      expect(result.logProbs).toEqual([-0.2, -0.3]);
+    });
+
     it('records standard text-completion model attributes and token usage', async () => {
       mockFetchWithCache.mockResolvedValue(mockResponse);
       const { attributes, restore } = recordSpanAttributes();
@@ -619,7 +705,7 @@ describe('OpenAI Provider', () => {
         },
       });
 
-      await provider.callApi('Test prompt');
+      await provider.callApi('Test prompt', undefined, { includeLogProbs: true });
 
       const actualCall = mockFetchWithCache.mock.calls[0];
       const body = JSON.parse(actualCall[1]?.body as string);
