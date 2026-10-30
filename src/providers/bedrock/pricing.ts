@@ -2,6 +2,7 @@ import {
   CLAUDE_REGIONAL_ENDPOINT_PREMIUM,
   calculateCacheInputCost,
   isClaudeFableOrMythos5Model,
+  isClaudeHaiku55Model,
   isClaudeOpus5Model,
   isClaudeOpus55Model,
   isClaudeRegionalPremiumModel,
@@ -17,7 +18,7 @@ type BedrockPricing = {
   input: number;
   output: number;
   /**
-   * Rates that replace `input`/`output` once total input tokens reach `threshold`.
+   * Rates that replace `input`/`output` once total input tokens exceed `threshold`.
    * Cache rates are derived from the tier's input rate, matching how AWS prices the
    * `-cache-read/-cache-write-...-long-context-...` meters.
    */
@@ -80,15 +81,23 @@ const BEDROCK_PRICING: Record<string, BedrockPricing> = {
   // explicit entry here for any future 4.x release for the same reason.
   'anthropic.claude-sonnet-4-6': { input: 3, output: 15 },
   'anthropic.claude-sonnet-4-5': { input: 3, output: 15 },
-  // Claude Sonnet 4 is the only Bedrock Claude model with published long-context meters
-  // (verified 2026-09-01 in us-east-1, us-east-2, us-west-2, eu-west-1 and ap-northeast-1):
-  // above 200K input tokens input doubles to $6 and output is 1.5x at $22.50. The matching
+  // Claude Sonnet 4 publishes long-context meters, like Haiku 5.5 below (verified 2026-09-01
+  // in us-east-1, us-east-2, us-west-2, eu-west-1 and ap-northeast-1): above 200K input
+  // tokens input doubles to $6 and output is 1.5x at $22.50. The matching
   // `-cache-read/-cache-write-...-long-context-...` meters are 10% and 1.25x of the tier's
   // input rate, which falls out of deriving the cache rates from it.
   'anthropic.claude-sonnet-4': {
     input: 3,
     output: 15,
     longContext: { threshold: 200_000, input: 6, output: 22.5 },
+  },
+  // Claude Haiku 5.5 ($0.10/$0.50 global, $0.11/$0.55 regional per the AWS price list on
+  // 2026-10-28). A prompt over 100K tokens, cache reads and writes included, bills the whole
+  // request at the long-context meters.
+  'anthropic.claude-haiku-5-5': {
+    input: 0.1,
+    output: 0.5,
+    longContext: { threshold: 100_000, input: 0.5, output: 2.5 },
   },
   // Claude Haiku 4.5
   'anthropic.claude-haiku-4': { input: 1, output: 5 },
@@ -508,10 +517,11 @@ export function calculateBedrockCost(
     serviceTier?.type === 'priority' ? 1.75 : serviceTier?.type === 'flex' ? 0.5 : 1;
   const pricingMultiplier = endpointMultiplier * serviceTierMultiplier;
   // Long-context tiers are billed on total input size, which for Anthropic means the uncached
-  // prompt plus any cache reads and writes (`input_tokens` excludes cached tokens).
+  // prompt plus any cache reads and writes (`input_tokens` excludes cached tokens). A prompt
+  // exactly at the threshold still bills at the standard rates.
   const totalInputTokens = promptTokens + cacheReadTokens + cacheWriteTokens;
   const tier =
-    pricing.longContext && totalInputTokens >= pricing.longContext.threshold
+    pricing.longContext && totalInputTokens > pricing.longContext.threshold
       ? pricing.longContext
       : pricing;
 
@@ -540,7 +550,7 @@ export function calculateBedrockCost(
  * reported Claude 5 cost. Keep that fail-closed behavior for legacy Runtime models instead of
  * emitting a plausible but incorrect cost.
  *
- * Claude 5 models (Fable 5, Mythos 5, Opus 5, Opus 5.5, Sonnet 5, and Sonnet 5.5) have verified Runtime rates, so they
+ * Claude 5 models (Fable 5, Mythos 5, Opus 5, Opus 5.5, Sonnet 5, Sonnet 5.5, and Haiku 5.5) have verified Runtime rates, so they
  * report cost on the default `bedrock:` InvokeModel path — without this, `bedrock:anthropic.claude-opus-5`
  * reports token usage but `cost: 0`. Legacy Claude (e.g. Sonnet/Opus 4.x) stays fail-closed.
  */
@@ -561,6 +571,7 @@ export function calculateBedrockInvokeModelCost(
     !isClaudeOpus55Model(normalizedModelId) &&
     !isClaudeSonnet55Model(normalizedModelId) &&
     !isClaudeSonnet5Model(normalizedModelId) &&
+    !isClaudeHaiku55Model(normalizedModelId) &&
     !BEDROCK_INVOKE_PRICING_MODEL_PREFIXES.some((prefix) => normalizedModelId.includes(prefix))
   ) {
     return undefined;

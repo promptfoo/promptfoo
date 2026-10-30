@@ -217,9 +217,13 @@ describe('calculateBedrockCost', () => {
       );
     });
 
-    it('switches to $6/$22.50 at and above 200k input tokens', () => {
+    it('switches to $6/$22.50 above 200k input tokens', () => {
       expect(calculateBedrockCost(ID, 200_000, 1_000)).toBeCloseTo(
-        (200_000 / 1e6) * 6 + (1_000 / 1e6) * 22.5,
+        (200_000 / 1e6) * 3 + (1_000 / 1e6) * 15,
+        6,
+      );
+      expect(calculateBedrockCost(ID, 200_001, 1_000)).toBeCloseTo(
+        (200_001 / 1e6) * 6 + (1_000 / 1e6) * 22.5,
         6,
       );
     });
@@ -302,6 +306,32 @@ describe('calculateBedrockCost', () => {
       expect(calculateBedrockInvokeModelCost(model, 1000, 500, 200, 100)).toBeCloseTo(expected, 8);
     },
   );
+
+  it.each(['global.anthropic.claude-haiku-5-5', 'us.anthropic.claude-haiku-5-5'])(
+    'prices Haiku 5.5 at $0.10/$0.50 for %s, with the regional premium off global',
+    (model) => {
+      // AWS price list (us-east-1, 2026-10-28): global $0.10 in / $0.50 out / $0.01 cache read /
+      // $0.125 cache write; regional 1.1x.
+      // 1000*0.1 + 200*0.01 + 100*0.125 + 500*0.5 = 364.5 per 1e6
+      const expected = 0.0003645 * (model.startsWith('global.') ? 1 : 1.1);
+      expect(calculateBedrockCost(model, 1000, 500, 200, 100)).toBeCloseTo(expected, 10);
+      expect(calculateBedrockInvokeModelCost(model, 1000, 500, 200, 100)).toBeCloseTo(expected, 10);
+    },
+  );
+
+  it('prices a Haiku 5.5 prompt over 100K tokens, cache included, at the long-context meters', () => {
+    const model = 'global.anthropic.claude-haiku-5-5';
+    // Exactly 100K prompt tokens still bills the standard meters.
+    expect(calculateBedrockCost(model, 60_000, 1_000, 40_000, 0)).toBeCloseTo(
+      (60_000 * 0.1 + 40_000 * 0.01 + 1_000 * 0.5) / 1e6,
+      10,
+    );
+    // AWS long-context meters: $0.50 in / $0.05 cache read / $2.50 out.
+    expect(calculateBedrockCost(model, 60_001, 1_000, 40_000, 0)).toBeCloseTo(
+      (60_001 * 0.5 + 40_000 * 0.05 + 1_000 * 2.5) / 1e6,
+      10,
+    );
+  });
 
   it.each([
     'global.anthropic.claude-fable-5-1',

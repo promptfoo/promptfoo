@@ -2334,6 +2334,7 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   'anthropic.claude-sonnet-4-6': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'anthropic.claude-sonnet-4-5-20250929-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'anthropic.claude-haiku-4-5-20251001-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
+  'anthropic.claude-haiku-5-5': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'anthropic.claude-sonnet-4-20250514-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'cohere.command-r-plus-v1:0': BEDROCK_MODEL.COHERE_COMMAND_R,
   'cohere.command-r-v1:0': BEDROCK_MODEL.COHERE_COMMAND_R,
@@ -2387,6 +2388,7 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   'au.anthropic.claude-opus-4-8': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'au.anthropic.claude-opus-5': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'au.anthropic.claude-sonnet-5': BEDROCK_MODEL.CLAUDE_MESSAGES,
+  'au.anthropic.claude-haiku-5-5': BEDROCK_MODEL.CLAUDE_MESSAGES,
 
   // EU Models
   'eu.amazon.nova-lite-v1:0': BEDROCK_MODEL.AMAZON_NOVA,
@@ -2408,6 +2410,7 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   'eu.anthropic.claude-sonnet-4-6': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'eu.anthropic.claude-sonnet-4-5-20250929-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'eu.anthropic.claude-haiku-4-5-20251001-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
+  'eu.anthropic.claude-haiku-5-5': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'eu.anthropic.claude-sonnet-4-20250514-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'eu.meta.llama3-2-1b-instruct-v1:0': BEDROCK_MODEL.LLAMA3_2,
   'eu.meta.llama3-2-3b-instruct-v1:0': BEDROCK_MODEL.LLAMA3_2,
@@ -2443,6 +2446,7 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   'us.anthropic.claude-sonnet-4-6': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'us.anthropic.claude-sonnet-4-5-20250929-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'us.anthropic.claude-haiku-4-5-20251001-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
+  'us.anthropic.claude-haiku-5-5': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'us.anthropic.claude-sonnet-4-20250514-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'us.deepseek.r1-v1:0': BEDROCK_MODEL.DEEPSEEK,
   'us.meta.llama3-1-405b-instruct-v1:0': BEDROCK_MODEL.LLAMA3_1,
@@ -2554,6 +2558,10 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   // models (Fable 5, Opus 4.7/4.8) rather than the older `apac.` prefix.
   'global.anthropic.claude-sonnet-5': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'global.anthropic.claude-sonnet-5-5': BEDROCK_MODEL.CLAUDE_MESSAGES,
+  // Claude Haiku 5.5 is served only through inference profiles. Verified via
+  // `aws bedrock list-inference-profiles` (2026-10-28): `us.`/`eu.`/`jp.`/`au.`/`global.`.
+  'global.anthropic.claude-haiku-5-5': BEDROCK_MODEL.CLAUDE_MESSAGES,
+  'jp.anthropic.claude-haiku-5-5': BEDROCK_MODEL.CLAUDE_MESSAGES,
 };
 
 function getCanonicalMessagesOnlyModel(modelName: string): string | undefined {

@@ -40,6 +40,14 @@ describe('getModelPricing', () => {
     expect(getModelPricing('openai', 'gpt-5.4')).toEqual(original);
   });
 
+  it("returns Claude Haiku 5.5's rates for prompts over 100K tokens", () => {
+    expect(getModelPricing('anthropic', 'claude-haiku-5-5')).toEqual({
+      input: 0.1 / 1e6,
+      output: 0.5 / 1e6,
+      longContext: { threshold: 100_000, input: 0.5 / 1e6, output: 2.5 / 1e6 },
+    });
+  });
+
   it('returns only text-token rates for a model with audio pricing', () => {
     expect(getModelPricing('openai', 'gpt-4o-mini-tts')).toEqual({
       input: 0.6 / 1e6,

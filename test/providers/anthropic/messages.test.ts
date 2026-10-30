@@ -1534,6 +1534,100 @@ describe('AnthropicMessagesProvider', () => {
       expect(result.cost).toBeCloseTo(33, 10);
     });
 
+    it('adds the per-search fee for web searches to the token cost', async () => {
+      const provider = createProvider('claude-sonnet-5-5');
+      vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValue({
+        content: [{ type: 'text', text: 'Searched' }],
+        stop_reason: 'end_turn',
+        usage: {
+          input_tokens: 1000,
+          output_tokens: 100,
+          server_tool_use: { web_search_requests: 3, web_fetch_requests: 2 },
+        },
+      } as unknown as Anthropic.Messages.Message);
+
+      const result = await provider.callApi('Search the web');
+
+      // 1000 * $2/MTok + 100 * $10/MTok, plus 3 searches at $10 per 1,000. Fetches are free.
+      expect(result.cost).toBeCloseTo(0.003 + 0.03, 10);
+    });
+
+    it('prices fast mode responses at the fast rates', async () => {
+      const provider = createProvider('claude-opus-5-5', {
+        config: { beta: ['fast-mode-2026-02-01'], extra_body: { speed: 'fast' } },
+      });
+      vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValue({
+        content: [{ type: 'text', text: 'Fast' }],
+        stop_reason: 'end_turn',
+        usage: {
+          input_tokens: 1_000_000,
+          output_tokens: 1_000_000,
+          speed: 'fast',
+          server_tool_use: null,
+        },
+      } as unknown as Anthropic.Messages.Message);
+
+      const result = await provider.callApi('Be quick');
+
+      // Opus 5.5 fast mode: $8 input + $40 output per MTok.
+      expect(result.cost).toBeCloseTo(48, 10);
+    });
+
+    it('bills a Claude Haiku 5.5 prompt over 100K tokens at the long-prompt rates', async () => {
+      const provider = createProvider('claude-haiku-5-5');
+      vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValue({
+        content: [{ type: 'text', text: 'Summary' }],
+        stop_reason: 'end_turn',
+        usage: {
+          input_tokens: 60_000,
+          output_tokens: 1_000,
+          cache_read_input_tokens: 90_000,
+          cache_creation_input_tokens: 0,
+          server_tool_use: null,
+        },
+      } as unknown as Anthropic.Messages.Message);
+
+      const result = await provider.callApi('Summarize the document');
+
+      // 150K prompt tokens with cache reads: $0.50 input, $0.05 cache read, $2.50 output per MTok.
+      expect(result.cost).toBeCloseTo(0.03 + 0.0045 + 0.0025, 10);
+    });
+
+    it('sends Claude Haiku 5.5 requests without sampling params and with thinking headroom', async () => {
+      const provider = createProvider('claude-haiku-5-5', {
+        config: {
+          temperature: 0,
+          effort: 'xhigh',
+          thinking: { type: 'disabled' },
+          tool_choice: { type: 'tool', name: 'lookup' },
+          tools: [
+            {
+              name: 'lookup',
+              description: 'Look up a value',
+              input_schema: { type: 'object', properties: { key: { type: 'string' } } },
+            },
+          ],
+        },
+      });
+      const create = vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValue({
+        content: [{ type: 'text', text: 'ok' }],
+        stop_reason: 'end_turn',
+        usage: { input_tokens: 10, output_tokens: 10, server_tool_use: null },
+      } as unknown as Anthropic.Messages.Message);
+
+      await provider.callApi('Look up the key');
+
+      const params = create.mock.calls[0][0];
+      // Verified live: temperature 0 and disabled thinking at xhigh return 400; forced tool use works.
+      expect(params).not.toHaveProperty('temperature');
+      expect(params).not.toHaveProperty('thinking');
+      expect(params).toMatchObject({
+        max_tokens: 2048,
+        output_config: { effort: 'xhigh' },
+        tool_choice: { type: 'tool', name: 'lookup' },
+      });
+    });
+
     it('should forward cache tokens from cached responses', async () => {
       const provider = createProvider('claude-3-5-sonnet-20241022');
 

@@ -11,6 +11,7 @@ import {
   isAlwaysOnAdaptiveThinkingClaudeModel,
   isBetweenToolsLowestThinkingClaudeModel,
   isClaudeFableOrMythos5Model,
+  isClaudeHaiku55Model,
   isClaudeOpus5Model,
   isClaudeOpus55Model,
   isClaudeRegionalPremiumModel,
@@ -2856,6 +2857,183 @@ describe('Anthropic utilities', () => {
       expect(
         calculateAnthropicCost('global.anthropic.claude-sonnet-5-5', {}, 1000, 500),
       ).toBeCloseTo(0.007, 10);
+    });
+  });
+
+  describe('Claude Haiku 5.5', () => {
+    const HAIKU_55_IDS = [
+      'claude-haiku-5-5',
+      'anthropic:messages:claude-haiku-5-5',
+      'anthropic.claude-haiku-5-5',
+      'global.anthropic.claude-haiku-5-5',
+      'us.anthropic.claude-haiku-5-5',
+      'jp.anthropic.claude-haiku-5-5',
+    ];
+
+    it('detects Haiku 5.5 across provider naming schemes', () => {
+      for (const id of HAIKU_55_IDS) {
+        expect(isClaudeHaiku55Model(id)).toBe(true);
+      }
+      expect(isClaudeHaiku55Model('claude-haiku-4-5')).toBe(false);
+      expect(isClaudeHaiku55Model('claude-haiku-5-50')).toBe(false);
+      expect(getClaudeModelWarningName('claude-haiku-5-5')).toBe('Claude Haiku 5.5');
+    });
+
+    it('applies the Haiku 5.5 thinking, sampling, and tool_choice rules verified live', () => {
+      for (const id of HAIKU_55_IDS) {
+        // `temperature: 0` and `top_k` return 400 "deprecated for this model".
+        expect(isSamplingParamsDeprecatedClaudeModel(id, { allowGenerationFallback: false })).toBe(
+          true,
+        );
+        expect(isThinkingOnByDefaultClaudeModel(id)).toBe(true);
+        expect(isAlwaysOnAdaptiveThinkingClaudeModel(id)).toBe(false);
+        // `between_tools` is a 400, and a forced tool_choice is accepted.
+        expect(isBetweenToolsLowestThinkingClaudeModel(id)).toBe(false);
+        expect(isForcedToolChoiceUnsupportedClaudeModel(id)).toBe(false);
+        expect(isClaudeRegionalPremiumModel(id)).toBe(true);
+        expect(claudeThinkingConsumesTokens(id, undefined)).toBe(true);
+      }
+    });
+
+    it('accepts disabled thinking up to high effort and converts manual budgets', () => {
+      for (const effort of [undefined, 'low', 'medium', 'high'] as const) {
+        expect(
+          normalizeClaudeThinkingConfig('claude-haiku-5-5', { type: 'disabled' }, effort),
+        ).toEqual({ type: 'disabled' });
+        expect(isDisabledThinkingRejectedAtEffort('claude-haiku-5-5', effort)).toBe(false);
+      }
+      for (const effort of ['xhigh', 'max'] as const) {
+        expect(
+          normalizeClaudeThinkingConfig('claude-haiku-5-5', { type: 'disabled' }, effort),
+        ).toBeUndefined();
+        expect(isDisabledThinkingRejectedAtEffort('claude-haiku-5-5', effort)).toBe(true);
+      }
+      expect(
+        normalizeClaudeThinkingConfig(
+          'claude-haiku-5-5',
+          { type: 'enabled', budget_tokens: 4096 } as any,
+          undefined,
+        ),
+      ).toEqual({ type: 'adaptive' });
+    });
+
+    it('bills $0.10/$0.50 up to 100K prompt tokens and $0.50/$2.50 for the whole request above', () => {
+      // 100,000 * 0.1e-6 + 1,000 * 0.5e-6
+      expect(calculateAnthropicCost('claude-haiku-5-5', {}, 100_000, 1_000)).toBeCloseTo(
+        0.0105,
+        10,
+      );
+      // 100,001 * 0.5e-6 + 1,000 * 2.5e-6
+      expect(calculateAnthropicCost('claude-haiku-5-5', {}, 100_001, 1_000)).toBeCloseTo(
+        0.0525005,
+        10,
+      );
+    });
+
+    it('counts cache reads and writes toward the 100K threshold', () => {
+      // 50K uncached + 40K cache reads + 20K cache writes is a 110K-token prompt, so every
+      // token bills at the long-prompt card: input $0.50, cache read $0.05, 5m write $0.625.
+      expect(
+        calculateAnthropicCost('claude-haiku-5-5', {}, 50_000, 1_000, 40_000, 20_000),
+      ).toBeCloseTo(0.025 + 0.002 + 0.0125 + 0.0025, 10);
+      // The same request under the threshold bills the standard card, with 1-hour writes at 2x.
+      expect(
+        calculateAnthropicCost('claude-haiku-5-5', {}, 50_000, 1_000, 30_000, 20_000, 20_000),
+      ).toBeCloseTo(0.005 + 0.0003 + 0.004 + 0.0005, 10);
+    });
+
+    it('keeps explicit pricing overrides and applies the regional and US-only multipliers', () => {
+      expect(
+        calculateAnthropicCost(
+          'claude-haiku-5-5',
+          { inputCost: 1e-6, outputCost: 1e-6 },
+          200_000,
+          0,
+        ),
+      ).toBeCloseTo(0.2, 10);
+      // AWS lists Haiku 5.5 at $0.11/$0.55 regional and $0.10/$0.50 global.
+      expect(calculateAnthropicCost('us.anthropic.claude-haiku-5-5', {}, 1000, 1000)).toBeCloseTo(
+        0.00066,
+        10,
+      );
+      expect(
+        calculateAnthropicCost('global.anthropic.claude-haiku-5-5', {}, 1000, 1000),
+      ).toBeCloseTo(0.0006, 10);
+      // The US-only multiplier also applies to the long-prompt card.
+      expect(calculateAnthropicCost('claude-haiku-5-5', {}, 200_000, 0, 0, 0, 0, 'us')).toBeCloseTo(
+        0.11,
+        10,
+      );
+    });
+  });
+
+  describe('fast mode', () => {
+    it('bills fast mode at twice the standard rates on Opus 5.5, Opus 5, and Opus 4.8', () => {
+      for (const [model, standard] of [
+        ['claude-opus-5-5', 4e-6 * 1000 + 20e-6 * 100],
+        ['claude-opus-5', 5e-6 * 1000 + 25e-6 * 100],
+        ['claude-opus-4-8', 5e-6 * 1000 + 25e-6 * 100],
+      ] as const) {
+        expect(
+          calculateAnthropicCost(
+            model,
+            {},
+            1000,
+            100,
+            undefined,
+            undefined,
+            undefined,
+            null,
+            'fast',
+          ),
+        ).toBeCloseTo(standard * 2, 10);
+        expect(
+          calculateAnthropicCost(
+            model,
+            {},
+            1000,
+            100,
+            undefined,
+            undefined,
+            undefined,
+            null,
+            'standard',
+          ),
+        ).toBeCloseTo(standard, 10);
+      }
+    });
+
+    it('applies the cache and US-only multipliers on top of fast mode prices', () => {
+      // Opus 5.5 fast: input $8, cache read $0.40 (0.05x), output $40, then 1.1x for US-only.
+      expect(
+        calculateAnthropicCost(
+          'claude-opus-5-5',
+          {},
+          1_000_000,
+          1_000_000,
+          1_000_000,
+          0,
+          0,
+          'us',
+          'fast',
+        ),
+      ).toBeCloseTo((8 + 0.4 + 40) * 1.1, 10);
+    });
+
+    it('takes explicit pricing overrides as the rates paid', () => {
+      expect(
+        calculateAnthropicCost(
+          'claude-opus-5-5',
+          { inputCost: 1e-6, outputCost: 1e-6 },
+          1000,
+          1000,
+          undefined,
+          undefined,
+          undefined,
+          null,
+          'fast',
+        ),
+      ).toBeCloseTo(0.002, 10);
     });
   });
 });
