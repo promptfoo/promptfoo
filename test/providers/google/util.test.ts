@@ -37,6 +37,7 @@ import {
   geminiFormatAndSystemInstructions,
   getGoogleResponseServiceTier,
   loadFile,
+  loadGoogleTools,
   maybeCoerceToGeminiFormat,
   mergeGoogleCompletionOptions,
   mergeGoogleRequestTools,
@@ -5824,4 +5825,26 @@ it('keeps mutable prices independent across model aliases', () => {
   const tiers = GOOGLE_MODELS.flatMap(({ tieredCost }) => (tieredCost ? [tieredCost] : []));
   expect(new Set(tiers).size).toBe(tiers.length);
   expect(new Set(tiers.map(({ above }) => above)).size).toBe(tiers.length);
+});
+
+describe('portable Google tool forms', () => {
+  it('normalizes single native tools and snake-case aliases', async () => {
+    expect(await loadGoogleTools({ google_search: {}, code_execution: {} })).toEqual([
+      { googleSearch: {}, codeExecution: {} },
+    ]);
+  });
+  it('converts OpenAI function arrays', async () => {
+    expect(
+      await loadGoogleTools([
+        {
+          type: 'function',
+          function: { name: 'lookup', parameters: { type: 'object', properties: {} } },
+        },
+      ]),
+    ).toEqual([
+      {
+        functionDeclarations: [{ name: 'lookup', parameters: { type: 'OBJECT', properties: {} } }],
+      },
+    ]);
+  });
 });
