@@ -7,6 +7,7 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vite
 import {
   getShareAuthorizedBlob,
   isBlobAllowedForShare,
+  isEvalPersisted,
   recordBlobReference,
   resetBlobStorageProvider,
   setBlobStorageProvider,
@@ -84,6 +85,11 @@ describe('blob share authorization', () => {
       .where(inArray(blobReferencesTable.evalId, [evalId, otherEvalId]));
     await db.delete(blobAssetsTable).where(inArray(blobAssetsTable.hash, hashes));
     await db.delete(evalsTable).where(inArray(evalsTable.id, [evalId, otherEvalId]));
+  });
+
+  it('reports whether an eval can own stored media', async () => {
+    await expect(isEvalPersisted(evalId)).resolves.toBe(true);
+    await expect(isEvalPersisted(`missing-${randomUUID()}`)).resolves.toBe(false);
   });
 
   it('allows only trusted references associated with the local eval', async () => {
