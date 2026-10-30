@@ -186,10 +186,7 @@ interface TraceInfo {
   testCaseId?: string;
 }
 
-interface GroupedTraces {
-  spansByTrace: Map<string, SpanData[]>;
-  traceInfoById: Map<string, TraceInfo>;
-}
+type GroupedTraces = Map<string, { spans: SpanData[]; info: TraceInfo }>;
 
 interface RegisteredTracePolicy {
   commandToolNames?: string[];
@@ -554,43 +551,34 @@ export class OTLPReceiver {
   }
 
   private groupTraces(traces: ParsedTrace[]): GroupedTraces {
-    const spansByTrace = new Map<string, SpanData[]>();
-    const traceInfoById = new Map<string, TraceInfo>();
+    const grouped = new Map<string, { spans: SpanData[]; info: TraceInfo }>();
 
     for (const trace of traces) {
-      const spans = spansByTrace.get(trace.traceId) ?? [];
-      spans.push(trace.span);
-      spansByTrace.set(trace.traceId, spans);
-      this.recordTraceInfo(traceInfoById, trace);
+      const group = grouped.get(trace.traceId) ?? { spans: [], info: {} };
+      group.spans.push(trace.span);
+      const evaluationId = trace.span.attributes?.['evaluation.id'] as string | undefined;
+      const testCaseId = trace.span.attributes?.['test.case.id'] as string | undefined;
+      if (evaluationId) {
+        group.info.evaluationId = evaluationId;
+      }
+      if (testCaseId) {
+        group.info.testCaseId = testCaseId;
+      }
+      grouped.set(trace.traceId, group);
     }
 
-    logger.debug(`[OtlpReceiver] Grouped spans into ${spansByTrace.size} traces`);
+    logger.debug(`[OtlpReceiver] Grouped spans into ${grouped.size} traces`);
 
-    return { spansByTrace, traceInfoById };
+    return grouped;
   }
 
-  private recordTraceInfo(traceInfoById: Map<string, TraceInfo>, trace: ParsedTrace): void {
-    const evaluationId = trace.span.attributes?.['evaluation.id'] as string | undefined;
-    const testCaseId = trace.span.attributes?.['test.case.id'] as string | undefined;
-    const info = traceInfoById.get(trace.traceId) ?? {};
-
-    if (evaluationId) {
-      info.evaluationId = evaluationId;
-    }
-    if (testCaseId) {
-      info.testCaseId = testCaseId;
-    }
-
-    traceInfoById.set(trace.traceId, info);
+  private async persistTraces(traces: GroupedTraces): Promise<void> {
+    await this.createTraceRecords(traces);
+    await this.storeSpans(traces);
   }
 
-  private async persistTraces({ spansByTrace, traceInfoById }: GroupedTraces): Promise<void> {
-    await this.createTraceRecords(traceInfoById);
-    await this.storeSpans(spansByTrace, traceInfoById);
-  }
-
-  private async createTraceRecords(traceInfoById: Map<string, TraceInfo>): Promise<void> {
-    for (const [traceId, info] of traceInfoById) {
+  private async createTraceRecords(traces: GroupedTraces): Promise<void> {
+    for (const [traceId, { info }] of traces) {
       if (!info.evaluationId || !info.testCaseId) {
         logger.debug(`[OtlpReceiver] Skipping trace record creation for unlinked trace ${traceId}`);
         continue;
@@ -628,16 +616,10 @@ export class OTLPReceiver {
     );
   }
 
-  private async storeSpans(
-    spansByTrace: Map<string, SpanData[]>,
-    traceInfoById: Map<string, TraceInfo>,
-  ): Promise<void> {
-    for (const [traceId, spans] of spansByTrace) {
+  private async storeSpans(traces: GroupedTraces): Promise<void> {
+    for (const [traceId, { spans, info }] of traces) {
       logger.debug(`[OtlpReceiver] Storing ${spans.length} spans for trace ${traceId}`);
-      const redactAttributePatterns = await this.getRedactAttributePatterns(
-        traceId,
-        traceInfoById.get(traceId),
-      );
+      const redactAttributePatterns = await this.getRedactAttributePatterns(traceId, info);
       const sanitized =
         redactAttributePatterns.length > 0
           ? spans.map((span) => this.redactSpan(span, redactAttributePatterns))

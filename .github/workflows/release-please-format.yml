@@ -13,7 +13,7 @@ on:
     paths:
       - '**/CHANGELOG.md'
 
-permissions:
+permissions: &read-only-permissions
   contents: read
 
 jobs:
@@ -27,8 +27,7 @@ jobs:
       startsWith(github.event.pull_request.head.ref, 'release-please--')
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    permissions:
-      contents: read
+    permissions: *read-only-permissions
     steps:
       # Pin an explicit Node version so this step does not depend on a
       # PR-controlled .nvmrc — the install below happens before checkout.

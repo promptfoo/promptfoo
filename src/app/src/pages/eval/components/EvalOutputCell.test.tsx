@@ -1,11 +1,8 @@
 import { mockClipboard } from '@app/tests/browserMocks';
 import { restoreTestTimers, type TestTimers, useTestTimers } from '@app/tests/timers';
 import { renderWithProviders as baseRender } from '@app/utils/testutils';
-import {
-  type AssertionType,
-  type EvaluateTableOutput,
-  ResultFailureReason,
-} from '@promptfoo/types';
+import { type AssertionType, type EvaluateTableOutput } from '@promptfoo/types';
+import { ResultFailureReason } from '@promptfoo/types/results';
 import { act, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -2366,6 +2363,26 @@ describe('EvalOutputCell extra actions hover behavior', () => {
       'View output and test details',
     ]);
   });
+  it.each(['google:gemini-nano-banana-2.1', 'custom-image-target'])(
+    'keeps structured images visible after long text from %s',
+    (provider) => {
+      const explanation = 'A detailed explanation of the generated image. '.repeat(10);
+      const { container } = renderWithProviders(
+        <EvalOutputCell
+          {...defaultProps}
+          maxTextLength={250}
+          output={{
+            ...defaultProps.output,
+            provider,
+            text: explanation,
+            images: [{ data: 'data:image/png;base64,aW1hZ2U=', mimeType: 'image/png' }],
+          }}
+        />,
+      );
+      expect(container.querySelectorAll('img')).toHaveLength(1);
+      expect(container.textContent).toContain(explanation.trim());
+    },
+  );
 });
 
 describe('isImageProvider helper function', () => {
@@ -2425,6 +2442,10 @@ describe('isVideoProvider helper function', () => {
 
   it('should return true for Google Veo 3.1 provider', () => {
     expect(isVideoProvider('google:video:veo-3.1-generate-preview')).toBe(true);
+  });
+
+  it('should return true for Google Veo on Vertex AI', () => {
+    expect(isVideoProvider('vertex:video:veo-3.1-generate-001')).toBe(true);
   });
 
   it('should return true for Google Veo 3.1 Fast provider', () => {

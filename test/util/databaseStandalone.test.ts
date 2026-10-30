@@ -21,6 +21,7 @@ import {
   getCachedStandaloneEvals,
   getStandaloneEvalCacheKey,
 } from '../../src/util/standaloneEvalCache';
+import { clearEvalTables } from '../util/evalDb';
 
 vi.mock('../../src/database/signal', async () => {
   const actual = await vi.importActual('../../src/database/signal');
@@ -63,15 +64,7 @@ async function createEvalWithPrompts(config: Partial<Parameters<typeof Eval.crea
   });
 }
 
-async function resetEvalTables() {
-  const db = await getDb();
-  await db.run('DELETE FROM eval_results');
-  await db.run('DELETE FROM evals_to_datasets');
-  await db.run('DELETE FROM evals_to_prompts');
-  await db.run('DELETE FROM evals_to_tags');
-  await db.run('DELETE FROM evals');
-  clearStandaloneEvalCache();
-}
+const resetEvalTables = () => clearEvalTables(() => clearStandaloneEvalCache());
 
 async function setIsRedteam(evalId: string, value: boolean) {
   const db = await getDb();
@@ -297,6 +290,54 @@ describe('getStandaloneEvals', () => {
 
     const row = (await getStandaloneEvals()).find((r) => r.evalId === eval_.id);
     expect(row?.isRedteam).toBe(true);
+  });
+});
+
+describe('getTestCases', () => {
+  beforeAll(async () => {
+    await runDbMigrations();
+  });
+
+  beforeEach(resetEvalTables);
+
+  afterEach(() => {
+    vi.resetAllMocks();
+    vi.unstubAllEnvs();
+  });
+
+  it('returns sanitized test cases without loading eval results', async () => {
+    const tests = [
+      {
+        description: 'says hello',
+        vars: { name: 'Ada' },
+        metadata: { topic: 'greeting' },
+      },
+    ];
+    const created = await createEvalWithPrompts({
+      tests,
+      env: { PROMPTFOO_STRIP_METADATA: 'true' },
+    });
+    const persisted = await Eval.findById(created.id);
+    expect(persisted?.config.tests).toEqual(tests);
+
+    const toResultsFile = vi.spyOn(Eval.prototype, 'toResultsFile');
+    const findResults = vi.spyOn(EvalResult, 'findManyByEvalId');
+    try {
+      const datasets = await getTestCases();
+
+      expect(datasets).toHaveLength(1);
+      expect(datasets[0].testCases).toEqual([
+        {
+          description: 'says hello',
+          vars: { name: 'Ada' },
+        },
+      ]);
+      expect(toResultsFile).not.toHaveBeenCalled();
+      expect(findResults).not.toHaveBeenCalled();
+    } finally {
+      toResultsFile.mockRestore();
+      findResults.mockRestore();
+    }
   });
 });
 

@@ -58,8 +58,7 @@ Leave sampling parameters unset in your config and environment; explicit values 
 
 Configure the provider in your promptfoo configuration file:
 
-```yaml title="promptfooconfig.yaml"
-# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+```yaml
 providers:
   - id: aimlapi:chat:google/gemini-3-5-flash
     config:

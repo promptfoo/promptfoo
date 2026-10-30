@@ -8,6 +8,14 @@ vi.mock('../../../../src/providers/elevenlabs/cache');
 vi.mock('../../../../src/providers/elevenlabs/cost-tracker');
 
 describe('ElevenLabsSTTProvider', () => {
+  const createSttModelCheck = () => () => {
+    const provider = new ElevenLabsSTTProvider('elevenlabs:stt', {
+      config: { modelId: 'scribe_v1' },
+    });
+
+    expect(provider.config.modelId).toBe('scribe_v1');
+  };
+
   beforeEach(() => {
     vi.clearAllMocks();
     mockProcessEnv({ ELEVENLABS_API_KEY: 'test-api-key' });
@@ -103,13 +111,7 @@ describe('ElevenLabsSTTProvider', () => {
   });
 
   describe('configuration validation', () => {
-    it('should accept valid model IDs', () => {
-      const provider = new ElevenLabsSTTProvider('elevenlabs:stt', {
-        config: { modelId: 'scribe_v1' },
-      });
-
-      expect(provider.config.modelId).toBe('scribe_v1');
-    });
+    it('should accept valid model IDs', createSttModelCheck());
 
     it('should accept valid language codes', () => {
       const validLanguages = ['en', 'es', 'fr', 'de', 'it', 'pt', 'pl', 'hi', 'ja', 'ko', 'zh'];
@@ -190,12 +192,6 @@ describe('ElevenLabsSTTProvider', () => {
       expect(provider.config.modelId).toBe('scribe_v2');
     });
 
-    it('should use custom model if specified', () => {
-      const provider = new ElevenLabsSTTProvider('elevenlabs:stt', {
-        config: { modelId: 'scribe_v1' },
-      });
-
-      expect(provider.config.modelId).toBe('scribe_v1');
-    });
+    it('should use custom model if specified', createSttModelCheck());
   });
 });

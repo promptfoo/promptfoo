@@ -2,7 +2,8 @@ import { createHmac } from 'crypto';
 
 import { context as otelContext, propagation, ROOT_CONTEXT, trace } from '@opentelemetry/api';
 import { getCache, isCacheEnabled } from '../cache';
-import { getEnvString } from '../envars';
+import { getEnvOverrides, getEnvString, getProviderEnvString } from '../envars';
+import { getExplicitProviderEnv } from '../envOverrides';
 import logger from '../logger';
 import { sha256 } from '../util/createHash';
 import { normalizeFinishReason } from '../util/finishReason';
@@ -74,10 +75,12 @@ function resolveApiKey(config: VercelAiConfig, env?: EnvOverrides): string | und
   if (config.apiKey) {
     return config.apiKey;
   }
+  // Check the registered fallback alias before retained suite values in default lookup.
   const apiKey = config.apiKeyEnvar
-    ? ((env?.[config.apiKeyEnvar as keyof EnvOverrides] as string | undefined) ??
-      getEnvString(config.apiKeyEnvar))
-    : ((env?.VERCEL_AI_GATEWAY_API_KEY as string | undefined) ??
+    ? (getProviderEnvString(env, config.apiKeyEnvar) ?? getEnvString(config.apiKeyEnvar))
+    : (getProviderEnvString(getExplicitProviderEnv(env), 'VERCEL_AI_GATEWAY_API_KEY') ??
+      getEnvOverrides('provider')?.AI_GATEWAY_API_KEY ??
+      getProviderEnvString(env, 'VERCEL_AI_GATEWAY_API_KEY') ??
       getEnvString('VERCEL_AI_GATEWAY_API_KEY'));
   return apiKey ?? getEnvString('AI_GATEWAY_API_KEY');
 }
@@ -88,7 +91,7 @@ function resolveApiKey(config: VercelAiConfig, env?: EnvOverrides): string | und
 function resolveBaseUrl(config: VercelAiConfig, env?: EnvOverrides): string | undefined {
   return (
     config.baseUrl ??
-    (env?.VERCEL_AI_GATEWAY_BASE_URL as string | undefined) ??
+    getProviderEnvString(env, 'VERCEL_AI_GATEWAY_BASE_URL') ??
     getEnvString('VERCEL_AI_GATEWAY_BASE_URL')
   );
 }
@@ -522,6 +525,8 @@ export class VercelAiProvider implements ApiProvider {
  * Vercel AI Gateway embedding provider.
  */
 export class VercelAiEmbeddingProvider implements ApiEmbeddingProvider {
+  readonly supportsEmbeddingCancellation = true;
+
   public modelName: string;
   public config: VercelAiConfig;
   public env?: EnvOverrides;
@@ -554,6 +559,7 @@ export class VercelAiEmbeddingProvider implements ApiEmbeddingProvider {
   async callEmbeddingApi(
     input: string,
     context?: CallApiContextParams,
+    options?: CallApiOptionsParams,
   ): Promise<ProviderEmbeddingResponse> {
     const config = { ...this.config, apiKey: resolveApiKey(this.config, this.env) };
     const cacheEnabled = isCacheEnabled() && Boolean(config.apiKey);
@@ -580,7 +586,7 @@ export class VercelAiEmbeddingProvider implements ApiEmbeddingProvider {
     }
 
     const timeout = config.timeout ?? getRequestTimeoutMs();
-    const { signal, cleanup } = createTimeoutController(timeout);
+    const { signal, cleanup } = createTimeoutController(timeout, options?.abortSignal);
 
     try {
       const gateway = await createGatewayInstance(config, this.env);
@@ -620,6 +626,7 @@ export class VercelAiEmbeddingProvider implements ApiEmbeddingProvider {
       return response;
     } catch (error) {
       cleanup();
+      options?.abortSignal?.throwIfAborted();
       return handleApiError(error, timeout, 'embedding');
     }
   }

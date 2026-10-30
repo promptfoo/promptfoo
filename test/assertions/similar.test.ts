@@ -1,7 +1,33 @@
 import { describe, expect, it, vi } from 'vitest';
 import { handleSimilar } from '../../src/assertions/similar';
 import { matchesSimilarity } from '../../src/matchers/similarity';
+import { createStringAssertion } from '../factories/literalFixtures';
 import { createMockProvider } from '../factories/provider';
+
+const createSimilarityTest = () => ({
+  description: 'test',
+  vars: {},
+  assert: [],
+  options: {},
+});
+
+function createSimilarityParams(output: string) {
+  return {
+    baseType: 'similar' as const,
+    outputString: output,
+    test: createSimilarityTest(),
+    assertionValueContext: {
+      prompt: 'test prompt',
+      vars: {},
+      test: createSimilarityTest(),
+      logProbs: undefined,
+      provider: createMockProvider({ response: {} }),
+      providerResponse: { output },
+    },
+    output,
+    providerResponse: { output },
+  };
+}
 
 vi.mock('../../src/matchers/similarity', () => ({
   matchesSimilarity: vi.fn().mockImplementation(async (expected, output, _threshold, inverse) => {
@@ -21,36 +47,10 @@ vi.mock('../../src/matchers/similarity', () => ({
 describe('handleSimilar', () => {
   it('should handle string similarity assertion', async () => {
     const result = await handleSimilar({
-      assertion: {
-        type: 'similar',
-        value: 'hello world',
-      },
-      baseType: 'similar' as any,
+      assertion: createStringAssertion('similar', 'hello world'),
       renderedValue: 'hello world',
-      outputString: 'hello world',
       inverse: false,
-      test: {
-        description: 'test',
-        vars: {},
-        assert: [],
-        options: {},
-      },
-      assertionValueContext: {
-        prompt: 'test prompt',
-        vars: {},
-        test: {
-          description: 'test',
-          vars: {},
-          assert: [],
-          options: {},
-        },
-        logProbs: undefined,
-        // @ts-ignore
-        provider: createMockProvider({ response: {} }),
-        providerResponse: { output: 'hello world' },
-      },
-      output: 'hello world',
-      providerResponse: { output: 'hello world' },
+      ...createSimilarityParams('hello world'),
     });
 
     expect(result.pass).toBe(true);
@@ -63,32 +63,9 @@ describe('handleSimilar', () => {
         type: 'similar',
         value: ['hello world', 'hi world'],
       },
-      baseType: 'similar' as any,
       renderedValue: ['hello world', 'hi world'],
-      outputString: 'hello world',
       inverse: false,
-      test: {
-        description: 'test',
-        vars: {},
-        assert: [],
-        options: {},
-      },
-      assertionValueContext: {
-        prompt: 'test prompt',
-        vars: {},
-        test: {
-          description: 'test',
-          vars: {},
-          assert: [],
-          options: {},
-        },
-        logProbs: undefined,
-        // @ts-ignore
-        provider: createMockProvider({ response: {} }),
-        providerResponse: { output: 'hello world' },
-      },
-      output: 'hello world',
-      providerResponse: { output: 'hello world' },
+      ...createSimilarityParams('hello world'),
     });
 
     expect(result.pass).toBe(true);
@@ -102,32 +79,9 @@ describe('handleSimilar', () => {
         value: 'hello world',
         threshold: 0.5,
       },
-      baseType: 'similar' as any,
       renderedValue: 'hello world',
-      outputString: 'hello world',
       inverse: false,
-      test: {
-        description: 'test',
-        vars: {},
-        assert: [],
-        options: {},
-      },
-      assertionValueContext: {
-        prompt: 'test prompt',
-        vars: {},
-        test: {
-          description: 'test',
-          vars: {},
-          assert: [],
-          options: {},
-        },
-        logProbs: undefined,
-        // @ts-ignore
-        provider: createMockProvider({ response: {} }),
-        providerResponse: { output: 'hello world' },
-      },
-      output: 'hello world',
-      providerResponse: { output: 'hello world' },
+      ...createSimilarityParams('hello world'),
     });
 
     expect(result.pass).toBe(true);
@@ -135,36 +89,10 @@ describe('handleSimilar', () => {
 
   it('should handle inverse similarity assertion', async () => {
     const result = await handleSimilar({
-      assertion: {
-        type: 'similar',
-        value: 'hello world',
-      },
-      baseType: 'similar' as any,
+      assertion: createStringAssertion('similar', 'hello world'),
       renderedValue: 'hello world',
-      outputString: 'completely different',
       inverse: true,
-      test: {
-        description: 'test',
-        vars: {},
-        assert: [],
-        options: {},
-      },
-      assertionValueContext: {
-        prompt: 'test prompt',
-        vars: {},
-        test: {
-          description: 'test',
-          vars: {},
-          assert: [],
-          options: {},
-        },
-        logProbs: undefined,
-        // @ts-ignore
-        provider: createMockProvider({ response: {} }),
-        providerResponse: { output: 'completely different' },
-      },
-      output: 'completely different',
-      providerResponse: { output: 'completely different' },
+      ...createSimilarityParams('completely different'),
     });
 
     expect(result.pass).toBe(true);
@@ -177,32 +105,9 @@ describe('handleSimilar', () => {
         value: ['hello world', 'hi world'],
         threshold: 0.9,
       },
-      baseType: 'similar' as any,
       renderedValue: ['hello world', 'hi world'],
-      outputString: 'completely different',
       inverse: false,
-      test: {
-        description: 'test',
-        vars: {},
-        assert: [],
-        options: {},
-      },
-      assertionValueContext: {
-        prompt: 'test prompt',
-        vars: {},
-        test: {
-          description: 'test',
-          vars: {},
-          assert: [],
-          options: {},
-        },
-        logProbs: undefined,
-        // @ts-ignore
-        provider: createMockProvider({ response: {} }),
-        providerResponse: { output: 'completely different' },
-      },
-      output: 'completely different',
-      providerResponse: { output: 'completely different' },
+      ...createSimilarityParams('completely different'),
     });
 
     expect(result.pass).toBe(false);
@@ -222,32 +127,9 @@ describe('handleSimilar', () => {
         value: ['far value', 'closer value'],
         threshold: 0.9,
       },
-      baseType: 'similar' as any,
       renderedValue: ['far value', 'closer value'],
-      outputString: 'some output',
       inverse: false,
-      test: {
-        description: 'test',
-        vars: {},
-        assert: [],
-        options: {},
-      },
-      assertionValueContext: {
-        prompt: 'test prompt',
-        vars: {},
-        test: {
-          description: 'test',
-          vars: {},
-          assert: [],
-          options: {},
-        },
-        logProbs: undefined,
-        // @ts-ignore
-        provider: createMockProvider({ response: {} }),
-        providerResponse: { output: 'some output' },
-      },
-      output: 'some output',
-      providerResponse: { output: 'some output' },
+      ...createSimilarityParams('some output'),
     });
 
     expect(result.pass).toBe(false);
@@ -273,27 +155,9 @@ describe('handleSimilar', () => {
         value: ['forbidden answer A', 'unrelated answer B'],
         threshold: 0.75,
       },
-      baseType: 'similar' as any,
       renderedValue: ['forbidden answer A', 'unrelated answer B'],
-      outputString: 'forbidden answer A',
       inverse: true,
-      test: {
-        description: 'test',
-        vars: {},
-        assert: [],
-        options: {},
-      },
-      assertionValueContext: {
-        prompt: 'test prompt',
-        vars: {},
-        test: { description: 'test', vars: {}, assert: [], options: {} },
-        logProbs: undefined,
-        // @ts-ignore
-        provider: createMockProvider({ response: {} }),
-        providerResponse: { output: 'forbidden answer A' },
-      },
-      output: 'forbidden answer A',
-      providerResponse: { output: 'forbidden answer A' },
+      ...createSimilarityParams('forbidden answer A'),
     });
 
     // Before the fix this returned pass: true (dissimilar to the second value
@@ -315,27 +179,9 @@ describe('handleSimilar', () => {
         value: ['forbidden answer A', 'forbidden answer B'],
         threshold: 0.75,
       },
-      baseType: 'similar' as any,
       renderedValue: ['forbidden answer A', 'forbidden answer B'],
-      outputString: 'a totally different response',
       inverse: true,
-      test: {
-        description: 'test',
-        vars: {},
-        assert: [],
-        options: {},
-      },
-      assertionValueContext: {
-        prompt: 'test prompt',
-        vars: {},
-        test: { description: 'test', vars: {}, assert: [], options: {} },
-        logProbs: undefined,
-        // @ts-ignore
-        provider: createMockProvider({ response: {} }),
-        providerResponse: { output: 'a totally different response' },
-      },
-      output: 'a totally different response',
-      providerResponse: { output: 'a totally different response' },
+      ...createSimilarityParams('a totally different response'),
     });
 
     expect(result.pass).toBe(true);
@@ -371,32 +217,9 @@ describe('handleSimilar', () => {
           type: 'similar',
           value: 'test',
         },
-        baseType: 'similar' as any,
         renderedValue: 123 as any,
-        outputString: 'test',
         inverse: false,
-        test: {
-          description: 'test',
-          vars: {},
-          assert: [],
-          options: {},
-        },
-        assertionValueContext: {
-          prompt: 'test prompt',
-          vars: {},
-          test: {
-            description: 'test',
-            vars: {},
-            assert: [],
-            options: {},
-          },
-          logProbs: undefined,
-          // @ts-ignore
-          provider: createMockProvider({ response: {} }),
-          providerResponse: { output: 'test' },
-        },
-        output: 'test',
-        providerResponse: { output: 'test' },
+        ...createSimilarityParams('test'),
       }),
     ).rejects.toThrow('Similarity assertion type must have a string or array of strings value');
   });
@@ -408,32 +231,9 @@ describe('handleSimilar', () => {
           type: 'similar',
           value: [],
         },
-        baseType: 'similar' as any,
         renderedValue: [],
-        outputString: 'test',
         inverse: false,
-        test: {
-          description: 'test',
-          vars: {},
-          assert: [],
-          options: {},
-        },
-        assertionValueContext: {
-          prompt: 'test prompt',
-          vars: {},
-          test: {
-            description: 'test',
-            vars: {},
-            assert: [],
-            options: {},
-          },
-          logProbs: undefined,
-          // @ts-ignore
-          provider: createMockProvider({ response: {} }),
-          providerResponse: { output: 'test' },
-        },
-        output: 'test',
-        providerResponse: { output: 'test' },
+        ...createSimilarityParams('test'),
       }),
     ).rejects.toThrow('Similarity assertion must have at least one value to compare against');
   });
@@ -446,32 +246,9 @@ describe('handleSimilar', () => {
         type: 'similar:dot',
         value: 'hello world',
       },
-      baseType: 'similar' as any,
       renderedValue: 'hello world',
-      outputString: 'hello world',
       inverse: false,
-      test: {
-        description: 'test',
-        vars: {},
-        assert: [],
-        options: {},
-      },
-      assertionValueContext: {
-        prompt: 'test prompt',
-        vars: {},
-        test: {
-          description: 'test',
-          vars: {},
-          assert: [],
-          options: {},
-        },
-        logProbs: undefined,
-        // @ts-ignore
-        provider: createMockProvider({ response: {} }),
-        providerResponse: { output: 'hello world' },
-      },
-      output: 'hello world',
-      providerResponse: { output: 'hello world' },
+      ...createSimilarityParams('hello world'),
     });
 
     // Verify that matchesSimilarity was called with dot_product metric
@@ -482,6 +259,7 @@ describe('handleSimilar', () => {
       false,
       expect.any(Object),
       'dot_product',
+      undefined,
     );
   });
 
@@ -493,32 +271,9 @@ describe('handleSimilar', () => {
         type: 'similar:euclidean',
         value: 'hello world',
       },
-      baseType: 'similar' as any,
       renderedValue: 'hello world',
-      outputString: 'hello world',
       inverse: false,
-      test: {
-        description: 'test',
-        vars: {},
-        assert: [],
-        options: {},
-      },
-      assertionValueContext: {
-        prompt: 'test prompt',
-        vars: {},
-        test: {
-          description: 'test',
-          vars: {},
-          assert: [],
-          options: {},
-        },
-        logProbs: undefined,
-        // @ts-ignore
-        provider: createMockProvider({ response: {} }),
-        providerResponse: { output: 'hello world' },
-      },
-      output: 'hello world',
-      providerResponse: { output: 'hello world' },
+      ...createSimilarityParams('hello world'),
     });
 
     // Verify that matchesSimilarity was called with euclidean metric
@@ -529,6 +284,7 @@ describe('handleSimilar', () => {
       false,
       expect.any(Object),
       'euclidean',
+      undefined,
     );
   });
 
@@ -536,36 +292,10 @@ describe('handleSimilar', () => {
     const mockMatchesSimilarity = vi.mocked(matchesSimilarity);
 
     await handleSimilar({
-      assertion: {
-        type: 'similar',
-        value: 'hello world',
-      },
-      baseType: 'similar' as any,
+      assertion: createStringAssertion('similar', 'hello world'),
       renderedValue: 'hello world',
-      outputString: 'hello world',
       inverse: false,
-      test: {
-        description: 'test',
-        vars: {},
-        assert: [],
-        options: {},
-      },
-      assertionValueContext: {
-        prompt: 'test prompt',
-        vars: {},
-        test: {
-          description: 'test',
-          vars: {},
-          assert: [],
-          options: {},
-        },
-        logProbs: undefined,
-        // @ts-ignore
-        provider: createMockProvider({ response: {} }),
-        providerResponse: { output: 'hello world' },
-      },
-      output: 'hello world',
-      providerResponse: { output: 'hello world' },
+      ...createSimilarityParams('hello world'),
     });
 
     // Verify that matchesSimilarity was called with cosine metric (default)
@@ -576,6 +306,7 @@ describe('handleSimilar', () => {
       false,
       expect.any(Object),
       'cosine',
+      undefined,
     );
   });
 });

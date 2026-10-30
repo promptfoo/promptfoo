@@ -13,6 +13,7 @@ import {
   createValidator,
   formatVideoOutput,
   generateVideoCacheKey,
+  isVideoCacheReferenceUrlSafe,
   readCacheMapping,
   storeCacheMapping,
 } from '../video';
@@ -159,13 +160,11 @@ function hasAuthenticatedInputReference(reference: OpenAiVideoOptions['input_ref
   if (!imageUrl || !/^https?:\/\//i.test(imageUrl)) {
     return false;
   }
+  if (!isVideoCacheReferenceUrlSafe(imageUrl)) {
+    return true;
+  }
   try {
-    const parsedUrl = new URL(imageUrl);
-    const normalizedUrl = parsedUrl.toString();
-    return (
-      sanitizeUrl(normalizedUrl) !== normalizedUrl ||
-      hasSensitiveOpenAiCachePath(decodeURIComponent(parsedUrl.pathname))
-    );
+    return hasSensitiveOpenAiCachePath(decodeURIComponent(new URL(imageUrl).pathname));
   } catch {
     return true;
   }

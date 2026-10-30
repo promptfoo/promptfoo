@@ -10,7 +10,6 @@ import {
   addVideoToBase64,
   createProgressBar,
   escapeDrawtextString,
-  getFallbackBase64,
 } from '../../../src/redteam/strategies/simpleVideo';
 
 import type { TestCase } from '../../../src/types/index';
@@ -40,6 +39,10 @@ vi.mock('../../../src/cliState', () => ({
   },
 }));
 
+vi.mock('../../../src/redteam/remoteGeneration', () => ({
+  neverGenerateRemote: () => false,
+}));
+
 // Mock for progress bar
 vi.mock('cli-progress', async (importOriginal) => {
   return {
@@ -66,9 +69,8 @@ describe('escapeDrawtextString', () => {
     expect(escapeDrawtextString('a\\b')).toBe('a\\\\b');
   });
 
-  it('escapes single quotes using close-escape-reopen pattern', () => {
-    // "it's" → it'\''s  (no shell involved — FFmpeg filter parser handles \' as literal ')
-    expect(escapeDrawtextString("it's")).toBe("it'\\''s");
+  it('escapes single quotes through the filtergraph and drawtext option parsers', () => {
+    expect(escapeDrawtextString("it's")).toBe(String.raw`it'\\\''s`);
   });
 
   it('escapes colons as option separators', () => {
@@ -84,18 +86,15 @@ describe('escapeDrawtextString', () => {
   });
 
   it('double-escapes a backslash immediately before a single quote', () => {
-    // Input runtime string: it\'s  (backslash + apostrophe + s)
-    // Step 1: backslash → \\   gives: it\\'s
-    // Step 2: '        → '\'' gives: it\\'\''s
-    expect(escapeDrawtextString("it\\'s")).toBe("it\\\\'\\''s");
+    expect(escapeDrawtextString("it\\'s")).toBe(String.raw`it\\'\\\''s`);
   });
 
   it('handles adversarial input with multiple special characters', () => {
     // Input: ';%{pts}\n[overlay]=value  (apostrophe, semicolon, percent, backslash+n, brackets, equals)
     const input = "';%{pts}\\n[overlay]=value";
     const result = escapeDrawtextString(input);
-    // Single quote becomes '\'' pattern
-    expect(result).toContain("'\\''");
+    // An escaped quote must survive both FFmpeg parsers.
+    expect(result).toContain(String.raw`'\\\''`);
     // Percent becomes %%
     expect(result).toContain('%%');
     // Backslash is doubled
@@ -109,13 +108,13 @@ describe('simpleVideo strategy', () => {
     mockVideoGenerator.mockClear();
   });
 
-  describe('getFallbackBase64', () => {
-    it('converts text to base64', () => {
+  describe('fallback encoding', () => {
+    it('converts text to base64 when the default generator cannot make a video', async () => {
       const input = 'Test text';
-      const result = getFallbackBase64(input);
+      const [result] = await addVideoToBase64([{ vars: { prompt: input } }], 'prompt');
 
       // Decode the base64 and verify it matches the original text
-      const decoded = Buffer.from(result, 'base64').toString();
+      const decoded = Buffer.from(result.vars!.prompt as string, 'base64').toString();
       expect(decoded).toBe(input);
     });
   });

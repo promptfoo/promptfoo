@@ -1,13 +1,11 @@
 import path from 'path';
 
 import protobuf from 'protobufjs';
-import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   bytesToHex,
   decodeExportTraceServiceRequest,
   encodeExportTraceServiceRequest,
-  initializeProtobuf,
-  longToNumber,
 } from '../../src/tracing/protobuf';
 
 // Mock the logger
@@ -54,11 +52,6 @@ async function encodeOTLPRequest(data: any): Promise<Buffer> {
 }
 
 describe('Protobuf decoding', () => {
-  beforeAll(async () => {
-    // Initialize proto definitions for faster subsequent tests
-    await initializeProtobuf();
-  });
-
   afterEach(() => {
     vi.resetAllMocks();
     vi.restoreAllMocks();
@@ -89,27 +82,6 @@ describe('Protobuf decoding', () => {
         0x12,
       ]);
       expect(bytesToHex(bytes, 32)).toBe('12345678901234567890123456789012');
-    });
-  });
-
-  describe('longToNumber', () => {
-    it('should return 0 for undefined', () => {
-      expect(longToNumber(undefined)).toBe(0);
-    });
-
-    it('should return number as-is', () => {
-      expect(longToNumber(12345)).toBe(12345);
-    });
-
-    it('should convert Long-like object to number', () => {
-      const longValue = {
-        low: 1000,
-        high: 0,
-        unsigned: false,
-        toNumber: () => 1000,
-        toString: () => '1000',
-      };
-      expect(longToNumber(longValue)).toBe(1000);
     });
   });
 
@@ -362,6 +334,22 @@ describe('Protobuf decoding', () => {
       const malformed = Uint8Array.from([0x0a, 0x01, 0x12, 0x00]);
 
       await expect(decodeExportTraceServiceRequest(malformed)).rejects.toThrow(/invalid protobuf/i);
+    });
+
+    it.each([
+      { field: 'resourceSpans message', prefix: [0x0a] },
+      { field: 'resource schema URL string', prefix: [0x0a, 0x06, 0x1a] },
+      { field: 'span trace ID bytes', prefix: [0x0a, 0x0a, 0x12, 0x08, 0x12, 0x06, 0x0a] },
+      { field: 'unknown length-delimited field', prefix: [0x7a] },
+    ])('rejects an overflowing length prefix for $field', async ({ prefix }) => {
+      // 2^32 must not wrap to a zero-byte field or message.
+      const malformed = Uint8Array.from([...prefix, 0x80, 0x80, 0x80, 0x80, 0x10]);
+      await expect(decodeExportTraceServiceRequest(malformed)).rejects.toThrow(
+        'Invalid protobuf data: invalid length encoding',
+      );
+      await expect(decodeExportTraceServiceRequest(Buffer.from(malformed))).rejects.toThrow(
+        'Invalid protobuf data: invalid length encoding',
+      );
     });
 
     it('should handle empty resourceSpans', async () => {
