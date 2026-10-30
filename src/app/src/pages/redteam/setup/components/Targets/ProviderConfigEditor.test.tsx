@@ -182,7 +182,7 @@ describe('ProviderConfigEditor', () => {
     expect(screen.getByTestId('common-config')).toBeVisible();
   });
 
-  it.each(['bedrock-agent', 'claude-agent-sdk'])(
+  it.each(['bedrock-agent', 'claude-agent-sdk', 'codex-sdk'])(
     'rejects an empty ID for the editable %s target',
     (providerType) => {
       let validate: (() => boolean) | undefined;

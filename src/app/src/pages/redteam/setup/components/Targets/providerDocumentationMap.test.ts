@@ -4,6 +4,7 @@ import { getProviderDocumentationUrl, hasSpecificDocumentation } from './provide
 describe('hasSpecificDocumentation', () => {
   it.each([
     { providerType: 'openai', description: 'a common foundation model provider' },
+    { providerType: 'codex-sdk', description: 'a native Codex SDK provider' },
     { providerType: 'codex-security', description: 'a native Codex Security SDK provider' },
     { providerType: 'a2a', description: 'an Agent2Agent provider' },
     { providerType: 'openinterpreter', description: 'a coding-agent provider' },
@@ -48,6 +49,15 @@ describe('hasSpecificDocumentation', () => {
 
     expect(result).toBe(false);
   });
+
+  it.each(['codex-sdk', 'openai:codex-sdk', 'openai:codex-sdk:gpt-6-sol'])(
+    'links %s to the Codex SDK provider documentation',
+    (providerType) => {
+      expect(getProviderDocumentationUrl(providerType)).toBe(
+        'https://www.promptfoo.dev/docs/providers/openai-codex-sdk',
+      );
+    },
+  );
 
   it.each(['codex-security', 'openai:codex-security', 'openai:codex-security:gpt-5.6-luna'])(
     'links %s to the Codex Security provider documentation',

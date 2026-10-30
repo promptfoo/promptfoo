@@ -93,6 +93,13 @@ const cases = [
     })),
   ),
   {
+    label: 'OpenAI Codex SDK',
+    type: 'codex-sdk',
+    keepType: true,
+    id: 'openai:codex-sdk',
+    config: { model: 'gpt-6-sol', sandbox_mode: 'read-only', working_dir: './workspace' },
+  },
+  {
     label: 'AWS Bedrock Agents',
     type: 'bedrock-agent',
     keepType: true,

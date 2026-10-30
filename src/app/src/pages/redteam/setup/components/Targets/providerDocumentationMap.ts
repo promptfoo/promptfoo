@@ -25,6 +25,7 @@ export const PROVIDER_DOCUMENTATION_MAP: Record<string, string> = {
 
   // Agent Frameworks
   'claude-agent-sdk': `${BASE_DOCS_URL}/claude-agent-sdk`,
+  'codex-sdk': `${BASE_DOCS_URL}/openai-codex-sdk`,
   'codex-security': `${BASE_DOCS_URL}/openai-codex-security`,
   openinterpreter: `${BASE_DOCS_URL}/openinterpreter`,
   'openai-agents-sdk': `${BASE_DOCS_URL}/openai-agents`,
@@ -105,6 +106,10 @@ export const PROVIDER_DOCUMENTATION_MAP: Record<string, string> = {
 export function getProviderDocumentationUrl(providerType?: string): string {
   if (!providerType) {
     return BASE_DOCS_URL;
+  }
+
+  if (providerType === 'openai:codex-sdk' || providerType.startsWith('openai:codex-sdk:')) {
+    return PROVIDER_DOCUMENTATION_MAP['codex-sdk'];
   }
 
   // Handle provider formats like 'openrouter:openai/gpt-6-sol' or 'azure:chat:'

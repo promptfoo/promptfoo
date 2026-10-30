@@ -488,6 +488,7 @@ function ProviderConfigEditor({
         'openinterpreter',
         'bedrock-agent',
         'claude-agent-sdk',
+        'codex-sdk',
       ].includes(providerType || '')
     ) {
       // Custom providers validation
