@@ -2143,7 +2143,7 @@ export function generateVarCombinations(
   vars: Record<string, string | string[] | unknown>,
 ): Record<string, VarValue>[] {
   const keys = Object.keys(vars);
-  const combinations: Record<string, VarValue>[] = [{}];
+  let combinations: Record<string, VarValue>[] = [{}];
 
   for (const key of keys) {
     let values: Array<string | object> = [];
@@ -2182,8 +2182,7 @@ export function generateVarCombinations(
       }
     }
 
-    combinations.length = 0;
-    combinations.push(...newCombinations);
+    combinations = newCombinations;
   }
 
   return combinations;
