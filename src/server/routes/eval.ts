@@ -1,11 +1,13 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import { HUMAN_ASSERTION_TYPE } from '../../constants';
+import { getDb } from '../../database/index';
 import { getUserEmail, setUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
 import Eval, { EvalQueries } from '../../models/eval';
+import { notifyEvaluationChanged } from '../../models/evalMutation';
 import EvalResult from '../../models/evalResult';
 import { evaluateWithSource } from '../../node';
+import { applyManualRating, updateManualRatingMetrics } from '../../presentation/manualRating';
 import { EvalSchemas } from '../../types/api/eval';
 import { deleteEval, deleteEvals, updateResult, writeResultsToDatabase } from '../../util/database';
 import {
@@ -737,64 +739,40 @@ evalRouter.post(
         return;
       }
 
-      // Capture the current state before we change it
-      const hasExistingManualOverride = Boolean(
-        result.gradingResult?.componentResults?.some(
-          (r) => r.assertion?.type === HUMAN_ASSERTION_TYPE,
-        ),
-      );
-      const successChanged = result.success !== gradingResult.pass;
-      const scoreChange = gradingResult.score - result.score;
+      const previous = {
+        pass: result.success,
+        score: result.score,
+        failureReason: result.failureReason,
+        error: result.error,
+        gradingResult: result.gradingResult,
+      };
+      const rated = applyManualRating(previous, {
+        action: bodyResult.data.action ?? 'rate',
+        pass: gradingResult.pass,
+        score: gradingResult.score,
+        comment: gradingResult.comment,
+      });
 
-      // Update the result
-      result.gradingResult = gradingResult;
-      result.success = gradingResult.pass;
-      result.score = gradingResult.score;
-
-      // Update the prompt metrics
       const prompt = eval_.prompts[result.promptIdx];
       invariant(prompt, 'Prompt not found');
       if (!prompt.metrics) {
-        logger.error(
-          `[${id}] This is not normal. Prompt metrics not found for prompt ${result.promptIdx}`,
-        );
-
         res.status(400).json({ error: 'Prompt metrics not found' });
         return;
       }
 
-      if (successChanged) {
-        if (result.success) {
-          // Result changed from fail to pass
-          prompt.metrics.testPassCount += 1;
-          prompt.metrics.testFailCount -= 1;
-          prompt.metrics.assertPassCount += 1;
-          prompt.metrics.score += scoreChange;
-          if (hasExistingManualOverride) {
-            // If there was an existing manual override, we need to decrement the assertFailCount because it changed from fail to pass
-            prompt.metrics.assertFailCount -= 1;
-          }
-        } else {
-          prompt.metrics.testPassCount -= 1;
-          prompt.metrics.testFailCount += 1;
-          prompt.metrics.assertFailCount += 1;
-          prompt.metrics.score += scoreChange;
-          if (hasExistingManualOverride) {
-            // If there was an existing manual override, we need to decrement the assertPassCount because it changed from pass to fail
-            prompt.metrics.assertPassCount -= 1;
-          }
-        }
-      } else if (!hasExistingManualOverride) {
-        // Nothing changed, so the user just added an assertion
-        if (result.success) {
-          prompt.metrics.assertPassCount += 1;
-        } else {
-          prompt.metrics.assertFailCount += 1;
-        }
-      }
+      result.gradingResult = rated.gradingResult;
+      result.success = rated.pass;
+      result.score = rated.score;
+      result.failureReason = rated.failureReason;
+      result.error = rated.error ?? null;
+      prompt.metrics = updateManualRatingMetrics(prompt.metrics, previous, rated);
 
-      await result.save();
-      await eval_.save();
+      const db = await getDb();
+      await db.transaction(async (tx) => {
+        await result.save(tx);
+        await eval_.save(tx);
+      });
+      notifyEvaluationChanged(evalId);
 
       res.json(EvalSchemas.SubmitRating.Response.parse(result));
     } catch (error) {

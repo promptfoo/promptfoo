@@ -278,10 +278,7 @@ describe('handleContextFaithfulness', () => {
     expect(result.metadata).toEqual({ context: 'test context' });
   });
 
-  it('should not invert grader errors for not-context-faithfulness', async () => {
-    // A grading provider that errored produced no verdict to negate. Without
-    // the `graderError` guard the inversion would turn an outage into a
-    // spurious pass, so the failure has to propagate verbatim.
+  it.each([false, true])('preserves grader errors with inverse=%s', async (inverse) => {
     const mockResult = {
       pass: false,
       score: 0,
@@ -293,13 +290,14 @@ describe('handleContextFaithfulness', () => {
 
     const result = await handleContextFaithfulness({
       ...createFaithfulnessParams('test output'),
-      assertion: { type: 'not-context-faithfulness' },
+      assertion: { type: inverse ? 'not-context-faithfulness' : 'context-faithfulness' },
       test: { vars: { query: 'test query' }, options: {} },
-      inverse: true,
+      inverse,
     } as any);
 
     expect(result.pass).toBe(false);
     expect(result.score).toBe(0);
     expect(result.reason).toBe('grading provider failed');
+    expect(result.metadata).toEqual({ graderError: true, context: 'test context' });
   });
 });

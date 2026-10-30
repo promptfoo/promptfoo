@@ -83,10 +83,17 @@ export class InMemoryEvaluationStore
     return this.failedResultsByIndex.has(getResultIndexKey(result));
   }
 
-  async readCompletedIndexPairs(options?: { excludeErrors?: boolean }): Promise<Set<string>> {
+  async readCompletedIndexPairs(options?: {
+    excludeErrors?: boolean;
+    excludeResultIds?: string[];
+  }): Promise<Set<string>> {
     const completedPairs = new Set<string>();
+    const excluded = new Set(options?.excludeResultIds);
     for (const result of this.evaluation.results) {
-      if (options?.excludeErrors && result.failureReason === ERROR_FAILURE_REASON) {
+      if (
+        (options?.excludeErrors && result.failureReason === ERROR_FAILURE_REASON) ||
+        (result.id && excluded.has(result.id))
+      ) {
         continue;
       }
       completedPairs.add(getResultIndexKey(result));

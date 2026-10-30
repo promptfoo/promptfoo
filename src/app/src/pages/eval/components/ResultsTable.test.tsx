@@ -3625,6 +3625,69 @@ describe('ResultsTable handleRating - Toggle off (null isPass) behavior', () => 
     expect(finalScore).toBe(0.5);
   });
 
+  it.each([3, 4])('restores grader errors and counts in a v%s eval', async (version) => {
+    const user = userEvent.setup();
+    const mockTable = createMockTableWithHumanAssertion();
+    Object.assign(mockTable.head.prompts[0], {
+      metrics: {
+        score: 1,
+        testPassCount: 1,
+        testFailCount: 0,
+        testErrorCount: 0,
+        assertPassCount: 1,
+        assertFailCount: 0,
+      },
+    });
+    const output = mockTable.body[0].outputs[0];
+    Object.assign(output.gradingResult.componentResults[1], {
+      metadata: {
+        originalResult: {
+          pass: false,
+          score: 0.35,
+          failureReason: 2,
+          error: 'Grader unavailable',
+          reason: 'Grader unavailable',
+        },
+      },
+    });
+    vi.mocked(useTableStore).mockImplementation(() =>
+      createTableStore({
+        version,
+        inComparisonMode: false,
+        setTable: mockSetTable,
+        table: mockTable,
+        isFetching: false,
+        filteredResultsCount: 1,
+      }),
+    );
+    renderWithProviders(<ResultsTable {...defaultProps} />);
+    await user.click(screen.getByRole('button', { name: 'Clear rating' }));
+    await waitFor(() => expect(mockCallApi).toHaveBeenCalled());
+    expect(mockSetTable.mock.calls[0][0].body[0].outputs[0]).toMatchObject({
+      pass: false,
+      score: 0.35,
+      failureReason: 2,
+      error: 'Grader unavailable',
+    });
+    expect(mockSetTable.mock.calls[0][0].head.prompts[0].metrics).toMatchObject({
+      testPassCount: 0,
+      testFailCount: 0,
+      testErrorCount: 1,
+      assertPassCount: 0,
+    });
+    const payload = JSON.parse(mockCallApi.mock.calls[0][1].body);
+    if (version === 4) {
+      expect(payload).toMatchObject({
+        action: 'clear',
+        pass: false,
+        score: 0.35,
+        reason: 'Grader unavailable',
+      });
+    } else {
+      expect(payload.table).toEqual(mockSetTable.mock.calls[0][0]);
+    }
+  });
+
   it('persists a cleared human rating without manual override fields', async () => {
     const user = userEvent.setup();
     const mockTable = createMockTableWithHumanAssertion();

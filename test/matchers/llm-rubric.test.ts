@@ -1323,8 +1323,7 @@ describe('matchesLlmRubric', () => {
     await expect(matchesLlmRubric(expected, output, options)).resolves.toEqual({
       pass: false,
       score: 0,
-      reason:
-        'llm-rubric produced malformed response - output must be string or object. Output: 42',
+      reason: 'llm-rubric produced malformed response - output must be string or object',
       metadata: { graderError: true },
       tokensUsed: {
         total: 10,
@@ -1411,8 +1410,7 @@ describe('matchesLlmRubric', () => {
     await expect(matchesLlmRubric(expected, output, options)).resolves.toEqual({
       pass: false,
       score: 0,
-      reason:
-        'llm-rubric produced malformed response - output must be string or object. Output: [{"pass":false,"score":0,"reason":"bad"}]',
+      reason: 'llm-rubric produced malformed response - output must be string or object',
       metadata: { graderError: true },
       tokensUsed: {
         total: 10,
