@@ -3,6 +3,7 @@ import cliState from './cliState';
 import { codeScansCommand } from './codeScan/index';
 import { authCommand } from './commands/auth';
 import { cacheCommand } from './commands/cache';
+import { compareCommand } from './commands/compare';
 import { configCommand } from './commands/config';
 import { debugCommand } from './commands/debug';
 import { deleteCommand } from './commands/delete';
@@ -97,6 +98,7 @@ async function main() {
   authCommand(program);
   cacheCommand(program);
   codeScansCommand(program);
+  compareCommand(program);
   configCommand(program);
   debugCommand(program, defaultConfig, defaultConfigPath);
   deleteCommand(program);
