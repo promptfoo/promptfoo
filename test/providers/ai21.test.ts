@@ -137,6 +137,33 @@ describe('AI21ChatCompletionProvider', () => {
     expect(result.error).toContain('Malformed response data');
   });
 
+  it('preserves an empty completion for assertion grading', async () => {
+    vi.mocked(fetchWithCache).mockResolvedValue(createMockChatResponse(''));
+    const provider = new AI21ChatCompletionProvider('jamba-mini', createApiKeyOptions());
+
+    const result = await provider.callApi('Return no text');
+
+    expect(result.output).toBe('');
+    expect(result.error).toBeUndefined();
+    expect(result.tokenUsage).toEqual({ total: 10, prompt: 5, completion: 5 });
+    expect(result.cost).toBeDefined();
+  });
+
+  it.each([null, undefined, 0, false])(
+    'rejects malformed completion content: %s',
+    async (content) => {
+      vi.mocked(fetchWithCache).mockResolvedValue(
+        createMockFetchResponse({ choices: [{ message: { content } }] }),
+      );
+      const provider = new AI21ChatCompletionProvider('jamba-mini', createApiKeyOptions());
+
+      const result = await provider.callApi('Hello');
+
+      expect(result.error).toContain('Malformed response data');
+      expect(result.output).toBeUndefined();
+    },
+  );
+
   it('should handle network errors', async () => {
     vi.mocked(fetchWithCache).mockRejectedValue(new Error('Network error'));
 
