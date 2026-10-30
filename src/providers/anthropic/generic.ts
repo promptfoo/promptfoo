@@ -16,7 +16,12 @@ import type { ClientOptions } from '@anthropic-ai/sdk';
 import type { Cache } from 'cache-manager';
 
 import type { EnvOverrides } from '../../types/env';
-import type { ApiProvider, CallApiContextParams, ProviderResponse } from '../../types/index';
+import type {
+  ApiProvider,
+  CallApiContextParams,
+  ProviderOptions,
+  ProviderResponse,
+} from '../../types/index';
 import type { ClaudeCodeOAuthCredential } from './claudeCodeAuth';
 import type { AnthropicBaseOptions } from './types';
 
@@ -227,12 +232,7 @@ export class AnthropicGenericProvider implements ApiProvider {
 
   constructor(
     modelName: string,
-    options: {
-      config?: AnthropicBaseOptions;
-      id?: string;
-      label?: string;
-      env?: EnvOverrides;
-    } = {},
+    options: Pick<ProviderOptions<AnthropicBaseOptions>, 'config' | 'id' | 'label' | 'env'> = {},
   ) {
     const { config, id, label, env } = options;
     this.env = env;

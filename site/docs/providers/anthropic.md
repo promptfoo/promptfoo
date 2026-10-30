@@ -8,6 +8,8 @@ description: 'Configure Anthropic Claude models in Promptfoo: authentication, to
 
 This provider supports the [Anthropic Claude](https://www.anthropic.com/claude) series of models.
 
+For TypeScript or API authoring, `promptfoo/contracts` exports `AnthropicProviderOptionsInputSchema` and `AnthropicProviderOptionsInput` for explicit `anthropic:messages:<model>` and legacy `anthropic:completion:<model>` routes. Each config schema also exports a matching `*InputJsonSchema`. These portable contracts check serializable input without resolving credentials, connecting to MCP servers, loading files, or applying execution defaults; runtime and YAML editor validation remain unchanged. Shorthand model IDs and Agent SDK providers use their existing runtime configuration paths.
+
 > **Note:** Anthropic models can also be accessed through [Azure AI Foundry](/docs/providers/azure/#using-claude-models), [AWS Bedrock](/docs/providers/aws-bedrock/), and [Google Vertex](/docs/providers/vertex/).
 
 :::tip Agentic Evals
