@@ -27,6 +27,8 @@ export * from './types/index';
 // via the Node.js package.
 export { isTransformFunction } from './types/transform';
 export { ConfigResolutionError } from './util/config/load';
+// EvalPort interchange converters (test cases, graders, suites, result sets)
+export * from './util/evalport';
 
 // Extension hook context types for users writing custom extensions
 export type {
