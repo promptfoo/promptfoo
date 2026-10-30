@@ -1754,18 +1754,18 @@ describe.each(['gpt-6-sol', 'gpt-6-luna'])('%s requests', (model) => {
         const config = { passthrough: { reasoning: invalid }, temperature: 0.3 };
         await expect(
           new OpenAiResponsesProvider(name, { config }).getOpenAiBody(prompt.raw),
-        ).rejects.toThrow('GPT-6 Responses reasoning must be an object or null');
+        ).rejects.toThrow('Responses reasoning must be an object or null');
         await expect(
           new OpenAiResponsesProvider(name).getOpenAiBody(prompt.raw, {
             vars: {},
             prompt: { ...prompt, config },
           }),
-        ).rejects.toThrow('GPT-6 Responses reasoning must be an object or null');
+        ).rejects.toThrow('Responses reasoning must be an object or null');
         await expect(
           new OpenAiResponsesProvider(name, {
             config: { reasoning: (() => invalid) as any },
           }).getOpenAiBody(prompt.raw, { vars: {}, prompt }),
-        ).rejects.toThrow('GPT-6 Responses reasoning must be an object or null');
+        ).rejects.toThrow('Responses reasoning must be an object or null');
       }
     },
   );
