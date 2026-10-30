@@ -419,6 +419,43 @@ describe('Provider Test Functions', () => {
     });
 
     describe('failed connectivity tests', () => {
+      it.each(['evaluation', 'provider response'] as const)(
+        'does not report success when the %s error is missed by remote analysis',
+        async (errorSource) => {
+          mockSummary.results = [
+            {
+              promptIdx: 0,
+              testIdx: 0,
+              testCase: {} as any,
+              promptId: 'test-prompt-id',
+              provider: { id: 'test-provider' },
+              prompt: { raw: 'Hello World!', label: 'Connectivity Test' },
+              vars: { sessionId: 'test-uuid-1234' },
+              response: {
+                error: errorSource === 'provider response' ? 'Connection timeout' : undefined,
+              },
+              error: errorSource === 'evaluation' ? 'Connection timeout' : null,
+              failureReason: ResultFailureReason.ERROR,
+              success: false,
+              score: 0,
+              latencyMs: 5000,
+              gradingResult: null,
+              namedScores: {},
+            },
+          ];
+          (fetchWithProxy as Mock).mockResolvedValue({
+            ok: true,
+            json: vi.fn().mockResolvedValue(createSuccessfulProbeResult()),
+          });
+
+          const result = await testProviderConnectivity({ provider: mockProvider });
+
+          expect(result.success).toBe(false);
+          expect(result.error).toBe('Connection timeout');
+          expect(result.message).toContain('Connection timeout');
+        },
+      );
+
       it('should handle provider call failure', async () => {
         const mockResult: EvaluateResult = {
           promptIdx: 0,
