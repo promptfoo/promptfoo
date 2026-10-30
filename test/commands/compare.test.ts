@@ -165,6 +165,73 @@ describe('compareResults', () => {
   });
 });
 
+describe('compareResults row identity', () => {
+  it('falls back to the provider ID, then to "unknown"', () => {
+    const comparison = compareResults(
+      side('a', [
+        result('t1', 'x', 'pass', { provider: { id: 'openai:gpt' } }),
+        result('t2', 'x', 'pass', { provider: undefined as any }),
+      ]),
+      side('b', [
+        result('t1', 'x', 'fail', { provider: { id: 'openai:gpt' } }),
+        result('t2', 'x', 'fail', { provider: undefined as any }),
+      ]),
+    );
+
+    expect(comparison.changes.map((change) => change.provider)).toEqual(['openai:gpt', 'unknown']);
+  });
+
+  it('uses the row description when the test case has none', () => {
+    const comparison = compareResults(
+      side('a', [result(undefined, 'p', 'pass', { description: 'from row' })]),
+      side('b', [result(undefined, 'p', 'fail', { description: 'from row' })]),
+    );
+
+    expect(comparison.changes[0].test).toBe('from row');
+  });
+
+  it('ignores latencies that are not finite numbers', () => {
+    const comparison = compareResults(
+      side('a', [
+        result('t1', 'p', 'pass', { latencyMs: Number.NaN }),
+        result('t2', 'p', 'pass', { latencyMs: 40 }),
+      ]),
+      side('b', [result('t1', 'p', 'pass'), result('t2', 'p', 'pass')]),
+    );
+
+    expect(comparison.a.medianLatencyMs).toBe(40);
+  });
+});
+
+describe('renderComparison edge cases', () => {
+  it('shows placeholders when no row is graded on both evals', () => {
+    const comparison = compareResults(
+      side('a', [result('t1', 'p', 'error')]),
+      side('b', [result('t1', 'p', 'pass')]),
+    );
+
+    expect(comparison).toMatchObject({
+      gradedOnBoth: 0,
+      a: { passRate: null, meanScore: null, medianLatencyMs: null, errors: 1 },
+    });
+    const text = renderComparison(comparison);
+    expect(text).toContain('0 rows graded on both evals.');
+    expect(text).toContain('0 changed outcomes (A → B):');
+  });
+
+  it('names the prompt when the evals have several', () => {
+    const text = renderComparison(
+      compareResults(
+        side('a', [result('t1', 'p', 'pass'), result('t1', 'p', 'pass', { promptIdx: 1 })]),
+        side('b', [result('t1', 'p', 'fail'), result('t1', 'p', 'fail', { promptIdx: 1 })]),
+      ),
+    );
+
+    expect(text).toMatch(/pass → fail.*p prompt 0 {2}t1/);
+    expect(text).toMatch(/pass → fail.*p prompt 1 {2}t1/);
+  });
+});
+
 describe('compare command', () => {
   let tempDir: string;
 

@@ -179,10 +179,10 @@ export function renderComparison(comparison: EvalComparison): string {
     line('mean score', a.meanScore?.toFixed(3) ?? '-', b.meanScore?.toFixed(3) ?? '-'),
     line('median latency', latency(a.medianLatencyMs), latency(b.medianLatencyMs)),
   ];
-  const providers = [...new Set([...Object.keys(a.byProvider), ...Object.keys(b.byProvider)])];
-  for (const provider of providers.sort()) {
-    const sideA = a.byProvider[provider] ?? { graded: 0, pass: 0 };
-    const sideB = b.byProvider[provider] ?? { graded: 0, pass: 0 };
+  // Both sides count the same rows, so they list the same providers.
+  for (const provider of Object.keys(a.byProvider).sort()) {
+    const sideA = a.byProvider[provider];
+    const sideB = b.byProvider[provider];
     table.push(
       line(
         `  ${provider}`,
