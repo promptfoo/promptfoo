@@ -46,7 +46,7 @@ describe('resolveTestsWatchPaths', () => {
     ]);
   });
 
-  it('expands a glob, because chokidar v5 does not', () => {
+  it('expands a glob, because chokidar does not', () => {
     // Exactly the matches, and nothing else: glob order is not guaranteed.
     const watched = resolve('file://tests/*.yaml' as TestSuiteConfig['tests']);
     expect([...watched].sort()).toEqual([

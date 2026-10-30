@@ -1238,7 +1238,12 @@ async function doEvalWithEnv(
         const watchPaths = Array.from(
           new Set([...configPaths, ...promptPaths, ...providerPaths, ...varPaths]),
         );
-        const watcher = chokidar.watch(watchPaths, { ignored: /^\./, persistent: true });
+        // Editor saves must produce a change event even when CHOKIDAR_USEPOLLING is set.
+        const watcher = chokidar.watch(watchPaths, {
+          atomic: true,
+          ignored: /^\./,
+          persistent: true,
+        });
         // Library callers own their own process lifetime, so only the CLI blocks here.
         if (isCliInvocation) {
           watchTermination = watchUntilTerminated(watcher);
