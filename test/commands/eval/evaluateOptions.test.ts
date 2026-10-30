@@ -9,11 +9,22 @@ import logger from '../../../src/logger';
 import Eval from '../../../src/models/eval';
 import { doEval } from '../../../src/node/doEval';
 import * as retryModule from '../../../src/node/retry';
+import { ResultFailureReason } from '../../../src/types/index';
+import * as configLoadModule from '../../../src/util/config/load';
 import { isSafeMode } from '../../../src/util/safeMode';
 import { mockProcessEnv } from '../../util/utils';
 import type { Command } from 'commander';
 
-import type { CommandLineOptions, EvaluateOptions, TestSuite } from '../../../src/types/index';
+import type {
+  CommandLineOptions,
+  EvaluateOptions,
+  TestCase,
+  TestSuite,
+} from '../../../src/types/index';
+import type {
+  InternalEvaluateOptions,
+  PreparedHistoricalCandidate,
+} from '../../../src/types/internal';
 
 vi.mock('../../../src/evaluator', async (importOriginal) => {
   return {
@@ -946,6 +957,1595 @@ describe('evaluateOptions behavior', () => {
       expect(testSuite.tests).toHaveLength(1);
       expect(testSuite.tests?.[0].metadata).toEqual({ category: 'keep' });
       expect(testSuite.scenarios).toBeUndefined();
+    });
+
+    it('should filter an implicit default test by exact inherited metadata', async () => {
+      const tempConfig = writeTempConfig(tmpDir, 'test-filter-implicit-default-exact.yaml', {
+        providers: ['echo'],
+        prompts: ['Hello'],
+        defaultTest: {
+          metadata: { category: 'keep' },
+          assert: [{ type: 'contains', value: 'Hello' }],
+        },
+      });
+
+      await doEval(
+        {
+          table: false,
+          write: false,
+          config: [tempConfig],
+          filterMetadataExact: 'category=keep',
+        },
+        {},
+        undefined,
+        {},
+      );
+
+      const testSuite = evaluateMock.mock.calls.at(-1)?.[0] as TestSuite;
+      expect(testSuite.tests).toHaveLength(1);
+      expect(testSuite.tests?.[0].metadata).toEqual({ category: 'keep' });
+    });
+
+    it('should prefer the CLI exact metadata filter over its configured value', async () => {
+      const tempConfig = writeTempConfig(tmpDir, 'test-filter-metadata-exact-precedence.yaml', {
+        commandLineOptions: { filterMetadataExact: 'category=unit' },
+        providers: ['echo'],
+        prompts: ['Hello {{input}}'],
+        tests: [
+          { vars: { input: 'unit' }, metadata: { category: 'unit' } },
+          { vars: { input: 'integration' }, metadata: { category: 'integration' } },
+        ],
+      });
+
+      await doEval(
+        {
+          table: false,
+          write: false,
+          config: [tempConfig],
+          filterMetadataExact: ['category=integration'],
+        },
+        {},
+        undefined,
+        {},
+      );
+
+      const testSuite = evaluateMock.mock.calls.at(-1)?.[0] as TestSuite;
+      expect(testSuite.tests?.map((test) => test.vars?.input)).toEqual(['integration']);
+    });
+
+    it.each([
+      ['filterFailing', ResultFailureReason.ASSERT],
+      ['filterFailingOnly', ResultFailureReason.ASSERT],
+      ['filterErrorsOnly', ResultFailureReason.ERROR],
+    ] as const)(
+      'should not reuse a different top-level metadata case with %s',
+      async (resultFilter, failureReason) => {
+        const tempConfig = writeTempConfig(tmpDir, 'test-exact-top-level-results.yaml', {
+          providers: ['echo'],
+          prompts: ['Hello {{input}}'],
+          tests: [
+            { vars: { input: 'same' }, metadata: { id: 'A' } },
+            { vars: { input: 'same' }, metadata: { id: 'B' } },
+          ],
+        });
+        const resultsPath = path.join(tmpDir, 'test-exact-top-level-results.json');
+        fs.writeFileSync(
+          resultsPath,
+          JSON.stringify({
+            results: {
+              results: [
+                {
+                  success: false,
+                  failureReason,
+                  vars: { input: 'same' },
+                  testCase: { vars: { input: 'same' }, metadata: { id: 'A' } },
+                },
+              ],
+            },
+          }),
+        );
+
+        await doEval(
+          {
+            table: false,
+            write: false,
+            config: [tempConfig],
+            filterMetadataExact: 'id=B',
+            [resultFilter]: resultsPath,
+          },
+          {},
+          undefined,
+          {},
+        );
+
+        const testSuite = evaluateMock.mock.calls.at(-1)?.[0] as TestSuite;
+        expect(testSuite.tests?.map((test) => test.metadata?.id)).toEqual(['B']);
+        const selection = (evaluateMock.mock.calls.at(-1)?.[2] as InternalEvaluateOptions)
+          .exactHistoricalSelection;
+        expect(selection).toBeDefined();
+        expect(
+          await selection?.select(
+            [{ test: testSuite.tests![0], source: { kind: 'top-level', testIndex: 0 } }],
+            testSuite,
+          ),
+        ).toEqual([]);
+      },
+    );
+
+    it('defers historical selection until scenario vars have been transformed', async () => {
+      const configFile = writeTempConfig(tmpDir, 'scenario-transformed-history.yaml', {
+        providers: ['echo'],
+        prompts: ['Hello {{variant}}'],
+        scenarios: [
+          {
+            config: [
+              { vars: { variant: 'a' }, metadata: { role: 'keep' } },
+              { vars: { variant: 'b' }, metadata: { role: 'keep' } },
+            ],
+            tests: [
+              {
+                options: { transformVars: 'return { ...vars, variant: vars.variant + "!" }' },
+              },
+            ],
+          },
+        ],
+      });
+      const resultsPath = path.join(tmpDir, 'scenario-transformed-history.json');
+      fs.writeFileSync(
+        resultsPath,
+        JSON.stringify({
+          results: {
+            results: [
+              {
+                success: false,
+                failureReason: ResultFailureReason.ASSERT,
+                vars: { variant: 'a!' },
+                testCase: {
+                  vars: { variant: 'a!' },
+                  metadata: { role: 'keep', conversationId: '__scenario_0__' },
+                },
+              },
+            ],
+          },
+        }),
+      );
+
+      await doEval(
+        {
+          table: false,
+          write: false,
+          config: [configFile],
+          filterMetadataExact: 'role=keep',
+          filterFailing: resultsPath,
+        },
+        {},
+        undefined,
+        {},
+      );
+
+      const suite = evaluateMock.mock.calls.at(-1)?.[0] as TestSuite;
+      expect(suite.scenarios?.map((scenario) => scenario.tests?.length)).toEqual([1, 1]);
+      expect(evaluateMock.mock.calls.at(-1)?.[2]).toHaveProperty('exactHistoricalSelection');
+    });
+
+    it('applies the top-level range after beforeAll removes scenarios', async () => {
+      const configFile = writeTempConfig(tmpDir, 'exact-history-remove-scenario.yaml', {
+        providers: ['echo'],
+        prompts: ['Hello {{id}}'],
+        tests: ['A', 'B'].map((id) => ({ vars: { id }, metadata: { id } })),
+        scenarios: [{ config: [{}], tests: [{ vars: { id: 'C' }, metadata: { id: 'C' } }] }],
+      });
+      const resultsPath = path.join(tmpDir, 'exact-history-remove-scenario.json');
+      fs.writeFileSync(
+        resultsPath,
+        JSON.stringify({
+          results: {
+            results: ['A', 'B'].map((id) => ({
+              success: false,
+              failureReason: ResultFailureReason.ASSERT,
+              vars: { id },
+              testCase: { vars: { id }, metadata: { id } },
+            })),
+          },
+        }),
+      );
+      await doEval(
+        {
+          table: false,
+          write: false,
+          config: [configFile],
+          filterMetadataExact: 'id=A,B,C',
+          filterFailing: resultsPath,
+          filterRange: '1:2',
+        },
+        {},
+        undefined,
+        {},
+      );
+      const suite = evaluateMock.mock.calls.at(-1)?.[0] as TestSuite;
+      const selection = (evaluateMock.mock.calls.at(-1)?.[2] as InternalEvaluateOptions)
+        .exactHistoricalSelection!;
+      const postHookSuite = { ...suite, scenarios: [] };
+      const candidates: PreparedHistoricalCandidate[] = (suite.tests ?? []).map(
+        (test, testIndex) => ({
+          source: { kind: 'top-level', testIndex },
+          test,
+        }),
+      );
+      expect(
+        (await selection.select(candidates, postHookSuite)).map(
+          (candidate) => candidate.test.vars?.id,
+        ),
+      ).toEqual(['B']);
+    });
+
+    it('keeps a seeded sample tied to the original scenario after beforeAll clones it', async () => {
+      const configFile = writeTempConfig(tmpDir, 'exact-history-cloned-scenarios.yaml', {
+        providers: ['echo'],
+        prompts: ['Hello {{variant}} {{caseId}}'],
+        scenarios: [
+          {
+            config: ['A', 'B'].map((variant) => ({
+              vars: { variant },
+              metadata: { role: 'keep' },
+            })),
+            tests: ['one', 'two'].map((caseId) => ({ vars: { caseId } })),
+          },
+        ],
+      });
+      const resultsPath = path.join(tmpDir, 'exact-history-cloned-scenarios.json');
+      fs.writeFileSync(
+        resultsPath,
+        JSON.stringify({
+          results: {
+            results: ['A', 'B'].flatMap((variant, scenarioIndex) =>
+              ['one', 'two'].map((caseId) => ({
+                success: false,
+                failureReason: ResultFailureReason.ASSERT,
+                vars: { variant, caseId },
+                testCase: {
+                  vars: { variant, caseId },
+                  metadata: { role: 'keep', conversationId: `__scenario_${scenarioIndex}__` },
+                },
+              })),
+            ),
+          },
+        }),
+      );
+      await doEval(
+        {
+          table: false,
+          write: false,
+          config: [configFile],
+          filterMetadataExact: 'role=keep',
+          filterFailing: resultsPath,
+          filterSample: 1,
+          filterSampleSeed: 0,
+        },
+        {},
+        undefined,
+        {},
+      );
+      const suite = evaluateMock.mock.calls.at(-1)?.[0] as TestSuite;
+      const selection = (evaluateMock.mock.calls.at(-1)?.[2] as InternalEvaluateOptions)
+        .exactHistoricalSelection!;
+      const candidates: PreparedHistoricalCandidate[] = (suite.scenarios ?? []).flatMap(
+        (scenario, scenarioIndex) =>
+          scenario.tests.map((test, testIndex) => ({
+            source: { kind: 'scenario', scenarioIndex, variantIndex: 0, testIndex },
+            test: {
+              ...test,
+              vars: { ...scenario.config[0].vars, ...test.vars },
+              metadata: {
+                ...scenario.config[0].metadata,
+                ...test.metadata,
+                conversationId: `__scenario_${scenarioIndex}__`,
+              },
+            },
+          })),
+      );
+      const selectedPairs = async (postHookSuite: TestSuite) =>
+        (await selection.select(candidates, postHookSuite)).map((candidate) => [
+          candidate.test.vars?.variant,
+          candidate.test.vars?.caseId,
+        ]);
+      const expected = await selectedPairs(suite);
+      expect(expected).toHaveLength(2);
+      expect(
+        await selectedPairs({
+          ...suite,
+          scenarios: suite.scenarios?.map((scenario) => ({
+            ...scenario,
+            config: [...scenario.config],
+            tests: [...scenario.tests],
+          })),
+        }),
+      ).toEqual(expected);
+      expect(
+        await selectedPairs({
+          ...suite,
+          scenarios: JSON.parse(JSON.stringify(suite.scenarios)),
+        }),
+      ).toEqual(expected);
+    });
+
+    it('does not extract a stale transformed top-level row with inherited default metadata', async () => {
+      const targetPath = path.join(tmpDir, 'exact-history-current-target.cjs');
+      fs.writeFileSync(
+        targetPath,
+        "module.exports = class { id() { return 'qa-target-B'; } async callApi() { return { output: 'B' }; } };",
+      );
+      const configFile = writeTempConfig(tmpDir, 'exact-history-default-metadata.yaml', {
+        providers: ['echo'],
+        prompts: ['Hello {{id}}'],
+        defaultTest: {
+          metadata: { role: 'keep' },
+          options: { transformVars: 'return { id: vars.id + "?" }' },
+        },
+        tests: [
+          {
+            vars: { id: 'a' },
+            provider: { id: `file://${targetPath}`, label: 'shared-target' },
+          },
+        ],
+      });
+      const resultsPath = path.join(tmpDir, 'exact-history-default-metadata.json');
+      const writeResult = (metadata: Record<string, unknown>, targetId = 'qa-target-A') =>
+        fs.writeFileSync(
+          resultsPath,
+          JSON.stringify({
+            results: {
+              results: [
+                {
+                  success: false,
+                  failureReason: ResultFailureReason.ASSERT,
+                  vars: { id: 'a!' },
+                  testCase: {
+                    vars: { id: 'a!' },
+                    metadata,
+                    provider: { id: targetId, label: 'shared-target' },
+                  },
+                },
+              ],
+            },
+          }),
+        );
+      writeResult({ role: 'keep' });
+      await doEval(
+        {
+          table: false,
+          write: false,
+          config: [configFile],
+          filterMetadataExact: 'role=keep',
+          filterFailing: resultsPath,
+        },
+        {},
+        undefined,
+        {},
+      );
+      const suite = evaluateMock.mock.calls.at(-1)?.[0] as TestSuite;
+      const selection = (evaluateMock.mock.calls.at(-1)?.[2] as InternalEvaluateOptions)
+        .exactHistoricalSelection!;
+      const prepared: PreparedHistoricalCandidate[] = [
+        {
+          source: { kind: 'top-level', testIndex: 0 },
+          test: {
+            ...suite.tests![0],
+            vars: { id: 'a?' },
+            options: {
+              ...(typeof suite.defaultTest === 'object' ? suite.defaultTest.options : undefined),
+            },
+          },
+        },
+      ];
+      expect(await selection.select(prepared, suite)).toEqual([]);
+
+      // Extra runtime metadata cannot prove that the old target is safe to reuse.
+      writeResult({ role: 'keep', pluginId: 'runtime-generated' });
+      await expect(selection.select(prepared, suite)).rejects.toThrow(
+        'one current singular provider',
+      );
+
+      // A runtime case using the current target may still be selected.
+      writeResult({ role: 'keep', pluginId: 'runtime-generated' }, 'qa-target-B');
+      expect((await selection.select(prepared, suite)).map((item) => item.test.vars?.id)).toEqual([
+        'a!',
+      ]);
+    });
+
+    it('should retain distinct failed top-level tests that share vars', async () => {
+      const tempConfig = writeTempConfig(tmpDir, 'test-exact-top-level-shared-vars.yaml', {
+        providers: ['echo'],
+        prompts: ['Hello {{input}}'],
+        tests: [
+          { vars: { input: 'same' }, metadata: { id: 'A' } },
+          { vars: { input: 'same' }, metadata: { id: 'B' } },
+        ],
+      });
+      const resultsPath = path.join(tmpDir, 'test-exact-top-level-shared-vars.json');
+      fs.writeFileSync(
+        resultsPath,
+        JSON.stringify({
+          results: {
+            results: ['A', 'B'].map((id) => ({
+              success: false,
+              failureReason: id === 'A' ? ResultFailureReason.ASSERT : ResultFailureReason.ERROR,
+              vars: { input: 'same' },
+              testCase: { vars: { input: 'same' }, metadata: { id } },
+            })),
+          },
+        }),
+      );
+
+      await doEval(
+        {
+          table: false,
+          write: false,
+          config: [tempConfig],
+          filterMetadataExact: 'id=A,B',
+          filterFailingOnly: resultsPath,
+          filterErrorsOnly: resultsPath,
+        },
+        {},
+        undefined,
+        {},
+      );
+
+      const testSuite = evaluateMock.mock.calls.at(-1)?.[0] as TestSuite;
+      expect(testSuite.tests?.map((test) => test.metadata?.id)).toEqual(['A', 'B']);
+    });
+
+    it('should extract a top-level runtime test from results when there are no authored tests', async () => {
+      const tempConfig = writeTempConfig(tmpDir, 'test-exact-top-level-runtime.yaml', {
+        providers: ['echo'],
+        prompts: ['Hello {{input}}'],
+        tests: [],
+        scenarios: [],
+      });
+      const resultsPath = path.join(tmpDir, 'test-exact-top-level-runtime.json');
+      fs.writeFileSync(
+        resultsPath,
+        JSON.stringify({
+          results: {
+            results: [
+              {
+                success: false,
+                vars: { input: 'runtime' },
+                testCase: { vars: { input: 'runtime' }, metadata: { id: 'generated' } },
+              },
+            ],
+          },
+        }),
+      );
+
+      await doEval(
+        {
+          table: false,
+          write: false,
+          config: [tempConfig],
+          filterMetadataExact: 'id=generated',
+          filterFailing: resultsPath,
+        },
+        {},
+        undefined,
+        {},
+      );
+
+      const testSuite = evaluateMock.mock.calls.at(-1)?.[0] as TestSuite;
+      const selection = (evaluateMock.mock.calls.at(-1)?.[2] as InternalEvaluateOptions)
+        .exactHistoricalSelection;
+      expect(selection).toBeDefined();
+      expect(
+        (await selection?.select([], testSuite))?.map((candidate) => candidate.test.vars?.input),
+      ).toEqual(['runtime']);
+    });
+
+    it('keeps synthetic scenario routing within current and stored provider and prompt selectors', async () => {
+      const configFile = writeTempConfig(tmpDir, 'exact-history-synthetic-routing.yaml', {
+        providers: [
+          { id: 'echo', label: 'provider-A' },
+          { id: 'echo', label: 'provider-B' },
+        ],
+        prompts: [
+          { raw: 'A {{input}}', label: 'prompt-A' },
+          { raw: 'B {{input}}', label: 'prompt-B' },
+        ],
+        scenarios: [
+          {
+            config: [
+              {
+                metadata: { role: 'keep' },
+                providers: ['provider-A'],
+                prompts: ['prompt-A'],
+              },
+            ],
+            tests: [],
+          },
+        ],
+      });
+      const resultsPath = path.join(tmpDir, 'exact-history-synthetic-routing.json');
+      const writeResult = (providers: string[], prompts: string[]) =>
+        fs.writeFileSync(
+          resultsPath,
+          JSON.stringify({
+            results: {
+              results: [
+                {
+                  success: false,
+                  failureReason: ResultFailureReason.ASSERT,
+                  vars: { input: 'runtime' },
+                  provider: { id: 'echo', label: 'provider-A' },
+                  prompt: { raw: 'A runtime', label: 'prompt-A' },
+                  metadata: { __promptfoo: { evalOrigin: 'scenario' } },
+                  testCase: {
+                    vars: { input: 'runtime' },
+                    metadata: { role: 'keep', conversationId: '__scenario_0__' },
+                    providers,
+                    prompts,
+                  },
+                },
+              ],
+            },
+          }),
+        );
+      writeResult(['provider-A', 'provider-B'], ['prompt-A', 'prompt-B']);
+      await doEval(
+        {
+          table: false,
+          write: false,
+          config: [configFile],
+          filterMetadataExact: 'role=keep',
+          filterFailing: resultsPath,
+        },
+        {},
+        undefined,
+        {},
+      );
+      const suite = evaluateMock.mock.calls.at(-1)?.[0] as TestSuite;
+      const selection = (evaluateMock.mock.calls.at(-1)?.[2] as InternalEvaluateOptions)
+        .exactHistoricalSelection!;
+      const selected = await selection.select([], suite);
+      expect(selected).toHaveLength(1);
+      expect(selected[0].source).toEqual({
+        kind: 'scenario',
+        scenarioIndex: 0,
+        variantIndex: 0,
+        testIndex: -1,
+      });
+      expect(selected[0].test.providers).toEqual(['provider-A']);
+      expect(selected[0].test.prompts).toEqual(['prompt-A']);
+
+      // Historical test-specific selectors remain narrower when the current variant widens.
+      writeResult(['provider-A'], ['prompt-A']);
+      const wideSuite: TestSuite = {
+        ...suite,
+        scenarios: suite.scenarios?.map((scenario) => ({
+          ...scenario,
+          config: scenario.config.map((variant) => ({
+            ...variant,
+            providers: ['provider-A', 'provider-B'],
+            prompts: ['prompt-A', 'prompt-B'],
+          })),
+        })),
+      };
+      expect((await selection.select([], wideSuite))[0].test.providers).toEqual(['provider-A']);
+      expect((await selection.select([], wideSuite))[0].test.prompts).toEqual(['prompt-A']);
+
+      writeResult(['provider-*'], ['prompt-*']);
+      expect((await selection.select([], suite))[0].test.providers).toEqual(['provider-A']);
+      expect((await selection.select([], suite))[0].test.prompts).toEqual(['prompt-A']);
+      writeResult(['provider:A'], ['prompt:A']);
+      const prefixResult = JSON.parse(fs.readFileSync(resultsPath, 'utf8'));
+      prefixResult.results.results[0].provider.label = 'provider:A';
+      prefixResult.results.results[0].prompt.label = 'prompt:A';
+      fs.writeFileSync(resultsPath, JSON.stringify(prefixResult));
+      const prefixSuite: TestSuite = {
+        ...wideSuite,
+        providers: wideSuite.providers.map((provider) => ({
+          id: () => provider.id(),
+          label: provider.label?.replace('-', ':'),
+          callApi: async () => ({ output: 'unused' }),
+        })),
+        prompts: wideSuite.prompts.map((prompt) => ({
+          ...prompt,
+          label: prompt.label.replace('-', ':'),
+        })),
+        scenarios: wideSuite.scenarios?.map((scenario) => ({
+          ...scenario,
+          config: scenario.config.map((variant) => ({
+            ...variant,
+            providers: ['provider'],
+            prompts: ['prompt'],
+          })),
+        })),
+      };
+      expect((await selection.select([], prefixSuite))[0].test.providers).toEqual(['provider:A']);
+      expect((await selection.select([], prefixSuite))[0].test.prompts).toEqual(['prompt:A']);
+
+      // Intersect overlapping lists against current columns; prefer A's safe
+      // label over its credential-bearing URL ID in the prepared plan.
+      writeResult(['provider-A', 'provider-C'], ['prompt-A', 'prompt-C']);
+      const overlappingSuite: TestSuite = {
+        ...wideSuite,
+        providers: [
+          {
+            id: () => 'https://example.invalid/target?api_key=qa-fake-secret',
+            label: 'provider-A',
+            callApi: async () => ({ output: 'unused' }),
+          },
+          ...wideSuite.providers.slice(1),
+          {
+            id: () => 'echo',
+            label: 'provider-C',
+            callApi: async () => ({ output: 'unused' }),
+          },
+        ],
+        prompts: [
+          ...wideSuite.prompts,
+          { raw: 'C {{input}}', label: 'prompt-C', id: 'prompt-id-C' },
+        ],
+      };
+      const overlap = (await selection.select([], overlappingSuite))[0];
+      expect(overlap.test.providers).toEqual(['provider-A']);
+      expect(overlap.test.prompts).toEqual(['prompt-A']);
+
+      // A shared prompt label cannot represent just one prompt; its unique ID can.
+      const stored = JSON.parse(fs.readFileSync(resultsPath, 'utf8'));
+      stored.results.results[0].prompt = { raw: 'A runtime', label: 'shared', id: 'prompt-id-A' };
+      stored.results.results[0].testCase.prompts = ['prompt-id-A', 'prompt-id-C'];
+      fs.writeFileSync(resultsPath, JSON.stringify(stored));
+      const duplicateLabelSuite: TestSuite = {
+        ...overlappingSuite,
+        prompts: [
+          { raw: 'A {{input}}', label: 'shared', id: 'prompt-id-A' },
+          { raw: 'B {{input}}', label: 'shared', id: 'prompt-id-B' },
+          { raw: 'C {{input}}', label: 'prompt-C', id: 'prompt-id-C' },
+        ],
+        scenarios: overlappingSuite.scenarios?.map((scenario) => ({
+          ...scenario,
+          config: scenario.config.map((variant) => ({ ...variant, prompts: ['shared'] })),
+        })),
+      };
+      expect((await selection.select([], duplicateLabelSuite))[0].test.prompts).toEqual([
+        'prompt-id-A',
+      ]);
+
+      // These two OR-lists intersect on one column, but neither its ID nor label
+      // can select it alone without admitting a different excluded column.
+      writeResult(['provider-A'], ['prompt-id-X']);
+      const crossCollisionResult = JSON.parse(fs.readFileSync(resultsPath, 'utf8'));
+      crossCollisionResult.results.results[0].prompt = {
+        raw: 'A runtime',
+        id: 'prompt-id-X',
+        label: 'prompt-label-Y',
+      };
+      fs.writeFileSync(resultsPath, JSON.stringify(crossCollisionResult));
+      const crossCollisionSuite: TestSuite = {
+        ...suite,
+        prompts: [
+          { raw: 'A {{input}}', id: 'prompt-id-X', label: 'prompt-label-Y' },
+          { raw: 'B {{input}}', id: 'prompt-id-X', label: 'prompt-label-Z' },
+          { raw: 'C {{input}}', id: 'prompt-id-W', label: 'prompt-label-Y' },
+        ],
+        scenarios: suite.scenarios?.map((scenario) => ({
+          ...scenario,
+          config: scenario.config.map((variant) => ({
+            ...variant,
+            prompts: ['prompt-label-Y'],
+          })),
+        })),
+      };
+      await expect(selection.select([], crossCollisionSuite)).rejects.toThrow(
+        'Use distinct provider/prompt IDs or labels',
+      );
+
+      const noneSuite: TestSuite = {
+        ...suite,
+        scenarios: suite.scenarios?.map((scenario) => ({
+          ...scenario,
+          config: scenario.config.map((variant) => ({
+            ...variant,
+            providers: [],
+            prompts: [],
+          })),
+        })),
+      };
+      expect(await selection.select([], noneSuite)).toEqual([]);
+    });
+
+    it('keeps synthetic top-level routing within current default selectors', async () => {
+      const configFile = writeTempConfig(tmpDir, 'exact-history-synthetic-default-routing.yaml', {
+        providers: [
+          { id: 'echo', label: 'provider-A' },
+          { id: 'echo', label: 'provider-B' },
+        ],
+        prompts: [
+          { raw: 'A {{input}}', label: 'prompt-A' },
+          { raw: 'B {{input}}', label: 'prompt-B' },
+        ],
+        defaultTest: { providers: ['provider-A'], prompts: ['prompt-A'] },
+        tests: [],
+      });
+      const resultsPath = path.join(tmpDir, 'exact-history-synthetic-default-routing.json');
+      fs.writeFileSync(
+        resultsPath,
+        JSON.stringify({
+          results: {
+            results: [
+              {
+                success: false,
+                failureReason: ResultFailureReason.ASSERT,
+                vars: { input: 'runtime' },
+                provider: { id: 'echo', label: 'provider-A' },
+                prompt: { raw: 'A runtime', label: 'prompt-A' },
+                metadata: { __promptfoo: { evalOrigin: 'top-level' } },
+                testCase: {
+                  vars: { input: 'runtime' },
+                  metadata: { role: 'keep' },
+                  providers: ['provider-A', 'provider-B'],
+                  prompts: ['prompt-A', 'prompt-B'],
+                },
+              },
+            ],
+          },
+        }),
+      );
+      await doEval(
+        {
+          table: false,
+          write: false,
+          config: [configFile],
+          filterMetadataExact: 'role=keep',
+          filterFailing: resultsPath,
+        },
+        {},
+        undefined,
+        {},
+      );
+      const suite = evaluateMock.mock.calls.at(-1)?.[0] as TestSuite;
+      const selection = (evaluateMock.mock.calls.at(-1)?.[2] as InternalEvaluateOptions)
+        .exactHistoricalSelection!;
+      const selected = await selection.select([], suite);
+      expect(selected).toHaveLength(1);
+      expect(selected[0].test.providers).toEqual(['provider-A']);
+      expect(selected[0].test.prompts).toEqual(['prompt-A']);
+    });
+
+    it('binds a synthetic scenario row to one current singular target and source', async () => {
+      const targetPath = path.join(tmpDir, 'exact-synthetic-current-target.cjs');
+      fs.writeFileSync(
+        targetPath,
+        "module.exports = class { id() { return 'qa-synthetic-current-target'; } async callApi() { return { output: 'current' }; } };",
+      );
+      const configFile = writeTempConfig(tmpDir, 'exact-synthetic-singular.yaml', {
+        providers: ['echo'],
+        prompts: ['Hello {{caseId}}'],
+        scenarios: [
+          {
+            config: [{ metadata: { role: 'keep' } }],
+            tests: [
+              {
+                vars: { caseId: 'authored' },
+                provider: { id: `file://${targetPath}`, label: 'current-target' },
+              },
+            ],
+          },
+        ],
+      });
+      const resultsPath = path.join(tmpDir, 'exact-synthetic-singular.json');
+      fs.writeFileSync(
+        resultsPath,
+        JSON.stringify({
+          results: {
+            results: [
+              {
+                success: false,
+                failureReason: ResultFailureReason.ASSERT,
+                vars: { caseId: 'generated' },
+                provider: { id: 'echo' },
+                metadata: { __promptfoo: { evalOrigin: 'scenario' } },
+                testCase: {
+                  vars: { caseId: 'generated' },
+                  metadata: {
+                    role: 'keep',
+                    pluginId: 'runtime',
+                    conversationId: '__scenario_0__',
+                  },
+                  provider: { id: 'qa-synthetic-current-target', label: 'current-target' },
+                },
+              },
+            ],
+          },
+        }),
+      );
+
+      await doEval(
+        {
+          table: false,
+          write: false,
+          config: [configFile],
+          filterMetadataExact: 'role=keep',
+          filterFailing: resultsPath,
+        },
+        {},
+        undefined,
+        {},
+      );
+      const suite = evaluateMock.mock.calls.at(-1)?.[0] as TestSuite;
+      const selection = (evaluateMock.mock.calls.at(-1)?.[2] as InternalEvaluateOptions)
+        .exactHistoricalSelection!;
+      const test = suite.scenarios![0].tests[0];
+      const selected = await selection.select(
+        [
+          {
+            source: { kind: 'scenario', scenarioIndex: 0, variantIndex: 0, testIndex: 0 },
+            test: {
+              ...test,
+              vars: { caseId: 'authored' },
+              metadata: { role: 'keep', conversationId: '__scenario_0__' },
+            },
+          },
+        ],
+        suite,
+      );
+
+      expect(selected).toHaveLength(1);
+      expect(selected[0].source).toEqual({
+        kind: 'scenario',
+        scenarioIndex: 0,
+        variantIndex: 0,
+        testIndex: 0,
+      });
+      expect(selected[0].test.vars).toEqual({ caseId: 'generated' });
+      expect(selected[0].test.provider).toBe(test.provider);
+
+      suite.scenarios![0].tests.push({ ...test, vars: { caseId: 'other' } });
+      await expect(
+        selection.select(
+          [
+            {
+              source: { kind: 'scenario', scenarioIndex: 0, variantIndex: 0, testIndex: 0 },
+              test,
+            },
+            {
+              source: { kind: 'scenario', scenarioIndex: 0, variantIndex: 0, testIndex: 1 },
+              test: suite.scenarios![0].tests[1],
+            },
+          ],
+          suite,
+        ),
+      ).rejects.toThrow('one current singular provider');
+    });
+
+    it('keeps a synthetic default target when another scenario source has an override', async () => {
+      const defaultPath = path.join(tmpDir, 'exact-synthetic-default-target.cjs');
+      const overridePath = path.join(tmpDir, 'exact-synthetic-override-target.cjs');
+      fs.writeFileSync(
+        defaultPath,
+        "module.exports = class { id() { return 'qa-default-target'; } async callApi() { return { output: 'default' }; } };",
+      );
+      fs.writeFileSync(
+        overridePath,
+        "module.exports = class { id() { return 'qa-override-target'; } async callApi() { return { output: 'override' }; } };",
+      );
+      const configFile = writeTempConfig(tmpDir, 'exact-synthetic-mixed-target.yaml', {
+        providers: ['echo'],
+        prompts: ['Hello {{caseId}}'],
+        defaultTest: { provider: { id: `file://${defaultPath}` } },
+        scenarios: [
+          {
+            config: [{ metadata: { role: 'keep' } }],
+            tests: [
+              { vars: { caseId: 'default' } },
+              { vars: { caseId: 'override' }, provider: { id: `file://${overridePath}` } },
+            ],
+          },
+        ],
+      });
+      const resultsPath = path.join(tmpDir, 'exact-synthetic-mixed-target.json');
+      fs.writeFileSync(
+        resultsPath,
+        JSON.stringify({
+          results: {
+            results: [
+              {
+                success: false,
+                failureReason: ResultFailureReason.ASSERT,
+                vars: { caseId: 'generated' },
+                provider: { id: 'echo' },
+                metadata: { __promptfoo: { evalOrigin: 'scenario' } },
+                testCase: {
+                  vars: { caseId: 'generated' },
+                  metadata: { role: 'keep', pluginId: 'runtime', conversationId: '__scenario_0__' },
+                  provider: { id: 'qa-default-target' },
+                },
+              },
+            ],
+          },
+        }),
+      );
+      await doEval(
+        {
+          table: false,
+          write: false,
+          config: [configFile],
+          filterMetadataExact: 'role=keep',
+          filterFailing: resultsPath,
+        },
+        {},
+        undefined,
+        {},
+      );
+      const suite = evaluateMock.mock.calls.at(-1)?.[0] as TestSuite;
+      const selection = (evaluateMock.mock.calls.at(-1)?.[2] as InternalEvaluateOptions)
+        .exactHistoricalSelection!;
+      const candidates = suite.scenarios![0].tests.map((test, testIndex) => ({
+        source: { kind: 'scenario' as const, scenarioIndex: 0, variantIndex: 0, testIndex },
+        test: {
+          ...test,
+          provider: test.provider ?? (suite.defaultTest as TestCase).provider,
+          metadata: { role: 'keep', conversationId: '__scenario_0__' },
+        },
+      }));
+      const selected = await selection.select(candidates, suite);
+      expect(selected).toHaveLength(1);
+      expect(selected[0].source).toEqual({
+        kind: 'scenario',
+        scenarioIndex: 0,
+        variantIndex: 0,
+        testIndex: -1,
+      });
+      expect(selected[0].test.provider).toBeUndefined();
+    });
+
+    it('accepts declarative runtime assertions but rejects executable historical references', async () => {
+      const configFile = writeTempConfig(tmpDir, 'exact-runtime-safe-assert.yaml', {
+        providers: ['echo'],
+        prompts: ['Hello {{input}}'],
+        tests: [],
+        scenarios: [],
+      });
+      const resultsPath = path.join(tmpDir, 'exact-runtime-safe-assert.json');
+      const writeResult = (testCase: Record<string, unknown>) =>
+        fs.writeFileSync(
+          resultsPath,
+          JSON.stringify({
+            results: {
+              results: [
+                {
+                  success: false,
+                  vars: testCase.vars ?? { input: 'runtime' },
+                  testCase: {
+                    vars: { input: 'runtime' },
+                    metadata: { id: 'generated' },
+                    ...testCase,
+                  },
+                },
+              ],
+            },
+          }),
+        );
+      writeResult({ assert: [{ type: 'contains', value: 'ok' }] });
+      await doEval(
+        {
+          table: false,
+          write: false,
+          config: [configFile],
+          filterMetadataExact: 'id=generated',
+          filterFailing: resultsPath,
+        },
+        {},
+        undefined,
+        {},
+      );
+      const suite = evaluateMock.mock.calls.at(-1)?.[0] as TestSuite;
+      const selection = (evaluateMock.mock.calls.at(-1)?.[2] as InternalEvaluateOptions)
+        .exactHistoricalSelection!;
+      expect((await selection.select([], suite))[0].test.assert).toEqual([
+        { type: 'contains', value: 'ok' },
+      ]);
+
+      writeResult({ vars: { provider: 'data-only', type: 'label-only' } });
+      expect((await selection.select([], suite))[0].test.vars).toEqual({
+        provider: 'data-only',
+        type: 'label-only',
+      });
+
+      for (const unsafe of [
+        { options: { provider: 'file://./old-grader.js' } },
+        { assert: [{ type: 'javascript', value: 'true' }] },
+        { assert: [{ type: 'equals', value: 'file://./old-value.js' }] },
+        { assert: [{ type: 'equals', value: 'package:old-grader:check' }] },
+        { vars: { input: 'file://./old-variable.js' } },
+      ]) {
+        writeResult(unsafe);
+        await expect(selection.select([], suite)).rejects.toThrow(
+          'An extracted historical case contains executable or provider references',
+        );
+      }
+    });
+
+    it('should resume the exact selection and its original order after range and sampling', async () => {
+      const tempConfig = writeTempConfig(tmpDir, 'test-exact-resume-selection.yaml', {
+        providers: ['echo'],
+        prompts: ['Hello {{id}}'],
+        tests: [1, 10, 3, 13, 7, 70].map((id) => ({
+          vars: { id },
+          metadata: { id },
+        })),
+      });
+
+      await doEval(
+        {
+          table: false,
+          write: false,
+          config: [tempConfig],
+          filterMetadataExact: 'id=1,3,7',
+          filterRange: '1:3',
+          filterSample: 1,
+        },
+        {},
+        undefined,
+        {},
+      );
+
+      const initialSuite = evaluateMock.mock.calls.at(-1)?.[0] as TestSuite;
+      const initialEval = evaluateMock.mock.calls.at(-1)?.[1] as Eval;
+      expect(initialSuite.tests).toHaveLength(1);
+      const selectedIds = initialSuite.tests?.map((test) => test.vars?.id);
+      const savedEval = new Eval(initialEval.config, {
+        id: 'eval-exact-resume-selection',
+        persisted: true,
+        runtimeOptions: initialEval.runtimeOptions,
+      });
+      const findByIdSpy = vi.spyOn(Eval, 'findById').mockResolvedValue(savedEval);
+      evaluateMock.mockClear();
+      try {
+        await doEval({ table: false, resume: savedEval.id } as any, {}, undefined, {});
+        const resumedSuite = evaluateMock.mock.calls.at(-1)?.[0] as TestSuite;
+        const resumedOptions = evaluateMock.mock.calls.at(-1)?.[2] as EvaluateOptions;
+        expect(resumedSuite.tests?.map((test) => test.vars?.id)).toEqual(selectedIds);
+        expect(resumedOptions.filterRange).toBeUndefined();
+      } finally {
+        findByIdSpy.mockRestore();
+      }
+    });
+
+    it('should retry errors against the saved exact test selection', async () => {
+      const tempConfig = writeTempConfig(tmpDir, 'test-exact-retry-selection.yaml', {
+        providers: ['echo'],
+        prompts: ['Hello {{id}}'],
+        tests: [1, 10, 3, 13, 7, 70].map((id) => ({
+          vars: { id },
+          metadata: { id },
+        })),
+      });
+      await doEval(
+        { table: false, write: false, config: [tempConfig], filterMetadataExact: 'id=1,3,7' },
+        {},
+        undefined,
+        {},
+      );
+      const initialEval = evaluateMock.mock.calls.at(-1)?.[1] as Eval;
+      const savedEval = new Eval(initialEval.config, {
+        id: 'eval-exact-retry-selection',
+        persisted: true,
+        runtimeOptions: initialEval.runtimeOptions,
+      });
+      const latestSpy = vi.spyOn(Eval, 'latest').mockResolvedValue(savedEval);
+      const errorsSpy = vi
+        .spyOn(retryModule, 'getErrorResultIds')
+        .mockResolvedValue(['failed-row']);
+      const deleteSpy = vi.spyOn(retryModule, 'deleteErrorResults').mockResolvedValue(undefined);
+      const metricsSpy = vi
+        .spyOn(retryModule, 'recalculatePromptMetrics')
+        .mockResolvedValue(undefined);
+      evaluateMock.mockClear();
+      try {
+        await doEval({ table: false, retryErrors: true }, {}, undefined, {});
+        const retriedSuite = evaluateMock.mock.calls.at(-1)?.[0] as TestSuite;
+        expect(retriedSuite.tests?.map((test) => test.vars?.id)).toEqual([1, 3, 7]);
+      } finally {
+        latestSpy.mockRestore();
+        errorsSpy.mockRestore();
+        deleteSpy.mockRestore();
+        metricsSpy.mockRestore();
+      }
+    });
+
+    it('should resume scenario exact samples without filtering the saved variants again', async () => {
+      const tempConfig = writeTempConfig(tmpDir, 'test-exact-scenario-resume.yaml', {
+        commandLineOptions: {
+          filterMetadataExact: 'category=keep',
+          filterSample: 2,
+          filterSampleSeed: 42,
+          filterRange: '1:3',
+        },
+        providers: ['echo'],
+        prompts: ['Hello'],
+        scenarios: [
+          {
+            config: [
+              { metadata: { category: 'keep', variant: 'a' } },
+              { metadata: { category: 'keep', variant: 'b' } },
+            ],
+            tests: [{ description: 'one' }, { description: 'two' }, { description: 'three' }],
+          },
+        ],
+      });
+
+      await doEval({ table: false, write: false, config: [tempConfig] }, {}, undefined, {});
+      const initialSuite = evaluateMock.mock.calls.at(-1)?.[0] as TestSuite;
+      const initialEval = evaluateMock.mock.calls.at(-1)?.[1] as Eval;
+      const selectedDescriptions = initialSuite.scenarios?.map((scenario) =>
+        scenario.tests?.map((test) => test.description),
+      );
+      expect(selectedDescriptions).toHaveLength(2);
+      expect(selectedDescriptions?.every((tests) => tests?.length === 2)).toBe(true);
+
+      const savedEval = new Eval(initialEval.config, {
+        id: 'eval-exact-scenario-resume',
+        persisted: true,
+        runtimeOptions: initialEval.runtimeOptions,
+      });
+      const findByIdSpy = vi.spyOn(Eval, 'findById').mockResolvedValue(savedEval);
+      evaluateMock.mockClear();
+      try {
+        await doEval({ table: false, resume: savedEval.id } as any, {}, undefined, {});
+        const resumedSuite = evaluateMock.mock.calls.at(-1)?.[0] as TestSuite;
+        const resumedOptions = evaluateMock.mock.calls.at(-1)?.[2] as EvaluateOptions;
+        expect(
+          resumedSuite.scenarios?.map((scenario) =>
+            scenario.tests?.map((test) => test.description),
+          ),
+        ).toEqual(selectedDescriptions);
+        expect(resumedOptions.filterRange).toBe('1:3');
+      } finally {
+        findByIdSpy.mockRestore();
+      }
+    });
+
+    it('should keep an empty exact selection empty when resuming', async () => {
+      const tempConfig = writeTempConfig(tmpDir, 'test-exact-empty-resume.yaml', {
+        providers: ['echo'],
+        prompts: ['Hello'],
+        tests: [{ metadata: { id: 'excluded' } }],
+      });
+      await doEval(
+        { table: false, write: false, config: [tempConfig], filterMetadataExact: 'id=selected' },
+        {},
+        undefined,
+        {},
+      );
+      const initialEval = evaluateMock.mock.calls.at(-1)?.[1] as Eval;
+      const savedEval = new Eval(initialEval.config, {
+        id: 'eval-exact-empty-resume',
+        persisted: true,
+        runtimeOptions: initialEval.runtimeOptions,
+      });
+      const findByIdSpy = vi.spyOn(Eval, 'findById').mockResolvedValue(savedEval);
+      evaluateMock.mockClear();
+      try {
+        await doEval({ table: false, resume: savedEval.id } as any, {}, undefined, {});
+        const resumedSuite = evaluateMock.mock.calls.at(-1)?.[0] as TestSuite;
+        expect(resumedSuite.tests).toEqual([]);
+        expect(resumedSuite.scenarios).toEqual([]);
+      } finally {
+        findByIdSpy.mockRestore();
+      }
+    });
+
+    it('should keep failed scenario variants separate when their test vars are shared', async () => {
+      const scenarioConfig = {
+        providers: ['echo'],
+        prompts: ['Hello {{variant}}'],
+        scenarios: [
+          {
+            config: [
+              { vars: { variant: 'shared' }, metadata: { category: 'A' } },
+              { vars: { variant: 'shared' }, metadata: { category: 'B' } },
+            ],
+            tests: [{ vars: { caseId: 'shared' }, metadata: { role: 'common' } }],
+          },
+        ],
+      };
+      const tempConfig = writeTempConfig(
+        tmpDir,
+        'test-exact-scenario-failing.yaml',
+        scenarioConfig,
+      );
+      const failedResultsPath = path.join(tmpDir, 'test-exact-scenario-failing.json');
+      const failedCase = (category: string) => ({
+        success: false,
+        vars: { variant: 'shared', caseId: 'shared' },
+        testCase: {
+          vars: { variant: 'shared', caseId: 'shared' },
+          metadata: {
+            category,
+            role: 'common',
+            conversationId: `__scenario_${category === 'A' ? 0 : 1}__`,
+          },
+        },
+      });
+      for (const failedCases of [[failedCase('A')], [failedCase('A'), failedCase('B')]]) {
+        fs.writeFileSync(
+          failedResultsPath,
+          JSON.stringify({
+            config: { ...scenarioConfig, tests: [] },
+            results: { version: 3, results: failedCases },
+          }),
+        );
+        await doEval(
+          {
+            table: false,
+            write: false,
+            config: [tempConfig],
+            filterMetadataExact: 'role=common',
+            filterFailing: failedResultsPath,
+          },
+          {},
+          undefined,
+          {},
+        );
+        const testSuite = evaluateMock.mock.calls.at(-1)?.[0] as TestSuite;
+        expect(testSuite.tests).toEqual([]);
+        expect(testSuite.scenarios?.map((scenario) => scenario.tests?.length)).toEqual([1, 1]);
+        const selection = (evaluateMock.mock.calls.at(-1)?.[2] as InternalEvaluateOptions)
+          .exactHistoricalSelection;
+        const prepared = (testSuite.scenarios ?? []).map((scenario, scenarioIndex) => ({
+          source: { kind: 'scenario' as const, scenarioIndex, variantIndex: 0, testIndex: 0 },
+          test: {
+            ...scenario.tests![0],
+            vars: { ...scenario.config[0].vars, ...scenario.tests![0].vars },
+            metadata: {
+              ...scenario.config[0].metadata,
+              ...scenario.tests![0].metadata,
+              conversationId: `__scenario_${scenarioIndex}__`,
+            },
+          },
+        })) as PreparedHistoricalCandidate[];
+        const selected = await selection!.select(prepared, testSuite);
+        expect(
+          selected.flatMap((candidate) =>
+            candidate.source.kind === 'scenario' ? [candidate.source.scenarioIndex] : [],
+          ),
+        ).toEqual(failedCases.length === 1 ? [0] : [0, 1]);
+      }
+
+      fs.writeFileSync(
+        failedResultsPath,
+        JSON.stringify({
+          config: { ...scenarioConfig, tests: [] },
+          results: {
+            version: 3,
+            results: [
+              {
+                success: false,
+                vars: { variant: 'shared', caseId: 'generated' },
+                testCase: {
+                  vars: { variant: 'shared', caseId: 'generated' },
+                  metadata: { category: 'A', role: 'common', conversationId: '__scenario_0__' },
+                },
+              },
+            ],
+          },
+        }),
+      );
+      await doEval(
+        {
+          table: false,
+          write: false,
+          config: [tempConfig],
+          filterMetadataExact: 'role=common',
+          filterFailing: failedResultsPath,
+        },
+        {},
+        undefined,
+        {},
+      );
+      const generatedSuite = evaluateMock.mock.calls.at(-1)?.[0] as TestSuite;
+      expect(generatedSuite.tests).toEqual([]);
+      expect(generatedSuite.scenarios?.map((scenario) => scenario.tests?.length)).toEqual([1, 1]);
+      const generatedSelection = (evaluateMock.mock.calls.at(-1)?.[2] as InternalEvaluateOptions)
+        .exactHistoricalSelection;
+      const generatedCandidates = (generatedSuite.scenarios ?? []).map(
+        (scenario, scenarioIndex) => ({
+          source: { kind: 'scenario' as const, scenarioIndex, variantIndex: 0, testIndex: 0 },
+          test: {
+            ...scenario.tests![0],
+            vars: { ...scenario.config[0].vars, ...scenario.tests![0].vars },
+            metadata: {
+              ...scenario.config[0].metadata,
+              ...scenario.tests![0].metadata,
+              conversationId: `__scenario_${scenarioIndex}__`,
+            },
+          },
+        }),
+      ) as PreparedHistoricalCandidate[];
+      const generatedSelected = await generatedSelection!.select(
+        generatedCandidates,
+        generatedSuite,
+      );
+      expect(
+        generatedSelected.map((candidate) => [candidate.source.kind, candidate.test.vars?.caseId]),
+      ).toEqual([['scenario', 'generated']]);
+    });
+
+    it('should retain distinct failed scenario tests that share vars', async () => {
+      const scenarioConfig = {
+        providers: ['echo'],
+        prompts: ['Hello {{caseId}}'],
+        scenarios: [
+          {
+            config: [{ metadata: { category: 'A' } }],
+            tests: [
+              { vars: { caseId: 'shared' }, metadata: { id: 'X' } },
+              { vars: { caseId: 'shared' }, metadata: { id: 'Y' } },
+            ],
+          },
+        ],
+      };
+      const tempConfig = writeTempConfig(
+        tmpDir,
+        'test-exact-scenario-shared-vars.yaml',
+        scenarioConfig,
+      );
+      const failedResultsPath = path.join(tmpDir, 'test-exact-scenario-shared-vars.json');
+      fs.writeFileSync(
+        failedResultsPath,
+        JSON.stringify({
+          config: { ...scenarioConfig, tests: [] },
+          results: {
+            version: 3,
+            results: ['X', 'Y'].map((id) => ({
+              success: false,
+              vars: { caseId: 'shared' },
+              testCase: {
+                vars: { caseId: 'shared' },
+                metadata: { category: 'A', id, conversationId: '__scenario_0__' },
+              },
+            })),
+          },
+        }),
+      );
+
+      await doEval(
+        {
+          table: false,
+          write: false,
+          config: [tempConfig],
+          filterMetadataExact: 'category=A',
+          filterFailing: failedResultsPath,
+        },
+        {},
+        undefined,
+        {},
+      );
+      const testSuite = evaluateMock.mock.calls.at(-1)?.[0] as TestSuite;
+      expect(testSuite.tests).toEqual([]);
+      expect(testSuite.scenarios?.[0].tests?.map((test) => test.metadata?.id)).toEqual(['X', 'Y']);
+    });
+
+    it('should retain authored provider options in the saved exact selection', async () => {
+      const tempConfig = writeTempConfig(tmpDir, 'test-exact-provider-resume.yaml', {
+        providers: ['echo'],
+        prompts: ['Hello'],
+        tests: [
+          {
+            provider: { id: 'echo', config: { response: 'kept-provider-option' } },
+            metadata: { id: 'selected' },
+          },
+          { metadata: { id: 'excluded' } },
+        ],
+      });
+      await doEval(
+        { table: false, write: false, config: [tempConfig], filterMetadataExact: 'id=selected' },
+        {},
+        undefined,
+        {},
+      );
+      const initialEval = evaluateMock.mock.calls.at(-1)?.[1] as Eval;
+      const savedTests = initialEval.config.tests;
+      expect(Array.isArray(savedTests) ? savedTests : []).toHaveLength(1);
+      const selectedProvider = Array.isArray(savedTests) ? savedTests[0] : undefined;
+      expect(
+        selectedProvider && typeof selectedProvider === 'object' && 'provider' in selectedProvider
+          ? selectedProvider.provider
+          : undefined,
+      ).toEqual({
+        id: 'echo',
+        config: { response: 'kept-provider-option' },
+      });
+    });
+
+    it('marks a persisted exact historical eval as requiring a plan before evaluation starts', async () => {
+      const tempConfig = writeTempConfig(tmpDir, 'test-exact-pending-plan.yaml', {
+        providers: ['echo'],
+        prompts: ['Hello'],
+        tests: [{ metadata: { id: 'selected' } }],
+      });
+      const persistedRecord = new Eval({}, { persisted: true });
+      const create = vi.spyOn(Eval, 'create').mockResolvedValue(persistedRecord);
+      try {
+        await doEval(
+          {
+            table: false,
+            write: true,
+            config: [tempConfig],
+            filterMetadataExact: 'id=selected',
+            filterFailing: 'history.json',
+          },
+          {},
+          undefined,
+          {},
+        );
+        expect(create).toHaveBeenCalledOnce();
+        expect(create.mock.calls[0][2]?.runtimeOptions).toMatchObject({
+          exactHistoricalReplayRequired: true,
+        });
+        expect(create.mock.calls[0][2]?.runtimeOptions?.exactHistoricalReplay).toBeUndefined();
+      } finally {
+        create.mockRestore();
+      }
+    });
+
+    it('should persist normal exact selections without scanning source tests per selected test', async () => {
+      const sourceCount = 100;
+      const tempConfig = writeTempConfig(tmpDir, 'test-exact-source-lookup.yaml', {
+        providers: ['echo'],
+        prompts: ['Hello {{id}}'],
+        tests: Array.from({ length: sourceCount }, (_, id) => ({
+          vars: { id },
+          metadata: { category: id % 2 === 0 ? 'selected' : 'excluded' },
+        })),
+      });
+      let sourceReads = 0;
+      const resolveConfigs = configLoadModule.resolveConfigs;
+      const resolveSpy = vi
+        .spyOn(configLoadModule, 'resolveConfigs')
+        .mockImplementation(async (...args) => {
+          const resolved = await resolveConfigs(...args);
+          const tests = resolved.testSuite.tests ?? [];
+          resolved.testSuite.tests = new Proxy(tests, {
+            get(target, key, receiver) {
+              if (typeof key === 'string' && /^(0|[1-9]\d*)$/.test(key)) {
+                sourceReads++;
+              }
+              return Reflect.get(target, key, receiver);
+            },
+          });
+          return resolved;
+        });
+      try {
+        await doEval(
+          {
+            table: false,
+            write: false,
+            config: [tempConfig],
+            filterMetadataExact: 'category=selected',
+          },
+          {},
+          undefined,
+          {},
+        );
+        const initialEval = evaluateMock.mock.calls.at(-1)?.[1] as Eval;
+        expect(
+          Array.isArray(initialEval.config.tests) ? initialEval.config.tests : [],
+        ).toHaveLength(50);
+        expect(sourceReads).toBeLessThan(sourceCount * 10);
+      } finally {
+        resolveSpy.mockRestore();
+      }
+    });
+
+    it('should persist the selected source when tests share vars and provider', async () => {
+      const tempConfig = writeTempConfig(tmpDir, 'test-exact-duplicate-vars-resume.yaml', {
+        providers: ['echo'],
+        prompts: ['Hello'],
+        tests: [
+          { vars: { input: 'same' }, metadata: { id: 1 } },
+          { vars: { input: 'same' }, metadata: { id: 3 } },
+        ],
+      });
+      await doEval(
+        { table: false, write: false, config: [tempConfig], filterMetadataExact: 'id=3' },
+        {},
+        undefined,
+        {},
+      );
+      const initialEval = evaluateMock.mock.calls.at(-1)?.[1] as Eval;
+      const savedTests = initialEval.config.tests;
+      expect(
+        Array.isArray(savedTests)
+          ? savedTests.map((test) =>
+              typeof test === 'object' && 'metadata' in test ? test.metadata?.id : undefined,
+            )
+          : [],
+      ).toEqual([3]);
+    });
+
+    it('should filter scenario tests using default, scenario, and test metadata precedence', async () => {
+      const tempConfig = writeTempConfig(tmpDir, 'test-filter-scenario-metadata-exact.yaml', {
+        providers: ['echo'],
+        prompts: ['Hello'],
+        defaultTest: { metadata: { category: 'default' } },
+        scenarios: [
+          {
+            description: 'metadata precedence',
+            config: [
+              { metadata: { category: 'scenario', region: 'west' } },
+              { metadata: { category: 'scenario', region: 'east' } },
+            ],
+            tests: [
+              { description: 'inherits scenario metadata', metadata: { kind: 'fast' } },
+              { description: 'overrides scenario metadata', metadata: { category: 'test' } },
+            ],
+          },
+        ],
+      });
+
+      await doEval(
+        {
+          table: false,
+          write: false,
+          config: [tempConfig],
+          filterMetadataExact: 'category=scenario',
+        },
+        {},
+        undefined,
+        {},
+      );
+
+      const testSuite = evaluateMock.mock.calls.at(-1)?.[0] as TestSuite;
+      expect(testSuite.scenarios).toHaveLength(2);
+      expect(
+        testSuite.scenarios?.map((scenario) => scenario.tests?.map((test) => test.description)),
+      ).toEqual([['inherits scenario metadata'], ['inherits scenario metadata']]);
+    });
+
+    it('should use the effective defaultTest metadata when filtering scenarios', async () => {
+      const tempConfig = writeTempConfig(tmpDir, 'test-filter-scenario-default-metadata.yaml', {
+        metadata: { category: 'root' },
+        defaultTest: { metadata: { label: 'default' } },
+        providers: ['echo'],
+        prompts: ['Hello'],
+        scenarios: [
+          {
+            config: [{}],
+            tests: [{ description: 'inherits default metadata', metadata: { kind: 'fast' } }],
+          },
+        ],
+      });
+
+      await doEval(
+        {
+          table: false,
+          write: false,
+          config: [tempConfig],
+          filterMetadataExact: 'category=root',
+        },
+        {},
+        undefined,
+        {},
+      );
+      const rootMetadataSuite = evaluateMock.mock.calls.at(-1)?.[0] as TestSuite;
+      expect(rootMetadataSuite.scenarios?.[0]?.tests).toEqual([]);
+
+      await doEval(
+        {
+          table: false,
+          write: false,
+          config: [tempConfig],
+          filterMetadataExact: 'label=default',
+        },
+        {},
+        undefined,
+        {},
+      );
+      const defaultMetadataSuite = evaluateMock.mock.calls.at(-1)?.[0] as TestSuite;
+      expect(defaultMetadataSuite.scenarios?.[0]?.tests?.map((test) => test.description)).toEqual([
+        'inherits default metadata',
+      ]);
     });
 
     it('should apply filterRange to the implicit default test', async () => {

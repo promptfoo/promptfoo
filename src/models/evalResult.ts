@@ -15,12 +15,17 @@ import {
   type AtomicTestCase,
   type EnvOverrides,
   type EvaluateResult,
+  type ExactHistoricalReplayPlan,
+  type ExactHistoricalSource,
   type GradingResult,
   isResultFailureReason,
   type Prompt,
   type ProviderOptions,
   type ProviderResponse,
   ResultFailureReason,
+  type TestCase,
+  TestCaseSchema,
+  type TestSuite,
   type TraceData,
 } from '../types/index';
 import { isApiProvider, isProviderOptions } from '../types/providers';
@@ -1459,4 +1464,225 @@ export function asEvaluateResult(
  * recovery, and comparison paths. */
 export function getResultIndexKey(result: Pick<EvaluateResult, 'testIdx' | 'promptIdx'>): string {
   return `${result.testIdx}:${result.promptIdx}`;
+}
+
+type PreparedHistoricalCandidate = { test: AtomicTestCase; source: ExactHistoricalSource };
+
+const UNSAFE_PLAN_MESSAGE =
+  'Could not safely save the prepared exact historical selection. Use --no-write for this run or remove protected/unserializable test values.';
+
+function providerIdentity(provider: AtomicTestCase['provider']) {
+  if (provider === undefined) {
+    return undefined;
+  }
+  const id = isApiProvider(provider)
+    ? provider.id()
+    : typeof provider === 'string'
+      ? provider
+      : typeof provider === 'object' && provider && typeof provider.id === 'string'
+        ? provider.id
+        : undefined;
+  if (typeof id !== 'string' || !id) {
+    throw new Error(UNSAFE_PLAN_MESSAGE);
+  }
+  const label =
+    typeof provider === 'object' && provider && typeof provider.label === 'string'
+      ? provider.label
+      : undefined;
+  return { id, ...(label && { label }) };
+}
+
+/** A positional source cannot safely distinguish two live targets with the same public identity. */
+export function assertUnambiguousHistoricalProviders(
+  candidates: PreparedHistoricalCandidate[],
+): void {
+  const providersByIdentity = new Map<string, ApiProvider>();
+  for (const { test } of candidates) {
+    if (!isApiProvider(test.provider)) {
+      continue;
+    }
+    const provider = test.provider;
+    const identity = JSON.stringify(providerIdentity(provider));
+    const previous = providersByIdentity.get(identity);
+    if (previous && previous !== provider) {
+      throw new Error(
+        'Prepared historical tests have distinct providers with the same id and label. Give them distinct identities before saving or replaying this selection.',
+      );
+    }
+    providersByIdentity.set(identity, provider);
+  }
+}
+
+function snapshotTest(test: AtomicTestCase): TestCase {
+  // Exclude internal Symbols, the live target instance and input transforms. The latter must
+  // never run on an already prepared case during replay.
+  const { provider: _provider, ...fields } = Object.fromEntries(Object.entries(test)) as TestCase;
+  const options = fields.options
+    ? Object.fromEntries(Object.entries(fields.options).filter(([key]) => key !== 'transformVars'))
+    : undefined;
+  return omitUndefined(
+    mapTestProviderRefs({ ...fields, ...(options && { options }) }, (nestedProvider) => {
+      if (isApiProvider(nestedProvider)) {
+        throw new Error(UNSAFE_PLAN_MESSAGE);
+      }
+      return nestedProvider;
+    }),
+  ) as TestCase;
+}
+
+function omitUndefined(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map(omitUndefined);
+  }
+  if (!value || typeof value !== 'object' || Object.getPrototypeOf(value) !== Object.prototype) {
+    return value;
+  }
+  return Object.fromEntries(
+    Object.entries(value)
+      .filter(([, item]) => item !== undefined)
+      .map(([key, item]) => [key, omitUndefined(item)]),
+  );
+}
+
+/** Build a lossless JSON snapshot before any selected case can call a provider. */
+export function createExactHistoricalReplayPlan(
+  candidates: PreparedHistoricalCandidate[],
+): ExactHistoricalReplayPlan {
+  try {
+    const plan: ExactHistoricalReplayPlan = {
+      version: 1,
+      cases: candidates.map(({ source, test }) => {
+        const identity = providerIdentity(test.provider);
+        return {
+          source,
+          test: snapshotTest(test),
+          ...(identity && { providerIdentity: identity }),
+        };
+      }),
+    };
+    const json = JSON.stringify(plan);
+    if (!json || !isDeepStrictEqual(plan, JSON.parse(json))) {
+      throw new Error(UNSAFE_PLAN_MESSAGE);
+    }
+    const sanitized = sanitizeObject(plan, {
+      context: 'prepared exact historical selection',
+      sanitizeUrls: true,
+      maxDepth: Number.POSITIVE_INFINITY,
+      throwOnError: true,
+    });
+    if (!isDeepStrictEqual(plan, sanitized)) {
+      throw new Error(UNSAFE_PLAN_MESSAGE);
+    }
+    validateExactHistoricalReplayPlan(plan);
+    return plan;
+  } catch {
+    throw new Error(UNSAFE_PLAN_MESSAGE);
+  }
+}
+
+function validSource(source: unknown): source is ExactHistoricalSource {
+  if (!source || typeof source !== 'object') {
+    return false;
+  }
+  const value = source as Record<string, unknown>;
+  if (value.kind === 'top-level') {
+    return Number.isInteger(value.testIndex) && (value.testIndex as number) >= -1;
+  }
+  return (
+    value.kind === 'scenario' &&
+    Number.isInteger(value.scenarioIndex) &&
+    (value.scenarioIndex as number) >= 0 &&
+    Number.isInteger(value.variantIndex) &&
+    (value.variantIndex as number) >= 0 &&
+    Number.isInteger(value.testIndex) &&
+    (value.testIndex as number) >= -1
+  );
+}
+
+/** Reject malformed or unsupported persisted plans before any provider call. */
+export function validateExactHistoricalReplayPlan(value: unknown): ExactHistoricalReplayPlan {
+  if (!value || typeof value !== 'object') {
+    throw new Error('Invalid prepared exact historical replay plan');
+  }
+  const plan = value as Partial<ExactHistoricalReplayPlan>;
+  if (
+    plan.version !== 1 ||
+    !Array.isArray(plan.cases) ||
+    !plan.cases.every(
+      (item) =>
+        item &&
+        validSource(item.source) &&
+        item.test &&
+        typeof item.test === 'object' &&
+        !Array.isArray(item.test) &&
+        Object.getPrototypeOf(item.test) === Object.prototype &&
+        !Object.prototype.hasOwnProperty.call(item.test, 'provider') &&
+        !(
+          item.test.options &&
+          Object.prototype.hasOwnProperty.call(item.test.options, 'transformVars')
+        ) &&
+        TestCaseSchema.safeParse(item.test).success &&
+        (item.providerIdentity === undefined ||
+          (item.providerIdentity !== null &&
+            typeof item.providerIdentity === 'object' &&
+            typeof item.providerIdentity.id === 'string' &&
+            (item.providerIdentity.label === undefined ||
+              typeof item.providerIdentity.label === 'string'))),
+    )
+  ) {
+    throw new Error('Invalid prepared exact historical replay plan');
+  }
+  try {
+    if (!isDeepStrictEqual(plan, JSON.parse(JSON.stringify(plan)))) {
+      throw new Error('Invalid prepared exact historical replay plan');
+    }
+  } catch {
+    throw new Error('Invalid prepared exact historical replay plan');
+  }
+  return plan as ExactHistoricalReplayPlan;
+}
+
+export function restoreExactHistoricalReplayCases(
+  plan: ExactHistoricalReplayPlan,
+  current: PreparedHistoricalCandidate[],
+  suite: TestSuite,
+  syntheticProvider?: AtomicTestCase['provider'],
+): PreparedHistoricalCandidate[] {
+  const bySource = new Map(
+    current.map((candidate) => [JSON.stringify(candidate.source), candidate]),
+  );
+  return plan.cases.map(({ source, test, providerIdentity: savedProvider }) => {
+    if (
+      source.kind === 'scenario' &&
+      !suite.scenarios?.[source.scenarioIndex]?.config?.[source.variantIndex]
+    ) {
+      throw new Error('Could not resolve a prepared historical scenario for replay');
+    }
+    const currentCase = bySource.get(JSON.stringify(source));
+    const currentProvider =
+      currentCase?.test.provider ?? (source.testIndex === -1 ? syntheticProvider : undefined);
+    if (savedProvider) {
+      if (
+        !currentProvider ||
+        !isDeepStrictEqual(providerIdentity(currentProvider), savedProvider)
+      ) {
+        throw new Error('Could not resolve a prepared historical provider for replay');
+      }
+    } else if (currentProvider) {
+      throw new Error('Prepared historical provider changed before replay');
+    }
+    if (!currentCase && source.testIndex !== -1) {
+      throw new Error('Could not resolve a prepared historical test for replay');
+    }
+    // Hooks can mutate nested vars, assertions and options in place. Keep the validated,
+    // persisted plan immutable so a later save or resume still uses the original selection.
+    const executionTest = JSON.parse(JSON.stringify(test)) as TestCase;
+    return {
+      source,
+      test: {
+        ...executionTest,
+        ...(currentProvider && { provider: currentProvider }),
+      },
+    };
+  });
 }

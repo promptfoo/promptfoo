@@ -138,6 +138,7 @@ export const CommandLineOptionsSchema = z.object({
   filterFailingOnly: z.string().optional(),
   filterFirstN: z.coerce.number().int().positive().optional(),
   filterMetadata: z.union([z.string(), z.array(z.string())]).optional(),
+  filterMetadataExact: z.union([z.string(), z.array(z.string())]).optional(),
   filterPattern: z.string().optional(),
   filterPrompts: z.string().optional(),
   filterProviders: z.string().optional(),
@@ -330,7 +331,26 @@ export type EvaluateOptions = z.infer<typeof EvaluateOptionsSchema> & {
 export type EvalRuntimeOptions = Partial<EvaluateOptions> & {
   /** @internal Normalized value of --filter-providers or --filter-targets. */
   providerFilter?: string;
+  /** @internal A persisted exact-history selection must have a committed replay plan. */
+  exactHistoricalReplayRequired?: boolean;
+  /** @internal Selected cases after exact historical matching and variable preparation. */
+  exactHistoricalReplay?: ExactHistoricalReplayPlan;
 };
+
+/** @internal Positional current-source reference; historical source code is never replayed. */
+export type ExactHistoricalSource =
+  | { kind: 'top-level'; testIndex: number }
+  | { kind: 'scenario'; scenarioIndex: number; variantIndex: number; testIndex: number };
+
+/** @internal Versioned, JSON-safe selection snapshot for resume and retry. */
+export interface ExactHistoricalReplayPlan {
+  version: 1;
+  cases: Array<{
+    source: ExactHistoricalSource;
+    test: TestCase;
+    providerIdentity?: { id: string; label?: string };
+  }>;
+}
 
 const PromptMetricsSchema = z.object({
   score: z.number(),

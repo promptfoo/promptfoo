@@ -22,6 +22,7 @@ import { cloudConfig } from '../globalConfig/cloud';
 import logger, { getLogLevel } from '../logger';
 import { runDbMigrations } from '../migrate';
 import Eval from '../models/eval';
+import { toSerializableProviderRef, validateExactHistoricalReplayPlan } from '../models/evalResult';
 import { providerRegistry } from '../providers/providerRegistry';
 import { neverGenerateRemote } from '../redteam/remoteGeneration';
 import { createShareableUrl, isSharingEnabled } from '../share';
@@ -30,12 +31,18 @@ import telemetry from '../telemetry';
 import { flushOtel, shutdownOtel } from '../tracing/otelSdk';
 import { EMAIL_OK_STATUS } from '../types/email';
 import { isCliEventSource } from '../types/eventSource';
-import { CommandLineOptionsSchema, MAX_SUGGESTIONS_COUNT, TestSuiteSchema } from '../types/index';
+import {
+  CommandLineOptionsSchema,
+  isApiProvider,
+  MAX_SUGGESTIONS_COUNT,
+  TestSuiteSchema,
+} from '../types/index';
 import { checkCloudPermissions, getEvalConfigFromCloud, getOrgContext } from '../util/cloud';
 import { loadDefaultConfig } from '../util/config/default';
 import { DEFAULT_CONFIG_EXTENSIONS } from '../util/config/extensions';
 import {
   ConfigResolutionError,
+  deriveScenarioSampleSeed,
   logConfigResolutionError,
   renderConfigEnvTemplates,
   resolveConfigs,
@@ -46,6 +53,10 @@ import {
   getProviderFilterRegexError,
 } from '../util/eval/filterProviders';
 import { filterTests } from '../util/eval/filterTests';
+import {
+  createScenarioResultClassifier,
+  topLevelResultMatchContext,
+} from '../util/eval/filterTestsUtil';
 import { warnIfRedteamConfigHasNoTests } from '../util/eval/redteamWarning';
 import { generateEvalSummary } from '../util/eval/summary';
 import { maybeLoadFromExternalFile } from '../util/file';
@@ -56,7 +67,9 @@ import {
   writeMultipleOutputs,
 } from '../util/index';
 import { promptfooCommand } from '../util/promptfooCommand';
-import { checkProviderApiKeys } from '../util/provider';
+import { isPromptAllowed } from '../util/promptMatching';
+import { checkProviderApiKeys, isProviderAllowed } from '../util/provider';
+import { mapTestProviderRefs } from '../util/sanitizer';
 import { shouldShareResults } from '../util/sharing';
 import { resolveTestsWatchPaths } from '../util/testCaseReader';
 import { TokenUsageTracker } from '../util/tokenUsage';
@@ -70,12 +83,15 @@ import type {
   CommandLineOptions,
   EnvOverrides,
   EvalRuntimeOptions,
+  EvaluateResult,
   Scenario,
+  TestCase,
   TestSuite,
   UnifiedConfig,
 } from '../types/index';
-import type { InternalEvaluateOptions } from '../types/internal';
+import type { InternalEvaluateOptions, PreparedHistoricalCandidate } from '../types/internal';
 import type { FilterOptions } from '../util/eval/filterTests';
+import type { ResultMatchContext, StoredResults } from '../util/eval/filterTestsUtil';
 
 export const EvalCommandSchema = CommandLineOptionsSchema.extend({
   help: z.boolean().optional(),
@@ -91,6 +107,420 @@ export const EvalCommandSchema = CommandLineOptionsSchema.extend({
 }).partial();
 
 export type EvalCommandOptions = z.infer<typeof EvalCommandSchema>;
+
+// Enumerable Symbols survive ordinary beforeAll scenario clones without entering saved JSON.
+const ORIGINAL_SCENARIO_SOURCE_INDEX = Symbol('promptfoo.originalScenarioSourceIndex');
+type ScenarioWithSourceIndex = Scenario & { [ORIGINAL_SCENARIO_SOURCE_INDEX]?: number };
+
+function hasExecutableHistoricalReference(value: unknown): boolean {
+  if (typeof value === 'function') {
+    return true;
+  }
+  if (typeof value === 'string') {
+    return value.startsWith('file://') || value.startsWith('package:');
+  }
+  if (Array.isArray(value)) {
+    return value.some(hasExecutableHistoricalReference);
+  }
+  if (!value || typeof value !== 'object') {
+    return false;
+  }
+  return Object.entries(value).some(
+    ([key, item]) =>
+      /^(?:provider|transform|transformVars|contextTransform|postprocess)$/i.test(key) ||
+      (key === 'type' &&
+        typeof item === 'string' &&
+        /^(?:not-)*(?:javascript|python|ruby|webhook)(?:$|:)/i.test(item)) ||
+      hasExecutableHistoricalReference(item),
+  );
+}
+
+function hasExecutableHistoricalValue(value: unknown): boolean {
+  if (typeof value === 'string') {
+    return value.startsWith('file://') || value.startsWith('package:');
+  }
+  if (Array.isArray(value)) {
+    return value.some(hasExecutableHistoricalValue);
+  }
+  return Boolean(
+    value && typeof value === 'object' && Object.values(value).some(hasExecutableHistoricalValue),
+  );
+}
+
+function assertSafeExtractedHistoricalTest(test: TestCase): void {
+  if (
+    test.assertScoringFunction !== undefined ||
+    hasExecutableHistoricalReference(test.assert) ||
+    hasExecutableHistoricalReference(test.options) ||
+    hasExecutableHistoricalValue(test.vars)
+  ) {
+    throw new Error(
+      'An extracted historical case contains executable or provider references. Declare the case in the current config before replaying it.',
+    );
+  }
+}
+
+function intersectHistoricalSelectors<T>(
+  columns: T[],
+  stored: string[] | undefined,
+  current: string[] | undefined,
+  isAllowed: (column: T, refs: string[] | undefined) => boolean,
+  refsForColumn: (column: T) => Array<string | undefined>,
+): string[] | undefined {
+  if (!Array.isArray(stored)) {
+    return current;
+  }
+  if (!Array.isArray(current)) {
+    return stored;
+  }
+
+  const allowed = columns.map((column) => isAllowed(column, stored) && isAllowed(column, current));
+  const representsIntersection = (refs: string[]) =>
+    columns.every((column, index) => isAllowed(column, refs) === allowed[index]);
+  if (representsIntersection(stored)) {
+    return stored;
+  }
+  if (representsIntersection(current)) {
+    return current;
+  }
+
+  // A wildcard and a label/ID may overlap. Materialize only current columns that
+  // both selectors allow, and verify that each ref cannot admit an excluded column.
+  const refs: string[] = [];
+  for (const [index, column] of columns.entries()) {
+    if (!allowed[index] || isAllowed(column, refs)) {
+      continue;
+    }
+    const safeRef = refsForColumn(column).find(
+      (ref) =>
+        ref &&
+        columns.every(
+          (candidate, candidateIndex) => allowed[candidateIndex] || !isAllowed(candidate, [ref]),
+        ),
+    );
+    if (!safeRef) {
+      throw new Error(
+        'Could not safely preserve the current routing for an extracted historical case. Use distinct provider/prompt IDs or labels, or declare the case in the current config.',
+      );
+    }
+    refs.push(safeRef);
+  }
+  if (!representsIntersection(refs)) {
+    throw new Error(
+      'Could not safely preserve the current routing for an extracted historical case. Use distinct provider/prompt IDs or labels, or declare the case in the current config.',
+    );
+  }
+  return refs;
+}
+
+function historicalTargetIdentity(provider: TestCase['provider']) {
+  if (!provider) {
+    return undefined;
+  }
+  const id =
+    typeof provider === 'string'
+      ? provider
+      : typeof provider.id === 'function'
+        ? provider.id()
+        : provider.id;
+  if (typeof id !== 'string' || !id) {
+    return undefined;
+  }
+  const label = typeof provider === 'object' ? provider.label : undefined;
+  return { id, ...(typeof label === 'string' && label ? { label } : {}) };
+}
+
+function hasCurrentSingularOverride(
+  source: PreparedHistoricalCandidate['source'],
+  suite: TestSuite,
+) {
+  if (source.kind === 'top-level') {
+    return suite.tests?.[source.testIndex]?.provider !== undefined;
+  }
+  const scenario = suite.scenarios?.[source.scenarioIndex];
+  return (
+    scenario?.config[source.variantIndex]?.provider !== undefined ||
+    scenario?.tests?.[source.testIndex]?.provider !== undefined
+  );
+}
+
+function bindCurrentSyntheticTarget(
+  result: EvaluateResult | undefined,
+  candidates: PreparedHistoricalCandidate[],
+  suite: TestSuite,
+): PreparedHistoricalCandidate | undefined {
+  const singularSources = new Map(
+    candidates
+      .filter((candidate) => hasCurrentSingularOverride(candidate.source, suite))
+      .map((candidate) => [JSON.stringify(candidate.source), candidate]),
+  );
+  if (singularSources.size === 0) {
+    return undefined;
+  }
+  const stored = historicalTargetIdentity(result?.testCase?.provider);
+  const matchesStored = (provider: TestCase['provider']) => {
+    if (!isApiProvider(provider)) {
+      return false;
+    }
+    const current = historicalTargetIdentity(provider);
+    return (
+      stored?.id === current?.id &&
+      (!stored?.label || !current?.label || stored.label === current.label)
+    );
+  };
+  const matching = [...singularSources.values()].filter((candidate) => {
+    return matchesStored(candidate.test.provider);
+  });
+  const defaultProvider =
+    typeof suite.defaultTest === 'object' ? suite.defaultTest.provider : undefined;
+  if (matchesStored(defaultProvider) && matching.length === 0) {
+    return undefined;
+  }
+  if (matching.length !== 1 || matchesStored(defaultProvider)) {
+    throw new Error(
+      'Could not safely bind an extracted historical case to one current singular provider. Declare the generated case in the current config or use distinct source tests.',
+    );
+  }
+  return matching[0];
+}
+
+function createExactHistoricalSelector({
+  filters,
+  scenarioSourceIndices,
+  initialScenarios,
+  basePath,
+}: {
+  filters: FilterOptions;
+  scenarioSourceIndices?: number[];
+  initialScenarios?: Scenario[];
+  basePath?: string;
+}): NonNullable<InternalEvaluateOptions['exactHistoricalSelection']>['select'] {
+  const originalIndexByScenario = new WeakMap<Scenario, number>();
+  initialScenarios?.forEach((scenario, index) => {
+    const sourceIndex = scenarioSourceIndices?.[index] ?? index;
+    originalIndexByScenario.set(scenario, sourceIndex);
+    if (Object.isExtensible(scenario)) {
+      (scenario as ScenarioWithSourceIndex)[ORIGINAL_SCENARIO_SOURCE_INDEX] = sourceIndex;
+    }
+  });
+  return async (candidates, suite) => {
+    const resultLoadCache = new Map<string, Promise<StoredResults | undefined>>();
+    const topCandidates: PreparedHistoricalCandidate[] = [];
+    const scenarioCandidates = new Map<string, PreparedHistoricalCandidate[]>();
+    for (const candidate of candidates) {
+      if (candidate.source.kind === 'top-level') {
+        topCandidates.push(candidate);
+      } else {
+        const key = `${candidate.source.scenarioIndex}:${candidate.source.variantIndex}`;
+        const group = scenarioCandidates.get(key) ?? [];
+        group.push(candidate);
+        scenarioCandidates.set(key, group);
+      }
+    }
+    const groups: Array<{
+      scenario: Scenario;
+      candidates: PreparedHistoricalCandidate[];
+      scenarioIndex: number;
+      variantIndex: number;
+      globalOffset: number;
+    }> = [];
+    let globalOffset = 0;
+    for (const [scenarioIndex, scenario] of (suite.scenarios ?? []).entries()) {
+      for (const [variantIndex, variant] of scenario.config.entries()) {
+        const groupCandidates = scenarioCandidates.get(`${scenarioIndex}:${variantIndex}`) ?? [];
+        groups.push({
+          scenario: {
+            ...scenario,
+            config: [variant],
+            tests: groupCandidates.map((candidate) => candidate.test),
+          },
+          candidates: groupCandidates,
+          scenarioIndex,
+          variantIndex,
+          globalOffset: globalOffset++,
+        });
+      }
+    }
+    const preparedSuite: TestSuite = {
+      ...suite,
+      tests: topCandidates.map((candidate) => candidate.test),
+      scenarios: groups.map((group) => group.scenario),
+    };
+    const expansionContext = {
+      basePath,
+      varExpansionDisabled: getEnvBool('PROMPTFOO_DISABLE_VAR_EXPANSION'),
+    };
+
+    const selectGroup = async (
+      groupCandidates: PreparedHistoricalCandidate[],
+      groupSuite: TestSuite,
+      resultContext: ResultMatchContext,
+      groupFilters: FilterOptions,
+      extractedSource: PreparedHistoricalCandidate['source'],
+      currentSelectors: Pick<TestCase, 'providers' | 'prompts'>,
+    ): Promise<PreparedHistoricalCandidate[]> => {
+      const byTest = new Map(groupCandidates.map((candidate) => [candidate.test, candidate]));
+      const originalByCopy = new WeakMap<object, PreparedHistoricalCandidate>();
+      const resultByExtractedTest = new WeakMap<TestCase, EvaluateResult>();
+      const defaultMetadata =
+        typeof suite.defaultTest === 'object' ? suite.defaultTest.metadata : undefined;
+      const metadataKeysByTest = new Map(
+        groupCandidates.map((candidate) => [
+          candidate.test,
+          new Set([
+            ...Object.keys(defaultMetadata ?? {}),
+            ...Object.keys(candidate.test.metadata ?? {}),
+          ]),
+        ]),
+      );
+      const context: ResultMatchContext = {
+        ...resultContext,
+        resultLoadCache,
+        shouldExtractResult: (result) => {
+          if (resultContext.shouldExtractResult?.(result) === false) {
+            return false;
+          }
+          // A changed, non-deterministic current transform may no longer yield the saved
+          // value. Do not turn that authored result into a new test with old transformed vars.
+          return !groupCandidates.some(
+            (candidate) =>
+              (candidate.test.options?.transformVars ||
+                (typeof suite.defaultTest === 'object' &&
+                  suite.defaultTest.options?.transformVars)) &&
+              Object.keys(result.testCase?.metadata ?? {}).every((key) =>
+                metadataKeysByTest.get(candidate.test)?.has(key),
+              ) &&
+              resultContext.matchesTest(
+                result,
+                // This is only an authored-origin check. A changed target must
+                // not turn a stale transformed row into a providerless new test.
+                { ...candidate.test, vars: result.vars, provider: undefined },
+                candidate.test,
+              ),
+          );
+        },
+        bindMatchedTest: (copy, authored) => {
+          const candidate = byTest.get(authored);
+          if (candidate) {
+            originalByCopy.set(copy, candidate);
+          }
+          resultContext.bindMatchedTest?.(copy, authored);
+        },
+        authoredTestFor: (test) =>
+          originalByCopy.get(test)?.test ?? resultContext.authoredTestFor?.(test),
+        bindExtractedTest: (test, result) => {
+          resultByExtractedTest.set(test, result);
+          resultContext.bindExtractedTest?.(test, result);
+        },
+        extractedIdentityFor: (test) =>
+          JSON.stringify(
+            historicalTargetIdentity(resultByExtractedTest.get(test)?.testCase?.provider),
+          ),
+      };
+      const selected = await filterTests(groupSuite, {
+        ...groupFilters,
+        resultMatchContext: context,
+      });
+      return selected.map((test) => {
+        const original = byTest.get(test) ?? originalByCopy.get(test);
+        if (original) {
+          return { ...original, test };
+        }
+        // Extracted historical cases are already prepared; never execute a saved transform.
+        const { transformVars: _historicalTransform, ...options } = test.options ?? {};
+        assertSafeExtractedHistoricalTest({ ...test, options });
+        const currentTarget = bindCurrentSyntheticTarget(
+          resultByExtractedTest.get(test),
+          groupCandidates,
+          suite,
+        );
+        return {
+          source: currentTarget?.source ?? extractedSource,
+          test: {
+            ...test,
+            options,
+            ...(currentTarget && { provider: currentTarget.test.provider }),
+            providers: intersectHistoricalSelectors(
+              suite.providers,
+              test.providers,
+              currentSelectors.providers,
+              isProviderAllowed,
+              (provider) => [provider.label, provider.id()],
+            ),
+            prompts: intersectHistoricalSelectors(
+              suite.prompts,
+              test.prompts,
+              currentSelectors.prompts,
+              isPromptAllowed,
+              (prompt) => [prompt.id, prompt.label],
+            ),
+          },
+        };
+      });
+    };
+
+    const selectedTop = await selectGroup(
+      topCandidates,
+      { ...preparedSuite, tests: topCandidates.map((candidate) => candidate.test) },
+      topLevelResultMatchContext(preparedSuite, expansionContext),
+      { ...filters, range: suite.scenarios?.length ? undefined : filters.range },
+      { kind: 'top-level', testIndex: -1 },
+      typeof suite.defaultTest === 'object' ? suite.defaultTest : {},
+    );
+    const selectedScenarios: PreparedHistoricalCandidate[] = [];
+    for (const group of groups) {
+      const classifier = createScenarioResultClassifier(
+        preparedSuite,
+        group.scenario,
+        group.globalOffset,
+        expansionContext,
+      );
+      const seed = filters.sampleSeed;
+      selectedScenarios.push(
+        ...(await selectGroup(
+          group.candidates,
+          { ...group.scenario, providers: suite.providers, prompts: suite.prompts },
+          classifier.forVariant(0),
+          {
+            ...filters,
+            range: undefined,
+            sampleSeed:
+              seed === undefined
+                ? undefined
+                : deriveScenarioSampleSeed(
+                    seed,
+                    (suite.scenarios![group.scenarioIndex] as ScenarioWithSourceIndex)[
+                      ORIGINAL_SCENARIO_SOURCE_INDEX
+                    ] ??
+                      originalIndexByScenario.get(suite.scenarios![group.scenarioIndex]) ??
+                      scenarioSourceIndices?.[group.scenarioIndex] ??
+                      group.scenarioIndex,
+                  ),
+            inheritedMetadata: {
+              ...(typeof suite.defaultTest === 'object' ? suite.defaultTest.metadata : undefined),
+              ...group.scenario.config[0].metadata,
+            },
+          },
+          {
+            kind: 'scenario',
+            scenarioIndex: group.scenarioIndex,
+            variantIndex: group.variantIndex,
+            testIndex: -1,
+          },
+          {
+            providers:
+              group.scenario.config[0].providers ??
+              (typeof suite.defaultTest === 'object' ? suite.defaultTest.providers : undefined),
+            prompts:
+              group.scenario.config[0].prompts ??
+              (typeof suite.defaultTest === 'object' ? suite.defaultTest.prompts : undefined),
+          },
+        )),
+      );
+    }
+    return [...selectedTop, ...selectedScenarios];
+  };
+}
 
 function runtimeTagsForEval(
   cmdObj: Partial<CommandLineOptions & Command>,
@@ -383,6 +813,7 @@ async function doEvalWithEnv(
     let _basePath: string | undefined;
     let commandLineOptions: Record<string, any> | undefined;
     let testSources: Awaited<ReturnType<typeof resolveConfigs>>['testSources'];
+    let deferredScenarioSourceIndices: number[] | undefined;
     telemetry.record('command_used', {
       name: 'eval - started',
       watch: Boolean(cmdObj.watch),
@@ -489,6 +920,18 @@ async function doEvalWithEnv(
           logForCli: () => logger.error(message),
         });
       }
+      if (
+        resumeEval.runtimeOptions?.exactHistoricalReplayRequired &&
+        resumeEval.runtimeOptions.exactHistoricalReplay === undefined
+      ) {
+        return failEvalRun(
+          'This evaluation requires a prepared exact historical replay plan that was not saved. Start a fresh evaluation.',
+          isCliInvocation,
+        );
+      }
+      if (resumeEval.runtimeOptions?.exactHistoricalReplay !== undefined) {
+        validateExactHistoricalReplayPlan(resumeEval.runtimeOptions.exactHistoricalReplay);
+      }
       logger.info(chalk.cyan(`Resuming evaluation ${resumeEval.id}...`));
       // Use the saved config as our base to ensure identical test ordering
       ({
@@ -515,6 +958,18 @@ async function doEvalWithEnv(
         return failEvalRun(message, isCliInvocation, {
           logForCli: () => logger.error(message),
         });
+      }
+      if (
+        latestEval.runtimeOptions?.exactHistoricalReplayRequired &&
+        latestEval.runtimeOptions.exactHistoricalReplay === undefined
+      ) {
+        return failEvalRun(
+          'This evaluation requires a prepared exact historical replay plan that was not saved. Start a fresh evaluation.',
+          isCliInvocation,
+        );
+      }
+      if (latestEval.runtimeOptions?.exactHistoricalReplay !== undefined) {
+        validateExactHistoricalReplayPlan(latestEval.runtimeOptions.exactHistoricalReplay);
       }
 
       // Get all ERROR result IDs - capture BEFORE retry so we know what to delete on success
@@ -550,6 +1005,7 @@ async function doEvalWithEnv(
         basePath: _basePath,
         commandLineOptions,
         testSources,
+        deferredScenarioSourceIndices,
       } = await resolveConfigs(cmdObj, defaultConfig));
     }
 
@@ -707,6 +1163,12 @@ async function doEvalWithEnv(
       : (cmdObj.filterRange ?? commandLineOptions?.filterRange ?? evaluateOptions.filterRange);
     const filterSample = cmdObj.filterSample ?? commandLineOptions?.filterSample;
     const filterSampleSeed = cmdObj.filterSampleSeed ?? commandLineOptions?.filterSampleSeed;
+    const filterMetadataExact =
+      cmdObj.filterMetadataExact ?? commandLineOptions?.filterMetadataExact;
+    const deferExactHistoricalSelection =
+      !resumeEval &&
+      filterMetadataExact !== undefined &&
+      Boolean(cmdObj.filterFailing || cmdObj.filterFailingOnly || cmdObj.filterErrorsOnly);
     const hasActiveTestFilter =
       filterRange !== undefined ||
       cmdObj.filterFailing !== undefined ||
@@ -714,10 +1176,13 @@ async function doEvalWithEnv(
       cmdObj.filterErrorsOnly !== undefined ||
       cmdObj.filterFirstN !== undefined ||
       cmdObj.filterMetadata !== undefined ||
+      filterMetadataExact !== undefined ||
       cmdObj.filterPattern !== undefined ||
       filterSample !== undefined;
     const shouldApplyFiltersToImplicitDefaultTest =
       hasActiveTestFilter && canSynthesizeImplicitDefaultTest && !testSuite.tests?.length;
+    const sourceTests = testSuite.tests ?? [];
+    const sourceConfigs = Array.isArray(config.tests) ? config.tests : [];
 
     // Apply filtering only when not resuming, to preserve test indices
     if (!resumeEval) {
@@ -727,15 +1192,27 @@ async function doEvalWithEnv(
         testSuite.tests = defaultMetadata ? [{ metadata: defaultMetadata }] : [{}];
       }
       const filterOptions: FilterOptions = {
-        failing: cmdObj.filterFailing,
-        failingOnly: cmdObj.filterFailingOnly,
-        errorsOnly: cmdObj.filterErrorsOnly,
-        firstN: cmdObj.filterFirstN,
+        failing: deferExactHistoricalSelection ? undefined : cmdObj.filterFailing,
+        failingOnly: deferExactHistoricalSelection ? undefined : cmdObj.filterFailingOnly,
+        errorsOnly: deferExactHistoricalSelection ? undefined : cmdObj.filterErrorsOnly,
+        firstN: deferExactHistoricalSelection ? undefined : cmdObj.filterFirstN,
         metadata: cmdObj.filterMetadata,
-        pattern: cmdObj.filterPattern,
-        range: hasScenarios ? undefined : filterRange,
-        sample: filterSample,
+        metadataExact: filterMetadataExact,
+        inheritedMetadata:
+          typeof testSuite.defaultTest === 'object' ? testSuite.defaultTest.metadata : undefined,
+        pattern: deferExactHistoricalSelection ? undefined : cmdObj.filterPattern,
+        range: hasScenarios || deferExactHistoricalSelection ? undefined : filterRange,
+        sample: deferExactHistoricalSelection ? undefined : filterSample,
         sampleSeed: filterSampleSeed,
+        resultMatchContext:
+          !deferExactHistoricalSelection &&
+          filterMetadataExact !== undefined &&
+          (cmdObj.filterFailing || cmdObj.filterFailingOnly || cmdObj.filterErrorsOnly)
+            ? topLevelResultMatchContext(testSuite, {
+                basePath: cliState.basePath,
+                varExpansionDisabled: getEnvBool('PROMPTFOO_DISABLE_VAR_EXPANSION'),
+              })
+            : undefined,
       };
       testSuite.tests = await filterTests(testSuite, filterOptions);
       const shouldSuppressImplicitDefaultTest =
@@ -877,9 +1354,15 @@ async function doEvalWithEnv(
       );
     }
 
+    const { exactHistoricalSelection: _ephemeralHistoricalSelection, ...persistableOptions } =
+      options;
     const runtimeOptions: EvalRuntimeOptions = {
-      ...options,
+      ...persistableOptions,
       ...(providerFilter ? { providerFilter } : {}),
+      ...(deferExactHistoricalSelection && cmdObj.write
+        ? { exactHistoricalReplayRequired: true }
+        : {}),
+      ...(filterMetadataExact !== undefined && !hasScenarios ? { filterRange: undefined } : {}),
     };
 
     if (!resumeEval && config.metadata && 'generationAccounting' in config.metadata) {
@@ -902,11 +1385,59 @@ async function doEvalWithEnv(
 
     // Create or load eval record
     const author = getAuthor();
+    const sourceIndexByTest = new Map<(typeof sourceTests)[number], number>();
+    if (!resumeEval && filterMetadataExact !== undefined) {
+      for (const [index, test] of sourceTests.entries()) {
+        if (!sourceIndexByTest.has(test)) {
+          sourceIndexByTest.set(test, index);
+        }
+      }
+    }
+    const savedConfig =
+      !resumeEval && filterMetadataExact !== undefined
+        ? {
+            ...config,
+            tests: (testSuite.tests ?? []).map((test) => {
+              let sourceIndex = sourceIndexByTest.get(test) ?? -1;
+              if (sourceIndex < 0) {
+                const copiedSourceIndices = sourceTests.flatMap((source, index) =>
+                  Object.keys(source).filter((key) => key !== 'vars').length ===
+                    Object.keys(test).filter((key) => key !== 'vars').length &&
+                  Object.entries(source).every(
+                    ([key, value]) =>
+                      key === 'vars' || Object.is((test as Record<string, unknown>)[key], value),
+                  ) &&
+                  Object.entries(source.vars ?? {}).every(
+                    ([key, value]) => test.vars?.[key] === value,
+                  )
+                    ? [index]
+                    : [],
+                );
+                sourceIndex = copiedSourceIndices.length === 1 ? copiedSourceIndices[0] : -1;
+              }
+              const sourceConfig = sourceConfigs[sourceIndex];
+              return sourceConfig && typeof sourceConfig === 'object'
+                ? { ...sourceConfig, vars: test.vars }
+                : mapTestProviderRefs(test, toSerializableProviderRef);
+            }),
+            ...(testSuite.scenarios?.length === 0 ? { scenarios: [] } : {}),
+            commandLineOptions: {
+              ...config.commandLineOptions,
+              filterMetadataExact: undefined,
+              filterSample: undefined,
+              filterSampleSeed: undefined,
+              ...(hasScenarios ? {} : { filterRange: undefined }),
+            },
+            ...(!hasScenarios && config.evaluateOptions
+              ? { evaluateOptions: { ...config.evaluateOptions, filterRange: undefined } }
+              : {}),
+          }
+        : config;
     const evalRecord = resumeEval
       ? resumeEval
       : cmdObj.write
-        ? await Eval.create(config, testSuite.prompts, { author, runtimeOptions })
-        : new Eval(config, { author, runtimeOptions });
+        ? await Eval.create(savedConfig, testSuite.prompts, { author, runtimeOptions })
+        : new Eval(savedConfig, { author, runtimeOptions });
 
     // Graceful pause support via Ctrl+C (only when writing to database)
     const abortController = new AbortController();
@@ -991,8 +1522,48 @@ async function doEvalWithEnv(
 
       ret = await evaluate(testSuite, evalRecord, {
         ...options,
+        ...(deferExactHistoricalSelection && {
+          exactHistoricalSelection: {
+            writeEnabled: cmdObj.write !== false,
+            eligible: async (candidates: PreparedHistoricalCandidate[], suite: TestSuite) => {
+              const eligible = await filterTests(
+                { ...suite, tests: candidates.map((candidate) => candidate.test) },
+                {
+                  metadata: cmdObj.filterMetadata,
+                  metadataExact: filterMetadataExact,
+                  inheritedMetadata:
+                    typeof suite.defaultTest === 'object' ? suite.defaultTest.metadata : undefined,
+                },
+              );
+              const selected = new Set(eligible);
+              return candidates.filter((candidate) => selected.has(candidate.test));
+            },
+            select: createExactHistoricalSelector({
+              filters: {
+                failing: cmdObj.filterFailing,
+                failingOnly: cmdObj.filterFailingOnly,
+                errorsOnly: cmdObj.filterErrorsOnly,
+                metadata: cmdObj.filterMetadata,
+                metadataExact: filterMetadataExact,
+                inheritedMetadata:
+                  typeof testSuite.defaultTest === 'object'
+                    ? testSuite.defaultTest.metadata
+                    : undefined,
+                pattern: cmdObj.filterPattern,
+                range: filterRange,
+                firstN: cmdObj.filterFirstN,
+                sample: filterSample,
+                sampleSeed: filterSampleSeed,
+              },
+              scenarioSourceIndices: deferredScenarioSourceIndices,
+              initialScenarios: testSuite.scenarios,
+              basePath: cliState.basePath,
+            }),
+          },
+        }),
         restorePromptColumns: Boolean(resumeEval),
-        filterRange: hasScenarios || resumeEval ? filterRange : undefined,
+        filterRange:
+          hasScenarios || resumeEval || deferExactHistoricalSelection ? filterRange : undefined,
         abortSignal: evaluateOptions.abortSignal,
         pauseSignal: isCliInvocation && cmdObj.write !== false ? abortController.signal : undefined,
         isRedteam: Boolean(config.redteam),

@@ -411,6 +411,24 @@ promptfoo eval --filter-metadata 'path=C:\data\\,D:\data'
 
 Quote the argument, as in these examples, so that the shell passes the backslashes on.
 
+Use `--filter-metadata-exact` to match the complete string form of a scalar metadata value. For array metadata, an element is stringified and must equal one of the requested values. Missing and null values do not match. When both metadata filters are supplied, a test must match both:
+
+```bash
+promptfoo eval --filter-metadata-exact category=math
+promptfoo eval --filter-metadata-exact tags=ai,technology
+promptfoo eval --filter-metadata category=math --filter-metadata-exact category=math
+```
+
+Exact filters use the same comma escaping, OR alternatives, and repeated-flag AND behavior as `--filter-metadata`. They also include metadata inherited from `defaultTest` and scenario configuration unless a test case overrides that key.
+
+When an exact metadata filter is combined with `--filter-failing`, `--filter-failing-only`, or `--filter-errors-only`, promptfoo compares previous results with the current test cases after applying their current `transformVars` once and expanding their variables. For example, if the current transform changes `a` to `a!`, a previous failure for `a!` selects the current `a` test and runs it with `a!`. A changed or random transform result that no longer matches selects no test; promptfoo does not guess the original input. For a saved eval from this combined filter, resume and retry reuse its selected variables and test settings without transforming them again, even if the historical results file is no longer available. Provider configuration still comes from the current config.
+
+For runtime-generated historical cases, saved and current provider/prompt selectors are both applied. If overlapping IDs or labels cannot express their intersection without allowing an excluded column, the evaluation stops before calling a provider. Use distinct IDs or labels, or declare the intended case in the current config.
+
+If a runtime-generated historical case used a singular test provider, replay requires its saved provider identity to identify one current source test. Missing, changed, or ambiguous identities stop the evaluation before provider calls. Declare the case in the current config or give source tests distinct provider identities; saved provider configuration is never reused.
+
+The selected cases must be saved safely before provider calls. If active data-stripping or redaction settings prevent that, the eval stops; use `--no-write` to run without saving a resumable eval. Distinct test providers need distinguishable IDs or labels for saved recovery; otherwise the eval stops before provider calls. Prompt suggestion generation cannot run with this filter combination; generate prompts separately and reuse them. Historical-only cases can retain simple declarative assertions, but executable assertions, graders, and provider settings must come from current config test cases.
+
 ### JSON in CSV
 
 Include structured data:
