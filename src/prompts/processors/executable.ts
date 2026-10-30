@@ -5,7 +5,7 @@ import { getCache, isCacheEnabled } from '../../cache';
 import { getProcessEnv } from '../../envars';
 import {
   EXEC_CACHE_VERSION,
-  getExecFileInputs,
+  getFileHashes,
   parseScriptParts,
   stripText,
 } from '../../providers/scriptCompletion';
@@ -45,8 +45,7 @@ export const executablePromptFunction = async (
   };
 
   const scriptParts = parseScriptParts(scriptPath);
-  // The child runs in basePath when it is set, so files are looked up there
-  const { fileHashes } = getExecFileInputs(scriptParts, context.config?.basePath || undefined);
+  const fileHashes = getFileHashes(scriptParts);
 
   const cacheKey = `exec-prompt:${EXEC_CACHE_VERSION}:${scriptPath}:${fileHashes.join(':')}:${safeJsonStringify(transformedContext)}`;
 
