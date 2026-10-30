@@ -28,9 +28,12 @@ describe('normalizeImageSrcForComparison', () => {
   });
 
   it('normalizes blob URIs to API paths', () => {
-    const blobUri = 'promptfoo://blob/abc123def456abc123def456abc123de';
+    const blobUri =
+      'promptfoo://blob/abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789';
     const result = normalizeImageSrcForComparison(blobUri);
-    expect(result).toBe('/api/blobs/abc123def456abc123def456abc123de');
+    expect(result).toBe(
+      '/api/blobs/abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789',
+    );
   });
 
   it('normalizes storage refs to API paths', () => {
@@ -57,10 +60,13 @@ describe('normalizeImageSrcForComparison', () => {
   });
 
   it('normalizes blob URIs within text containing other content', () => {
-    const text = 'Some text promptfoo://blob/fedcba9876543210fedcba9876543210 more text';
+    const text =
+      'Some text promptfoo://blob/fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210 more text';
     const result = normalizeImageSrcForComparison(text);
     // normalizeMediaText replaces the blob URI
-    expect(result).toContain('/api/blobs/fedcba9876543210fedcba9876543210');
+    expect(result).toContain(
+      '/api/blobs/fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210',
+    );
   });
 });
 
@@ -129,11 +135,14 @@ describe('extractMarkdownImageSources', () => {
   });
 
   it('extracts blob URI images', () => {
-    const blobUri = 'promptfoo://blob/abc123def456abc123def456abc123de';
+    const blobUri =
+      'promptfoo://blob/abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789';
     const markdown = `![Alt](${blobUri})`;
     const sources = extractMarkdownImageSources(markdown);
     // Blob URIs should be normalized to API paths
-    expect(sources).toEqual(['/api/blobs/abc123def456abc123def456abc123de']);
+    expect(sources).toEqual([
+      '/api/blobs/abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789',
+    ]);
   });
 
   it('extracts storage ref images', () => {
@@ -228,7 +237,7 @@ describe('extractMarkdownImageSources', () => {
 
   it('normalizes URLs before deduplication', () => {
     // If two URLs normalize to the same thing, they should be deduplicated
-    const blobHash = 'abc123def456abc123def456abc123de';
+    const blobHash = 'abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789';
     const markdown = `
       ![Blob1](promptfoo://blob/${blobHash})
       ![Blob2](promptfoo://blob/${blobHash})
@@ -261,10 +270,15 @@ describe('resolveEvalImageOutputSource', () => {
   it('falls back to resolveImageSource for blob refs', () => {
     const image = {
       data: 'base64data',
-      blobRef: { uri: 'promptfoo://blob/abc123def456abc123def456abc123de', hash: 'abc123' },
+      blobRef: {
+        uri: 'promptfoo://blob/abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789',
+        hash: 'abc123',
+      },
     } as any;
     const result = resolveEvalImageOutputSource(image);
-    expect(result).toBe('/api/blobs/abc123def456abc123def456abc123de');
+    expect(result).toBe(
+      '/api/blobs/abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789',
+    );
   });
 
   it('falls back to resolveImageSource when data is not an HTTP(S) URL', () => {
@@ -281,10 +295,15 @@ describe('resolveEvalImageOutputSource', () => {
 
   it('handles image with only blobRef', () => {
     const image = {
-      blobRef: { uri: 'promptfoo://blob/fedcba9876543210fedcba9876543210', hash: 'fedcba98' },
+      blobRef: {
+        uri: 'promptfoo://blob/fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210',
+        hash: 'fedcba98',
+      },
     } as any;
     const result = resolveEvalImageOutputSource(image);
-    expect(result).toBe('/api/blobs/fedcba9876543210fedcba9876543210');
+    expect(result).toBe(
+      '/api/blobs/fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210',
+    );
   });
 
   it('handles empty object', () => {
