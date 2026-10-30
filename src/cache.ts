@@ -36,13 +36,16 @@ const namespacedCacheInstances = new Map<string, Cache>();
 let cacheClearGeneration = 0;
 
 // The CLI and the public ESM/CJS entry points can load separate copies of this
-// module. Share only the async policy, not cache instances or module defaults,
-// so providers loaded by extension hooks observe the evaluation's cache policy.
+// module. Share the async policy and the explicit enableCache()/disableCache()
+// choice, not cache instances or env-derived module defaults, so providers loaded
+// by extension hooks observe the evaluation's cache policy.
 const CACHE_ENABLED_CONTEXT = Symbol.for('promptfoo.cache.enabledContext.v1');
 const CACHE_NAMESPACE_CONTEXT = Symbol.for('promptfoo.cache.namespaceContext.v1');
+const CACHE_EXPLICIT_ENABLED = Symbol.for('promptfoo.cache.explicitEnabled.v1');
 const cacheContextGlobal = globalThis as typeof globalThis & {
   [CACHE_ENABLED_CONTEXT]?: AsyncLocalStorage<{ enabled: boolean }>;
   [CACHE_NAMESPACE_CONTEXT]?: AsyncLocalStorage<{ namespace: string }>;
+  [CACHE_EXPLICIT_ENABLED]?: boolean;
 };
 const cacheEnabledStorage = (cacheContextGlobal[CACHE_ENABLED_CONTEXT] ??= new AsyncLocalStorage<{
   enabled: boolean;
@@ -53,7 +56,8 @@ const cacheNamespaceStorage = (cacheContextGlobal[CACHE_NAMESPACE_CONTEXT] ??=
     namespace: string;
   }>());
 
-let enabled = getEnvBool('PROMPTFOO_CACHE_ENABLED', true);
+// Explicit enableCache()/disableCache() calls from any module copy win over this copy's env default.
+const envCacheEnabled = getEnvBool('PROMPTFOO_CACHE_ENABLED', true);
 
 const cacheType =
   getEnvString('PROMPTFOO_CACHE_TYPE') || (getEnvString('NODE_ENV') === 'test' ? 'memory' : 'disk');
@@ -95,7 +99,7 @@ function getCacheInstance() {
     let cachePath = '';
     let diskCache: Cache | undefined;
 
-    if (cacheType === 'disk' && enabled) {
+    if (cacheType === 'disk' && (cacheContextGlobal[CACHE_EXPLICIT_ENABLED] ?? envCacheEnabled)) {
       cachePath =
         getEnvString('PROMPTFOO_CACHE_PATH') || path.join(getConfigDirectoryPath(), 'cache');
 
@@ -293,7 +297,11 @@ export function withCacheEnabled<T>(enabledOverride: boolean | undefined, fn: ()
 }
 
 function getEffectiveCacheEnabled() {
-  return cacheEnabledStorage.getStore()?.enabled ?? enabled;
+  return (
+    cacheEnabledStorage.getStore()?.enabled ??
+    cacheContextGlobal[CACHE_EXPLICIT_ENABLED] ??
+    envCacheEnabled
+  );
 }
 
 export type FetchWithCacheResult<T> = {
@@ -1150,7 +1158,7 @@ export async function fetchWithCache<T = unknown>(
  * ```
  */
 export function enableCache() {
-  enabled = true;
+  cacheContextGlobal[CACHE_EXPLICIT_ENABLED] = true;
 }
 
 /**
@@ -1168,7 +1176,7 @@ export function enableCache() {
  * ```
  */
 export function disableCache() {
-  enabled = false;
+  cacheContextGlobal[CACHE_EXPLICIT_ENABLED] = false;
 }
 
 /**

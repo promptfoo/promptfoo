@@ -761,6 +761,20 @@ describe('fetchWithCache', () => {
       expect(getScopedCacheKey('sample')).toBe('sample');
     });
 
+    it('shares enableCache and disableCache across separately loaded module copies', async () => {
+      vi.resetModules();
+      const otherCacheModule = await import('../src/cache');
+
+      disableCache();
+      expect(otherCacheModule.isCacheEnabled()).toBe(false);
+      await otherCacheModule.withCacheEnabled(true, async () => {
+        expect(isCacheEnabled()).toBe(true);
+      });
+
+      otherCacheModule.enableCache();
+      expect(isCacheEnabled()).toBe(true);
+    });
+
     it('should scope cache disabling to the current async context', async () => {
       expect(isCacheEnabled()).toBe(true);
 
