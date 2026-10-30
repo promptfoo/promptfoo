@@ -1,5 +1,5 @@
 import { parseDataUrl } from '../../util/dataUrl';
-import { calculateCost as calculateCostBase } from '../shared';
+import { calculateCost as calculateCostBase, parseToolCallArguments } from '../shared';
 import type Anthropic from '@anthropic-ai/sdk';
 
 import type { TokenUsage } from '../../types/index';
@@ -737,30 +737,76 @@ export function parseMessages(messages: string): {
   extractedMessages: Anthropic.MessageParam[];
   thinking?: Anthropic.ThinkingConfigParam;
 } {
+  let parsed;
   try {
-    const parsed = JSON.parse(messages);
-    if (Array.isArray(parsed)) {
-      const systemMessage = parsed.find((msg) => msg.role === 'system');
-      const thinking = parsed.find((msg) => msg.thinking)?.thinking;
-      return {
-        extractedMessages: parsed
-          .filter((msg) => msg.role && msg.role !== 'system')
-          .map((msg) => ({
-            role: msg.role,
-            content: Array.isArray(msg.content)
-              ? processAnthropicImageContent(msg.content)
-              : [{ type: 'text', text: msg.content }],
-          })),
-        system: systemMessage
-          ? Array.isArray(systemMessage.content)
-            ? systemMessage.content
-            : [{ type: 'text', text: systemMessage.content }]
-          : undefined,
-        thinking,
-      };
-    }
+    parsed = JSON.parse(messages);
   } catch {
-    // Not JSON, parse as plain text
+    // Not JSON, parse as plain text below.
+  }
+  if (Array.isArray(parsed) && parsed.every((msg) => msg != null)) {
+    const extractedMessages: Anthropic.MessageParam[] = [];
+    const systemMessages = parsed.filter(
+      (msg) => msg.role === 'system' || msg.role === 'developer',
+    );
+    for (const msg of parsed.filter((item) => item.role && !systemMessages.includes(item))) {
+      if (msg.role === 'tool' || msg.tool_call_id !== undefined) {
+        if (typeof msg.tool_call_id !== 'string' || !msg.tool_call_id) {
+          throw new Error('Tool result requires a tool_call_id');
+        }
+        const result: Anthropic.ToolResultBlockParam = {
+          type: 'tool_result',
+          tool_use_id: msg.tool_call_id,
+          content: Array.isArray(msg.content)
+            ? processAnthropicImageContent(msg.content)
+            : typeof msg.content === 'string'
+              ? msg.content
+              : JSON.stringify(msg.content ?? ''),
+        };
+        const previous = extractedMessages[extractedMessages.length - 1];
+        if (
+          previous?.role === 'user' &&
+          Array.isArray(previous.content) &&
+          previous.content.length &&
+          previous.content.every((block) => block.type === 'tool_result')
+        ) {
+          previous.content.push(result);
+        } else {
+          extractedMessages.push({ role: 'user', content: [result] });
+        }
+        continue;
+      }
+      const content: Anthropic.ContentBlockParam[] = Array.isArray(msg.content)
+        ? processAnthropicImageContent(msg.content)
+        : msg.content == null || (msg.tool_calls?.length && msg.content === '')
+          ? []
+          : [{ type: 'text', text: msg.content }];
+      for (const call of msg.tool_calls ?? []) {
+        if (
+          typeof call?.id !== 'string' ||
+          !call.id ||
+          typeof call.function?.name !== 'string' ||
+          !call.function.name
+        ) {
+          throw new Error('Tool call requires an id and function name');
+        }
+        content.push({
+          type: 'tool_use',
+          id: call.id,
+          name: call.function.name,
+          input: parseToolCallArguments(call.function.arguments),
+        });
+      }
+      extractedMessages.push({ role: msg.role, content });
+    }
+    return {
+      extractedMessages,
+      system: systemMessages.length
+        ? systemMessages.flatMap((msg) =>
+            Array.isArray(msg.content) ? msg.content : [{ type: 'text', text: msg.content }],
+          )
+        : undefined,
+      thinking: parsed.find((msg) => msg.thinking)?.thinking,
+    };
   }
   const lines = messages
     .split('\n')
