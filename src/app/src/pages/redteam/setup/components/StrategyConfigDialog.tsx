@@ -30,9 +30,12 @@ import {
   MULTI_MODAL_STRATEGIES,
   MULTI_TURN_STRATEGIES,
   type MultiTurnStrategy,
+  TEXT_MUTATION_DEFAULT_RATES,
+  TEXT_MUTATION_STRATEGIES,
+  type TextMutationStrategy,
 } from '@promptfoo/redteam/constants/strategies';
 import { AlertTriangle, ArrowDown, ArrowUp, Info, Trash2, X } from 'lucide-react';
-import { STRATEGIES_REQUIRING_CONFIG } from './strategies/utils';
+import { getLayerConfigError, STRATEGIES_REQUIRING_CONFIG } from './strategies/utils';
 import type { StrategyConfig } from '@promptfoo/redteam/types';
 
 import type { StrategyCardData } from './strategies/types';
@@ -54,6 +57,9 @@ const getStepId = (step: StepType): string => {
 // Stable empty arrays to avoid infinite loops in useEffect dependencies
 const EMPTY_PLUGINS_ARRAY: string[] = [];
 const EMPTY_STRATEGIES_ARRAY: Array<string | { id: string; config?: Partial<StrategyConfig> }> = [];
+
+const isTextMutationStrategy = (value: string): value is TextMutationStrategy =>
+  TEXT_MUTATION_STRATEGIES.includes(value as TextMutationStrategy);
 
 interface StrategyConfigDialogProps {
   open: boolean;
@@ -99,6 +105,7 @@ export default function StrategyConfigDialog({
   const [error, setError] = React.useState<string>('');
 
   const [steps, setSteps] = React.useState<StepType[]>((config.steps as StepType[]) || []);
+  const layerError = getLayerConfigError(steps);
   const [newStep, setNewStep] = React.useState<string>('');
   const [layerPlugins, setLayerPlugins] = React.useState<string[]>(config.plugins || []);
   // Plugin targeting: 'all' or 'specific'
@@ -325,24 +332,11 @@ export default function StrategyConfigDialog({
         const isValidStrategy = (availableStrategies as string[]).includes(trimmedValue);
 
         if (isValidStrategy) {
-          // If strategy requires config, get its config from allStrategies
-          if (STRATEGIES_REQUIRING_CONFIG.includes(trimmedValue)) {
-            const strategyConfig = allStrategies.find((s) => {
-              const id = typeof s === 'string' ? s : s.id;
-              return id === trimmedValue;
-            });
-
-            if (strategyConfig && typeof strategyConfig === 'object' && strategyConfig.config) {
-              // Add step with its config
-              setSteps((prev) => [...prev, { id: trimmedValue, config: strategyConfig.config }]);
-            } else {
-              // Shouldn't reach here due to filtering, but add as string fallback
-              setSteps((prev) => [...prev, trimmedValue]);
-            }
-          } else {
-            // Regular strategy without config requirements
-            setSteps((prev) => [...prev, trimmedValue]);
-          }
+          const strategyConfig = allStrategies.find(
+            (s) => (typeof s === 'string' ? s : s.id) === trimmedValue,
+          );
+          const config = typeof strategyConfig === 'object' ? strategyConfig.config : undefined;
+          setSteps((prev) => [...prev, config ? { id: trimmedValue, config } : trimmedValue]);
           setNewStep('');
         }
       }
@@ -430,6 +424,8 @@ export default function StrategyConfigDialog({
       strategy === 'jailbreak:meta' ||
       strategy === 'jailbreak:tree' ||
       strategy === 'best-of-n' ||
+      strategy === 'bijection' ||
+      isTextMutationStrategy(strategy) ||
       strategy === 'goat' ||
       strategy === 'crescendo' ||
       strategy === 'custom' ||
@@ -440,8 +436,15 @@ export default function StrategyConfigDialog({
       if (!isCustomStrategyValid()) {
         return;
       }
-      onSave(strategy, localConfig);
+      const strategyConfig =
+        strategy === 'bijection' && localConfig.type !== 'digit' && localConfig.dispersion === 1
+          ? { ...localConfig, dispersion: 2 }
+          : localConfig;
+      onSave(strategy, strategyConfig);
     } else if (strategy === 'layer') {
+      if (layerError) {
+        return;
+      }
       const layerConfig: Partial<StrategyConfig> = {
         ...localConfig,
       };
@@ -983,6 +986,198 @@ export default function StrategyConfigDialog({
     </div>
   );
 
+  const renderBijectionStrategyConfig = () => {
+    const mappingType = localConfig.type === 'digit' ? 'digit' : 'letter';
+
+    return (
+      <div className="flex flex-col gap-4">
+        <p className="text-sm text-muted-foreground">
+          Configure a deterministic one-to-one substitution language. The target is asked to decode
+          the request and answer its meaning directly in ordinary language.
+        </p>
+
+        <div className="space-y-2">
+          <Label htmlFor="bijection-type">Mapping Type</Label>
+          <Select
+            value={mappingType}
+            onValueChange={(value) => {
+              const dispersion = Number(localConfig.dispersion ?? 16);
+              setLocalConfig({
+                ...localConfig,
+                type: value,
+                dispersion: value === 'letter' && dispersion === 1 ? 2 : dispersion,
+              });
+            }}
+          >
+            <SelectTrigger id="bijection-type">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="letter">Letter substitution</SelectItem>
+              <SelectItem value="digit">Fixed-width digit tokens</SelectItem>
+            </SelectContent>
+          </Select>
+          <p className="text-xs text-muted-foreground">
+            Letter mappings permute letters. Digit mappings replace selected letters with numeric
+            tokens.
+          </p>
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="bijection-dispersion">Changed Letters</Label>
+          <Input
+            id="bijection-dispersion"
+            type="number"
+            value={localConfig.dispersion === undefined ? 16 : Number(localConfig.dispersion)}
+            onChange={(e) => {
+              const parsed = e.target.value ? Number.parseInt(e.target.value, 10) : 16;
+              const value = clampValue(parsed, 0, 26);
+              setLocalConfig({ ...localConfig, dispersion: value });
+            }}
+            min={0}
+            max={26}
+          />
+          <p className="text-xs text-muted-foreground">
+            Number of alphabet letters whose representation changes. Letter mappings skip 1 because
+            a one-item permutation cannot change itself.
+          </p>
+        </div>
+
+        {mappingType === 'digit' && (
+          <div className="space-y-2">
+            <Label htmlFor="bijection-encoding-length">Digit Token Length</Label>
+            <Input
+              id="bijection-encoding-length"
+              type="number"
+              value={
+                localConfig.encodingLength === undefined ? 2 : Number(localConfig.encodingLength)
+              }
+              onChange={(e) => {
+                const value = e.target.value ? Number.parseInt(e.target.value, 10) : 2;
+                setLocalConfig({
+                  ...localConfig,
+                  encodingLength: clampValue(value, 2, 4),
+                });
+              }}
+              min={2}
+              max={4}
+            />
+          </div>
+        )}
+
+        <div className="space-y-2">
+          <Label htmlFor="bijection-n">Variants per Test</Label>
+          <Input
+            id="bijection-n"
+            type="number"
+            value={localConfig.n === undefined ? 1 : Number(localConfig.n)}
+            onChange={(e) => {
+              const value = e.target.value ? Number.parseInt(e.target.value, 10) : 1;
+              setLocalConfig({ ...localConfig, n: clampValue(value, 1, 20) });
+            }}
+            min={1}
+            max={20}
+          />
+          <p className="text-xs text-muted-foreground">
+            Maximum distinct prompts per test. Zero changed letters produces one variant.
+          </p>
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="bijection-seed">Seed</Label>
+          <Input
+            id="bijection-seed"
+            value={localConfig.seed === undefined ? 'promptfoo' : String(localConfig.seed)}
+            onChange={(e) => setLocalConfig({ ...localConfig, seed: e.target.value })}
+          />
+          <p className="text-xs text-muted-foreground">
+            Reuse a seed to reproduce the same mappings.
+          </p>
+        </div>
+
+        <div className="flex items-start gap-3">
+          <Switch
+            id="bijection-examples"
+            checked={localConfig.includeExamples !== false}
+            onCheckedChange={(checked) =>
+              setLocalConfig({ ...localConfig, includeExamples: checked })
+            }
+            className="mt-0.5"
+          />
+          <div className="space-y-0.5">
+            <Label htmlFor="bijection-examples" className="text-sm font-normal">
+              Include harmless translation examples
+            </Label>
+            <p className="text-xs text-muted-foreground">
+              Adds short demonstrations to teach the temporary language in context.
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  const renderTextMutationStrategyConfig = (strategyId: TextMutationStrategy) => {
+    const defaultRate = TEXT_MUTATION_DEFAULT_RATES[strategyId];
+
+    return (
+      <div className="flex flex-col gap-4">
+        <p className="text-sm text-muted-foreground">
+          Configure a deterministic text mutation. A nonzero rate always changes at least one
+          eligible character when the input contains one.
+        </p>
+
+        <div className="space-y-2">
+          <Label htmlFor={`${strategyId}-rate`}>Mutation Rate</Label>
+          <Input
+            id={`${strategyId}-rate`}
+            type="number"
+            value={localConfig.rate === undefined ? defaultRate : Number(localConfig.rate)}
+            onChange={(e) => {
+              const value = e.target.value ? Number.parseFloat(e.target.value) : defaultRate;
+              setLocalConfig({ ...localConfig, rate: clampValue(value, 0, 1) });
+            }}
+            min={0}
+            max={1}
+            step={0.05}
+          />
+          <p className="text-xs text-muted-foreground">
+            Probability from 0 to 1 that each eligible position is selected.
+          </p>
+        </div>
+
+        {strategyId === 'zalgo' && (
+          <div className="space-y-2">
+            <Label htmlFor="zalgo-intensity">Combining Marks per Character</Label>
+            <Input
+              id="zalgo-intensity"
+              type="number"
+              value={localConfig.intensity === undefined ? 3 : Number(localConfig.intensity)}
+              onChange={(e) => {
+                const value = e.target.value ? Number.parseInt(e.target.value, 10) : 3;
+                setLocalConfig({ ...localConfig, intensity: clampValue(value, 1, 8) });
+              }}
+              min={1}
+              max={8}
+            />
+          </div>
+        )}
+
+        <div className="space-y-2">
+          <Label htmlFor={`${strategyId}-seed`}>Seed</Label>
+          <Input
+            id={`${strategyId}-seed`}
+            value={localConfig.seed === undefined ? 'promptfoo' : String(localConfig.seed)}
+            onChange={(e) => setLocalConfig({ ...localConfig, seed: e.target.value })}
+          />
+          <p className="text-xs text-muted-foreground">
+            Reuse a seed to reproduce the same mutation.
+          </p>
+        </div>
+      </div>
+    );
+  };
+
   const renderCitationStrategyConfig = () => (
     <div className="flex flex-col gap-4">
       <p className="text-sm text-muted-foreground">
@@ -1282,12 +1477,12 @@ export default function StrategyConfigDialog({
       <p
         className={cn(
           'mt-1 text-xs',
-          steps.length === 0 ? 'text-destructive' : 'text-muted-foreground',
+          steps.length === 0 || layerError ? 'text-destructive' : 'text-muted-foreground',
         )}
       >
         {steps.length === 0
           ? 'Add at least one strategy step (required)'
-          : getValidationMessage() || 'Add steps to build your transform chain'}
+          : layerError || getValidationMessage() || 'Add steps to build your transform chain'}
       </p>
 
       {steps.length > 0 && (
@@ -1307,6 +1502,10 @@ export default function StrategyConfigDialog({
   );
 
   const renderStrategyConfig = () => {
+    if (strategy && isTextMutationStrategy(strategy)) {
+      return renderTextMutationStrategyConfig(strategy);
+    }
+
     switch (strategy) {
       case 'basic':
         return renderBasicStrategyConfig();
@@ -1327,6 +1526,8 @@ export default function StrategyConfigDialog({
         return renderTreeStrategyConfig();
       case 'gcg':
         return renderGcgStrategyConfig();
+      case 'bijection':
+        return renderBijectionStrategyConfig();
       case 'citation':
         return renderCitationStrategyConfig();
       case 'layer':
@@ -1363,7 +1564,7 @@ export default function StrategyConfigDialog({
             disabled={
               (strategy === 'retry' && (!!error || !numTests)) ||
               !isCustomStrategyValid() ||
-              (strategy === 'layer' && steps.length === 0)
+              (strategy === 'layer' && (steps.length === 0 || !!layerError))
             }
           >
             Save
