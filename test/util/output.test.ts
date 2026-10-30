@@ -1943,6 +1943,7 @@ describe('writeOutput', () => {
     expect(templateContent).toContain('data-detail-drawer');
     expect(templateContent).toContain('data-detail-template');
     expect(templateContent).toContain('appendVariableDetails(trigger);');
+    expect(templateContent).toContain("'a[href], summary, button:not([disabled])");
     expect(templateContent).not.toContain('{% for variable in cell.variables %}');
   });
 
@@ -2014,6 +2015,12 @@ describe('writeOutput', () => {
     expect(html).not.toContain('Passing <test> description');
     expect(html).toContain('Passing reason');
     expect(html).toContain('Failing reason');
+    expect(html.indexOf('<p class="output-reason">Failing reason</p>')).toBeLessThan(
+      html.indexOf('<div class="output-text">Failing output</div>'),
+    );
+    expect(html).toContain('<details class="output-section output-collapse">');
+    expect(html).not.toContain('<span class="output-section-label">Error</span>');
+    expect(html).not.toContain('<details class="output-section output-collapse" open');
     expect(html).toContain('View detail');
     expect(html).toContain('Result detail - row 1, prompt 1');
     expect(html).toContain('Prompt');
@@ -2096,6 +2103,69 @@ describe('writeOutput', () => {
     expect(html).toContain('data-variable-name="input"');
     expect(html).not.toContain('<span class="detail-variable-name">');
     expect(html).toContain('appendVariableDetails(trigger);');
+  });
+
+  it('writeOutput with HTML orders the drawer as error, reason, then collapsed output', async () => {
+    const realFs = await vi.importActual<typeof import('fs')>('fs');
+    const templatePath = path.resolve(__dirname, '../../src/tableOutput.html');
+    const templateContent = realFs.readFileSync(templatePath, 'utf-8');
+    vi.mocked(fsPromises.readFile).mockResolvedValue(templateContent);
+
+    const eval_ = new Eval({ description: 'HTML drawer order' });
+    await eval_.addPrompts([{ raw: 'Prompt', label: 'Prompt', provider: 'provider' }]);
+    eval_.setVars(['input']);
+
+    await eval_.addResult({
+      success: false,
+      failureReason: ResultFailureReason.ERROR,
+      score: 0,
+      namedScores: {},
+      latencyMs: 100,
+      provider: { id: 'provider' },
+      prompt: { raw: 'Prompt', label: 'Prompt' },
+      response: { output: 'Differing output' },
+      error: 'Differing error',
+      vars: { input: 'differing' },
+      promptIdx: 0,
+      testIdx: 0,
+      testCase: { vars: { input: 'differing' } },
+      promptId: 'prompt',
+      gradingResult: { pass: false, score: 0, reason: 'Differing reason' },
+    });
+    await eval_.addResult({
+      success: false,
+      failureReason: ResultFailureReason.ASSERT,
+      score: 0,
+      namedScores: {},
+      latencyMs: 100,
+      provider: { id: 'provider' },
+      prompt: { raw: 'Prompt', label: 'Prompt' },
+      response: { output: 'Repeated output' },
+      error: 'Repeated reason',
+      vars: { input: 'repeated' },
+      promptIdx: 0,
+      testIdx: 1,
+      testCase: { vars: { input: 'repeated' } },
+      promptId: 'prompt',
+      gradingResult: { pass: false, score: 0, reason: 'Repeated reason' },
+    });
+
+    await writeOutput('output.html', eval_, null);
+
+    const html = vi.mocked(fsPromises.writeFile).mock.calls[0][1] as string;
+    const drawers = html.match(/<template[\s\S]*?<\/template>/g) ?? [];
+    const drawerOf = (text: string) => drawers.find((drawer) => drawer.includes(text)) as string;
+
+    const differing = drawerOf('Differing reason');
+    expect(differing.indexOf('>Error<')).toBeGreaterThan(-1);
+    expect(differing.indexOf('>Error<')).toBeLessThan(differing.indexOf('>Reason<'));
+    expect(differing.indexOf('>Reason<')).toBeLessThan(differing.indexOf('>Output<'));
+    expect(differing).toContain('<details class="detail-section output-collapse">');
+    expect(differing).not.toContain('<details class="detail-section output-collapse" open');
+
+    const repeated = drawerOf('Repeated reason');
+    expect(repeated).not.toContain('>Error<');
+    expect(repeated.indexOf('>Reason<')).toBeLessThan(repeated.indexOf('>Output<'));
   });
 
   it('writes output to Google Sheets', async () => {
