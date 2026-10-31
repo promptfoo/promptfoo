@@ -571,7 +571,7 @@ describeEvaluator('select-best runtime grading configuration', () => {
     expect(grader.callApi).toHaveBeenCalledTimes(2);
   });
 
-  it.each(['malformed YAML', 'Error', 'string'])(
+  it.each(['malformed YAML', 'Error', 'string', 'error response'])(
     'keeps secrets in a grader %s out of persisted errors and recovers on resume',
     async (failure) => {
       const { grader, suite, target } = makeSuite();
@@ -585,6 +585,11 @@ describeEvaluator('select-best runtime grading configuration', () => {
         if (failure === 'malformed YAML') {
           await writeFile(graderPath, `id: echo\nconfig:\n  apiKey: ${errorSecret}: invalid\n`);
           (suite.tests![0].assert![0] as Assertion).provider = `file://${graderPath}`;
+        } else if (failure === 'error response') {
+          vi.mocked(grader.callApi).mockResolvedValueOnce({
+            error: errorSecret,
+            tokenUsage: { total: 7, prompt: 5, completion: 2, numRequests: 1 },
+          });
         } else {
           vi.mocked(grader.callApi).mockRejectedValueOnce(
             failure === 'Error' ? new Error(errorSecret) : errorSecret,
@@ -607,6 +612,9 @@ describeEvaluator('select-best runtime grading configuration', () => {
           expect(row.error).toContain(failure === 'malformed YAML' ? graderPath : grader.id());
         }
         expect(record.getStats()).toMatchObject({ successes: 0, failures: 0, errors: 2 });
+        if (failure === 'error response') {
+          expect(record.getStats().tokenUsage.assertions?.total).toBe(14);
+        }
         // The run's log file records debug messages on every run, so without debug output
         // enabled the cause must not be logged at all.
         expect(getLogLevel()).not.toBe('debug');

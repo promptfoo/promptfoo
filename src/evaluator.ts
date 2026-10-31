@@ -5173,7 +5173,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     if (!assertion) {
       return;
     }
-    let gradingResults: GradingResult[];
+    let gradingResults: GradingResult[] = [];
     try {
       const providers = this.comparisonProviders.get(getResultIndexKey(firstResult));
       // Persisted rows retain each column's hook-adjusted criteria and vars. Only grader
@@ -5215,6 +5215,10 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
               ),
           ),
       );
+      const graderError = gradingResults.find((grade) => grade.metadata?.graderError);
+      if (graderError) {
+        throw new Error(graderError.reason);
+      }
     } catch (error) {
       if (isGradingAbort(error, providerAbortSignal)) {
         throw error;
@@ -5233,8 +5237,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       const message =
         'Check the grader configuration and credentials. Supply a grader configuration matching the saved result to resume, or rerun the evaluation. Run with --verbose to log the underlying error.';
       const reason = `${COMPARISON_ERROR_PREFIX}${graderId ? ` (${graderId})` : ''}: ${message}`;
-      gradingResults = [];
-      for (const result of resultsToCompare) {
+      for (const [index, result] of resultsToCompare.entries()) {
         if (result.failureReason === ResultFailureReason.ERROR && !getComparisonError(result)) {
           continue;
         }
@@ -5251,12 +5254,23 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
         result.failureReason = ResultFailureReason.ERROR;
         result.success = false;
         result.score = 0;
-        this.updateComparisonResultCounts(result, previous, prompts[result.promptIdx]?.metrics);
+        const metrics = prompts[result.promptIdx]?.metrics;
+        const grade = gradingResults[index];
+        if (grade?.tokensUsed) {
+          mergeComparisonTokenUsage(result, grade, this.stats.tokenUsage);
+          if (metrics) {
+            updateAssertionMetrics(metrics, grade.tokensUsed, {
+              cached: grade.metadata?.cachedResponse,
+            });
+          }
+        }
+        this.updateComparisonResultCounts(result, previous, metrics);
         this.trackFinalJsonlResult(result);
         if (this.store.persisted && !this.store.hasResultPersistenceFailure(result)) {
           await this.store.saveResult(result);
         }
       }
+      gradingResults = [];
     }
 
     for (let index = 0; index < gradingResults.length; index++) {
