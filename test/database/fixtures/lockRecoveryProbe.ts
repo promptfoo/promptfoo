@@ -106,11 +106,12 @@ try {
       await db.run('PRAGMA busy_timeout = 400');
       result.statementBusyTimeouts = [];
       Sqlite3Transaction.prototype.execute = async function (stmt) {
+        const execute = executeStatement.bind(this);
         if (typeof stmt !== 'string' && stmt.sql.startsWith('insert into')) {
-          const pragma = await executeStatement.call(this, 'PRAGMA busy_timeout');
+          const pragma = await execute('PRAGMA busy_timeout');
           result.statementBusyTimeouts!.push(Number(pragma.rows[0].timeout));
         }
-        return executeStatement.call(this, stmt);
+        return execute(stmt);
       };
       result.commitBusyTimeouts = [];
       Sqlite3Transaction.prototype.executeMultiple = async function (sql) {
