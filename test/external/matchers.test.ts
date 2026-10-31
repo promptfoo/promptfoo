@@ -165,6 +165,41 @@ describe('matchesConversationRelevance', () => {
     });
   });
 
+  it.each([
+    ['Yes', true],
+    [' NO ', false],
+  ])('should accept a %j verdict regardless of case', async (verdict, expectedPass) => {
+    const mockProvider = {
+      id: () => 'mock-provider',
+      callApi: vi.fn().mockResolvedValue({
+        output: JSON.stringify({ verdict }),
+        tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0 },
+      }),
+    };
+
+    vi.mocked(getDefaultProviders).mockResolvedValue({
+      embeddingProvider: mockProvider,
+      gradingJsonProvider: mockProvider,
+      gradingProvider: mockProvider,
+      llmRubricProvider: mockProvider,
+      moderationProvider: mockProvider,
+      suggestionsProvider: mockProvider,
+      synthesizeProvider: mockProvider,
+    });
+
+    const messages = [
+      {
+        input: 'What is the capital of France?',
+        output: 'The capital of France is Paris.',
+      },
+    ];
+
+    const result = await matchesConversationRelevance(messages, 0.5);
+    expect(result.pass).toBe(expectedPass);
+    expect(result.score).toBe(expectedPass ? 1 : 0);
+    expect(result.metadata?.graderError).toBeUndefined();
+  });
+
   it('should handle malformed provider responses', async () => {
     const mockProvider = {
       id: () => 'mock-provider',
