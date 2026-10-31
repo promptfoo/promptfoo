@@ -641,6 +641,38 @@ describeEvaluator('select-best runtime grading configuration', () => {
     },
   );
 
+  it.each([false, true])(
+    'accounts for a failed comparison on saved cache hits (cached grader: %s)',
+    async (cached) => {
+      const { grader, suite, target } = makeSuite();
+      vi.mocked(target.callApi).mockResolvedValue({
+        output: 'cached answer',
+        cached: true,
+        tokenUsage: { total: 5 },
+      });
+      const record = await Eval.create({}, suite.prompts, { id: randomUUID() });
+      await evaluate(suite, record, {});
+      await markComparisonPending(record);
+      // Older evals stored zero requests on cached targets awaiting a comparison.
+      for (const row of await record.fetchResultsByTestIdx(0)) {
+        row.response!.tokenUsage!.numRequests = 0;
+        await row.save();
+      }
+      vi.mocked(grader.callApi).mockResolvedValue({
+        error: 'grader unavailable',
+        cached,
+        tokenUsage: { total: 7, numRequests: 1 },
+      });
+      cliState.resume = true;
+      await evaluate(suite, record, {});
+      for (const row of await record.fetchResultsByTestIdx(0)) {
+        expect(row.failureReason).toBe(ResultFailureReason.ERROR);
+        expect(row.response?.tokenUsage?.numRequests).toBe(cached ? 0 : 1);
+      }
+      expect(target.callApi).toHaveBeenCalledTimes(2);
+    },
+  );
+
   it('compares only replacement rows during an error-only retry', async () => {
     const { grader, suite, target } = makeSuite();
     suite.tests![0].options = { rubricPrompt: '{{ outputs | dump }}' };

@@ -4141,43 +4141,6 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     redteamProviderManager.setRateLimitRegistry(this.rateLimitRegistry);
   }
 
-  /**
-   * Updates metrics and stats after a comparison assertion (select-best or max-score).
-   */
-  private updateComparisonStats(
-    result: TResult,
-    passed: boolean,
-    reason: string,
-    tokensUsed: TokenUsage | undefined,
-    wasSuccess: boolean,
-    wasScore: number,
-    metrics: CompletedPrompt['metrics'] | undefined,
-    gradingCached?: boolean,
-  ): void {
-    if (metrics) {
-      metrics.assertPassCount += passed ? 1 : 0;
-      metrics.assertFailCount += passed ? 0 : 1;
-      if (tokensUsed) {
-        updateAssertionMetrics(metrics, tokensUsed, { cached: gradingCached });
-      }
-      if (!passed && result.score !== wasScore) {
-        metrics.score += result.score - wasScore;
-      }
-    }
-    if (wasSuccess && !result.success) {
-      result.failureReason = ResultFailureReason.ASSERT;
-      result.error = reason;
-      if (metrics) {
-        metrics.testPassCount -= 1;
-        metrics.testFailCount += 1;
-      }
-      if (this.currentResultKeys.has(getResultIndexKey(result))) {
-        this.stats.successes -= 1;
-        this.stats.failures += 1;
-      }
-    }
-  }
-
   private updateComparisonResultCounts(
     result: TResult,
     previous: Pick<TResult, 'success' | 'score' | 'failureReason'>,
@@ -5258,17 +5221,9 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
         const grade = gradingResults[index];
         if (grade?.tokensUsed) {
           mergeComparisonTokenUsage(result, grade, this.stats.tokenUsage);
-          if (metrics) {
-            updateAssertionMetrics(metrics, grade.tokensUsed, {
-              cached: grade.metadata?.cachedResponse,
-            });
-          }
         }
         this.updateComparisonResultCounts(result, previous, metrics);
-        this.trackFinalJsonlResult(result);
-        if (this.store.persisted && !this.store.hasResultPersistenceFailure(result)) {
-          await this.store.saveResult(result);
-        }
+        await this.recordComparisonResult(result, grade, metrics);
       }
       gradingResults = [];
     }
@@ -5467,26 +5422,47 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     wasSuccess: boolean;
     wasScore: number;
   }) {
-    this.updateComparisonStats(
-      result,
-      gradingResult.pass,
-      gradingResult.reason || '',
-      gradingResult.tokensUsed,
-      wasSuccess,
-      wasScore,
-      metrics,
-      gradingResult.metadata?.cachedResponse,
-    );
+    const passed = gradingResult.pass;
+    if (metrics) {
+      metrics.assertPassCount += passed ? 1 : 0;
+      metrics.assertFailCount += passed ? 0 : 1;
+      if (!passed && result.score !== wasScore) {
+        metrics.score += result.score - wasScore;
+      }
+    }
+    if (wasSuccess && !result.success) {
+      result.failureReason = ResultFailureReason.ASSERT;
+      result.error = gradingResult.reason || '';
+      if (metrics) {
+        metrics.testPassCount -= 1;
+        metrics.testFailCount += 1;
+      }
+      if (this.currentResultKeys.has(getResultIndexKey(result))) {
+        this.stats.successes -= 1;
+        this.stats.failures += 1;
+      }
+    }
+    await this.recordComparisonResult(result, gradingResult, metrics);
+  }
+
+  private async recordComparisonResult(
+    result: TResult,
+    grade: GradingResult | undefined,
+    metrics: CompletedPrompt['metrics'] | undefined,
+  ) {
+    const tokensUsed = grade?.tokensUsed;
+    const cached = grade?.metadata?.cachedResponse;
+    if (metrics && tokensUsed) {
+      updateAssertionMetrics(metrics, tokensUsed, { cached });
+    }
     if (
       result.response?.cached &&
       result.response.tokenUsage &&
       (result.response.tokenUsage.numRequests ?? 0) === 0 &&
-      gradingResult.tokensUsed
+      tokensUsed
     ) {
       const comparisonUsage = createEmptyAssertions();
-      accumulateGradingRequest(comparisonUsage, gradingResult.tokensUsed, {
-        cached: gradingResult.metadata?.cachedResponse,
-      });
+      accumulateGradingRequest(comparisonUsage, tokensUsed, { cached });
       if ((comparisonUsage.numRequests ?? 0) > 0) {
         result.response.tokenUsage.numRequests = 1;
         const evaluatedResult = this.store.toEvaluateResult(result);
