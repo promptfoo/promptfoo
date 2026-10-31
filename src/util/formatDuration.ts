@@ -1,8 +1,4 @@
-/**
- * Formats a duration in seconds into a human-readable string
- * @param seconds Total duration in seconds
- * @returns Formatted string like "2h 5m 30s" or "45s" depending on duration
- */
+/** Format elapsed seconds, rounding down and displaying invalid durations as zero. */
 export function formatDuration(seconds: number): string {
   if (!Number.isFinite(seconds) || seconds < 0) {
     return '0s';
@@ -18,17 +14,6 @@ export function formatDuration(seconds: number): string {
   const minutes = Math.floor((totalSeconds % 3600) / 60);
   const remainingSeconds = totalSeconds % 60;
 
-  let result = '';
-
-  if (hours > 0) {
-    result += `${hours}h `;
-  }
-
-  if (minutes > 0 || hours > 0) {
-    result += `${minutes}m `;
-  }
-
-  result += `${remainingSeconds}s`;
-
-  return result;
+  const minutesAndSeconds = `${minutes}m ${remainingSeconds}s`;
+  return hours > 0 ? `${hours}h ${minutesAndSeconds}` : minutesAndSeconds;
 }
