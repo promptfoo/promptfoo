@@ -43,3 +43,18 @@ jq '.results.results[] | {runtime: .provider.label, answer: .response.output,
 ```
 
 The hosted config opts into recording tool arguments so they can be inspected for this synthetic receipt. That setting can expose command contents. Runs create billable model requests, and the hosted sandbox can incur additional charges.
+
+## Test a Codex tool instruction
+
+In `examples/openai-agents-api/`, copy `promptfooconfig.compare.mjs` to `promptfooconfig.explicit.mjs` so both configs use the same receipt and MCP server. In the copy's `prompts` entry, replace `using read_receipt if available` with `using read_receipt({"filename":"receipt.txt"}) if available`. Keep the remaining prompt, tool schema and assertions unchanged.
+
+Run each wording once from the repository root. Each export should contain one `Codex app-server` row with three assertions.
+
+```sh
+for variant in compare explicit; do
+  npm run local -- eval -c "examples/openai-agents-api/promptfooconfig.$variant.mjs" \
+    --filter-pattern '^App-server receipt MCP tool$' --no-cache -o "codex-$variant.json"
+done
+```
+
+In each result's **Metadata** tab, inspect the first `mcpToolCall` in `codexAppServer.items` and any later retry. Compare its `arguments` and `status` with the `mcp receipt/read_receipt` span in **Traces**. In one pair of runs, the original wording produced `{}` and a failed call before a successful retry. With the explicit filename, the first call succeeded. Both returned `3316`. Use repeated paired runs to estimate how often either wording succeeds on the first call.
