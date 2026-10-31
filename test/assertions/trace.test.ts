@@ -3,8 +3,8 @@ import * as path from 'path';
 import { trace } from '@opentelemetry/api';
 import {
   InMemorySpanExporter,
-  TracerProvider,
   SimpleSpanProcessor,
+  TracerProvider,
 } from '@opentelemetry/sdk-trace';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { assertionUsesTrace, runAssertion, runAssertions } from '../../src/assertions/index';
@@ -294,6 +294,68 @@ describe('trace assertions', () => {
       });
     });
 
+    it.each<{ assertion: Assertion; pass: boolean }>([
+      {
+        assertion: { type: 'trace-span-count', value: { pattern: 'execute_tool *', min: 1 } },
+        pass: true,
+      },
+      {
+        assertion: { type: 'not-trace-span-count', value: { pattern: 'execute_tool *', max: 0 } },
+        pass: true,
+      },
+      {
+        assertion: { type: 'trace-span-count', value: { pattern: 'execute_tool *', max: 1 } },
+        pass: false,
+      },
+      {
+        assertion: { type: 'not-trace-span-count', value: { pattern: 'execute_tool *', min: 2 } },
+        pass: false,
+      },
+      { assertion: { type: 'not-trace-error-spans', value: { max_count: 0 } }, pass: true },
+      { assertion: { type: 'not-trace-error-spans', value: { max_percentage: 50 } }, pass: false },
+      {
+        assertion: {
+          type: 'not-trace-span-duration',
+          value: { pattern: 'execute_tool *', max: 10 },
+        },
+        pass: true,
+      },
+      {
+        assertion: {
+          type: 'not-trace-span-duration',
+          value: { pattern: 'execute_tool *', max: 10, percentile: 50 },
+        },
+        pass: false,
+      },
+    ])(
+      'grades $assertion.type only when later spans cannot change its verdict',
+      async ({ assertion, pass }) => {
+        const result = await grade(assertion, { ...imported, status: 'partial' }, [
+          { ...tool('lookup'), statusCode: 2 },
+        ]);
+        expect(result.pass).toBe(pass);
+        if (!pass) {
+          expect(result.reason).toContain('partial');
+        }
+      },
+    );
+
+    it('withholds an uncertain legacy chat name while retaining other witnessed spans', async () => {
+      const manifest = { ...imported, spanCount: 2, status: 'partial' };
+      const chat = {
+        ...tool('old-chat'),
+        name: 'chat',
+        attributes: { 'promptfoo.openai.hosted_trace': 'wrapper', 'gen_ai.operation.name': 'chat' },
+      };
+      const count = (pattern: string) =>
+        grade({ type: 'trace-span-count', value: { pattern, min: 1 } }, manifest, [
+          tool('lookup'),
+          chat,
+        ]);
+      await expect(count('execute_tool lookup')).resolves.toMatchObject({ pass: true });
+      await expect(count('chat')).resolves.toMatchObject({ pass: false });
+    });
+
     it('keeps the local provider wrapper but excludes tools outside this hosted turn', async () => {
       await expect(
         grade({ type: 'trace-span-count', value: { pattern: 'invoke_agent', min: 1 } }, imported),
@@ -404,7 +466,11 @@ describe('trace assertions', () => {
         });
       const duration: Assertion = { type: 'trace-span-duration', value: { max: 200 } };
       const errors: Assertion = { type: 'trace-error-spans', value: 0 };
-      for (const assertion of [duration, errors]) {
+      const emptyErrorPattern: Assertion = {
+        type: 'trace-error-spans',
+        value: { pattern: '', max_count: 0 },
+      };
+      for (const assertion of [duration, errors, emptyErrorPattern]) {
         await expect(check(assertion, false, 'case')).resolves.toMatchObject({ pass: true });
         await expect(check(assertion, true, 'case')).resolves.toMatchObject({ pass: true });
         await expect(check(assertion, true, undefined)).resolves.toMatchObject({ pass: true });

@@ -1,10 +1,12 @@
 import { SpanStatusCode } from '@opentelemetry/api';
+import { resourceFromAttributes } from '@opentelemetry/resources';
 import {
   InMemorySpanExporter,
   SimpleSpanProcessor,
   TracerProvider,
 } from '@opentelemetry/sdk-trace';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { runAssertion } from '../../src/assertions/index';
 import { HttpProvider } from '../../src/providers/http';
 import { callGradingProvider } from '../../src/redteam/providers/shared';
 import { withProviderCallTracingContext } from '../../src/scheduler/providerCallExecutionContext';
@@ -39,6 +41,12 @@ describe('test-case execution trace hierarchy', () => {
   beforeAll(() => {
     exporter = new InMemorySpanExporter();
     tracerProvider = new TracerProvider({
+      resource: resourceFromAttributes({
+        'service.name': 'ledger',
+        'run.label': 'a'.repeat(500),
+        'org.private': 'protected-fixture',
+        'promptfoo.test.score': 17,
+      }),
       spanProcessors: [new SimpleSpanProcessor({ exporter: exporter })],
     });
     registerTracerProvider(tracerProvider);
@@ -92,6 +100,82 @@ describe('test-case execution trace hierarchy', () => {
       'promptfoo.repeat.index': 4,
       'promptfoo.test.success': true,
       'promptfoo.test.score': 1,
+    });
+  });
+
+  it('rules out a mismatched live root without persisting its attribute values', async () => {
+    const ctx = await generateTraceContextIfNeeded(
+      { metadata: { tracingEnabled: true } },
+      {},
+      0,
+      0,
+      { tracing: { otlp: { http: { redactAttributes: ['org.private'] } } } } as TestSuite,
+    );
+    const root = ctx!.rootSpan!;
+    const { traceId, spanId } = root.spanContext();
+    const metadata = createTrace.mock.calls[0][0].metadata;
+    expect(JSON.stringify(metadata)).not.toContain('protected-fixture');
+    const check = (attributes: Record<string, string | number>, id = traceId) =>
+      runAssertion({
+        assertion: {
+          type: 'trace-span-count',
+          value: { pattern: 'promptfoo.test_case', attributes, max: 0 },
+        },
+        test: {},
+        traceId: id,
+        traceData: {
+          traceId: id,
+          evaluationId: 'eval',
+          testCaseId: 'test',
+          metadata,
+          spans: [
+            { spanId: 'wrapper', parentSpanId: spanId, name: 'provider', startTime: 0 },
+            {
+              spanId: 'native',
+              parentSpanId: 'wrapper',
+              name: 'execute_tool lookup',
+              startTime: 1,
+              attributes: { 'promptfoo.openai.hosted_trace': 'wrapper' },
+            },
+          ],
+        },
+        providerResponse: {
+          output: 'ok',
+          metadata: {
+            hostedTrace: {
+              source: 'openai:agents-api',
+              status: 'imported',
+              spanCount: 1,
+              parentSpanId: 'wrapper',
+              toolArgumentsComplete: false,
+              includeToolArguments: false,
+            },
+          },
+        },
+      });
+    await withTestCaseSpan(root, async () => {
+      await expect(check({ 'service.name': 'another-service' })).resolves.toMatchObject({
+        pass: true,
+      });
+      const possible: Record<string, string | number>[] = [
+        { 'service.name': 'ledger' },
+        { 'org.private': 'another-value' },
+        { 'run.label': 'a'.repeat(450) },
+        { 'promptfoo.test.score': 1 },
+      ];
+      for (const filter of possible) {
+        await expect(check(filter)).resolves.toMatchObject({
+          pass: false,
+          reason: expect.stringContaining('ancestor'),
+        });
+      }
+      await expect(
+        check({ 'service.name': 'another-service' }, 'other-trace'),
+      ).resolves.toMatchObject({ pass: false });
+    });
+    // Older and stripped exports may have only the root's keys.
+    await expect(check({ 'service.name': 'another-service' })).resolves.toMatchObject({
+      pass: false,
     });
   });
 

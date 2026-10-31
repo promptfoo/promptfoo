@@ -1,6 +1,7 @@
 import {
   isMissingTraceBodyUncertain,
   isUncertainTraceAttributeMatch,
+  sanitizeTraceAttributes,
 } from '../tracing/sanitizeAttributes';
 import {
   filterTargetSpans,
@@ -9,11 +10,16 @@ import {
   hasUncertainHostedChatName,
   withoutReceivedHostedOwner,
 } from '../tracing/spanFilter';
-import { SPAN_ROLE_ATTRIBUTE, TEST_CASE_SPAN_NAME } from '../tracing/spanRoles';
+import {
+  getLiveTestCaseAttributes,
+  SPAN_ROLE_ATTRIBUTE,
+  TEST_CASE_OUTCOME_ATTRIBUTES,
+  TEST_CASE_SPAN_NAME,
+} from '../tracing/spanRoles';
 import { matchesPattern } from './traceUtils';
 
 import type { AssertionParams } from '../types/index';
-import type { TraceSpan } from '../types/tracing';
+import type { TraceData, TraceSpan } from '../types/tracing';
 
 const ARGUMENT_FILTER_KEYS = new Set(['gen_ai.tool.call.arguments', 'tool.arguments']);
 
@@ -63,7 +69,7 @@ function getRawFilterCoverageError(
   const absentToolAttributes = attrs[HOSTED_ABSENT_TOOL_ATTRIBUTES];
   const tool = capture.native && isHostedToolSpan(span);
   let reason = capture.uncertainName
-    ? 'A local span name may have been redacted before it was stored.'
+    ? 'A stored span name may be incomplete or redacted.'
     : undefined;
   for (const [key, expected] of filters) {
     if (!capture.native && isMissingTraceBodyUncertain(key, attrs, capture.metadata)) {
@@ -113,25 +119,42 @@ function getLocalAncestors(spans: TraceSpan[], parentId: string) {
   return { spans: ancestors, unresolvedId: id };
 }
 
-function couldMatchTestCaseRoot(
-  pattern: string,
-  filters: unknown,
-  attributeKeys: unknown,
-): boolean {
+function couldMatchTestCaseRoot(pattern: string, filters: unknown, trace: TraceData): boolean {
   if (!matchesPattern(TEST_CASE_SPAN_NAME, pattern)) {
     return false;
   }
   if (!filters || typeof filters !== 'object') {
     return true;
   }
+  const attributeKeys = trace.metadata?.testCaseSpanAttributeKeys;
   if (!Array.isArray(attributeKeys) || !attributeKeys.includes(SPAN_ROLE_ATTRIBUTE)) {
     return true;
   }
+  const root = getLiveTestCaseAttributes(trace.traceId, trace.metadata?.testCaseSpanId);
+  const redact = trace.metadata?.otlpHttpRedactAttributes;
+  const known = sanitizeTraceAttributes(root, {
+    redactAttributes: Array.isArray(redact) ? redact : [],
+  });
   return Object.entries(filters).every(([key, value]) => {
     if (key === SPAN_ROLE_ATTRIBUTE) {
       return value === 'test_case';
     }
-    return attributeKeys.includes(key);
+    if (!attributeKeys.includes(key)) {
+      return false;
+    }
+    // The outcome is set after grading. Receivers also assign transport attributes at export time.
+    if (
+      key.startsWith('otel.') ||
+      key === TEST_CASE_OUTCOME_ATTRIBUTES.score ||
+      key === TEST_CASE_OUTCOME_ATTRIBUTES.success
+    ) {
+      return true;
+    }
+    return (
+      !Object.hasOwn(known, key) ||
+      known[key] === value ||
+      isUncertainTraceAttributeMatch(known[key], value)
+    );
   });
 }
 
@@ -169,6 +192,7 @@ function prepareRawTraceAssertion(
   parentId: string,
   unresolvedId: string | undefined,
   includeToolArguments: boolean,
+  partial: boolean,
 ): string | undefined {
   const trace = params.assertionValueContext.trace!;
   const filter = (params.renderedValue ?? params.assertion.value ?? {}) as {
@@ -182,7 +206,8 @@ function prepareRawTraceAssertion(
   // Explicit filters may select it, while default operational checks measure target work.
   const targetWorkOnly =
     (params.baseType === 'trace-span-duration' || params.baseType === 'trace-error-spans') &&
-    filter.pattern === undefined &&
+    (filter.pattern === undefined ||
+      (params.baseType === 'trace-error-spans' && filter.pattern === '')) &&
     filters.length === 0;
   if (targetWorkOnly) {
     trace.spans = trace.spans.filter(
@@ -195,9 +220,13 @@ function prepareRawTraceAssertion(
         ),
     );
   }
-  let possible = 0;
-  let reason: string | undefined;
+  // An unattested tree may omit any number of native spans, even when its local parent is present.
+  let possible = partial ? Infinity : 0;
+  let reason = partial
+    ? 'The hosted trace is partial. Additional matching spans may be missing.'
+    : undefined;
   if (
+    !partial &&
     unresolvedId &&
     !filters.some(([key, value]) => key === 'promptfoo.openai.hosted_trace' && value === parentId)
   ) {
@@ -205,10 +234,7 @@ function prepareRawTraceAssertion(
     // in the local parent chain can hide an unknown number of ancestors.
     if (unresolvedId !== trace.metadata?.testCaseSpanId) {
       possible = Infinity;
-    } else if (
-      !targetWorkOnly &&
-      couldMatchTestCaseRoot(pattern, attrs, trace.metadata?.testCaseSpanAttributeKeys)
-    ) {
+    } else if (!targetWorkOnly && couldMatchTestCaseRoot(pattern, attrs, trace)) {
       possible = 1;
     }
     if (possible) {
@@ -221,7 +247,9 @@ function prepareRawTraceAssertion(
     const native = span.attributes?.['promptfoo.openai.hosted_trace'] === parentId;
     // OTLP can replace a name that echoed a protected attribute. Its stored
     // placeholder neither witnesses nor rules out a match on the original name.
-    const uncertainName = !native && !selectsAllNames && span.name.includes('[REDACTED]');
+    const uncertainName =
+      !selectsAllNames &&
+      (native ? hasUncertainHostedChatName(span) : span.name.includes('[REDACTED]'));
     if (!uncertainName && (!filters.length || !matchesPattern(span.name, pattern))) {
       continue;
     }
@@ -298,9 +326,7 @@ export function prepareHostedTraceAssertion(params: AssertionParams): string | u
   if (native.length !== spanCount) {
     return 'The stored OpenAI Agents API spans are incomplete for this provider call.';
   }
-  if (hostedTrace.status === 'partial' || native.some(hasUncertainHostedChatName)) {
-    return 'The hosted trace is partial. This assertion requires a complete trace.';
-  }
+  const partial = hostedTrace.status === 'partial' || native.some(hasUncertainHostedChatName);
   // Raw span assertions inspect the local case/target/provider wrappers, alongside
   // this turn's hosted spans. A sibling tool or grader belongs to a different call.
   const ancestors = getLocalAncestors(spans, parentId);
@@ -308,5 +334,11 @@ export function prepareHostedTraceAssertion(params: AssertionParams): string | u
     return 'The local provider wrapper is missing from the stored OpenAI Agents API trace.';
   }
   assertionValueContext.trace = { ...trace, spans: [...native, ...ancestors.spans] };
-  return prepareRawTraceAssertion(params, parentId, ancestors.unresolvedId, includeToolArguments);
+  return prepareRawTraceAssertion(
+    params,
+    parentId,
+    ancestors.unresolvedId,
+    includeToolArguments,
+    partial,
+  );
 }
