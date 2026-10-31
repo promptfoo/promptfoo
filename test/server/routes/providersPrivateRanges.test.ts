@@ -240,6 +240,36 @@ describe('PROMPTFOO_BLOCK_PRIVATE_RANGES server guards (#11768 item 2)', () => {
       expect(mockedLoadApiProvider).toHaveBeenCalled();
       expect(guardActiveDuringLoad).toBe(false);
     });
+
+    it.each([
+      'PROMPTFOO_BLOCK_PRIVATE_RANGES is set: refusing to fetch provider URL whose host "noresolve.example.com" could not be resolved: getaddrinfo ENOTFOUND noresolve.example.com',
+      'PROMPTFOO_BLOCK_PRIVATE_RANGES is set: refusing to fetch provider URL whose host "internal.example.com" resolves to a private address',
+    ])(
+      'answers a downstream guard failure with the same generic 400: %s',
+      async (failure) => {
+        restoreEnv = mockProcessEnv({ PROMPTFOO_BLOCK_PRIVATE_RANGES: 'true' });
+        mockedTestProviderConnectivity.mockResolvedValue({
+          success: false,
+          message: `Provider returned error: ${failure}`,
+          error: failure,
+        });
+
+        const response = await request(app)
+          .post('/api/providers/test')
+          .send({ providerOptions: { id: 'openai:gpt-4o-mini' } });
+
+        expect(response.status).toBe(400);
+        expect(response.body.error).toBe(
+          'Refused: PROMPTFOO_BLOCK_PRIVATE_RANGES is set and the provider target resolves to a private, loopback, or link-local address.',
+        );
+        // No residue of the detailed failure: unresolvable and
+        // private-resolving hosts must be indistinguishable.
+        expect(JSON.stringify(response.body)).not.toContain('could not be resolved');
+        expect(JSON.stringify(response.body)).not.toContain('resolves to a private address');
+        expect(JSON.stringify(response.body)).not.toContain('internal.example.com');
+        expect(JSON.stringify(response.body)).not.toContain('noresolve.example.com');
+      },
+    );
   });
 
   describe('POST /api/providers/discover', () => {
@@ -321,6 +351,29 @@ describe('PROMPTFOO_BLOCK_PRIVATE_RANGES server guards (#11768 item 2)', () => {
       expect(response.status).toBe(200);
       expect(mockedLoadApiProvider).toHaveBeenCalled();
       expect(guardActiveDuringLoad).toBe(true);
+    });
+
+    it('answers a downstream guard failure with the same generic 400', async () => {
+      restoreEnv = mockProcessEnv({ PROMPTFOO_BLOCK_PRIVATE_RANGES: 'true' });
+      const failure =
+        'PROMPTFOO_BLOCK_PRIVATE_RANGES is set: refusing to fetch provider URL whose host "internal.example.com" resolves to a private address';
+      mockedTestProviderSession.mockResolvedValue({
+        success: false,
+        message: `First request failed: ${failure}`,
+        error: failure,
+        details: { response1: failure },
+      } as never);
+
+      const response = await request(app)
+        .post('/api/providers/test-session')
+        .send({ provider: { id: 'openai:gpt-4o-mini' } });
+
+      expect(response.status).toBe(400);
+      expect(response.body.error).toBe(
+        'Refused: PROMPTFOO_BLOCK_PRIVATE_RANGES is set and the provider target resolves to a private, loopback, or link-local address.',
+      );
+      expect(JSON.stringify(response.body)).not.toContain('internal.example.com');
+      expect(JSON.stringify(response.body)).not.toContain('resolves to a private address');
     });
   });
 });

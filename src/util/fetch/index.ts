@@ -1005,9 +1005,13 @@ export async function fetchWithRetries(
       }
       // Preserve completed policy and rate-limit diagnostics even if cancellation
       // arrives after the response. These failures never consume another retry.
+      // A private-range policy failure is final too: retrying it would replay
+      // the original request (including non-idempotent POSTs) against the
+      // public endpoint that redirected into private space.
       if (
         error instanceof CloudAuthRedirectError ||
         error instanceof HttpRateLimitError ||
+        error instanceof PrivateRangeBlockedError ||
         error instanceof RequestAuthenticationError
       ) {
         throw error;

@@ -16,9 +16,20 @@ import { withPrivateRangeGuard } from '../../util/fetch/guardContext';
 import { fetchWithProxy } from '../../util/fetch/index';
 import {
   assertProviderTargetPublic,
+  isPrivateRangeBlockedMessage,
   isPrivateRangeBlockingEnabled,
   PrivateRangeBlockedError,
 } from '../../util/privateNetwork';
+
+/**
+ * The single client-facing refusal for every private-range guard failure,
+ * preflight or downstream. Downstream failures must answer with exactly
+ * this text: their detailed messages distinguish unresolvable hosts from
+ * private-resolving ones, which would turn these routes into an
+ * internal-DNS oracle.
+ */
+const PRIVATE_RANGE_REFUSAL_MESSAGE =
+  'Refused: PROMPTFOO_BLOCK_PRIVATE_RANGES is set and the provider target resolves to a private, loopback, or link-local address.';
 
 /**
  * Run a guarded route's downstream provider call inside the private-range
@@ -79,10 +90,7 @@ providersRouter.post('/test', async (req: Request, res: Response): Promise<void>
   } catch (error) {
     if (error instanceof PrivateRangeBlockedError) {
       logger.warn('[POST /providers/test] Blocked private-range provider target');
-      res.status(400).json({
-        error:
-          'Refused: PROMPTFOO_BLOCK_PRIVATE_RANGES is set and the provider target resolves to a private, loopback, or link-local address.',
-      });
+      res.status(400).json({ error: PRIVATE_RANGE_REFUSAL_MESSAGE });
       return;
     }
     throw error;
@@ -113,6 +121,17 @@ providersRouter.post('/test', async (req: Request, res: Response): Promise<void>
         inputs: providerOptions.inputs || providerOptions.config?.inputs,
       }),
     );
+
+    // A downstream guard failure (a preflighted public target that redirects
+    // into private space) reaches here as a string in result.error, not as
+    // a thrown error, so it bypasses the generic handler below. Answer
+    // exactly like the preflight refusal: the detailed text distinguishes
+    // unresolvable hosts from private-resolving ones.
+    if (isPrivateRangeBlockedMessage(result.error)) {
+      logger.warn('[POST /providers/test] Blocked private-range provider target');
+      res.status(400).json({ error: PRIVATE_RANGE_REFUSAL_MESSAGE });
+      return;
+    }
 
     res.status(200).json(
       ProviderSchemas.Test.Response.parse({
@@ -159,10 +178,7 @@ providersRouter.post(
     } catch (error) {
       if (error instanceof PrivateRangeBlockedError) {
         logger.warn('[POST /providers/discover] Blocked private-range provider target');
-        res.status(400).json({
-          error:
-            'Refused: PROMPTFOO_BLOCK_PRIVATE_RANGES is set and the provider target resolves to a private, loopback, or link-local address.',
-        });
+        res.status(400).json({ error: PRIVATE_RANGE_REFUSAL_MESSAGE });
         return;
       }
       throw error;
@@ -394,10 +410,7 @@ providersRouter.post('/test-session', async (req: Request, res: Response): Promi
   } catch (error) {
     if (error instanceof PrivateRangeBlockedError) {
       logger.warn('[POST /providers/test-session] Blocked private-range provider target');
-      res.status(400).json({
-        error:
-          'Refused: PROMPTFOO_BLOCK_PRIVATE_RANGES is set and the provider target resolves to a private, loopback, or link-local address.',
-      });
+      res.status(400).json({ error: PRIVATE_RANGE_REFUSAL_MESSAGE });
       return;
     }
     throw error;
@@ -430,6 +443,15 @@ providersRouter.post('/test-session', async (req: Request, res: Response): Promi
         mainInputVariable,
       }),
     );
+
+    // Same downstream-guard redaction as POST /providers/test: result.error
+    // carries the detailed guard text here, including inside message and
+    // details, so discard the whole result for the generic refusal.
+    if (isPrivateRangeBlockedMessage(result.error)) {
+      logger.warn('[POST /providers/test-session] Blocked private-range provider target');
+      res.status(400).json({ error: PRIVATE_RANGE_REFUSAL_MESSAGE });
+      return;
+    }
 
     res.json(ProviderSchemas.TestSession.Response.parse(result));
   } catch (error) {

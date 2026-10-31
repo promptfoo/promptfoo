@@ -17,7 +17,7 @@ import type { LookupAddress } from 'node:dns';
 
 import { CloudAuthRedirectError } from '../../../src/util/fetch/cloudAuthRedirects';
 import { withPrivateRangeGuard } from '../../../src/util/fetch/guardContext';
-import { fetchWithProxy } from '../../../src/util/fetch/index';
+import { fetchWithProxy, fetchWithRetries } from '../../../src/util/fetch/index';
 
 // Guarded-route calls run inside the guard context (see guardContext.ts);
 // the env flag alone no longer switches fetchWithProxy into validation mode.
@@ -235,6 +235,33 @@ describe('fetchWithProxy guarded redirects (PROMPTFOO_BLOCK_PRIVATE_RANGES)', ()
     for (const call of mockedMonkeyPatchFetch.mock.calls) {
       expect(call[1]).toMatchObject({ skipCloudAuthInjection: true });
     }
+  });
+
+  it('does not retry a private-range policy failure from a guarded redirect', async () => {
+    restoreEnv = mockProcessEnv({ PROMPTFOO_BLOCK_PRIVATE_RANGES: 'true' });
+    mockedLookup.mockImplementation(async (hostname: string) => {
+      if (hostname === 'internal.example.com') {
+        return [{ address: '10.1.2.3', family: 4 } as LookupAddress];
+      }
+      return [{ address: '93.184.216.34', family: 4 } as LookupAddress];
+    });
+    mockedMonkeyPatchFetch.mockResolvedValueOnce(
+      redirectResponse('http://internal.example.com/latest'),
+    );
+
+    await expect(
+      withPrivateRangeGuard(() =>
+        fetchWithRetries(
+          'https://public.example.com/start',
+          { method: 'POST', body: 'x' },
+          10_000,
+          4,
+        ),
+      ),
+    ).rejects.toThrow(PrivateRangeBlockedError);
+    // The policy failure is final: the original POST must not be replayed
+    // against the public endpoint that redirected into private space.
+    expect(mockedMonkeyPatchFetch).toHaveBeenCalledTimes(1);
   });
 
   it('keeps Cloud auth injection eligible when the initial request is Cloud-bound', async () => {
