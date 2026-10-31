@@ -103,37 +103,23 @@ describe.each([
 ] as const)('%s log probabilities', (type, handle) => {
   const assertion = { type, threshold: type === 'perplexity' ? 5 : 0.5 };
 
-  it.each([NaN, Infinity, 0.5, null, '-2'])(
-    'rejects invalid log probability %s before applying negation',
-    (logProb) => {
-      for (const inverse of [false, true]) {
+  it.each([
+    { label: 'NaN', logProbs: [NaN] },
+    { label: 'positive infinity', logProbs: [Infinity] },
+    { label: 'positive value', logProbs: [-2, 0.5] },
+    { label: 'null', logProbs: [null] },
+    { label: 'numeric string', logProbs: ['-2'] },
+    { label: 'missing token', logProbs: new Array<number>(3).fill(-2, 1) },
+  ])('rejects $label with or without a threshold or negation', ({ logProbs }) => {
+    for (const inverse of [false, true]) {
+      for (const threshold of [undefined, assertion.threshold]) {
         expect(() =>
           handle(
-            params({
-              assertion,
-              inverse,
-              logProbs: [-2, logProb] as number[],
-            }),
+            params({ assertion: { type, threshold }, inverse, logProbs: logProbs as number[] }),
           ),
         ).toThrow('logProbs must contain only non-positive numbers');
       }
-    },
-  );
-
-  it.each([1, 3])('rejects sparse log probabilities of length %s', (length) => {
-    const logProbs = new Array<number>(length).fill(-2, 1);
-
-    for (const inverse of [false, true]) {
-      expect(() => handle(params({ assertion, logProbs, inverse }))).toThrow(
-        'logProbs must contain only non-positive numbers',
-      );
     }
-  });
-
-  it('rejects NaN when no threshold is set', () => {
-    expect(() => handle(params({ assertion: { type }, logProbs: [NaN] }))).toThrow(
-      'logProbs must contain only non-positive numbers',
-    );
   });
 
   it('rejects empty log probabilities', () => {
