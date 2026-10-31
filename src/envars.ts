@@ -88,6 +88,13 @@ type EnvVars = {
   PROMPTFOO_TELEMETRY_DEBUG?: boolean;
   PROMPTFOO_TRACING_ENABLED?: boolean;
   PROMPTFOO_ENABLE_UNBLOCKING?: boolean;
+  /**
+   * When `true`, disables all non-eval network egress: version checks, license
+   * consent submission, and analytics/telemetry. Intended for air-gapped runs
+   * or restricted CI where no outbound traffic is acceptable. Eval-time
+   * provider calls are unaffected.
+   */
+  PROMPTFOO_NO_NETWORK?: boolean;
 
   //=========================================================================
   // OpenTelemetry tracing configuration

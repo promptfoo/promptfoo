@@ -2955,6 +2955,34 @@ describe('evalCommand', () => {
     expect(checkEmailStatusAndMaybeExit).toHaveBeenCalledTimes(1);
   });
 
+  it('should skip the email status check when PROMPTFOO_NO_NETWORK is set', async () => {
+    vi.stubEnv('PROMPTFOO_NO_NETWORK', 'true');
+    const cmdObj = {};
+    const config = {
+      redteam: { plugins: ['test-plugin'] as any },
+      prompts: [],
+    } as UnifiedConfig;
+
+    vi.mocked(resolveConfigs).mockResolvedValue({
+      config,
+      testSuite: {
+        prompts: [],
+        providers: [],
+        tests: [{ vars: { test: 'value' } }],
+      },
+      basePath: path.resolve('/'),
+    });
+
+    const mockEvalRecord = new Eval(config);
+    vi.mocked(evaluate).mockResolvedValue(mockEvalRecord);
+
+    await doEval(cmdObj, config, defaultConfigPath, {});
+
+    expect(promptForEmailUnverified).not.toHaveBeenCalled();
+    expect(checkEmailStatusAndMaybeExit).not.toHaveBeenCalled();
+    vi.unstubAllEnvs();
+  });
+
   it('should handle share option when enabled', async () => {
     const cmdObj = { share: true };
     const config = { sharing: true } as UnifiedConfig;

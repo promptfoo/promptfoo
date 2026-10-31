@@ -1,5 +1,6 @@
 import chalk from 'chalk';
 import dedent from 'dedent';
+import { getEnvBool } from './envars';
 import { getUserEmail } from './globalConfig/accounts';
 import logger from './logger';
 import { fetchWithProxy } from './util/fetch/index';
@@ -10,6 +11,17 @@ import { promptUser } from './util/readline';
  */
 export async function sendFeedback(feedback: string) {
   if (!feedback.trim()) {
+    return;
+  }
+
+  if (getEnvBool('PROMPTFOO_NO_NETWORK')) {
+    // No-egress guarantee: feedback is a non-eval POST, so it must not leave
+    // the process while the flag is set.
+    logger.info(
+      chalk.yellow(
+        'PROMPTFOO_NO_NETWORK is set: feedback was not sent (network egress is disabled).',
+      ),
+    );
     return;
   }
 

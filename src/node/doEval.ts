@@ -746,20 +746,24 @@ async function doEvalWithEnv(
       }
     }
 
-    if (
-      !neverGenerateRemote() &&
-      config.redteam &&
-      config.redteam.plugins &&
-      config.redteam.plugins.length > 0 &&
-      testSuite.tests &&
-      testSuite.tests.length > 0
-    ) {
+    // No-egress guarantee: the pre-eval email status check contacts Promptfoo
+    // Cloud, so it must not run while PROMPTFOO_NO_NETWORK is set.
+    const noNetworkMode = getEnvBool('PROMPTFOO_NO_NETWORK');
+    const redteamEmailCheckApplies =
+      !neverGenerateRemote() && !!config.redteam?.plugins?.length && !!testSuite.tests?.length;
+    if (redteamEmailCheckApplies && !noNetworkMode) {
       let hasValidEmail = false;
       while (!hasValidEmail) {
         const { emailNeedsValidation } = await promptForEmailUnverified();
         const res = await checkEmailStatusAndMaybeExit({ validate: emailNeedsValidation });
         hasValidEmail = res === EMAIL_OK_STATUS;
       }
+    } else if (redteamEmailCheckApplies) {
+      logger.info(
+        chalk.yellow(
+          'PROMPTFOO_NO_NETWORK is set: skipping the pre-eval email status check (network egress is disabled).',
+        ),
+      );
     }
 
     if (!resumeEval) {

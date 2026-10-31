@@ -1,4 +1,4 @@
-import { getEnvString } from '../envars';
+import { getEnvBool, getEnvString } from '../envars';
 import { CloudConfig } from '../globalConfig/cloud';
 import logger from '../logger';
 import { fetchWithTimeout } from './fetch/index';
@@ -6,6 +6,15 @@ import { fetchWithTimeout } from './fetch/index';
 interface HealthResponse {
   status: string;
   message: string;
+}
+
+/**
+ * Whether PROMPTFOO_NO_NETWORK disables non-eval network egress. Callers
+ * that poll remote health must answer locally instead of reaching the
+ * remote endpoint when this is true.
+ */
+export function isNetworkEgressDisabled(): boolean {
+  return getEnvBool('PROMPTFOO_NO_NETWORK');
 }
 
 /**

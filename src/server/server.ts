@@ -26,7 +26,7 @@ import { createShareableUrl, determineShareDomain, stripAuthFromUrl } from '../s
 import telemetry from '../telemetry';
 import { synthesizeFromTestSuite } from '../testCase/synthesis';
 import { ServerSchemas } from '../types/api/server';
-import { checkRemoteHealth } from '../util/apiHealth';
+import { checkRemoteHealth, isNetworkEgressDisabled } from '../util/apiHealth';
 import {
   getPromptsForTestCasesHash,
   getStandaloneEvals,
@@ -132,6 +132,18 @@ export function createApp() {
   });
 
   app.get('/api/remote-health', async (_req: Request, res: Response): Promise<void> => {
+    // PROMPTFOO_NO_NETWORK promises no non-eval egress: answer from the
+    // local process instead of forwarding the poll to api.promptfoo.app.
+    if (isNetworkEgressDisabled()) {
+      res.json(
+        ServerSchemas.RemoteHealth.Response.parse({
+          status: 'DISABLED',
+          message: 'network egress is disabled (PROMPTFOO_NO_NETWORK)',
+        }),
+      );
+      return;
+    }
+
     const apiUrl = getRemoteHealthUrl();
 
     if (apiUrl === null) {

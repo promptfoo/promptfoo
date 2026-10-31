@@ -197,9 +197,13 @@ vi.mock('../../../src/updates/updateCommands', () => ({
   getUpdateCommands: mocks.getUpdateCommands,
 }));
 
-vi.mock('../../../src/util/apiHealth', () => ({
-  checkRemoteHealth: mocks.checkRemoteHealth,
-}));
+vi.mock('../../../src/util/apiHealth', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../../src/util/apiHealth')>();
+  return {
+    ...actual,
+    checkRemoteHealth: mocks.checkRemoteHealth,
+  };
+});
 
 vi.mock('../../../src/util/database', () => ({
   deleteEval: mocks.deleteEval,

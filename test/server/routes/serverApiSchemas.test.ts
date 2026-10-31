@@ -59,9 +59,13 @@ vi.mock('../../../src/testCase/synthesis', () => ({
   synthesizeFromTestSuite: vi.fn(),
 }));
 
-vi.mock('../../../src/util/apiHealth', () => ({
-  checkRemoteHealth: vi.fn(),
-}));
+vi.mock('../../../src/util/apiHealth', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../../src/util/apiHealth')>();
+  return {
+    ...actual,
+    checkRemoteHealth: vi.fn(),
+  };
+});
 
 vi.mock('../../../src/util/database', () => ({
   getPrompts: vi.fn(),
