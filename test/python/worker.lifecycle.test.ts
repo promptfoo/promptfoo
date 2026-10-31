@@ -102,41 +102,39 @@ it.each(['timeout', 'shutdown'] as const)(
   async (mode) => {
     const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'promptfoo-worker-descendant-'));
     const script = path.join(directory, 'provider.py');
-    const marker = path.join(directory, 'pids.json');
     await fs.writeFile(
       script,
-      `import json
-import os
+      `import os
 import subprocess
 import sys
 import time
 
 
-def call_api(mode, marker):
-    if mode != "recover":
-        # Inherit stdout/stderr so close cannot fire merely because the wrapper exits.
+def call_api(mode):
+    if mode == "spawn":
+        # The descendant inherits the worker pipes until the test cleans it up.
         descendant = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)"])
-        with open(marker, "w", encoding="utf-8") as handle:
-            json.dump({"worker": os.getpid(), "descendant": descendant.pid}, handle)
-        if mode == "timeout":
-            time.sleep(60)
+        return {"worker": os.getpid(), "descendant": descendant.pid}
+    if mode == "timeout":
+        time.sleep(60)
     return os.getpid()
 `,
     );
-    // Only the timeout case needs a short request deadline. The shutdown case
-    // starts a real child process before its separate cleanup deadline begins.
-    const requestTimeout = mode === 'timeout' ? 1000 : undefined;
-    const pool = new PythonWorkerPool(script, 'call_api', 1, undefined, requestTimeout);
+    const pool = new PythonWorkerPool(script, 'call_api', 1, undefined, 1000);
+    let descendant: number | undefined;
     const deadline = new AbortController();
     let operation: Promise<unknown> | undefined;
     try {
       await pool.initialize();
-      if (mode === 'shutdown') {
-        await pool.execute('call_api', [mode, marker]);
-        operation = pool.shutdown();
-      } else {
-        operation = pool.execute('call_api', [mode, marker]).catch((error) => error);
-      }
+      // Start the descendant before measuring either deadline.
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+      const pids = await pool.execute('call_api', ['spawn']);
+      descendant = pids.descendant;
+      vi.useRealTimers();
+      operation =
+        mode === 'shutdown'
+          ? pool.shutdown()
+          : pool.execute('call_api', ['timeout']).catch((error) => error);
       // Bound cleanup even when the descendant retains the worker's output pipes.
       const outcome = await Promise.race([
         operation,
@@ -145,7 +143,6 @@ def call_api(mode, marker):
       expect(outcome).toEqual(
         mode === 'shutdown' ? undefined : new Error('Python worker timed out after 1000ms'),
       );
-      const pids = JSON.parse(await fs.readFile(marker, 'utf-8'));
       expect(() => process.kill(pids.worker, 0)).toThrow();
       if (process.platform === 'win32' && mode === 'timeout') {
         // Forced Windows shutdown terminates the entire process tree.
@@ -154,20 +151,16 @@ def call_api(mode, marker):
         expect(() => process.kill(pids.descendant, 0)).not.toThrow();
       }
       if (mode === 'timeout') {
-        const replacement = await pool.execute('call_api', ['recover', marker]);
+        const replacement = await pool.execute('call_api', ['recover']);
         expect(replacement).toBeTypeOf('number');
         expect(replacement).not.toBe(pids.worker);
       }
     } finally {
+      vi.useRealTimers();
       deadline.abort();
-      // The provider-created descendant is deliberately independent of wrapper lifetime.
-      const pids = await fs
-        .readFile(marker, 'utf-8')
-        .then(JSON.parse)
-        .catch(() => undefined);
-      if (pids?.descendant) {
+      if (descendant) {
         try {
-          process.kill(pids.descendant, 'SIGKILL');
+          process.kill(descendant, 'SIGKILL');
         } catch {
           // It may have already exited while the test was cleaning up.
         }
