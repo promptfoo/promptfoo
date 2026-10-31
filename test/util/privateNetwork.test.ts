@@ -13,6 +13,7 @@ import {
   assertUrlResolvesPublic,
   getCallerSuppliedBaseUrls,
   isPrivateIpAddress,
+  isPrivateRangeBlockedMessage,
   isPrivateRangeBlockingEnabled,
   PrivateRangeBlockedError,
 } from '../../src/util/privateNetwork';
@@ -23,6 +24,31 @@ const mockedLookup = vi.mocked(
 
 afterEach(() => {
   vi.resetAllMocks();
+});
+
+describe('isPrivateRangeBlockedMessage', () => {
+  it.each([
+    'PROMPTFOO_BLOCK_PRIVATE_RANGES is set: refusing to fetch provider URL whose host "noresolve.example.com" could not be resolved: getaddrinfo ENOTFOUND',
+    'PROMPTFOO_BLOCK_PRIVATE_RANGES is set: refusing to fetch provider URL whose host "internal.example.com" resolves to a private address',
+    'PROMPTFOO_BLOCK_PRIVATE_RANGES is set: refusing to fetch provider URL with private address "10.1.2.3"',
+  ])('matches a guard failure message: %s', (message) => {
+    expect(isPrivateRangeBlockedMessage(message)).toBe(true);
+  });
+
+  it('matches a guard message wrapped by another layer', () => {
+    expect(
+      isPrivateRangeBlockedMessage(
+        'Provider returned error: PROMPTFOO_BLOCK_PRIVATE_RANGES is set: refusing to fetch provider URL whose host "internal.example.com" resolves to a private address',
+      ),
+    ).toBe(true);
+  });
+
+  it.each(['Request failed after 4 retries: socket hang up', '', undefined, 42])(
+    'does not match a non-guard message: %s',
+    (message) => {
+      expect(isPrivateRangeBlockedMessage(message)).toBe(false);
+    },
+  );
 });
 
 describe('isPrivateIpAddress', () => {

@@ -179,6 +179,21 @@ export class PrivateRangeBlockedError extends Error {
 }
 
 /**
+ * Every message raised by this module shares one prefix. Guard failures
+ * surface downstream as plain strings (provider `{ error }` results,
+ * evaluation summaries), so callers that only see the string cannot use
+ * `instanceof` on them. Matching on the shared prefix lets a caller
+ * redact a guard failure without distinguishing why it was refused.
+ */
+const PRIVATE_RANGE_BLOCKED_MESSAGE_PREFIX = 'PROMPTFOO_BLOCK_PRIVATE_RANGES is set:';
+
+export function isPrivateRangeBlockedMessage(message: unknown): boolean {
+  return (
+    typeof message === 'string' && message.includes(PRIVATE_RANGE_BLOCKED_MESSAGE_PREFIX)
+  );
+}
+
+/**
  * Resolve the URL's host and throw {@link PrivateRangeBlockedError} when it
  * is a private, loopback, or link-local address, or when the host cannot be
  * resolved (fail closed: an unverifiable target must not be fetched on an
