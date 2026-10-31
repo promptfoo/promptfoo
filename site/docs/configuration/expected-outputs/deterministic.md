@@ -770,7 +770,7 @@ The `trajectory:tool-used` assertion checks traced tool steps rather than the mo
 Trajectory assertions require trace data. Enable tracing for the eval and use a provider that emits tool-oriented spans or attributes.
 :::
 
-For an [OpenAI Agents API](/docs/providers/openai-agents-api#inspect-traces) target with `hostedTrace` enabled, use [raw span assertions](#trace-span-count) to grade hosted actions. Trajectory assertions report unavailable evidence.
+For the hosted OpenAI Agents API, enable `hostedTrace` to grade native tool spans. A partial import can establish that a tool or a matching argument was observed. It cannot establish that a tool never ran or that the observed count was the total. [Hosted trace settings and import statuses](/docs/providers/openai-agents-api#inspect-traces)
 
 Promptfoo identifies tool names from attributes such as `tool.name`, `function.name`, and Vercel AI SDK telemetry's `ai.toolCall.name`.
 
@@ -832,6 +832,8 @@ tests:
 - optional `ignore`, an argument name or list of names to drop before matching, regardless of value
 
 In `partial` mode, object properties are matched recursively as a subset. In `exact` mode, the entire argument payload must match exactly.
+
+With hosted OpenAI Agents API traces, a positive subset match can use an unchanged field such as `cwd` even if another argument was omitted. An exact match needs one call with intact arguments, including when `ignore` or `defaults` is set. An inverse match requires complete argument evidence across the hosted call. If the calls that might match have missing or redacted arguments, the assertion can report insufficient evidence.
 
 #### Tolerating default arguments {#trajectory-tool-args-match-defaults}
 
@@ -988,6 +990,8 @@ For `anthropic:claude-agent-sdk`, subagent rounds also emit `gen_ai.turn` spans 
 The `trajectory:step-count` assertion counts normalized trajectory steps. It can filter by step type (`tool`, `command`, `search`, `reasoning`, `message`, or `span`) and by glob-style name pattern.
 
 Command steps are detected from command attributes such as `command` and `codex.command`, and from command-like tool spans such as OpenAI Agents SDK `exec_command`, `local_shell`, or `shell` calls whose arguments include `cmd`, `command`, or `commands`.
+
+Hosted OpenAI Agents API step counts require a complete trace. A positive minimum such as `{ pattern: 'execute_tool *', min: 1 }` can count recorded span names without arguments. A command minimum can use captured commands even when another call’s arguments were lost. If the count falls short and unresolved calls could meet the minimum, the assertion reports insufficient evidence. An upper bound or inverse check on commands or untyped names requires complete argument capture.
 
 Example:
 
