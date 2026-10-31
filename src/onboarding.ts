@@ -354,7 +354,7 @@ export async function createDummyFiles(
   interactive: boolean = true,
 ): Promise<InitProjectResult> {
   const outDirectory = directory || '.';
-  const outDirAbsolute = path.join(process.cwd(), outDirectory);
+  const outDirAbsolute = path.resolve(outDirectory);
 
   async function writeFile({
     file,
@@ -740,7 +740,8 @@ export async function initializeProject(directory: string | null, interactive: b
         `  ${chalk.bold('2.')} Run ${chalk.cyan(viewCommand)} to view results in your browser`,
       );
     } else {
-      logger.info(chalk.green(`✅ Wrote promptfooconfig.yaml to ./${outDirectory}\n`));
+      const displayDirectory = path.isAbsolute(outDirectory) ? outDirectory : `./${outDirectory}`;
+      logger.info(chalk.green(`✅ Wrote promptfooconfig.yaml to ${displayDirectory}\n`));
       logger.info(`  ${chalk.bold('1.')} Run ${chalk.cyan(`cd ${outDirectory}`)}`);
       logger.info(`  ${chalk.bold('2.')} Run ${chalk.cyan(runCommand)} to evaluate your prompts`);
       logger.info(
