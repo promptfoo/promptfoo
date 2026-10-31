@@ -457,13 +457,20 @@ export async function logRequestResponse(options: {
   requestMethod: string;
   response?: Response | null;
   error?: boolean;
+  /**
+   * Skip reading the response body (no `response.clone().text()`). Used when
+   * the caller discards the body anyway, e.g. an intermediate redirect in
+   * manual-redirect mode: cloning would keep a potentially unbounded body
+   * draining after the caller cancels the original branch.
+   */
+  skipResponseBody?: boolean;
 }): Promise<void> {
-  const { url, requestBody, requestMethod, response, error } = options;
+  const { url, requestBody, requestMethod, response, error, skipResponseBody } = options;
 
   const logMethod = error ? logger.error : logger.debug;
 
   let responseText = '';
-  if (response) {
+  if (response && !skipResponseBody) {
     try {
       responseText = await response.clone().text();
     } catch {
