@@ -1617,7 +1617,7 @@ async function main(): Promise<void> {
       runOptionalSdkChecks(consumerDir, configDir, consumerNpmEnv, values.profile === 'default', {
         name: 'Langfuse',
         package: '@langfuse/client',
-        version: '^5.11.1',
+        version: '^6.0.0',
         script: 'optional-langfuse.mjs',
         env: {
           LANGFUSE_PUBLIC_KEY: '',

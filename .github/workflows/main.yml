@@ -47,9 +47,10 @@ jobs:
           build_matrix='{"node":["22.22","26.x"]}'
 
           if [[ "$EVENT_NAME" == "pull_request" ]]; then
-            # PRs: add 1 macOS version only
+            # PRs: include the Node 24 Windows shard that runs Python process tests.
             extra_entries='
-              ,{"node":"22.22","os":"macOS-latest","shard":""}
+              ,{"node":"22.22","os":"macOS-latest","shard":""},
+              {"node":"24.x","os":"windows-2025-vs2026","shard":1}
             '
           else
             # Main/dispatch: add all macOS versions + remaining Windows shards
@@ -143,13 +144,13 @@ jobs:
         # CI. Real test/assertion failures still fail; see vitest.config.ts.
         env:
           PROMPTFOO_IGNORE_UNHANDLED_TEST_ERRORS: 'true'
-        run: npm run test${{ matrix.shard && format(' -- --shard={0}/3', matrix.shard) || '' }}${{ matrix.os == 'ubuntu-latest' && matrix.node == '22.22' && !matrix.shard && ' -- --coverage' || '' }}${{ startsWith(matrix.os, 'windows-') && ' --exclude=test/release-artifact.test.ts' || '' }}
+        run: npm run test${{ matrix.shard && format(' -- --shard={0}/3', matrix.shard) || '' }}${{ matrix.os == 'ubuntu-latest' && matrix.node == '22.22' && !matrix.shard && ' -- --coverage' || '' }}${{ startsWith(matrix.os, 'windows-') && ' --exclude=test/release-artifact.test.ts --exclude=test/examples/integrationCrewai.test.ts --exclude=test/python/python-subprocess-cancellation.test.ts --exclude=test/python/worker.lifecycle.test.ts' || '' }}
 
-      - name: Test release artifact acceptance without parallel workers
-        # Cold npm install/rebuild fixtures need the runner's CPU and disk without
-        # competing test forks. Run the unchanged suite once per Windows Node version.
+      - name: Test process fixtures without parallel workers
+        # Cold npm and Python processes can miss deadlines when competing
+        # with test forks. Run these unchanged suites once per Windows Node version.
         if: startsWith(matrix.os, 'windows-') && matrix.shard == 1
-        run: npm run test -- test/release-artifact.test.ts --maxWorkers=1
+        run: npm run test -- test/release-artifact.test.ts test/examples/integrationCrewai.test.ts test/python/python-subprocess-cancellation.test.ts test/python/worker.lifecycle.test.ts --maxWorkers=1
 
       - name: Run built agent skill examples
         if: matrix.os != 'ubuntu-latest' && (!matrix.shard || matrix.shard == '1')
