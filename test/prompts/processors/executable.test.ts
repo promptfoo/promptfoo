@@ -1,9 +1,12 @@
+import * as crypto from 'crypto';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 
-import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import * as cacheModule from '../../../src/cache';
 import cliState from '../../../src/cliState';
+import logger from '../../../src/logger';
 import { processExecutableFile } from '../../../src/prompts/processors/executable';
 import { mockProcessEnv } from '../../util/utils';
 
@@ -13,6 +16,8 @@ vi.mock('../../../src/logger', () => ({
   default: {
     debug: vi.fn(),
     error: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
   },
 }));
 
@@ -58,6 +63,252 @@ describe('processExecutableFile', () => {
       restoreEnv();
       fs.rmSync(tempDir, { recursive: true, force: true });
     }
+  });
+
+  it('passes shell-style quoted arguments to the script as single arguments', async () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-executable-args-'));
+    const scriptPath = path.join(tempDir, 'prompt.cjs');
+    try {
+      // The last argument is always the JSON context
+      fs.writeFileSync(
+        scriptPath,
+        'process.stdout.write(JSON.stringify(process.argv.slice(2, -1)));',
+      );
+      const [prompt] = await processExecutableFile(
+        `"${process.execPath}" "${scriptPath}" --name="John Smith" "" --x='a b' --empty=""`,
+        {},
+      );
+      const output = await prompt.function!({ vars: {}, provider: mockProvider });
+      expect(JSON.parse(output as string)).toEqual([
+        '--name=John Smith',
+        '',
+        '--x=a b',
+        '--empty=',
+      ]);
+    } finally {
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it('keys the cache by parser version so output cached for the old argv is not reused', async () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-executable-cache-'));
+    const scriptPath = path.join(tempDir, 'prompt.cjs');
+    const keys: string[] = [];
+    const cache = {
+      get: vi.fn(async (key: string) => {
+        keys.push(key);
+        return key.startsWith('exec-prompt:argv-v2:') ? undefined : 'stale output';
+      }),
+      set: vi.fn(),
+    };
+    vi.mocked(cacheModule.getCache).mockReturnValue(cache as never);
+    vi.mocked(cacheModule.isCacheEnabled).mockReturnValue(true);
+    try {
+      fs.writeFileSync(scriptPath, "process.stdout.write('fresh output');");
+      const [prompt] = await processExecutableFile(`"${process.execPath}" "${scriptPath}"`, {});
+      const output = await prompt.function!({ vars: {}, provider: mockProvider });
+      expect(output).toBe('fresh output');
+      expect(keys).toHaveLength(1);
+      expect(keys[0]).toMatch(/^exec-prompt:argv-v2:/);
+    } finally {
+      vi.mocked(cacheModule.getCache).mockImplementation(
+        () => ({ get: vi.fn(), set: vi.fn() }) as never,
+      );
+      vi.mocked(cacheModule.isCacheEnabled).mockReturnValue(false);
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  describe('cache key for files attached to quoted arguments', () => {
+    const sha256 = (content: string) => crypto.createHash('sha256').update(content).digest('hex');
+
+    async function collectKeys(buildCommand: (configPath: string) => string, configName: string) {
+      const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-executable-attached-'));
+      const scriptPath = path.join(tempDir, 'prompt.cjs');
+      const configPath = path.join(tempDir, configName);
+      const keys: string[] = [];
+      const cache = {
+        get: vi.fn(async (key: string) => {
+          keys.push(key);
+          return undefined;
+        }),
+        set: vi.fn(),
+      };
+      vi.mocked(cacheModule.getCache).mockReturnValue(cache as never);
+      vi.mocked(cacheModule.isCacheEnabled).mockReturnValue(true);
+      try {
+        fs.writeFileSync(scriptPath, "process.stdout.write('output');");
+        fs.writeFileSync(configPath, 'config v1');
+        const [prompt] = await processExecutableFile(
+          `"${process.execPath}" "${scriptPath}" ${buildCommand(configPath)}`,
+          {},
+        );
+        await prompt.function!({ vars: {}, provider: mockProvider });
+        fs.writeFileSync(configPath, 'config v2');
+        await prompt.function!({ vars: {}, provider: mockProvider });
+        return { keys, scriptHash: sha256(fs.readFileSync(scriptPath, 'utf8')) };
+      } finally {
+        vi.mocked(cacheModule.getCache).mockImplementation(
+          () => ({ get: vi.fn(), set: vi.fn() }) as never,
+        );
+        vi.mocked(cacheModule.isCacheEnabled).mockReturnValue(false);
+        fs.rmSync(tempDir, { recursive: true, force: true });
+      }
+    }
+
+    it.each([
+      ['double quotes', 'config file.json', (p: string) => `--config="${p}"`],
+      ['single quotes', 'config file.json', (p: string) => `--config='${p}'`],
+      ['double quotes without spaces', 'config.json', (p: string) => `--config="${p}"`],
+      ['no quotes', 'config.json', (p: string) => `--config=${p}`],
+    ])('changes when a file attached with =, %s, changes', async (_label, name, build) => {
+      const { keys, scriptHash } = await collectKeys(build, name);
+
+      expect(keys).toHaveLength(2);
+      expect(keys[0]).toContain(`:${scriptHash}:${sha256('config v1')}:`);
+      expect(keys[1]).toContain(`:${scriptHash}:${sha256('config v2')}:`);
+    });
+
+    it('ignores an attached value that is not a file', async () => {
+      const { keys, scriptHash } = await collectKeys(
+        (p) => `--config="${p}.missing" --name="John Smith"`,
+        'config file.json',
+      );
+
+      expect(keys).toHaveLength(2);
+      expect(keys[0]).toBe(keys[1]);
+      expect(keys[0]).toContain(`:${scriptHash}:{`);
+    });
+
+    describe('child working directory and credential files', () => {
+      let tempDir: string;
+      let hostDir: string;
+      let baseDir: string;
+      let scriptPath: string;
+      let originalCwd: string;
+      let keys: string[];
+      let cache: { get: ReturnType<typeof vi.fn>; set: ReturnType<typeof vi.fn> };
+
+      beforeEach(() => {
+        originalCwd = process.cwd();
+        tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-executable-cwd-'));
+        hostDir = path.join(tempDir, 'host');
+        baseDir = path.join(tempDir, 'base');
+        fs.mkdirSync(hostDir);
+        fs.mkdirSync(baseDir);
+        scriptPath = path.join(tempDir, 'prompt.cjs');
+        fs.writeFileSync(scriptPath, "process.stdout.write('output');");
+        process.chdir(hostDir);
+        keys = [];
+        cache = {
+          get: vi.fn(async (key: string) => {
+            keys.push(key);
+            return undefined;
+          }),
+          set: vi.fn(),
+        };
+        vi.mocked(cacheModule.getCache).mockReturnValue(cache as never);
+        vi.mocked(cacheModule.isCacheEnabled).mockReturnValue(true);
+      });
+
+      afterEach(() => {
+        process.chdir(originalCwd);
+        vi.mocked(cacheModule.getCache).mockImplementation(
+          () => ({ get: vi.fn(), set: vi.fn() }) as never,
+        );
+        vi.mocked(cacheModule.isCacheEnabled).mockReturnValue(false);
+        fs.rmSync(tempDir, { recursive: true, force: true });
+      });
+
+      it('keys the cache by the attached file in basePath, not the one in our cwd', async () => {
+        fs.writeFileSync(path.join(hostDir, 'config.json'), 'host copy');
+        fs.writeFileSync(path.join(baseDir, 'config.json'), 'base v1');
+        const [prompt] = await processExecutableFile(
+          `"${process.execPath}" "${scriptPath}" --config=config.json`,
+          { config: { basePath: baseDir } },
+        );
+
+        await prompt.function!({ vars: {}, provider: mockProvider });
+        fs.writeFileSync(path.join(baseDir, 'config.json'), 'base v2');
+        await prompt.function!({ vars: {}, provider: mockProvider });
+
+        const scriptHash = sha256(fs.readFileSync(scriptPath, 'utf8'));
+        expect(keys).toHaveLength(2);
+        expect(keys[0]).toContain(`:${scriptHash}:${sha256('base v1')}:`);
+        expect(keys[1]).toContain(`:${scriptHash}:${sha256('base v2')}:`);
+        expect(keys.join()).not.toContain(sha256('host copy'));
+      });
+
+      it('does not cache from a file that exists only in our cwd', async () => {
+        fs.writeFileSync(path.join(hostDir, 'config.json'), 'host copy');
+        const [prompt] = await processExecutableFile(
+          `node -e "process.stdout.write('output')" -- --config=config.json`,
+          { config: { basePath: baseDir } },
+        );
+
+        await prompt.function!({ vars: {}, provider: mockProvider });
+
+        expect(cache.get).not.toHaveBeenCalled();
+        expect(cache.set).not.toHaveBeenCalled();
+      });
+
+      it('does not cache a command whose only file is an attached argument', async () => {
+        fs.writeFileSync(path.join(baseDir, 'config.json'), 'base copy');
+        const [prompt] = await processExecutableFile(
+          `node -e "process.stdout.write('output')" -- --config=config.json`,
+          { config: { basePath: baseDir } },
+        );
+
+        await prompt.function!({ vars: {}, provider: mockProvider });
+
+        expect(cache.get).not.toHaveBeenCalled();
+        expect(cache.set).not.toHaveBeenCalled();
+      });
+
+      it.each([['--token-file="%s" --password=hunter2'], ['--password=hunter2 --token-file %s']])(
+        'never logs the command when a credential file is attached, %s',
+        async (template) => {
+          const secretPath = path.join(tempDir, 'secret.txt');
+          fs.writeFileSync(secretPath, 'file-secret');
+          const [prompt] = await processExecutableFile(
+            `"${process.execPath}" "${scriptPath}" ${template.replace('%s', secretPath)}`,
+            {},
+          );
+
+          await prompt.function!({ vars: {}, provider: mockProvider });
+
+          const logged = JSON.stringify(
+            [logger.error, logger.warn, logger.info, logger.debug].flatMap(
+              (fn) => vi.mocked(fn).mock.calls,
+            ),
+          );
+          expect(logged).not.toContain('hunter2');
+          expect(logged).not.toContain('file-secret');
+          expect(cache.get).not.toHaveBeenCalled();
+        },
+      );
+
+      it.each([
+        ['--token-file="%s"'],
+        ['--api-key-file=%s'],
+        ['--password=%s'],
+        ['--token-file %s'],
+      ])('does not hash or cache a command with a credential file, %s', async (template) => {
+        const secretPath = path.join(tempDir, 'secret.txt');
+        fs.writeFileSync(secretPath, 'hunter2');
+        const [prompt] = await processExecutableFile(
+          `"${process.execPath}" "${scriptPath}" ${template.replace('%s', secretPath)}`,
+          {},
+        );
+
+        const output = await prompt.function!({ vars: {}, provider: mockProvider });
+
+        expect(output).toBe('output');
+        expect(cache.get).not.toHaveBeenCalled();
+        expect(cache.set).not.toHaveBeenCalled();
+        expect(keys).toEqual([]);
+      });
+    });
   });
 
   it('should process a script with exec: prefix', async () => {
