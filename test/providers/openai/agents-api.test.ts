@@ -1027,6 +1027,75 @@ describe('OpenAiAgentsApiProvider', () => {
       },
     );
 
+    it.each([
+      ['violet-bridge', 'unavailable'],
+      ['public-ledger.csv', 'imported'],
+    ])(
+      'checks a native tool identity against configured stdio credentials: %s',
+      async (suffix, status) => {
+        recordWrapper();
+        const addSpans = vi.spyOn(getTraceStore(), 'addSpans').mockResolvedValue({ stored: true });
+        const resource = publishedWithTool();
+        const tool = resource.otlp.resourceSpans[0].scopeSpans[0].spans[1];
+        tool.attributes.find((attr) => attr.key === 'gen_ai.tool.name')!.value.stringValue =
+          `lookup_${suffix}`;
+        mockApi((path) => (path.endsWith('/traces') ? json(page([resource])) : undefined));
+        const result = await provider({
+          hostedTrace: true,
+          agent: {
+            tools: [
+              {
+                type: 'mcp',
+                server_label: 'ledger',
+                transport: {
+                  type: 'stdio',
+                  cwd: '/workspace',
+                  command: '/usr/bin/ledger',
+                  args: ['--api-key', 'violet-bridge', '--file', 'public-ledger.csv'],
+                },
+              },
+            ],
+          },
+        }).callApi('hi', row);
+        expect(result.output).toBe('42');
+        expect(result.metadata?.hostedTrace).toMatchObject({ status });
+        const persisted = JSON.stringify(addSpans.mock.calls);
+        expect(persisted).not.toContain('violet-bridge');
+        if (status === 'imported') {
+          expect(persisted).toContain('lookup_public-ledger.csv');
+        }
+      },
+    );
+
+    it('preserves the answer when an opaque authorization scheme hides native identities', async () => {
+      recordWrapper();
+      const addSpans = vi.spyOn(getTraceStore(), 'addSpans').mockResolvedValue({ stored: true });
+      const resource = publishedWithTool();
+      const tool = resource.otlp.resourceSpans[0].scopeSpans[0].spans[1];
+      tool.attributes.find((attr) => attr.key === 'gen_ai.tool.name')!.value.stringValue =
+        'lookup_violet-bridge';
+      mockApi((path) => (path.endsWith('/traces') ? json(page([resource])) : undefined));
+      const result = await provider({
+        hostedTrace: true,
+        agent: {
+          tools: [
+            {
+              type: 'mcp',
+              server_label: 'ledger',
+              transport: {
+                type: 'http',
+                url: 'https://mcp.example/api',
+                authorization: 'Digest username="ledger", response="violet-bridge"',
+              },
+            },
+          ],
+        },
+      }).callApi('hi', row);
+      expect(result.output).toBe('42');
+      expect(result.metadata?.hostedTrace).toMatchObject({ status: 'unavailable' });
+      expect(addSpans).not.toHaveBeenCalled();
+    });
+
     it('keeps the answer and deletes the session when export is denied', async () => {
       recordWrapper();
       mockApi((path) =>
@@ -1389,6 +1458,78 @@ describe('OpenAiAgentsApiProvider', () => {
     });
     expect(checkProviderApiKeys([gateway])).toEqual(new Map());
     expect((await gateway.callApi('hi')).output).toBe('42');
+  });
+
+  it('redacts credentials in MCP stdio arguments while preserving ordinary diagnostic values', async () => {
+    const filename = 'ledger.csv';
+    const credentials = [
+      'violet-bridge',
+      'amber-willow',
+      'coral-meadow',
+      'maple-stream',
+      'pine-garden',
+      'ruby-blossom',
+    ];
+    vi.mocked(fetchWithRetries).mockResolvedValueOnce(
+      apiError(401, [filename, ...credentials].join(' ')),
+    );
+    const result = await provider({
+      agent: {
+        tools: [
+          {
+            type: 'mcp',
+            server_label: 'ledger',
+            transport: {
+              type: 'stdio',
+              command: '/usr/bin/ledger',
+              cwd: '/workspace',
+              args: [
+                '--file',
+                filename,
+                '--api-key',
+                credentials[0],
+                `--password=${credentials[1]}`,
+                '-H',
+                `Authorization: Bearer ${credentials[2]}`,
+                `SERVICE_API_KEY=${credentials[3]}`,
+                '--header',
+                `X-Honeycomb-Team: ${credentials[4]}`,
+                '-H',
+                `Cookie: auth=${credentials[5]}`,
+              ],
+            },
+          },
+        ],
+      },
+    }).callApi('hi');
+    expect(result.error).toContain(filename);
+    for (const value of credentials) {
+      expect(result.error).not.toContain(value);
+    }
+  });
+
+  it('redacts tokens and cookie values from configured MCP HTTP credentials', async () => {
+    vi.mocked(fetchWithRetries).mockResolvedValueOnce(
+      apiError(401, 'ledger.csv violet-bridge amber-willow'),
+    );
+    const result = await provider({
+      agent: {
+        tools: [
+          {
+            type: 'mcp',
+            server_label: 'ledger',
+            transport: {
+              type: 'http',
+              url: 'https://mcp.example/api',
+              authorization: 'DPoP violet-bridge',
+              headers: { Cookie: 'auth="amber-willow"; count=1' },
+            },
+          },
+        ],
+      },
+    }).callApi('hi');
+    expect(result.error).toContain('ledger.csv');
+    expect(result.error).not.toMatch(/violet-bridge|amber-willow/);
   });
 
   it('redacts an echoed MCP path credential', async () => {
