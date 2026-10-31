@@ -1,18 +1,11 @@
 import invariant from '../util/invariant';
 import { parseCommaSeparatedValues as parseValues } from '../validation/parseCommaSeparatedValues';
-import { normalizeForComparison } from './normalize';
+import { isTextComparisonValue, normalizeForComparison } from './normalize';
 
 import type { AssertionParams, GradingResult } from '../types/index';
 
 export function parseCommaSeparatedValues(value: string): string[] {
   return parseValues(value);
-}
-
-function isContainsValue(value: unknown): value is string | number {
-  return (
-    (typeof value === 'string' && value !== '') ||
-    (typeof value === 'number' && !Number.isNaN(value))
-  );
 }
 
 function handleContainsValue(
@@ -32,7 +25,7 @@ function handleContainsValue(
   let expectation: () => string;
   if (mode === 'single') {
     invariant(
-      isContainsValue(value),
+      isTextComparisonValue(value),
       `"${type}" assertion type must have a string or number value`,
     );
     matches = includes(value);
