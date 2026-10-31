@@ -12,7 +12,9 @@ import {
 import {
   HOSTED_ABSENT_TOOL_ATTRIBUTES,
   HOSTED_CHAT_MODEL_ABSENT,
+  HOSTED_SPAN_OPERATIONS,
   hasUncertainHostedChatName,
+  isHostedSpanIdentifier,
 } from '../../tracing/spanFilter';
 import { HOSTED_DURATION_NS, HOSTED_START_TIME_OFFSET_NS } from '../../tracing/spanTiming';
 import { getNormalizedToolAttributes } from '../../tracing/toolAttributes';
@@ -717,8 +719,7 @@ function hasOpaqueIdentifierComponent(value: string): boolean {
 
 function safeIdentifier(value: unknown, policy: ImportPolicy): value is string {
   return (
-    typeof value === 'string' &&
-    /^[\w.:-]{1,256}$/.test(value) &&
+    isHostedSpanIdentifier('execute_tool', value) &&
     !hasOpaqueIdentifierComponent(value) &&
     !hasProtectedComponent(value, policy) &&
     canRetainText(value, policy)
@@ -727,9 +728,7 @@ function safeIdentifier(value: unknown, policy: ImportPolicy): value is string {
 
 function safeModelIdentifier(value: unknown, policy: ImportPolicy): value is string {
   return (
-    typeof value === 'string' &&
-    value.length <= 256 &&
-    /^(?:[\w.:-]+\/)*[\w.:-]+$/.test(value) &&
+    isHostedSpanIdentifier('chat', value) &&
     !hasOpaqueIdentifierComponent(value) &&
     !hasProtectedComponent(value, policy) &&
     canRetainText(value, policy, hasRecognizableOpenAiCredential)
@@ -817,8 +816,9 @@ function normalizeSpan(
     invalid();
   }
   const attrs = attributeMap(wire.attributes);
-  const operation = wireString(attrs.get('gen_ai.operation.name'));
-  if (operation !== 'execute_tool' && operation !== 'invoke_agent' && operation !== 'chat') {
+  const operationName = wireString(attrs.get('gen_ai.operation.name'));
+  const operation = HOSTED_SPAN_OPERATIONS.find((candidate) => candidate === operationName);
+  if (!operation) {
     // Fail closed if the API introduces new kinds of tool telemetry.
     invalid();
   }

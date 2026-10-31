@@ -352,6 +352,38 @@ describe('trace assertions', () => {
       },
     );
 
+    it('bounds missing hosted spans by the names and attributes the decoder can produce', async () => {
+      const lookup = tool('lookup');
+      lookup.attributes!['gen_ai.provider.name'] = 'openai';
+      const check = (pattern: string, attributes?: Record<string, string>) =>
+        grade(
+          { type: 'trace-span-count', value: { pattern, max: 0, attributes } },
+          { ...imported, status: 'partial' },
+          [lookup],
+        );
+      // The wrapper and the stored lookup tool do not match any of these filters.
+      for (const [pattern, attributes] of [
+        ['http.request', {}],
+        ['HTTP.*', {}],
+        ['execute_tool outside/fixture', {}],
+        ['chat invalid model', {}],
+        ['chat *', { 'gen_ai.operation.name': 'execute_tool' }],
+        ['*', { 'gen_ai.operation.name': 'CHAT' }],
+        ['*', { 'gen_ai.provider.name': 'elsewhere' }],
+      ] as const) {
+        await expect(
+          await check(pattern, attributes),
+          JSON.stringify({ pattern, attributes }),
+        ).toMatchObject({ pass: true });
+      }
+      for (const pattern of ['c?at *', '*request', 'execute_tool other']) {
+        await expect(check(pattern)).resolves.toMatchObject({
+          pass: false,
+          reason: expect.stringContaining('partial'),
+        });
+      }
+    });
+
     it('bounds a legacy chat name separately from missing hosted spans', async () => {
       const chat = {
         ...tool('old-chat'),
