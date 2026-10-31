@@ -13,7 +13,8 @@ const createStreamingToolConfig = () => ({
   toolConfig: { functionCallingConfig: { streamFunctionCallArguments: true } },
 });
 
-vi.mock('../../../src/envars', () => ({
+vi.mock('../../../src/envars', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../../src/envars')>()),
   getEnvString: vi.fn(),
   getEnvInt: vi.fn().mockReturnValue(300000),
   getEnvBool: vi.fn().mockReturnValue(false),

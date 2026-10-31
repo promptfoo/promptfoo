@@ -2,7 +2,8 @@ import os from 'os';
 import path from 'path';
 
 import dedent from 'dedent';
-import { getEnvString } from '../envars';
+import { getEnvString, getProviderEnvString } from '../envars';
+import { getExplicitProviderEnv, setExplicitProviderEnv } from '../envOverrides';
 import { importModule } from '../esm';
 import logger from '../logger';
 import { isJavascriptFile } from '../util/fileExtensions';
@@ -280,7 +281,9 @@ export function mergeProviderEnv(
         ];
   const isWindowsOpenCode = os.platform() === 'win32' && /^opencode(?::|$)/.test(providerPath);
   let merged: NonNullable<ProviderOptions['env']> | undefined;
-  for (const layer of layers) {
+  const explicitLayers = layers.map(getExplicitProviderEnv);
+  const explicit: NonNullable<ProviderOptions['env']> = {};
+  for (const [index, layer] of layers.entries()) {
     if (!layer) {
       continue;
     }
@@ -291,6 +294,7 @@ export function mergeProviderEnv(
       if (aliases.some((key) => layer[key])) {
         for (const key of aliases) {
           delete merged[key];
+          delete explicit[key];
         }
       }
     }
@@ -298,17 +302,23 @@ export function mergeProviderEnv(
       if (value === undefined) {
         continue;
       }
+      const isExplicit = explicitLayers[index]?.[key] !== undefined;
       if (isWindowsOpenCode) {
         for (const existingKey of Object.keys(merged)) {
           if (existingKey !== key && existingKey.toUpperCase() === key.toUpperCase()) {
             // Keep earlier spellings available to case-sensitive provider templates.
             // The server environment later collapses aliases with this same value.
             merged[existingKey] = value;
+            explicit[existingKey] = isExplicit ? value : undefined;
           }
         }
       }
       merged[key] = value;
+      explicit[key] = isExplicit ? value : undefined;
     }
+  }
+  if (merged && layers.some((layer, index) => layer !== explicitLayers[index])) {
+    setExplicitProviderEnv(merged, explicit);
   }
   return merged;
 }
@@ -503,7 +513,7 @@ export const providerMap: ProviderFactory[] = [
         ...providerOptions,
         id: providerOptions.id ?? providerPath,
         config: model ? { ...providerOptions.config, model } : providerOptions.config,
-        env: { ...context.env, ...providerOptions.env },
+        env: mergeProviderEnv(providerPath, context.env, providerOptions.env),
       });
     },
   },
@@ -864,7 +874,7 @@ export const providerMap: ProviderFactory[] = [
       const endpoint = providerPath.slice('f5:'.length).replace(/^\/+/, '');
       const configuredBaseUrl =
         providerOptions.config?.apiBaseUrl ??
-        providerOptions.env?.F5_API_BASE_URL ??
+        getProviderEnvString(providerOptions.env, 'F5_API_BASE_URL') ??
         getEnvString('F5_API_BASE_URL');
       if (!configuredBaseUrl) {
         throw new Error(
@@ -911,7 +921,7 @@ export const providerMap: ProviderFactory[] = [
         // loadApiProvider merges any provider-level `env` block into
         // providerOptions.env, so let those overrides win over the suite-level
         // env from context.
-        env: { ...context.env, ...providerOptions.env },
+        env: mergeProviderEnv(providerPath, context.env, providerOptions.env),
       });
     },
   },
@@ -1134,10 +1144,7 @@ export const providerMap: ProviderFactory[] = [
               model: codexModel,
             }
           : providerOptions.config,
-        env: {
-          ...context.env,
-          ...providerOptions.env,
-        },
+        env: mergeProviderEnv(providerPath, context.env, providerOptions.env),
       });
     },
   },
@@ -1192,7 +1199,7 @@ export const providerMap: ProviderFactory[] = [
         const { OpenAiAgentsApiProvider } = await import('./openai/agents-api');
         return new OpenAiAgentsApiProvider(modelName, {
           ...providerOptions,
-          env: { ...context.env, ...providerOptions.env },
+          env: mergeProviderEnv(providerPath, context.env, providerOptions.env),
         });
       }
 
