@@ -294,6 +294,11 @@ function buildRedirectHopOptions(
  *
  * Redirect semantics mirror the fetch spec for the common cases (301/302/303
  * downgrade to GET with the body dropped; 307/308 preserve method and body).
+ * The caller's redirect mode is preserved: the follow loop runs only for
+ * callers whose mode was `follow` (or unset, which defaults to `follow`).
+ * A `manual` caller gets the first response untouched, so it can inspect the
+ * Location itself, and an `error` caller gets a rejection on a redirect
+ * response, matching what native fetch would do.
  */
 async function fetchWithRedirectValidation(
   initialUrl: string,
@@ -318,6 +323,32 @@ async function fetchWithRedirectValidation(
   // dispatcher per hop: proxy selection depends on the hop's URL. A
   // caller-supplied dispatcher (e.g. mTLS) is kept for every hop.
   const callerDispatcher = options.dispatcher;
+
+  // Preserve the caller's redirect mode: only `follow` (the default) enters
+  // the follow loop. A `manual` caller gets the first response untouched so
+  // it can inspect the Location itself, and an `error` caller gets a
+  // rejection on a redirect response, matching native fetch. Following every
+  // redirect here would silently break both contracts.
+  if ((options.redirect ?? 'follow') !== 'follow') {
+    if (!callerDispatcher) {
+      const hopProxyUrl = getProxyForUrl(currentUrl);
+      currentOptions.dispatcher = hopProxyUrl
+        ? getOrCreateProxyAgent(hopProxyUrl, tlsOptions)
+        : getOrCreateAgent(tlsOptions);
+    }
+    const response = await monkeyPatchFetch(currentUrl, currentOptions);
+    if (
+      options.redirect === 'error' &&
+      isRedirectStatus(response.status) &&
+      response.headers.get('location')
+    ) {
+      await response.body?.cancel().catch(() => undefined);
+      throw new TypeError(
+        'fetch failed: redirects are not allowed for a request with redirect mode "error"',
+      );
+    }
+    return response;
+  }
 
   for (let hop = 0; hop <= MAX_GUARDED_REDIRECT_HOPS; hop++) {
     let hopAgent: ActiveAgent | undefined;
