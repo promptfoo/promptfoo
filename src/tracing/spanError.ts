@@ -1,5 +1,5 @@
 export const HOSTED_ERROR_STATUS_COMPLETE = 'promptfoo.openai.error_status_complete';
-export const HOSTED_ERROR_STATUS_VERSION = 'otlp-v2';
+export const HOSTED_ERROR_STATUS_VERSION = 'otlp-v3';
 
 /** Classify a span before persisting, or from its decoded trace attributes during grading. */
 export function isSpanError(
@@ -20,6 +20,7 @@ export function isSpanError(
     Number(attribute('http.status_code')) >= 400 ||
     attribute('otel.status_code') === 'ERROR' ||
     attribute('status.code') === 'ERROR' ||
-    /error|failed|failure|exception|timeout|abort/i.test(statusMessage ?? '')
+    ((statusCode === undefined || statusCode === 0) &&
+      /error|failed|failure|exception|timeout|abort/i.test(statusMessage ?? ''))
   );
 }

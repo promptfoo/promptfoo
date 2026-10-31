@@ -12,6 +12,7 @@ import cliState from '../../src/cliState';
 import { withProviderCallTracingContext } from '../../src/scheduler/providerCallExecutionContext';
 import { withGenAISpan } from '../../src/tracing/genaiTracer';
 import { sanitizeTraceAttributes } from '../../src/tracing/sanitizeAttributes';
+import { HOSTED_ERROR_STATUS_VERSION } from '../../src/tracing/spanError';
 import { getTraceStore } from '../../src/tracing/store';
 import { mockProcessEnv } from '../util/utils';
 
@@ -169,7 +170,7 @@ describe('trace assertions', () => {
       statusCode: 0,
       attributes: {
         'promptfoo.openai.hosted_trace': 'wrapper',
-        'promptfoo.openai.error_status_complete': 'otlp-v2',
+        'promptfoo.openai.error_status_complete': HOSTED_ERROR_STATUS_VERSION,
         'gen_ai.operation.name': 'execute_tool',
         'tool.name': name,
         ...(args !== undefined && {
@@ -219,7 +220,7 @@ describe('trace assertions', () => {
       },
     );
 
-    it('retains known failures but cannot prove zero errors from an older hosted projection', async () => {
+    it('requires reliable error evidence to grade an older hosted projection', async () => {
       const legacy = { ...imported, errorStatusComplete: undefined };
       const zero: Assertion = {
         type: 'trace-error-spans',
@@ -249,13 +250,24 @@ describe('trace assertions', () => {
           [call, tool('read')],
         ),
       ).resolves.toMatchObject({ pass: true });
-      await expect(grade(zero, legacy, [{ ...call, statusCode: 2 }])).resolves.toMatchObject({
-        pass: false,
-        reason: expect.stringContaining('Found 1 error'),
-      });
       const someErrors: Assertion = { ...zero, type: 'not-trace-error-spans' };
-      await expect(grade(someErrors, legacy, [call])).resolves.toMatchObject({ pass: false });
-      await expect(grade(someErrors, legacy, [{ ...call, statusCode: 2 }])).resolves.toMatchObject({
+      for (const marker of [undefined, 'otlp-v2']) {
+        for (const statusCode of [0, 1, 2]) {
+          const oldSpan = {
+            ...call,
+            statusCode,
+            attributes: { ...call.attributes, 'promptfoo.openai.error_status_complete': marker },
+          };
+          for (const assertion of [zero, someErrors]) {
+            await expect(grade(assertion, legacy, [oldSpan])).resolves.toMatchObject({
+              pass: false,
+              reason: expect.stringContaining('did not preserve all error indicators'),
+            });
+          }
+        }
+      }
+      const observedError = { ...call, attributes: { ...call.attributes, failed: true } };
+      await expect(grade(someErrors, legacy, [observedError])).resolves.toMatchObject({
         pass: true,
       });
       await expect(
@@ -925,7 +937,7 @@ describe('trace assertions', () => {
         attributes: {
           'gen_ai.operation.name': 'chat',
           'promptfoo.openai.hosted_trace': 'wrapper',
-          'promptfoo.openai.error_status_complete': 'otlp-v2',
+          'promptfoo.openai.error_status_complete': HOSTED_ERROR_STATUS_VERSION,
         },
       };
       const pattern = 'chat gpt-6-astra';
@@ -1543,6 +1555,43 @@ describe('trace assertions', () => {
       await expect(
         check({ url: 'https://***:***@example.test/' }, 'partial', [legacy]),
       ).resolves.toMatchObject({ pass: false });
+    });
+
+    it('rules out a hosted call when a retained argument contradicts the expected match', async () => {
+      const lossy = tool('lookup', { order_id: '123', commands: ['pwd', 'ls'] }, true);
+      const check = (args: Record<string, unknown>, options = {}, calls = [lossy]) =>
+        grade(
+          { type: 'trajectory:tool-args-match', value: { name: 'lookup', args, ...options } },
+          { ...incomplete, spanCount: calls.length },
+          calls,
+        );
+      const mismatch = { pass: false, reason: expect.stringContaining('No call to tool') };
+      const unknown = { pass: false, reason: expect.stringContaining('unavailable') };
+      for (const mode of ['partial', 'exact']) {
+        await expect(check({ order_id: '456', note: 'missing' }, { mode })).resolves.toMatchObject(
+          mismatch,
+        );
+        await expect(check({ commands: ['pwd'] }, { mode })).resolves.toMatchObject(mismatch);
+      }
+      await expect(check({ note: { nested: 'omitted' } })).resolves.toMatchObject(unknown);
+      await expect(
+        check({ note: { nested: 'omitted' } }, { defaults: { note: { nested: 'omitted' } } }),
+      ).resolves.toMatchObject(unknown);
+      await expect(
+        check({ note: 'omitted', order_id: '456' }, { ignore: ['*_id'] }),
+      ).resolves.toMatchObject(unknown);
+      await expect(
+        check(
+          { note: 'omitted' },
+          { mode: 'exact', defaults: { order_id: '123', commands: ['pwd', 'ls'] } },
+        ),
+      ).resolves.toMatchObject(unknown);
+      await expect(
+        check({ order_id: '456' }, {}, [lossy, tool('lookup', { limit: 1 }, true)]),
+      ).resolves.toMatchObject(unknown);
+      const unverified = tool('lookup', { order_id: '123' }, true);
+      delete unverified.attributes!['gen_ai.tool.call.arguments'];
+      await expect(check({ order_id: '456' }, {}, [unverified])).resolves.toMatchObject(unknown);
     });
 
     it('grades saved shell command strings, argv, and command objects consistently', async () => {

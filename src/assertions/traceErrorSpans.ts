@@ -52,17 +52,23 @@ export const handleTraceErrorSpans = (params: AssertionParams): GradingResult =>
   // Filter spans by pattern
   const matchingSpans = filterTraceSpans(spans, pattern, attributes);
 
-  const hasError = (span: TraceSpan) =>
-    isSpanError(span.statusCode, span.statusMessage, (key) => span.attributes?.[key]);
+  const hosted = providerResponse?.metadata?.hostedTrace;
+  const owner = hosted?.source === 'openai:agents-api' ? hosted.parentSpanId : undefined;
+  const isHosted = (span: TraceSpan) =>
+    typeof owner === 'string' && span.attributes?.['promptfoo.openai.hosted_trace'] === owner;
+  const unverifiedStatus = (span: TraceSpan) =>
+    isHosted(span) &&
+    span.attributes?.[HOSTED_ERROR_STATUS_COMPLETE] !== HOSTED_ERROR_STATUS_VERSION;
+  const hasError = (span: TraceSpan) => {
+    // Older imports reduced HTTP attributes and status text to one possibly incorrect code.
+    const status = unverifiedStatus(span) ? undefined : span;
+    return isSpanError(status?.statusCode, status?.statusMessage, (key) => span.attributes?.[key]);
+  };
   const errorSpans = matchingSpans.filter(hasError);
   const errorCount = errorSpans.length;
-  const hosted = providerResponse?.metadata?.hostedTrace;
   if (hosted?.source === 'openai:agents-api') {
-    // Older imports can have a known match without recording every error indicator.
     const unknownStatus = (span: TraceSpan) =>
-      span.attributes?.['promptfoo.openai.hosted_trace'] === hosted.parentSpanId &&
-      (span.attributes?.[HOSTED_ERROR_STATUS_COMPLETE] !== HOSTED_ERROR_STATUS_VERSION ||
-        (span.statusCode !== 0 && span.statusCode !== 1));
+      unverifiedStatus(span) || (isHosted(span) && span.statusCode !== 0 && span.statusCode !== 1);
     const unknownMatching = matchingSpans.filter(
       (span) => !hasError(span) && unknownStatus(span),
     ).length;
@@ -101,7 +107,7 @@ export const handleTraceErrorSpans = (params: AssertionParams): GradingResult =>
         assertion,
       };
     }
-    if (uncertainty) {
+    if (uncertainty || unknownMatching > 0) {
       const verdict = couldFail ? 'exceed' : 'satisfy';
       return finishTraceAssertion(
         params,

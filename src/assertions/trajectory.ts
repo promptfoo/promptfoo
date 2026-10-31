@@ -599,15 +599,24 @@ export const handleTrajectoryToolArgsMatch = (params: AssertionParams): GradingR
     !params.inverse &&
     params.providerResponse.metadata?.hostedTrace?.source === 'openai:agents-api' &&
     toolSteps.some((step) => {
-      if (matchesTrajectoryStep(step, matcher)) {
-        return step.args === undefined || !!step.argumentsRedacted;
+      if (!matchesTrajectoryStep(step, matcher) && !couldMatchUnresolvedCommand(step, matcher)) {
+        return false;
       }
-      return (
-        couldMatchUnresolvedCommand(step, matcher) &&
-        (step.args === undefined ||
-          !!step.argumentsRedacted ||
-          matchesToolArgs(step.args, expectedArgs, mode, defaults, ignore))
-      );
+      if (step.args === undefined) {
+        return true;
+      }
+      // The hosted projection keeps or omits whole fields. Only compare expected keys
+      // that survived. An exact comparison can still rule out an extra retained field.
+      const retained = step.args;
+      const knownExpectation =
+        step.argumentsRedacted && isRecord(expectedArgs) && isRecord(retained)
+          ? Object.fromEntries(
+              Object.entries(expectedArgs).filter(([key]) =>
+                Object.prototype.hasOwnProperty.call(retained, key),
+              ),
+            )
+          : expectedArgs;
+      return matchesToolArgs(retained, knownExpectation, mode, defaults, ignore);
     });
   return observedToolResult(params, pass, reason, uncertainArgs);
 };
