@@ -151,7 +151,7 @@ function couldMatchTestCaseRoot(pattern: string, filters: unknown, trace: TraceD
       return true;
     }
     return (
-      !Object.hasOwn(known, key) ||
+      !Object.prototype.hasOwnProperty.call(known, key) ||
       known[key] === value ||
       isUncertainTraceAttributeMatch(known[key], value)
     );
