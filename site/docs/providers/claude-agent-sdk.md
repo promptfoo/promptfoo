@@ -678,10 +678,12 @@ providers:
           required: [analysis, confidence]
 ```
 
-When `output_format` is configured, the response will include structured output that conforms to the schema. The structured output is available in:
+When the SDK returns a value that conforms to `output_format`, Promptfoo exposes it in two response fields.
 
 - `output` - The parsed structured output (when available)
 - `metadata.structuredOutput` - The raw structured output value
+
+With SDK 0.3.302 and later, an API refusal that discards structured output produces a provider error. The provider response includes `error` and omits both `output` and `metadata.structuredOutput`.
 
 :::tip
 For evals that depend on parsing JSON from the model's reply, prefer `output_format` over asking for JSON in the prompt and then running `is-json` / `JSON.parse()`. Without it, Claude commonly wraps short JSON answers in Markdown fences or a leading sentence, which makes downstream parsers brittle. With it, the response arrives as a parsed object, so a JavaScript assertion can read fields directly.
@@ -961,6 +963,8 @@ providers:
 ```
 
 ### Subagent Limits
+
+With SDK 0.3.302 and later, agents with access to the Agent (Task) tool can fork the current conversation by default. To disable fork subagents for an eval, set `CLAUDE_CODE_FORK_SUBAGENT` to `'0'` in the provider's `config.env`.
 
 Claude Agent SDK 0.3.217 limits concurrent subagents to 20. Promptfoo preserves the previous maximum nesting depth of five; set either limit to a positive integer when your eval needs different behavior:
 
