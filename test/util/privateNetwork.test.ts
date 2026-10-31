@@ -84,12 +84,20 @@ describe('isPrivateIpAddress', () => {
     expect(isPrivateIpAddress(ip)).toBe(false);
   });
 
-  it.each(['::1', '::', 'fe80::1', 'fe80::abcd', 'fc00::1', 'fd00::1234', '::ffff:10.0.0.1'])(
-    'flags private IPv6 %s',
-    (ip) => {
-      expect(isPrivateIpAddress(ip)).toBe(true);
-    },
-  );
+  it.each([
+    '::1',
+    '::',
+    'fe80::1',
+    'fe80::abcd',
+    'fec0::1',
+    'fec0::abcd',
+    'feff::1',
+    'fc00::1',
+    'fd00::1234',
+    '::ffff:10.0.0.1',
+  ])('flags private IPv6 %s', (ip) => {
+    expect(isPrivateIpAddress(ip)).toBe(true);
+  });
 
   it.each(['2001:db8::1', '2606:4700:4700::1111', '::ffff:8.8.8.8', '[::1]'])(
     'handles IPv6 %s',
@@ -184,6 +192,18 @@ describe('getCallerSuppliedBaseUrls', () => {
     expect(() => getCallerSuppliedBaseUrls({ id: 'file://{{ env.HOME }}/provider.yaml' })).toThrow(
       PrivateRangeBlockedError,
     );
+  });
+
+  it('refuses a cloud provider id instead of letting the loader resolve it unseen', () => {
+    // loadApiProvider replaces a promptfoo://provider/<uuid> id with the
+    // saved provider from Cloud and instantiates it, so the preflight sees
+    // no URL here: a saved provider pointing at a private address would
+    // bypass the guard entirely.
+    expect(() =>
+      getCallerSuppliedBaseUrls({
+        id: 'promptfoo://provider/12345678-1234-1234-1234-123456789abc',
+      }),
+    ).toThrow(PrivateRangeBlockedError);
   });
 
   it('leaves non-config file:// ids alone (script providers, not config expansion)', () => {
