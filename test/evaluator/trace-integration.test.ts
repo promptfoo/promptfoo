@@ -250,7 +250,7 @@ describe('evaluator trace integration', () => {
     expect(mockTraceStore.getTrace).toHaveBeenCalledWith(testTraceId, {
       sanitizeAttributes: false,
     });
-    expect(mockFlushOtel).toHaveBeenCalled();
+    expect(mockFlushOtel).not.toHaveBeenCalled();
     expect(mockReleaseOtel).toHaveBeenCalledOnce();
 
     // Verify result was added with passing assertion
@@ -821,6 +821,41 @@ describe('evaluator trace integration', () => {
       expect(warning).toHaveBeenCalledWith(
         '[Evaluator] Failed to fetch external traces: Error: Tempo unavailable',
       );
+    });
+
+    it.each([
+      ['untracked local', 'local', false, false],
+      ['unsampled local', 'unsampled', false, false],
+      ['missing external', 'external', false, false],
+      ['collected external', 'external', true, true],
+    ] as const)('uses %s evidence to grade absence', async (_name, source, collected, reliable) => {
+      const options = createRunOptions(createMockProvider({ response: { output: 'ok' } }));
+      options.test = {
+        ...options.test,
+        assert: [
+          { type: 'equals', value: 'ok' },
+          { type: 'trace-span-count', value: { pattern: 'target.call', min: 1 } },
+          { type: 'trace-span-count', value: { pattern: 'forbidden', max: 0 } },
+        ],
+      };
+      if (source === 'external') {
+        mockFetchTraceContext.mockResolvedValue(collected ? externalTrace : null);
+      } else {
+        options.testSuite = { ...tracingSuite, tracing: { enabled: true } };
+        if (source === 'unsampled') {
+          vi.mocked(evaluatorTracing.generateTraceContextIfNeeded).mockResolvedValue({
+            traceparent: `00-${traceId}-0123456789abcdef-00`,
+          });
+          mockTrackLocalTrace.mockReturnValue({ flush: async () => true, release: vi.fn() });
+        }
+      }
+
+      const [result] = await runEval(options);
+      expect(result.gradingResult?.componentResults?.map((grade) => grade.pass)).toEqual([
+        true,
+        true,
+        reliable,
+      ]);
     });
 
     it('distinguishes missing external traces from successful fetches', async () => {

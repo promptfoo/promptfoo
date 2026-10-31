@@ -114,6 +114,7 @@ describe('test-case execution trace hierarchy', () => {
     const root = ctx!.rootSpan!;
     const { traceId, spanId } = root.spanContext();
     const metadata = createTrace.mock.calls[0][0].metadata;
+    expect(metadata.promptfooTraceEvidence).toBe('partial');
     expect(JSON.stringify(metadata)).not.toContain('protected-fixture');
     const check = (attributes: Record<string, string | number>, id = traceId) =>
       runAssertion({
@@ -127,7 +128,8 @@ describe('test-case execution trace hierarchy', () => {
           traceId: id,
           evaluationId: 'eval',
           testCaseId: 'test',
-          metadata,
+          // Model the completed row flush while its test-case root is still active.
+          metadata: { ...metadata, promptfooTraceEvidence: 'complete' },
           spans: [
             { spanId: 'wrapper', parentSpanId: spanId, name: 'provider', startTime: 0 },
             {

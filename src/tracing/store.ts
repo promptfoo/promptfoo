@@ -308,6 +308,23 @@ export class TraceStore {
     }
   }
 
+  async setTraceEvidence(traceId: string, evidence: 'complete' | 'unavailable'): Promise<void> {
+    try {
+      const db = await this.getDatabase();
+      const update = db
+        .update(tracesTable)
+        .set({
+          metadata: sql`json_set(coalesce(${tracesTable.metadata}, '{}'), '$.promptfooTraceEvidence', ${evidence})`,
+        })
+        .where(eq(tracesTable.traceId, traceId));
+      // Keep the initial partial status if a concurrent writer or reader holds a lock.
+      await db.runGuardedWrite(update, () => {}, Date.now());
+    } catch (error) {
+      // New rows remain partial if their collection status cannot be saved.
+      logger.warn('[TraceStore] Could not save trace collection status', { traceId, error });
+    }
+  }
+
   async getTraceMetadata(traceId: string): Promise<Record<string, any> | undefined> {
     try {
       logger.debug(`[TraceStore] Fetching metadata for trace ${traceId}`);
