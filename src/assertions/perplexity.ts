@@ -1,9 +1,18 @@
 import type { AssertionParams, GradingResult } from '../types/index';
 
+function validateLogProbs(logProbs: number[]): void {
+  for (const logProb of logProbs) {
+    if (typeof logProb !== 'number' || Number.isNaN(logProb) || logProb > 0) {
+      throw new Error('Perplexity logProbs must contain only non-positive numbers');
+    }
+  }
+}
+
 export function handlePerplexity({ logProbs, assertion, inverse }: AssertionParams): GradingResult {
   if (!logProbs || logProbs.length === 0) {
     throw new Error('Perplexity assertion does not support providers that do not return logProbs');
   }
+  validateLogProbs(logProbs);
   const sumLogProbs = logProbs.reduce((acc, logProb) => acc + logProb, 0);
   const avgLogProb = sumLogProbs / logProbs.length;
   const perplexity = Math.exp(-avgLogProb);
@@ -32,6 +41,7 @@ export function handlePerplexityScore({
       'perplexity-score assertion does not support providers that do not return logProbs',
     );
   }
+  validateLogProbs(logProbs);
   const sumLogProbs = logProbs.reduce((acc, logProb) => acc + logProb, 0);
   const avgLogProb = sumLogProbs / logProbs.length;
   const perplexity = Math.exp(-avgLogProb);
