@@ -1545,6 +1545,43 @@ describe('trace assertions', () => {
       ).resolves.toMatchObject({ pass: false });
     });
 
+    it('rules out a hosted call when a retained argument contradicts the expected match', async () => {
+      const lossy = tool('lookup', { order_id: '123', commands: ['pwd', 'ls'] }, true);
+      const check = (args: Record<string, unknown>, options = {}, calls = [lossy]) =>
+        grade(
+          { type: 'trajectory:tool-args-match', value: { name: 'lookup', args, ...options } },
+          { ...incomplete, spanCount: calls.length },
+          calls,
+        );
+      const mismatch = { pass: false, reason: expect.stringContaining('No call to tool') };
+      const unknown = { pass: false, reason: expect.stringContaining('unavailable') };
+      for (const mode of ['partial', 'exact']) {
+        await expect(check({ order_id: '456', note: 'missing' }, { mode })).resolves.toMatchObject(
+          mismatch,
+        );
+        await expect(check({ commands: ['pwd'] }, { mode })).resolves.toMatchObject(mismatch);
+      }
+      await expect(check({ note: { nested: 'omitted' } })).resolves.toMatchObject(unknown);
+      await expect(
+        check({ note: { nested: 'omitted' } }, { defaults: { note: { nested: 'omitted' } } }),
+      ).resolves.toMatchObject(unknown);
+      await expect(
+        check({ note: 'omitted', order_id: '456' }, { ignore: ['*_id'] }),
+      ).resolves.toMatchObject(unknown);
+      await expect(
+        check(
+          { note: 'omitted' },
+          { mode: 'exact', defaults: { order_id: '123', commands: ['pwd', 'ls'] } },
+        ),
+      ).resolves.toMatchObject(unknown);
+      await expect(
+        check({ order_id: '456' }, {}, [lossy, tool('lookup', { limit: 1 }, true)]),
+      ).resolves.toMatchObject(unknown);
+      const unverified = tool('lookup', { order_id: '123' }, true);
+      delete unverified.attributes!['gen_ai.tool.call.arguments'];
+      await expect(check({ order_id: '456' }, {}, [unverified])).resolves.toMatchObject(unknown);
+    });
+
     it('grades saved shell command strings, argv, and command objects consistently', async () => {
       const command: Assertion = {
         type: 'trajectory:step-count',
