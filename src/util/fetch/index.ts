@@ -356,8 +356,8 @@ async function fetchWithRedirectValidation(
     );
 
     logger.debug('[fetchWithProxy] Following guarded redirect', {
-      from: sanitizeUrl(currentUrl),
-      to: sanitizeUrl(nextUrl),
+      from: sanitizeUrlForLogging(currentUrl),
+      to: sanitizeUrlForLogging(nextUrl),
     });
     currentUrl = nextUrl;
     currentOptions = nextOptions;

@@ -396,6 +396,24 @@ describe('assertUrlResolvesPublic', () => {
     );
     expect(mockedLookup).not.toHaveBeenCalled();
   });
+
+  it('fails closed for a hostless ws+unix Unix socket URL without touching DNS', async () => {
+    // new URL('ws+unix:///path/to/service.sock:/endpoint').hostname is '',
+    // and dns.lookup('') returns [] with no error, so without this check
+    // the DNS verdict below would pass a target WebSocketProvider dials
+    // via the ws library, outside the fetch guard.
+    await expect(
+      assertUrlResolvesPublic('ws+unix:///path/to/service.sock:/endpoint'),
+    ).rejects.toThrow(PrivateRangeBlockedError);
+    expect(mockedLookup).not.toHaveBeenCalled();
+  });
+
+  it('fails closed for an unsupported scheme without touching DNS', async () => {
+    await expect(assertUrlResolvesPublic('file:///etc/passwd')).rejects.toThrow(
+      PrivateRangeBlockedError,
+    );
+    expect(mockedLookup).not.toHaveBeenCalled();
+  });
 });
 
 describe('assertProviderTargetPublic', () => {

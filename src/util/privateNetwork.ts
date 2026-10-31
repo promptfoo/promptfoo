@@ -198,14 +198,26 @@ export function isPrivateRangeBlockedMessage(message: unknown): boolean {
  * exposed server).
  */
 export async function assertUrlResolvesPublic(rawUrl: string): Promise<void> {
-  let hostname: string;
+  let parsed: URL;
   try {
-    hostname = new URL(rawUrl).hostname;
+    parsed = new URL(rawUrl);
   } catch {
     throw new PrivateRangeBlockedError(
       `PROMPTFOO_BLOCK_PRIVATE_RANGES is set: refusing to fetch unparseable provider URL ${JSON.stringify(rawUrl)}`,
     );
   }
+  // Fail closed on targets with no host to resolve (e.g. ws+unix:///path,
+  // where the hostname is empty and dns.lookup('') returns [] with no
+  // error, so the DNS check below would pass a Unix socket dial) and on
+  // schemes outside the http/https/ws/wss set this preflight ever
+  // legitimately validates (e.g. file:, ws+unix:). A hostless or
+  // unsupported-scheme target has no public network endpoint to verify.
+  if (parsed.hostname === '' || !['http:', 'https:', 'ws:', 'wss:'].includes(parsed.protocol)) {
+    throw new PrivateRangeBlockedError(
+      `PROMPTFOO_BLOCK_PRIVATE_RANGES is set: refusing to fetch provider URL with no resolvable host or unsupported scheme ${JSON.stringify(rawUrl)}`,
+    );
+  }
+  const hostname = parsed.hostname;
   const host = hostname.replace(/^\[(.*)\]$/, '$1');
 
   if (isIP(host) !== 0) {

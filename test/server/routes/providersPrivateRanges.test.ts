@@ -93,6 +93,23 @@ describe('PROMPTFOO_BLOCK_PRIVATE_RANGES server guards (#11768 item 2)', () => {
       expect(mockedLoadApiProvider).not.toHaveBeenCalled();
     });
 
+    it('refuses a websocket provider with a ws+unix config.url when the flag is set', async () => {
+      restoreEnv = mockProcessEnv({ PROMPTFOO_BLOCK_PRIVATE_RANGES: 'true' });
+
+      const response = await request(app)
+        .post('/api/providers/test')
+        .send({
+          providerOptions: {
+            id: 'websocket',
+            config: { url: 'ws+unix:///path/to/service.sock:/endpoint' },
+          },
+        });
+
+      expect(response.status).toBe(400);
+      expect(response.body.error).toContain('PROMPTFOO_BLOCK_PRIVATE_RANGES');
+      expect(mockedLoadApiProvider).not.toHaveBeenCalled();
+    });
+
     it('refuses a non-canonical http: provider id when the flag is set', async () => {
       restoreEnv = mockProcessEnv({ PROMPTFOO_BLOCK_PRIVATE_RANGES: 'true' });
 
