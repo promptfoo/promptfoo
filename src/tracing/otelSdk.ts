@@ -28,6 +28,7 @@ const require = createRequire(import.meta.url);
 interface OtelSdk {
   provider: TracerProvider;
   localExporter?: LocalSpanExporter;
+  localProcessor?: SpanProcessor;
   owners: number;
   shutdown?: Promise<void>;
 }
@@ -122,8 +123,9 @@ export function initializeOtel(config: OtelConfig): (() => Promise<void>) | unde
 
   // Add local exporter (writes to TraceStore/SQLite)
   const localExporter = config.localExport ? new LocalSpanExporter() : undefined;
-  if (localExporter) {
-    spanProcessors.push(batchProcessorFromEnv(localExporter));
+  const localProcessor = localExporter && batchProcessorFromEnv(localExporter);
+  if (localProcessor) {
+    spanProcessors.push(localProcessor);
     logger.debug('[OtelSdk] Added local span exporter');
   }
 
@@ -142,7 +144,7 @@ export function initializeOtel(config: OtelConfig): (() => Promise<void>) | unde
   // Register the provider globally
   registerTracerProvider(provider, new W3CTraceContextPropagator());
 
-  sdk = { provider, localExporter, owners: 0 };
+  sdk = { provider, localExporter, localProcessor, owners: 0 };
   logger.info('[OtelSdk] OpenTelemetry SDK initialized successfully');
 
   installSignalHandlers();
@@ -260,11 +262,12 @@ async function flushGeneration(
   try {
     // The SDK flushes its queued batches. Also join local writes already dispatched
     // in the background. An external exporter failure need not hide local evidence.
-    const sdkFlush = generation?.provider
-      .forceFlush({ timeoutMillis: FLUSH_TIMEOUT_MS })
-      .catch((error) => {
-        logger.error('[OtelSdk] Error flushing spans', { error });
-      });
+    const flushing = traceId
+      ? generation?.localProcessor?.forceFlush()
+      : generation?.provider.forceFlush({ timeoutMillis: FLUSH_TIMEOUT_MS });
+    const sdkFlush = flushing?.catch((error) => {
+      logger.error('[OtelSdk] Error flushing spans', { error });
+    });
     const localFlush = () => generation?.localExporter?.forceFlush(traceId);
     // Scoped failures remain observable after the SDK dispatches late batches. A
     // process-wide drain must snapshot outstanding writes while they are in flight.

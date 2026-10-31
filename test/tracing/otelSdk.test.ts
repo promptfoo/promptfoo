@@ -14,6 +14,7 @@ const mockTraceDisable = vi.fn(() => {
 });
 const mockShutdown = vi.fn().mockResolvedValue(undefined);
 const mockForceFlush = vi.fn().mockResolvedValue(undefined);
+const mockProcessorFlush = vi.fn().mockResolvedValue(undefined);
 const mockLocalFlush = vi.fn().mockResolvedValue(undefined);
 const mockSetLogger = vi.fn();
 
@@ -36,6 +37,7 @@ vi.mock('@opentelemetry/sdk-trace', () => {
     },
     BatchSpanProcessor: class MockBatchSpanProcessor {
       exporter: unknown;
+      forceFlush = mockProcessorFlush;
       constructor(exporter: unknown) {
         this.exporter = exporter;
         batchProcessorCalls.push(exporter);
@@ -153,6 +155,7 @@ describe('otelSdk', () => {
     // Reset mock implementations
     mockShutdown.mockResolvedValue(undefined);
     mockLocalFlush.mockResolvedValue(undefined);
+    mockProcessorFlush.mockResolvedValue(undefined);
     mockForceFlush.mockResolvedValue(undefined);
 
     // Reset modules to clear singleton state
@@ -412,18 +415,30 @@ describe('otelSdk', () => {
       }
     });
 
-    it('checks the row after the SDK has dispatched its last batch', async () => {
+    it('checks the row after the local processor dispatches its batches, independently of the external processor', async () => {
       const { trackLocalTrace } = await import('../../src/tracing/otelSdk');
       const flushing = createDeferred<void>();
-      initializeOtel(defaultConfig);
+      initializeOtel({ ...defaultConfig, endpoint: 'https://collector.example/v1/traces' });
       const row = trackLocalTrace('trace-a')!;
-      mockForceFlush.mockReturnValueOnce(flushing.promise);
+      mockProcessorFlush.mockReturnValueOnce(flushing.promise);
       const result = row.flush();
+      expect(mockProcessorFlush).toHaveBeenCalledOnce();
+      expect(mockForceFlush).not.toHaveBeenCalled();
       expect(mockLocalFlush).not.toHaveBeenCalled();
       mockLocalFlush.mockRejectedValueOnce(new Error('late background batch failed'));
       flushing.resolve();
       await expect(result).resolves.toBe(false);
       expect(mockLocalFlush).toHaveBeenCalledWith('trace-a');
+      row.release();
+    });
+
+    it('grades the local row independently of a different trace failing in the same batch', async () => {
+      const { trackLocalTrace } = await import('../../src/tracing/otelSdk');
+      initializeOtel(defaultConfig);
+      const row = trackLocalTrace('healthy')!;
+      mockProcessorFlush.mockRejectedValueOnce(new Error('a different trace failed to persist'));
+      await expect(row.flush()).resolves.toBe(true);
+      expect(mockLocalFlush).toHaveBeenCalledWith('healthy');
       row.release();
     });
 
@@ -443,7 +458,7 @@ describe('otelSdk', () => {
       initializeOtel(defaultConfig);
       await flushOtel();
 
-      expect(mockForceFlush).toHaveBeenCalled();
+      expect(mockForceFlush).toHaveBeenCalledWith({ timeoutMillis: 30_000 });
     });
 
     it('should handle flush errors gracefully', async () => {
