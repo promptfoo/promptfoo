@@ -1112,17 +1112,7 @@ See [Python assertions](/docs/configuration/expected-outputs/python).
 
 ### Starts-With
 
-The `starts-with` assertion checks if the LLM output begins with the specified string. A numeric value is also accepted and is compared as its string form (for example, `42` matches an output that begins with `"42"`).
-
-This example checks if the output starts with "Yes":
-
-```yaml
-assert:
-  - type: starts-with
-    value: 'Yes'
-```
-
-This example checks if the output starts with the number 200 (useful for unquoted YAML values):
+Use `starts-with` to match a text or numeric prefix. For example, `200` matches `200 OK`. Quote prefixes such as `'01'` to preserve leading zeros. Use `not-starts-with` to reject a matching prefix.
 
 ```yaml
 assert:
