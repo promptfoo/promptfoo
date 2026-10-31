@@ -29,9 +29,9 @@ let localExporterCalls: unknown[] = [];
 let batchProcessorCalls: unknown[] = [];
 let resourceCalls: unknown[] = [];
 
-vi.mock('@opentelemetry/sdk-trace', () => {
-  // Use a class-like constructor function
+vi.mock('@opentelemetry/sdk-trace', async (importOriginal) => {
   return {
+    ...(await importOriginal<typeof import('@opentelemetry/sdk-trace')>()),
     TracerProvider: class MockTracerProvider {
       constructor(options: unknown) {
         nodeTracerProviderCalls.push(options);
