@@ -20,6 +20,7 @@ export interface LockRecoveryProbeResult {
   initialJournalMode: string;
   initialSynchronous: number;
   commitBusyTimeouts?: number[];
+  statementBusyTimeouts?: number[];
   busyTimeoutAfterRollback?: number;
 }
 
@@ -95,12 +96,23 @@ try {
   if (mode.startsWith('guarded-commit')) {
     const table = sqliteTable('lock_recovery_test', { id: integer('id') });
     const insert = db.insert(table).values({ id: 2 });
-    const reader = await contender.transaction('read');
+    const noWait = mode === 'guarded-commit-nowait-writer';
+    const lock = await contender.transaction(noWait ? 'write' : 'read');
     const close = Sqlite3Transaction.prototype.close;
     const executeMultiple = Sqlite3Transaction.prototype.executeMultiple;
-    const deadlineMs = mode === 'guarded-commit-deadline' ? 50 : undefined;
+    const executeStatement = Sqlite3Transaction.prototype.execute;
+    const deadlineMs = noWait ? 0 : mode === 'guarded-commit-deadline' ? 50 : undefined;
     if (deadlineMs !== undefined) {
       await db.run('PRAGMA busy_timeout = 400');
+      result.statementBusyTimeouts = [];
+      Sqlite3Transaction.prototype.execute = async function (stmt) {
+        const execute = executeStatement.bind(this);
+        if (typeof stmt !== 'string' && stmt.sql.startsWith('insert into')) {
+          const pragma = await execute('PRAGMA busy_timeout');
+          result.statementBusyTimeouts!.push(Number(pragma.rows[0].timeout));
+        }
+        return execute(stmt);
+      };
       result.commitBusyTimeouts = [];
       Sqlite3Transaction.prototype.executeMultiple = async function (sql) {
         if (sql.startsWith('COMMIT')) {
@@ -123,7 +135,7 @@ try {
       };
     }
     try {
-      await reader.execute('SELECT id FROM lock_recovery_test');
+      await lock.execute('SELECT id FROM lock_recovery_test');
       result.firstError = await captureError(write);
       if (deadlineMs !== undefined) {
         result.busyTimeoutAfterRollback = Number(
@@ -132,11 +144,12 @@ try {
       }
     } finally {
       Sqlite3Transaction.prototype.close = close;
-      await reader.rollback();
+      await lock.rollback();
     }
     try {
       await write();
     } finally {
+      Sqlite3Transaction.prototype.execute = executeStatement;
       Sqlite3Transaction.prototype.executeMultiple = executeMultiple;
     }
   } else if (mode === 'root-in-transaction') {
