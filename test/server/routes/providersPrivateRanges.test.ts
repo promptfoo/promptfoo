@@ -156,6 +156,33 @@ describe('PROMPTFOO_BLOCK_PRIVATE_RANGES server guards (#11768 item 2)', () => {
       expect(mockedLoadApiProvider).not.toHaveBeenCalled();
     });
 
+    it('refuses a file-backed provider id when the flag is set', async () => {
+      restoreEnv = mockProcessEnv({ PROMPTFOO_BLOCK_PRIVATE_RANGES: 'true' });
+
+      // The loader would expand this file and instantiate its inner
+      // provider, so the preflight must refuse before any load happens,
+      // whatever the file contains.
+      const response = await request(app)
+        .post('/api/providers/test')
+        .send({ providerOptions: { id: 'file:///tmp/provider.yaml' } });
+
+      expect(response.status).toBe(400);
+      expect(response.body.error).toContain('PROMPTFOO_BLOCK_PRIVATE_RANGES');
+      expect(mockedLoadApiProvider).not.toHaveBeenCalled();
+      expect(mockedTestProviderConnectivity).not.toHaveBeenCalled();
+    });
+
+    it('proceeds for a file-backed provider id when the flag is unset', async () => {
+      restoreEnv = mockProcessEnv({ PROMPTFOO_BLOCK_PRIVATE_RANGES: undefined });
+
+      const response = await request(app)
+        .post('/api/providers/test')
+        .send({ providerOptions: { id: 'file:///tmp/provider.yaml' } });
+
+      expect(response.status).toBe(200);
+      expect(mockedLoadApiProvider).toHaveBeenCalled();
+    });
+
     it('refuses litellm with its local proxy default when the flag is set', async () => {
       restoreEnv = mockProcessEnv({
         PROMPTFOO_BLOCK_PRIVATE_RANGES: 'true',

@@ -4,6 +4,7 @@ import { isIP } from 'node:net';
 import { getEnvBool, getEnvString } from '../envars';
 import logger from '../logger';
 import { maybeLoadFromExternalFile } from './file';
+import { isProviderConfigFileReference } from './providerRef';
 
 /**
  * Guards for the opt-in `PROMPTFOO_BLOCK_PRIVATE_RANGES` mode (see #11768).
@@ -473,6 +474,13 @@ function getRawRequestTarget(rawRequest: string, useHttps: boolean): string {
  *   variants) are caught too,
  * - URL-bearing provider ids the registry unwraps before fetching
  *   (`webhook:<url>`, `n8n:<url>`, `a2a:<url>`, `ws:`/`wss:`),
+ * - a file-backed provider id (`file://` YAML/JSON config), refused outright:
+ *   `loadApiProvider` expands the file and instantiates the inner provider,
+ *   so the preflight cannot validate the effective target without reading
+ *   the file, and expanding it here would drag the provider loader into
+ *   this shared guard. A templated `file://` id is refused for the same
+ *   reason: env-template rendering at load time could turn it into a
+ *   config-file reference the preflight never saw,
  * - a named provider whose default endpoint is local (ollama, llama,
  *   litellm, openclaw, ...), validated against its effective default base
  *   URL, unless the provider resolves an explicit `config.apiBaseUrl`
@@ -501,6 +509,11 @@ export function getCallerSuppliedBaseUrls(providerOptions: ProviderTarget): stri
   const id = providerOptions?.id;
   if (typeof id !== 'string' || id.length === 0) {
     return urls;
+  }
+  if (id.startsWith('file://') && (isProviderConfigFileReference(id) || id.includes('{{'))) {
+    throw new PrivateRangeBlockedError(
+      'PROMPTFOO_BLOCK_PRIVATE_RANGES is set: refusing file-backed provider reference whose expanded target cannot be validated before loading',
+    );
   }
   const idUrl = getUrlFromProviderId(id);
   if (idUrl) {
