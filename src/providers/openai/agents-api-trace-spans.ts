@@ -17,6 +17,10 @@ import {
 import { HOSTED_DURATION_NS, HOSTED_START_TIME_OFFSET_NS } from '../../tracing/spanTiming';
 import { getNormalizedToolAttributes } from '../../tracing/toolAttributes';
 import { isCredentialHeader, isSecretEnvVarName, looksLikeSecret } from '../../util/sanitizer';
+import {
+  getHostedCredentialArgument,
+  getHostedHeaderCredentialParts,
+} from './agents-api-credential-args';
 import { hasRecognizableOpenAiCredential, hasSensitiveOpenAiCacheString } from './util';
 
 import type { SpanData } from '../../tracing/store';
@@ -243,34 +247,55 @@ function isHostedCredentialField(key: string): boolean {
   );
 }
 
+// Header collections may use Fetch tuples, Node's alternating rawHeaders, or named records.
+const headerCollection = /headers?$/i;
+const headerNameField = /^(?:name|key|header|header[-_]?name)$/i;
+const headerValueField = /^(?:value|header[-_]?value)s?$/i;
+
 // Decode JSON escapes for the same name guard. Built-in rules need not parse a large
 // or malformed argument when the source cannot spell a credential field in the first place.
-function mayContainCredentialField(raw: string, consumeToken: () => void): boolean {
+function mayContainCredentialField(raw: string, consumeToken: () => void, strict = true): boolean {
   if (!raw.includes('\\') && !mayNameCredential(raw)) {
     return false;
   }
   if (raw.length > MAX_ARGUMENT_BYTES) {
     return true;
   }
-  // Inspect the decoded token before each colon. Values such as {"cmd":"pwd"}
-  // do not declare a credential, and escaped or overwritten keys still do.
+  // Inspect decoded labels before parsing potentially overwritten object members.
+  // A bare "pwd" command is common and need not trigger credential inspection.
   let key: string | undefined;
+  let startsArray = false;
   try {
-    JSON.parse(raw); // Only tokenize JSON, never arbitrary JavaScript.
-    for (const token of tokenizer(raw, { ecmaVersion: 2022 })) {
-      consumeToken();
-      if (token.type === tokTypes.colon && key !== undefined && isHostedCredentialField(key)) {
-        return true;
-      }
-      key =
-        token.type === tokTypes.string && 'value' in token && typeof token.value === 'string'
-          ? token.value
-          : undefined;
-    }
-    return false;
+    JSON.parse(raw);
   } catch {
-    return true;
+    return strict;
   }
+  // Only tokenize valid JSON. Ordinary tool strings can begin with a shell bracket.
+  for (const token of tokenizer(raw, { ecmaVersion: 2022 })) {
+    consumeToken();
+    if (
+      token.type === tokTypes.colon &&
+      key !== undefined &&
+      (isHostedCredentialField(key) || headerCollection.test(key) || headerNameField.test(key))
+    ) {
+      return true;
+    }
+    key =
+      token.type === tokTypes.string && 'value' in token && typeof token.value === 'string'
+        ? token.value
+        : undefined;
+    if (
+      key !== undefined &&
+      ((startsArray && key.toLowerCase() !== 'pwd' && isHostedCredentialField(key)) ||
+        ((key.startsWith('--') || key.includes('=') || key.includes(':')) &&
+          mayNameCredential(key)) ||
+        (/^\s*["[{]/.test(key) && (key.includes('\\') || mayNameCredential(key))))
+    ) {
+      return true;
+    }
+    startsArray = token.type === tokTypes.bracketL;
+  }
+  return false;
 }
 
 // Acorn returns unsigned number tokens. Compare their decimal digits and scale so
@@ -373,7 +398,7 @@ function protectedEchoMatcher(policy: ImportPolicy) {
   function isStructuredJson(text: string): boolean {
     return /^\s*["[{]/.test(text);
   }
-  function inspectJson(raw: string, hidden: boolean, depth: number) {
+  function inspectJson(raw: string, hidden: boolean | string, depth: number, headers = false) {
     if (!reserveArgumentJson(raw, policy)) {
       invalid();
     }
@@ -382,29 +407,34 @@ function protectedEchoMatcher(policy: ImportPolicy) {
       if (!roundTrips(raw, parsed, policy)) {
         invalid();
       }
-      jsonLeaves(parsed, hidden, depth);
+      jsonLeaves(parsed, hidden, depth, headers);
     } catch {
       invalid();
     }
   }
-  function remember(value: unknown, depth: number) {
+  function remember(value: unknown, depth: number, source: boolean | string = false) {
     if (value === null || value === undefined || value === '') {
       return;
     }
     const text = String(value);
+    if (text.length > MAX_ARGUMENT_BYTES) {
+      invalid();
+    }
+    if (typeof source === 'string' && typeof value === 'string') {
+      chargeSearch(text, 1);
+      for (const part of getHostedHeaderCredentialParts(source, text, invalid)) {
+        remember(part, depth);
+      }
+    }
     if (!needles.has(text)) {
-      if (
-        text.length > MAX_ARGUMENT_BYTES ||
-        (needleBytes += Buffer.byteLength(text)) > MAX_ARGUMENT_BYTES ||
-        needles.size >= 128
-      ) {
+      if ((needleBytes += Buffer.byteLength(text)) > MAX_ARGUMENT_BYTES || needles.size >= 128) {
         invalid();
       }
       needles.add(text);
       // A protected OTLP or JSON string may itself encode structured data. Inspect
       // it once, preserving the original text and charging the shared JSON budgets.
       if (typeof value === 'string' && isStructuredJson(text)) {
-        inspectJson(text, true, depth + 1);
+        inspectJson(text, source || true, depth + 1);
       }
       // The credential alone can appear in a tool or model name.
       const auth = /^(?:Bearer|Basic|Token|Api[-_]?Key)[ \t]+(\S+)$/i.exec(text.trim());
@@ -413,57 +443,191 @@ function protectedEchoMatcher(policy: ImportPolicy) {
       }
     }
   }
-  function jsonLeaves(value: unknown, hidden: boolean, depth: number): void {
-    visit(depth);
-    if (Array.isArray(value)) {
-      for (const item of value) {
-        jsonLeaves(item, hidden, depth + 1);
+  function inspectText(text: string, headers: boolean, depth: number) {
+    if (isStructuredJson(text)) {
+      chargeSearch(text, 1);
+      if (headers || mayContainCredentialField(text, () => visit(depth), false)) {
+        inspectJson(text, false, depth + 1, headers);
       }
-    } else if (value && typeof value === 'object') {
-      for (const [key, item] of Object.entries(value)) {
-        jsonLeaves(item, hidden || protectedKey(key), depth + 1);
+    } else if (headers && text.includes(':')) {
+      if (text.length > MAX_ARGUMENT_BYTES) {
+        invalid();
       }
-    } else if (hidden) {
-      remember(value, depth);
+      chargeSearch(text, 1);
+      if (/\r(?!\n)|\n[ \t]/.test(text)) {
+        invalid(); // Obsolete folded headers do not identify the value on each line.
+      }
+      for (const line of text.split(/\r?\n/)) {
+        visit(depth);
+        const colon = line.indexOf(':');
+        if (colon > 0 && protectedKey(line.slice(0, colon).trim())) {
+          remember(line.slice(colon + 1).trim(), depth, line.slice(0, colon).trim());
+        }
+      }
     }
   }
-  function wireLeaves(value: WireValue, hidden: boolean, depth: number): void {
+
+  function rememberArgument(value: unknown, previous: unknown, depth: number) {
+    const arg = getHostedCredentialArgument(value, previous, protectedKey);
+    if (arg) {
+      remember(arg.value, depth, arg.name);
+    }
+  }
+
+  function pairedValue(label: unknown, inHeaders: boolean): string | false {
+    // Outside a header collection, ["pwd", ...] can be an ordinary command list.
+    return (
+      typeof label === 'string' &&
+      (inHeaders || label.toLowerCase() !== 'pwd') &&
+      protectedKey(label) &&
+      label
+    );
+  }
+  function namedHeader<T>(
+    entries: [string, T][],
+    text: (item: T) => unknown,
+    headers: boolean,
+  ): string | false {
+    const hasValue = entries.some(([key]) => headerValueField.test(key));
+    let field: string | false = false;
+    for (const [key, item] of entries) {
+      if (!headerNameField.test(key)) {
+        continue;
+      }
+      const label = text(item);
+      if (headers && hasValue && typeof label !== 'string') {
+        invalid();
+      }
+      const name = pairedValue(label, headers);
+      if (name) {
+        if ((headers && !hasValue) || (field && name.toLowerCase() !== field.toLowerCase())) {
+          invalid();
+        }
+        field = name;
+      }
+    }
+    return hasValue && field;
+  }
+
+  function jsonLeaves(
+    value: unknown,
+    hidden: boolean | string,
+    depth: number,
+    headers = false,
+  ): void {
     visit(depth);
+    if (Array.isArray(value)) {
+      for (const [i, item] of value.entries()) {
+        rememberArgument(item, value[i - 1], depth);
+        const paired =
+          i % 2 === 1 && (headers || value.length === 2) && pairedValue(value[i - 1], headers);
+        jsonLeaves(item, paired || hidden, depth + 1, headers);
+      }
+    } else if (value && typeof value === 'object') {
+      const entries = Object.entries(value);
+      const named = namedHeader(entries, (item) => item, headers);
+      for (const [key, item] of entries) {
+        jsonLeaves(
+          item,
+          (headerValueField.test(key) && named) || (protectedKey(key) && key) || hidden,
+          depth + 1,
+          headers || headerCollection.test(key),
+        );
+      }
+    } else if (hidden) {
+      remember(value, depth, hidden);
+    } else if (typeof value === 'string') {
+      inspectText(value, headers, depth);
+    }
+  }
+  function wireFields(
+    entries: { key: string; value: WireValue }[],
+    hidden: boolean | string,
+    depth: number,
+    headers: boolean,
+  ) {
+    if (entries.length > nodesLeft) {
+      invalid();
+    }
+    const named = namedHeader(
+      entries.map(({ key, value }) => [key, value]),
+      (item) => item.stringValue,
+      headers,
+    );
+    for (const entry of entries) {
+      const childHidden =
+        (headerValueField.test(entry.key) && named) ||
+        (protectedKey(entry.key) && entry.key) ||
+        hidden;
+      if (
+        !hidden &&
+        (childHidden || (!headers && headerCollection.test(entry.key))) &&
+        !isValidWireValue(entry.value)
+      ) {
+        invalid();
+      }
+      wireLeaves(entry.value, childHidden, depth + 1, headers || headerCollection.test(entry.key));
+    }
+  }
+  function wireLeaves(
+    value: WireValue,
+    hidden: boolean | string,
+    depth: number,
+    headers = false,
+  ): void {
+    visit(depth);
+    if (headers && value.bytesValue !== undefined) {
+      invalid(); // Encoded bytes have no reliable text interpretation in a header collection.
+    }
     if (value.arrayValue) {
-      for (const item of value.arrayValue.values ?? []) {
-        wireLeaves(item, hidden, depth + 1);
+      const items = value.arrayValue.values ?? [];
+      for (const [i, item] of items.entries()) {
+        rememberArgument(item.stringValue, items[i - 1]?.stringValue, depth);
+        const paired =
+          i % 2 === 1 &&
+          (headers || items.length === 2) &&
+          pairedValue(items[i - 1].stringValue, headers);
+        if (!hidden && paired && !isValidWireValue(item)) {
+          invalid();
+        }
+        wireLeaves(item, paired || hidden, depth + 1, headers);
       }
     }
     if (value.kvlistValue) {
-      for (const entry of value.kvlistValue.values ?? []) {
-        const childHidden = hidden || protectedKey(entry.key);
-        if (!hidden && childHidden && !isValidWireValue(entry.value)) {
-          invalid();
-        }
-        wireLeaves(entry.value, childHidden, depth + 1);
-      }
+      wireFields(value.kvlistValue.values ?? [], hidden, depth, headers);
     } else if (hidden && !value.arrayValue) {
       // Byte sequences have no unique textual interpretation for matching echoes.
       if (value.bytesValue !== undefined) {
         invalid();
       }
-      remember(value.stringValue ?? value.boolValue ?? value.doubleValue ?? value.intValue, depth);
+      remember(
+        value.stringValue ?? value.boolValue ?? value.doubleValue ?? value.intValue,
+        depth,
+        hidden,
+      );
       if (typeof value.intValue === 'string') {
-        // Protobuf JSON accepts integer strings with leading zeros or a negative zero.
         remember(BigInt(value.intValue).toString(), depth);
       }
+    } else if ((headers || depth > 0) && typeof value.stringValue === 'string') {
+      inspectText(value.stringValue, headers, depth);
     }
   }
   function collectAttribute(key: string, value: WireValue) {
     const alias = key.toLowerCase();
     const args = alias === 'gen_ai.tool.call.arguments' || alias === 'tool.arguments';
     const hidden =
-      protectedKey(key) ||
+      (protectedKey(key) && key) ||
       (args && protectsKey(['tool.arguments', 'gen_ai.tool.call.arguments'], policy));
-    if ((hidden || policy.redactAttributes.length > 0) && !isValidWireValue(value)) {
+    if (
+      (hidden || headerCollection.test(key) || policy.redactAttributes.length > 0) &&
+      !isValidWireValue(value)
+    ) {
       invalid();
     }
-    wireLeaves(value, hidden, 0);
+    wireLeaves(value, hidden, 0, headerCollection.test(key));
+    if (!args && !hidden && !headerCollection.test(key) && typeof value.stringValue === 'string') {
+      inspectText(value.stringValue, false, 0);
+    }
     if (args && typeof value.stringValue === 'string') {
       const raw = value.stringValue;
       if (hidden && isStructuredJson(raw)) {

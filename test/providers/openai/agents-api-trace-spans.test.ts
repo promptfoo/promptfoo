@@ -817,10 +817,115 @@ describe('normalizeHostedTrace', () => {
     describe('credential attributes and argument aliases', () => {
       const credential = 'kappa-blue-19';
 
+      it.each([
+        ['flag value', ['tool', '--api-key', credential]],
+        ['flag assignment', ['tool', `--api-key=${credential}`]],
+        ['environment assignment', ['env', `SERVICE_API_KEY=${credential}`, 'tool']],
+        ['header flag', ['curl', '-H', `Authorization: Bearer ${credential}`]],
+        ['attached header', ['curl', `--header=Authorization: Bearer ${credential}`]],
+      ] as const)(
+        'protects a %s in native or JSON argv before retaining an identifier',
+        (_label, argv) => {
+          const attrs = [
+            attribute('gen_ai.tool.call.arguments', JSON.stringify({ cmd: argv })),
+            {
+              key: 'gen_ai.tool.call.arguments',
+              value: { arrayValue: { values: argv.map((arg) => ({ stringValue: arg })) } },
+            },
+          ];
+          for (const attr of attrs) {
+            expect(() =>
+              withCarriers(payload(root, callNamed(`lookup_${credential}`, attr)), []),
+            ).toThrow('Invalid hosted OTLP trace');
+            const { spans } = withCarriers(payload(root, callNamed('lookup_order', attr)), []);
+            expect(spans[1].name).toBe('execute_tool lookup_order');
+            expect(JSON.stringify(spans)).not.toContain(credential);
+          }
+        },
+      );
+
+      it('keeps a readable identifier echoed in an ordinary argument or filename', () => {
+        const argv = ['cat', '/workspace/ledger.csv', '--format', 'ledger', 'COLOR=ledger'];
+        const call = callNamed(
+          'lookup_ledger',
+          attribute('gen_ai.tool.call.arguments', JSON.stringify({ cmd: argv })),
+        );
+        expect(withCarriers(payload(root, call), []).spans[1].name).toBe(
+          'execute_tool lookup_ledger',
+        );
+      });
+
       it('withholds a tool name echoing an opaque API key by default', () => {
         const call = callNamed(`lookup_${credential}`, attribute('x-api-key', credential));
         expect(() => normalizeHostedTrace(payload(root, call), parentId)).toThrow(
           'Invalid hosted OTLP trace',
+        );
+      });
+
+      it.each([
+        { headers: [['Authorization', `DPoP ${credential}`]] },
+        { responseHeaders: [{ Value: `id=${credential}; Path=/; HttpOnly`, Name: 'Set-Cookie' }] },
+        { rawHeaders: ['Accept', 'text/plain', 'Cookie', `locale=en; SID=${credential}`] },
+        { headers: JSON.stringify([['X-API-Key', [credential]]]) },
+        { body: JSON.stringify({ headers: [`Authorization: Bearer ${credential}`] }) },
+        { env: [{ key: 'API_TOKEN', value: { token: credential } }] },
+      ])('withholds a reflected credential carried in header entries', (args) => {
+        const call = callNamed(
+          `lookup_${credential}`,
+          attribute('tool.arguments', JSON.stringify(args)),
+        );
+        expect(() => withCarriers(payload(root, call), [])).toThrow('Invalid hosted OTLP trace');
+      });
+
+      it('withholds obsolete folded header lines with an ambiguous continuation', () => {
+        const raw = JSON.stringify({ headers: [`Authorization:\r\n DPoP ${credential}`] });
+        const call = callNamed(`lookup_${credential}`, attribute('tool.arguments', raw));
+        expect(() => withCarriers(payload(root, call), [])).toThrow('Invalid hosted OTLP trace');
+      });
+
+      it('recognizes an OTLP header record on a sibling span', () => {
+        const source = {
+          ...model,
+          attributes: [
+            ...model.attributes,
+            {
+              key: 'http.request.headers',
+              value: {
+                arrayValue: {
+                  values: [
+                    {
+                      kvlistValue: {
+                        values: [
+                          attribute('value', credential),
+                          attribute('name', 'Authorization'),
+                        ],
+                      },
+                    },
+                  ],
+                },
+              },
+            },
+          ],
+        };
+        expect(() =>
+          withCarriers(payload(root, callNamed(`lookup_${credential}`), source), []),
+        ).toThrow('Invalid hosted OTLP trace');
+      });
+
+      it('preserves ordinary headers, public cookie attributes and shell expressions', () => {
+        const args = {
+          cmd: '[ -f /workspace/keys.json ] && echo ready',
+          headers: [
+            { name: 'Content-Type', value: 'morning' },
+            { name: 'Set-Cookie', value: `SID=${credential}; SameSite=Strict`, note: 'morning' },
+          ],
+        };
+        const call = callNamed(
+          'lookup_morning_Strict',
+          attribute('tool.arguments', JSON.stringify(args)),
+        );
+        expect(withCarriers(payload(root, call), []).spans[1].name).toBe(
+          'execute_tool lookup_morning_Strict',
         );
       });
 
