@@ -414,6 +414,8 @@ The [OpenAI Agents API](/docs/providers/openai-agents-api/) publishes OTLP artif
 
 The decoder withholds the whole artifact if it contains an unsupported operation, mixes trace IDs, or cannot safely retain an identifier. For example, `tracing.otlp.http.redactAttributes: ['gen_ai.tool.name']` withholds an artifact containing a tool call. An identifier that contains a recognized credential pattern or echoes a value protected by a redaction rule also prevents import. A child whose parent has yet to appear can indicate that the API is still publishing the turn.
 
+Explicit error signals, such as HTTP 503, count as failures even on a span marked `OK`. Diagnostic text can indicate failure when the span has no status or is marked `UNSET`. An HTTP status must be zero (no status) or an integer from 100 through 599. Other values leave the span's error status unknown unless another signal establishes a failure.
+
 ### Environment Variables
 
 You can also configure tracing via environment variables:
