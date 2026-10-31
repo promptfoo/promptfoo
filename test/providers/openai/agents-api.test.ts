@@ -951,6 +951,75 @@ describe('OpenAiAgentsApiProvider', () => {
       expect(JSON.stringify(spans)).not.toContain('sensitive-input');
     });
 
+    it.each([
+      ['violet-bridge', 'unavailable'],
+      ['public-ledger.csv', 'imported'],
+    ])(
+      'checks a native tool identity against configured stdio credentials: %s',
+      async (suffix, status) => {
+        recordWrapper();
+        const addSpans = vi.spyOn(getTraceStore(), 'addSpans').mockResolvedValue({ stored: true });
+        const resource = publishedWithTool();
+        const tool = resource.otlp.resourceSpans[0].scopeSpans[0].spans[1];
+        tool.attributes.find((attr) => attr.key === 'gen_ai.tool.name')!.value.stringValue =
+          `lookup_${suffix}`;
+        mockApi((path) => (path.endsWith('/traces') ? json(page([resource])) : undefined));
+        const result = await provider({
+          hostedTrace: true,
+          agent: {
+            tools: [
+              {
+                type: 'mcp',
+                server_label: 'ledger',
+                transport: {
+                  type: 'stdio',
+                  cwd: '/workspace',
+                  command: '/usr/bin/ledger',
+                  args: ['--api-key', 'violet-bridge', '--file', 'public-ledger.csv'],
+                },
+              },
+            ],
+          },
+        }).callApi('hi', row);
+        expect(result.output).toBe('42');
+        expect(result.metadata?.hostedTrace).toMatchObject({ status });
+        const persisted = JSON.stringify(addSpans.mock.calls);
+        expect(persisted).not.toContain('violet-bridge');
+        if (status === 'imported') {
+          expect(persisted).toContain('lookup_public-ledger.csv');
+        }
+      },
+    );
+
+    it('preserves the answer when an opaque authorization scheme hides native identities', async () => {
+      recordWrapper();
+      const addSpans = vi.spyOn(getTraceStore(), 'addSpans').mockResolvedValue({ stored: true });
+      const resource = publishedWithTool();
+      const tool = resource.otlp.resourceSpans[0].scopeSpans[0].spans[1];
+      tool.attributes.find((attr) => attr.key === 'gen_ai.tool.name')!.value.stringValue =
+        'lookup_violet-bridge';
+      mockApi((path) => (path.endsWith('/traces') ? json(page([resource])) : undefined));
+      const result = await provider({
+        hostedTrace: true,
+        agent: {
+          tools: [
+            {
+              type: 'mcp',
+              server_label: 'ledger',
+              transport: {
+                type: 'http',
+                url: 'https://mcp.example/api',
+                authorization: 'Digest username="ledger", response="violet-bridge"',
+              },
+            },
+          ],
+        },
+      }).callApi('hi', row);
+      expect(result.output).toBe('42');
+      expect(result.metadata?.hostedTrace).toMatchObject({ status: 'unavailable' });
+      expect(addSpans).not.toHaveBeenCalled();
+    });
+
     it('keeps the answer and deletes the session when export is denied', async () => {
       recordWrapper();
       mockApi((path) =>
