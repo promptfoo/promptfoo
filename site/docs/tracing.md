@@ -267,7 +267,7 @@ For a custom assertion that requires trace evidence, return a failing grade when
 
 #### Concurrent programmatic evaluations
 
-Concurrent programmatic evaluations can share tracing when their service name, local export setting, collector URL, and OTLP headers match. Run evaluations with different settings or file-based OTLP TLS credentials sequentially or in separate processes. Promptfoo rejects incompatible settings before calling providers. If the host application already registered an OpenTelemetry provider, configure the collector on the host. Promptfoo can use a host provider with an inherited process-level `OTEL_EXPORTER_OTLP_ENDPOINT`. Setting `PROMPTFOO_OTEL_ENDPOINT` or overriding the collector for that evaluation requires a separate process.
+Concurrent programmatic evaluations can share tracing when their service name, local export setting, collector URL, OTLP headers, and sampling policy match. Set OTLP credentials and sampling variables in the process environment. The SDK cannot apply per-evaluation overrides for these settings. Run evaluations with different settings or file-based OTLP TLS credentials sequentially or in separate processes. Promptfoo rejects incompatible settings before calling providers. If the host application already registered an OpenTelemetry provider, configure the collector on the host. Promptfoo can use a host provider with an inherited process-level `OTEL_EXPORTER_OTLP_ENDPOINT`. Setting `PROMPTFOO_OTEL_ENDPOINT` or overriding the collector for that evaluation requires a separate process.
 
 ### Turn marker spans {#per-llm-turn-spans}
 
