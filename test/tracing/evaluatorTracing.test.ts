@@ -19,9 +19,6 @@ import { mockProcessEnv } from '../util/utils';
 
 import type { TestCase, TestSuite } from '../../src/types/index';
 
-// The real receiver resolves with the port it bound; port 0 stands in for an OS-chosen one.
-const EPHEMERAL_TEST_PORT = 49_321;
-const echoBoundPort = async (port: number) => (port === 0 ? EPHEMERAL_TEST_PORT : port);
 const mockStartOTLPReceiver = vi.hoisted(() => vi.fn());
 const mockStopOTLPReceiver = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
 const mockUpdateOTLPReceiverOptions = vi.hoisted(() => vi.fn());
@@ -55,7 +52,7 @@ vi.mock('../../src/tracing/otlpReceiver', () => ({
 describe('evaluatorTracing', () => {
   beforeEach(() => {
     vi.resetAllMocks();
-    mockStartOTLPReceiver.mockImplementation(echoBoundPort);
+    mockStartOTLPReceiver.mockImplementation(async (port: number) => port);
     mockStopOTLPReceiver.mockResolvedValue(undefined);
     mockCreateTrace.mockResolvedValue(undefined);
     vi.mocked(getTraceStore).mockReturnValue({
@@ -938,37 +935,21 @@ describe('evaluatorTracing', () => {
       expect(cliState.activeOtlpReceiver).toBeUndefined();
     });
 
-    describe('receiver port', () => {
-      const tracedSuite = (http: Record<string, unknown>) =>
-        ({
+    it.each([
+      { configured: undefined, requested: 4318, bound: 4318 },
+      { configured: 0, requested: 0, bound: 49_321 },
+    ])(
+      'records the port bound for http.port=$configured',
+      async ({ configured, requested, bound }) => {
+        mockStartOTLPReceiver.mockResolvedValueOnce(bound);
+        await startOtlpReceiverIfNeeded({
           providers: [],
           prompts: [],
-          tracing: { enabled: true, otlp: { http: { enabled: true, ...http } } },
-        }) as unknown as TestSuite;
-
-      it('binds an OS-chosen port for port 0 and records the port it bound', async () => {
-        await startOtlpReceiverIfNeeded(tracedSuite({ port: 0 }));
-
-        expect(mockStartOTLPReceiver).toHaveBeenCalledWith(
-          0,
-          '127.0.0.1',
-          ['json', 'protobuf'],
-          expect.any(Object),
-        );
-        expect(cliState.activeOtlpReceiver?.port).toBe(EPHEMERAL_TEST_PORT);
-      });
-
-      it('still defaults an omitted port to 4318', async () => {
-        await startOtlpReceiverIfNeeded(tracedSuite({}));
-
-        expect(mockStartOTLPReceiver).toHaveBeenCalledWith(
-          4318,
-          '127.0.0.1',
-          ['json', 'protobuf'],
-          expect.any(Object),
-        );
-        expect(cliState.activeOtlpReceiver?.port).toBe(4318);
-      });
-    });
+          tracing: { enabled: true, otlp: { http: { enabled: true, port: configured } } },
+        } as TestSuite);
+        expect(mockStartOTLPReceiver.mock.calls[0][0]).toBe(requested);
+        expect(cliState.activeOtlpReceiver?.port).toBe(bound);
+      },
+    );
   });
 });

@@ -46,10 +46,6 @@ export function getConfiguredTracingExport(): ConfiguredTracingExport | undefine
 
   const receiver = cliState.activeOtlpReceiver ?? requestedReceiver;
   const port = receiver.port ?? 4318;
-  // `port: 0` has no endpoint until the receiver has bound its OS-chosen port.
-  if (port === 0) {
-    return undefined;
-  }
   const acceptFormats = receiver.acceptFormats;
   const format =
     !acceptFormats?.length || acceptFormats.includes('json')
@@ -57,7 +53,7 @@ export function getConfiguredTracingExport(): ConfiguredTracingExport | undefine
       : acceptFormats.includes('protobuf')
         ? 'protobuf'
         : undefined;
-  if (!format) {
+  if (!format || port === 0) {
     return undefined;
   }
 

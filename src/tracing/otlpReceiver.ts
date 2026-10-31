@@ -1,4 +1,5 @@
 import crypto from 'node:crypto';
+import type { AddressInfo } from 'node:net';
 
 import express from 'express';
 import logger from '../logger';
@@ -1028,38 +1029,18 @@ export class OTLPReceiver {
     }
   }
 
-  /**
-   * Bind the receiver and resolve with the port actually bound, which differs from the
-   * requested one when `port` is 0.
-   */
+  /** Bind a TCP receiver and return its assigned port. */
   listen(port: number = 4318, host: string = '127.0.0.1'): Promise<number> {
-    logger.debug(`[OtlpReceiver] Starting receiver on ${host}:${port}`);
-
     return new Promise((resolve, reject) => {
-      let settled = false;
-      const server = this.app.listen(port, host, () => {
-        // Express invokes this callback even when the bind fails (e.g. EADDRINUSE), with
-        // `server.listening === false`. Only resolve once the socket is truly bound; otherwise
-        // let the 'error' handler reject so `failOnReceiverStartFailure` startup actually fails.
-        if (settled || !server.listening) {
-          return;
-        }
-        settled = true;
-        const address = server.address();
-        const boundPort = address && typeof address === 'object' ? address.port : port;
-        this.port = boundPort;
-        logger.info(`[OtlpReceiver] Listening on http://${host}:${boundPort}`);
-        logger.debug('[OtlpReceiver] Receiver fully initialized and ready to accept traces');
-        resolve(boundPort);
-      });
+      const server = this.app.listen(port, host);
       this.server = server;
-
+      server.once('listening', () => {
+        this.port = (server.address() as AddressInfo).port;
+        logger.info(`[OtlpReceiver] Listening on http://${host}:${this.port}`);
+        resolve(this.port);
+      });
       server.on('error', (error: Error) => {
-        if (settled) {
-          return;
-        }
-        settled = true;
-        logger.error(`[OtlpReceiver] Failed to start: ${error}`);
+        logger.error(`[OtlpReceiver] Receiver error: ${error}`);
         reject(error);
       });
     });

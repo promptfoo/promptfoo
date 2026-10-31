@@ -1201,10 +1201,7 @@ describe('OTLPReceiver', () => {
       }
     });
 
-    it('rejects (instead of spuriously resolving) when the port is already in use', async () => {
-      // Regression: Express invokes the listen callback even on EADDRINUSE (with
-      // server.listening === false), which previously resolved listen() successfully and
-      // defeated `failOnReceiverStartFailure`. listen() must reject on bind failure.
+    it('rejects when the TCP port is already in use', async () => {
       const http = await import('node:http');
       const blocker = http.createServer();
       await new Promise<void>((resolve) => blocker.listen(0, '127.0.0.1', () => resolve()));

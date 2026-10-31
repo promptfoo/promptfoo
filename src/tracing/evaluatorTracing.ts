@@ -181,7 +181,6 @@ export async function startOtlpReceiverIfNeeded(
     const startPromise = (async () => {
       logger.debug('[EvaluatorTracing] Tracing configuration detected, starting OTLP receiver');
       const { startOTLPReceiver } = await import('./otlpReceiver');
-      // `port: 0` asks the OS for a free port; only an omitted port falls back to 4318.
       const requestedPort = httpTracing.port ?? 4318;
       const host = httpTracing.host || '127.0.0.1';
       logger.debug(
