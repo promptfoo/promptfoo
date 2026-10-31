@@ -16,8 +16,10 @@ Labels allow you to:
 1. **Install promptfoo and the optional Langfuse SDK together in your project:**
 
    ```bash
-   npm install promptfoo @langfuse/client@^5.11.1
+   npm install promptfoo @langfuse/client@^6.0.0
    ```
+
+   SDK v6 requires Langfuse Cloud or self-hosted Langfuse v4.59.0 or later. For older self-hosted servers, install `@langfuse/client@^5.11.1`, which remains supported. See the [Langfuse migration guide](https://langfuse.com/docs/observability/sdk/upgrade-path/js-v5-to-v6).
 
 2. **Set environment variables:**
 

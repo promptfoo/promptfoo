@@ -1,7 +1,7 @@
 import * as path from 'path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { runAssertion } from '../../src/assertions/index';
+import { runAssertion, runAssertions } from '../../src/assertions/index';
 import cliState from '../../src/cliState';
 import { importModule } from '../../src/esm';
 import * as llmGradingMatchers from '../../src/matchers/llmGrading';
@@ -369,6 +369,86 @@ describe('Script value resolution', () => {
       });
 
       expect(result.pass).toBe(true);
+    });
+  });
+
+  describe('javascript file assertion that throws (#11917)', () => {
+    it('should fail the assertion instead of throwing', async () => {
+      const result = await runAssertion({
+        assertion: createStringAssertion('javascript', 'file://throws.cjs'),
+        test: { vars: {} },
+        providerResponse: baseProviderResponse,
+      });
+
+      expect(result.pass).toBe(false);
+      expect(result.score).toBe(0);
+      expect(result.reason).toBe('Custom function threw error: boom');
+    });
+
+    it('should keep the results of the other assertions in the row', async () => {
+      const result = await runAssertions({
+        test: {
+          vars: { n: 1 },
+          assert: [
+            { type: 'contains', value: 'hello' },
+            { type: 'javascript', value: 'file://throws.cjs' },
+          ],
+        },
+        providerResponse: {
+          output: 'hello 1',
+          tokenUsage: { total: 0, prompt: 0, completion: 0 },
+        },
+      });
+
+      expect(result.pass).toBe(false);
+      expect(result.componentResults).toHaveLength(2);
+      expect(result.componentResults?.[0]).toMatchObject({ pass: true });
+      expect(result.componentResults?.[1]).toMatchObject({
+        pass: false,
+        reason: 'Custom function threw error: boom',
+      });
+    });
+
+    it('should apply the weight: 0 override to a throwing file assertion', async () => {
+      const result = await runAssertion({
+        assertion: { type: 'javascript', value: 'file://throws.cjs', weight: 0 },
+        test: { vars: {} },
+        providerResponse: baseProviderResponse,
+      });
+
+      expect(result.pass).toBe(true);
+      expect(result.score).toBe(0);
+      expect(result.reason).toBe('Custom function threw error: boom');
+
+      const rowResult = await runAssertions({
+        test: {
+          vars: { n: 1 },
+          assert: [
+            { type: 'contains', value: 'hello' },
+            { type: 'javascript', value: 'file://throws.cjs', weight: 0 },
+          ],
+        },
+        providerResponse: {
+          output: 'hello 1',
+          tokenUsage: { total: 0, prompt: 0, completion: 0 },
+        },
+      });
+
+      expect(rowResult.pass).toBe(true);
+      expect(rowResult.componentResults?.[1]).toMatchObject({
+        pass: true,
+        reason: 'Custom function threw error: boom',
+      });
+    });
+
+    it('should still throw when the file does not export a function', async () => {
+      await expect(
+        runAssertion({
+          assertion: createStringAssertion('javascript', 'file://no-function-export.cjs'),
+          test: { vars: {} },
+          providerResponse: baseProviderResponse,
+        }),
+      ).rejects.toThrow('must export a function');
     });
   });
 

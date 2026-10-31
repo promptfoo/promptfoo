@@ -2,7 +2,7 @@
   "name": "promptfoo",
   "description": "LLM eval & testing toolkit",
   "author": "Ian Webster",
-  "version": "0.124.1",
+  "version": "0.125.1",
   "license": "MIT",
   "type": "module",
   "repository": {
@@ -114,6 +114,7 @@
     "prepare": "husky || exit 0"
   },
   "overrides": {
+    "mermaid": "^12.2.0",
     "@ibm-cloud/watsonx-ai": {
       "ibm-cloud-sdk-core": "5.6.2"
     },
@@ -135,38 +136,17 @@
     "@ai-sdk/provider-utils": {
       "undici": "$undici"
     },
-    "@opentelemetry/exporter-trace-otlp-http": {
-      "@opentelemetry/core": "2.12.0"
-    },
-    "@opentelemetry/otlp-exporter-base": {
-      "@opentelemetry/core": "2.12.0"
-    },
-    "@opentelemetry/otlp-transformer": {
-      "@opentelemetry/core": "2.12.0"
-    },
-    "@opentelemetry/resources": {
-      "@opentelemetry/core": "2.12.0"
-    },
-    "@opentelemetry/sdk-logs": {
-      "@opentelemetry/core": "2.12.0"
-    },
-    "@opentelemetry/sdk-metrics": {
-      "@opentelemetry/core": "2.12.0"
-    },
-    "@opentelemetry/sdk-trace-base": {
-      "@opentelemetry/core": "2.12.0"
-    },
-    "@opentelemetry/sdk-trace-node": {
-      "@opentelemetry/core": "2.12.0"
+    "satori": {
+      "fflate@0.7.3": "0.7.5"
     },
     "serialize-javascript": ">=7.1.2",
-    "gaxios": "^8.0.0",
-    "ip-address": "10.7.3",
+    "gaxios": "^8.3.0",
+    "ip-address": "10.7.4",
     "mongoose": {
-      "gcp-metadata": "^9.0.2"
+      "gcp-metadata": "^9.2.2"
     },
     "webpack-dev-server": {
-      "express": "^4.22.2"
+      "express": "^4.22.3"
     },
     "launch-editor": "2.14.2",
     "engine.io": {
@@ -182,25 +162,25 @@
       "ws": "$ws"
     },
     "socket.io-parser": ">=4.2.7 <5",
-    "qs": ">=6.15.2 <7.0.0",
+    "qs": ">=6.16.1 <7.0.0",
     "@cacheable/utils": ">=2.5.0 <2.5.1",
     "brace-expansion@5": "^5.0.6",
     "fast-xml-parser": "$fast-xml-parser",
     "minimatch@<=3.1.3": "3.1.5",
     "vite": "^8.0.16",
     "lodash-es": "^4.18.1",
-    "webpack": "5.111.1",
-    "dompurify": "3.4.16",
+    "webpack": "5.112.0",
+    "dompurify": "3.4.17",
     "monaco-editor": {
       ".": "0.57.0",
-      "dompurify": "3.4.16"
+      "dompurify": "3.4.17"
     }
   },
   "resolutions": {
     "ibm-cloud-sdk-core": "5.6.2"
   },
   "devDependencies": {
-    "@anthropic-ai/claude-agent-sdk": "0.3.292",
+    "@anthropic-ai/claude-agent-sdk": "0.3.305",
     "@asteasolutions/zod-to-openapi": "^9.1.0",
     "@aws-sdk/client-bedrock-agent-runtime": "^3.1045.0",
     "@aws-sdk/client-bedrock-runtime": "^3.1045.0",
@@ -212,7 +192,7 @@
     "@biomejs/biome": "2.5.15",
     "@fal-ai/client": "~1.10.1",
     "@ibm-cloud/watsonx-ai": "^1.7.16",
-    "@langfuse/client": "^5.11.1",
+    "@langfuse/client": "^6.0.0",
     "@openai/agents": "^0.14.1",
     "@openai/codex-sdk": "^0.156.1",
     "@openai/codex-security": "^0.2.0",
@@ -241,16 +221,16 @@
     "ibm-cloud-sdk-core": "5.6.2",
     "knip": "~6.27.0",
     "node-sql-parser": "^5.4.0",
-    "oxc-parser": "^0.153.0",
+    "oxc-parser": "^0.155.0",
     "pdf-parse": "^2.4.5",
     "playwright": "^1.63.0",
     "playwright-extra": "^4.3.6",
-    "prettier": "^3.8.1",
+    "prettier": "^3.9.10",
     "puppeteer-extra-plugin-stealth": "^2.11.2",
     "read-excel-file": "^9.3.9",
     "source-map-support": "^0.5.21",
     "supertest": "^7.3.0",
-    "tsdown": "0.23.0",
+    "tsdown": "0.23.1",
     "typescript": "^7.0.0",
     "vitest": "^5.0.2",
     "yaml": "^2.9.0"
@@ -264,15 +244,15 @@
     "@aws-sdk/credential-provider-sso": "^3.972.16",
     "@azure/ai-projects": "^2.1.1",
     "@azure/identity": "^4.13.3",
-    "@azure/msal-node": "^7.0.0",
+    "@azure/msal-node": "^7.1.0",
     "@azure/storage-blob": "^12.31.0",
     "@fal-ai/client": "~1.10.1",
-    "@googleapis/sheets": "^18.1.0",
+    "@googleapis/sheets": "^18.1.1",
     "@modelcontextprotocol/sdk": "^1.32.1",
     "@modelcontextprotocol/server-filesystem": "2026.8.31",
     "@opencode-ai/sdk": "^1.18.34",
     "@smithy/node-http-handler": "^4.4.14",
-    "google-auth-library": "^11.1.0",
+    "google-auth-library": "^11.3.1",
     "hono": "^4.13.12",
     "natural": "^8.1.1",
     "node-sql-parser": "^5.4.0",
@@ -282,9 +262,9 @@
     "sharp": "^0.35.5"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "0.131.0",
-    "@apidevtools/json-schema-ref-parser": "^16.0.3",
-    "@hono/node-server": "2.1.3",
+    "@anthropic-ai/sdk": "0.137.0",
+    "@apidevtools/json-schema-ref-parser": "^16.0.5",
+    "@hono/node-server": "2.1.5",
     "@inquirer/checkbox": "^5.1.0",
     "@inquirer/confirm": "^6.0.8",
     "@inquirer/core": "^12.0.0",
@@ -293,11 +273,12 @@
     "@inquirer/search": "^4.1.8",
     "@inquirer/select": "^5.1.0",
     "@libsql/client": "^0.18.0",
-    "@opentelemetry/api": "^1.9.0",
-    "@opentelemetry/core": "2.12.0",
-    "@opentelemetry/exporter-trace-otlp-http": "^0.223.0",
-    "@opentelemetry/resources": "^2.6.0",
-    "@opentelemetry/sdk-trace-node": "^2.6.0",
+    "@opentelemetry/api": "^1.10.0",
+    "@opentelemetry/context-async-hooks": "^3.0.0",
+    "@opentelemetry/core": "3.0.0",
+    "@opentelemetry/exporter-trace-otlp-http": "^0.300.0",
+    "@opentelemetry/resources": "^3.0.0",
+    "@opentelemetry/sdk-trace": "^3.0.0",
     "@opentelemetry/semantic-conventions": "^1.40.0",
     "acorn": "^8.19.0",
     "ai": "^6.0.286",
@@ -307,7 +288,7 @@
     "binary-extensions": "^3.2.0",
     "cache-manager": ">=7.2.8 <7.2.10",
     "chalk": "^6.0.0",
-    "chokidar": "5.0.0",
+    "chokidar": "6.0.0",
     "cli-progress": "^3.12.0",
     "cli-table3": "^0.6.5",
     "commander": "^15.0.0",
@@ -317,20 +298,20 @@
     "csv-stringify": "^6.9.0",
     "dedent": "^1.7.2",
     "drizzle-orm": "^0.45.3",
-    "express": "^5.2.1",
+    "express": "^5.3.0",
     "exsolve": "^1.1.3",
     "fast-deep-equal": "^3.1.3",
     "fast-safe-stringify": "^2.1.1",
     "fast-xml-parser": "^5.7.1",
     "fastest-levenshtein": "^1.0.16",
-    "gcp-metadata": "^9.0.2",
+    "gcp-metadata": "^9.2.2",
     "glob": "^13.0.6",
     "http-z": "^8.1.1",
     "istextorbinary": "^9.5.0",
     "js-rouge": "^3.2.1",
-    "js-yaml": "5.4.3",
+    "js-yaml": "5.5.0",
     "json5": "^2.2.3",
-    "keyv": "^5.6.0",
+    "keyv": "^6.1.0",
     "keyv-file": "^5.3.3",
     "lru-cache": "^11.5.3",
     "mathjs": "^15.1.1",
@@ -341,7 +322,7 @@
     "ora": "^9.3.0",
     "parse5": "^8.0.0",
     "posthog-node": "~5.24.10",
-    "protobufjs": "^8.7.2",
+    "protobufjs": "^8.8.1",
     "proxy-agent": "^8.0.0",
     "proxy-from-env": "^2.1.0",
     "python-shell": "^5.0.0",
@@ -354,10 +335,10 @@
     "socket.io-client": "^4.8.4",
     "text-extensions": "^3.1.0",
     "tsx": "^4.23.11",
-    "undici": ">=7.29.1 <8",
+    "undici": ">=7.30.1 <8",
     "winston": "^3.19.0",
     "ws": "^8.21.3",
-    "zod": "^4.3.6"
+    "zod": "^4.6.7"
   },
   "madge": {
     "detectiveOptions": {

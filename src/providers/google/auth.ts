@@ -11,7 +11,8 @@
  * 4. GEMINI_API_KEY (secondary)
  */
 
-import { getEnvOverrides, getEnvString } from '../../envars';
+import { getEnvOverrides, getEnvString, getProviderEnvString } from '../../envars';
+import { getExplicitProviderEnv } from '../../envOverrides';
 import logger from '../../logger';
 import { maybeLoadFromExternalFile } from '../../util/file';
 import { resolveProviderEnv } from '../env';
@@ -20,7 +21,7 @@ import type { GoogleAuthOptions } from 'google-auth-library';
 import type { EnvOverrides } from '../../types/env';
 import type { CompletionOptions } from './types';
 
-// gcp-metadata (8.x) emits a `MetadataLookupWarning` of the form
+// gcp-metadata emits a `MetadataLookupWarning` of the form
 // `received unexpected error = ${err.message} code = ${code}` when the optional ADC probe cannot
 // reach the metadata host. Match the stable prefix (scoped by the warning type) rather than the
 // fully-interpolated string: the err.message/code suffix varies by failure mode (the codeless
@@ -176,6 +177,8 @@ export class GoogleAuthManager {
     // Select the scope before the alias; an empty value masks that name in lower scopes.
     const masked = new Set<string>();
     for (const layer of [
+      getExplicitProviderEnv(env),
+      getEnvOverrides('provider'),
       env,
       getEnvOverrides(),
       getEnvOverrides('file'),
@@ -226,7 +229,8 @@ export class GoogleAuthManager {
 
     // Check for Python SDK environment variables
     const useVertexEnv =
-      env?.GOOGLE_GENAI_USE_VERTEXAI ?? getEnvString('GOOGLE_GENAI_USE_VERTEXAI');
+      getProviderEnvString(env, 'GOOGLE_GENAI_USE_VERTEXAI') ??
+      getEnvString('GOOGLE_GENAI_USE_VERTEXAI');
     const cloudProject = env?.GOOGLE_CLOUD_PROJECT ?? getEnvString('GOOGLE_CLOUD_PROJECT');
     const hasProjectEnvironment = Boolean(
       resolveProviderEnv(env, ['VERTEX_PROJECT_ID', 'GOOGLE_PROJECT_ID', 'GOOGLE_CLOUD_PROJECT'])
@@ -308,7 +312,8 @@ export class GoogleAuthManager {
 
     // 2. Python SDK env var
     const useVertexEnv =
-      env?.GOOGLE_GENAI_USE_VERTEXAI ?? getEnvString('GOOGLE_GENAI_USE_VERTEXAI');
+      getProviderEnvString(env, 'GOOGLE_GENAI_USE_VERTEXAI') ??
+      getEnvString('GOOGLE_GENAI_USE_VERTEXAI');
     if (useVertexEnv === 'true' || useVertexEnv === '1') {
       logger.debug('[Google] Vertex AI mode enabled via GOOGLE_GENAI_USE_VERTEXAI');
       return true;
