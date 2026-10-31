@@ -91,6 +91,7 @@ describe('normalizeHostedTrace', () => {
     expect(other.every((span) => spans.every((s) => s.spanId !== span.spanId))).toBe(true);
   });
 
+  const opaqueToken = `${'A'.repeat(32)}-${'b'.repeat(32)}`;
   it.each([
     ['1699999999999999999', '1700000000000000000'],
     ['1700000000000000001', '1700000000000000002'],
@@ -536,11 +537,15 @@ describe('normalizeHostedTrace', () => {
   });
 
   it.each([
+    ['chat', 'gen_ai.request.model', `vendor/${opaqueToken}`],
+    ['chat', 'gen_ai.request.model', `ft:vendor:${opaqueToken}:run-17`],
+    ['chat', 'gen_ai.request.model', `${opaqueToken}/model`],
+    ['execute_tool', 'gen_ai.tool.name', `mcp.${opaqueToken}`],
     ['execute_tool', 'gen_ai.tool.name', 'api_key_abcdefgh'],
     ['chat', 'gen_ai.request.model', 'vendor/token_abcdefgh'],
     ['chat', 'gen_ai.request.model', 'vendor/X-Honeycomb-Team_abc-def'],
     ['execute_tool', 'gen_ai.tool.name', 'mcp:api-key-abc.def'],
-  ] as const)('withholds %s when a terminal label includes its value', (operation, key, id) => {
+  ] as const)('withholds %s with a protected identifier', (operation, key, id) => {
     const call = {
       ...tool,
       attributes: [attribute('gen_ai.operation.name', operation), attribute(key, id)],

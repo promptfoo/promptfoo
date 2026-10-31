@@ -16,7 +16,7 @@ import {
 } from '../../tracing/spanFilter';
 import { HOSTED_DURATION_NS, HOSTED_START_TIME_OFFSET_NS } from '../../tracing/spanTiming';
 import { getNormalizedToolAttributes } from '../../tracing/toolAttributes';
-import { isCredentialHeader, isSecretEnvVarName } from '../../util/sanitizer';
+import { isCredentialHeader, isSecretEnvVarName, looksLikeSecret } from '../../util/sanitizer';
 import {
   hasRecognizableOpenAiCredential,
   hasSensitiveOpenAiCachePath,
@@ -704,10 +704,22 @@ function toolAttributes(
   }
 }
 
+// A namespace or file extension can surround a base64url token. Keep hyphens and
+// underscores inside each component so a token cannot hide behind its own separators.
+function hasOpaqueIdentifierComponent(value: string): boolean {
+  return value.split(/[.:/]/).some(
+    (part) =>
+      looksLikeSecret(part) &&
+      // Some dated model slugs exceed the opaque-token threshold using descriptive words.
+      !/^(?:[a-z]{1,16}-){2,}\d{4}-\d{2}-\d{2}(?:-\d{1,8})?$/.test(part),
+  );
+}
+
 function safeIdentifier(value: unknown, policy: ImportPolicy): value is string {
   return (
     typeof value === 'string' &&
     /^[\w.:-]{1,256}$/.test(value) &&
+    !hasOpaqueIdentifierComponent(value) &&
     !hasProtectedComponent(value, policy) &&
     canRetainText(value, policy)
   );
@@ -718,10 +730,9 @@ function safeModelIdentifier(value: unknown, policy: ImportPolicy): value is str
     typeof value === 'string' &&
     value.length <= 256 &&
     /^(?:[\w.:-]+\/)*[\w.:-]+$/.test(value) &&
+    !hasOpaqueIdentifierComponent(value) &&
     !hasProtectedComponent(value, policy) &&
-    canRetainText(value, policy, hasRecognizableOpenAiCredential) &&
-    // Preserve dated, fine-tuned and namespaced IDs. A single long opaque token is ambiguous.
-    !/(?:^|\/)[a-z\d_]{64,}(?:\/|$)/i.test(value)
+    canRetainText(value, policy, hasRecognizableOpenAiCredential)
   );
 }
 
