@@ -15,6 +15,7 @@ import logger from '../logger';
 import { VERSION } from '../version';
 import { LocalSpanExporter } from './localSpanExporter';
 import { trackLocalOtlpExports } from './otlpOwnership';
+import { getOtelRoutingKey } from './otelConfig';
 import {
   batchProcessorFromEnv,
   registerTracerProvider,
@@ -28,6 +29,7 @@ const require = createRequire(import.meta.url);
 
 interface OtelSdk {
   provider: TracerProvider;
+  routingKey?: string;
   localExporter?: LocalSpanExporter;
   localProcessor?: SpanProcessor;
   owners: number;
@@ -98,13 +100,19 @@ export function initializeOtel(config: OtelConfig): (() => Promise<void>) | unde
     return;
   }
 
+  const routingKey = getOtelRoutingKey(config);
   if (sdk) {
+    if (!routingKey || routingKey !== sdk.routingKey) {
+      throw new Error(
+        'Cannot share the active OpenTelemetry SDK. Run evaluations with different trace settings or file-based OTLP TLS credentials sequentially or in separate processes.',
+      );
+    }
     return acquire(sdk);
   }
 
   logger.debug('[OtelSdk] Initializing OpenTelemetry SDK', {
     serviceName: config.serviceName,
-    endpoint: config.endpoint,
+    externalExport: Boolean(config.endpoint),
     localExport: config.localExport,
   });
 
@@ -137,16 +145,25 @@ export function initializeOtel(config: OtelConfig): (() => Promise<void>) | unde
       require('@opentelemetry/exporter-trace-otlp-http') as typeof import('@opentelemetry/exporter-trace-otlp-http');
     const exporter = trackLocalOtlpExports(new OTLPTraceExporter({ url: config.endpoint }));
     spanProcessors.push(batchProcessorFromEnv(exporter));
-    logger.debug(`[OtelSdk] Added OTLP exporter to ${config.endpoint}`);
+    logger.debug('[OtelSdk] Added OTLP exporter');
   }
 
   // Create trace provider with resource and span processors
   const provider = new TracerProvider({ ...traceOptionsFromEnv(), resource, spanProcessors });
 
   // Register the provider globally
-  registerTracerProvider(provider, new W3CTraceContextPropagator());
-
-  sdk = { provider, localExporter, localProcessor, owners: 0 };
+  const registered = registerTracerProvider(provider, new W3CTraceContextPropagator());
+  const generation = { provider, routingKey, localExporter, localProcessor, owners: 0 };
+  if (!registered) {
+    void shutdownGeneration(generation);
+    if (config.endpoint && !config.inheritedEndpoint) {
+      throw new Error(
+        'A host OpenTelemetry provider is already registered. Configure trace export on the host or run this evaluation in a separate process.',
+      );
+    }
+    return;
+  }
+  sdk = generation;
   logger.info('[OtelSdk] OpenTelemetry SDK initialized successfully');
 
   installSignalHandlers();
