@@ -622,24 +622,27 @@ function synchronizeLegacyTransportHeaders(
 }
 
 function applyGradingResult(row: EvaluateResult, checkResult: GradingResult) {
-  const graderError =
-    checkResult.metadata?.graderError === true ||
-    checkResult.componentResults?.some((result) => result.metadata?.graderError === true);
+  const graderErrorResult =
+    checkResult.metadata?.graderError === true
+      ? checkResult
+      : checkResult.componentResults?.find((result) => result.metadata?.graderError === true);
+  const graderError = graderErrorResult !== undefined;
+  const gradingResult = graderError ? { ...checkResult, pass: false } : checkResult;
   if (!checkResult.pass || graderError) {
-    row.error = checkResult.reason;
+    row.error = graderErrorResult?.reason ?? checkResult.reason;
     row.failureReason = graderError ? ResultFailureReason.ERROR : ResultFailureReason.ASSERT;
   }
-  row.success = checkResult.pass && !graderError;
-  row.score = checkResult.score;
-  row.namedScores = checkResult.namedScores || {};
+  row.success = gradingResult.pass;
+  row.score = gradingResult.score;
+  row.namedScores = gradingResult.namedScores || {};
 
   if (!row.tokenUsage) {
     row.tokenUsage = createEmptyTokenUsage();
   }
-  accumulateGradingTokenUsage(row.tokenUsage, checkResult.tokensUsed, {
-    cached: checkResult.metadata?.cachedResponse,
+  accumulateGradingTokenUsage(row.tokenUsage, gradingResult.tokensUsed, {
+    cached: gradingResult.metadata?.cachedResponse,
   });
-  row.gradingResult = checkResult;
+  row.gradingResult = gradingResult;
 }
 
 const ABORTED_GRADING_PREFIX = 'Aborted: ';
