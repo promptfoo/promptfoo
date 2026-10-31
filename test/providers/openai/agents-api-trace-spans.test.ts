@@ -189,7 +189,7 @@ describe('normalizeHostedTrace', () => {
         s.attributes?.['promptfoo.openai.error_status_complete'],
       ]),
     ).toEqual([
-      ['invoke_agent', 2, 'otlp-v3'],
+      ['invoke_agent', 2, 'otlp-v4'],
       ['execute_tool lookup_order', 1, false],
       ['chat gpt-6-astra', 1, false],
     ]);
@@ -292,6 +292,137 @@ describe('normalizeHostedTrace', () => {
     ).toBe(false);
   });
 
+  it.each([
+    ['exception', undefined, 0, 0, 2, 'otlp-v4'],
+    ['exception', { boolValue: false }, 0, 0, 0, 'otlp-v4'],
+    ['exception', { boolValue: true }, 1, 0, 2, 'otlp-v4'],
+    ['exception', { stringValue: 'not a boolean' }, 0, 0, 0, false],
+    ['exception', undefined, 0, 1, 0, false],
+    ['checkpoint', undefined, '1', 0, 0, false],
+    ['checkpoint', undefined, '0', 0, 0, 'otlp-v4'],
+    [undefined, undefined, 0, 0, 0, false],
+    ['   ', undefined, 0, 0, 0, false],
+  ] as const)(
+    'summarizes event %s with escaped=%o, dropped events=%s, dropped attributes=%s',
+    (name, escaped, droppedEventsCount, droppedAttributesCount, statusCode, evidence) => {
+      const event = {
+        name,
+        droppedAttributesCount,
+        attributes: [
+          attribute('exception.message', 'private event detail'),
+          ...(escaped ? [{ key: 'exception.escaped', value: escaped }] : []),
+        ],
+      };
+      const call = { ...tool, status: { code: 'UNSET' }, droppedEventsCount, events: [event] };
+      const saved = normalizeHostedTrace(payload(root, call), parentId).spans[1];
+      expect(saved).toMatchObject({
+        statusCode,
+        attributes: { 'promptfoo.openai.error_status_complete': evidence },
+      });
+      expect(JSON.stringify(saved)).not.toContain('private event detail');
+    },
+  );
+
+  it.each([-1, 'bad', '4294967296'])('rejects invalid dropped event count %s', (count) => {
+    expect(() =>
+      normalizeHostedTrace(payload(root, { ...tool, droppedEventsCount: count }), parentId),
+    ).toThrow('Invalid hosted OTLP trace');
+  });
+
+  it.each([
+    ['stable failure', undefined, '503', undefined, undefined, 2, true],
+    ['matching aliases', undefined, '503', '504', undefined, 2, true],
+    ['contradictory aliases', undefined, '200', '503', undefined, 1, false],
+    ['malformed stable code', undefined, 'unknown', '503', undefined, 1, false],
+    ['client 404', 3, '404', undefined, undefined, 2, true],
+    ['server 404', 'SPAN_KIND_SERVER', '404', undefined, undefined, 1, true],
+    ['no kind for 404', undefined, undefined, '404', undefined, 1, false],
+    ['unknown response code with error type', undefined, 'unknown', undefined, 'timeout', 2, true],
+    ['transport failure', undefined, undefined, undefined, 'timeout', 2, true],
+    ['empty error type', undefined, '200', undefined, ' ', 1, false],
+  ] as const)(
+    'classifies hosted HTTP evidence: %s',
+    (_label, kind, stable, legacy, errorType, code, known) => {
+      const call = {
+        ...tool,
+        kind,
+        attributes: [
+          ...tool.attributes,
+          ...(stable === undefined ? [] : [attribute('http.response.status_code', stable)]),
+          ...(legacy === undefined ? [] : [attribute('http.status_code', legacy)]),
+          ...(errorType === undefined ? [] : [attribute('error.type', errorType)]),
+        ],
+      };
+      const saved = normalizeHostedTrace(payload(root, call), parentId).spans[1];
+      expect(saved.statusCode).toBe(code);
+      expect(typeof saved.attributes?.['promptfoo.openai.error_status_complete'] === 'string').toBe(
+        known,
+      );
+      expect(saved.attributes).not.toHaveProperty('error.type');
+    },
+  );
+
+  it.each(['span', 'resource'])(
+    'treats a dropped %s alias as a possible conflicting status',
+    (carrier) => {
+      const read = (both: boolean, status: string) => {
+        const evidence = {
+          droppedAttributesCount: 1,
+          attributes: [
+            attribute('http.response.status_code', '503'),
+            ...(both ? [attribute('http.status_code', '503')] : []),
+          ],
+        };
+        const call = {
+          ...tool,
+          status: { code: status },
+          ...(carrier === 'span' && {
+            ...evidence,
+            attributes: [...tool.attributes, ...evidence.attributes],
+          }),
+        };
+        return normalizeHostedTrace(
+          {
+            resourceSpans: [
+              {
+                ...(carrier === 'resource' && { resource: evidence }),
+                scopeSpans: [{ spans: [root, call] }],
+              },
+            ],
+          },
+          parentId,
+        ).spans[1];
+      };
+      expect(read(false, 'OK')).toMatchObject({
+        statusCode: 1,
+        attributes: { 'promptfoo.openai.error_status_complete': false },
+      });
+      expect(read(true, 'OK').statusCode).toBe(2);
+      expect(read(false, 'ERROR').statusCode).toBe(2);
+    },
+  );
+
+  it('uses either span-local HTTP status alias before resource defaults', () => {
+    const snapshot = {
+      resourceSpans: [
+        {
+          resource: { attributes: [attribute('http.response.status_code', '503')] },
+          scopeSpans: [
+            {
+              spans: [
+                root,
+                { ...tool, attributes: [...tool.attributes, attribute('http.status_code', '200')] },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+    const [inherited, overridden] = normalizeHostedTrace(snapshot, parentId).spans;
+    expect(inherited.statusCode).toBe(2);
+    expect(overridden.statusCode).toBe(1);
+  });
+
   it('converts a long inherited HTTP status once across spans', () => {
     const status = '0'.repeat(1024 * 1024) + '503';
     let conversions = 0;
@@ -392,7 +523,7 @@ describe('normalizeHostedTrace', () => {
       expect(complete).toBe(true);
       const saved = spans.find((span) => span.name === 'execute_tool lookup_order');
       expect(saved?.statusCode).toBe(expectedCode);
-      expect(saved?.attributes?.['promptfoo.openai.error_status_complete']).toBe('otlp-v3');
+      expect(saved?.attributes?.['promptfoo.openai.error_status_complete']).toBe('otlp-v4');
       expect(saved?.attributes).not.toHaveProperty(key);
       expect(JSON.stringify(spans)).not.toContain('private');
     },

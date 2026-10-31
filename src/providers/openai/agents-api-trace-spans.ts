@@ -44,9 +44,11 @@ const wireAttributes = z.object({
     .nullish(),
 });
 const wireSpan = wireAttributes.extend({
+  droppedEventsCount: wireAttributes.shape.droppedAttributesCount,
   traceId: z.string(),
   spanId: z.string(),
   parentSpanId: z.string().nullish(),
+  kind: z.union([z.number(), z.string()]).nullish(),
   startTimeUnixNano: nanos,
   endTimeUnixNano: nanos,
   status: z
@@ -209,7 +211,7 @@ interface ImportPolicy {
   redact: Redact;
   redactAttributes: string[];
   echoesProtectedValue: (text: string) => boolean;
-  errorValues: WeakMap<object, { valid: boolean; httpStatus?: number }>;
+  errorValues: WeakMap<object, { valid: boolean; httpStatus?: number; hasErrorType?: boolean }>;
   argumentBytesLeft: number;
   argumentValuesLeft: number;
 }
@@ -482,14 +484,6 @@ function protectedEchoMatcher(policy: ImportPolicy) {
       collectAttribute(key, value);
     }
   }
-  function collectSpan(span: unknown, attributes: z.infer<typeof attributeList> | undefined) {
-    collect(attributes);
-    for (const key of ['events', 'links']) {
-      for (const carrier of collection(span, key)) {
-        collect(readAttributes(carrier).attributes);
-      }
-    }
-  }
   function matches(text: string) {
     chargeSearch(text, needles.size);
     for (const needle of needles) {
@@ -499,7 +493,7 @@ function protectedEchoMatcher(policy: ImportPolicy) {
     }
     return false;
   }
-  return { collect, collectSpan, matches };
+  return { collect, matches };
 }
 
 // A credential can follow a named component in a namespaced identifier.
@@ -635,10 +629,69 @@ function normalizeNonToolSpan(
   return { name: operation, attributes };
 }
 
+function checkedErrorValue(value: Record<string, unknown>, policy: ImportPolicy) {
+  let checked = policy.errorValues.get(value);
+  if (!checked) {
+    checked = { valid: isValidWireValue(value) };
+    policy.errorValues.set(value, checked);
+  }
+  return checked;
+}
+
+// OTLP JSON exporters use integers or enum names for span kinds.
+const http4xxFailure = new Map([
+  ['2', false],
+  ['SERVER', false],
+  ['SPAN_KIND_SERVER', false],
+  ['3', true],
+  ['CLIENT', true],
+  ['SPAN_KIND_CLIENT', true],
+]);
+
+// Both names may be emitted during an HTTP semantic-convention migration.
+function hostedHttpFailure(
+  wire: z.infer<typeof wireSpan>,
+  attrs: ReturnType<typeof attributeMap>,
+  resource: HostedResource,
+  policy: ImportPolicy,
+): boolean | undefined {
+  const keys = ['http.response.status_code', 'http.status_code'];
+  const source =
+    wire.droppedAttributesCount || keys.some((key) => attrs.has(key)) ? attrs : resource.attributes;
+  const dropped = source === attrs ? wire.droppedAttributesCount : resource.dropped;
+  if (dropped && !keys.every((key) => source.has(key))) {
+    // A missing alias could contradict the observed status on the same carrier.
+    return undefined;
+  }
+  const verdicts = new Set<boolean | undefined>();
+  for (const key of keys) {
+    const value = source.get(key);
+    if (!value) {
+      continue;
+    }
+    // A resource may supply a very long decimal string to every span in the artifact.
+    const checked = checkedErrorValue(value, policy);
+    const scalar = value.stringValue ?? value.intValue ?? value.doubleValue;
+    checked.httpStatus ??=
+      checked.valid &&
+      (typeof scalar === 'number' || (typeof scalar === 'string' && /^\s*\d+\s*$/.test(scalar)))
+        ? Number(scalar)
+        : Number.NaN;
+    const code = checked.httpStatus;
+    if (!Number.isInteger(code) || (code !== 0 && (code < 100 || code > 599))) {
+      return undefined;
+    }
+    const failed = code >= 400 && code < 500 ? http4xxFailure.get(String(wire.kind)) : code >= 500;
+    verdicts.add(failed);
+  }
+  return verdicts.size > 1 || verdicts.has(undefined) ? undefined : verdicts.has(true);
+}
+
 function normalizeSpan(
   wire: z.infer<typeof wireSpan>,
   policy: ImportPolicy,
   resource: HostedResource,
+  eventFailure: boolean | undefined,
 ): SpanData {
   const spanId = decodeId(wire.spanId, 8);
   const parent = wire.parentSpanId ? decodeId(wire.parentSpanId, 8) : undefined;
@@ -695,54 +748,49 @@ function normalizeSpan(
   }
   // Preserve the same error verdict as an ordinary span without storing tool diagnostics.
   const code = statusCode(wire.status?.code);
-  let validErrorAttributes = true;
-  const failed = isSpanError(code, wire.status?.message ?? undefined, (key) => {
-    // OTLP span attributes override resource defaults. A dropped span attribute may
-    // have overridden that default, so only intact inheritance is evidence.
-    const value =
-      attrs.get(key) ?? (wire.droppedAttributesCount ? undefined : resource.attributes.get(key));
-    if (!value) {
-      return undefined;
-    }
-    // Every span in a resource can inherit the same compound diagnostic.
-    let checked = policy.errorValues.get(value);
-    if (!checked) {
-      checked = { valid: isValidWireValue(value) };
-      policy.errorValues.set(value, checked);
-    }
-    if (!checked.valid) {
-      validErrorAttributes = false;
-      return undefined;
-    }
-    if (key === 'http.status_code' && (value.kvlistValue || value.arrayValue)) {
-      // A compound HTTP status cannot establish a numeric status code.
-      return invalid();
-    }
-    const scalar =
-      value.stringValue ??
-      value.boolValue ??
-      value.doubleValue ??
-      (value.intValue === undefined
-        ? (value.kvlistValue ?? value.arrayValue)
-        : Number(value.intValue));
-    // Number() can scan arbitrarily long string spellings of an inherited status.
-    if (key === 'http.status_code') {
-      checked.httpStatus ??=
-        typeof scalar === 'number' || (typeof scalar === 'string' && /^\s*\d+\s*$/.test(scalar))
-          ? Number(scalar)
-          : Number.NaN;
-      const status = checked.httpStatus;
-      if (status === 0 || (Number.isInteger(status) && status >= 100 && status <= 599)) {
-        return status;
+  const httpFailure = hostedHttpFailure(wire, attrs, resource, policy);
+  let validErrorAttributes = httpFailure !== undefined && eventFailure !== undefined;
+  const failed = isSpanError(
+    code,
+    wire.status?.message ?? undefined,
+    (key) => {
+      // OTLP span attributes override resource defaults. A dropped span attribute may
+      // have overridden that default, so only intact inheritance is evidence.
+      const value =
+        attrs.get(key) ?? (wire.droppedAttributesCount ? undefined : resource.attributes.get(key));
+      if (!value) {
+        return undefined;
       }
-      validErrorAttributes = false;
-      return undefined;
-    }
-    return scalar;
-  });
+      // Every span in a resource can inherit the same compound diagnostic.
+      const checked = checkedErrorValue(value, policy);
+      if (!checked.valid) {
+        validErrorAttributes = false;
+        return undefined;
+      }
+      if (key === 'error.type') {
+        checked.hasErrorType ??=
+          typeof value.stringValue === 'string' && /\S/.test(value.stringValue);
+        if (!checked.hasErrorType) {
+          validErrorAttributes = false;
+          return undefined;
+        }
+        return 'error';
+      }
+      return (
+        value.stringValue ??
+        value.boolValue ??
+        value.doubleValue ??
+        (value.intValue === undefined
+          ? (value.kvlistValue ?? value.arrayValue)
+          : Number(value.intValue))
+      );
+    },
+    httpFailure === true,
+  );
+  const observedFailure = failed || eventFailure === true;
   if (!protectsKey([HOSTED_ERROR_STATUS_COMPLETE], policy)) {
     attributes[HOSTED_ERROR_STATUS_COMPLETE] =
-      failed || (validErrorAttributes && !wire.droppedAttributesCount && !resource.dropped)
+      observedFailure || (validErrorAttributes && !wire.droppedAttributesCount && !resource.dropped)
         ? HOSTED_ERROR_STATUS_VERSION
         : false;
   }
@@ -751,7 +799,7 @@ function normalizeSpan(
     parentSpanId,
     name,
     attributes,
-    statusCode: failed ? 2 : code,
+    statusCode: observedFailure ? 2 : code,
     startTime,
     endTime: Number(end) / 1e6,
   };
@@ -812,6 +860,48 @@ function readAttributes(source: unknown) {
   return parsed.success ? parsed.data : invalid();
 }
 
+// Only the failure verdict is retained. Exception messages and stacks can contain secrets.
+function isExceptionFailure(
+  name: unknown,
+  event: z.infer<typeof wireAttributes>,
+): boolean | undefined {
+  if (typeof name !== 'string' || !name.trim()) {
+    return undefined;
+  }
+  if (name !== 'exception') {
+    return false;
+  }
+  const escaped = attributeMap(event.attributes).get('exception.escaped');
+  if (!escaped) {
+    // Older exporters may record handled exceptions with exception.escaped=false.
+    return event.droppedAttributesCount ? undefined : true;
+  }
+  return Object.keys(escaped).length === 1 && typeof escaped.boolValue === 'boolean'
+    ? escaped.boolValue
+    : undefined;
+}
+
+function collectSpanEvidence(
+  value: unknown,
+  wire: z.infer<typeof wireSpan>,
+  echoes: ReturnType<typeof protectedEchoMatcher>,
+): boolean | undefined {
+  echoes.collect(wire.attributes);
+  let eventFailure: boolean | undefined = wire.droppedEventsCount ? undefined : false;
+  for (const event of collection(value, 'events')) {
+    const eventAttrs = readAttributes(event);
+    echoes.collect(eventAttrs.attributes);
+    const observed = isExceptionFailure(wireField(event, 'name'), eventAttrs);
+    if (eventFailure !== true && observed !== false) {
+      eventFailure = observed;
+    }
+  }
+  for (const link of collection(value, 'links')) {
+    echoes.collect(readAttributes(link).attributes);
+  }
+  return eventFailure;
+}
+
 function* readSpans(otlp: unknown, echoes: ReturnType<typeof protectedEchoMatcher>) {
   // Bound collections before schema validation; malformed entries must not cause an
   // unbounded allocation of validation errors for a large but byte-limited response.
@@ -836,8 +926,8 @@ function* readSpans(otlp: unknown, echoes: ReturnType<typeof protectedEchoMatche
         if (!parsed.success) {
           invalid();
         }
-        echoes.collectSpan(value, parsed.data.attributes);
-        yield { wire: parsed.data, resource };
+        const eventFailure = collectSpanEvidence(value, parsed.data, echoes);
+        yield { wire: parsed.data, resource, eventFailure };
       }
     }
   }
@@ -873,9 +963,9 @@ export function normalizeHostedTrace(
   const echoes = protectedEchoMatcher(policy);
   const records = [...readSpans(otlp, echoes)];
   policy.echoesProtectedValue = echoes.matches;
-  for (const { wire, resource } of records) {
+  for (const { wire, resource, eventFailure } of records) {
     const traceId = decodeId(wire.traceId, 16);
-    const node = normalizeSpan(wire, policy, resource);
+    const node = normalizeSpan(wire, policy, resource, eventFailure);
     if (
       nodes.has(node.spanId) ||
       /^0+$/.test(traceId) ||
