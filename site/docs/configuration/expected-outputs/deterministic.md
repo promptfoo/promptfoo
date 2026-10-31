@@ -1138,7 +1138,7 @@ Trace assertions require tracing to be enabled in your evaluation. See the [trac
 If trace data is not available, the assertion will throw an error rather than failing, indicating that the assertion could not be evaluated.
 :::
 
-Hosted OpenAI Agents API checks include spans from the requested turn and its local ancestors. For example, one matching tool span proves `min: 1` even on a partial import, while an absent span cannot prove `max: 0` there. For duration or error budgets, a recorded violation can settle the result. If missing spans or redaction leave more than one possible verdict, the assertion fails for insufficient evidence, including when inverted. A known mismatch on an open test-case span can rule it out during a live eval. If a saved trace is missing that span, its attribute keys alone may leave the filter uncertain.
+Hosted OpenAI Agents API checks include spans from the requested turn and its local ancestors. For example, one matching tool span proves `min: 1` even on a partial import, while an absent span cannot prove `max: 0` there. For duration or error budgets, a recorded violation can settle the result. If missing spans or redaction leave more than one possible verdict, the assertion fails for insufficient evidence, including when inverted. A known mismatch on an open test-case span can rule it out during a live eval. If a saved trace is missing that span, its attribute keys alone may leave the filter uncertain. On older complete exports, a `chat` span can lack its model name. It may match a model-specific pattern but cannot change the count of `execute_tool *` spans.
 
 Example:
 
@@ -1229,7 +1229,7 @@ assert:
 
 Key features:
 
-- `pattern` (optional): Filter spans by name pattern. Defaults to `*` (all spans)
+- Omit `pattern` to time all spans in scope. An explicit empty string (`pattern: ''`) matches only an empty span name.
 - `attributes` (optional): Filter by exact span attributes, as described under [Trace-Span-Count](#trace-span-count)
 - `max`: Maximum allowed duration in milliseconds
 - `percentile` (optional): Check percentile instead of all spans (e.g., 50 for median, 95 for 95th percentile). Must be a number from 0 to 100 inclusive; out-of-range values cause an assertion error. Use the 0-100 scale, not 0-1 — `0.95` is accepted as the 0.95th percentile (effectively the fastest span), not p95

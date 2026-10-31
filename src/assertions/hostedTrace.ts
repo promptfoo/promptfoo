@@ -168,7 +168,7 @@ function couldMatchTestCaseRoot(pattern: string, filters: unknown, trace: TraceD
       return true;
     }
     return (
-      !Object.hasOwn(known, key) ||
+      !Object.prototype.hasOwnProperty.call(known, key) ||
       known[key] === value ||
       isUncertainTraceAttributeMatch(known[key], value)
     );
@@ -239,6 +239,21 @@ function excludeHostedGraderEvidence({
   return undefined;
 }
 
+/** Legacy exports retain the operation, but may omit the model from `chat <model>`. */
+function isUncertainChatPattern(pattern: string): boolean {
+  if (matchesPattern('chat', pattern)) {
+    // A trailing wildcard can absorb any model suffix without losing the bare-name match.
+    return !/\*[?*]*$/.test(pattern);
+  }
+  const namePrefix = 'chat ';
+  const [fixedPrefix] = pattern.split('*', 1);
+  // A possible qualified name must match this prefix, with at least one more model character.
+  return (
+    (fixedPrefix.length > namePrefix.length || pattern.includes('*')) &&
+    matchesPattern(namePrefix.slice(0, fixedPrefix.length), fixedPrefix.slice(0, namePrefix.length))
+  );
+}
+
 /** Count assertions can use the bounds of missing evidence. Other raw checks need every candidate. */
 function prepareRawTraceAssertion(
   params: AssertionParams,
@@ -252,15 +267,15 @@ function prepareRawTraceAssertion(
     pattern?: string;
     attributes?: unknown;
   };
-  const pattern = typeof filter.pattern === 'string' && filter.pattern ? filter.pattern : '*';
+  const emptyErrorPattern = params.baseType === 'trace-error-spans' && filter.pattern === '';
+  const pattern = typeof filter.pattern === 'string' && !emptyErrorPattern ? filter.pattern : '*';
   const attrs = filter.attributes;
   const filters = attrs && typeof attrs === 'object' ? Object.entries(attrs) : [];
   // The case root includes grading itself and closes after the live assertions.
   // Explicit filters may select it, while default operational checks measure target work.
   const targetWorkOnly =
     (params.baseType === 'trace-span-duration' || params.baseType === 'trace-error-spans') &&
-    (filter.pattern === undefined ||
-      (params.baseType === 'trace-error-spans' && filter.pattern === '')) &&
+    (filter.pattern === undefined || emptyErrorPattern) &&
     filters.length === 0;
   if (targetWorkOnly) {
     trace.spans = trace.spans.filter(
@@ -302,7 +317,9 @@ function prepareRawTraceAssertion(
     // placeholder neither witnesses nor rules out a match on the original name.
     const uncertainName =
       !selectsAllNames &&
-      (native ? hasUncertainHostedChatName(span) : span.name.includes('[REDACTED]'));
+      (native
+        ? hasUncertainHostedChatName(span) && isUncertainChatPattern(pattern)
+        : pattern !== '' && span.name.includes('[REDACTED]'));
     if (!uncertainName && (!filters.length || !matchesPattern(span.name, pattern))) {
       continue;
     }
@@ -376,8 +393,8 @@ export function prepareHostedTraceAssertion(params: AssertionParams): string | u
   if (native.length !== spanCount) {
     return 'The stored OpenAI Agents API spans are incomplete for this provider call.';
   }
-  const partial = hostedTrace.status === 'partial' || native.some(hasUncertainHostedChatName);
-  if (partial && baseType.startsWith('trajectory:')) {
+  const partial = hostedTrace.status === 'partial';
+  if (baseType.startsWith('trajectory:') && (partial || native.some(hasUncertainHostedChatName))) {
     const reason =
       'The hosted trace is partial. It can only establish an observed tool call or matching arguments.';
     if (inverse || !provesObservedTool(baseType, renderedValue)) {
