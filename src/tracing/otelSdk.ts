@@ -14,8 +14,8 @@ import { ATTR_SERVICE_NAME, ATTR_SERVICE_VERSION } from '@opentelemetry/semantic
 import logger from '../logger';
 import { VERSION } from '../version';
 import { LocalSpanExporter } from './localSpanExporter';
-import { trackLocalOtlpExports } from './otlpOwnership';
 import { getOtelRoutingKey } from './otelConfig';
+import { trackLocalOtlpExports } from './otlpOwnership';
 import {
   batchProcessorFromEnv,
   registerTracerProvider,
