@@ -1414,6 +1414,21 @@ export const PLUGINS = [
     isRemote: true,
   },
   {
+    category: 'Security and Access Control',
+    description:
+      'Tests whether an MCP server returns poisoned tool responses — prompt-injection content embedded in the output of benign tool calls',
+    label: 'technical',
+    link: '/docs/red-team/plugins/mcp-tool-response-poisoning/',
+    name: 'MCP Tool Response Poisoning',
+    pluginId: 'mcp:tool-response-poisoning',
+    applicationTypes: {
+      rag: false,
+      agent: true,
+      chat: false,
+    },
+    vulnerabilityType: 'security',
+  },
+  {
     category: 'Trust and Safety',
     description: 'Tests for medical anchoring bias where AI fixates on irrelevant information',
     label: 'technical',
