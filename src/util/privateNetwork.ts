@@ -1,6 +1,7 @@
 import { lookup } from 'node:dns/promises';
 import { isIP } from 'node:net';
 
+import { CLOUD_PROVIDER_PREFIX } from '../constants';
 import { getEnvBool, getEnvString } from '../envars';
 import logger from '../logger';
 import { maybeLoadFromExternalFile } from './file';
@@ -129,6 +130,10 @@ function isPrivateIPv6(bytes: number[]): boolean {
   }
   // fe80::/10 link-local
   if (bytes[0] === 0xfe && (bytes[1] & 0xc0) === 0x80) {
+    return true;
+  }
+  // fec0::/10 site-local (deprecated, but still routable on hosts that route it)
+  if (bytes[0] === 0xfe && (bytes[1] & 0xc0) === 0xc0) {
     return true;
   }
   // fc00::/7 unique-local (the IPv6 counterpart of RFC1918)
@@ -481,6 +486,11 @@ function getRawRequestTarget(rawRequest: string, useHttps: boolean): string {
  *   this shared guard. A templated `file://` id is refused for the same
  *   reason: env-template rendering at load time could turn it into a
  *   config-file reference the preflight never saw,
+ * - a cloud provider id (`promptfoo://provider/<uuid>`), refused outright:
+ *   `loadApiProvider` replaces it with the saved provider from Cloud and
+ *   instantiates that, so the preflight sees no URL here, and resolving
+ *   the saved target here would drag the Cloud client into this shared
+ *   guard. Refusal keeps the flag fail closed,
  * - a named provider whose default endpoint is local (ollama, llama,
  *   litellm, openclaw, ...), validated against its effective default base
  *   URL, unless the provider resolves an explicit `config.apiBaseUrl`
@@ -513,6 +523,11 @@ export function getCallerSuppliedBaseUrls(providerOptions: ProviderTarget): stri
   if (id.startsWith('file://') && (isProviderConfigFileReference(id) || id.includes('{{'))) {
     throw new PrivateRangeBlockedError(
       'PROMPTFOO_BLOCK_PRIVATE_RANGES is set: refusing file-backed provider reference whose expanded target cannot be validated before loading',
+    );
+  }
+  if (id.startsWith(CLOUD_PROVIDER_PREFIX)) {
+    throw new PrivateRangeBlockedError(
+      'PROMPTFOO_BLOCK_PRIVATE_RANGES is set: refusing cloud provider reference whose saved target cannot be validated before loading',
     );
   }
   const idUrl = getUrlFromProviderId(id);
