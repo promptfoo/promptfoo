@@ -1,66 +1,26 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, expect, it, vi } from 'vitest';
 import { fetchWithCache } from '../src/cache';
 import { doRemoteScoringWithPi } from '../src/remoteScoring';
+import { createMockFetchResponse } from './providers/mockProviderResponses';
 
-vi.mock('../src/cache', () => ({
-  fetchWithCache: vi.fn(),
-}));
+vi.mock('../src/cache', () => ({ fetchWithCache: vi.fn() }));
 
-const payload = {
-  llm_input: 'What is the capital of France?',
-  llm_output: 'Paris',
-  scoring_spec: [{ question: 'Is the answer correct?' }],
-};
+afterEach(() => vi.unstubAllEnvs());
 
-function mockPiScore(totalScore: number) {
-  vi.mocked(fetchWithCache).mockResolvedValue({
-    data: { total_score: totalScore, question_scores: { 'Is the answer correct?': totalScore } },
-    cached: false,
-    status: 200,
-    statusText: 'OK',
-  });
-}
-
-describe('doRemoteScoringWithPi', () => {
-  beforeEach(() => {
-    vi.stubEnv('WITHPI_API_KEY', 'test-key');
-  });
-
-  afterEach(() => {
-    vi.unstubAllEnvs();
-    vi.resetAllMocks();
-  });
-
-  it('passes when the score equals the threshold', async () => {
-    mockPiScore(0.5);
-
-    const result = await doRemoteScoringWithPi(payload, 0.5);
-
-    expect(result.pass).toBe(true);
-    expect(result.score).toBe(0.5);
-  });
-
-  it('fails when the score is below the threshold', async () => {
-    mockPiScore(0.49);
-
-    const result = await doRemoteScoringWithPi(payload, 0.5);
-
-    expect(result.pass).toBe(false);
-  });
-
-  it('passes when the score is above the threshold', async () => {
-    mockPiScore(0.51);
-
-    const result = await doRemoteScoringWithPi(payload, 0.5);
-
-    expect(result.pass).toBe(true);
-  });
-
-  it('passes a score equal to the default threshold of 0.5', async () => {
-    mockPiScore(0.5);
-
-    const result = await doRemoteScoringWithPi(payload);
-
-    expect(result.pass).toBe(true);
-  });
+it.each([
+  { score: 0.5, threshold: undefined, pass: true },
+  { score: 0.8, threshold: 0.8, pass: true },
+  { score: 0.79, threshold: 0.8, pass: false },
+  { score: 0.81, threshold: 0.8, pass: true },
+  { score: 0, threshold: 0, pass: true },
+])('grades Pi score $score against threshold $threshold', async ({ score, threshold, pass }) => {
+  vi.stubEnv('WITHPI_API_KEY', 'test-key');
+  vi.mocked(fetchWithCache).mockResolvedValue(
+    createMockFetchResponse({ total_score: score, question_scores: { correct: score } }),
+  );
+  const result = await doRemoteScoringWithPi(
+    { llm_input: 'Hello?', llm_output: 'Hello!', scoring_spec: [{ question: 'correct' }] },
+    threshold,
+  );
+  expect(result).toMatchObject({ pass, score, namedScores: { correct: score } });
 });
