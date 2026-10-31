@@ -1,6 +1,11 @@
 import logger from '../../logger';
 import Eval from '../../models/eval';
-import { deduplicateTestCases, extractRuntimeVars, filterRuntimeVars } from '../../util/comparison';
+import {
+  deduplicateTestCases,
+  extractRuntimeVars,
+  filterRuntimeVars,
+  isRuntimeVar,
+} from '../../util/comparison';
 import { readOutput, resultIsForTestCase } from '../../util/index';
 
 import type { EvaluateResult, TestCase, TestSuite, Vars } from '../../types/index';
@@ -13,92 +18,47 @@ type Tests = NonNullable<TestSuite['tests']>;
 type ResultFilterFn = (result: EvaluateResult) => boolean;
 type TestFilterFn = (test: TestCase) => boolean;
 
-/**
- * Use a primitive variable to narrow large result/test scans, then rely on
- * resultIsForTestCase for the full variable and provider comparison.
- * Complex or missing indexed variables retain the original full scan.
- */
+// Equal vars have the same primitive fields, regardless of insertion order. Nested
+// values can share a bucket because resultIsForTestCase still checks full equality.
+function primitiveVarsKey(vars: Vars | undefined): string {
+  if (!vars || typeof vars !== 'object' || Array.isArray(vars)) {
+    return '';
+  }
+  const fields = [];
+  for (const key of Object.keys(vars).sort()) {
+    const value = vars[key];
+    if (
+      !isRuntimeVar(key) &&
+      (value === null ||
+        typeof value === 'string' ||
+        typeof value === 'number' ||
+        typeof value === 'boolean')
+    ) {
+      fields.push([key, value]);
+    }
+  }
+  return JSON.stringify(fields);
+}
+
 function createCandidateLookup<T>(
   items: T[],
   getVars: (item: T) => Vars | undefined,
   expectedLookups: number,
 ): (vars: Vars | undefined) => T[] {
-  // Building a lookup costs more than scanning small collections.
   if (items.length < 64 || expectedLookups < 64) {
     return () => items;
   }
-
-  const isPrimitive = (value: unknown) =>
-    value === null || (typeof value !== 'object' && typeof value !== 'function');
-
-  // Choose a selective key instead of indexing a common constant such as locale.
-  const distinctValues = new Map<string, Set<unknown>>();
-  for (const item of items.slice(0, 128)) {
-    const vars = filterRuntimeVars(getVars(item));
-    if (!vars || typeof vars !== 'object' || Array.isArray(vars)) {
-      continue;
-    }
-    for (const [name, value] of Object.entries(vars)) {
-      if (!isPrimitive(value)) {
-        continue;
-      }
-      let distinct = distinctValues.get(name);
-      if (!distinct) {
-        distinct = new Set();
-        distinctValues.set(name, distinct);
-      }
-      distinct.add(value);
-    }
-  }
-
-  let key: string | undefined;
-  let maxDistinct = 0;
-  for (const [name, values] of distinctValues) {
-    if (values.size > maxDistinct) {
-      key = name;
-      maxDistinct = values.size;
-    }
-  }
-  if (key === undefined) {
-    return () => items;
-  }
-
-  const buckets = new Map<unknown, T[]>();
+  const buckets = new Map<string, T[]>();
   for (const item of items) {
-    const vars = filterRuntimeVars(getVars(item));
-    if (
-      !vars ||
-      typeof vars !== 'object' ||
-      Array.isArray(vars) ||
-      !Object.prototype.hasOwnProperty.call(vars, key)
-    ) {
-      continue;
+    const key = primitiveVarsKey(getVars(item));
+    const bucket = buckets.get(key);
+    if (bucket) {
+      bucket.push(item);
+    } else {
+      buckets.set(key, [item]);
     }
-    const value = vars[key];
-    if (!isPrimitive(value)) {
-      continue;
-    }
-    let bucket = buckets.get(value);
-    if (!bucket) {
-      bucket = [];
-      buckets.set(value, bucket);
-    }
-    bucket.push(item);
   }
-
-  return (rawVars) => {
-    const vars = filterRuntimeVars(rawVars);
-    if (
-      !vars ||
-      typeof vars !== 'object' ||
-      Array.isArray(vars) ||
-      !Object.prototype.hasOwnProperty.call(vars, key)
-    ) {
-      return items;
-    }
-    const value = vars[key];
-    return isPrimitive(value) ? (buckets.get(value) ?? []) : items;
-  };
+  return (vars) => buckets.get(primitiveVarsKey(vars)) ?? [];
 }
 
 /**
@@ -182,14 +142,6 @@ export async function filterTestsByResults(
     `[filterTestsByResults] ${uniqueVarsInResults.size} unique test cases (by vars) in filtered results`,
   );
 
-  // Match tests against filtered results and restore runtime vars.
-  // We try two matching strategies:
-  // 1. First, try with defaultTest.vars merged (for new results where defaults are merged)
-  // 2. Fallback: try without merging defaults (for old results that don't have defaults merged)
-  // This ensures backward compatibility with results stored before the merge was consistent.
-  //
-  // When a match is found, we restore runtime variables (like _conversation, sessionId)
-  // from the result into the test so they're available during re-evaluation.
   const matchedTests: Tests = [];
   const candidatesForTest = createCandidateLookup(
     filteredResults,
@@ -197,46 +149,27 @@ export async function filterTestsByResults(
     testSuite.tests.length,
   );
 
-  for (const test of testSuite.tests) {
-    const testWithDefaults = mergeDefaultVars(test, testSuite.defaultTest);
-
-    // Try matching with merged defaults first (new results)
-    // Prefer results that have runtime vars to ensure we restore them when available.
-    // This prevents issues when a test matches multiple results and only some have runtime vars.
-    const defaultCandidates = candidatesForTest(testWithDefaults.vars);
-    let matchedResult = defaultCandidates.find(
-      (result) =>
-        resultIsForTestCase(result, testWithDefaults) &&
-        extractRuntimeVars(result.vars) !== undefined,
-    );
-
-    // Fallback: any matching result (even without runtime vars)
-    if (!matchedResult) {
-      matchedResult = defaultCandidates.find((result) =>
-        resultIsForTestCase(result, testWithDefaults),
-      );
-    }
-
-    // Fallback: try matching without defaults (old results that don't have defaults merged)
-    if (!matchedResult) {
-      const hasDefaultVars =
-        testSuite.defaultTest &&
-        typeof testSuite.defaultTest !== 'string' &&
-        testSuite.defaultTest.vars &&
-        Object.keys(testSuite.defaultTest.vars).length > 0;
-
-      if (hasDefaultVars) {
-        // Again, prefer results with runtime vars first
-        const originalCandidates = candidatesForTest(test.vars);
-        matchedResult = originalCandidates.find(
-          (result) =>
-            resultIsForTestCase(result, test) && extractRuntimeVars(result.vars) !== undefined,
-        );
-        if (!matchedResult) {
-          matchedResult = originalCandidates.find((result) => resultIsForTestCase(result, test));
+  function findMatchingResult(test: TestCase): EvaluateResult | undefined {
+    let firstMatch: EvaluateResult | undefined;
+    for (const result of candidatesForTest(test.vars)) {
+      if (resultIsForTestCase(result, test)) {
+        if (extractRuntimeVars(result.vars)) {
+          return result;
         }
+        firstMatch ??= result;
       }
     }
+    return firstMatch;
+  }
+
+  const defaultVars =
+    typeof testSuite.defaultTest === 'object' ? testSuite.defaultTest?.vars : undefined;
+  const hasDefaultVars = defaultVars && Object.keys(defaultVars).length > 0;
+  for (const test of testSuite.tests) {
+    // Older saved results can omit default vars.
+    const matchedResult =
+      findMatchingResult(mergeDefaultVars(test, testSuite.defaultTest)) ??
+      (hasDefaultVars ? findMatchingResult(test) : undefined);
 
     if (matchedResult) {
       // Restore runtime variables from the matched result into the test.

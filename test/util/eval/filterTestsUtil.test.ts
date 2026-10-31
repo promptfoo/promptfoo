@@ -1,8 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import Eval from '../../../src/models/eval';
 import { ResultFailureReason } from '../../../src/types/index';
+import { resultIsForTestCase } from '../../../src/util/comparison';
 import { filterTestsByResults } from '../../../src/util/eval/filterTestsUtil';
 import * as util from '../../../src/util/index';
+import { createEvaluateSummaryV2 } from '../../factories/eval';
 
 import type { EvaluateResult, Prompt, ProviderResponse, TestSuite } from '../../../src/types/index';
 
@@ -137,29 +139,14 @@ describe('filterTestsUtil', () => {
     });
 
     describe('large result matching', () => {
-      beforeEach(async () => {
-        const actual =
-          await vi.importActual<typeof import('../../../src/util/index')>(
-            '../../../src/util/index',
-          );
-        vi.mocked(util.resultIsForTestCase).mockImplementation(actual.resultIsForTestCase);
+      beforeEach(() => {
+        vi.mocked(util.resultIsForTestCase).mockImplementation(resultIsForTestCase);
       });
 
       function mockFileResults(results: EvaluateResult[]) {
         vi.mocked(util.readOutput).mockResolvedValue({
           evalId: null,
-          results: {
-            version: 2,
-            timestamp: new Date().toISOString(),
-            results,
-            table: { head: { prompts: [], vars: [] }, body: [] },
-            stats: {
-              successes: 0,
-              failures: 0,
-              errors: results.length,
-              tokenUsage: mockTokenUsage,
-            },
-          },
+          results: createEvaluateSummaryV2({ results }),
           config: {},
           shareableUrl: null,
         });
