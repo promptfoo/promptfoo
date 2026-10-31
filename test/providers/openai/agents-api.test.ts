@@ -674,6 +674,78 @@ describe('OpenAiAgentsApiProvider', () => {
     expect((await gateway.callApi('hi')).output).toBe('42');
   });
 
+  it('redacts credentials in MCP stdio arguments while preserving ordinary diagnostic values', async () => {
+    const filename = 'ledger.csv';
+    const credentials = [
+      'violet-bridge',
+      'amber-willow',
+      'coral-meadow',
+      'maple-stream',
+      'pine-garden',
+      'ruby-blossom',
+    ];
+    vi.mocked(fetchWithRetries).mockResolvedValueOnce(
+      apiError(401, [filename, ...credentials].join(' ')),
+    );
+    const result = await provider({
+      agent: {
+        tools: [
+          {
+            type: 'mcp',
+            server_label: 'ledger',
+            transport: {
+              type: 'stdio',
+              command: '/usr/bin/ledger',
+              cwd: '/workspace',
+              args: [
+                '--file',
+                filename,
+                '--api-key',
+                credentials[0],
+                `--password=${credentials[1]}`,
+                '-H',
+                `Authorization: Bearer ${credentials[2]}`,
+                `SERVICE_API_KEY=${credentials[3]}`,
+                '--header',
+                `X-Honeycomb-Team: ${credentials[4]}`,
+                '-H',
+                `Cookie: auth=${credentials[5]}`,
+              ],
+            },
+          },
+        ],
+      },
+    }).callApi('hi');
+    expect(result.error).toContain(filename);
+    for (const value of credentials) {
+      expect(result.error).not.toContain(value);
+    }
+  });
+
+  it('redacts tokens and cookie values from configured MCP HTTP credentials', async () => {
+    vi.mocked(fetchWithRetries).mockResolvedValueOnce(
+      apiError(401, 'ledger.csv violet-bridge amber-willow'),
+    );
+    const result = await provider({
+      agent: {
+        tools: [
+          {
+            type: 'mcp',
+            server_label: 'ledger',
+            transport: {
+              type: 'http',
+              url: 'https://mcp.example/api',
+              authorization: 'DPoP violet-bridge',
+              headers: { Cookie: 'auth="amber-willow"; count=1' },
+            },
+          },
+        ],
+      },
+    }).callApi('hi');
+    expect(result.error).toContain('ledger.csv');
+    expect(result.error).not.toMatch(/violet-bridge|amber-willow/);
+  });
+
   it('redacts an echoed MCP path credential', async () => {
     vi.mocked(fetchWithRetries).mockResolvedValueOnce(
       apiError(401, 'Rejected auth-supersecretvalue123'),
