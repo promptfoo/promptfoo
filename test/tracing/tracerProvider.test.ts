@@ -1,21 +1,54 @@
+import { ROOT_CONTEXT, TraceFlags, trace } from '@opentelemetry/api';
 import { InMemorySpanExporter, TracerProvider } from '@opentelemetry/sdk-trace';
 import { afterEach, expect, it, vi } from 'vitest';
 import { batchProcessorFromEnv, traceOptionsFromEnv } from '../../src/tracing/tracerProvider';
 
 afterEach(() => vi.unstubAllEnvs());
 
-it('honors sampling ratios before creating spans', async () => {
-  vi.stubEnv('OTEL_TRACES_SAMPLER', 'parentbased_traceidratio');
-  vi.stubEnv('OTEL_TRACES_SAMPLER_ARG', '0');
-  const provider = new TracerProvider(traceOptionsFromEnv());
-  try {
-    const span = provider.getTracer('test').startSpan('unsampled');
-    expect(span.isRecording()).toBe(false);
-    span.end();
-  } finally {
-    await provider.shutdown();
-  }
-});
+it.each([
+  // Sampler, ratio, and recording decisions for a root, sampled parent, and unsampled parent.
+  [undefined, undefined, [true, true, false]],
+  ['parentbased_always_on', undefined, [true, true, false]],
+  ['always_on', undefined, [true, true, true]],
+  ['always_off', undefined, [false, false, false]],
+  ['parentbased_always_off', undefined, [false, true, false]],
+  ['traceidratio', '0', [false, false, false]],
+  ['parentbased_traceidratio', '0', [false, true, false]],
+  ['traceidratio', '1', [true, true, true]],
+  ['traceidratio', '2', [true, true, true]],
+  ['traceidratio', undefined, [true, true, true]],
+  ['unknown', undefined, [true, true, false]],
+] as const)(
+  'applies sampler %s with ratio %s to root and remote child spans',
+  async (name, ratio, expected) => {
+    vi.stubEnv('OTEL_TRACES_SAMPLER', name);
+    vi.stubEnv('OTEL_TRACES_SAMPLER_ARG', ratio);
+    const provider = new TracerProvider(traceOptionsFromEnv());
+    try {
+      const tracer = provider.getTracer('test');
+      const parents = [
+        ROOT_CONTEXT,
+        ...[TraceFlags.SAMPLED, TraceFlags.NONE].map((traceFlags) =>
+          trace.setSpanContext(ROOT_CONTEXT, {
+            traceId: '0123456789abcdef0123456789abcdef',
+            spanId: '0123456789abcdef',
+            isRemote: true,
+            traceFlags,
+          }),
+        ),
+      ];
+      const recording = parents.map((parent) => {
+        const span = tracer.startSpan('test', {}, parent);
+        const sampled = span.isRecording();
+        span.end();
+        return sampled;
+      });
+      expect(recording).toEqual(expected);
+    } finally {
+      await provider.shutdown();
+    }
+  },
+);
 
 it('applies span limits and exports a full batch without waiting for the scheduled flush', async () => {
   vi.stubEnv('OTEL_ATTRIBUTE_COUNT_LIMIT', '1');
