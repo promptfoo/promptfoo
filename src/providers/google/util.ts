@@ -384,14 +384,16 @@ export function removeGoogleFunctionDeclarations(tools: unknown): Tool[] {
 }
 
 /**
- * Current Gemini Flash models ignore sampling parameters and reject penalties
+ * Gemini 4 Argon and current Gemini Flash models ignore sampling parameters and reject penalties
  * and candidate counts. Remove typed and passthrough spellings.
  */
 export function removeDeprecatedGeminiGenerationParams<T>(
   modelName: string,
   generationConfig: T,
 ): T {
+  const isGemini4Argon = modelName.startsWith('gemini-4-argon');
   if (
+    !isGemini4Argon &&
     !GEMINI_FLASH_MODELS.some(({ id }) => modelName.startsWith(id)) &&
     modelName !== 'gemini-flash-latest' &&
     modelName !== 'gemini-flash-lite-latest'
@@ -425,6 +427,7 @@ export function removeDeprecatedGeminiGenerationParams<T>(
   }
 
   if (
+    isGemini4Argon ||
     modelName.startsWith('gemini-3.8-flash') ||
     modelName.startsWith('gemini-3.7-flash') ||
     modelName === 'gemini-flash-latest'
