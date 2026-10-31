@@ -1,9 +1,9 @@
 /**
- * Formats the ASR for display, applying a consistent number of significant digits and appending a percentage sign.
+ * Formats the ASR with a fixed number of fractional digits, without a percentage sign.
  * @param asr - The ASR to format.
- * @param significantDigits - The number of significant digits to display.
+ * @param fractionDigits - The number of digits to display after the decimal point.
  * @returns The formatted ASR.
  */
-export function formatASRForDisplay(asr: number, significantDigits: number = 2): string {
-  return asr.toFixed(significantDigits);
+export function formatASRForDisplay(asr: number, fractionDigits: number = 2): string {
+  return asr.toFixed(fractionDigits);
 }

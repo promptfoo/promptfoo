@@ -3,13 +3,13 @@ import { formatASRForDisplay } from './redteam';
 
 describe('redteam utils', () => {
   describe('formatASRForDisplay', () => {
-    it('should format ASR with default 2 significant digits', () => {
+    it('should format ASR with default 2 fractional digits', () => {
       expect(formatASRForDisplay(12.345)).toBe('12.35');
       expect(formatASRForDisplay(67.891)).toBe('67.89');
       expect(formatASRForDisplay(99.999)).toBe('100.00');
     });
 
-    it('should format ASR with custom significant digits', () => {
+    it('should format ASR with custom fractional digits', () => {
       expect(formatASRForDisplay(12.345, 0)).toBe('12');
       expect(formatASRForDisplay(12.345, 1)).toBe('12.3');
       expect(formatASRForDisplay(12.345, 3)).toBe('12.345');
