@@ -1,12 +1,12 @@
 import OpenAI from 'openai';
 import { InvalidToolCallError } from '../../contracts/providers';
 import logger from '../../logger';
-import { maybeLoadFromExternalFileWithVars } from '../../util/index';
 import { getAjv, safeJsonStringify } from '../../util/json';
 import { isSafeCost, isSafeTokenCount } from '../../util/numeric';
 import { isNonCredentialHeader, looksLikeSecret, sanitizeUrl } from '../../util/sanitizer';
 import { calculateCost } from '../shared';
 import { InvalidToolSchemaError } from '../toolSchemaError';
+import { prepareOpenAiFunctions } from './prepare';
 
 import type { TokenUsage, VarValue } from '../../types/index';
 import type { ProviderConfig } from '../shared';
@@ -1485,6 +1485,13 @@ export function parseChatCompletionJsonOutput(
   }
 }
 
+/** API function definition, including functions that accept no arguments. */
+type OpenAiFunctionDefinition = Pick<
+  OpenAI.FunctionDefinition,
+  'name' | 'description' | 'parameters' | 'strict'
+>;
+
+// Retain the historical tool shape for adapters which prepare this resolved form.
 export interface OpenAiFunction {
   name: string;
   description?: string;
@@ -1502,7 +1509,7 @@ export interface OpenAiTool {
 
 export function validateFunctionCall(
   output: string | object,
-  functions?: OpenAiFunction[],
+  functions?: OpenAiFunctionDefinition[] | string,
   vars?: Record<string, VarValue>,
 ) {
   if (output && typeof output === 'object' && 'function_call' in output) {
@@ -1521,32 +1528,15 @@ export function validateFunctionCall(
   }
 
   // Parse function call and validate it against schema
-  let interpolatedFunctions: OpenAiFunction[];
+  let interpolatedFunctions: ReturnType<typeof prepareOpenAiFunctions>;
   try {
-    interpolatedFunctions = maybeLoadFromExternalFileWithVars(functions, vars) as OpenAiFunction[];
+    interpolatedFunctions = prepareOpenAiFunctions(functions, vars);
   } catch (err) {
     throw new InvalidToolSchemaError((err as Error).message);
-  }
-  if (interpolatedFunctions !== undefined && !Array.isArray(interpolatedFunctions)) {
-    throw new InvalidToolSchemaError('Expected the loaded functions to be an array');
   }
   if (!interpolatedFunctions?.length) {
     throw new InvalidToolSchemaError(
       `Called "${functionCall.name}", but there is no function with that name`,
-    );
-  }
-  if (
-    interpolatedFunctions.some(
-      (definition) =>
-        !definition ||
-        typeof definition !== 'object' ||
-        typeof definition.name !== 'string' ||
-        !definition.name.trim() ||
-        definition.parameters == null,
-    )
-  ) {
-    throw new InvalidToolSchemaError(
-      'Expected each function to have a name and a parameters schema',
     );
   }
   let functionArgs;
@@ -1556,15 +1546,21 @@ export function validateFunctionCall(
     throw new InvalidToolCallError((err as Error).message);
   }
   const functionName = functionCall.name;
-  const functionSchema = interpolatedFunctions?.find((f) => f.name === functionName)?.parameters;
-  if (!functionSchema) {
+  const definition = interpolatedFunctions.find((f) => f.name === functionName);
+  if (!definition) {
     throw new InvalidToolCallError(
       `Called "${functionName}", but there is no function with that name`,
     );
   }
   let validate;
   try {
-    validate = getAjv().compile(functionSchema);
+    validate = getAjv().compile(
+      definition.parameters ?? {
+        type: 'object',
+        properties: {},
+        additionalProperties: false,
+      },
+    );
   } catch (err) {
     throw new InvalidToolSchemaError((err as Error).message);
   }
@@ -1628,10 +1624,12 @@ function transcriptionModelsWithCost(
   return ids.map((id) => ({ id, cost: { ...cost } }));
 }
 
-export function flattenResponseTool(tool: any) {
-  if (tool?.type !== 'function' || !tool.function) {
+export function flattenResponseTool<T>(tool: T): T | Record<string, unknown> {
+  const record = getRecord(tool);
+  const definition = getRecord(record?.function);
+  if (record?.type !== 'function' || !definition) {
     return tool;
   }
-  const { function: functionDefinition, ...rest } = tool;
-  return { ...rest, ...functionDefinition };
+  const { function: _definition, ...rest } = record;
+  return { ...rest, ...definition };
 }

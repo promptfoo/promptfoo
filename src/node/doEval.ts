@@ -27,6 +27,7 @@ import { neverGenerateRemote } from '../redteam/remoteGeneration';
 import { createShareableUrl, isSharingEnabled } from '../share';
 import { generateTable } from '../table';
 import telemetry from '../telemetry';
+import { flushOtel, shutdownOtel } from '../tracing/otelSdk';
 import { EMAIL_OK_STATUS } from '../types/email';
 import { isCliEventSource } from '../types/eventSource';
 import { CommandLineOptionsSchema, MAX_SUGGESTIONS_COUNT, TestSuiteSchema } from '../types/index';
@@ -222,6 +223,39 @@ function watchUntilTerminated(watcher: FSWatcher): Promise<void> {
       process.on(signal, onSignal);
     }
   });
+}
+
+/** How long a CLI eval waits for provider and tracing cleanup after SIGTERM before it ends. */
+export const SIGTERM_CLEANUP_TIMEOUT_MS = 3_000;
+
+async function cleanupOnSigterm(): Promise<void> {
+  // Flush buffered spans first, then keep tracing open for calls that settle during the drain.
+  await flushOtel();
+  try {
+    await providerRegistry.shutdownForProcess();
+  } catch (error) {
+    logger.debug('Provider cleanup failed during SIGTERM', { error });
+  }
+  await shutdownOtel();
+}
+
+/** CLI evals own process termination. Library hosts keep their own SIGTERM policy. */
+export function terminateOnSigterm(): () => void {
+  const onSigterm = async () => {
+    let timer: NodeJS.Timeout | undefined;
+    const timeout = new Promise<void>((resolve) => {
+      timer = setTimeout(resolve, SIGTERM_CLEANUP_TIMEOUT_MS);
+    });
+    try {
+      await Promise.race([cleanupOnSigterm(), timeout]);
+    } finally {
+      clearTimeout(timer);
+      process.removeAllListeners('SIGTERM');
+      process.kill(process.pid, 'SIGTERM');
+    }
+  };
+  process.once('SIGTERM', onSigterm);
+  return () => process.removeListener('SIGTERM', onSigterm);
 }
 
 function resolveSuggestionOptions(
@@ -1238,7 +1272,12 @@ async function doEvalWithEnv(
         const watchPaths = Array.from(
           new Set([...configPaths, ...promptPaths, ...providerPaths, ...varPaths]),
         );
-        const watcher = chokidar.watch(watchPaths, { ignored: /^\./, persistent: true });
+        // Editor saves must produce a change event even when CHOKIDAR_USEPOLLING is set.
+        const watcher = chokidar.watch(watchPaths, {
+          atomic: true,
+          ignored: /^\./,
+          persistent: true,
+        });
         // Library callers own their own process lifetime, so only the CLI blocks here.
         if (isCliInvocation) {
           watchTermination = watchUntilTerminated(watcher);
@@ -1298,7 +1337,7 @@ async function doEvalWithEnv(
     return ret;
   };
 
-  const runEvaluation = (initialization?: boolean) => {
+  const runEvaluation = async (initialization?: boolean) => {
     // Each watch run keeps its inputs, resolved environment and providers through cleanup.
     const runEnv: EnvOverrides = {};
     const runEnvFileOverrides =
@@ -1308,28 +1347,35 @@ async function doEvalWithEnv(
     const runCommand = { ...cmdObj };
     const runDefaults = { ...defaultConfig };
     const runOptions = { ...evaluateOptions };
-    return cliState.withSafeMode(
-      Boolean(runCommand.safeMode || runDefaults.commandLineOptions?.safeMode),
-      () =>
-        cliState.withConfig(undefined, () =>
-          cliState.withBasePath(undefined, () =>
-            cliState.withEnvFileOverrides(runEnvFileOverrides, () =>
-              cliState.withEnv(runEnv, () =>
-                providerRegistry.withEvaluation(() =>
-                  runEvaluationWithEnv(
-                    runEnv,
-                    runEnvFileOverrides,
-                    runCommand,
-                    runDefaults,
-                    runOptions,
-                    initialization,
+    // Ending the process on SIGTERM is CLI policy too; library hosts keep control of their own.
+    // Keep it until the whole run settles, including sharing and output files after evaluate().
+    const removeSigtermHandler = isCliInvocation ? terminateOnSigterm() : undefined;
+    try {
+      return await cliState.withSafeMode(
+        Boolean(runCommand.safeMode || runDefaults.commandLineOptions?.safeMode),
+        () =>
+          cliState.withConfig(undefined, () =>
+            cliState.withBasePath(undefined, () =>
+              cliState.withEnvFileOverrides(runEnvFileOverrides, () =>
+                cliState.withEnv(runEnv, () =>
+                  providerRegistry.withEvaluation(() =>
+                    runEvaluationWithEnv(
+                      runEnv,
+                      runEnvFileOverrides,
+                      runCommand,
+                      runDefaults,
+                      runOptions,
+                      initialization,
+                    ),
                   ),
                 ),
               ),
             ),
           ),
-        ),
-    );
+      );
+    } finally {
+      removeSigtermHandler?.();
+    }
   };
 
   const result = await runEvaluation(true /* initialization */);
