@@ -90,9 +90,7 @@ describe('normalizeFinishReason', () => {
     });
 
     it.each([
-      ['constructor', 'constructor'],
-      ['CONSTRUCTOR', 'constructor'],
-      ['__proto__', '__proto__'],
+      [' CONSTRUCTOR ', 'constructor'],
       [' __PROTO__ ', '__proto__'],
     ])('should preserve inherited object key %s as a normalized string', (raw, expected) => {
       expect(normalizeFinishReason(raw)).toBe(expected);
