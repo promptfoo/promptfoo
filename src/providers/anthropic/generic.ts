@@ -4,6 +4,8 @@ import Anthropic from '@anthropic-ai/sdk';
 import { getEnvOverrides, getEnvString, getProviderEnvString } from '../../envars';
 import { getExplicitProviderEnv } from '../../envOverrides';
 import logger from '../../logger';
+import { isPrivateRangeGuardContextActive } from '../../util/fetch/guardContext';
+import { type FetchOptions, fetchWithProxy } from '../../util/fetch/index';
 import { resolveProviderApiKey } from '../credentials';
 import {
   CLAUDE_CODE_OAUTH_BETA_FEATURES,
@@ -108,6 +110,24 @@ function parseAnthropicCustomHeaders(value: string | undefined): Record<string, 
   }
   return headers;
 }
+
+/**
+ * SDK transport for Anthropic-compatible providers. Outside a guarded server
+ * route this is the plain global fetch, so eval behavior is unchanged.
+ * Inside the private-range guard context it routes through fetchWithProxy,
+ * so an SDK request to a public apiBaseUrl that redirects into private space
+ * is validated hop by hop instead of being followed by the SDK's ordinary
+ * fetch. The check runs at request time, not construction time, so a provider
+ * loaded outside the guard and called inside it is still covered. Subclass
+ * overrides of buildAnthropicClientOptions spread or wrap this fetch (the
+ * Bedrock override wraps it with token injection), so the guard survives
+ * them; the single `new Anthropic` call site in this file is the only SDK
+ * client construction for the whole Anthropic family.
+ */
+const guardedAnthropicFetch: NonNullable<ClientOptions['fetch']> = (input, init) =>
+  isPrivateRangeGuardContextActive()
+    ? fetchWithProxy(input instanceof URL ? input.toString() : input, init as FetchOptions)
+    : globalThis.fetch(input, init);
 
 function setCaseInsensitiveHeaderValue(
   headers: Record<string, string | null>,
@@ -336,6 +356,7 @@ export class AnthropicGenericProvider implements ApiProvider {
       this.buildAnthropicClientOptions({
         apiKey: this.apiKey ?? null,
         authToken: authToken ?? null,
+        fetch: guardedAnthropicFetch,
         baseURL: this.getApiBaseUrl(),
         // Promptfoo owns generation spans; SDK spans would duplicate traced requests.
         openTelemetry: false,

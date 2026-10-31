@@ -292,6 +292,47 @@ describe('fetchWithProxy guarded redirects (PROMPTFOO_BLOCK_PRIVATE_RANGES)', ()
     expect(mockedMonkeyPatchFetch).toHaveBeenCalledTimes(1);
   });
 
+  it('returns the first response untouched for a manual redirect caller', async () => {
+    restoreEnv = mockProcessEnv({ PROMPTFOO_BLOCK_PRIVATE_RANGES: 'true' });
+    mockedMonkeyPatchFetch.mockResolvedValueOnce(
+      redirectResponse('https://public.example.com/next'),
+    );
+
+    const response = await guardedFetch('https://public.example.com/start', {
+      redirect: 'manual',
+    });
+
+    // The caller inspects the Location itself; the guard must not follow it.
+    expect(response.status).toBe(302);
+    expect(response.headers.get('location')).toBe('https://public.example.com/next');
+    expect(mockedMonkeyPatchFetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('rejects a redirect response for an error redirect caller', async () => {
+    restoreEnv = mockProcessEnv({ PROMPTFOO_BLOCK_PRIVATE_RANGES: 'true' });
+    mockedMonkeyPatchFetch.mockResolvedValueOnce(
+      redirectResponse('https://public.example.com/next'),
+    );
+
+    await expect(
+      guardedFetch('https://public.example.com/start', { redirect: 'error' }),
+    ).rejects.toThrow(TypeError);
+    // The redirect destination is never requested.
+    expect(mockedMonkeyPatchFetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('passes a non-redirect response through for an error redirect caller', async () => {
+    restoreEnv = mockProcessEnv({ PROMPTFOO_BLOCK_PRIVATE_RANGES: 'true' });
+    mockedMonkeyPatchFetch.mockResolvedValueOnce(new Response('ok', { status: 200 }));
+
+    const response = await guardedFetch('https://public.example.com/start', {
+      redirect: 'error',
+    });
+
+    expect(response.status).toBe(200);
+    expect(mockedMonkeyPatchFetch).toHaveBeenCalledTimes(1);
+  });
+
   it('keeps Cloud auth injection eligible when the initial request is Cloud-bound', async () => {
     restoreEnv = mockProcessEnv({ PROMPTFOO_BLOCK_PRIVATE_RANGES: 'true' });
     mockedMonkeyPatchFetch
