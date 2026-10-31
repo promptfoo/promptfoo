@@ -2,7 +2,7 @@ import { ExportResultCode } from '@opentelemetry/core';
 import { describe, expect, it, vi } from 'vitest';
 import { setReceivedSpanOwnership, trackLocalOtlpExports } from '../../src/tracing/otlpOwnership';
 import { PROMPTFOO_TRACER_NAME, SPAN_ROLE_ATTRIBUTE } from '../../src/tracing/spanRoles';
-import type { ReadableSpan, SpanExporter } from '@opentelemetry/sdk-trace-node';
+import type { ReadableSpan, SpanExporter } from '@opentelemetry/sdk-trace';
 
 import type { SpanData } from '../../src/tracing/store';
 
