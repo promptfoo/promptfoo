@@ -19,7 +19,11 @@ import type { Query, SQLWrapper } from 'drizzle-orm';
 
 type GuardedStatement = SQLWrapper & { toSQL(): Query };
 type Database = Drizzle & {
-  runGuardedWrite(statement: GuardedStatement, checkWrite: () => void): Promise<void>;
+  runGuardedWrite(
+    statement: GuardedStatement,
+    checkWrite: () => void,
+    deadline?: number,
+  ): Promise<void>;
 };
 
 // Lazy types; the runtime modules below are imported inside getDb() so that a
@@ -382,22 +386,42 @@ function serializeTopLevelOperations(
   }) as typeof db.transaction;
 
   const runGuardedWrite = serializeClientMethod(
-    async (statement: GuardedStatement, checkWrite: () => void) => {
+    async (statement: GuardedStatement, checkWrite: () => void, deadline?: number) => {
       checkWrite();
       const tx = await client.transaction();
+      let restoreTimeout: string | undefined;
       try {
         checkWrite();
         const { sql, params } = statement.toSQL();
         await tx.execute({ sql, args: params as InValue[] });
+        if (deadline !== undefined) {
+          // A rollback-journal reader can block this native call while JS timers are paused.
+          const previous = Number((await tx.execute('PRAGMA busy_timeout')).rows[0].timeout);
+          const remaining = Math.max(0, Math.floor(deadline - Date.now()));
+          if (remaining < previous) {
+            restoreTimeout = `PRAGMA busy_timeout = ${previous}`;
+            await tx.execute(`PRAGMA busy_timeout = ${remaining}`);
+          }
+        }
         checkWrite();
         // libSQL's prepared commit() releases its connection even on SQLITE_BUSY.
         // Keep the transaction open so close() can roll it back before recovery.
-        await tx.executeMultiple('COMMIT');
+        await tx.executeMultiple(restoreTimeout ? `COMMIT; ${restoreTimeout}` : 'COMMIT');
       } catch (error) {
         try {
           tx.close();
         } catch (rollbackError) {
           logger.warn('Could not roll back guarded database write', { error: rollbackError });
+        }
+        // COMMIT may have skipped the trailing PRAGMA. Restore the single serialized
+        // connection before lock recovery reads its settings or another writer can use it.
+        if (restoreTimeout) {
+          try {
+            await rawExecute(restoreTimeout);
+          } catch (restoreError) {
+            client.close();
+            throw restoreError;
+          }
         }
         throw error;
       }
@@ -407,10 +431,10 @@ function serializeTopLevelOperations(
   );
 
   return Object.assign(db, {
-    async runGuardedWrite(statement: GuardedStatement, checkWrite: () => void) {
+    async runGuardedWrite(statement: GuardedStatement, checkWrite: () => void, deadline?: number) {
       const current = activeTransaction.getStore()?.transaction;
       if (!current) {
-        return runGuardedWrite(statement, checkWrite);
+        return runGuardedWrite(statement, checkWrite, deadline);
       }
       // As with nested db.transaction(), the caller owns commit or rollback.
       checkWrite();

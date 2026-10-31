@@ -146,22 +146,26 @@ Promptfoo passes a W3C trace context to providers via the `traceparent` field. U
 
 ```javascript
 const { trace, context, propagation, SpanStatusCode } = require('@opentelemetry/api');
-const { NodeTracerProvider, SimpleSpanProcessor } = require('@opentelemetry/sdk-trace-node');
+const { TracerProvider, SimpleSpanProcessor } = require('@opentelemetry/sdk-trace');
+const { AsyncLocalStorageContextManager } = require('@opentelemetry/context-async-hooks');
+const { W3CTraceContextPropagator } = require('@opentelemetry/core');
 const { OTLPTraceExporter } = require('@opentelemetry/exporter-trace-otlp-http');
 const { resourceFromAttributes } = require('@opentelemetry/resources');
 
-// Initialize tracer (SDK 2.x API - pass spanProcessors to constructor)
-const provider = new NodeTracerProvider({
+// Initialize tracer (SDK 3.x API - pass spanProcessors to constructor)
+const provider = new TracerProvider({
   resource: resourceFromAttributes({ 'service.name': 'my-provider' }),
   spanProcessors: [
-    new SimpleSpanProcessor(
-      new OTLPTraceExporter({
+    new SimpleSpanProcessor({
+      exporter: new OTLPTraceExporter({
         url: 'http://localhost:4318/v1/traces',
       }),
-    ),
+    }),
   ],
 });
-provider.register();
+trace.setGlobalTracerProvider(provider);
+context.setGlobalContextManager(new AsyncLocalStorageContextManager().enable());
+propagation.setGlobalPropagator(new W3CTraceContextPropagator());
 
 const tracer = trace.getTracer('my-provider');
 
@@ -255,7 +259,11 @@ Use trajectory assertions when your spans identify tools, commands, searches, re
 
 The three raw-span assertions accept `value.attributes` to select spans by exact attributes in addition to their name pattern. For example, `attributes: { 'gen_ai.tool.name': 'search' }` limits a count, duration, or error-rate check to the search tool even when every tool emits a span named `execute_tool`. All supplied attributes must match; missing attributes are excluded. See the [attribute-filter examples](/docs/configuration/expected-outputs/deterministic/#trace-span-count) for supported values and presence checks.
 
-Before grading a locally traced row, Promptfoo waits up to 30 seconds for pending exports. If a local write for the row fails or the flush exceeds that budget, built-in trace and trajectory assertions report unavailable evidence. Output assertions still run. The local exporter uses `OTEL_BSP_EXPORT_TIMEOUT` for each batch (30,000 ms by default).
+Before grading a locally traced row, Promptfoo waits up to 30 seconds for queued local spans and SQLite writes. An external OTLP exporter sends batches independently and drains at SDK shutdown. Assertions configured to fetch an external trace still wait for that trace provider. If local export fails or exceeds the grading budget, built-in trace and trajectory assertions report unavailable evidence. Output assertions still run.
+
+The local exporter uses `OTEL_BSP_EXPORT_TIMEOUT` per batch (30,000 ms by default). In SQLite rollback-journal mode, the commit can wait on a lock only for the remaining write budget. Synchronous disk work can still finish after the deadline, and the exporter can report a timeout even when the spans were committed.
+
+For a custom assertion that requires trace evidence, return a failing grade when the spans are missing or empty. [JavaScript example](/docs/configuration/expected-outputs/javascript/#using-trace-data) · [Python example](/docs/configuration/expected-outputs/python/#using-trace-data) · [Ruby example](/docs/configuration/expected-outputs/ruby/#using-trace-data)
 
 Overlapping programmatic evaluations share the first active OpenTelemetry exporter configuration. When an evaluation finishes, it flushes its spans. The last evaluation drains and closes the SDK, and a subsequent evaluation can choose a new configuration.
 
@@ -704,9 +712,9 @@ span.setAttributes({
 Reduce overhead in high-volume scenarios:
 
 ```javascript
-const { TraceIdRatioBasedSampler } = require('@opentelemetry/sdk-trace-node');
+const { TracerProvider, TraceIdRatioBasedSampler } = require('@opentelemetry/sdk-trace');
 
-const provider = new NodeTracerProvider({
+const provider = new TracerProvider({
   sampler: new TraceIdRatioBasedSampler(0.1), // Sample 10% of traces
 });
 ```

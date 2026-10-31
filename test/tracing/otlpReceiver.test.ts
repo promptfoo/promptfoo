@@ -3,7 +3,7 @@ import path from 'path';
 import type { AddressInfo } from 'node:net';
 
 import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http';
-import { NodeTracerProvider, SimpleSpanProcessor } from '@opentelemetry/sdk-trace-node';
+import { TracerProvider, SimpleSpanProcessor } from '@opentelemetry/sdk-trace';
 import protobuf from 'protobufjs';
 import request from 'supertest';
 import {
@@ -205,8 +205,8 @@ describe('OTLPReceiver', () => {
       await once(server, 'listening');
       const { port } = server.address() as AddressInfo;
       const exporter = new OTLPTraceExporter({ url: `http://127.0.0.1:${port}/v1/traces` });
-      const provider = new NodeTracerProvider({
-        spanProcessors: [new SimpleSpanProcessor(trackLocalOtlpExports(exporter))],
+      const provider = new TracerProvider({
+        spanProcessors: [new SimpleSpanProcessor({ exporter: trackLocalOtlpExports(exporter) })],
       });
       const name = 'invoke_agent';
       const attributes = {
@@ -457,7 +457,7 @@ describe('OTLPReceiver', () => {
                         key: 'array.attr',
                         value: {
                           arrayValue: {
-                            values: [{ stringValue: 'a' }, { stringValue: 'b' }],
+                            values: [{ stringValue: 'a' }, { bytesValue: 'AP8=' }, {}],
                           },
                         },
                       },
@@ -485,7 +485,7 @@ describe('OTLPReceiver', () => {
               'int.attr': 123,
               'double.attr': 3.14,
               'bool.attr': true,
-              'array.attr': ['a', 'b'],
+              'array.attr': ['a', 'AP8=', null],
             }),
           }),
         ]),
