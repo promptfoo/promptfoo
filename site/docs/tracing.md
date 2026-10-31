@@ -404,6 +404,12 @@ Promptfoo's OTLP receiver accepts traces in both **JSON** and **protobuf** forma
 
 Protobuf is more efficient for serialization and produces smaller payloads. Python's OpenTelemetry SDK uses protobuf by default.
 
+### Hosted OpenAI turn artifacts
+
+The [OpenAI Agents API](/docs/providers/openai-agents-api/) publishes OTLP artifacts for individual turns. For a trace rooted at `invoke_agent`, the decoder keeps the span hierarchy, timing, status, operation, and safe model and tool identifiers. It derives span names from those identifiers and omits prompts, tool output, diagnostic text, and arbitrary OTLP attributes. Tool arguments are omitted by default.
+
+The decoder withholds the whole artifact if it contains an unsupported operation, mixes trace IDs, or cannot safely retain an identifier. For example, `tracing.otlp.http.redactAttributes: ['gen_ai.tool.name']` withholds an artifact containing a tool call. An identifier that contains a recognized credential pattern or echoes a value protected by a redaction rule also prevents import. A child whose parent has yet to appear can indicate that the API is still publishing the turn.
+
 ### Environment Variables
 
 You can also configure tracing via environment variables:
