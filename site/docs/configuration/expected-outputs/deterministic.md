@@ -1724,7 +1724,7 @@ See [GitHub](https://github.com/promptfoo/promptfoo/tree/main/examples/eval-f-sc
 
 ### Finish Reason
 
-The `finish-reason` assertion checks if the model stopped generating for the expected reason. This is useful for validating that the model completed naturally, hit token limits, triggered content filters, or made tool calls as expected.
+The `finish-reason` assertion compares the provider’s finish reason with the expected value. Known provider aliases map to the standard values below. Other reasons are trimmed and lowercased.
 
 #### Standard Finish Reasons
 
