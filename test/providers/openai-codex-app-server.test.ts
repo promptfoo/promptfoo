@@ -547,6 +547,65 @@ describe('OpenAICodexAppServerProvider', () => {
     await provider.cleanup();
   });
 
+  it.each([undefined, () => undefined])(
+    'inherits provider restrictions when a composed prompt config supplies %s',
+    async (unset) => {
+      const server = createMockAppServer({
+        autoCompleteThread: 'thr_programmatic',
+        threadEnvironments: [],
+      });
+      mocks.spawn.mockReturnValue(server.proc);
+      const sandboxPolicy = {
+        type: 'readOnly',
+        access: { type: 'restricted', readableRoots: ['/workspace/{{folder}}'] },
+        networkAccess: false,
+      };
+      const provider = new OpenAICodexAppServerProvider({
+        config: { environment_access: false, sandbox_policy: sandboxPolicy },
+      });
+      const call = (prompt: string, config: Record<string, unknown>) =>
+        provider.callApi(prompt, {
+          prompt: { raw: prompt, label: 'composed', config },
+          vars: { folder: 'receipts' },
+        });
+      const overrides = { environment_access: unset, sandbox_policy: unset };
+      const image = JSON.stringify([{ type: 'localImage', path: 'receipt.png' }]);
+      expect((await call(image, overrides)).error).toContain('environment_access: false');
+      expect(mocks.spawn).not.toHaveBeenCalled();
+      expect((await call('Read the receipt', overrides)).error).toBeUndefined();
+      const messages = server.messages();
+      expect(messages.find((msg) => msg.method === 'thread/start')?.params.environments).toEqual(
+        [],
+      );
+      expect(messages.find((msg) => msg.method === 'turn/start')?.params).toMatchObject({
+        environments: [],
+        sandboxPolicy: {
+          ...sandboxPolicy,
+          access: { type: 'restricted', readableRoots: ['/workspace/receipts'] },
+        },
+      });
+      await provider.cleanup();
+    },
+  );
+
+  it.each([null, 'false'])(
+    'rejects a supplied non-boolean environment access value %s',
+    async (value) => {
+      const provider = new OpenAICodexAppServerProvider({ config: { environment_access: false } });
+      const result = await provider.callApi('Read the receipt', {
+        prompt: {
+          raw: 'Read the receipt',
+          label: 'invalid',
+          config: { environment_access: value },
+        },
+        vars: {},
+      });
+      expect(result.error).toContain('Invalid OpenAI Codex app-server config: environment_access');
+      expect(mocks.spawn).not.toHaveBeenCalled();
+      await provider.cleanup();
+    },
+  );
+
   it('requires the experimental protocol to disable environment access', () => {
     expect(
       () =>

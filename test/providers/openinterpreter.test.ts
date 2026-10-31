@@ -598,14 +598,26 @@ describe('OpenInterpreterProvider', () => {
     const server = createMockAppServer();
     mocks.spawn.mockReturnValue(server.proc);
     const provider = new OpenInterpreterProvider({
-      config: { environment_access: '{{allowEnv}}', skip_git_repo_check: true } as any,
+      config: {
+        environment_access: '{{allowEnv}}',
+        sandbox_policy: {
+          type: 'readOnly',
+          access: { type: 'restricted', readableRoots: ['/workspace/{{dir}}'] },
+        },
+        skip_git_repo_check: true,
+      } as any,
     });
 
     const pending = provider.callApi('Read the receipt', {
-      vars: { allowEnv },
-      prompt: { raw: 'Read the receipt', label: 'templated environment' },
+      vars: { allowEnv, dir: 'receipts' },
+      prompt: {
+        raw: 'Read the receipt',
+        label: 'templated environment',
+        config: { environment_access: undefined, sandbox_policy: undefined },
+      },
     });
     const { threadStart, turnStart } = await startTurn(server);
+    expect(turnStart.params.sandboxPolicy.access.readableRoots).toEqual(['/workspace/receipts']);
     for (const request of [threadStart, turnStart]) {
       if (allowEnv) {
         expect(request.params).not.toHaveProperty('environments');

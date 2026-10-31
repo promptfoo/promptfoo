@@ -1406,6 +1406,13 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
     // but runtime variable rendering must not recurse into provider methods.
     delete mergedConfig.provider;
     const config = renderVarsInObject(mergedConfig, context?.vars) as CodexAppServerConfig;
+    // A programmatic row can leave a restriction unset, including after template rendering.
+    if (config.environment_access === undefined) {
+      config.environment_access = this.config.environment_access;
+    }
+    if (config.sandbox_policy === undefined && this.config.sandbox_policy) {
+      config.sandbox_policy = renderVarsInObject(this.config.sandbox_policy, context?.vars);
+    }
     const requestedModel =
       typeof config.model === 'string' && config.model ? config.model : undefined;
 
