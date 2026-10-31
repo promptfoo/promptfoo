@@ -612,9 +612,9 @@ Legacy - please use is-valid-function-call instead. This ensures that any JSON L
 
 ### is-valid-openai-tools-call
 
-This ensures that any JSON LLM output adheres to the schema specified in the `tools` configuration of the provider. Learn more about the [OpenAI provider](/docs/providers/openai/#tool-calling).
+Checks the model output against the provider's `tools` schema. Missing, null, or malformed output produces a failed grade. Circular references or bigint values in malformed output do not prevent grading. See [OpenAI tool calling](/docs/providers/openai/#tool-calling).
 
-**MCP Support**: This assertion also validates MCP (Model Context Protocol) tool calls when using OpenAI's Responses API. It will:
+**MCP Support**: This assertion also validates MCP (Model Context Protocol) tool calls when using OpenAI's Responses API. It inspects output text or an object's string `content` field. Errors retain their message even when no tool name is provided. It will:
 
 - Pass if MCP tool calls succeed (output contains "MCP Tool Result")
 - Fail if MCP tool calls fail (output contains "MCP Tool Error")

@@ -778,6 +778,112 @@ describe('OpenAI assertions', () => {
       }
     });
 
+    it.each([{}, { output: undefined }, { output: null as unknown as object }])(
+      'returns a failed assertion for nullish provider output: %j',
+      async (providerResponse) => {
+        const result = await runAssertion({
+          prompt: 'Some prompt',
+          provider: mockProvider,
+          assertion: toolsAssertion,
+          test: {} as AtomicTestCase,
+          providerResponse,
+        });
+
+        expect(result.pass).toBe(false);
+        expect(result.score).toBe(0);
+        expect(result.reason).toContain('OpenAI did not return a valid-looking tools response');
+      },
+    );
+
+    it.each([
+      [
+        'circular object',
+        () => {
+          const output: Record<string, unknown> = {};
+          output.self = output;
+          return output;
+        },
+      ],
+      ['bigint property', () => ({ value: 1n })],
+      [
+        'throwing toJSON',
+        () => ({
+          toJSON() {
+            throw new Error('cannot serialize');
+          },
+        }),
+      ],
+      [
+        'circular tool_calls',
+        () => {
+          const calls: unknown[] = [];
+          calls.push(calls);
+          return { tool_calls: calls };
+        },
+      ],
+    ] as const)('returns a failed grade for %s without rejecting', async (_name, createOutput) => {
+      const output = createOutput();
+      const result = await runAssertion({
+        prompt: 'Some prompt',
+        assertion: toolsAssertion,
+        provider: mockProvider,
+        test: {} as AtomicTestCase,
+        providerResponse: { output },
+      });
+
+      expect(result).toEqual({
+        pass: false,
+        score: 0,
+        reason: expect.stringContaining('OpenAI did not return a valid-looking tools response'),
+        assertion: toolsAssertion,
+      });
+    });
+
+    it.each(['is-valid-openai-tools-call', 'not-is-valid-openai-tools-call'] as const)(
+      'validates native calls without inspecting unrelated metadata: %s',
+      async (type) => {
+        const assertion = { type };
+        const output = {
+          metadata: { value: 1n, note: 'MCP Tool Error: unrelated metadata' },
+          tool_calls: [{ type: 'function', function: createFahrenheitFunctionCall() }],
+        };
+        const result = await runAssertion({
+          prompt: 'Some prompt',
+          assertion,
+          provider: mockProvider,
+          test: {} as AtomicTestCase,
+          providerResponse: { output },
+        });
+
+        expect(result.pass).toBe(type === 'is-valid-openai-tools-call');
+        expect(result.score).toBe(type === 'is-valid-openai-tools-call' ? 1 : 0);
+      },
+    );
+
+    it('does not treat MCP result markers in native arguments as tool results', async () => {
+      const result = await runAssertion({
+        prompt: 'Some prompt',
+        assertion: toolsAssertion,
+        provider: mockProvider,
+        test: {} as AtomicTestCase,
+        providerResponse: {
+          output: [
+            {
+              type: 'function',
+              function: {
+                name: 'getCurrentTemperature',
+                arguments: '{"note":"MCP Tool Result (weather): not a tool result"}',
+              },
+            },
+          ],
+        },
+      });
+
+      expect(result.pass).toBe(false);
+      expect(result.score).toBe(0);
+      expect(result.reason).toContain('does not match schema');
+    });
+
     it('should fail when tool call does not match schema', async () => {
       const toolsOutput = [
         {
@@ -1142,7 +1248,8 @@ describe('OpenAI assertions', () => {
       expect(result).toEqual({
         pass: false,
         score: 0,
-        reason: 'MCP tool call failed for read_wiki_structure: Failed to read structure.',
+        reason:
+          'MCP tool call failed for read_wiki_structure: Failed to read structure.\n        Mixed results from tools.',
         assertion: toolsAssertion,
       });
     });
@@ -1165,10 +1272,74 @@ describe('OpenAI assertions', () => {
       expect(result).toEqual({
         pass: false,
         score: 0,
-        reason: 'MCP tool call failed for unknown: unknown error',
+        reason: 'MCP tool call failed for unknown: General error occurred',
         assertion: toolsAssertion,
       });
     });
+
+    it.each([
+      ['MCP Tool Error: denied', false, 'MCP tool call failed for unknown: denied'],
+      ['MCP Tool Result (ask_question): done', true, 'MCP tool call succeeded for ask_question'],
+    ] as const)(
+      'preserves MCP content with nonserializable metadata: %s',
+      async (content, pass, reason) => {
+        const result = await runAssertion({
+          prompt: 'Some prompt',
+          assertion: toolsAssertion,
+          provider: mockProvider,
+          test: {} as AtomicTestCase,
+          providerResponse: {
+            output: {
+              content,
+              metadata: { value: 1n },
+              tool_calls: [{ type: 'function', function: createFahrenheitFunctionCall() }],
+            },
+          },
+        });
+
+        expect(result).toEqual({ pass, score: pass ? 1 : 0, reason, assertion: toolsAssertion });
+      },
+    );
+
+    it.each([
+      ['MCP Tool Error', 'first line\nsecond line'],
+      ['MCP Tool Error', '\nfirst line\nsecond line'],
+      ['MCP Tool Error (weather)', 'first line\nsecond line'],
+      ['MCP Tool Error (weather)', '\nfirst line\nsecond line'],
+    ])('preserves multiline MCP failure details: %s %j', async (prefix, message) => {
+      const result = await runAssertion({
+        prompt: 'Some prompt',
+        assertion: toolsAssertion,
+        provider: mockProvider,
+        test: {} as AtomicTestCase,
+        providerResponse: { output: `${prefix}: ${message}` },
+      });
+
+      expect(result).toEqual({
+        pass: false,
+        score: 0,
+        reason: `MCP tool call failed for ${prefix.includes('(weather)') ? 'weather' : 'unknown'}: ${message.trim()}`,
+        assertion: toolsAssertion,
+      });
+    });
+
+    it.each(['MCP Tool Result (other): done', 'MCP Tool Error: another failure'])(
+      'keeps later MCP output out of the first failure reason: %s',
+      async (nextOutput) => {
+        const result = await runAssertion({
+          prompt: 'Some prompt',
+          assertion: toolsAssertion,
+          provider: mockProvider,
+          test: {} as AtomicTestCase,
+          providerResponse: {
+            output: `MCP Tool Error (weather): first line\nsecond line\n${nextOutput}`,
+          },
+        });
+
+        expect(result.reason).toBe('MCP tool call failed for weather: first line\nsecond line');
+        expect(result.pass).toBe(false);
+      },
+    );
 
     it('should handle MCP tool result without tool name match', async () => {
       const mcpOutput = 'MCP Tool Result: General success';

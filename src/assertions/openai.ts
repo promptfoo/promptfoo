@@ -16,15 +16,29 @@ export const handleIsValidOpenAiToolsCall = async ({
     toolCallVerdict(assertion, inverse, valid, reason, 'OpenAI tools call');
 
   // Handle MCP tool outputs from Responses API
-  const outputStr = typeof output === 'string' ? output : (JSON.stringify(output) ?? '');
+  let outputStr: string;
+  if (typeof output === 'string') {
+    outputStr = output;
+  } else if (
+    output &&
+    typeof output === 'object' &&
+    'content' in output &&
+    typeof output.content === 'string'
+  ) {
+    outputStr = output.content;
+  } else {
+    outputStr = '';
+  }
 
   // Check for MCP tool results in the output
   if (outputStr.includes('MCP Tool Result') || outputStr.includes('MCP Tool Error')) {
     // For MCP tools, we validate that the tool call was successful
     if (outputStr.includes('MCP Tool Error')) {
-      const errorMatch = outputStr.match(/MCP Tool Error \(([^)]+)\): (.+)/);
-      const toolName = errorMatch ? errorMatch[1] : 'unknown';
-      const errorMsg = errorMatch ? errorMatch[2] : 'unknown error';
+      const errorMatch = outputStr.match(
+        /MCP Tool Error(?: \(([^)]+)\))?:[ \t]*([\s\S]*?)(?=\r?\n[ \t]*MCP Tool (?:Result|Error)(?: \([^)]+\))?:|$)/,
+      );
+      const toolName = errorMatch?.[1] ?? 'unknown';
+      const errorMsg = errorMatch?.[2].trim() || 'unknown error';
       return verdict(false, `MCP tool call failed for ${toolName}: ${errorMsg}`);
     }
 
@@ -51,10 +65,7 @@ export const handleIsValidOpenAiToolsCall = async ({
         typeof toolCall?.function?.arguments !== 'string',
     )
   ) {
-    return verdict(
-      false,
-      `OpenAI did not return a valid-looking tools response: ${JSON.stringify(toolsOutput)}`,
-    );
+    return verdict(false, 'OpenAI did not return a valid-looking tools response');
   }
 
   let tools: unknown = (provider as OpenAiChatCompletionProvider).config?.tools;
