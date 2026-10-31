@@ -212,16 +212,58 @@ export function classifyOpenAiGatewayStreamError(
   }
 }
 
-// Each base64url segment is scanned once, even when the text contains many
-// header prefixes but no JWT signature. A header can be embedded in an identifier.
+function parseJsonObject(text: string) {
+  try {
+    return getRecord(JSON.parse(text));
+  } catch {
+    return undefined;
+  }
+}
+
+function hasEmbeddedJwtHeader(part: string, payload: string): boolean {
+  // A tool prefix can be made of base64url characters too. One of the four
+  // alignments decodes the whole JOSE header, including legal JSON whitespace.
+  if (part.length < 14) {
+    return false; // Even {"alg":""} encodes to 14 base64url characters.
+  }
+  for (let offset = 0; offset < 4; offset++) {
+    const decoded = Buffer.from(part.slice(offset), 'base64url').toString('utf8').trimEnd();
+    const start = decoded.indexOf('{');
+    if (start < 0 || !decoded.endsWith('}')) {
+      continue;
+    }
+    const header = parseJsonObject(decoded.slice(start));
+    if (typeof header?.alg === 'string') {
+      return true;
+    }
+    // A decoded prefix can contain a stray opening brace. Withhold this ambiguous
+    // object suffix if the following segment is itself a JWT claims object.
+    if (
+      !header &&
+      decoded.includes('{', start + 1) &&
+      parseJsonObject(Buffer.from(payload, 'base64url').toString('utf8'))
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
 function hasInlineJwt(value: string): boolean {
-  if (!value.includes('eyJ') || !value.includes('.')) {
+  if (!value.includes('.')) {
     return false;
   }
   for (const [candidate] of value.matchAll(/[A-Za-z0-9_.-]+/g)) {
     const parts = candidate.split('.');
-    if (parts.some((part, i) => parts[i + 1] && parts[i + 2] && part.includes('eyJ'))) {
-      return true;
+    for (let i = 0; i + 2 < parts.length; i++) {
+      const header = parts[i];
+      const payload = parts[i + 1];
+      if (
+        payload &&
+        ((parts[i + 2] && header.includes('eyJ')) || hasEmbeddedJwtHeader(header, payload))
+      ) {
+        return true;
+      }
     }
   }
   return false;
