@@ -60,10 +60,12 @@ describeEvaluator('evaluator metrics and scoring', () => {
     expect(result.success).toBe(false);
     expect(result.failureReason).toBe(ResultFailureReason.ERROR);
     expect(result.gradingResult?.pass).toBe(false);
-    expect(result.error).toBe('Grader provider unavailable');
+    expect(result.gradingResult?.reason).toContain('Grader provider unavailable');
+    expect(result.gradingResult?.reason).not.toContain('Aggregate score');
     expect(result.gradingResult?.componentResults?.[0]).toMatchObject({
       metadata: { graderError: true },
     });
+    expect(result.error).toBe('Grader provider unavailable');
     expect(metrics?.testErrorCount).toBe(1);
     expect(metrics?.testFailCount).toBe(0);
   });

@@ -627,9 +627,15 @@ function applyGradingResult(row: EvaluateResult, checkResult: GradingResult) {
       ? checkResult
       : checkResult.componentResults?.find((result) => result.metadata?.graderError === true);
   const graderError = graderErrorResult !== undefined;
-  const gradingResult = graderError ? { ...checkResult, pass: false } : checkResult;
+  const gradingResult = graderError
+    ? {
+        ...checkResult,
+        pass: false,
+        reason: graderErrorResult.reason || checkResult.reason,
+      }
+    : checkResult;
   if (!checkResult.pass || graderError) {
-    row.error = graderErrorResult?.reason ?? checkResult.reason;
+    row.error = graderErrorResult?.reason || gradingResult.reason;
     row.failureReason = graderError ? ResultFailureReason.ERROR : ResultFailureReason.ASSERT;
   }
   row.success = gradingResult.pass;
