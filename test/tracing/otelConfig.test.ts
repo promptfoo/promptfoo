@@ -27,7 +27,9 @@ describe('otelConfig', () => {
     'rejects invocation-only %s when the external exporter would use process credentials',
     (key) => {
       vi.stubEnv(key, 'host');
-      mockedGetEnvString.mockImplementation((name) => (name === key ? 'suite' : process.env[name]));
+      mockedGetEnvString.mockImplementation((name, fallback) =>
+        name === key ? 'suite' : (process.env[name] ?? fallback),
+      );
       const config = { enabled: true, localExport: true, serviceName: 'test', debug: false };
       expect(getOtelRoutingKey(config)).toBeDefined();
       expect(() => getOtelRoutingKey({ ...config, endpoint: 'https://collector.test' })).toThrow(
