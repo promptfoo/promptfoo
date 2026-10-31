@@ -48,18 +48,10 @@ export async function retryWithDeduplication<T>(
   return allItems;
 }
 
-/**
- * Randomly samples n items from an array.
- * If n is greater than the length of the array, the entire array is returned.
- * Non-positive or NaN counts return no items.
- *
- * @param array The array to sample from
- * @param n The number of items to sample
- * @returns A new array with n randomly sampled items
- */
+/** Sample without replacement. Counts below one or NaN return an empty array. */
 export function sampleArray<T>(array: T[], n: number): T[] {
   logger.debug(`Sampling ${n} items from array of length ${array.length}`);
-  if (n <= 0 || Number.isNaN(n)) {
+  if (!(n >= 1)) {
     return [];
   }
   // Fisher-Yates shuffle.
@@ -68,7 +60,7 @@ export function sampleArray<T>(array: T[], n: number): T[] {
     const j = Math.floor(Math.random() * (i + 1));
     [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
   }
-  return shuffled.slice(0, Math.min(n, array.length));
+  return shuffled.slice(0, n);
 }
 
 /**
