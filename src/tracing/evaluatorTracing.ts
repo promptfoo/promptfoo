@@ -319,6 +319,8 @@ export interface EvaluationTraceContext {
   testCaseId?: string;
   rootSpan?: Span;
   localExport?: ReturnType<typeof trackLocalTrace>;
+  externalTraceCollected?: boolean;
+  setTraceEvidence?: (evidence: 'complete' | 'unavailable') => Promise<void>;
 }
 
 interface TraceExecutionMetadata {
@@ -427,5 +429,6 @@ export async function generateTraceContextIfNeeded(
     evaluationId,
     testCaseId,
     ...(rootSpan && { rootSpan }),
+    setTraceEvidence: (evidence) => traceStore.setTraceEvidence(traceId, evidence),
   };
 }

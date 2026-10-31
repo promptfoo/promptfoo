@@ -117,7 +117,8 @@ export class TraceStore {
           evaluationId: trace.evaluationId,
           testCaseId: trace.testCaseId,
           createdAt: Date.now(),
-          metadata: trace.metadata,
+          // Only the evaluator can confirm that the row's spans were collected.
+          metadata: { ...trace.metadata, promptfooTraceEvidence: 'partial' },
         })
         .onConflictDoNothing({ target: tracesTable.traceId })
         .run();
@@ -306,6 +307,21 @@ export class TraceStore {
     } catch (error) {
       logger.error(`[TraceStore] Failed to get trace: ${error}`);
       throw error;
+    }
+  }
+
+  async setTraceEvidence(traceId: string, evidence: 'complete' | 'unavailable'): Promise<void> {
+    try {
+      await (await this.getDatabase())
+        .update(tracesTable)
+        .set({
+          metadata: sql`json_set(coalesce(${tracesTable.metadata}, '{}'), '$.promptfooTraceEvidence', ${evidence})`,
+        })
+        .where(eq(tracesTable.traceId, traceId))
+        .run();
+    } catch (error) {
+      // New rows remain partial if their collection status cannot be saved.
+      logger.warn('[TraceStore] Could not save trace collection status', { traceId, error });
     }
   }
 
