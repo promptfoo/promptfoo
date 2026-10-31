@@ -33,6 +33,7 @@ describe('ellipsize', () => {
     expect(ellipsize('😀hello', 4)).toBe('...');
     expect(ellipsize('😀hello', 5)).toBe('😀...');
     expect(ellipsize('A😀BCDE', 5)).toBe('A...');
+    expect(ellipsize('A😀BCDE', 5.5)).toBe('A...');
     expect(ellipsize('A😀BCDE', 6)).toBe('A😀...');
   });
 
