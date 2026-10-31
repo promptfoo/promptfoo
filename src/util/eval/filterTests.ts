@@ -237,10 +237,11 @@ export async function filterTests(testSuite: TestSuite, options: FilterOptions):
         const matches = values.some((value) => {
           if (Array.isArray(testValue)) {
             // For array metadata, check if any value includes the search term
-            return testValue.some((v) => v.toString().includes(value));
+            return testValue.some((v) => v != null && v.toString().includes(value));
           }
-          // For single value metadata, check if it includes the search term
-          return testValue !== undefined && testValue.toString().includes(value);
+          // For single value metadata, check if it includes the search term.
+          // A key with no value (e.g. `owner:` in YAML) is null and matches nothing.
+          return testValue != null && testValue.toString().includes(value);
         });
 
         if (!matches) {
