@@ -1,5 +1,5 @@
 import { PROMPTFOO_TRACER_NAME, SPAN_ROLE_ATTRIBUTE } from './spanRoles';
-import type { ReadableSpan, SpanExporter } from '@opentelemetry/sdk-trace-node';
+import type { ReadableSpan, SpanExporter } from '@opentelemetry/sdk-trace';
 
 import type { ParsedTrace } from './store';
 
