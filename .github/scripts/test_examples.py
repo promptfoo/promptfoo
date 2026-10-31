@@ -29,7 +29,7 @@ SCRIPT = Path(__file__).with_name("examples.py")
 class SelectionTests(unittest.TestCase):
     def test_full_run_preserves_every_registered_runtime(self):
         rows = select_examples(None)
-        self.assertEqual(len(rows), 22)
+        self.assertEqual(len(rows), 24)
         self.assertEqual(
             [(row["example"], row["python"]) for row in rows],
             [
@@ -55,8 +55,27 @@ class SelectionTests(unittest.TestCase):
                 ("google-adk", "3.14"),
                 ("google-adk-minimums", "3.10"),
                 ("google-adk-litellm", "3.12"),
+                ("factguard", "3.10"),
+                ("factguard", "3.14"),
             ],
         )
+
+    def test_factguard_changes_select_its_offline_assertion_tests(self):
+        for filename in (
+            "factguard_assert.py",
+            "factguard_assert_test.py",
+            "requirements.txt",
+        ):
+            with self.subTest(filename=filename):
+                self.assertEqual(
+                    select_examples(
+                        [f"examples/factguard-numeric-grounding/{filename}"]
+                    ),
+                    [
+                        {"example": "factguard", "python": "3.10", "node": False},
+                        {"example": "factguard", "python": "3.14", "node": False},
+                    ],
+                )
 
     def test_e2b_changes_select_its_offline_sdk_tests(self):
         for filename in (
