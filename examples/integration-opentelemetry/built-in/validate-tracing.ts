@@ -17,19 +17,20 @@
 
 import {
   InMemorySpanExporter,
-  NodeTracerProvider,
   SimpleSpanProcessor,
-} from '@opentelemetry/sdk-trace-node';
+  TracerProvider,
+} from '@opentelemetry/sdk-trace';
 import { disableCache } from '../../../src/cache';
 import { OpenAiResponsesProvider } from '../../../src/providers/openai/responses';
 import { GenAIAttributes, PromptfooAttributes } from '../../../src/tracing/genaiTracer';
+import { registerTracerProvider } from '../../../src/tracing/tracerProvider';
 
 // Set up OTEL before making provider calls.
 const memoryExporter = new InMemorySpanExporter();
-const tracerProvider = new NodeTracerProvider({
-  spanProcessors: [new SimpleSpanProcessor(memoryExporter)],
+const tracerProvider = new TracerProvider({
+  spanProcessors: [new SimpleSpanProcessor({ exporter: memoryExporter })],
 });
-tracerProvider.register();
+registerTracerProvider(tracerProvider);
 
 interface ValidationResult {
   name: string;

@@ -21,6 +21,7 @@ interface OTLPAttribute {
   key: string;
   value: {
     stringValue?: string;
+    bytesValue?: string;
     intValue?: string;
     doubleValue?: number;
     boolValue?: boolean;
@@ -936,7 +937,8 @@ export class OTLPReceiver {
       }
       return kvMap;
     }
-    return undefined;
+    // OTLP represents a null AnyValue with an empty message.
+    return Object.keys(value).length === 0 ? null : undefined;
   }
 
   private parseAttributes(attributes?: OTLPAttribute[]): Record<string, any> {
@@ -960,6 +962,9 @@ export class OTLPReceiver {
     if (value.stringValue !== undefined) {
       return value.stringValue;
     }
+    if (typeof value.bytesValue === 'string') {
+      return value.bytesValue;
+    }
     if (value.intValue !== undefined) {
       return Number(value.intValue);
     }
@@ -979,7 +984,8 @@ export class OTLPReceiver {
       }
       return kvMap;
     }
-    return undefined;
+    // OTLP represents a null AnyValue with an empty message.
+    return Object.keys(value).length === 0 ? null : undefined;
   }
 
   private convertId(id: string, expectedHexLength: number): string {

@@ -1,8 +1,8 @@
 import {
   InMemorySpanExporter,
-  NodeTracerProvider,
   SimpleSpanProcessor,
-} from '@opentelemetry/sdk-trace-node';
+  TracerProvider,
+} from '@opentelemetry/sdk-trace';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import {
   addActiveSpanRoleAttribute,
@@ -15,19 +15,20 @@ import {
 } from '../../src/tracing/genaiTracer';
 import { SPAN_ROLE_ATTRIBUTE } from '../../src/tracing/spanRoles';
 import { withTestCaseSpan, withTracedProviderCall } from '../../src/tracing/targetTracer';
+import { registerTracerProvider } from '../../src/tracing/tracerProvider';
 
 import type { ApiProvider, CallApiContextParams } from '../../src/types/index';
 
 describe('provider tool execution hierarchy', () => {
-  let tracerProvider: NodeTracerProvider;
+  let tracerProvider: TracerProvider;
   let exporter: InMemorySpanExporter;
 
   beforeAll(() => {
     exporter = new InMemorySpanExporter();
-    tracerProvider = new NodeTracerProvider({
-      spanProcessors: [new SimpleSpanProcessor(exporter)],
+    tracerProvider = new TracerProvider({
+      spanProcessors: [new SimpleSpanProcessor({ exporter: exporter })],
     });
-    tracerProvider.register();
+    registerTracerProvider(tracerProvider);
   });
 
   afterAll(async () => {

@@ -1931,7 +1931,7 @@ describe('OpenAiResponsesProvider request building', () => {
     setOpenAiEnv({ PROMPTFOO_EVAL_TIMEOUT_MS: '100' });
     const originalNow = Date.now;
     let now = originalNow();
-    const timeouts: number[] = [];
+    const timeouts: Array<Parameters<typeof cache.fetchWithCache>[2]> = [];
     const nowSpy = vi.spyOn(Date, 'now').mockImplementation(() => now);
     try {
       vi.mocked(cache.fetchWithCache).mockImplementation(async (url, options, timeout) => {
@@ -2418,7 +2418,7 @@ describe('OpenAiResponsesProvider request building', () => {
     const originalNow = Date.now;
     let now = originalNow();
     const nowSpy = vi.spyOn(Date, 'now').mockImplementation(() => now);
-    const timeouts: number[] = [];
+    const timeouts: Array<Parameters<typeof cache.fetchWithCache>[2]> = [];
     try {
       vi.mocked(cache.fetchWithCache).mockImplementation(async (url, options, timeout) => {
         if (String(url).endsWith('/responses') && options?.method === 'POST') {
