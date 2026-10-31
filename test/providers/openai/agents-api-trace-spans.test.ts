@@ -189,7 +189,7 @@ describe('normalizeHostedTrace', () => {
         s.attributes?.['promptfoo.openai.error_status_complete'],
       ]),
     ).toEqual([
-      ['invoke_agent', 2, 'otlp-v2'],
+      ['invoke_agent', 2, 'otlp-v3'],
       ['execute_tool lookup_order', 1, false],
       ['chat gpt-6-astra', 1, false],
     ]);
@@ -324,6 +324,17 @@ describe('normalizeHostedTrace', () => {
   });
 
   it.each([
+    { stringValue: 'unknown' },
+    { intValue: 99 },
+    { stringValue: '99' },
+    { intValue: 600 },
+    { stringValue: '600' },
+    { stringValue: '' },
+    { stringValue: '  ' },
+    { stringValue: '0x190' },
+    { boolValue: true },
+    { doubleValue: 'Infinity' },
+    { doubleValue: 2.5 },
     { stringValue: '200', intValue: '503' },
     { boolValue: 'false' },
     { intValue: 'bad' },
@@ -331,7 +342,7 @@ describe('normalizeHostedTrace', () => {
     { doubleValue: {} },
     { kvlistValue: { values: [{ key: 'nested', value: { intValue: false } }] } },
   ])(
-    'withholds error coverage for a malformed OTLP value but preserves observed failures',
+    'withholds error coverage for an invalid HTTP status but preserves observed failures',
     (value) => {
       const span = {
         ...tool,
@@ -364,7 +375,11 @@ describe('normalizeHostedTrace', () => {
     ['otel.status_code', { stringValue: 'ERROR' }, 'UNSET', '', 2],
     ['failure', { boolValue: false }, 'UNSET', 'private timeout detail', 2],
     ['error', { boolValue: false }, 'UNSET', '', 0],
-    ['http.status_code', { intValue: '200' }, 'OK', '', 1],
+    ['http.status_code', { intValue: '0' }, 'UNSET', '', 0],
+    ['http.status_code', { stringValue: '100' }, 'UNSET', '', 0],
+    ['http.status_code', { intValue: 599 }, 'OK', '', 2],
+    ['http.status_code', { intValue: '200' }, 'OK', 'private: completed without error', 1],
+    ['http.status_code', { intValue: '503' }, 'OK', 'private: completed without error', 2],
   ] as const)(
     'classifies %s with status %s without persisting diagnostic text',
     (key, value, code, message, expectedCode) => {
@@ -377,6 +392,7 @@ describe('normalizeHostedTrace', () => {
       expect(complete).toBe(true);
       const saved = spans.find((span) => span.name === 'execute_tool lookup_order');
       expect(saved?.statusCode).toBe(expectedCode);
+      expect(saved?.attributes?.['promptfoo.openai.error_status_complete']).toBe('otlp-v3');
       expect(saved?.attributes).not.toHaveProperty(key);
       expect(JSON.stringify(spans)).not.toContain('private');
     },
@@ -385,6 +401,12 @@ describe('normalizeHostedTrace', () => {
   it.each([
     ['API key', 'AIza' + 'x'.repeat(35)],
     ['JWT', 'eyJfixture.payload.signature'],
+    ...['{ "alg":"HS256"}', ' \n{"alg":"HS256"}'].map((header) => [
+      'JWT with header whitespace',
+      [header, '{"sub":"fixture"}', 'fixture-signature']
+        .map((part) => Buffer.from(part).toString('base64url'))
+        .join('.'),
+    ]),
     ...['ghp_', 'gho_', 'ghu_', 'ghs_', 'ghr_', 'github_pat_', 'npm_'].map((prefix) => [
       prefix,
       prefix + 'x'.repeat(36),
