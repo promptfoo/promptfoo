@@ -382,6 +382,7 @@ interface ThreadHandle {
   response: any;
   cacheKey?: string;
   autoResumeKey?: string;
+  environmentAccess: boolean;
   // Fingerprints of acknowledged fields. Null means a change was sent without an acknowledgement.
   stickyTurnSettings?: Record<string, string | null>;
   persistent: boolean;
@@ -2127,6 +2128,12 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
         );
       }
       if (!persistentVariantPrefix) {
+        // Releasing a restricted subscription would let the next borrower resume without it.
+        if (!stale.environmentAccess) {
+          throw new Error(
+            'Cannot change resume settings when borrowing a Codex thread with environment_access: false',
+          );
+        }
         checkBorrowedTurn(stale, stickyTurnSettings);
       }
       this.threads.delete(key);
@@ -2290,12 +2297,16 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
       throw new Error('codex app-server did not return a thread id');
     }
 
-    const handle: ThreadHandle = { connectionKey, threadId, response, cacheKey, persistent: false };
+    const handle: ThreadHandle = {
+      connectionKey,
+      threadId,
+      response,
+      cacheKey,
+      environmentAccess: config.environment_access ?? true,
+      persistent: false,
+    };
     const environments = response?.thread?.environments;
-    if (
-      config.environment_access === false &&
-      (!Array.isArray(environments) || environments.length)
-    ) {
+    if (!handle.environmentAccess && (!Array.isArray(environments) || environments.length)) {
       // Older servers can silently ignore the experimental environments field. Release the
       // subscription before publishing the handle to other callers, preserving caller-owned threads.
       await this.cleanupThreadAfterTurn(connection, handle, {

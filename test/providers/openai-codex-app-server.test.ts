@@ -963,6 +963,41 @@ describe('OpenAICodexAppServerProvider', () => {
     await provider.cleanup();
   });
 
+  it('preserves environment isolation when a one-off row borrows a restricted explicit thread', async () => {
+    const threadId = 'thr_restricted';
+    const server = createMockAppServer({ autoCompleteThread: threadId, threadEnvironments: [] });
+    mocks.spawn.mockReturnValue(server.proc);
+    const provider = new OpenAICodexAppServerProvider({
+      config: { thread_id: threadId, persist_threads: true },
+    });
+    const prompt = 'Read the receipt';
+    const call = (config: Record<string, unknown>) =>
+      provider.callApi(prompt, { prompt: { raw: prompt, label: 'receipt', config }, vars: {} });
+
+    expect((await call({ environment_access: false })).error).toBeUndefined();
+    // Changing the resume instructions must not release the restricted subscription either.
+    for (const overrides of [
+      { environment_access: true },
+      { environment_access: false, developer_instructions: 'Different instructions' },
+      {},
+    ]) {
+      expect((await call({ persist_threads: false, ...overrides })).error).toContain(
+        'environment_access: false',
+      );
+    }
+    expect(
+      (await call({ persist_threads: false, environment_access: false })).error,
+    ).toBeUndefined();
+    expect((await call({ environment_access: false })).error).toBeUndefined();
+    const messages = server.messages();
+    expect(messages.filter((msg) => msg.method === 'thread/resume')).toHaveLength(1);
+    expect(messages.some((msg) => msg.method === 'thread/unsubscribe')).toBe(false);
+    expect(
+      messages.filter((msg) => msg.method === 'turn/start').map((msg) => msg.params.environments),
+    ).toEqual([[], [], []]);
+    await provider.cleanup();
+  });
+
   it('leaves a cached subscription on another process intact during a one-off resume', async () => {
     const threadId = 'thr_two_processes';
     const original = createMockAppServer({ autoCompleteThread: threadId });
