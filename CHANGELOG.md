@@ -4,6 +4,33 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.125.2](https://github.com/promptfoo/promptfoo/compare/0.125.1...0.125.2) (2026-10-31)
+
+
+### Bug Fixes
+
+* **assertions:** dont count tool calls as refusals ([#11957](https://github.com/promptfoo/promptfoo/issues/11957)) ([5ca33a6](https://github.com/promptfoo/promptfoo/commit/5ca33a6c4195248387f199e7ac30352812d6bc5b))
+* **assertions:** fail throwing file:// and package: JavaScript assertions instead of erroring the row ([#11939](https://github.com/promptfoo/promptfoo/issues/11939)) ([8399f76](https://github.com/promptfoo/promptfoo/commit/8399f767d2410f3076109b8ec9670051f603617e))
+* **deps:** update anthropic packages ([#11991](https://github.com/promptfoo/promptfoo/issues/11991)) ([204cf8f](https://github.com/promptfoo/promptfoo/commit/204cf8f2fa5cd92661b041a32a39276e7a83a7d3))
+* **deps:** update anthropic packages ([#12050](https://github.com/promptfoo/promptfoo/issues/12050)) ([44ef3dc](https://github.com/promptfoo/promptfoo/commit/44ef3dc7598b8c3658d92e9c3c76de102038eef5))
+* **deps:** update dependency chokidar to v6 ([#12047](https://github.com/promptfoo/promptfoo/issues/12047)) ([b3cea64](https://github.com/promptfoo/promptfoo/commit/b3cea642ed1188832fe77f50de90e820b2a96cbb))
+* **deps:** update dependency js-yaml to v5.5.0 ([#11994](https://github.com/promptfoo/promptfoo/issues/11994)) ([9a212e7](https://github.com/promptfoo/promptfoo/commit/9a212e71207ab25ddfab1c4dafead8dfd71b458c))
+* **deps:** update direct MSAL dependency to 7.1.0 ([#11970](https://github.com/promptfoo/promptfoo/issues/11970)) ([b4c2404](https://github.com/promptfoo/promptfoo/commit/b4c2404a0dee93dcd4d53a323d6f32f87ee27558))
+* **deps:** update gcp-metadata to v9.2.1 ([#11985](https://github.com/promptfoo/promptfoo/issues/11985)) ([111a782](https://github.com/promptfoo/promptfoo/commit/111a7829be4cd8ca2437db654d1804a68c6566da))
+* **deps:** update google-auth-library to v11.3.1 ([#11990](https://github.com/promptfoo/promptfoo/issues/11990)) ([bfe9709](https://github.com/promptfoo/promptfoo/commit/bfe97095b6d9eabd424021f004b13038068881d3))
+* **eval:** end only CLI evals on SIGTERM, after provider drain and OTel flush ([#11933](https://github.com/promptfoo/promptfoo/issues/11933)) ([b9433a0](https://github.com/promptfoo/promptfoo/commit/b9433a0bbc2dceb660f92c9d63911014a0b11f0d))
+* **examples:** support Google ADK telemetry v2 ([#11956](https://github.com/promptfoo/promptfoo/issues/11956)) ([22df9a5](https://github.com/promptfoo/promptfoo/commit/22df9a560d4185c7584ed9302dc4f3b4ccacf5dd))
+* **providers:** enforce deadlines on buffered HTTP responses ([#12014](https://github.com/promptfoo/promptfoo/issues/12014)) ([5f31095](https://github.com/promptfoo/promptfoo/commit/5f310952972cbab4b56b23c0ae1414842e32c37c))
+* **providers:** scope Snowflake and Cloudera endpoints ([#11900](https://github.com/promptfoo/promptfoo/issues/11900)) ([fbb4b9a](https://github.com/promptfoo/promptfoo/commit/fbb4b9ac76aa861be1331d981bbd42ba2b23de48))
+* **providers:** surface Cohere embedding API errors ([#12025](https://github.com/promptfoo/promptfoo/issues/12025)) ([424ee97](https://github.com/promptfoo/promptfoo/commit/424ee97973cb1c9a74045ec725c5e3d376902356))
+* **providers:** surface Mistral embedding API errors ([#12054](https://github.com/promptfoo/promptfoo/issues/12054)) ([df90acf](https://github.com/promptfoo/promptfoo/commit/df90acf562205a0308963ec147d0cfed73eb4f98))
+* **redteam:** upgrade the CloudSwag example to Anthropic v2 ([#11913](https://github.com/promptfoo/promptfoo/issues/11913)) ([6a5ee15](https://github.com/promptfoo/promptfoo/commit/6a5ee150ce2b1d5c44e88b5038a68f0300f04ece))
+
+
+### Performance Improvements
+
+* **datasets:** read eval config instead of full results file ([#11989](https://github.com/promptfoo/promptfoo/issues/11989)) ([687571b](https://github.com/promptfoo/promptfoo/commit/687571b26f2c1fda89fc4c0ddb64caff01d8a4ab))
+
 ## [0.125.1](https://github.com/promptfoo/promptfoo/compare/0.125.0...0.125.1) (2026-10-25)
 
 ### Bug Fixes
