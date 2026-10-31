@@ -140,7 +140,7 @@ tests:
 - **No filter**: Without the `providers` field, the test runs against all providers (cross-product behavior)
 - **Empty array**: `providers: []` means the test runs on no providers and is effectively skipped
 - **Stacking with providerPromptMap**: When both `providers` and `providerPromptMap` are set, they filter together—a provider must match both to run
-- **CLI `--filter-providers`**: If you use `--filter-providers` to filter providers at the CLI level, validation only sees the filtered providers. Tests referencing providers excluded by `--filter-providers` will fail validation
+- With `--filter-providers`, a test runs only against matching providers. References to configured providers excluded by the filter are valid. An unknown provider reference still fails validation.
 
 ### Filtering Tests by Prompt
 
