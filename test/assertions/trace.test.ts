@@ -588,11 +588,16 @@ describe('trace assertions', () => {
     it('distinguishes an open test-case root from an unknown missing local ancestor', async () => {
       const call = tool('lookup');
       call.attributes!['gen_ai.tool.name'] = 'lookup';
-      const check = (assertion: Assertion, testCaseSpanId?: string, closed = false) =>
+      const check = (
+        assertion: Assertion,
+        testCaseSpanId?: string,
+        closed = false,
+        status = 'imported',
+      ) =>
         runAssertion({
           assertion,
           test: mockTest,
-          providerResponse: { output: 'ok', metadata: { hostedTrace: imported } },
+          providerResponse: { output: 'ok', metadata: { hostedTrace: { ...imported, status } } },
           traceId: mockTraceData.traceId,
           traceData: {
             ...mockTraceData,
@@ -623,6 +628,29 @@ describe('trace assertions', () => {
             ],
           },
         });
+      const countByOwner = (owner: string): Assertion => ({
+        type: 'trace-span-count',
+        value: {
+          pattern: 'execute_tool absent',
+          attributes: { 'promptfoo.openai.hosted_trace': owner },
+          max: 0,
+        },
+      });
+      await expect(
+        check(countByOwner('another-call'), 'missing', true, 'partial'),
+      ).resolves.toMatchObject({ pass: true });
+      await expect(
+        check(countByOwner('wrapper'), 'missing', true, 'partial'),
+      ).resolves.toMatchObject({
+        pass: false,
+        reason: expect.stringContaining('partial'),
+      });
+      await expect(
+        check(countByOwner('another-call'), 'unknown', false, 'partial'),
+      ).resolves.toMatchObject({
+        pass: false,
+        reason: expect.stringContaining('ancestor'),
+      });
       const noError: Assertion = {
         type: 'trace-error-spans',
         value: { pattern: 'execute_tool *', max_count: 0 },

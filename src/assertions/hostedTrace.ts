@@ -235,16 +235,14 @@ function prepareRawTraceAssertion(
         ),
     );
   }
-  // An unattested tree may omit any number of native spans, even when its local parent is present.
-  let possible = partial ? Infinity : 0;
-  let reason = partial
+  // Any omitted native span would receive the same owner when imported.
+  const ownerFilter = filters.find(([key]) => key === 'promptfoo.openai.hosted_trace');
+  const missingNative = partial && (!ownerFilter || ownerFilter[1] === parentId);
+  let possible = missingNative ? Infinity : 0;
+  let reason = missingNative
     ? 'The hosted trace is partial. Additional matching spans may be missing.'
     : undefined;
-  if (
-    !partial &&
-    unresolvedId &&
-    !filters.some(([key, value]) => key === 'promptfoo.openai.hosted_trace' && value === parentId)
-  ) {
+  if (!missingNative && unresolvedId && ownerFilter?.[1] !== parentId) {
     // The open evaluator root accounts for one possible span. A break elsewhere
     // in the local parent chain can hide an unknown number of ancestors.
     if (unresolvedId !== trace.metadata?.testCaseSpanId) {
