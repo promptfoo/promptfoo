@@ -1,4 +1,4 @@
-import { filterTraceSpans, withTraceAttributeFilterContext } from './traceUtils';
+import { filterTraceSpans, traceVerdict, withTraceAttributeFilterContext } from './traceUtils';
 
 import type { AssertionParams, GradingResult } from '../types/index';
 import type { TraceSpan } from '../types/tracing';
@@ -24,6 +24,7 @@ function calculatePercentile(durations: number[], percentile: number): number {
 export const handleTraceSpanDuration = ({
   assertion,
   assertionValueContext,
+  inverse,
 }: AssertionParams): GradingResult => {
   if (!assertionValueContext.trace || !assertionValueContext.trace.spans) {
     throw new Error('No trace data available for trace-span-duration assertion');
@@ -51,15 +52,15 @@ export const handleTraceSpanDuration = ({
   );
 
   if (matchingSpans.length === 0) {
-    return {
-      pass: true,
-      score: 1,
-      reason: withTraceAttributeFilterContext(
+    return traceVerdict(
+      assertion,
+      inverse,
+      true,
+      withTraceAttributeFilterContext(
         `No spans found matching pattern "${pattern}" with complete timing data`,
         attributes,
       ),
-      assertion,
-    };
+    );
   }
 
   const spanDurations = matchingSpans.map((span) => {
@@ -105,10 +106,10 @@ export const handleTraceSpanDuration = ({
     }
   }
 
-  return {
-    pass,
-    score: pass ? 1 : 0,
-    reason: withTraceAttributeFilterContext(reason, attributes),
+  return traceVerdict(
     assertion,
-  };
+    inverse,
+    pass,
+    withTraceAttributeFilterContext(reason, attributes),
+  );
 };

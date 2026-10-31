@@ -497,3 +497,45 @@ describe('handleTraceErrorSpans', () => {
     });
   });
 });
+
+describe('handleTraceErrorSpans with not- prefix', () => {
+  const negatedParams = (value: { max_count?: number; pattern?: string }): AssertionParams => ({
+    ...defaultParams,
+    inverse: true,
+    assertion: { type: 'not-trace-error-spans', value },
+    renderedValue: value,
+    assertionValueContext: {
+      ...defaultParams.assertionValueContext,
+      trace: mockTraceDataWithErrors,
+    },
+  });
+
+  it('passes when error spans exceed the threshold', () => {
+    const result = handleTraceErrorSpans(negatedParams({ max_count: 0 }));
+    expect(result.pass).toBe(true);
+    expect(result.score).toBe(1);
+    expect(result.reason).toContain('Found 4 error spans, expected at most 0');
+  });
+
+  it('fails when matching spans have no errors', () => {
+    const params = negatedParams({ max_count: 0, pattern: '*llm*' });
+    expect(handleTraceErrorSpans(params)).toEqual({
+      pass: false,
+      score: 0,
+      reason:
+        'Expected trace-error-spans not to pass: No errors found in 1 spans matching pattern "*llm*"',
+      assertion: params.assertion,
+    });
+  });
+
+  it('fails when no spans match the pattern', () => {
+    const params = negatedParams({ max_count: 0, pattern: 'nonexistent.*' });
+    expect(handleTraceErrorSpans(params)).toEqual({
+      pass: false,
+      score: 0,
+      reason:
+        'Expected trace-error-spans not to pass: No spans found matching pattern "nonexistent.*"',
+      assertion: params.assertion,
+    });
+  });
+});

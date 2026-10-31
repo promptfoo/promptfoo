@@ -346,3 +346,47 @@ describe('handleTraceSpanCount', () => {
     );
   });
 });
+
+describe('handleTraceSpanCount with not- prefix', () => {
+  const negatedParams = (value: {
+    pattern: string;
+    min?: number;
+    max?: number;
+  }): AssertionParams => ({
+    ...defaultParams,
+    inverse: true,
+    assertion: { type: 'not-trace-span-count', value },
+    renderedValue: value,
+    assertionValueContext: { ...defaultParams.assertionValueContext, trace: mockTraceData },
+  });
+
+  it('fails when the span count satisfies the constraint', () => {
+    const params = negatedParams({ pattern: '*llm*', max: 3 });
+    expect(handleTraceSpanCount(params)).toEqual({
+      pass: false,
+      score: 0,
+      reason:
+        'Expected trace-span-count not to pass: Found 2 spans matching pattern "*llm*" (expected at most 3). Matched spans: llm.completion, llm.chat',
+      assertion: params.assertion,
+    });
+  });
+
+  it('passes when the span count violates the constraint', () => {
+    const params = negatedParams({ pattern: '*llm*', max: 1 });
+    expect(handleTraceSpanCount(params)).toEqual({
+      pass: true,
+      score: 1,
+      reason:
+        'Found 2 spans matching pattern "*llm*", expected at most 1. Matched spans: llm.completion, llm.chat',
+      assertion: params.assertion,
+    });
+  });
+
+  it('still throws when trace data is missing', () => {
+    const params = negatedParams({ pattern: '*llm*', max: 3 });
+    params.assertionValueContext = { ...defaultParams.assertionValueContext };
+    expect(() => handleTraceSpanCount(params)).toThrow(
+      'No trace data available for trace-span-count assertion',
+    );
+  });
+});
