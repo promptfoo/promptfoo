@@ -135,12 +135,9 @@ tests:
       - smart-model # Override default for this test
 ```
 
-**Edge cases:**
-
-- **No filter**: Without the `providers` field, the test runs against all providers (cross-product behavior)
-- **Empty array**: `providers: []` means the test runs on no providers and is effectively skipped
-- **Stacking with providerPromptMap**: When both `providers` and `providerPromptMap` are set, they filter together—a provider must match both to run
-- With `--filter-providers`, a test runs only against matching providers. Tests can reference an excluded provider by its configured ID or label. If a custom module supplies its ID only when loaded, give it a label and reference that label. Unknown references fail validation.
+- Omit `providers` to run the test against all providers. Use `providers: []` to skip it.
+- When both `providers` and `providerPromptMap` are set, a provider must match both.
+- `--filter-providers` runs tests only against selected providers. Excluded IDs and labels remain valid references. If a custom module sets its ID at load time, give it a label and reference that label. Unknown-reference errors list the selected providers and the number excluded.
 
 ### Filtering Tests by Prompt
 
