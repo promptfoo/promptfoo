@@ -388,21 +388,29 @@ function serializeTopLevelOperations(
   const runGuardedWrite = serializeClientMethod(
     async (statement: GuardedStatement, checkWrite: () => void, deadline?: number) => {
       checkWrite();
-      const tx = await client.transaction();
+      // BEGIN IMMEDIATE can block on a writer before we can limit this connection's wait.
+      const tx = await client.transaction(deadline === undefined ? 'write' : 'deferred');
+      let busyTimeout: number | undefined;
       let restoreTimeout: string | undefined;
+      const limitLockWait = async () => {
+        if (deadline === undefined) {
+          return;
+        }
+        busyTimeout ??= Number((await tx.execute('PRAGMA busy_timeout')).rows[0].timeout);
+        const remaining = Math.max(0, Math.floor(deadline - Date.now()));
+        if (remaining < busyTimeout) {
+          restoreTimeout ??= `PRAGMA busy_timeout = ${busyTimeout}`;
+          await tx.execute(`PRAGMA busy_timeout = ${remaining}`);
+          busyTimeout = remaining;
+        }
+      };
       try {
         checkWrite();
         const { sql, params } = statement.toSQL();
+        await limitLockWait();
         await tx.execute({ sql, args: params as InValue[] });
-        if (deadline !== undefined) {
-          // A rollback-journal reader can block this native call while JS timers are paused.
-          const previous = Number((await tx.execute('PRAGMA busy_timeout')).rows[0].timeout);
-          const remaining = Math.max(0, Math.floor(deadline - Date.now()));
-          if (remaining < previous) {
-            restoreTimeout = `PRAGMA busy_timeout = ${previous}`;
-            await tx.execute(`PRAGMA busy_timeout = ${remaining}`);
-          }
-        }
+        // A rollback-journal reader can still block COMMIT after the statement has run.
+        await limitLockWait();
         checkWrite();
         // libSQL's prepared commit() releases its connection even on SQLITE_BUSY.
         // Keep the transaction open so close() can roll it back before recovery.

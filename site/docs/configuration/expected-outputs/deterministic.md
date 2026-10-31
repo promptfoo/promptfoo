@@ -1131,7 +1131,7 @@ The `trace-span-count` assertion counts the number of spans in a trace that matc
 :::note
 Trace assertions require tracing to be enabled in your evaluation. See the [tracing documentation](/docs/tracing/) for setup instructions.
 
-If trace data is not available, the assertion will throw an error rather than failing, indicating that the assertion could not be evaluated.
+If no spans arrive for a traced row, the assertion fails. A partial trace can prove a positive minimum count. An upper bound, including `max: 0`, requires complete collection. [Trace collection and grading](/docs/tracing/#concurrent-programmatic-evaluations)
 :::
 
 For an [OpenAI Agents API](/docs/providers/openai-agents-api#inspect-traces) target that requested hosted spans, use the **Traces** tab to inspect the import. Raw span counts, durations, and error budgets report unavailable evidence.
@@ -1197,7 +1197,7 @@ A span must match both `pattern` and every attribute. Attribute keys are literal
 The `trace-span-duration` assertion checks if span durations in a trace are within acceptable limits. It can check individual spans or percentiles across all matching spans.
 
 :::note
-This assertion requires trace data to be available. If tracing is not enabled or trace data is missing, the assertion will throw an error.
+Enable tracing for this assertion. It fails if collection is incomplete or no spans were saved.
 :::
 
 Example:
@@ -1237,7 +1237,7 @@ The assertion will show the slowest spans when a threshold is exceeded, making i
 The `trace-error-spans` assertion detects error spans in a trace and ensures the error rate is within acceptable limits. It automatically detects errors through status codes, error attributes, and status messages.
 
 :::note
-This assertion requires trace data to be available. If tracing is not enabled or trace data is missing, the assertion will throw an error.
+Enable tracing for this assertion. It fails if collection is incomplete or no spans were saved.
 :::
 
 Example:
