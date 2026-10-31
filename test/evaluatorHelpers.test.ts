@@ -895,6 +895,21 @@ describe('evaluatorHelpers', () => {
       expect(renderedPrompt).toBe(JSON.stringify({ text: '{{x}}' }, null, 2));
     });
 
+    it('should render a whitespace-controlled raw-carrying var to literal text', async () => {
+      // `{%- raw %}` is a valid Nunjucks raw opener. The pre-render only treats a
+      // value as protected when collectRawSpans sees a raw span; anchoring the
+      // scan on '{%' plus whitespace misses the dash form, so the value is
+      // passed through as data and the inner placeholder leaks. This is the
+      // render-level guard for the same dashed-openner case resolveVariables
+      // covers at the scanner level.
+      const renderedPrompt = await renderPrompt(
+        toPrompt('{"text": "{{v}}"}'),
+        { v: '{%- raw %}{{x}}{% endraw %}', x: 'XVAL' },
+        {},
+      );
+      expect(renderedPrompt).toBe(JSON.stringify({ text: '{{x}}' }, null, 2));
+    });
+
     it('should render a concat-expression var exactly like Nunjucks in a JSON prompt', async () => {
       const renderedPrompt = await renderPrompt(
         toPrompt('{"text": "{{v}}"}'),
