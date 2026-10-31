@@ -414,7 +414,9 @@ The [OpenAI Agents API](/docs/providers/openai-agents-api/) publishes OTLP artif
 
 The decoder withholds the whole artifact if it contains an unsupported operation, mixes trace IDs, or cannot safely retain an identifier. For example, `tracing.otlp.http.redactAttributes: ['gen_ai.tool.name']` withholds an artifact containing a tool call. An identifier that contains a recognized credential pattern or echoes a value protected by a redaction rule also prevents import. A child whose parent has yet to appear can indicate that the API is still publishing the turn.
 
-Explicit error signals, such as HTTP 503, count as failures even on a span marked `OK`. Diagnostic text can indicate failure when the span has no status or is marked `UNSET`. An HTTP status must be zero (no status) or an integer from 100 through 599. Other values leave the span's error status unknown unless another signal establishes a failure.
+An `exception` event or a nonempty `error.type` records a failure, even on a span marked `OK`. An exception explicitly marked as handled (`exception.escaped: false`) does not count as a failure. Diagnostic text can indicate failure when the span has no status or is marked `UNSET`. Dropped events and unreadable event names can leave the error status unknown. The decoder never stores event messages or stack traces.
+
+Both `http.response.status_code` and its legacy name `http.status_code` are recognized. Span attributes take precedence over resource defaults. A 5xx response indicates failure. A 4xx response indicates failure on a client span and can be expected on a server span. If the span kind is unknown, the two status attributes disagree about failure, or a status is outside 100–599 (except zero for no status), the error verdict is unknown unless another signal establishes a failure. [OpenTelemetry HTTP span conventions](https://opentelemetry.io/docs/specs/semconv/http/http-spans/#status)
 
 ### Environment Variables
 
