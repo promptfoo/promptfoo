@@ -3,7 +3,7 @@ import logger from '../logger';
 import { runWithAbort, sleepWithAbort } from '../util/time';
 import { getTraceStore, type SpanData, type TraceStore } from './store';
 import type { ExportResult } from '@opentelemetry/core';
-import type { ReadableSpan, SpanExporter } from '@opentelemetry/sdk-trace-node';
+import type { ReadableSpan, SpanExporter } from '@opentelemetry/sdk-trace';
 
 const MISSING_TRACE_RETRY_DELAY_MS = 50;
 
@@ -11,6 +11,22 @@ interface TrackedTrace {
   owners: number;
   pending: Set<Promise<void>>;
   error?: Error;
+}
+
+// Represent byte values the same way as OTLP JSON, including inside arrays and maps.
+function toStoredAttribute(value: unknown): unknown {
+  if (value instanceof Uint8Array) {
+    return Buffer.from(value).toString('base64');
+  }
+  if (Array.isArray(value)) {
+    return value.map(toStoredAttribute);
+  }
+  if (value !== null && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value).map(([key, entry]) => [key, toStoredAttribute(entry)]),
+    );
+  }
+  return value;
 }
 
 /**
@@ -118,14 +134,10 @@ export class LocalSpanExporter implements SpanExporter {
           name: span.name,
           startTime: startTimeMs,
           endTime: endTimeMs,
-          /**
-           * Convert OTEL attributes to a plain object.
-           * OTEL attributes can have various value types that need normalization.
-           */
-          // OTEL attribute values can be string, number, boolean, or arrays of those
-          attributes: Object.assign(
-            {},
-            Object.fromEntries(Object.entries({ ...span.resource.attributes, ...span.attributes })),
+          attributes: Object.fromEntries(
+            Object.entries({ ...span.resource.attributes, ...span.attributes }).map(
+              ([key, value]) => [key, toStoredAttribute(value)],
+            ),
           ),
           statusCode: span.status.code,
           statusMessage: span.status.message,

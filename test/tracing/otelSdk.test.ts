@@ -5,8 +5,8 @@ import type { OtelConfig } from '../../src/tracing/otelConfig';
 
 // Create mock functions that will be used across tests
 let registeredProvider: object | undefined;
-const mockRegister = vi.fn(function (this: object) {
-  registeredProvider ??= this;
+const mockRegister = vi.fn((provider: object) => {
+  registeredProvider ??= provider;
 });
 const mockGetTracerProvider = vi.fn(() => registeredProvider);
 const mockTraceDisable = vi.fn(() => {
@@ -15,7 +15,6 @@ const mockTraceDisable = vi.fn(() => {
 const mockShutdown = vi.fn().mockResolvedValue(undefined);
 const mockForceFlush = vi.fn().mockResolvedValue(undefined);
 const mockLocalFlush = vi.fn().mockResolvedValue(undefined);
-const mockAddSpanProcessor = vi.fn();
 const mockSetLogger = vi.fn();
 
 // Track constructor calls
@@ -25,17 +24,15 @@ let localExporterCalls: unknown[] = [];
 let batchProcessorCalls: unknown[] = [];
 let resourceCalls: unknown[] = [];
 
-vi.mock('@opentelemetry/sdk-trace-node', () => {
+vi.mock('@opentelemetry/sdk-trace', () => {
   // Use a class-like constructor function
   return {
-    NodeTracerProvider: class MockNodeTracerProvider {
+    TracerProvider: class MockTracerProvider {
       constructor(options: unknown) {
         nodeTracerProviderCalls.push(options);
       }
-      register = mockRegister;
       shutdown = mockShutdown;
       forceFlush = mockForceFlush;
-      addSpanProcessor = mockAddSpanProcessor;
     },
     BatchSpanProcessor: class MockBatchSpanProcessor {
       exporter: unknown;
@@ -84,7 +81,11 @@ vi.mock('@opentelemetry/semantic-conventions', () => ({
 vi.mock('@opentelemetry/api', () => ({
   createContextKey: Symbol.for,
   ProxyTracerProvider: class {},
-  trace: { getTracerProvider: mockGetTracerProvider, disable: mockTraceDisable },
+  trace: {
+    getTracerProvider: mockGetTracerProvider,
+    disable: mockTraceDisable,
+    setGlobalTracerProvider: mockRegister,
+  },
   diag: {
     setLogger: mockSetLogger,
   },
@@ -92,6 +93,7 @@ vi.mock('@opentelemetry/api', () => ({
   DiagLogLevel: {
     DEBUG: 0,
   },
+  context: { setGlobalContextManager: vi.fn() },
   propagation: {
     setGlobalPropagator: vi.fn(),
   },
