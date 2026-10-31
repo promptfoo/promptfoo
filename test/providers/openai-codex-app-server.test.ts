@@ -547,6 +547,65 @@ describe('OpenAICodexAppServerProvider', () => {
     await provider.cleanup();
   });
 
+  it.each([undefined, () => undefined])(
+    'inherits provider restrictions when a composed prompt config supplies %s',
+    async (unset) => {
+      const server = createMockAppServer({
+        autoCompleteThread: 'thr_programmatic',
+        threadEnvironments: [],
+      });
+      mocks.spawn.mockReturnValue(server.proc);
+      const sandboxPolicy = {
+        type: 'readOnly',
+        access: { type: 'restricted', readableRoots: ['/workspace/{{folder}}'] },
+        networkAccess: false,
+      };
+      const provider = new OpenAICodexAppServerProvider({
+        config: { environment_access: false, sandbox_policy: sandboxPolicy },
+      });
+      const call = (prompt: string, config: Record<string, unknown>) =>
+        provider.callApi(prompt, {
+          prompt: { raw: prompt, label: 'composed', config },
+          vars: { folder: 'receipts' },
+        });
+      const overrides = { environment_access: unset, sandbox_policy: unset };
+      const image = JSON.stringify([{ type: 'localImage', path: 'receipt.png' }]);
+      expect((await call(image, overrides)).error).toContain('environment_access: false');
+      expect(mocks.spawn).not.toHaveBeenCalled();
+      expect((await call('Read the receipt', overrides)).error).toBeUndefined();
+      const messages = server.messages();
+      expect(messages.find((msg) => msg.method === 'thread/start')?.params.environments).toEqual(
+        [],
+      );
+      expect(messages.find((msg) => msg.method === 'turn/start')?.params).toMatchObject({
+        environments: [],
+        sandboxPolicy: {
+          ...sandboxPolicy,
+          access: { type: 'restricted', readableRoots: ['/workspace/receipts'] },
+        },
+      });
+      await provider.cleanup();
+    },
+  );
+
+  it.each([null, 'false'])(
+    'rejects a supplied non-boolean environment access value %s',
+    async (value) => {
+      const provider = new OpenAICodexAppServerProvider({ config: { environment_access: false } });
+      const result = await provider.callApi('Read the receipt', {
+        prompt: {
+          raw: 'Read the receipt',
+          label: 'invalid',
+          config: { environment_access: value },
+        },
+        vars: {},
+      });
+      expect(result.error).toContain('Invalid OpenAI Codex app-server config: environment_access');
+      expect(mocks.spawn).not.toHaveBeenCalled();
+      await provider.cleanup();
+    },
+  );
+
   it('requires the experimental protocol to disable environment access', () => {
     expect(
       () =>
@@ -960,6 +1019,41 @@ describe('OpenAICodexAppServerProvider', () => {
     expect(methods.filter((method) => method === 'thread/resume')).toHaveLength(1);
     expect(methods.filter((method) => method === 'turn/start')).toHaveLength(3);
     expect(methods).not.toContain('thread/unsubscribe');
+    await provider.cleanup();
+  });
+
+  it('preserves environment isolation when a one-off row borrows a restricted explicit thread', async () => {
+    const threadId = 'thr_restricted';
+    const server = createMockAppServer({ autoCompleteThread: threadId, threadEnvironments: [] });
+    mocks.spawn.mockReturnValue(server.proc);
+    const provider = new OpenAICodexAppServerProvider({
+      config: { thread_id: threadId, persist_threads: true },
+    });
+    const prompt = 'Read the receipt';
+    const call = (config: Record<string, unknown>) =>
+      provider.callApi(prompt, { prompt: { raw: prompt, label: 'receipt', config }, vars: {} });
+
+    expect((await call({ environment_access: false })).error).toBeUndefined();
+    // Changing the resume instructions must not release the restricted subscription either.
+    for (const overrides of [
+      { environment_access: true },
+      { environment_access: false, developer_instructions: 'Different instructions' },
+      {},
+    ]) {
+      expect((await call({ persist_threads: false, ...overrides })).error).toContain(
+        'environment_access: false',
+      );
+    }
+    expect(
+      (await call({ persist_threads: false, environment_access: false })).error,
+    ).toBeUndefined();
+    expect((await call({ environment_access: false })).error).toBeUndefined();
+    const messages = server.messages();
+    expect(messages.filter((msg) => msg.method === 'thread/resume')).toHaveLength(1);
+    expect(messages.some((msg) => msg.method === 'thread/unsubscribe')).toBe(false);
+    expect(
+      messages.filter((msg) => msg.method === 'turn/start').map((msg) => msg.params.environments),
+    ).toEqual([[], [], []]);
     await provider.cleanup();
   });
 

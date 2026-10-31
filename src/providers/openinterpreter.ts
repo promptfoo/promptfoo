@@ -580,6 +580,9 @@ export class OpenInterpreterProvider implements ApiProvider {
       const effectiveConfig = {
         ...renderedBaseConfig,
         ...(promptConfig ?? {}),
+        environment_access:
+          promptConfig?.environment_access ?? renderedBaseConfig.environment_access,
+        sandbox_policy: promptConfig?.sandbox_policy ?? renderedBaseConfig.sandbox_policy,
         cli_config: mergeRecords(renderedBaseConfig.cli_config, promptConfig?.cli_config),
         cli_env: { ...(renderedBaseConfig.cli_env ?? {}), ...(promptConfig?.cli_env ?? {}) },
         server_request_policy: mergeServerRequestPolicy(
