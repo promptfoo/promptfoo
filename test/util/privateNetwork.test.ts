@@ -118,6 +118,18 @@ describe('getCallerSuppliedBaseUrls', () => {
     ]);
   });
 
+  it('unwraps n8n: and a2a: provider ids before returning the inner URL', () => {
+    // createN8nProvider strips the n8n: prefix for the webhook URL and
+    // A2AProvider stores the a2a: remainder as config.url, so the inner
+    // URL is the fetched target in both cases.
+    expect(
+      getCallerSuppliedBaseUrls({ id: 'n8n:http://169.254.169.254/latest/meta-data' }),
+    ).toEqual(['http://169.254.169.254/latest/meta-data']);
+    expect(getCallerSuppliedBaseUrls({ id: 'a2a:http://127.0.0.1:8080' })).toEqual([
+      'http://127.0.0.1:8080',
+    ]);
+  });
+
   it('returns ws:/wss: provider ids for validation', () => {
     expect(getCallerSuppliedBaseUrls({ id: 'ws://169.254.169.254/socket' })).toEqual([
       'ws://169.254.169.254/socket',
@@ -237,6 +249,37 @@ describe('getCallerSuppliedBaseUrls', () => {
     expect(getCallerSuppliedBaseUrls({ id: 'elevenlabs:tts' })).toEqual([
       'https://api.elevenlabs.io/v1',
     ]);
+  });
+
+  it('validates litellm against its local proxy default unless apiBaseUrl wins', () => {
+    // createLiteLLMProvider resolves config.apiBaseUrl, then
+    // LITELLM_API_BASE, then the local proxy default, so with no override
+    // the default is the fetched target.
+    expect(getCallerSuppliedBaseUrls({ id: 'litellm:chat:gpt-4o' })).toEqual([
+      'http://0.0.0.0:4000',
+    ]);
+    expect(
+      getCallerSuppliedBaseUrls({
+        id: 'litellm:chat:gpt-4o',
+        config: { apiBaseUrl: 'https://models.example.com/v1' },
+      }),
+    ).toEqual(['https://models.example.com/v1']);
+  });
+
+  it('validates openclaw against its local gateway default unless gateway_url wins', () => {
+    // resolveGatewayTransportUrl resolves config.gateway_url, then the
+    // gateway env overrides, then the local gateway default, so with no
+    // override the default is the fetched target.
+    expect(getCallerSuppliedBaseUrls({ id: 'openclaw' })).toEqual(['http://127.0.0.1:18789']);
+    expect(getCallerSuppliedBaseUrls({ id: 'openclaw:chat' })).toEqual(['http://127.0.0.1:18789']);
+    // The clawdbot alias routes to the same provider and gateway.
+    expect(getCallerSuppliedBaseUrls({ id: 'clawdbot' })).toEqual(['http://127.0.0.1:18789']);
+    expect(
+      getCallerSuppliedBaseUrls({
+        id: 'openclaw:chat',
+        config: { gateway_url: 'https://gateway.example.com' },
+      }),
+    ).toEqual(['https://gateway.example.com']);
   });
 
   it('keeps the local default when the provider ignores config.apiBaseUrl', () => {
@@ -454,6 +497,45 @@ describe('assertProviderTargetPublic', () => {
     await expect(
       assertProviderTargetPublic({ id: 'webhook:http://169.254.169.254/latest' }),
     ).rejects.toThrow(PrivateRangeBlockedError);
+    expect(mockedLookup).not.toHaveBeenCalled();
+  });
+
+  it('validates the unwrapped target of n8n: and a2a: provider ids', async () => {
+    restoreEnv = mockProcessEnv({ PROMPTFOO_BLOCK_PRIVATE_RANGES: 'true' });
+    await expect(
+      assertProviderTargetPublic({ id: 'n8n:http://169.254.169.254/latest/meta-data' }),
+    ).rejects.toThrow(PrivateRangeBlockedError);
+    await expect(assertProviderTargetPublic({ id: 'a2a:http://127.0.0.1:8080' })).rejects.toThrow(
+      PrivateRangeBlockedError,
+    );
+    expect(mockedLookup).not.toHaveBeenCalled();
+  });
+
+  it('blocks litellm and openclaw local defaults when the flag is set', async () => {
+    restoreEnv = mockProcessEnv({ PROMPTFOO_BLOCK_PRIVATE_RANGES: 'true' });
+    await expect(assertProviderTargetPublic({ id: 'litellm:chat:gpt-4o' })).rejects.toThrow(
+      PrivateRangeBlockedError,
+    );
+    await expect(assertProviderTargetPublic({ id: 'openclaw' })).rejects.toThrow(
+      PrivateRangeBlockedError,
+    );
+    expect(mockedLookup).not.toHaveBeenCalled();
+  });
+
+  it('allows litellm and openclaw when an explicit public endpoint wins', async () => {
+    restoreEnv = mockProcessEnv({ PROMPTFOO_BLOCK_PRIVATE_RANGES: 'true' });
+    await expect(
+      assertProviderTargetPublic({
+        id: 'litellm:chat:gpt-4o',
+        config: { apiBaseUrl: 'https://8.8.8.8/v1' },
+      }),
+    ).resolves.toBeUndefined();
+    await expect(
+      assertProviderTargetPublic({
+        id: 'openclaw:chat',
+        config: { gateway_url: 'http://8.8.8.8:18789' },
+      }),
+    ).resolves.toBeUndefined();
     expect(mockedLookup).not.toHaveBeenCalled();
   });
 
