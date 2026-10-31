@@ -63,6 +63,23 @@ describe('scriptBasedProvider', () => {
       expect(factory.test('file://path/script.py')).toBe(false);
     });
 
+    it('should match file extensions case-insensitively', () => {
+      const factory = createScriptBasedProviderFactory('test', 'py', MockProvider as any);
+
+      expect(factory.test('file://path/provider.PY')).toBe(true);
+      expect(factory.test('file://path/provider.Py:call')).toBe(true);
+      expect(factory.test('file://path/provider.js')).toBe(false);
+    });
+
+    it('should match only the script extension before a selector', () => {
+      const goFactory = createScriptBasedProviderFactory('golang', 'go', MockProvider as any);
+      const pythonFactory = createScriptBasedProviderFactory('python', 'py', MockProvider as any);
+
+      expect(goFactory.test('file://path/provider.py:Class.GO')).toBe(false);
+      expect(goFactory.test('file://path/provider.go:CallApi')).toBe(true);
+      expect(pythonFactory.test('file://path/provider.PY:custom_call')).toBe(true);
+    });
+
     it('should extract script path correctly when using prefix pattern', async () => {
       const factory = createScriptBasedProviderFactory('test', null, MockProvider as any);
       const provider = await factory.create('test:script.js', mockProviderOptions, mockContext);
