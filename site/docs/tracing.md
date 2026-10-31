@@ -263,6 +263,8 @@ Before grading a locally traced row, Promptfoo waits up to 30 seconds for queued
 
 The local exporter uses `OTEL_BSP_EXPORT_TIMEOUT` per batch (30,000 ms by default). In SQLite rollback-journal mode, the commit can wait on a lock only for the remaining write budget. Synchronous disk work can still finish after the deadline, and the exporter can report a timeout even when the spans were committed.
 
+A trace ID can exist before any spans arrive. Built-in trace and trajectory checks fail if no spans were saved by grading time. If the host owns the tracer, local export is disabled, the row was unsampled, or the configured external trace provider returned no spans, the saved spans can still prove a positive minimum count or an observed tool call. Absence, maximum counts, exact sequences, and inverse checks need a completed local export or a successful lookup from the configured trace provider. New trace records retain their collection status when graded later by trace ID. Older records keep their original behavior.
+
 For a custom assertion that requires trace evidence, return a failing grade when the spans are missing or empty. [JavaScript example](/docs/configuration/expected-outputs/javascript/#using-trace-data) · [Python example](/docs/configuration/expected-outputs/python/#using-trace-data) · [Ruby example](/docs/configuration/expected-outputs/ruby/#using-trace-data)
 
 #### Concurrent programmatic evaluations
