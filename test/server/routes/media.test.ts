@@ -95,13 +95,16 @@ describe('Media Routes', () => {
       expect(response.body.error).toContain('type');
     });
 
-    it('should return 400 when path segments resolve to invalid type and filename', async () => {
-      // Express resolves ../../ before routing, so params become { type: 'etc', filename: 'passwd' }
-      const response = await api.get('/api/media/info/audio/../../etc/passwd');
+    it('should return 400 for a path traversal filename before accessing storage', async () => {
+      // Encode separators so the traversal reaches filename validation as one route parameter.
+      const response = await api.get('/api/media/info/audio/..%2F..%2Fetc%2Fpasswd');
 
       expect(response.status).toBe(400);
       expect(response.body).toHaveProperty('error');
       expect(response.body.error).toContain('filename');
+      expect(mockedMediaExists).not.toHaveBeenCalled();
+      expect(mockedGetMediaStorage).not.toHaveBeenCalled();
+      expect(mockedRetrieveMedia).not.toHaveBeenCalled();
     });
 
     it('should return 400 for filename without hex prefix', async () => {

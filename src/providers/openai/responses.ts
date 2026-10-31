@@ -15,11 +15,7 @@ import {
   isAbortError,
 } from '../../util/fetch/errors';
 import { fetchWithRetries } from '../../util/fetch/index';
-import {
-  maybeLoadResponseFormatFromExternalFile,
-  maybeLoadToolsFromExternalFile,
-  renderVarsInObject,
-} from '../../util/index';
+import { renderVarsInObject } from '../../util/index';
 import { isSecretField, sanitizeUrl } from '../../util/sanitizer';
 import { sleep } from '../../util/time';
 import { FunctionCallbackHandler } from '../functionCallbackUtils';
@@ -47,6 +43,12 @@ import {
   isGpt6Model,
 } from './gpt6';
 import {
+  type PreparedOpenAiResponseFormat,
+  prepareOpenAiReasoning,
+  prepareOpenAiResponseFormat,
+  prepareOpenAiTools,
+} from './prepare';
+import {
   appendOpenAiApiPath,
   assertOpenAiApiModel,
   classifyOpenAiGatewayStreamError,
@@ -66,14 +68,15 @@ import {
   RETIRED_OPENAI_MODEL_IDS,
 } from './util';
 
-import type { EnvOverrides } from '../../types/env';
 import type {
   CallApiContextParams,
   CallApiOptionsParams,
   ProviderResponse,
 } from '../../types/index';
+import type { ProviderOptions } from '../../types/providers';
 import type { FetchOptions } from '../../util/fetch/types';
-import type { OpenAiCompletionOptions, ReasoningEffort } from './types';
+import type { OpenAiBillingConfig, OpenAiRequestBody, OpenAiResponsesConfig } from './config';
+import type { ReasoningEffort } from './types';
 
 // OpenAI SDK has APIError class for exceptions, but not a type for error responses
 // in the JSON body. This interface represents the structure when the API returns
@@ -800,11 +803,11 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     'gpt-5-codex-mini',
   ].filter((model) => !RETIRED_OPENAI_MODEL_IDS.has(model));
 
-  config: OpenAiCompletionOptions;
+  config: OpenAiResponsesConfig;
 
   constructor(
     modelName: string,
-    options: { config?: OpenAiCompletionOptions; id?: string; env?: EnvOverrides } = {},
+    options: Pick<ProviderOptions<OpenAiResponsesConfig>, 'config' | 'id' | 'env'> = {},
   ) {
     super(modelName, options);
     this.config = options.config ? { ...options.config } : {};
@@ -838,14 +841,14 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       : !this.isReasoningCapabilityModel(modelName);
   }
 
-  private getEffectiveModelName(config: OpenAiCompletionOptions): string {
+  private getEffectiveModelName(config: OpenAiBillingConfig): string {
     const passthroughModel = (config.passthrough as { model?: unknown } | undefined)?.model;
     return typeof passthroughModel === 'string'
       ? this.normalizeCapabilityModelName(passthroughModel)
       : this.getCapabilityModelName();
   }
 
-  protected getBillingModelName(config: OpenAiCompletionOptions): string {
+  protected getBillingModelName(config: OpenAiBillingConfig): string {
     return this.getEffectiveModelName(config);
   }
 
@@ -853,7 +856,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     return this.getGenAISystem() === 'openai' && isCustomOpenAiEndpoint(this.getApiUrl());
   }
 
-  protected getBillingUsage(data: any, _config: OpenAiCompletionOptions): any {
+  protected getBillingUsage(data: any, _config: OpenAiBillingConfig): any {
     return data.usage;
   }
 
@@ -864,7 +867,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
   protected applyBilling(
     result: ProviderResponse,
     data: any,
-    config: OpenAiCompletionOptions,
+    config: OpenAiBillingConfig,
     cached: boolean,
   ): ProviderResponse {
     if (this.getGenAISystem() === 'openai' && isOpenRouterEndpoint(this.getApiUrl())) {
@@ -951,7 +954,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
 
   private getPolicyResponse(
     data: OpenAIResponsesResponse,
-    config: OpenAiCompletionOptions,
+    config: OpenAiBillingConfig & { response_format?: PreparedOpenAiResponseFormat },
     cached: boolean,
     status: number,
     statusText: string,
@@ -992,7 +995,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     );
   }
 
-  private getDeploymentCapabilities(config: OpenAiCompletionOptions) {
+  private getDeploymentCapabilities(config: OpenAiResponsesConfig) {
     const effectiveModelName = this.getEffectiveModelName(config);
     const capabilityModelName = effectiveModelName.replace(/(^|\/)ft:/, '$1');
     const isEffectiveGpt5Model =
@@ -1040,13 +1043,14 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
   async getOpenAiBody(
     prompt: string,
     context?: CallApiContextParams,
-    _callApiOptions?: CallApiOptionsParams,
+    callApiOptions?: CallApiOptionsParams,
   ) {
     const promptConfig = context?.prompt?.config;
-    const config = {
-      ...this.config,
-      ...promptConfig,
-    };
+    const mergedConfig: OpenAiResponsesConfig = { ...this.config, ...promptConfig };
+    const passthrough: Record<string, unknown> | undefined = mergedConfig.passthrough
+      ? { ...mergedConfig.passthrough }
+      : undefined;
+    const config = { ...mergedConfig, passthrough };
     const effectiveServiceTier = getOpenAiEffectiveServiceTier(this.config, promptConfig);
 
     // Chat-format content parts are translated to their Responses equivalents so multimodal
@@ -1084,15 +1088,15 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
 
     const gpt6Reasoning = isGPT6Model
       ? getGpt6ResponsesReasoning(this.config, context?.prompt?.config, (value) =>
-          renderVarsInObject(value, context?.vars),
+          renderVarsInObject(value, context?.vars ?? {}),
         )
       : undefined;
     const renderedReasoning = isGPT6Model
-      ? (gpt6Reasoning as typeof config.reasoning)
-      : (renderVarsInObject(config.reasoning, context?.vars) as typeof config.reasoning);
+      ? gpt6Reasoning
+      : prepareOpenAiReasoning(config.reasoning, context?.vars);
     const renderedReasoningEffort =
       isReasoningModel && !isGPT6Model
-        ? (renderVarsInObject(config.reasoning_effort, context?.vars) as ReasoningEffort)
+        ? (renderVarsInObject(config.reasoning_effort, context?.vars ?? {}) as ReasoningEffort)
         : undefined;
     const effectiveReasoningEffort = renderedReasoning?.effort ?? renderedReasoningEffort;
     const hasAzureReasoningEffort =
@@ -1115,10 +1119,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     const instructions = config.instructions;
 
     // Load response_format from external file if needed (handles nested schema loading)
-    const responseFormat = maybeLoadResponseFormatFromExternalFile(
-      config.response_format,
-      context?.vars,
-    );
+    const responseFormat = prepareOpenAiResponseFormat(config.response_format, context?.vars);
 
     let textFormat;
     if (responseFormat) {
@@ -1158,21 +1159,17 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
 
     // Load tools from external file if needed
     // Store in variable so we can include in both body and returned config
-    const loadedTools = config.tools
-      ? await maybeLoadToolsFromExternalFile(config.tools, context?.vars)
-      : undefined;
+    const loadedTools = await prepareOpenAiTools(
+      config.tools,
+      context?.vars,
+      callApiOptions?.abortSignal,
+    );
     const responsesTools = Array.isArray(loadedTools)
       ? loadedTools.map(flattenResponseTool)
       : loadedTools;
-    const toolChoice =
-      config.tool_choice &&
-      typeof config.tool_choice === 'object' &&
-      config.tool_choice.type === 'function' &&
-      config.tool_choice.function?.name
-        ? { type: 'function', name: config.tool_choice.function.name }
-        : config.tool_choice;
+    const toolChoice = flattenResponseTool(config.tool_choice);
 
-    const body = {
+    const bodyFields = {
       model: this.modelName,
       input,
       ...(config.access_programs === undefined ? {} : { access_programs: config.access_programs }),
@@ -1220,6 +1217,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
             service_tier: normalizeOpenAiServiceTierForWire(effectiveServiceTier, this.getApiUrl()),
           }),
     };
+    const body: OpenAiRequestBody<typeof bodyFields> = bodyFields;
     // A nullable prompt tier clears an inherited provider tier. Preserve an
     // explicitly nullable passthrough field, but never leave a stale string on
     // the wire while the effective billing tier is null.
