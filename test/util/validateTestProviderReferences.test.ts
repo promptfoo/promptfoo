@@ -98,7 +98,13 @@ describe('validateTestProviderReferences', () => {
     const id =
       'webhook:https://example-private-user:example-private-pass@host.test/example-private-route';
     const label = 'https://host.test/opaque-example-private-path?token=example-private-token';
-    const available = [{ id, label }];
+    const available = [
+      { id, label },
+      {
+        id: 'exec:run --key=example-private-argv',
+        label: 'sk-proj-example-private-fixture-1234567890',
+      },
+    ];
     expect(() =>
       validateTestProviderReferences([{ providers: [id, label] }], available),
     ).not.toThrow();
@@ -111,14 +117,19 @@ describe('validateTestProviderReferences', () => {
     expect(validate).not.toThrow(/example-private/);
   });
 
-  it('validates excluded provider IDs and labels with the same wildcard rules', () => {
-    const available = [...providers, { id: 'gemini:flash', label: 'fast' }];
-    expect(() =>
-      validateTestProviderReferences([{ providers: ['gemini:*', 'fast'] }], available),
-    ).not.toThrow();
-    expect(() => validateTestProviderReferences([{ providers: ['typo'] }], available)).toThrow(
-      /typo/,
-    );
+  it('matches excluded IDs and labels without listing them in diagnostics', () => {
+    const excluded = [{ id: 'gemini:private-endpoint', label: 'private-label' }];
+    const validate = (refs: string[]) =>
+      validateTestProviderReferences(
+        [{ providers: refs }],
+        providers,
+        undefined,
+        undefined,
+        excluded,
+      );
+    expect(() => validate(['gemini:*', 'private-label'])).not.toThrow();
+    expect(() => validate(['typo'])).toThrow(/Available providers:.*Excluded by filter: 1/);
+    expect(() => validate(['typo'])).not.toThrow(/private/);
   });
 
   describe('scenario validation', () => {

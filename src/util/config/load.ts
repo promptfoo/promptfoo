@@ -15,7 +15,11 @@ import { getEnvBool, isCI, isTemplateProcessEnvDisabled } from '../../envars';
 import { clearCjsModuleCache, ensureTypescriptLoader, importModule } from '../../esm';
 import logger from '../../logger';
 import { readPrompts } from '../../prompts/index';
-import { loadApiProviders, resolveProviderConfigs } from '../../providers/index';
+import {
+  loadApiProviders,
+  renderProviderIdentity,
+  resolveProviderConfigs,
+} from '../../providers/index';
 import telemetry from '../../telemetry';
 import {
   type CommandLineOptions,
@@ -163,7 +167,7 @@ export function resolveCliProvidersWithConfig(
   // re-calling getProviderIdAndLabel on every find() iteration.
   const indexed = configProviders.map((cp, i) => ({
     provider: cp,
-    ...getProviderIdAndLabel(cp, i, env),
+    ...getProviderIdAndLabel(cp, i, (ref) => renderProviderIdentity(ref, env)),
   }));
 
   return cliProviders.map((cliProvider) => {
@@ -1175,7 +1179,7 @@ async function resolveLoadedConfig(
   const excludedProviders: ProviderIdentity[] = [];
   const filteredProviderConfigs = filterProviderConfigs(cliFilteredProviderConfigs, filterOption, {
     excluded: excludedProviders,
-    env: runtimeEnv,
+    renderIdentity: (ref) => renderProviderIdentity(ref, runtimeEnv),
   });
 
   if (
@@ -1337,9 +1341,10 @@ async function resolveLoadedConfig(
   // Excluded providers remain valid references but are never instantiated.
   validateTestProviderReferences(
     testSuite.tests || [],
-    [...testSuite.providers, ...excludedProviders],
+    testSuite.providers,
     typeof testSuite.defaultTest === 'object' ? testSuite.defaultTest : undefined,
     testSuite.scenarios,
+    excludedProviders,
   );
 
   // Validate that all prompt references in tests exist

@@ -1,6 +1,6 @@
 import { isApiProvider, isProviderOptions, type TestCase } from '../types';
 import { canonicalizeProviderId, normalizeProviderRef } from './providerRef';
-import { sanitizeUrl } from './sanitizer';
+import { looksLikeSecret, REDACTED, sanitizeUrl } from './sanitizer';
 
 import type { ApiProvider } from '../types/providers';
 
@@ -70,8 +70,11 @@ export function getProviderDescription(provider: ProviderIdentity): string {
 export function getProviderDescriptionForLog(provider: ProviderIdentity | string): string {
   function display(ref: string): string {
     const endpoint = ref.match(/(?:https?|wss?):\/\/.*/i)?.[0];
-    return endpoint
-      ? (URL.parse(endpoint)?.origin ?? '[redacted endpoint]')
+    if (endpoint) {
+      return URL.parse(endpoint)?.origin ?? REDACTED;
+    }
+    return ref.startsWith('exec:') || looksLikeSecret(ref)
+      ? REDACTED
       : sanitizeProviderIdForLog(ref);
   }
   return typeof provider === 'string'
