@@ -7,6 +7,7 @@ import { neverGenerateRemote } from '../../src/redteam/remoteGeneration';
 import { doRemoteGrading } from '../../src/remoteGrading';
 import { ResultFailureReason } from '../../src/types/index';
 import { fetchWithProxy } from '../../src/util/fetch/index';
+import { createEvaluateResult } from '../factories/eval';
 import { createTestOutput } from '../factories/literalFixtures';
 import { mockGlobal } from '../util/utils';
 
@@ -419,42 +420,50 @@ describe('Provider Test Functions', () => {
     });
 
     describe('failed connectivity tests', () => {
-      it.each(['evaluation', 'provider response'] as const)(
-        'does not report success when the %s error is missed by remote analysis',
-        async (errorSource) => {
+      it.each([
+        { offline: false, error: 'Connection timeout', response: {} },
+        { offline: false, error: '', response: { error: 'Connection timeout' } },
+        { offline: true, error: null, response: { error: 'Connection timeout' } },
+      ])(
+        'keeps a local provider error when offline=$offline',
+        async ({ offline, error, response }) => {
           mockSummary.results = [
-            {
-              promptIdx: 0,
-              testIdx: 0,
-              testCase: {} as any,
-              promptId: 'test-prompt-id',
-              provider: { id: 'test-provider' },
-              prompt: { raw: 'Hello World!', label: 'Connectivity Test' },
-              vars: { sessionId: 'test-uuid-1234' },
-              response: {
-                error: errorSource === 'provider response' ? 'Connection timeout' : undefined,
-              },
-              error: errorSource === 'evaluation' ? 'Connection timeout' : null,
-              failureReason: ResultFailureReason.ERROR,
+            createEvaluateResult({
+              error,
+              response,
               success: false,
-              score: 0,
-              latencyMs: 5000,
-              gradingResult: null,
-              namedScores: {},
-            },
+              failureReason: ResultFailureReason.ERROR,
+            }),
           ];
+          vi.mocked(neverGenerateRemote).mockReturnValue(offline);
           (fetchWithProxy as Mock).mockResolvedValue({
             ok: true,
-            json: vi.fn().mockResolvedValue(createSuccessfulProbeResult()),
+            json: async () => createSuccessfulProbeResult(),
           });
-
-          const result = await testProviderConnectivity({ provider: mockProvider });
-
-          expect(result.success).toBe(false);
-          expect(result.error).toBe('Connection timeout');
-          expect(result.message).toContain('Connection timeout');
+          expect(await testProviderConnectivity({ provider: mockProvider })).toMatchObject({
+            success: false,
+            error: 'Connection timeout',
+            message: 'Provider returned error: Connection timeout',
+          });
+          if (!offline) {
+            expect(JSON.parse((fetchWithProxy as Mock).mock.calls[0][1].body).error).toBe(
+              'Connection timeout',
+            );
+          }
         },
       );
+
+      it('reports a requested configuration change without a success message', async () => {
+        mockSummary.results = [createEvaluateResult()];
+        (fetchWithProxy as Mock).mockResolvedValue({
+          ok: true,
+          json: async () => ({ changes_needed: true }),
+        });
+        expect(await testProviderConnectivity({ provider: mockProvider })).toMatchObject({
+          success: false,
+          message: 'The provider configuration needs changes.',
+        });
+      });
 
       it('should handle provider call failure', async () => {
         const mockResult: EvaluateResult = {
