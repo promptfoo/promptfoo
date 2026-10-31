@@ -12,7 +12,7 @@
  */
 
 import { fetchWithCache } from '../cache';
-import { getEnvString } from '../envars';
+import { getEnvString, getProviderEnvString } from '../envars';
 import logger from '../logger';
 import { formatRateLimitErrorMessage, HttpRateLimitError } from '../util/fetch/errors';
 import { rateLimitTimingFromHeaders } from '../util/fetch/index';
@@ -189,7 +189,11 @@ export class TypeSafeProvider implements ApiProvider {
   }
 
   getApiKey(): string | undefined {
-    return this.config.apiKey || this.env?.TYPESAFE_API_KEY || getEnvString('TYPESAFE_API_KEY');
+    return (
+      this.config.apiKey ||
+      getProviderEnvString(this.env, 'TYPESAFE_API_KEY') ||
+      getEnvString('TYPESAFE_API_KEY')
+    );
   }
 
   async callApi(
