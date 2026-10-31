@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { getOtelConfigFromEnv } from '../../src/tracing/otelConfig';
+import { getOtelConfigFromEnv, getOtelRoutingKey } from '../../src/tracing/otelConfig';
 
 // Mock envars module
 vi.mock('../../src/envars', () => ({
@@ -22,6 +22,19 @@ describe('otelConfig', () => {
     vi.resetAllMocks();
     vi.unstubAllEnvs();
   });
+
+  it.each(['OTEL_EXPORTER_OTLP_HEADERS', 'OTEL_EXPORTER_OTLP_TRACES_CLIENT_KEY'])(
+    'rejects invocation-only %s when the external exporter would use process credentials',
+    (key) => {
+      vi.stubEnv(key, 'host');
+      mockedGetEnvString.mockImplementation((name) => (name === key ? 'suite' : process.env[name]));
+      const config = { enabled: true, localExport: true, serviceName: 'test', debug: false };
+      expect(getOtelRoutingKey(config)).toBeDefined();
+      expect(() => getOtelRoutingKey({ ...config, endpoint: 'https://collector.test' })).toThrow(
+        'Set OTLP credentials and trace sampling in the process environment',
+      );
+    },
+  );
 
   describe('getOtelConfigFromEnv', () => {
     it('should return default config when no env vars are set', () => {

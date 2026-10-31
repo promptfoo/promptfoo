@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto';
+
 import { getEnvBool, getEnvOverrides, getEnvString } from '../envars';
 
 /**
@@ -52,6 +54,42 @@ export function getOtelConfigFromEnv(): OtelConfig {
     localExport: getEnvBool('PROMPTFOO_OTEL_LOCAL_EXPORT', true),
     debug: getEnvBool('PROMPTFOO_OTEL_DEBUG', false),
   };
+}
+
+// The SDK reads these settings directly from the process when it creates its sampler and exporter.
+function getProcessTraceSetting(key: string): string | undefined {
+  const value = process.env[key];
+  if (getEnvString(key) !== value) {
+    throw new Error(
+      'Set OTLP credentials and trace sampling in the process environment. The OpenTelemetry SDK cannot apply evaluation-specific overrides for these settings.',
+    );
+  }
+  return value?.trim() ? value : undefined;
+}
+
+export function getOtelRoutingKey(config: OtelConfig): string | undefined {
+  const sampler = getProcessTraceSetting('OTEL_TRACES_SAMPLER') ?? 'parentbased_always_on';
+  const settings = [config.serviceName, config.localExport, config.endpoint, sampler];
+  if (sampler === 'traceidratio' || sampler === 'parentbased_traceidratio') {
+    settings.push(getProcessTraceSetting('OTEL_TRACES_SAMPLER_ARG'));
+  }
+  let usesTlsFiles = false;
+  if (config.endpoint) {
+    for (const prefix of ['OTEL_EXPORTER_OTLP_', 'OTEL_EXPORTER_OTLP_TRACES_']) {
+      for (const suffix of ['HEADERS', 'CERTIFICATE', 'CLIENT_CERTIFICATE', 'CLIENT_KEY']) {
+        const value = getProcessTraceSetting(prefix + suffix);
+        if (suffix === 'HEADERS') {
+          settings.push(value);
+        } else if (value) {
+          // File contents can rotate at the same path between evaluations.
+          usesTlsFiles = true;
+        }
+      }
+    }
+  }
+  return usesTlsFiles
+    ? undefined
+    : createHash('sha256').update(JSON.stringify(settings)).digest('hex');
 }
 
 /**

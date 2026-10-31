@@ -1,4 +1,3 @@
-import { createHash } from 'node:crypto';
 import { createRequire } from 'node:module';
 
 import {
@@ -8,13 +7,14 @@ import {
   ProxyTracerProvider,
   trace,
 } from '@opentelemetry/api';
-import { callWithTimeout, getStringFromEnv, W3CTraceContextPropagator } from '@opentelemetry/core';
+import { callWithTimeout, W3CTraceContextPropagator } from '@opentelemetry/core';
 import { resourceFromAttributes } from '@opentelemetry/resources';
 import { TracerProvider } from '@opentelemetry/sdk-trace';
 import { ATTR_SERVICE_NAME, ATTR_SERVICE_VERSION } from '@opentelemetry/semantic-conventions';
 import logger from '../logger';
 import { VERSION } from '../version';
 import { LocalSpanExporter } from './localSpanExporter';
+import { getOtelRoutingKey } from './otelConfig';
 import {
   batchProcessorFromEnv,
   registerTracerProvider,
@@ -40,25 +40,6 @@ const FLUSH_TIMEOUT_MS = 30_000;
 
 let sdk: OtelSdk | undefined;
 const pendingShutdowns = new Set<Promise<void>>();
-
-// The HTTP exporter snapshots these process settings when it is constructed.
-function getRoutingKey(config: OtelConfig): string | undefined {
-  const settings = [config.serviceName, config.localExport, config.endpoint];
-  if (config.endpoint) {
-    for (const prefix of ['OTEL_EXPORTER_OTLP_', 'OTEL_EXPORTER_OTLP_TRACES_']) {
-      // A certificate or key can rotate at the same path between evaluations.
-      if (
-        ['CERTIFICATE', 'CLIENT_CERTIFICATE', 'CLIENT_KEY'].some((key) =>
-          getStringFromEnv(prefix + key),
-        )
-      ) {
-        return undefined;
-      }
-      settings.push(getStringFromEnv(prefix + 'HEADERS'));
-    }
-  }
-  return createHash('sha256').update(JSON.stringify(settings)).digest('hex');
-}
 
 // Each evaluator releases the generation it acquired, even if a signal handler
 // has since shut it down and another evaluation has registered a replacement.
@@ -118,11 +99,11 @@ export function initializeOtel(config: OtelConfig): (() => Promise<void>) | unde
     return;
   }
 
-  const routingKey = getRoutingKey(config);
+  const routingKey = getOtelRoutingKey(config);
   if (sdk) {
     if (!routingKey || routingKey !== sdk.routingKey) {
       throw new Error(
-        'Cannot share the active OpenTelemetry SDK. Run evaluations with different trace export settings or file-based OTLP TLS credentials sequentially or in separate processes.',
+        'Cannot share the active OpenTelemetry SDK. Run evaluations with different trace settings or file-based OTLP TLS credentials sequentially or in separate processes.',
       );
     }
     return acquire(sdk);

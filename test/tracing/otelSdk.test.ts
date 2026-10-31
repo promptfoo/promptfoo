@@ -297,6 +297,22 @@ describe('otelSdk', () => {
       },
     );
 
+    it.each([
+      ['always_on', undefined, 'always_off', undefined],
+      ['traceidratio', '1', 'traceidratio', '0'],
+    ])('rejects a changed process sampling policy', async (first, arg, second, nextArg) => {
+      vi.stubEnv('OTEL_TRACES_SAMPLER', first);
+      vi.stubEnv('OTEL_TRACES_SAMPLER_ARG', arg);
+      const release = initializeOtel(defaultConfig)!;
+      vi.stubEnv('OTEL_TRACES_SAMPLER', second);
+      vi.stubEnv('OTEL_TRACES_SAMPLER_ARG', nextArg);
+      expect(() => initializeOtel(defaultConfig)).toThrow(
+        'Cannot share the active OpenTelemetry SDK',
+      );
+      await release();
+      await initializeOtel(defaultConfig)!();
+    });
+
     it('reopens file-backed TLS credentials for each evaluation', async () => {
       const config = { ...defaultConfig, endpoint: 'https://collector.test/traces' };
       vi.stubEnv('OTEL_EXPORTER_OTLP_TRACES_CLIENT_CERTIFICATE', 'rotating-tenant.pem');
