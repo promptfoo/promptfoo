@@ -1,11 +1,16 @@
+import { createHash } from 'node:crypto';
+import { serialize } from 'node:v8';
+
 import logger from '../logger';
 import { providerRegistry } from './providerRegistry';
 import { loadTransformers } from './transformersAvailability';
 
 import type {
+  ApiClassificationProvider,
   ApiProvider,
   CallApiContextParams,
   CallApiOptionsParams,
+  ProviderClassificationResponse,
   ProviderEmbeddingResponse,
   ProviderResponse,
 } from '../types/index';
@@ -158,6 +163,45 @@ interface PipelineEntry {
 
 // Providers share pipelines until the last owner releases them.
 const pipelineCache = new Map<string, PipelineEntry>();
+const opaqueOptionIds = new WeakMap<object, number>();
+let nextOpaqueOptionId = 0;
+
+function opaqueOptionIdentity(value: object): Map<string, number> {
+  let id = opaqueOptionIds.get(value);
+  if (id === undefined) {
+    id = nextOpaqueOptionId++;
+    opaqueOptionIds.set(value, id);
+  }
+  // A Map cannot collide with a user-supplied plain configuration object.
+  return new Map([['reference', id]]);
+}
+
+function canonicalizePipelineOption(value: unknown, ancestors = new WeakSet<object>()): unknown {
+  if (typeof value === 'function') {
+    return opaqueOptionIdentity(value);
+  }
+  if (value === null || typeof value !== 'object') {
+    return value;
+  }
+  const prototype = Object.getPrototypeOf(value);
+  if (
+    (!Array.isArray(value) && prototype !== Object.prototype && prototype !== null) ||
+    ancestors.has(value)
+  ) {
+    // Device handles and external weights use identity, avoiding large buffer copies.
+    return opaqueOptionIdentity(value);
+  }
+  ancestors.add(value);
+  const canonical = Array.isArray(value)
+    ? value.map((item) => canonicalizePipelineOption(item, ancestors))
+    : Object.fromEntries(
+        Object.entries(value)
+          .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+          .map(([key, item]) => [key, canonicalizePipelineOption(item, ancestors)]),
+      );
+  ancestors.delete(value);
+  return canonical;
+}
 
 function getPipelineCacheKey(
   task: string,
@@ -166,7 +210,14 @@ function getPipelineCacheKey(
 ): string {
   const device = options.device || 'auto';
   const dtype = options.dtype || 'auto';
-  return `${task}:${model}:${device}:${dtype}`;
+  const constructionOptions = canonicalizePipelineOption({
+    cacheDir: options.cacheDir || null,
+    localFilesOnly: options.localFilesOnly || false,
+    revision: options.revision || 'main',
+    sessionOptions: options.sessionOptions || {},
+  });
+  const optionsHash = createHash('sha256').update(serialize(constructionOptions)).digest('hex');
+  return `${task}:${model}:${device}:${dtype}:${optionsHash}`;
 }
 
 async function initializePipeline(
@@ -331,7 +382,7 @@ const pipelineCleanup = { shutdown: disposePipelines };
 function handleTransformersError(
   error: Error,
   provider: { modelName: string },
-  kind: 'embedding' | 'generation',
+  kind: 'embedding' | 'generation' | 'classification',
 ): { error: string } {
   // Check for model not found
   if (error.message?.includes('Could not locate file')) {
@@ -343,12 +394,106 @@ function handleTransformersError(
     };
   }
 
-  logger.error(`[Transformers] ${kind === 'embedding' ? 'Embedding' : 'Generation'} error:`, {
+  logger.error(`[Transformers] ${kind} error:`, {
     error: error.message,
   });
   return {
     error: `Transformers.js ${kind} error: ${error.message}`,
   };
+}
+
+/**
+ * Local classifiers usable both as targets and by the existing classifier assertion.
+ * The SDK returns every label, including non-winning labels used by thresholds.
+ */
+export class TransformersTextClassificationProvider implements ApiClassificationProvider {
+  modelName: string;
+  config: TransformersBaseOptions;
+  private pipelines = new Set<PipelineEntry>();
+
+  constructor(modelName: string, options: { id?: string; config?: TransformersBaseOptions } = {}) {
+    const { id, config } = options;
+    this.modelName = modelName;
+    this.id = id ? () => id : this.id;
+    this.config = config || {};
+  }
+
+  id(): string {
+    return `transformers:text-classification:${this.modelName}`;
+  }
+
+  toString(): string {
+    return `[Transformers Text Classification Provider ${this.modelName}]`;
+  }
+
+  cleanup(): Promise<void> {
+    const pipelines = this.pipelines;
+    this.pipelines = new Set<PipelineEntry>();
+    return releasePipelines(pipelines);
+  }
+
+  async callApi(
+    prompt: string,
+    _context?: CallApiContextParams,
+    options?: CallApiOptionsParams,
+  ): Promise<ProviderResponse> {
+    const result = await this.callClassificationApi(prompt, options);
+    return { error: result.error, output: JSON.stringify(result.classification) };
+  }
+
+  async callClassificationApi(
+    prompt: string,
+    options?: CallApiOptionsParams,
+  ): Promise<ProviderClassificationResponse> {
+    try {
+      providerRegistry.throwIfResourceUseAborted(options?.abortSignal);
+      if (!prompt.trim()) {
+        return { error: 'Text classification requires nonempty input' };
+      }
+
+      const classifier = await getOrCreatePipeline(
+        'text-classification',
+        this.modelName,
+        this.config,
+        this.pipelines,
+        options?.abortSignal,
+      );
+      providerRegistry.throwIfResourceUseAborted(options?.abortSignal);
+      const result = await classifier(prompt, { top_k: null });
+      providerRegistry.throwIfResourceUseAborted(options?.abortSignal);
+
+      if (!Array.isArray(result) || result.length === 0) {
+        return { error: 'Transformers.js classifier returned no label probabilities' };
+      }
+      const classification: Record<string, number> = {};
+      for (const item of result) {
+        if (
+          !item ||
+          typeof item !== 'object' ||
+          typeof item.label !== 'string' ||
+          !item.label ||
+          typeof item.score !== 'number' ||
+          !Number.isFinite(item.score) ||
+          item.score < 0 ||
+          item.score > 1 ||
+          Object.prototype.hasOwnProperty.call(classification, item.label)
+        ) {
+          return { error: 'Transformers.js classifier returned invalid label probabilities' };
+        }
+        // Define own properties safely even for model labels such as __proto__.
+        Object.defineProperty(classification, item.label, {
+          value: item.score,
+          enumerable: true,
+          configurable: true,
+          writable: true,
+        });
+      }
+      return { classification };
+    } catch (error) {
+      providerRegistry.throwIfResourceUseAborted(options?.abortSignal);
+      return handleTransformersError(error as Error, this, 'classification');
+    }
+  }
 }
 
 /**

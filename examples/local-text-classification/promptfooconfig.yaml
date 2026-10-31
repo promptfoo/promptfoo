@@ -1,0 +1,27 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Grade recorded outputs with local sentiment classifiers
+prompts:
+  - '{{text}}'
+providers:
+  - echo
+defaultTest:
+  options:
+    provider:
+      id: transformers:text-classification:Xenova/distilbert-base-uncased-finetuned-sst-2-english
+      config:
+        dtype: q8
+        # After the first download, require cached model files:
+        # localFilesOnly: true
+tests:
+  - vars:
+      text: I loved every minute of this wonderful movie.
+    assert:
+      - type: classifier
+        value: POSITIVE
+        threshold: 0.9
+  - vars:
+      text: This movie was a waste of time.
+    assert:
+      - type: classifier
+        value: NEGATIVE
+        threshold: 0.9

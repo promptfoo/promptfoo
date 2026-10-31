@@ -1,6 +1,6 @@
 ---
 sidebar_label: Transformers.js
-description: Run local LLM inference with Transformers.js for embeddings and text generation without external APIs
+description: Run local ONNX models with Transformers.js for embeddings, text generation, and classification without external inference APIs
 ---
 
 # Transformers.js
@@ -43,11 +43,30 @@ Popular models: `Xenova/gpt2`, `onnx-community/Qwen3-0.6B-ONNX`, `onnx-community
 Text generation runs on CPU and is best for testing. For production, consider [Ollama](/docs/providers/ollama) or cloud APIs.
 :::
 
+### Text Classification
+
+Use ONNX sequence classifiers as targets or as grading providers for the existing `classifier` assertion:
+
+```yaml
+assert:
+  - type: classifier
+    value: POSITIVE
+    threshold: 0.9
+    provider:
+      id: transformers:text-classification:Xenova/distilbert-base-uncased-finetuned-sst-2-english
+      config:
+        dtype: q8
+```
+
+The provider returns every label's probability, including non-winning classes. Multi-label models such as `Xenova/toxic-bert` return independent probabilities, which need not sum to one. When used as a target, the output is a JSON object mapping labels to probabilities.
+
+After downloading the model, set `localFilesOnly: true` to require cached files. Public models need no API key. The SDK truncates input to the model's token limit; this provider accepts a single text, not premise/hypothesis pairs. See the [runnable example](https://github.com/promptfoo/promptfoo/tree/main/examples/local-text-classification).
+
 ## Configuration
 
 ### Common Options
 
-These options apply to both embedding and text generation providers:
+These options apply to embedding, text generation, and classification providers:
 
 | Option           | Description                                                                                                                             | Default        |
 | ---------------- | --------------------------------------------------------------------------------------------------------------------------------------- | -------------- |
@@ -132,6 +151,7 @@ assert:
 ## Performance
 
 - **Caching:** Pipelines are cached after first load. Initial model download may take time, but subsequent runs are fast.
+- **External weights:** In-memory external weight buffers use reference identity. Use a new buffer or start a new eval when changing their contents.
 - **Quantization:** Use `dtype: q4` or `dtype: q8` for faster inference and lower memory. Use `dtype: q4f16` for WebGPU-optimized quantization.
 - **WebGPU:** v4 includes a WebGPU runtime written in C++ with improved performance. Use `device: webgpu` on supported systems.
 - **Concurrency:** For limited RAM, use `promptfoo eval -j 1` to run serially.
