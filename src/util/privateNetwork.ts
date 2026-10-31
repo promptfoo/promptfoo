@@ -188,9 +188,7 @@ export class PrivateRangeBlockedError extends Error {
 const PRIVATE_RANGE_BLOCKED_MESSAGE_PREFIX = 'PROMPTFOO_BLOCK_PRIVATE_RANGES is set:';
 
 export function isPrivateRangeBlockedMessage(message: unknown): boolean {
-  return (
-    typeof message === 'string' && message.includes(PRIVATE_RANGE_BLOCKED_MESSAGE_PREFIX)
-  );
+  return typeof message === 'string' && message.includes(PRIVATE_RANGE_BLOCKED_MESSAGE_PREFIX);
 }
 
 /**
