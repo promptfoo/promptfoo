@@ -1025,6 +1025,17 @@ describe('assertionFromString', () => {
 });
 
 describe('serializeObjectArrayAsCSV', () => {
+  it.each(['first,last', 'quoted"name', 'line\nbreak', 'carriage\rreturn'])(
+    'round-trips CSV header %j',
+    (name) => {
+      const vars = [{ [name]: 'Ada', ordinary: 'control' }];
+      const csv = serializeObjectArrayAsCSV(vars);
+
+      expect(parseCsv(csv, { columns: true })).toEqual(vars);
+      expect(parseBrowserCsv(csv, { columns: true })).toEqual(vars);
+    },
+  );
+
   it('should serialize an array of objects as a CSV string', () => {
     expect(
       serializeObjectArrayAsCSV([
