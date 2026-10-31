@@ -22,6 +22,7 @@ export type EvaluationStoreResult = Pick<
 export interface EvaluationRecord {
   readonly id: string;
   readonly config: Partial<UnifiedConfig>;
+  readonly runtimeOptions?: { bayesAtN?: boolean };
   readonly persisted: boolean;
   readonly prompts: CompletedPrompt[];
   readonly results: EvaluationStoreResult[];

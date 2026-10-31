@@ -158,6 +158,26 @@ describe('retryCommand', () => {
     expect(evaluate).not.toHaveBeenCalled();
   });
 
+  it.each(['runtime', 'config', 'plan'])(
+    'rejects dedicated retry for Bayes@N before changing results (%s)',
+    async (source) => {
+      const originalEval = createEval({
+        runtimeOptions: source === 'runtime' ? { bayesAtN: true } : undefined,
+        config: {
+          evaluateOptions: source === 'config' ? { bayesAtN: true } : undefined,
+          metadata: source === 'plan' ? { bayesAtNPlan: { version: 1, groups: [] } } : undefined,
+        } as UnifiedConfig,
+      });
+      vi.mocked(Eval.findById).mockResolvedValue(originalEval);
+      dbMocks.errorRows.push({ id: 'original-error' });
+      await expect(retryCommand(originalEval.id, {})).rejects.toThrow('fresh evaluations only');
+      expect(resolveConfigs).not.toHaveBeenCalled();
+      expect(evaluate).not.toHaveBeenCalled();
+      expect(dbMocks.deleteRun).not.toHaveBeenCalled();
+      expect(cliState.resume).toBe(false);
+    },
+  );
+
   it('reads and deletes error result ids while notifying affected evaluations', async () => {
     dbMocks.errorRows.push({ id: 'error-result-1' }, { id: 'error-result-2' });
     dbMocks.affectedEvalRows.push({ evalId: 'eval-123' }, { evalId: 'eval-456' });

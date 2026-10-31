@@ -48,6 +48,7 @@ import {
 import { getNunjucksEngine } from '../util/templates';
 import { createEmptyTokenUsage } from '../util/tokenUsageUtils';
 import {
+  getHttpMultipartInputFilePaths,
   HttpMultipartConfigSchema,
   type RenderedHttpMultipartBody,
   renderHttpMultipartBody,
@@ -1813,6 +1814,52 @@ export class HttpProvider implements ApiProvider {
 
   id(): string {
     return this.url;
+  }
+
+  getEvaluationInputs(
+    context: Pick<CallApiContextParams, 'prompt' | 'vars' | 'evaluationId' | 'isGrading'>,
+  ) {
+    if (!this.config.multipart) {
+      return {};
+    }
+    if (
+      context.isGrading &&
+      this.config.multipart.parts.some(
+        (part) =>
+          part.kind === 'file' && part.source.type === 'path' && /\{[{%]/.test(part.source.path),
+      )
+    ) {
+      throw new Error('Bayes@N does not support dynamic multipart file paths in graders');
+    }
+    // These modes mutate vars/prompt asynchronously. Do not execute them twice
+    // or guess a different filename while preparing independent trials.
+    if (
+      this.config.transformRequest ||
+      this.config.request ||
+      this.config.auth?.type === 'oauth' ||
+      this.config.auth?.type === 'file' ||
+      this.config.signatureAuth ||
+      this.config.session
+    ) {
+      throw new Error(
+        'Bayes@N does not support multipart inputs with dynamic request transforms or authentication/session variables',
+      );
+    }
+    const rawTools = context.prompt.config?.tools ?? this.config.tools;
+    const rawToolChoice = context.prompt.config?.tool_choice ?? this.config.tool_choice;
+    const format = this.config.transformToolsFormat as ToolFormat | undefined;
+    const tools = format ? transformTools(rawTools, format) : rawTools;
+    const toolChoice = format ? transformToolChoice(rawToolChoice, format) : rawToolChoice;
+    const serialize = (value: unknown) =>
+      typeof value === 'object' && value !== null ? JSON.stringify(value) : value;
+    const vars = {
+      ...context.vars,
+      prompt: context.prompt.raw,
+      ...(context.evaluationId ? { evaluationId: context.evaluationId } : {}),
+      ...(tools === undefined ? {} : { tools: serialize(tools) }),
+      ...(toolChoice === undefined ? {} : { tool_choice: serialize(toolChoice) }),
+    };
+    return { filePaths: getHttpMultipartInputFilePaths(this.config.multipart, vars) };
   }
 
   toString(): string {

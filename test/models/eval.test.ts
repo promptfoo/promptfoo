@@ -29,6 +29,7 @@ import {
   getStandaloneEvalCacheKey,
   setCachedStandaloneEvals,
 } from '../../src/util/standaloneEvalCache';
+import { createEmptyTokenUsage } from '../../src/util/tokenUsageUtils';
 import { createEvaluateResult } from '../factories/eval';
 import EvalFactory from '../factories/evalFactory';
 import { createAccuracyFilter, createPassFailOptions } from '../factories/literalFixtures';
@@ -78,6 +79,112 @@ describe('evaluator', () => {
   });
 
   describe('repeat stability export', () => {
+    it('strips legacy verifiers from V2 row and table metadata exports', async () => {
+      const plan = {
+        version: 1,
+        groups: [
+          {
+            repeatGroupId: 'question',
+            promptIdx: 0,
+            provider: { id: 'provider' },
+            repetitions: 1,
+            inputHash: 'sha256:' + 'b'.repeat(64),
+          },
+        ],
+      };
+      const metadata = { bayesAtNPlan: plan, label: 'retained' };
+      const evaluation = new Eval({});
+      evaluation.oldResults = {
+        version: 2,
+        timestamp: '',
+        results: [createEvaluateResult({ metadata, testCase: { metadata } })],
+        table: { head: { prompts: [], vars: [] }, body: [] },
+        stats: { successes: 1, failures: 0, errors: 0, tokenUsage: createEmptyTokenUsage() },
+      };
+      vi.spyOn(evaluation, 'useOldResults').mockReturnValue(true);
+      const summary = await evaluation.toEvaluateSummary();
+      expect(summary.version).toBe(2);
+      expect(summary.results[0].metadata?.label).toBe('retained');
+      expect(JSON.stringify(summary)).not.toContain('inputHash');
+      expect(evaluation.oldResults!.results[0].metadata?.bayesAtNPlan).toEqual(plan);
+    });
+
+    it('uses recovered final results for the Bayes@N posterior', async () => {
+      const evaluation = await Eval.create(
+        {
+          metadata: {
+            bayesAtNPlan: {
+              version: 1,
+              groups: [
+                {
+                  repeatGroupId: 'recovered',
+                  promptIdx: 0,
+                  provider: { id: 'test-provider' },
+                  repetitions: 1,
+                },
+              ],
+            },
+          },
+        },
+        [],
+        { id: 'bayes-recovered-persistence' },
+      );
+      const row = createEvaluateResult({
+        repeatGroupId: 'recovered',
+        repeatIndex: 0,
+        success: true,
+      });
+      evaluation.recordResultPersistenceFailure(row);
+      const [recovered] = await evaluation.getFailedResultsByTestIdx(row.testIdx);
+      recovered.success = false;
+      recovered.failureReason = ResultFailureReason.ASSERT;
+      const summary = await evaluation.getRepeatStability();
+      expect(summary?.bayesAtN?.[0].mean).toBeCloseTo(1 / 3, 14);
+      expect(summary?.bayesAtN?.[0].posteriorStd).toBeCloseTo(Math.sqrt(1 / 18), 14);
+      const exported = (await evaluation.toEvaluateSummary()) as EvaluateSummaryV3;
+      expect(exported.results).toHaveLength(1);
+      expect(exported.results[0].success).toBe(false);
+      expect(exported.repeatStability?.bayesAtN).toEqual(summary?.bayesAtN);
+    });
+
+    it('keeps Bayes@N cache rejection when grading details are stripped', async () => {
+      const evaluation = new Eval({
+        env: { PROMPTFOO_STRIP_GRADING_RESULT: 'true' },
+        metadata: {
+          bayesAtNPlan: {
+            version: 1,
+            groups: [
+              {
+                repeatGroupId: 'repeated',
+                promptIdx: 0,
+                provider: { id: 'test-provider' },
+                repetitions: 1,
+              },
+            ],
+          },
+        },
+      });
+      await evaluation.addResult(
+        createEvaluateResult({
+          repeatGroupId: 'repeated',
+          repeatIndex: 0,
+          response: { output: 'fresh' },
+          gradingResult: {
+            pass: true,
+            score: 1,
+            reason: 'cached',
+            metadata: { cachedResponse: true },
+          },
+        }),
+      );
+      const summary = (await evaluation.toEvaluateSummary()) as EvaluateSummaryV3;
+      expect(summary.results[0].gradingResult).toBeNull();
+      expect(summary.repeatStability?.bayesAtN?.[0]).toMatchObject({
+        unavailableReason: 'Results contain cached responses or grading',
+      });
+      expect(summary.repeatStability?.bayesAtN?.[0].mean).toBeUndefined();
+    });
+
     it('includes final comparison verdicts for a row that failed persistence', async () => {
       const evaluation = await Eval.create({}, [], { id: 'repeat-failed-persistence' });
       const row = createEvaluateResult({
@@ -92,6 +199,9 @@ describe('evaluator', () => {
       const summary = await evaluation.getRepeatStability();
       expect(summary?.groups[0]).toMatchObject({ repetitions: 1, passed: 0, failed: 1 });
       expect(await EvalResult.findManyByEvalId(evaluation.id)).toEqual([]);
+      const exported = (await evaluation.toEvaluateSummary()) as EvaluateSummaryV3;
+      expect(exported.results).toEqual([]);
+      expect(exported.repeatStability).toBeUndefined();
     });
 
     it('keeps cached grader evidence when grading details are stripped', async () => {

@@ -362,6 +362,33 @@ export class GoogleVideoProvider implements ApiProvider {
     return this.providerId || `google:video:${this.modelName}`;
   }
 
+  getEvaluationInputs(context: Pick<CallApiContextParams, 'prompt' | 'vars'>) {
+    return { filePaths: this.getInputFilePaths(context) };
+  }
+
+  getInputFilePaths(context?: Pick<CallApiContextParams, 'prompt' | 'vars'>): string[] {
+    const { config, mediaBasePaths } = mergeGoogleVideoRequestConfig(
+      this.config,
+      context?.prompt?.config as GoogleVideoOptions | undefined,
+    );
+    const files: string[] = [];
+    const addMedia = (value: string | undefined, basePath: string | undefined) => {
+      if (value?.startsWith('file://')) {
+        files.push(path.resolve(basePath || process.cwd(), value.slice('file://'.length)));
+      }
+    };
+    addMedia(config.image, mediaBasePaths.image);
+    addMedia(config.lastFrame || config.lastImage, mediaBasePaths.lastFrame);
+    for (const reference of config.referenceImages?.slice(0, 3) ?? []) {
+      addMedia(
+        typeof reference === 'string' ? reference : reference.image,
+        mediaBasePaths.referenceImages,
+      );
+    }
+    addMedia(config.sourceVideo || config.extendVideoId, mediaBasePaths.sourceVideo);
+    return [...new Set(files)].sort();
+  }
+
   toString(): string {
     return `[Google Video Provider ${this.modelName}]`;
   }

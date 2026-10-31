@@ -1062,6 +1062,23 @@ describe('generateEvalSummary', () => {
           unstableGroups: 1,
           groupsWithErrors: 1,
           cachedResults: 1,
+          bayesAtN: [
+            {
+              provider: { id: 'provider-a' },
+              promptIdx: 0,
+              questions: 2,
+              trials: 3,
+              mean: 0.6,
+              posteriorStd: 0.1,
+            },
+            {
+              provider: { id: 'provider-b' },
+              promptIdx: 1,
+              questions: 2,
+              trials: 3,
+              unavailableReason: 'Not all scheduled repetitions are present',
+            },
+          ],
           groups: [
             {
               repeatGroupId: 'test-0-vars-0',
@@ -1105,6 +1122,12 @@ describe('generateEvalSummary', () => {
       expect(output).toContain('95% CI 20.8%–93.8%');
       expect(output).toContain('1 repeated group contained errors');
       expect(output).toContain('1 cached result detected');
+      expect(output).toContain(
+        'Bayes@N (provider-a, prompt 0, M=2, N=3): mean 0.600000, posterior SD 0.100000',
+      );
+      expect(output).toContain(
+        'Bayes@N (provider-b, prompt 1, M=2, N=3): unavailable (Not all scheduled repetitions are present)',
+      );
     });
   });
 
