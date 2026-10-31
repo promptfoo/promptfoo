@@ -1539,6 +1539,57 @@ describe('trace assertions', () => {
       ).resolves.toMatchObject({ pass: false });
     });
 
+    it.each(['trajectory:tool-used', 'trajectory:step-count'] as const)(
+      'distinguishes unresolved commands from an unreachable minimum for %s',
+      async (type) => {
+        const cat = tool('shell', { cmd: 'cat receipt.txt' });
+        const second = { ...tool('shell', undefined, true), spanId: 'second' };
+        const check = (min: number, other = second) =>
+          grade(
+            { type, value: { type: 'command', name: 'cat', min } },
+            { ...incomplete, spanCount: 2 },
+            [cat, other],
+          );
+        await expect(check(1)).resolves.toMatchObject({ pass: true });
+        await expect(check(2)).resolves.toMatchObject({
+          pass: false,
+          reason: expect.stringContaining('unavailable'),
+        });
+        await expect(check(3)).resolves.toMatchObject({
+          pass: false,
+          reason: expect.stringContaining('Matched'),
+        });
+        await expect(check(2, tool('lookup', undefined, true))).resolves.toMatchObject({
+          pass: false,
+          reason: expect.stringContaining('Matched'),
+        });
+      },
+    );
+
+    it('distinguishes missing candidate arguments from a recorded mismatch', async () => {
+      const lookup = tool('lookup', { order_id: '123' }, true);
+      const findArgs = (name: string, args: Record<string, string>, calls: TraceSpan[]) =>
+        grade(
+          { type: 'trajectory:tool-args-match', value: { name, args } },
+          { ...incomplete, spanCount: calls.length },
+          calls,
+        );
+      await expect(findArgs('lookup', { order_id: '123' }, [lookup])).resolves.toMatchObject({
+        pass: true,
+      });
+      await expect(findArgs('lookup', { token: 'abc' }, [lookup])).resolves.toMatchObject({
+        pass: false,
+        reason: expect.stringContaining('unavailable'),
+      });
+      await expect(findArgs('lookup', { token: 'abc' }, [tool('lookup')])).resolves.toMatchObject({
+        pass: false,
+        reason: expect.stringContaining('unavailable'),
+      });
+      await expect(
+        findArgs('shell', { cwd: '/missing' }, [tool('shell', { cwd: '/workspace' }), lookup]),
+      ).resolves.toMatchObject({ pass: false, reason: expect.stringContaining('No call to tool') });
+    });
+
     it('credits a witnessed tool-use minimum when another call has redacted arguments', async () => {
       const calls = [tool('shell', { cmd: 'cat receipt.txt' }), tool('lookup', undefined, true)];
       const check = (

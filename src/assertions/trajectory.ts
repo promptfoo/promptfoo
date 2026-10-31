@@ -9,6 +9,7 @@ import {
   matchesTrajectoryStep,
   normalizeTrajectoryMatcher,
   summarizeTrajectoryForJudge,
+  type TrajectoryStep,
   type TrajectoryStepMatcher,
 } from './trajectoryUtils';
 
@@ -139,13 +140,48 @@ function resolveToolMatchers(
   );
 }
 
-function observedToolResult(params: AssertionParams, pass: boolean, reason: string): GradingResult {
-  return {
-    pass,
-    score: pass ? 1 : 0,
-    reason: pass ? reason : (params.traceSpanUncertainty?.reason ?? reason),
-    assertion: params.assertion,
-  };
+function couldMatchUnresolvedCommand(
+  step: TrajectoryStep,
+  matcher: TrajectoryStepMatcher,
+): boolean {
+  const types = matcher.type;
+  return (
+    !!step.unresolvedHostedCommand &&
+    (!types || types === 'command' || (Array.isArray(types) && types.includes('command')))
+  );
+}
+
+function couldReachCommandMinimum(
+  steps: TrajectoryStep[],
+  matcher: TrajectoryCountValue,
+  count: number,
+  min: number,
+): boolean {
+  if (count >= min || matcher.max !== undefined) {
+    return false;
+  }
+  // A shell span already counted through its tool name cannot add a second match.
+  const unknown = steps.filter(
+    (step) => couldMatchUnresolvedCommand(step, matcher) && !matchesTrajectoryStep(step, matcher),
+  );
+  return count + unknown.length >= min;
+}
+
+function observedToolResult(
+  params: AssertionParams,
+  pass: boolean,
+  reason: string,
+  uncertainArgs = false,
+): GradingResult {
+  if (!pass && !params.inverse) {
+    if (params.traceSpanUncertainty) {
+      reason = params.traceSpanUncertainty.reason;
+    } else if (uncertainArgs) {
+      reason =
+        'Some hosted tool arguments were unavailable. The recorded calls cannot establish this requirement.';
+    }
+  }
+  return { pass, score: pass ? 1 : 0, reason, assertion: params.assertion };
 }
 
 export const handleTrajectoryToolUsed = (params: AssertionParams): GradingResult => {
@@ -219,7 +255,12 @@ export const handleTrajectoryToolUsed = (params: AssertionParams): GradingResult
       : `Tool "${matcherLabel}" did not satisfy the forbidden match condition`;
   }
 
-  return observedToolResult(params, pass, reason);
+  return observedToolResult(
+    params,
+    pass,
+    reason,
+    !pass && couldReachCommandMinimum(steps, matcher, count, min),
+  );
 };
 
 function resolveSequenceValue(value: unknown): TrajectorySequenceValue {
@@ -553,7 +594,22 @@ export const handleTrajectoryToolArgsMatch = (params: AssertionParams): GradingR
     reason = `No call to tool "${matcherLabel}" matched expected arguments (${mode}): ${expectedArgsLabel}. Observed args: ${observedArgsLabel}`;
   }
 
-  return observedToolResult(params, pass, reason);
+  const uncertainArgs =
+    !pass &&
+    !params.inverse &&
+    params.providerResponse.metadata?.hostedTrace?.source === 'openai:agents-api' &&
+    toolSteps.some((step) => {
+      if (matchesTrajectoryStep(step, matcher)) {
+        return step.args === undefined || !!step.argumentsRedacted;
+      }
+      return (
+        couldMatchUnresolvedCommand(step, matcher) &&
+        (step.args === undefined ||
+          !!step.argumentsRedacted ||
+          matchesToolArgs(step.args, expectedArgs, mode, defaults, ignore))
+      );
+    });
+  return observedToolResult(params, pass, reason, uncertainArgs);
 };
 
 function resolveStepCountValue(value: unknown): TrajectoryCountValue {
@@ -623,12 +679,12 @@ export const handleTrajectoryStepCount = (params: AssertionParams): GradingResul
       : `Trajectory step count did not satisfy the forbidden range`;
   }
 
-  return {
+  return observedToolResult(
+    params,
     pass,
-    score: pass ? 1 : 0,
     reason,
-    assertion: params.assertion,
-  };
+    !pass && couldReachCommandMinimum(steps, matcher, count, min ?? 0),
+  );
 };
 
 export const handleTrajectoryGoalSuccess = async (
