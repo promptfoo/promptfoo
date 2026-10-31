@@ -327,6 +327,21 @@ const ASSERTION_HANDLERS: Record<
 };
 
 const nunjucks = getNunjucksEngine();
+const forcedTemplatingNunjucks = getNunjucksEngine(undefined, false, true);
+
+function renderAssertionTemplate(
+  template: string,
+  vars: Record<string, unknown>,
+  disableTemplating?: boolean,
+): string {
+  if (disableTemplating === true) {
+    return template;
+  }
+  return (disableTemplating === false ? forcedTemplatingNunjucks : nunjucks).renderString(
+    template,
+    vars,
+  );
+}
 
 /**
  * Renders a metric name template with test variables.
@@ -337,12 +352,13 @@ const nunjucks = getNunjucksEngine();
 export function renderMetricName(
   metric: string | undefined,
   vars: Record<string, unknown>,
+  disableTemplating?: boolean,
 ): string | undefined {
   if (!metric) {
     return metric;
   }
   try {
-    const rendered = nunjucks.renderString(metric, vars);
+    const rendered = renderAssertionTemplate(metric, vars, disableTemplating);
     if (rendered === '' && metric !== '') {
       logger.debug(`Metric template "${metric}" rendered to empty string`);
     }
@@ -425,6 +441,7 @@ async function runAssertionInternal({
   traceId,
   traceData,
   claimStoredGradingUsage,
+  disableTemplating,
 }: {
   prompt?: string;
   provider?: ApiProvider;
@@ -437,6 +454,7 @@ async function runAssertionInternal({
   traceId?: string;
   traceData?: TraceData | null;
   claimStoredGradingUsage?: () => boolean;
+  disableTemplating?: boolean;
 }): Promise<GradingResult> {
   // Use resolved vars if provided, otherwise fall back to test.vars
   const resolvedVars = vars || test.vars || {};
@@ -578,7 +596,7 @@ async function runAssertionInternal({
       }
     } else {
       // It's a normal string value
-      renderedValue = nunjucks.renderString(renderedValue, resolvedVars);
+      renderedValue = renderAssertionTemplate(renderedValue, resolvedVars, disableTemplating);
     }
   } else if (renderedValue && Array.isArray(renderedValue)) {
     // Process each element in the array
@@ -587,7 +605,7 @@ async function runAssertionInternal({
         if (v.startsWith('file://')) {
           return processFileReference(v);
         }
-        return nunjucks.renderString(v, resolvedVars);
+        return renderAssertionTemplate(v, resolvedVars, disableTemplating);
       }
       return v;
     });
@@ -791,6 +809,7 @@ export async function runAssertions({
   test,
   vars,
   traceId,
+  disableTemplating,
 }: {
   assertScoringFunction?: ScoringFunction;
   latencyMs?: number;
@@ -800,6 +819,7 @@ export async function runAssertions({
   test: AtomicTestCase;
   vars?: Record<string, VarValue>;
   traceId?: string;
+  disableTemplating?: boolean;
 }): Promise<GradingResult> {
   if (!test.assert || test.assert.length < 1) {
     return AssertionsResult.noAssertsResult();
@@ -895,12 +915,13 @@ export async function runAssertions({
       traceId,
       traceData: preloadedTraceData,
       claimStoredGradingUsage,
+      disableTemplating,
     });
 
     assertResult.addResult({
       index,
       result,
-      metric: renderMetricName(assertion.metric, vars || test.vars || {}),
+      metric: renderMetricName(assertion.metric, vars || test.vars || {}, disableTemplating),
       weight: assertion.weight,
     });
   };
@@ -931,7 +952,7 @@ export async function runAssertions({
     mainAssertResult.addResult({
       index,
       result,
-      metric: renderMetricName(metric, vars || test.vars || {}),
+      metric: renderMetricName(metric, vars || test.vars || {}, disableTemplating),
       weight,
     });
   });
