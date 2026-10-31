@@ -115,6 +115,75 @@ describe('PROMPTFOO_BLOCK_PRIVATE_RANGES server guards (#11768 item 2)', () => {
       expect(mockedLoadApiProvider).not.toHaveBeenCalled();
     });
 
+    it('refuses an n8n: wrapped private target when the flag is set', async () => {
+      restoreEnv = mockProcessEnv({ PROMPTFOO_BLOCK_PRIVATE_RANGES: 'true' });
+
+      const response = await request(app)
+        .post('/api/providers/test')
+        .send({
+          providerOptions: { id: 'n8n:http://169.254.169.254/latest/meta-data' },
+        });
+
+      expect(response.status).toBe(400);
+      expect(mockedLoadApiProvider).not.toHaveBeenCalled();
+    });
+
+    it('refuses an a2a: wrapped private target when the flag is set', async () => {
+      restoreEnv = mockProcessEnv({ PROMPTFOO_BLOCK_PRIVATE_RANGES: 'true' });
+
+      const response = await request(app)
+        .post('/api/providers/test')
+        .send({ providerOptions: { id: 'a2a:http://127.0.0.1:8080' } });
+
+      expect(response.status).toBe(400);
+      expect(mockedLoadApiProvider).not.toHaveBeenCalled();
+    });
+
+    it('refuses litellm with its local proxy default when the flag is set', async () => {
+      restoreEnv = mockProcessEnv({
+        PROMPTFOO_BLOCK_PRIVATE_RANGES: 'true',
+        LITELLM_API_BASE: undefined,
+      });
+
+      const response = await request(app)
+        .post('/api/providers/test')
+        .send({ providerOptions: { id: 'litellm:chat:gpt-4o' } });
+
+      expect(response.status).toBe(400);
+      expect(mockedLoadApiProvider).not.toHaveBeenCalled();
+    });
+
+    it('refuses openclaw with its local gateway default when the flag is set', async () => {
+      restoreEnv = mockProcessEnv({
+        PROMPTFOO_BLOCK_PRIVATE_RANGES: 'true',
+        OPENCLAW_GATEWAY_URL: undefined,
+        CLAWDBOT_GATEWAY_URL: undefined,
+      });
+
+      const response = await request(app)
+        .post('/api/providers/test')
+        .send({ providerOptions: { id: 'openclaw' } });
+
+      expect(response.status).toBe(400);
+      expect(mockedLoadApiProvider).not.toHaveBeenCalled();
+    });
+
+    it('proceeds for openclaw with a public gateway_url override when the flag is set', async () => {
+      restoreEnv = mockProcessEnv({ PROMPTFOO_BLOCK_PRIVATE_RANGES: 'true' });
+
+      const response = await request(app)
+        .post('/api/providers/test')
+        .send({
+          providerOptions: {
+            id: 'openclaw:chat',
+            config: { gateway_url: 'http://8.8.8.8:18789' },
+          },
+        });
+
+      expect(response.status).toBe(200);
+      expect(mockedLoadApiProvider).toHaveBeenCalled();
+    });
+
     it('proceeds when the flag is unset (default local behavior)', async () => {
       restoreEnv = mockProcessEnv({ PROMPTFOO_BLOCK_PRIVATE_RANGES: undefined });
 
