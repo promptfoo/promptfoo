@@ -349,8 +349,8 @@ nested key like `authorization` inside a `headers` object is matched by the patt
 `authorization`, but a full dotted path such as `request.headers.authorization` will **not**
 match the nested leaf key — use the key's own name.
 Redaction covers span **attributes** (recursively, including nested objects and arrays),
-and a span `name` or `statusMessage` **only when it exactly echoes the value of a redacted
-attribute**. A secret that appears solely in a span name, status/error message, or log
+and a span `name` or `statusMessage` when it exactly matches a redacted string, including
+a string inside a redacted object or array. A secret that appears solely in a span name, status/error message, or log
 body — without also being a redacted attribute value — is not detected. Redaction also does
 **not** scan arbitrary free text or trace `metadata` (such as test `vars`), so avoid placing
 secrets in test variables when traces are retained.
