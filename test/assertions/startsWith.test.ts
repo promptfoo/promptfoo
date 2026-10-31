@@ -33,8 +33,8 @@ describe('handleStartsWith', () => {
     [42, '42 apples', false, true],
     [42, 'apples 42', false, false],
     [0, '0 results', false, true],
-    [Infinity, 'Infinity', false, true],
-    [-Infinity, '-Infinity', false, true],
+    ['Infinity', 'Infinity', false, true],
+    ['-Infinity', '-Infinity', false, true],
     [42, '42 apples', true, false],
     [42, 'apples 42', true, true],
   ] as const)('matches %s against %s (inverse %s)', (value, output, inverse, pass) => {
@@ -49,12 +49,15 @@ describe('handleStartsWith', () => {
     });
   });
 
-  it.each([[NaN], [''], [true], [{}], [['42']], [undefined], [null]])('rejects %s', (value) => {
-    expect(() =>
-      handleStartsWith({
-        ...params('valid', '42'),
-        renderedValue: value as AssertionParams['renderedValue'],
-      }),
-    ).toThrow('"starts-with" assertion type must have a string or number value');
-  });
+  it.each([[NaN], [Infinity], [-Infinity], [''], [true], [{}], [['42']], [undefined], [null]])(
+    'rejects %s',
+    (value) => {
+      expect(() =>
+        handleStartsWith({
+          ...params('valid', '42'),
+          renderedValue: value as AssertionParams['renderedValue'],
+        }),
+      ).toThrow('"starts-with" assertion type must have a non-empty string or finite number value');
+    },
+  );
 });

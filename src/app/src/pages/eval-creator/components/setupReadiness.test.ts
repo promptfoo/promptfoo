@@ -144,14 +144,16 @@ describe('setupReadiness', () => {
       'runs imported numeric %s prefixes',
       (type) => {
         const setup = { providers: ['echo'], prompts: ['hello'] };
-        for (const value of [0, 200]) {
+        for (const value of [0, 200, 'Infinity']) {
           expect(
             getSetupReadiness({ ...setup, tests: [{ assert: [{ type, value }] }] }).isReadyToRun,
           ).toBe(true);
         }
-        expect(
-          getSetupReadiness({ ...setup, tests: [{ assert: [{ type, value: '' }] }] }).isReadyToRun,
-        ).toBe(false);
+        for (const value of ['', NaN, Infinity, -Infinity]) {
+          expect(
+            getSetupReadiness({ ...setup, tests: [{ assert: [{ type, value }] }] }).isReadyToRun,
+          ).toBe(false);
+        }
       },
     );
 

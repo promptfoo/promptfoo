@@ -1,10 +1,3 @@
-export function isTextComparisonValue(value: unknown): value is string | number {
-  return (
-    (typeof value === 'string' && value !== '') ||
-    (typeof value === 'number' && !Number.isNaN(value))
-  );
-}
-
 /** Normalize string comparisons only when requested; true selects canonical NFC. */
 export function normalizeForComparison(
   text: string,

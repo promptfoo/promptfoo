@@ -1,5 +1,4 @@
 import invariant from '../util/invariant';
-import { isTextComparisonValue } from './normalize';
 
 import type { AssertionParams, GradingResult } from '../types/index';
 
@@ -10,8 +9,9 @@ export const handleStartsWith = ({
   inverse,
 }: AssertionParams): GradingResult => {
   invariant(
-    isTextComparisonValue(renderedValue),
-    '"starts-with" assertion type must have a string or number value',
+    (typeof renderedValue === 'string' && renderedValue.length > 0) ||
+      Number.isFinite(renderedValue),
+    '"starts-with" assertion type must have a non-empty string or finite number value',
   );
   const pass = outputString.startsWith(String(renderedValue)) !== inverse;
   return {
