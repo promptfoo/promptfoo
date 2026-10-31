@@ -125,7 +125,7 @@ For example, a script that printed `READY` and exited with code 17 passed an ans
 
 #### Diagnose missing trace evidence
 
-Look under **Metadata** or inspect `response.metadata.hostedTrace` in the JSON export. Import needs local export enabled for both the eval and its running tracing SDK. Setting `PROMPTFOO_OTEL_LOCAL_EXPORT=false` skips the hosted download. Overlapping evals in one process share the first active tracing SDK. If it has only an external exporter, run the hosted eval after the others finish, or use a separate process.
+Look under **Metadata** or inspect `response.metadata.hostedTrace` in the JSON export. Import needs local export enabled for both the eval and its running tracing SDK. Setting `PROMPTFOO_OTEL_LOCAL_EXPORT=false` skips the hosted download. Concurrent evals that use different tracing settings must run sequentially or in separate processes. [Concurrent programmatic evaluations](/docs/tracing/#concurrent-programmatic-evaluations)
 
 | What you see                                               | What it means and what to check                                                                                                                                                                                                 |
 | ---------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

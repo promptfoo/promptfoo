@@ -273,6 +273,10 @@ For a custom assertion that requires trace evidence, return a failing grade when
 
 For hosted runs, `trace-error-spans` and `trace-span-duration` with no filters grade the target work completed before assertions run. To include the surrounding Promptfoo test-case span, set an explicit filter such as `pattern: '*'`. For `trace-error-spans`, an empty `pattern` with no attribute filters also uses the default target scope. If a selected span has no end time, a duration check can pass only when the known durations establish the bound even with the missing measurement.
 
+#### Concurrent programmatic evaluations
+
+Concurrent programmatic evaluations can share tracing when their service name, local export setting, collector URL, OTLP headers, and sampling policy match. Set OTLP credentials and sampling variables in the process environment. The SDK cannot apply per-evaluation overrides for these settings. Run evaluations with different settings or file-based OTLP TLS credentials sequentially or in separate processes. Promptfoo rejects incompatible settings before calling providers. If the host application already registered an OpenTelemetry provider, configure the collector on the host. Promptfoo can use a host provider with an inherited process-level `OTEL_EXPORTER_OTLP_ENDPOINT`. Setting `PROMPTFOO_OTEL_ENDPOINT` or overriding the collector for that evaluation requires a separate process.
+
 ### Turn marker spans {#per-llm-turn-spans}
 
 Several first-party providers expose turn marker spans to trace assertions. Some markers correspond to internal model generations; Codex SDK and app-server markers correspond to the protocol turn exposed by those APIs. The span name and convention depend on the provider:
@@ -410,6 +414,12 @@ Promptfoo's OTLP receiver accepts traces in both **JSON** and **protobuf** forma
 | Protobuf | `application/x-protobuf` | Python (default), Go, Java, and other languages |
 
 Protobuf is more efficient for serialization and produces smaller payloads. Python's OpenTelemetry SDK uses protobuf by default.
+
+### Hosted OpenAI turn artifacts
+
+The [OpenAI Agents API](/docs/providers/openai-agents-api/) publishes OTLP artifacts for individual turns. For a trace rooted at `invoke_agent`, the decoder keeps the span hierarchy, timing, status, operation, and safe model and tool identifiers. It derives span names from those identifiers and omits prompts, tool output, diagnostic text, and arbitrary OTLP attributes. Tool arguments are omitted by default.
+
+The decoder withholds the whole artifact if it contains an unsupported operation, mixes trace IDs, or cannot safely retain an identifier. For example, `tracing.otlp.http.redactAttributes: ['gen_ai.tool.name']` withholds an artifact containing a tool call. An identifier that contains a recognized credential pattern or echoes a value protected by a redaction rule also prevents import. A child whose parent has yet to appear can indicate that the API is still publishing the turn.
 
 ### Environment Variables
 
