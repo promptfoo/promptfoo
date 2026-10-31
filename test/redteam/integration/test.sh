@@ -90,7 +90,7 @@ fi
 
 # Check for expected output patterns
 # With numTests: 1 on jailbreak:composite, we get 2 plugin tests + 1 strategy test = 3 total
-if echo "$output" | grep -q "Wrote 3 test cases to redteam.yaml"; then
+if [[ "$output" == *"Wrote 3 test cases to redteam.yaml"* ]]; then
   echo "Expected line (Wrote 3 test cases to redteam.yaml) found for promptfoo redteam generate"
 else
   echo "ERROR: Expected line (Wrote 3 test cases to redteam.yaml) not found in output."
@@ -130,7 +130,7 @@ else
   echo "Confirmed: No promptfoo-errors.log file exists"
 fi
 
-if echo "$output" | grep -q "0 errors"; then
+if [[ "$output" == *"0 errors"* ]]; then
   echo "Expected line found (0 errors) for promptfoo redteam eval"
 else
   echo "ERROR: Expected line (0 errors) not found in output."

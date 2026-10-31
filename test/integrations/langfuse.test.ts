@@ -319,7 +319,7 @@ describe('langfuse integration', () => {
       expect(result).toBe('Default text prompt');
     });
 
-    it('should pass empty options object when no label is provided', async () => {
+    it('should pass version and type when no label is provided', async () => {
       const mockPrompt = {
         compile: vi.fn().mockReturnValue('Test prompt'),
       };
