@@ -1,5 +1,5 @@
 import { detectResources, resourceFromAttributes } from '@opentelemetry/resources';
-import { AlwaysOffSampler, NodeTracerProvider } from '@opentelemetry/sdk-trace-node';
+import { AlwaysOffSampler, TracerProvider } from '@opentelemetry/sdk-trace';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import cliState from '../../src/cliState';
 import logger from '../../src/logger';
@@ -142,7 +142,7 @@ describe('evaluatorTracing', () => {
     });
 
     it('preserves the sampling decision of a valid unsampled root span', async () => {
-      const tracerProvider = new NodeTracerProvider({ sampler: new AlwaysOffSampler() });
+      const tracerProvider = new TracerProvider({ sampler: new AlwaysOffSampler() });
       const getTracer = vi
         .spyOn(genaiTracer, 'getGenAITracer')
         .mockReturnValue(tracerProvider.getTracer('unsampled-test-case'));
@@ -218,7 +218,7 @@ describe('evaluatorTracing', () => {
       const getTraceStoreSpy = vi.spyOn(traceStoreModule, 'getTraceStore').mockReturnValue({
         createTrace: mockCreateTrace,
       } as unknown as ReturnType<typeof traceStoreModule.getTraceStore>);
-      const provider = new NodeTracerProvider({
+      const provider = new TracerProvider({
         resource: resourceFromAttributes({ 'gen_ai.tool.name': 'resource-tool' }),
       });
       const tracer = vi
@@ -255,7 +255,7 @@ describe('evaluatorTracing', () => {
       const resource = detectResources({
         detectors: [{ detect: () => ({ attributes: { late: Promise.resolve('resource') } }) }],
       });
-      const provider = new NodeTracerProvider({ resource });
+      const provider = new TracerProvider({ resource });
       const tracer = vi
         .spyOn(genaiTracer, 'getGenAITracer')
         .mockReturnValue(provider.getTracer('test'));

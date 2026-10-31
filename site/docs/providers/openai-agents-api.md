@@ -131,7 +131,7 @@ Look under **Metadata** or inspect `response.metadata.hostedTrace` in the JSON e
 | ---------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | A local `invoke_agent` span with no `hostedTrace` metadata | Only the provider call was traced. Enable `hostedTrace` under the provider's `config` and rerun to grade hosted tools.                                                                                                          |
 | `status: imported`                                         | The hosted turn reported a complete trace. `spanCount` counts native spans. A count of `invoke_agent` in the full trace also includes the local wrapper.                                                                        |
-| `status: partial`                                          | The available tree lacks confirmed completeness. Positive tool-name or argument checks can use observed calls. Absence, maximum counts, sequences, timings and error budgets require a complete trace.                          |
+| `status: partial`                                          | A recorded tool, argument, or raw span can prove a match or a budget violation. A partial tree cannot establish an exact total or prove the whole turn had zero errors.                                                         |
 | `status: unavailable`                                      | Read `reason`. Enable eval tracing if no local span was available, check organization and key permissions for HTTP 403, or increase `hostedTrace.timeoutMs` if publication timed out. Output assertions still grade the answer. |
 | Tool name is visible but arguments are missing             | Set `hostedTrace.includeToolArguments: true` before running a synthetic fixture. Missing or redacted arguments cannot establish the absence of a value.                                                                         |
 
@@ -146,6 +146,8 @@ Prefer built-in trajectory assertions when grading a saved trace. For a custom J
 To inspect the full recording in OpenAI, set `retainSession: true` before the run, find `response.metadata.sessionId` in the export, and open the matching session in [OpenAI's Agents logs](https://platform.openai.com/logs?api=agents). For a manual OTLP export, allow time for publication, retrieve every page of `GET /v1/agents/sessions/{session_id}/traces`, then delete the retained session. [OpenAI trace export example](https://developers.openai.com/api/docs/guides/agents-api/tracing#export-session-traces)
 
 #### Captured tool arguments
+
+A partial import can show arguments for a tool that ran. Its `toolArgumentsComplete` flag stays false because additional calls may be missing.
 
 With `hostedTrace.includeToolArguments: true`, Promptfoo can retain the following fields of a top-level tool argument object. Paths and identifiers can contain sensitive data. Use synthetic fixtures when enabling capture.
 

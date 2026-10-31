@@ -23,6 +23,7 @@ export interface TrajectoryStep {
   args?: unknown;
   argumentsRedacted?: boolean;
   hostedToolName?: string;
+  unresolvedHostedCommand?: boolean;
   name: string;
   spanName: string;
   statusCode?: number;
@@ -473,6 +474,9 @@ export function extractTrajectorySteps(trace: TraceData): TrajectoryStep[] {
           typeof span.attributes?.['promptfoo.openai.hosted_trace'] === 'string' && {
             hostedToolName: toolName,
           }),
+        ...(!command &&
+          typeof span.attributes?.['promptfoo.openai.hosted_trace'] === 'string' &&
+          isCommandToolName(toolName, commandToolNames) && { unresolvedHostedCommand: true }),
         ...(args === undefined ? {} : { args }),
         ...(hasRedactedHostedArguments(span) && { argumentsRedacted: true }),
         attributes: span.attributes || {},

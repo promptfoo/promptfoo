@@ -833,7 +833,7 @@ tests:
 
 In `partial` mode, object properties are matched recursively as a subset. In `exact` mode, the entire argument payload must match exactly.
 
-With hosted OpenAI Agents API traces, a positive subset match can use an unchanged field such as `cwd` even if another argument was omitted. An exact match needs one call with intact arguments, including when `ignore` or `defaults` is set. An inverse match requires complete argument evidence across the hosted call.
+With hosted OpenAI Agents API traces, a positive subset match can use an unchanged field such as `cwd` even if another argument was omitted. An exact match needs one call with intact arguments, including when `ignore` or `defaults` is set. An inverse match requires complete argument evidence across the hosted call. If the calls that might match have missing or redacted arguments, the assertion can report insufficient evidence.
 
 #### Tolerating default arguments {#trajectory-tool-args-match-defaults}
 
@@ -993,7 +993,7 @@ The `trajectory:step-count` assertion counts normalized trajectory steps. It can
 
 Command steps are detected from command attributes such as `command` and `codex.command`, and from command-like tool spans such as OpenAI Agents SDK `exec_command`, `local_shell`, or `shell` calls whose arguments include `cmd`, `command`, or `commands`.
 
-Hosted OpenAI Agents API step counts require a complete trace. To check for a recorded tool span without capturing arguments, use a name pattern and a positive minimum, such as `{ pattern: 'execute_tool *', min: 1 }`. A command count with only a positive `min` can use captured commands even if another call's arguments were lost. An upper bound or inverse check on an untyped name pattern or a command count requires full argument capture, since missing command text can hide additional matches.
+Hosted OpenAI Agents API step counts require a complete trace. A positive minimum such as `{ pattern: 'execute_tool *', min: 1 }` can count recorded span names without arguments. A command minimum can use captured commands even when another call’s arguments were lost. If the count falls short and unresolved calls could meet the minimum, the assertion reports insufficient evidence. An upper bound or inverse check on commands or untyped names requires complete argument capture.
 
 Example:
 
@@ -1140,6 +1140,8 @@ Trace assertions require tracing to be enabled in your evaluation. See the [trac
 If trace data is not available, the assertion will throw an error rather than failing, indicating that the assertion could not be evaluated.
 :::
 
+Hosted OpenAI Agents API checks include spans from the requested turn and its local ancestors. For example, one matching tool span proves `min: 1` even on a partial import, while an absent span cannot prove `max: 0` there. For duration or error budgets, a recorded violation can settle the result. If missing spans or redaction leave more than one possible verdict, the assertion fails for insufficient evidence, including when inverted. A known mismatch on an open test-case span can rule it out during a live eval. If a saved trace is missing that span, its attribute keys alone may leave the filter uncertain.
+
 Example:
 
 ```yaml
@@ -1246,7 +1248,7 @@ The `trace-error-spans` assertion detects error spans in a trace and ensures the
 This assertion requires trace data to be available. If tracing is not enabled or trace data is missing, the assertion will throw an error.
 :::
 
-Pair a zero-error check with a positive tool check when the tool is required. When an OpenAI hosted import is requested, `trace-error-spans` requires a complete imported trace. The importer recognizes signals such as `error: true` and `http.status_code: 500` on the span or its resource, with span attributes taking precedence. It saves the error status and omits diagnostic text. A tool can have an observed error even when telemetry dropped other attributes. A zero-error check needs enough evidence for every selected span. If an older export lacks that evidence, run the eval again. [Hosted command example](/docs/providers/openai-agents-api#inspect-traces)
+Pair a zero-error check with a positive tool check when the tool is required. On a partial hosted OpenAI Agents API trace, a recorded error can disprove a zero-error budget. A clean subset cannot prove the whole turn had zero errors. The importer recognizes signals such as `error: true` and `http.status_code: 500` on the span or its resource, with span attributes taking precedence. It saves the error status and omits diagnostic text. A tool can have an observed error even when telemetry dropped other attributes. A zero-error check needs enough evidence for every selected span. If an older export lacks that evidence, run the eval again. [Hosted command example](/docs/providers/openai-agents-api#inspect-traces)
 
 Example:
 

@@ -146,22 +146,26 @@ Promptfoo passes a W3C trace context to providers via the `traceparent` field. U
 
 ```javascript
 const { trace, context, propagation, SpanStatusCode } = require('@opentelemetry/api');
-const { NodeTracerProvider, SimpleSpanProcessor } = require('@opentelemetry/sdk-trace-node');
+const { TracerProvider, SimpleSpanProcessor } = require('@opentelemetry/sdk-trace');
+const { AsyncLocalStorageContextManager } = require('@opentelemetry/context-async-hooks');
+const { W3CTraceContextPropagator } = require('@opentelemetry/core');
 const { OTLPTraceExporter } = require('@opentelemetry/exporter-trace-otlp-http');
 const { resourceFromAttributes } = require('@opentelemetry/resources');
 
-// Initialize tracer (SDK 2.x API - pass spanProcessors to constructor)
-const provider = new NodeTracerProvider({
+// Initialize tracer (SDK 3.x API - pass spanProcessors to constructor)
+const provider = new TracerProvider({
   resource: resourceFromAttributes({ 'service.name': 'my-provider' }),
   spanProcessors: [
-    new SimpleSpanProcessor(
-      new OTLPTraceExporter({
+    new SimpleSpanProcessor({
+      exporter: new OTLPTraceExporter({
         url: 'http://localhost:4318/v1/traces',
       }),
-    ),
+    }),
   ],
 });
-provider.register();
+trace.setGlobalTracerProvider(provider);
+context.setGlobalContextManager(new AsyncLocalStorageContextManager().enable());
+propagation.setGlobalPropagator(new W3CTraceContextPropagator());
 
 const tracer = trace.getTracer('my-provider');
 
@@ -259,11 +263,15 @@ When regrading a JSON export, built-in argument assertions check the saved targe
 
 The three raw-span assertions accept `value.attributes` to select spans by exact attributes in addition to their name pattern. For example, `attributes: { 'gen_ai.tool.name': 'search' }` limits a count, duration, or error-rate check to the search tool even when every tool emits a span named `execute_tool`. All supplied attributes must match. [Attribute filter examples](/docs/configuration/expected-outputs/deterministic/#trace-span-count)
 
-On a complete hosted Agents API trace with its local provider span, `trace-span-count` with only `min: 1` can pass as soon as one saved span matches the filter, even if an unrelated span lacks the attribute or a higher local ancestor is missing. For an upper bound such as `max: 0`, Promptfoo must account for each candidate, including local ancestors, that could match all the filters. If a saved tool name rules out a call, missing arguments on that call do not affect the grade. A candidate whose tool result was discarded cannot establish that a particular result never occurred.
+With a hosted Agents API trace and its local provider span, `trace-span-count` with only `min: 1` can pass as soon as one saved span matches the filter, even if an unrelated span lacks the attribute or a higher local ancestor is missing. For an upper bound such as `max: 0`, Promptfoo must account for each candidate, including local ancestors, that could match all the filters. If a saved tool name rules out a call, missing arguments on that call do not affect the grade. A candidate whose tool result was discarded cannot establish that a particular result never occurred.
 
-Before grading, Promptfoo waits up to 30 seconds for pending spans and local writes. If local export fails or exceeds that budget, built-in trace and trajectory assertions report unavailable evidence. Output assertions still run. A synchronous SQLite write can return after its export deadline, in which case the local exporter reports a timeout even if the spans were committed.
+Before grading a locally traced row, Promptfoo waits up to 30 seconds for queued local spans and SQLite writes. An external OTLP exporter sends batches independently and drains at SDK shutdown. Assertions configured to fetch an external trace still wait for that trace provider. If local export fails or exceeds the grading budget, built-in trace and trajectory assertions report unavailable evidence. Output assertions still run.
 
-For hosted runs, `trace-error-spans` and `trace-span-duration` with no filters grade the target work completed before assertions run. To include the surrounding Promptfoo test-case span, set an explicit filter such as `pattern: '*'`. If a selected span has no end time, a duration check can pass only when the known durations establish the bound even with the missing measurement.
+The local exporter uses `OTEL_BSP_EXPORT_TIMEOUT` per batch (30,000 ms by default). In SQLite rollback-journal mode, the commit can wait on a lock only for the remaining write budget. Synchronous disk work can still finish after the deadline, and the exporter can report a timeout even when the spans were committed.
+
+For a custom assertion that requires trace evidence, return a failing grade when the spans are missing or empty. [JavaScript example](/docs/configuration/expected-outputs/javascript/#using-trace-data) · [Python example](/docs/configuration/expected-outputs/python/#using-trace-data) · [Ruby example](/docs/configuration/expected-outputs/ruby/#using-trace-data)
+
+For hosted runs, `trace-error-spans` and `trace-span-duration` with no filters grade the target work completed before assertions run. To include the surrounding Promptfoo test-case span, set an explicit filter such as `pattern: '*'`. For `trace-error-spans`, an empty `pattern` with no attribute filters also uses the default target scope. If a selected span has no end time, a duration check can pass only when the known durations establish the bound even with the missing measurement.
 
 ### Turn marker spans {#per-llm-turn-spans}
 
@@ -347,8 +355,8 @@ nested key like `authorization` inside a `headers` object is matched by the patt
 `authorization`, but a full dotted path such as `request.headers.authorization` will **not**
 match the nested leaf key — use the key's own name.
 Redaction covers span **attributes** (recursively, including nested objects and arrays),
-and a span `name` or `statusMessage` **only when it exactly echoes the value of a redacted
-attribute**. A secret that appears solely in a span name, status/error message, or log
+and a span `name` or `statusMessage` when it exactly matches a redacted string, including
+a string inside a redacted object or array. A secret that appears solely in a span name, status/error message, or log
 body — without also being a redacted attribute value — is not detected. Redaction also does
 **not** scan arbitrary free text or trace `metadata` (such as test `vars`), so avoid placing
 secrets in test variables when traces are retained.
@@ -711,9 +719,9 @@ span.setAttributes({
 Reduce overhead in high-volume scenarios:
 
 ```javascript
-const { TraceIdRatioBasedSampler } = require('@opentelemetry/sdk-trace-node');
+const { TracerProvider, TraceIdRatioBasedSampler } = require('@opentelemetry/sdk-trace');
 
-const provider = new NodeTracerProvider({
+const provider = new TracerProvider({
   sampler: new TraceIdRatioBasedSampler(0.1), // Sample 10% of traces
 });
 ```
