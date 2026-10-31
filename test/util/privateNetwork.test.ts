@@ -165,6 +165,33 @@ describe('getCallerSuppliedBaseUrls', () => {
     ]);
   });
 
+  it('refuses a file-backed provider id instead of letting the loader expand it unseen', () => {
+    // loadApiProvider expands file:// YAML/JSON configs and instantiates the
+    // inner provider, so a file whose single provider points at metadata
+    // would bypass the preflight entirely: the preflight sees no URL here.
+    expect(() => getCallerSuppliedBaseUrls({ id: 'file:///tmp/provider.yaml' })).toThrow(
+      PrivateRangeBlockedError,
+    );
+    expect(() => getCallerSuppliedBaseUrls({ id: 'file:///tmp/provider.json' })).toThrow(
+      PrivateRangeBlockedError,
+    );
+    expect(() => getCallerSuppliedBaseUrls({ id: 'file:///tmp/provider.yml' })).toThrow(
+      PrivateRangeBlockedError,
+    );
+  });
+
+  it('refuses a templated file:// id that could render into a config reference', () => {
+    expect(() => getCallerSuppliedBaseUrls({ id: 'file://{{ env.HOME }}/provider.yaml' })).toThrow(
+      PrivateRangeBlockedError,
+    );
+  });
+
+  it('leaves non-config file:// ids alone (script providers, not config expansion)', () => {
+    expect(getCallerSuppliedBaseUrls({ id: 'file://path/to/custom_provider.py:call_api' })).toEqual(
+      [],
+    );
+  });
+
   it('reads config.url (the HttpProvider request URL)', () => {
     expect(
       getCallerSuppliedBaseUrls({ id: 'http', config: { url: 'http://127.0.0.1:8080/hook' } }),
@@ -448,6 +475,21 @@ describe('assertProviderTargetPublic', () => {
     restoreEnv = mockProcessEnv({ PROMPTFOO_BLOCK_PRIVATE_RANGES: 'true' });
     await expect(assertProviderTargetPublic({ id: 'openai:gpt-4o-mini' })).resolves.toBeUndefined();
     expect(mockedLookup).not.toHaveBeenCalled();
+  });
+
+  it('refuses a file-backed provider id when the flag is set', async () => {
+    restoreEnv = mockProcessEnv({ PROMPTFOO_BLOCK_PRIVATE_RANGES: 'true' });
+    await expect(assertProviderTargetPublic({ id: 'file:///tmp/provider.yaml' })).rejects.toThrow(
+      PrivateRangeBlockedError,
+    );
+    expect(mockedLookup).not.toHaveBeenCalled();
+  });
+
+  it('does not refuse a file-backed provider id when the flag is unset', async () => {
+    restoreEnv = mockProcessEnv({ PROMPTFOO_BLOCK_PRIVATE_RANGES: undefined });
+    await expect(
+      assertProviderTargetPublic({ id: 'file:///tmp/provider.yaml' }),
+    ).resolves.toBeUndefined();
   });
 
   it('checks config.apiBaseUrl when the flag is set', async () => {
