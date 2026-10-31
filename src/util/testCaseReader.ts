@@ -934,7 +934,7 @@ function hasGlobMagic(reference: string): boolean {
  * Resolve a single `tests` string reference to the file paths the loader will read.
  *
  * Globs are expanded with the same `globSync` call `loadTestsFromGlob` uses, because
- * chokidar v5 does not expand glob patterns itself. Only concrete files are returned:
+ * chokidar does not expand glob patterns itself. Only concrete files are returned:
  * watching a pattern's parent directory instead would rerun the evaluation on every
  * unrelated edit beneath it, including the run's own output file.
  */

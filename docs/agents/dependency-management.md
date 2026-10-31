@@ -5,19 +5,24 @@
 Use `--target minor` for safe minor/patch updates only:
 
 ```bash
-# Check all three locations for available updates
-npx npm-check-updates --target minor              # Root
-npx npm-check-updates --target minor --cwd site   # Site workspace
-npx npm-check-updates --target minor --cwd src/app # App workspace
+# Check the root, workspaces, and standalone action package for available updates
+npx npm-check-updates --target minor                       # Root
+npx npm-check-updates --target minor --cwd site            # Site workspace
+npx npm-check-updates --target minor --cwd src/app         # App workspace
+npx npm-check-updates --target minor --cwd code-scan-action # Standalone action
 
 # Apply updates with -u flag
 npx npm-check-updates --target minor -u
 npx npm-check-updates --target minor -u --cwd site
 npx npm-check-updates --target minor -u --cwd src/app
+npx npm-check-updates --target minor -u --cwd code-scan-action
 
 # Install and verify
 npm install
+npm install --prefix code-scan-action
 npm run build && npm test && npm run lint && npm run format:check
+npm --prefix code-scan-action run tsc
+npm --prefix code-scan-action run build
 
 # Check version consistency (required by CI)
 npx check-dependency-version-consistency
@@ -29,7 +34,7 @@ npx check-dependency-version-consistency
 
 2. **Update examples/** - 20+ package.json files in examples/ are user-facing; keep them current when updating dependencies.
 
-3. **Run `npm audit`** - Use `npm audit` or `npm run audit:fix` to check for security vulnerabilities across all workspaces. Do not let `npm audit fix` lockfile drift ride along with an unrelated change; ship audit-driven updates as their own PR.
+3. **Run `npm audit`** - Use `npm audit` or `npm run audit:fix` to check for security vulnerabilities across all workspaces, and `npm audit --prefix code-scan-action` for the standalone action package. Do not let `npm audit fix` lockfile drift ride along with an unrelated change; ship audit-driven updates as their own PR.
 
 4. **If updates fail** - Revert the problematic package and keep the current version. Don't force incompatible updates.
 
@@ -50,13 +55,22 @@ Major updates require careful evaluation:
 - Look for migration guides
 - Test thoroughly before merging
 
-## Workspaces
+## Packages and Workspaces
 
-The project uses npm workspaces. Updates must be checked in all three locations:
+The root `mermaid` override selects version 12. The site explicitly uses `layout: dagre` and `look: classic` to preserve its existing diagrams' layout and appearance. Mermaid's browser floor is newer than some site targets, so validate new diagram types against the site's Browserslist targets before adopting them.
+
+Keep `storybook`, the `@storybook/*` framework and addons on the same release. Storybook 10.6.2 also requires `@chromatic-com/storybook` 5.5.1 or later for the hardened highlight API. Development servers restrict remote iframe embedding and messaging by default; built Storybooks remain embeddable.
+
+The root and its npm workspaces share the root lockfile. Check updates in all three locations:
 
 - Root (`/`) - Core library dependencies
 - Site (`/site`) - Documentation site (Docusaurus)
 - App (`/src/app`) - Web UI (React/Vite)
+
+The code-scan GitHub Action (`/code-scan-action`) is a separate package with its own
+`package-lock.json`; it is not a root workspace. Check and update its dependencies
+separately, and run its install, typecheck, and build commands above when they change.
+Only include its generated `dist/` files when packaging an action release.
 
 ## Working on Renovate Branches
 
