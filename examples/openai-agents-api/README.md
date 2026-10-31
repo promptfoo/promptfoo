@@ -39,6 +39,8 @@ npm run local -- eval -c examples/openai-agents-api/promptfooconfig.files.yaml -
 
 The arithmetic and ledger checks match the tool item's type, status, and root turn ID in `context.providerResponse.metadata`. To inspect the shell exit code, open the command's saved item in OpenAI. The ledger config also enables native trace import. The root command summary and the native trace are independent sources of action evidence.
 
+Each ledger row starts a new hosted sandbox with networking disabled and one synthetic input file. The config supplies no credentials to the sandbox. An agent can run additional shell commands and still pass the checks. Promptfoo grades the answer and recorded actions after the turn.
+
 ## Inspect the results
 
 Use the JSON export to see which check failed when the final answer looks correct:
