@@ -28,13 +28,6 @@ export interface OtelConfig {
   debug: boolean;
 }
 
-/**
- * Resolve the traces URL the OpenTelemetry spec assigns to an OTLP/HTTP exporter.
- *
- * `PROMPTFOO_OTEL_ENDPOINT` and the signal-specific `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` are used
- * verbatim. The generic `OTEL_EXPORTER_OTLP_ENDPOINT` is a base URL, so `/v1/traces` is appended
- * when it has no path; a generic value that already names a path is kept as-is.
- */
 function resolveTracesEndpoint(): string | undefined {
   const verbatim =
     getEnvString('PROMPTFOO_OTEL_ENDPOINT')?.trim() ||
@@ -46,14 +39,11 @@ function resolveTracesEndpoint(): string | undefined {
   if (!base) {
     return undefined;
   }
-  try {
-    const url = new URL(base);
-    if (url.pathname === '' || url.pathname === '/') {
-      url.pathname = '/v1/traces';
-      return url.toString();
-    }
-  } catch {
-    // Leave an unparseable value for the exporter to report.
+  // A generic origin names a collector. Existing configs also use this variable for full URLs.
+  const url = URL.parse(base);
+  if (url?.pathname === '/') {
+    url.pathname = '/v1/traces';
+    return url.href;
   }
   return base;
 }
