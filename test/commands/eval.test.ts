@@ -1889,7 +1889,7 @@ describe('evalCommand', () => {
         path.resolve('/suite', 'vars/scenario.yaml'),
         path.resolve('/suite', 'vars/body.txt'),
       ]),
-      { ignored: /^\./, persistent: true },
+      { atomic: true, ignored: /^\./, persistent: true },
     );
 
     const loggerInfoSpy = vi.spyOn(logger, 'info').mockImplementation(() => logger);
@@ -1937,7 +1937,7 @@ describe('evalCommand', () => {
         );
         expect(chokidarMocks.watch).toHaveBeenCalledWith(
           expect.arrayContaining([path.resolve(expected)]),
-          { ignored: /^\./, persistent: true },
+          { atomic: true, ignored: /^\./, persistent: true },
         );
       } finally {
         cwd.mockRestore();

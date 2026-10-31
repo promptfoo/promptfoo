@@ -1,4 +1,4 @@
-import { getEnvString } from '../../envars';
+import { getEnvString, getProviderEnvString } from '../../envars';
 import { resolveProviderEnv } from '../env';
 
 import type { EnvOverrides } from '../../types/env';
@@ -45,7 +45,11 @@ export function resolveBedrockMantleApiKey(
   if (config.apiKeyRequired === false || hasExplicitAwsCredentials) {
     return explicitKey || undefined;
   }
-  return explicitKey || env?.AWS_BEARER_TOKEN_BEDROCK || getEnvString('AWS_BEARER_TOKEN_BEDROCK');
+  return (
+    explicitKey ||
+    getProviderEnvString(env, 'AWS_BEARER_TOKEN_BEDROCK') ||
+    getEnvString('AWS_BEARER_TOKEN_BEDROCK')
+  );
 }
 
 export function getBedrockMantleOrigin(region: string): string {
