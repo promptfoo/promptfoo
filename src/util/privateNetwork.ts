@@ -230,6 +230,7 @@ interface ProviderTarget {
     apiBaseUrl?: unknown;
     baseUrl?: unknown;
     url?: unknown;
+    gateway_url?: unknown;
     request?: unknown;
     useHttps?: unknown;
   };
@@ -264,6 +265,18 @@ const LOCAL_DEFAULT_ENDPOINTS: Array<{
    * while the real target goes unchecked.
    */
   configBaseUrlWins?: boolean;
+  /**
+   * Same shape as `configBaseUrlWins` for providers whose endpoint key is
+   * `config.gateway_url` (openclaw): the effective target is the explicit
+   * `config.gateway_url` when one is configured, the local default
+   * otherwise. The provider's config-file fallback (step 3 of
+   * `resolveGatewayTransportUrl`) is not reproduced here: resolving it
+   * would mean importing provider code into this shared util, so a
+   * config-file-redirected public gateway still validates the local
+   * default and fails closed. Operators can unblock that case with an
+   * explicit `config.gateway_url` or gateway env override.
+   */
+  configGatewayUrlWins?: boolean;
 }> = [
   {
     test: (id) => id.startsWith('ollama:'),
@@ -305,17 +318,41 @@ const LOCAL_DEFAULT_ENDPOINTS: Array<{
     // public default needs no exception because it is public.
     configBaseUrlWins: true,
   },
+  {
+    test: (id) => id.startsWith('litellm:'),
+    baseUrl: () => getEnvString('LITELLM_API_BASE') || 'http://0.0.0.0:4000',
+    // createLiteLLMProvider resolves config.apiBaseUrl, then the
+    // LITELLM_API_BASE env override, then the local proxy default, so an
+    // explicit apiBaseUrl replaces the default outright.
+    apiBaseUrlWins: true,
+  },
+  {
+    test: (id) => /^(?:openclaw|clawdbot)(?::|$)/.test(id),
+    baseUrl: () =>
+      getEnvString('OPENCLAW_GATEWAY_URL') ||
+      getEnvString('CLAWDBOT_GATEWAY_URL') ||
+      'http://127.0.0.1:18789',
+    // resolveGatewayTransportUrl resolves config.gateway_url, then the
+    // gateway env overrides, then the local gateway default. The port
+    // override needs no separate handling: the default host is loopback
+    // on any port, so the verdict is the same.
+    configGatewayUrlWins: true,
+  },
 ];
 
 /**
  * Resolve a provider id to a fetchable URL when the registry routes it to a
- * URL-fetching provider. `webhook:<url>` is unwrapped because the registry
- * strips the prefix before WebhookProvider fetches the inner URL; `ws:` and
- * `wss:` ids reach WebSocketProvider, which dials the URL outside the fetch
- * layer, so the route preflight is the only guard for them.
+ * URL-fetching provider. URL-bearing ids are unwrapped because the
+ * providers strip the prefix before fetching the inner URL: `webhook:`
+ * (WebhookProvider), `n8n:` (createN8nProvider strips the prefix for the
+ * webhook URL), and `a2a:` (A2AProvider stores the remainder as
+ * `config.url`). `ws:` and `wss:` ids reach WebSocketProvider, which dials
+ * the URL outside the fetch layer, so the route preflight is the only guard
+ * for them.
  */
 function getUrlFromProviderId(id: string): string | undefined {
-  const candidate = id.startsWith('webhook:') ? id.slice('webhook:'.length) : id;
+  const wrappedPrefix = ['webhook:', 'n8n:', 'a2a:'].find((prefix) => id.startsWith(prefix));
+  const candidate = wrappedPrefix ? id.slice(wrappedPrefix.length) : id;
   try {
     const parsed = new URL(candidate);
     if (
@@ -410,13 +447,15 @@ function getRawRequestTarget(rawRequest: string, useHttps: boolean): string {
  *   forms the provider registry accepts (`http:127.0.0.1`, backslash
  *   variants) are caught too,
  * - URL-bearing provider ids the registry unwraps before fetching
- *   (`webhook:<url>`, `ws:`/`wss:`),
- * - a named provider whose default endpoint is local (ollama, llama, ...),
- *   validated against its effective default base URL, unless the provider
- *   resolves an explicit `config.apiBaseUrl` ahead of that default
- *   (localai), in which case the default is never fetched; providers that
- *   derive their endpoint from `config.baseUrl` instead (helicone, elevenlabs) are
- *   validated against the effective `config.baseUrl`.
+ *   (`webhook:<url>`, `n8n:<url>`, `a2a:<url>`, `ws:`/`wss:`),
+ * - a named provider whose default endpoint is local (ollama, llama,
+ *   litellm, openclaw, ...), validated against its effective default base
+ *   URL, unless the provider resolves an explicit `config.apiBaseUrl`
+ *   ahead of that default (localai, litellm), in which case the default
+ *   is never fetched; providers that derive their endpoint from
+ *   `config.baseUrl` instead (helicone, elevenlabs) are validated against
+ *   the effective `config.baseUrl`, and providers that derive it from
+ *   `config.gateway_url` (openclaw) against the effective gateway URL.
  *
  * Named providers without an override or a local default resolve to their
  * public defaults and need no check.
@@ -446,29 +485,53 @@ export function getCallerSuppliedBaseUrls(providerOptions: ProviderTarget): stri
   const localDefault = LOCAL_DEFAULT_ENDPOINTS.find(({ test }) => test(id));
   const defaultUrl = localDefault?.baseUrl();
   if (defaultUrl) {
-    if (localDefault?.configBaseUrlWins) {
-      // The provider derives its endpoint from config.baseUrl and never
-      // fetches config.apiBaseUrl, so the effective target is the explicit
-      // config.baseUrl when one is configured, the local default otherwise.
-      const configBaseUrl = config?.baseUrl;
-      urls.push(
-        typeof configBaseUrl === 'string' && configBaseUrl.length > 0 ? configBaseUrl : defaultUrl,
-      );
-    } else {
-      // A provider that resolves `config.apiBaseUrl` ahead of its local
-      // default never fetches the default once an override is configured, so
-      // validating the default would reject a target that is never used.
-      // Providers whose fetch URL comes from an env var alone keep the
-      // default in the list: it remains their effective target.
-      const apiBaseUrl = config?.apiBaseUrl;
-      const explicitApiBaseUrl =
-        typeof apiBaseUrl === 'string' && apiBaseUrl.length > 0 ? apiBaseUrl : undefined;
-      if (!(explicitApiBaseUrl && localDefault?.apiBaseUrlWins)) {
-        urls.push(defaultUrl);
-      }
+    const target = getLocalDefaultTarget(localDefault, config, defaultUrl);
+    if (target) {
+      urls.push(target);
     }
   }
   return urls;
+}
+
+type LocalDefaultEndpoint = (typeof LOCAL_DEFAULT_ENDPOINTS)[number];
+
+/**
+ * Resolve the effective target for a named provider with a local default
+ * endpoint. Providers that derive their endpoint from `config.baseUrl`
+ * (helicone, elevenlabs) or `config.gateway_url` (openclaw) never fetch
+ * `config.apiBaseUrl`, so the effective target is the explicit key when
+ * one is configured, the local default otherwise. A provider that
+ * resolves `config.apiBaseUrl` ahead of its local default (localai,
+ * litellm) never fetches the default once an override is configured, so
+ * the default is suppressed there; providers whose fetch URL comes from
+ * an env var alone keep the default, since it remains their effective
+ * target. Returns undefined only when the default is suppressed.
+ */
+function getLocalDefaultTarget(
+  localDefault: LocalDefaultEndpoint | undefined,
+  config: ProviderTarget['config'],
+  defaultUrl: string,
+): string | undefined {
+  if (!localDefault) {
+    return undefined;
+  }
+  if (localDefault.configBaseUrlWins) {
+    const configBaseUrl = config?.baseUrl;
+    return typeof configBaseUrl === 'string' && configBaseUrl.length > 0
+      ? configBaseUrl
+      : defaultUrl;
+  }
+  if (localDefault.configGatewayUrlWins) {
+    const gatewayUrl = config?.gateway_url;
+    return typeof gatewayUrl === 'string' && gatewayUrl.length > 0 ? gatewayUrl : defaultUrl;
+  }
+  const apiBaseUrl = config?.apiBaseUrl;
+  const explicitApiBaseUrl =
+    typeof apiBaseUrl === 'string' && apiBaseUrl.length > 0 ? apiBaseUrl : undefined;
+  if (explicitApiBaseUrl && localDefault.apiBaseUrlWins) {
+    return undefined;
+  }
+  return defaultUrl;
 }
 
 /**
