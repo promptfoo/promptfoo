@@ -57,10 +57,11 @@ npx promptfoo@latest eval --no-cache -o results.json
 | Option                                             | Description                                                                                                                     |
 | -------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
 | `model`                                            | Required when using bare `openai:decisions`. A model in `openai:decisions:<model>` takes precedence. There is no default model. |
-| `questions`                                        | One or more predicate, choice, or score questions. Required when testing the provider directly.                                 |
+| `questions`                                        | One to 400 predicate, choice, or score questions. Required when testing the provider directly.                                  |
 | `threshold`                                        | Pass cutoff for `llm-rubric`, from 0 to 1. Defaults to `0.5`.                                                                   |
 | `levels`                                           | Two to ten ordered score levels for `llm-rubric`, as strings or `{ label, description? }` objects. Omit to use a predicate.     |
 | `instructions`, `labels`                           | Required for `classifier`: a question and a list of labels or a map of label to description.                                    |
+| `prompt_cache_key`, `prompt_cache_options`         | Partition OpenAI prompt cache reuse and select implicit or explicit breakpoints in shared input.                                |
 | `safety_identifier`                                | Optional stable pseudonymous end-user identifier, at most 128 characters, or `null`.                                            |
 | `apiKey`, `apiKeyEnvar`                            | Standard OpenAI credential overrides. Defaults to `OPENAI_API_KEY`.                                                             |
 | `apiKeyRequired`                                   | Whether an OpenAI API key is required. Defaults to `true`.                                                                      |
@@ -71,7 +72,9 @@ npx promptfoo@latest eval --no-cache -o results.json
 
 For gateway-only authentication through a custom `Authorization` header or URL userinfo, set both `apiKeyRequired: false` and `useDefaultApiKey: false`. This skips the OpenAI API-key check and disables ambient `OPENAI_API_KEY` fallback; explicitly configured keys are still honored.
 
-The rendered prompt becomes the request's `input`. Text prompts are sent as strings. A JSON array must contain user messages whose content is a string or text/image parts. The provider accepts Responses-style `input_text` and `input_image` parts and normalizes Chat Completions-style `text` and `image_url` parts. Images must be inline base64 data URLs; hosted image URLs and file IDs are not supported. A request can include up to 128 images. Other roles, tool items, and audio inputs are rejected. Multiple messages form one input, so use separate test cases to evaluate independent inputs.
+The rendered prompt becomes the request's `input`. Send plain text or a JSON array of messages and tool calls. User messages accept text, hosted HTTP(S) images, base64 image data URLs, and `input_json` parts whose `data` is an object or an array of objects. System and developer messages accept text. Assistant messages accept output text or refusals. Function and custom tool outputs must follow a matching call with the same `call_id`.
+
+A question's `instructions` can contain text, image, and JSON parts. Promptfoo counts images in both shared input and questions toward its 128-image limit. Explicit cache breakpoints belong on text or image parts in shared input. See the [Decisions request reference](https://developers.openai.com/api/reference/resources/decisions/methods/create) for examples and limits.
 
 Promptfoo does not infer a default Decisions price. Cost estimates require the explicit per-token prices above. Custom input rates apply to all reported input tokens, including API-cached tokens; they are flat-rate estimates, not automatic Decisions billing. See [OpenAI's pricing and availability](https://developers.openai.com/api/docs/guides/decisions#pricing-and-availability) for current billing details. Matching results may be reused within an eval run; separate CLI invocations do not reuse provider results.
 

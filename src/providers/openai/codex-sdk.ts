@@ -597,7 +597,7 @@ function buildCodexRateLimitResponse(
   };
 }
 
-export const CODEX_SDK_VERSION_RANGE = '^0.156.1';
+export const CODEX_SDK_VERSION_RANGE = '>=0.156.1 <0.166.0';
 
 export function resolveCodexSdkPackage(): string | null {
   const basePaths = [
@@ -623,7 +623,7 @@ async function loadCodexSDK(): Promise<{ entryPoint: string; module: any }> {
       dedent`The @openai/codex-sdk package is required but not installed.
 
       To use the OpenAI Codex SDK provider, install it with:
-        npm install promptfoo @openai/codex-sdk@${CODEX_SDK_VERSION_RANGE}
+        npm install promptfoo "@openai/codex-sdk@${CODEX_SDK_VERSION_RANGE}"
 
       Requires Node.js >=22.22.0.
 
@@ -634,7 +634,7 @@ async function loadCodexSDK(): Promise<{ entryPoint: string; module: any }> {
   const version = getPackageVersion('@openai/codex-sdk', codexPath);
   if (!version || !semverSatisfies(version, CODEX_SDK_VERSION_RANGE)) {
     throw new Error(
-      `The OpenAI Codex SDK provider requires @openai/codex-sdk@${CODEX_SDK_VERSION_RANGE} (found ${version ?? 'unknown'}). Install it with: npm install promptfoo @openai/codex-sdk@${CODEX_SDK_VERSION_RANGE}`,
+      `The OpenAI Codex SDK provider requires @openai/codex-sdk@${CODEX_SDK_VERSION_RANGE} (found ${version ?? 'unknown'}). Install it with: npm install promptfoo "@openai/codex-sdk@${CODEX_SDK_VERSION_RANGE}"`,
     );
   }
 
@@ -656,7 +656,7 @@ async function loadCodexSDK(): Promise<{ entryPoint: string; module: any }> {
       - Corrupted installation
 
       Try reinstalling:
-        npm install promptfoo @openai/codex-sdk@${CODEX_SDK_VERSION_RANGE}
+        npm install promptfoo "@openai/codex-sdk@${CODEX_SDK_VERSION_RANGE}"
 
       For more information, see: https://www.promptfoo.dev/docs/providers/openai-codex-sdk/`,
     );
@@ -668,6 +668,8 @@ export class OpenAICodexSDKProvider implements ApiProvider {
 
   static OPENAI_MODELS = [
     'gpt-6-astra',
+    'gpt-6.1-sol',
+    'gpt-6.1-terra',
     'gpt-6-sol',
     'gpt-6-luna',
     // GPT-5.6 models (requires Codex 0.144.0 or later)

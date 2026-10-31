@@ -49,7 +49,7 @@ const createMixedCachedTokenDetails = () => ({
 });
 
 describe('OpenAI billing helpers', () => {
-  describe('native Daybreak alias pricing', () => {
+  describe('native trusted-access model pricing', () => {
     const apiUrl = 'https://api.openai.com/v1';
     const usage = {
       input_tokens: 2000,
@@ -61,6 +61,9 @@ describe('OpenAI billing helpers', () => {
       ['gpt-daybreak-blue-latest', 272_000, 4, 0.4, 5, 20],
       ['gpt-daybreak-blue-latest', 272_001, 8, 0.8, 10, 30],
       ['gpt-daybreak-red-latest', 272_000, 12.5, 1.25, 15.625, 75],
+      ['gpt-5.6-cyber', 272_000, 12.5, 1.25, 15.625, 75],
+      ['gpt-rosalind-research', 2000, 5, 0.5, 5, 25],
+      ['gpt-rosalind-discovery', 2000, 5, 0.5, 5, 25],
     ] as const)(
       'prices %s with %i input tokens and reported cache usage',
       (model, inputTokens, input, cached, write, output) => {
@@ -89,7 +92,7 @@ describe('OpenAI billing helpers', () => {
       ).toBeUndefined();
     });
 
-    it.each(['gpt-daybreak-blue-latest', 'gpt-daybreak-red-latest'])(
+    it.each(['gpt-daybreak-blue-latest', 'gpt-daybreak-red-latest', 'gpt-5.6-cyber'])(
       'limits %s automatic prices to established tiers, endpoints, and usage',
       (model) => {
         for (const serviceTier of [undefined, null, 'default', 'standard']) {
@@ -202,6 +205,7 @@ describe('OpenAI billing helpers', () => {
           ['flex', 0.5],
           ['fast', 2],
           ['priority', 2],
+          ['ultrafast', 6],
         ] as const) {
           expect(calculateOpenAIUsageCost('gpt-6.1-sol', {}, usage, { serviceTier })).toBeCloseTo(
             standardCost * multiplier,
@@ -270,6 +274,48 @@ describe('OpenAI billing helpers', () => {
     });
   });
 
+  it.each([
+    { inputs: 272_000, input: 1, cached: 0.05, output: 5 },
+    { inputs: 272_001, input: 2, cached: 0.1, output: 7.5 },
+  ])(
+    'prices GPT-6.1 Terra with mixed cache lifetimes at $inputs input tokens',
+    ({ inputs, input, cached, output }) => {
+      const usage = {
+        input_tokens: inputs,
+        output_tokens: 1000,
+        input_tokens_details: {
+          cached_tokens: 4000,
+          cache_write_tokens: 7000,
+          cache_write_tokens_details: { ttl_30m_tokens: 3000, ttl_12h_tokens: 4000 },
+        },
+      };
+      const expected =
+        ((inputs - 11000) * input +
+          4000 * cached +
+          3000 * input * 1.25 +
+          4000 * input * 2.5 +
+          1000 * output) /
+        1e6;
+      for (const [serviceTier, multiplier] of [
+        ['default', 1],
+        ['flex', 0.5],
+        ['batch', 0.5],
+        ['priority', 2],
+      ] as const) {
+        expect(
+          calculateOpenAIUsageCost('gpt-6.1-terra', {}, usage, {
+            apiUrl: 'https://eu.api.openai.com/v1',
+            serviceTier,
+          }),
+        ).toBeCloseTo(expected * multiplier * 1.1, 10);
+      }
+      expect(calculateOpenAIUsageCost('gpt-6.1-terra', { inputCost: 3 / 1e6 }, usage)).toBeCloseTo(
+        (inputs * 3 + 1000 * output) / 1e6,
+        10,
+      );
+    },
+  );
+
   describe('Ultrafast', () => {
     it.each([
       { inputTokens: 272_000, input: 60, cached: 6, write: 75, output: 300 },
@@ -306,7 +352,7 @@ describe('OpenAI billing helpers', () => {
       ).toBe(0);
     });
 
-    it.each(['gpt-5.6-sol', 'gpt-6.1-sol', 'gpt-6-sol', 'gpt-4o', 'gpt-image-1'])(
+    it.each(['gpt-5.6-sol', 'gpt-6.1-terra', 'gpt-6-sol', 'gpt-4o', 'gpt-image-1'])(
       'does not substitute standard prices for unpublished %s Ultrafast rates',
       (model) => {
         const usage = { input_tokens: 1000, output_tokens: 100 };
@@ -600,6 +646,7 @@ describe('OpenAI billing helpers', () => {
       totalInputTokens: 220,
       cachedInputTokens: 12,
       cacheWriteInputTokens: 5,
+      cacheWrite12hInputTokens: 0,
       cachedTextInputTokens: 0,
       cachedAudioInputTokens: 0,
       cachedImageInputTokens: 0,
@@ -637,6 +684,7 @@ describe('OpenAI billing helpers', () => {
       totalInputTokens: 30,
       cachedInputTokens: 4,
       cacheWriteInputTokens: 0,
+      cacheWrite12hInputTokens: 0,
       cachedTextInputTokens: 3,
       cachedAudioInputTokens: 1,
       cachedImageInputTokens: 0,
@@ -952,7 +1000,8 @@ describe('OpenAI billing helpers', () => {
     [{ apiHost: 'eu.api.openai.com' }, {}],
     [{ apiBaseUrl: 'https://us.api.openai.com/v1' }, {}],
     [{}, { apiUrl: 'https://eu.api.openai.com/v1' }],
-  ])('applies the GPT-5.6 regional processing uplift', (config, options) => {
+    [{}, { apiUrl: 'https://gov.api.openai.com/v1' }],
+  ])('applies the GPT-5.6 regional or FedRAMP processing uplift', (config, options) => {
     const usage = createCachedResponsesUsage();
 
     expect(calculateOpenAIUsageCost('gpt-5.6', config, usage, options)).toBeCloseTo(

@@ -184,7 +184,7 @@ export type OpenAiCompletionOptions = OpenAiSharedOptions & {
     bitrate?: string;
     format?: string | 'wav' | 'mp3' | 'flac' | 'opus' | 'pcm16' | 'aac';
     speed?: number;
-    voice?: string;
+    voice?: OpenAI.Chat.Completions.ChatCompletionAudioParam['voice'];
   };
 
   // Responses API specific options

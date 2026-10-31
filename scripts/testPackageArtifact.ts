@@ -654,7 +654,7 @@ assert.equal(summary.results[0].success, false);
 assert.equal(summary.results[0].score, 0);
 assert.ok(summary.results[0].response.error.includes(mode === 'installed'
   ? 'Repository is not a directory'
-  : 'npm install promptfoo @openai/codex-security@^0.2.0'));
+  : 'npm install promptfoo "@openai/codex-security@>=0.2.0 <0.9.0"'));
 if (mode === 'incompatible') {
   assert.ok(summary.results[0].response.error.includes('incompatible (0.1.31)'));
 }
@@ -931,12 +931,24 @@ const record = await evaluate({
 }, { cache: false, maxConcurrency: 1, writeLatestResults: false });
 const { results } = await record.toEvaluateSummary();
 assert.equal(results.length, installed ? 4 : 2);
+const expectedSdkErrors = {
+  'openai:codex-sdk': {
+    install: 'npm install promptfoo "@openai/codex-sdk@>=0.156.1 <0.166.0"',
+    incompatible: 'found 0.154.0',
+  },
+  'anthropic:claude-agent-sdk': {
+    install: 'npm install promptfoo @anthropic-ai/claude-agent-sdk@^0.3.273',
+    incompatible: 'found 0.3.235',
+  },
+};
 for (const result of results) {
   if (!installed) {
     assert.equal(result.success, false);
-    assert.match(result.response.error, new RegExp('npm install promptfoo @(openai/codex-sdk|anthropic-ai/claude-agent-sdk)'));
+    const expected = expectedSdkErrors[result.provider.id];
+    assert.ok(expected, result.provider.id);
+    assert.ok(result.response.error.includes(expected.install), result.response.error);
     if (mode === 'incompatible') {
-      assert.match(result.response.error, /found 0\\.(154\\.0|3\\.235)/);
+      assert.ok(result.response.error.includes(expected.incompatible), result.response.error);
     }
   } else if (result.vars.input === 'fixture error') {
     assert.equal(result.success, false);
@@ -995,7 +1007,7 @@ async function runOptionalOpenAiAgentsChecks(
     await assert.rejects(
       loadApiProvider('openai:agents:gpt-4.1-mini'),
       (error) => {
-        assert.match(error.message, /npm install promptfoo @openai\\/agents@\\^0\\.14\\.1/);
+        assert.ok(error.message.includes('npm install promptfoo @openai/agents@^0.21.0'), error.message);
         if (process.argv[2] === 'incompatible') {
           assert.match(error.message, /found 0\\.0\\.0/);
         } else {

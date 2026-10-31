@@ -39,7 +39,7 @@ export const CODEX_SECURITY_OPERATIONS = [
   'validation',
 ] as const;
 
-const MINIMUM_CODEX_SECURITY_SDK_VERSION = '0.2.0';
+const CODEX_SECURITY_SDK_VERSION_RANGE = '>=0.2.0 <0.9.0';
 
 const ReasoningEffortSchema = z.enum(['minimal', 'low', 'medium', 'high', 'xhigh', 'max', 'ultra']);
 
@@ -186,10 +186,10 @@ async function loadCodexSecurity(): Promise<CodexSecurityModule> {
     try {
       const module = (await importModule(entryPoint)) as CodexSecurityModule;
       const version = typeof module.VERSION === 'string' ? module.VERSION : 'unknown';
-      if (!semverSatisfies(version, `^${MINIMUM_CODEX_SECURITY_SDK_VERSION}`)) {
+      if (!semverSatisfies(version, CODEX_SECURITY_SDK_VERSION_RANGE)) {
         incompatibleVersions.add(version);
         logger.warn(
-          `[CodexSecurity] Ignoring @openai/codex-security ${version}; a compatible version ^${MINIMUM_CODEX_SECURITY_SDK_VERSION} is required for patched TOML parsing, updated plugin archive extraction, and deep-scan usage accounting.`,
+          `[CodexSecurity] Ignoring @openai/codex-security ${version}; supported versions are ${CODEX_SECURITY_SDK_VERSION_RANGE}.`,
         );
         continue;
       }
@@ -207,7 +207,7 @@ async function loadCodexSecurity(): Promise<CodexSecurityModule> {
 
       Promptfoo and the SDK require a supported even-numbered Node.js release: ^22.22.0, ^24.0.0, or ^26.0.0.
       Reinstall them together with:
-        npm install promptfoo @openai/codex-security@^${MINIMUM_CODEX_SECURITY_SDK_VERSION}
+        npm install promptfoo "@openai/codex-security@${CODEX_SECURITY_SDK_VERSION_RANGE}"
       If Promptfoo is installed globally with npm, add -g to that command. With pnpm, Yarn or Bun, use its global install instead.
 
       See https://www.promptfoo.dev/docs/providers/openai-codex-security/`,
@@ -218,9 +218,9 @@ async function loadCodexSecurity(): Promise<CodexSecurityModule> {
     throw new Error(
       dedent`The installed @openai/codex-security package is incompatible (${Array.from(incompatibleVersions).join(', ')}).
 
-      A compatible version ^${MINIMUM_CODEX_SECURITY_SDK_VERSION} is required for patched TOML parsing, updated plugin archive extraction, and accurate deep-worker cost tracking.
+      Supported versions are ${CODEX_SECURITY_SDK_VERSION_RANGE}.
       Install the compatible SDK alongside Promptfoo with:
-        npm install promptfoo @openai/codex-security@^${MINIMUM_CODEX_SECURITY_SDK_VERSION}
+        npm install promptfoo "@openai/codex-security@${CODEX_SECURITY_SDK_VERSION_RANGE}"
       If Promptfoo is installed globally with npm, add -g to that command. With pnpm, Yarn or Bun, use its global install instead.
 
       See https://www.promptfoo.dev/docs/providers/openai-codex-security/`,
@@ -231,7 +231,7 @@ async function loadCodexSecurity(): Promise<CodexSecurityModule> {
     dedent`The @openai/codex-security package is required but not installed.
 
     Install it alongside Promptfoo with:
-      npm install promptfoo @openai/codex-security@^${MINIMUM_CODEX_SECURITY_SDK_VERSION}
+      npm install promptfoo "@openai/codex-security@${CODEX_SECURITY_SDK_VERSION_RANGE}"
     If Promptfoo is installed globally with npm, add -g to that command. With pnpm, Yarn or Bun, use its global install instead.
 
     Requires Node.js ^22.22.0, ^24.0.0, or ^26.0.0.
@@ -593,11 +593,13 @@ export class OpenAICodexSecurityProvider implements ApiProvider {
           ? { reasoningEffort: config.model_reasoning_effort ?? config.reasoning_effort }
           : {}),
         findingsCount: findings.length,
-        coverage: result.coverage,
+        ...(result.coverage
+          ? { coverage: result.coverage, coveragePath: result.coveragePath }
+          : {}),
+        ...(raw.review ? { review: raw.review } : {}),
         scanDir: result.scanDir,
         reportPath: result.reportPath,
         findingsPath: result.findingsPath,
-        coveragePath: result.coveragePath,
         ...(result.sarifPath ? { sarifPath: result.sarifPath } : {}),
         pluginVersion: result.pluginVersion,
         sdkVersion: module.VERSION,
