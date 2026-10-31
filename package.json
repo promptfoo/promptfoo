@@ -137,28 +137,28 @@
       "undici": "$undici"
     },
     "@opentelemetry/exporter-trace-otlp-http": {
-      "@opentelemetry/core": "2.12.0"
+      "@opentelemetry/core": "3.0.0"
     },
     "@opentelemetry/otlp-exporter-base": {
-      "@opentelemetry/core": "2.12.0"
+      "@opentelemetry/core": "3.0.0"
     },
     "@opentelemetry/otlp-transformer": {
-      "@opentelemetry/core": "2.12.0"
+      "@opentelemetry/core": "3.0.0"
     },
     "@opentelemetry/resources": {
-      "@opentelemetry/core": "2.12.0"
+      "@opentelemetry/core": "3.0.0"
     },
     "@opentelemetry/sdk-logs": {
-      "@opentelemetry/core": "2.12.0"
+      "@opentelemetry/core": "3.0.0"
     },
     "@opentelemetry/sdk-metrics": {
-      "@opentelemetry/core": "2.12.0"
+      "@opentelemetry/core": "3.0.0"
     },
     "@opentelemetry/sdk-trace-base": {
-      "@opentelemetry/core": "2.12.0"
+      "@opentelemetry/core": "3.0.0"
     },
     "@opentelemetry/sdk-trace-node": {
-      "@opentelemetry/core": "2.12.0"
+      "@opentelemetry/core": "3.0.0"
     },
     "satori": {
       "fflate@0.7.3": "0.7.5"
@@ -298,9 +298,9 @@
     "@inquirer/select": "^5.1.0",
     "@libsql/client": "^0.18.0",
     "@opentelemetry/api": "^1.9.0",
-    "@opentelemetry/core": "2.12.0",
+    "@opentelemetry/core": "3.0.0",
     "@opentelemetry/exporter-trace-otlp-http": "^0.223.0",
-    "@opentelemetry/resources": "^2.6.0",
+    "@opentelemetry/resources": "^3.0.0",
     "@opentelemetry/sdk-trace-node": "^2.6.0",
     "@opentelemetry/semantic-conventions": "^1.40.0",
     "acorn": "^8.19.0",
