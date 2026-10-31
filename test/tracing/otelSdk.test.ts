@@ -6,7 +6,11 @@ import type { OtelConfig } from '../../src/tracing/otelConfig';
 // Create mock functions that will be used across tests
 let registeredProvider: object | undefined;
 const mockRegister = vi.fn((provider: object) => {
-  registeredProvider ??= provider;
+  if (registeredProvider) {
+    return false;
+  }
+  registeredProvider = provider;
+  return true;
 });
 const mockGetTracerProvider = vi.fn(() => registeredProvider);
 const mockTraceDisable = vi.fn(() => {
@@ -25,9 +29,9 @@ let localExporterCalls: unknown[] = [];
 let batchProcessorCalls: unknown[] = [];
 let resourceCalls: unknown[] = [];
 
-vi.mock('@opentelemetry/sdk-trace', () => {
-  // Use a class-like constructor function
+vi.mock('@opentelemetry/sdk-trace', async (importOriginal) => {
   return {
+    ...(await importOriginal<typeof import('@opentelemetry/sdk-trace')>()),
     TracerProvider: class MockTracerProvider {
       constructor(options: unknown) {
         nodeTracerProviderCalls.push(options);
@@ -172,6 +176,7 @@ describe('otelSdk', () => {
   afterEach(async () => {
     await shutdownOtel();
     vi.resetAllMocks();
+    vi.unstubAllEnvs();
   });
 
   const defaultConfig: OtelConfig = {
@@ -255,26 +260,94 @@ describe('otelSdk', () => {
       expect(mockRegister.mock.calls.length).toBe(firstCallCount);
     });
 
-    it.each([true, false])(
-      'reports the first active exporter configuration (localExport=%s)',
-      async (localExport) => {
-        const { hasLocalSpanExporter } = await import('../../src/tracing/otelSdk');
-        expect(hasLocalSpanExporter()).toBe(false);
-        initializeOtel({ ...defaultConfig, localExport });
-        initializeOtel({ ...defaultConfig, localExport: !localExport });
-        expect(hasLocalSpanExporter()).toBe(localExport);
-        expect(localExporterCalls).toHaveLength(localExport ? 1 : 0);
-        await shutdownOtel();
-        expect(hasLocalSpanExporter()).toBe(false);
+    it.each([true, false])('rejects a conflicting local export setting (%s)', (localExport) => {
+      initializeOtel({ ...defaultConfig, localExport });
+      expect(() => initializeOtel({ ...defaultConfig, localExport: !localExport })).toThrow(
+        'Cannot share the active OpenTelemetry SDK',
+      );
+      expect(localExporterCalls).toHaveLength(localExport ? 1 : 0);
+    });
+
+    it('rejects different collectors before acquiring another owner', async () => {
+      const first = { ...defaultConfig, endpoint: 'https://collector.test/a?token=first' };
+      const second = { ...defaultConfig, endpoint: 'https://collector.test/b?token=second' };
+      const release = initializeOtel(first)!;
+      expect(() => initializeOtel(second)).toThrow(
+        /^Cannot share the active OpenTelemetry SDK\.[^?]*$/,
+      );
+      expect(otlpExporterCalls).toEqual([{ url: first.endpoint }]);
+      await release();
+      await initializeOtel(second)!();
+      expect(otlpExporterCalls).toEqual([{ url: first.endpoint }, { url: second.endpoint }]);
+    });
+
+    it.each(['OTEL_EXPORTER_OTLP_HEADERS', 'OTEL_EXPORTER_OTLP_TRACES_HEADERS'])(
+      'shares an endpoint only while %s is unchanged',
+      async (key) => {
+        const config = { ...defaultConfig, endpoint: 'https://collector.test/traces' };
+        vi.stubEnv(key, 'tenant=first');
+        const releaseA = initializeOtel(config)!;
+        const releaseB = initializeOtel(config)!;
+        vi.stubEnv(key, 'tenant=second');
+        expect(() => initializeOtel(config)).toThrow('Cannot share the active OpenTelemetry SDK');
+        await releaseA();
+        expect(mockShutdown).not.toHaveBeenCalled();
+        await releaseB();
+        expect(mockShutdown).toHaveBeenCalledTimes(1);
       },
     );
+
+    it.each([
+      ['always_on', undefined, 'always_off', undefined],
+      ['traceidratio', '1', 'traceidratio', '0'],
+    ])('rejects a changed process sampling policy', async (first, arg, second, nextArg) => {
+      vi.stubEnv('OTEL_TRACES_SAMPLER', first);
+      vi.stubEnv('OTEL_TRACES_SAMPLER_ARG', arg);
+      const release = initializeOtel(defaultConfig)!;
+      vi.stubEnv('OTEL_TRACES_SAMPLER', second);
+      vi.stubEnv('OTEL_TRACES_SAMPLER_ARG', nextArg);
+      expect(() => initializeOtel(defaultConfig)).toThrow(
+        'Cannot share the active OpenTelemetry SDK',
+      );
+      await release();
+      await initializeOtel(defaultConfig)!();
+    });
+
+    it('reopens file-backed TLS credentials for each evaluation', async () => {
+      const config = { ...defaultConfig, endpoint: 'https://collector.test/traces' };
+      vi.stubEnv('OTEL_EXPORTER_OTLP_TRACES_CLIENT_CERTIFICATE', 'rotating-tenant.pem');
+      const release = initializeOtel(config)!;
+      expect(() => initializeOtel(config)).toThrow('file-based OTLP TLS credentials');
+      await release();
+      await initializeOtel(config)!();
+      expect(otlpExporterCalls).toHaveLength(2);
+    });
+
+    it('rejects a requested collector when a host already owns the global tracer', async () => {
+      const host = {};
+      registeredProvider = host;
+      expect(() =>
+        initializeOtel({ ...defaultConfig, endpoint: 'https://collector.test' }),
+      ).toThrow('A host OpenTelemetry provider is already registered');
+      expect(isOtelInitialized()).toBe(false);
+      await shutdownOtel();
+      expect(registeredProvider).toBe(host);
+      expect(mockTraceDisable).not.toHaveBeenCalled();
+      expect(mockShutdown).toHaveBeenCalledTimes(1);
+    });
 
     it('does not claim local export for another global tracer provider', async () => {
       const { hasLocalSpanExporter } = await import('../../src/tracing/otelSdk');
       const host = {};
       registeredProvider = host;
       initializeOtel(defaultConfig);
+      initializeOtel({
+        ...defaultConfig,
+        endpoint: 'https://collector.test',
+        inheritedEndpoint: true,
+      });
       expect(hasLocalSpanExporter()).toBe(false);
+      expect(isOtelInitialized()).toBe(false);
       await shutdownOtel();
       expect(registeredProvider).toBe(host);
       expect(mockTraceDisable).not.toHaveBeenCalled();
