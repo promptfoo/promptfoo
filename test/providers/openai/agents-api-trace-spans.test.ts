@@ -91,6 +91,7 @@ describe('normalizeHostedTrace', () => {
     expect(other.every((span) => spans.every((s) => s.spanId !== span.spanId))).toBe(true);
   });
 
+  const opaqueToken = `${'A'.repeat(32)}-${'b'.repeat(32)}`;
   it.each([
     ['1699999999999999999', '1700000000000000000'],
     ['1700000000000000001', '1700000000000000002'],
@@ -535,7 +536,6 @@ describe('normalizeHostedTrace', () => {
     expect(JSON.stringify(spans)).not.toContain('fixture-private-value');
   });
 
-  const opaqueToken = `${'A'.repeat(32)}-${'b'.repeat(32)}`;
   it.each([
     ['chat', 'gen_ai.request.model', `vendor/${opaqueToken}`],
     ['chat', 'gen_ai.request.model', `ft:vendor:${opaqueToken}:run-17`],
