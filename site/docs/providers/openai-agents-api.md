@@ -162,6 +162,8 @@ Accepted commands are simple invocations of `pwd`, `ls`, `cat`, `wc`, `head`, an
 
 Other fields, including free text and nested objects, are omitted. For example, if `lookup_order` receives `{"order_id":"417","note":"rush"}`, a subset assertion can match `order_id: '417'`. The trace cannot grade the note or establish an exact match for that call. If a value protected by `tracing.otlp.http.redactAttributes` also appears in a tool or model name, the trace becomes unavailable. An argument containing a protected value can be omitted on its own. Malformed JSON, duplicate keys, or an oversized payload can leave a span without argument evidence.
 
+In a stdio MCP transport, Promptfoo recognizes explicit credential flags such as `--api-key VALUE`, environment assignments such as `SERVICE_API_KEY=VALUE`, and credential headers passed with `-H` or `--header`. Use synthetic tool names, model IDs and filenames. A positional argument or free-form shell command can contain sensitive text without a recognizable credential label.
+
 ## Saved agents
 
 Set `agent_id` to evaluate an existing saved agent in a new session. Omitted agent settings, including the model, are inherited. An `agent` object supplies session-only overrides; arrays and objects replace their saved fields rather than merging.
