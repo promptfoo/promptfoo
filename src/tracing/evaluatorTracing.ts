@@ -11,7 +11,7 @@ import {
   TEST_CASE_OUTCOME_ATTRIBUTES,
   TEST_CASE_SPAN_NAME,
 } from './spanRoles';
-import type { ReadableSpan } from '@opentelemetry/sdk-trace-node';
+import type { ReadableSpan } from '@opentelemetry/sdk-trace';
 
 import type { TestCase, TestSuite } from '../types/index';
 import type { InternalEvaluateOptions } from '../types/internal';

@@ -124,6 +124,8 @@ To inspect the full recording in OpenAI, set `retainSession: true` before the ru
 
 #### Captured tool arguments
 
+A partial import can show arguments for a tool that ran. Its `toolArgumentsComplete` flag stays false because additional calls may be missing.
+
 With `hostedTrace.includeToolArguments: true`, Promptfoo can retain the following fields of a top-level tool argument object. Paths and identifiers can contain sensitive data. Use synthetic fixtures when enabling capture.
 
 | Field                                  | Accepted value                                                                                                                             |
@@ -137,6 +139,8 @@ Accepted commands are simple invocations of `pwd`, `ls`, `cat`, `wc`, `head`, an
 Other fields, including free text and nested objects, are omitted. For example, if `lookup_order` receives `{"order_id":"417","note":"rush"}`, the trace can retain `order_id`. If a value protected by `tracing.otlp.http.redactAttributes` also appears in a tool or model name, the trace becomes unavailable. An argument containing a protected value can be omitted on its own. Malformed JSON, duplicate keys, or an oversized payload can leave a span without argument evidence.
 
 #### Grade native spans
+
+Use `trajectory:tool-used` to require a tool or `trajectory:tool-args-match` to check a captured field such as `cwd`. A partial trace can prove a match it recorded. To grade a shell command during replay, enable argument capture before the run and check the saved command step. [Trajectory assertion examples](/docs/configuration/expected-outputs/deterministic/#trajectorytool-used)
 
 For a completed hosted trace, use a raw span assertion such as `trace-error-spans` to check the status of a named tool. Pair a zero-error budget with a positive count so an agent that skips the tool fails the test.
 

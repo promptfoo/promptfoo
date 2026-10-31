@@ -906,6 +906,23 @@ describe('database', () => {
       },
     );
 
+    it('bounds the native commit lock wait and restores the configured timeout on either outcome', async () => {
+      const result = await runDatabaseProbe<LockRecoveryProbeResult>(
+        'lockRecoveryProbe',
+        tempConfigDir,
+        'guarded-commit-deadline',
+      );
+      expect(result.firstError).toMatch(/SQLITE_BUSY/);
+      expect(result.commitBusyTimeouts).toHaveLength(2);
+      for (const timeout of result.commitBusyTimeouts!) {
+        expect(timeout).toBeGreaterThanOrEqual(0);
+        expect(timeout).toBeLessThanOrEqual(50);
+      }
+      expect(result.busyTimeoutAfterRollback).toBe(400);
+      expect(result.pragmas.busy_timeout).toBe(400);
+      expect(result.afterCloseIds).toEqual([1, 2, 3]);
+    });
+
     it.each(['wal-failure', 'wal-refused'])(
       'preserves FULL synchronization at startup and after lock recovery when %s',
       async (mode) => {
