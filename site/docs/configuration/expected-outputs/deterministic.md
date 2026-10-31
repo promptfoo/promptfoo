@@ -1112,7 +1112,7 @@ See [Python assertions](/docs/configuration/expected-outputs/python).
 
 ### Starts-With
 
-Use `starts-with` to match a text or numeric prefix. For example, `200` matches `200 OK`. Quote prefixes such as `'01'` to preserve leading zeros. Use `not-starts-with` to reject a matching prefix.
+Use `starts-with` to match a string or a finite number as text. For example, `200` matches `200 OK`. Quote `'01'` to preserve its leading zero or `'Infinity'` to match the literal word. Use `not-starts-with` to reject a matching prefix.
 
 ```yaml
 assert:
