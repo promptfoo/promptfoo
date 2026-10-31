@@ -544,6 +544,7 @@ const sidebars = {
         { type: 'doc', id: 'enterprise/service-accounts' },
         { type: 'doc', id: 'enterprise/teams' },
         { type: 'doc', id: 'enterprise/red-teams' },
+        { type: 'doc', id: 'enterprise/customization' },
         { type: 'doc', id: 'enterprise/findings' },
         { type: 'doc', id: 'enterprise/guardrails' },
         { type: 'doc', id: 'enterprise/remediation-reports' },
