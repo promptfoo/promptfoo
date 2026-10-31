@@ -5,26 +5,31 @@ import {
   DiagLogLevel,
   diag,
   ProxyTracerProvider,
-  propagation,
   trace,
 } from '@opentelemetry/api';
 import { callWithTimeout, W3CTraceContextPropagator } from '@opentelemetry/core';
 import { resourceFromAttributes } from '@opentelemetry/resources';
-import { BatchSpanProcessor, NodeTracerProvider } from '@opentelemetry/sdk-trace-node';
+import { TracerProvider } from '@opentelemetry/sdk-trace';
 import { ATTR_SERVICE_NAME, ATTR_SERVICE_VERSION } from '@opentelemetry/semantic-conventions';
 import logger from '../logger';
 import { VERSION } from '../version';
 import { LocalSpanExporter } from './localSpanExporter';
 import { trackLocalOtlpExports } from './otlpOwnership';
-import type { SpanProcessor } from '@opentelemetry/sdk-trace-node';
+import {
+  batchProcessorFromEnv,
+  registerTracerProvider,
+  traceOptionsFromEnv,
+} from './tracerProvider';
+import type { SpanProcessor } from '@opentelemetry/sdk-trace';
 
 import type { OtelConfig } from './otelConfig';
 
 const require = createRequire(import.meta.url);
 
 interface OtelSdk {
-  provider: NodeTracerProvider;
+  provider: TracerProvider;
   localExporter?: LocalSpanExporter;
+  localProcessor?: SpanProcessor;
   owners: number;
   shutdown?: Promise<void>;
 }
@@ -78,7 +83,7 @@ function getHandlers(): OtelHandlers {
  * Initialize the OpenTelemetry SDK for tracing LLM provider calls.
  *
  * This sets up:
- * - A NodeTracerProvider with promptfoo service info
+ * - A TracerProvider with promptfoo service info
  * - LocalSpanExporter for storing spans in TraceStore (SQLite)
  * - Optional OTLPTraceExporter for external backends (Jaeger, Honeycomb, etc.)
  *
@@ -108,10 +113,6 @@ export function initializeOtel(config: OtelConfig): (() => Promise<void>) | unde
     diag.setLogger(new DiagConsoleLogger(), DiagLogLevel.DEBUG);
   }
 
-  // Register W3C Trace Context propagator for traceparent header support
-  propagation.setGlobalPropagator(new W3CTraceContextPropagator());
-  logger.debug('[OtelSdk] Registered W3C Trace Context propagator');
-
   // Create resource with service info
   const resource = resourceFromAttributes({
     [ATTR_SERVICE_NAME]: config.serviceName,
@@ -123,8 +124,9 @@ export function initializeOtel(config: OtelConfig): (() => Promise<void>) | unde
 
   // Add local exporter (writes to TraceStore/SQLite)
   const localExporter = config.localExport ? new LocalSpanExporter() : undefined;
-  if (localExporter) {
-    spanProcessors.push(new BatchSpanProcessor(localExporter));
+  const localProcessor = localExporter && batchProcessorFromEnv(localExporter);
+  if (localProcessor) {
+    spanProcessors.push(localProcessor);
     logger.debug('[OtelSdk] Added local span exporter');
   }
 
@@ -134,21 +136,17 @@ export function initializeOtel(config: OtelConfig): (() => Promise<void>) | unde
     const { OTLPTraceExporter } =
       require('@opentelemetry/exporter-trace-otlp-http') as typeof import('@opentelemetry/exporter-trace-otlp-http');
     const exporter = trackLocalOtlpExports(new OTLPTraceExporter({ url: config.endpoint }));
-    spanProcessors.push(new BatchSpanProcessor(exporter));
+    spanProcessors.push(batchProcessorFromEnv(exporter));
     logger.debug(`[OtelSdk] Added OTLP exporter to ${config.endpoint}`);
   }
 
   // Create trace provider with resource and span processors
-  const provider = new NodeTracerProvider({
-    resource,
-    spanProcessors,
-    forceFlushTimeoutMillis: FLUSH_TIMEOUT_MS,
-  });
+  const provider = new TracerProvider({ ...traceOptionsFromEnv(), resource, spanProcessors });
 
   // Register the provider globally
-  provider.register();
+  registerTracerProvider(provider, new W3CTraceContextPropagator());
 
-  sdk = { provider, localExporter, owners: 0 };
+  sdk = { provider, localExporter, localProcessor, owners: 0 };
   logger.info('[OtelSdk] OpenTelemetry SDK initialized successfully');
 
   installSignalHandlers();
@@ -171,8 +169,11 @@ function installSignalHandlers(): void {
   // the unhandled promise warning while still allowing async completion.
   // The shutdown will complete before process exit because we're not
   // calling process.exit() - we let Node.js exit naturally after async work.
+  // SIGTERM only flushes. The CLI shuts tracing down after its own SIGTERM cleanup, and the
+  // evaluator does when a run ends, so spans that end during that cleanup are still exported.
   handlers.sigTermHandler = () => {
-    void shutdown('SIGTERM');
+    logger.debug('[OtelSdk] Received SIGTERM, flushing pending spans');
+    void flushOtel();
   };
   handlers.sigIntHandler = () => {
     void shutdown('SIGINT');
@@ -263,7 +264,10 @@ async function flushGeneration(
   try {
     // The SDK flushes its queued batches. Also join local writes already dispatched
     // in the background. An external exporter failure need not hide local evidence.
-    const sdkFlush = generation?.provider.forceFlush().catch((error) => {
+    const flushing = traceId
+      ? generation?.localProcessor?.forceFlush()
+      : generation?.provider.forceFlush({ timeoutMillis: FLUSH_TIMEOUT_MS });
+    const sdkFlush = flushing?.catch((error) => {
       logger.error('[OtelSdk] Error flushing spans', { error });
     });
     const localFlush = () => generation?.localExporter?.forceFlush(traceId);
@@ -285,7 +289,7 @@ export function isOtelInitialized(): boolean {
   return sdk !== undefined;
 }
 
-function ownsGlobalTracerProvider(provider: NodeTracerProvider): boolean {
+function ownsGlobalTracerProvider(provider: TracerProvider): boolean {
   // OTel leaves the first global provider registered if the host app already set one.
   const active = trace.getTracerProvider();
   return (active instanceof ProxyTracerProvider ? active.getDelegate() : active) === provider;

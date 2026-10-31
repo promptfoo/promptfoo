@@ -19,6 +19,8 @@ export interface LockRecoveryProbeResult {
   pragmas: Record<string, number>;
   initialJournalMode: string;
   initialSynchronous: number;
+  commitBusyTimeouts?: number[];
+  busyTimeoutAfterRollback?: number;
 }
 
 if (!process.env.PROMPTFOO_CONFIG_DIR) {
@@ -95,6 +97,25 @@ try {
     const insert = db.insert(table).values({ id: 2 });
     const reader = await contender.transaction('read');
     const close = Sqlite3Transaction.prototype.close;
+    const executeMultiple = Sqlite3Transaction.prototype.executeMultiple;
+    const deadlineMs = mode === 'guarded-commit-deadline' ? 50 : undefined;
+    if (deadlineMs !== undefined) {
+      await db.run('PRAGMA busy_timeout = 400');
+      result.commitBusyTimeouts = [];
+      Sqlite3Transaction.prototype.executeMultiple = async function (sql) {
+        if (sql.startsWith('COMMIT')) {
+          const pragma = await this.execute('PRAGMA busy_timeout');
+          result.commitBusyTimeouts!.push(Number(pragma.rows[0].timeout));
+        }
+        return executeMultiple.call(this, sql);
+      };
+    }
+    const write = () =>
+      db.runGuardedWrite(
+        insert,
+        () => {},
+        deadlineMs === undefined ? undefined : Date.now() + deadlineMs,
+      );
     if (mode === 'guarded-commit-rollback-failure') {
       Sqlite3Transaction.prototype.close = function () {
         close.call(this);
@@ -103,12 +124,21 @@ try {
     }
     try {
       await reader.execute('SELECT id FROM lock_recovery_test');
-      result.firstError = await captureError(() => db.runGuardedWrite(insert, () => {}));
+      result.firstError = await captureError(write);
+      if (deadlineMs !== undefined) {
+        result.busyTimeoutAfterRollback = Number(
+          (await client.execute('PRAGMA busy_timeout')).rows[0].timeout,
+        );
+      }
     } finally {
       Sqlite3Transaction.prototype.close = close;
       await reader.rollback();
     }
-    await db.runGuardedWrite(insert, () => {});
+    try {
+      await write();
+    } finally {
+      Sqlite3Transaction.prototype.executeMultiple = executeMultiple;
+    }
   } else if (mode === 'root-in-transaction') {
     await db.transaction(async (tx) => {
       result.callbackCalls++;

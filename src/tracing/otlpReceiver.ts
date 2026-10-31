@@ -22,6 +22,7 @@ interface OTLPAttribute {
   key: string;
   value: {
     stringValue?: string;
+    bytesValue?: string;
     intValue?: string;
     doubleValue?: number;
     boolValue?: boolean;
@@ -363,28 +364,38 @@ export class OTLPReceiver {
     redactAttributePatterns: string[],
   ): SpanData {
     const attributes = span.attributes ?? {};
-    // Collect echoes from the wire before discarding untrusted ownership attributes.
-    // A copied value can otherwise survive in the name or status message.
-    const redactedSourceValues = new Set<string>();
-    if (redactAttributePatterns.length > 0) {
-      for (const [key, value] of Object.entries(attributes)) {
-        if (typeof value === 'string' && this.shouldRedactAttribute(key, redactAttributePatterns)) {
-          redactedSourceValues.add(value);
+    let { name, statusMessage } = span;
+    // Check wire values before discarding untrusted ownership attributes.
+    const scrubEchoes = (value: unknown, hidden: boolean): void => {
+      if (typeof value === 'string' && hidden) {
+        if (value === name) {
+          name = '[REDACTED]';
+        }
+        if (value === statusMessage) {
+          statusMessage = '[REDACTED]';
+        }
+      } else if (Array.isArray(value)) {
+        for (const item of value) {
+          scrubEchoes(item, hidden);
+        }
+      } else if (value && typeof value === 'object') {
+        for (const [key, item] of Object.entries(value)) {
+          scrubEchoes(item, hidden || this.shouldRedactAttribute(key, redactAttributePatterns));
         }
       }
+    };
+    if (redactAttributePatterns.length > 0) {
+      scrubEchoes(attributes, false);
     }
     setReceivedSpanOwnership({ traceId, span });
     if (redactAttributePatterns.length === 0) {
       return span;
     }
-    // `redactedSourceValues` only holds strings, so an undefined statusMessage passes through.
-    const scrubEcho = <T extends string | undefined>(value: T): T =>
-      typeof value === 'string' && redactedSourceValues.has(value) ? ('[REDACTED]' as T) : value;
 
     return {
       ...span,
-      name: scrubEcho(span.name),
-      statusMessage: scrubEcho(span.statusMessage),
+      name,
+      statusMessage,
       attributes: this.redactAttributes(attributes, redactAttributePatterns),
     };
   }
@@ -940,7 +951,8 @@ export class OTLPReceiver {
       }
       return kvMap;
     }
-    return undefined;
+    // OTLP represents a null AnyValue with an empty message.
+    return Object.keys(value).length === 0 ? null : undefined;
   }
 
   private parseAttributes(attributes?: OTLPAttribute[]): Record<string, any> {
@@ -964,6 +976,9 @@ export class OTLPReceiver {
     if (value.stringValue !== undefined) {
       return value.stringValue;
     }
+    if (typeof value.bytesValue === 'string') {
+      return value.bytesValue;
+    }
     if (value.intValue !== undefined) {
       return Number(value.intValue);
     }
@@ -983,7 +998,8 @@ export class OTLPReceiver {
       }
       return kvMap;
     }
-    return undefined;
+    // OTLP represents a null AnyValue with an empty message.
+    return Object.keys(value).length === 0 ? null : undefined;
   }
 
   private convertId(id: string, expectedHexLength: number): string {

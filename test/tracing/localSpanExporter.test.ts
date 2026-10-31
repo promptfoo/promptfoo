@@ -1,9 +1,9 @@
 import { ExportResultCode } from '@opentelemetry/core';
-import { BatchSpanProcessor, NodeTracerProvider } from '@opentelemetry/sdk-trace-node';
+import { BatchSpanProcessor, TracerProvider } from '@opentelemetry/sdk-trace';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { LocalSpanExporter } from '../../src/tracing/localSpanExporter';
 import { createDeferred } from '../util/utils';
-import type { ReadableSpan } from '@opentelemetry/sdk-trace-node';
+import type { ReadableSpan } from '@opentelemetry/sdk-trace';
 
 // Mock the store module
 const mockAddSpans = vi.fn();
@@ -60,7 +60,6 @@ describe('LocalSpanExporter', () => {
         traceFlags: 1,
         isRemote: false,
       }),
-      // OpenTelemetry SDK 2.x uses parentSpanContext instead of parentSpanId
       parentSpanContext: overrides.parentSpanId
         ? { traceId, spanId: overrides.parentSpanId, traceFlags: 1, isRemote: false }
         : undefined,
@@ -251,6 +250,7 @@ describe('LocalSpanExporter', () => {
           'gen_ai.provider.name': 'openai',
           'gen_ai.request.model': 'gpt-4',
           'gen_ai.usage.input_tokens': 100,
+          payload: [{ bytes: new Uint8Array([0, 255]) }],
         },
       });
 
@@ -265,6 +265,7 @@ describe('LocalSpanExporter', () => {
               'gen_ai.provider.name': 'openai',
               'gen_ai.request.model': 'gpt-4',
               'gen_ai.usage.input_tokens': 100,
+              payload: [{ bytes: 'AP8=' }],
             },
           }),
         ],
@@ -485,9 +486,9 @@ describe('LocalSpanExporter', () => {
         started.resolve();
         return write.promise;
       });
-      const provider = new NodeTracerProvider({
+      const provider = new TracerProvider({
         spanProcessors: [
-          new BatchSpanProcessor(exporter, { maxQueueSize: 1, maxExportBatchSize: 1 }),
+          new BatchSpanProcessor({ exporter, maxQueueSize: 1, maxExportBatchSize: 1 }),
         ],
       });
       provider.getTracer('test').startSpan('already-dispatched').end();
