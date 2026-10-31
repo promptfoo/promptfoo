@@ -199,7 +199,7 @@ export class TraceStore {
         for (let attempt = 1; ; attempt++) {
           checkWrite();
           try {
-            await db.runGuardedWrite(insert, checkWrite);
+            await db.runGuardedWrite(insert, checkWrite, deadline);
             break;
           } catch (error) {
             checkWrite();

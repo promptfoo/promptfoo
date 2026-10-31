@@ -229,21 +229,17 @@ Ruby snake_case fields are automatically mapped to camelCase:
 
 ## Using trace data
 
-When [tracing is enabled](/docs/tracing/), OpenTelemetry trace data is available in the `context['trace']` object. This allows you to write assertions based on the execution flow:
+Promptfoo supplies spans in `context['trace']` when a trace is available. If your assertion requires trace evidence, fail when the trace is missing or empty. [Configure tracing](/docs/tracing/).
 
 ```ruby
 def get_assert(output, context)
-  # Check if trace data is available
-  unless context['trace']
-    # Tracing not enabled, skip trace-based checks
-    return true
+  spans = context.dig('trace', 'spans')
+  if spans.nil? || spans.empty?
+    return { 'pass' => false, 'score' => 0, 'reason' => 'No trace spans available' }
   end
 
-  # Access trace spans
-  spans = context['trace']['spans']
-
-  # Example: Check for errors in any span
-  error_spans = spans.select { |s| s.fetch('statusCode', 0) >= 400 }
+  # OpenTelemetry span status 2 means ERROR.
+  error_spans = spans.select { |s| s['statusCode'] == 2 }
   if error_spans.any?
     return {
       'pass' => false,
@@ -287,17 +283,11 @@ tests:
     assert:
       - type: ruby
         value: |
-          # Ensure retrieval happened before response generation
-          if context['trace']
-            spans = context['trace']['spans']
-            retrieval_span = spans.find { |s| s['name'].include?('retrieval') }
-            generation_span = spans.find { |s| s['name'].include?('generation') }
-
-            if retrieval_span && generation_span
-              return retrieval_span['startTime'] < generation_span['startTime']
-            end
-          end
-          true
+          spans = context.dig('trace', 'spans') || []
+          retrieval = spans.find { |s| s['name'].include?('retrieval') }
+          generation = spans.find { |s| s['name'].include?('generation') }
+          return false unless retrieval && generation
+          retrieval['startTime'] < generation['startTime']
 ```
 
 ## Overriding the Ruby binary
