@@ -926,6 +926,46 @@ describe('trace assertions', () => {
       ).resolves.toMatchObject({ pass: true });
     });
 
+    it('limits a legacy chat model name to trajectory checks that depend on it', async () => {
+      const chat: TraceSpan = {
+        name: 'chat',
+        spanId: 'chat',
+        startTime: 1000,
+        attributes: { 'promptfoo.openai.hosted_trace': 'wrapper', 'gen_ai.operation.name': 'chat' },
+      };
+      const spans = [chat, tool('lookup', { id: 1 })];
+      const manifest = { ...complete, spanCount: spans.length };
+      for (const assertion of [
+        { type: 'not-trajectory:tool-used', value: 'delete' },
+        { type: 'trajectory:tool-sequence', value: { steps: ['lookup'], mode: 'exact' } },
+        { type: 'trajectory:tool-args-match', value: { name: 'lookup', args: { id: 1 } } },
+        { type: 'trajectory:step-count', value: { type: 'tool', min: 1, max: 1 } },
+        { type: 'trajectory:step-count', value: { min: 2, max: 2 } },
+        { type: 'trajectory:step-count', value: { type: 'span', pattern: 'chat*', min: 1 } },
+        { type: 'trajectory:step-count', value: { pattern: 'chat gpt-*', max: 1 } },
+        { type: 'not-trajectory:step-count', value: { name: 'chat', min: 2 } },
+      ] satisfies Assertion[]) {
+        await expect(grade(assertion, manifest, spans)).resolves.toMatchObject({ pass: true });
+      }
+      for (const assertion of [
+        { type: 'trajectory:step-count', value: { type: ['tool', 'span'], name: 'chat', min: 1 } },
+        { type: 'not-trajectory:step-count', value: { pattern: 'chat *', min: 1 } },
+        { type: 'trajectory:goal-success', value: 'Used the requested model' },
+      ] satisfies Assertion[]) {
+        await expect(grade(assertion, manifest, spans)).resolves.toMatchObject({
+          pass: false,
+          reason: expect.stringContaining('legacy hosted chat'),
+        });
+      }
+      await expect(
+        grade(
+          { type: 'not-trajectory:tool-used', value: 'delete' },
+          { ...manifest, status: 'partial' },
+          spans,
+        ),
+      ).resolves.toMatchObject({ pass: false, reason: expect.stringContaining('partial') });
+    });
+
     it('grades bounds that hold or fail for every possible count of filtered native spans', async () => {
       const chat: TraceSpan = {
         name: 'chat gpt-test',
