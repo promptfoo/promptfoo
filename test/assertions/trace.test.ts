@@ -340,6 +340,34 @@ describe('trace assertions', () => {
       },
     );
 
+    it('bounds a legacy chat name separately from missing hosted spans', async () => {
+      const chat = {
+        ...tool('old-chat'),
+        name: 'chat',
+        attributes: { 'promptfoo.openai.hosted_trace': 'wrapper', 'gen_ai.operation.name': 'chat' },
+      };
+      const calls = [tool('lookup'), chat];
+      const manifest = { ...imported, spanCount: calls.length };
+      const count = (pattern: string, min: number, max: number, status = 'imported') =>
+        grade(
+          { type: 'trace-span-count', value: { pattern, min, max } },
+          { ...manifest, status },
+          calls,
+        );
+
+      await expect(count('execute_tool *', 1, 1)).resolves.toMatchObject({ pass: true });
+      await expect(count('Ch?t*', 1, 1)).resolves.toMatchObject({ pass: true });
+      await expect(count('chat model-*', 0, 1)).resolves.toMatchObject({ pass: true });
+      await expect(count('chat model-*', 0, 0)).resolves.toMatchObject({
+        pass: false,
+        reason: expect.stringContaining('span name'),
+      });
+      await expect(count('execute_tool *', 1, 1, 'partial')).resolves.toMatchObject({
+        pass: false,
+        reason: expect.stringContaining('partial'),
+      });
+    });
+
     it('withholds an uncertain legacy chat name while retaining other witnessed spans', async () => {
       const manifest = { ...imported, spanCount: 2, status: 'partial' };
       const chat = {
@@ -470,6 +498,16 @@ describe('trace assertions', () => {
         type: 'trace-error-spans',
         value: { pattern: '', max_count: 0 },
       };
+      const emptyDurationPattern: Assertion = {
+        type: 'trace-span-duration',
+        value: { pattern: '', max: 0 },
+      };
+      for (const closed of [false, true]) {
+        await expect(check(emptyDurationPattern, closed, 'case')).resolves.toMatchObject({
+          pass: true,
+          reason: expect.stringContaining('No spans found matching pattern ""'),
+        });
+      }
       for (const assertion of [duration, errors, emptyErrorPattern]) {
         await expect(check(assertion, false, 'case')).resolves.toMatchObject({ pass: true });
         await expect(check(assertion, true, 'case')).resolves.toMatchObject({ pass: true });
@@ -899,6 +937,9 @@ describe('trace assertions', () => {
             ],
           },
         });
+      await expect(
+        check({ type: 'trace-span-duration', value: { pattern: '', max: 0 } }),
+      ).resolves.toMatchObject({ pass: true });
       for (const pattern of ['support agent', '[REDACTED]', '[RED*']) {
         for (const assertion of [
           { type: 'trace-span-count', value: { pattern, max: 0 } },
