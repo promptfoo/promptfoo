@@ -8,6 +8,7 @@ import { CloudAuthRedirectError } from '../../util/fetch/cloudAuthRedirects';
 import { fetchWithRetries, readBoundedText } from '../../util/fetch/index';
 import { renderVarsInObject } from '../../util/render';
 import {
+  isCredentialHeader as isKnownCredentialHeader,
   isNonCredentialHeader,
   isSecretField,
   looksLikeSecret,
@@ -19,6 +20,10 @@ import { analyzeTemplateReference } from '../../util/templates';
 import { runWithAbort, sleepWithAbort } from '../../util/time';
 import { buildChatSpanContext, extractProviderResponseAttributes, withGenAISpan } from '../tracing';
 import { decodeUrlComponent } from '../urlEncoding';
+import {
+  getHostedCredentialArgument,
+  getHostedHeaderCredentialParts,
+} from './agents-api-credential-args';
 import { normalizeHostedTrace, UnpublishedTraceParentError } from './agents-api-trace-spans';
 import { calculateOpenAIUsageCost } from './billing';
 import { OpenAiGenericProvider } from './index';
@@ -181,12 +186,31 @@ function isCredentialHeader(name: string, value: string): boolean {
   );
 }
 
-function addCredential(credentials: Set<string>, value: unknown): void {
+// Empty credentials are never collected. This sentinel suppresses echoes of an
+// authorization scheme whose individual credential values cannot be inspected.
+const UNINSPECTABLE_AUTHORIZATION = '';
+
+function isCredentialArgumentName(name: string): boolean {
+  return isCredentialName(name) || isKnownCredentialHeader(name, '');
+}
+
+function addCredential(credentials: Set<string>, value: unknown, field?: string): void {
   if (typeof value !== 'string') {
     return;
   }
   const trimmed = value.trim();
   const candidates = [trimmed, trimmed.replace(/^(?:Bearer|Basic|Token)\s+/i, '')];
+  if (field) {
+    for (const part of getHostedHeaderCredentialParts(field, trimmed, () => {
+      // A template may stand in for the entire token. Its rendered value is
+      // collected again from the effective request configuration.
+      if (!/^(?:[a-z][\w-]*[ \t]+)?\{\{[\w.()| \t]+\}\}$/i.test(trimmed)) {
+        credentials.add(UNINSPECTABLE_AUTHORIZATION);
+      }
+    })) {
+      candidates.push(part);
+    }
+  }
   const basic = /^Basic\s+([a-z\d+/]+={0,2})$/i.exec(trimmed);
   if (basic) {
     const bytes = Buffer.from(basic[1], 'base64');
@@ -296,7 +320,7 @@ function collectConfigCredentials(
 ): void {
   if (typeof value === 'string') {
     if ((key && isCredentialName(key)) || (inHeaders && !isNonCredentialHeader(key))) {
-      addCredential(credentials, value);
+      addCredential(credentials, value, key);
     }
     for (const credential of getUrlCredentials(value)) {
       addCredential(credentials, credential);
@@ -310,6 +334,24 @@ function collectConfigCredentials(
     return;
   }
   if (value && typeof value === 'object') {
+    if (
+      key === 'transport' &&
+      'type' in value &&
+      value.type === 'stdio' &&
+      'args' in value &&
+      Array.isArray(value.args)
+    ) {
+      for (const [index, arg] of value.args.entries()) {
+        const credential = getHostedCredentialArgument(
+          arg,
+          value.args[index - 1],
+          isCredentialArgumentName,
+        );
+        if (credential) {
+          addCredential(credentials, credential.value, credential.name);
+        }
+      }
+    }
     const childInHeaders = inHeaders || key.toLowerCase() === 'headers';
     for (const [childKey, item] of Object.entries(value)) {
       collectConfigCredentials(item, credentials, childKey, childInHeaders);
@@ -331,7 +373,7 @@ function scanRequestHeaders(
     const present = value.trim().length > 0;
     if (isCredentialName(name)) {
       hasHeaderCredential ||= present;
-      addCredential(credentials, value);
+      addCredential(credentials, value, name);
     }
     hasCustomHeader ||= present && name !== 'authorization' && !isNonCredentialHeader(name);
   });
@@ -362,6 +404,9 @@ function shortCredentialPattern(credential: string): RegExp {
 }
 
 function redactCredentials(text: string, credentials: readonly string[]): string {
+  if (credentials.includes(UNINSPECTABLE_AUTHORIZATION)) {
+    return REDACTED;
+  }
   let redacted = text;
   for (const credential of credentials) {
     redacted =
@@ -925,7 +970,7 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
           }
           if (isCredentialHeader(name, value)) {
             removedInheritedHeaders ||= !hasReplacementCredential && value.trim().length > 0;
-            addCredential(removedHeaderCredentials, value);
+            addCredential(removedHeaderCredentials, value, name);
             collectConfigCredentials(value, removedHeaderCredentials);
           } else {
             safeHeaders[name] = value;
