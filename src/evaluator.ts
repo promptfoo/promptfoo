@@ -1072,6 +1072,9 @@ async function collectExternalTraceAfterProviderCall({
       abortSignal,
     });
 
+    if (traceContext) {
+      traceContext.externalTraceCollected = !!trace?.spans.length;
+    }
     if (trace) {
       logger.debug(`[Evaluator] Successfully fetched traces for traceId=${traceId}`);
     } else {
@@ -1579,11 +1582,21 @@ async function gradeRunEvalResponse({
     vars,
   });
   const traceId = getTraceId(traceContext);
-  const localTraceUnavailable =
-    traceId &&
-    hasTraceAwareAssertions(test.assert) &&
-    !isExternalTraceProvider(testSuite?.tracing?.provider) &&
-    (await (traceContext?.localExport?.flush() ?? flushOtel())) === false;
+  const localExport = traceContext?.localExport;
+  const traceEvidence = {
+    traceUnavailable: localExport ? !(await localExport.flush()) : false,
+    traceIncomplete:
+      !!traceId &&
+      (isExternalTraceProvider(testSuite?.tracing?.provider)
+        ? !traceContext?.externalTraceCollected
+        : !localExport || !!traceContext?.traceparent?.endsWith('-00')),
+  };
+
+  if (traceEvidence.traceUnavailable || !traceEvidence.traceIncomplete) {
+    await traceContext?.setTraceEvidence?.(
+      traceEvidence.traceUnavailable ? 'unavailable' : 'complete',
+    );
+  }
 
   const assertionProviderResponse = {
     ...processedResponse,
@@ -1608,7 +1621,7 @@ async function gradeRunEvalResponse({
           latencyMs: response.latencyMs ?? latencyMs,
           assertScoringFunction: test.assertScoringFunction as ScoringFunction,
           traceId,
-          traceUnavailable: !!localTraceUnavailable,
+          ...traceEvidence,
         }).then((checkResult) => applyGradingResult(ret, checkResult)),
     ).catch((error) => {
       applyGradingError(ret, error, deferredGradingAbortSignal);
@@ -1630,7 +1643,7 @@ async function gradeRunEvalResponse({
           latencyMs: response.latencyMs ?? latencyMs,
           assertScoringFunction: test.assertScoringFunction as ScoringFunction,
           traceId,
-          traceUnavailable: !!localTraceUnavailable,
+          ...traceEvidence,
         }),
     );
     applyGradingResult(ret, checkResult);

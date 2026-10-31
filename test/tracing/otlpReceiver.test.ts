@@ -1074,7 +1074,10 @@ describe('OTLPReceiver', () => {
         traceId: 'dddddddddddddddddddddddddddddddd',
         evaluationId: 'receiver-created-eval',
         testCaseId: 'receiver-created-test',
-        metadata: { otlpHttpRedactAttributes: ['authorization'] },
+        metadata: {
+          otlpHttpRedactAttributes: ['authorization'],
+          promptfooTraceEvidence: 'partial',
+        },
       });
       expect(mockTraceStore.addSpans).toHaveBeenCalledWith(
         'dddddddddddddddddddddddddddddddd',
@@ -1132,7 +1135,7 @@ describe('OTLPReceiver', () => {
         traceId: 'eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee',
         evaluationId: 'receiver-created-eval',
         testCaseId: 'receiver-created-test',
-        metadata: { commandToolNames: ['bash', 'shell'] },
+        metadata: { commandToolNames: ['bash', 'shell'], promptfooTraceEvidence: 'partial' },
       });
     });
 
@@ -1178,6 +1181,7 @@ describe('OTLPReceiver', () => {
         evaluationId: 'registered-eval',
         testCaseId: 'registered-test',
         metadata: {
+          promptfooTraceEvidence: 'partial',
           commandToolNames: ['bash'],
           otlpHttpRedactAttributes: ['authorization'],
         },
@@ -1294,7 +1298,7 @@ describe('OTLPReceiver', () => {
         traceId: '11111111111111111111111111111111',
         evaluationId: 'no-redaction-eval',
         testCaseId: 'no-redaction-test',
-        metadata: undefined,
+        metadata: { promptfooTraceEvidence: 'partial' },
       });
       expect(mockTraceStore.addSpans).toHaveBeenCalledWith(
         '11111111111111111111111111111111',
