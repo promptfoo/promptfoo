@@ -833,7 +833,7 @@ tests:
 
 In `partial` mode, object properties are matched recursively as a subset. In `exact` mode, the entire argument payload must match exactly.
 
-With hosted OpenAI Agents API traces, a positive subset match can use an unchanged field such as `cwd` even if another argument was omitted. An exact match needs one call with intact arguments, including when `ignore` or `defaults` is set. An inverse match requires complete argument evidence across the hosted call. If the calls that might match have missing or redacted arguments, the assertion can report insufficient evidence.
+With hosted OpenAI Agents API traces, a positive subset match can use an unchanged field such as `cwd` even if another argument was omitted. An exact match needs one call with intact arguments, including when `ignore` or `defaults` is set. An inverse match requires complete argument evidence across the hosted call. For example, a saved `order_id` of `123` rules out an expected `456` on that call, even when another field was omitted. If another matching call omitted `order_id`, the assertion still reports insufficient evidence.
 
 #### Tolerating default arguments {#trajectory-tool-args-match-defaults}
 
