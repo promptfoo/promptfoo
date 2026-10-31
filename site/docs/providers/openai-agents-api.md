@@ -124,6 +124,8 @@ To inspect the full recording in OpenAI, set `retainSession: true` before the ru
 
 #### Captured tool arguments
 
+A partial import can show arguments for a tool that ran. Its `toolArgumentsComplete` flag stays false because additional calls may be missing.
+
 With `hostedTrace.includeToolArguments: true`, Promptfoo can retain the following fields of a top-level tool argument object. Paths and identifiers can contain sensitive data. Use synthetic fixtures when enabling capture.
 
 | Field                                  | Accepted value                                                                                                                             |

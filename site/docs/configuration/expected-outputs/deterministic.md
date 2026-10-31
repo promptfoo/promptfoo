@@ -770,6 +770,8 @@ The `trajectory:tool-used` assertion checks traced tool steps rather than the mo
 Trajectory assertions require trace data. Enable tracing for the eval and use a provider that emits tool-oriented spans or attributes.
 :::
 
+For an [OpenAI Agents API](/docs/providers/openai-agents-api#inspect-traces) target with `hostedTrace` enabled, built-in trace and trajectory assertions report unavailable evidence. Inspect the imported spans in **Traces**, or grade the returned answer and the root turn’s completed tool calls.
+
 Promptfoo identifies tool names from attributes such as `tool.name`, `function.name`, and Vercel AI SDK telemetry's `ai.toolCall.name`.
 
 Example:
@@ -1131,6 +1133,8 @@ Trace assertions require tracing to be enabled in your evaluation. See the [trac
 
 If trace data is not available, the assertion will throw an error rather than failing, indicating that the assertion could not be evaluated.
 :::
+
+For an [OpenAI Agents API](/docs/providers/openai-agents-api#inspect-traces) target that requested hosted spans, use the **Traces** tab to inspect the import. Raw span counts, durations, and error budgets report unavailable evidence.
 
 Example:
 

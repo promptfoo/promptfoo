@@ -3,9 +3,9 @@ import * as path from 'path';
 import { trace } from '@opentelemetry/api';
 import {
   InMemorySpanExporter,
-  NodeTracerProvider,
+  TracerProvider,
   SimpleSpanProcessor,
-} from '@opentelemetry/sdk-trace-node';
+} from '@opentelemetry/sdk-trace';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { assertionUsesTrace, runAssertion, runAssertions } from '../../src/assertions/index';
 import cliState from '../../src/cliState';
@@ -970,8 +970,8 @@ describe('trace assertions', () => {
       const responseBody = `{"password":"test-only-value","details":"${'receipt '.repeat(600)}"}`;
       const providerNote = 'note password=test-only-value';
       const exporter = new InMemorySpanExporter();
-      const provider = new NodeTracerProvider({
-        spanProcessors: [new SimpleSpanProcessor(exporter)],
+      const provider = new TracerProvider({
+        spanProcessors: [new SimpleSpanProcessor({ exporter })],
       });
       const tracer = vi.spyOn(trace, 'getTracer').mockReturnValue(provider.getTracer('test'));
       try {
