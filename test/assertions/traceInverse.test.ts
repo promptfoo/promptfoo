@@ -3,6 +3,10 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { runAssertion } from '../../src/assertions';
 import cliState from '../../src/cliState';
+import {
+  HOSTED_ERROR_STATUS_COMPLETE,
+  HOSTED_ERROR_STATUS_VERSION,
+} from '../../src/tracing/spanError';
 
 const fixtureDir = fileURLToPath(new URL('../fixtures/file-script-assertions/', import.meta.url));
 const trace = {
@@ -18,7 +22,10 @@ const trace = {
       startTime: 1,
       endTime: 51,
       statusCode: 2,
-      attributes: { 'promptfoo.openai.hosted_trace': 'wrapper' },
+      attributes: {
+        'promptfoo.openai.hosted_trace': 'wrapper',
+        [HOSTED_ERROR_STATUS_COMPLETE]: HOSTED_ERROR_STATUS_VERSION,
+      },
     },
   ],
 };
