@@ -903,8 +903,16 @@ function normalizeSpan(
         : Number(value.intValue));
     // Number() can scan arbitrarily long string spellings of an inherited status.
     if (key === 'http.status_code') {
-      checked.httpStatus ??= Number(scalar);
-      return checked.httpStatus;
+      checked.httpStatus ??=
+        typeof scalar === 'number' || (typeof scalar === 'string' && /^\s*\d+\s*$/.test(scalar))
+          ? Number(scalar)
+          : Number.NaN;
+      const status = checked.httpStatus;
+      if (status === 0 || (Number.isInteger(status) && status >= 100 && status <= 599)) {
+        return status;
+      }
+      validErrorAttributes = false;
+      return undefined;
     }
     return scalar;
   });

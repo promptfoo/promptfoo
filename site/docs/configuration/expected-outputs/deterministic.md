@@ -833,7 +833,7 @@ tests:
 
 In `partial` mode, object properties are matched recursively as a subset. In `exact` mode, the entire argument payload must match exactly.
 
-With hosted OpenAI Agents API traces, a positive subset match can use an unchanged field such as `cwd` even if another argument was omitted. An exact match needs one call with intact arguments, including when `ignore` or `defaults` is set. An inverse match requires complete argument evidence across the hosted call. If the calls that might match have missing or redacted arguments, the assertion can report insufficient evidence.
+With hosted OpenAI Agents API traces, a positive subset match can use an unchanged field such as `cwd` even if another argument was omitted. An exact match needs one call with intact arguments, including when `ignore` or `defaults` is set. An inverse match requires complete argument evidence across the hosted call. For example, a saved `order_id` of `123` rules out an expected `456` on that call, even when another field was omitted. If another matching call omitted `order_id`, the assertion still reports insufficient evidence.
 
 #### Tolerating default arguments {#trajectory-tool-args-match-defaults}
 
@@ -1239,6 +1239,8 @@ The assertion will show the slowest spans when a threshold is exceeded, making i
 ### Trace-Error-Spans
 
 The `trace-error-spans` assertion detects error spans in a trace and ensures the error rate is within acceptable limits. It automatically detects errors through status codes, error attributes, and status messages.
+
+When regrading a saved hosted OpenAI trace, an older import can contain a status code computed from diagnostic text or a malformed HTTP status. If the error limit depends on that code, Promptfoo reports insufficient evidence. Rerun the eval to capture the current error evidence.
 
 :::note
 Enable tracing for this assertion. It fails if collection is incomplete or no spans were saved.
