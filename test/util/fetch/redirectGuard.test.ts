@@ -15,6 +15,7 @@ vi.mock('../../../src/util/fetch/monkeyPatchFetch', async (importOriginal) => {
 import { lookup } from 'node:dns/promises';
 import type { LookupAddress } from 'node:dns';
 
+import logger from '../../../src/logger';
 import { CloudAuthRedirectError } from '../../../src/util/fetch/cloudAuthRedirects';
 import { withPrivateRangeGuard } from '../../../src/util/fetch/guardContext';
 import { fetchWithProxy, fetchWithRetries } from '../../../src/util/fetch/index';
@@ -157,6 +158,33 @@ describe('fetchWithProxy guarded redirects (PROMPTFOO_BLOCK_PRIVATE_RANGES)', ()
 
     expect(response.status).toBe(200);
     expect(cancelled).toBe(true);
+  });
+
+  it('redacts an opaque path credential from the guarded redirect log entry', async () => {
+    restoreEnv = mockProcessEnv({ PROMPTFOO_BLOCK_PRIVATE_RANGES: 'true' });
+    const credential = '2e163f4d-28e2-4f84-b6d2-05e13058d6aa';
+    mockedMonkeyPatchFetch
+      .mockResolvedValueOnce(
+        redirectResponse(`https://public.example.com/v1/${credential}/responses`),
+      )
+      .mockResolvedValueOnce(new Response('ok', { status: 200 }));
+
+    const debugSpy = vi.spyOn(logger, 'debug');
+    let redirectLogs: Array<[string, unknown?]>;
+    try {
+      const response = await guardedFetch('https://public.example.com/start');
+      expect(response.status).toBe(200);
+      redirectLogs = debugSpy.mock.calls.filter(
+        ([message]) => message === '[fetchWithProxy] Following guarded redirect',
+      );
+    } finally {
+      debugSpy.mockRestore();
+    }
+    expect(redirectLogs).toHaveLength(1);
+    const logged = redirectLogs[0][1] as { from: string; to: string };
+    expect(logged.to).toContain('%5BREDACTED%5D');
+    expect(logged.to).not.toContain(credential);
+    expect(logged.from).toBe('https://public.example.com/start');
   });
 
   it('redacts credentials from the redirect-limit error message', async () => {
