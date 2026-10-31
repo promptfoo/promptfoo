@@ -3,7 +3,7 @@ import path from 'path';
 import type { AddressInfo } from 'node:net';
 
 import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http';
-import { TracerProvider, SimpleSpanProcessor } from '@opentelemetry/sdk-trace';
+import { SimpleSpanProcessor, TracerProvider } from '@opentelemetry/sdk-trace';
 import protobuf from 'protobufjs';
 import request from 'supertest';
 import {
@@ -730,7 +730,8 @@ describe('OTLPReceiver', () => {
                     {
                       traceId: 'a'.repeat(32),
                       spanId: '1234567890abcdef',
-                      name: 'tool.call',
+                      name: 'nested-pw',
+                      status: { code: 2, message: 'prefix nested-pw' },
                       startTimeUnixNano: '1000000000',
                       endTimeUnixNano: '2000000000',
                       attributes: [
@@ -767,6 +768,8 @@ describe('OTLPReceiver', () => {
         'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
         [
           expect.objectContaining({
+            name: '[REDACTED]',
+            statusMessage: 'prefix nested-pw',
             attributes: expect.objectContaining({
               AUTHORIZATION: '[REDACTED]',
               'http.password': '[REDACTED]',
@@ -865,7 +868,8 @@ describe('OTLPReceiver', () => {
                     {
                       traceId: 'f'.repeat(32),
                       spanId: '1234567890abcdef',
-                      name: 'tool.call',
+                      name: 'v',
+                      status: { code: 2, message: 'two' },
                       startTimeUnixNano: '1000000000',
                       attributes: [
                         {
@@ -898,6 +902,8 @@ describe('OTLPReceiver', () => {
         'ffffffffffffffffffffffffffffffff',
         [
           expect.objectContaining({
+            name: '[REDACTED]',
+            statusMessage: '[REDACTED]',
             attributes: expect.objectContaining({
               'secret.config': '[REDACTED]',
               'secret.list': '[REDACTED]',
