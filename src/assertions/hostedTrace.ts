@@ -21,6 +21,7 @@ import { getHostedToolArguments, hasUnresolvedHostedCommand } from './trajectory
 
 import type { AssertionParams, AssertionType, AssertionValue } from '../types/index';
 import type { TraceData, TraceSpan } from '../types/tracing';
+import type { TrajectoryStepMatcher } from './trajectoryUtils';
 
 const ARGUMENT_FILTER_KEYS = new Set(['gen_ai.tool.call.arguments', 'tool.arguments']);
 
@@ -254,6 +255,21 @@ function isUncertainChatPattern(pattern: string): boolean {
   );
 }
 
+function countsUncertainChatNames(value: AssertionValue | undefined): boolean {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return false;
+  }
+  const matcher = value as TrajectoryStepMatcher;
+  const pattern = matcher.pattern || matcher.name;
+  const types = matcher.type;
+  return (
+    typeof pattern === 'string' &&
+    !!pattern &&
+    (!types || types === 'span' || (Array.isArray(types) && types.includes('span'))) &&
+    isUncertainChatPattern(pattern)
+  );
+}
+
 /** Count assertions can use the bounds of missing evidence. Other raw checks need every candidate. */
 function prepareRawTraceAssertion(
   params: AssertionParams,
@@ -288,16 +304,14 @@ function prepareRawTraceAssertion(
         ),
     );
   }
-  // An unattested tree may omit any number of native spans, even when its local parent is present.
-  let possible = partial ? Infinity : 0;
-  let reason = partial
+  // Any omitted native span would receive the same owner when imported.
+  const ownerFilter = filters.find(([key]) => key === 'promptfoo.openai.hosted_trace');
+  const missingNative = partial && (!ownerFilter || ownerFilter[1] === parentId);
+  let possible = missingNative ? Infinity : 0;
+  let reason = missingNative
     ? 'The hosted trace is partial. Additional matching spans may be missing.'
     : undefined;
-  if (
-    !partial &&
-    unresolvedId &&
-    !filters.some(([key, value]) => key === 'promptfoo.openai.hosted_trace' && value === parentId)
-  ) {
+  if (!missingNative && unresolvedId && ownerFilter?.[1] !== parentId) {
     // The open evaluator root accounts for one possible span. A break elsewhere
     // in the local parent chain can hide an unknown number of ancestors.
     if (unresolvedId !== trace.metadata?.testCaseSpanId) {
@@ -394,7 +408,7 @@ export function prepareHostedTraceAssertion(params: AssertionParams): string | u
     return 'The stored OpenAI Agents API spans are incomplete for this provider call.';
   }
   const partial = hostedTrace.status === 'partial';
-  if (baseType.startsWith('trajectory:') && (partial || native.some(hasUncertainHostedChatName))) {
+  if (baseType.startsWith('trajectory:') && partial) {
     const reason =
       'The hosted trace is partial. It can only establish an observed tool call or matching arguments.';
     if (inverse || !provesObservedTool(baseType, renderedValue)) {
@@ -421,6 +435,24 @@ export function prepareHostedTraceAssertion(params: AssertionParams): string | u
       includeToolArguments,
       partial,
     );
+  }
+  // Tool matchers only inspect tool calls. A legacy chat name can affect the judge's
+  // summary or a count of named span steps, but no steps are missing from this import.
+  if (
+    baseType === 'trajectory:goal-success' ||
+    (baseType === 'trajectory:step-count' && countsUncertainChatNames(renderedValue))
+  ) {
+    const candidates = native.filter(hasUncertainHostedChatName);
+    if (candidates.length) {
+      const reason = 'A legacy hosted chat span may be missing its model name.';
+      if (baseType === 'trajectory:goal-success') {
+        return reason;
+      }
+      assertionValueContext.trace.spans = native.filter(
+        (span) => !hasUncertainHostedChatName(span),
+      );
+      params.traceSpanUncertainty = { missing: 0, candidates, reason };
+    }
   }
   const coverageError = getArgumentCoverageError(params, includeToolArguments);
   if (!coverageError) {

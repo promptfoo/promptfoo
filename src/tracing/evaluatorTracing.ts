@@ -349,6 +349,8 @@ export interface EvaluationTraceContext {
   testCaseId?: string;
   rootSpan?: Span;
   localExport?: ReturnType<typeof trackLocalTrace>;
+  externalTraceCollected?: boolean;
+  setTraceEvidence?: (evidence: 'complete' | 'unavailable') => Promise<void>;
 }
 
 interface TraceExecutionMetadata {
@@ -433,6 +435,8 @@ export async function generateTraceContextIfNeeded(
       evaluationId: evaluationId || '',
       testCaseId: testCaseId || '',
       metadata: {
+        // Only the evaluator can confirm that the row's spans were collected.
+        promptfooTraceEvidence: 'partial',
         testCaseSpanId: spanId,
         localBodyAttributeLossTracked: true,
         ...(testCaseSpanAttributeKeys && { testCaseSpanAttributeKeys }),
@@ -461,5 +465,6 @@ export async function generateTraceContextIfNeeded(
     evaluationId,
     testCaseId,
     ...(rootSpan && { rootSpan }),
+    setTraceEvidence: (evidence) => traceStore.setTraceEvidence(traceId, evidence),
   };
 }
