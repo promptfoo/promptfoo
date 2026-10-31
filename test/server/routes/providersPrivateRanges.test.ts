@@ -67,6 +67,19 @@ describe('PROMPTFOO_BLOCK_PRIVATE_RANGES server guards (#11768 item 2)', () => {
       expect(mockedTestProviderConnectivity).not.toHaveBeenCalled();
     });
 
+    it('refuses an IPv6 site-local literal target when the flag is set', async () => {
+      restoreEnv = mockProcessEnv({ PROMPTFOO_BLOCK_PRIVATE_RANGES: 'true' });
+
+      const response = await request(app)
+        .post('/api/providers/test')
+        .send({ providerOptions: { id: 'http://[fec0::1]/v1' } });
+
+      expect(response.status).toBe(400);
+      expect(response.body.error).toContain('PROMPTFOO_BLOCK_PRIVATE_RANGES');
+      expect(mockedLoadApiProvider).not.toHaveBeenCalled();
+      expect(mockedTestProviderConnectivity).not.toHaveBeenCalled();
+    });
+
     it('refuses a config.apiBaseUrl private target when the flag is set', async () => {
       restoreEnv = mockProcessEnv({ PROMPTFOO_BLOCK_PRIVATE_RANGES: 'true' });
 
@@ -181,6 +194,24 @@ describe('PROMPTFOO_BLOCK_PRIVATE_RANGES server guards (#11768 item 2)', () => {
 
       expect(response.status).toBe(200);
       expect(mockedLoadApiProvider).toHaveBeenCalled();
+    });
+
+    it('refuses a cloud provider id when the flag is set', async () => {
+      restoreEnv = mockProcessEnv({ PROMPTFOO_BLOCK_PRIVATE_RANGES: 'true' });
+
+      // The loader would replace this id with the saved provider from
+      // Cloud and instantiate it, so the preflight must refuse before any
+      // load happens, whatever the saved provider points at.
+      const response = await request(app)
+        .post('/api/providers/test')
+        .send({
+          providerOptions: { id: 'promptfoo://provider/12345678-1234-1234-1234-123456789abc' },
+        });
+
+      expect(response.status).toBe(400);
+      expect(response.body.error).toContain('PROMPTFOO_BLOCK_PRIVATE_RANGES');
+      expect(mockedLoadApiProvider).not.toHaveBeenCalled();
+      expect(mockedTestProviderConnectivity).not.toHaveBeenCalled();
     });
 
     it('refuses litellm with its local proxy default when the flag is set', async () => {
