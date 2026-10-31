@@ -265,7 +265,9 @@ The local exporter uses `OTEL_BSP_EXPORT_TIMEOUT` per batch (30,000 ms by defaul
 
 For a custom assertion that requires trace evidence, return a failing grade when the spans are missing or empty. [JavaScript example](/docs/configuration/expected-outputs/javascript/#using-trace-data) · [Python example](/docs/configuration/expected-outputs/python/#using-trace-data) · [Ruby example](/docs/configuration/expected-outputs/ruby/#using-trace-data)
 
-Overlapping programmatic evaluations share the first active OpenTelemetry exporter configuration. When an evaluation finishes, it flushes its spans. The last evaluation drains and closes the SDK, and a subsequent evaluation can choose a new configuration.
+#### Concurrent programmatic evaluations
+
+Concurrent programmatic evaluations can share tracing when their service name, local export setting, collector URL, and OTLP headers match. Run evaluations with different settings or file-based OTLP TLS credentials sequentially or in separate processes. Promptfoo rejects incompatible settings before calling providers. If the host application already registered an OpenTelemetry provider, configure the collector on the host. Promptfoo can use a host provider with an inherited process-level `OTEL_EXPORTER_OTLP_ENDPOINT`. Setting `PROMPTFOO_OTEL_ENDPOINT` or overriding the collector for that evaluation requires a separate process.
 
 ### Turn marker spans {#per-llm-turn-spans}
 
