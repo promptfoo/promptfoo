@@ -11,8 +11,21 @@ interface SpanRelevanceInput {
   statusCode?: number;
 }
 
+export const HOSTED_SPAN_OPERATIONS = ['invoke_agent', 'chat', 'execute_tool'] as const;
 export const HOSTED_CHAT_MODEL_ABSENT = 'promptfoo.openai.chat_model_absent';
 export const HOSTED_ABSENT_TOOL_ATTRIBUTES = 'promptfoo.openai.absent_tool_attributes';
+
+// Identifier shape determines which names the decoder can project, before redaction.
+export function isHostedSpanIdentifier(
+  operation: 'chat' | 'execute_tool',
+  value: unknown,
+): value is string {
+  return (
+    typeof value === 'string' &&
+    value.length <= 256 &&
+    (operation === 'chat' ? /^(?:[\w.:-]+\/)*[\w.:-]+$/.test(value) : /^[\w.:-]+$/.test(value))
+  );
+}
 
 /** Older imports also used a bare chat name when OTLP had dropped its model attribute. */
 export function hasUncertainHostedChatName(span: SpanRelevanceInput & { name: string }): boolean {

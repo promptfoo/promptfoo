@@ -254,7 +254,7 @@ describe('normalizeHostedTrace', () => {
         s.attributes?.['promptfoo.openai.error_status_complete'],
       ]),
     ).toEqual([
-      ['invoke_agent', 2, 'otlp-v3'],
+      ['invoke_agent', 2, 'otlp-v4'],
       ['execute_tool lookup_order', 1, false],
       ['chat gpt-6-astra', 1, false],
     ]);
@@ -360,6 +360,138 @@ describe('normalizeHostedTrace', () => {
     ).toBe(false);
   });
 
+  it.each([
+    ['exception', undefined, 0, 0, 2, 'otlp-v4'],
+    ['exception', { boolValue: false }, 0, 0, 0, 'otlp-v4'],
+    ['exception', { boolValue: true }, 1, 0, 2, 'otlp-v4'],
+    ['exception', { stringValue: 'not a boolean' }, 0, 0, 0, false],
+    ['exception', undefined, 0, 1, 0, false],
+    ['checkpoint', undefined, '1', 0, 0, false],
+    ['checkpoint', undefined, '0', 0, 0, 'otlp-v4'],
+    [undefined, undefined, 0, 0, 0, false],
+    ['   ', undefined, 0, 0, 0, false],
+  ] as const)(
+    'summarizes event %s with escaped=%o, dropped events=%s, dropped attributes=%s',
+    (name, escaped, droppedEventsCount, droppedAttributesCount, statusCode, evidence) => {
+      const event = {
+        name,
+        droppedAttributesCount,
+        attributes: [
+          attribute('exception.message', 'private event detail'),
+          ...(escaped ? [{ key: 'exception.escaped', value: escaped }] : []),
+        ],
+      };
+      const call = { ...tool, status: { code: 'UNSET' }, droppedEventsCount, events: [event] };
+      const saved = normalizeHostedTrace(payload(root, call), parentId, false).spans[1];
+      expect(saved).toMatchObject({
+        statusCode,
+        attributes: { 'promptfoo.openai.error_status_complete': evidence },
+      });
+      expect(JSON.stringify(saved)).not.toContain('private event detail');
+    },
+  );
+
+  it.each([-1, 'bad', '4294967296'])('rejects invalid dropped event count %s', (count) => {
+    expect(() =>
+      normalizeHostedTrace(payload(root, { ...tool, droppedEventsCount: count }), parentId, false),
+    ).toThrow('Invalid hosted OTLP trace');
+  });
+
+  it.each([
+    ['stable failure', undefined, '503', undefined, undefined, 2, true],
+    ['matching aliases', undefined, '503', '504', undefined, 2, true],
+    ['contradictory aliases', undefined, '200', '503', undefined, 1, false],
+    ['malformed stable code', undefined, 'unknown', '503', undefined, 1, false],
+    ['client 404', 3, '404', undefined, undefined, 2, true],
+    ['server 404', 'SPAN_KIND_SERVER', '404', undefined, undefined, 1, true],
+    ['no kind for 404', undefined, undefined, '404', undefined, 1, false],
+    ['unknown response code with error type', undefined, 'unknown', undefined, 'timeout', 2, true],
+    ['transport failure', undefined, undefined, undefined, 'timeout', 2, true],
+    ['empty error type', undefined, '200', undefined, ' ', 1, false],
+  ] as const)(
+    'classifies hosted HTTP evidence: %s',
+    (_label, kind, stable, legacy, errorType, code, known) => {
+      const call = {
+        ...tool,
+        kind,
+        attributes: [
+          ...tool.attributes,
+          ...(stable === undefined ? [] : [attribute('http.response.status_code', stable)]),
+          ...(legacy === undefined ? [] : [attribute('http.status_code', legacy)]),
+          ...(errorType === undefined ? [] : [attribute('error.type', errorType)]),
+        ],
+      };
+      const saved = normalizeHostedTrace(payload(root, call), parentId, false).spans[1];
+      expect(saved.statusCode).toBe(code);
+      expect(typeof saved.attributes?.['promptfoo.openai.error_status_complete'] === 'string').toBe(
+        known,
+      );
+      expect(saved.attributes).not.toHaveProperty('error.type');
+    },
+  );
+
+  it.each(['span', 'resource'])(
+    'treats a dropped %s alias as a possible conflicting status',
+    (carrier) => {
+      const read = (both: boolean, status: string) => {
+        const evidence = {
+          droppedAttributesCount: 1,
+          attributes: [
+            attribute('http.response.status_code', '503'),
+            ...(both ? [attribute('http.status_code', '503')] : []),
+          ],
+        };
+        const call = {
+          ...tool,
+          status: { code: status },
+          ...(carrier === 'span' && {
+            ...evidence,
+            attributes: [...tool.attributes, ...evidence.attributes],
+          }),
+        };
+        return normalizeHostedTrace(
+          {
+            resourceSpans: [
+              {
+                ...(carrier === 'resource' && { resource: evidence }),
+                scopeSpans: [{ spans: [root, call] }],
+              },
+            ],
+          },
+          parentId,
+          false,
+        ).spans[1];
+      };
+      expect(read(false, 'OK')).toMatchObject({
+        statusCode: 1,
+        attributes: { 'promptfoo.openai.error_status_complete': false },
+      });
+      expect(read(true, 'OK').statusCode).toBe(2);
+      expect(read(false, 'ERROR').statusCode).toBe(2);
+    },
+  );
+
+  it('uses either span-local HTTP status alias before resource defaults', () => {
+    const snapshot = {
+      resourceSpans: [
+        {
+          resource: { attributes: [attribute('http.response.status_code', '503')] },
+          scopeSpans: [
+            {
+              spans: [
+                root,
+                { ...tool, attributes: [...tool.attributes, attribute('http.status_code', '200')] },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+    const [inherited, overridden] = normalizeHostedTrace(snapshot, parentId, false).spans;
+    expect(inherited.statusCode).toBe(2);
+    expect(overridden.statusCode).toBe(1);
+  });
+
   it('converts a long inherited HTTP status once across spans', () => {
     const status = '0'.repeat(1024 * 1024) + '503';
     let conversions = 0;
@@ -460,7 +592,7 @@ describe('normalizeHostedTrace', () => {
       expect(complete).toBe(true);
       const saved = spans.find((span) => span.name === 'execute_tool lookup_order');
       expect(saved?.statusCode).toBe(expectedCode);
-      expect(saved?.attributes?.['promptfoo.openai.error_status_complete']).toBe('otlp-v3');
+      expect(saved?.attributes?.['promptfoo.openai.error_status_complete']).toBe('otlp-v4');
       expect(saved?.attributes).not.toHaveProperty(key);
       expect(JSON.stringify(spans)).not.toContain('private');
     },
@@ -1069,10 +1201,115 @@ describe('normalizeHostedTrace', () => {
     describe('credential attributes and argument aliases', () => {
       const credential = 'kappa-blue-19';
 
+      it.each([
+        ['flag value', ['tool', '--api-key', credential]],
+        ['flag assignment', ['tool', `--api-key=${credential}`]],
+        ['environment assignment', ['env', `SERVICE_API_KEY=${credential}`, 'tool']],
+        ['header flag', ['curl', '-H', `Authorization: Bearer ${credential}`]],
+        ['attached header', ['curl', `--header=Authorization: Bearer ${credential}`]],
+      ] as const)(
+        'protects a %s in native or JSON argv before retaining an identifier',
+        (_label, argv) => {
+          const attrs = [
+            attribute('gen_ai.tool.call.arguments', JSON.stringify({ cmd: argv })),
+            {
+              key: 'gen_ai.tool.call.arguments',
+              value: { arrayValue: { values: argv.map((arg) => ({ stringValue: arg })) } },
+            },
+          ];
+          for (const attr of attrs) {
+            expect(() =>
+              withCarriers(payload(root, callNamed(`lookup_${credential}`, attr)), []),
+            ).toThrow('Invalid hosted OTLP trace');
+            const { spans } = withCarriers(payload(root, callNamed('lookup_order', attr)), []);
+            expect(spans[1].name).toBe('execute_tool lookup_order');
+            expect(JSON.stringify(spans)).not.toContain(credential);
+          }
+        },
+      );
+
+      it('keeps a readable identifier echoed in an ordinary argument or filename', () => {
+        const argv = ['cat', '/workspace/ledger.csv', '--format', 'ledger', 'COLOR=ledger'];
+        const call = callNamed(
+          'lookup_ledger',
+          attribute('gen_ai.tool.call.arguments', JSON.stringify({ cmd: argv })),
+        );
+        expect(withCarriers(payload(root, call), []).spans[1].name).toBe(
+          'execute_tool lookup_ledger',
+        );
+      });
+
       it('withholds a tool name echoing an opaque API key with default capture settings', () => {
         const call = callNamed(`lookup_${credential}`, attribute('x-api-key', credential));
         expect(() => normalizeHostedTrace(payload(root, call), parentId, false)).toThrow(
           'Invalid hosted OTLP trace',
+        );
+      });
+
+      it.each([
+        { headers: [['Authorization', `DPoP ${credential}`]] },
+        { responseHeaders: [{ Value: `id=${credential}; Path=/; HttpOnly`, Name: 'Set-Cookie' }] },
+        { rawHeaders: ['Accept', 'text/plain', 'Cookie', `locale=en; SID=${credential}`] },
+        { headers: JSON.stringify([['X-API-Key', [credential]]]) },
+        { body: JSON.stringify({ headers: [`Authorization: Bearer ${credential}`] }) },
+        { env: [{ key: 'API_TOKEN', value: { token: credential } }] },
+      ])('withholds a reflected credential carried in header entries', (args) => {
+        const call = callNamed(
+          `lookup_${credential}`,
+          attribute('tool.arguments', JSON.stringify(args)),
+        );
+        expect(() => withCarriers(payload(root, call), [])).toThrow('Invalid hosted OTLP trace');
+      });
+
+      it('withholds obsolete folded header lines with an ambiguous continuation', () => {
+        const raw = JSON.stringify({ headers: [`Authorization:\r\n DPoP ${credential}`] });
+        const call = callNamed(`lookup_${credential}`, attribute('tool.arguments', raw));
+        expect(() => withCarriers(payload(root, call), [])).toThrow('Invalid hosted OTLP trace');
+      });
+
+      it('recognizes an OTLP header record on a sibling span', () => {
+        const source = {
+          ...model,
+          attributes: [
+            ...model.attributes,
+            {
+              key: 'http.request.headers',
+              value: {
+                arrayValue: {
+                  values: [
+                    {
+                      kvlistValue: {
+                        values: [
+                          attribute('value', credential),
+                          attribute('name', 'Authorization'),
+                        ],
+                      },
+                    },
+                  ],
+                },
+              },
+            },
+          ],
+        };
+        expect(() =>
+          withCarriers(payload(root, callNamed(`lookup_${credential}`), source), []),
+        ).toThrow('Invalid hosted OTLP trace');
+      });
+
+      it('preserves ordinary headers, public cookie attributes and shell expressions', () => {
+        const args = {
+          cmd: '[ -f /workspace/keys.json ] && echo ready',
+          headers: [
+            { name: 'Content-Type', value: 'morning' },
+            { name: 'Set-Cookie', value: `SID=${credential}; SameSite=Strict`, note: 'morning' },
+          ],
+        };
+        const call = callNamed(
+          'lookup_morning_Strict',
+          attribute('tool.arguments', JSON.stringify(args)),
+        );
+        expect(withCarriers(payload(root, call), []).spans[1].name).toBe(
+          'execute_tool lookup_morning_Strict',
         );
       });
 

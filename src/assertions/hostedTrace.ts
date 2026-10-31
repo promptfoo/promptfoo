@@ -7,7 +7,9 @@ import {
   filterTargetSpans,
   HOSTED_ABSENT_TOOL_ATTRIBUTES,
   HOSTED_CHAT_MODEL_ABSENT,
+  HOSTED_SPAN_OPERATIONS,
   hasUncertainHostedChatName,
+  isHostedSpanIdentifier,
   withoutReceivedHostedOwner,
 } from '../tracing/spanFilter';
 import {
@@ -240,19 +242,46 @@ function excludeHostedGraderEvidence({
   return undefined;
 }
 
+/** A qualified name has a known operation prefix and at least one identifier character. */
+function couldMatchQualifiedName(pattern: string, operation: 'chat' | 'execute_tool'): boolean {
+  const namePrefix = `${operation} `;
+  if (!/[*?]/.test(pattern)) {
+    return (
+      pattern.toLowerCase().startsWith(namePrefix) &&
+      isHostedSpanIdentifier(operation, pattern.slice(namePrefix.length))
+    );
+  }
+  const [fixedPrefix] = pattern.split('*', 1);
+  // Once a '*' can absorb an unknown suffix, retain the candidate. '?' still matches one character.
+  return (
+    (fixedPrefix.length > namePrefix.length || pattern.includes('*')) &&
+    matchesPattern(namePrefix.slice(0, fixedPrefix.length), fixedPrefix.slice(0, namePrefix.length))
+  );
+}
+
 /** Legacy exports retain the operation, but may omit the model from `chat <model>`. */
 function isUncertainChatPattern(pattern: string): boolean {
   if (matchesPattern('chat', pattern)) {
     // A trailing wildcard can absorb any model suffix without losing the bare-name match.
     return !/\*[?*]*$/.test(pattern);
   }
-  const namePrefix = 'chat ';
-  const [fixedPrefix] = pattern.split('*', 1);
-  // A possible qualified name must match this prefix, with at least one more model character.
-  return (
-    (fixedPrefix.length > namePrefix.length || pattern.includes('*')) &&
-    matchesPattern(namePrefix.slice(0, fixedPrefix.length), fixedPrefix.slice(0, namePrefix.length))
-  );
+  return couldMatchQualifiedName(pattern, 'chat');
+}
+
+function couldMatchMissingNativeSpan(pattern: string, filters: [string, unknown][]): boolean {
+  if (filters.some(([key, value]) => key === 'gen_ai.provider.name' && value !== 'openai')) {
+    return false;
+  }
+  const operationFilter = filters.find(([key]) => key === 'gen_ai.operation.name');
+  return HOSTED_SPAN_OPERATIONS.some((operation) => {
+    if (operationFilter && operationFilter[1] !== operation) {
+      return false;
+    }
+    return (
+      (operation !== 'execute_tool' && matchesPattern(operation, pattern)) ||
+      (operation !== 'invoke_agent' && couldMatchQualifiedName(pattern, operation))
+    );
+  });
 }
 
 function countsUncertainChatNames(value: AssertionValue | undefined): boolean {
@@ -306,7 +335,10 @@ function prepareRawTraceAssertion(
   }
   // Any omitted native span would receive the same owner when imported.
   const ownerFilter = filters.find(([key]) => key === 'promptfoo.openai.hosted_trace');
-  const missingNative = partial && (!ownerFilter || ownerFilter[1] === parentId);
+  const missingNative =
+    partial &&
+    (!ownerFilter || ownerFilter[1] === parentId) &&
+    couldMatchMissingNativeSpan(pattern, filters);
   let possible = missingNative ? Infinity : 0;
   let reason = missingNative
     ? 'The hosted trace is partial. Additional matching spans may be missing.'
