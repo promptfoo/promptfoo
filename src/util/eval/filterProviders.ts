@@ -2,6 +2,7 @@ import { normalizeProviderRef } from '../../util/providerRef';
 
 import type { ApiProvider, CommandLineOptions, TestSuiteConfig } from '../../types/index';
 import type { ProviderOptions, ProviderOptionsMap } from '../../types/providers';
+import type { ProviderIdentity } from '../provider';
 
 /**
  * Converts an untrusted persisted provider filter into the CLI option shape used by config
@@ -57,37 +58,27 @@ export function getProviderIdAndLabel(
 export function filterProviderConfigs(
   providers: TestSuiteConfig['providers'],
   filterOption?: string,
+  excluded?: ProviderIdentity[],
 ): TestSuiteConfig['providers'] {
   if (!filterOption) {
     return providers;
   }
-
-  // Handle non-array cases
-  if (typeof providers === 'string') {
-    const filterRegex = new RegExp(filterOption);
-    return filterRegex.test(providers) ? providers : [];
-  }
-
-  if (typeof providers === 'function') {
-    const filterRegex = new RegExp(filterOption);
-    const label = (providers as { label?: string }).label;
-    const id = label ?? 'custom-function';
-    if (filterRegex.test(id) || (label && filterRegex.test(label))) {
-      return providers;
+  const regex = new RegExp(filterOption);
+  function matches({ id, label }: { id: string; label?: string }): boolean {
+    if (regex.test(id) || (label && regex.test(label))) {
+      return true;
     }
-    return [];
+    excluded?.push({ id, label });
+    return false;
   }
 
-  if (!Array.isArray(providers)) {
-    return providers;
+  if (Array.isArray(providers)) {
+    return providers.filter((provider, index) => matches(getProviderIdAndLabel(provider, index)));
   }
-
-  const filterRegex = new RegExp(filterOption);
-
-  return providers.filter((provider, index) => {
-    const { id, label } = getProviderIdAndLabel(provider, index);
-    return filterRegex.test(id) || (label && filterRegex.test(label));
-  });
+  if (typeof providers === 'string' || typeof providers === 'function') {
+    return matches(normalizeProviderRef(providers)) ? providers : [];
+  }
+  return providers;
 }
 
 /**

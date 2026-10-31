@@ -4,6 +4,11 @@ import { sanitizeUrl } from './sanitizer';
 
 import type { ApiProvider } from '../types/providers';
 
+export interface ProviderIdentity {
+  id: string | ApiProvider['id'];
+  label?: string;
+}
+
 export function providerToIdentifier(
   provider: TestCase['provider'] | { id?: string; label?: string } | undefined,
 ): string | undefined {
@@ -51,9 +56,9 @@ export function getProviderIdentifier(provider: ApiProvider): string {
  * Gets a descriptive identifier string for a provider, showing both label and ID when both exist.
  * Useful for error messages to help users debug provider reference issues.
  */
-export function getProviderDescription(provider: ApiProvider): string {
+export function getProviderDescription(provider: ProviderIdentity): string {
   const label = provider.label;
-  const id = provider.id();
+  const id = typeof provider.id === 'string' ? provider.id : provider.id();
   if (label && label !== id) {
     return `${label} (${id})`;
   }
@@ -76,9 +81,9 @@ export function sanitizeProviderIdForLog(providerId: string): string {
  * Checks if a provider reference matches a given provider.
  * Supports exact matching and wildcard patterns.
  */
-export function doesProviderRefMatch(ref: string, provider: ApiProvider): boolean {
+export function doesProviderRefMatch(ref: string, provider: ProviderIdentity): boolean {
   const label = provider.label;
-  const id = provider.id();
+  const id = typeof provider.id === 'string' ? provider.id : provider.id();
 
   // Canonicalize the reference for file/exec providers
   const canonicalRef = canonicalizeProviderId(ref);

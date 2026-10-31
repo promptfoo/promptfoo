@@ -56,12 +56,11 @@ import {
   type PromptReferenceSource,
   validateTestPromptReferences,
 } from '../validateTestPromptReferences';
-import {
-  type RawProviderConfig,
-  validateTestProviderReferences,
-} from '../validateTestProviderReferences';
+import { validateTestProviderReferences } from '../validateTestProviderReferences';
 import { loadYaml } from '../yamlLoad';
 import { DEFAULT_CONFIG_EXTENSIONS } from './extensions';
+
+import type { ProviderIdentity } from '../provider';
 
 const clone = Clone({ circles: true });
 
@@ -1172,7 +1171,12 @@ async function resolveLoadedConfig(
   // Filter providers BEFORE instantiation to avoid loading providers that won't be used.
   // Filtering on resolved configs allows matching by provider id/label from file-based providers.
   const filterOption = cmdObj.filterProviders || cmdObj.filterTargets;
-  const filteredProviderConfigs = filterProviderConfigs(cliFilteredProviderConfigs, filterOption);
+  const excludedProviders: ProviderIdentity[] = [];
+  const filteredProviderConfigs = filterProviderConfigs(
+    cliFilteredProviderConfigs,
+    filterOption,
+    excludedProviders,
+  );
 
   if (
     filterOption &&
@@ -1330,18 +1334,12 @@ async function resolveLoadedConfig(
     typeof testSuite.defaultTest === 'object' ? testSuite.defaultTest : undefined,
   );
 
-  // Validate provider references in tests and scenarios. --filter-providers narrows the
-  // instantiated set before validation, so pass the pre-filter configs as well: a reference
-  // to a provider the filter removed is valid in the full suite, and the per-test provider
-  // filter drops such tests at run time.
+  // Excluded providers remain valid references but are never instantiated.
   validateTestProviderReferences(
     testSuite.tests || [],
-    testSuite.providers,
+    [...testSuite.providers, ...excludedProviders],
     typeof testSuite.defaultTest === 'object' ? testSuite.defaultTest : undefined,
     testSuite.scenarios,
-    Array.isArray(cliFilteredProviderConfigs)
-      ? (cliFilteredProviderConfigs as RawProviderConfig[])
-      : undefined,
   );
 
   // Validate that all prompt references in tests exist
