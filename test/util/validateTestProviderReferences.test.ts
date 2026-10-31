@@ -95,18 +95,19 @@ describe('validateTestProviderReferences', () => {
   });
 
   it('matches raw IDs but redacts credentials in error descriptions and references', () => {
-    const id = 'https://host.test/model?api_key=example-private-key';
-    const label = 'https://host.test/label?token=example-private-token';
+    const id =
+      'webhook:https://example-private-user:example-private-pass@host.test/example-private-route';
+    const label = 'https://host.test/opaque-example-private-path?token=example-private-token';
     const available = [{ id, label }];
     expect(() =>
       validateTestProviderReferences([{ providers: [id, label] }], available),
     ).not.toThrow();
     const validate = () =>
       validateTestProviderReferences(
-        [{ providers: ['https://other.test/?api_key=example-private-ref'] }],
+        [{ providers: ['https://other.test/example-private-ref?api_key=example-private-query'] }],
         available,
       );
-    expect(validate).toThrow(/which does not exist.*host\.test\/model/);
+    expect(validate).toThrow(/which does not exist.*host\.test/);
     expect(validate).not.toThrow(/example-private/);
   });
 

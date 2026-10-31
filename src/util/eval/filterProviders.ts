@@ -1,6 +1,10 @@
+import cliState from '../../cliState';
+import { mergeProviderEnv } from '../../providers/registry';
 import { isApiProvider } from '../../types/providers';
 import { normalizeProviderRef } from '../../util/providerRef';
+import { renderEnvOnlyInObject } from '../render';
 
+import type { EnvOverrides } from '../../types/env';
 import type { ApiProvider, CommandLineOptions, TestSuiteConfig } from '../../types/index';
 import type { ProviderOptions, ProviderOptionsMap } from '../../types/providers';
 import type { ProviderIdentity } from '../provider';
@@ -52,10 +56,24 @@ export function getProviderIdAndLabel(
     | ProviderOptionsMap
     | ((...args: unknown[]) => unknown),
   index?: number,
+  env?: EnvOverrides,
 ): { id: string; label?: string } {
-  return isApiProvider(provider)
-    ? { id: provider.id(), label: provider.label }
-    : normalizeProviderRef(provider, { index });
+  if (isApiProvider(provider)) {
+    return { id: provider.id(), label: provider.label };
+  }
+  const ref = normalizeProviderRef(provider, { index });
+  if (!('loadProviderPath' in ref) || !(ref.id.includes('{{') || ref.label?.includes('{{'))) {
+    return ref;
+  }
+  // Use the loader's explicit-template scope without constructing an excluded provider.
+  const templateEnv = mergeProviderEnv(
+    { id: ref.loadProviderPath, preserveAliases: true },
+    env,
+    'loadOptions' in ref ? ref.loadOptions.env : undefined,
+  );
+  return cliState.withEnv(templateEnv, () =>
+    renderEnvOnlyInObject({ id: ref.id, label: ref.label }, templateEnv),
+  );
 }
 
 /**
@@ -66,7 +84,7 @@ export function getProviderIdAndLabel(
 export function filterProviderConfigs(
   providers: TestSuiteConfig['providers'],
   filterOption?: string,
-  excluded?: ProviderIdentity[],
+  { excluded, env }: { excluded?: ProviderIdentity[]; env?: EnvOverrides } = {},
 ): TestSuiteConfig['providers'] {
   if (!filterOption) {
     return providers;
@@ -81,14 +99,16 @@ export function filterProviderConfigs(
   }
 
   if (Array.isArray(providers)) {
-    return providers.filter((provider, index) => matches(getProviderIdAndLabel(provider, index)));
+    return providers.filter((provider, index) =>
+      matches(getProviderIdAndLabel(provider, index, env)),
+    );
   }
   if (
     typeof providers === 'string' ||
     typeof providers === 'function' ||
     isApiProvider(providers)
   ) {
-    return matches(getProviderIdAndLabel(providers)) ? providers : [];
+    return matches(getProviderIdAndLabel(providers, undefined, env)) ? providers : [];
   }
   return providers;
 }

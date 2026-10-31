@@ -153,6 +153,7 @@ function firstTargetHasInputs(providers: UnifiedConfig['providers'] | undefined)
 export function resolveCliProvidersWithConfig(
   cliProviders: string[],
   configProviders: UnifiedConfig['providers'],
+  env?: UnifiedConfig['env'],
 ): UnifiedConfig['providers'] {
   if (!configProviders || !Array.isArray(configProviders)) {
     return cliProviders;
@@ -162,7 +163,7 @@ export function resolveCliProvidersWithConfig(
   // re-calling getProviderIdAndLabel on every find() iteration.
   const indexed = configProviders.map((cp, i) => ({
     provider: cp,
-    ...getProviderIdAndLabel(cp, i),
+    ...getProviderIdAndLabel(cp, i, env),
   }));
 
   return cliProviders.map((cliProvider) => {
@@ -1165,18 +1166,17 @@ async function resolveLoadedConfig(
   // (after file:// expansion) so that file-based provider configs are also matched.
   const cliFilteredProviderConfigs =
     (cmdObj.providers
-      ? resolveCliProvidersWithConfig(cmdObj.providers, resolvedProviderConfigs)
+      ? resolveCliProvidersWithConfig(cmdObj.providers, resolvedProviderConfigs, runtimeEnv)
       : resolvedProviderConfigs) ?? [];
 
   // Filter providers BEFORE instantiation to avoid loading providers that won't be used.
   // Filtering on resolved configs allows matching by provider id/label from file-based providers.
   const filterOption = cmdObj.filterProviders || cmdObj.filterTargets;
   const excludedProviders: ProviderIdentity[] = [];
-  const filteredProviderConfigs = filterProviderConfigs(
-    cliFilteredProviderConfigs,
-    filterOption,
-    excludedProviders,
-  );
+  const filteredProviderConfigs = filterProviderConfigs(cliFilteredProviderConfigs, filterOption, {
+    excluded: excludedProviders,
+    env: runtimeEnv,
+  });
 
   if (
     filterOption &&

@@ -66,13 +66,20 @@ export function getProviderDescription(provider: ProviderIdentity): string {
   return label && label !== id ? `${label} (${id})` : id;
 }
 
-/** Redact each URL before combining the label and ID in a diagnostic. */
-export function getProviderDescriptionForLog(provider: ProviderIdentity): string {
-  const id = readProviderId(provider);
-  return getProviderDescription({
-    id: sanitizeProviderIdForLog(id),
-    label: provider.label && sanitizeProviderIdForLog(provider.label),
-  });
+/** Reference errors only need the origin of HTTP endpoints, including webhook-prefixed URLs. */
+export function getProviderDescriptionForLog(provider: ProviderIdentity | string): string {
+  function display(ref: string): string {
+    const endpoint = ref.match(/(?:https?|wss?):\/\/.*/i)?.[0];
+    return endpoint
+      ? (URL.parse(endpoint)?.origin ?? '[redacted endpoint]')
+      : sanitizeProviderIdForLog(ref);
+  }
+  return typeof provider === 'string'
+    ? display(provider)
+    : getProviderDescription({
+        id: display(readProviderId(provider)),
+        label: provider.label && display(provider.label),
+      });
 }
 
 export function sanitizeProviderIdForLog(providerId: string): string {

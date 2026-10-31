@@ -1614,16 +1614,27 @@ describe('resolveConfigs', () => {
   );
 
   it('validates references to excluded providers without loading them', async () => {
-    const providers = [
-      { id: 'promptfoo://provider/excluded-target', config: { label: 'excluded' } },
-      { id: 'promptfoo://provider/selected-target', config: { label: 'selected' } },
-    ];
-    const tests = [{ providers: [providers[0].id] }];
-    vi.mocked(loadApiProviders).mockResolvedValue([createMockProvider({ id: providers[1].id })]);
+    const selected = { id: 'promptfoo://provider/selected-target' };
+    const excluded = {
+      id: 'promptfoo://provider/{{ env.PR_FILTER_TARGET }}',
+      label: '{{ env.PR_FILTER_LABEL }}',
+      env: { PR_FILTER_LABEL: 'excluded' },
+    };
+    const tests = [{ providers: ['promptfoo://provider/excluded-target', 'excluded'] }];
+    vi.mocked(loadApiProviders).mockResolvedValue([createMockProvider(selected)]);
     vi.mocked(readTests).mockResolvedValue(tests);
     vi.mocked(fs.existsSync).mockReturnValue(true);
-    vi.mocked(fs.readFileSync).mockReturnValue(
-      JSON.stringify({ prompts: ['prompt1'], providers, tests }),
+    vi.mocked(fs.readFileSync).mockImplementation((filename) =>
+      JSON.stringify(
+        String(filename).endsWith('excluded.yaml')
+          ? excluded
+          : {
+              prompts: ['prompt1'],
+              providers: ['file://excluded.yaml', selected],
+              env: { PR_FILTER_TARGET: 'excluded-target' },
+              tests,
+            },
+      ),
     );
     vi.mocked(globSync).mockReturnValueOnce(['config.json']);
 
@@ -1632,9 +1643,9 @@ describe('resolveConfigs', () => {
       {},
     );
 
-    expect(result.selectedProviderConfigs).toEqual([providers[1]]);
-    expect(cliState.selectedProviderConfigs).toEqual([providers[1]]);
-    expect(loadApiProviders).toHaveBeenCalledWith([providers[1]], expect.any(Object));
+    expect(result.selectedProviderConfigs).toEqual([selected]);
+    expect(cliState.selectedProviderConfigs).toEqual([selected]);
+    expect(loadApiProviders).toHaveBeenCalledWith([selected], expect.any(Object));
   });
 
   it('should load scenarios and tests from external files', async () => {
