@@ -117,8 +117,7 @@ export class TraceStore {
           evaluationId: trace.evaluationId,
           testCaseId: trace.testCaseId,
           createdAt: Date.now(),
-          // Only the evaluator can confirm that the row's spans were collected.
-          metadata: { ...trace.metadata, promptfooTraceEvidence: 'partial' },
+          metadata: trace.metadata,
         })
         .onConflictDoNothing({ target: tracesTable.traceId })
         .run();

@@ -404,6 +404,8 @@ export async function generateTraceContextIfNeeded(
       evaluationId: evaluationId || '',
       testCaseId: testCaseId || '',
       metadata: {
+        // Only the evaluator can confirm that the row's spans were collected.
+        promptfooTraceEvidence: 'partial',
         testIdx,
         promptIdx,
         ...(executionMetadata.providerId && { providerId: executionMetadata.providerId }),
