@@ -1,4 +1,9 @@
-import { doesProviderRefMatch, getProviderDescription, type ProviderIdentity } from './provider';
+import {
+  doesProviderRefMatch,
+  getProviderDescriptionForLog,
+  type ProviderIdentity,
+  sanitizeProviderIdForLog,
+} from './provider';
 
 import type { Scenario, TestCase } from '../types/index';
 
@@ -14,9 +19,9 @@ export class ProviderReferenceValidationError extends Error {
  */
 function validateProviderRef(ref: string, providers: ProviderIdentity[], context: string): void {
   if (!providers.some((p) => doesProviderRefMatch(ref, p))) {
-    const available = providers.map(getProviderDescription).join(', ');
+    const available = providers.map(getProviderDescriptionForLog).join(', ');
     throw new ProviderReferenceValidationError(
-      `${context} references provider "${ref}" which does not exist. Available providers: ${available}`,
+      `${context} references provider "${sanitizeProviderIdForLog(ref)}" which does not exist. Available providers: ${available}`,
     );
   }
 }

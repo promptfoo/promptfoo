@@ -1,3 +1,4 @@
+import { isApiProvider } from '../../types/providers';
 import { normalizeProviderRef } from '../../util/providerRef';
 
 import type { ApiProvider, CommandLineOptions, TestSuiteConfig } from '../../types/index';
@@ -44,10 +45,17 @@ export function getProviderFilterRegexError(filter: string): string | undefined 
  * Handles all provider config formats: string, function, ProviderOptions, ProviderOptionsMap.
  */
 export function getProviderIdAndLabel(
-  provider: string | ProviderOptions | ProviderOptionsMap | ((...args: unknown[]) => unknown),
-  index: number,
+  provider:
+    | string
+    | ApiProvider
+    | ProviderOptions
+    | ProviderOptionsMap
+    | ((...args: unknown[]) => unknown),
+  index?: number,
 ): { id: string; label?: string } {
-  return normalizeProviderRef(provider, { index });
+  return isApiProvider(provider)
+    ? { id: provider.id(), label: provider.label }
+    : normalizeProviderRef(provider, { index });
 }
 
 /**
@@ -75,8 +83,12 @@ export function filterProviderConfigs(
   if (Array.isArray(providers)) {
     return providers.filter((provider, index) => matches(getProviderIdAndLabel(provider, index)));
   }
-  if (typeof providers === 'string' || typeof providers === 'function') {
-    return matches(normalizeProviderRef(providers)) ? providers : [];
+  if (
+    typeof providers === 'string' ||
+    typeof providers === 'function' ||
+    isApiProvider(providers)
+  ) {
+    return matches(getProviderIdAndLabel(providers)) ? providers : [];
   }
   return providers;
 }

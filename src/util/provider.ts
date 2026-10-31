@@ -9,6 +9,10 @@ export interface ProviderIdentity {
   label?: string;
 }
 
+function readProviderId(provider: ProviderIdentity): string {
+  return typeof provider.id === 'string' ? provider.id : provider.id();
+}
+
 export function providerToIdentifier(
   provider: TestCase['provider'] | { id?: string; label?: string } | undefined,
 ): string | undefined {
@@ -58,11 +62,17 @@ export function getProviderIdentifier(provider: ApiProvider): string {
  */
 export function getProviderDescription(provider: ProviderIdentity): string {
   const label = provider.label;
-  const id = typeof provider.id === 'string' ? provider.id : provider.id();
-  if (label && label !== id) {
-    return `${label} (${id})`;
-  }
-  return id;
+  const id = readProviderId(provider);
+  return label && label !== id ? `${label} (${id})` : id;
+}
+
+/** Redact each URL before combining the label and ID in a diagnostic. */
+export function getProviderDescriptionForLog(provider: ProviderIdentity): string {
+  const id = readProviderId(provider);
+  return getProviderDescription({
+    id: sanitizeProviderIdForLog(id),
+    label: provider.label && sanitizeProviderIdForLog(provider.label),
+  });
 }
 
 export function sanitizeProviderIdForLog(providerId: string): string {
@@ -83,7 +93,7 @@ export function sanitizeProviderIdForLog(providerId: string): string {
  */
 export function doesProviderRefMatch(ref: string, provider: ProviderIdentity): boolean {
   const label = provider.label;
-  const id = typeof provider.id === 'string' ? provider.id : provider.id();
+  const id = readProviderId(provider);
 
   // Canonicalize the reference for file/exec providers
   const canonicalRef = canonicalizeProviderId(ref);

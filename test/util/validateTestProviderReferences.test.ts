@@ -94,6 +94,22 @@ describe('validateTestProviderReferences', () => {
     expect(() => validateTestProviderReferences(tests, providers)).toThrow(/Test #2/);
   });
 
+  it('matches raw IDs but redacts credentials in error descriptions and references', () => {
+    const id = 'https://host.test/model?api_key=example-private-key';
+    const label = 'https://host.test/label?token=example-private-token';
+    const available = [{ id, label }];
+    expect(() =>
+      validateTestProviderReferences([{ providers: [id, label] }], available),
+    ).not.toThrow();
+    const validate = () =>
+      validateTestProviderReferences(
+        [{ providers: ['https://other.test/?api_key=example-private-ref'] }],
+        available,
+      );
+    expect(validate).toThrow(/which does not exist.*host\.test\/model/);
+    expect(validate).not.toThrow(/example-private/);
+  });
+
   it('validates excluded provider IDs and labels with the same wildcard rules', () => {
     const available = [...providers, { id: 'gemini:flash', label: 'fast' }];
     expect(() =>
