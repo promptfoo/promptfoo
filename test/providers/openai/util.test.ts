@@ -34,6 +34,21 @@ it('recognizes a complete JWT after repeated header prefixes', () => {
   expect(hasSensitiveOpenAiCacheString(text + '.signature')).toBe(true);
 });
 
+it('recognizes signed headers embedded at every base64url alignment', () => {
+  const header = Buffer.from(' \n{ "alg":"HS256"}').toString('base64url');
+  // e2Fi decodes to "{ab" and introduces an extra opening brace before the header.
+  for (const prefix of ['', 'a', 'ab', 'abc', 'e2Fi']) {
+    expect(hasSensitiveOpenAiCacheString(`${prefix}${header}.e30.fixture`)).toBe(true);
+  }
+});
+
+it('preserves dotted identifiers and incomplete token fragments', () => {
+  const header = Buffer.from('{ "alg":"HS256"}').toString('base64url');
+  expect(hasSensitiveOpenAiCacheString('vendor/Mistral-Large.3.1-Instruct.gguf')).toBe(false);
+  expect(hasSensitiveOpenAiCacheString(`mcp_${header}.e30`)).toBe(false);
+  expect(hasSensitiveOpenAiCacheString('model.e30.revision')).toBe(false);
+});
+
 describe('getOpenAiEffectiveServiceTier', () => {
   it('preserves layer precedence when prompt passthrough replaces provider passthrough', () => {
     const providerConfig = {

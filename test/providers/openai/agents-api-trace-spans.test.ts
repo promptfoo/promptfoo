@@ -385,6 +385,12 @@ describe('normalizeHostedTrace', () => {
   it.each([
     ['API key', 'AIza' + 'x'.repeat(35)],
     ['JWT', 'eyJfixture.payload.signature'],
+    ...['{ "alg":"HS256"}', ' \n{"alg":"HS256"}'].map((header) => [
+      'JWT with header whitespace',
+      [header, '{"sub":"fixture"}', 'fixture-signature']
+        .map((part) => Buffer.from(part).toString('base64url'))
+        .join('.'),
+    ]),
     ...['ghp_', 'gho_', 'ghu_', 'ghs_', 'ghr_', 'github_pat_', 'npm_'].map((prefix) => [
       prefix,
       prefix + 'x'.repeat(36),
