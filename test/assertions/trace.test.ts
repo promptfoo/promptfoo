@@ -12,6 +12,7 @@ import cliState from '../../src/cliState';
 import { withProviderCallTracingContext } from '../../src/scheduler/providerCallExecutionContext';
 import { withGenAISpan } from '../../src/tracing/genaiTracer';
 import { sanitizeTraceAttributes } from '../../src/tracing/sanitizeAttributes';
+import { HOSTED_ERROR_STATUS_VERSION } from '../../src/tracing/spanError';
 import { getTraceStore } from '../../src/tracing/store';
 import { mockProcessEnv } from '../util/utils';
 
@@ -169,7 +170,7 @@ describe('trace assertions', () => {
       statusCode: 0,
       attributes: {
         'promptfoo.openai.hosted_trace': 'wrapper',
-        'promptfoo.openai.error_status_complete': 'otlp-v2',
+        'promptfoo.openai.error_status_complete': HOSTED_ERROR_STATUS_VERSION,
         'gen_ai.operation.name': 'execute_tool',
         'tool.name': name,
         ...(args !== undefined && {
@@ -219,7 +220,7 @@ describe('trace assertions', () => {
       },
     );
 
-    it('retains known failures but cannot prove zero errors from an older hosted projection', async () => {
+    it('requires reliable error evidence to grade an older hosted projection', async () => {
       const legacy = { ...imported, errorStatusComplete: undefined };
       const zero: Assertion = {
         type: 'trace-error-spans',
@@ -249,13 +250,24 @@ describe('trace assertions', () => {
           [call, tool('read')],
         ),
       ).resolves.toMatchObject({ pass: true });
-      await expect(grade(zero, legacy, [{ ...call, statusCode: 2 }])).resolves.toMatchObject({
-        pass: false,
-        reason: expect.stringContaining('Found 1 error'),
-      });
       const someErrors: Assertion = { ...zero, type: 'not-trace-error-spans' };
-      await expect(grade(someErrors, legacy, [call])).resolves.toMatchObject({ pass: false });
-      await expect(grade(someErrors, legacy, [{ ...call, statusCode: 2 }])).resolves.toMatchObject({
+      for (const marker of [undefined, 'otlp-v2']) {
+        for (const statusCode of [0, 1, 2]) {
+          const oldSpan = {
+            ...call,
+            statusCode,
+            attributes: { ...call.attributes, 'promptfoo.openai.error_status_complete': marker },
+          };
+          for (const assertion of [zero, someErrors]) {
+            await expect(grade(assertion, legacy, [oldSpan])).resolves.toMatchObject({
+              pass: false,
+              reason: expect.stringContaining('did not preserve all error indicators'),
+            });
+          }
+        }
+      }
+      const observedError = { ...call, attributes: { ...call.attributes, failed: true } };
+      await expect(grade(someErrors, legacy, [observedError])).resolves.toMatchObject({
         pass: true,
       });
       await expect(
@@ -925,7 +937,7 @@ describe('trace assertions', () => {
         attributes: {
           'gen_ai.operation.name': 'chat',
           'promptfoo.openai.hosted_trace': 'wrapper',
-          'promptfoo.openai.error_status_complete': 'otlp-v2',
+          'promptfoo.openai.error_status_complete': HOSTED_ERROR_STATUS_VERSION,
         },
       };
       const pattern = 'chat gpt-6-astra';

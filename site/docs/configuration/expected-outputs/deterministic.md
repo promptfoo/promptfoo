@@ -1240,6 +1240,8 @@ The assertion will show the slowest spans when a threshold is exceeded, making i
 
 The `trace-error-spans` assertion detects error spans in a trace and ensures the error rate is within acceptable limits. It automatically detects errors through status codes, error attributes, and status messages.
 
+When regrading a saved hosted OpenAI trace, an older import can contain a status code computed from diagnostic text or a malformed HTTP status. If the error limit depends on that code, Promptfoo reports insufficient evidence. Rerun the eval to capture the current error evidence.
+
 :::note
 Enable tracing for this assertion. It fails if collection is incomplete or no spans were saved.
 :::
