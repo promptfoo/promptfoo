@@ -259,7 +259,11 @@ Use trajectory assertions when your spans identify tools, commands, searches, re
 
 The three raw-span assertions accept `value.attributes` to select spans by exact attributes in addition to their name pattern. For example, `attributes: { 'gen_ai.tool.name': 'search' }` limits a count, duration, or error-rate check to the search tool even when every tool emits a span named `execute_tool`. All supplied attributes must match; missing attributes are excluded. See the [attribute-filter examples](/docs/configuration/expected-outputs/deterministic/#trace-span-count) for supported values and presence checks.
 
-Before grading a locally traced row, Promptfoo waits up to 30 seconds for pending exports. If a local write for the row fails or the flush exceeds that budget, built-in trace and trajectory assertions report unavailable evidence. Output assertions still run. The local exporter uses `OTEL_BSP_EXPORT_TIMEOUT` for each batch (30,000 ms by default).
+Before grading a locally traced row, Promptfoo waits up to 30 seconds for queued local spans and SQLite writes. An external OTLP exporter sends batches independently and drains at SDK shutdown. Assertions configured to fetch an external trace still wait for that trace provider. If local export fails or exceeds the grading budget, built-in trace and trajectory assertions report unavailable evidence. Output assertions still run.
+
+The local exporter uses `OTEL_BSP_EXPORT_TIMEOUT` per batch (30,000 ms by default). In SQLite rollback-journal mode, the commit can wait on a lock only for the remaining write budget. Synchronous disk work can still finish after the deadline, and the exporter can report a timeout even when the spans were committed.
+
+For a custom assertion that requires trace evidence, return a failing grade when the spans are missing or empty. [JavaScript example](/docs/configuration/expected-outputs/javascript/#using-trace-data) · [Python example](/docs/configuration/expected-outputs/python/#using-trace-data) · [Ruby example](/docs/configuration/expected-outputs/ruby/#using-trace-data)
 
 Overlapping programmatic evaluations share the first active OpenTelemetry exporter configuration. When an evaluation finishes, it flushes its spans. The last evaluation drains and closes the SDK, and a subsequent evaluation can choose a new configuration.
 

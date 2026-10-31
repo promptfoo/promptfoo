@@ -353,20 +353,17 @@ Here `output` is always a string, so if your [custom response parser](/docs/prov
 
 ## Using trace data
 
-When [tracing is enabled](/docs/tracing/), OpenTelemetry trace data is available in the `context.trace` object. This allows you to write assertions based on the execution flow:
+Promptfoo supplies spans in `context.trace` when a trace is available. If your assertion requires trace evidence, fail when the trace is missing or empty. [Configure tracing](/docs/tracing/).
 
 ```js
 module.exports = (output, context) => {
-  // Check if trace data is available
-  if (!context.trace) {
-    // Tracing not enabled, skip trace-based checks
-    return true;
+  const spans = context.trace?.spans;
+  if (!spans?.length) {
+    return { pass: false, score: 0, reason: 'No trace spans available' };
   }
 
-  const { spans } = context.trace;
-
-  // Example: Check for errors in any span
-  const errorSpans = spans.filter((s) => s.statusCode >= 400);
+  // OpenTelemetry span status 2 means ERROR.
+  const errorSpans = spans.filter((s) => s.statusCode === 2);
   if (errorSpans.length > 0) {
     return {
       pass: false,
@@ -412,16 +409,10 @@ tests:
     assert:
       - type: javascript
         value: |
-          // Ensure retrieval happened before response generation
-          if (context.trace) {
-            const retrievalSpan = context.trace.spans.find(s => s.name.includes('retrieval'));
-            const generationSpan = context.trace.spans.find(s => s.name.includes('generation'));
-            
-            if (retrievalSpan && generationSpan) {
-              return retrievalSpan.startTime < generationSpan.startTime;
-            }
-          }
-          return true;
+          const spans = context.trace?.spans ?? [];
+          const retrieval = spans.find(s => s.name.includes('retrieval'));
+          const generation = spans.find(s => s.name.includes('generation'));
+          return Boolean(retrieval && generation && retrieval.startTime < generation.startTime);
 ```
 
 Additional examples:
