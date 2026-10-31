@@ -4,11 +4,12 @@ import type { AddressInfo } from 'node:net';
 import { context, propagation, SpanStatusCode, trace } from '@opentelemetry/api';
 import {
   InMemorySpanExporter,
-  NodeTracerProvider,
   SimpleSpanProcessor,
-} from '@opentelemetry/sdk-trace-node';
+  TracerProvider,
+} from '@opentelemetry/sdk-trace';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { AnthropicMessagesProvider } from '../../../src/providers/anthropic/messages';
+import { registerTracerProvider } from '../../../src/tracing/tracerProvider';
 import { mockProcessEnv } from '../../util/utils';
 
 const servers: Server[] = [];
@@ -68,13 +69,13 @@ afterEach(async () => {
 
 describe('Anthropic Messages SDK transport', () => {
   const exporter = new InMemorySpanExporter();
-  const tracerProvider = new NodeTracerProvider({
-    spanProcessors: [new SimpleSpanProcessor(exporter)],
+  const tracerProvider = new TracerProvider({
+    spanProcessors: [new SimpleSpanProcessor({ exporter: exporter })],
   });
   let restoreEnv: () => void;
 
   beforeAll(() => {
-    tracerProvider.register();
+    registerTracerProvider(tracerProvider);
   });
 
   beforeEach(() => {
