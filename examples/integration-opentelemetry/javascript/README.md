@@ -47,7 +47,7 @@ Promptfoo's OpenTelemetry integration allows you to:
 | `promptfooconfig.yaml`      | Evaluation config with tracing enabled and assertions |
 | `provider-simple-traced.js` | Simulated RAG provider with comprehensive tracing     |
 | `trace-assertions.js`       | Custom JavaScript assertion for trace validation      |
-| `package.json`              | OpenTelemetry dependencies (v2.x API)                 |
+| `package.json`              | OpenTelemetry dependencies (v3.x API)                 |
 
 ## Tracing Configuration
 
@@ -68,25 +68,28 @@ tracing:
 The provider receives trace context from Promptfoo via the `traceparent` field. Here's the pattern used in this example:
 
 ```javascript
-const { trace, context, SpanStatusCode } = require('@opentelemetry/api');
-const { NodeTracerProvider } = require('@opentelemetry/sdk-trace-node');
+const { trace, context, propagation, SpanStatusCode } = require('@opentelemetry/api');
+const { BatchSpanProcessor, TracerProvider } = require('@opentelemetry/sdk-trace');
+const { AsyncLocalStorageContextManager } = require('@opentelemetry/context-async-hooks');
+const { W3CTraceContextPropagator } = require('@opentelemetry/core');
 const { OTLPTraceExporter } = require('@opentelemetry/exporter-trace-otlp-http');
-const { BatchSpanProcessor } = require('@opentelemetry/sdk-trace-node');
 const { resourceFromAttributes } = require('@opentelemetry/resources');
 const { ATTR_SERVICE_NAME } = require('@opentelemetry/semantic-conventions');
 
-// Initialize OpenTelemetry (v2.x API)
+// Initialize OpenTelemetry (v3.x API)
 const exporter = new OTLPTraceExporter({
   url: 'http://localhost:4318/v1/traces',
 });
 
-const provider = new NodeTracerProvider({
+const provider = new TracerProvider({
   resource: resourceFromAttributes({
     [ATTR_SERVICE_NAME]: 'my-provider',
   }),
-  spanProcessors: [new BatchSpanProcessor(exporter)],
+  spanProcessors: [new BatchSpanProcessor({ exporter })],
 });
-provider.register();
+trace.setGlobalTracerProvider(provider);
+context.setGlobalContextManager(new AsyncLocalStorageContextManager().enable());
+propagation.setGlobalPropagator(new W3CTraceContextPropagator());
 
 const tracer = trace.getTracer('my-provider');
 
@@ -231,12 +234,14 @@ async callApi(prompt, promptfooContext) {
 
 ## Dependencies
 
-This example uses OpenTelemetry v2.x packages:
+This example uses OpenTelemetry v3.x packages:
 
-| Package                                   | Version  | Purpose                  |
-| ----------------------------------------- | -------- | ------------------------ |
-| `@opentelemetry/api`                      | ^1.9.0   | Core tracing API         |
-| `@opentelemetry/sdk-trace-node`           | ^2.5.0   | Node.js tracer provider  |
-| `@opentelemetry/exporter-trace-otlp-http` | ^0.223.0 | OTLP HTTP exporter       |
-| `@opentelemetry/resources`                | ^2.5.0   | Resource attributes      |
-| `@opentelemetry/semantic-conventions`     | ^1.39.0  | Standard attribute names |
+| Package                                   | Version  | Purpose                       |
+| ----------------------------------------- | -------- | ----------------------------- |
+| `@opentelemetry/context-async-hooks`      | ^3.0.0   | Async context propagation     |
+| `@opentelemetry/core`                     | 3.0.0    | W3C trace context propagation |
+| `@opentelemetry/api`                      | ^1.10.0  | Core tracing API              |
+| `@opentelemetry/sdk-trace`                | ^3.0.0   | Node.js tracer provider       |
+| `@opentelemetry/exporter-trace-otlp-http` | ^0.300.0 | OTLP HTTP exporter            |
+| `@opentelemetry/resources`                | ^3.0.0   | Resource attributes           |
+| `@opentelemetry/semantic-conventions`     | ^1.39.0  | Standard attribute names      |
