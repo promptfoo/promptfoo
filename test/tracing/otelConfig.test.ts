@@ -5,9 +5,10 @@ import { getOtelConfigFromEnv } from '../../src/tracing/otelConfig';
 vi.mock('../../src/envars', () => ({
   getEnvBool: vi.fn(),
   getEnvString: vi.fn(),
+  getEnvOverrides: vi.fn(),
 }));
 
-import { getEnvBool, getEnvString } from '../../src/envars';
+import { getEnvBool, getEnvOverrides, getEnvString } from '../../src/envars';
 
 const mockedGetEnvBool = vi.mocked(getEnvBool);
 const mockedGetEnvString = vi.mocked(getEnvString);
@@ -19,6 +20,7 @@ describe('otelConfig', () => {
 
   afterEach(() => {
     vi.resetAllMocks();
+    vi.unstubAllEnvs();
   });
 
   describe('getOtelConfigFromEnv', () => {
@@ -111,6 +113,26 @@ describe('otelConfig', () => {
       const config = getOtelConfigFromEnv();
 
       expect(config.localExport).toBe(false);
+    });
+
+    it('identifies only the inherited process collector as host-managed', () => {
+      const endpoint = 'https://collector.test/';
+      vi.stubEnv('OTEL_EXPORTER_OTLP_ENDPOINT', endpoint);
+      mockedGetEnvString.mockImplementation((key, fallback) =>
+        key === 'OTEL_EXPORTER_OTLP_ENDPOINT' ? endpoint : fallback,
+      );
+      expect(getOtelConfigFromEnv().inheritedEndpoint).toBe(true);
+
+      vi.mocked(getEnvOverrides).mockImplementation((layer) =>
+        layer === 'suite' ? { OTEL_EXPORTER_OTLP_ENDPOINT: endpoint } : undefined,
+      );
+      expect(getOtelConfigFromEnv().inheritedEndpoint).toBeUndefined();
+
+      vi.mocked(getEnvOverrides).mockReturnValue(undefined);
+      mockedGetEnvString.mockImplementation((key, fallback) =>
+        key === 'PROMPTFOO_OTEL_ENDPOINT' ? endpoint : fallback,
+      );
+      expect(getOtelConfigFromEnv().inheritedEndpoint).toBeUndefined();
     });
 
     it('should read PROMPTFOO_OTEL_DEBUG', () => {
