@@ -629,11 +629,16 @@ describe('trace assertions', () => {
     it('distinguishes an open test-case root from an unknown missing local ancestor', async () => {
       const call = tool('lookup');
       call.attributes!['gen_ai.tool.name'] = 'lookup';
-      const check = (assertion: Assertion, testCaseSpanId?: string, closed = false) =>
+      const check = (
+        assertion: Assertion,
+        testCaseSpanId?: string,
+        closed = false,
+        status = 'imported',
+      ) =>
         runAssertion({
           assertion,
           test: mockTest,
-          providerResponse: { output: 'ok', metadata: { hostedTrace: imported } },
+          providerResponse: { output: 'ok', metadata: { hostedTrace: { ...imported, status } } },
           traceId: mockTraceData.traceId,
           traceData: {
             ...mockTraceData,
@@ -664,6 +669,29 @@ describe('trace assertions', () => {
             ],
           },
         });
+      const countByOwner = (owner: string): Assertion => ({
+        type: 'trace-span-count',
+        value: {
+          pattern: 'execute_tool absent',
+          attributes: { 'promptfoo.openai.hosted_trace': owner },
+          max: 0,
+        },
+      });
+      await expect(
+        check(countByOwner('another-call'), 'missing', true, 'partial'),
+      ).resolves.toMatchObject({ pass: true });
+      await expect(
+        check(countByOwner('wrapper'), 'missing', true, 'partial'),
+      ).resolves.toMatchObject({
+        pass: false,
+        reason: expect.stringContaining('partial'),
+      });
+      await expect(
+        check(countByOwner('another-call'), 'unknown', false, 'partial'),
+      ).resolves.toMatchObject({
+        pass: false,
+        reason: expect.stringContaining('ancestor'),
+      });
       const noError: Assertion = {
         type: 'trace-error-spans',
         value: { pattern: 'execute_tool *', max_count: 0 },
@@ -924,6 +952,46 @@ describe('trace assertions', () => {
           tool('lookup'),
         ]),
       ).resolves.toMatchObject({ pass: true });
+    });
+
+    it('limits a legacy chat model name to trajectory checks that depend on it', async () => {
+      const chat: TraceSpan = {
+        name: 'chat',
+        spanId: 'chat',
+        startTime: 1000,
+        attributes: { 'promptfoo.openai.hosted_trace': 'wrapper', 'gen_ai.operation.name': 'chat' },
+      };
+      const spans = [chat, tool('lookup', { id: 1 })];
+      const manifest = { ...complete, spanCount: spans.length };
+      for (const assertion of [
+        { type: 'not-trajectory:tool-used', value: 'delete' },
+        { type: 'trajectory:tool-sequence', value: { steps: ['lookup'], mode: 'exact' } },
+        { type: 'trajectory:tool-args-match', value: { name: 'lookup', args: { id: 1 } } },
+        { type: 'trajectory:step-count', value: { type: 'tool', min: 1, max: 1 } },
+        { type: 'trajectory:step-count', value: { min: 2, max: 2 } },
+        { type: 'trajectory:step-count', value: { type: 'span', pattern: 'chat*', min: 1 } },
+        { type: 'trajectory:step-count', value: { pattern: 'chat gpt-*', max: 1 } },
+        { type: 'not-trajectory:step-count', value: { name: 'chat', min: 2 } },
+      ] satisfies Assertion[]) {
+        await expect(grade(assertion, manifest, spans)).resolves.toMatchObject({ pass: true });
+      }
+      for (const assertion of [
+        { type: 'trajectory:step-count', value: { type: ['tool', 'span'], name: 'chat', min: 1 } },
+        { type: 'not-trajectory:step-count', value: { pattern: 'chat *', min: 1 } },
+        { type: 'trajectory:goal-success', value: 'Used the requested model' },
+      ] satisfies Assertion[]) {
+        await expect(grade(assertion, manifest, spans)).resolves.toMatchObject({
+          pass: false,
+          reason: expect.stringContaining('legacy hosted chat'),
+        });
+      }
+      await expect(
+        grade(
+          { type: 'not-trajectory:tool-used', value: 'delete' },
+          { ...manifest, status: 'partial' },
+          spans,
+        ),
+      ).resolves.toMatchObject({ pass: false, reason: expect.stringContaining('partial') });
     });
 
     it('grades bounds that hold or fail for every possible count of filtered native spans', async () => {
@@ -1687,6 +1755,193 @@ describe('trace assertions', () => {
         grade(noDelete, { status: 'unavailable', source: 'custom' }),
       ).resolves.toMatchObject({ pass: true });
     });
+  });
+
+  it('grades an empty stored association as unavailable without discarding output assertions', async () => {
+    const emptyTrace = { ...mockTraceData, spans: [] };
+    mockTraceStore.getTrace.mockResolvedValue(emptyTrace);
+    mockProcessEnv({ PROMPTFOO_TRACE_FETCH_MAX_ATTEMPTS: '2' });
+    const absence = { type: 'trace-span-count', value: { pattern: '*', max: 0 } } as const;
+    const result = await runAssertions({
+      test: {
+        assert: [absence, { type: 'equals', value: 'Test output' }, createSpanCountAssertion()],
+      },
+      providerResponse: mockProviderResponse,
+      traceId: emptyTrace.traceId,
+    });
+    expect(result.componentResults?.map((grade) => grade.pass)).toEqual([false, true, true]);
+    expect(result.componentResults?.[0].reason).toContain('No spans were stored');
+    expect(mockTraceStore.getTrace).toHaveBeenCalledTimes(2);
+    // An explicit empty capture from the caller is authoritative.
+    const explicit = await runAssertion({
+      test: mockTest,
+      assertion: absence,
+      providerResponse: mockProviderResponse,
+      traceId: emptyTrace.traceId,
+      traceData: emptyTrace,
+    });
+    expect(explicit.pass).toBe(true);
+  });
+
+  describe('regrading saved trace evidence', () => {
+    const positive = { type: 'trace-span-count', value: { pattern: '*', min: 1 } } as const;
+    const absence = { type: 'trace-span-count', value: { pattern: 'missing', max: 0 } } as const;
+
+    it.each(['partial', 'unavailable'])(
+      'uses the %s status for direct and bulk grading',
+      async (status) => {
+        const traceData = { ...mockTraceData, metadata: { promptfooTraceEvidence: status } };
+        const choices = [
+          positive,
+          absence,
+          createSpanCountAssertion('context.trace === undefined'),
+        ];
+        const expected = [status === 'partial', false, status === 'unavailable'];
+        const direct = await Promise.all(
+          choices.map((assertion) =>
+            runAssertion({
+              assertion,
+              test: mockTest,
+              providerResponse: mockProviderResponse,
+              traceData,
+            }),
+          ),
+        );
+        expect(direct.map((grade) => grade.pass)).toEqual(expected);
+        expect(mockTraceStore.getTrace).not.toHaveBeenCalled();
+
+        mockTraceStore.getTrace.mockResolvedValue(traceData);
+        const bulk = await runAssertions({
+          test: { assert: choices },
+          providerResponse: mockProviderResponse,
+          traceId: traceData.traceId,
+        });
+        expect(bulk.componentResults?.map((grade) => grade.pass)).toEqual(expected);
+        expect(mockTraceStore.getTrace).toHaveBeenCalledOnce();
+      },
+    );
+
+    it('uses a successful live capture over the initial partial status', async () => {
+      mockTraceStore.getTrace.mockResolvedValue({
+        ...mockTraceData,
+        metadata: { promptfooTraceEvidence: 'partial' },
+      });
+      const options = {
+        test: { assert: [absence] },
+        providerResponse: mockProviderResponse,
+        traceId: mockTraceData.traceId,
+      };
+      expect(
+        (await runAssertions({ ...options, traceUnavailable: false, traceIncomplete: false })).pass,
+      ).toBe(true);
+      expect((await runAssertions({ ...options, traceIncomplete: false })).pass).toBe(false);
+    });
+
+    it('preserves the hard failure even if no spans were persisted', async () => {
+      mockTraceStore.getTrace.mockResolvedValue({
+        ...mockTraceData,
+        metadata: { promptfooTraceEvidence: 'unavailable' },
+        spans: [],
+      });
+      const result = await runAssertion({
+        assertion: positive,
+        test: mockTest,
+        providerResponse: mockProviderResponse,
+        traceId: mockTraceData.traceId,
+      });
+      expect(result).toMatchObject({
+        pass: false,
+        reason: expect.stringContaining('Local trace export did not complete'),
+      });
+      expect(mockTraceStore.getTrace).toHaveBeenCalledOnce();
+    });
+  });
+
+  it('grades only observed positive claims on a partial trace', async () => {
+    mockTraceStore.getTrace.mockResolvedValue({
+      ...mockTraceData,
+      spans: [
+        {
+          ...mockTraceData.spans[0],
+          name: 'execute_tool search',
+          attributes: { 'tool.name': 'search', 'tool.arguments': '{"query":"orders"}' },
+        },
+      ],
+    });
+    const observed: Assertion[] = [
+      { type: 'trace-span-count', value: { pattern: '*', min: 1 } },
+      { type: 'trajectory:step-count', value: { min: 1 } },
+      { type: 'trajectory:tool-used', value: 'search' },
+      { type: 'trajectory:tool-used', value: ['search'] },
+      { type: 'trajectory:tool-used', value: { name: 'search' } },
+      { type: 'trajectory:tool-sequence', value: ['search'] },
+      { type: 'trajectory:tool-sequence', value: { steps: ['search'], mode: 'in_order' } },
+      { type: 'trajectory:tool-args-match', value: { name: 'search', args: { query: 'orders' } } },
+    ];
+    const unobserved: Assertion[] = [
+      { type: 'trace-span-count', value: { pattern: '*', min: 2 } },
+      { type: 'trajectory:step-count', value: { min: 2 } },
+      { type: 'trajectory:tool-used', value: ['search', 'missing'] },
+      { type: 'trajectory:tool-args-match', value: { name: 'search', args: { query: 'missing' } } },
+      { type: 'trajectory:tool-sequence', value: ['search', 'missing'] },
+    ];
+    const requiresComplete: Assertion[] = [
+      { type: 'trace-span-count', value: { pattern: '*', min: 0 } },
+      { type: 'trace-span-count', value: { pattern: '*', min: 1, max: 1 } },
+      { type: 'trace-error-spans', value: { max_count: 0 } },
+      { type: 'trace-span-duration', value: { pattern: '*', max: 600 } },
+      { type: 'trajectory:step-count', value: { max: 1 } },
+      { type: 'trajectory:tool-used', value: { name: 'search', min: 0 } },
+      { type: 'not-trajectory:tool-used', value: 'missing' },
+      { type: 'trajectory:tool-sequence', value: { steps: ['search'], mode: 'exact' } },
+      { type: 'trajectory:goal-success', value: 'Find orders' },
+    ];
+    const result = await runAssertions({
+      test: {
+        assert: [
+          ...observed,
+          ...unobserved,
+          ...requiresComplete,
+          createSpanCountAssertion('context.trace.spans.length === 1'),
+        ],
+      },
+      providerResponse: mockProviderResponse,
+      traceId: mockTraceData.traceId,
+      traceIncomplete: true,
+    });
+    const grades = result.componentResults!;
+    expect(grades.slice(0, observed.length).map((grade) => grade.pass)).toEqual(
+      observed.map(() => true),
+    );
+    const afterUnobserved = observed.length + unobserved.length;
+    for (const grade of grades.slice(observed.length, afterUnobserved)) {
+      expect(grade).toMatchObject({
+        pass: false,
+        score: 0,
+        reason: expect.stringContaining('Additional spans could satisfy'),
+      });
+    }
+    for (const grade of grades.slice(afterUnobserved, -1)) {
+      expect(grade).toMatchObject({
+        pass: false,
+        score: 0,
+        reason: expect.stringContaining('requires a complete trace'),
+      });
+    }
+    expect(grades.at(-1)?.pass).toBe(true);
+  });
+
+  it('preserves validation errors on positive partial-trace assertions', async () => {
+    await expect(
+      runAssertion({
+        assertion: { type: 'trajectory:tool-args-match', value: { name: 'search' } },
+        test: mockTest,
+        providerResponse: mockProviderResponse,
+        traceId: mockTraceData.traceId,
+        traceData: mockTraceData,
+        traceIncomplete: true,
+      }),
+    ).rejects.toThrow('must include an args or arguments property');
   });
 
   describe('deterministic assertions with span attribute filters', () => {

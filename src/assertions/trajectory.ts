@@ -1,7 +1,7 @@
 import { isDeepStrictEqual } from 'node:util';
 
 import { isGraderFailure, matchesTrajectoryGoalSuccess } from '../matchers/llmGrading';
-import { matchesPattern } from './traceUtils';
+import { countRangeIsUncertain, matchesPattern } from './traceUtils';
 import {
   extractTrajectorySteps,
   formatTrajectoryArgs,
@@ -174,7 +174,7 @@ function observedToolResult(
   uncertainArgs = false,
 ): GradingResult {
   if (!pass && !params.inverse) {
-    if (params.traceSpanUncertainty) {
+    if (params.traceSpanUncertainty?.missing === Infinity) {
       reason = params.traceSpanUncertainty.reason;
     } else if (uncertainArgs) {
       reason =
@@ -657,6 +657,22 @@ export const handleTrajectoryStepCount = (params: AssertionParams): GradingResul
   }
 
   let reason = `Matched ${count} trajectory step(s)`;
+  const uncertainty = params.traceSpanUncertainty;
+  if (uncertainty?.candidates.length) {
+    const unresolvedCommands = steps.filter(
+      (step) => couldMatchUnresolvedCommand(step, matcher) && !matchesTrajectoryStep(step, matcher),
+    );
+    const upper = count + uncertainty.candidates.length + unresolvedCommands.length;
+    reason = `Between ${count} and ${upper} trajectory step(s) match`;
+    if (countRangeIsUncertain(count, upper, min, max)) {
+      return {
+        pass: false,
+        score: 0,
+        reason: `${uncertainty.reason} ${reason}.`,
+        assertion: params.assertion,
+      };
+    }
+  }
   if (filterParts.length > 0) {
     reason += ` for ${filterParts.join(', ')}`;
   }

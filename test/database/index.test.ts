@@ -923,6 +923,20 @@ describe('database', () => {
       expect(result.afterCloseIds).toEqual([1, 2, 3]);
     });
 
+    it('tries a best-effort write without waiting on another writer and restores the timeout', async () => {
+      const result = await runDatabaseProbe<LockRecoveryProbeResult>(
+        'lockRecoveryProbe',
+        tempConfigDir,
+        'guarded-commit-nowait-writer',
+      );
+      expect(result.firstError).toMatch(/SQLITE_BUSY|SQLITE_LOCKED/);
+      expect(result.statementBusyTimeouts).toEqual([0, 0]);
+      expect(result.commitBusyTimeouts).toEqual([0]);
+      expect(result.busyTimeoutAfterRollback).toBe(400);
+      expect(result.pragmas.busy_timeout).toBe(400);
+      expect(result.afterCloseIds).toEqual([1, 2, 3]);
+    });
+
     it.each(['wal-failure', 'wal-refused'])(
       'preserves FULL synchronization at startup and after lock recovery when %s',
       async (mode) => {
