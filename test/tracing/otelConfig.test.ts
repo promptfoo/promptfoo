@@ -1,13 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { getOtelConfigFromEnv } from '../../src/tracing/otelConfig';
+import { getOtelConfigFromEnv, getOtelRoutingKey } from '../../src/tracing/otelConfig';
 
 // Mock envars module
 vi.mock('../../src/envars', () => ({
   getEnvBool: vi.fn(),
   getEnvString: vi.fn(),
+  getEnvOverrides: vi.fn(),
 }));
 
-import { getEnvBool, getEnvString } from '../../src/envars';
+import { getEnvBool, getEnvOverrides, getEnvString } from '../../src/envars';
 
 const mockedGetEnvBool = vi.mocked(getEnvBool);
 const mockedGetEnvString = vi.mocked(getEnvString);
@@ -19,7 +20,23 @@ describe('otelConfig', () => {
 
   afterEach(() => {
     vi.resetAllMocks();
+    vi.unstubAllEnvs();
   });
+
+  it.each(['OTEL_EXPORTER_OTLP_HEADERS', 'OTEL_EXPORTER_OTLP_TRACES_CLIENT_KEY'])(
+    'rejects invocation-only %s when the external exporter would use process credentials',
+    (key) => {
+      vi.stubEnv(key, 'host');
+      mockedGetEnvString.mockImplementation((name, fallback) =>
+        name === key ? 'suite' : (process.env[name] ?? fallback),
+      );
+      const config = { enabled: true, localExport: true, serviceName: 'test', debug: false };
+      expect(getOtelRoutingKey(config)).toBeDefined();
+      expect(() => getOtelRoutingKey({ ...config, endpoint: 'https://collector.test' })).toThrow(
+        'Set OTLP credentials and trace sampling in the process environment',
+      );
+    },
+  );
 
   describe('getOtelConfigFromEnv', () => {
     it('should return default config when no env vars are set', () => {
@@ -111,6 +128,26 @@ describe('otelConfig', () => {
       const config = getOtelConfigFromEnv();
 
       expect(config.localExport).toBe(false);
+    });
+
+    it('identifies only the inherited process collector as host-managed', () => {
+      const endpoint = 'https://collector.test/';
+      vi.stubEnv('OTEL_EXPORTER_OTLP_ENDPOINT', endpoint);
+      mockedGetEnvString.mockImplementation((key, fallback) =>
+        key === 'OTEL_EXPORTER_OTLP_ENDPOINT' ? endpoint : fallback,
+      );
+      expect(getOtelConfigFromEnv().inheritedEndpoint).toBe(true);
+
+      vi.mocked(getEnvOverrides).mockImplementation((layer) =>
+        layer === 'suite' ? { OTEL_EXPORTER_OTLP_ENDPOINT: endpoint } : undefined,
+      );
+      expect(getOtelConfigFromEnv().inheritedEndpoint).toBeUndefined();
+
+      vi.mocked(getEnvOverrides).mockReturnValue(undefined);
+      mockedGetEnvString.mockImplementation((key, fallback) =>
+        key === 'PROMPTFOO_OTEL_ENDPOINT' ? endpoint : fallback,
+      );
+      expect(getOtelConfigFromEnv().inheritedEndpoint).toBeUndefined();
     });
 
     it('should read PROMPTFOO_OTEL_DEBUG', () => {
