@@ -1285,6 +1285,49 @@ describe('OTLPReceiver', () => {
       }
     });
 
+    it.each([
+      { operations: ['start', 'stop'] },
+      { operations: ['start', 'stop', 'start'] },
+      { operations: ['stop', 'start', 'stop', 'start', 'stop'] },
+    ])('applies queued lifecycle calls in order: $operations', async ({ operations }) => {
+      let activeListeners = 0;
+      vi.spyOn(OTLPReceiver.prototype, 'listen').mockImplementation(async () => {
+        activeListeners += 1;
+      });
+      let finishStopping: (() => void) | undefined;
+      const firstShutdown = new Promise<void>((resolve) => {
+        finishStopping = resolve;
+      });
+      let stopCalls = 0;
+      const stopSpy = vi.spyOn(OTLPReceiver.prototype, 'stop').mockImplementation(async () => {
+        if (stopCalls++ === 0) {
+          await firstShutdown;
+        }
+        activeListeners -= 1;
+      });
+      const pending: Promise<void>[] = [];
+
+      try {
+        await startOTLPReceiver(4318, '127.0.0.1', ['json']);
+        pending.push(stopOTLPReceiver());
+        await vi.waitFor(() => expect(stopSpy).toHaveBeenCalledTimes(1));
+        for (const operation of operations) {
+          pending.push(
+            operation === 'start'
+              ? startOTLPReceiver(4318, '127.0.0.1', ['protobuf'])
+              : stopOTLPReceiver(),
+          );
+        }
+        finishStopping?.();
+        await Promise.all(pending);
+        expect(activeListeners).toBe(operations.at(-1) === 'start' ? 1 : 0);
+      } finally {
+        finishStopping?.();
+        await Promise.all(pending);
+        await stopOTLPReceiver();
+      }
+    });
+
     it('keeps startup fallback policies while registering each later evaluation policy', async () => {
       const listenSpy = vi.spyOn(OTLPReceiver.prototype, 'listen').mockResolvedValue(undefined);
       try {

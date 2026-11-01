@@ -1105,7 +1105,7 @@ export async function startOTLPReceiver(
   },
 ): Promise<void> {
   logger.debug('[OtlpReceiver] Starting receiver through startOTLPReceiver function');
-  if (otlpReceiverStopPromise) {
+  while (otlpReceiverStopPromise) {
     await otlpReceiverStopPromise;
   }
   if (otlpReceiver) {
@@ -1141,9 +1141,8 @@ export function deregisterOTLPReceiverTracePolicy(evaluationId?: string): void {
 
 export async function stopOTLPReceiver(): Promise<void> {
   logger.debug('[OtlpReceiver] Stopping receiver through stopOTLPReceiver function');
-  if (otlpReceiverStopPromise) {
+  while (otlpReceiverStopPromise) {
     await otlpReceiverStopPromise;
-    return;
   }
   const receiver = otlpReceiver;
   const startPromise = otlpReceiverStartPromise;
