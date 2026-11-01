@@ -67,6 +67,7 @@ import { handleIsValidFunctionCall } from './functionToolCall';
 import { handleGEval } from './geval';
 import { handleGleuScore } from './gleu';
 import { handleGuardrails } from './guardrails';
+import { prepareHostedTraceAssertion } from './hostedTrace';
 import { handleContainsHtml, handleIsHtml } from './html';
 import { handleJavascript } from './javascript';
 import { handleContainsJson, handleIsJson } from './json';
@@ -753,7 +754,7 @@ async function runAssertionInternal({
 
   const assertionParams: AssertionParams = {
     assertion,
-    baseType: getAssertionBaseType(assertion),
+    baseType,
     providerCallContext,
     assertionValueContext: context,
     cost,
@@ -777,12 +778,9 @@ async function runAssertionInternal({
 
   const handler = ASSERTION_HANDLERS[assertionParams.baseType as keyof typeof ASSERTION_HANDLERS];
   if (scriptFailure || handler) {
-    const traceError = getTraceEvidenceError(
-      assertionParams,
-      traceId,
-      traceUnavailable,
-      traceIncomplete,
-    );
+    const traceError =
+      getTraceEvidenceError(assertionParams, traceId, traceUnavailable, traceIncomplete) ??
+      prepareHostedTraceAssertion(assertionParams);
     const result: GradingResult =
       scriptFailure ??
       (traceError

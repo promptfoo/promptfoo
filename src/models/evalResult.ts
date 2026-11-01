@@ -105,9 +105,18 @@ function projectProviderResponse(
     return response;
   }
 
-  const projectedResponse: ProviderResponse = options.stripMetadata
-    ? (({ metadata: _metadata, ...rest }) => rest)(response)
-    : { ...response };
+  const projectedResponse: ProviderResponse = { ...response };
+  if (options.stripMetadata) {
+    // A reimported row may have no spans. Keep only the fact that this response
+    // requested hosted capture, so absence checks still require hosted evidence.
+    if (response.metadata?.hostedTrace?.source === 'openai:agents-api') {
+      projectedResponse.metadata = {
+        hostedTrace: { source: 'openai:agents-api', status: 'unavailable' },
+      };
+    } else {
+      delete projectedResponse.metadata;
+    }
+  }
 
   if (options.stripOutput) {
     projectedResponse.output = '[output stripped]';
