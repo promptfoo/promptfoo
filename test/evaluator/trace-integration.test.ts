@@ -286,6 +286,30 @@ describe('evaluator trace integration', () => {
       evidence: 'unavailable',
     },
     {
+      name: 'active local child',
+      assertions: undefined,
+      flushed: true,
+      sampled: true,
+      complete: false,
+      evidence: 'partial',
+    },
+    {
+      name: 'enabled OTLP receiver',
+      assertions: undefined,
+      flushed: true,
+      sampled: true,
+      receiver: true,
+      evidence: 'partial',
+    },
+    {
+      name: 'potentially truncated attributes',
+      assertions: undefined,
+      flushed: true,
+      sampled: true,
+      reliable: false,
+      evidence: 'unavailable',
+    },
+    {
       name: 'unsampled local export',
       assertions: undefined,
       flushed: true,
@@ -294,10 +318,18 @@ describe('evaluator trace integration', () => {
     },
   ])(
     'persists $name evidence for later grading by trace ID',
-    async ({ assertions, flushed, sampled, evidence }) => {
+    async ({
+      assertions,
+      flushed,
+      sampled,
+      evidence,
+      complete = true,
+      reliable = true,
+      receiver = false,
+    }) => {
       const traceId = 'abcdef1234567890abcdef1234567890';
       let savedEvidence = 'partial';
-      const setTraceEvidence = vi.fn(async (value: 'complete' | 'unavailable') => {
+      const setTraceEvidence = vi.fn(async (value: 'complete' | 'partial' | 'unavailable') => {
         savedEvidence = value;
       });
       vi.mocked(evaluatorTracing.generateTraceContextIfNeeded).mockResolvedValue({
@@ -308,10 +340,20 @@ describe('evaluator trace integration', () => {
       });
       const flush = vi.fn().mockResolvedValue(flushed);
       const release = vi.fn();
-      mockTrackLocalTrace.mockReturnValueOnce({ flush, release });
+      const seal = vi.fn().mockReturnValue(['target-span']);
+      mockTrackLocalTrace.mockReturnValueOnce({
+        flush,
+        release,
+        seal,
+        isComplete: () => complete,
+        isReliable: () => reliable,
+      });
       mockTraceStore.getTrace.mockImplementation(async () => ({
         traceId,
-        metadata: { promptfooTraceEvidence: savedEvidence },
+        metadata: {
+          promptfooTraceEvidence: savedEvidence,
+          ...(savedEvidence !== 'unavailable' && { promptfooTraceSpanIds: ['target-span'] }),
+        },
         spans: [{ spanId: 'target-span', name: 'target.call', startTime: 1000, endTime: 2000 }],
       }));
 
@@ -320,7 +362,7 @@ describe('evaluator trace integration', () => {
           providers: [createMockProvider(createTraceProviderConfig())],
           prompts: [{ raw: 'Test prompt', label: 'test' }],
           tests: [{ metadata: createTracingContext(), assert: assertions }],
-          tracing: { enabled: true },
+          tracing: { enabled: true, otlp: { http: { enabled: receiver } } },
         },
         mockEval,
         createSerialOptions(),
@@ -331,6 +373,8 @@ describe('evaluator trace integration', () => {
       );
       expect(mockTrackLocalTrace).toHaveBeenCalledWith(traceId);
       expect(flush).toHaveBeenCalledOnce();
+      expect(seal).toHaveBeenCalledOnce();
+      expect(setTraceEvidence).toHaveBeenCalledWith(evidence, ['target-span']);
       expect(release).toHaveBeenCalledOnce();
       expect(savedEvidence).toBe(evidence);
       const replay = await runAssertions({
@@ -341,6 +385,47 @@ describe('evaluator trace integration', () => {
         },
       });
       expect(replay.pass).toBe(evidence === 'complete');
+    },
+  );
+
+  it.each(['throw', 'error', 'empty'] as const)(
+    'finalizes target evidence when the provider returns %s',
+    async (outcome) => {
+      const traceId = 'abcdef1234567890abcdef1234567890';
+      const setTraceEvidence = vi.fn();
+      vi.mocked(evaluatorTracing.generateTraceContextIfNeeded).mockResolvedValue({
+        traceparent: `00-${traceId}-0123456789abcdef-01`,
+        evaluationId: 'test-eval-id',
+        testCaseId: 'test-case-id',
+        setTraceEvidence,
+      });
+      const flush = vi.fn().mockResolvedValue(true);
+      const seal = vi.fn().mockReturnValue(['target-span']);
+      const release = vi.fn();
+      mockTrackLocalTrace.mockReturnValueOnce({ flush, seal, release, isComplete: () => true });
+      const provider = createMockProvider({
+        callApi: async () => {
+          if (outcome === 'throw') {
+            throw new Error('target failed');
+          }
+          return outcome === 'error' ? { error: 'target failed' } : { output: undefined };
+        },
+      });
+      await evaluate(
+        {
+          providers: [provider],
+          prompts: [{ raw: 'prompt', label: 'test' }],
+          tests: [{ metadata: createTracingContext() }],
+          tracing: { enabled: true },
+        },
+        mockEval,
+        createSerialOptions(),
+      );
+      expect(mockEval.addResult).toHaveBeenCalledWith(expect.objectContaining({ success: false }));
+      expect(seal).toHaveBeenCalledOnce();
+      expect(flush).toHaveBeenCalledOnce();
+      expect(setTraceEvidence).toHaveBeenCalledWith('complete', ['target-span']);
+      expect(release).toHaveBeenCalledOnce();
     },
   );
 

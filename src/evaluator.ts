@@ -1532,6 +1532,47 @@ async function applyRunEvalResponseOutcome({
   });
 }
 
+async function finalizeRunEvalTrace(
+  traceContext: Awaited<ReturnType<typeof generateTraceContextIfNeeded>>,
+  testSuite?: TestSuite,
+) {
+  if (traceContext?.traceEvidence) {
+    return traceContext.traceEvidence;
+  }
+  const traceId = getTraceId(traceContext);
+  const localExport = traceContext?.localExport;
+  const localCapture = !isExternalTraceProvider(testSuite?.tracing?.provider);
+  const captureSpanIds = localCapture ? (localExport?.seal?.() ?? []) : undefined;
+  const traceEvidence = {
+    traceUnavailable: localExport
+      ? !(await localExport.flush()) || localExport.isReliable?.() === false
+      : false,
+    traceIncomplete:
+      !!traceId &&
+      (isExternalTraceProvider(testSuite?.tracing?.provider)
+        ? !traceContext?.externalTraceCollected
+        : !localExport ||
+          // Local flushes cannot certify that remote OTLP exporters have finished.
+          !!testSuite?.tracing?.otlp?.http?.enabled ||
+          localExport.isComplete?.() === false ||
+          !!traceContext?.traceparent?.endsWith('-00')),
+  };
+
+  await traceContext?.setTraceEvidence?.(
+    traceEvidence.traceUnavailable
+      ? 'unavailable'
+      : traceEvidence.traceIncomplete
+        ? 'partial'
+        : 'complete',
+    captureSpanIds,
+  );
+
+  if (traceContext) {
+    traceContext.traceEvidence = traceEvidence;
+  }
+  return traceEvidence;
+}
+
 async function gradeRunEvalResponse({
   abortSignal,
   deferGrading,
@@ -1582,21 +1623,7 @@ async function gradeRunEvalResponse({
     vars,
   });
   const traceId = getTraceId(traceContext);
-  const localExport = traceContext?.localExport;
-  const traceEvidence = {
-    traceUnavailable: localExport ? !(await localExport.flush()) : false,
-    traceIncomplete:
-      !!traceId &&
-      (isExternalTraceProvider(testSuite?.tracing?.provider)
-        ? !traceContext?.externalTraceCollected
-        : !localExport || !!traceContext?.traceparent?.endsWith('-00')),
-  };
-
-  if (traceEvidence.traceUnavailable || !traceEvidence.traceIncomplete) {
-    await traceContext?.setTraceEvidence?.(
-      traceEvidence.traceUnavailable ? 'unavailable' : 'complete',
-    );
-  }
+  const traceEvidence = await finalizeRunEvalTrace(traceContext, testSuite);
 
   const assertionProviderResponse = {
     ...processedResponse,
@@ -1900,7 +1927,7 @@ async function runEvalInternal(
             testSuite,
             traceContext: executionTraceContext,
             vars: state.vars,
-          });
+          }).finally(() => finalizeRunEvalTrace(executionTraceContext, testSuite));
           providerCallCompleted = true;
           const response = normalizeCachedTargetResponse(providerCall.response);
           latencyMs = providerCall.latencyMs;

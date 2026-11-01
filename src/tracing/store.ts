@@ -309,14 +309,23 @@ export class TraceStore {
     }
   }
 
-  async setTraceEvidence(traceId: string, evidence: 'complete' | 'unavailable'): Promise<void> {
+  async setTraceEvidence(
+    traceId: string,
+    evidence: 'complete' | 'partial' | 'unavailable',
+    captureSpanIds?: string[],
+  ): Promise<void> {
     try {
       const db = await this.getDatabase();
+      // Capture IDs in the same statement as the status. A failed write cannot certify
+      // completeness without the matching target-call snapshot. Bound stored seeds
+      // independently of the SDK's bounded active-span membership.
+      const metadata =
+        evidence !== 'unavailable' && captureSpanIds !== undefined
+          ? sql`json_set(coalesce(${tracesTable.metadata}, '{}'), '$.promptfooTraceEvidence', ${evidence}, '$.promptfooTraceSpanIds', json((SELECT json_group_array(span_id) FROM (SELECT span_id FROM (SELECT ${spansTable.spanId} AS span_id FROM ${spansTable} WHERE ${spansTable.traceId} = ${traceId} LIMIT 10000) UNION SELECT value AS span_id FROM json_each(${JSON.stringify(captureSpanIds)})))))`
+          : sql`json_remove(json_set(coalesce(${tracesTable.metadata}, '{}'), '$.promptfooTraceEvidence', ${evidence}), '$.promptfooTraceSpanIds')`;
       const update = db
         .update(tracesTable)
-        .set({
-          metadata: sql`json_set(coalesce(${tracesTable.metadata}, '{}'), '$.promptfooTraceEvidence', ${evidence})`,
-        })
+        .set({ metadata })
         .where(eq(tracesTable.traceId, traceId));
       // Keep the initial partial status if a concurrent writer or reader holds a lock.
       await db.runGuardedWrite(update, () => {}, Date.now());

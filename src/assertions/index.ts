@@ -185,6 +185,50 @@ export function hasTraceAwareAssertions(assertions?: AssertionOrSet[]): boolean 
   return Boolean(assertions?.some(assertionMayNeedTraceContext));
 }
 
+// A local capture records the target spans known before grading begins. The full
+// timeline stays available in storage, including later evaluator and grader spans.
+function getAssertionTraceSpans(traceData: TraceData): {
+  spans: TraceData['spans'];
+  incomplete: boolean;
+} {
+  const spans = traceData.spans || [];
+  const capturedIds = traceData.metadata?.promptfooTraceSpanIds;
+  if (capturedIds === undefined) {
+    return { spans, incomplete: false };
+  }
+  if (!Array.isArray(capturedIds) || !capturedIds.every((id) => typeof id === 'string' && id)) {
+    return { spans: [], incomplete: true };
+  }
+  const captured = new Set(capturedIds);
+  if (traceData.metadata?.promptfooTraceEvidence === 'partial') {
+    // Remote or still-active target children may arrive after grading. Their parent
+    // linkage keeps them in the target capture without admitting later grader roots.
+    const children = new Map<string, string[]>();
+    for (const span of spans) {
+      if (span.parentSpanId) {
+        const siblings = children.get(span.parentSpanId) ?? [];
+        siblings.push(span.spanId);
+        children.set(span.parentSpanId, siblings);
+      }
+    }
+    const pending = [...captured];
+    while (pending.length) {
+      for (const child of children.get(pending.pop()!) ?? []) {
+        if (!captured.has(child)) {
+          captured.add(child);
+          pending.push(child);
+        }
+      }
+    }
+  }
+  const selected = spans.filter((span) => captured.has(span.spanId));
+  const storedIds = new Set(selected.map((span) => span.spanId));
+  return {
+    spans: selected,
+    incomplete: captured.size === 0 || capturedIds.some((id) => !storedIds.has(id)),
+  };
+}
+
 async function loadTraceData(traceId: string): Promise<TraceData | null> {
   const traceStore = getTraceStore();
   const maxAttempts = Math.min(
@@ -242,12 +286,16 @@ function canGradePartialTrace({
   assertion,
   renderedValue,
 }: AssertionParams): boolean {
-  if (inverse) {
-    return false;
-  }
   // Raw span handlers read the assertion value. Trajectory handlers use the rendered matcher.
   const value =
     baseType === 'trace-span-count' ? assertion.value : (renderedValue ?? assertion.value);
+  if (baseType === 'trajectory:tool-used' && Array.isArray(value) && value.length === 0) {
+    // Let the handler report its configuration error before considering incomplete evidence.
+    return true;
+  }
+  if (inverse) {
+    return false;
+  }
   if (baseType === 'trajectory:tool-args-match') {
     return true;
   }
@@ -561,12 +609,14 @@ async function runAssertionInternal({
         !traceUnavailable &&
         (evidence !== 'partial' || resolvedTraceData.spans?.length)
       ) {
+        const capture = getAssertionTraceSpans(resolvedTraceData);
+        traceIncomplete ||= capture.incomplete;
         context.trace = {
           traceId: resolvedTraceData.traceId,
           evaluationId: resolvedTraceData.evaluationId,
           testCaseId: resolvedTraceData.testCaseId,
           metadata: resolvedTraceData.metadata,
-          spans: resolvedTraceData.spans || [],
+          spans: capture.spans,
         };
       }
     } catch (error) {

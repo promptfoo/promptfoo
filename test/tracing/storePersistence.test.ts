@@ -38,6 +38,79 @@ describe('TraceStore span persistence', () => {
     return traceStore;
   }
 
+  it('atomically captures target span IDs and preserves the full stored timeline', async () => {
+    const traceId = 'capture-target-spans';
+    const traceStore = await createTrace(traceId);
+    const db = await getDb();
+    await db
+      .update(tracesTable)
+      .set({ metadata: { promptfooTraceEvidence: 'partial', policy: 'keep' } })
+      .where(eq(tracesTable.traceId, traceId));
+    await traceStore.addSpans(traceId, [
+      {
+        spanId: 'target',
+        name: 'grader target',
+        startTime: 1,
+        attributes: { 'promptfoo.span.role': 'grader' },
+      },
+    ]);
+    await traceStore.setTraceEvidence(traceId, 'complete', ['target']);
+    await traceStore.addSpans(traceId, [
+      { spanId: 'later-grader', name: 'grader javascript', startTime: 2 },
+    ]);
+    const saved = await traceStore.getTrace(traceId);
+    expect(saved?.metadata).toEqual({
+      promptfooTraceEvidence: 'complete',
+      promptfooTraceSpanIds: ['target'],
+      policy: 'keep',
+    });
+    expect(saved?.spans).toHaveLength(2);
+
+    await traceStore.setTraceEvidence(traceId, 'partial');
+    expect((await traceStore.getTrace(traceId))?.metadata).toEqual({
+      promptfooTraceEvidence: 'partial',
+      policy: 'keep',
+    });
+    await traceStore.setTraceEvidence(traceId, 'unavailable');
+    expect((await traceStore.getTrace(traceId))?.metadata).toEqual({
+      promptfooTraceEvidence: 'unavailable',
+      policy: 'keep',
+    });
+  });
+
+  it('captures known active target IDs together with already stored remote spans', async () => {
+    const traceId = 'partial-target-membership';
+    const traceStore = await createTrace(traceId);
+    await traceStore.addSpans(traceId, [{ spanId: 'remote', name: 'remote.target', startTime: 1 }]);
+    await traceStore.setTraceEvidence(traceId, 'partial', ['active', 'remote']);
+    expect((await traceStore.getTrace(traceId))?.metadata).toEqual({
+      promptfooTraceEvidence: 'partial',
+      promptfooTraceSpanIds: ['active', 'remote'],
+    });
+  });
+
+  it('retains partial evidence when the capture snapshot cannot be saved', async () => {
+    const traceId = 'failed-capture';
+    const traceStore = await createTrace(traceId);
+    const db = await getDb();
+    await db
+      .update(tracesTable)
+      .set({ metadata: { promptfooTraceEvidence: 'partial', promptfooTraceSpanIds: [] } })
+      .where(eq(tracesTable.traceId, traceId));
+    await traceStore.addSpans(traceId, [{ spanId: 'target', name: 'work', startTime: 1 }]);
+    const write = vi.spyOn(db, 'runGuardedWrite').mockRejectedValueOnce(new Error('database busy'));
+    try {
+      await traceStore.setTraceEvidence(traceId, 'complete', ['target']);
+      expect((await traceStore.getTrace(traceId))?.metadata).toEqual({
+        promptfooTraceEvidence: 'partial',
+        promptfooTraceSpanIds: [],
+      });
+      expect(await traceStore.getSpans(traceId)).toHaveLength(1);
+    } finally {
+      write.mockRestore();
+    }
+  });
+
   it('ignores duplicate span IDs in a single insertion', async () => {
     const traceStore = await createTrace('single-insertion');
 
