@@ -1222,6 +1222,69 @@ describe('OTLPReceiver', () => {
       }
     });
 
+    it('does not let an idle stop close a receiver started in the same turn', async () => {
+      const listenSpy = vi.spyOn(OTLPReceiver.prototype, 'listen').mockResolvedValue(undefined);
+      const stopSpy = vi.spyOn(OTLPReceiver.prototype, 'stop').mockResolvedValue(undefined);
+
+      try {
+        const idleStop = stopOTLPReceiver();
+        const start = startOTLPReceiver(4318, '127.0.0.1', ['json']);
+        await Promise.all([idleStop, start]);
+
+        expect(listenSpy).toHaveBeenCalledExactlyOnceWith(4318, '127.0.0.1');
+        expect(stopSpy).not.toHaveBeenCalled();
+      } finally {
+        await stopOTLPReceiver();
+      }
+    });
+
+    it('shares shutdown and waits for it before starting a fresh receiver', async () => {
+      const listenSpy = vi.spyOn(OTLPReceiver.prototype, 'listen').mockResolvedValue(undefined);
+      let finishStopping: (() => void) | undefined;
+      const stopSpy = vi
+        .spyOn(OTLPReceiver.prototype, 'stop')
+        .mockResolvedValue(undefined)
+        .mockImplementationOnce(
+          () =>
+            new Promise<void>((resolve) => {
+              finishStopping = resolve;
+            }),
+        );
+      let firstStop: Promise<void> | undefined;
+      let secondStop: Promise<void> | undefined;
+      let restart: Promise<void> | undefined;
+
+      try {
+        await startOTLPReceiver(4318, '127.0.0.1', ['json']);
+        const firstReceiver = listenSpy.mock.contexts[0];
+        firstStop = stopOTLPReceiver();
+        await vi.waitFor(() => expect(stopSpy).toHaveBeenCalledTimes(1));
+        secondStop = stopOTLPReceiver();
+        restart = startOTLPReceiver(4319, '127.0.0.1', ['protobuf']);
+        let restarted = false;
+        void restart.then(() => {
+          restarted = true;
+        });
+        await Promise.resolve();
+        await Promise.resolve();
+        expect(restarted).toBe(false);
+        expect(stopSpy).toHaveBeenCalledTimes(1);
+        expect(listenSpy).toHaveBeenCalledTimes(1);
+
+        finishStopping?.();
+        await Promise.all([firstStop, secondStop, restart]);
+        expect(listenSpy).toHaveBeenCalledTimes(2);
+        expect(listenSpy.mock.contexts[1]).not.toBe(firstReceiver);
+        const freshReceiver = listenSpy.mock.contexts[1] as OTLPReceiver;
+        const info = await request(freshReceiver.getApp()).get('/v1/traces').expect(200);
+        expect(info.body.supported_formats).toEqual(['protobuf']);
+      } finally {
+        finishStopping?.();
+        await Promise.all([firstStop, secondStop, restart]);
+        await stopOTLPReceiver();
+      }
+    });
+
     it('keeps startup fallback policies while registering each later evaluation policy', async () => {
       const listenSpy = vi.spyOn(OTLPReceiver.prototype, 'listen').mockResolvedValue(undefined);
       try {

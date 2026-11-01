@@ -1092,6 +1092,7 @@ export class OTLPReceiver {
 // Singleton instance and its pending or completed startup.
 let otlpReceiver: OTLPReceiver | null = null;
 let otlpReceiverStartPromise: Promise<void> | null = null;
+let otlpReceiverStopPromise: Promise<void> | null = null;
 
 export async function startOTLPReceiver(
   port?: number,
@@ -1104,6 +1105,9 @@ export async function startOTLPReceiver(
   },
 ): Promise<void> {
   logger.debug('[OtlpReceiver] Starting receiver through startOTLPReceiver function');
+  if (otlpReceiverStopPromise) {
+    await otlpReceiverStopPromise;
+  }
   if (otlpReceiver) {
     // A later caller can add its evaluation policy without changing the active endpoint
     // or the fallback policy used for traces with no registered evaluation.
@@ -1137,10 +1141,28 @@ export function deregisterOTLPReceiverTracePolicy(evaluationId?: string): void {
 
 export async function stopOTLPReceiver(): Promise<void> {
   logger.debug('[OtlpReceiver] Stopping receiver through stopOTLPReceiver function');
-  await otlpReceiverStartPromise?.catch(() => undefined);
-  if (otlpReceiver) {
-    await otlpReceiver.stop();
-    otlpReceiver = null;
-    otlpReceiverStartPromise = null;
+  if (otlpReceiverStopPromise) {
+    await otlpReceiverStopPromise;
+    return;
+  }
+  const receiver = otlpReceiver;
+  const startPromise = otlpReceiverStartPromise;
+  if (!receiver) {
+    return;
+  }
+
+  const stopPromise = (async () => {
+    await startPromise?.catch(() => undefined);
+    await receiver.stop();
+    if (otlpReceiver === receiver) {
+      otlpReceiver = null;
+      otlpReceiverStartPromise = null;
+    }
+  })();
+  otlpReceiverStopPromise = stopPromise;
+  try {
+    await stopPromise;
+  } finally {
+    otlpReceiverStopPromise = null;
   }
 }
