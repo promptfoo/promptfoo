@@ -32,6 +32,22 @@ describe('METEOR with the Natural CommonJS default export', () => {
       pass: true,
     },
     {
+      description: 'looks up the original candidate when its stem is absent from WordNet',
+      candidate: 'automobile',
+      reference: 'car',
+      threshold: 0.5,
+      score: 0.5,
+      pass: true,
+    },
+    {
+      description: 'compares WordNet synonyms against the original reference',
+      candidate: 'car',
+      reference: 'automobile',
+      threshold: 0.5,
+      score: 0.5,
+      pass: true,
+    },
+    {
       description: 'rejects unrelated words',
       candidate: 'qzxw',
       reference: 'jvkp',
