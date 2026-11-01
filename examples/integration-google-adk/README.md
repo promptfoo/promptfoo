@@ -27,6 +27,20 @@ source .venv/bin/activate
 python -m pip install -r requirements.txt
 
 export GOOGLE_API_KEY=your_google_api_key_here
+```
+
+Choose whether ADK model and tool spans store messages, arguments, and results. To run the tool-argument assertions, opt in with these settings in the example directory's `.env`:
+
+```text
+OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT=SPAN_ONLY
+ADK_CAPTURE_MESSAGE_CONTENT_IN_SPANS=true
+```
+
+To suppress payload content on both schemas, use `NO_CONTENT` and `false`, respectively. Legacy ADK captures content by default and writes empty JSON to its payload attributes when disabled; telemetry v2 omits the attributes. The tool-argument assertions fail with capture off. The **exported trace can still contain sensitive text**: Promptfoo includes test variables and grader explanations, and model errors can include rejected input. Saved eval results also include model output.
+
+The commands below load `.env` from the current directory (`integration-google-adk`). If you run the same configs from the repository root, pass `--env-file examples/integration-google-adk/.env` to each eval. Shell values win for an implicit `.env` by default; an [explicit env file](https://www.promptfoo.dev/docs/usage/command-line/#multiple-environment-files) overrides them.
+
+```bash
 npx promptfoo@latest eval -c promptfooconfig.yaml --no-cache
 npx promptfoo@latest eval -c promptfooconfig.workflow.yaml --no-cache
 npx promptfoo@latest view
@@ -47,11 +61,7 @@ export OPENAI_API_KEY=your_openai_api_key_here
 export ADK_MODEL=openai/gpt-5.4-mini
 ```
 
-If Promptfoo is launched outside the activated virtual environment, point the Python provider at it explicitly:
-
-```bash
-PROMPTFOO_PYTHON=.venv/bin/python npx promptfoo@latest eval -c promptfooconfig.yaml --no-cache
-```
+If Promptfoo runs outside the activated virtual environment, prefix either eval command above with `PROMPTFOO_PYTHON=.venv/bin/python`.
 
 ## Files
 
@@ -82,16 +92,16 @@ The eval asserts that:
 - ADK used both `get_weather` and `save_trip_note`
 - the tool arguments were correct
 - the tool sequence was correct
-- ADK emitted `invoke_agent`, `call_llm`, and `execute_tool` spans
+- ADK emitted `invoke_agent`, `generate_content`, and `execute_tool` spans
 - no traced error spans were emitted
 
 ## How Tracing Works
 
 ADK 2.x emits OpenTelemetry spans for the important framework steps:
 
-- `invocation`
+- `invocation` (legacy ADK) or `invoke_workflow <name>` (ADK 2.13 v2)
 - `invoke_agent <name>`
-- `call_llm`
+- `generate_content <model>`
 - `execute_tool <name>`
 
 `provider.py` keeps those spans inside Promptfoo's trace by:
@@ -101,16 +111,18 @@ ADK 2.x emits OpenTelemetry spans for the important framework steps:
 3. starting a small provider span under the Promptfoo parent trace
 4. letting ADK emit its native child spans beneath it
 
-Because ADK records `gen_ai.tool.name` and tool-call arguments, Promptfoo can normalize those spans into `trajectory:*` assertions without a custom SDK span converter.
+ADK 2.13 defaults to telemetry v2. Tool names remain visible when content capture is off. Leave `PROMPTFOO_ENABLE_OTEL` off to avoid recording provider request and response bodies in separate Python worker spans.
+
+ADK 2.9.2 and 2.12 store tool arguments in `gcp.vertex.agent.tool_call_args` and emit `call_llm`. ADK 2.13’s v2 schema uses `gen_ai.tool.call.arguments` and drops `call_llm`. Use `generate_content <model>` to count model calls across these releases.
 
 After an eval, open the Trace Timeline for the row and inspect:
 
 - `invoke_agent weather_agent`
-- `call_llm`
+- `generate_content <model>`
 - `execute_tool get_weather`
 - `execute_tool save_trip_note`
 - tool attributes such as `gen_ai.tool.name`
-- ADK tool arguments captured in `gcp.vertex.agent.tool_call_args`
+- tool arguments in `gcp.vertex.agent.tool_call_args` (legacy ADK) or `gen_ai.tool.call.arguments` (ADK 2.13 v2)
 
 ## Why This Uses A Python Provider
 

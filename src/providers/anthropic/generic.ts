@@ -316,6 +316,8 @@ export class AnthropicGenericProvider implements ApiProvider {
         apiKey: this.apiKey ?? null,
         authToken: authToken ?? null,
         baseURL: this.getApiBaseUrl(),
+        // Promptfoo owns generation spans; SDK spans would duplicate traced requests.
+        openTelemetry: false,
         ...(Object.keys(clientDefaultHeaders).length > 0
           ? { defaultHeaders: clientDefaultHeaders }
           : {}),
