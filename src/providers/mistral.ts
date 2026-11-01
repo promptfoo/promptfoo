@@ -11,6 +11,7 @@ import { getEnvString, getProviderEnvString } from '../envars';
 import logger from '../logger';
 import { extractGenAIResponse, type GenAISpanContext, withGenAISpan } from '../tracing/genaiTracer';
 import { maybeLoadToolsFromExternalFile } from '../util';
+import { partitionInFlightKeyByGuardContext } from '../util/fetch/guardContext';
 import { resolveProviderEnv } from './env';
 import { calculateCost, getRequestTimeoutMs, parseChatPrompt } from './shared';
 
@@ -289,7 +290,13 @@ function fetchMistralWithDedupe(
   fetcher: () => Promise<MistralFetchResult>,
   abortSignal?: AbortSignal,
 ): Promise<MistralFetchResult> {
-  const inflightCacheKey = getAbortSignalScopedKey(getScopedCacheKey(cacheKey), abortSignal);
+  // Partition by guard context: without this, a guarded server-route call
+  // joins an ordinary call's in-flight request and receives its response
+  // without ever executing the guarded transport, so a public URL that
+  // redirects into private space goes unvalidated for the guarded caller.
+  const inflightCacheKey = partitionInFlightKeyByGuardContext(
+    getAbortSignalScopedKey(getScopedCacheKey(cacheKey), abortSignal),
+  );
   let inflightRequest = MISTRAL_INFLIGHT_REQUESTS.get(inflightCacheKey);
   if (!inflightRequest) {
     inflightRequest = fetcher().finally(() => {

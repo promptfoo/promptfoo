@@ -10,6 +10,7 @@ import {
   MistralEmbeddingProvider,
 } from '../../src/providers/mistral';
 import { maybeLoadToolsFromExternalFile } from '../../src/util';
+import { withPrivateRangeGuard } from '../../src/util/fetch/guardContext';
 import { createChatCompletion } from '../factories/literalFixtures';
 import { createMockChatResponse, createMockFetchResponse } from './mockProviderResponses';
 
@@ -1228,4 +1229,54 @@ describe('Mistral', () => {
 it('keeps mutable prices independent across model aliases', () => {
   const costs = MistralChatCompletionProvider.MISTRAL_CHAT_MODELS.map(({ cost }) => cost);
   expect(new Set(costs).size).toBe(costs.length);
+});
+
+describe('Mistral guarded in-flight dedupe partition', () => {
+  it('does not let a guarded call join an unguarded in-flight request', async () => {
+    const provider = new MistralChatCompletionProvider('mistral-tiny');
+    vi.spyOn(provider, 'getApiKey').mockReturnValue('fake-api-key');
+
+    // The unguarded call stays in flight while the guarded one starts. If
+    // the dedupe key had no guard-context component, the guarded call
+    // would join it and receive its response without ever executing the
+    // guarded transport, so a public URL that redirects into private
+    // space would go unvalidated for the guarded caller.
+    let release!: (value: Awaited<ReturnType<typeof fetchWithCache>>) => void;
+    const gate = new Promise<Awaited<ReturnType<typeof fetchWithCache>>>((resolve) => {
+      release = resolve;
+    });
+    vi.mocked(fetchWithCache).mockImplementationOnce(() => gate);
+    vi.mocked(fetchWithCache).mockResolvedValueOnce(createMockChatResponse('guarded answer'));
+
+    const unguarded = provider.callApi('Hello');
+    await vi.waitFor(() => expect(vi.mocked(fetchWithCache)).toHaveBeenCalledTimes(1));
+    const guarded = withPrivateRangeGuard(() => provider.callApi('Hello'));
+    await vi.waitFor(() => expect(vi.mocked(fetchWithCache)).toHaveBeenCalledTimes(2));
+    release(createMockChatResponse('unguarded answer'));
+
+    const [unguardedResult, guardedResult] = await Promise.all([unguarded, guarded]);
+    expect(unguardedResult.output).toBe('unguarded answer');
+    expect(guardedResult.output).toBe('guarded answer');
+  });
+
+  it('still dedupes two guarded calls with each other', async () => {
+    const provider = new MistralChatCompletionProvider('mistral-tiny');
+    vi.spyOn(provider, 'getApiKey').mockReturnValue('fake-api-key');
+
+    let release!: (value: Awaited<ReturnType<typeof fetchWithCache>>) => void;
+    const gate = new Promise<Awaited<ReturnType<typeof fetchWithCache>>>((resolve) => {
+      release = resolve;
+    });
+    vi.mocked(fetchWithCache).mockImplementationOnce(() => gate);
+
+    const first = withPrivateRangeGuard(() => provider.callApi('Hello'));
+    await vi.waitFor(() => expect(vi.mocked(fetchWithCache)).toHaveBeenCalledTimes(1));
+    const second = withPrivateRangeGuard(() => provider.callApi('Hello'));
+    release(createMockChatResponse('shared answer'));
+
+    const [firstResult, secondResult] = await Promise.all([first, second]);
+    expect(vi.mocked(fetchWithCache)).toHaveBeenCalledTimes(1);
+    expect(firstResult.output).toBe('shared answer');
+    expect(secondResult.output).toBe('shared answer');
+  });
 });

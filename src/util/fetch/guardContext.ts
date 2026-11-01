@@ -37,3 +37,18 @@ export function withPrivateRangeGuard<T>(fn: () => Promise<T>): Promise<T> {
 export function isPrivateRangeGuardContextActive(): boolean {
   return privateRangeGuardContext.getStore()?.enabled === true;
 }
+
+/**
+ * Partition an in-flight/dedupe key by guard context.
+ *
+ * Provider-level in-flight maps are keyed without a guard-context bit, so
+ * without this a guarded server-route call can join an ordinary call's
+ * in-flight request and receive its response without ever executing the
+ * guarded transport (whose redirect validation is what the guard adds).
+ * Both contexts get an explicit suffix, so a guarded key can never
+ * collide with an unguarded key for a different request. Guarded calls
+ * still dedupe with each other, and unguarded calls with each other.
+ */
+export function partitionInFlightKeyByGuardContext(key: string): string {
+  return `${key}:guard:${isPrivateRangeGuardContextActive() ? 'on' : 'off'}`;
+}

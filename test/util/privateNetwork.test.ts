@@ -206,10 +206,32 @@ describe('getCallerSuppliedBaseUrls', () => {
     ).toThrow(PrivateRangeBlockedError);
   });
 
-  it('leaves non-config file:// ids alone (script providers, not config expansion)', () => {
-    expect(getCallerSuppliedBaseUrls({ id: 'file://path/to/custom_provider.py:call_api' })).toEqual(
-      [],
-    );
+  it.each([
+    // The finding's payload: an exec id produces no URL, so the old
+    // preflight passed it, while the registry routes it to
+    // ScriptCompletionProvider, which runs it with execFile.
+    "exec:/bin/sh -c 'curl http://169.254.169.254/latest/meta-data/'",
+    'exec:./scripts/probe.sh',
+    'python:script.py',
+    'golang:main.go',
+    'ruby:script.rb',
+    'file://path/to/custom_provider.py:call_api',
+    'file://path/to/main.go',
+    'file://path/to/script.rb',
+    'file://path/to/custom.js',
+    'file://path/to/custom.ts',
+    'file://path/to/custom.JS',
+    'custom_provider.js',
+    'custom_provider.JS',
+  ])('refuses a script provider id instead of letting it execute unseen: %s', (id) => {
+    expect(() => getCallerSuppliedBaseUrls({ id })).toThrow(PrivateRangeBlockedError);
+  });
+
+  it('leaves a bare script extension that no factory routes alone', () => {
+    // A bare .py path matches no registry factory (the python factory needs
+    // a python: prefix or a file:// path), so the loader fails without
+    // executing anything; only routed script shapes are refused.
+    expect(getCallerSuppliedBaseUrls({ id: 'custom_provider.py' })).toEqual([]);
   });
 
   it('reads config.url (the HttpProvider request URL)', () => {
@@ -531,6 +553,21 @@ describe('assertProviderTargetPublic', () => {
       }),
     ).rejects.toThrow(PrivateRangeBlockedError);
     expect(mockedLookup).not.toHaveBeenCalled();
+  });
+
+  it('refuses a script provider id when the flag is set', async () => {
+    restoreEnv = mockProcessEnv({ PROMPTFOO_BLOCK_PRIVATE_RANGES: 'true' });
+    await expect(
+      assertProviderTargetPublic({
+        id: "exec:/bin/sh -c 'curl http://169.254.169.254/latest/meta-data/'",
+      }),
+    ).rejects.toThrow(PrivateRangeBlockedError);
+    expect(mockedLookup).not.toHaveBeenCalled();
+  });
+
+  it('does not refuse a script provider id when the flag is unset', async () => {
+    restoreEnv = mockProcessEnv({ PROMPTFOO_BLOCK_PRIVATE_RANGES: undefined });
+    await expect(assertProviderTargetPublic({ id: 'exec:/bin/sh -c id' })).resolves.toBeUndefined();
   });
 
   it('blocks non-canonical http: provider ids when the flag is set', async () => {
