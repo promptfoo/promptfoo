@@ -264,6 +264,8 @@ interface ProviderTarget {
     gateway_url?: unknown;
     request?: unknown;
     useHttps?: unknown;
+    server?: unknown;
+    servers?: unknown;
   };
 }
 
@@ -428,6 +430,70 @@ const JAVASCRIPT_FILE_EXTENSIONS = ['js', 'cjs', 'mjs', 'ts', 'cts', 'mts'];
 // factory below is suffix-only, so its extensions stay out of this list).
 const SCRIPT_FACTORY_EXTENSIONS = ['py', 'go', 'rb'];
 
+function isMcpProviderId(id: string): boolean {
+  return id === 'mcp' || id.startsWith('mcp:');
+}
+
+type McpServerTransport = {
+  command?: unknown;
+  path?: unknown;
+  url?: unknown;
+};
+
+/**
+ * The MCP servers a caller-supplied config would connect to: the single
+ * `server` object, plus every entry of the `servers` array when present (the
+ * shared client prefers the array). Defensive reads only: the preflight must
+ * fail closed on malformed shapes, never throw a TypeError on them.
+ */
+function getMcpServers(config: ProviderTarget['config']): McpServerTransport[] {
+  const servers: McpServerTransport[] = [];
+  const server = config?.server;
+  if (typeof server === 'object' && server !== null) {
+    servers.push(server as McpServerTransport);
+  }
+  const serversRaw = config?.servers;
+  if (Array.isArray(serversRaw)) {
+    for (const entry of serversRaw) {
+      if (typeof entry === 'object' && entry !== null) {
+        servers.push(entry as McpServerTransport);
+      }
+    }
+  }
+  return servers;
+}
+
+/**
+ * MCP servers execute outside the fetch layer too: command/path transports
+ * spawn a subprocess (or a local script) when the provider initializes, so
+ * they are refused outright like script providers. A remote server URL is
+ * collected for validation like any other caller-supplied URL instead.
+ */
+function handleMcpProviderTargets(
+  id: string,
+  config: ProviderTarget['config'],
+  urls: string[],
+): void {
+  if (!isMcpProviderId(id)) {
+    return;
+  }
+  for (const server of getMcpServers(config)) {
+    if (typeof server.command === 'string' && server.command.length > 0) {
+      throw new PrivateRangeBlockedError(
+        'PROMPTFOO_BLOCK_PRIVATE_RANGES is set: refusing MCP server command transport whose subprocess would execute outside the fetch guard',
+      );
+    }
+    if (typeof server.path === 'string' && server.path.length > 0) {
+      throw new PrivateRangeBlockedError(
+        'PROMPTFOO_BLOCK_PRIVATE_RANGES is set: refusing MCP local server path whose script would execute outside the fetch guard',
+      );
+    }
+    if (typeof server.url === 'string' && server.url.length > 0) {
+      urls.push(server.url);
+    }
+  }
+}
+
 function isScriptProviderId(id: string): boolean {
   if (SCRIPT_PROVIDER_PREFIXES.some((prefix) => id.startsWith(prefix))) {
     return true;
@@ -589,6 +655,7 @@ export function getCallerSuppliedBaseUrls(providerOptions: ProviderTarget): stri
       'PROMPTFOO_BLOCK_PRIVATE_RANGES is set: refusing script provider reference whose code would execute outside the fetch guard',
     );
   }
+  handleMcpProviderTargets(id, config, urls);
   const idUrl = getUrlFromProviderId(id);
   if (idUrl) {
     urls.push(idUrl);
