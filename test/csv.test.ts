@@ -18,6 +18,16 @@ describe.each([
   ['Node.js', parseCsv],
   ['browser', parseBrowserCsv],
 ] as const)('%s CSV parsing', (_name, parse) => {
+  it.each(['first,last', 'quoted"name', 'line\nbreak', 'carriage\rreturn'])(
+    'round-trips CSV header %j',
+    (name) => {
+      const vars = [{ [name]: 'Ada', ordinary: 'control' }];
+      const csv = serializeObjectArrayAsCSV(vars);
+
+      expect(parse(csv, { columns: true })).toEqual(vars);
+    },
+  );
+
   it('preserves special column names as own properties', () => {
     const [record] = parse<Record<string, string>>(
       '__proto__,constructor,toString\nproto-value,constructor-value,toString-value',
@@ -1025,17 +1035,6 @@ describe('assertionFromString', () => {
 });
 
 describe('serializeObjectArrayAsCSV', () => {
-  it.each(['first,last', 'quoted"name', 'line\nbreak', 'carriage\rreturn'])(
-    'round-trips CSV header %j',
-    (name) => {
-      const vars = [{ [name]: 'Ada', ordinary: 'control' }];
-      const csv = serializeObjectArrayAsCSV(vars);
-
-      expect(parseCsv(csv, { columns: true })).toEqual(vars);
-      expect(parseBrowserCsv(csv, { columns: true })).toEqual(vars);
-    },
-  );
-
   it('should serialize an array of objects as a CSV string', () => {
     expect(
       serializeObjectArrayAsCSV([
