@@ -2,8 +2,7 @@ import { TraceFlags } from '@opentelemetry/api';
 import { ExportResultCode, getNumberFromEnv } from '@opentelemetry/core';
 import logger from '../logger';
 import { runWithAbort, sleepWithAbort } from '../util/time';
-import { getTraceStore, type SpanData, type TraceStore } from './store';
-import { UNRELIABLE_SPAN_ATTRIBUTE } from './traceEvidence';
+import { getTraceStore, type SpanData, type TraceStore, UNRELIABLE_SPAN_ATTRIBUTE } from './store';
 import type { ExportResult } from '@opentelemetry/core';
 import type { ReadableSpan, SpanExporter } from '@opentelemetry/sdk-trace';
 

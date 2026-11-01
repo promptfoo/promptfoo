@@ -25,8 +25,7 @@ import {
   getProviderCallTracingContext,
 } from '../scheduler/providerCallExecutionContext';
 import { generateSpanId, generateTraceparent } from '../tracing/evaluatorTracing';
-import { getTraceStore } from '../tracing/store';
-import { UNRELIABLE_SPAN_ATTRIBUTE } from '../tracing/traceEvidence';
+import { getTraceStore, UNRELIABLE_SPAN_ATTRIBUTE } from '../tracing/store';
 import {
   type ApiProvider,
   type Assertion,

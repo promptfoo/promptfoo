@@ -362,7 +362,7 @@ describe('evaluator trace integration', () => {
           providers: [createMockProvider(createTraceProviderConfig())],
           prompts: [{ raw: 'Test prompt', label: 'test' }],
           tests: [{ metadata: createTracingContext(), assert: assertions }],
-          tracing: { enabled: true, otlp: { http: { enabled: receiver } } },
+          tracing: { enabled: true, otlp: { http: { enabled: receiver, port: 0 } } },
         },
         mockEval,
         createSerialOptions(),

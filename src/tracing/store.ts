@@ -10,6 +10,9 @@ import { SPAN_ROLE_ATTRIBUTE } from './spanRoles';
 
 import type { TraceData } from '../types/tracing';
 
+// A downgrade marker only: its absence never establishes complete or reliable evidence.
+export const UNRELIABLE_SPAN_ATTRIBUTE = 'promptfoo.trace.evidence.unreliable';
+
 interface StoreTraceData extends Omit<TraceData, 'spans'> {
   evaluationId: string;
   testCaseId: string;

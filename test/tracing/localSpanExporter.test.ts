@@ -11,7 +11,8 @@ const mockTraceStore = {
   addSpans: mockAddSpans,
 };
 
-vi.mock('../../src/tracing/store', () => ({
+vi.mock('../../src/tracing/store', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../src/tracing/store')>()),
   getTraceStore: vi.fn(() => mockTraceStore),
 }));
 

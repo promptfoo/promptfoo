@@ -14,7 +14,7 @@ import {
   shutdownOtel,
   trackLocalTrace,
 } from '../../src/tracing/otelSdk';
-import { UNRELIABLE_SPAN_ATTRIBUTE } from '../../src/tracing/traceEvidence';
+import { UNRELIABLE_SPAN_ATTRIBUTE } from '../../src/tracing/store';
 import { createDeferred } from '../util/utils';
 import type { Resource } from '@opentelemetry/resources';
 
@@ -23,7 +23,8 @@ const { mockAddSpans, resourceOverride } = vi.hoisted(() => ({
   resourceOverride: { current: undefined as Resource | undefined },
 }));
 
-vi.mock('../../src/tracing/store', () => ({
+vi.mock('../../src/tracing/store', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../src/tracing/store')>()),
   getTraceStore: () => ({ addSpans: mockAddSpans }),
 }));
 vi.mock('../../src/logger');

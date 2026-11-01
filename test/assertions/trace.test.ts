@@ -4,8 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { assertionUsesTrace, runAssertion, runAssertions } from '../../src/assertions/index';
 import cliState from '../../src/cliState';
 import { withProviderCallTracingContext } from '../../src/scheduler/providerCallExecutionContext';
-import { getTraceStore } from '../../src/tracing/store';
-import { UNRELIABLE_SPAN_ATTRIBUTE } from '../../src/tracing/traceEvidence';
+import { getTraceStore, UNRELIABLE_SPAN_ATTRIBUTE } from '../../src/tracing/store';
 import { mockProcessEnv } from '../util/utils';
 
 import type {

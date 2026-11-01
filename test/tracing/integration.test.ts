@@ -5,7 +5,8 @@ import { mockProcessEnv } from '../util/utils';
 import type { EvaluateTestSuite } from '../../src/types/index';
 
 // Mock the trace store to avoid database dependency in tests
-vi.mock('../../src/tracing/store', () => ({
+vi.mock('../../src/tracing/store', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../src/tracing/store')>()),
   getTraceStore: vi.fn(() => ({
     createTrace: vi.fn().mockResolvedValue(undefined),
     setTraceEvidence: vi.fn().mockResolvedValue(undefined),
