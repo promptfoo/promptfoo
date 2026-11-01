@@ -74,18 +74,14 @@ export class LlamaProvider implements ApiProvider {
     const url = resolveProviderEnv(this.env, ['LLAMA_BASE_URL'])?.value || 'http://localhost:8080';
 
     interface LlamaCompletionResponse {
-      content: string;
-      error?: { message?: string };
+      content?: string;
+      error?: string | { message?: string };
+      message?: string;
     }
 
-    let data: LlamaCompletionResponse;
-    let cached = false;
-    let latencyMs: number | undefined;
-    let status: number | undefined;
-    let statusText = '';
     try {
-      ({ data, cached, latencyMs, status, statusText } =
-        await fetchWithCache<LlamaCompletionResponse>(
+      const { data, cached, latencyMs, status, statusText } =
+        await fetchWithCache<LlamaCompletionResponse | null>(
           `${url}/completion`,
           {
             method: 'POST',
@@ -95,28 +91,22 @@ export class LlamaProvider implements ApiProvider {
             body: JSON.stringify(body),
           },
           getRequestTimeoutMs(),
-        ));
-    } catch (err) {
-      return {
-        error: `API call error: ${String(err)}`,
-      };
-    }
+        );
 
-    if (status !== undefined && (status < 200 || status >= 300)) {
-      const detail = data?.error?.message ?? JSON.stringify(data);
-      return { error: `API response error: ${status} ${statusText}: ${detail}` };
-    }
+      if (status < 200 || status >= 300 || data?.error) {
+        const error = data?.error;
+        const message = typeof error === 'string' ? error : (error?.message ?? data?.message);
+        const httpStatus = `${status} ${statusText}`.trimEnd();
+        const detail = typeof message === 'string' && message ? `: ${message}` : '';
+        return { error: `API response error: ${httpStatus}${detail}` };
+      }
+      if (typeof data?.content !== 'string') {
+        return { error: 'API response error: expected a string in the content field' };
+      }
 
-    try {
-      return {
-        output: data.content,
-        cached,
-        latencyMs,
-      };
+      return { output: data.content, cached, latencyMs };
     } catch (err) {
-      return {
-        error: `API response error: ${String(err)}: ${JSON.stringify(data)}`,
-      };
+      return { error: `API call error: ${String(err)}` };
     }
   }
 }

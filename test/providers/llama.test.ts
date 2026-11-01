@@ -130,16 +130,17 @@ describe('LlamaProvider', () => {
     });
 
     it('should return the correct response on success', async () => {
-      vi.mocked(fetchWithCache).mockResolvedValue(
-        createMockFetchResponse({ content: 'test response' }),
-      );
+      vi.mocked(fetchWithCache).mockResolvedValue({
+        ...createMockFetchResponse(response.data, { cached: true }),
+        latencyMs: 42,
+      });
 
       const provider = new LlamaProvider(modelName, { config });
       const result = await provider.callApi(prompt);
       expect(result).toEqual({
         output: response.data.content,
-        cached: false,
-        latencyMs: undefined,
+        cached: true,
+        latencyMs: 42,
       });
     });
 
@@ -153,36 +154,37 @@ describe('LlamaProvider', () => {
       expect(result).toEqual({ error: `API call error: ${String(error)}` });
     });
 
-    it('returns the server error instead of an empty output on a non-2xx response', async () => {
+    it.each([
+      [
+        400,
+        'Bad Request',
+        { error: { message: 'context size exceeded' } },
+        '400 Bad Request: context size exceeded',
+      ],
+      [401, 'Unauthorized', { error: 'invalid API key' }, '401 Unauthorized: invalid API key'],
+      [403, 'Forbidden', { message: 'access denied' }, '403 Forbidden: access denied'],
+      [503, '', { content: 'partial output', prompt: 'original prompt' }, '503'],
+      [
+        200,
+        'OK',
+        { content: 'partial output', error: { message: 'generation failed' } },
+        '200 OK: generation failed',
+      ],
+    ])('returns the server error for %i %s', async (status, statusText, data, expected) => {
       vi.mocked(fetchWithCache).mockResolvedValue(
-        createMockFetchResponse(
-          {
-            error: {
-              code: 400,
-              message: 'the request exceeds the available context size, try increasing it',
-              type: 'exceed_context_size_error',
-            },
-          },
-          { status: 400, statusText: 'Bad Request' },
-        ),
+        createMockFetchResponse(data, { status, statusText }),
       );
 
-      const provider = new LlamaProvider(modelName, { config });
-      const result = await provider.callApi(prompt);
-      expect(result).toEqual({
-        error:
-          'API response error: 400 Bad Request: the request exceeds the available context size, try increasing it',
+      expect(await new LlamaProvider(modelName).callApi(prompt)).toEqual({
+        error: `API response error: ${expected}`,
       });
     });
 
-    it('should return an error if response data is malformed', async () => {
-      const malformedResponse = createMockFetchResponse(null);
-      vi.mocked(fetchWithCache).mockResolvedValue(malformedResponse);
+    it.each([null, {}, { content: 0 }])('rejects a malformed completion %j', async (data) => {
+      vi.mocked(fetchWithCache).mockResolvedValue(createMockFetchResponse(data));
 
-      const provider = new LlamaProvider(modelName, { config });
-      const result = await provider.callApi(prompt);
-      expect(result).toEqual({
-        error: `API response error: TypeError: Cannot read properties of null (reading 'content'): null`,
+      expect(await new LlamaProvider(modelName).callApi(prompt)).toEqual({
+        error: 'API response error: expected a string in the content field',
       });
     });
   });
