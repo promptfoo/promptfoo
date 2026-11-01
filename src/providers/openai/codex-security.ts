@@ -575,6 +575,7 @@ export class OpenAICodexSecurityProvider implements ApiProvider {
     const findings = Array.isArray(result.findings?.findings) ? result.findings.findings : [];
     const model = result.turnResult?.model ?? cost?.model ?? config.model;
     const raw = result.toJSON();
+    const coverage = 'coverage' in result ? result.coverage : undefined;
 
     return {
       output: JSON.stringify(raw),
@@ -593,12 +594,16 @@ export class OpenAICodexSecurityProvider implements ApiProvider {
           ? { reasoningEffort: config.model_reasoning_effort ?? config.reasoning_effort }
           : {}),
         findingsCount: findings.length,
-        ...(result.coverage
-          ? { coverage: result.coverage, coveragePath: result.coveragePath }
+        ...(coverage
+          ? {
+              coverage,
+              coveragePath: 'coveragePath' in result ? result.coveragePath : undefined,
+            }
           : {}),
         ...(raw.review ? { review: raw.review } : {}),
         scanDir: result.scanDir,
         reportPath: result.reportPath,
+        manifestPath: result.manifestPath,
         findingsPath: result.findingsPath,
         ...(result.sarifPath ? { sarifPath: result.sarifPath } : {}),
         pluginVersion: result.pluginVersion,

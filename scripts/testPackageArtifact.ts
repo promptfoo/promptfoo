@@ -709,7 +709,7 @@ ${script}
     } else if (mode === 'installed') {
       installConsumerPackages(
         'install supported Codex Security SDK',
-        ['@openai/codex-security@^0.2.0'],
+        ['@openai/codex-security@^0.8.0'],
         consumerDir,
         npmEnv,
       );
@@ -987,7 +987,7 @@ for (const result of results) {
     await runChecks('incompatible');
     installConsumerPackages(
       'install supported coding SDKs',
-      ['@openai/codex-sdk@^0.156.1', '@anthropic-ai/claude-agent-sdk@^0.3.273'],
+      ['@openai/codex-sdk@^0.165.0', '@anthropic-ai/claude-agent-sdk@^0.3.273'],
       consumerDir,
       npmEnv,
     );
@@ -998,13 +998,43 @@ for (const result of results) {
 async function runOptionalOpenAiAgentsChecks(
   consumerDir: string,
   configDir: string,
+  npmEnv: NodeJS.ProcessEnv,
+  withOptionalDependencies: boolean,
 ): Promise<void> {
   const sdkDir = path.join(consumerDir, 'node_modules', '@openai', 'agents');
   assert(!fs.existsSync(sdkDir), 'Default consumers should not install the optional Agents SDK');
   const checks = `
     const echo = await loadApiProvider('echo');
     assert.equal((await echo.callApi('ordinary evaluation')).output, 'ordinary evaluation');
-    await assert.rejects(
+    if (process.argv[2] === 'installed') {
+      const { Agent, Usage, setTracingDisabled } = await import('@openai/agents');
+      setTracingDisabled(true);
+      const inputs = [];
+      const agent = new Agent({
+        name: 'Installed package fixture',
+        model: {
+          async getResponse(request) {
+            inputs.push(request.input);
+            return {
+              usage: new Usage({ inputTokens: 3, outputTokens: 2, totalTokens: 5 }),
+              output: [{ type: 'message', role: 'assistant', status: 'completed',
+                content: [{ type: 'output_text', text: 'Real SDK fixture response' }] }],
+            };
+          },
+          async *getStreamedResponse() { throw new Error('Unexpected streaming request'); },
+        },
+      });
+      const provider = await loadApiProvider('openai:agents:fixture', {
+        options: { config: { agent, session: { type: 'memory' } } },
+      });
+      const first = await provider.callApi('Remember cedar.');
+      assert.equal(first.output, 'Real SDK fixture response');
+      assert.equal(first.tokenUsage.total, 5);
+      assert.equal((await provider.callApi('Recall it.')).output, first.output);
+      assert.equal(inputs.length, 2);
+      assert.match(JSON.stringify(inputs[1]), /Remember cedar/);
+    } else {
+      await assert.rejects(
       loadApiProvider('openai:agents:gpt-4.1-mini'),
       (error) => {
         assert.ok(error.message.includes('npm install promptfoo @openai/agents@^0.21.0'), error.message);
@@ -1015,7 +1045,8 @@ async function runOptionalOpenAiAgentsChecks(
         }
         return true;
       },
-    );
+      );
+    }
   `;
   fs.writeFileSync(
     path.join(consumerDir, 'optional-agents.mjs'),
@@ -1072,6 +1103,15 @@ async function runOptionalOpenAiAgentsChecks(
   } finally {
     fs.rmSync(sdkDir, { recursive: true, force: true });
     fs.rmSync(loaderPackages, { recursive: true, force: true });
+  }
+  if (withOptionalDependencies) {
+    installConsumerPackages(
+      'install supported OpenAI Agents SDK',
+      ['@openai/agents@^0.21.0'],
+      consumerDir,
+      npmEnv,
+    );
+    await runChecks('installed');
   }
 }
 
@@ -1614,7 +1654,12 @@ async function main(): Promise<void> {
       ),
     );
     await timeAsyncPhase('check optional OpenAI Agents SDK', () =>
-      runOptionalOpenAiAgentsChecks(consumerDir, configDir),
+      runOptionalOpenAiAgentsChecks(
+        consumerDir,
+        configDir,
+        consumerNpmEnv,
+        values.profile === 'default',
+      ),
     );
     await timeAsyncPhase('check optional Slack SDK', () =>
       runOptionalSdkChecks(consumerDir, configDir, consumerNpmEnv, values.profile === 'default', {

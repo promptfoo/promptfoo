@@ -141,6 +141,8 @@ providers:
 
 Set `working_tree: true` to review uncommitted changes instead. `head_ref` cannot be combined with `working_tree`, and path-scoped scans cannot be combined with Git diff targets.
 
+SDK 0.7 and later require committed-ref scans to use a clean, full checkout at the requested head revision.
+
 ## Validate findings
 
 Pass a structured finding directly or load it from `finding_file`:
@@ -155,6 +157,8 @@ providers:
 ```
 
 Validation returns JSON containing `disposition`, `report`, `outputDir`, and `threadId`. If `finding` and `finding_file` are omitted, the provider uses a structured `finding` eval-row variable when available; otherwise, it uses the rendered prompt as the finding text.
+
+Starting with SDK 0.3, standalone validation is a source-only assessment in a read-only sandbox. Read the returned `report`; it does not reproduce the finding at runtime or write validation report files.
 
 :::warning
 
@@ -194,9 +198,13 @@ Repository scans return `ScanResult.toJSON()` in `output`, including `manifest`,
 - `metadata.operation`, `metadata.mode`, `metadata.model`, `metadata.reasoningEffort`, `metadata.findingsCount`, artifact paths, warnings, SDK version, and plugin version.
 - `metadata.skillCalls` for native scan and finding-validation operation routing.
 
+`metadata.manifestPath` locates the saved scan manifest. In SDK 0.8, inspect `manifest.scan.status`, warnings, scope, and limitations alongside review exclusions. Exclusions alone do not establish complete coverage.
+
 Finding validation does not currently expose reliable token or cost totals, so the provider leaves those fields unset.
 
 Use [named assertion metrics](/docs/configuration/expected-outputs#assertion-properties) to compare finding recall, skill routing, scan coverage, latency, and spend in the web UI:
+
+The `CompleteCoverage` assertion below applies only to SDK versions that report `coverage.completeness`, including the 0.2.x version used by this example. Remove that assertion when evaluating SDK 0.8 and inspect its scan evidence instead.
 
 ```yaml
 tests:
@@ -240,9 +248,10 @@ tests:
 
 ## Troubleshooting
 
-- **Zero findings with partial coverage:** Inspect `metadata.warnings`, `metadata.coverage.deferred`, and `coverage.json`. Discarded findings or malformed evidence references indicate an incomplete scan, not a clean repository.
+- **Zero findings with partial coverage:** For legacy coverage SDKs, inspect `metadata.warnings`, `metadata.coverage.deferred`, and `coverage.json`. With SDK 0.8, inspect the saved manifest's scan status, warnings, scope, and limitations, plus `metadata.review`. Discarded findings or malformed evidence references indicate an incomplete scan, not a clean repository.
 - **Deep scan cost appears too low:** Install SDK version `^0.2.0`. SDKs before `0.1.18` can omit independently launched discovery and deduplication workers from token and cost totals.
 - **Sandbox preflight fails:** SDK 0.2.0 checks Unix sandbox support before paid model calls. Run scans in an environment that supports the Codex sandbox.
+- **Scan output parent rejected:** On Unix, SDK 0.8 requires a private output directory owned by the current user. Every ancestor must belong to that user or root and must not allow group or world writes unless it has the sticky bit. Choose a private location with trusted ancestors; a private leaf directory alone does not satisfy this check.
 - **SDK fails to load:** Install Promptfoo and the SDK together, and use Node.js `^22.22.0`, `^24.0.0`, or `^26.0.0`.
 - **Authentication or access fails:** Sign in with Codex or set `OPENAI_API_KEY` / `CODEX_API_KEY`; confirm that the account has the required Codex Security and Trusted Access permissions.
 - **Output directory is rejected:** Choose an artifact directory outside the target repository, and use a distinct directory for each provider or eval row.

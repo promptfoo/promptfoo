@@ -360,6 +360,8 @@ providers:
 
 Use `type: unix-local` for the SDK's local sandbox client or `type: docker` for the Docker client. You can also pass a full SDK `SandboxRunConfig`, a file export, or a factory if you need custom sessions, snapshots, manifests, or clients.
 
+With SDK 0.21, `unix-local` also requires a trusted Python 3 interpreter on the host with descriptor-relative filesystem support for protected file operations. If the SDK cannot discover it, set `OPENAI_AGENTS_PYTHON` to the interpreter's absolute path. The SDK fails closed when this prerequisite is missing; disabling file protection is unsupported. Docker sandbox images need `/bin/sh` and standard GNU filesystem utilities, including `realpath`.
+
 Inline agent definitions can opt into the sandbox runtime with `type: sandbox`, but file-exported SDK agents are the better fit once you need custom capability objects such as `skills()` or non-default manifests.
 
 ## Skills and Shell Tools

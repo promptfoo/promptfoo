@@ -1,6 +1,7 @@
 import fs from 'fs/promises';
 import path from 'path';
 
+import { ScanResult, VERSION } from '@openai/codex-security';
 import { satisfies, validRange } from 'semver';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import cliState from '../../src/cliState';
@@ -342,15 +343,70 @@ describe('OpenAICodexSecurityProvider', () => {
       },
     );
 
+    it('preserves legacy SDK coverage and its saved artifact path', async () => {
+      const result = createScanResult();
+      mockRun.mockResolvedValue(result);
+
+      const response = await new OpenAICodexSecurityProvider().callApi('Scan');
+
+      expect(response.metadata).toMatchObject({
+        coverage: result.coverage,
+        coveragePath: result.coveragePath,
+        manifestPath: result.manifestPath,
+      });
+      expect(response.metadata).not.toHaveProperty('review');
+    });
+
     it('preserves review exclusions from SDKs that no longer report coverage', async () => {
-      vi.mocked(importModule).mockResolvedValue({ ...mockModule, VERSION: '0.8.0' });
+      vi.mocked(importModule).mockResolvedValue({ ...mockModule, VERSION });
       const review = { excludedPaths: ['vendor'] };
-      const result = createScanResult({ coverage: undefined, coveragePath: undefined });
-      mockRun.mockResolvedValue({ ...result, toJSON: () => ({ ...result.toJSON(), review }) });
+      const result = new ScanResult({
+        manifest: {
+          documentType: 'codex-security.scan-manifest',
+          schemaVersion: '1.0',
+          scan: {
+            id: 'scan-fixture',
+            producer: { name: 'codex-security', version: 'fixture' },
+            status: 'interrupted',
+            startedAt: '2026-01-01T00:00:00Z',
+            completedAt: '2026-01-01T00:00:01Z',
+            sealedAt: '2026-01-01T00:00:01Z',
+            target: { kind: 'directory_snapshot', targetId: 'fixture', displayName: 'fixture' },
+            scope: {
+              includePaths: ['src'],
+              excludePaths: ['vendor'],
+              limitations: ['Interrupted'],
+            },
+            mode: 'repository',
+            review,
+            findingsRef: 'findings.json',
+            artifacts: [
+              { path: 'findings.json', sha256: '0'.repeat(64), mediaType: 'application/json' },
+            ],
+          },
+        },
+        findings: {
+          documentType: 'codex-security.findings',
+          schemaVersion: '1.0',
+          scanId: 'scan-fixture',
+          findings: [],
+        },
+        scanDir: path.join('fixtures', 'security-scan'),
+        threadId: 'fixture-thread',
+        turnResult: {},
+        sarifPath: null,
+      });
+      mockRun.mockResolvedValue(result);
 
       const response = await new OpenAICodexSecurityProvider().callApi('Scan');
       expect(response.error).toBeUndefined();
+      expect(response.raw).toEqual(result.toJSON());
+      expect(JSON.parse(response.output as string).manifest.scan).toMatchObject({
+        status: 'interrupted',
+        scope: { limitations: ['Interrupted'] },
+      });
       expect(response.metadata?.review).toEqual(review);
+      expect(response.metadata?.manifestPath).toBe(result.manifestPath);
       expect(response.metadata).not.toHaveProperty('coverage');
       expect(response.metadata).not.toHaveProperty('coveragePath');
     });
