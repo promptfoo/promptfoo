@@ -316,6 +316,94 @@ describe('OpenAI billing helpers', () => {
     },
   );
 
+  describe('Bedrock GPT-6.1 Terra', () => {
+    it.each([
+      { inputs: 272_000, input: 1, cached: 0.05, output: 5 },
+      { inputs: 272_001, input: 2, cached: 0.1, output: 7.5 },
+    ])(
+      'uses published Standard rates at $inputs input tokens',
+      ({ inputs, input, cached, output }) => {
+        const usage = {
+          input_tokens: inputs,
+          output_tokens: 1000,
+          input_tokens_details: { cached_tokens: 4000, cache_write_tokens: 3000 },
+        };
+        const expected =
+          ((inputs - 7000) * input + 4000 * cached + 3000 * input * 1.25 + 1000 * output) / 1e6;
+        for (const serviceTier of [undefined, null, 'default', 'standard']) {
+          for (const regionalProcessing of [false, true]) {
+            expect(
+              calculateOpenAIUsageCost('gpt-6.1-terra', {}, usage, {
+                provider: 'bedrock',
+                serviceTier,
+                regionalProcessing,
+              }),
+            ).toBeCloseTo(expected * (regionalProcessing ? 1.1 : 1), 10);
+          }
+        }
+        expect(
+          calculateOpenAIUsageCostFromTokenUsage('openai.gpt-6.1-terra', {
+            prompt: inputs,
+            completion: 1000,
+            cached: 4000,
+            completionDetails: { cacheCreationInputTokens: 3000 },
+          }),
+        ).toBeCloseTo(expected * 1.1, 10);
+        expect(
+          calculateOpenAIUsageCost('gpt-6.1-terra', { inputCost: 3 / 1e6 }, usage, {
+            provider: 'bedrock',
+            regionalProcessing: true,
+          }),
+        ).toBeCloseTo((inputs * 3 + 1000 * output * 1.1) / 1e6, 10);
+        expect(
+          calculateOpenAIUsageCost('gpt-6.1-terra', {}, usage, {
+            provider: 'bedrock',
+            cachedResponse: true,
+          }),
+        ).toBe(0);
+      },
+    );
+
+    it.each(['priority', 'fast', 'flex', 'batch', 'ultrafast', 'reserved', 'unknown'])(
+      'requires explicit prices for unsupported %s processing',
+      (serviceTier) => {
+        const usage = { input_tokens: 1000, output_tokens: 1000, cache_write_input_tokens: 0 };
+        const options = { provider: 'bedrock', serviceTier, regionalProcessing: true };
+        expect(calculateOpenAIUsageCost('gpt-6.1-terra', {}, usage, options)).toBeUndefined();
+        expect(
+          calculateOpenAIUsageCost('gpt-6.1-terra', { inputCost: 2 / 1e6 }, usage, options),
+        ).toBeUndefined();
+        expect(
+          calculateOpenAIUsageCost(
+            'gpt-6.1-terra',
+            { inputCost: 2 / 1e6, outputCost: 3 / 1e6 },
+            usage,
+            options,
+          ),
+        ).toBeCloseTo(0.005, 10);
+      },
+    );
+
+    it('does not infer missing cache-write usage or unknown model prices', () => {
+      const usage = { input_tokens: 1000, output_tokens: 1000 };
+      expect(
+        calculateOpenAIUsageCost('gpt-6.1-terra', {}, usage, { provider: 'bedrock' }),
+      ).toBeUndefined();
+      expect(
+        calculateOpenAIUsageCostFromTokenUsage('openai.gpt-6.1-terra', {
+          prompt: 1000,
+          completion: 1000,
+        }),
+      ).toBeUndefined();
+      expect(
+        calculateOpenAIUsageCost('gpt-6.1-terra-unpublished', {}, usage, { provider: 'bedrock' }),
+      ).toBeUndefined();
+      expect(
+        calculateOpenAIUsageCost('gpt-6.1-terra', {}, undefined, { provider: 'bedrock' }),
+      ).toBeUndefined();
+    });
+  });
+
   describe('Ultrafast', () => {
     it.each([
       { inputTokens: 272_000, input: 60, cached: 6, write: 75, output: 300 },

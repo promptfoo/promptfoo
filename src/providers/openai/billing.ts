@@ -847,7 +847,7 @@ export function calculateOpenAIUsageCostFromTokenUsage(
   // These models have no published Bedrock rates.
   if (
     modelName.startsWith('openai.') &&
-    ['gpt-6-astra', 'gpt-6.1-sol', 'gpt-6.1-terra'].includes(billingModelName)
+    ['gpt-6-astra', 'gpt-6.1-sol'].includes(billingModelName)
   ) {
     return undefined;
   }
@@ -1349,9 +1349,14 @@ export function calculateOpenAIUsageCost(
   const usageParts = getOpenAIUsageParts(rawUsage);
   const usage = extractOpenAIBillingUsage(rawUsage);
   const gpt6Variant = getGpt6Variant(modelName);
+  // AWS publishes Terra Standard rates matching the Global OpenAI rates, with the
+  // existing 1.1 regional multiplier for In-Region/Geo. Other tiers are not published.
+  // https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-openai-gpt-6-1-terra.html
   if (
-    (gpt6Variant === '6.1-sol' || gpt6Variant === '6.1-terra') &&
-    options.provider === 'bedrock'
+    options.provider === 'bedrock' &&
+    (gpt6Variant === '6.1-sol' ||
+      (gpt6Variant === '6.1-terra' &&
+        ![undefined, null, 'default', 'standard'].includes(options.serviceTier)))
   ) {
     return calculateCustomUsageCost(usage, config, options.cachedResponse);
   }
