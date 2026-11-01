@@ -198,10 +198,16 @@ export function projectTracesForOutput(
         }
 
         const projectedAttributes = { ...span.attributes };
-        if (shouldStripPromptText) {
+        if (shouldStripPromptText && PromptfooAttributes.REQUEST_BODY in projectedAttributes) {
+          if (projectedTrace.metadata?.localBodyAttributeLossTracked === true) {
+            projectedAttributes[PromptfooAttributes.REQUEST_BODY_STRIPPED] = true;
+          }
           delete projectedAttributes[PromptfooAttributes.REQUEST_BODY];
         }
-        if (shouldStripResponseOutput) {
+        if (shouldStripResponseOutput && PromptfooAttributes.RESPONSE_BODY in projectedAttributes) {
+          if (projectedTrace.metadata?.localBodyAttributeLossTracked === true) {
+            projectedAttributes[PromptfooAttributes.RESPONSE_BODY_STRIPPED] = true;
+          }
           delete projectedAttributes[PromptfooAttributes.RESPONSE_BODY];
         }
 

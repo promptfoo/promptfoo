@@ -770,7 +770,7 @@ The `trajectory:tool-used` assertion checks traced tool steps rather than the mo
 Trajectory assertions require trace data. Enable tracing for the eval and use a provider that emits tool-oriented spans or attributes.
 :::
 
-For an [OpenAI Agents API](/docs/providers/openai-agents-api#inspect-traces) target with `hostedTrace` enabled, built-in trace and trajectory assertions report unavailable evidence. Inspect the imported spans in **Traces**, or grade the returned answer and the root turn’s completed tool calls.
+For an [OpenAI Agents API](/docs/providers/openai-agents-api#inspect-traces) target with `hostedTrace` enabled, use [raw span assertions](#trace-span-count) to grade hosted actions. Trajectory assertions report unavailable evidence.
 
 Promptfoo identifies tool names from attributes such as `tool.name`, `function.name`, and Vercel AI SDK telemetry's `ai.toolCall.name`.
 
@@ -1134,7 +1134,9 @@ Trace assertions require tracing to be enabled in your evaluation. See the [trac
 If no spans arrive for a traced row, the assertion fails. A partial trace can prove a positive minimum count. An upper bound, including `max: 0`, requires complete collection. [Trace collection and grading](/docs/tracing/#concurrent-programmatic-evaluations)
 :::
 
-For an [OpenAI Agents API](/docs/providers/openai-agents-api#inspect-traces) target that requested hosted spans, use the **Traces** tab to inspect the import. Raw span counts, durations, and error budgets report unavailable evidence.
+Hosted OpenAI Agents API checks include spans from the requested turn and its local ancestors. For example, one matching tool span proves `min: 1` even on a partial import, while an absent span cannot prove `max: 0` there. For duration or error budgets, a recorded violation can settle the result. If missing spans or redaction leave more than one possible verdict, the assertion fails for insufficient evidence, including when inverted. A known mismatch on an open test-case span can rule it out during a live eval. If a saved trace is missing that span, its attribute keys alone may leave the filter uncertain. On older complete exports, a `chat` span can lack its model name. It may match a model-specific pattern but cannot change the count of `execute_tool *` spans.
+
+Hosted span names are `invoke_agent`, `chat`, `chat <model>`, and `execute_tool <tool>`. On a partial import, a zero-count assertion for `http.request` can pass when the local ancestors also rule out that name. This grades the names in the imported trace. Measuring the agent's HTTP requests requires instrumentation at the network boundary.
 
 Example:
 
@@ -1225,7 +1227,7 @@ assert:
 
 Key features:
 
-- `pattern` (optional): Filter spans by name pattern. Defaults to `*` (all spans)
+- Omit `pattern` to time all spans in scope. An explicit empty string (`pattern: ''`) matches only an empty span name.
 - `attributes` (optional): Filter by exact span attributes, as described under [Trace-Span-Count](#trace-span-count)
 - `max`: Maximum allowed duration in milliseconds
 - `percentile` (optional): Check percentile instead of all spans (e.g., 50 for median, 95 for 95th percentile). Must be a number from 0 to 100 inclusive; out-of-range values cause an assertion error. Use the 0-100 scale, not 0-1 — `0.95` is accepted as the 0.95th percentile (effectively the fastest span), not p95
@@ -1235,6 +1237,8 @@ The assertion will show the slowest spans when a threshold is exceeded, making i
 ### Trace-Error-Spans
 
 The `trace-error-spans` assertion detects error spans in a trace and ensures the error rate is within acceptable limits. It automatically detects errors through status codes, error attributes, and status messages.
+
+When regrading a saved hosted OpenAI trace, an older import can contain a status code computed from diagnostic text or a malformed HTTP status. If the error limit depends on that code, Promptfoo reports insufficient evidence. Rerun the eval to capture the current error evidence.
 
 :::note
 Enable tracing for this assertion. It fails if collection is incomplete or no spans were saved.
