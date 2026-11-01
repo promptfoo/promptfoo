@@ -149,7 +149,7 @@ jobs:
           node-version: '24.22.2'
           registry-url: 'https://registry.npmjs.org'
       - name: Download verified npm package
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with: &npm-package-download
           artifact-ids: ${{ needs.build-npm.outputs.artifact-id || needs.build-npm-backfill.outputs.artifact-id }}
           path: ${{ runner.temp }}/promptfoo-package
@@ -256,7 +256,7 @@ jobs:
       - run: npm install -g npm@11.11.0 --registry=https://registry.npmjs.org/
       - run: npm ci --registry=https://registry.npmjs.org/
       - name: Download npm package
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with: *npm-package-download
       - name: Validate npm package
         env:
@@ -488,7 +488,7 @@ jobs:
       attestations: write
     steps:
       - name: Download release payload
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           name: code-scan-action-release-payload
           path: ${{ runner.temp }}/code-scan-action-attest
@@ -514,7 +514,7 @@ jobs:
         CHANGELOG.md
     steps:
       - name: Download attested release payload
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           name: code-scan-action-release-payload
           path: ${{ runner.temp }}/code-scan-action-export
