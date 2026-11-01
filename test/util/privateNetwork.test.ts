@@ -234,6 +234,56 @@ describe('getCallerSuppliedBaseUrls', () => {
     expect(getCallerSuppliedBaseUrls({ id: 'custom_provider.py' })).toEqual([]);
   });
 
+  it.each([
+    // The finding's payload: an mcp id contributes no URL, so the old
+    // preflight passed it, while initializing the provider launches
+    // server.command with StdioClientTransport (or runs a server.path
+    // script) before parsing any prompt.
+    {
+      id: 'mcp',
+      config: {
+        server: {
+          command: '/bin/sh',
+          args: ['-c', 'curl http://169.254.169.254/latest/meta-data/'],
+        },
+      },
+    },
+    { id: 'mcp:prod', config: { server: { command: 'npx', args: ['-y', 'mcp-server'] } } },
+    { id: 'mcp', config: { server: { path: './server.js' } } },
+    {
+      id: 'mcp',
+      config: { servers: [{ command: '/bin/sh' }, { url: 'https://public.example.com/mcp' }] },
+    },
+    { id: 'mcp', config: { servers: [{ path: './server.py' }] } },
+  ])(
+    'refuses an MCP subprocess transport instead of letting it execute unseen: %s',
+    ({ id, config }) => {
+      expect(() => getCallerSuppliedBaseUrls({ id, config })).toThrow(PrivateRangeBlockedError);
+    },
+  );
+
+  it('leaves an MCP id with no server transport to configure', () => {
+    expect(getCallerSuppliedBaseUrls({ id: 'mcp' })).toEqual([]);
+    expect(getCallerSuppliedBaseUrls({ id: 'mcp:prod', config: {} })).toEqual([]);
+  });
+
+  it('reads MCP server urls for validation', () => {
+    expect(
+      getCallerSuppliedBaseUrls({
+        id: 'mcp',
+        config: { server: { url: 'https://public.example.com/mcp' } },
+      }),
+    ).toEqual(['https://public.example.com/mcp']);
+    expect(
+      getCallerSuppliedBaseUrls({
+        id: 'mcp',
+        config: {
+          servers: [{ url: 'https://a.example.com/mcp' }, { url: 'https://b.example.com/mcp' }],
+        },
+      }),
+    ).toEqual(['https://a.example.com/mcp', 'https://b.example.com/mcp']);
+  });
+
   it('reads config.url (the HttpProvider request URL)', () => {
     expect(
       getCallerSuppliedBaseUrls({ id: 'http', config: { url: 'http://127.0.0.1:8080/hook' } }),
@@ -568,6 +618,38 @@ describe('assertProviderTargetPublic', () => {
   it('does not refuse a script provider id when the flag is unset', async () => {
     restoreEnv = mockProcessEnv({ PROMPTFOO_BLOCK_PRIVATE_RANGES: undefined });
     await expect(assertProviderTargetPublic({ id: 'exec:/bin/sh -c id' })).resolves.toBeUndefined();
+  });
+
+  it('refuses an MCP subprocess transport when the flag is set', async () => {
+    restoreEnv = mockProcessEnv({ PROMPTFOO_BLOCK_PRIVATE_RANGES: 'true' });
+    await expect(
+      assertProviderTargetPublic({
+        id: 'mcp',
+        config: { server: { command: '/bin/sh', args: ['-c', 'id'] } },
+      }),
+    ).rejects.toThrow(PrivateRangeBlockedError);
+    expect(mockedLookup).not.toHaveBeenCalled();
+  });
+
+  it('does not refuse an MCP subprocess transport when the flag is unset', async () => {
+    restoreEnv = mockProcessEnv({ PROMPTFOO_BLOCK_PRIVATE_RANGES: undefined });
+    await expect(
+      assertProviderTargetPublic({
+        id: 'mcp',
+        config: { server: { command: '/bin/sh' } },
+      }),
+    ).resolves.toBeUndefined();
+  });
+
+  it('refuses a private MCP server url when the flag is set', async () => {
+    restoreEnv = mockProcessEnv({ PROMPTFOO_BLOCK_PRIVATE_RANGES: 'true' });
+    await expect(
+      assertProviderTargetPublic({
+        id: 'mcp',
+        config: { server: { url: 'http://127.0.0.1:8080/mcp' } },
+      }),
+    ).rejects.toThrow(PrivateRangeBlockedError);
+    expect(mockedLookup).not.toHaveBeenCalled();
   });
 
   it('blocks non-canonical http: provider ids when the flag is set', async () => {
