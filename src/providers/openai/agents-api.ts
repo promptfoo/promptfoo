@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto';
+
 import logger from '../../logger';
 import { CloudAuthRedirectError } from '../../util/fetch/cloudAuthRedirects';
 import { fetchWithRetries, readBoundedText } from '../../util/fetch/index';
@@ -17,6 +19,7 @@ import { decodeUrlComponent } from '../urlEncoding';
 import { calculateOpenAIUsageCost } from './billing';
 import { OpenAiGenericProvider } from './index';
 import { appendOpenAiApiPath, assertOpenAiApiModel } from './util';
+import type { SessionArtifact } from 'openai/resources/beta/agents/sessions/artifacts';
 
 import type { EnvOverrides } from '../../types/env';
 import type {
@@ -44,6 +47,7 @@ interface AgentsApiOptions extends OpenAiSharedOptions {
   cleanupTimeoutMs?: number;
   usageTimeoutMs?: number;
   retainSession?: boolean;
+  artifactPaths?: string[];
 }
 
 interface Usage {
@@ -93,7 +97,7 @@ interface ToolCallSummary {
 interface Page<T> {
   data: T[];
   has_more: boolean;
-  last_id: string | null;
+  last_id?: string | null;
 }
 
 const MAX_TIMER_MS = 2_147_483_647;
@@ -102,6 +106,8 @@ const MAX_SESSION_LIST_PAGES = 1_000;
 const MAX_LIST_ITEMS = 10_000;
 const MAX_ERROR_DETAIL_LENGTH = 1_024;
 const MAX_RESPONSE_BODY_BYTES = 16 * 1024 * 1024;
+const MAX_ARTIFACT_PATHS = 8;
+const MAX_ARTIFACT_BYTES = 1024 * 1024;
 const TRANSIENT_STATUS_CODES = new Set([500, 502, 503, 504]);
 // Assistant messages, messages between agents, and reasoning are not tool activity.
 const MESSAGE_ITEM_TYPES = new Set(['message', 'agent_message', 'reasoning']);
@@ -116,6 +122,34 @@ const MIN_CREDENTIAL_LENGTH = 8;
 const MIN_TOKEN_CREDENTIAL_LENGTH = 2;
 const CREDENTIAL_NAME =
   /(?:authorization|api[-_]?key|token|secret|signature|credential|cookie|password|(?:^|[-_])key$)/i;
+
+async function digestArtifact(response: Response | undefined, expectedSize: number) {
+  if (!response?.body) {
+    throw new Error('Missing artifact content');
+  }
+  const reader = response.body.getReader();
+  const hash = createHash('sha256');
+  let sizeBytes = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) {
+        break;
+      }
+      sizeBytes += value.byteLength;
+      if (sizeBytes > expectedSize) {
+        throw new Error('Artifact exceeded its published size');
+      }
+      hash.update(value);
+    }
+  } finally {
+    await reader.cancel();
+  }
+  if (sizeBytes !== expectedSize) {
+    throw new Error('Artifact content was incomplete');
+  }
+  return { sizeBytes, sha256: hash.digest('hex') };
+}
 
 class AgentsApiHttpError extends Error {
   constructor(
@@ -385,9 +419,44 @@ function referencesVariable(template: string, names: string[]): boolean {
   });
 }
 
+function containsTemplate(value: string): boolean {
+  return value.includes('{{') || value.includes('{%');
+}
+
+function isArtifactOutputPath(path: unknown): path is string {
+  return (
+    typeof path === 'string' &&
+    path.startsWith('/workspace/outputs/') &&
+    path.length <= 4096 &&
+    !path.includes('\0') &&
+    path
+      .slice(1)
+      .split('/')
+      .every((part) => part.length > 0 && part !== '.' && part !== '..')
+  );
+}
+
 /** Opaque IDs must identify a resource and stay in their own URL path segment. */
 function isResourceId(value: unknown): value is string {
   return typeof value === 'string' && value.trim().length > 0 && value !== '.' && value !== '..';
+}
+
+/** An absent or malformed field cannot prove that this record belongs elsewhere. */
+function identifiesAnother(value: unknown, expected: string): boolean {
+  return isResourceId(value) && value !== expected;
+}
+
+function assertUniqueEvidenceIds(items: { id?: unknown }[]): void {
+  const seen = new Set<string>();
+  for (const item of items) {
+    const id = item?.id;
+    if (isResourceId(id)) {
+      if (seen.has(id)) {
+        throw new Error('Agents API returned duplicate evidence resource IDs');
+      }
+      seen.add(id);
+    }
+  }
 }
 
 /** Render only strings that reference test vars, preserving literal braces in commands and code. */
@@ -397,7 +466,7 @@ function renderConfigTemplates(
   names: string[],
 ): unknown {
   if (typeof value === 'string') {
-    return (value.includes('{{') || value.includes('{%')) && referencesVariable(value, names)
+    return containsTemplate(value) && referencesVariable(value, names)
       ? renderVarsInObject(value, vars)
       : value;
   }
@@ -461,6 +530,21 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
     if (config.environment && !['none', 'openai_hosted'].includes(config.environment.type)) {
       throw new Error('Agents API environment.type must be "none" or "openai_hosted"');
     }
+    const paths = config.artifactPaths;
+    if (
+      paths !== undefined &&
+      (!Array.isArray(paths) ||
+        paths.length > MAX_ARTIFACT_PATHS ||
+        new Set(paths).size !== paths.length ||
+        paths.some(
+          (path) =>
+            typeof path !== 'string' || (!containsTemplate(path) && !isArtifactOutputPath(path)),
+        ))
+    ) {
+      throw new Error(
+        `Agents API artifactPaths must contain at most ${MAX_ARTIFACT_PATHS} unique file paths under /workspace/outputs/`,
+      );
+    }
     if (this.modelName) {
       assertOpenAiApiModel(this.modelName, this.getApiUrl());
     }
@@ -479,7 +563,7 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
     return redactCredentials(text, this.credentials);
   }
 
-  private async request<T>(
+  private async requestRaw(
     endpoint: string,
     method: 'GET' | 'POST' | 'DELETE',
     headers: Headers,
@@ -488,7 +572,7 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
     query?: string,
     // Replaying a session creation can start another billable agent task.
     idempotent = method !== 'POST',
-  ): Promise<T> {
+  ): Promise<Response | undefined> {
     const maxRetries = Math.max(0, this.config.maxRetries ?? 4);
     for (let attempt = 0; ; attempt++) {
       signal.throwIfAborted();
@@ -523,7 +607,7 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
       if (method === 'DELETE' && response.status === 404) {
         // A previous deletion may have succeeded even if its response was lost.
         await response.body?.cancel();
-        return undefined as T;
+        return undefined;
       }
       if (!response.ok) {
         let detail = '';
@@ -542,15 +626,22 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
           response.status,
         );
       }
-      if (response.status === 204) {
-        return undefined as T;
-      }
-      const text = await readBoundedText(response, MAX_RESPONSE_BODY_BYTES);
-      return (text ? JSON.parse(text) : undefined) as T;
+      return response.status === 204 ? undefined : response;
     }
   }
 
-  private async list<T>(endpoint: string, headers: Headers, signal: AbortSignal): Promise<T[]> {
+  private async request<T>(...args: Parameters<OpenAiAgentsApiProvider['requestRaw']>): Promise<T> {
+    const response = await this.requestRaw(...args);
+    const text = response && (await readBoundedText(response, MAX_RESPONSE_BODY_BYTES));
+    return (text ? JSON.parse(text) : undefined) as T;
+  }
+
+  private async list<T extends { id?: unknown }>(
+    endpoint: string,
+    headers: Headers,
+    signal: AbortSignal,
+    { requirePageInfo = false }: { requirePageInfo?: boolean } = {},
+  ): Promise<T[]> {
     const items: T[] = [];
     const cursors = new Set<string>();
     let after: string | undefined;
@@ -574,7 +665,7 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
         undefined,
         query.toString(),
       );
-      if (!Array.isArray(page?.data)) {
+      if (!Array.isArray(page?.data) || (requirePageInfo && typeof page.has_more !== 'boolean')) {
         throw new Error('Agents API returned an invalid list response');
       }
       // Polls replace an endpoint's snapshot; charge only growth beyond its previous peak.
@@ -598,12 +689,25 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
       this.listBytePeaks.set(endpoint, Math.max(previousBytePeak, bytes));
       items.push(...page.data);
       if (!page.has_more) {
+        if (requirePageInfo) {
+          // One immutable file must not be credited with another record's contents.
+          assertUniqueEvidenceIds(items);
+        }
         return items;
       }
-      if (!page.last_id || cursors.has(page.last_id)) {
+      let cursor = page.last_id;
+      if (requirePageInfo) {
+        // The artifact API uses the last resource ID as the SDK's "after" cursor.
+        const id = page.data[page.data.length - 1]?.id;
+        if (!isResourceId(id) || (cursor != null && cursor !== id)) {
+          throw new Error('Agents API returned an invalid pagination cursor');
+        }
+        cursor = id;
+      }
+      if (!cursor || cursors.has(cursor)) {
         throw new Error('Agents API returned an invalid pagination cursor');
       }
-      after = page.last_id;
+      after = cursor;
       cursors.add(after);
     }
     throw new Error(`Agents API pagination limit exceeded (${MAX_LIST_PAGES} pages)`);
@@ -808,6 +912,12 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
         config,
         env: this.env,
       });
+      // A template was allowed during provider loading. Check the actual path before opening a session.
+      if (callProvider.config.artifactPaths?.some((path) => !isArtifactOutputPath(path))) {
+        throw new Error(
+          'Agents API artifactPaths must resolve to file paths under /workspace/outputs/',
+        );
+      }
       if (removedInheritedHeaders && !callProvider.sendsToOpenAiApi()) {
         const { hasCustomHeader } = scanRequestHeaders(
           new Headers(callProvider.getOpenAiRequestHeaders()),
@@ -1003,6 +1113,7 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
         ...toolActivity,
         ...usageMetadata,
         ...subagentUsageMetadata,
+        ...(await this.getArtifactMetadata(session.id, turn.id, endpoint, headers, signal)),
       });
       options?.abortSignal?.throwIfAborted();
       completed = true;
@@ -1023,6 +1134,72 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
       result.metadata = metadata;
     }
     return result;
+  }
+
+  /** Read only requested immutable files while the provider still owns the session. */
+  private async getArtifactMetadata(
+    sessionId: string,
+    turnId: string,
+    endpoint: string,
+    headers: Headers,
+    signal: AbortSignal,
+  ) {
+    const paths = this.config.artifactPaths;
+    if (!paths?.length) {
+      return {};
+    }
+    const artifactSignal = AbortSignal.any([signal, AbortSignal.timeout(10_000)]);
+    const collection = `${endpoint}/artifacts`;
+    const published = await this.list<SessionArtifact>(collection, headers, artifactSignal, {
+      requirePageInfo: true,
+    }).catch(() => undefined);
+    const artifacts = await Promise.all(
+      paths.map(async (path) => {
+        const evidence = { path: this.redact(path) };
+        if (!published) {
+          return { ...evidence, status: 'unavailable' };
+        }
+        try {
+          const matches = published.filter(
+            (item) =>
+              !identifiesAnother(item?.session_id, sessionId) &&
+              !identifiesAnother(item?.turn_id, turnId) &&
+              (!isArtifactOutputPath(item?.path) || item.path === path),
+          );
+          if (!matches.length) {
+            return { ...evidence, status: 'missing' };
+          }
+          const [artifact] = matches;
+          if (
+            matches.length !== 1 ||
+            artifact?.session_id !== sessionId ||
+            artifact.turn_id !== turnId ||
+            artifact.path !== path ||
+            typeof artifact.id !== 'string' ||
+            !/^[A-Za-z0-9_-]+$/.test(artifact.id) ||
+            !isNonNegativeSafeInteger(artifact.size_bytes) ||
+            artifact.size_bytes > MAX_ARTIFACT_BYTES
+          ) {
+            return { ...evidence, status: 'unavailable' };
+          }
+          const response = await this.requestRaw(
+            `${collection}/${artifact.id}/content`,
+            'GET',
+            headers,
+            artifactSignal,
+          );
+          return {
+            ...evidence,
+            status: 'available',
+            ...(await digestArtifact(response, artifact.size_bytes)),
+          };
+        } catch {
+          // A download or transport error must not disclose its raw body or discard the answer.
+          return { ...evidence, status: 'unavailable' };
+        }
+      }),
+    );
+    return { artifacts };
   }
 
   private async waitForTurn(
