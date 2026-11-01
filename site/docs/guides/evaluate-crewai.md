@@ -603,7 +603,9 @@ The configured red team scan can help identify:
 - Unexpected hallucinations or failures.
 - Non-compliance with business rules.
 
-### **Target and run options**
+### **Additional Configuration**
+
+<span id="why-it-matters" />
 
 In the target configuration, leave **Extension Hook** empty unless your evaluation needs a custom lifecycle hook. Use `{{ prompt }}` where Promptfoo should insert each generated probe. For example:
 
@@ -664,17 +666,13 @@ Meta Agent and Hydra require remote generation. Use `--remote`, set `PROMPTFOO_R
 
 ## **Step 11: Run and Check Final Red Team Results**
 
-Now choose how you want to launch the red teaming:
-
-**Option 1:** Save the YAML and run from the terminal.
+Save the YAML and run it from the terminal.
 
 Move the downloaded configuration into the project directory beside `agent.py`. To preserve the functional config, rename it to `promptfooconfig.redteam.yaml`, then run:
 
 ```bash
 promptfoo redteam run -c promptfooconfig.redteam.yaml --remote
 ```
-
-**Option 2:** Click **Run Now** in the browser. This option requires Promptfoo Cloud connectivity and remote generation to be enabled.
 
 Once it starts, Promptfoo will:
 
