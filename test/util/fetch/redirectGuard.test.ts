@@ -11,6 +11,10 @@ vi.mock('../../../src/util/fetch/monkeyPatchFetch', async (importOriginal) => {
     monkeyPatchFetch: vi.fn(),
   };
 });
+const mockGetProxyForUrl = vi.hoisted(() => vi.fn((_url: string) => ''));
+vi.mock('proxy-from-env', () => ({
+  getProxyForUrl: (url: string) => mockGetProxyForUrl(url),
+}));
 
 import { lookup } from 'node:dns/promises';
 import type { LookupAddress } from 'node:dns';
@@ -43,6 +47,7 @@ describe('fetchWithProxy guarded redirects (PROMPTFOO_BLOCK_PRIVATE_RANGES)', ()
   beforeEach(() => {
     vi.resetAllMocks();
     mockedLookup.mockResolvedValue([{ address: '93.184.216.34', family: 4 } as LookupAddress]);
+    mockGetProxyForUrl.mockReturnValue('');
   });
 
   afterEach(() => {
@@ -416,5 +421,64 @@ describe('fetchWithProxy guarded redirects (PROMPTFOO_BLOCK_PRIVATE_RANGES)', ()
     for (const call of mockedMonkeyPatchFetch.mock.calls) {
       expect(call[1]).not.toMatchObject({ skipCloudAuthInjection: true });
     }
+  });
+
+  it('recomputes the proxy dispatcher per redirect hop', async () => {
+    restoreEnv = mockProcessEnv({ PROMPTFOO_BLOCK_PRIVATE_RANGES: 'true' });
+    // Only the redirect destination sits behind the proxy. If the
+    // dispatcher fetchWithProxy bound for the initial URL is reused as
+    // the caller dispatcher, the per-hop recomputation never runs and
+    // the second hop goes direct when it should use the proxy.
+    mockGetProxyForUrl.mockImplementation((url: string) =>
+      url === 'https://public.example.com/next' ? 'http://proxy.example.com:8080' : '',
+    );
+    mockedMonkeyPatchFetch
+      .mockResolvedValueOnce(redirectResponse('https://public.example.com/next', 307))
+      .mockResolvedValueOnce(new Response('ok', { status: 200 }));
+
+    const response = await guardedFetch('https://public.example.com/start', {
+      method: 'POST',
+      body: 'x',
+    });
+
+    expect(response.status).toBe(200);
+    expect(mockedMonkeyPatchFetch).toHaveBeenCalledTimes(2);
+    const [firstCall, secondCall] = mockedMonkeyPatchFetch.mock.calls;
+    expect((secondCall[1] as { dispatcher?: unknown }).dispatcher).not.toBe(
+      (firstCall[1] as { dispatcher?: unknown }).dispatcher,
+    );
+    expect(mockGetProxyForUrl).toHaveBeenCalledWith('https://public.example.com/next');
+  });
+
+  it('replays a Request stream body across a 307 redirect', async () => {
+    restoreEnv = mockProcessEnv({ PROMPTFOO_BLOCK_PRIVATE_RANGES: 'true' });
+    // A real fetch consumes the body stream, so the mock consumes it too:
+    // reusing the same stream object on the second hop must fail exactly
+    // like undici, with the disturbed-stream error, instead of silently
+    // replaying a body the mock never touched.
+    let hops = 0;
+    mockedMonkeyPatchFetch.mockImplementation(async (_url, options) => {
+      const body = (options as { body?: unknown }).body;
+      if (body instanceof ReadableStream) {
+        await new Response(body).text();
+      }
+      hops += 1;
+      return hops === 1
+        ? redirectResponse('https://public.example.com/next', 307)
+        : new Response('ok', { status: 200 });
+    });
+
+    const request = new Request('https://public.example.com/submit', {
+      method: 'POST',
+      body: 'x',
+    });
+    const response = await guardedFetch(request);
+
+    expect(response.status).toBe(200);
+    expect(mockedMonkeyPatchFetch).toHaveBeenCalledTimes(2);
+    const [firstCall, secondCall] = mockedMonkeyPatchFetch.mock.calls;
+    const secondBody = (secondCall[1] as { body?: unknown }).body;
+    expect(secondBody).toBeInstanceOf(ReadableStream);
+    expect(secondBody).not.toBe((firstCall[1] as { body?: unknown }).body);
   });
 });

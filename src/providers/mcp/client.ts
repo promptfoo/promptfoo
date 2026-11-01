@@ -5,6 +5,8 @@ import cliState from '../../cliState';
 import { type McpConfigParsed, McpConfigSchema } from '../../contracts/providerConfig/mcp';
 import { getEnvBool, getEnvInt, getProcessEnv } from '../../envars';
 import logger from '../../logger';
+import { isPrivateRangeGuardContextActive } from '../../util/fetch/guardContext';
+import { fetchWithProxy } from '../../util/fetch/index';
 import { isCallerAbortError } from '../../util/fetch/requestSignal';
 import { isMissingPackageImportError } from '../../util/packageImportErrors';
 import { waitForPromiseWithAbort } from '../shared';
@@ -24,6 +26,7 @@ import type { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/cl
 import type { RequestOptions as MCPRequestOptions } from '@modelcontextprotocol/sdk/shared/protocol.js';
 import type { FetchLike } from '@modelcontextprotocol/sdk/shared/transport.js';
 
+import type { FetchOptions } from '../../util/fetch/types';
 import type {
   MCPConfig,
   MCPOAuthClientCredentialsAuth,
@@ -34,6 +37,14 @@ import type {
 } from './types';
 
 const oauthRequestSignal = new AsyncLocalStorage<AbortSignal>();
+
+/**
+ * The MCP SDK's default transport fetch, kept for unguarded use so eval
+ * behavior is unchanged. Inside a guarded server route the OAuth fetch
+ * below routes through fetchWithProxy instead.
+ */
+// biome-ignore lint/style/noRestrictedGlobals: SDK default outside the guard
+const sdkDefaultFetch: FetchLike = (url, init) => fetch(url, init);
 
 /**
  * Refresh tokens per request without reconnecting and aborting other tool calls.
@@ -71,8 +82,24 @@ function createOAuthFetch(
       signal?.throwIfAborted();
       const headers = new Headers(init?.headers);
       headers.set('Authorization', `Bearer ${accessToken}`);
-      // biome-ignore lint/style/noRestrictedGlobals: SDK default; fetchWithProxy retries tool calls on 5xx
-      return { accessToken, response: await fetch(url, { ...init, headers, signal }) };
+      // Inside a guarded server route, the SDK's ordinary fetch would
+      // follow a public-to-private redirect outside the guard, so route
+      // through fetchWithProxy there and let it validate every hop.
+      // Transient retries stay off: a retried tools/call could execute
+      // twice, which is the reason this used the raw fetch. Outside the
+      // guard this stays the plain SDK fetch, so eval behavior is
+      // unchanged. The check runs at request time, not construction time,
+      // so a client connected outside the guard and called inside it is
+      // still covered.
+      const response = isPrivateRangeGuardContextActive()
+        ? await fetchWithProxy(url instanceof URL ? url.toString() : url, {
+            ...init,
+            headers,
+            signal,
+            disableTransientRetries: true,
+          } as FetchOptions)
+        : await sdkDefaultFetch(url, { ...init, headers, signal });
+      return { accessToken, response };
     };
     const first = await send();
     if (first.response.status !== 401) {
