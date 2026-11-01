@@ -140,6 +140,8 @@ Other fields, including free text and nested objects, are omitted. For example, 
 
 #### Grade native spans
 
+Use `trajectory:tool-used` to require a tool or `trajectory:tool-args-match` to check a captured field such as `cwd`. A partial trace can prove a match it recorded. To grade a shell command during replay, enable argument capture before the run and check the saved command step. [Trajectory assertion examples](/docs/configuration/expected-outputs/deterministic/#trajectorytool-used)
+
 For a completed hosted trace, use a raw span assertion such as `trace-error-spans` to check the status of a named tool. Pair a zero-error budget with a positive count so an agent that skips the tool fails the test.
 
 ```yaml

@@ -19,11 +19,20 @@ import {
   TEST_CASE_SPAN_NAME,
 } from '../tracing/spanRoles';
 import { matchesPattern } from './traceUtils';
+import { getHostedToolArguments, hasUnresolvedHostedCommand } from './trajectoryUtils';
 
-import type { AssertionParams } from '../types/index';
+import type { AssertionParams, AssertionType, AssertionValue } from '../types/index';
 import type { TraceData, TraceSpan } from '../types/tracing';
+import type { TrajectoryStepMatcher } from './trajectoryUtils';
 
 const ARGUMENT_FILTER_KEYS = new Set(['gen_ai.tool.call.arguments', 'tool.arguments']);
+
+function isCommandMatcher(value: unknown): boolean {
+  if (!value || typeof value !== 'object' || !('type' in value)) {
+    return false;
+  }
+  return value.type === 'command' || (Array.isArray(value.type) && value.type.includes('command'));
+}
 
 function isHostedToolSpan(span: TraceSpan): boolean {
   return (
@@ -33,21 +42,11 @@ function isHostedToolSpan(span: TraceSpan): boolean {
 }
 
 function hasIntactArguments(attributes: TraceSpan['attributes']): boolean {
-  const args = attributes?.['tool.arguments'];
-  const native = attributes?.['gen_ai.tool.call.arguments'];
-  if (
-    attributes?.['promptfoo.tool.arguments_redacted'] ||
-    typeof args !== 'string' ||
-    (native !== undefined && native !== args)
-  ) {
-    return false;
-  }
-  // Old captures can lack the native alias. Both versions must still contain intact JSON.
-  try {
-    return JSON.parse(args) !== null;
-  } catch {
-    return false;
-  }
+  return (
+    !!attributes &&
+    !attributes['promptfoo.tool.arguments_redacted'] &&
+    getHostedToolArguments(attributes) !== undefined
+  );
 }
 
 function missingArgumentsReason(includeToolArguments: boolean): string {
@@ -104,6 +103,25 @@ function getRawFilterCoverageError(
   return reason;
 }
 
+// Use the count defaults from the trajectory handlers. A bare tool matcher requires one call.
+function hasPositiveMinimum(value: object, defaultMin: number): boolean {
+  const min = 'min' in value && typeof value.min === 'number' ? value.min : defaultMin;
+  return min > 0 && !('max' in value && typeof value.max === 'number');
+}
+
+function provesObservedTool(type: AssertionType, value: AssertionValue | undefined): boolean {
+  if (type === 'trajectory:tool-args-match') {
+    return true;
+  }
+  if (type !== 'trajectory:tool-used') {
+    return false;
+  }
+  if (typeof value === 'string' || Array.isArray(value)) {
+    return true;
+  }
+  return !!value && typeof value === 'object' && hasPositiveMinimum(value, 1);
+}
+
 function getLocalAncestors(spans: TraceSpan[], parentId: string) {
   const byId = new Map(spans.map((span) => [span.spanId, span]));
   const ancestors: TraceSpan[] = [];
@@ -158,6 +176,42 @@ function couldMatchTestCaseRoot(pattern: string, filters: unknown, trace: TraceD
       isUncertainTraceAttributeMatch(known[key], value)
     );
   });
+}
+
+function getArgumentCoverageError(
+  { baseType, renderedValue: value, inverse }: AssertionParams,
+  includeToolArguments: boolean,
+): string | undefined {
+  if (!value || typeof value !== 'object') {
+    return undefined;
+  }
+  if (baseType === 'trajectory:tool-args-match') {
+    // The matcher grades preserved fields and skips lossy candidates in exact mode.
+    if (includeToolArguments && !inverse) {
+      return undefined;
+    }
+  } else {
+    const steps = Array.isArray(value) ? value : 'steps' in value ? value.steps : [value];
+    const untypedStep = baseType === 'trajectory:step-count' && !('type' in value && value.type);
+    const commandFilter =
+      (baseType.startsWith('trajectory:') &&
+        Array.isArray(steps) &&
+        steps.some(isCommandMatcher)) ||
+      (untypedStep && ('name' in value || 'pattern' in value));
+    if (!commandFilter) {
+      return undefined;
+    }
+    if (
+      !inverse &&
+      (includeToolArguments || untypedStep) &&
+      (provesObservedTool(baseType, value) ||
+        (baseType === 'trajectory:step-count' && hasPositiveMinimum(value, 0)))
+    ) {
+      // Untyped patterns can match preserved span names even when arguments were never captured.
+      return undefined;
+    }
+  }
+  return missingArgumentsReason(includeToolArguments);
 }
 
 /** A generic target can share its trace with an OpenAI-hosted grader. */
@@ -230,7 +284,22 @@ function couldMatchMissingNativeSpan(pattern: string, filters: [string, unknown]
   });
 }
 
-/** Pass uncertain candidates to the raw handlers so they can bound the requested statistic. */
+function countsUncertainChatNames(value: AssertionValue | undefined): boolean {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return false;
+  }
+  const matcher = value as TrajectoryStepMatcher;
+  const pattern = matcher.pattern || matcher.name;
+  const types = matcher.type;
+  return (
+    typeof pattern === 'string' &&
+    !!pattern &&
+    (!types || types === 'span' || (Array.isArray(types) && types.includes('span'))) &&
+    isUncertainChatPattern(pattern)
+  );
+}
+
+/** Count assertions can use the bounds of missing evidence. Other raw checks need every candidate. */
 function prepareRawTraceAssertion(
   params: AssertionParams,
   parentId: string,
@@ -328,7 +397,7 @@ function prepareRawTraceAssertion(
 
 /** A wrapper span alone cannot establish that an action never occurred inside the hosted turn. */
 export function prepareHostedTraceAssertion(params: AssertionParams): string | undefined {
-  const { assertionValueContext, providerResponse, baseType } = params;
+  const { assertionValueContext, providerResponse, baseType, renderedValue, inverse } = params;
   if (!(baseType.startsWith('trajectory:') || baseType.startsWith('trace-'))) {
     return undefined;
   }
@@ -336,9 +405,6 @@ export function prepareHostedTraceAssertion(params: AssertionParams): string | u
   const hostedTrace = providerResponse.metadata?.hostedTrace;
   if (hostedTrace?.source !== 'openai:agents-api') {
     return excludeHostedGraderEvidence(params);
-  }
-  if (baseType.startsWith('trajectory:')) {
-    return 'Hosted trajectory evidence is unavailable for this assertion.';
   }
   if (hostedTrace.status !== 'imported' && hostedTrace.status !== 'partial') {
     return 'The requested OpenAI Agents API trace was unavailable.';
@@ -374,18 +440,63 @@ export function prepareHostedTraceAssertion(params: AssertionParams): string | u
     return 'The stored OpenAI Agents API spans are incomplete for this provider call.';
   }
   const partial = hostedTrace.status === 'partial';
-  // Raw span assertions inspect the local case/target/provider wrappers, alongside
-  // this turn's hosted spans. A sibling tool or grader belongs to a different call.
-  const ancestors = getLocalAncestors(spans, parentId);
-  if (!ancestors.spans.length) {
+  if (baseType.startsWith('trajectory:') && partial) {
+    const reason =
+      'The hosted trace is partial. It can only establish an observed tool call or matching arguments.';
+    if (inverse || !provesObservedTool(baseType, renderedValue)) {
+      return reason;
+    }
+    // A positive matcher can prove a pass. Missing calls could still satisfy an unmet requirement.
+    params.traceSpanUncertainty = { missing: Infinity, candidates: [], reason };
+  }
+  // Raw span assertions can inspect the local case/target/provider wrappers.
+  // A sibling tool or grader in the same row cannot establish an action in this turn.
+  const ancestors = baseType.startsWith('trace-') ? getLocalAncestors(spans, parentId) : undefined;
+  if (ancestors && !ancestors.spans.length) {
     return 'The local provider wrapper is missing from the stored OpenAI Agents API trace.';
   }
-  assertionValueContext.trace = { ...trace, spans: [...native, ...ancestors.spans] };
-  return prepareRawTraceAssertion(
-    params,
-    parentId,
-    ancestors.unresolvedId,
-    includeToolArguments,
-    partial,
-  );
+  assertionValueContext.trace = {
+    ...trace,
+    spans: ancestors ? [...native, ...ancestors.spans] : native,
+  };
+  if (ancestors) {
+    return prepareRawTraceAssertion(
+      params,
+      parentId,
+      ancestors.unresolvedId,
+      includeToolArguments,
+      partial,
+    );
+  }
+  // Tool matchers only inspect tool calls. A legacy chat name can affect the judge's
+  // summary or a count of named span steps, but no steps are missing from this import.
+  if (
+    baseType === 'trajectory:goal-success' ||
+    (baseType === 'trajectory:step-count' && countsUncertainChatNames(renderedValue))
+  ) {
+    const candidates = native.filter(hasUncertainHostedChatName);
+    if (candidates.length) {
+      const reason = 'A legacy hosted chat span may be missing its model name.';
+      if (baseType === 'trajectory:goal-success') {
+        return reason;
+      }
+      assertionValueContext.trace.spans = native.filter(
+        (span) => !hasUncertainHostedChatName(span),
+      );
+      params.traceSpanUncertainty = { missing: 0, candidates, reason };
+    }
+  }
+  const coverageError = getArgumentCoverageError(params, includeToolArguments);
+  if (!coverageError) {
+    return undefined;
+  }
+  // The row describes capture time. JSON export can truncate or redact a stored argument
+  // without changing that row or the number of spans.
+  const complete =
+    includeToolArguments &&
+    toolArgumentsComplete &&
+    native.every((span) => !isHostedToolSpan(span) || hasIntactArguments(span.attributes)) &&
+    ((baseType === 'trajectory:tool-args-match' && !isCommandMatcher(renderedValue)) ||
+      !hasUnresolvedHostedCommand(assertionValueContext.trace));
+  return complete ? undefined : coverageError;
 }

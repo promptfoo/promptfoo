@@ -1,7 +1,7 @@
 import { isDeepStrictEqual } from 'node:util';
 
 import { isGraderFailure, matchesTrajectoryGoalSuccess } from '../matchers/llmGrading';
-import { matchesPattern } from './traceUtils';
+import { countRangeIsUncertain, matchesPattern } from './traceUtils';
 import {
   extractTrajectorySteps,
   formatTrajectoryArgs,
@@ -9,6 +9,7 @@ import {
   matchesTrajectoryStep,
   normalizeTrajectoryMatcher,
   summarizeTrajectoryForJudge,
+  type TrajectoryStep,
   type TrajectoryStepMatcher,
 } from './trajectoryUtils';
 
@@ -44,6 +45,12 @@ function getTraceOrThrow(params: AssertionParams) {
     throw new Error(`No trace data available for ${params.baseType} assertion`);
   }
   return trace;
+}
+
+function getToolSteps(params: AssertionParams) {
+  return extractTrajectorySteps(getTraceOrThrow(params)).filter(
+    (step) => step.type === 'tool' || step.hostedToolName !== undefined,
+  );
 }
 
 function applyInverse(pass: boolean, inverse: boolean) {
@@ -133,9 +140,52 @@ function resolveToolMatchers(
   );
 }
 
+function couldMatchUnresolvedCommand(
+  step: TrajectoryStep,
+  matcher: TrajectoryStepMatcher,
+): boolean {
+  const types = matcher.type;
+  return (
+    !!step.unresolvedHostedCommand &&
+    (!types || types === 'command' || (Array.isArray(types) && types.includes('command')))
+  );
+}
+
+function couldReachCommandMinimum(
+  steps: TrajectoryStep[],
+  matcher: TrajectoryCountValue,
+  count: number,
+  min: number,
+): boolean {
+  if (count >= min || matcher.max !== undefined) {
+    return false;
+  }
+  // A shell span already counted through its tool name cannot add a second match.
+  const unknown = steps.filter(
+    (step) => couldMatchUnresolvedCommand(step, matcher) && !matchesTrajectoryStep(step, matcher),
+  );
+  return count + unknown.length >= min;
+}
+
+function observedToolResult(
+  params: AssertionParams,
+  pass: boolean,
+  reason: string,
+  uncertainArgs = false,
+): GradingResult {
+  if (!pass && !params.inverse) {
+    if (params.traceSpanUncertainty?.missing === Infinity) {
+      reason = params.traceSpanUncertainty.reason;
+    } else if (uncertainArgs) {
+      reason =
+        'Some hosted tool arguments were unavailable. The recorded calls cannot establish this requirement.';
+    }
+  }
+  return { pass, score: pass ? 1 : 0, reason, assertion: params.assertion };
+}
+
 export const handleTrajectoryToolUsed = (params: AssertionParams): GradingResult => {
-  const trace = getTraceOrThrow(params);
-  const steps = extractTrajectorySteps(trace).filter((step) => step.type === 'tool');
+  const steps = getToolSteps(params);
   const expected = resolveToolMatchers(params.renderedValue ?? params.assertion.value);
 
   if (expected.kind === 'list') {
@@ -171,12 +221,7 @@ export const handleTrajectoryToolUsed = (params: AssertionParams): GradingResult
       reason = `Missing required tool(s): ${missingTools.join(', ')}. Actual tools: ${formatStepList(actualTools)}`;
     }
 
-    return {
-      pass,
-      score: pass ? 1 : 0,
-      reason,
-      assertion: params.assertion,
-    };
+    return observedToolResult(params, pass, reason);
   }
 
   const matcher = expected.matcher;
@@ -210,12 +255,12 @@ export const handleTrajectoryToolUsed = (params: AssertionParams): GradingResult
       : `Tool "${matcherLabel}" did not satisfy the forbidden match condition`;
   }
 
-  return {
+  return observedToolResult(
+    params,
     pass,
-    score: pass ? 1 : 0,
     reason,
-    assertion: params.assertion,
-  };
+    !pass && couldReachCommandMinimum(steps, matcher, count, min),
+  );
 };
 
 function resolveSequenceValue(value: unknown): TrajectorySequenceValue {
@@ -429,8 +474,7 @@ function resolveToolArgsMatchValue(value: unknown) {
 }
 
 export const handleTrajectoryToolSequence = (params: AssertionParams): GradingResult => {
-  const trace = getTraceOrThrow(params);
-  const toolSteps = extractTrajectorySteps(trace).filter((step) => step.type === 'tool');
+  const toolSteps = getToolSteps(params);
   const value = resolveSequenceValue(params.renderedValue ?? params.assertion.value);
   const expectedMatchers = value.steps.map((step, index) => {
     const matcher = normalizeTrajectoryMatcher(step, 'tool');
@@ -500,8 +544,7 @@ export const handleTrajectoryToolSequence = (params: AssertionParams): GradingRe
 };
 
 export const handleTrajectoryToolArgsMatch = (params: AssertionParams): GradingResult => {
-  const trace = getTraceOrThrow(params);
-  const toolSteps = extractTrajectorySteps(trace).filter((step) => step.type === 'tool');
+  const toolSteps = getToolSteps(params);
   const { matcher, expectedArgs, mode, defaults, ignore } = resolveToolArgsMatchValue(
     params.renderedValue ?? params.assertion.value,
   );
@@ -509,8 +552,10 @@ export const handleTrajectoryToolArgsMatch = (params: AssertionParams): GradingR
   const actualTools = toolSteps.map(formatTrajectoryStep);
   const matchingSteps = toolSteps.filter((step) => matchesTrajectoryStep(step, matcher));
   const stepsWithArgs = matchingSteps.filter((step) => step.args !== undefined);
-  const matchedStep = stepsWithArgs.find((step) =>
-    matchesToolArgs(step.args, expectedArgs, mode, defaults, ignore),
+  const matchedStep = stepsWithArgs.find(
+    (step) =>
+      !(mode === 'exact' && step.argumentsRedacted) &&
+      matchesToolArgs(step.args, expectedArgs, mode, defaults, ignore),
   );
   const basePass = matchedStep !== undefined;
   const pass = applyInverse(basePass, params.inverse);
@@ -549,12 +594,31 @@ export const handleTrajectoryToolArgsMatch = (params: AssertionParams): GradingR
     reason = `No call to tool "${matcherLabel}" matched expected arguments (${mode}): ${expectedArgsLabel}. Observed args: ${observedArgsLabel}`;
   }
 
-  return {
-    pass,
-    score: pass ? 1 : 0,
-    reason,
-    assertion: params.assertion,
-  };
+  const uncertainArgs =
+    !pass &&
+    !params.inverse &&
+    params.providerResponse.metadata?.hostedTrace?.source === 'openai:agents-api' &&
+    toolSteps.some((step) => {
+      if (!matchesTrajectoryStep(step, matcher) && !couldMatchUnresolvedCommand(step, matcher)) {
+        return false;
+      }
+      if (step.args === undefined) {
+        return true;
+      }
+      // The hosted projection keeps or omits whole fields. Only compare expected keys
+      // that survived. An exact comparison can still rule out an extra retained field.
+      const retained = step.args;
+      const knownExpectation =
+        step.argumentsRedacted && isRecord(expectedArgs) && isRecord(retained)
+          ? Object.fromEntries(
+              Object.entries(expectedArgs).filter(([key]) =>
+                Object.prototype.hasOwnProperty.call(retained, key),
+              ),
+            )
+          : expectedArgs;
+      return matchesToolArgs(retained, knownExpectation, mode, defaults, ignore);
+    });
+  return observedToolResult(params, pass, reason, uncertainArgs);
 };
 
 function resolveStepCountValue(value: unknown): TrajectoryCountValue {
@@ -602,6 +666,22 @@ export const handleTrajectoryStepCount = (params: AssertionParams): GradingResul
   }
 
   let reason = `Matched ${count} trajectory step(s)`;
+  const uncertainty = params.traceSpanUncertainty;
+  if (uncertainty?.candidates.length) {
+    const unresolvedCommands = steps.filter(
+      (step) => couldMatchUnresolvedCommand(step, matcher) && !matchesTrajectoryStep(step, matcher),
+    );
+    const upper = count + uncertainty.candidates.length + unresolvedCommands.length;
+    reason = `Between ${count} and ${upper} trajectory step(s) match`;
+    if (countRangeIsUncertain(count, upper, min, max)) {
+      return {
+        pass: false,
+        score: 0,
+        reason: `${uncertainty.reason} ${reason}.`,
+        assertion: params.assertion,
+      };
+    }
+  }
   if (filterParts.length > 0) {
     reason += ` for ${filterParts.join(', ')}`;
   }
@@ -624,12 +704,12 @@ export const handleTrajectoryStepCount = (params: AssertionParams): GradingResul
       : `Trajectory step count did not satisfy the forbidden range`;
   }
 
-  return {
+  return observedToolResult(
+    params,
     pass,
-    score: pass ? 1 : 0,
     reason,
-    assertion: params.assertion,
-  };
+    !pass && couldReachCommandMinimum(steps, matcher, count, min ?? 0),
+  );
 };
 
 export const handleTrajectoryGoalSuccess = async (

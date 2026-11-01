@@ -4,6 +4,15 @@
 
 export type TraceSpanAttributeFilter = Record<string, string | number | boolean>;
 
+/** Whether the possible integer counts produce different grades for this range. */
+export function countRangeIsUncertain(lower: number, upper: number, min?: number, max?: number) {
+  const minimum = Math.ceil(min ?? 0);
+  const maximum = Math.floor(max ?? Infinity);
+  const couldSatisfy = minimum <= maximum && upper >= minimum && lower <= maximum;
+  const mustSatisfy = lower >= minimum && upper <= maximum;
+  return couldSatisfy && !mustSatisfy;
+}
+
 export function withTraceAttributeFilterContext(
   reason: string,
   attributes?: TraceSpanAttributeFilter,

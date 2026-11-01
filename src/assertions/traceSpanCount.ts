@@ -1,4 +1,5 @@
 import {
+  countRangeIsUncertain,
   filterTraceSpans,
   finishTraceAssertion,
   withTraceAttributeFilterContext,
@@ -40,11 +41,7 @@ export const handleTraceSpanCount = (params: AssertionParams): GradingResult => 
     found = Number.isFinite(upper)
       ? `Between ${count} and ${upper} spans match pattern "${pattern}"`
       : `At least ${count} spans match pattern "${pattern}"`;
-    const minCount = Math.ceil(min ?? 0);
-    const maxCount = Math.floor(max ?? Infinity);
-    const couldSatisfy = minCount <= maxCount && upper >= minCount && count <= maxCount;
-    const mustSatisfy = count >= minCount && upper <= maxCount;
-    if (couldSatisfy && !mustSatisfy) {
+    if (countRangeIsUncertain(count, upper, min, max)) {
       // The possible counts give different grades, even after inversion.
       return {
         pass: false,

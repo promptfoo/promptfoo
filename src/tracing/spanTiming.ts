@@ -3,7 +3,7 @@ import type { SpanData } from './store';
 export const HOSTED_START_TIME_OFFSET_NS = 'promptfoo.openai.start_time_offset_ns';
 export const HOSTED_DURATION_NS = 'promptfoo.openai.duration_ns';
 
-function nativeStartOffsetNs(span: SpanData): number {
+export function nativeStartOffsetNs(span: SpanData): number {
   const offset = span.attributes?.[HOSTED_START_TIME_OFFSET_NS];
   return typeof span.attributes?.['promptfoo.openai.hosted_trace'] === 'string' &&
     Number.isSafeInteger(offset)
@@ -18,7 +18,7 @@ function hasNativeDuration(span: SpanData): boolean {
   );
 }
 
-function getNativeSpanDurationNs(span: SpanData): bigint | undefined {
+export function getNativeSpanDurationNs(span: SpanData): bigint | undefined {
   const raw = span.attributes?.[HOSTED_DURATION_NS];
   if (
     !hasNativeDuration(span) ||

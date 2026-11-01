@@ -862,7 +862,7 @@ export interface AssertionParams {
   providerCallContext?: CallApiContextParams;
   /** Context passed to assertion value functions */
   assertionValueContext: AssertionValueFunctionContext;
-  /** Missing ancestors and recorded spans whose raw filters could not be resolved. */
+  /** Missing spans and recorded candidates whose evidence could not be resolved. */
   traceSpanUncertainty?: { missing: number; candidates: TraceSpan[]; reason: string };
   cost?: number;
   inverse: boolean;
