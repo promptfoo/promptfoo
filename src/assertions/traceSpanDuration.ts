@@ -1,4 +1,4 @@
-import { filterTraceSpans, traceVerdict, withTraceAttributeFilterContext } from './traceUtils';
+import { filterTraceSpans, traceVerdict, validateTraceLimit } from './traceUtils';
 
 import type { AssertionParams, GradingResult } from '../types/index';
 import type { TraceSpan } from '../types/tracing';
@@ -37,12 +37,8 @@ export const handleTraceSpanDuration = ({
 
   const { pattern = '*', max, percentile, attributes } = value;
 
-  if (
-    percentile !== undefined &&
-    (!Number.isFinite(percentile) || percentile < 0 || percentile > 100)
-  ) {
-    throw new Error('trace-span-duration assertion percentile must be a number between 0 and 100');
-  }
+  validateTraceLimit(max, 'trace-span-duration assertion max');
+  validateTraceLimit(percentile, 'trace-span-duration assertion percentile', 100);
 
   const spans = assertionValueContext.trace.spans as TraceSpan[];
 
@@ -56,10 +52,8 @@ export const handleTraceSpanDuration = ({
       assertion,
       inverse,
       true,
-      withTraceAttributeFilterContext(
-        `No spans found matching pattern "${pattern}" with complete timing data`,
-        attributes,
-      ),
+      `No spans found matching pattern "${pattern}" with complete timing data`,
+      attributes,
     );
   }
 
@@ -106,10 +100,5 @@ export const handleTraceSpanDuration = ({
     }
   }
 
-  return traceVerdict(
-    assertion,
-    inverse,
-    pass,
-    withTraceAttributeFilterContext(reason, attributes),
-  );
+  return traceVerdict(assertion, inverse, pass, reason, attributes);
 };

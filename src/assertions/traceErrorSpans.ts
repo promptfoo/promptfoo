@@ -1,4 +1,4 @@
-import { filterTraceSpans, traceVerdict, withTraceAttributeFilterContext } from './traceUtils';
+import { filterTraceSpans, traceVerdict, validateTraceLimit } from './traceUtils';
 
 import type { AssertionParams, GradingResult } from '../types/index';
 import type { TraceSpan } from '../types/tracing';
@@ -88,8 +88,12 @@ export const handleTraceErrorSpans = ({
     maxPercentage = objValue.max_percentage;
     pattern = objValue.pattern || '*';
     attributes = objValue.attributes;
+  } else if (value !== undefined) {
+    throw new Error('trace-error-spans assertion value must be a number or an object');
   }
 
+  validateTraceLimit(maxCount, 'trace-error-spans assertion max_count');
+  validateTraceLimit(maxPercentage, 'trace-error-spans assertion max_percentage', 100);
   if (maxCount === undefined && maxPercentage === undefined) {
     maxCount = 0; // Default to no errors allowed
   }
@@ -104,7 +108,8 @@ export const handleTraceErrorSpans = ({
       assertion,
       inverse,
       true,
-      withTraceAttributeFilterContext(`No spans found matching pattern "${pattern}"`, attributes),
+      `No spans found matching pattern "${pattern}"`,
+      attributes,
     );
   }
 
@@ -149,10 +154,5 @@ export const handleTraceErrorSpans = ({
     }
   }
 
-  return traceVerdict(
-    assertion,
-    inverse,
-    pass,
-    withTraceAttributeFilterContext(reason, attributes),
-  );
+  return traceVerdict(assertion, inverse, pass, reason, attributes);
 };
