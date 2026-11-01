@@ -957,6 +957,8 @@ tests:
 
 `mode: in_order` is the default and allows extra tool steps in between the expected ones. `mode: exact` requires the traced tool sequence to match exactly.
 
+Overlapping tool calls are ordered by start time. Imported hosted OpenAI Agents API traces preserve nanosecond differences between starts. When the available start times are equal, the earlier end time sorts first.
+
 #### Asserting batched vs sequential tool calls {#trajectorytool-sequence-batching}
 
 `tool-sequence` checks _which_ tools ran in _which_ order. For providers that expose internal model-generation spans, you can also assert that the agent issued multiple tool calls in a single LLM round-trip (batched/parallel) rather than across separate rounds (sequential). Assert this via the `gen_ai.turn.index` tag on the tool spans — both tool calls must carry the **same** index. See [Turn marker spans](/docs/tracing#per-llm-turn-spans) for the per-provider details.
@@ -1196,6 +1198,8 @@ assert:
       max: 2000
 ```
 
+Target assertions include application tool calls from OTLP telemetry and external trace providers even when the application supplies Promptfoo ownership attributes.
+
 A span must match both `pattern` and every attribute. Attribute keys are literal, including dots; values use case-sensitive exact equality without glob matching or type conversion. Values must be strings, booleans, or finite numbers. Missing attributes do not match, while an empty object adds no restriction. Duration percentiles and error percentages use only the selected spans. If matching spans must exist, include a `trace-span-count` assertion with `min: 1`; duration and error assertions retain their existing behavior when no spans match.
 
 ### Trace-Span-Duration
@@ -1236,7 +1240,7 @@ Key features:
 - `max`: Maximum allowed duration in milliseconds
 - `percentile` (optional): Check percentile instead of all spans (e.g., 50 for median, 95 for 95th percentile). Must be a number from 0 to 100 inclusive; out-of-range values cause an assertion error. Use the 0-100 scale, not 0-1 — `0.95` is accepted as the 0.95th percentile (effectively the fastest span), not p95
 
-The assertion will show the slowest spans when a threshold is exceeded, making it easy to identify performance bottlenecks.
+For new hosted OpenAI Agents API traces, Promptfoo compares the integer nanosecond duration with your millisecond threshold before rounding for display. If a redacted field leaves a span’s membership in the filter uncertain, a maximum or percentile can still be graded when including or excluding that span yields the same verdict. Add a `trace-span-count` minimum if the selected group must contain a span.
 
 ### Trace-Error-Spans
 
@@ -1247,6 +1251,8 @@ When regrading a saved hosted OpenAI trace, an older import can contain a status
 :::note
 Enable tracing for this assertion. It fails if collection is incomplete or no spans were saved.
 :::
+
+Pair a zero-error check with a positive tool check when the tool is required. On a partial hosted OpenAI Agents API trace, a recorded error can disprove a zero-error budget. A clean subset cannot prove the whole turn had zero errors. The importer recognizes signals such as `error: true` and `http.status_code: 500` on the span or its resource, with span attributes taking precedence. It saves the error status and omits diagnostic text. A tool can have an observed error even when telemetry dropped other attributes. A zero-error check needs enough evidence for every selected span. If an older export lacks that evidence, run the eval again. [Hosted command example](/docs/providers/openai-agents-api#inspect-traces)
 
 Example:
 
