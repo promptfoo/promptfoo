@@ -246,6 +246,18 @@ function stripHeadersByName(headers: Record<string, string>, names: Set<string>)
 }
 
 /**
+ * True when a request body is a web ReadableStream that can be teed for
+ * replay across redirect hops. String, Buffer, and other replayable bodies
+ * need no tee; async-iterable bodies have no tee and keep their existing
+ * behavior.
+ */
+function isTeeableStreamBody(body: unknown): body is ReadableStream {
+  return (
+    typeof body === 'object' && body !== null && typeof (body as ReadableStream).tee === 'function'
+  );
+}
+
+/**
  * Compute the request options for following a redirect hop, mirroring the
  * fetch spec: 301/302/303 downgrade to GET with the body dropped (303 for any
  * non-HEAD method), 307/308 preserve method and body, and credentials are
@@ -359,6 +371,24 @@ async function fetchWithRedirectValidation(
     }
 
     try {
+      // A stream body can only be consumed once, but a 307/308 hop must
+      // replay it: tee the stream before each hop and carry the untouched
+      // branch forward, so the next hop gets a fresh stream instead of the
+      // disturbed one. Native fetch replays the POST the same way; without
+      // this the second fetch fails on the disturbed stream. A stream that
+      // cannot be teed (already disturbed or locked) is left for the fetch
+      // to fail on as it would have before.
+      let carriedBody: ReadableStream | undefined;
+      if (isTeeableStreamBody(currentOptions.body)) {
+        try {
+          const [branch, rest] = currentOptions.body.tee();
+          currentOptions.body = branch;
+          carriedBody = rest;
+        } catch {
+          // Leave the body untouched; the fetch below fails as before.
+        }
+      }
+
       const response = await monkeyPatchFetch(currentUrl, currentOptions);
       const location = response.headers.get('location');
       if (!isRedirectStatus(response.status) || !location) {
@@ -385,6 +415,11 @@ async function fetchWithRedirectValidation(
         nextUrl,
         currentOptions,
       );
+      // A downgrade (301/302/303 to GET) deletes the body, so only a
+      // preserved-method hop replays the carried branch.
+      if (carriedBody !== undefined && nextOptions.body !== undefined) {
+        nextOptions.body = carriedBody;
+      }
 
       logger.debug('[fetchWithProxy] Following guarded redirect', {
         from: sanitizeUrlForLogging(currentUrl),
@@ -538,10 +573,33 @@ export async function fetchWithProxy(
       }
     }
   }
+  // Inside a guarded server-route context, redirects are followed manually so
+  // every hop can be re-validated; otherwise a single automatic fetch is used.
+  // The context is request-scoped: the process-wide
+  // `PROMPTFOO_BLOCK_PRIVATE_RANGES` flag alone must not switch unrelated
+  // callers in the same process (for example eval runs against local targets)
+  // into private-hop validation.
+  const guardRedirects = isPrivateRangeGuardContextActive();
+
   const proxyUrl = finalUrlString ? getProxyForUrl(finalUrlString) : '';
 
   if (proxyUrl && logEnabled) {
     logger.debug(`Using proxy: ${sanitizeUrl(proxyUrl)}`);
+  }
+  // Inside the guard context, do NOT bind a pooled dispatcher here:
+  // fetchWithRedirectValidation reads options.dispatcher as the
+  // caller-supplied dispatcher, and a pooled one would make it look
+  // caller-supplied on every hop, so the per-hop proxy recomputation there
+  // would never run. The validation function binds the per-hop dispatcher
+  // itself.
+  if (guardRedirects) {
+    return fetchWithTransientRetries(
+      finalUrl,
+      finalOptions,
+      getAuthHeaders,
+      logEnabled,
+      tlsOptions,
+    );
   }
   // Hold the same transport across asynchronous auth, redirects and retry backoff.
   const agent = acquireAgent(proxyUrl, tlsOptions);

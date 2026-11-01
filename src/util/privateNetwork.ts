@@ -266,6 +266,9 @@ interface ProviderTarget {
     useHttps?: unknown;
     server?: unknown;
     servers?: unknown;
+    transformRequest?: unknown;
+    transformResponse?: unknown;
+    responseParser?: unknown;
   };
 }
 
@@ -611,6 +614,19 @@ function getRawRequestTarget(rawRequest: string, useHttps: boolean): string {
  *   outright: the registry executes these outside the fetch layer, so
  *   neither the preflight nor redirect validation would see the network
  *   access they perform,
+ * - a provider id carrying an unresolved template (`{{ ... }}`), refused
+ *   outright: `loadApiProvider` renders env templates after this preflight
+ *   runs, so the rendered id could be a script provider or a private URL
+ *   this check never saw, and reproducing the loader's env merge here
+ *   would risk a divergence the bypass could hide in,
+ * - a string HttpProvider transform (`config.transformRequest`,
+ *   `config.transformResponse`, `config.responseParser`), refused
+ *   outright: the provider compiles the string with `new Function` and
+ *   runs it before dispatch (request) or after fetch (response) with a
+ *   process shim that exposes `require`, so a public URL must not mask
+ *   code that can reach private services outside `fetchWithProxy`. A
+ *   function value cannot arrive over a JSON route body and is left
+ *   alone,
  * - a named provider whose default endpoint is local (ollama, llama,
  *   litellm, openclaw, ...), validated against its effective default base
  *   URL, unless the provider resolves an explicit `config.apiBaseUrl`
@@ -636,9 +652,22 @@ export function getCallerSuppliedBaseUrls(providerOptions: ProviderTarget): stri
   if (typeof rawRequest === 'string' && rawRequest.length > 0) {
     urls.push(getRawRequestTarget(rawRequest, config?.useHttps === true));
   }
+  for (const key of ['transformRequest', 'transformResponse', 'responseParser'] as const) {
+    const transform = config?.[key];
+    if (typeof transform === 'string' && transform.length > 0) {
+      throw new PrivateRangeBlockedError(
+        `PROMPTFOO_BLOCK_PRIVATE_RANGES is set: refusing provider with a string ${key} transform that would execute outside the fetch guard`,
+      );
+    }
+  }
   const id = providerOptions?.id;
   if (typeof id !== 'string' || id.length === 0) {
     return urls;
+  }
+  if (id.includes('{{')) {
+    throw new PrivateRangeBlockedError(
+      'PROMPTFOO_BLOCK_PRIVATE_RANGES is set: refusing provider id with an unresolved template whose rendered target cannot be validated before loading',
+    );
   }
   if (id.startsWith('file://') && (isProviderConfigFileReference(id) || id.includes('{{'))) {
     throw new PrivateRangeBlockedError(

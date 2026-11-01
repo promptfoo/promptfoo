@@ -841,4 +841,82 @@ describe('assertProviderTargetPublic', () => {
       }),
     ).rejects.toThrow(PrivateRangeBlockedError);
   });
+
+  it('refuses a string transformRequest that HttpProvider would compile and run', async () => {
+    restoreEnv = mockProcessEnv({ PROMPTFOO_BLOCK_PRIVATE_RANGES: 'true' });
+    // HttpProvider compiles a string transformRequest with new Function
+    // and runs it before dispatch, outside fetchWithProxy, with a process
+    // shim that exposes require: a public URL must not mask code that can
+    // reach private services on its own.
+    await expect(
+      assertProviderTargetPublic({
+        id: 'http',
+        config: {
+          url: 'https://public.example.com/hook',
+          transformRequest:
+            "process.mainModule.require('http').get('http://169.254.169.254/'); return prompt",
+        },
+      }),
+    ).rejects.toThrow(PrivateRangeBlockedError);
+    expect(mockedLookup).not.toHaveBeenCalled();
+  });
+
+  it('refuses a string transformResponse that HttpProvider would compile and run', async () => {
+    restoreEnv = mockProcessEnv({ PROMPTFOO_BLOCK_PRIVATE_RANGES: 'true' });
+    await expect(
+      assertProviderTargetPublic({
+        id: 'http',
+        config: {
+          url: 'https://public.example.com/hook',
+          transformResponse:
+            "process.mainModule.require('http').get('http://169.254.169.254/'); return json",
+        },
+      }),
+    ).rejects.toThrow(PrivateRangeBlockedError);
+    expect(mockedLookup).not.toHaveBeenCalled();
+  });
+
+  it('refuses a string responseParser that HttpProvider would compile and run', async () => {
+    restoreEnv = mockProcessEnv({ PROMPTFOO_BLOCK_PRIVATE_RANGES: 'true' });
+    await expect(
+      assertProviderTargetPublic({
+        id: 'http',
+        config: {
+          url: 'https://public.example.com/hook',
+          responseParser:
+            "process.mainModule.require('http').get('http://169.254.169.254/'); return json",
+        },
+      }),
+    ).rejects.toThrow(PrivateRangeBlockedError);
+    expect(mockedLookup).not.toHaveBeenCalled();
+  });
+
+  it('does not refuse a function transform, which cannot arrive over a JSON route', async () => {
+    restoreEnv = mockProcessEnv({ PROMPTFOO_BLOCK_PRIVATE_RANGES: 'true' });
+    // Only string transforms compile to code execution at load time; a
+    // function value is already in-process code, and JSON route bodies
+    // cannot carry one.
+    mockedLookup.mockResolvedValue([{ address: '93.184.216.34', family: 4 } as LookupAddress]);
+    await expect(
+      assertProviderTargetPublic({
+        id: 'http',
+        config: {
+          url: 'https://public.example.com/hook',
+          transformRequest: () => 'prompt',
+        },
+      }),
+    ).resolves.toBeUndefined();
+  });
+
+  it('refuses a provider id carrying an unresolved env template', async () => {
+    restoreEnv = mockProcessEnv({ PROMPTFOO_BLOCK_PRIVATE_RANGES: 'true' });
+    // The preflight sees this id as a non-script literal, but loadApiProvider
+    // renders env templates afterward: with OPENAI_API_KEY set to an exec:
+    // value the registry would execute a script provider the preflight
+    // never saw. Refusing unresolved templates keeps the check fail closed.
+    await expect(assertProviderTargetPublic({ id: '{{ env.OPENAI_API_KEY }}' })).rejects.toThrow(
+      PrivateRangeBlockedError,
+    );
+    expect(mockedLookup).not.toHaveBeenCalled();
+  });
 });
