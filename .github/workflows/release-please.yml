@@ -121,7 +121,7 @@ jobs:
       - &upload-npm-package
         name: Upload npm package
         id: upload
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: promptfoo-npm-package
           path: ${{ steps.package-artifact.outputs.tarball }}
@@ -460,7 +460,7 @@ jobs:
       # publication jobs. The hidden source manifest is required by the mirror
       # repository's reproducible-build validation.
       - name: Upload release payload for attestation
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: code-scan-action-release-payload
           if-no-files-found: error
