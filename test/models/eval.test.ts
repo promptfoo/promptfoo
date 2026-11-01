@@ -21,7 +21,6 @@ import {
   type EvaluateSummaryV3,
   type Prompt,
   ResultFailureReason,
-  type ResultsFile,
 } from '../../src/types/index';
 import { updateResult, writeResultsToDatabase } from '../../src/util/database';
 import { redactAzureBlobSasTokens } from '../../src/util/sanitizer';
@@ -1633,22 +1632,22 @@ describe('evaluator', () => {
       expect(JSON.stringify(evaluation.config)).toContain(gateway);
     });
 
-    it('includes stored traces in the typed results file', async () => {
+    it('exports stored traces and spans', async () => {
       const evaluation = await EvalFactory.create();
       const traceStore = new TraceStore();
+      const traceId = 'results-file-trace';
       await traceStore.createTrace({
-        traceId: 'results-file-trace',
+        traceId,
         evaluationId: evaluation.id,
         testCaseId: 'test-case-id',
       });
-      await traceStore.addSpans('results-file-trace', [
+      await traceStore.addSpans(traceId, [
         { spanId: 'results-file-span', name: 'provider-call', startTime: 1 },
       ]);
 
-      const results: ResultsFile = await evaluation.toResultsFile();
+      const { traces } = await evaluation.toResultsFile();
 
-      expect(results.traces?.map((trace) => trace.traceId)).toEqual(['results-file-trace']);
-      expect(results.traces?.[0].spans.map((span) => span.spanId)).toEqual(['results-file-span']);
+      expect(traces).toMatchObject([{ traceId, spans: [{ spanId: 'results-file-span' }] }]);
     });
 
     it('drops malformed trace-provider headers when exporting older evaluations', async () => {
