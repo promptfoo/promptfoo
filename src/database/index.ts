@@ -309,7 +309,10 @@ function serializeTopLevelOperations(
   type TransactionCallback = Parameters<typeof transaction>[0];
   type TransactionContext = Parameters<TransactionCallback>[0];
 
-  type TransactionScope = { transaction: TransactionContext | undefined };
+  type TransactionScope = {
+    transaction: TransactionContext | undefined;
+    failedWrite?: { error: unknown };
+  };
   const activeTransaction = new AsyncLocalStorage<TransactionScope>();
   let operationQueue = Promise.resolve();
   let closing = false;
@@ -372,7 +375,11 @@ function serializeTopLevelOperations(
             const scope: TransactionScope = { transaction: tx };
             return activeTransaction.run(scope, async () => {
               try {
-                return await callback(tx);
+                const result = await callback(tx);
+                if (scope.failedWrite) {
+                  throw scope.failedWrite.error;
+                }
+                return result;
               } finally {
                 // Async resources can outlive the callback. Their root operations
                 // must queue normally instead of reusing a completed transaction.
@@ -440,14 +447,21 @@ function serializeTopLevelOperations(
 
   return Object.assign(db, {
     async runGuardedWrite(statement: GuardedStatement, checkWrite: () => void, deadline?: number) {
-      const current = activeTransaction.getStore()?.transaction;
-      if (!current) {
+      const scope = activeTransaction.getStore();
+      const current = scope?.transaction;
+      if (!current || !scope) {
         return runGuardedWrite(statement, checkWrite, deadline);
       }
-      // As with nested db.transaction(), the caller owns commit or rollback.
       checkWrite();
-      await current.run(statement);
-      checkWrite();
+      try {
+        await current.run(statement);
+        checkWrite();
+      } catch (error) {
+        // The write may already be applied. Even if the callback catches this error,
+        // its transaction must roll back; a savepoint could undo concurrent sibling writes.
+        scope.failedWrite ??= { error };
+        throw error;
+      }
     },
   });
 }
