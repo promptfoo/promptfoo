@@ -21,13 +21,14 @@ async function ensureNaturalPackage(): Promise<void> {
   }
 
   try {
-    // Dynamic import for ESM compatibility
-    const natural = await import('natural');
+    // Native ESM imports expose Natural's CommonJS exports under default.
+    const naturalModule = await import('natural');
+    const natural = 'default' in naturalModule ? naturalModule.default : naturalModule;
     PorterStemmer = natural.PorterStemmer;
     WordNet = natural.WordNet;
   } catch (_err) {
     throw new Error(
-      'The "natural" package is required for METEOR assertions. Install it with: npm install natural@^8.1.0',
+      'The "natural" package is required for METEOR assertions. Install it with: npm install natural@^8.1.2',
     );
   }
 }
@@ -178,10 +179,10 @@ async function calculateSingleMeteorScore(
   const [stemMatches, remainingCandidateAfterStem, remainingReferenceAfterStem] =
     await matchStemEnums(remainingCandidate, remainingReference);
 
-  // Stage 3: Synonym matches
+  // WordNet indexes original words, while the previous stage compares stems.
   const synonymMatches = await matchSynonymEnums(
-    remainingCandidateAfterStem,
-    remainingReferenceAfterStem,
+    remainingCandidateAfterStem.map(([idx]) => enumCandidate[idx]),
+    remainingReferenceAfterStem.map(([idx]) => enumReference[idx]),
   );
 
   // Combine all matches
