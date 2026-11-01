@@ -1,9 +1,5 @@
 import readline from 'readline';
 
-/**
- * Factory function for creating readline interface.
- * This abstraction makes it easier to mock in tests and prevents open handles.
- */
 export function createReadlineInterface(): readline.Interface {
   return readline.createInterface({
     input: process.stdin,
@@ -11,46 +7,23 @@ export function createReadlineInterface(): readline.Interface {
   });
 }
 
-/**
- * Prompts the user with a question and returns their answer.
- * Automatically handles cleanup of the readline interface.
- */
+/** Rejects if stdin closes before a line is submitted. */
 export async function promptUser(question: string): Promise<string> {
-  return new Promise((resolve, reject) => {
-    let rl: readline.Interface | null = null;
-    let settled = false;
+  const closedMessage = 'Input closed before an answer was received';
+  if (!process.stdin.readable) {
+    throw new Error(closedMessage);
+  }
 
-    try {
-      rl = createReadlineInterface();
-
-      // Handle errors
-      rl.on('error', (err) => {
-        settled = true;
-        rl!.close();
-        reject(err);
-      });
-
-      // Readline closes on EOF without invoking the question callback.
-      rl.on('close', () => {
-        if (!settled) {
-          settled = true;
-          reject(new Error('Input closed before an answer was received'));
-        }
-      });
-
-      rl.question(question, (answer) => {
-        settled = true;
-        rl!.close();
-        resolve(answer);
-      });
-    } catch (err) {
-      settled = true;
-      if (rl) {
-        rl.close();
-      }
-      reject(err);
-    }
-  });
+  const rl = createReadlineInterface();
+  try {
+    return await new Promise<string>((resolve, reject) => {
+      rl.once('error', reject);
+      rl.once('close', () => reject(new Error(closedMessage)));
+      rl.question(question, resolve);
+    });
+  } finally {
+    rl.close();
+  }
 }
 
 /**
