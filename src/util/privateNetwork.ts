@@ -406,6 +406,47 @@ function getUrlFromProviderId(id: string): string | undefined {
 }
 
 /**
+ * Provider ids that execute caller-chosen code instead of fetching a URL.
+ * With the flag set, the guarded routes must refuse these before any
+ * provider is loaded: the registry routes them to code execution outside
+ * the fetch layer, so neither the preflight nor redirect validation would
+ * see the network access they perform. `exec:` runs an arbitrary command
+ * (ScriptCompletionProvider via execFile), `python:`/`golang:`/`ruby:`
+ * run caller-chosen scripts, and the JS factory's suffix match is
+ * prefix-agnostic, so any `file://` script module or bare JS/TS path is
+ * loaded as a custom module. The shapes mirror the factories exactly:
+ * prefixed ids, `file://` script modules (including the
+ * `file://script.py:function` form the script factories accept), and bare
+ * JS/TS module paths. A bare `.py`/`.go`/`.rb` path matches no factory,
+ * so it is left for the loader to reject without executing. The JS
+ * factory's suffix match is case-insensitive, unlike the script
+ * factories, so the JS check lowercases the path.
+ */
+const SCRIPT_PROVIDER_PREFIXES = ['exec:', 'python:', 'golang:', 'ruby:'];
+const JAVASCRIPT_FILE_EXTENSIONS = ['js', 'cjs', 'mjs', 'ts', 'cts', 'mts'];
+// Extensions the script factories route from file:// paths (the JS
+// factory below is suffix-only, so its extensions stay out of this list).
+const SCRIPT_FACTORY_EXTENSIONS = ['py', 'go', 'rb'];
+
+function isScriptProviderId(id: string): boolean {
+  if (SCRIPT_PROVIDER_PREFIXES.some((prefix) => id.startsWith(prefix))) {
+    return true;
+  }
+  if (id.startsWith('file://')) {
+    const scriptPath = id.slice('file://'.length);
+    if (
+      SCRIPT_FACTORY_EXTENSIONS.some(
+        (ext) => scriptPath.endsWith(`.${ext}`) || scriptPath.includes(`.${ext}:`),
+      )
+    ) {
+      return true;
+    }
+    return JAVASCRIPT_FILE_EXTENSIONS.some((ext) => scriptPath.toLowerCase().endsWith(`.${ext}`));
+  }
+  return JAVASCRIPT_FILE_EXTENSIONS.some((ext) => id.toLowerCase().endsWith(`.${ext}`));
+}
+
+/**
  * Derive the effective fetch target of an HttpProvider raw request
  * (`config.request`), mirroring `callApiWithRawRequest`: the Host header is
  * the effective authority (the provider strips an absolute-form request
@@ -499,6 +540,11 @@ function getRawRequestTarget(rawRequest: string, useHttps: boolean): string {
  *   instantiates that, so the preflight sees no URL here, and resolving
  *   the saved target here would drag the Cloud client into this shared
  *   guard. Refusal keeps the flag fail closed,
+ * - a script provider id (`exec:`, `python:`, `golang:`, `ruby:`, a
+ *   `file://` script module, or a bare JS/TS module path), refused
+ *   outright: the registry executes these outside the fetch layer, so
+ *   neither the preflight nor redirect validation would see the network
+ *   access they perform,
  * - a named provider whose default endpoint is local (ollama, llama,
  *   litellm, openclaw, ...), validated against its effective default base
  *   URL, unless the provider resolves an explicit `config.apiBaseUrl`
@@ -536,6 +582,11 @@ export function getCallerSuppliedBaseUrls(providerOptions: ProviderTarget): stri
   if (id.startsWith(CLOUD_PROVIDER_PREFIX)) {
     throw new PrivateRangeBlockedError(
       'PROMPTFOO_BLOCK_PRIVATE_RANGES is set: refusing cloud provider reference whose saved target cannot be validated before loading',
+    );
+  }
+  if (isScriptProviderId(id)) {
+    throw new PrivateRangeBlockedError(
+      'PROMPTFOO_BLOCK_PRIVATE_RANGES is set: refusing script provider reference whose code would execute outside the fetch guard',
     );
   }
   const idUrl = getUrlFromProviderId(id);

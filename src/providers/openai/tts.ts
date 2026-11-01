@@ -7,6 +7,7 @@ import {
   HttpRateLimitError,
   isAbortError,
 } from '../../util/fetch/errors';
+import { partitionInFlightKeyByGuardContext } from '../../util/fetch/guardContext';
 import { fetchWithRetries } from '../../util/fetch/index';
 import { isSecretField, sanitizeUrl } from '../../util/sanitizer';
 import { getRequestTimeoutMs } from '../shared';
@@ -147,18 +148,23 @@ async function coalesceRequest(
   cacheKey: string,
   request: () => Promise<ProviderResponse>,
 ): Promise<ProviderResponse> {
-  const inFlight = inFlightRequests.get(cacheKey);
+  // Same guard-context partition as Mistral and moderation. This path is
+  // currently unreachable inside the guard context (useCache is false
+  // there because isCacheEnabled() is false), but the partition keeps it
+  // safe if that gating ever changes, at no cost to the unguarded path.
+  const partitionedKey = partitionInFlightKeyByGuardContext(cacheKey);
+  const inFlight = inFlightRequests.get(partitionedKey);
   if (inFlight) {
     const result = await inFlight;
     return result.error ? result : { ...result, cached: true, cost: 0 };
   }
 
   const pending = request();
-  inFlightRequests.set(cacheKey, pending);
+  inFlightRequests.set(partitionedKey, pending);
   try {
     return await pending;
   } finally {
-    inFlightRequests.delete(cacheKey);
+    inFlightRequests.delete(partitionedKey);
   }
 }
 

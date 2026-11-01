@@ -432,6 +432,12 @@ function seedRequestOwnedOptions(
   }
   finalOptions.referrer ??= url.referrer;
   finalOptions.credentials ??= url.credentials;
+  // A Request-owned redirect mode must survive the same way: the guarded
+  // path forwards only the URL string plus an options object, so without
+  // this seeding fetchWithRedirectValidation would see the default follow
+  // mode instead of the Request's manual/error mode. Explicit options win,
+  // mirroring fetch(Request, init).
+  finalOptions.redirect ??= url.redirect;
 }
 
 export async function fetchWithProxy(

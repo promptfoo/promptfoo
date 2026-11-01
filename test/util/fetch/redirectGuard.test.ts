@@ -120,6 +120,56 @@ describe('fetchWithProxy guarded redirects (PROMPTFOO_BLOCK_PRIVATE_RANGES)', ()
     expect(firstOptions.body).not.toBeUndefined();
   });
 
+  it('preserves a Request-owned manual redirect mode in the guarded path', async () => {
+    restoreEnv = mockProcessEnv({ PROMPTFOO_BLOCK_PRIVATE_RANGES: 'true' });
+    mockedMonkeyPatchFetch.mockResolvedValueOnce(
+      redirectResponse('https://public.example.com/next'),
+    );
+    mockedMonkeyPatchFetch.mockResolvedValueOnce(new Response('ok', { status: 200 }));
+
+    // Without seeding, fetchWithRedirectValidation sees the default
+    // follow mode and follows the redirect; a manual Request must get
+    // the 302 itself, so it can inspect the Location.
+    const request = new Request('https://public.example.com/start', {
+      redirect: 'manual',
+    });
+    const response = await guardedFetch(request);
+
+    expect(response.status).toBe(302);
+    expect(mockedMonkeyPatchFetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('preserves a Request-owned error redirect mode in the guarded path', async () => {
+    restoreEnv = mockProcessEnv({ PROMPTFOO_BLOCK_PRIVATE_RANGES: 'true' });
+    mockedMonkeyPatchFetch.mockResolvedValueOnce(
+      redirectResponse('https://public.example.com/next'),
+    );
+    mockedMonkeyPatchFetch.mockResolvedValueOnce(new Response('ok', { status: 200 }));
+
+    const request = new Request('https://public.example.com/start', {
+      redirect: 'error',
+    });
+    await expect(guardedFetch(request)).rejects.toThrow(/redirects are not allowed/);
+  });
+
+  it('lets an explicit init redirect mode win over the Request-owned mode', async () => {
+    restoreEnv = mockProcessEnv({ PROMPTFOO_BLOCK_PRIVATE_RANGES: 'true' });
+    mockedMonkeyPatchFetch.mockResolvedValueOnce(
+      redirectResponse('https://public.example.com/next'),
+    );
+    mockedMonkeyPatchFetch.mockResolvedValueOnce(new Response('ok', { status: 200 }));
+
+    // Explicit options win, mirroring fetch(Request, init): the manual
+    // Request mode is overridden, so the public redirect is followed.
+    const request = new Request('https://public.example.com/start', {
+      redirect: 'manual',
+    });
+    const response = await guardedFetch(request, { redirect: 'follow' });
+
+    expect(response.status).toBe(200);
+    expect(mockedMonkeyPatchFetch).toHaveBeenCalledTimes(2);
+  });
+
   it('does not intercept redirects when the flag is unset', async () => {
     restoreEnv = mockProcessEnv({ PROMPTFOO_BLOCK_PRIVATE_RANGES: undefined });
     mockedMonkeyPatchFetch.mockResolvedValueOnce(new Response('ok', { status: 200 }));
