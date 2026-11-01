@@ -1872,12 +1872,7 @@ async function runEvalInternal(
           },
         );
     const traceId = getTraceId(traceContext);
-    if (
-      traceContext &&
-      traceId &&
-      hasTraceAwareAssertions(test.assert) &&
-      !isExternalTraceProvider(testSuite?.tracing?.provider)
-    ) {
+    if (traceContext && traceId && !isExternalTraceProvider(testSuite?.tracing?.provider)) {
       traceContext = { ...traceContext, localExport: trackLocalTrace(traceId) };
     }
     const executionTraceContext = traceContext;
