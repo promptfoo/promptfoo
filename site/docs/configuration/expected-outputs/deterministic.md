@@ -1552,7 +1552,7 @@ For additional context, read about the metric on [Wikipedia](https://en.wikipedi
 METEOR requires the optional `natural` package. Install it before using METEOR assertions:
 
 ```bash
-npm install natural@^8.1.0
+npm install natural@^8.1.2
 ```
 
 If the package is not installed, METEOR assertions return a failed result (`pass: false`, `score: 0`) with installation instructions in the reason.

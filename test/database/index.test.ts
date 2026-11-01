@@ -4,6 +4,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 
+import { sqliteTable, text } from 'drizzle-orm/sqlite-core';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import cliState from '../../src/cliState';
 import {
@@ -626,6 +627,105 @@ describe('database', () => {
       await expect(
         db.all<{ id: string }>('SELECT id FROM nested_transaction_test ORDER BY id'),
       ).resolves.toEqual([{ id: 'inner' }, { id: 'outer' }]);
+    });
+
+    it.each(['abort', 'deadline'])(
+      'rolls back the caller transaction after a caught post-write %s failure',
+      async (failure) => {
+        const db = await getDb();
+        const table = sqliteTable('guarded_nested_write_test', { id: text('id').primaryKey() });
+        await db.run('CREATE TABLE guarded_nested_write_test (id TEXT PRIMARY KEY)');
+        const controller = new AbortController();
+        const rejection = new Error(`Nested write ${failure}`);
+        const deadline = Date.now() + 1_000;
+        let checks = 0;
+        vi.useFakeTimers({ toFake: ['Date'] });
+        try {
+          await expect(
+            db.transaction(async (tx) => {
+              await tx.insert(table).values({ id: 'before' });
+              await expect(
+                db.runGuardedWrite(
+                  db.insert(table).values({ id: 'cancelled' }),
+                  () => {
+                    if (++checks === 2) {
+                      if (failure === 'abort') {
+                        controller.abort(rejection);
+                      } else {
+                        vi.setSystemTime(deadline);
+                      }
+                    }
+                    controller.signal.throwIfAborted();
+                    if (failure === 'deadline' && Date.now() >= deadline) {
+                      throw rejection;
+                    }
+                  },
+                  failure === 'deadline' ? deadline : undefined,
+                ),
+              ).rejects.toBe(rejection);
+              await tx.insert(table).values({ id: 'after' });
+            }),
+          ).rejects.toBe(rejection);
+        } finally {
+          vi.useRealTimers();
+        }
+
+        expect(checks).toBe(2);
+        await expect(db.select().from(table)).resolves.toEqual([]);
+        await db.insert(table).values({ id: 'after-rollback' });
+        await expect(db.select().from(table)).resolves.toEqual([{ id: 'after-rollback' }]);
+      },
+    );
+
+    it('rejects the outer commit when a guarded write fails alongside ordinary writes', async () => {
+      const db = await getDb();
+      const table = sqliteTable('concurrent_guarded_write_test', { id: text('id').primaryKey() });
+      await db.run('CREATE TABLE concurrent_guarded_write_test (id TEXT PRIMARY KEY)');
+      const rejection = new Error('Post-write cancellation');
+      let checks = 0;
+
+      await expect(
+        db.transaction(async (tx) => {
+          const results = await Promise.allSettled([
+            db.runGuardedWrite(db.insert(table).values({ id: 'cancelled' }), () => {
+              if (++checks === 2) {
+                throw rejection;
+              }
+            }),
+            tx.insert(table).values({ id: 'ordinary-sibling' }),
+            db.runGuardedWrite(db.insert(table).values({ id: 'guarded-sibling' }), () => {}),
+          ]);
+          expect(results.map(({ status }) => status)).toEqual([
+            'rejected',
+            'fulfilled',
+            'fulfilled',
+          ]);
+        }),
+      ).rejects.toBe(rejection);
+
+      await expect(db.select().from(table)).resolves.toEqual([]);
+    });
+
+    it('commits successful guarded writes after a caught pre-write rejection', async () => {
+      const db = await getDb();
+      const table = sqliteTable('guarded_prewrite_test', { id: text('id').primaryKey() });
+      await db.run('CREATE TABLE guarded_prewrite_test (id TEXT PRIMARY KEY)');
+      const rejection = new Error('Already cancelled');
+
+      await db.transaction(async (tx) => {
+        await expect(
+          db.runGuardedWrite(db.insert(table).values({ id: 'not-written' }), () => {
+            throw rejection;
+          }),
+        ).rejects.toBe(rejection);
+        await db.runGuardedWrite(db.insert(table).values({ id: 'guarded' }), () => {});
+        await tx.insert(table).values({ id: 'ordinary' });
+      });
+
+      await expect(db.select().from(table).orderBy(table.id)).resolves.toEqual([
+        { id: 'guarded' },
+        { id: 'ordinary' },
+      ]);
     });
 
     it('rejects root calls without aborting the active transaction', async () => {

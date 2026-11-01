@@ -254,7 +254,7 @@
     "@smithy/node-http-handler": "^4.4.14",
     "google-auth-library": "^11.3.1",
     "hono": "^4.13.12",
-    "natural": "^8.1.1",
+    "natural": "^8.1.2",
     "node-sql-parser": "^5.4.0",
     "pdf-parse": "^2.4.5",
     "pem": "~1.14.8",

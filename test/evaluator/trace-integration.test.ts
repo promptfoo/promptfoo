@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
+import { runAssertions } from '../../src/assertions/index';
 import { evaluate, runEval } from '../../src/evaluator';
 import logger from '../../src/logger';
 import { nodeEvaluatorRuntime } from '../../src/node/evaluatorRuntime';
@@ -261,6 +262,87 @@ describe('evaluator trace integration', () => {
       }),
     );
   });
+
+  it.each([
+    {
+      name: 'no assertions',
+      assertions: undefined,
+      flushed: true,
+      sampled: true,
+      evidence: 'complete',
+    },
+    {
+      name: 'only output assertions',
+      assertions: [{ type: 'contains' as const, value: 'Test response' }],
+      flushed: true,
+      sampled: true,
+      evidence: 'complete',
+    },
+    {
+      name: 'failed local export',
+      assertions: undefined,
+      flushed: false,
+      sampled: true,
+      evidence: 'unavailable',
+    },
+    {
+      name: 'unsampled local export',
+      assertions: undefined,
+      flushed: true,
+      sampled: false,
+      evidence: 'partial',
+    },
+  ])(
+    'persists $name evidence for later grading by trace ID',
+    async ({ assertions, flushed, sampled, evidence }) => {
+      const traceId = 'abcdef1234567890abcdef1234567890';
+      let savedEvidence = 'partial';
+      const setTraceEvidence = vi.fn(async (value: 'complete' | 'unavailable') => {
+        savedEvidence = value;
+      });
+      vi.mocked(evaluatorTracing.generateTraceContextIfNeeded).mockResolvedValue({
+        traceparent: `00-${traceId}-0123456789abcdef-${sampled ? '01' : '00'}`,
+        evaluationId: 'test-eval-id',
+        testCaseId: 'test-case-id',
+        setTraceEvidence,
+      });
+      const flush = vi.fn().mockResolvedValue(flushed);
+      const release = vi.fn();
+      mockTrackLocalTrace.mockReturnValueOnce({ flush, release });
+      mockTraceStore.getTrace.mockImplementation(async () => ({
+        traceId,
+        metadata: { promptfooTraceEvidence: savedEvidence },
+        spans: [{ spanId: 'target-span', name: 'target.call', startTime: 1000, endTime: 2000 }],
+      }));
+
+      await evaluate(
+        {
+          providers: [createMockProvider(createTraceProviderConfig())],
+          prompts: [{ raw: 'Test prompt', label: 'test' }],
+          tests: [{ metadata: createTracingContext(), assert: assertions }],
+          tracing: { enabled: true },
+        },
+        mockEval,
+        createSerialOptions(),
+      );
+
+      expect(mockEval.addResult).toHaveBeenCalledWith(
+        expect.objectContaining({ success: true, score: 1 }),
+      );
+      expect(mockTrackLocalTrace).toHaveBeenCalledWith(traceId);
+      expect(flush).toHaveBeenCalledOnce();
+      expect(release).toHaveBeenCalledOnce();
+      expect(savedEvidence).toBe(evidence);
+      const replay = await runAssertions({
+        traceId,
+        providerResponse: { output: 'Test response' },
+        test: {
+          assert: [{ type: 'trace-span-count', value: { pattern: 'execute_tool *', max: 0 } }],
+        },
+      });
+      expect(replay.pass).toBe(evidence === 'complete');
+    },
+  );
 
   it('grades ordinary output but withholds incomplete local evidence after a flush timeout', async () => {
     const traceId = 'abcdef1234567890abcdef1234567890';
