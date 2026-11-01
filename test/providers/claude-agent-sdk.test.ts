@@ -1406,6 +1406,51 @@ describe('ClaudeCodeSDKProvider', () => {
         expect(result.error).toBeUndefined();
       });
 
+      it('returns a provider error when the SDK drops refused structured output', async () => {
+        mockQuery.mockReturnValue(
+          createMockQuery({
+            type: 'result',
+            subtype: 'success',
+            is_error: true,
+            stop_reason: 'refusal',
+            result: 'Refused',
+            session_id: 'refused-session',
+            total_cost_usd: 0.001,
+            usage: createMockUsage(10, 2),
+          }),
+        );
+        const provider = new ClaudeCodeSDKProvider({
+          ...createAnthropicEnvOptions(),
+          config: { output_format: { type: 'json_schema', schema: { type: 'object' } } },
+        });
+
+        const result = await provider.callApi('Return a JSON object');
+
+        expect(result.error).toBe('Claude Agent SDK call failed: refusal');
+        expect(result.output).toBeUndefined();
+        expect(result.metadata?.structuredOutput).toBeUndefined();
+        expect(result.sessionId).toBe('refused-session');
+        expect(result.cost).toBe(0.001);
+      });
+
+      it('preserves refusal text when the SDK reports a normal model response', async () => {
+        mockQuery.mockReturnValue(
+          createMockQuery({
+            type: 'result',
+            subtype: 'success',
+            is_error: false,
+            stop_reason: 'refusal',
+            result: 'I cannot fulfill that request.',
+          }),
+        );
+
+        const provider = new ClaudeCodeSDKProvider(createAnthropicEnvOptions());
+        const result = await provider.callApi('Test prompt');
+
+        expect(result.error).toBeUndefined();
+        expect(result.output).toBe('I cannot fulfill that request.');
+      });
+
       it('should fall back to text result when no structured output', async () => {
         mockQuery.mockReturnValue(
           createMockResponse('Plain text response', { input_tokens: 10, output_tokens: 20 }),
