@@ -242,7 +242,10 @@ export async function handleMeteorAssertion({
   inverse,
   outputString,
   renderedValue,
-}: AssertionParams): Promise<GradingResult> {
+}: Pick<
+  AssertionParams,
+  'assertion' | 'inverse' | 'outputString' | 'renderedValue'
+>): Promise<GradingResult> {
   // Validate inputs
   invariant(
     typeof renderedValue === 'string' ||
@@ -259,6 +262,23 @@ export async function handleMeteorAssertion({
   const gamma = meteorAssertion.gamma ?? 0.5;
   const threshold = meteorAssertion.threshold ?? 0.5;
 
+  invariant(
+    Number.isFinite(alpha) && alpha >= 0 && alpha <= 1,
+    '"meteor" assertion alpha must be a finite number between 0 and 1',
+  );
+  invariant(
+    Number.isFinite(beta) && beta >= 0,
+    '"meteor" assertion beta must be a finite number greater than or equal to 0',
+  );
+  invariant(
+    Number.isFinite(gamma) && gamma >= 0 && gamma <= 1,
+    '"meteor" assertion gamma must be a finite number between 0 and 1',
+  );
+  invariant(
+    Number.isFinite(threshold) && threshold >= 0 && threshold <= 1,
+    '"meteor" assertion threshold must be a finite number between 0 and 1',
+  );
+
   const score = await calculateMeteorScore(outputString, references, alpha, beta, gamma);
 
   const pass = inverse ? score < threshold : score >= threshold;
@@ -268,7 +288,9 @@ export async function handleMeteorAssertion({
     score: inverse ? 1 - score : score,
     reason: pass
       ? 'METEOR assertion passed'
-      : `METEOR score ${score.toFixed(4)} did not meet threshold ${threshold}`,
+      : inverse
+        ? `METEOR score ${score.toFixed(4)} met threshold ${threshold} (expected it not to)`
+        : `METEOR score ${score.toFixed(4)} did not meet threshold ${threshold}`,
     assertion,
   };
 }
