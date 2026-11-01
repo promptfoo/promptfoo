@@ -2,6 +2,8 @@
  * Maps provider types to their specific documentation URLs
  */
 
+import { isCodexSdkProviderId } from './helpers';
+
 const BASE_DOCS_URL = 'https://www.promptfoo.dev/docs/providers';
 
 /**
@@ -108,7 +110,7 @@ export function getProviderDocumentationUrl(providerType?: string): string {
     return BASE_DOCS_URL;
   }
 
-  if (providerType === 'openai:codex-sdk' || providerType.startsWith('openai:codex-sdk:')) {
+  if (isCodexSdkProviderId(providerType)) {
     return PROVIDER_DOCUMENTATION_MAP['codex-sdk'];
   }
 

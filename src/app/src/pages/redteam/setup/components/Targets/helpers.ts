@@ -117,6 +117,11 @@ export function normalizeLocalProviders<T>(
   return (Array.isArray(providers) ? providers.map(normalize) : normalize(providers)) as T;
 }
 
+// Both SDK IDs are accepted by the runtime, with an optional model suffix.
+export function isCodexSdkProviderId(providerId: string): boolean {
+  return /^openai:codex(?:-sdk)?(?::|$)/.test(providerId);
+}
+
 export function getProviderType(
   providerId?: string,
   config?: Record<string, unknown>,
@@ -125,7 +130,7 @@ export function getProviderType(
     return undefined;
   }
 
-  if (providerId === 'openai:codex-sdk' || providerId.startsWith('openai:codex-sdk:')) {
+  if (isCodexSdkProviderId(providerId)) {
     return 'codex-sdk';
   }
 

@@ -50,7 +50,7 @@ describe('hasSpecificDocumentation', () => {
     expect(result).toBe(false);
   });
 
-  it.each(['codex-sdk', 'openai:codex-sdk', 'openai:codex-sdk:gpt-6-sol'])(
+  it.each(['codex-sdk', 'openai:codex-sdk', 'openai:codex:gpt-6-sol'])(
     'links %s to the Codex SDK provider documentation',
     (providerType) => {
       expect(getProviderDocumentationUrl(providerType)).toBe(

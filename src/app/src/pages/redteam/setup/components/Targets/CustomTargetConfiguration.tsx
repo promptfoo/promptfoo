@@ -62,7 +62,7 @@ const getProviderConfig = (providerType?: string): ProviderConfig => {
     'codex-sdk': {
       title: 'OpenAI Codex SDK',
       helpText:
-        'Install @openai/codex-sdk on the Promptfoo server. Use an existing Codex login or configure OPENAI_API_KEY or CODEX_API_KEY. Set model and working_dir in the JSON configuration. Relative working_dir paths resolve from the config file directory.',
+        'Install @openai/codex-sdk on the Promptfoo server. Sign in to Codex or set OPENAI_API_KEY or CODEX_API_KEY. Relative working_dir paths resolve from the config file directory.',
     },
     together: {
       title: 'Together AI',

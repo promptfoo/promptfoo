@@ -29,6 +29,7 @@ describe('ProviderTypeSelector', () => {
       'bedrock-agent:your-agent-id',
       { agentAliasId: 'your-agent-alias-id' },
     ],
+    ['OpenAI Codex SDK', 'codex-sdk', 'openai:codex-sdk', { sandbox_mode: 'read-only' }],
     ['fal.ai', 'fal', 'fal:image:fal-ai/flux/dev', {}],
     [
       'Cloudflare AI',
@@ -279,26 +280,6 @@ describe('ProviderTypeSelector', () => {
     expect(screen.getByText('OpenAI')).toBeVisible();
 
     expect(screen.queryByText('HTTP/HTTPS Endpoint')).toBeNull();
-  });
-
-  it('finds Codex SDK in agent frameworks and selects its native provider', async () => {
-    const user = userEvent.setup();
-    const setProvider = vi.fn();
-    renderWithTooltipProvider(
-      <ProviderTypeSelector
-        provider={{ id: '__selecting__', config: {} }}
-        setProvider={setProvider}
-      />,
-    );
-    await user.click(screen.getByRole('button', { name: /Agent Frameworks/ }));
-    await user.type(screen.getByRole('searchbox', { name: 'Search providers' }), 'codex');
-    const card = screen.getByText('OpenAI Codex SDK').closest('[role="button"]');
-    expect(card).toBeInTheDocument();
-    await user.click(card!);
-    expect(setProvider).toHaveBeenCalledWith(
-      { id: 'openai:codex-sdk', config: { sandbox_mode: 'read-only' } },
-      'codex-sdk',
-    );
   });
 
   it('finds Codex Security SDK by security search and configures its native provider', async () => {
