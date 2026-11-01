@@ -733,7 +733,7 @@ describe('cloud utils', () => {
     });
 
     it('should preserve the complete serialized eval config envelope', async () => {
-      const providerId = '12345678-1234-4234-8234-123456789abc';
+      const providerId = '0191ab19-7d3a-7e7c-8c22-3651cd50e791';
       mockFetchWithProxy.mockResolvedValueOnce({
         ok: true,
         json: () =>
