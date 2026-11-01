@@ -100,6 +100,26 @@ describe('fetchWithProxy guarded redirects (PROMPTFOO_BLOCK_PRIVATE_RANGES)', ()
     expect(secondOptions.body).toBe('x');
   });
 
+  it('preserves Request-owned method and body in the guarded path', async () => {
+    restoreEnv = mockProcessEnv({ PROMPTFOO_BLOCK_PRIVATE_RANGES: 'true' });
+    mockedMonkeyPatchFetch.mockResolvedValueOnce(new Response('ok', { status: 200 }));
+
+    // The guarded path forwards only the URL string plus an options
+    // object, so a Request passed to fetchWithProxy must have its
+    // method and body seeded into those options, or a POST would
+    // silently downgrade to a GET while the guard is active.
+    const request = new Request('https://public.example.com/submit', {
+      method: 'POST',
+      body: 'x',
+    });
+    const response = await guardedFetch(request);
+
+    expect(response.status).toBe(200);
+    const firstOptions = mockedMonkeyPatchFetch.mock.calls[0][1] as RequestInit;
+    expect(firstOptions.method).toBe('POST');
+    expect(firstOptions.body).not.toBeUndefined();
+  });
+
   it('does not intercept redirects when the flag is unset', async () => {
     restoreEnv = mockProcessEnv({ PROMPTFOO_BLOCK_PRIVATE_RANGES: undefined });
     mockedMonkeyPatchFetch.mockResolvedValueOnce(new Response('ok', { status: 200 }));

@@ -403,6 +403,30 @@ async function fetchWithRedirectValidation(
   throw new Error('Unexpected end of redirect loop');
 }
 
+/**
+ * Seed an options object with the fields a Request object carries itself.
+ * The unguarded path passes the Request to the fetch implementation, so
+ * those survive; the guarded path only forwards an options object and the
+ * URL string, so without this seeding a guarded POST Request would silently
+ * downgrade to a GET. Explicit options win over the Request-owned values,
+ * mirroring fetch(Request, init).
+ */
+function seedRequestOwnedOptions(
+  finalOptions: FetchOptions & { dispatcher?: any },
+  url: RequestInfo,
+): void {
+  if (!(url instanceof Request)) {
+    return;
+  }
+  finalOptions.method ??= url.method;
+  if (finalOptions.body === undefined && url.body !== null) {
+    finalOptions.body = url.body;
+  }
+  finalOptions.signal ??= url.signal;
+  finalOptions.referrer ??= url.referrer;
+  finalOptions.credentials ??= url.credentials;
+}
+
 export async function fetchWithProxy(
   url: RequestInfo,
   options: FetchOptions = {},
@@ -430,6 +454,7 @@ export async function fetchWithProxy(
     headers: getFetchWithProxyHeaders(url, options),
     signal: combinedSignal,
   };
+  seedRequestOwnedOptions(finalOptions, url);
   const logEnabled = new Headers(finalOptions.headers).get('x-promptfoo-silent') !== 'true';
 
   if (typeof url === 'string') {

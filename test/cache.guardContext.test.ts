@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { clearCache, enableCache, fetchWithCache } from '../src/cache';
+import { clearCache, enableCache, fetchWithCache, isCacheEnabled } from '../src/cache';
 import { cloudConfig } from '../src/globalConfig/cloud';
 import { getConfigDirectoryPath } from '../src/util/config/manage';
 import { withPrivateRangeGuard } from '../src/util/fetch/guardContext';
@@ -82,6 +82,18 @@ describe('fetchWithCache inside the private-range guard context', () => {
     expect(third.data).toEqual({ ok: true });
     expect(third.cached).toBe(true);
     expect(mockedFetchWithRetries).toHaveBeenCalledTimes(2);
+  });
+
+  it('reports the cache disabled inside the guard context', async () => {
+    restoreEnv = mockProcessEnv({ PROMPTFOO_BLOCK_PRIVATE_RANGES: 'true' });
+    expect(isCacheEnabled()).toBe(true);
+    // Provider-level caches are keyed without a guard-context bit, so a
+    // guarded probe must not serve a response cached by an ordinary eval
+    // whose redirect chain was never guard-validated.
+    await withPrivateRangeGuard(async () => {
+      expect(isCacheEnabled()).toBe(false);
+    });
+    expect(isCacheEnabled()).toBe(true);
   });
 
   it('does not coalesce guarded requests with unguarded in-flight work', async () => {
