@@ -347,7 +347,7 @@ describe('OTLPReceiver', () => {
                         key: 'array.attr',
                         value: {
                           arrayValue: {
-                            values: [{ stringValue: 'a' }, { stringValue: 'b' }],
+                            values: [{ stringValue: 'a' }, { bytesValue: 'AP8=' }, {}],
                           },
                         },
                       },
@@ -375,7 +375,7 @@ describe('OTLPReceiver', () => {
               'int.attr': 123,
               'double.attr': 3.14,
               'bool.attr': true,
-              'array.attr': ['a', 'b'],
+              'array.attr': ['a', 'AP8=', null],
             }),
           }),
         ]),

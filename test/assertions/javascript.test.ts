@@ -2086,6 +2086,50 @@ describe('JavaScript file references', () => {
     },
   );
 
+  it('should fail the assertion when a package function throws (#11917)', async () => {
+    vi.mocked(isPackagePath).mockReturnValue(true);
+    vi.mocked(loadFromPackage).mockResolvedValue(() => {
+      throw new Error('boom');
+    });
+
+    const result: GradingResult = await runAssertion({
+      prompt: 'Some prompt',
+      assertion: { type: 'javascript', value: 'package:@promptfoo/fake:assertionFunction' },
+      test: {} as AtomicTestCase,
+      providerResponse: { output: 'Expected output' },
+    });
+
+    expect(result).toMatchObject({
+      pass: false,
+      score: 0,
+      reason: 'Custom function threw error: boom',
+    });
+  });
+
+  it('should apply the weight: 0 override when a package function throws', async () => {
+    vi.mocked(isPackagePath).mockReturnValue(true);
+    vi.mocked(loadFromPackage).mockResolvedValue(() => {
+      throw new Error('boom');
+    });
+
+    const result: GradingResult = await runAssertion({
+      prompt: 'Some prompt',
+      assertion: {
+        type: 'javascript',
+        value: 'package:@promptfoo/fake:assertionFunction',
+        weight: 0,
+      },
+      test: {} as AtomicTestCase,
+      providerResponse: { output: 'Expected output' },
+    });
+
+    expect(result).toMatchObject({
+      pass: true,
+      score: 0,
+      reason: 'Custom function threw error: boom',
+    });
+  });
+
   it('should resolve js paths relative to the configuration file', async () => {
     const output = 'Expected output';
     const mockFn = vi.fn((output: string) => output === 'Expected output');
