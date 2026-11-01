@@ -32,6 +32,19 @@ const SAFE_TOKEN_ATTRIBUTE_KEYS = new Set([
   'gen_ai.usage.cache_creation_input_tokens',
 ]);
 
+/** Preserve recognized token-count fields even when extending credential-name detection. */
+export function isSensitiveTraceAttribute(
+  key: string,
+  additionalCheck?: (key: string) => boolean,
+): boolean {
+  const lowerKey = key.toLowerCase();
+  return (
+    !SAFE_TOKEN_ATTRIBUTE_KEYS.has(lowerKey) &&
+    (SENSITIVE_ATTRIBUTE_PATTERN.test(lowerKey.replace(/[^a-z0-9]/g, '')) ||
+      additionalCheck?.(key) === true)
+  );
+}
+
 export function sanitizeTraceAttributes(
   attributes: Record<string, any> | null | undefined,
   options: AttributeSanitizationOptions = {},
@@ -72,15 +85,9 @@ export function sanitizeTraceAttributes(
       sanitized[key] = '[REDACTED]';
       continue;
     }
-    if (sanitizeSensitiveAttributes) {
-      const lowerKey = key.toLowerCase();
-      if (
-        !SAFE_TOKEN_ATTRIBUTE_KEYS.has(lowerKey) &&
-        SENSITIVE_ATTRIBUTE_PATTERN.test(lowerKey.replace(/[^a-z0-9]/g, ''))
-      ) {
-        sanitized[key] = '<redacted>';
-        continue;
-      }
+    if (sanitizeSensitiveAttributes && isSensitiveTraceAttribute(key)) {
+      sanitized[key] = '<redacted>';
+      continue;
     }
     sanitized[key] = sanitizeValue(value);
   }

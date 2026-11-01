@@ -212,15 +212,77 @@ export function classifyOpenAiGatewayStreamError(
   }
 }
 
-function hasInlineSecret(value: string): boolean {
+function parseJsonObject(text: string) {
+  try {
+    return getRecord(JSON.parse(text));
+  } catch {
+    return undefined;
+  }
+}
+
+function hasEmbeddedJwtHeader(part: string, payload: string): boolean {
+  // A tool prefix can be made of base64url characters too. One of the four
+  // alignments decodes the whole JOSE header, including legal JSON whitespace.
+  if (part.length < 14) {
+    return false; // Even {"alg":""} encodes to 14 base64url characters.
+  }
+  for (let offset = 0; offset < 4; offset++) {
+    const decoded = Buffer.from(part.slice(offset), 'base64url').toString('utf8').trimEnd();
+    const start = decoded.indexOf('{');
+    if (start < 0 || !decoded.endsWith('}')) {
+      continue;
+    }
+    const header = parseJsonObject(decoded.slice(start));
+    if (typeof header?.alg === 'string') {
+      return true;
+    }
+    // A decoded prefix can contain a stray opening brace. Withhold this ambiguous
+    // object suffix if the following segment is itself a JWT claims object.
+    if (
+      !header &&
+      decoded.includes('{', start + 1) &&
+      parseJsonObject(Buffer.from(payload, 'base64url').toString('utf8'))
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function hasInlineJwt(value: string): boolean {
+  if (!value.includes('.')) {
+    return false;
+  }
+  for (const [candidate] of value.matchAll(/[A-Za-z0-9_.-]+/g)) {
+    const parts = candidate.split('.');
+    for (let i = 0; i + 2 < parts.length; i++) {
+      const header = parts[i];
+      const payload = parts[i + 1];
+      if (
+        payload &&
+        ((parts[i + 2] && header.includes('eyJ')) || hasEmbeddedJwtHeader(header, payload))
+      ) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+export function hasRecognizableOpenAiCredential(value: string): boolean {
   return (
-    looksLikeSecret(value) ||
     /(?:^|\s)(?:Bearer|Basic)\s+\S+/i.test(value) ||
-    /eyJ[a-zA-Z0-9_-]*\.[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+/.test(value) ||
+    hasInlineJwt(value) ||
+    // GitHub and npm tokens can be embedded in a remote tool name or filename.
+    /(?:github_pat_|gh[pousr]_)[A-Za-z0-9_.-]{20,}|npm_[A-Za-z0-9]{20,}/.test(value) ||
     /(?:sk-(?:proj-|ant-)?[a-zA-Z0-9-_]{20,}|key-[a-zA-Z0-9]{20,}|AKIA[A-Z0-9]{16}|AIza[a-zA-Z0-9_-]{35})/.test(
       value,
     )
   );
+}
+
+function hasInlineSecret(value: string): boolean {
+  return looksLikeSecret(value) || hasRecognizableOpenAiCredential(value);
 }
 
 export function hasSensitiveOpenAiCacheString(value: string): boolean {

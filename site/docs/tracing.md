@@ -408,6 +408,16 @@ Promptfoo's OTLP receiver accepts traces in both **JSON** and **protobuf** forma
 
 Protobuf is more efficient for serialization and produces smaller payloads. Python's OpenTelemetry SDK uses protobuf by default.
 
+### Hosted OpenAI turn artifacts
+
+The [OpenAI Agents API](/docs/providers/openai-agents-api/) publishes OTLP artifacts for individual turns. For a trace rooted at `invoke_agent`, the decoder keeps the span hierarchy, timing, status, operation, and safe model and tool identifiers. It derives span names from those identifiers and omits prompts, tool output, diagnostic text, and arbitrary OTLP attributes. Tool arguments are omitted by default.
+
+The decoder withholds the whole artifact if it contains an unsupported operation, mixes trace IDs, or cannot safely retain an identifier. For example, `tracing.otlp.http.redactAttributes: ['gen_ai.tool.name']` withholds an artifact containing a tool call. An identifier that contains a recognized credential pattern or echoes a protected value also prevents import. For example, tool arguments containing `{"headers":[["Authorization","demo-42"]]}` make a span named `execute_tool lookup_demo-42` unsafe to retain, even when argument capture is off. A child whose parent has yet to appear can indicate that the API is still publishing the turn.
+
+An `exception` event or a nonempty `error.type` records a failure, even on a span marked `OK`. An exception explicitly marked as handled (`exception.escaped: false`) does not count as a failure. Diagnostic text can indicate failure when the span has no status or is marked `UNSET`. Dropped events and unreadable event names can leave the error status unknown. The decoder never stores event messages or stack traces.
+
+Both `http.response.status_code` and its legacy name `http.status_code` are recognized. Span attributes take precedence over resource defaults. A 5xx response indicates failure. A 4xx response indicates failure on a client span and can be expected on a server span. If the span kind is unknown, the two status attributes disagree about failure, or a status is outside 100–599 (except zero for no status), the error verdict is unknown unless another signal establishes a failure. [OpenTelemetry HTTP span conventions](https://opentelemetry.io/docs/specs/semconv/http/http-spans/#status)
+
 ### Environment Variables
 
 You can also configure tracing via environment variables:
