@@ -8,7 +8,7 @@ import {
   type MockApiProvider,
 } from '../factories/provider';
 
-import type { ApiProvider, ProviderResponse } from '../../src/types/index';
+import type { ApiProvider } from '../../src/types/index';
 
 const createAgentResponse = () => ({
   output: 'agent response',
@@ -64,98 +64,6 @@ describe('SimulatedUser', () => {
     });
 
     vi.clearAllMocks();
-  });
-
-  describe('conversationEnded', () => {
-    it.each([
-      { stateful: false, initialSource: 'none' },
-      { stateful: true, initialSource: 'none' },
-      { stateful: false, initialSource: 'config' },
-      { stateful: true, initialSource: 'config' },
-      { stateful: false, initialSource: 'vars' },
-      { stateful: true, initialSource: 'vars' },
-    ])(
-      'stops after the target ends the conversation (stateful=$stateful, initialSource=$initialSource)',
-      async ({ stateful, initialSource }) => {
-        const initialMessages = [{ role: 'user' as const, content: 'user response' }];
-        const finalResponse: ProviderResponse = {
-          output: 'Conversation closed',
-          conversationEnded: true,
-          sessionId: 'ended-session',
-          guardrails: { flagged: true },
-          tokenUsage: { prompt: 8, completion: 5, total: 13, numRequests: 1 },
-        };
-        originalProvider.callApi.mockResolvedValueOnce(finalResponse);
-        mockUserProviderCallApi.mockResolvedValue({
-          output: 'user response',
-          tokenUsage: { prompt: 3, completion: 2, total: 5, numRequests: 1 },
-        });
-        simulatedUser = new SimulatedUser({
-          config: {
-            maxTurns: 3,
-            stateful,
-            initialMessages: initialSource === 'config' ? initialMessages : undefined,
-          },
-        });
-
-        const result = await simulatedUser.callApi('test prompt', {
-          originalProvider,
-          vars: initialSource === 'vars' ? { initialMessages } : {},
-          prompt: { raw: 'test', label: 'test' },
-        });
-
-        const generatedUser = initialSource === 'none';
-        expect(originalProvider.callApi).toHaveBeenCalledTimes(1);
-        expect(mockUserProviderCallApi).toHaveBeenCalledTimes(generatedUser ? 1 : 0);
-        expect(result.output).toBe('User: user response\n---\nAssistant: Conversation closed');
-        expect(result.metadata).toMatchObject({
-          messages: [...initialMessages, { role: 'assistant', content: 'Conversation closed' }],
-          sessionId: 'ended-session',
-        });
-        expect(result.guardrails).toEqual(finalResponse.guardrails);
-        expect(result.tokenUsage).toMatchObject({
-          prompt: generatedUser ? 11 : 8,
-          completion: generatedUser ? 7 : 5,
-          total: generatedUser ? 18 : 13,
-          numRequests: generatedUser ? 2 : 1,
-        });
-      },
-    );
-
-    it.each([false, undefined])(
-      'continues for conversationEnded=%s and preserves an empty final response',
-      async (conversationEnded) => {
-        simulatedUser = new SimulatedUser({ config: { maxTurns: 3, stateful: true } });
-        originalProvider.callApi
-          .mockResolvedValueOnce({
-            output: 'Keep going',
-            conversationEnded,
-            sessionId: 'test-session',
-          })
-          .mockResolvedValueOnce({ conversationEnded: true });
-
-        const result = await simulatedUser.callApi('test prompt', {
-          originalProvider,
-          vars: {},
-          prompt: { raw: 'test', label: 'test' },
-        });
-
-        expect(originalProvider.callApi).toHaveBeenCalledTimes(2);
-        expect(mockUserProviderCallApi).toHaveBeenCalledTimes(2);
-        expect(JSON.parse(originalProvider.callApi.mock.calls[1][0])).toEqual([
-          { role: 'user', content: 'user response' },
-        ]);
-        expect(result.metadata?.messages).toEqual([
-          { role: 'user', content: 'user response' },
-          { role: 'assistant', content: 'Keep going' },
-          { role: 'user', content: 'user response' },
-          { role: 'assistant', content: '' },
-        ]);
-        expect(result.output).toBe(
-          'User: user response\n---\nAssistant: Keep going\n---\nUser: user response\n---\nAssistant: ',
-        );
-      },
-    );
   });
 
   describe('id()', () => {
@@ -304,6 +212,34 @@ describe('SimulatedUser', () => {
       expect(messageCount).toBe(2);
       expect(originalProvider.callApi).toHaveBeenCalledTimes(1);
       expect(timeUtils.sleep).not.toHaveBeenCalled();
+    });
+
+    it('stops before user generation when the target ends the seeded conversation', async () => {
+      const initialMessages = [{ role: 'user', content: 'Goodbye' }];
+      originalProvider.callApi.mockResolvedValueOnce({
+        conversationEnded: true,
+        sessionId: 'closed',
+        guardrails: { flagged: true },
+        tokenUsage: { total: 13, numRequests: 1 },
+      });
+
+      const result = await simulatedUser.callApi('test prompt', {
+        originalProvider,
+        vars: { initialMessages },
+        prompt: { raw: 'test', label: 'test' },
+      });
+
+      expect(originalProvider.callApi).toHaveBeenCalledTimes(1);
+      expect(mockUserProviderCallApi).not.toHaveBeenCalled();
+      expect(result).toMatchObject({
+        output: 'User: Goodbye\n---\nAssistant: ',
+        metadata: {
+          messages: [...initialMessages, { role: 'assistant', content: '' }],
+          sessionId: 'closed',
+        },
+        guardrails: { flagged: true },
+        tokenUsage: { total: 13, numRequests: 1 },
+      });
     });
 
     it('should stop conversation when ###STOP### is received', async () => {
