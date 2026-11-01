@@ -8,7 +8,13 @@ import {
 import { resourceFromAttributes } from '@opentelemetry/resources';
 import { TracerProvider } from '@opentelemetry/sdk-trace';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { initializeOtel, shutdownOtel, trackLocalTrace } from '../../src/tracing/otelSdk';
+import {
+  flushOtel,
+  initializeOtel,
+  shutdownOtel,
+  trackLocalTrace,
+} from '../../src/tracing/otelSdk';
+import { UNRELIABLE_SPAN_ATTRIBUTE } from '../../src/tracing/traceEvidence';
 import { createDeferred } from '../util/utils';
 import type { Resource } from '@opentelemetry/resources';
 
@@ -296,6 +302,48 @@ describe('scoped local SDK flush', () => {
       root.end();
     }
   });
+
+  it.each([
+    { loss: 'dropped attributes', countLimit: '2', valueLimit: '100', unreliable: true },
+    { loss: 'truncated attributes', countLimit: '128', valueLimit: '6', unreliable: true },
+    { loss: 'intact attributes', countLimit: '128', valueLimit: '100', unreliable: false },
+  ])(
+    'persists $loss reliability after releasing the row tracker',
+    async ({ countLimit, valueLimit, unreliable }) => {
+      vi.stubEnv('OTEL_SPAN_ATTRIBUTE_COUNT_LIMIT', countLimit);
+      vi.stubEnv('OTEL_SPAN_ATTRIBUTE_VALUE_LENGTH_LIMIT', valueLimit);
+      initializeOtel(config);
+      const tracer = trace.getTracer('test');
+      const root = tracer.startSpan('evaluation-root');
+      const row = trackLocalTrace(root.spanContext().traceId)!;
+      const target = tracer.startSpan('target', {}, trace.setSpan(ROOT_CONTEXT, root));
+      const child = tracer.startSpan('late-tool', {}, trace.setSpan(ROOT_CONTEXT, target));
+      target.end();
+      try {
+        await expect(row.flush()).resolves.toBe(true);
+        expect(row.isComplete()).toBe(false);
+        expect(row.seal()).toContain(child.spanContext().spanId);
+        row.release();
+
+        // Loss occurs after the row's live reliability state is gone. A caller's
+        // marker cannot override the exporter decision persisted with this span.
+        child.setAttribute(UNRELIABLE_SPAN_ATTRIBUTE, false);
+        child.setAttribute('tool.arguments', 'safe_probe');
+        child.setAttribute('gen_ai.tool.name', 'send_email');
+        child.end();
+        await expect(flushOtel()).resolves.toBe(true);
+        const storedChild = mockAddSpans.mock.calls
+          .flatMap(([, spans]) => spans)
+          .find((span: { spanId: string }) => span.spanId === child.spanContext().spanId);
+        expect(storedChild.attributes[UNRELIABLE_SPAN_ATTRIBUTE]).toBe(unreliable);
+        expect(storedChild.parentSpanId).toBe(target.spanContext().spanId);
+      } finally {
+        child.end();
+        root.end();
+        row.release();
+      }
+    },
+  );
 
   it('withholds completeness after a host provider takes over during a row', async () => {
     initializeOtel(config);

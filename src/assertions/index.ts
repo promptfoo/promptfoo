@@ -26,6 +26,7 @@ import {
 } from '../scheduler/providerCallExecutionContext';
 import { generateSpanId, generateTraceparent } from '../tracing/evaluatorTracing';
 import { getTraceStore } from '../tracing/store';
+import { UNRELIABLE_SPAN_ATTRIBUTE } from '../tracing/traceEvidence';
 import {
   type ApiProvider,
   type Assertion,
@@ -342,7 +343,7 @@ function getTraceEvidenceError(
     return;
   }
   if (traceUnavailable) {
-    return 'Local trace export did not complete before grading. Trace evidence is unavailable.';
+    return 'Trace evidence is unavailable or unreliable; this assertion cannot be graded.';
   }
   if (traceId && !params.assertionValueContext.trace) {
     return 'No spans were stored for this row before grading. Trace evidence is unavailable.';
@@ -611,13 +612,20 @@ async function runAssertionInternal({
       ) {
         const capture = getAssertionTraceSpans(resolvedTraceData);
         traceIncomplete ||= capture.incomplete;
-        context.trace = {
-          traceId: resolvedTraceData.traceId,
-          evaluationId: resolvedTraceData.evaluationId,
-          testCaseId: resolvedTraceData.testCaseId,
-          metadata: resolvedTraceData.metadata,
-          spans: capture.spans,
-        };
+        // Delayed target children can lose attributes after the row was finalized.
+        // Excluded graders cannot make an otherwise intact target capture unavailable.
+        traceUnavailable ||= capture.spans.some(
+          (span) => span.attributes?.[UNRELIABLE_SPAN_ATTRIBUTE] === true,
+        );
+        if (!traceUnavailable) {
+          context.trace = {
+            traceId: resolvedTraceData.traceId,
+            evaluationId: resolvedTraceData.evaluationId,
+            testCaseId: resolvedTraceData.testCaseId,
+            metadata: resolvedTraceData.metadata,
+            spans: capture.spans,
+          };
+        }
       }
     } catch (error) {
       logger.debug(`Failed to fetch trace data for assertion: ${error}`);

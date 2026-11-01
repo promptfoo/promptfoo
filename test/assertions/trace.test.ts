@@ -5,6 +5,7 @@ import { assertionUsesTrace, runAssertion, runAssertions } from '../../src/asser
 import cliState from '../../src/cliState';
 import { withProviderCallTracingContext } from '../../src/scheduler/providerCallExecutionContext';
 import { getTraceStore } from '../../src/tracing/store';
+import { UNRELIABLE_SPAN_ATTRIBUTE } from '../../src/tracing/traceEvidence';
 import { mockProcessEnv } from '../util/utils';
 
 import type {
@@ -323,6 +324,97 @@ describe('trace assertions', () => {
     expect(traceData.spans).toHaveLength(6);
   });
 
+  it.each(['complete', 'partial', 'external'] as const)(
+    'withholds %s evidence when a selected target span loses attributes',
+    async (evidence) => {
+      const traceData: TraceData = {
+        ...mockTraceData,
+        metadata:
+          evidence === 'external'
+            ? {}
+            : {
+                promptfooTraceEvidence: evidence,
+                promptfooTraceSpanIds:
+                  evidence === 'complete' ? ['target', 'late-child'] : ['target'],
+              },
+        spans: [
+          { spanId: 'target', parentSpanId: 'root', name: 'target.call', startTime: 1 },
+          {
+            spanId: 'late-child',
+            parentSpanId: 'target',
+            name: 'execute_tool',
+            startTime: 2,
+            attributes: {
+              'tool.arguments': 'safe_probe',
+              [UNRELIABLE_SPAN_ATTRIBUTE]: true,
+            },
+          },
+        ],
+      };
+      const assertion = { type: 'trajectory:tool-used', value: 'safe_probe' } as const;
+      const direct = await runAssertion({
+        assertion,
+        test: mockTest,
+        providerResponse: mockProviderResponse,
+        traceId: traceData.traceId,
+        traceData,
+      });
+      expect(direct.pass).toBe(false);
+      const unmarked = structuredClone(traceData);
+      delete unmarked.spans[1].attributes![UNRELIABLE_SPAN_ATTRIBUTE];
+      expect(
+        (
+          await runAssertion({
+            assertion,
+            test: mockTest,
+            providerResponse: mockProviderResponse,
+            traceId: unmarked.traceId,
+            traceData: unmarked,
+          })
+        ).pass,
+      ).toBe(true);
+      mockTraceStore.getTrace.mockResolvedValue(JSON.parse(JSON.stringify(traceData)));
+      const replay = await runAssertions({
+        test: { assert: [assertion, createSpanCountAssertion('context.trace === undefined')] },
+        providerResponse: mockProviderResponse,
+        traceId: traceData.traceId,
+      });
+      expect(replay.componentResults?.map((result) => result.pass)).toEqual([false, true]);
+    },
+  );
+
+  it.each(['complete', 'partial'])(
+    'keeps %s target evidence usable when only an excluded grader loses attributes',
+    async (evidence) => {
+      mockTraceStore.getTrace.mockResolvedValue({
+        ...mockTraceData,
+        metadata: { promptfooTraceEvidence: evidence, promptfooTraceSpanIds: ['target'] },
+        spans: [
+          {
+            spanId: 'target',
+            parentSpanId: 'root',
+            name: 'execute_tool target',
+            startTime: 1,
+            attributes: { 'tool.name': 'target', [UNRELIABLE_SPAN_ATTRIBUTE]: false },
+          },
+          {
+            spanId: 'grader',
+            parentSpanId: 'root',
+            name: 'execute_tool grader',
+            startTime: 2,
+            attributes: { 'tool.name': 'grader', [UNRELIABLE_SPAN_ATTRIBUTE]: true },
+          },
+        ],
+      });
+      const result = await runAssertions({
+        traceId: mockTraceData.traceId,
+        providerResponse: mockProviderResponse,
+        test: { assert: [{ type: 'trajectory:tool-used', value: 'target' }] },
+      });
+      expect(result.pass).toBe(true);
+    },
+  );
+
   it('keeps an empty partial local scope from accepting later grader evidence', async () => {
     mockTraceStore.getTrace.mockResolvedValue({
       ...mockTraceData,
@@ -433,7 +525,7 @@ describe('trace assertions', () => {
       });
       expect(result).toMatchObject({
         pass: false,
-        reason: expect.stringContaining('Local trace export did not complete'),
+        reason: expect.stringContaining('Trace evidence is unavailable or unreliable'),
       });
       expect(mockTraceStore.getTrace).toHaveBeenCalledOnce();
     });

@@ -3,6 +3,7 @@ import { ExportResultCode, getNumberFromEnv } from '@opentelemetry/core';
 import logger from '../logger';
 import { runWithAbort, sleepWithAbort } from '../util/time';
 import { getTraceStore, type SpanData, type TraceStore } from './store';
+import { UNRELIABLE_SPAN_ATTRIBUTE } from './traceEvidence';
 import type { ExportResult } from '@opentelemetry/core';
 import type { ReadableSpan, SpanExporter } from '@opentelemetry/sdk-trace';
 
@@ -62,6 +63,33 @@ export class LocalSpanExporter implements SpanExporter {
 
   constructor(private readonly attributeValueLengthLimit = Infinity) {}
 
+  private hasUnreliableAttributes(span: ReadableSpan): boolean {
+    // Dropped fields can change normalization fallbacks; truncated values can
+    // change tool identities or arguments. Neither supports positive claims.
+    // The SDK has no truncation counter, so exact-limit values also fail closed.
+    return (
+      span.droppedAttributesCount > 0 ||
+      (Number.isFinite(this.attributeValueLengthLimit) &&
+        this.attributeValueLengthLimit > 0 &&
+        reachesAttributeLimit(span.attributes, this.attributeValueLengthLimit))
+    );
+  }
+
+  private storedAttributes(span: ReadableSpan): Record<string, unknown> {
+    const attributes = Object.fromEntries(
+      Object.entries({ ...span.resource.attributes, ...span.attributes }).map(([key, value]) => [
+        key,
+        toStoredAttribute(value),
+      ]),
+    );
+    // Persist with the span even when a delayed child outlives its row tracker.
+    // A caller-provided false value cannot override detected attribute loss.
+    if (this.hasUnreliableAttributes(span)) {
+      attributes[UNRELIABLE_SPAN_ATTRIBUTE] = true;
+    }
+    return attributes;
+  }
+
   /** Remember failed writes from the start of an eval row through its trace assertions. */
   trackTrace(traceId: string): () => void {
     const state = this.trackedTraces.get(traceId) ?? {
@@ -93,14 +121,7 @@ export class LocalSpanExporter implements SpanExporter {
       return;
     }
     if (!state.sealed || this.pendingSpans.has(span)) {
-      // Dropped fields can change normalization fallbacks; truncated values can
-      // change tool identities or arguments. Neither supports positive claims.
-      // The SDK has no truncation counter, so exact-limit values also fail closed.
-      state.unreliableAttributes ||=
-        span.droppedAttributesCount > 0 ||
-        (Number.isFinite(this.attributeValueLengthLimit) &&
-          this.attributeValueLengthLimit > 0 &&
-          reachesAttributeLimit(span.attributes, this.attributeValueLengthLimit));
+      state.unreliableAttributes ||= this.hasUnreliableAttributes(span);
     }
     if (!state.sealed && !this.pendingSpans.has(span)) {
       if (state.spanIds.size < MAX_CAPTURED_SPAN_IDS) {
@@ -207,11 +228,7 @@ export class LocalSpanExporter implements SpanExporter {
           name: span.name,
           startTime: startTimeMs,
           endTime: endTimeMs,
-          attributes: Object.fromEntries(
-            Object.entries({ ...span.resource.attributes, ...span.attributes }).map(
-              ([key, value]) => [key, toStoredAttribute(value)],
-            ),
-          ),
+          attributes: this.storedAttributes(span),
           statusCode: span.status.code,
           statusMessage: span.status.message,
         };
