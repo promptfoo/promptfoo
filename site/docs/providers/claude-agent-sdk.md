@@ -678,10 +678,12 @@ providers:
           required: [analysis, confidence]
 ```
 
-When `output_format` is configured, the response will include structured output that conforms to the schema. The structured output is available in:
+When the SDK returns a value that conforms to `output_format`, Promptfoo exposes it in two response fields.
 
 - `output` - The parsed structured output (when available)
 - `metadata.structuredOutput` - The raw structured output value
+
+With SDK 0.3.302 and later, an API refusal that discards structured output produces a provider error. The provider response includes `error` and omits both `output` and `metadata.structuredOutput`.
 
 :::tip
 For evals that depend on parsing JSON from the model's reply, prefer `output_format` over asking for JSON in the prompt and then running `is-json` / `JSON.parse()`. Without it, Claude commonly wraps short JSON answers in Markdown fences or a leading sentence, which makes downstream parsers brittle. With it, the response arrives as a parsed object, so a JavaScript assertion can read fields directly.
@@ -794,6 +796,8 @@ Available sandbox options:
 | `ripgrep.args`                     | string[] | Additional arguments for ripgrep                     |
 
 When `sandbox.enabled` is `true`, Claude Agent SDK defaults `failIfUnavailable` to `true`; set it to `false` only if you want the SDK to degrade gracefully when sandbox dependencies or platform support are missing.
+
+With Claude Agent SDK 0.3.296 or later, `sandbox` merges with an inline `settings.sandbox` object: explicit `sandbox` values take precedence, while deny and credential lists from both are combined. A `settings` file path cannot be combined with `sandbox`; use inline settings when configuring both.
 
 Use `credentials.envVars` with `mode: mask` to keep a credential out of sandboxed commands while allowing the proxy to inject it only for selected hosts. Each `injectHosts` entry must also be present in `network.allowedDomains`:
 
@@ -959,6 +963,8 @@ providers:
 ```
 
 ### Subagent Limits
+
+With SDK 0.3.302 and later, agents with access to the Agent (Task) tool can fork the current conversation by default. To disable fork subagents for an eval, set `CLAUDE_CODE_FORK_SUBAGENT` to `'0'` in the provider's `config.env`.
 
 Claude Agent SDK 0.3.217 limits concurrent subagents to 20. Promptfoo preserves the previous maximum nesting depth of five; set either limit to a positive integer when your eval needs different behavior:
 
