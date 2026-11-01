@@ -369,12 +369,8 @@
         color: var(--text);
       }
 
-      .output-collapse > summary {
+      summary {
         cursor: pointer;
-      }
-
-      .output-collapse[open] > summary {
-        margin-bottom: 4px;
       }
 
       .detail-button {
@@ -773,7 +769,7 @@
                       >
                       {% endfor %}
                     </div>
-                    {% if cell.error and cell.error != cell.reason %}
+                    {% if cell.error %}
                     <div class="output-section">
                       <span class="output-section-label">Error</span>
                       <p class="output-reason">{{ cell.error | escape }}</p>
@@ -783,11 +779,12 @@
                       <span class="output-section-label">Reason</span>
                       <p class="output-reason">{{ cell.reason | escape }}</p>
                     </div>
-                    {% endif %}
-                    <details class="output-section output-collapse">
+                    {% endif %} {% if cell.text %}
+                    <details class="output-section" {% if cell.openOutput %}open{% endif %}>
                       <summary class="output-section-label">Output</summary>
                       <div class="output-text">{{ cell.text | escape }}</div>
                     </details>
+                    {% endif %}
                     <div>
                       <button
                         type="button"
@@ -862,6 +859,23 @@
           {% endfor %}
         </div>
 
+        {% if cell.error %}
+        <section class="detail-section">
+          <span class="detail-section-title">Error</span>
+          <p class="detail-copy detail-reason">{{ cell.error | escape }}</p>
+        </section>
+        {% endif %} {% if cell.reason %}
+        <section class="detail-section">
+          <span class="detail-section-title">Reason</span>
+          <p class="detail-copy detail-reason">{{ cell.reason | escape }}</p>
+        </section>
+        {% endif %} {% if cell.text %}
+        <details class="detail-section" {% if cell.openOutput %}open{% endif %}>
+          <summary class="detail-section-title">Output</summary>
+          <p class="detail-copy">{{ cell.text | escape }}</p>
+        </details>
+        {% endif %}
+
         <div class="detail-metrics">
           {% if cell.provider %}
           <div class="detail-metric">
@@ -896,22 +910,7 @@
           <span class="detail-section-title">Prompt</span>
           <p class="detail-copy">{{ cell.prompt | escape }}</p>
         </section>
-        {% endif %} {% if cell.error and cell.error != cell.reason %}
-        <section class="detail-section">
-          <span class="detail-section-title">Error</span>
-          <p class="detail-copy detail-reason">{{ cell.error | escape }}</p>
-        </section>
-        {% endif %} {% if cell.reason %}
-        <section class="detail-section">
-          <span class="detail-section-title">Reason</span>
-          <p class="detail-copy detail-reason">{{ cell.reason | escape }}</p>
-        </section>
         {% endif %}
-
-        <details class="detail-section output-collapse">
-          <summary class="detail-section-title">Output</summary>
-          <p class="detail-copy">{{ cell.text | escape }}</p>
-        </details>
         <div data-detail-variable-slot></div>
         {% if cell.promptTokensDisplay or cell.completionTokensDisplay %}
         <section class="detail-section">
