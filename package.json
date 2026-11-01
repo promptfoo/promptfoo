@@ -136,35 +136,14 @@
     "@ai-sdk/provider-utils": {
       "undici": "$undici"
     },
-    "@opentelemetry/exporter-trace-otlp-http": {
-      "@opentelemetry/core": "2.12.0"
-    },
-    "@opentelemetry/otlp-exporter-base": {
-      "@opentelemetry/core": "2.12.0"
-    },
-    "@opentelemetry/otlp-transformer": {
-      "@opentelemetry/core": "2.12.0"
-    },
-    "@opentelemetry/resources": {
-      "@opentelemetry/core": "2.12.0"
-    },
-    "@opentelemetry/sdk-logs": {
-      "@opentelemetry/core": "2.12.0"
-    },
-    "@opentelemetry/sdk-metrics": {
-      "@opentelemetry/core": "2.12.0"
-    },
-    "@opentelemetry/sdk-trace-base": {
-      "@opentelemetry/core": "2.12.0"
-    },
-    "@opentelemetry/sdk-trace-node": {
-      "@opentelemetry/core": "2.12.0"
+    "satori": {
+      "fflate@0.7.3": "0.7.5"
     },
     "serialize-javascript": ">=7.1.2",
     "gaxios": "^8.3.0",
     "ip-address": "10.7.4",
     "mongoose": {
-      "gcp-metadata": "^9.2.1"
+      "gcp-metadata": "^9.2.2"
     },
     "webpack-dev-server": {
       "express": "^4.22.3"
@@ -201,7 +180,7 @@
     "ibm-cloud-sdk-core": "5.6.2"
   },
   "devDependencies": {
-    "@anthropic-ai/claude-agent-sdk": "0.3.301",
+    "@anthropic-ai/claude-agent-sdk": "0.3.305",
     "@asteasolutions/zod-to-openapi": "^9.1.0",
     "@aws-sdk/client-bedrock-agent-runtime": "^3.1045.0",
     "@aws-sdk/client-bedrock-runtime": "^3.1045.0",
@@ -242,7 +221,7 @@
     "ibm-cloud-sdk-core": "5.6.2",
     "knip": "~6.27.0",
     "node-sql-parser": "^5.4.0",
-    "oxc-parser": "^0.154.0",
+    "oxc-parser": "^0.155.0",
     "pdf-parse": "^2.4.5",
     "playwright": "^1.63.0",
     "playwright-extra": "^4.3.6",
@@ -283,7 +262,7 @@
     "sharp": "^0.35.5"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "0.135.0",
+    "@anthropic-ai/sdk": "0.137.0",
     "@apidevtools/json-schema-ref-parser": "^16.0.5",
     "@hono/node-server": "2.1.5",
     "@inquirer/checkbox": "^5.1.0",
@@ -294,11 +273,12 @@
     "@inquirer/search": "^4.1.8",
     "@inquirer/select": "^5.1.0",
     "@libsql/client": "^0.18.0",
-    "@opentelemetry/api": "^1.9.0",
-    "@opentelemetry/core": "2.12.0",
-    "@opentelemetry/exporter-trace-otlp-http": "^0.223.0",
-    "@opentelemetry/resources": "^2.6.0",
-    "@opentelemetry/sdk-trace-node": "^2.6.0",
+    "@opentelemetry/api": "^1.10.0",
+    "@opentelemetry/context-async-hooks": "^3.0.0",
+    "@opentelemetry/core": "3.0.0",
+    "@opentelemetry/exporter-trace-otlp-http": "^0.300.0",
+    "@opentelemetry/resources": "^3.0.0",
+    "@opentelemetry/sdk-trace": "^3.0.0",
     "@opentelemetry/semantic-conventions": "^1.40.0",
     "acorn": "^8.19.0",
     "ai": "^6.0.286",
@@ -308,7 +288,7 @@
     "binary-extensions": "^3.2.0",
     "cache-manager": ">=7.2.8 <7.2.10",
     "chalk": "^6.0.0",
-    "chokidar": "5.0.0",
+    "chokidar": "6.0.0",
     "cli-progress": "^3.12.0",
     "cli-table3": "^0.6.5",
     "commander": "^15.0.0",
@@ -324,7 +304,7 @@
     "fast-safe-stringify": "^2.1.1",
     "fast-xml-parser": "^5.7.1",
     "fastest-levenshtein": "^1.0.16",
-    "gcp-metadata": "^9.2.1",
+    "gcp-metadata": "^9.2.2",
     "glob": "^13.0.6",
     "http-z": "^8.1.1",
     "istextorbinary": "^9.5.0",
