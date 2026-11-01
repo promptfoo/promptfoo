@@ -49,6 +49,39 @@ vi.mock('../../../src/redteam/graders', async (importOriginal) => {
 });
 
 describe('RedteamIterativeProvider', () => {
+  it('counts consecutive scores that do not beat the best score', async () => {
+    const ratings = [5, 1, 1, 6, 1, 1, 6];
+    using attacker = vi.spyOn(redteamProviderManager, 'getProvider');
+    attacker.mockResolvedValue(
+      createMockProvider({
+        response: { output: { prompt: 'attack', improvement: 'try again' } },
+      }),
+    );
+    using judge = vi.spyOn(redteamProviderManager, 'getGradingProvider');
+    judge.mockResolvedValue(
+      createMockProvider({
+        callApi: async () => ({ output: { currentResponse: { rating: ratings.shift() ?? 1 } } }),
+      }),
+    );
+
+    const provider = new RedteamIterativeTreeProvider({
+      injectVar: 'goal',
+      redteamProvider: 'test-attacker',
+      maxNoImprovement: 3,
+    });
+    const result = await provider.callApi('', {
+      originalProvider: createMockProvider(),
+      vars: { goal: 'test goal' },
+      prompt: { raw: '{{goal}}', label: 'test' },
+    });
+
+    expect(result.metadata).toMatchObject({
+      attempts: 7,
+      highestScore: 6,
+      stopReason: 'NO_IMPROVEMENT',
+    });
+  });
+
   describe('renderSystemPrompts', () => {
     it('should render system prompts correctly with default settings', () => {
       const goal = '{{goal}}';
@@ -752,56 +785,6 @@ describe('RedteamIterativeProvider', () => {
         expect(result.metadata.sessionIds).toEqual(sessions);
         expect(result.metadata.stopReason).toBe('MAX_DEPTH');
         expect(result.metadata.storedGraderResult).toBeUndefined();
-      } finally {
-        remote.mockRestore();
-        attackerSpy.mockRestore();
-        judgeSpy.mockRestore();
-      }
-    });
-
-    it('restarts the no-improvement count when a new max score is found', async () => {
-      let attempt = 0;
-      const attacker = createMockProvider();
-      attacker.callApi.mockImplementation(async () => ({
-        output: JSON.stringify({ prompt: `attack${++attempt}`, improvement: 'try again' }),
-      }));
-      const ratings = [5, 1, 1, 6, 1, 1, 1, 1, 1, 1];
-      let judgeCall = 0;
-      const judge = createMockProvider();
-      judge.callApi.mockImplementation(async () =>
-        createProviderResponse({
-          output: JSON.stringify({
-            currentResponse: { rating: ratings[judgeCall++] ?? 1 },
-            previousBestResponse: { rating: 0 },
-          }),
-        }),
-      );
-      const target = createMockProvider({
-        response: createProviderResponse({ output: 'actual response' }),
-      });
-      const remote = vi.spyOn(remoteGeneration, 'shouldGenerateRemote').mockReturnValue(false);
-      const attackerSpy = vi
-        .spyOn(redteamProviderManager, 'getProvider')
-        .mockResolvedValue(attacker);
-      const judgeSpy = vi
-        .spyOn(redteamProviderManager, 'getGradingProvider')
-        .mockResolvedValue(judge);
-      try {
-        const provider = new RedteamIterativeTreeProvider({
-          injectVar: 'goal',
-          maxDepth: 5,
-          branchingFactor: 2,
-          maxWidth: 1,
-          maxNoImprovement: 3,
-        });
-        const result = await provider.callApi('', {
-          originalProvider: target,
-          vars: { goal: 'test goal' },
-          prompt: { raw: '{{goal}}', label: 'test' },
-        });
-
-        // The new max of 6 on attempt 4 restarts the count, so three more misses are needed.
-        expect(result.metadata).toMatchObject({ attempts: 7, stopReason: 'NO_IMPROVEMENT' });
       } finally {
         remote.mockRestore();
         attackerSpy.mockRestore();
