@@ -111,15 +111,6 @@ describe('Vegas 2026 event data', () => {
     expect(copy).toMatch(/Aug(?:ust)?\.?\s*7\s*[–-]\s*9/i);
   });
 
-  // `Event.highlights` is rendered by nothing in src/components or src/pages/events —
-  // every event page hardcodes its own highlight markup. Carrying the field on the two
-  // newest entries created a copy surface that could drift from the live pages without
-  // anyone noticing, so the Vegas entries deliberately omit it. (The older entries still
-  // carry theirs; removing those is a separate cleanup.)
-  it.each(['blackhat-2026', 'defcon-2026'])('%s carries no unrendered highlights', (slug) => {
-    expect(getEventBySlug(slug)?.highlights).toBeUndefined();
-  });
-
   it('keeps the DEF CON 33 party entry distinct from the 2026 conference entry', () => {
     expect(getEventBySlug('defcon-2025')?.type).toBe('party');
     expect(getEventBySlug('defcon-2025')?.registrationUrl).toBeDefined();

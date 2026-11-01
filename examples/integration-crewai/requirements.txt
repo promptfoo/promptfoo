@@ -1,2 +1,1 @@
-# CrewAI - Main framework used in this example
-crewai>=0.203.0
+crewai>=1.15.28,<2

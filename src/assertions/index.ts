@@ -100,7 +100,12 @@ import {
   handleTrajectoryToolSequence,
   handleTrajectoryToolUsed,
 } from './trajectory';
-import { coerceString, getFinalTest, loadFromJavaScriptFile, processFileReference } from './utils';
+import {
+  coerceString,
+  getFinalTest,
+  processFileReference,
+  resolveJavaScriptFileFunction,
+} from './utils';
 import { handleWebhook } from './webhook';
 import { handleWordCount } from './wordCount';
 import { handleIsXml } from './xml';
@@ -114,7 +119,7 @@ import type {
   ScoringFunction,
 } from '../types/index';
 
-const ASSERTIONS_MAX_CONCURRENCY = getEnvInt('PROMPTFOO_ASSERTIONS_MAX_CONCURRENCY', 3);
+const DEFAULT_ASSERTIONS_MAX_CONCURRENCY = 3;
 const DEFAULT_TRACE_FETCH_MAX_ATTEMPTS = 6;
 const DEFAULT_TRACE_FETCH_RETRY_DELAY_MS = 250;
 const DEFAULT_TRACE_FETCH_STABLE_POLLS = 2;
@@ -270,7 +275,8 @@ const ASSERTION_HANDLERS: Record<
   meteor: async (params: AssertionParams) => {
     try {
       const { handleMeteorAssertion } = await import('./meteor.js');
-      return handleMeteorAssertion(params);
+      // Await so missing-dependency rejections reach the catch below.
+      return await handleMeteorAssertion(params);
     } catch (error) {
       if (
         error instanceof Error &&
@@ -281,7 +287,7 @@ const ASSERTION_HANDLERS: Record<
           pass: false,
           score: 0,
           reason:
-            'METEOR assertion requires the natural package. Please install it using: npm install natural@^8.1.0',
+            'METEOR assertion requires the natural package. Please install it using: npm install natural@^8.1.2',
           assertion: params.assertion,
         };
       }
@@ -297,7 +303,9 @@ const ASSERTION_HANDLERS: Record<
   python: handlePython,
   regex: handleRegex,
   ruby: handleRuby,
+  'rouge-l': handleRougeScore,
   'rouge-n': handleRougeScore,
+  'rouge-s': handleRougeScore,
   'search-rubric': handleSearchRubric,
   'skill-used': handleSkillUsed,
   similar: handleSimilar,
@@ -416,6 +424,7 @@ async function runAssertionInternal({
   providerResponse,
   traceId,
   traceData,
+  claimStoredGradingUsage,
 }: {
   prompt?: string;
   provider?: ApiProvider;
@@ -427,6 +436,7 @@ async function runAssertionInternal({
   assertIndex?: number;
   traceId?: string;
   traceData?: TraceData | null;
+  claimStoredGradingUsage?: () => boolean;
 }): Promise<GradingResult> {
   // Use resolved vars if provided, otherwise fall back to test.vars
   const resolvedVars = vars || test.vars || {};
@@ -477,6 +487,9 @@ async function runAssertionInternal({
   type ValueFromScriptType = string | boolean | number | GradingResult | object | undefined;
   let renderedValue = assertion.value;
   let valueFromScript: ValueFromScriptType;
+  // A JavaScript file or package function that throws becomes a failed result. It still goes
+  // through the common post-processing below, so overrides such as weight: 0 apply.
+  let scriptFailure: GradingResult | undefined;
   if (typeof renderedValue === 'string') {
     if (renderedValue.startsWith('file://')) {
       const basePath = cliState.basePath || '';
@@ -493,7 +506,18 @@ async function runAssertionInternal({
       filePath = path.resolve(basePath, filePath);
 
       if (isJavascriptFile(filePath)) {
-        valueFromScript = await loadFromJavaScriptFile(filePath, functionName, [output, context]);
+        // Load errors (missing file or export) are config mistakes and still throw.
+        const assertionFunction = await resolveJavaScriptFileFunction(filePath, functionName);
+        try {
+          valueFromScript = await assertionFunction(output, context);
+        } catch (error) {
+          scriptFailure = {
+            pass: false,
+            score: 0,
+            reason: `Custom function threw error: ${(error as Error)?.message ?? String(error)}`,
+            assertion,
+          };
+        }
         logger.debug(`Javascript script ${filePath} output: ${valueFromScript}`);
       } else if (filePath.endsWith('.py')) {
         try {
@@ -542,7 +566,16 @@ async function runAssertionInternal({
         );
       }
 
-      valueFromScript = await Promise.resolve(requiredModule(output, context));
+      try {
+        valueFromScript = await Promise.resolve(requiredModule(output, context));
+      } catch (error) {
+        scriptFailure = {
+          pass: false,
+          score: 0,
+          reason: `Custom function threw error: ${(error as Error)?.message ?? String(error)}`,
+          assertion,
+        };
+      }
     } else {
       // It's a normal string value
       renderedValue = nunjucks.renderString(renderedValue, resolvedVars);
@@ -647,13 +680,13 @@ async function runAssertionInternal({
   };
 
   // Check for redteam assertions first
-  if (assertionParams.baseType.startsWith('promptfoo:redteam:')) {
-    return handleRedteam(assertionParams);
+  if (!scriptFailure && assertionParams.baseType.startsWith('promptfoo:redteam:')) {
+    return handleRedteam(assertionParams, claimStoredGradingUsage);
   }
 
   const handler = ASSERTION_HANDLERS[assertionParams.baseType as keyof typeof ASSERTION_HANDLERS];
-  if (handler) {
-    const result = await handler(assertionParams);
+  if (scriptFailure || handler) {
+    const result = scriptFailure ?? (await handler(assertionParams));
 
     // Store rendered assertion value in metadata if it differs from the original template
     // This allows the UI to display substituted variable values instead of raw templates
@@ -820,11 +853,31 @@ export async function runAssertions({
 
   // Serialize when the grouping queue is active: concurrent dispatch can
   // reorder provider enqueues and split same-judge groups.
+  // Read at call time: --env-file and the config's `env:` block are applied after this module is imported.
+  // async rejects a limit below 1, which would fail every assertion.
   const concurrency = getProviderCallExecutionContext()?.providerCallQueue
     ? 1
-    : ASSERTIONS_MAX_CONCURRENCY;
+    : Math.max(
+        1,
+        getEnvInt('PROMPTFOO_ASSERTIONS_MAX_CONCURRENCY', DEFAULT_ASSERTIONS_MAX_CONCURRENCY),
+      );
 
-  await async.forEachOfLimit(asserts, concurrency, async ({ assertion, assertResult, index }) => {
+  // All assertions (including assertion sets) share one historical strategy cost.
+  // Keep ownership local to this run so replaying a saved response starts fresh.
+  let storedGradingUsageClaimed = false;
+  const claimStoredGradingUsage = () => {
+    if (storedGradingUsageClaimed) {
+      return false;
+    }
+    storedGradingUsageClaimed = true;
+    return true;
+  };
+
+  const runAndRecordAssertion = async ({
+    assertion,
+    assertResult,
+    index,
+  }: (typeof asserts)[number]) => {
     if (assertion.type.startsWith('select-') || assertion.type === 'max-score') {
       // Select-type and max-score assertions are handled separately because they depend on multiple outputs.
       return;
@@ -841,6 +894,7 @@ export async function runAssertions({
       assertIndex: index,
       traceId,
       traceData: preloadedTraceData,
+      claimStoredGradingUsage,
     });
 
     assertResult.addResult({
@@ -849,7 +903,23 @@ export async function runAssertions({
       metric: renderMetricName(assertion.metric, vars || test.vars || {}),
       weight: assertion.weight,
     });
-  });
+  };
+
+  const activeAssertions = new Set<Promise<void>>();
+  try {
+    await async.forEachOfLimit(asserts, concurrency, async (entry) => {
+      const pending = runAndRecordAssertion(entry);
+      activeAssertions.add(pending);
+      try {
+        await pending;
+      } finally {
+        activeAssertions.delete(pending);
+      }
+    });
+  } finally {
+    // async stops scheduling on the first error, but active graders still need their workspace.
+    await Promise.allSettled(activeAssertions);
+  }
 
   await async.forEach(subAssertResults, async (subAssertResult) => {
     const result = await subAssertResult.testResult();
@@ -876,7 +946,9 @@ export async function runCompareAssertion(
   context?: CallApiContextParams,
 ): Promise<GradingResult[]> {
   invariant(typeof assertion.value === 'string', 'select-best must have a string value');
-  test = getFinalTest(test, assertion);
+  // The matcher needs options and vars, not the assertion list. A runtime assertion can
+  // contain a provider with a circular SDK client, which getFinalTest cannot deep-clone.
+  test = getFinalTest({ ...test, assert: undefined }, assertion);
   const comparisonResults = await matchesSelectBest(
     assertion.value,
     outputs,
@@ -884,9 +956,17 @@ export async function runCompareAssertion(
     test.vars,
     context,
   );
+  // The runtime assertion may contain a live grader and secrets. Results only need
+  // the comparison criteria and scoring labels, so keep provider config out of memory.
+  const safeAssertion: Assertion = {
+    type: assertion.type,
+    value: assertion.value,
+    metric: assertion.metric,
+    weight: assertion.weight,
+  };
   return comparisonResults.map((result) => ({
     ...result,
-    assertion,
+    assertion: safeAssertion,
   }));
 }
 

@@ -5,12 +5,11 @@ prompts:
   - file://prompts.txt
 
 providers:
-  - id: bedrock:us.anthropic.claude-sonnet-4-6
-    label: Claude Sonnet 4.6
+  - id: bedrock:us.anthropic.claude-sonnet-5
+    label: Claude Sonnet 5
     config:
       region: us-west-2
       max_tokens: 2048
-      temperature: 0
   - id: bedrock:us.meta.llama4-scout-17b-instruct-v1:0
     label: Llama 4 Scout 17B
   - id: bedrock:amazon.nova-pro-v1:0

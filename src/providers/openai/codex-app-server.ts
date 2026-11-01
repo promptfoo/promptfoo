@@ -8,7 +8,7 @@ import { type Attributes, type Span, SpanKind, SpanStatusCode, trace } from '@op
 import dedent from 'dedent';
 import { z } from 'zod';
 import cliState from '../../cliState';
-import { getEnvString } from '../../envars';
+import { getProcessEnv } from '../../envars';
 import logger from '../../logger';
 import {
   addActiveSpanRoleAttribute,
@@ -24,6 +24,9 @@ import { renderVarsInObject } from '../../util/render';
 import { normalizeFieldName, REDACTED, sanitizeObject } from '../../util/sanitizer';
 import { VERSION } from '../../version';
 import { resolveAgenticWorkingDir } from '../agentic-utils';
+import { AgenticRunQueue, createAbortError } from '../agenticRunQueue';
+import { clearRepositoryEnv, isAgentWorkspace } from '../agentWorkspace';
+import { resolveProviderApiKey } from '../credentials';
 import { providerRegistry } from '../providerRegistry';
 import { calculateOpenAIUsageCostFromTokenUsage } from './billing';
 import {
@@ -33,6 +36,11 @@ import {
   withCodexTraceExporter,
 } from './codex-tracing';
 import { applyApiKeyToCliEnv, shouldInjectApiKey } from './codexApiKeyGating';
+import {
+  COMMON_OPTIONAL_PROCESS_ENV_KEYS,
+  findGitRepositoryRoot,
+  getMinimalProcessEnv,
+} from './codexProcess';
 import {
   buildCodexSkillMetadata,
   getCodexSkillMetadataFields,
@@ -376,39 +384,6 @@ interface ThreadHandle {
 const DEFAULT_REQUEST_TIMEOUT_MS = 30_000;
 const DEFAULT_STARTUP_TIMEOUT_MS = 30_000;
 
-const MINIMAL_CLI_ENV_KEYS = [
-  'PATH',
-  'Path',
-  'HOME',
-  'USER',
-  'USERNAME',
-  'USERPROFILE',
-  'TMPDIR',
-  'TMP',
-  'TEMP',
-  'SHELL',
-  'COMSPEC',
-  'SystemRoot',
-  'PATHEXT',
-  'LANG',
-  'LC_ALL',
-  'TERM',
-] as const;
-
-const COMMON_OPTIONAL_PROCESS_ENV_KEYS = [
-  'CODEX_HOME',
-  'HTTP_PROXY',
-  'HTTPS_PROXY',
-  'ALL_PROXY',
-  'NO_PROXY',
-  'SSL_CERT_FILE',
-  'SSL_CERT_DIR',
-  'REQUESTS_CA_BUNDLE',
-  'NODE_EXTRA_CA_CERTS',
-  'SSH_AUTH_SOCK',
-  'GIT_SSH_COMMAND',
-] as const;
-
 const CodexCliEnvValueSchema = z.union([z.string(), z.number(), z.boolean()]).transform(String);
 
 const CodexAppServerReasoningEffortSchema = z.enum([
@@ -677,17 +652,6 @@ function mergeCodexAppServerConfig(
   };
 }
 
-function getMinimalProcessEnv(): Record<string, string> {
-  const env: Record<string, string> = {};
-  for (const key of MINIMAL_CLI_ENV_KEYS) {
-    const value = process.env[key];
-    if (typeof value === 'string' && value.length > 0) {
-      env[key] = value;
-    }
-  }
-  return env;
-}
-
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 }
@@ -820,10 +784,48 @@ function isMethodNotFoundError(error: unknown): boolean {
   return error instanceof JsonRpcError && error.code === -32601;
 }
 
-function createAbortError(message: string): Error {
-  const error = new Error(message);
-  error.name = 'AbortError';
-  return error;
+/** Find npm's entrypoint only when Windows cannot launch a native Codex binary. */
+function getCodexNpmEntrypoint(env: Record<string, string>): string | undefined {
+  // Match Node's first, case-insensitive PATH key after sorting environment keys.
+  const pathKey = Object.keys(env)
+    .sort()
+    .find((key) => key.toUpperCase() === 'PATH');
+  const searchPath = pathKey
+    ? env[pathKey]
+    : (Object.entries(process.env).find(([key]) => key.toUpperCase() === 'PATH')?.[1] ?? '');
+  // libuv skips quoted delimiters, then consumes the rest of the PATH component.
+  const directories = (
+    searchPath.match(
+      new RegExp(`(?:"[^"]*(?:"|$)|'[^']*(?:'|$)|[^${path.delimiter}]+)[^${path.delimiter}]*`, 'g'),
+    ) ?? []
+  ).map((directory) => directory.replace(/^["']|["']$/g, ''));
+  // libuv checks the parent process environment when deciding whether to search cwd.
+  const searchCwd = !Object.keys(process.env).some(
+    (key) => key.toUpperCase() === 'NODEFAULTCURRENTDIRECTORYINEXEPATH',
+  );
+  const nativeDirectories = searchCwd ? [process.cwd(), ...directories] : directories;
+  if (
+    nativeDirectories.some((directory) =>
+      ['codex.com', 'codex.exe'].some((file) =>
+        fs.existsSync(path.resolve(process.cwd(), directory, file)),
+      ),
+    )
+  ) {
+    return undefined;
+  }
+  // Only discover npm installations on absolute PATH entries, never in the workspace.
+  const binDirectory = directories.find(
+    (directory) => path.isAbsolute(directory) && fs.existsSync(path.join(directory, 'codex.cmd')),
+  );
+  if (!binDirectory) {
+    return undefined;
+  }
+  const nodeModulesDirectory =
+    path.basename(binDirectory).toLowerCase() === '.bin'
+      ? path.dirname(binDirectory)
+      : path.join(binDirectory, 'node_modules');
+  const entrypoint = path.join(nodeModulesDirectory, '@openai', 'codex', 'bin', 'codex.js');
+  return fs.existsSync(entrypoint) ? entrypoint : undefined;
 }
 
 class CodexAppServerConnection {
@@ -934,9 +936,7 @@ class CodexAppServerConnection {
         pendingRequest.abortListener = () => {
           const error = createAbortError(`codex app-server request aborted: ${method}`);
           this.pending.delete(id);
-          if (pendingRequest.timeout) {
-            clearTimeout(pendingRequest.timeout);
-          }
+          clearTimeout(pendingRequest.timeout);
           reject(error);
           logger.debug('[CodexAppServer] JSON-RPC request aborted', {
             error: error.message,
@@ -975,12 +975,8 @@ class CodexAppServerConnection {
       let terminateTimer: ReturnType<typeof setTimeout> | undefined;
       let killTimer: ReturnType<typeof setTimeout> | undefined;
       const finish = () => {
-        if (terminateTimer) {
-          clearTimeout(terminateTimer);
-        }
-        if (killTimer) {
-          clearTimeout(killTimer);
-        }
+        clearTimeout(terminateTimer);
+        clearTimeout(killTimer);
         this.lineInterface.close();
         resolve();
       };
@@ -1027,7 +1023,7 @@ class CodexAppServerConnection {
     return this.closePromise;
   }
 
-  private handleLine(line: string): void {
+  private handleLine(line: string, retryBufferedMessage = true): void {
     const trimmed = line.trim();
     if (!trimmed && this.bufferedJsonRpcLines.length === 0) {
       return;
@@ -1035,7 +1031,7 @@ class CodexAppServerConnection {
 
     const candidateLines =
       this.bufferedJsonRpcLines.length > 0 ? [...this.bufferedJsonRpcLines, line] : [trimmed];
-    const candidate = candidateLines.join('\\n');
+    let candidate = candidateLines.join('\n');
     if (candidate.length > MAX_BUFFERED_JSON_RPC_CHARS) {
       this.bufferedJsonRpcLines = [];
       this.handleProcessFailure(
@@ -1048,15 +1044,40 @@ class CodexAppServerConnection {
     }
     let message: JsonRpcMessage;
     try {
-      message = JSON.parse(candidate) as JsonRpcMessage;
+      try {
+        message = JSON.parse(candidate) as JsonRpcMessage;
+      } catch (error) {
+        if (
+          candidateLines.length <= 1 ||
+          !(error instanceof Error) ||
+          !/Bad control character/i.test(error.message)
+        ) {
+          throw error;
+        }
+        // Preserve compatibility with app-server output containing raw newlines inside strings.
+        candidate = this.escapeStringNewlines(candidate);
+        message = JSON.parse(candidate) as JsonRpcMessage;
+      }
     } catch (error) {
-      if (this.shouldBufferJsonRpcLine(error, trimmed)) {
+      if (this.shouldBufferJsonRpcLine(error, candidate)) {
         this.bufferedJsonRpcLines = candidateLines;
         return;
       }
 
       logger.warn('[CodexAppServer] Failed to parse JSON-RPC line', { error, line: candidate });
       this.bufferedJsonRpcLines = [];
+      if (retryBufferedMessage && candidateLines.length > 1) {
+        // A later object may begin a new record after an unfinished malformed message.
+        let restartIndex = candidateLines.length - 1;
+        for (let index = candidateLines.length - 1; index > 0; index--) {
+          if (candidateLines[index].trimStart().startsWith('{')) {
+            restartIndex = index;
+            break;
+          }
+        }
+        this.bufferedJsonRpcLines = candidateLines.slice(restartIndex, -1);
+        this.handleLine(line, false);
+      }
       return;
     }
 
@@ -1064,16 +1085,42 @@ class CodexAppServerConnection {
     this.handleMessage(message);
   }
 
-  private shouldBufferJsonRpcLine(error: unknown, trimmedLine: string): boolean {
-    if (this.bufferedJsonRpcLines.length > 0) {
-      return true;
+  private escapeStringNewlines(candidate: string): string {
+    const parts: string[] = [];
+    let inString = false;
+    let escaped = false;
+    let start = 0;
+
+    for (let index = 0; index < candidate.length; index++) {
+      const character = candidate[index];
+      if (inString && character === '\n' && !escaped) {
+        parts.push(candidate.slice(start, index), '\\n');
+        start = index + 1;
+      }
+      if (escaped) {
+        escaped = false;
+      } else if (inString && character === '\\') {
+        escaped = true;
+      } else if (character === '"') {
+        inString = !inString;
+      }
     }
-    if (!trimmedLine.startsWith('{')) {
+
+    parts.push(candidate.slice(start));
+    return parts.join('');
+  }
+
+  private shouldBufferJsonRpcLine(error: unknown, candidate: string): boolean {
+    if (!candidate.trimStart().startsWith('{')) {
       return false;
     }
 
     const message = error instanceof Error ? error.message : String(error);
-    return /Unterminated string|Unexpected end of JSON input|Bad control character/i.test(message);
+    return (
+      /Unterminated string|Unexpected end of JSON input/i.test(message) ||
+      (message.startsWith('Expected ') &&
+        message.includes(` in JSON at position ${candidate.length} (line`))
+    );
   }
 
   private handleMessage(message: JsonRpcMessage): void {
@@ -1103,9 +1150,7 @@ class CodexAppServerConnection {
     }
 
     this.pending.delete(message.id as JsonRpcId);
-    if (pendingRequest.timeout) {
-      clearTimeout(pendingRequest.timeout);
-    }
+    clearTimeout(pendingRequest.timeout);
     if (pendingRequest.abortSignal && pendingRequest.abortListener) {
       pendingRequest.abortSignal.removeEventListener('abort', pendingRequest.abortListener);
     }
@@ -1201,9 +1246,7 @@ class CodexAppServerConnection {
 
   private rejectPending(error: Error): void {
     for (const [id, pendingRequest] of this.pending) {
-      if (pendingRequest.timeout) {
-        clearTimeout(pendingRequest.timeout);
-      }
+      clearTimeout(pendingRequest.timeout);
       if (pendingRequest.abortSignal && pendingRequest.abortListener) {
         pendingRequest.abortSignal.removeEventListener('abort', pendingRequest.abortListener);
       }
@@ -1221,6 +1264,9 @@ class CodexAppServerConnection {
 }
 
 export class OpenAICodexAppServerProvider implements ApiProvider {
+  private readonly registerForCleanup: boolean;
+  private cleanupGeneration = 0;
+
   config: CodexAppServerConfig;
   env?: EnvOverrides;
   apiKey?: string;
@@ -1230,11 +1276,15 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
   private connectionPromises = new Map<string, Promise<CodexAppServerConnection>>();
   private initializingConnections = new Set<CodexAppServerConnection>();
   private threads = new Map<string, ThreadHandle>();
-  private threadPromises = new Map<string, Promise<ThreadHandle>>();
+  private threadPromises = new Map<
+    string,
+    { promise: Promise<ThreadHandle>; connectionInstanceId: string }
+  >();
+  // Retain the legacy Map field in provider serialization fallback output.
   private threadPromiseConnectionInstances = new Map<string, string>();
   private explicitThreadAbortCleanups = new Map<string, Promise<void>>();
   private protectedThreadCounts = new Map<string, number>();
-  private threadRunQueues = new Map<string, Promise<void>>();
+  private threadRunQueues = new AgenticRunQueue('Codex app-server thread turn wait aborted');
   private activeTurnsByThread = new Map<string, CodexAppServerTurnState>();
   private activeTurnsByTurn = new Map<string, CodexAppServerTurnState>();
   private validatedWorkingDirs = new Set<string>();
@@ -1248,13 +1298,17 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
       id?: string;
       config?: CodexAppServerConfig;
       env?: EnvOverrides;
+      registerForCleanup?: boolean;
     } = {},
   ) {
+    this.registerForCleanup = options.registerForCleanup ?? true;
     this.config = parseCodexAppServerConfig(options.config);
     this.env = options.env;
     this.apiKey = this.getApiKey();
     this.providerId = options.id ?? this.providerId;
-    providerRegistry.register(this);
+    if (this.registerForCleanup) {
+      providerRegistry.register(this);
+    }
   }
 
   id(): string {
@@ -1262,13 +1316,7 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
   }
 
   getApiKey(config: CodexAppServerConfig = this.config): string | undefined {
-    return (
-      config.apiKey ||
-      this.env?.OPENAI_API_KEY ||
-      this.env?.CODEX_API_KEY ||
-      getEnvString('OPENAI_API_KEY') ||
-      getEnvString('CODEX_API_KEY')
-    );
+    return resolveProviderApiKey(config, this.env, ['OPENAI_API_KEY', 'CODEX_API_KEY']);
   }
 
   requiresApiKey(): boolean {
@@ -1280,10 +1328,11 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
   }
 
   async cleanup(): Promise<void> {
+    providerRegistry.unregister(this);
+    this.cleanupGeneration++;
     this.resolveActiveTurns(new Error('codex app-server provider cleanup interrupted active turn'));
     this.threads.clear();
     this.threadPromises.clear();
-    this.threadPromiseConnectionInstances.clear();
     this.explicitThreadAbortCleanups.clear();
     this.threadRunQueues.clear();
     this.activeTurnsByThread.clear();
@@ -1308,11 +1357,7 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
   }
 
   async shutdown(): Promise<void> {
-    try {
-      await this.cleanup();
-    } finally {
-      providerRegistry.unregister(this);
-    }
+    await this.cleanup();
   }
 
   async callApi(
@@ -1320,6 +1365,7 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
     context?: CallApiContextParams,
     callOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
+    const cleanupGeneration = this.cleanupGeneration;
     const mergedConfig = mergeCodexAppServerConfig(
       this.config,
       context?.prompt?.config as CodexAppServerConfig | undefined,
@@ -1334,7 +1380,7 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
 
     return withGenAISpan(
       this.buildSpanContext(prompt, context, requestedModel),
-      () => this.callApiInternal(prompt, context, callOptions, config),
+      () => this.callApiInternal(prompt, context, callOptions, config, cleanupGeneration),
       (response) => this.extractSpanResult(response, requestedModel),
     );
   }
@@ -1398,6 +1444,7 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
     context: CallApiContextParams | undefined,
     callOptions: CallApiOptionsParams | undefined,
     rawConfig: CodexAppServerConfig,
+    cleanupGeneration: number,
   ): Promise<ProviderResponse> {
     let config: CodexAppServerConfig;
     try {
@@ -1529,6 +1576,7 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
                 await this.cleanupThreadAfterTurn(connection, threadHandle, resolvedConfig);
               }
             },
+            cleanupGeneration,
           );
         } finally {
           this.unprotectThread(threadHandle.threadId);
@@ -1541,13 +1589,12 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
         }
       };
 
-      return explicitThreadQueueKey
-        ? await this.runSerializedThreadTurn(
-            explicitThreadQueueKey,
-            callOptions?.abortSignal,
-            runThreadTurn,
-          )
-        : await runThreadTurn();
+      return await this.runSerializedThreadTurn(
+        explicitThreadQueueKey,
+        callOptions?.abortSignal,
+        runThreadTurn,
+        cleanupGeneration,
+      );
     } catch (error: unknown) {
       const isAbort =
         (error instanceof Error && error.name === 'AbortError') ||
@@ -1598,7 +1645,7 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
       Object.entries(config.cli_env ?? {}).map(([key, value]) => [key, String(value)]),
     );
     const env: Record<string, string> = {
-      ...(inheritProcessEnv ? (process.env as Record<string, string>) : getMinimalProcessEnv()),
+      ...(inheritProcessEnv ? (getProcessEnv() as Record<string, string>) : getMinimalProcessEnv()),
       ...cliEnv,
     };
 
@@ -1662,6 +1709,10 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
       }
     } else {
       delete sortedEnv.TRACEPARENT;
+    }
+
+    if (config.working_dir && isAgentWorkspace(config.working_dir)) {
+      clearRepositoryEnv(sortedEnv);
     }
 
     return sortedEnv;
@@ -1744,10 +1795,15 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
     config: CodexAppServerConfig,
   ): Promise<CodexAppServerConnection> {
     const connectionInstanceId = `${connectionKey}:${crypto.randomUUID()}`;
+    const entrypoint =
+      process.platform === 'win32' && config.codex_path_override === undefined
+        ? getCodexNpmEntrypoint(env)
+        : undefined;
+    const args = this.buildAppServerArgs(config, env);
     const connection = new CodexAppServerConnection({
       connectionInstanceId,
-      command: config.codex_path_override ?? 'codex',
-      args: this.buildAppServerArgs(config, env),
+      command: config.codex_path_override ?? (entrypoint ? process.execPath : 'codex'),
+      args: entrypoint ? [entrypoint, ...args] : args,
       env,
       requestTimeoutMs: this.getRequestTimeoutMs(config),
       startupTimeoutMs: config.startup_timeout_ms ?? DEFAULT_STARTUP_TIMEOUT_MS,
@@ -1755,6 +1811,10 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
       onServerRequest: (message) => this.handleServerRequest(message, config),
       onClose: (error) => this.handleConnectionClose(connectionKey, connectionInstanceId, error),
     });
+
+    if (this.registerForCleanup) {
+      providerRegistry.register(this);
+    }
 
     this.initializingConnections.add(connection);
     try {
@@ -1881,10 +1941,9 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
           this.threads.delete(threadCacheKey);
         }
       }
-      for (const [threadCacheKey] of this.threadPromises) {
-        if (this.threadPromiseConnectionInstances.get(threadCacheKey) === connectionInstanceId) {
+      for (const [threadCacheKey, pending] of this.threadPromises) {
+        if (pending.connectionInstanceId === connectionInstanceId) {
           this.threadPromises.delete(threadCacheKey);
-          this.threadPromiseConnectionInstances.delete(threadCacheKey);
         }
       }
     }
@@ -2020,13 +2079,13 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
   ): Promise<void> {
     const pending: Promise<unknown>[] = Array.from(this.threadPromises.entries())
       .filter(([key]) => key.startsWith(prefix) && key !== keepKey)
-      .map(([, promise]) => promise);
+      .map(([, entry]) => entry.promise);
     const abortCleanups = Array.from(this.explicitThreadAbortCleanups.entries())
       .filter(([key]) => key.startsWith(prefix))
       .map(([, promise]) => promise);
     pending.push(...abortCleanups);
     if (pending.length > 0) {
-      await this.waitForPreviousThreadRun(
+      await this.threadRunQueues.wait(
         Promise.allSettled(pending).then(() => undefined),
         abortSignal,
       );
@@ -2065,7 +2124,8 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
         );
       }
       const cachedOrPending =
-        (cacheKey ? this.threads.get(cacheKey) : undefined) ?? this.threadPromises.get(variantKey);
+        (cacheKey ? this.threads.get(cacheKey) : undefined) ??
+        this.threadPromises.get(variantKey)?.promise;
       if (cachedOrPending !== undefined) {
         return this.waitForThreadHandle(cachedOrPending, callOptions?.abortSignal);
       }
@@ -2160,7 +2220,7 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
     if (!cacheKey) {
       return undefined;
     }
-    return this.threads.get(cacheKey) ?? this.threadPromises.get(cacheKey);
+    return this.threads.get(cacheKey) ?? this.threadPromises.get(cacheKey)?.promise;
   }
 
   private cacheThreadPromise(
@@ -2174,13 +2234,11 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
 
     let threadPromise: Promise<ThreadHandle>;
     threadPromise = createThread().finally(() => {
-      if (this.threadPromises.get(cacheKey) === threadPromise) {
+      if (this.threadPromises.get(cacheKey)?.promise === threadPromise) {
         this.threadPromises.delete(cacheKey);
-        this.threadPromiseConnectionInstances.delete(cacheKey);
       }
     });
-    this.threadPromises.set(cacheKey, threadPromise);
-    this.threadPromiseConnectionInstances.set(cacheKey, connectionInstanceId);
+    this.threadPromises.set(cacheKey, { promise: threadPromise, connectionInstanceId });
     return threadPromise;
   }
 
@@ -2360,7 +2418,7 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
         : {}),
       ...(config.personality ? { personality: config.personality } : {}),
       ...(config.base_url
-        ? { config: { ...(config.cli_config ?? {}), base_url: config.base_url } }
+        ? { config: { ...(config.cli_config ?? {}), openai_base_url: config.base_url } }
         : {}),
       ephemeral: config.ephemeral ?? true,
       experimentalRawEvents: config.experimental_raw_events ?? false,
@@ -2387,6 +2445,9 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
         ? { developerInstructions: config.developer_instructions }
         : {}),
       ...(config.personality ? { personality: config.personality } : {}),
+      ...(config.base_url
+        ? { config: { ...(config.cli_config ?? {}), openai_base_url: config.base_url } }
+        : {}),
       persistExtendedHistory: config.persist_extended_history ?? false,
     };
   }
@@ -3055,9 +3116,7 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
         ),
       );
     } finally {
-      if (timeout) {
-        clearTimeout(timeout);
-      }
+      clearTimeout(timeout);
       if (abortListener && callOptions?.abortSignal) {
         callOptions.abortSignal.removeEventListener('abort', abortListener);
       }
@@ -3132,58 +3191,17 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
     queueKey: string | undefined,
     abortSignal: AbortSignal | undefined,
     executeTurn: () => Promise<T>,
+    cleanupGeneration: number,
   ): Promise<T> {
-    if (!queueKey) {
+    if (cleanupGeneration !== this.cleanupGeneration) {
+      throw new Error('codex app-server provider cleanup interrupted queued turn');
+    }
+    return this.threadRunQueues.run(queueKey, abortSignal, async () => {
+      if (cleanupGeneration !== this.cleanupGeneration) {
+        throw new Error('codex app-server provider cleanup interrupted queued turn');
+      }
       return executeTurn();
-    }
-
-    const previousRun = this.threadRunQueues.get(queueKey) ?? Promise.resolve();
-    let releaseCurrentRun: () => void = () => {};
-    const currentRun = new Promise<void>((resolve) => {
-      releaseCurrentRun = resolve;
     });
-    const queuedRun = previousRun.catch(() => undefined).then(() => currentRun);
-    this.threadRunQueues.set(queueKey, queuedRun);
-    void queuedRun.finally(() => {
-      if (this.threadRunQueues.get(queueKey) === queuedRun) {
-        this.threadRunQueues.delete(queueKey);
-      }
-    });
-
-    try {
-      await this.waitForPreviousThreadRun(previousRun, abortSignal);
-      return await executeTurn();
-    } finally {
-      releaseCurrentRun();
-    }
-  }
-
-  private async waitForPreviousThreadRun(
-    previousRun: Promise<void>,
-    abortSignal: AbortSignal | undefined,
-  ): Promise<void> {
-    const previousRunDone = previousRun.catch(() => undefined);
-    if (!abortSignal) {
-      await previousRunDone;
-      return;
-    }
-    if (abortSignal.aborted) {
-      throw createAbortError('Codex app-server thread turn wait aborted');
-    }
-
-    let onAbort: (() => void) | undefined;
-    const abortPromise = new Promise<void>((_, reject) => {
-      onAbort = () => reject(createAbortError('Codex app-server thread turn wait aborted'));
-      abortSignal.addEventListener('abort', onAbort, { once: true });
-    });
-
-    try {
-      await Promise.race([previousRunDone, abortPromise]);
-    } finally {
-      if (onAbort) {
-        abortSignal.removeEventListener('abort', onAbort);
-      }
-    }
   }
 
   private buildProviderResponse(
@@ -3454,7 +3472,10 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
       input,
       output,
       cached: usage.cachedInputTokens ?? usage.cached_input_tokens ?? 0,
-      cacheWrite: usage.cacheWriteInputTokens ?? usage.cache_write_input_tokens,
+      cacheWrite:
+        typeof (usage.cacheWriteInputTokens ?? usage.cache_write_input_tokens) === 'number'
+          ? (usage.cacheWriteInputTokens ?? usage.cache_write_input_tokens)
+          : undefined,
       reasoning: usage.reasoningOutputTokens ?? usage.reasoning_output_tokens ?? 0,
     };
   }
@@ -3542,17 +3563,7 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
   }
 
   private findGitRepositoryRoot(workingDir: string): string | undefined {
-    let currentDir = path.resolve(workingDir);
-    while (true) {
-      if (fs.existsSync(path.join(currentDir, '.git'))) {
-        return currentDir;
-      }
-      const parentDir = path.dirname(currentDir);
-      if (parentDir === currentDir) {
-        return undefined;
-      }
-      currentDir = parentDir;
-    }
+    return findGitRepositoryRoot(workingDir);
   }
 
   private warnOnceForDeepTracingThreadOptions(config: CodexAppServerConfig): void {

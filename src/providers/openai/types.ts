@@ -15,6 +15,8 @@ export interface CallbackContext {
   assistantId: string;
   /** The provider type (e.g., 'openai', 'azure') */
   provider: string;
+  /** Caller cancellation signal, when supported by the provider (including Azure Foundry). */
+  abortSignal?: AbortSignal;
 }
 
 /**
@@ -171,9 +173,12 @@ export type OpenAiCompletionOptions = OpenAiSharedOptions & {
   prompt_cache_key?: string;
   prompt_cache_options?: OpenAiPromptCacheOptions;
   prompt_cache_retention?: OpenAiPromptCacheRetention;
+  safety_identifier?: string;
   reasoning_effort?: GPT5ReasoningEffort;
   reasoning?: Reasoning | GPT5Reasoning;
-  service_tier?: ('auto' | 'default' | 'fast' | 'flex' | 'priority' | 'premium') | null;
+  service_tier?:
+    | ('auto' | 'default' | 'fast' | 'flex' | 'priority' | 'premium' | 'ultrafast')
+    | null;
   modalities?: string[];
   audio?: {
     bitrate?: string;
@@ -183,6 +188,9 @@ export type OpenAiCompletionOptions = OpenAiSharedOptions & {
   };
 
   // Responses API specific options
+  access_programs?: {
+    cyber?: 'standard' | 'daybreak_blue' | 'daybreak_red';
+  };
   instructions?: string;
   max_output_tokens?: number;
   max_tool_calls?: number;
@@ -208,7 +216,7 @@ export type OpenAiCompletionOptions = OpenAiSharedOptions & {
   mcp?: MCPConfig;
 
   /**
-   * Controls response verbosity for GPT-5 models and GPT-6 Astra.
+   * Controls response verbosity for GPT-5 and GPT-6 models.
    */
   verbosity?: GPT5Verbosity;
 

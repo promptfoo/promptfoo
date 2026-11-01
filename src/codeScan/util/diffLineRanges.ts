@@ -9,15 +9,10 @@
  * numbers to ensure comments can be posted successfully.
  */
 
+import { annotateDiffWithLineRanges } from '../git/diffAnnotator';
 import { parseHunkHeader } from './diffHunkParser';
 
-/**
- * Represents a range of valid line numbers in a file's diff
- */
-export interface LineRange {
-  start: number;
-  end: number;
-}
+import type { LineRange } from '../../types/codeScan';
 
 /**
  * Map of file paths to their valid line ranges in the diff
@@ -47,105 +42,111 @@ export interface ClampedLines {
  * const diff = `diff --git a/src/foo.ts b/src/foo.ts
  * --- a/src/foo.ts
  * +++ b/src/foo.ts
- * @@ -10,7 +10,8 @@
+ * @@ -10,3 +10,3 @@
  *    context
  * -  removed
  * +  added
  *    context`;
  *
  * const ranges = extractValidLineRanges(diff);
- * // Map { 'src/foo.ts' => [{ start: 10, end: 17 }] }
+ * // Map { 'src/foo.ts' => [{ start: 10, end: 12 }] }
  * ```
  */
 export function extractValidLineRanges(unifiedDiff: string): FileLineRanges {
   const ranges: FileLineRanges = new Map();
 
-  if (!unifiedDiff || unifiedDiff.trim() === '') {
-    return ranges;
-  }
-
-  const lines = unifiedDiff.split('\n');
-  let currentFile: string | null = null;
-  let currentRanges: LineRange[] = [];
-  let currentNewLine = 0;
-  let hunkStartLine = 0;
-
-  for (const line of lines) {
-    // Match file header: diff --git a/path b/path
-    // or +++ b/path (for new file path)
-    const fileMatch = line.match(/^\+\+\+ b\/(.+)$/);
-    if (fileMatch) {
-      // Close current hunk if we have one (before switching files)
-      if (currentFile && hunkStartLine > 0 && currentNewLine > hunkStartLine) {
-        currentRanges.push({
-          start: hunkStartLine,
-          end: currentNewLine - 1,
-        });
-      }
-
-      // Save previous file's ranges
-      if (currentFile && currentRanges.length > 0) {
-        ranges.set(currentFile, currentRanges);
-      }
-
-      currentFile = fileMatch[1];
-      currentRanges = [];
-      currentNewLine = 0;
-      hunkStartLine = 0;
+  for (const patch of splitFilePatches(unifiedDiff)) {
+    // Only file headers before the first hunk identify the path. Added source
+    // text can itself look like a +++ header, so never search inside a hunk.
+    const lines = patch.split('\n');
+    const hunkStart = lines.findIndex((line) => line.startsWith('@@ '));
+    const headers = hunkStart === -1 ? lines : lines.slice(0, hunkStart);
+    const header = headers.find((line) => line.startsWith('+++ '))?.slice(4);
+    const filePath = header && decodeNewFilePath(header);
+    if (!filePath) {
       continue;
     }
 
-    // Match hunk header: @@ -old,count +new,count @@
-    const hunkHeader = parseHunkHeader(line);
-    if (hunkHeader && currentFile) {
-      // Save the previous hunk's range if we have one
-      if (hunkStartLine > 0 && currentNewLine > hunkStartLine) {
-        currentRanges.push({
-          start: hunkStartLine,
-          end: currentNewLine - 1,
-        });
-      }
-
-      // Start tracking new hunk
-      hunkStartLine = hunkHeader.newStart;
-      currentNewLine = hunkHeader.newStart;
-
-      // For hunks with 0 lines in new file (pure deletion), don't start a range
-      if (hunkHeader.newCount === 0) {
-        hunkStartLine = 0;
-      }
-      continue;
-    }
-
-    // Track line numbers within hunks
-    if (currentFile && hunkStartLine > 0) {
-      if (line.startsWith('-')) {
-        // Removed line - doesn't exist in new file
-        continue;
-      } else if (line.startsWith('+') || line.startsWith(' ') || line === '') {
-        // Added line, context line, or empty line within hunk
-        currentNewLine++;
-      } else if (line.startsWith('\\')) {
-        // Special marker like "\ No newline at end of file" - skip
-        continue;
-      }
-    }
-  }
-
-  // Save the last file's ranges
-  if (currentFile) {
-    if (hunkStartLine > 0 && currentNewLine > hunkStartLine) {
-      currentRanges.push({
-        start: hunkStartLine,
-        end: currentNewLine - 1,
-      });
-    }
-    if (currentRanges.length > 0) {
-      ranges.set(currentFile, currentRanges);
+    const { lineRanges } = annotateDiffWithLineRanges(patch);
+    if (lineRanges.length > 0) {
+      ranges.set(filePath, lineRanges);
     }
   }
 
   return ranges;
+}
+
+function* splitFilePatches(diff: string): Generator<string> {
+  const lines = diff.split('\n');
+  let start = 0;
+  let remaining = 0;
+  for (const [index, line] of lines.entries()) {
+    // Unified diffs may omit Git's section markers. Only recognize their
+    // ---/+++ header pair outside a hunk, where it cannot be source content.
+    if (
+      line.startsWith('diff --git ') ||
+      (remaining === 0 && line.startsWith('--- ') && lines[index + 1]?.startsWith('+++ '))
+    ) {
+      if (index > start) {
+        yield `${lines.slice(start, index).join('\n')}\n`;
+      }
+      start = index;
+      remaining = 0;
+    }
+    const hunk = parseHunkHeader(line);
+    if (hunk) {
+      remaining = hunk.oldCount + hunk.newCount;
+    } else if (remaining > 0 && !line.startsWith('\\')) {
+      remaining = Math.max(0, remaining - (line.startsWith('+') || line.startsWith('-') ? 1 : 2));
+    }
+  }
+  yield lines.slice(start).join('\n');
+}
+
+function decodeNewFilePath(rawHeader: string): string | null {
+  // Git appends a tab to unquoted paths containing spaces. Literal tabs in
+  // filenames are always escaped inside a quoted path.
+  const header = rawHeader.split('\t', 1)[0];
+  let filePath = header;
+  if (header.startsWith('"')) {
+    if (!header.endsWith('"')) {
+      return null;
+    }
+    const body = header.slice(1, -1);
+    const parts = [...body.matchAll(/\\([0-3][0-7]{2}|.)|([^\\]+)/gs)];
+    if (parts.map((part) => part[0]).join('') !== body) {
+      return null;
+    }
+    const escapes: Record<string, string> = {
+      a: '\x07',
+      b: '\b',
+      f: '\f',
+      n: '\n',
+      r: '\r',
+      t: '\t',
+      v: '\v',
+      '"': '"',
+      '\\': '\\',
+    };
+    const bytes: Buffer[] = [];
+    for (const [, escaped, text] of parts) {
+      if (text !== undefined) {
+        if (text.includes('"')) {
+          return null;
+        }
+        bytes.push(Buffer.from(text));
+      } else if (/^[0-7]{3}$/.test(escaped)) {
+        bytes.push(Buffer.from([Number.parseInt(escaped, 8)]));
+      } else if (escapes[escaped] === undefined) {
+        return null;
+      } else {
+        bytes.push(Buffer.from(escapes[escaped]));
+      }
+    }
+    // Git quotes UTF-8 bytes as octal, which JSON string decoding cannot handle.
+    filePath = Buffer.concat(bytes).toString('utf8');
+  }
+  return filePath.startsWith('b/') ? filePath.slice(2) : null;
 }
 
 /**
@@ -264,23 +265,13 @@ export function clampCommentLines(
 
   // Clamp the start line
   const clampedStartLine = clampToValidLine(filepath, startLine, ranges);
-  if (clampedStartLine === null) {
-    return {
-      startLine: null,
-      line: clampedEndLine,
-    };
-  }
-
-  // Ensure start <= end (if start > end after clamping, make it single-line)
-  if (clampedStartLine > clampedEndLine) {
-    return {
-      startLine: null,
-      line: clampedEndLine,
-    };
-  }
-
-  // If start and end are the same, make it single-line
-  if (clampedStartLine === clampedEndLine) {
+  // Missing or equal start lines make a single-line comment. Also ensure start <= end:
+  // if start > end after clamping, make it single-line.
+  if (
+    clampedStartLine === null ||
+    clampedStartLine > clampedEndLine ||
+    clampedStartLine === clampedEndLine
+  ) {
     return {
       startLine: null,
       line: clampedEndLine,

@@ -41,7 +41,7 @@ class Crew:
     def __init__(self, agents, tasks):
         assert len(agents) == len(tasks) == 1
 
-    def kickoff(self, inputs):
+    async def kickoff_async(self, inputs):
         assert inputs["job_requirements"] == "Find a candidate"
         return CrewOutput(os.environ["MOCK_RAW"])
 `,

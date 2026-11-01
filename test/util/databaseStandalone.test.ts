@@ -10,13 +10,18 @@ import { type CompletedPrompt, type Prompt, ResultFailureReason } from '../../sr
 import {
   clearStandaloneEvalCache,
   deleteEval,
+  getDatasetFromHash,
+  getPrompts,
+  getPromptsForTestCasesHash,
   getStandaloneEvals,
+  getTestCases,
   updateResult,
 } from '../../src/util/database';
 import {
   getCachedStandaloneEvals,
   getStandaloneEvalCacheKey,
 } from '../../src/util/standaloneEvalCache';
+import { clearEvalTables } from '../util/evalDb';
 
 vi.mock('../../src/database/signal', async () => {
   const actual = await vi.importActual('../../src/database/signal');
@@ -59,15 +64,7 @@ async function createEvalWithPrompts(config: Partial<Parameters<typeof Eval.crea
   });
 }
 
-async function resetEvalTables() {
-  const db = await getDb();
-  await db.run('DELETE FROM eval_results');
-  await db.run('DELETE FROM evals_to_datasets');
-  await db.run('DELETE FROM evals_to_prompts');
-  await db.run('DELETE FROM evals_to_tags');
-  await db.run('DELETE FROM evals');
-  clearStandaloneEvalCache();
-}
+const resetEvalTables = () => clearEvalTables(() => clearStandaloneEvalCache());
 
 async function setIsRedteam(evalId: string, value: boolean) {
   const db = await getDb();
@@ -87,6 +84,25 @@ describe('getStandaloneEvals', () => {
 
   afterEach(() => {
     vi.resetAllMocks();
+    vi.unstubAllEnvs();
+  });
+
+  it.each([false, true])('keeps dataset identities when output stripping is %s', async (strip) => {
+    vi.stubEnv('PROMPTFOO_STRIP_TEST_VARS', String(strip));
+    const tests = [{ vars: { doc: 'https://cdn.example/doc?X-Amz-Signature=short-secret' } }];
+    const created = await createEvalWithPrompts({ tests });
+    const persisted = await Eval.findById(created.id);
+    const datasetId = persisted!.datasetId!;
+
+    expect(datasetId).toBeTruthy();
+    const datasets = await getTestCases();
+    expect(datasets).toHaveLength(1);
+    expect(datasets[0].id).toBe(datasetId);
+    expect(JSON.stringify(datasets[0].testCases)).not.toContain('short-secret');
+    expect((await getDatasetFromHash(datasetId))?.id).toBe(datasetId);
+    expect((await getPrompts())[0].evals[0].datasetId).toBe(datasetId);
+    expect(await getPromptsForTestCasesHash(datasetId)).toHaveLength(1);
+    expect(persisted!.config.tests).toEqual(tests);
   });
 
   it('returns isRedteam from the materialized column, not raw JSON inspection', async () => {
@@ -274,6 +290,54 @@ describe('getStandaloneEvals', () => {
 
     const row = (await getStandaloneEvals()).find((r) => r.evalId === eval_.id);
     expect(row?.isRedteam).toBe(true);
+  });
+});
+
+describe('getTestCases', () => {
+  beforeAll(async () => {
+    await runDbMigrations();
+  });
+
+  beforeEach(resetEvalTables);
+
+  afterEach(() => {
+    vi.resetAllMocks();
+    vi.unstubAllEnvs();
+  });
+
+  it('returns sanitized test cases without loading eval results', async () => {
+    const tests = [
+      {
+        description: 'says hello',
+        vars: { name: 'Ada' },
+        metadata: { topic: 'greeting' },
+      },
+    ];
+    const created = await createEvalWithPrompts({
+      tests,
+      env: { PROMPTFOO_STRIP_METADATA: 'true' },
+    });
+    const persisted = await Eval.findById(created.id);
+    expect(persisted?.config.tests).toEqual(tests);
+
+    const toResultsFile = vi.spyOn(Eval.prototype, 'toResultsFile');
+    const findResults = vi.spyOn(EvalResult, 'findManyByEvalId');
+    try {
+      const datasets = await getTestCases();
+
+      expect(datasets).toHaveLength(1);
+      expect(datasets[0].testCases).toEqual([
+        {
+          description: 'says hello',
+          vars: { name: 'Ada' },
+        },
+      ]);
+      expect(toResultsFile).not.toHaveBeenCalled();
+      expect(findResults).not.toHaveBeenCalled();
+    } finally {
+      toResultsFile.mockRestore();
+      findResults.mockRestore();
+    }
   });
 });
 

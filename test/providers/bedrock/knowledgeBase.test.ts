@@ -6,6 +6,43 @@ import { sha256 } from '../../../src/util/createHash';
 import { createEmptyTokenUsage } from '../../../src/util/tokenUsageUtils';
 import { mockProcessEnv } from '../../util/utils';
 
+const { createNodeHttpHandlerFactory, createBedrockCacheFactory } = await vi.hoisted(
+  () => import('../../factories/moduleMocks'),
+);
+
+const createKnowledgeBaseOptions = () => ({
+  config: {
+    knowledgeBaseId: 'kb-123',
+    region: 'us-east-1',
+  },
+});
+
+const createKnowledgeBaseResponse = () => ({
+  output: {
+    text: 'This is the response from the knowledge base',
+  },
+  citations: [],
+});
+
+const createExpectedKnowledgeBaseCommand = () => ({
+  input: { text: 'What is the capital of France?' },
+  retrieveAndGenerateConfiguration: {
+    type: 'KNOWLEDGE_BASE',
+    knowledgeBaseConfiguration: {
+      knowledgeBaseId: 'kb-123',
+      modelArn: 'us.anthropic.claude-3-7-sonnet-20241022-v2:0',
+    },
+  },
+});
+
+const createRetrievalLimitOptions = () => ({
+  config: {
+    knowledgeBaseId: 'kb-123',
+    region: 'us-east-1',
+    numberOfResults: 10,
+  },
+});
+
 const mockSend = vi.fn();
 const mockBedrockClient = {
   send: mockSend,
@@ -31,19 +68,7 @@ let RetrieveAndGenerateCommand: typeof import('@aws-sdk/client-bedrock-agent-run
 const NodeHttpHandlerMock = vi.mocked(NodeHttpHandler);
 
 // Mock @smithy/node-http-handler with ESM-compatible exports
-vi.mock('@smithy/node-http-handler', () => ({
-  __esModule: true,
-  NodeHttpHandler: vi.fn().mockImplementation(function () {
-    return {
-      handle: vi.fn(),
-    };
-  }),
-  default: vi.fn().mockImplementation(function () {
-    return {
-      handle: vi.fn(),
-    };
-  }),
-}));
+vi.mock('@smithy/node-http-handler', createNodeHttpHandlerFactory());
 
 // Mock proxy-agent with ESM-compatible exports
 vi.mock('proxy-agent', () => ({
@@ -100,20 +125,10 @@ function buildKnowledgeBaseCacheKey({
   )}`;
 }
 
-vi.mock('../../../src/cache', async (importOriginal) => {
-  return {
-    ...(await importOriginal()),
-
-    getCache: vi.fn().mockImplementation(function () {
-      return {
-        get: mockGet,
-        set: mockSet,
-      };
-    }),
-
-    isCacheEnabled: () => mockIsCacheEnabled(),
-  };
-});
+vi.mock(
+  '../../../src/cache',
+  createBedrockCacheFactory(mockGet, mockSet, () => mockIsCacheEnabled),
+);
 
 describe('AwsBedrockKnowledgeBaseProvider', () => {
   beforeAll(async () => {
@@ -163,12 +178,7 @@ describe('AwsBedrockKnowledgeBaseProvider', () => {
   it('should create provider with required options', () => {
     const provider = new AwsBedrockKnowledgeBaseProvider(
       'us.anthropic.claude-3-7-sonnet-20241022-v2:0',
-      {
-        config: {
-          knowledgeBaseId: 'kb-123',
-          region: 'us-east-1',
-        },
-      },
+      createKnowledgeBaseOptions(),
     );
 
     expect(provider).toBeDefined();
@@ -179,12 +189,7 @@ describe('AwsBedrockKnowledgeBaseProvider', () => {
   it('should create knowledge base client without proxy settings', async () => {
     const provider = new AwsBedrockKnowledgeBaseProvider(
       'us.anthropic.claude-3-7-sonnet-20241022-v2:0',
-      {
-        config: {
-          knowledgeBaseId: 'kb-123',
-          region: 'us-east-1',
-        },
-      },
+      createKnowledgeBaseOptions(),
     );
 
     await provider.getKnowledgeBaseClient();
@@ -230,12 +235,7 @@ describe('AwsBedrockKnowledgeBaseProvider', () => {
     mockProcessEnv({ AWS_BEDROCK_MAX_RETRIES: '5' });
     const provider = new AwsBedrockKnowledgeBaseProvider(
       'us.anthropic.claude-3-7-sonnet-20241022-v2:0',
-      {
-        config: {
-          knowledgeBaseId: 'kb-123',
-          region: 'us-east-1',
-        },
-      },
+      createKnowledgeBaseOptions(),
     );
 
     await provider.getKnowledgeBaseClient();
@@ -285,26 +285,12 @@ describe('AwsBedrockKnowledgeBaseProvider', () => {
 
     const provider = new AwsBedrockKnowledgeBaseProvider(
       'us.anthropic.claude-3-7-sonnet-20241022-v2:0',
-      {
-        config: {
-          knowledgeBaseId: 'kb-123',
-          region: 'us-east-1',
-        },
-      },
+      createKnowledgeBaseOptions(),
     );
 
     const result = await provider.callApi('What is the capital of France?');
 
-    const expectedCommand = {
-      input: { text: 'What is the capital of France?' },
-      retrieveAndGenerateConfiguration: {
-        type: 'KNOWLEDGE_BASE',
-        knowledgeBaseConfiguration: {
-          knowledgeBaseId: 'kb-123',
-          modelArn: 'us.anthropic.claude-3-7-sonnet-20241022-v2:0',
-        },
-      },
-    };
+    const expectedCommand = createExpectedKnowledgeBaseCommand();
 
     expect(RetrieveAndGenerateCommand).toHaveBeenCalledWith(expectedCommand);
     expect(mockSend).toHaveBeenCalledWith(expectedCommand);
@@ -315,17 +301,31 @@ describe('AwsBedrockKnowledgeBaseProvider', () => {
     });
   });
 
+  it.each([
+    'us-gov.anthropic.claude-3-5-sonnet-20240620-v1:0',
+    'ca.amazon.nova-lite-v1:0',
+    'in.openai.gpt-5.6-terra',
+  ])('passes the %s inference profile through as the model ARN', async (modelName) => {
+    mockSend.mockResolvedValueOnce({ output: { text: 'ok' } });
+    const provider = new AwsBedrockKnowledgeBaseProvider(modelName, createKnowledgeBaseOptions());
+
+    await provider.callApi('What is the capital of France?');
+
+    expect(mockSend).toHaveBeenCalledWith(
+      expect.objectContaining({
+        retrieveAndGenerateConfiguration: expect.objectContaining({
+          knowledgeBaseConfiguration: expect.objectContaining({ modelArn: modelName }),
+        }),
+      }),
+    );
+  });
+
   it('should handle API errors gracefully', async () => {
     mockSend.mockRejectedValueOnce(new Error('API error'));
 
     const provider = new AwsBedrockKnowledgeBaseProvider(
       'us.anthropic.claude-3-7-sonnet-20241022-v2:0',
-      {
-        config: {
-          knowledgeBaseId: 'kb-123',
-          region: 'us-east-1',
-        },
-      },
+      createKnowledgeBaseOptions(),
     );
 
     const result = await provider.callApi('What is the capital of France?');
@@ -335,13 +335,42 @@ describe('AwsBedrockKnowledgeBaseProvider', () => {
     });
   });
 
+  it.each([
+    'arn:aws:bedrock:us-east-1::foundation-model/anthropic.claude-3-opus-20240229-v1:0',
+    'arn:aws:bedrock:us-east-1:123456789012:inference-profile/eu.anthropic.claude-3-5-haiku-20241022-v1:0',
+  ])('rejects a retired modelArn override before creating a client: %s', (modelArn) => {
+    expect(
+      () =>
+        new AwsBedrockKnowledgeBaseProvider('default', {
+          config: { knowledgeBaseId: 'kb-123', modelArn },
+        }),
+    ).toThrow(`Unknown Amazon Bedrock model: ${modelArn}`);
+    expect(BedrockAgentRuntimeClient).not.toHaveBeenCalled();
+    expect(mockSend).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    'arn:aws:bedrock:us-east-1::foundation-model/amazon.nova-lite-v1:0',
+    'arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/abc123xyz789',
+  ])('uses the modelArn override instead of a retired route model: %s', async (modelArn) => {
+    mockSend.mockResolvedValueOnce({ output: { text: 'ok' } });
+    const provider = new AwsBedrockKnowledgeBaseProvider(
+      'eu.anthropic.claude-3-5-haiku-20241022-v1:0',
+      { config: { knowledgeBaseId: 'kb-123', modelArn } },
+    );
+
+    expect((await provider.callApi('Describe the garden')).output).toBe('ok');
+    expect(RetrieveAndGenerateCommand).toHaveBeenCalledWith(
+      expect.objectContaining({
+        retrieveAndGenerateConfiguration: expect.objectContaining({
+          knowledgeBaseConfiguration: expect.objectContaining({ modelArn }),
+        }),
+      }),
+    );
+  });
+
   it('should use custom modelArn if provided', async () => {
-    const mockResponse = {
-      output: {
-        text: 'This is the response from the knowledge base',
-      },
-      citations: [],
-    };
+    const mockResponse = createKnowledgeBaseResponse();
 
     mockSend.mockResolvedValueOnce(mockResponse);
 
@@ -409,12 +438,7 @@ describe('AwsBedrockKnowledgeBaseProvider', () => {
   });
 
   it('should leave generationConfiguration omitted when no generation settings are provided', async () => {
-    const mockResponse = {
-      output: {
-        text: 'This is the response from the knowledge base',
-      },
-      citations: [],
-    };
+    const mockResponse = createKnowledgeBaseResponse();
 
     mockSend.mockResolvedValueOnce(mockResponse);
 
@@ -524,60 +548,30 @@ describe('AwsBedrockKnowledgeBaseProvider', () => {
   );
 
   it('should not include retrievalConfiguration when numberOfResults is not provided', async () => {
-    const mockResponse = {
-      output: {
-        text: 'This is the response from the knowledge base',
-      },
-      citations: [],
-    };
+    const mockResponse = createKnowledgeBaseResponse();
 
     mockSend.mockResolvedValueOnce(mockResponse);
 
     const provider = new AwsBedrockKnowledgeBaseProvider(
       'us.anthropic.claude-3-7-sonnet-20241022-v2:0',
-      {
-        config: {
-          knowledgeBaseId: 'kb-123',
-          region: 'us-east-1',
-        },
-      },
+      createKnowledgeBaseOptions(),
     );
 
     await provider.callApi('What is the capital of France?');
 
-    const expectedCommand = {
-      input: { text: 'What is the capital of France?' },
-      retrieveAndGenerateConfiguration: {
-        type: 'KNOWLEDGE_BASE',
-        knowledgeBaseConfiguration: {
-          knowledgeBaseId: 'kb-123',
-          modelArn: 'us.anthropic.claude-3-7-sonnet-20241022-v2:0',
-        },
-      },
-    };
+    const expectedCommand = createExpectedKnowledgeBaseCommand();
 
     expect(RetrieveAndGenerateCommand).toHaveBeenCalledWith(expectedCommand);
   });
 
   it('should use custom numberOfResults when provided', async () => {
-    const mockResponse = {
-      output: {
-        text: 'This is the response from the knowledge base',
-      },
-      citations: [],
-    };
+    const mockResponse = createKnowledgeBaseResponse();
 
     mockSend.mockResolvedValueOnce(mockResponse);
 
     const provider = new AwsBedrockKnowledgeBaseProvider(
       'us.anthropic.claude-3-7-sonnet-20241022-v2:0',
-      {
-        config: {
-          knowledgeBaseId: 'kb-123',
-          region: 'us-east-1',
-          numberOfResults: 10,
-        },
-      },
+      createRetrievalLimitOptions(),
     );
 
     await provider.callApi('What is the capital of France?');
@@ -641,12 +635,7 @@ describe('AwsBedrockKnowledgeBaseProvider', () => {
 
     const provider = new AwsBedrockKnowledgeBaseProvider(
       'us.anthropic.claude-3-7-sonnet-20241022-v2:0',
-      {
-        config: {
-          knowledgeBaseId: 'kb-123',
-          region: 'us-east-1',
-        },
-      },
+      createKnowledgeBaseOptions(),
     );
 
     const result = await provider.callApi('What is the capital of France?');
@@ -747,13 +736,7 @@ describe('AwsBedrockKnowledgeBaseProvider', () => {
 
     const provider = new AwsBedrockKnowledgeBaseProvider(
       'us.anthropic.claude-3-7-sonnet-20241022-v2:0',
-      {
-        config: {
-          knowledgeBaseId: 'kb-123',
-          region: 'us-east-1',
-          numberOfResults: 10,
-        },
-      },
+      createRetrievalLimitOptions(),
     );
 
     mockGet.mockResolvedValueOnce(null);
@@ -870,12 +853,7 @@ describe('AwsBedrockKnowledgeBaseProvider', () => {
 
     const provider = new AwsBedrockKnowledgeBaseProvider(
       'us.anthropic.claude-3-7-sonnet-20241022-v2:0',
-      {
-        config: {
-          knowledgeBaseId: 'kb-123',
-          region: 'us-east-1',
-        },
-      },
+      createKnowledgeBaseOptions(),
     );
 
     await provider.getKnowledgeBaseClient();

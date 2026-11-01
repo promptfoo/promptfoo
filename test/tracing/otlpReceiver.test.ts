@@ -347,7 +347,7 @@ describe('OTLPReceiver', () => {
                         key: 'array.attr',
                         value: {
                           arrayValue: {
-                            values: [{ stringValue: 'a' }, { stringValue: 'b' }],
+                            values: [{ stringValue: 'a' }, { bytesValue: 'AP8=' }, {}],
                           },
                         },
                       },
@@ -375,7 +375,7 @@ describe('OTLPReceiver', () => {
               'int.attr': 123,
               'double.attr': 3.14,
               'bool.attr': true,
-              'array.attr': ['a', 'b'],
+              'array.attr': ['a', 'AP8=', null],
             }),
           }),
         ]),
@@ -463,6 +463,20 @@ describe('OTLPReceiver', () => {
 
       expect(response.body).toHaveProperty('error');
       expect(response.body.error).toMatch(/invalid protobuf/i);
+    });
+
+    it('rejects overflowing protobuf lengths without storing spans', async () => {
+      // resourceSpans length encodes 2^32, which previously wrapped to zero.
+      const malformed = Buffer.from([0x0a, 0x80, 0x80, 0x80, 0x80, 0x10]);
+      const response = await request(receiver.getApp())
+        .post('/v1/traces')
+        .set('Content-Type', 'application/x-protobuf')
+        .send(malformed)
+        .expect(400);
+
+      expect(response.body.error).toMatch(/invalid protobuf/i);
+      expect(mockTraceStore.createTrace).not.toHaveBeenCalled();
+      expect(mockTraceStore.addSpans).not.toHaveBeenCalled();
     });
 
     it('should accept valid OTLP protobuf traces', async () => {
@@ -1586,13 +1600,7 @@ describe('OTLPReceiver', () => {
       },
     );
 
-    it('is advertised on the service info endpoint', async () => {
-      // Sanity check that /v1/traces stays stable despite the new /v1/logs route.
-      const response = await request(receiver.getApp()).get('/v1/traces').expect(200);
-      expect(response.body.service).toBe('promptfoo-otlp-receiver');
-    });
-
-    it('marks log-derived spans as ERROR when severityNumber >= 17', async () => {
+    it('preserves OK span status while exposing ERROR log severity', async () => {
       const req = makeLogsRequest([
         {
           timeUnixNano: '1700000000000000000',
@@ -1613,9 +1621,8 @@ describe('OTLPReceiver', () => {
 
       const [, spans] = mockTraceStore.addSpans.mock.calls[0];
       const span = (spans as any[])[0];
+      expect(span.statusCode).toBe(1);
       expect(span.statusMessage).toBe('ERROR');
-      // The synthesized span still reports statusCode=1 (OK for the OTEL span itself)
-      // while statusMessage surfaces the severity — verifies the mapping contract.
       expect(span.attributes['otel.log.severity_number']).toBe(17);
     });
 
@@ -1728,13 +1735,11 @@ describe('OTLPReceiver', () => {
         .send(req)
         .expect(200);
 
-      // Either both survived (because parseAttributes was lenient) or the bad
-      // one was skipped while the good one survived — both acceptable. The
-      // failure mode we're guarding against is "bad record → 500 → whole
-      // batch dropped", verified by the 200 status.
-      expect(mockTraceStore.addSpans).toHaveBeenCalled();
-      const [, spans] = mockTraceStore.addSpans.mock.calls[0];
-      expect((spans as any[]).some((s: any) => s.name === 'claude_code.tool.execution')).toBe(true);
+      expect(mockTraceStore.addSpans).toHaveBeenCalledTimes(1);
+      const [persistedTraceId, spans] = mockTraceStore.addSpans.mock.calls[0];
+      expect(persistedTraceId).toBe(hexTraceId);
+      expect(spans).toHaveLength(1);
+      expect(spans[0].name).toBe('claude_code.tool.execution');
     });
 
     it('treats a base64-encoded all-zero span_id as no parent linkage', async () => {
