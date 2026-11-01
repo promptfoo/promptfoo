@@ -11,7 +11,6 @@ import {
 } from '../../database/tables';
 import logger from '../../logger';
 import { BlobsSchemas } from '../../types/api/blobs';
-import { escapeLikePattern } from '../../util/sqlLike';
 import { replyValidationError, sendError } from '../utils/errors';
 import type { Request, Response } from 'express';
 
@@ -374,7 +373,9 @@ blobsRouter.get('/library/evals', async (req: Request, res: Response): Promise<v
     const conditions = [];
     if (search) {
       // Escape SQL LIKE wildcards so user input is treated as literal text.
-      const pattern = `%${escapeLikePattern(search)}%`;
+      // First escape backslashes (the ESCAPE character), then escape % and _.
+      const escaped = search.replace(/\\/g, '\\\\').replace(/[%_]/g, '\\$&');
+      const pattern = `%${escaped}%`;
       conditions.push(
         sql`(${evalsTable.description} LIKE ${pattern} ESCAPE '\\' OR ${blobReferencesTable.evalId} LIKE ${pattern} ESCAPE '\\')`,
       );

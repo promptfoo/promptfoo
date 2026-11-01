@@ -2708,13 +2708,18 @@ describe('evaluator', () => {
       expect(limited.filteredCount).toBeGreaterThanOrEqual(limited.testIndices.length);
     });
 
-    it('treats % and _ in the search query as literal text on both search paths', async () => {
-      // queryTestIndices is private; it backs filtered pages, filtered metrics and exports.
-      type FullSearch = {
-        queryTestIndices(opts: { searchQuery: string }): Promise<{ testIndices: number[] }>;
-      };
-      const eval_ = await EvalFactory.create({ numResults: 4, withNamedScores: true });
-      const outputs = ['snake_case value', 'snakeXcase value', '100% done', '1000 done'];
+    it('matches literal text on the response-only and filtered search paths', async () => {
+      const outputs = [
+        'snake_case',
+        'snakeXcase',
+        '100%',
+        '1000',
+        'C:\\path\\%_file',
+        'C:\\\\path',
+        'quoted "value"\n',
+        'slash\\\newline',
+      ];
+      const eval_ = await EvalFactory.create({ numResults: outputs.length, withNamedScores: true });
       const db = await getDb();
       for (const [index, output] of outputs.entries()) {
         await db.run(
@@ -2722,25 +2727,27 @@ describe('evaluator', () => {
         );
       }
 
+      const filters = [JSON.stringify(createAccuracyFilter())];
       for (const [searchQuery, expected] of [
-        ['snake_case', [0]],
-        ['100%', [2]],
-        ['_', [0]],
-        ['%', [2]],
         ['SNAKE_CASE', [0]],
+        ['100%', [2]],
+        ['_', [0, 4]],
+        ['%', [2, 4]],
+        ['C:\\path\\%_', [4]],
+        ['C:\\\\path', [5]],
+        ['\\', [4, 5, 7]],
+        ['\\n', []],
       ] as const) {
-        // Unfiltered pages use the optimized response-only query.
-        const unfiltered = await eval_.getTablePage({ searchQuery });
-        expect(
-          unfiltered.body.map((row) => row.testIdx),
-          searchQuery,
-        ).toEqual(expected);
-        expect(unfiltered.filteredCount, searchQuery).toBe(expected.length);
-
-        const { testIndices } = await (eval_ as unknown as FullSearch).queryTestIndices({
-          searchQuery,
-        });
-        expect(testIndices, searchQuery).toEqual(expected);
+        for (const activeFilters of [[], filters]) {
+          const page = await eval_.getTablePage({ searchQuery, filters: activeFilters });
+          expect(
+            page.body.map((row) => row.testIdx),
+            searchQuery,
+          ).toEqual(expected);
+          expect(page.filteredCount).toBe(expected.length);
+        }
+        const [metrics] = await eval_.getFilteredMetrics({ searchQuery, filters });
+        expect(metrics.testPassCount).toBe(expected.length);
       }
     });
   });

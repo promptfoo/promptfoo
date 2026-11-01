@@ -47,7 +47,6 @@ import {
   sanitizeRuntimeOptions,
   sanitizeTracingConfigForPersistence,
 } from '../util/sanitizer';
-import { escapeLikePattern } from '../util/sqlLike';
 import { getCurrentTimestamp } from '../util/time';
 import {
   accumulateGenerationTokenUsage,
@@ -62,6 +61,7 @@ import {
 import {
   getCachedResultsCount,
   getTotalResultRowCount,
+  matchResultSearch,
   queryTestIndicesOptimized,
 } from './evalPerformance';
 import EvalResult, {
@@ -1192,21 +1192,21 @@ export default class Eval {
       }
     }
 
-    // Add search condition if searchQuery is provided. `%` and `_` typed by the user are
-    // literal text; SQLite's LIKE folds ASCII case only.
-    if (opts.searchQuery && opts.searchQuery.trim() !== '') {
-      const searchPattern = `%${escapeLikePattern(opts.searchQuery)}%`;
-
+    const query = opts.searchQuery;
+    if (query?.trim()) {
       const searchConditions = [
-        sql`response LIKE ${searchPattern} ESCAPE '\\'`,
-        sql`json_extract(grading_result, '$.reason') LIKE ${searchPattern} ESCAPE '\\'`,
-        sql`json_extract(grading_result, '$.comment') LIKE ${searchPattern} ESCAPE '\\'`,
-        sql`json_extract(named_scores, '$') LIKE ${searchPattern} ESCAPE '\\'`,
-        // Search user-visible metadata only — drop the reserved `__promptfoo` namespace
-        // (trace linkage) so a query can't match on internal data the UI never shows.
-        sql`json_remove(metadata, ${`$.${PROMPTFOO_METADATA_KEY}`}) LIKE ${searchPattern} ESCAPE '\\'`,
-        sql`json_extract(test_case, '$.vars') LIKE ${searchPattern} ESCAPE '\\'`,
-        sql`json_extract(test_case, '$.metadata') LIKE ${searchPattern} ESCAPE '\\'`,
+        matchResultSearch(sql`response`, query, 'json'),
+        matchResultSearch(sql`json_extract(grading_result, '$.reason')`, query, 'text'),
+        matchResultSearch(sql`json_extract(grading_result, '$.comment')`, query, 'text'),
+        matchResultSearch(sql`json_extract(named_scores, '$')`, query, 'json'),
+        // Exclude trace linkage and other internal metadata from the searchable fields.
+        matchResultSearch(
+          sql`json_remove(metadata, ${`$.${PROMPTFOO_METADATA_KEY}`})`,
+          query,
+          'json',
+        ),
+        matchResultSearch(sql`json_extract(test_case, '$.vars')`, query, 'json'),
+        matchResultSearch(sql`json_extract(test_case, '$.metadata')`, query, 'json'),
       ];
 
       const searchClause = sql.join(searchConditions, sql` OR `);

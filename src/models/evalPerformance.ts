@@ -1,4 +1,4 @@
-import { sql } from 'drizzle-orm';
+import { type SQL, sql } from 'drizzle-orm';
 import { HUMAN_ASSERTION_TYPE } from '../constants';
 import { getDb } from '../database/index';
 import { evalResultsTable } from '../database/tables';
@@ -6,6 +6,20 @@ import logger from '../logger';
 import { escapeLikePattern } from '../util/sqlLike';
 
 import type { EvalResultsFilterMode } from '../types/index';
+
+/** Match literal text in a result field, decoding JSON strings and keys for backslash searches. */
+export function matchResultSearch(field: SQL, query: string, format: 'text' | 'json'): SQL {
+  const like = sql`LIKE ${`%${escapeLikePattern(query)}%`} ESCAPE '\\'`;
+  if (format === 'text' || !query.includes('\\')) {
+    return sql`${field} ${like}`;
+  }
+  // JSON escapes quotes and newlines with backslashes. Search decoded keys and values
+  // only in fields containing a backslash, treating legacy non-JSON text as one value.
+  return sql`(instr(${field}, ${'\\'}) > 0 AND EXISTS (
+    SELECT 1 FROM json_tree(CASE WHEN json_valid(${field}) THEN ${field} ELSE json_quote(${field}) END)
+    WHERE atom ${like} OR key ${like}
+  ))`;
+}
 
 /** Result from COUNT queries using db.all() - count is always a number in result array */
 interface CountResult {
@@ -133,8 +147,7 @@ export async function queryTestIndicesOptimized(
   // This is a compromise - we search less fields but query is faster
   let searchCondition = sql`1=1`;
   if (opts.searchQuery && opts.searchQuery.trim() !== '' && !opts.filters?.length) {
-    // Only search in response field for better performance. User-typed `%` and `_` are literal.
-    searchCondition = sql`response LIKE ${`%${escapeLikePattern(opts.searchQuery)}%`} ESCAPE '\\'`;
+    searchCondition = matchResultSearch(sql`response`, opts.searchQuery, 'json');
   }
 
   const whereClause = sql`${baseQuery} AND ${searchCondition}`;
