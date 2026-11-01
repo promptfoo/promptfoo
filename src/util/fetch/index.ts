@@ -421,8 +421,15 @@ function seedRequestOwnedOptions(
   finalOptions.method ??= url.method;
   if (finalOptions.body === undefined && url.body !== null) {
     finalOptions.body = url.body;
+    // A stream body passed as init requires duplex, which the Request
+    // itself carries but an init body does not inherit.
+    (finalOptions as FetchOptions & { duplex?: 'half' }).duplex ??= 'half';
   }
-  finalOptions.signal ??= url.signal;
+  // An explicit signal of null clears an inherited signal, so only an
+  // unset signal falls back to the Request-owned one.
+  if (finalOptions.signal === undefined) {
+    finalOptions.signal = url.signal;
+  }
   finalOptions.referrer ??= url.referrer;
   finalOptions.credentials ??= url.credentials;
 }
