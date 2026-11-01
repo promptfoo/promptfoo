@@ -19,13 +19,10 @@ export class JsonlFileWriter {
     this.flags = append ? 'a' : 'w';
   }
 
-  // Attach the output path to a stream error so callers (e.g. the evaluator aggregating
-  // writer failures) can attribute it to a specific file. Shared by write() and close() so
-  // both rejection paths report the path consistently; the original error is kept as `cause`.
-  private wrapStreamError(action: 'write' | 'close', error: Error): Error {
-    return new Error(`Failed to ${action} JSONL output ${this.filePath}: ${error.message}`, {
-      cause: error,
-    });
+  // The evaluator can report failures from multiple output files together.
+  private wrapStreamError(action: 'write' | 'close', cause: unknown): Error {
+    const message = cause instanceof Error ? cause.message : String(cause);
+    return new Error(`Failed to ${action} JSONL output ${this.filePath}: ${message}`, { cause });
   }
 
   async write(data: unknown): Promise<void> {
@@ -37,23 +34,17 @@ export class JsonlFileWriter {
     if (!this.writeStream) {
       try {
         mkdirSync(dirname(this.filePath), { recursive: true });
+        this.writeStream = createWriteStream(this.filePath, { flags: this.flags });
       } catch (error) {
-        throw this.wrapStreamError(
-          'write',
-          error instanceof Error ? error : new Error(String(error)),
-        );
+        throw this.wrapStreamError('write', error);
       }
-      const stream = createWriteStream(this.filePath, { flags: this.flags });
       // Keep a persistent listener for the stream's lifetime so an error emitted while no
       // write is in flight is recorded rather than thrown. write()/close() surface it as a
       // rejected promise with the output path. The listener also stays attached after
       // close() settles so a stray late error is absorbed instead of crashing the process.
-      stream.on('error', (error: Error) => {
-        if (!this.streamError) {
-          this.streamError = error;
-        }
+      this.writeStream.on('error', (error: Error) => {
+        this.streamError ??= error;
       });
-      this.writeStream = stream;
     }
     const stream = this.writeStream;
 

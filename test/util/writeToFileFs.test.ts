@@ -20,11 +20,11 @@ describe('JsonlFileWriter (real filesystem)', () => {
     fs.rmSync(dir, { recursive: true, force: true });
   });
 
-  it('releases the file descriptor before close() resolves', async () => {
-    const file = path.join(dir, 'out.jsonl');
+  it('writes concurrent rows in order to a new directory and releases the file on close', async () => {
+    const parent = path.join(dir, 'nested', 'deep');
+    const file = path.join(parent, 'out.jsonl');
     const writer = new JsonlFileWriter(file);
-    await writer.write({ a: 1 });
-    await writer.write({ b: 2 });
+    await Promise.all([writer.write({ a: 1 }), writer.write({ b: 2 })]);
     await writer.close();
 
     const lines = fs.readFileSync(file, 'utf-8').trim().split('\n');
@@ -32,24 +32,24 @@ describe('JsonlFileWriter (real filesystem)', () => {
 
     // Non-recursive removal fails (EBUSY/ENOTEMPTY on Windows) if the fd is still held.
     fs.rmSync(file);
-    fs.rmdirSync(dir);
-    fs.mkdirSync(dir);
+    fs.rmdirSync(parent);
   });
 
-  it('creates missing parent directories when the first row is written', async () => {
-    const file = path.join(dir, 'nested', 'deep', 'results.jsonl');
+  it('can retry a write after parent directory creation fails', async () => {
+    const parent = path.join(dir, 'nested');
+    fs.writeFileSync(parent, 'occupied');
+    const file = path.join(parent, 'out.jsonl');
     const writer = new JsonlFileWriter(file);
 
-    await Promise.all([writer.write({ a: 1 }), writer.write({ b: 2 })]);
-    await writer.close();
+    await expect(writer.write({ a: 1 })).rejects.toMatchObject({
+      message: expect.stringContaining(`Failed to write JSONL output ${file}:`),
+      cause: expect.objectContaining({ code: expect.any(String) }),
+    });
 
-    expect(
-      fs
-        .readFileSync(file, 'utf-8')
-        .trim()
-        .split('\n')
-        .map((line) => JSON.parse(line)),
-    ).toEqual([{ a: 1 }, { b: 2 }]);
+    fs.unlinkSync(parent);
+    await writer.write({ b: 2 });
+    await writer.close();
+    expect(fs.readFileSync(file, 'utf-8')).toBe('{"b":2}\n');
   });
 
   it('resolves a second close() call on an already-closed stream', async () => {
