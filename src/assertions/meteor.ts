@@ -21,8 +21,9 @@ async function ensureNaturalPackage(): Promise<void> {
   }
 
   try {
-    // Dynamic import for ESM compatibility
-    const natural = await import('natural');
+    // Native ESM imports expose Natural's CommonJS exports under default.
+    const naturalModule = await import('natural');
+    const natural = 'default' in naturalModule ? naturalModule.default : naturalModule;
     PorterStemmer = natural.PorterStemmer;
     WordNet = natural.WordNet;
   } catch (_err) {
