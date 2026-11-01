@@ -1195,7 +1195,7 @@ export default class Eval {
     const query = opts.searchQuery;
     if (query?.trim()) {
       const searchConditions = [
-        matchResultSearch(sql`response`, query, 'json'),
+        matchResultSearch(sql`response`, query, 'response'),
         matchResultSearch(sql`json_extract(grading_result, '$.reason')`, query, 'text'),
         matchResultSearch(sql`json_extract(grading_result, '$.comment')`, query, 'text'),
         matchResultSearch(sql`json_extract(named_scores, '$')`, query, 'json'),
@@ -1205,7 +1205,7 @@ export default class Eval {
           query,
           'json',
         ),
-        matchResultSearch(sql`json_extract(test_case, '$.vars')`, query, 'json'),
+        matchResultSearch(sql`json_extract(test_case, '$.vars')`, query, 'vars'),
         matchResultSearch(sql`json_extract(test_case, '$.metadata')`, query, 'json'),
       ];
 

@@ -7,17 +7,41 @@ import { escapeLikePattern } from '../util/sqlLike';
 
 import type { EvalResultsFilterMode } from '../types/index';
 
-/** Match literal text in a result field, decoding JSON strings and keys for backslash searches. */
-export function matchResultSearch(field: SQL, query: string, format: 'text' | 'json'): SQL {
-  const like = sql`LIKE ${`%${escapeLikePattern(query)}%`} ESCAPE '\\'`;
-  if (format === 'text' || !query.includes('\\')) {
-    return sql`${field} ${like}`;
+const SQLITE_MAX_LIKE_PATTERN_BYTES = 50_000;
+
+export function matchResultSearch(
+  field: SQL,
+  query: string,
+  format: 'text' | 'json' | 'response' | 'vars',
+): SQL {
+  const contains = (value: SQL) => sql`instr(lower(${value}), lower(${query})) > 0`;
+  if (format === 'text') {
+    return contains(field);
   }
-  // JSON escapes quotes and newlines with backslashes. Search decoded keys and values
-  // only in fields containing a backslash, treating legacy non-JSON text as one value.
-  return sql`(instr(${field}, ${'\\'}) > 0 AND EXISTS (
+
+  const hasNul = query.includes('\0');
+  if (!hasNul && !query.includes('\\')) {
+    const pattern = `%${escapeLikePattern(query)}%`;
+    return Buffer.byteLength(pattern) <= SQLITE_MAX_LIKE_PATTERN_BYTES
+      ? sql`${field} LIKE ${pattern} ESCAPE '\\'`
+      : contains(field);
+  }
+
+  // The table renders object and array outputs and variables as compact JSON.
+  // Their children still supply decoded values for searches such as a file path.
+  const cell =
+    format === 'response'
+      ? sql`key = 'output'`
+      : format === 'vars'
+        ? sql`key IS NOT NULL`
+        : undefined;
+  const value = cell ? sql`CASE WHEN path = '$' AND ${cell} THEN value ELSE atom END` : sql`atom`;
+  const hasEscape = hasNul
+    ? sql`(instr(${field}, '\\u0000') OR instr(${field}, char(0)))`
+    : sql`instr(${field}, '\\')`;
+  return sql`(${hasEscape} AND EXISTS (
     SELECT 1 FROM json_tree(CASE WHEN json_valid(${field}) THEN ${field} ELSE json_quote(${field}) END)
-    WHERE atom ${like} OR key ${like}
+    WHERE ${contains(value)} OR ${contains(sql`key`)}
   ))`;
 }
 
@@ -147,7 +171,7 @@ export async function queryTestIndicesOptimized(
   // This is a compromise - we search less fields but query is faster
   let searchCondition = sql`1=1`;
   if (opts.searchQuery && opts.searchQuery.trim() !== '' && !opts.filters?.length) {
-    searchCondition = matchResultSearch(sql`response`, opts.searchQuery, 'json');
+    searchCondition = matchResultSearch(sql`response`, opts.searchQuery, 'response');
   }
 
   const whereClause = sql`${baseQuery} AND ${searchCondition}`;
