@@ -706,4 +706,20 @@ describe('assertProviderTargetPublic', () => {
       }),
     ).rejects.toThrow(PrivateRangeBlockedError);
   });
+
+  it('fails closed on a raw request with an absolute target but no Host header', async () => {
+    restoreEnv = mockProcessEnv({ PROMPTFOO_BLOCK_PRIVATE_RANGES: 'true' });
+    // The provider strips an absolute target to its path and re-resolves it
+    // against the Host header, so with no Host header the dispatch target
+    // is http://undefined, not this public URL. Validating the absolute
+    // target would approve a URL that is never fetched.
+    await expect(
+      assertProviderTargetPublic({
+        id: 'http',
+        config: {
+          request: 'GET https://public.example.com/hook HTTP/1.1\r\nX-Custom: yes\r\n\r\n',
+        },
+      }),
+    ).rejects.toThrow(PrivateRangeBlockedError);
+  });
 });

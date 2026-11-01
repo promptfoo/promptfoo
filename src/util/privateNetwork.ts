@@ -412,7 +412,9 @@ function getUrlFromProviderId(id: string): string | undefined {
  * target to its path via `urlEncodeRawRequestPath` and re-resolves it
  * against the Host header), so a Host header is validated whenever one is
  * present, even alongside an absolute-form target. Without a Host header an
- * absolute-form target is used as-is. A `file://` reference is resolved the
+ * absolute-form target is refused: the provider would resolve the stripped
+ * path against a missing Host header instead of this target, so validating
+ * the absolute target would approve a URL that is never fetched. A `file://` reference is resolved the
  * same way the provider resolves it.
  * Throws {@link PrivateRangeBlockedError} when no target can be determined:
  * fail closed, since an unverifiable target must not be fetched on an
@@ -451,7 +453,13 @@ function getRawRequestTarget(rawRequest: string, useHttps: boolean): string {
     if (host) {
       return `${useHttps ? 'https' : 'http'}://${host}`;
     }
-    return target;
+    // No Host header: the provider strips this absolute target to its path
+    // and re-resolves it against the (missing) Host header, so the actual
+    // dispatch target is http(s)://undefined, not this target. Validating
+    // the absolute target would approve a URL that is never fetched.
+    throw new PrivateRangeBlockedError(
+      'PROMPTFOO_BLOCK_PRIVATE_RANGES is set: refusing provider raw request with an absolute request target but no Host header to resolve it against',
+    );
   }
   if (!host) {
     throw new PrivateRangeBlockedError(

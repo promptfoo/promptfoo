@@ -1220,5 +1220,11 @@ export async function clearCache() {
  * ```
  */
 export function isCacheEnabled() {
-  return getEffectiveCacheEnabled();
+  // Provider-level caches are keyed without a guard-context bit, so a
+  // guarded server probe must never serve a response cached by an ordinary
+  // eval (whose redirect chain was never guard-validated), nor write its
+  // own response into the shared cache. fetchWithCache already bypasses
+  // its own cache in this context; this extends the same policy to every
+  // provider cache that gates on isCacheEnabled().
+  return getEffectiveCacheEnabled() && !isPrivateRangeGuardContextActive();
 }
