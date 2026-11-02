@@ -844,7 +844,7 @@ providers:
 
 Use `managed_settings` to pass restrictions from an embedding application to the SDK. If the machine already has an administrator policy, that policy controls whether the SDK merges restrictions from the application.
 
-With SDK 0.3.309 or later, `disableAllHooks: true` allows only administrator-managed hooks. The SDK accepts empty `allowedHttpHookUrls` and `httpHookAllowedEnvVars` lists, but they only restrict HTTP hooks when other settings sources have no entries for the same list.
+Setting `disableAllHooks`, `disableSkillShellExecution`, `allowedHttpHookUrls`, or `httpHookAllowedEnvVars` in `managed_settings` requires SDK 0.3.309 or later in the 0.3.x series. With `disableAllHooks: true`, the SDK allows only administrator-managed hooks. The SDK accepts empty `allowedHttpHookUrls` and `httpHookAllowedEnvVars` lists, but they only restrict HTTP hooks when other settings sources have no entries for the same list.
 
 ```yaml
 providers:
