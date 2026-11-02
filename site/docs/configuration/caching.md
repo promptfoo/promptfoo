@@ -99,7 +99,7 @@ The cache is configurable through environment variables:
 - Rate limit responses (HTTP 429) are automatically handled with exponential backoff
 - Empty responses are not cached
 - HTTP 500 responses can be retried by setting `PROMPTFOO_RETRY_5XX=true`
-- Cache entries are isolated by credential, so an API key that rotates on every run causes cache misses. Set `PROMPTFOO_CACHE_IDENTITY=ci-pipeline` to key entries by that name instead of the credential. Different identities stay isolated
+- Cache entries are isolated by credential, so an API key that rotates on every run causes cache misses. Set `PROMPTFOO_CACHE_IDENTITY=ci-pipeline` to key entries by that name instead of the credential in request headers. Different identities stay isolated. Credentials in URLs or request bodies, and providers that build their own cache keys (e.g. fal), are not affected
 
 ## Managing the Cache
 
