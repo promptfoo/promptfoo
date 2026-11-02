@@ -2074,7 +2074,7 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
               'disableSkillShellExecution',
               'allowedHttpHookUrls',
               'httpHookAllowedEnvVars',
-            ].some((key) => Object.hasOwn(managedSettings, key)) &&
+            ].some((key) => Object.prototype.hasOwnProperty.call(managedSettings, key)) &&
             !semverSatisfies(version, '^0.3.309')
           ) {
             throw new Error(
