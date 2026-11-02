@@ -89,6 +89,26 @@ describe('tracking script consent', () => {
     },
   );
 
+  it.each([
+    ['v1.i.0.1', 'analytics', 'marketing'],
+    ['v1.i.1.0', 'marketing', 'analytics'],
+  ])('starts the newly granted category when switching from %s', (prior, granted, revoked) => {
+    document.cookie = 'pf_country=DE;path=/';
+    document.cookie = `pf_consent=${prior};path=/`;
+    runScript('consent');
+    expect(document.querySelector(`script[src="/js/scripts-${granted}.js"]`)).toBeNull();
+    (window as any).__pf_manage_cookies();
+    (document.getElementById(`cc-${granted}`) as HTMLInputElement).checked = true;
+    (document.getElementById(`cc-${revoked}`) as HTMLInputElement).checked = false;
+    document.getElementById('cc-save')!.click();
+    expect(window.location.reload).toHaveBeenCalledOnce();
+    expect(document.querySelectorAll(`script[src="/js/scripts-${granted}.js"]`)).toHaveLength(1);
+    expect(document.querySelectorAll(`script[src="/js/scripts-${revoked}.js"]`)).toHaveLength(1);
+    (window as any).__pf_manage_cookies();
+    document.getElementById('cc-save')!.click();
+    expect(document.querySelectorAll(`script[src="/js/scripts-${granted}.js"]`)).toHaveLength(1);
+  });
+
   it.each(['analytics', 'marketing'])('retries the skipped %s bootstrap on regrant', (category) => {
     document.cookie = 'pf_country=DE;path=/';
     runScript('consent');

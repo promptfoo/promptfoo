@@ -227,6 +227,7 @@
     revokeManual =
       !!revokeManual || !!(window.__pf_consent && window.__pf_consent.marketing && !marketing);
     var consent = saveConsent(analytics, marketing, undefined, revokeManual);
+    loadByConsent(consent);
     if (
       (!consent.analytics && window.__pf_analytics_loaded) ||
       (!consent.marketing && window.__pf_marketing_loaded) ||
@@ -235,7 +236,6 @@
       window.location.reload();
       return;
     }
-    loadByConsent(consent);
   }
 
   // Script Loading
