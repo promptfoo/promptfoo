@@ -1022,6 +1022,16 @@ describe('evaluatorHelpers', () => {
       expect(renderedPrompt).not.toContain('42');
     });
 
+    it('should ignore raw contents when finding placeholders after a raw block', async () => {
+      const renderedPrompt = await renderPrompt(
+        toPrompt('{"text": "{{v}}"}'),
+        { v: '{% raw %}{{{% endraw %} {{x}}', x: 'yes' },
+        {},
+      );
+
+      expect(renderedPrompt).toBe(JSON.stringify({ text: '{{ yes' }, null, 2));
+    });
+
     it('should not execute a set-bound constructor beside protected literals', async () => {
       const payload =
         '{% set range = [] %}{% raw %}x{% endraw %}{{ range.constructor("return 6 * 7")() }}';
@@ -1205,6 +1215,32 @@ describe('evaluatorHelpers', () => {
         undefined,
         undefined,
       );
+    });
+
+    it('should preserve raw variables to integrations when templating is disabled', async () => {
+      const restoreEnv = mockProcessEnv({ PROMPTFOO_DISABLE_TEMPLATING: 'true' });
+      try {
+        vi.mocked(getPortkeyPrompt).mockResolvedValue({
+          model: 'gpt-4o',
+          n: 1,
+          top_p: 1,
+          max_tokens: 128,
+          temperature: 0.7,
+          presence_penalty: 0,
+          frequency_penalty: 0,
+          messages: [{ role: 'user', content: 'hi' }],
+        });
+        const rawValue = '{% raw %}{{x}}{% endraw %}';
+
+        await renderPrompt(toPrompt('portkey://my-prompt'), { v: rawValue }, {});
+
+        expect(getPortkeyPrompt).toHaveBeenCalledWith(
+          'my-prompt',
+          expect.objectContaining({ v: rawValue }),
+        );
+      } finally {
+        restoreEnv();
+      }
     });
   });
 

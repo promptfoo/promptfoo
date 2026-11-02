@@ -27,9 +27,9 @@ import { renderVarsInObject, setLoadedFileMimeTypes } from './util/index';
 import invariant from './util/invariant';
 import { filterFiniteScores } from './util/numeric';
 import {
+  extractVariablesFromExpression,
   extractVariablesFromTemplate,
   getNunjucksEngine,
-  templateReferencesVariable,
 } from './util/templates';
 import { transform } from './util/transform';
 import { loadYaml } from './util/yamlLoad';
@@ -117,14 +117,23 @@ const PROTECTED_LITERAL_EXPRESSION_REGEX =
 // Precompute nesting depth at every position in one forward scan.
 // Depth is the number of unclosed {{ or {% delimiters before each character.
 // A placeholder is nested (and must be left for the real render) when its
-// opening position has depth > 0. Delimiters inside single- or double-quoted
-// strings are literal text, not structure, so they do not affect depth.
-function computeNestingDepths(value: string): Int32Array {
+// opening position has depth > 0. Delimiters inside quoted strings and raw
+// spans are literal text, not structure, so they do not affect depth.
+function computeNestingDepths(
+  value: string,
+  rawSpans: Array<[number, number]> = collectRawSpans(value),
+): Int32Array {
   const depths = new Int32Array(value.length + 1);
   let depth = 0;
   let quote: string | null = null;
+  let rawIdx = 0;
   for (let i = 0; i < value.length; i++) {
     depths[i] = depth;
+    if (rawIdx < rawSpans.length && i >= rawSpans[rawIdx][0]) {
+      i = rawSpans[rawIdx][1] - 1;
+      rawIdx++;
+      continue;
+    }
     const ch = value[i];
     if (quote) {
       // Inside a quoted string: only the matching quote ends it.
@@ -170,7 +179,7 @@ function firstUnprotectedPlaceholder(
   value: string,
 ): { placeholder: string; varName: string; index: number } | null {
   const rawSpans = collectRawSpans(value);
-  const depths = computeNestingDepths(value);
+  const depths = computeNestingDepths(value, rawSpans);
   let spanIdx = 0;
   for (const match of value.matchAll(SIMPLE_PLACEHOLDER_REGEX)) {
     const start = match.index;
@@ -395,14 +404,11 @@ function referencesUndefinedVariables(template: string, vars: Record<string, Var
     /\{%\s*-?\s*set\s+([A-Za-z_]\w*)\s*=\s*([^%]+?)\s*-?%\}/g,
   )) {
     defined.add(match[1]!);
-    // Extract only real expression references. The AST check excludes string
-    // contents, booleans, property names, and filter names.
-    for (const rhsMatch of (match[2] || '').matchAll(/([A-Za-z_]\w*)/g)) {
-      const candidate = rhsMatch[1]!;
-      if (templateReferencesVariable(`{{ ${match[2]} }}`, candidate)) {
-        setRhsVars.push(candidate);
-      }
-    }
+    // Parse the RHS once and collect real expression references from its AST.
+    // A parse failure keeps the previous conservative identifier fallback.
+    const rhs = match[2] || '';
+    const references = extractVariablesFromExpression(`{{ ${rhs} }}`);
+    setRhsVars.push(...(references ?? rhs.match(/[A-Za-z_]\w*/g) ?? []));
   }
   // Also handle set without explicit RHS extraction (e.g. {% set local %}).
   for (const match of scrubbed.matchAll(/\{%\s*-?\s*set\s+([A-Za-z_]\w*)\s*-?%\}/g)) {
@@ -739,6 +745,7 @@ export async function renderPrompt(
   // hoisted. JSON, no-autoescape, and integration paths supplied values as data,
   // so they only pre-render the explicit literal escapes handled above.
   const jsonAutoescapeDisabled = getEnvBool('PROMPTFOO_DISABLE_JSON_AUTOESCAPE');
+  const templatingDisabled = getEnvBool('PROMPTFOO_DISABLE_TEMPLATING');
   const renderAllVarTemplates = shouldRenderAllVarTemplates(
     prompt.raw,
     basePrompt,
@@ -757,7 +764,7 @@ export async function renderPrompt(
         return [key, value];
       }
 
-      if (!renderAllVarTemplates && !hasProtectedLiteralSyntax(value)) {
+      if (!renderAllVarTemplates && (templatingDisabled || !hasProtectedLiteralSyntax(value))) {
         return [key, value];
       }
 

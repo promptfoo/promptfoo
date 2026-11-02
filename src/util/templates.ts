@@ -612,3 +612,44 @@ export function analyzeTemplateReference(
 export function templateReferencesVariable(template: string, variableName: string): boolean {
   return analyzeTemplateReference(template, variableName).referenced;
 }
+
+function collectExpressionReferences(
+  node: NunjucksAstNode,
+  parent: NunjucksParentContext | undefined,
+  references: Set<string>,
+): void {
+  if (node.typename === 'Symbol' && typeof node.value === 'string') {
+    if (!isNonReferenceSymbol(parent)) {
+      references.add(node.value);
+    }
+    return;
+  }
+
+  for (const field of node.fields ?? []) {
+    const child = node[field];
+    if (Array.isArray(child)) {
+      for (const item of child) {
+        if (isNunjucksAstNode(item)) {
+          collectExpressionReferences(item, { field, node }, references);
+        }
+      }
+    } else if (isNunjucksAstNode(child)) {
+      collectExpressionReferences(child, { field, node }, references);
+    }
+  }
+}
+
+/**
+ * Collect real symbols from a Nunjucks expression with one AST parse.
+ * String literals, filter names, object keys, and property names are excluded.
+ * Returns undefined when parsing fails so callers can choose a conservative fallback.
+ */
+export function extractVariablesFromExpression(template: string): string[] | undefined {
+  const parseResult = parseNunjucksTemplate(template);
+  if (!parseResult.ok) {
+    return undefined;
+  }
+  const references = new Set<string>();
+  collectExpressionReferences(parseResult.ast, undefined, references);
+  return Array.from(references);
+}

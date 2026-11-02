@@ -5,6 +5,7 @@ import { getEnvString, getProcessEnv } from '../../src/envars';
 import { getEnvOverridesProvider, setEnvOverridesProvider } from '../../src/envOverrides';
 import {
   analyzeTemplateReference,
+  extractVariablesFromExpression,
   extractVariablesFromTemplate,
   extractVariablesFromTemplates,
   getNunjucksEngine,
@@ -302,6 +303,28 @@ describe('analyzeTemplateReference', () => {
       referenced: false,
       parsed: true,
     });
+  });
+});
+
+describe('extractVariablesFromExpression', () => {
+  it('parses once and collects only real expression references', () => {
+    const parser = (nunjucks as unknown as { parser: { parse: (template: string) => unknown } })
+      .parser;
+    const parseSpy = vi.spyOn(parser, 'parse');
+    try {
+      const references = extractVariablesFromExpression(
+        "{{ user.name ~ foo | length ~ {'key': bar} ~ 'Hello' ~ true }}",
+      );
+
+      expect(references).toEqual(['user', 'foo', 'bar']);
+      expect(parseSpy).toHaveBeenCalledTimes(1);
+    } finally {
+      parseSpy.mockRestore();
+    }
+  });
+
+  it('reports parse failure so callers can retain their conservative fallback', () => {
+    expect(extractVariablesFromExpression('{{ broken')).toBeUndefined();
   });
 });
 
