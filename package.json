@@ -122,7 +122,7 @@
       "chokidar": "$chokidar"
     },
     "uri-js": "npm:uri-js-replace",
-    "whatwg-url": "16.0.1",
+    "whatwg-url": "17.3.0",
     "esbuild": "0.28.2",
     "jsdom": {
       "@asamuzakjp/css-color": "6.0.7"
