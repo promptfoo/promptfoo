@@ -1,6 +1,6 @@
 import { fetchWithCache } from '../../cache';
 import invariant from '../../util/invariant';
-import { getRequestTimeoutMs } from '../shared';
+import { getRequestTimeoutMs, shouldBustProviderCache } from '../shared';
 import { DEFAULT_AZURE_API_VERSION } from './defaults';
 import { AzureGenericProvider } from './generic';
 
@@ -15,7 +15,7 @@ export class AzureEmbeddingProvider extends AzureGenericProvider {
 
   async callEmbeddingApi(
     text: string,
-    _context?: CallApiContextParams,
+    context?: CallApiContextParams,
     options?: CallApiOptionsParams,
   ): Promise<ProviderEmbeddingResponse> {
     await this.ensureInitialized();
@@ -30,9 +30,12 @@ export class AzureEmbeddingProvider extends AzureGenericProvider {
       ...(this.config.dimensions === undefined ? {} : { dimensions: this.config.dimensions }),
     };
     let data,
-      cached = false;
+      cached = false,
+      status: number | undefined,
+      statusText = '',
+      deleteFromCache: (() => Promise<void>) | undefined;
     try {
-      ({ data, cached } = (await fetchWithCache(
+      ({ data, cached, status, statusText, deleteFromCache } = (await fetchWithCache(
         `${this.getApiBaseUrl()}/openai/deployments/${this.deploymentName}/embeddings?api-version=${
           this.config.apiVersion || DEFAULT_AZURE_API_VERSION
         }`,
@@ -47,6 +50,8 @@ export class AzureEmbeddingProvider extends AzureGenericProvider {
           ...(options?.abortSignal && { signal: options.abortSignal }),
         },
         getRequestTimeoutMs(),
+        'json',
+        shouldBustProviderCache(context),
       )) as unknown as any);
     } catch (err) {
       options?.abortSignal?.throwIfAborted();
@@ -61,9 +66,25 @@ export class AzureEmbeddingProvider extends AzureGenericProvider {
       };
     }
 
+    if (status && (status < 200 || status >= 300)) {
+      return {
+        error: `API error: ${status} ${statusText}\n${
+          typeof data === 'string' ? data : JSON.stringify(data)
+        }`,
+        tokenUsage: {
+          total: 0,
+          prompt: 0,
+          completion: 0,
+          numRequests: 1,
+        },
+      };
+    }
+
     try {
       const embedding = data?.data?.[0]?.embedding;
       if (!embedding) {
+        // Evict 2xx responses with missing embeddings so they aren't replayed from cache.
+        await deleteFromCache?.();
         throw new Error('No embedding returned');
       }
       const ret: ProviderEmbeddingResponse = {

@@ -179,4 +179,110 @@ describe('AzureEmbeddingProvider', () => {
       },
     });
   });
+  it.each([
+    { label: 'bustCache: true', context: { bustCache: true }, expected: true },
+    { label: 'legacy debug: true', context: { debug: true }, expected: true },
+    {
+      label: 'explicit bustCache: false takes precedence over debug',
+      context: { bustCache: false, debug: true },
+      expected: false,
+    },
+  ])(
+    'forwards the cache-bust context to fetchWithCache ($label)',
+    async ({ context, expected }) => {
+      const mockResponse = {
+        data: { data: [{ embedding: [0.1, 0.2, 0.3] }], usage: { total_tokens: 10 } },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      };
+
+      vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse as any);
+
+      await provider.callEmbeddingApi('test text', context as any);
+
+      // shouldBustProviderCache precedence is `bustCache ?? debug ?? false`.
+      const [, , , format, bustCache] = vi.mocked(fetchWithCache).mock.calls[0];
+      expect(format).toBe('json');
+      expect(bustCache).toBe(expected);
+    },
+  );
+
+  it('reports the HTTP status and keeps the Azure message when the request is rejected', async () => {
+    const mockResponse = {
+      data: {
+        error: { code: '401', message: 'Access denied due to invalid subscription key' },
+      },
+      cached: false,
+      status: 401,
+      statusText: 'Unauthorized',
+    };
+
+    vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse as any);
+
+    const result = await provider.callEmbeddingApi('test text');
+
+    expect(result).toEqual({
+      error: expect.stringContaining('API error: 401 Unauthorized'),
+      tokenUsage: {
+        total: 0,
+        prompt: 0,
+        completion: 0,
+        numRequests: 1,
+      },
+    });
+    // The provider's own message must survive alongside the status line.
+    expect(result.error).toContain('Access denied due to invalid subscription key');
+  });
+
+  it('evicts a freshly fetched 200 that carried no embedding', async () => {
+    const deleteFromCache = vi.fn();
+    const mockResponse = {
+      data: { data: [], usage: { total_tokens: 7, prompt_tokens: 7, completion_tokens: 0 } },
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+      deleteFromCache,
+    };
+
+    vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse as any);
+
+    // fetchWithCache stores a 200 that carries no `error` key, so without the eviction
+    // this response is replayed for the full TTL.
+    const result = await provider.callEmbeddingApi('test text');
+
+    expect(deleteFromCache).toHaveBeenCalled();
+    expect(result.error).toContain('No embedding returned');
+    expect(result.tokenUsage).toEqual({
+      total: 7,
+      prompt: 7,
+      completion: 0,
+      numRequests: 1,
+    });
+  });
+
+  it('evicts a cache hit that carried no embedding', async () => {
+    const deleteFromCache = vi.fn();
+    const mockResponse = {
+      data: { data: [], usage: { total_tokens: 7 } },
+      cached: true,
+      status: 200,
+      statusText: 'OK',
+      deleteFromCache,
+    };
+
+    vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse as any);
+
+    const result = await provider.callEmbeddingApi('test text');
+
+    expect(deleteFromCache).toHaveBeenCalled();
+    expect(result.error).toContain('No embedding returned');
+    // A cache hit reports its tokens under `cached`, so the two eviction paths differ in
+    // what they report even though both evict.
+    expect(result.tokenUsage).toEqual({
+      cached: 7,
+      total: 7,
+      numRequests: 1,
+    });
+  });
 });
