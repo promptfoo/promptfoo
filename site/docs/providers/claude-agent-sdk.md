@@ -842,7 +842,9 @@ providers:
       settings: /path/to/settings.json
 ```
 
-For embedders that derive lockdown configuration from an enterprise policy, use `managed_settings` to load policy-tier settings above user/project layers (so user/project settings cannot widen restrictions set here):
+Use `managed_settings` to pass restrictions from an embedding application to the SDK. If the machine already has an administrator policy, that policy controls whether the SDK merges restrictions from the application.
+
+With SDK 0.3.309 or later, `disableAllHooks: true` allows only administrator-managed hooks. The SDK accepts empty `allowedHttpHookUrls` and `httpHookAllowedEnvVars` lists, but they only restrict HTTP hooks when other settings sources have no entries for the same list.
 
 ```yaml
 providers:
