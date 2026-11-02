@@ -7335,42 +7335,63 @@ describe('ClaudeCodeSDKProvider', () => {
         expect(getTrace).not.toHaveBeenCalled();
       });
 
-      it.each([true, false])(
-        'flushes synthetic spans when the stream has no result (tool completed: %s)',
-        async (toolCompleted) => {
-          const { emittedSpans } = installTracerSpy();
-          const getTrace = vi.fn().mockResolvedValue({ spans: [] });
-          vi.spyOn(traceStore, 'getTraceStore').mockReturnValue({
-            getTrace,
-          } as unknown as ReturnType<typeof traceStore.getTraceStore>);
-          mockQuery.mockReturnValue(
-            createMockQuery([
-              {
-                type: 'assistant',
-                parent_tool_use_id: null,
-                message: createMockBetaMessage([createReadToolUse()]),
-                session_id: 'test-session',
-              },
-              ...(toolCompleted ? [createReadToolResultMessage()] : []),
-            ]),
-          );
-          cliState.setActiveOtlpReceiver(createOtlpOptions());
-          const provider = new ClaudeCodeSDKProvider(createTracedClaudeOptions());
+      it.each([
+        { toolCompleted: true, nativeSpansArrived: false },
+        { toolCompleted: false, nativeSpansArrived: false },
+        { toolCompleted: true, nativeSpansArrived: true },
+        { toolCompleted: false, nativeSpansArrived: true },
+      ])(
+        'preserves missing-result evidence without duplicates (completed: $toolCompleted, native: $nativeSpansArrived)',
+        async ({ toolCompleted, nativeSpansArrived }) => {
+          vi.useFakeTimers();
+          try {
+            const { emittedSpans } = installTracerSpy();
+            const parentSpanId = 'b7ad6b7169203331';
+            const getTrace = vi.fn().mockResolvedValue({
+              spans: nativeSpansArrived ? [{ spanId: 'native-claude-span', parentSpanId }] : [],
+            });
+            vi.spyOn(traceStore, 'getTraceStore').mockReturnValue({
+              getTrace,
+            } as unknown as ReturnType<typeof traceStore.getTraceStore>);
+            mockQuery.mockReturnValue(
+              createMockQuery([
+                {
+                  type: 'assistant',
+                  parent_tool_use_id: null,
+                  message: createMockBetaMessage([createReadToolUse()]),
+                  session_id: 'test-session',
+                },
+                ...(toolCompleted ? [createReadToolResultMessage()] : []),
+              ]),
+            );
+            cliState.setActiveOtlpReceiver(createOtlpOptions());
+            const provider = new ClaudeCodeSDKProvider(createTracedClaudeOptions());
 
-          const result = await cliState.withRequestTracingConfig(
-            { enabled: true, otlp: { http: { enabled: true, port: 4318 } } },
-            () =>
-              provider.callApi('prompt', {
-                traceparent: '00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01',
-                prompt: { raw: 'prompt', label: 'prompt' },
-                vars: {},
-              }),
-          );
+            const resultPromise = cliState.withRequestTracingConfig(
+              { enabled: true, otlp: { http: { enabled: true, port: 4318 } } },
+              () =>
+                provider.callApi('prompt', {
+                  traceparent: `00-0af7651916cd43dd8448eb211c80319c-${parentSpanId}-01`,
+                  prompt: { raw: 'prompt', label: 'prompt' },
+                  vars: {},
+                }),
+            );
+            await vi.runAllTimersAsync();
+            const result = await resultPromise;
 
-          expect(result.error).toBe("Claude Agent SDK call didn't return a result");
-          expect(emittedSpans.map((span) => span.name)).toEqual(['gen_ai.turn 1', 'tool Read']);
-          expect(emittedSpans[1].attrs['tool.incomplete']).toBe(toolCompleted ? undefined : true);
-          expect(getTrace).not.toHaveBeenCalled();
+            expect(result.error).toBe("Claude Agent SDK call didn't return a result");
+            expect(emittedSpans.map((span) => span.name)).toEqual(
+              nativeSpansArrived ? [] : ['gen_ai.turn 1', 'tool Read'],
+            );
+            if (!nativeSpansArrived) {
+              expect(emittedSpans[1].attrs['tool.incomplete']).toBe(
+                toolCompleted ? undefined : true,
+              );
+            }
+            expect(getTrace).toHaveBeenCalled();
+          } finally {
+            vi.useRealTimers();
+          }
         },
       );
 

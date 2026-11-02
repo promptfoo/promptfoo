@@ -2284,14 +2284,6 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
           // the main agent's result never arrived).
           const finalMsg = lastMainResultMsg ?? lastResultMsg;
 
-          if (!finalMsg) {
-            // Preserve observed work even when the stream cannot confirm native export.
-            for (const emit of deferredSyntheticSpans) {
-              emit();
-            }
-            return { error: "Claude Agent SDK call didn't return a result" };
-          }
-
           if (sdkExportsNativeSpans && tpTraceId && tpSpanId) {
             let nativeSpansArrived = false;
             try {
@@ -2315,6 +2307,10 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
                 emit();
               }
             }
+          }
+
+          if (!finalMsg) {
+            return { error: "Claude Agent SDK call didn't return a result" };
           }
 
           // Truncation guard. With SDK >= 0.2.126 the `origin` field gives a
