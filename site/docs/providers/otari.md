@@ -1,6 +1,8 @@
 ---
+title: Otari
 sidebar_label: Otari
-description: 'Evaluate models through Otari, the open-source LLM gateway from Mozilla.ai, on otari.ai or self-hosted, using the OpenAI provider and apiBaseUrl'
+sidebar_position: 60
+description: "Use promptfoo to evaluate models through Otari, Mozilla.ai's open-source LLM gateway, hosted on otari.ai or self-hosted, with the OpenAI provider and apiBaseUrl"
 ---
 
 # Otari
