@@ -11,7 +11,7 @@ description: "Use promptfoo to evaluate models through Otari, Mozilla.ai's open-
 
 ```yaml
 providers:
-  - id: openai:chat:openai:gpt-4o
+  - id: openai:chat:openai:gpt-6.1-sol
     config:
       apiBaseUrl: '{{ env.OTARI_BASE_URL | default("https://api.otari.ai/api/v1") }}'
       apiKeyEnvar: OTARI_API_KEY
@@ -21,6 +21,6 @@ This uses the hosted gateway at `https://api.otari.ai/api/v1` unless `OTARI_BASE
 
 Everything after `openai:chat:` is passed to Otari unchanged as the model ID:
 
-- `openai:chat:openai:gpt-4o` or `openai:chat:anthropic:claude-sonnet-4-6` pins a provider (`provider:model`)
-- `openai:chat:openai/gpt-4o` lets otari.ai choose the provider
+- `openai:chat:openai:gpt-6.1-sol` or `openai:chat:anthropic:claude-sonnet-5-5` pins a provider (`provider:model`)
+- `openai:chat:openai/gpt-6.1-sol` lets otari.ai choose the provider
 - `openai:chat:support-agent` uses an alias or routing policy defined on the gateway
