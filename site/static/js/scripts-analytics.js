@@ -3,7 +3,10 @@
 
 (function () {
   // Consent can change while this script is downloading.
-  if (!window.__pf_consent || !window.__pf_consent.analytics) return;
+  if (!window.__pf_consent || !window.__pf_consent.analytics) {
+    window.__pf_analytics_loaded = false;
+    return;
+  }
 
   gtag('config', 'G-3TS8QLZQ93', { anonymize_ip: true });
   gtag('config', 'G-3YM29CN26E', { anonymize_ip: true });

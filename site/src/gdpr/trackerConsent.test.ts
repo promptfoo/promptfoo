@@ -89,6 +89,39 @@ describe('tracking script consent', () => {
     },
   );
 
+  it.each(['analytics', 'marketing'])('retries the skipped %s bootstrap on regrant', (category) => {
+    document.cookie = 'pf_country=DE;path=/';
+    runScript('consent');
+    document.getElementById('cc-accept')!.click();
+    (window as any).__pf_manage_cookies();
+    document.getElementById('cc-reject-all')!.click();
+    runScript(`scripts-${category}`);
+    expect((window as any)[`__pf_${category}_loaded`]).toBe(false);
+    (window as any).__pf_manage_cookies();
+    document.getElementById('cc-accept-all')!.click();
+    expect(document.querySelectorAll(`script[src="/js/scripts-${category}.js"]`)).toHaveLength(2);
+    runScript(`scripts-${category}`);
+    expect(
+      document.querySelector(
+        category === 'analytics' ? 'script[src*="posthog.com"]' : 'script[src*="reo.dev"]',
+      ),
+    ).not.toBeNull();
+  });
+
+  it('initializes a delayed Reo client once after regrant', () => {
+    consent(0, 1);
+    runScript('scripts-marketing');
+    (window as any).Reo = { init: vi.fn() };
+    consent(0, 0);
+    document.querySelector('script[src*="reo.dev"]')!.dispatchEvent(new Event('load'));
+    expect((window as any).Reo.init).not.toHaveBeenCalled();
+    consent(0, 1);
+    window.dispatchEvent(new CustomEvent('pf_consent_change'));
+    expect((window as any).Reo.init).toHaveBeenCalledOnce();
+    window.dispatchEvent(new CustomEvent('pf_consent_change'));
+    expect((window as any).Reo.init).toHaveBeenCalledOnce();
+  });
+
   it('loads Vector and Reo only with marketing consent', () => {
     consent(0, 1);
     runScript('scripts-marketing');

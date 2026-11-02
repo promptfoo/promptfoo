@@ -3,7 +3,10 @@
 
 (function () {
   // Consent can change while this script is downloading.
-  if (!window.__pf_consent || !window.__pf_consent.marketing) return;
+  if (!window.__pf_consent || !window.__pf_consent.marketing) {
+    window.__pf_marketing_loaded = false;
+    return;
+  }
 
   gtag('config', 'AW-17347444171', { anonymize_ip: true });
 
@@ -56,7 +59,10 @@
     (e = '59f3ca4439de16d'),
       (t = function () {
         if (window.__pf_consent && window.__pf_consent.marketing) {
+          window.removeEventListener('pf_consent_change', t);
           Reo.init({ clientID: '59f3ca4439de16d' });
+        } else {
+          window.addEventListener('pf_consent_change', t);
         }
       }),
       ((n = document.createElement('script')).src = 'https://static.reo.dev/' + e + '/reo.js'),
