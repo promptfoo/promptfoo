@@ -26,6 +26,9 @@ import {
 import { monkeyPatchFetch, preserveCloudAuthRedirects } from './monkeyPatchFetch';
 import { getEffectiveRequestSignal } from './requestSignal';
 import { readWithResponseDeadline, trackResponseDeadline } from './responseDeadline';
+
+export { readWithResponseDeadline };
+
 import { getFetchRetryContextMaxRetries } from './retryContext';
 
 import type { FetchOptions } from './types';

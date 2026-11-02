@@ -1,6 +1,5 @@
 import { getEnvInt } from '../envars';
-import { fetchWithRetries } from '../util/fetch/index';
-import { readWithResponseDeadline } from '../util/fetch/responseDeadline';
+import { fetchWithRetries, readWithResponseDeadline } from '../util/fetch/index';
 import invariant from '../util/invariant';
 
 import type { AssertionParams, GradingResult } from '../types/index';
