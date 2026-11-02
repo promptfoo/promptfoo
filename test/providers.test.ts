@@ -163,6 +163,7 @@ describe('loadApiProvider', () => {
         tools: [{ name: 'search', description: 'Search the web' }],
       }),
       id: 'openai:chat:gpt-4',
+      requestPolicy: 'openai',
     });
   });
 
@@ -202,6 +203,7 @@ describe('loadApiProvider', () => {
         systemPrompt: 'You are a helpful assistant.',
       }),
       id: 'openai:chat:gpt-3.5-turbo',
+      requestPolicy: 'openai',
     });
   });
 

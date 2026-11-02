@@ -884,6 +884,7 @@ export const providerMap: ProviderFactory[] = [
       const baseUrl = configuredBaseUrl.replace(/\/+$/, '');
       return new OpenAiChatCompletionProvider(endpoint, {
         ...providerOptions,
+        requestPolicy: 'compatible',
         config: {
           ...providerOptions.config,
           apiBaseUrl: `${baseUrl}/${endpoint}`,
@@ -1264,10 +1265,18 @@ export const providerMap: ProviderFactory[] = [
         const apiUrl = resolveOpenAiApiUrl(providerOptions.config ?? {}, providerEnv);
         assertOpenAiApiModel(assistantModel || effectiveApiModel, apiUrl, { allowTranscription });
       }
+      const chatProviderOptions = {
+        ...providerOptions,
+        requestPolicy: isOpenAiFirstPartyApiUrl(
+          resolveOpenAiApiUrl(providerOptions.config ?? {}, providerEnv),
+        )
+          ? ('openai' as const)
+          : ('compatible' as const),
+      };
       if (modelType === 'chat') {
         return new OpenAiChatCompletionProvider(
           modelName || configuredModel || 'gpt-6-sol',
-          providerOptions,
+          chatProviderOptions,
         );
       }
       if (modelType === 'embedding' || modelType === 'embeddings') {
@@ -1297,7 +1306,7 @@ export const providerMap: ProviderFactory[] = [
       if (modelType === 'responses') {
         return new OpenAiResponsesProvider(
           modelName || configuredModel || 'gpt-6-sol',
-          providerOptions,
+          chatProviderOptions,
         );
       }
       if (modelType === 'decisions') {
@@ -1335,10 +1344,10 @@ export const providerMap: ProviderFactory[] = [
             resolveOpenAiApiUrl(providerOptions.config ?? {}, providerOptions.env),
           ))
       ) {
-        return new OpenAiResponsesProvider(modelType, providerOptions);
+        return new OpenAiResponsesProvider(modelType, chatProviderOptions);
       }
       if (OpenAiChatCompletionProvider.OPENAI_CHAT_MODEL_NAMES.includes(modelType)) {
-        return new OpenAiChatCompletionProvider(modelType, providerOptions);
+        return new OpenAiChatCompletionProvider(modelType, chatProviderOptions);
       }
       if (OpenAiCompletionProvider.OPENAI_COMPLETION_MODEL_NAMES.includes(modelType)) {
         return new OpenAiCompletionProvider(modelType, providerOptions);
@@ -1354,19 +1363,19 @@ export const providerMap: ProviderFactory[] = [
         return new OpenAiRealtimeProvider(modelType, providerOptions);
       }
       if (OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES.includes(modelType)) {
-        return new OpenAiResponsesProvider(modelType, providerOptions);
+        return new OpenAiResponsesProvider(modelType, chatProviderOptions);
       }
       // assertOpenAiApiModel above rejects retired IDs for api.openai.com. Preserve the
       // historical endpoint family for custom OpenAI-compatible gateways that still serve them.
       switch (getRetiredOpenAiModelRoute(modelType)) {
         case 'chat':
-          return new OpenAiChatCompletionProvider(modelType, providerOptions);
+          return new OpenAiChatCompletionProvider(modelType, chatProviderOptions);
         case 'tts':
           return new OpenAiTtsProvider(modelType, providerOptions);
         case 'realtime':
           return new OpenAiRealtimeProvider(modelType, providerOptions);
         case 'responses':
-          return new OpenAiResponsesProvider(modelType, providerOptions);
+          return new OpenAiResponsesProvider(modelType, chatProviderOptions);
         case 'moderation':
           return new OpenAiModerationProvider(modelType, providerOptions);
       }
@@ -1389,7 +1398,7 @@ export const providerMap: ProviderFactory[] = [
       logger.warn(
         `Unknown OpenAI model type: ${modelType}. Treating it as a chat model. Use one of the following providers: openai:chat:<model name>, openai:completion:<model name>, openai:embeddings:<model name>, openai:image:<model name>, openai:video:<model name>, openai:tts:<model name>, openai:transcription:<model name>, openai:realtime:<model name>, openai:live:<model name>, openai:agents:<agent name>, openai:codex-sdk`,
       );
-      return new OpenAiChatCompletionProvider(modelType, providerOptions);
+      return new OpenAiChatCompletionProvider(modelType, chatProviderOptions);
     },
   },
   configuredProviderFactory('openrouter:', () => createOpenRouterProvider),

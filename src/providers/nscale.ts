@@ -57,7 +57,12 @@ export function createNscaleProvider(
 
   if (splits[1] === 'chat') {
     const modelName = splits.slice(2).join(':');
-    return withNscaleCredentials(new OpenAiChatCompletionProvider(modelName, nscaleConfig));
+    return withNscaleCredentials(
+      new OpenAiChatCompletionProvider(modelName, {
+        ...nscaleConfig,
+        requestPolicy: 'compatible',
+      }),
+    );
   } else if (splits[1] === 'completion') {
     const modelName = splits.slice(2).join(':');
     return withNscaleCredentials(new OpenAiCompletionProvider(modelName, nscaleConfig));
@@ -73,6 +78,11 @@ export function createNscaleProvider(
   } else {
     // If no specific type is provided, default to chat
     const modelName = splits.slice(1).join(':');
-    return withNscaleCredentials(new OpenAiChatCompletionProvider(modelName, nscaleConfig));
+    return withNscaleCredentials(
+      new OpenAiChatCompletionProvider(modelName, {
+        ...nscaleConfig,
+        requestPolicy: 'compatible',
+      }),
+    );
   }
 }

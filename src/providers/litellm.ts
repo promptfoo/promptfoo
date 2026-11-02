@@ -109,7 +109,10 @@ abstract class LiteLLMProviderWrapper implements ApiProvider {
  */
 class LiteLLMChatProvider extends LiteLLMProviderWrapper {
   constructor(modelName: string, options: ProviderOptions) {
-    const provider = new OpenAiChatCompletionProvider(modelName, options);
+    const provider = new OpenAiChatCompletionProvider(modelName, {
+      ...options,
+      requestPolicy: 'compatible',
+    });
     super(provider, 'chat', options.id);
     // Bind getApiKey if it exists
     if (provider.getApiKey) {

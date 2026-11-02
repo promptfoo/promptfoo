@@ -342,7 +342,7 @@ describe('OpenAiResponsesProvider Azure custom deployments', () => {
 
       const { body } = await provider.getOpenAiBody('Test prompt');
 
-      expect(body.reasoning).toBeUndefined();
+      expect(body.reasoning).toEqual({ effort: 'medium' });
       expect(body.temperature).toBe(0.5);
     });
 
@@ -358,7 +358,7 @@ describe('OpenAiResponsesProvider Azure custom deployments', () => {
 
       const { body } = await provider.getOpenAiBody('Test prompt');
 
-      expect(body.reasoning).toBeUndefined();
+      expect(body.reasoning).toEqual({ effort: 'medium' });
       expect(body.temperature).toBe(0.5);
     });
 

@@ -159,6 +159,34 @@ describe('OpenAI Provider', () => {
   });
 
   describe('OpenAiChatCompletionProvider', () => {
+    it.each([
+      ['https://proxy.example.test/v1', 'https://openrouter.ai/api/v1', 50],
+      ['https://openrouter.ai/api/v1', 'https://proxy.example.test/v1', 60],
+    ] as const)(
+      'aligns token precedence with the requested provider URL %s',
+      async (providerUrl, promptUrl, expected) => {
+        mockFetchWithCache.mockResolvedValue(createUncachedChatResponse());
+        const provider = new OpenAiChatCompletionProvider('o3', {
+          config: {
+            apiKey: 'fixture-key',
+            apiBaseUrl: providerUrl,
+            max_completion_tokens: 50,
+            passthrough: { max_tokens: 60 },
+          },
+        });
+        const result = await provider.callApi('Hello', {
+          vars: {},
+          prompt: { raw: 'Hello', label: 'Hello', config: { apiBaseUrl: promptUrl } },
+        });
+        expect(result.error).toBeUndefined();
+        const [url, options] = mockFetchWithCache.mock.calls[0];
+        expect(url).toBe(`${providerUrl}/chat/completions`);
+        const body = JSON.parse(options?.body as string);
+        expect(body.max_completion_tokens).toBe(expected);
+        expect(body).not.toHaveProperty('max_tokens');
+      },
+    );
+
     const createAttributeRecorder =
       (attributes: Record<string, unknown>[]) =>
       (
@@ -578,7 +606,7 @@ describe('OpenAI Provider', () => {
             providerConfig: { max_completion_tokens: 4096 },
             promptConfig: { max_tokens: 50 },
             wireField: 'max_completion_tokens',
-            expected: 4096,
+            expected: 50,
           },
           {
             model: 'gpt-4o',
@@ -3204,7 +3232,7 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
       const gpt5Call = mockFetchWithCache.mock.calls[0] as [string, { body: string }];
       const gpt5Body = JSON.parse(gpt5Call[1].body);
       expect(gpt5Body.max_tokens).toBeUndefined();
-      expect(gpt5Body.max_completion_tokens).toBeUndefined();
+      expect(gpt5Body.max_completion_tokens).toBe(300);
 
       // Test prefixed GPT-5 model (GitHub Models) should not include max_tokens
       mockFetchWithCache.mockClear();
@@ -3215,7 +3243,7 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
       const prefixedGpt5Call = mockFetchWithCache.mock.calls[0] as [string, { body: string }];
       const prefixedGpt5Body = JSON.parse(prefixedGpt5Call[1].body);
       expect(prefixedGpt5Body.max_tokens).toBeUndefined();
-      expect(prefixedGpt5Body.max_completion_tokens).toBeUndefined();
+      expect(prefixedGpt5Body.max_completion_tokens).toBe(400);
     });
 
     it('should strip max_tokens from passthrough for GPT-5 models', async () => {

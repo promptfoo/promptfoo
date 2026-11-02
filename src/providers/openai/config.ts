@@ -20,7 +20,7 @@ export type OpenAiRuntimeValue<T> =
   | ((context: { vars: Record<string, VarValue> }) => T | undefined);
 
 type RuntimeFields<T extends { reasoning?: unknown; reasoning_effort?: unknown }> = {
-  reasoning?: OpenAiRuntimeValue<T['reasoning']>;
+  reasoning?: OpenAiRuntimeValue<T['reasoning']> | null;
   reasoning_effort?: OpenAiRuntimeValue<T['reasoning_effort']>;
   /** Compatible APIs and in-process templates may add non-JSON values here. */
   passthrough?: object;
@@ -60,9 +60,9 @@ export type OpenAiResponsesConfig = Omit<
 > &
   RuntimeFields<OpenAiResponsesConfigInput> & {
     /** @deprecated Ignored by Responses; use max_output_tokens. Retained for older callers. */
-    max_completion_tokens?: number;
+    max_completion_tokens?: OpenAiCompletionOptions['max_completion_tokens'];
     /** @deprecated Only compatible adapters map this alias; use max_output_tokens. */
-    max_tokens?: number;
+    max_tokens?: OpenAiCompletionOptions['max_tokens'];
     tools?: OpenAiResponsesConfigInput['tools'] | OpenAiCompletionOptions['tools'];
     tool_choice?:
       | OpenAiResponsesConfigInput['tool_choice']

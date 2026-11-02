@@ -868,12 +868,12 @@ These properties can be set under the provider `config` key:
 | o1                    | Set to `true` if your Azure deployment uses an o1 model. **(Deprecated, use `isReasoningModel` instead)**                                                                                                             |
 | isReasoningModel      | Treat the deployment as reasoning-capable. Set to `true` for custom deployment names; recognizable reasoning model names are auto-detected.                                                                           |
 | isClaudeOpus47OrLater | Set to `true` to omit unsupported sampling parameters for a custom-named Claude deployment. Prefer `modelName` for model-specific compatibility and cost estimates.                                                   |
-| modelName             | Underlying Claude model ID for `azure:chat` compatibility and cost estimates when your deployment uses a custom alias. The deployment name is still sent to Azure.                                                    |
+| modelName             | Model ID, such as `o4-mini`, `gpt-4.1`, or a Claude model ID, used to select supported settings and estimate costs for `azure:chat`. Requests are sent to your Azure deployment name.                                 |
 | max_completion_tokens | Maximum tokens for `azure:chat` reasoning models. Use `max_output_tokens` for `azure:responses`; `azure:completion` does not support it.                                                                              |
 | max_output_tokens     | Maximum output tokens for `azure:responses`, including reasoning deployments.                                                                                                                                         |
 | reasoning_effort      | Controls reasoning depth: 'minimal', 'low', 'medium', 'high', 'xhigh', or 'max' (model-dependent). Sent directly by `azure:chat` and as `reasoning.effort` by `azure:responses`. Not supported by `azure:completion`. |
 | temperature           | Controls randomness (0-2). Not supported for reasoning models                                                                                                                                                         |
-| max_tokens            | Maximum tokens to generate. Not supported for reasoning models                                                                                                                                                        |
+| max_tokens            | Maximum tokens to generate. For `azure:chat` with o-series or GPT-5/GPT-6 models, also accepted in place of `max_completion_tokens`.                                                                                  |
 | top_p                 | Controls nucleus sampling (0-1)                                                                                                                                                                                       |
 | frequency_penalty     | Penalizes repeated tokens (-2 to 2)                                                                                                                                                                                   |
 | presence_penalty      | Penalizes new tokens based on presence (-2 to 2)                                                                                                                                                                      |
@@ -894,32 +894,33 @@ operate differently from standard models with specific requirements:
 2. They don't support `temperature` (it's ignored)
 3. They accept a `reasoning_effort` parameter ('low', 'medium', 'high')
 
-For `azure:responses` reasoning deployments, use `max_output_tokens` and the Responses
-configuration documented above.
+With `azure:chat`, use `max_completion_tokens` to limit the total number of tokens used for reasoning and the answer. You can also use `max_tokens`; promptfoo sends that value as `max_completion_tokens`. If you set both fields in the same config, `max_completion_tokens` takes precedence.
+
+A token limit set for an individual prompt overrides the provider's limit. For example, a prompt with `max_tokens: 500` uses a limit of 500 tokens even if the provider has `max_completion_tokens: 2000`.
+
+With `azure:responses`, use `max_output_tokens` to limit the total number of tokens used for reasoning and the answer. The `max_tokens` and `max_completion_tokens` settings apply to Chat Completions; they do not set the Responses token limit.
 
 `azure:completion` has no reasoning support: it always sends `max_tokens` and ignores
 `isReasoningModel`, `max_completion_tokens`, and `reasoning_effort`. Use `azure:chat` or
 `azure:responses` for reasoning deployments.
 
-Since Azure allows custom deployment names that don't necessarily reflect the underlying model type, set `isReasoningModel: true` for aliases or deployment names that do not identify the reasoning model. Promptfoo auto-detects common o-series, GPT-5, DeepSeek-R1, Phi reasoning, and Grok reasoning deployment names. The explicit configuration below works with `azure:chat` deployments:
+Your Azure deployment can have a custom name, such as `my-assistant`. Set `modelName` to the model it runs so promptfoo can choose the settings that model supports. The example below connects to a deployment named `my-assistant` that runs o4-mini:
 
 ```yaml
-# For chat endpoints
 providers:
-  - id: azure:chat:my-o4-mini-deployment
+  - id: azure:chat:my-assistant
     config:
       apiHost: 'xxxxxxxx.openai.azure.com'
-      # Set this flag to true for reasoning models (o1, o3, o3-mini, o4-mini)
-      isReasoningModel: true
-      # Use max_completion_tokens instead of max_tokens
+      modelName: 'o4-mini'
       max_completion_tokens: 25000
-      # Optional: Set reasoning effort (default is 'medium' unless omitDefaults is true)
       reasoning_effort: 'medium'
 ```
 
 > Note: The `o1` flag is still supported for backward compatibility, but `isReasoningModel` is preferred as it more clearly indicates its purpose.
 
 ### Using Variables with Reasoning Effort
+
+Reasoning settings on an individual prompt override the provider's settings. To clear an inherited effort setting, use `reasoning_effort: null` with Chat Completions or `reasoning: { effort: null }` with Responses. Other Responses options, such as `summary`, are retained. Use `reasoning: null` to clear all inherited Responses reasoning options.
 
 You can use variables in your configuration to dynamically adjust the reasoning effort based on your test cases:
 

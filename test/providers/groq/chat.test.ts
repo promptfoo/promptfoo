@@ -171,6 +171,44 @@ describe('GroqProvider', () => {
     },
   );
 
+  it.each([0, 73])(
+    'preserves environment cap %s unless explicitly overridden or cleared',
+    async (envCap) => {
+      vi.stubEnv('OPENAI_MAX_COMPLETION_TOKENS', String(envCap));
+      vi.stubEnv('OPENAI_MAX_TOKENS', '999');
+      const provider = new GroqProvider('openai/gpt-oss-120b', {});
+      expect((await provider.getOpenAiBody('Hello')).body.max_completion_tokens).toBe(envCap);
+      for (const field of ['max_tokens', 'max_completion_tokens']) {
+        for (const raw of [false, true]) {
+          for (const value of [null, 0, 17]) {
+            const config = raw ? { passthrough: { [field]: value } } : { [field]: value };
+            const direct = new GroqProvider('openai/gpt-oss-120b', { config });
+            const inherited = new GroqProvider('openai/gpt-oss-120b', {
+              config: { max_completion_tokens: 128 },
+            });
+            const bodies = [
+              (await direct.getOpenAiBody('Hello')).body,
+              (
+                await inherited.getOpenAiBody('Hello', {
+                  vars: {},
+                  prompt: { raw: 'Hello', label: 'Hello', config },
+                })
+              ).body,
+            ];
+            for (const body of bodies) {
+              expect(body).not.toHaveProperty('max_tokens');
+              if (value === null) {
+                expect(body).not.toHaveProperty('max_completion_tokens');
+              } else {
+                expect(body.max_completion_tokens).toBe(value);
+              }
+            }
+          }
+        }
+      }
+    },
+  );
+
   it('preserves an explicit passthrough token limit', async () => {
     const provider = new GroqProvider('openai/gpt-oss-120b', {
       config: { max_tokens: 100, passthrough: { max_completion_tokens: 20 } },
