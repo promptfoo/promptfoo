@@ -136,6 +136,12 @@ const allowedSkippedTests: AllowedSkip[] = [
     reason: 'Ruby smoke coverage requires the Ruby toolchain',
   },
   {
+    file: 'smoke/sigterm-eval.test.ts',
+    kind: 'skipIf',
+    linePattern: /^describe\.skipIf\(process\.platform === 'win32'\)\('SIGTERM during an eval'/,
+    reason: 'Windows has no POSIX signals, so SIGTERM ends the child without running handlers',
+  },
+  {
     file: 'smoke/extension-hooks.test.ts',
     kind: 'skipIf',
     linePattern: /^it\.skipIf\(!PYTHON_PATH\)\($/,

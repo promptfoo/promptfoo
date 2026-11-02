@@ -27,7 +27,7 @@ import type { AzureResponsesConfigInput } from '../../src/contracts';
 import type { AnthropicMessageOptions } from '../../src/providers/anthropic/types';
 import type { AzureResponsesOptions } from '../../src/providers/azure/types';
 
-// Independent corpus: pinned @anthropic-ai/sdk@0.131.0 Messages.ToolUnion.
+// Independent corpus for the Anthropic SDK's Messages.ToolUnion.
 // These values are checked against the SDK and provider options, not inferred from our schema.
 const nativeTools = [
   { type: 'browser_toolset_20260801' },
@@ -233,7 +233,7 @@ it('forwards parsed Anthropic Completion headers to the SDK request', async () =
   const headers = { 'X-Gateway-Route': 'synthetic-test' };
   const config = AnthropicCompletionConfigInputSchema.parse({ apiKey: 'test-key', headers });
   const provider = new AnthropicCompletionProvider('claude-2.1', { config });
-  const send = vi.spyOn(provider.anthropic.completions, 'create').mockResolvedValue({
+  const send = vi.spyOn(provider.anthropic, 'post').mockResolvedValue({
     id: 'test-completion',
     model: 'claude-2.1',
     type: 'completion',
@@ -241,7 +241,10 @@ it('forwards parsed Anthropic Completion headers to the SDK request', async () =
     stop_reason: 'stop_sequence',
   });
   expect(await provider.callApi('Hello')).toMatchObject({ output: 'ok' });
-  expect(send).toHaveBeenCalledWith(expect.objectContaining({ model: 'claude-2.1' }), { headers });
+  expect(send).toHaveBeenCalledExactlyOnceWith('/v1/complete', {
+    body: expect.objectContaining({ model: 'claude-2.1' }),
+    headers,
+  });
 });
 
 it.each(['azure', 'azureopenai'])(

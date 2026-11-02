@@ -111,7 +111,9 @@ function normalizeHeadersForCacheKey(headers: Record<string, string>) {
     });
 }
 
-function getMessagesRequestMetadata(params: Anthropic.Messages.MessageCreateParams) {
+function getMessagesRequestMetadata(
+  params: Anthropic.Messages.MessageCreateParams & { temperature?: number },
+) {
   const mcpServers = (params as { mcp_servers?: unknown }).mcp_servers;
   return {
     model: params.model,
