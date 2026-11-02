@@ -109,6 +109,10 @@ const SIMPLE_PLACEHOLDER_REGEX = /\{\{\s*(\w+)\s*\}\}/g;
 // because its substitution only handles bare names; the scrub needs to see
 // every path form that extractVariablesFromTemplate would report.
 const PATH_PLACEHOLDER_REGEX = /\{\{\s*([\w.]+)\s*\}\}/g;
+// Only quoted string literals joined by Nunjucks' concatenation operator are
+// safe to render without treating the rest of a runtime value as source.
+const PROTECTED_LITERAL_EXPRESSION_REGEX =
+  /\{\{\s*(?:'(?:\\.|[^'\\])*'|"(?:\\.|[^"\\])*")(?:\s*~\s*(?:'(?:\\.|[^'\\])*'|"(?:\\.|[^"\\])*"))*\s*\}\}/;
 
 // Precompute nesting depth at every position in one forward scan.
 // Depth is the number of unclosed {{ or {% delimiters before each character.
@@ -246,16 +250,90 @@ function collectRawSpans(value: string): Array<[number, number]> {
 // historically supplied variables as data. A plain {{...}} in a CSV or file
 // value is not, by itself, an opt-in to evaluate that value as template source.
 function hasProtectedLiteralSyntax(value: string): boolean {
-  if (collectRawSpans(value).length > 0) {
-    return true;
-  }
-  const depths = computeNestingDepths(value);
-  for (const match of value.matchAll(PATH_PLACEHOLDER_REGEX)) {
-    if (depths[match.index] > 0) {
-      return true;
+  return collectRawSpans(value).length > 0 || PROTECTED_LITERAL_EXPRESSION_REGEX.test(value);
+}
+
+// Apply replacements in one forward pass. Besides avoiding repeated string
+// copies, the cursor also makes overlapping spans harmless: the outer span
+// already owns that part of the input.
+function mapSpans(
+  value: string,
+  spans: Array<[number, number]>,
+  replacementFor: (start: number, end: number) => string,
+): string {
+  const chunks: string[] = [];
+  let cursor = 0;
+  for (const [start, end] of spans) {
+    if (start < cursor) {
+      continue;
     }
+    chunks.push(value.slice(cursor, start), replacementFor(start, end));
+    cursor = end;
   }
-  return false;
+  chunks.push(value.slice(cursor));
+  return chunks.join('');
+}
+
+function rawSpanLiteralContent(value: string, start: number, end: number): string {
+  const span = value.slice(start, end);
+  const opener = /^\{%-?\s*raw\s*-?%\}/.exec(span);
+  if (!opener) {
+    return span;
+  }
+  let depth = 1;
+  let quote: string | null = null;
+  for (let i = opener[0].length; i < span.length; i++) {
+    const ch = span[i];
+    if (quote) {
+      if (ch === quote) {
+        quote = null;
+      }
+      continue;
+    }
+    if (ch === '"' || ch === "'") {
+      quote = ch;
+      continue;
+    }
+    const token = /^\{%-?\s*(raw|endraw)\s*-?%\}/.exec(span.slice(i));
+    if (!token) {
+      continue;
+    }
+    if (token[1] === 'raw') {
+      depth++;
+    } else {
+      depth--;
+      if (depth === 0) {
+        return span.slice(opener[0].length, i);
+      }
+    }
+    i += token[0].length - 1;
+  }
+  return span.slice(opener[0].length);
+}
+
+function decodeProtectedLiteralFragments(
+  value: string,
+  renderLiteral: (template: string) => string,
+): string {
+  const rawSpans = collectRawSpans(value);
+  const rawStarts = new Set(rawSpans.map(([start]) => start));
+  const protectedSpans: Array<[number, number]> = [...rawSpans];
+  let rawIdx = 0;
+  for (const match of value.matchAll(new RegExp(PROTECTED_LITERAL_EXPRESSION_REGEX, 'g'))) {
+    while (rawIdx < rawSpans.length && match.index >= rawSpans[rawIdx][1]) {
+      rawIdx++;
+    }
+    if (rawIdx < rawSpans.length && match.index >= rawSpans[rawIdx][0]) {
+      continue;
+    }
+    protectedSpans.push([match.index, match.index + match[0].length]);
+  }
+  protectedSpans.sort((left, right) => left[0] - right[0]);
+  return mapSpans(value, protectedSpans, (start, end) =>
+    rawStarts.has(start)
+      ? rawSpanLiteralContent(value, start, end)
+      : renderLiteral(value.slice(start, end)),
+  );
 }
 
 // Only the non-JSON fallback historically rendered every value as source.
@@ -293,10 +371,7 @@ function referencesUndefinedVariables(template: string, vars: Record<string, Var
   // cannot count x as a dependency, or this guard would skip the very render
   // pass that resolves the raw block.
   const spans = collectRawSpans(template);
-  let scrubbed = template;
-  for (let i = spans.length - 1; i >= 0; i--) {
-    scrubbed = scrubbed.slice(0, spans[i][0]) + scrubbed.slice(spans[i][1]);
-  }
+  let scrubbed = mapSpans(template, spans, () => '');
   // A quoted placeholder inside a surrounding expression or block tag is
   // literal text too: {{ '{{x}}' }} renders to the text {{x}}, so x is not a
   // dependency. The extractor below is regex-based and would report it, so
@@ -310,9 +385,7 @@ function referencesUndefinedVariables(template: string, vars: Record<string, Var
       nested.push([match.index, match.index + match[0].length]);
     }
   }
-  for (let i = nested.length - 1; i >= 0; i--) {
-    scrubbed = scrubbed.slice(0, nested[i][0]) + scrubbed.slice(nested[i][1]);
-  }
+  scrubbed = mapSpans(scrubbed, nested, () => '');
   // Names bound by {% set ... %} inside the template are local bindings, not
   // external dependencies; the extractor has no notion of them. But the RHS
   // of a set can reference external variables, so those still count.
@@ -322,9 +395,13 @@ function referencesUndefinedVariables(template: string, vars: Record<string, Var
     /\{%\s*-?\s*set\s+([A-Za-z_]\w*)\s*=\s*([^%]+?)\s*-?%\}/g,
   )) {
     defined.add(match[1]!);
-    // Extract variable references from the RHS expression.
+    // Extract only real expression references. The AST check excludes string
+    // contents, booleans, property names, and filter names.
     for (const rhsMatch of (match[2] || '').matchAll(/([A-Za-z_]\w*)/g)) {
-      setRhsVars.push(rhsMatch[1]!);
+      const candidate = rhsMatch[1]!;
+      if (templateReferencesVariable(`{{ ${match[2]} }}`, candidate)) {
+        setRhsVars.push(candidate);
+      }
     }
   }
   // Also handle set without explicit RHS extraction (e.g. {% set local %}).
@@ -335,7 +412,7 @@ function referencesUndefinedVariables(template: string, vars: Record<string, Var
     const rootVariableName = /^([A-Za-z_]\w*)/.exec(variableName)?.[1];
     return Boolean(
       rootVariableName &&
-        rootVariableName !== 'env' &&
+        !['env', 'range'].includes(rootVariableName) &&
         !defined.has(rootVariableName) &&
         vars[rootVariableName] === undefined,
     );
@@ -680,14 +757,11 @@ export async function renderPrompt(
         return [key, value];
       }
 
-      if (
-        !renderAllVarTemplates &&
-        (!hasProtectedLiteralSyntax(value) || templateReferencesVariable(value, 'env'))
-      ) {
+      if (!renderAllVarTemplates && !hasProtectedLiteralSyntax(value)) {
         return [key, value];
       }
 
-      if (referencesUndefinedVariables(value, vars)) {
+      if (!renderAllVarTemplates && referencesUndefinedVariables(value, vars)) {
         return [key, value];
       }
 
@@ -697,6 +771,14 @@ export async function renderPrompt(
       // reference this value, a render failure is a real error the caller
       // must see rather than silently passing the raw template to the provider.
       try {
+        if (!renderAllVarTemplates) {
+          return [
+            key,
+            decodeProtectedLiteralFragments(value, (fragment) =>
+              nunjucks.renderString(fragment, {}),
+            ),
+          ];
+        }
         return [key, nunjucks.renderString(autoWrapRawIfPartialNunjucks(value), vars)];
       } catch (renderError) {
         if (promptReferencedVars.has(key)) {

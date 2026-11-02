@@ -1008,6 +1008,66 @@ describe('evaluatorHelpers', () => {
       }
     });
 
+    it('should keep constructor calls as data beside protected literals in JSON prompts', async () => {
+      const payload = '{% raw %}x{% endraw %}{{ range.constructor("return 6 * 7")() }}';
+      const renderedPrompt = await renderPrompt(
+        toPrompt('{"text": "{{payload}}"}'),
+        { payload },
+        {},
+      );
+
+      expect(renderedPrompt).toBe(
+        JSON.stringify({ text: 'x{{ range.constructor("return 6 * 7")() }}' }, null, 2),
+      );
+      expect(renderedPrompt).not.toContain('42');
+    });
+
+    it('should not execute a set-bound constructor beside protected literals', async () => {
+      const payload =
+        '{% set range = [] %}{% raw %}x{% endraw %}{{ range.constructor("return 6 * 7")() }}';
+      const renderedPrompt = await renderPrompt(
+        toPrompt('{"text": "{{payload}}"}'),
+        { payload },
+        {},
+      );
+
+      expect(renderedPrompt).toBe(
+        JSON.stringify(
+          {
+            text: '{% set range = [] %}x{{ range.constructor("return 6 * 7")() }}',
+          },
+          null,
+          2,
+        ),
+      );
+      expect(renderedPrompt).not.toContain('42');
+    });
+
+    it('should ignore set RHS literals when collecting external dependencies', async () => {
+      const renderedPrompt = await renderPrompt(
+        toPrompt('{{v}}'),
+        { v: "{% set greeting = 'Hello' %}{{ greeting ~ name }}", name: 'Ada' },
+        {},
+      );
+
+      expect(renderedPrompt).toBe('HelloAda');
+    });
+
+    it('should decode raw spans without evaluating a surrounding set program', async () => {
+      const renderedPrompt = await renderPrompt(
+        toPrompt('{"text": "{{v}}"}'),
+        {
+          v: "{% set greeting = 'Hello' %}{% raw %}x{% endraw %}{{ greeting ~ name }}",
+          name: 'Ada',
+        },
+        {},
+      );
+
+      expect(renderedPrompt).toBe(
+        JSON.stringify({ text: "{% set greeting = 'Hello' %}x{{ greeting ~ name }}" }, null, 2),
+      );
+    });
+
     it('should not evaluate an env reference just because a value also has protected syntax', async () => {
       const restoreEnv = mockProcessEnv({ TEST_ENV_VAR: 'runtime-value-sentinel' });
       try {
