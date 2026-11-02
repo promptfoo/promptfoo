@@ -206,6 +206,20 @@
     if (!consent.analytics) clearVendorCookies(ANALYTICS_COOKIE_PATTERNS);
     if (!consent.marketing) clearVendorCookies(MARKETING_COOKIE_PATTERNS);
     publishConsent(consent, revokeManual);
+    if (window.__pf_posthog_loaded && window.posthog) {
+      try {
+        if (!consent.analytics) {
+          // Stop capture while the reload unloads the other active trackers.
+          window.posthog.opt_out_capturing();
+        } else if (window.posthog.has_opted_out_capturing()) {
+          window.posthog.set_config({ disable_persistence: false });
+          window.posthog.opt_in_capturing();
+        }
+      } catch (error) {
+        // A vendor failure must not prevent the reload that stops other trackers.
+        console.error('Error updating PostHog consent:', error);
+      }
+    }
     return consent;
   }
 

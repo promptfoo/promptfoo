@@ -2,8 +2,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 describe('Provider registry optional dependencies', () => {
   afterEach(() => {
-    vi.doUnmock('../../src/providers/openai/agents');
     vi.doUnmock('@openai/agents');
+    vi.restoreAllMocks();
     vi.resetModules();
   });
 
@@ -16,15 +16,13 @@ describe('Provider registry optional dependencies', () => {
   });
 
   it('explains how to install the OpenAI Agents SDK when that provider is requested', async () => {
-    vi.doMock('../../src/providers/openai/agents', () => ({
-      OpenAiAgentsProvider: class {
-        constructor() {
-          throw new Error('Cannot find package @openai/agents');
-        }
-      },
-    }));
-
     const { providerMap } = await import('../../src/providers/registry');
+    const esm = await import('../../src/esm');
+    vi.spyOn(esm, 'getDirectory').mockImplementation(() => {
+      throw Object.assign(new Error("Cannot find package '@openai/agents'"), {
+        code: 'MODULE_NOT_FOUND',
+      });
+    });
     const factory = providerMap.find((providerFactory) =>
       providerFactory.test('openai:agents:default-agent'),
     );
@@ -39,6 +37,8 @@ describe('Provider registry optional dependencies', () => {
     await expect(createProviderPromise).rejects.toThrow(
       'The @openai/agents package is required for OpenAI Agents providers.',
     );
-    await expect(createProviderPromise).rejects.toThrow('npm install @openai/agents');
+    await expect(createProviderPromise).rejects.toThrow(
+      'npm install promptfoo @openai/agents@^0.14.1',
+    );
   });
 });
