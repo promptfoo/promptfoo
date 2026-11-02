@@ -4,6 +4,7 @@ import path from 'node:path';
 import type { Stats } from 'node:fs';
 
 import { trace as otelTrace, SpanStatusCode } from '@opentelemetry/api';
+import { parseTraceParent } from '@opentelemetry/core';
 import dedent from 'dedent';
 import semverSatisfies from 'semver/functions/satisfies.js';
 import cliState from '../cliState';
@@ -2055,7 +2056,9 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
           // IDs as resource attributes too — promptfoo's OTLP /v1/logs receiver
           // reads these to link log-derived spans to the evaluation trace.
           // traceparent format: "version-traceId-spanId-flags".
-          const [, tpTraceId, tpSpanId] = traceparent ? traceparent.split('-') : [];
+          const traceContext = traceparent ? parseTraceParent(traceparent) : null;
+          const tpTraceId = traceContext?.traceId;
+          const tpSpanId = traceContext?.spanId;
           if (tpTraceId && tpSpanId) {
             env.OTEL_RESOURCE_ATTRIBUTES = appendPromptfooResourceAttrs(
               env.OTEL_RESOURCE_ATTRIBUTES,
@@ -2102,7 +2105,7 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
           const toolTurnIndex = new Map<string, number>();
           const deferredSyntheticSpans: Array<() => void> = [];
           const emitOrDeferSyntheticSpan = (emit: () => void): void => {
-            if (sdkExportsNativeSpans) {
+            if (sdkExportsNativeSpans && tpTraceId && tpSpanId) {
               deferredSyntheticSpans.push(emit);
             } else {
               emit();
@@ -2282,6 +2285,10 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
           const finalMsg = lastMainResultMsg ?? lastResultMsg;
 
           if (!finalMsg) {
+            // Preserve observed work even when the stream cannot confirm native export.
+            for (const emit of deferredSyntheticSpans) {
+              emit();
+            }
             return { error: "Claude Agent SDK call didn't return a result" };
           }
 

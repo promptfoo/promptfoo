@@ -7214,6 +7214,16 @@ describe('ClaudeCodeSDKProvider', () => {
           expectSyntheticSpans,
         }) => {
           const { emittedSpans } = installTracerSpy();
+          const traceId = '0af7651916cd43dd8448eb211c80319c';
+          const parentSpanId = 'b7ad6b7169203331';
+          vi.spyOn(genaiTracer, 'getTraceparent').mockReturnValue(
+            `00-${traceId}-${parentSpanId}-01`,
+          );
+          vi.spyOn(traceStore, 'getTraceStore').mockReturnValue({
+            getTrace: vi.fn().mockResolvedValue({
+              spans: [{ spanId: 'native-claude-span', parentSpanId }],
+            }),
+          } as unknown as ReturnType<typeof traceStore.getTraceStore>);
           mockQuery.mockReturnValue(
             createMockQuery([
               {
@@ -7278,6 +7288,89 @@ describe('ClaudeCodeSDKProvider', () => {
           expect(result.metadata?.toolCalls).toEqual([
             expect.objectContaining({ name: 'Read', id: 'tool-1' }),
           ]);
+        },
+      );
+
+      it.each([
+        undefined,
+        'invalid',
+        '00-0af7651916cd43dd8448eb211c80319c',
+        '00-00000000000000000000000000000000-b7ad6b7169203331-01',
+        '00-0af7651916cd43dd8448eb211c80319c-0000000000000000-01',
+        '00-not-a-trace-id-not-a-span-id-01',
+      ])('preserves synthetic spans without a valid traceparent (%s)', async (traceparent) => {
+        const { emittedSpans } = installTracerSpy();
+        vi.spyOn(genaiTracer, 'getTraceparent').mockReturnValue(undefined);
+        const getTrace = vi.fn().mockResolvedValue({ spans: [] });
+        vi.spyOn(traceStore, 'getTraceStore').mockReturnValue({
+          getTrace,
+        } as unknown as ReturnType<typeof traceStore.getTraceStore>);
+        mockQuery.mockReturnValue(
+          createMockQuery([
+            {
+              type: 'assistant',
+              parent_tool_use_id: null,
+              message: createMockBetaMessage([createReadToolUse()]),
+              session_id: 'test-session',
+            },
+            createReadToolResultMessage(),
+            (await createMockResponse('ok').next()).value as SDKMessage,
+          ]),
+        );
+        cliState.setActiveOtlpReceiver(createOtlpOptions());
+        const provider = new ClaudeCodeSDKProvider(createTracedClaudeOptions());
+
+        const result = await cliState.withRequestTracingConfig(
+          { enabled: true, otlp: { http: { enabled: true, port: 4318 } } },
+          () =>
+            provider.callApi('prompt', {
+              traceparent,
+              prompt: { raw: 'prompt', label: 'prompt' },
+              vars: {},
+            }),
+        );
+
+        expect(result.output).toBe('ok');
+        expect(emittedSpans.map((span) => span.name)).toEqual(['gen_ai.turn 1', 'tool Read']);
+        expect(getTrace).not.toHaveBeenCalled();
+      });
+
+      it.each([true, false])(
+        'flushes synthetic spans when the stream has no result (tool completed: %s)',
+        async (toolCompleted) => {
+          const { emittedSpans } = installTracerSpy();
+          const getTrace = vi.fn().mockResolvedValue({ spans: [] });
+          vi.spyOn(traceStore, 'getTraceStore').mockReturnValue({
+            getTrace,
+          } as unknown as ReturnType<typeof traceStore.getTraceStore>);
+          mockQuery.mockReturnValue(
+            createMockQuery([
+              {
+                type: 'assistant',
+                parent_tool_use_id: null,
+                message: createMockBetaMessage([createReadToolUse()]),
+                session_id: 'test-session',
+              },
+              ...(toolCompleted ? [createReadToolResultMessage()] : []),
+            ]),
+          );
+          cliState.setActiveOtlpReceiver(createOtlpOptions());
+          const provider = new ClaudeCodeSDKProvider(createTracedClaudeOptions());
+
+          const result = await cliState.withRequestTracingConfig(
+            { enabled: true, otlp: { http: { enabled: true, port: 4318 } } },
+            () =>
+              provider.callApi('prompt', {
+                traceparent: '00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01',
+                prompt: { raw: 'prompt', label: 'prompt' },
+                vars: {},
+              }),
+          );
+
+          expect(result.error).toBe("Claude Agent SDK call didn't return a result");
+          expect(emittedSpans.map((span) => span.name)).toEqual(['gen_ai.turn 1', 'tool Read']);
+          expect(emittedSpans[1].attrs['tool.incomplete']).toBe(toolCompleted ? undefined : true);
+          expect(getTrace).not.toHaveBeenCalled();
         },
       );
 
