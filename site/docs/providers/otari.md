@@ -2,7 +2,7 @@
 title: Otari
 sidebar_label: Otari
 sidebar_position: 60
-description: "Use promptfoo to evaluate models through Otari, Mozilla.ai's open-source LLM gateway, hosted on otari.ai or self-hosted, with the OpenAI provider and apiBaseUrl"
+description: "Use Promptfoo to evaluate models through Otari, Mozilla.ai's open-source LLM gateway, hosted on otari.ai or self-hosted, with the OpenAI provider and apiBaseUrl"
 ---
 
 # Otari
@@ -15,9 +15,10 @@ providers:
     config:
       apiBaseUrl: '{{ env.OTARI_BASE_URL | default("https://api.otari.ai/api/v1") }}'
       apiKeyEnvar: OTARI_API_KEY
+      omitDefaults: true
 ```
 
-This uses the hosted gateway at `https://api.otari.ai/api/v1` unless `OTARI_BASE_URL` is set. For a self-hosted gateway, set `OTARI_BASE_URL` to `https://<your-host>/api/v1`. The key in `OTARI_API_KEY` is sent as `Authorization: Bearer <key>`.
+This uses the hosted gateway at `https://api.otari.ai/api/v1` unless `OTARI_BASE_URL` is set. `omitDefaults: true` stops Promptfoo from adding its default `temperature` and output limit, which models such as GPT-6.1 Sol reject; Promptfoo cannot recognize the model behind an Otari ID like `openai:gpt-6.1-sol`. For a self-hosted gateway, set `OTARI_BASE_URL` to `https://<your-host>/api/v1`. The key in `OTARI_API_KEY` is sent as `Authorization: Bearer <key>`.
 
 Everything after `openai:chat:` is passed to Otari unchanged as the model ID:
 
