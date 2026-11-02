@@ -214,7 +214,16 @@ async function calculateSingleMeteorScore(
 function tokenize(text: string): string[] {
   const trimmed = text.trim();
   // Splitting '' yields [''], and an empty token on both sides would match itself.
-  return trimmed === '' ? [] : trimmed.split(/\s+/).map((word) => word.replace(/\.+$/, ''));
+  if (trimmed === '') {
+    return [];
+  }
+  return trimmed.split(/\s+/).map((word) => {
+    let end = word.length;
+    while (end > 0 && word[end - 1] === '.') {
+      end--;
+    }
+    return word.slice(0, end);
+  });
 }
 
 async function calculateMeteorScore(

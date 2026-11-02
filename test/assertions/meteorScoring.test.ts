@@ -41,4 +41,17 @@ describe('METEOR whitespace tokenization', () => {
   it('preserves rejection of an empty output string', async () => {
     await expect(score('', 'hello world')).rejects.toThrow('Invalid inputs');
   });
+
+  it('strips trailing periods without changing periods inside a token', async () => {
+    const result = await score('  version..one...\tend. ', 'version..one end');
+    expect(result.score).toBe(0.9375);
+    expect(result.pass).toBe(true);
+  });
+
+  it('handles long runs of periods before a non-period suffix', async () => {
+    const word = `${'.'.repeat(100_000)}suffix`;
+    const result = await score(`${word}...`, word);
+    expect(result.score).toBe(0.5);
+    expect(result.pass).toBe(true);
+  });
 });
