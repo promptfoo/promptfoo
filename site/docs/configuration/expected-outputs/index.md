@@ -136,7 +136,7 @@ These metrics are programmatic tests that are run on LLM output. [See all detail
 | [is-html](/docs/configuration/expected-outputs/deterministic/#is-html)                                             | output is valid HTML                                                            |
 | [is-sql](/docs/configuration/expected-outputs/deterministic/#is-sql)                                               | output is a non-empty valid SQL statement                                       |
 | [contains-sql](/docs/configuration/expected-outputs/deterministic/#contains-sql)                                   | output is valid SQL or contains a valid SQL code block                          |
-| [is-xml](/docs/configuration/expected-outputs/deterministic/#is-xml)                                               | output is a supported well-formed XML document                                  |
+| [is-xml](/docs/configuration/expected-outputs/deterministic/#is-xml)                                               | output is a supported well-formed XML document containing any required elements |
 | [contains-xml](/docs/configuration/expected-outputs/deterministic/#contains-xml)                                   | output contains valid xml fragment(s)                                           |
 | [is-refusal](/docs/configuration/expected-outputs/deterministic/#is-refusal)                                       | the provider reports a refusal or the output indicates one                      |
 | [javascript](/docs/configuration/expected-outputs/javascript)                                                      | provided Javascript function validates the output                               |
@@ -172,6 +172,8 @@ Single-line [JavaScript assertions](/docs/configuration/expected-outputs/javascr
 
 :::tip
 Every test type can be negated by prepending `not-`. For example, `not-equals` or `not-regex`.
+
+For tool-call validity assertions, `not-` inverts a validation verdict. Tool configuration errors and unexpected validator failures remain failures.
 
 When a `not-javascript` assertion returns a full grading result, its `reason` is preserved verbatim, including an empty string, for either inverted outcome. For `not-python` and `not-ruby`, a negated failure keeps its custom `reason`, falling back to a generic message if it is empty; a negated pass reports `Assertion passed`. All three preserve the script's score.
 
@@ -210,7 +212,7 @@ See [Model-graded evals](/docs/configuration/expected-outputs/model-graded), [cl
 
 In some cases, you might want to assign different weights to your assertions depending on their importance. The `weight` property is a number that determines the relative importance of the assertion. The default weight is 1.
 
-The final score of the test case is calculated as the weighted average of the scores of all assertions, where the weights are the `weight` values of the assertions.
+The final score of the test case is calculated as the weighted average of the scores of all assertions, where the weights are the `weight` values of the assertions. Averaging does not rescale the scores: a negative similarity or an unbounded dot product retains its original scale.
 
 Here's an example:
 
@@ -231,7 +233,7 @@ If the LLM output is `Goodbye world`, the `equals` assertion fails but the `cont
 
 ### Setting a score requirement
 
-Test cases support an optional `threshold` property. If set, the pass/fail status of a test case is determined by whether the combined weighted score of all assertions is greater than or equal to the threshold value.
+Test cases support an optional `threshold` property. If set, the pass/fail status of a test case is determined by whether the combined weighted score of all assertions is greater than or equal to the threshold value. This can override individual assertion verdicts. Omit the test-level threshold to require every nonzero-weight assertion to pass.
 
 For example:
 
@@ -249,10 +251,10 @@ tests:
 
 If the LLM outputs `Goodbye world`, the `equals` assertion fails but the `contains` assertion passes and the final score is 0.33. Because this is below the 0.5 threshold, the test case fails. If the threshold were lowered to 0.2, the test case would succeed.
 
-A `threshold` of `0` makes the test case pass regardless of individual assertion failures, since the combined score is always at least 0. Use it to collect assertion scores without letting any single failure fail the test. The same applies to an `assert-set` threshold.
+A `threshold` of `0` passes only when the combined score is nonnegative; negative scores can still fail. The same applies to an `assert-set` threshold. To collect a metric without requiring that individual assertion to pass, set `weight: 0` on the assertion instead.
 
 :::info
-If weight is set to 0, the assertion automatically passes and does not contribute to the aggregate score. Its named metrics still record their measured values, with unit weight for metric aggregation; this also applies to named metrics inside a zero-weight assertion set.
+Setting `weight: 0` on an individual assertion makes it pass and excludes its score from the aggregate. On an `assert-set`, zero weight excludes the set's score, but the set can still fail based on its children or its own `threshold`. Named metrics retain their measured values in both cases, with unit weight used in place of zero for metric aggregation.
 :::
 
 ### Custom assertion scoring
@@ -261,6 +263,7 @@ By default, test cases use weighted averaging to combine assertion scores. You c
 
 - Failing if any critical metric falls below a threshold
 - Implementing non-linear scoring combinations
+- Mapping metrics to a common scale before combining them
 - Using different scoring logic for different test cases
 
 #### Prerequisites
@@ -296,7 +299,7 @@ The scoring function can be JavaScript or Python, referenced with `file://` pref
 
 ```typescript
 type ScoringFunction = (
-  namedScores: Record<string, number>, // Normalized scores; may be nonfinite after aggregation
+  namedScores: Record<string, number>, // Weighted averages; may be nonfinite after aggregation
   context: {
     threshold?: number; // Test case threshold if set
     tokensUsed?: {
@@ -313,7 +316,9 @@ type ScoringFunction = (
 };
 ```
 
-When assertions use `weight`, each named score passed into the scoring function is already normalized as a weighted average. Eval outputs also include `namedScoreWeights` so downstream consumers can recover the weighted denominator when needed.
+When assertions use `weight`, each named score passed into the scoring function is already a weighted average; it is not rescaled to 0–1. Eval outputs also include `namedScoreWeights` so downstream consumers can recover the weighted denominator when needed.
+
+For example, `(namedScores.raw_cosine + 1) / 2` explicitly maps a cosine metric from -1 to 1 onto 0 to 1 while preserving its ordering. Choose the custom score's pass condition on that new scale; the assertion's own threshold still uses raw cosine. Dot product has no universal 0–1 mapping, so choose a scale appropriate to your embeddings and use case.
 
 Custom scoring results must use finite numbers for `score` and values in `namedScores` and `namedScoreWeights`, including nested `componentResults`. `NaN` and infinities cause a scoring function error.
 

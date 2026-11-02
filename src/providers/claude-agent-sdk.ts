@@ -1703,7 +1703,9 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
       model: config.model,
       fallbackModel: config.fallback_model,
       strictMcpConfig: config.strict_mcp_config ?? true, // only allow MCP servers that are explicitly configured - true by default
-      permissionMode: config.permission_mode === 'manual' ? 'default' : config.permission_mode,
+      // SDK 0.3.286 can select auto mode when omitted. Preserve manual approvals by default.
+      permissionMode:
+        config.permission_mode === 'manual' ? 'default' : (config.permission_mode ?? 'default'),
       planModeInstructions: config.plan_mode_instructions,
       systemPrompt:
         config.custom_system_prompt == null
@@ -2454,7 +2456,9 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
           const apiErrorStatus =
             'api_error_status' in finalMsg ? finalMsg.api_error_status : undefined;
 
-          if (finalMsg.subtype === 'success') {
+          // The SDK keeps the success subtype when a refusal discards structured output.
+          const refused = finalMsg.is_error && finalMsg.stop_reason === 'refusal';
+          if (finalMsg.subtype === 'success' && !refused) {
             logger.debug(`Claude Agent SDK response: ${raw}`);
             // When structured output is enabled and available, use it as the output
             // Otherwise fall back to the text result
@@ -2503,9 +2507,10 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
             assistantErrors.length > 0
               ? assistantErrors[assistantErrors.length - 1].error
               : undefined;
+          const reason = finalMsg.subtype === 'success' ? 'refusal' : finalMsg.subtype;
           const errorMessage = lastAssistantError
-            ? `Claude Agent SDK call failed: ${finalMsg.subtype} (${lastAssistantError})`
-            : `Claude Agent SDK call failed: ${finalMsg.subtype}`;
+            ? `Claude Agent SDK call failed: ${reason} (${lastAssistantError})`
+            : `Claude Agent SDK call failed: ${reason}`;
           return {
             error: errorMessage,
             tokenUsage,

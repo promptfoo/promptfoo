@@ -1,8 +1,10 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { getEnvOverridesProvider, setEnvOverridesProvider } from '../../../src/envOverrides';
 import logger from '../../../src/logger';
 import { AnthropicGenericProvider } from '../../../src/providers/anthropic/generic';
 import { AnthropicMessagesProvider } from '../../../src/providers/anthropic/messages';
+import { loadApiProvider } from '../../../src/providers/index';
 import { mockProcessEnv } from '../../util/utils';
 
 const { createProxyAgentFactory } = await vi.hoisted(() => import('../../factories/moduleMocks'));
@@ -31,6 +33,42 @@ vi.mock('proxy-agent', createProxyAgentFactory());
 
 describe('AnthropicGenericProvider', () => {
   describe('constructor', () => {
+    it.each([
+      [undefined, 'provider-value'],
+      ['X-Scoped-Header: explicit-value', 'explicit-value'],
+      ['', null],
+    ])(
+      'loads provider-only custom headers with explicit override %j',
+      async (headers, expected) => {
+        const restoreEnv = mockProcessEnv({
+          ANTHROPIC_CUSTOM_HEADERS: 'X-Ambient-Secret: inherited-secret',
+        });
+        const previousProvider = getEnvOverridesProvider();
+        setEnvOverridesProvider(
+          (layer) => ({
+            ANTHROPIC_CUSTOM_HEADERS: `X-Scoped-Header: ${layer}-value`,
+          }),
+          { providerLayer: true },
+        );
+        try {
+          const provider = (await loadApiProvider('anthropic:messages:fixture', {
+            env: { ANTHROPIC_CUSTOM_HEADERS: 'X-Scoped-Header: suite-value' },
+            options: {
+              config: { apiKey: 'test-key', apiBaseUrl: 'https://third-party.example' },
+              env: headers === undefined ? undefined : { ANTHROPIC_CUSTOM_HEADERS: headers },
+            },
+          })) as AnthropicMessagesProvider;
+          const { req } = await (provider.anthropic as any).buildRequest(createMessagesRequest());
+          expect(req.headers.get('x-scoped-header')).toBe(expected);
+          expect(req.headers.has('x-ambient-secret')).toBe(false);
+          expect(req.headers.get('x-api-key')).toBe('test-key');
+        } finally {
+          setEnvOverridesProvider(previousProvider);
+          restoreEnv();
+        }
+      },
+    );
+
     it('should initialize with the given model name', () => {
       const provider = new AnthropicGenericProvider('claude-3-5-sonnet-20241022');
       expect(provider.modelName).toBe('claude-3-5-sonnet-20241022');

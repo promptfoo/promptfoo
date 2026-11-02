@@ -79,6 +79,7 @@ import {
   TestSuiteConfigSchema,
 } from './types/index';
 import { type ApiProvider, isApiProvider } from './types/providers';
+import { createDefaultPromptMetrics, updatePromptResultCounts } from './util/eval/promptMetrics';
 import { isAbortError, isNonTransientHttpStatus } from './util/fetch/errors';
 import { isCallerAbortError } from './util/fetch/requestSignal';
 import { filterByRange } from './util/filterRange';
@@ -1318,7 +1319,7 @@ function updateConversationHistory({
   conversations[conversationKey].push({
     prompt: renderedJson || renderedPrompt,
     input: conversationLastInput || renderedJson || renderedPrompt,
-    output: response.output || '',
+    output: response.conversationOutput ?? (response.output || ''),
     metadata: response.metadata,
   });
 }
@@ -2188,17 +2189,6 @@ export function generateVarCombinations(
   return combinations;
 }
 
-function updatePromptResultCounts(metrics: PromptMetrics, row: EvaluateResult) {
-  metrics.testPassCount += row.success ? 1 : 0;
-  if (!row.success) {
-    if (row.failureReason === ResultFailureReason.ERROR) {
-      metrics.testErrorCount += 1;
-    } else {
-      metrics.testFailCount += 1;
-    }
-  }
-}
-
 function updateDerivedMetrics(
   metrics: PromptMetrics,
   derivedMetrics: NonNullable<TestSuite['derivedMetrics']>,
@@ -2502,23 +2492,6 @@ async function maybeAddGeneratedPrompts(
     return false;
   }
   throw new PromptSuggestionsRejectedError();
-}
-
-function createDefaultPromptMetrics(): PromptMetrics {
-  return {
-    score: 0,
-    testPassCount: 0,
-    testFailCount: 0,
-    testErrorCount: 0,
-    assertPassCount: 0,
-    assertFailCount: 0,
-    totalLatencyMs: 0,
-    tokenUsage: createEmptyTokenUsage(),
-    namedScores: {},
-    namedScoresCount: {},
-    namedScoreWeights: {},
-    cost: 0,
-  };
 }
 
 /**
