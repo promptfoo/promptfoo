@@ -1,6 +1,6 @@
 import { createHmac } from 'crypto';
 
-import { fetchWithCache, getCache, isCacheEnabled } from '../../cache';
+import { fetchWithCache, getCache, getCacheIdentity, isCacheEnabled } from '../../cache';
 import logger from '../../logger';
 import { formatRateLimitErrorMessage, HttpRateLimitError } from '../../util/fetch/errors';
 import { maybeLoadToolsFromExternalFile } from '../../util/index';
@@ -155,6 +155,11 @@ function hmacAzureAssistantCacheValue(value: unknown) {
 }
 
 function getAuthHeadersCacheIdentity(authHeaders: Record<string, string>) {
+  const cacheIdentity = getCacheIdentity();
+  if (cacheIdentity) {
+    return cacheIdentity;
+  }
+
   const entries = Object.entries(authHeaders).sort(([nameA], [nameB]) =>
     nameA.localeCompare(nameB),
   );

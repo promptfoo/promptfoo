@@ -1853,6 +1853,30 @@ describe('fetchWithCache', () => {
       }
     });
 
+    it('should key credential headers by PROMPTFOO_CACHE_IDENTITY when set', () => {
+      const getHeaders = (token: string) =>
+        getHeadersForCacheKey('https://api.example.com/v1', {
+          headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        });
+      const first = 'sk-first-rotating-token-0001';
+      const second = 'sk-second-rotating-token-0002';
+
+      expect(getHeaders(first)).not.toEqual(getHeaders(second));
+
+      let restoreEnv = mockProcessEnv({ PROMPTFOO_CACHE_IDENTITY: 'ci-pipeline' });
+      try {
+        expect(getHeaders(first)).toEqual(getHeaders(second));
+        expect(getHeaders(first)).toContainEqual(['content-type', 'application/json']);
+        const ciHeaders = getHeaders(first);
+
+        restoreEnv();
+        restoreEnv = mockProcessEnv({ PROMPTFOO_CACHE_IDENTITY: 'other-pipeline' });
+        expect(getHeaders(first)).not.toEqual(ciHeaders);
+      } finally {
+        restoreEnv();
+      }
+    });
+
     it('should preserve Request headers when isolating cached responses', async () => {
       const cache = getCache();
       mockFetchWithRetries

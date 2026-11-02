@@ -347,6 +347,11 @@ const FETCH_CACHE_SECRET_HMAC_SALT = 'promptfoo:fetch-cache-secret-hmac-salt:v1'
 const abortSignalIds = new WeakMap<AbortSignal, number>();
 let nextAbortSignalId = 0;
 
+/** Principal named by PROMPTFOO_CACHE_IDENTITY, used in place of credential fingerprints. */
+export function getCacheIdentity(): string | undefined {
+  return getEnvString('PROMPTFOO_CACHE_IDENTITY');
+}
+
 function fingerprintFetchCacheSecret(value: string) {
   return {
     __promptfooSecretFingerprint: crypto
@@ -478,18 +483,26 @@ export function getHeadersForCacheKey(url: RequestInfo, options: RequestInit) {
     headers.set(PROMPTFOO_TEAM_ID_HEADER, cloudTaskTeamId);
   }
 
+  const cacheIdentity = getCacheIdentity();
+
   return Array.from(headers.entries())
     .filter(([name]) => !IGNORED_FETCH_CACHE_HEADERS.has(name))
     .sort(([nameA, valueA], [nameB, valueB]) => {
       const nameComparison = nameA.localeCompare(nameB);
       return nameComparison === 0 ? valueA.localeCompare(valueB) : nameComparison;
     })
-    .map(([name, value]) => [
-      name,
-      name === cloudAuthHeaderNameForFingerprint
-        ? fingerprintFetchCacheSecret(value)
-        : getStringForFetchCacheKey(value, name),
-    ]);
+    .map(([name, value]) => {
+      const isCloudAuth = name === cloudAuthHeaderNameForFingerprint;
+      // With PROMPTFOO_CACHE_IDENTITY set, credential headers are keyed by the named
+      // principal so rotating credentials still share cache entries.
+      if (cacheIdentity && (isCloudAuth || isSensitiveFetchCacheString(value, name))) {
+        return [name, cacheIdentity];
+      }
+      return [
+        name,
+        isCloudAuth ? fingerprintFetchCacheSecret(value) : getStringForFetchCacheKey(value, name),
+      ];
+    });
 }
 
 function hashFetchCacheKey(identity: unknown) {

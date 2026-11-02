@@ -86,18 +86,20 @@ PROMPTFOO_CACHE_PATH=...
 
 The cache is configurable through environment variables:
 
-| Environment Variable    | Description                               | Default Value                                      |
-| ----------------------- | ----------------------------------------- | -------------------------------------------------- |
-| PROMPTFOO_CACHE_ENABLED | Enable or disable the cache               | true                                               |
-| PROMPTFOO_CACHE_TYPE    | `disk` or `memory`                        | `memory` if `NODE_ENV` is `test`, otherwise `disk` |
-| PROMPTFOO_CACHE_PATH    | Path to the cache directory               | `~/.promptfoo/cache`                               |
-| PROMPTFOO_CACHE_TTL     | Time to live for cache entries in seconds | 14 days                                            |
+| Environment Variable     | Description                                       | Default Value                                      |
+| ------------------------ | ------------------------------------------------- | -------------------------------------------------- |
+| PROMPTFOO_CACHE_ENABLED  | Enable or disable the cache                       | true                                               |
+| PROMPTFOO_CACHE_TYPE     | `disk` or `memory`                                | `memory` if `NODE_ENV` is `test`, otherwise `disk` |
+| PROMPTFOO_CACHE_PATH     | Path to the cache directory                       | `~/.promptfoo/cache`                               |
+| PROMPTFOO_CACHE_TTL      | Time to live for cache entries in seconds         | 14 days                                            |
+| PROMPTFOO_CACHE_IDENTITY | Name of the principal making requests (see below) | none                                               |
 
 #### Additional Cache Details
 
 - Rate limit responses (HTTP 429) are automatically handled with exponential backoff
 - Empty responses are not cached
 - HTTP 500 responses can be retried by setting `PROMPTFOO_RETRY_5XX=true`
+- Cache entries are isolated by credential, so an API key that rotates on every run causes cache misses. Set `PROMPTFOO_CACHE_IDENTITY=ci-pipeline` to key entries by that name instead of the credential. Different identities stay isolated
 
 ## Managing the Cache
 

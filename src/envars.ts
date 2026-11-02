@@ -122,6 +122,7 @@ type EnvVars = {
   //=========================================================================
   PROMPTFOO_ASSERTIONS_MAX_CONCURRENCY?: number;
   PROMPTFOO_AUTHOR?: string;
+  PROMPTFOO_CACHE_IDENTITY?: string;
   PROMPTFOO_CACHE_MAX_FILE_COUNT?: number;
   PROMPTFOO_CACHE_MAX_SIZE?: number;
   PROMPTFOO_CACHE_PATH?: string;
