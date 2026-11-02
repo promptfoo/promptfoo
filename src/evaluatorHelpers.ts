@@ -761,7 +761,7 @@ export async function renderPrompt(
         return [key, value];
       }
 
-      if (!renderAllVarTemplates && referencesUndefinedVariables(value, vars)) {
+      if (referencesUndefinedVariables(value, vars)) {
         return [key, value];
       }
 
