@@ -126,23 +126,30 @@ export function parseFileUrl(fileUrl: string): { filePath: string; functionName?
   }
 
   const urlWithoutProtocol = fileUrl.slice('file://'.length);
-  const lastColonIndex = urlWithoutProtocol.lastIndexOf(':');
 
-  if (lastColonIndex > 1) {
-    const candidateFilePath = urlWithoutProtocol.slice(0, lastColonIndex);
-
-    // Only executable function files support a :functionName suffix. This preserves
-    // colons that are part of a valid file or directory name on POSIX systems.
-    if (!isJavascriptFile(candidateFilePath) && !candidateFilePath.endsWith('.py')) {
+  // A :functionName suffix belongs to the first colon that follows a script
+  // file extension. Scanning from the left keeps namespaced Ruby methods
+  // (Validators::Format.check) intact and skips the colon in a Windows drive.
+  // Colons in other file names stay part of the path.
+  for (
+    let colonIndex = urlWithoutProtocol.indexOf(':');
+    colonIndex !== -1;
+    colonIndex = urlWithoutProtocol.indexOf(':', colonIndex + 1)
+  ) {
+    if (colonIndex <= 1) {
+      continue;
+    }
+    const candidateFilePath = urlWithoutProtocol.slice(0, colonIndex);
+    if (
+      isJavascriptFile(candidateFilePath) ||
+      candidateFilePath.endsWith('.py') ||
+      candidateFilePath.endsWith('.rb')
+    ) {
       return {
-        filePath: normalizeFilePath(urlWithoutProtocol),
+        filePath: normalizeFilePath(candidateFilePath),
+        functionName: urlWithoutProtocol.slice(colonIndex + 1),
       };
     }
-
-    return {
-      filePath: normalizeFilePath(candidateFilePath),
-      functionName: urlWithoutProtocol.slice(lastColonIndex + 1),
-    };
   }
 
   return {
