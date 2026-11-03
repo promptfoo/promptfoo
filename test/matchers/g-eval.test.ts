@@ -627,4 +627,27 @@ describe('matchesGEval', () => {
       tokensUsed: expect.any(Object),
     });
   });
+
+  it('should select the complete grading result when commentary includes an example JSON object', async () => {
+    vi.spyOn(DefaultGradingProvider, 'callApi')
+      .mockImplementationOnce(async () => ({
+        output:
+          'Example schema: {"steps": ["example"]}. Actual steps:\n{"steps": ["Check accuracy", "Check completeness"]}',
+        tokenUsage: { total: 10, prompt: 5, completion: 5 },
+      }))
+      .mockImplementationOnce(async () => ({
+        output:
+          'For instance, an invalid response looks like: {"score": 0, "reason": "example zero"}. Actual evaluation:\n```json\n{"score": 9, "reason": "High quality answer"}\n```',
+        tokenUsage: { total: 15, prompt: 8, completion: 7 },
+      }));
+
+    const result = await matchesGEval('Evaluate accuracy', 'Test input', 'Test output', 0.7);
+
+    expect(result).toEqual({
+      pass: true,
+      score: 0.9,
+      reason: 'High quality answer',
+      tokensUsed: expect.any(Object),
+    });
+  });
 });

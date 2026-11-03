@@ -513,11 +513,19 @@ export async function matchesGEval(
         `LLM-proposed evaluation steps are not in JSON format: ${respSteps.output}`,
       );
     }
+    const isStepsArray = (obj: unknown): obj is { steps: unknown } =>
+      typeof obj === 'object' &&
+      obj !== null &&
+      'steps' in obj &&
+      Array.isArray((obj as { steps: unknown }).steps) &&
+      (obj as { steps: unknown[] }).steps.length > 0;
+    const isStepsObject = (obj: unknown): obj is { steps: unknown } =>
+      typeof obj === 'object' && obj !== null && 'steps' in obj;
+    const reversedSteps = [...jsonObjects].reverse();
     const candidate =
-      (jsonObjects.find(
-        (obj): obj is { steps: unknown } =>
-          typeof obj === 'object' && obj !== null && 'steps' in obj,
-      ) as { steps?: unknown } | undefined) ?? (jsonObjects[0] as { steps?: unknown });
+      reversedSteps.find(isStepsArray) ??
+      reversedSteps.find(isStepsObject) ??
+      (reversedSteps[0] as { steps?: unknown });
     steps = candidate?.steps;
 
     if (!Array.isArray(steps)) {
@@ -578,12 +586,15 @@ export async function matchesGEval(
     if (jsonObjects.length === 0) {
       return failWithTokens(`LLM-proposed evaluation result is not in JSON format: ${resp.output}`);
     }
+    const isCompleteResult = (obj: unknown): obj is { score?: unknown; reason?: unknown } =>
+      typeof obj === 'object' && obj !== null && 'score' in obj && 'reason' in obj;
+    const isPartialResult = (obj: unknown): obj is { score?: unknown; reason?: unknown } =>
+      typeof obj === 'object' && obj !== null && ('score' in obj || 'reason' in obj);
+    const reversed = [...jsonObjects].reverse();
     result =
-      (jsonObjects.find(
-        (obj): obj is { score?: unknown; reason?: unknown } =>
-          typeof obj === 'object' && obj !== null && ('score' in obj || 'reason' in obj),
-      ) as { score?: unknown; reason?: unknown } | undefined) ??
-      (jsonObjects[0] as { score?: unknown; reason?: unknown });
+      reversed.find(isCompleteResult) ??
+      reversed.find(isPartialResult) ??
+      (reversed[0] as { score?: unknown; reason?: unknown });
   } catch (err) {
     return failWithTokens(
       `LLM-proposed evaluation result is not in JSON format: ${(err as Error).message}\n\n${resp.output}`,
