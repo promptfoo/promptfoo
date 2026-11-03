@@ -82,7 +82,7 @@ export async function readTestFiles(
 
     for (const p of paths) {
       const rawData = loadYaml(await fsPromises.readFile(p, 'utf-8'));
-      const yamlData = maybeLoadConfigFromExternalFile(rawData, 'test-config');
+      const yamlData = maybeLoadConfigFromExternalFile(rawData);
       Object.assign(ret, yamlData);
     }
   }
@@ -116,7 +116,7 @@ export async function readStandaloneTestsFile(
   config?: Record<string, any>,
 ): Promise<TestCase[]> {
   varsPath = renderEnvOnlyInObject(varsPath);
-  const finalConfig = config ? maybeLoadConfigFromExternalFile(config, 'test-config') : config;
+  const finalConfig = config ? maybeLoadConfigFromExternalFile(config) : config;
 
   if (varsPath.startsWith('huggingface://datasets/')) {
     telemetry.record('feature_used', {
