@@ -22,12 +22,17 @@ import { cloudConfig } from '../globalConfig/cloud';
 import logger, { getLogLevel } from '../logger';
 import { runDbMigrations } from '../migrate';
 import Eval from '../models/eval';
-import { toSerializableProviderRef, validateExactHistoricalReplayPlan } from '../models/evalResult';
+import {
+  PROMPTFOO_METADATA_KEY,
+  toSerializableProviderRef,
+  validateExactHistoricalReplayPlan,
+} from '../models/evalResult';
 import { providerRegistry } from '../providers/providerRegistry';
 import { neverGenerateRemote } from '../redteam/remoteGeneration';
 import { createShareableUrl, isSharingEnabled } from '../share';
 import { generateTable } from '../table';
 import telemetry from '../telemetry';
+import { flushOtel, shutdownOtel } from '../tracing/otelSdk';
 import { EMAIL_OK_STATUS } from '../types/email';
 import { isCliEventSource } from '../types/eventSource';
 import {
@@ -54,6 +59,8 @@ import {
 import { filterTests } from '../util/eval/filterTests';
 import {
   createScenarioResultClassifier,
+  isStoredPromptAllowed,
+  isStoredProviderAllowed,
   topLevelResultMatchContext,
 } from '../util/eval/filterTestsUtil';
 import { warnIfRedteamConfigHasNoTests } from '../util/eval/redteamWarning';
@@ -90,7 +97,11 @@ import type {
 } from '../types/index';
 import type { InternalEvaluateOptions, PreparedHistoricalCandidate } from '../types/internal';
 import type { FilterOptions } from '../util/eval/filterTests';
-import type { ResultMatchContext, StoredResults } from '../util/eval/filterTestsUtil';
+import type {
+  ResultMatchContext,
+  StoredResultProvenance,
+  StoredResults,
+} from '../util/eval/filterTestsUtil';
 
 export const EvalCommandSchema = CommandLineOptionsSchema.extend({
   help: z.boolean().optional(),
@@ -349,6 +360,53 @@ function createExactHistoricalSelector({
       basePath,
       varExpansionDisabled: getEnvBool('PROMPTFOO_DISABLE_VAR_EXPANSION'),
     };
+    const currentScenarioClassifiers = groups.map((group) =>
+      createScenarioResultClassifier(
+        preparedSuite,
+        group.scenario,
+        group.globalOffset,
+        expansionContext,
+      ),
+    );
+    const ambiguousLegacyOriginCache = new WeakMap<
+      EvaluateResult,
+      Map<StoredResultProvenance | undefined, boolean>
+    >();
+    const warnedAmbiguousLegacyRows = new WeakSet<EvaluateResult>();
+    let ambiguousLegacyRowCount = 0;
+    const isAmbiguousLegacyOrigin = (
+      result: EvaluateResult,
+      provenance?: StoredResultProvenance,
+    ) => {
+      const cached = ambiguousLegacyOriginCache.get(result)?.get(provenance);
+      if (cached !== undefined) {
+        return cached;
+      }
+      const origin = result.metadata?.[PROMPTFOO_METADATA_KEY]?.evalOrigin;
+      const conversationId = result.testCase?.metadata?.conversationId;
+      if (
+        origin === 'scenario' ||
+        origin === 'top-level' ||
+        provenance?.hasScenarios === false ||
+        conversationId == null ||
+        (typeof conversationId === 'string' && /^__scenario_\d+__$/.test(conversationId))
+      ) {
+        return false;
+      }
+      // Old custom IDs do not establish whether a row ran at top level or in a
+      // scenario. If a current scenario also claims it, neither route is safe.
+      const ambiguous = currentScenarioClassifiers.some((classifier) =>
+        classifier.matchesAny(result, provenance),
+      );
+      if (ambiguous && !warnedAmbiguousLegacyRows.has(result)) {
+        warnedAmbiguousLegacyRows.add(result);
+        ambiguousLegacyRowCount++;
+      }
+      const byProvenance = ambiguousLegacyOriginCache.get(result) ?? new Map();
+      byProvenance.set(provenance, ambiguous);
+      ambiguousLegacyOriginCache.set(result, byProvenance);
+      return ambiguous;
+    };
 
     const selectGroup = async (
       groupCandidates: PreparedHistoricalCandidate[],
@@ -375,27 +433,43 @@ function createExactHistoricalSelector({
       const context: ResultMatchContext = {
         ...resultContext,
         resultLoadCache,
+        includesResult: (result, provenance) =>
+          !isAmbiguousLegacyOrigin(result, provenance) &&
+          resultContext.includesResult(result, provenance),
         shouldExtractResult: (result) => {
           if (resultContext.shouldExtractResult?.(result) === false) {
             return false;
           }
           // A changed, non-deterministic current transform may no longer yield the saved
           // value. Do not turn that authored result into a new test with old transformed vars.
-          return !groupCandidates.some(
-            (candidate) =>
-              (candidate.test.options?.transformVars ||
-                (typeof suite.defaultTest === 'object' &&
-                  suite.defaultTest.options?.transformVars)) &&
-              Object.keys(result.testCase?.metadata ?? {}).every((key) =>
-                metadataKeysByTest.get(candidate.test)?.has(key),
-              ) &&
-              resultContext.matchesTest(
-                result,
-                // This is only an authored-origin check. A changed target must
-                // not turn a stale transformed row into a providerless new test.
-                { ...candidate.test, vars: result.vars, provider: undefined },
-                candidate.test,
-              ),
+          if (
+            groupCandidates.some(
+              (candidate) =>
+                (candidate.test.options?.transformVars ||
+                  (typeof suite.defaultTest === 'object' &&
+                    suite.defaultTest.options?.transformVars)) &&
+                Object.keys(result.testCase?.metadata ?? {}).every((key) =>
+                  metadataKeysByTest.get(candidate.test)?.has(key),
+                ) &&
+                resultContext.matchesTest(
+                  result,
+                  // This is only an authored-origin check. A changed target must
+                  // not turn a stale transformed row into a providerless new test.
+                  { ...candidate.test, vars: result.vars, provider: undefined },
+                  candidate.test,
+                ),
+            )
+          ) {
+            return false;
+          }
+          const currentTarget = bindCurrentSyntheticTarget(result, groupCandidates, suite);
+          return (
+            !currentTarget ||
+            (isStoredProviderAllowed(
+              result,
+              currentTarget.test.providers ?? currentSelectors.providers,
+            ) &&
+              isStoredPromptAllowed(result, currentTarget.test.prompts ?? currentSelectors.prompts))
           );
         },
         bindMatchedTest: (copy, authored) => {
@@ -442,14 +516,14 @@ function createExactHistoricalSelector({
             providers: intersectHistoricalSelectors(
               suite.providers,
               test.providers,
-              currentSelectors.providers,
+              currentTarget?.test.providers ?? currentSelectors.providers,
               isProviderAllowed,
               (provider) => [provider.label, provider.id()],
             ),
             prompts: intersectHistoricalSelectors(
               suite.prompts,
               test.prompts,
-              currentSelectors.prompts,
+              currentTarget?.test.prompts ?? currentSelectors.prompts,
               isPromptAllowed,
               (prompt) => [prompt.id, prompt.label],
             ),
@@ -467,13 +541,8 @@ function createExactHistoricalSelector({
       typeof suite.defaultTest === 'object' ? suite.defaultTest : {},
     );
     const selectedScenarios: PreparedHistoricalCandidate[] = [];
-    for (const group of groups) {
-      const classifier = createScenarioResultClassifier(
-        preparedSuite,
-        group.scenario,
-        group.globalOffset,
-        expansionContext,
-      );
+    for (const [groupIndex, group] of groups.entries()) {
+      const classifier = currentScenarioClassifiers[groupIndex];
       const seed = filters.sampleSeed;
       selectedScenarios.push(
         ...(await selectGroup(
@@ -515,6 +584,11 @@ function createExactHistoricalSelector({
               (typeof suite.defaultTest === 'object' ? suite.defaultTest.prompts : undefined),
           },
         )),
+      );
+    }
+    if (ambiguousLegacyRowCount > 0) {
+      logger.warn(
+        `[exact historical selection] Skipped ${ambiguousLegacyRowCount} legacy result row(s) with ambiguous top-level/scenario origin. Run a fresh evaluation to record their origin before replay.`,
       );
     }
     return [...selectedTop, ...selectedScenarios];
@@ -652,6 +726,39 @@ function watchUntilTerminated(watcher: FSWatcher): Promise<void> {
       process.on(signal, onSignal);
     }
   });
+}
+
+/** How long a CLI eval waits for provider and tracing cleanup after SIGTERM before it ends. */
+export const SIGTERM_CLEANUP_TIMEOUT_MS = 3_000;
+
+async function cleanupOnSigterm(): Promise<void> {
+  // Flush buffered spans first, then keep tracing open for calls that settle during the drain.
+  await flushOtel();
+  try {
+    await providerRegistry.shutdownForProcess();
+  } catch (error) {
+    logger.debug('Provider cleanup failed during SIGTERM', { error });
+  }
+  await shutdownOtel();
+}
+
+/** CLI evals own process termination. Library hosts keep their own SIGTERM policy. */
+export function terminateOnSigterm(): () => void {
+  const onSigterm = async () => {
+    let timer: NodeJS.Timeout | undefined;
+    const timeout = new Promise<void>((resolve) => {
+      timer = setTimeout(resolve, SIGTERM_CLEANUP_TIMEOUT_MS);
+    });
+    try {
+      await Promise.race([cleanupOnSigterm(), timeout]);
+    } finally {
+      clearTimeout(timer);
+      process.removeAllListeners('SIGTERM');
+      process.kill(process.pid, 'SIGTERM');
+    }
+  };
+  process.once('SIGTERM', onSigterm);
+  return () => process.removeListener('SIGTERM', onSigterm);
 }
 
 function resolveSuggestionOptions(
@@ -1809,7 +1916,12 @@ async function doEvalWithEnv(
         const watchPaths = Array.from(
           new Set([...configPaths, ...promptPaths, ...providerPaths, ...varPaths]),
         );
-        const watcher = chokidar.watch(watchPaths, { ignored: /^\./, persistent: true });
+        // Editor saves must produce a change event even when CHOKIDAR_USEPOLLING is set.
+        const watcher = chokidar.watch(watchPaths, {
+          atomic: true,
+          ignored: /^\./,
+          persistent: true,
+        });
         // Library callers own their own process lifetime, so only the CLI blocks here.
         if (isCliInvocation) {
           watchTermination = watchUntilTerminated(watcher);
@@ -1869,7 +1981,7 @@ async function doEvalWithEnv(
     return ret;
   };
 
-  const runEvaluation = (initialization?: boolean) => {
+  const runEvaluation = async (initialization?: boolean) => {
     // Each watch run keeps its inputs, resolved environment and providers through cleanup.
     const runEnv: EnvOverrides = {};
     const runEnvFileOverrides =
@@ -1879,28 +1991,35 @@ async function doEvalWithEnv(
     const runCommand = { ...cmdObj };
     const runDefaults = { ...defaultConfig };
     const runOptions = { ...evaluateOptions };
-    return cliState.withSafeMode(
-      Boolean(runCommand.safeMode || runDefaults.commandLineOptions?.safeMode),
-      () =>
-        cliState.withConfig(undefined, () =>
-          cliState.withBasePath(undefined, () =>
-            cliState.withEnvFileOverrides(runEnvFileOverrides, () =>
-              cliState.withEnv(runEnv, () =>
-                providerRegistry.withEvaluation(() =>
-                  runEvaluationWithEnv(
-                    runEnv,
-                    runEnvFileOverrides,
-                    runCommand,
-                    runDefaults,
-                    runOptions,
-                    initialization,
+    // Ending the process on SIGTERM is CLI policy too; library hosts keep control of their own.
+    // Keep it until the whole run settles, including sharing and output files after evaluate().
+    const removeSigtermHandler = isCliInvocation ? terminateOnSigterm() : undefined;
+    try {
+      return await cliState.withSafeMode(
+        Boolean(runCommand.safeMode || runDefaults.commandLineOptions?.safeMode),
+        () =>
+          cliState.withConfig(undefined, () =>
+            cliState.withBasePath(undefined, () =>
+              cliState.withEnvFileOverrides(runEnvFileOverrides, () =>
+                cliState.withEnv(runEnv, () =>
+                  providerRegistry.withEvaluation(() =>
+                    runEvaluationWithEnv(
+                      runEnv,
+                      runEnvFileOverrides,
+                      runCommand,
+                      runDefaults,
+                      runOptions,
+                      initialization,
+                    ),
                   ),
                 ),
               ),
             ),
           ),
-        ),
-    );
+      );
+    } finally {
+      removeSigtermHandler?.();
+    }
   };
 
   const result = await runEvaluation(true /* initialization */);

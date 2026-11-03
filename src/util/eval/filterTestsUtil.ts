@@ -674,7 +674,10 @@ function matchesScenarioCandidate(
   );
 }
 
-function isStoredProviderAllowed(result: EvaluateResult, allowedProviders: string[] | undefined) {
+export function isStoredProviderAllowed(
+  result: EvaluateResult,
+  allowedProviders: string[] | undefined,
+) {
   if (!Array.isArray(allowedProviders)) {
     return true;
   }
@@ -688,7 +691,10 @@ function isStoredProviderAllowed(result: EvaluateResult, allowedProviders: strin
   return isProviderAllowed(columnProvider, allowedProviders);
 }
 
-function isStoredPromptAllowed(result: EvaluateResult, allowedPrompts: string[] | undefined) {
+export function isStoredPromptAllowed(
+  result: EvaluateResult,
+  allowedPrompts: string[] | undefined,
+) {
   if (!Array.isArray(allowedPrompts)) {
     return true;
   }

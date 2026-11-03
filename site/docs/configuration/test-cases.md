@@ -427,6 +427,8 @@ For runtime-generated historical cases, saved and current provider/prompt select
 
 If a runtime-generated historical case used a singular test provider, replay requires its saved provider identity to identify one current source test. Missing, changed, or ambiguous identities stop the evaluation before provider calls. Declare the case in the current config or give source tests distinct provider identities; saved provider configuration is never reused.
 
+Older results without a recorded top-level or scenario origin can contain an explicit `conversationId` that matches both routes. Exact historical replay skips those ambiguous rows and reports the count without exposing their values. Run a fresh evaluation to save their origin before replaying them.
+
 The selected cases must be saved safely before provider calls. If active data-stripping or redaction settings prevent that, the eval stops; use `--no-write` to run without saving a resumable eval. Distinct test providers need distinguishable IDs or labels for saved recovery; otherwise the eval stops before provider calls. Prompt suggestion generation cannot run with this filter combination; generate prompts separately and reuse them. Historical-only cases can retain simple declarative assertions, but executable assertions, graders, and provider settings must come from current config test cases.
 
 ### JSON in CSV

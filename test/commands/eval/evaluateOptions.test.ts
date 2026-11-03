@@ -1711,6 +1711,229 @@ describe('evaluateOptions behavior', () => {
       expect(selected[0].test.prompts).toEqual(['prompt-A']);
     });
 
+    it('does not replay a markerless custom-ID row with ambiguous top-level and scenario origin', async () => {
+      const configFile = writeTempConfig(tmpDir, 'exact-legacy-custom-id.yaml', {
+        providers: ['echo'],
+        prompts: ['Hello {{caseId}}'],
+        tests: [],
+        scenarios: [
+          {
+            config: [{ metadata: { role: 'keep', conversationId: 'stable' } }],
+            tests: [{ vars: { caseId: 'shared' } }],
+          },
+        ],
+      });
+      const resultsPath = path.join(tmpDir, 'exact-legacy-custom-id.json');
+      const writeResult = (
+        origin?: 'scenario' | 'top-level',
+        conversationId = 'stable',
+        savedScenarios: unknown[] = [{ config: [{}], tests: [] }],
+      ) =>
+        fs.writeFileSync(
+          resultsPath,
+          JSON.stringify({
+            config: {
+              prompts: ['Hello {{caseId}}'],
+              providers: ['echo'],
+              tests: [],
+              scenarios: savedScenarios,
+            },
+            results: {
+              results: [
+                {
+                  success: false,
+                  failureReason: ResultFailureReason.ASSERT,
+                  vars: { caseId: 'shared' },
+                  provider: { id: 'echo' },
+                  ...(origin && { metadata: { __promptfoo: { evalOrigin: origin } } }),
+                  testCase: {
+                    vars: { caseId: 'shared' },
+                    metadata: { role: 'keep', conversationId },
+                  },
+                },
+              ],
+            },
+          }),
+        );
+      await doEval(
+        {
+          table: false,
+          write: false,
+          config: [configFile],
+          filterMetadataExact: 'role=keep',
+          filterFailing: resultsPath,
+        },
+        {},
+        undefined,
+        {},
+      );
+      const suite = evaluateMock.mock.calls.at(-1)?.[0] as TestSuite;
+      const selection = (evaluateMock.mock.calls.at(-1)?.[2] as InternalEvaluateOptions)
+        .exactHistoricalSelection!;
+      const authored = suite.scenarios![0].tests[0];
+      const candidate: PreparedHistoricalCandidate = {
+        source: { kind: 'scenario', scenarioIndex: 0, variantIndex: 0, testIndex: 0 },
+        test: {
+          ...authored,
+          vars: { caseId: 'shared' },
+          metadata: { role: 'keep', conversationId: 'stable' },
+        },
+      };
+
+      writeResult();
+      expect(await selection.select([candidate], suite)).toEqual([]);
+      expect(logger.warn).toHaveBeenCalledWith(
+        expect.stringContaining('Skipped 1 legacy result row(s) with ambiguous'),
+      );
+      expect(
+        vi
+          .mocked(logger.warn)
+          .mock.calls.map(([message]) => message)
+          .join(' '),
+      ).not.toContain('stable');
+      writeResult('scenario');
+      expect((await selection.select([candidate], suite)).map((item) => item.source.kind)).toEqual([
+        'scenario',
+      ]);
+      writeResult('top-level');
+      expect((await selection.select([candidate], suite)).map((item) => item.source.kind)).toEqual([
+        'top-level',
+      ]);
+      writeResult(undefined, 'other');
+      expect((await selection.select([candidate], suite)).map((item) => item.source.kind)).toEqual([
+        'top-level',
+      ]);
+      writeResult(undefined, 'stable', []);
+      expect((await selection.select([candidate], suite)).map((item) => item.source.kind)).toEqual([
+        'top-level',
+      ]);
+    });
+
+    it('honors a bound singular source test selector before replaying a generated row', async () => {
+      const targetPath = path.join(tmpDir, 'exact-bound-selector-target.cjs');
+      fs.writeFileSync(
+        targetPath,
+        "module.exports = class { id() { return 'qa-bound-target'; } async callApi() { return { output: 'current' }; } };",
+      );
+      const configFile = writeTempConfig(tmpDir, 'exact-bound-selector.yaml', {
+        providers: [
+          { id: 'echo', label: 'provider-A' },
+          { id: 'echo', label: 'provider-B' },
+        ],
+        prompts: [
+          { raw: 'A {{caseId}}', label: 'prompt-A' },
+          { raw: 'B {{caseId}}', label: 'prompt-B' },
+        ],
+        scenarios: [
+          {
+            config: [{ metadata: { role: 'keep' } }],
+            tests: [
+              {
+                vars: { caseId: 'authored' },
+                provider: { id: `file://${targetPath}`, label: 'bound-target' },
+                providers: ['provider-A'],
+                prompts: ['prompt-A'],
+              },
+            ],
+          },
+        ],
+      });
+      const resultsPath = path.join(tmpDir, 'exact-bound-selector.json');
+      const writeResult = (column: 'A' | 'B') => {
+        fs.writeFileSync(
+          resultsPath,
+          JSON.stringify({
+            results: {
+              results: [
+                {
+                  success: false,
+                  failureReason: ResultFailureReason.ASSERT,
+                  vars: { caseId: 'generated' },
+                  provider: { id: 'echo', label: `provider-${column}` },
+                  prompt: { raw: `${column} generated`, label: `prompt-${column}` },
+                  metadata: { __promptfoo: { evalOrigin: 'scenario' } },
+                  testCase: {
+                    vars: { caseId: 'generated' },
+                    metadata: { role: 'keep', conversationId: '__scenario_0__' },
+                    provider: { id: 'qa-bound-target', label: 'bound-target' },
+                    providers: ['provider-A', 'provider-B'],
+                    prompts: ['prompt-A', 'prompt-B'],
+                  },
+                },
+              ],
+            },
+          }),
+        );
+      };
+      await doEval(
+        {
+          table: false,
+          write: false,
+          config: [configFile],
+          filterMetadataExact: 'role=keep',
+          filterFailing: resultsPath,
+        },
+        {},
+        undefined,
+        {},
+      );
+      const suite = evaluateMock.mock.calls.at(-1)?.[0] as TestSuite;
+      const selection = (evaluateMock.mock.calls.at(-1)?.[2] as InternalEvaluateOptions)
+        .exactHistoricalSelection!;
+      const authored = suite.scenarios![0].tests[0];
+      const candidate: PreparedHistoricalCandidate = {
+        source: { kind: 'scenario', scenarioIndex: 0, variantIndex: 0, testIndex: 0 },
+        test: {
+          ...authored,
+          vars: { caseId: 'authored' },
+          metadata: { role: 'keep', conversationId: '__scenario_0__' },
+        },
+      };
+
+      writeResult('A');
+      const selected = await selection.select([candidate], suite);
+      expect(selected).toHaveLength(1);
+      expect(selected[0].test.providers).toEqual(['provider-A']);
+      expect(selected[0].test.prompts).toEqual(['prompt-A']);
+
+      writeResult('B');
+      expect(await selection.select([candidate], suite)).toEqual([]);
+
+      writeResult('A');
+      expect(
+        await selection.select(
+          [{ ...candidate, test: { ...candidate.test, providers: [] } }],
+          suite,
+        ),
+      ).toEqual([]);
+      expect(
+        await selection.select([{ ...candidate, test: { ...candidate.test, prompts: [] } }], suite),
+      ).toEqual([]);
+
+      const topSuite: TestSuite = {
+        ...suite,
+        tests: [{ ...authored, metadata: { role: 'keep' } }],
+        scenarios: [],
+      };
+      const topCandidate: PreparedHistoricalCandidate = {
+        source: { kind: 'top-level', testIndex: 0 },
+        test: topSuite.tests![0],
+      };
+      const writeTopResult = (column: 'A' | 'B') => {
+        writeResult(column);
+        const stored = JSON.parse(fs.readFileSync(resultsPath, 'utf8'));
+        stored.results.results[0].metadata.__promptfoo.evalOrigin = 'top-level';
+        stored.results.results[0].testCase.metadata = { role: 'keep' };
+        fs.writeFileSync(resultsPath, JSON.stringify(stored));
+      };
+      writeTopResult('A');
+      expect((await selection.select([topCandidate], topSuite))[0].test.providers).toEqual([
+        'provider-A',
+      ]);
+      writeTopResult('B');
+      expect(await selection.select([topCandidate], topSuite)).toEqual([]);
+    });
+
     it('binds a synthetic scenario row to one current singular target and source', async () => {
       const targetPath = path.join(tmpDir, 'exact-synthetic-current-target.cjs');
       fs.writeFileSync(
