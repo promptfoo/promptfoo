@@ -342,6 +342,21 @@ describe('parseFileUrl', () => {
     });
   });
 
+  it('should backtrack to the Ruby file after colon-containing path components', () => {
+    expect(parseFileUrl('file://dir.rb:x/assert.rb:Mod::fn')).toEqual({
+      filePath: 'dir.rb:x/assert.rb',
+      functionName: 'Mod::fn',
+    });
+    expect(parseFileUrl('file://checks.rb:old/assert.rb:Validators::Format.check')).toEqual({
+      filePath: 'checks.rb:old/assert.rb',
+      functionName: 'Validators::Format.check',
+    });
+    expect(parseFileUrl('file://build.rb:2026-05-27T12:00/assert.rb:Mod::fn')).toEqual({
+      filePath: 'build.rb:2026-05-27T12:00/assert.rb',
+      functionName: 'Mod::fn',
+    });
+  });
+
   it('should parse file URL without function name', () => {
     const result = parseFileUrl('file:///path/to/file.js');
     expect(result).toEqual({

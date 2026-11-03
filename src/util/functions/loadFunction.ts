@@ -149,7 +149,7 @@ export function parseFileUrl(fileUrl: string): { filePath: string; functionName?
   // the first colon following the .rb file. Backtrack only for that shape so
   // multi-colon data file names such as data.js:2026-05-27T12:00:00.json stay
   // intact.
-  let colonIndex = urlWithoutProtocol.indexOf(':');
+  let colonIndex = lastColonIndex;
   while (colonIndex > 1) {
     const candidateFilePath = urlWithoutProtocol.slice(0, colonIndex);
     const functionName = urlWithoutProtocol.slice(colonIndex + 1);
@@ -159,7 +159,7 @@ export function parseFileUrl(fileUrl: string): { filePath: string; functionName?
         functionName,
       };
     }
-    colonIndex = urlWithoutProtocol.indexOf(':', colonIndex + 1);
+    colonIndex = urlWithoutProtocol.lastIndexOf(':', colonIndex - 1);
   }
 
   return {
