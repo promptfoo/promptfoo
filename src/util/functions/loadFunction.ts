@@ -103,9 +103,12 @@ function normalizeFilePath(filePath: string): string {
  * Extracts the file path and optional function name from a `file://` URL.
  *
  * Splits at the last colon whose prefix is a script file (JS/TS, `.py`, `.rb`),
- * scanning from the right so colons in directories and file names stay part of
- * the path, and namespaced Ruby methods (`Validators::Format.check_length`)
- * stay in the function name. Colons at index 0 or 1 are never separators.
+ * so colons in directories and file names stay part of the path. Ruby
+ * namespaced methods (`Validators::Format.check_length`) place the function
+ * after the colon that follows the `.rb` file; backtrack to that colon only
+ * when the suffix contains `::`, so multi-colon data file names such as
+ * `data.js:2026-05-27T12:00:00.json` stay intact. Colons at index 0 or 1 are
+ * never separators.
  *
  * Examples:
  *   `file://callbacks.js`                        → `{ filePath: 'callbacks.js' }`
@@ -116,6 +119,7 @@ function normalizeFilePath(filePath: string): string {
  *   `file://C:/cb.js:fn`                         → `{ filePath: 'C:/cb.js', functionName: 'fn' }`
  *   `file://C:`                                  → `{ filePath: 'C:' }` (drive-letter colon preserved)
  *   `file://2026-05-27T12:00:00.js`              → `{ filePath: '2026-05-27T12:00:00.js' }` (colon is part of path)
+ *   `file://data.js:2026-05-27T12:00:00.json`     → `{ filePath: 'data.js:2026-05-27T12:00:00.json' }` (data file, no suffix)
  *
  * @param fileUrl The `file://` URL.
  * @returns The file path and optional function name.
@@ -128,20 +132,34 @@ export function parseFileUrl(fileUrl: string): { filePath: string; functionName?
 
   const urlWithoutProtocol = fileUrl.slice('file://'.length);
 
-  // Split at the last colon whose prefix is a script file. Scanning from the
-  // right keeps colons in directories and file names in the path, and leaves
-  // namespaced Ruby methods (Validators::Format.check) in the function name.
-  // Colons at index 0 or 1 are never treated as the separator.
-  let colonIndex = urlWithoutProtocol.lastIndexOf(':');
-  while (colonIndex > 1) {
-    const candidateFilePath = urlWithoutProtocol.slice(0, colonIndex);
+  // The function suffix normally follows the script file at the last colon,
+  // so colons in directories and earlier file names stay in the path.
+  const lastColonIndex = urlWithoutProtocol.lastIndexOf(':');
+  if (lastColonIndex > 1) {
+    const candidateFilePath = urlWithoutProtocol.slice(0, lastColonIndex);
     if (isScriptFilePath(candidateFilePath)) {
       return {
         filePath: normalizeFilePath(candidateFilePath),
-        functionName: urlWithoutProtocol.slice(colonIndex + 1),
+        functionName: urlWithoutProtocol.slice(lastColonIndex + 1),
       };
     }
-    colonIndex = urlWithoutProtocol.lastIndexOf(':', colonIndex - 1);
+  }
+
+  // Ruby namespaced methods (Validators::Format.check) put the function after
+  // the first colon following the .rb file. Backtrack only for that shape so
+  // multi-colon data file names such as data.js:2026-05-27T12:00:00.json stay
+  // intact.
+  let colonIndex = urlWithoutProtocol.indexOf(':');
+  while (colonIndex > 1) {
+    const candidateFilePath = urlWithoutProtocol.slice(0, colonIndex);
+    const functionName = urlWithoutProtocol.slice(colonIndex + 1);
+    if (candidateFilePath.endsWith('.rb') && functionName.includes('::')) {
+      return {
+        filePath: normalizeFilePath(candidateFilePath),
+        functionName,
+      };
+    }
+    colonIndex = urlWithoutProtocol.indexOf(':', colonIndex + 1);
   }
 
   return {
