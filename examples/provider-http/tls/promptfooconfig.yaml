@@ -114,8 +114,8 @@ providers:
 
 defaultTest:
   assert:
-    - type: not-empty
-      value: 'Response should not be empty'
+    - type: javascript
+      value: output.trim().length > 0
 
 tests:
   - vars:
@@ -127,8 +127,8 @@ tests:
           - qubit
           - superposition
           - entanglement
-      - type: min-length
-        value: 50
+      - type: javascript
+        value: output.length >= 50
 
   - vars:
       topic: blockchain technology

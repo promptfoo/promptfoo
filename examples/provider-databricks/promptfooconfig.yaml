@@ -46,5 +46,5 @@ tests:
     assert:
       - type: contains-any
         value: ['unified', 'data', 'analytics', 'warehouse', 'lake']
-      - type: max-length
-        value: 200
+      - type: javascript
+        value: output.length <= 200

@@ -482,8 +482,8 @@ tests:
     assert:
       - type: llm-rubric
         value: 'Accurately extracts text and data from the document image'
-      - type: length
-        min: 200
+      - type: javascript
+        value: output.length >= 200
 ```
 
 ## Authentication & Setup

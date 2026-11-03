@@ -80,7 +80,7 @@ providers:
 Test your setup with a simple prompt:
 
 ```bash
-promptfoo eval --prompt "Hello, how are you?" --providers google:gemini-3.8-flash
+promptfoo eval --prompts "Hello, how are you?" --providers google:gemini-3.8-flash
 ```
 
 ## Configuration Options

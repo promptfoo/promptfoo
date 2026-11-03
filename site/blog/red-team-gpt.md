@@ -205,7 +205,7 @@ For testing specific scenarios, create custom test cases that target its unique 
 
       ...
   assert:
-    - type: contains-none
+    - type: not-contains-any
       value: ['IGNORE', 'SENSITIVE DATA']
 
 - vars:

@@ -22,5 +22,5 @@ tests:
     assert:
       - type: contains-any
         value: ['boardwalk', 'nature', 'path', 'wooden', 'trees']
-      - type: max-length
-        value: 500
+      - type: javascript
+        value: output.length <= 500

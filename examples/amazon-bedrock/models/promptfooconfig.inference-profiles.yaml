@@ -120,8 +120,8 @@ tests:
         value: 'The response should be comprehensive, technically accurate, and well-structured'
       - type: contains
         value: 'technology'
-      - type: min-length
-        value: 200
+      - type: javascript
+        value: output.length >= 200
 
 # Default grading configuration using an inference profile
 defaultTest:

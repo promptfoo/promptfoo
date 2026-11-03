@@ -25,26 +25,26 @@ tests:
     vars:
       prompt: 'A serene landscape with mountains and a lake at sunset'
     assert:
-      - type: not-empty
-        value: 'Image should be generated'
+      - type: javascript
+        value: output.trim().length > 0
 
   - description: 'Futuristic scene generation'
     vars:
       prompt: 'A futuristic cityscape with flying cars and neon lights'
     assert:
-      - type: not-empty
-        value: 'Image should be generated'
+      - type: javascript
+        value: output.trim().length > 0
 
   - description: 'Portrait generation'
     vars:
       prompt: 'A close-up portrait of a wise old wizard with a long beard'
     assert:
-      - type: not-empty
-        value: 'Image should be generated'
+      - type: javascript
+        value: output.trim().length > 0
 
   - description: 'Abstract art generation'
     vars:
       prompt: 'An abstract geometric pattern in vibrant colors'
     assert:
-      - type: not-empty
-        value: 'Image should be generated'
+      - type: javascript
+        value: output.trim().length > 0
