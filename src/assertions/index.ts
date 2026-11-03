@@ -487,7 +487,7 @@ async function runAssertionInternal({
   type ValueFromScriptType = string | boolean | number | GradingResult | object | undefined;
   let renderedValue = assertion.value;
   let valueFromScript: ValueFromScriptType;
-  // A JavaScript file or package function that throws becomes a failed result. It still goes
+  // A script file or package function that throws becomes a failed result. It still goes
   // through the common post-processing below, so overrides such as weight: 0 apply.
   let scriptFailure: GradingResult | undefined;
   if (typeof renderedValue === 'string') {
@@ -529,7 +529,7 @@ async function runAssertionInternal({
           valueFromScript = pythonScriptOutput;
           logger.debug(`Python script ${filePath} output: ${valueFromScript}`);
         } catch (error) {
-          return {
+          scriptFailure = {
             pass: false,
             score: 0,
             reason: (error as Error).message,
@@ -547,7 +547,7 @@ async function runAssertionInternal({
           valueFromScript = rubyScriptOutput;
           logger.debug(`Ruby script ${filePath} output: ${valueFromScript}`);
         } catch (error) {
-          return {
+          scriptFailure = {
             pass: false,
             score: 0,
             reason: (error as Error).message,

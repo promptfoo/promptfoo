@@ -5,6 +5,7 @@ import { runAssertion, runAssertions } from '../../src/assertions/index';
 import cliState from '../../src/cliState';
 import { importModule } from '../../src/esm';
 import * as llmGradingMatchers from '../../src/matchers/llmGrading';
+import { runPython } from '../../src/python/pythonUtils';
 import { runRuby } from '../../src/ruby/rubyUtils.js';
 import { createStringAssertion } from '../factories/literalFixtures';
 
@@ -54,6 +55,16 @@ vi.mock('../../src/database', () => ({
 vi.mock('../../src/ruby/rubyUtils.js', () => ({
   runRuby: vi.fn(),
 }));
+
+vi.mock('../../src/python/pythonUtils', async () => {
+  const actual = await vi.importActual<typeof import('../../src/python/pythonUtils')>(
+    '../../src/python/pythonUtils',
+  );
+  return {
+    ...actual,
+    runPython: vi.fn(),
+  };
+});
 
 vi.mock('../../src/matchers/llmGrading', async () => {
   const actual = await vi.importActual('../../src/matchers/llmGrading');
@@ -450,6 +461,65 @@ describe('Script value resolution', () => {
         }),
       ).rejects.toThrow('must export a function');
     });
+  });
+
+  describe('python and ruby file assertions that throw', () => {
+    it.each([
+      ['python', 'file://grade.py', () => vi.mocked(runPython)],
+      ['ruby', 'file://grade.rb', () => vi.mocked(runRuby)],
+    ] as const)(
+      'should apply the weight: 0 override to a throwing %s file assertion',
+      async (type, value, getRunner) => {
+        getRunner().mockRejectedValue(new Error('script failed'));
+
+        const result = await runAssertion({
+          assertion: { type, value, weight: 0 },
+          test: { vars: {} },
+          providerResponse: baseProviderResponse,
+        });
+
+        expect(result.pass).toBe(true);
+        expect(result.score).toBe(0);
+        expect(result.reason).toBe('script failed');
+
+        const rowResult = await runAssertions({
+          test: {
+            vars: {},
+            assert: [
+              { type: 'contains', value: 'test' },
+              { type, value, weight: 0 },
+            ],
+          },
+          providerResponse: baseProviderResponse,
+        });
+
+        expect(rowResult.pass).toBe(true);
+        expect(rowResult.componentResults?.[1]).toMatchObject({
+          pass: true,
+          reason: 'script failed',
+        });
+      },
+    );
+
+    it.each([
+      ['python', 'file://grade.py', () => vi.mocked(runPython)],
+      ['ruby', 'file://grade.rb', () => vi.mocked(runRuby)],
+    ] as const)(
+      'should still fail a throwing %s file assertion without weight: 0',
+      async (type, value, getRunner) => {
+        getRunner().mockRejectedValue(new Error('script failed'));
+
+        const result = await runAssertion({
+          assertion: createStringAssertion(type, value),
+          test: { vars: {} },
+          providerResponse: baseProviderResponse,
+        });
+
+        expect(result.pass).toBe(false);
+        expect(result.score).toBe(0);
+        expect(result.reason).toBe('script failed');
+      },
+    );
   });
 
   describe('edge cases', () => {
