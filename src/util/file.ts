@@ -149,11 +149,14 @@ export function maybeLoadFromExternalFile(
   // This handles colon splitting correctly, including Windows drive letters (C:\path)
   const { filePath: cleanPath, functionName } = parseFileUrl(renderedFilePath);
 
-  // In assertion contexts, always preserve Python/JS file references
+  // In assertion contexts, always preserve script file references
   // This prevents premature dereferencing of assertion files that should be
   // handled by the assertion system, not the generic config loader
-  if (context === 'assertion' && (cleanPath.endsWith('.py') || isJavascriptFile(cleanPath))) {
-    logger.debug(`Preserving Python/JS file reference in assertion context: ${renderedFilePath}`);
+  if (
+    context === 'assertion' &&
+    (cleanPath.endsWith('.py') || cleanPath.endsWith('.rb') || isJavascriptFile(cleanPath))
+  ) {
+    logger.debug(`Preserving script file reference in assertion context: ${renderedFilePath}`);
     return renderedFilePath;
   }
 
@@ -166,16 +169,20 @@ export function maybeLoadFromExternalFile(
     return renderedFilePath;
   }
 
-  // For Python/JS files with function names, return the original string unchanged
+  // For script files with function names, return the original string unchanged
   // to allow the assertion system to handle function loading at execution time.
   // This prevents premature file existence checks that would fail for function references.
-  if (functionName && (cleanPath.endsWith('.py') || isJavascriptFile(cleanPath))) {
+  if (
+    functionName &&
+    (cleanPath.endsWith('.py') || cleanPath.endsWith('.rb') || isJavascriptFile(cleanPath))
+  ) {
     return renderedFilePath;
   }
 
-  // For non-Python/JS files, use the original path (ignore potential function name)
+  // For non-script files, use the original path (ignore potential function name)
   const pathToUse =
-    functionName && !(cleanPath.endsWith('.py') || isJavascriptFile(cleanPath))
+    functionName &&
+    !(cleanPath.endsWith('.py') || cleanPath.endsWith('.rb') || isJavascriptFile(cleanPath))
       ? renderedFilePath.slice('file://'.length) // Use original path for non-script files
       : cleanPath;
 
@@ -339,7 +346,13 @@ export function maybeLoadConfigFromExternalFile(
       // This preserves file:// glob patterns for test case expansion
       const isVarsField = key === 'vars';
 
-      const childContext = isAssertionValue ? 'assertion' : isVarsField ? 'vars' : context;
+      const childContext = isAssertionValue
+        ? 'assertion'
+        : isVarsField
+          ? 'vars'
+          : key === 'assert' && context !== 'vars'
+            ? 'assertion'
+            : context;
       const value = maybeLoadConfigFromExternalFile(config[key], childContext);
 
       if (key === '__proto__') {

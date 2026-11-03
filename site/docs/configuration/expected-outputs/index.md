@@ -382,6 +382,8 @@ module.exports = (output, { vars }) => {
 
 You can also use Javascript files in non-`javascript`-type asserts. For example, using a Javascript file in a `contains` assertion will check that the output contains the string returned by Javascript.
 
+Script file references in assertion values are resolved at assertion time whether the test case is defined inline or loaded from an external tests file (`tests: file://tests.yaml`); the external loader preserves them instead of inlining the script source.
+
 #### Python
 
 If the file ends in `.py`, the Python is executed:

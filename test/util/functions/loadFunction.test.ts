@@ -289,6 +289,29 @@ describe('parseFileUrl', () => {
     });
   });
 
+  it('should parse a Ruby file URL with function name', () => {
+    const result = parseFileUrl('file:///path/to/assert.rb:check');
+    expect(result).toEqual({
+      filePath: '/path/to/assert.rb',
+      functionName: 'check',
+    });
+  });
+
+  it('should keep namespaced Ruby method names intact', () => {
+    const result = parseFileUrl('file:///path/to/assert.rb:Validators::Format.check_length');
+    expect(result).toEqual({
+      filePath: '/path/to/assert.rb',
+      functionName: 'Validators::Format.check_length',
+    });
+  });
+
+  it('should keep a colon in a non-script file name as part of the path', () => {
+    const result = parseFileUrl('file:///path/to/data:part.json');
+    expect(result).toEqual({
+      filePath: '/path/to/data:part.json',
+    });
+  });
+
   it('should parse file URL without function name', () => {
     const result = parseFileUrl('file:///path/to/file.js');
     expect(result).toEqual({

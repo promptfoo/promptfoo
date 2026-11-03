@@ -935,6 +935,38 @@ describe('file utilities', () => {
         expect(fs.readFileSync).not.toHaveBeenCalled();
       });
 
+      it('should preserve script references in non-script assertion types', () => {
+        const config = {
+          tests: [
+            {
+              assert: [
+                {
+                  type: 'contains',
+                  value: 'file://assert.js',
+                },
+              ],
+            },
+          ],
+        };
+        const result = maybeLoadConfigFromExternalFile(config);
+        expect(result.tests[0].assert[0].value).toBe('file://assert.js');
+        expect(fs.readFileSync).not.toHaveBeenCalled();
+      });
+
+      it('should preserve Ruby script references in assertions', () => {
+        const config = {
+          assert: [
+            {
+              type: 'ruby',
+              value: 'file://assert.rb:Validators::Format.check_length',
+            },
+          ],
+        };
+        const result = maybeLoadConfigFromExternalFile(config);
+        expect(result.assert[0].value).toBe('file://assert.rb:Validators::Format.check_length');
+        expect(fs.readFileSync).not.toHaveBeenCalled();
+      });
+
       it('should handle mixed assertion types', () => {
         (fs.readFileSync as ReturnType<typeof vi.fn>).mockReturnValue('some data');
         const config = {
