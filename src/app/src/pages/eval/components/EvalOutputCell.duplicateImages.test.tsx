@@ -3,6 +3,7 @@ import { renderWithProviders as baseRender } from '@app/utils/testutils';
 import { type EvaluateTableOutput } from '@promptfoo/types';
 import { ResultFailureReason } from '@promptfoo/types/results';
 import { screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ShiftKeyProvider } from '../../../contexts/ShiftKeyContext';
 import EvalOutputCell from './EvalOutputCell';
@@ -18,10 +19,12 @@ const renderWithProviders = (ui: React.ReactElement) => {
   return baseRender(<ShiftKeyProvider>{ui}</ShiftKeyProvider>);
 };
 
+const viewSettings = vi.hoisted(() => ({ renderMarkdown: false }));
+
 vi.mock('./store', () => ({
   useResultsViewSettingsStore: () => ({
     prettifyJson: false,
-    renderMarkdown: false,
+    renderMarkdown: viewSettings.renderMarkdown,
     showPassFail: false,
     showPassReasons: false,
     showMetricPills: true,
@@ -94,6 +97,7 @@ describe('EvalOutputCell duplicate image prevention', () => {
   beforeEach(() => {
     timers = useTestTimers({ shouldAdvanceTime: true });
     vi.clearAllMocks();
+    viewSettings.renderMarkdown = false;
   });
 
   afterEach(() => {
@@ -175,6 +179,54 @@ describe('EvalOutputCell duplicate image prevention', () => {
 
       const images = container.querySelectorAll('img');
       expect(images).toHaveLength(1);
+    });
+
+    it.each([false, true])(
+      'deduplicates large inline image payloads without lowercasing them with Markdown rendering %s',
+      (renderMarkdown) => {
+        viewSettings.renderMarkdown = renderMarkdown;
+        const base64 = 'AbCd'.repeat(64 * 1024);
+        const dataUri = `data:image/png;base64,${base64}`;
+        const props = createBaseProps({
+          text: `Generated image: ![generated](${dataUri})`,
+          images: [{ data: `data:application/octet-stream;base64,${base64}` }],
+        });
+        const toLowerCase = vi.spyOn(String.prototype, 'toLowerCase');
+
+        try {
+          const { container } = renderWithProviders(<EvalOutputCell {...props} />);
+
+          const images = container.querySelectorAll('img');
+          expect(images).toHaveLength(1);
+          expect(images[0].getAttribute('src')).toBe(dataUri);
+          expect(
+            toLowerCase.mock.contexts.some((value) => String(value).length >= base64.length),
+          ).toBe(false);
+        } finally {
+          toLowerCase.mockRestore();
+        }
+      },
+    );
+
+    it('deduplicates equivalent headers and whitespace without ignoring payload case', () => {
+      const base64 = 'AbCd'.repeat(20);
+      const dataUri = `DATA:APPLICATION/OCTET-STREAM;BASE64,${base64}`;
+      const distinctDataUri = `data:image/png;base64,${base64.toLowerCase()}`;
+      const props = createBaseProps({
+        text: dataUri,
+        images: [
+          { data: `data:IMAGE/PNG;BASE64,${'AbCd \n'.repeat(20)}` },
+          { data: distinctDataUri },
+        ],
+      });
+
+      const { container } = renderWithProviders(<EvalOutputCell {...props} />);
+
+      const images = container.querySelectorAll('img');
+      expect(Array.from(images, (image) => image.getAttribute('src'))).toEqual([
+        dataUri,
+        distinctDataUri,
+      ]);
     });
 
     it('should detect data URI with image/svg+xml as primary rendered image', () => {
@@ -329,6 +381,160 @@ describe('EvalOutputCell duplicate image prevention', () => {
   });
 
   describe('image array deduplication behavior', () => {
+    it('keeps exactly one image when a truncated inline preview is expanded and collapsed', async () => {
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+      const source = 'data:image/png;base64,aW1hZ2U=';
+      const props = createBaseProps({
+        text: `${'prefix '.repeat(20)}![Preview](${source}) trailing text`,
+        images: [{ data: source }],
+      });
+      props.maxTextLength = 20;
+      const { container } = renderWithProviders(<EvalOutputCell {...props} />);
+      expect(container.querySelectorAll('img')).toHaveLength(1);
+      expect(screen.getByRole('img')).toHaveAttribute('alt', 'Test prompt');
+
+      await user.click(screen.getByText('...'));
+      expect(container.querySelectorAll('img')).toHaveLength(1);
+      expect(screen.getByRole('img')).toHaveAttribute('alt', 'Preview');
+
+      await user.click(screen.getByText('Show less'));
+      expect(container.querySelectorAll('img')).toHaveLength(1);
+      expect(screen.getByRole('img')).toHaveAttribute('alt', 'Test prompt');
+    });
+
+    it('keeps previews at the exact cutoff and structured copies of previews beyond it', async () => {
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+      const first = 'data:image/png;base64,Zmlyc3Q=';
+      const second = 'data:image/png;base64,c2Vjb25k';
+      const props = createBaseProps({
+        text: `12345![First](${first}) more text ![Second](${second})`,
+        images: [{ data: first }, { data: second }, { data: second }],
+      });
+      const { container } = renderWithProviders(<EvalOutputCell {...props} maxTextLength={5} />);
+      expect(Array.from(container.querySelectorAll('img'), (image) => image.src)).toEqual([
+        first,
+        second,
+      ]);
+      expect(screen.getByAltText('First')).toBeInTheDocument();
+      expect(screen.queryByAltText('Second')).not.toBeInTheDocument();
+
+      await user.click(screen.getByText('...'));
+      expect(Array.from(container.querySelectorAll('img'), (image) => image.src)).toEqual([
+        first,
+        second,
+      ]);
+      expect(screen.getByAltText('Second')).toBeInTheDocument();
+    });
+
+    it('updates duplicate filtering when Markdown rendering is toggled', () => {
+      const source = 'data:image/png;base64,aW1hZ2U=';
+      const props = createBaseProps({
+        text: `${'prefix '.repeat(20)}![Preview](${source}) trailing text`,
+        images: [{ data: source }],
+      });
+      props.maxTextLength = 20;
+      const { container, rerender } = renderWithProviders(<EvalOutputCell {...props} />);
+      expect(screen.getByRole('img')).toHaveAttribute('alt', 'Test prompt');
+      viewSettings.renderMarkdown = true;
+      rerender(
+        <ShiftKeyProvider>
+          <EvalOutputCell {...props} />
+        </ShiftKeyProvider>,
+      );
+      expect(container.querySelectorAll('img')).toHaveLength(1);
+      expect(screen.getByRole('img')).toHaveAttribute('alt', 'Preview');
+      viewSettings.renderMarkdown = false;
+      rerender(
+        <ShiftKeyProvider>
+          <EvalOutputCell {...props} />
+        </ShiftKeyProvider>,
+      );
+      expect(container.querySelectorAll('img')).toHaveLength(1);
+      expect(screen.getByRole('img')).toHaveAttribute('alt', 'Test prompt');
+    });
+
+    it('updates duplicate filtering when the literal-text threshold changes', () => {
+      const source = 'data:image/png;base64,aW1hZ2U=';
+      const props = createBaseProps({
+        text: `${'prefix '.repeat(20)}![Preview](${source}) trailing text`,
+        images: [{ data: source }],
+      });
+      const { container, rerender } = renderWithProviders(
+        <EvalOutputCell {...props} maxTextLength={20} />,
+      );
+      expect(container.querySelectorAll('img')).toHaveLength(1);
+      expect(screen.getByRole('img')).toHaveAttribute('alt', 'Test prompt');
+
+      rerender(
+        <ShiftKeyProvider>
+          <EvalOutputCell {...props} maxTextLength={145} />
+        </ShiftKeyProvider>,
+      );
+      expect(container.querySelectorAll('img')).toHaveLength(1);
+      expect(screen.getByRole('img')).toHaveAttribute('alt', 'Preview');
+      expect(screen.getByText('...')).toBeInTheDocument();
+
+      rerender(
+        <ShiftKeyProvider>
+          <EvalOutputCell {...props} maxTextLength={1000} />
+        </ShiftKeyProvider>,
+      );
+      expect(container.querySelectorAll('img')).toHaveLength(1);
+      expect(screen.getByRole('img')).toHaveAttribute('alt', 'Preview');
+
+      rerender(
+        <ShiftKeyProvider>
+          <EvalOutputCell {...props} maxTextLength={20} />
+        </ShiftKeyProvider>,
+      );
+      expect(container.querySelectorAll('img')).toHaveLength(1);
+      expect(screen.getByRole('img')).toHaveAttribute('alt', 'Test prompt');
+    });
+
+    it.each([
+      [
+        'unused footnote',
+        'Normal output\n\n[^unused]: ![Preview][pic]\n\n[pic]: https://example.com/image.png',
+      ],
+      [
+        'empty first reference definition',
+        '![Preview][pic]\n\n[pic]: <>\n[pic]: https://example.com/image.png',
+      ],
+      [
+        'duplicate footnote definition',
+        'Normal output[^used]\n\n[^used]: First definition\n\n[^used]: ![Preview][pic]\n\n[pic]: https://example.com/image.png',
+      ],
+    ])('retains a structured image hidden by an unrendered %s', (_label, text) => {
+      viewSettings.renderMarkdown = true;
+      const source = 'https://example.com/image.png';
+      const props = createBaseProps({ text, images: [{ data: source }] });
+      const { container } = renderWithProviders(<EvalOutputCell {...props} />);
+      const images = container.querySelectorAll('img');
+      expect(images).toHaveLength(1);
+      expect(images[0]).toHaveAttribute('src', source);
+    });
+
+    it.each([
+      ['reference image', '![Preview][pic]\n\n[pic]: https://example.com/image.png'],
+      [
+        'referenced footnote',
+        'Normal output[^used]\n\n[^used]: ![Preview][pic]\n\n[pic]: https://example.com/image.png',
+      ],
+      [
+        'transitive footnote',
+        'Normal output[^first]\n\n[^first]: See[^second]\n\n[^second]: ![Preview][pic]\n\n[pic]: https://example.com/image.png',
+      ],
+    ])('deduplicates a structured image rendered in a %s', (_label, text) => {
+      viewSettings.renderMarkdown = true;
+      const source = 'https://example.com/image.png';
+      const props = createBaseProps({ text, images: [{ data: source }] });
+      const { container } = renderWithProviders(<EvalOutputCell {...props} />);
+      const images = container.querySelectorAll('img');
+      expect(images).toHaveLength(1);
+      expect(images[0]).toHaveAttribute('src', source);
+      expect(images[0]).toHaveAttribute('alt', 'Preview');
+    });
+
     it('should skip matching structured images when primary is rendered as image', () => {
       const duplicateImageData =
         'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';

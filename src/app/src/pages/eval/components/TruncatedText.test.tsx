@@ -6,6 +6,47 @@ import { describe, expect, it, vi } from 'vitest';
 import TruncatedText from './TruncatedText';
 
 describe('TruncatedText', () => {
+  it('passes the displayed tree to renderAfter across toggles and threshold changes', async () => {
+    const user = userEvent.setup();
+    const text = (
+      <span>
+        12345
+        <img src="/preview.png" alt="Preview" />
+        67890
+      </span>
+    );
+    const renderAfter = (visibleText: React.ReactNode) => <aside>{visibleText}</aside>;
+    const { container, rerender } = render(
+      <TruncatedText text={text} maxLength={4} renderAfter={renderAfter} />,
+    );
+    const expectMatchingTree = () => {
+      const displayed = container.querySelector('[id^="eval-output-cell-text-"] > span');
+      expect(container.querySelector('aside > span')?.outerHTML).toBe(displayed?.outerHTML);
+    };
+    expectMatchingTree();
+    expect(container.querySelector('aside img')).toBeNull();
+
+    await user.click(screen.getByText('...'));
+    expectMatchingTree();
+    expect(container.querySelector('aside img')).not.toBeNull();
+
+    await user.click(screen.getByText('Show less'));
+    expectMatchingTree();
+    expect(container.querySelector('aside img')).toBeNull();
+
+    rerender(<TruncatedText text={text} maxLength={5} renderAfter={renderAfter} />);
+    expectMatchingTree();
+    expect(container.querySelector('aside img')).not.toBeNull();
+
+    rerender(<TruncatedText text={text} maxLength={4} renderAfter={renderAfter} />);
+    expectMatchingTree();
+    expect(container.querySelector('aside img')).toBeNull();
+
+    rerender(<TruncatedText text={text} maxLength={0} renderAfter={renderAfter} />);
+    expectMatchingTree();
+    expect(container.querySelector('aside img')).not.toBeNull();
+  });
+
   it('should display truncated text with ellipsis and toggle UI when the input text length exceeds maxLength', () => {
     const longText =
       'This is a very long piece of text that is intended to be truncated by the component.';

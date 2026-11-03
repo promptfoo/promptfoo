@@ -1,15 +1,243 @@
 import React from 'react';
 
 import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
+import * as markdownConfig from './markdown-config';
 import VariableMarkdownCell from './VariableMarkdownCell';
 
 describe('VariableMarkdownCell', () => {
   describe('rendering', () => {
+    it.each([true, false])(
+      'preserves literal content when image extraction fails (forced=%s)',
+      (dataImagesOnly) => {
+        const value = `${'> '.repeat(8000)}![Preview](data:image/png;base64,AA==)`;
+        const { container } = render(
+          <VariableMarkdownCell
+            value={value}
+            maxTextLength={100000}
+            dataImagesOnly={dataImagesOnly}
+          />,
+        );
+        expect(screen.queryByRole('img')).not.toBeInTheDocument();
+        expect(container).toHaveTextContent(value);
+      },
+    );
+
     it('renders plain text content', () => {
       render(<VariableMarkdownCell value="Hello, world!" maxTextLength={100} />);
 
       expect(screen.getByText('Hello, world!')).toBeInTheDocument();
+    });
+
+    it.each([
+      '![request screenshot]()',
+      '![request screenshot](data:text/plain,diagnostic)',
+      '![request screenshot][image]\n\n[image]: data:text/plain,diagnostic',
+    ])('preserves alt text for an empty or filtered image source: %s', (value) => {
+      const onImageClick = vi.fn();
+      render(
+        <VariableMarkdownCell value={value} maxTextLength={200} onImageClick={onImageClick} />,
+      );
+
+      expect(screen.getByText('request screenshot')).toBeVisible();
+      expect(screen.queryByRole('img')).not.toBeInTheDocument();
+      expect(screen.queryByRole('button')).not.toBeInTheDocument();
+      expect(onImageClick).not.toHaveBeenCalled();
+    });
+
+    it('preserves the link label when its image source is filtered', () => {
+      render(
+        <VariableMarkdownCell
+          value="[![request screenshot](data:text/plain,diagnostic)](#details)"
+          maxTextLength={200}
+        />,
+      );
+
+      expect(screen.getByRole('link', { name: 'request screenshot' })).toHaveAttribute(
+        'href',
+        '#details',
+      );
+      expect(screen.queryByRole('img')).not.toBeInTheDocument();
+      expect(screen.queryByRole('button')).not.toBeInTheDocument();
+    });
+
+    it.each([
+      ['![request](data:text/plain,diagnostic "HTTP 500")', 'request'],
+      ['![](data:text/plain,diagnostic "HTTP 500")', 'HTTP 500'],
+      ['![request][image]\n\n[image]: data:text/plain,diagnostic "HTTP 500"', 'request'],
+    ])('preserves the title when an image source is filtered: %s', (value, label) => {
+      const onImageClick = vi.fn();
+      render(
+        <VariableMarkdownCell value={value} maxTextLength={200} onImageClick={onImageClick} />,
+      );
+
+      expect(screen.getByText(label)).toHaveAttribute('title', 'HTTP 500');
+      expect(screen.queryByRole('img')).not.toBeInTheDocument();
+      expect(screen.queryByRole('button')).not.toBeInTheDocument();
+      expect(onImageClick).not.toHaveBeenCalled();
+    });
+
+    it('skips ordinary text parsing and parses image syntax once', () => {
+      const extractSpy = vi.spyOn(markdownConfig, 'extractRenderableMarkdownImages');
+
+      try {
+        const ordinaryRender = render(
+          <VariableMarkdownCell value={'ordinary text '.repeat(10_000)} maxTextLength={100} />,
+        );
+        expect(extractSpy).not.toHaveBeenCalled();
+        ordinaryRender.unmount();
+
+        render(
+          <VariableMarkdownCell
+            value="![Preview](data:image/png;base64,AA==)"
+            maxTextLength={100}
+          />,
+        );
+        expect(extractSpy).toHaveBeenCalledTimes(1);
+      } finally {
+        extractSpy.mockRestore();
+      }
+    });
+
+    it('preserves literal Markdown around forced data-image previews', () => {
+      const dataUri = 'data:image/png;base64,AA==';
+      const value = [
+        '**literal emphasis**',
+        '[diagnostic]: https://example.com/debug',
+        `![Preview](${dataUri})`,
+        '![Remote](https://attacker.example/collect)',
+      ].join('\n');
+
+      const { container } = render(
+        <VariableMarkdownCell value={value} maxTextLength={200} dataImagesOnly />,
+      );
+
+      expect(container).toHaveTextContent('**literal emphasis**');
+      expect(container).toHaveTextContent('[diagnostic]: https://example.com/debug');
+      expect(container).toHaveTextContent('![Remote](https://attacker.example/collect)');
+      expect(container.querySelector('strong')).not.toBeInTheDocument();
+      expect(container.querySelector('a')).not.toBeInTheDocument();
+      expect(screen.getByRole('img', { name: 'Preview' })).toHaveAttribute('src', dataUri);
+    });
+
+    it('truncates literal reference definitions alongside an inline preview', async () => {
+      const user = userEvent.setup();
+      const dataUri = `data:image/png;base64,${'AaBb'.repeat(100)}`;
+      const definition = `[image]: data:image/png;base64,${'CcDd'.repeat(1000)}`;
+      const value = `![Inline](${dataUri})\n![Reference][image]\n\n${definition}`;
+      const { container } = render(
+        <VariableMarkdownCell value={value} maxTextLength={100} dataImagesOnly />,
+      );
+
+      expect(screen.getByRole('img', { name: 'Inline' })).toHaveAttribute('src', dataUri);
+      expect(screen.queryByRole('img', { name: 'Reference' })).not.toBeInTheDocument();
+      expect(container.textContent!.length).toBeLessThan(150);
+
+      await user.click(screen.getByText('...'));
+      expect(container).toHaveTextContent(definition);
+      expect(screen.getAllByRole('img')).toHaveLength(1);
+
+      await user.click(screen.getByText('Show less'));
+      expect(container.textContent!.length).toBeLessThan(150);
+      expect(screen.getByRole('img', { name: 'Inline' })).toHaveAttribute('src', dataUri);
+    });
+
+    it('does not force previews for reference-style data images', () => {
+      const value = ['![Preview][image]', `[image]: data:image/png;base64,${'A'.repeat(200)}`].join(
+        '\n',
+      );
+
+      const { container } = render(
+        <VariableMarkdownCell value={value} maxTextLength={40} dataImagesOnly />,
+      );
+
+      expect(screen.queryByRole('img')).not.toBeInTheDocument();
+      expect(container.querySelector('.truncation-toggler')).toBeInTheDocument();
+    });
+
+    it.each([
+      '![Blocked](javascript:alert%281%29)',
+      '![Blocked](data:text/html;base64,PHNjcmlwdD4=)',
+      '![Blocked](data:application/octet-streaming;base64,AA==)',
+      '![Blocked](DATA:APPLICATION/OCTET-STREAM+XML,AA==)',
+      '![Blocked][image]\n\n[image]: javascript:alert%281%29',
+    ])('keeps truncation when Markdown rejects an image source: %s', async (markdown) => {
+      const user = userEvent.setup();
+      const diagnostic = 'Long diagnostic text. '.repeat(100);
+      const value = `${markdown}\n\n${diagnostic}`;
+      const { container } = render(<VariableMarkdownCell value={value} maxTextLength={100} />);
+
+      expect(screen.queryByRole('img')).not.toBeInTheDocument();
+      expect(container).not.toHaveTextContent(diagnostic.trim());
+      expect(container.querySelector('.truncation-toggler')).toBeInTheDocument();
+
+      await user.click(screen.getByText('...'));
+
+      expect(container).toHaveTextContent(diagnostic.trim());
+      expect(screen.queryByRole('img')).not.toBeInTheDocument();
+    });
+
+    it.each(['data:image/png;base64', 'data:image/', 'data:image/;base64,AA=='])(
+      'keeps incomplete data-image diagnostics literal in forced mode: %s',
+      (source) => {
+        const value = `![Preview](${source} "diagnostic title")`;
+        const { container } = render(
+          <VariableMarkdownCell value={value} maxTextLength={200} dataImagesOnly />,
+        );
+        expect(screen.queryByRole('img')).not.toBeInTheDocument();
+        expect(container.textContent).toBe(value);
+      },
+    );
+
+    it.each([
+      'data:image/png;base64,',
+      'https://example.com/image.png?payload=',
+      '/images/test.png?payload=',
+    ])('keeps allowed image sources intact when Markdown is enabled: %s', (prefix) => {
+      const source = `${prefix}${'AaBb'.repeat(100)}`;
+      const { container } = render(
+        <VariableMarkdownCell value={`![Preview](${source})`} maxTextLength={100} />,
+      );
+
+      expect(screen.getByRole('img', { name: 'Preview' })).toHaveAttribute('src', source);
+      expect(container.querySelector('.truncation-toggler')).not.toBeInTheDocument();
+    });
+
+    it.each([
+      '[![Linked image](data:image/png;base64,AA==)](#details)',
+      '[![Linked image][image]][destination]\n\n[image]: data:image/png;base64,AA==\n[destination]: #details',
+    ])('preserves linked-image navigation without a nested preview button: %s', async (value) => {
+      const user = userEvent.setup();
+      const onImageClick = vi.fn();
+      const { container } = render(
+        <VariableMarkdownCell value={value} maxTextLength={100} onImageClick={onImageClick} />,
+      );
+
+      const link = screen.getByRole('link', { name: 'Linked image' });
+      expect(link).toHaveAttribute('href', '#details');
+      expect(container.querySelector('a button')).not.toBeInTheDocument();
+      const onLinkClick = vi.fn();
+      link.addEventListener('click', onLinkClick);
+      await user.click(screen.getByRole('img', { name: 'Linked image' }));
+      expect(onLinkClick).toHaveBeenCalledOnce();
+      expect(onLinkClick.mock.calls[0][0].defaultPrevented).toBe(false);
+      expect(onImageClick).not.toHaveBeenCalled();
+    });
+
+    it('preserves footnote link targets and accessibility attributes', () => {
+      const { container } = render(
+        <VariableMarkdownCell value={'Text[^1]\n\n[^1]: Footnote'} maxTextLength={100} />,
+      );
+
+      const reference = screen.getByRole('link', { name: '1' });
+      expect(reference).toHaveAttribute('id', 'user-content-fnref-1');
+      expect(reference).toHaveAttribute('aria-describedby', 'footnote-label');
+      expect(reference).toHaveAttribute('data-footnote-ref');
+      const back = screen.getByRole('link', { name: 'Back to reference 1' });
+      expect(back).toHaveAttribute('href', '#user-content-fnref-1');
+      expect(back).toHaveClass('data-footnote-backref');
+      expect(container.querySelector('a[node]')).not.toBeInTheDocument();
     });
 
     it('renders markdown bold text', () => {
