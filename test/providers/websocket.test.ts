@@ -897,12 +897,17 @@ describe('WebSocketProvider', () => {
           });
         }
         const controller = new AbortController();
-        controller.abort(new Error('fixture cancellation'));
+        const reason = new Error('fixture cancellation');
+        controller.abort(reason);
         const response = provider.callApi('hello', undefined, { abortSignal: controller.signal });
         const outcome = response.catch((error) => error);
         await vi.runAllTimersAsync();
 
-        await expect(outcome).resolves.toMatchObject({ name: 'AbortError' });
+        await expect(outcome).resolves.toMatchObject({
+          name: 'AbortError',
+          message: reason.message,
+          cause: reason,
+        });
         expect(WebSocket).not.toHaveBeenCalled();
         expect(vi.getTimerCount()).toBe(0);
       },
@@ -923,7 +928,11 @@ describe('WebSocketProvider', () => {
         expect(mockWs.close).toHaveBeenCalledOnce();
         expect(vi.getTimerCount()).toBe(0);
         expect(removeListener).toHaveBeenCalledWith('abort', expect.any(Function));
-        await expect(outcome).resolves.toMatchObject({ name: 'AbortError' });
+        await expect(outcome).resolves.toMatchObject({
+          name: 'AbortError',
+          message: 'fixture cancellation',
+          cause: 'fixture cancellation',
+        });
 
         const sent = mockWs.send.mock.calls.length;
         mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
@@ -1435,6 +1444,56 @@ describe('WebSocketProvider', () => {
       );
       expect((permanentError as NodeJS.ErrnoException).code).not.toBe('ECONNRESET');
       expect((permanentError as Error).message).toContain('1003');
+    });
+
+    it.each([
+      { wasClean: true, expectedCode: undefined },
+      { wasClean: false, expectedCode: 'ECONNRESET' },
+    ])(
+      'should classify a 1005 close using wasClean=$wasClean',
+      async ({ wasClean, expectedCode }) => {
+        provider = new WebSocketProvider('ws://test.com', {
+          config: {
+            messageTemplate: '{{ prompt }}',
+            streamResponse: (accumulator: any) => [accumulator, false],
+          },
+        });
+        const response = provider.callApi('close test').catch((error) => error);
+        await Promise.resolve();
+        mockWs.onclose?.({
+          type: 'close',
+          target: mockWs,
+          code: 1005,
+          reason: '',
+          wasClean,
+        } as WebSocket.CloseEvent);
+
+        const error = await response;
+        expect((error as NodeJS.ErrnoException).code).toBe(expectedCode);
+        expect((error as Error).message).toContain('1005');
+      },
+    );
+
+    it('should propagate a bounded reconnect delay for a 1012 close', async () => {
+      vi.spyOn(Math, 'random').mockReturnValue(0.5);
+      provider = new WebSocketProvider('ws://test.com', {
+        config: {
+          messageTemplate: '{{ prompt }}',
+          streamResponse: (accumulator: any) => [accumulator, false],
+        },
+      });
+      const response = provider.callApi('close test').catch((error) => error);
+      await Promise.resolve();
+      mockWs.onclose?.({
+        type: 'close',
+        target: mockWs,
+        code: 1012,
+        reason: '',
+        wasClean: false,
+      } as WebSocket.CloseEvent);
+
+      const error = await response;
+      expect(error).toMatchObject({ code: 'ECONNRESET', retryAfterMs: 15000 });
     });
   });
 });

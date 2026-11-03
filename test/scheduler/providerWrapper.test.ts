@@ -373,5 +373,19 @@ describe('providerWrapper', () => {
       const error = new Error(overflowingRetryAfter);
       expect(capturedOptions.getRetryAfter(undefined, error)).toBeUndefined();
     });
+
+    it('should read a finite retryAfterMs value from an error', async () => {
+      let capturedOptions: any;
+      mockExecute.mockImplementation(async (_provider, callFn, options) => {
+        capturedOptions = options;
+        return callFn();
+      });
+
+      const wrappedProvider = wrapProviderWithRateLimiting(mockProvider, mockRegistry);
+      await wrappedProvider.callApi('test');
+
+      const error = Object.assign(new Error('service restart'), { retryAfterMs: 15000 });
+      expect(capturedOptions.getRetryAfter(undefined, error)).toBe(15000);
+    });
   });
 });

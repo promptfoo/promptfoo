@@ -137,6 +137,17 @@ export function createProviderRateLimitOptions(
           }
         }
       }
+      // Providers with transport-specific recovery guidance can attach a
+      // finite delay directly to the error instead of encoding it in text.
+      const errorRetryAfterMs = (error as (Error & { retryAfterMs?: unknown }) | undefined)
+        ?.retryAfterMs;
+      if (
+        typeof errorRetryAfterMs === 'number' &&
+        Number.isFinite(errorRetryAfterMs) &&
+        errorRetryAfterMs >= 0
+      ) {
+        return errorRetryAfterMs;
+      }
       // Try to extract from error message (some providers include it)
       const match = error?.message?.match(/\bretry after (\d+)\b/i);
       if (match) {
