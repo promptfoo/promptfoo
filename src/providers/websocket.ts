@@ -4,13 +4,12 @@ import WebSocket, { type ClientOptions } from 'ws';
 import cliState from '../cliState';
 import { importModule } from '../esm';
 import logger from '../logger';
-import { getCallerAbortError } from '../util/fetch/requestSignal';
 import invariant from '../util/invariant';
 import { safeJsonStringify } from '../util/json';
 import { getProcessShim } from '../util/processShim';
 import { getNunjucksEngine } from '../util/templates';
 import { getSafeProviderId, sanitizeProviderObject } from './providerLogging';
-import { getRequestTimeoutMs } from './shared';
+import { getCallerAbortError, getRequestTimeoutMs } from './shared';
 import { normalizeResponseTransformResult } from './transformResult';
 import { parseFileTransformReference } from './transformUtils';
 

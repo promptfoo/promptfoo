@@ -3,6 +3,7 @@ import WebSocket from 'ws';
 import logger from '../../src/logger';
 import { createTransformResponse, WebSocketProvider } from '../../src/providers/websocket';
 import { RateLimitRegistry } from '../../src/scheduler/rateLimitRegistry';
+import { DEFAULT_RETRY_POLICY, shouldRetry } from '../../src/scheduler/retryPolicy';
 import { isProviderResponseRateLimited } from '../../src/scheduler/types';
 
 const websocketMocks = vi.hoisted(() => {
@@ -1445,6 +1446,28 @@ describe('WebSocketProvider', () => {
       expect((permanentError as NodeJS.ErrnoException).code).not.toBe('ECONNRESET');
       expect((permanentError as Error).message).toContain('1003');
     });
+
+    it.each([4502, 4503, 4504])(
+      'should keep terminal close code %s out of HTTP retries',
+      async (closeCode) => {
+        provider = new WebSocketProvider('ws://test.com', {
+          config: {
+            messageTemplate: '{{ prompt }}',
+            streamResponse: (accumulator: any) => [accumulator, false],
+          },
+        });
+        emitWebSocketEvents({ type: 'open' }, { type: 'close', code: closeCode });
+
+        const error = await provider.callApi('close test').then(
+          () => {
+            throw new Error('expected a rejection');
+          },
+          (err: unknown) => err,
+        );
+        expect((error as Error).message).toContain(String(closeCode));
+        expect(shouldRetry(0, error as Error, false, DEFAULT_RETRY_POLICY)).toBe(false);
+      },
+    );
 
     it.each([
       { wasClean: true, expectedCode: undefined },
