@@ -1199,6 +1199,44 @@ describe('evaluatorHelpers', () => {
       );
     });
 
+    it('should surface render errors for vars used through expression reads', async () => {
+      await expect(
+        renderPrompt(toPrompt("{{ v ~ 'tail' }}"), { v: '{% unknown %}' }, {}),
+      ).rejects.toThrow('unknown block tag: unknown');
+    });
+
+    it('should honor escaped quotes in protected literal expressions', async () => {
+      const template = "{{ 'it\\'s' }} {{x}}";
+      const renderedPrompt = await renderPrompt(
+        toPrompt('{"text": "{{v}}"}'),
+        { v: template, x: 'yes' },
+        {},
+      );
+
+      expect(renderedPrompt).toBe(JSON.stringify({ text: "it's yes" }, null, 2));
+      expect(renderedPrompt).toBe(
+        JSON.stringify({ text: getNunjucksEngine().renderString(template, { x: 'yes' }) }, null, 2),
+      );
+    });
+
+    it('should ignore raw markers after escaped quotes in literal expressions', async () => {
+      const template = "{{ 'it\\'s {% raw %}' ~ name }}";
+      const renderedPrompt = await renderPrompt(
+        toPrompt('{"text": "{{v}}"}'),
+        { v: template, name: 'Ada' },
+        {},
+      );
+
+      expect(renderedPrompt).toBe(JSON.stringify({ text: template }, null, 2));
+    });
+
+    it('should exclude callable test names from set RHS dependencies', async () => {
+      const template = "{% set even = n is divisibleby(2) %}{{ 'even' if even else 'odd' }}";
+      const renderedPrompt = await renderPrompt(toPrompt('{{v}}'), { v: template, n: 4 }, {});
+
+      expect(renderedPrompt).toBe('even');
+    });
+
     it('should check render failures against the prompt returned by a function', async () => {
       const prompt = {
         ...toPrompt('function source'),

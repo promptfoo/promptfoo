@@ -323,6 +323,10 @@ describe('extractVariablesFromExpression', () => {
     }
   });
 
+  it('excludes callable test names from expression references', () => {
+    expect(extractVariablesFromExpression('{{ n is divisibleby(2) }}')).toEqual(['n']);
+  });
+
   it('reports parse failure so callers can retain their conservative fallback', () => {
     expect(extractVariablesFromExpression('{{ broken')).toBeUndefined();
   });

@@ -113,6 +113,7 @@ const PATH_PLACEHOLDER_REGEX = /\{\{\s*([\w.]+)\s*\}\}/g;
 // safe to render without treating the rest of a runtime value as source.
 const PROTECTED_LITERAL_EXPRESSION_REGEX =
   /\{\{\s*(?:'(?:\\.|[^'\\])*'|"(?:\\.|[^"\\])*")(?:\s*~\s*(?:'(?:\\.|[^'\\])*'|"(?:\\.|[^"\\])*"))*\s*\}\}/;
+const QUOTE_CHARACTERS = new Set(['"', "'"]);
 
 // Precompute nesting depth at every position in one forward scan.
 // Depth is the number of unclosed {{ or {% delimiters before each character.
@@ -136,13 +137,16 @@ function computeNestingDepths(
     }
     const ch = value[i];
     if (quote) {
-      // Inside a quoted string: only the matching quote ends it.
-      if (ch === quote) {
+      // Inside a quoted string: only an unescaped matching quote ends it.
+      if (ch === '\\') {
+        depths[i + 1] = depth;
+        i++;
+      } else if (ch === quote) {
         quote = null;
       }
       continue;
     }
-    if (ch === '"' || ch === "'") {
+    if (QUOTE_CHARACTERS.has(ch)) {
       quote = ch;
       continue;
     }
@@ -237,7 +241,9 @@ function collectRawSpans(value: string): Array<[number, number]> {
       continue;
     }
     if (depth === 0 && quote) {
-      if (ch === quote) {
+      if (ch === '\\') {
+        i++;
+      } else if (ch === quote) {
         quote = null;
       }
       continue;
@@ -772,7 +778,9 @@ export async function renderPrompt(
   );
   // Determine which vars the resolved prompt actually references so render
   // failures on unused values can be suppressed without hiding errors on used ones.
-  const promptReferencedVars = new Set(extractVariablesFromTemplate(basePrompt));
+  const promptReferencedVars = new Set(
+    extractVariablesFromExpression(basePrompt) ?? extractVariablesFromTemplate(basePrompt),
+  );
   const renderedVars = Object.fromEntries(
     Object.entries(vars).map(([key, value]) => {
       if (

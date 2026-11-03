@@ -618,6 +618,24 @@ function collectExpressionReferences(
   parent: NunjucksParentContext | undefined,
   references: Set<string>,
 ): void {
+  if (node.typename === 'Is') {
+    if (isNunjucksAstNode(node.left)) {
+      collectExpressionReferences(node.left, { field: 'left', node }, references);
+    }
+    const right = node.right;
+    if (!isNunjucksAstNode(right)) {
+      return;
+    }
+    if (right.typename === 'FunCall') {
+      if (isNunjucksAstNode(right.args)) {
+        collectExpressionReferences(right.args, { field: 'args', node: right }, references);
+      }
+    } else if (right.typename !== 'Symbol') {
+      collectExpressionReferences(right, { field: 'right', node }, references);
+    }
+    return;
+  }
+
   if (node.typename === 'Symbol' && typeof node.value === 'string') {
     if (!isNonReferenceSymbol(parent)) {
       references.add(node.value);
