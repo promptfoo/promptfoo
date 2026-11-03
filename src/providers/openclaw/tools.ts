@@ -40,6 +40,10 @@ export class OpenClawToolInvokeProvider implements ApiProvider {
     this.timeoutMs = this.openclawConfig.timeoutMs ?? getRequestTimeoutMs();
   }
 
+  get config(): Pick<OpenClawConfig, 'session_key'> {
+    return { session_key: this.openclawConfig.session_key };
+  }
+
   id(): string {
     return `openclaw:tools:${this.toolName}`;
   }
