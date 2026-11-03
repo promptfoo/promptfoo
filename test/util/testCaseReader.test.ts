@@ -1881,6 +1881,18 @@ describe('readVarsFiles', () => {
     expect(result).toEqual({ var1: 'value1', var2: 'value2' });
   });
 
+  it('should load vars files without test-config assertion detection', async () => {
+    vi.mocked(fs.readFileSync).mockReturnValue(
+      'payload:\n  assert:\n    - value: file://snippet.js',
+    );
+    vi.mocked(globSync).mockReturnValue(['vars.yaml']);
+
+    await readTestFiles('vars.yaml');
+
+    const args = vi.mocked(maybeLoadConfigFromExternalFile).mock.calls[0];
+    expect(args[1]).toBeUndefined();
+  });
+
   it('should read variables from multiple YAML files', async () => {
     const yamlContent1 = 'var1: value1';
     const yamlContent2 = 'var2: value2';
