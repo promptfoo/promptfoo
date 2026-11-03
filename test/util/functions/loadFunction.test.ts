@@ -312,6 +312,13 @@ describe('parseFileUrl', () => {
     });
   });
 
+  it('should keep multi-colon data file names intact', () => {
+    const result = parseFileUrl('file://data.js:2026-05-27T12:00:00.json');
+    expect(result).toEqual({
+      filePath: 'data.js:2026-05-27T12:00:00.json',
+    });
+  });
+
   it('should keep a colon in a directory name before the script file', () => {
     const result = parseFileUrl('file://project.js:old/hooks.js:handler');
     expect(result).toEqual({
