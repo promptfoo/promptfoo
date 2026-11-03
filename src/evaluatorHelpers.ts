@@ -265,7 +265,8 @@ function renderTemplateString(
     return templateStr;
   }
   const filterKey = getFilterKey(nunjucksFilters);
-  const cacheKey = filterKey ? `${filterKey}:${templateStr}` : templateStr;
+  // Always prefix, so a filterless template whose text starts with `f1:` can't share a key with a filtered one.
+  const cacheKey = `${filterKey}:${templateStr}`;
   let tmpl = promptTemplateCache.get(cacheKey);
   if (!tmpl) {
     tmpl = new nunjucks.Template(templateStr, getEngine());
