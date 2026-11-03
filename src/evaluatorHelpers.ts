@@ -178,6 +178,9 @@ function computeNestingDepths(
 function firstUnprotectedPlaceholder(
   value: string,
 ): { placeholder: string; varName: string; index: number } | null {
+  if (!value.includes('{{')) {
+    return null;
+  }
   const rawSpans = collectRawSpans(value);
   const depths = computeNestingDepths(value, rawSpans);
   let spanIdx = 0;
@@ -216,21 +219,36 @@ function collectRawSpans(value: string): Array<[number, number]> {
   let spanStart = 0;
   let lastTokenEnd = 0;
   let quote: string | null = null;
+  let inExpression = false;
+  let inComment = false;
   for (let i = 0; i < value.length; i++) {
     const ch = value[i];
-    if (quote) {
+    const two = value.slice(i, i + 2);
+    if (inComment) {
+      if (two === '#}') {
+        inComment = false;
+        i++;
+      }
+      continue;
+    }
+    if (depth === 0 && !inExpression && two === '{#') {
+      inComment = true;
+      i++;
+      continue;
+    }
+    if (depth === 0 && quote) {
       if (ch === quote) {
         quote = null;
       }
       continue;
     }
-    if (ch === '"' || ch === "'") {
+    if (depth === 0 && inExpression && (ch === '"' || ch === "'")) {
       quote = ch;
       continue;
     }
-    // Check for raw/endraw token at this position.
-    const remaining = value.substring(i);
-    const rawMatch = /^\{%-?\s*(raw|endraw)\s*-?%\}/.exec(remaining);
+    // Raw bodies are always literal. Quotes and comment delimiters only have
+    // syntactic meaning in real expressions, tags, or comments outside them.
+    const rawMatch = ch === '{' ? /^\{%-?\s*(raw|endraw)\s*-?%\}/.exec(value.slice(i)) : null;
     if (rawMatch) {
       const tokenEnd = i + rawMatch[0].length;
       if (rawMatch[1] === 'raw') {
@@ -247,6 +265,14 @@ function collectRawSpans(value: string): Array<[number, number]> {
         }
       }
       i = tokenEnd - 1; // loop will i++
+      continue;
+    }
+    if (depth === 0 && inExpression && (two === '}}' || two === '%}')) {
+      inExpression = false;
+      i++;
+    } else if (depth === 0 && !inExpression && (two === '{{' || two === '{%')) {
+      inExpression = true;
+      i++;
     }
   }
   if (depth > 0) {
@@ -259,6 +285,9 @@ function collectRawSpans(value: string): Array<[number, number]> {
 // historically supplied variables as data. A plain {{...}} in a CSV or file
 // value is not, by itself, an opt-in to evaluate that value as template source.
 function hasProtectedLiteralSyntax(value: string): boolean {
+  if (!value.includes('{{') && !value.includes('{%')) {
+    return false;
+  }
   return collectRawSpans(value).length > 0 || PROTECTED_LITERAL_EXPRESSION_REGEX.test(value);
 }
 
@@ -290,19 +319,7 @@ function rawSpanLiteralContent(value: string, start: number, end: number): strin
     return span;
   }
   let depth = 1;
-  let quote: string | null = null;
   for (let i = opener[0].length; i < span.length; i++) {
-    const ch = span[i];
-    if (quote) {
-      if (ch === quote) {
-        quote = null;
-      }
-      continue;
-    }
-    if (ch === '"' || ch === "'") {
-      quote = ch;
-      continue;
-    }
     const token = /^\{%-?\s*(raw|endraw)\s*-?%\}/.exec(span.slice(i));
     if (!token) {
       continue;
@@ -381,6 +398,7 @@ function referencesUndefinedVariables(template: string, vars: Record<string, Var
   // pass that resolves the raw block.
   const spans = collectRawSpans(template);
   let scrubbed = mapSpans(template, spans, () => '');
+  scrubbed = scrubbed.replace(/\{#[\s\S]*?#\}/g, '');
   // A quoted placeholder inside a surrounding expression or block tag is
   // literal text too: {{ '{{x}}' }} renders to the text {{x}}, so x is not a
   // dependency. The extractor below is regex-based and would report it, so
@@ -400,13 +418,14 @@ function referencesUndefinedVariables(template: string, vars: Record<string, Var
   // of a set can reference external variables, so those still count.
   const defined = new Set<string>();
   const setRhsVars: string[] = [];
-  for (const match of scrubbed.matchAll(
-    /\{%\s*-?\s*set\s+([A-Za-z_]\w*)\s*=\s*([^%]+?)\s*-?%\}/g,
-  )) {
+  for (const match of scrubbed.matchAll(/\{%\s*-?\s*set\s+([A-Za-z_]\w*)\s*=\s*([^%]+)%\}/g)) {
     defined.add(match[1]!);
     // Parse the RHS once and collect real expression references from its AST.
     // A parse failure keeps the previous conservative identifier fallback.
-    const rhs = match[2] || '';
+    // The greedy [^%] boundary avoids the lazy-RHS/trailing-whitespace
+    // backtracking ambiguity; remove the optional whitespace-control dash here.
+    const rhsSource = (match[2] || '').trimEnd();
+    const rhs = (rhsSource.endsWith('-') ? rhsSource.slice(0, -1) : rhsSource).trimEnd();
     const references = extractVariablesFromExpression(`{{ ${rhs} }}`);
     setRhsVars.push(...(references ?? rhs.match(/[A-Za-z_]\w*/g) ?? []));
   }

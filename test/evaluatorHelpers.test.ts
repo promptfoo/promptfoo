@@ -1032,6 +1032,19 @@ describe('evaluatorHelpers', () => {
       expect(renderedPrompt).toBe(JSON.stringify({ text: '{{ yes' }, null, 2));
     });
 
+    it.each([
+      ['inside', "{% raw %}don't {{x}}{% endraw %}"],
+      ['before', "don't {% raw %}{{x}}{% endraw %}"],
+    ])('should treat apostrophes %s a raw body as literal text', async (_name, value) => {
+      const renderedPrompt = await renderPrompt(
+        toPrompt('{"text": "{{v}}"}'),
+        { v: value, x: 'yes' },
+        {},
+      );
+
+      expect(renderedPrompt).toBe(JSON.stringify({ text: "don't {{x}}" }, null, 2));
+    });
+
     it('should not execute a set-bound constructor beside protected literals', async () => {
       const payload =
         '{% set range = [] %}{% raw %}x{% endraw %}{{ range.constructor("return 6 * 7")() }}';
@@ -1061,6 +1074,23 @@ describe('evaluatorHelpers', () => {
       );
 
       expect(renderedPrompt).toBe('HelloAda');
+    });
+
+    it('should ignore set tags inside comments when collecting external dependencies', async () => {
+      const renderedPrompt = await renderPrompt(
+        toPrompt('{{v}}'),
+        { v: '{# {% set local = missing %} #}hello' },
+        {},
+      );
+
+      expect(renderedPrompt).toBe('hello');
+    });
+
+    it('should preserve whitespace-control dashes on set tags', async () => {
+      const template = "{% set greeting = 'Hello' -%} {{ greeting }}";
+      const renderedPrompt = await renderPrompt(toPrompt('{{v}}'), { v: template }, {});
+
+      expect(renderedPrompt).toBe(getNunjucksEngine().renderString(template, {}));
     });
 
     it('should decode raw spans without evaluating a surrounding set program', async () => {
