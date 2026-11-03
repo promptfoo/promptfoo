@@ -320,6 +320,21 @@ describe('parseFileUrl', () => {
     });
   });
 
+  it('should split namespaced Ruby methods after a colon-containing path', () => {
+    expect(parseFileUrl('file://dir:name/assert.rb:Validators::Format.check')).toEqual({
+      filePath: 'dir:name/assert.rb',
+      functionName: 'Validators::Format.check',
+    });
+    expect(parseFileUrl('file://./2026-05-27T12:00/assert.rb:Mod::fn')).toEqual({
+      filePath: './2026-05-27T12:00/assert.rb',
+      functionName: 'Mod::fn',
+    });
+    expect(parseFileUrl('file://project.js:old/assert.rb:Mod::fn')).toEqual({
+      filePath: 'project.js:old/assert.rb',
+      functionName: 'Mod::fn',
+    });
+  });
+
   it('should parse file URL without function name', () => {
     const result = parseFileUrl('file:///path/to/file.js');
     expect(result).toEqual({
