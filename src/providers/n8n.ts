@@ -358,6 +358,10 @@ export class N8nProvider implements ApiProvider {
     return this.providerId;
   }
 
+  getEvaluationInputs(context: Pick<CallApiContextParams, 'prompt' | 'vars'>) {
+    return { hasSharedSession: Boolean(this.getRequestSessionId(context)) };
+  }
+
   toString(): string {
     return `[n8n Provider ${this.providerId}]`;
   }

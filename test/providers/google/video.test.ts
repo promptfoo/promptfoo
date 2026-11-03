@@ -226,6 +226,71 @@ describe('GoogleVideoProvider', () => {
     });
   });
 
+  it.each(
+    videoTransports.flatMap((transport) =>
+      (['image', 'lastImage', 'referenceImages', 'extendVideoId'] as const).flatMap((field) =>
+        (['inherited', 'prompt', 'prompt without basePath'] as const).map((owner) => ({
+          transport,
+          field,
+          owner,
+        })),
+      ),
+    ),
+  )(
+    'declares exactly the media paths read by $transport for $field owned by $owner',
+    async ({ transport, field, owner }) => {
+      const providerBasePath = path.resolve('/tmp', 'provider-video-inputs');
+      const promptBasePath = path.resolve('/tmp', 'prompt-video-inputs');
+      const fileRef = 'file://assets/input.png';
+      const media =
+        field === 'referenceImages'
+          ? {
+              referenceImages: [
+                fileRef,
+                { image: 'file://assets/second.png', referenceType: 'asset' as const },
+              ],
+            }
+          : { [field]: fileRef };
+      const providerConfig: GoogleVideoOptions = {
+        basePath: providerBasePath,
+        ...(field === 'lastImage' && { image: 'inline-base64' }),
+        ...media,
+      };
+      const promptConfig: GoogleVideoOptions =
+        owner === 'inherited'
+          ? { basePath: promptBasePath }
+          : { ...(owner === 'prompt' && { basePath: promptBasePath }), ...media };
+      vi.mocked(fs.existsSync).mockReturnValue(true);
+      vi.mocked(fs.readFileSync).mockReturnValue(Buffer.from('media bytes'));
+      const provider = new GoogleVideoProvider('veo-3.1-generate-preview', {
+        id: 'video-alias',
+        config: providerConfig,
+      });
+      const files = provider.getInputFilePaths({
+        prompt: { raw: 'question', label: 'video', config: promptConfig },
+        vars: {},
+      });
+      expect(files.length).toBe(field === 'referenceImages' ? 2 : 1);
+      await callVideoProviderWithPromptConfig(transport, providerConfig, promptConfig);
+      expect(
+        [...new Set(vi.mocked(fs.readFileSync).mock.calls.map(([file]) => file))].sort(),
+      ).toEqual(files);
+    },
+  );
+
+  it('does not declare inert strings, remote media, or unused reference images', () => {
+    const provider = new GoogleVideoProvider('veo-3.1-generate-preview', {
+      config: {
+        negativePrompt: 'file://literal-description',
+        image: 'base64',
+        sourceVideo: 'gs://bucket/video.mp4',
+        referenceImages: ['base64', 'base64', 'base64', 'file://unused-fourth.png'],
+      },
+    });
+    expect(provider.getInputFilePaths()).toEqual([]);
+    expect(fs.readFileSync).not.toHaveBeenCalled();
+  });
+
   describe('pricing', () => {
     it.each([
       ['veo-3.1-generate-preview', '720p', 4, 1.6],

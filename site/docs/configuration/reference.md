@@ -45,6 +45,7 @@ Here is the main structure of the promptfoo configuration file:
 | tracing                         | TracingConfig                                                                                                                                         | No                             | [OpenTelemetry tracing](/docs/tracing) configuration                                                                                                                                                                            |
 | evaluateOptions.maxConcurrency  | number                                                                                                                                                | No                             | Maximum number of concurrent requests. Defaults to 4                                                                                                                                                                            |
 | evaluateOptions.repeat          | number                                                                                                                                                | No                             | Number of times to run each test case. Defaults to 1                                                                                                                                                                            |
+| evaluateOptions.bayesAtN        | boolean                                                                                                                                               | No                             | Report binary Bayes@N posterior mean and standard deviation for each provider/prompt. Defaults to false. See [EvaluateOptions](#evaluateoptions).                                                                               |
 | evaluateOptions.delay           | number                                                                                                                                                | No                             | Force the test runner to wait after each API call (milliseconds). Defaults to 0                                                                                                                                                 |
 | evaluateOptions.showProgressBar | boolean                                                                                                                                               | No                             | Whether to display the progress bar                                                                                                                                                                                             |
 | evaluateOptions.cache           | boolean                                                                                                                                               | No                             | Whether to use disk [cache](/docs/configuration/caching) for results (default: true)                                                                                                                                            |
@@ -1132,6 +1133,7 @@ interface EvaluateOptions {
   interactiveProviders?: boolean;
   maxConcurrency?: number;
   repeat?: number;
+  bayesAtN?: boolean;
   showProgressBar?: boolean;
   timeoutMs?: number;
   maxEvalTimeMs?: number;
@@ -1149,6 +1151,70 @@ interface EvaluateOptions {
 ```
 
 ## Evaluation outputs
+
+Set `evaluateOptions: { repeat: 10, bayesAtN: true, cache: false }` to report
+[Bayes@N](https://arxiv.org/abs/2510.04265v4) for repeated pass/fail outcomes. The CLI
+shows the posterior mean and posterior standard deviation on the 0–1 scale. JSON
+exports include them in `results.repeatStability.bayesAtN`, with `questions` (M),
+`trials` (N), `promptIdx`, and provider identity for each cohort.
+
+Each original test/expanded variable combination is one question. For a question
+with s passes in N trials, the posterior is Beta(s + 1, N − s + 1). The reported
+mean averages the question posterior means; `posteriorStd` is the square root of
+their summed variances divided by M. It describes uncertainty about the average
+latent pass probability on this fixed question set. Existing Wilson intervals
+remain separate. Only final boolean pass/fail grades enter the posterior.
+
+Use independent generations with comparable grading and a fixed number of trials
+per question. Every scheduled question and repeat index must be present. Cohorts
+with errors, cached target responses or grading, duplicate/missing indices, or
+unequal repeat counts have an `unavailableReason` instead of posterior moments.
+Runs with precomputed `providerOutput`, redteam, comparison assertions (including
+inside assertion sets), `_conversation`, `storeOutputAs`, or shared provider
+sessions are unsupported. This binary variant uses a uniform prior without prior
+observations or rubric weights.
+
+Bayes@N supports fresh evaluations with an empty result record. Resume,
+`eval --retry-errors`, and the dedicated `retry` command are unsupported, including
+for older Bayes@N records. Start a new evaluation after an interrupted run. The
+count-only schedule in `metadata.bayesAtNPlan` lets completed saved and imported
+results reconstruct their summaries. It contains no input fingerprints. Results
+without a schedule do not get posterior estimates. Exports made with
+`PROMPTFOO_STRIP_GRADING_RESULT` retain the computed summary but omit the schedule;
+imported copies cannot recompute Bayes@N without the original grading evidence.
+Legacy input fingerprints are removed from exported plans.
+
+Shared-session option names are reserved in Bayes@N, including with custom
+provider IDs: `persistSession`, `session_id`, `persist_sessions`, `thread_id`,
+`persist_threads`, `resume`, `continue`, `sessionId`, `session_key`, and `session`.
+The restriction also covers `runOptions.session`, OpenClaw's session-key header,
+Claude's session-related `extra_args` flags, Slack's `threadTs`, and n8n's prepared
+`vars.sessionId`. Target overrides and configured graders are checked too.
+Remove shared-session modes from base provider configuration even if a per-test
+option disables them, since some providers read only their base configuration.
+Saving a fresh Claude session with `persist_session` or creating a fresh OpenCode
+child with `parent_session_id` is allowed.
+
+Prompt and file inputs are prepared once per scheduled trial. Each call receives
+its own mutable grading state. In-memory consistency checks require identical
+question and grading inputs across repeats, and check again after `beforeEach`.
+These checks include native assertion file inputs such as `contextTransform` and
+`rubricPrompt`, including environment-expanded rubric file paths. No fingerprints
+are saved. Use plain data objects for vars and grading options; maps, sets, and
+cyclic data are unsupported.
+
+Loaded providers can describe private nonsecret configuration, input files, and
+context-dependent session reuse through the synchronous
+`getEvaluationInputs(context)` hook. It must return absolute file paths without
+network calls or mutation. The older `getInputFilePaths(context)` hook remains
+supported for file declarations. Google Video declares media inputs using its
+native aliases and owning base paths. HTTP declares multipart path sources using
+its native template and path rules. Multipart modes with request transforms or
+dynamically fetched authentication/session variables, and templated multipart
+paths in graders, are unsupported. OpenClaw private header modes are unsupported.
+Provider instances that expose neither public configuration nor an input
+descriptor are rejected, as are recognized undeclared file modes. Custom callbacks must keep captured state, code dependencies,
+authentication scope, and other external inputs fixed throughout the run.
 
 ### EvaluateTable
 

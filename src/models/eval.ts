@@ -46,6 +46,7 @@ import {
   sanitizeConfigForOutput,
   sanitizeRuntimeOptions,
   sanitizeTracingConfigForPersistence,
+  stripBayesAtNInputHashes,
 } from '../util/sanitizer';
 import { getCurrentTimestamp } from '../util/time';
 import {
@@ -807,7 +808,9 @@ export default class Eval {
   async getObservedRepeatStability(): Promise<RepeatStabilitySummary | undefined> {
     // Read final grading from the existing result store. Retaining each raw response
     // here both defeats persisted-eval batching and reports stale comparison verdicts.
-    return this.observedRepeatedResults ? this.getRepeatStability() : undefined;
+    return this.observedRepeatedResults || this.config.metadata?.bayesAtNPlan
+      ? this.getRepeatStability()
+      : undefined;
   }
 
   recordResultPersistenceFailure(result: EvaluateResult) {
@@ -1509,14 +1512,7 @@ export default class Eval {
     return stats;
   }
 
-  async getRepeatStability(): Promise<RepeatStabilitySummary | undefined> {
-    if (this.useOldResults()) {
-      return calculateRepeatStability(this.oldResults?.results ?? []);
-    }
-
-    const calculator = new RepeatStabilityCalculator();
-    // Failed writes and their finalized comparisons are already retained for artifact
-    // recovery. Prefer those authoritative rows over stale or missing database rows.
+  private getRecoveredResults(): Map<string, EvalResult | EvaluateResult> {
     const recovered = new Map<string, EvalResult | EvaluateResult>(this.failedResults);
     for (const [key, result] of this.failedEvalResults) {
       recovered.set(key, result);
@@ -1524,6 +1520,21 @@ export default class Eval {
     for (const [key, result] of this.finalJsonlResults) {
       recovered.set(key, result);
     }
+    return recovered;
+  }
+
+  async getRepeatStability(): Promise<RepeatStabilitySummary | undefined> {
+    if (this.useOldResults()) {
+      return calculateRepeatStability(
+        this.oldResults?.results ?? [],
+        this.config.metadata?.bayesAtNPlan,
+      );
+    }
+
+    const calculator = new RepeatStabilityCalculator(this.config.metadata?.bayesAtNPlan);
+    // Failed writes and their finalized comparisons are already retained for artifact
+    // recovery. Prefer those authoritative rows over stale or missing database rows.
+    const recovered = this.getRecoveredResults();
     for await (const batch of this.fetchResultsBatched()) {
       for (const result of batch) {
         const key = getResultIndexKey(result);
@@ -1538,13 +1549,13 @@ export default class Eval {
   async toEvaluateSummary(): Promise<EvaluateSummaryV3 | EvaluateSummaryV2> {
     if (this.useOldResults()) {
       invariant(this.oldResults, 'Old results not found');
-      return {
+      return stripBayesAtNInputHashes({
         version: 2,
         timestamp: new Date(this.createdAt).toISOString(),
         results: this.oldResults.results,
         table: this.oldResults.table,
         stats: this.oldResults.stats,
-      };
+      });
     }
     if (this.results.length === 0) {
       await this.loadResults();
@@ -1555,14 +1566,30 @@ export default class Eval {
 
     const prompts = this.prompts.map((p) => projectPrompt(p, stripFlags.shouldStripPromptText));
 
-    const calculator = new RepeatStabilityCalculator();
-    const results = this.results.map((result) => {
-      const exported = result.toEvaluateResult(stripFlags);
-      // Output stripping must not turn cached grading into independent samples.
-      // Keep projected labels in the summary while using the original cache evidence.
-      calculator.addResult({ ...exported, gradingResult: result.gradingResult });
-      return exported;
+    const calculator = new RepeatStabilityCalculator(this.config.metadata?.bayesAtNPlan);
+    const recovered = calculator.getSummary()?.bayesAtN
+      ? this.getRecoveredResults()
+      : new Map<string, EvalResult | EvaluateResult>();
+    const authoritative = this.results.map((result) => {
+      const key = getResultIndexKey(result);
+      const row = recovered.get(key) ?? result;
+      recovered.delete(key);
+      return row;
     });
+    authoritative.push(...recovered.values());
+    const results = await Promise.all(
+      authoritative.map(async (row) => {
+        const result =
+          row instanceof EvalResult
+            ? row
+            : await EvalResult.createFromEvaluateResult(this.id, row, { persist: false });
+        const exported = result.toEvaluateResult(stripFlags);
+        // Output stripping must not turn cached grading into independent samples.
+        // Keep projected labels in the summary while using the original cache evidence.
+        calculator.addResult({ ...exported, gradingResult: result.gradingResult });
+        return exported;
+      }),
+    );
     const repeatStability = calculator.getSummary();
 
     return {

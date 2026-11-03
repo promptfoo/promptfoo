@@ -1,3 +1,5 @@
+import { BayesAtNCalculator } from './bayesAtN';
+
 const WILSON_Z_95 = 1.959963984540054;
 // ResultFailureReason.ERROR's persisted value. Keep this aggregator structurally typed so it
 // does not add another node-to-legacy-contracts dependency solely for result projections.
@@ -31,6 +33,7 @@ interface RepeatStabilitySummary {
   groupsWithErrors: number;
   cachedResults: number;
   groups: RepeatStabilityGroup[];
+  bayesAtN?: ReturnType<BayesAtNCalculator['getSummary']>;
 }
 
 export function getWilsonScoreInterval(
@@ -113,6 +116,13 @@ function getGroupKey(result: RepeatStabilityResult): string {
 
 export class RepeatStabilityCalculator {
   private groups = new Map<string, MutableRepeatStabilityGroup>();
+  private bayesAtN?: BayesAtNCalculator;
+
+  constructor(bayesAtNPlan?: unknown) {
+    if (bayesAtNPlan !== undefined) {
+      this.bayesAtN = new BayesAtNCalculator(bayesAtNPlan);
+    }
+  }
 
   addResults(results: Iterable<RepeatStabilityResult>): void {
     for (const result of results) {
@@ -121,6 +131,11 @@ export class RepeatStabilityCalculator {
   }
 
   addResult(result: RepeatStabilityResult): void {
+    let cached: boolean | undefined;
+    if (this.bayesAtN) {
+      cached = isCachedResult(result);
+      this.bayesAtN.addResult(result, cached);
+    }
     if (
       !result.repeatGroupId ||
       result.repeatIndex === undefined ||
@@ -147,7 +162,7 @@ export class RepeatStabilityCalculator {
     };
 
     group.repetitions++;
-    if (isCachedResult(result)) {
+    if (cached ?? isCachedResult(result)) {
       group.cached++;
     }
     if (result.failureReason === ERROR_FAILURE_REASON) {
@@ -164,7 +179,8 @@ export class RepeatStabilityCalculator {
   }
 
   getSummary(): RepeatStabilitySummary | undefined {
-    if (this.groups.size === 0) {
+    const bayesAtN = this.bayesAtN?.getSummary();
+    if (this.groups.size === 0 && !bayesAtN) {
       return undefined;
     }
 
@@ -193,14 +209,16 @@ export class RepeatStabilityCalculator {
       groupsWithErrors: groups.filter((group) => group.errors > 0).length,
       cachedResults: groups.reduce((total, group) => total + group.cached, 0),
       groups,
+      ...(bayesAtN && { bayesAtN }),
     };
   }
 }
 
 export function calculateRepeatStability(
   results: Iterable<RepeatStabilityResult>,
+  bayesAtNPlan?: unknown,
 ): RepeatStabilitySummary | undefined {
-  const calculator = new RepeatStabilityCalculator();
+  const calculator = new RepeatStabilityCalculator(bayesAtNPlan);
   calculator.addResults(results);
   return calculator.getSummary();
 }

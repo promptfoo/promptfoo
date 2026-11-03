@@ -13,6 +13,7 @@ export {
 export { setupEnv } from './env';
 // File operations
 export {
+  getNunjucksEngineForFilePath,
   maybeLoadFromExternalFileWithVars,
   maybeLoadResponseFormatFromExternalFile,
   maybeLoadToolsFromExternalFile,

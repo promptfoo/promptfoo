@@ -27,9 +27,10 @@ import Eval from '../../src/models/eval';
 import EvalResult from '../../src/models/evalResult';
 import { blobsRouter } from '../../src/server/routes/blobs';
 import { TraceStore } from '../../src/tracing/store';
-import { ResultFailureReason } from '../../src/types/index';
+import { type EvaluateSummaryV3, ResultFailureReason } from '../../src/types/index';
 import { sha256 } from '../../src/util/createHash';
 import { createOutputData } from '../../src/util/output';
+import { createEvaluateResult } from '../factories/eval';
 import { createTempDir, mockProcessEnv, removeTempDir } from '../util/utils';
 
 vi.mock('../../src/logger', () => ({
@@ -94,6 +95,95 @@ describe('importCommand', () => {
       fs.unlinkSync(tempFilePath);
     }
   });
+
+  it.each([
+    { strip: false, cached: false },
+    { strip: false, cached: true },
+    { strip: true, cached: false },
+    { strip: true, cached: true },
+  ])(
+    'restores Bayes@N only with retained grading evidence (strip=$strip, cached=$cached)',
+    async ({ strip, cached }) => {
+      const plan = {
+        version: 1,
+        groups: [
+          {
+            repeatGroupId: 'question',
+            promptIdx: 0,
+            provider: { id: 'test-provider' },
+            repetitions: 1,
+            inputHash: `sha256:${'ab'.repeat(32)}`,
+          },
+        ],
+      };
+      const source = await Eval.create(
+        {
+          env: { PROMPTFOO_STRIP_GRADING_RESULT: String(strip) },
+          metadata: {
+            bayesAtNPlan: plan,
+            apiKey: 'adjacent-secret',
+            opaqueCredential: 'c'.repeat(64),
+            label: 'retained',
+          },
+        },
+        [],
+        { id: 'bayes-export-source' },
+      );
+      await source.addResult(
+        createEvaluateResult({
+          repeatGroupId: 'question',
+          repeatIndex: 0,
+          response: { output: 'answer' },
+          gradingResult: {
+            pass: true,
+            score: 1,
+            reason: 'graded',
+            componentResults: [
+              {
+                pass: true,
+                score: 1,
+                reason: 'component',
+                metadata: { cachedResponse: cached },
+              },
+            ],
+          },
+        }),
+      );
+      const exported = await createOutputData(source, null);
+      expect(exported.config.metadata).toMatchObject({
+        apiKey: '[REDACTED]',
+        opaqueCredential: '[REDACTED]',
+        label: 'retained',
+      });
+      const summary = exported.results as EvaluateSummaryV3;
+      if (cached) {
+        expect(summary.repeatStability?.bayesAtN?.[0].unavailableReason).toContain('cached');
+      } else {
+        expect(summary.repeatStability?.bayesAtN?.[0].mean).toBeCloseTo(2 / 3, 14);
+      }
+      tempFilePath = path.join(__dirname, `temp-bayes-${strip}-${cached}.json`);
+      fs.writeFileSync(tempFilePath, JSON.stringify(exported));
+      importCommand(program);
+      await program.parseAsync(['node', 'test', 'import', '--new-id', tempFilePath]);
+      expect(process.exitCode).toBeUndefined();
+      const imported = (await Eval.getMany(10)).find((evaluation) => evaluation.id !== source.id)!;
+      expect(imported).toBeDefined();
+      const restored = await imported.getRepeatStability();
+      if (strip) {
+        expect(restored?.bayesAtN).toBeUndefined();
+        expect(exported.config.metadata?.bayesAtNPlan).toBeUndefined();
+        expect(summary.results[0].gradingResult).toBeNull();
+      } else {
+        expect(restored?.bayesAtN).toEqual(summary.repeatStability?.bayesAtN);
+        expect(exported.config.metadata?.bayesAtNPlan).toEqual({
+          ...plan,
+          groups: plan.groups.map(({ inputHash: _hash, ...counts }) => counts),
+        });
+        expect(JSON.stringify(exported)).not.toContain('inputHash');
+      }
+      expect(source.config.metadata?.bayesAtNPlan).toEqual(plan);
+    },
+  );
 
   describe('command registration', () => {
     it('should register the import command', () => {

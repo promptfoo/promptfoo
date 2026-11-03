@@ -1945,6 +1945,44 @@ describe('evalCommand', () => {
     },
   );
 
+  it.each(
+    ['resume', 'retry-errors'].flatMap((mode) =>
+      ['runtime', 'config', 'plan'].map((source) => ({ mode, source })),
+    ),
+  )(
+    'rejects stored Bayes@N $mode before replay configuration or row access ($source)',
+    async ({ mode, source }) => {
+      const record = new Eval({
+        prompts: [],
+        ...(source === 'config' && { evaluateOptions: { bayesAtN: true } }),
+        ...(source === 'plan' && { metadata: { bayesAtNPlan: { version: 1, groups: [] } } }),
+      });
+      if (source === 'runtime') {
+        record.runtimeOptions = { bayesAtN: true };
+      }
+      const find = vi.spyOn(Eval, 'findById').mockResolvedValueOnce(record);
+      const latest = vi.spyOn(Eval, 'latest').mockResolvedValueOnce(record);
+      try {
+        await expect(
+          doEval(
+            (mode === 'resume' ? { resume: record.id } : { retryErrors: true }) as Parameters<
+              typeof doEval
+            >[0],
+            defaultConfig,
+            defaultConfigPath,
+            {},
+          ),
+        ).rejects.toThrow('fresh evaluations only');
+        expect(resolveConfigs).not.toHaveBeenCalled();
+        expect(getErrorResultIds).not.toHaveBeenCalled();
+        expect(evaluate).not.toHaveBeenCalled();
+      } finally {
+        find.mockRestore();
+        latest.mockRestore();
+      }
+    },
+  );
+
   it('should resume an existing eval with persisted prompts', async () => {
     const authored = { id: 'authored-prompt', raw: 'current prompt', label: 'Saved' };
     const resumeEval = new Eval({ prompts: [authored] } as UnifiedConfig);
@@ -1976,7 +2014,11 @@ describe('evalCommand', () => {
     vi.mocked(evaluate).mockImplementationOnce(async (testSuite, evalRecord, options) => {
       expect(testSuite.prompts).toEqual([authored]);
       expect(options).toEqual(
-        expect.objectContaining({ repeat: 2, cache: false, restorePromptColumns: true }),
+        expect.objectContaining({
+          repeat: 2,
+          cache: false,
+          restorePromptColumns: true,
+        }),
       );
       return evalRecord as Eval;
     });
