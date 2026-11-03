@@ -1,5 +1,5 @@
 import { fetchWithCache } from '../cache';
-import { getEnvString } from '../envars';
+import { getEnvString, getProviderEnvString } from '../envars';
 import logger from '../logger';
 import { resolveProviderEnv } from './env';
 import { calculateCost, getRequestTimeoutMs, parseChatPrompt } from './shared';
@@ -115,10 +115,12 @@ export class AI21ChatCompletionProvider implements ApiProvider {
 
   getApiKey(): string | undefined {
     const namedKey = this.config.apiKeyEnvar
-      ? (this.env?.[this.config.apiKeyEnvar] ?? getEnvString(this.config.apiKeyEnvar as EnvVarKey))
+      ? (getProviderEnvString(this.env, this.config.apiKeyEnvar) ??
+        getEnvString(this.config.apiKeyEnvar as EnvVarKey))
       : undefined;
     return (
-      this.config.apiKey || (namedKey ?? this.env?.AI21_API_KEY ?? getEnvString('AI21_API_KEY'))
+      this.config.apiKey ||
+      (namedKey ?? getProviderEnvString(this.env, 'AI21_API_KEY') ?? getEnvString('AI21_API_KEY'))
     );
   }
 

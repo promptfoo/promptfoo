@@ -173,6 +173,8 @@ Single-line [JavaScript assertions](/docs/configuration/expected-outputs/javascr
 :::tip
 Every test type can be negated by prepending `not-`. For example, `not-equals` or `not-regex`.
 
+For tool-call validity assertions, `not-` inverts a validation verdict. Tool configuration errors and unexpected validator failures remain failures.
+
 When a `not-javascript` assertion returns a full grading result, its `reason` is preserved verbatim, including an empty string, for either inverted outcome. For `not-python` and `not-ruby`, a negated failure keeps its custom `reason`, falling back to a generic message if it is empty; a negated pass reports `Assertion passed`. All three preserve the script's score.
 
 The `search-rubric` and `not-search-rubric` assertions require a rubric value that renders to a string.

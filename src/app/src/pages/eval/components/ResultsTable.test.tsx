@@ -3949,7 +3949,8 @@ describe('ResultsTable minimal scroll room detection', () => {
     renderWithProviders(<ResultsTable {...defaultProps} />);
 
     const stickyContainer = screen.getByTestId('results-table-header');
-    expect(stickyContainer).toHaveClass('-mx-4', 'overflow-hidden', 'px-4');
+    expect(stickyContainer).toHaveClass('-mx-4', 'overflow-hidden');
+    expect(screen.getByTestId('results-table-header-scroll-container')).toHaveClass('px-4');
   });
 
   const verifyScrollRoom = async () => {
