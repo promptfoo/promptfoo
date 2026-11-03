@@ -82,7 +82,7 @@ export async function readTestFiles(
 
     for (const p of paths) {
       const rawData = loadYaml(await fsPromises.readFile(p, 'utf-8'));
-      const yamlData = maybeLoadConfigFromExternalFile(rawData);
+      const yamlData = maybeLoadConfigFromExternalFile(rawData, 'test-config');
       Object.assign(ret, yamlData);
     }
   }
@@ -116,7 +116,7 @@ export async function readStandaloneTestsFile(
   config?: Record<string, any>,
 ): Promise<TestCase[]> {
   varsPath = renderEnvOnlyInObject(varsPath);
-  const finalConfig = config ? maybeLoadConfigFromExternalFile(config) : config;
+  const finalConfig = config ? maybeLoadConfigFromExternalFile(config, 'test-config') : config;
 
   if (varsPath.startsWith('huggingface://datasets/')) {
     telemetry.record('feature_used', {
@@ -249,7 +249,7 @@ async function readLocalStandaloneTestsFile(
       feature: 'yaml tests file',
     });
     const rawContent = loadYaml(await fsPromises.readFile(resolvedVarsPath, 'utf-8'));
-    const rows = maybeLoadConfigFromExternalFile(rawContent) as unknown as CsvRow[];
+    const rows = maybeLoadConfigFromExternalFile(rawContent, 'test-config') as unknown as CsvRow[];
     return csvRowsToTestCases(rows);
   }
 
@@ -519,7 +519,10 @@ async function readTestWithEnv(
     const testFilePath = path.resolve(sourceBasePath, test);
     effectiveBasePath = path.dirname(testFilePath);
     const rawContent = loadYaml(await fsPromises.readFile(testFilePath, 'utf-8'));
-    const rawTestCase = maybeLoadConfigFromExternalFile(rawContent) as TestCaseWithVarsFile;
+    const rawTestCase = maybeLoadConfigFromExternalFile(
+      rawContent,
+      'test-config',
+    ) as TestCaseWithVarsFile;
     testCase = await loadTestWithVars(rawTestCase, effectiveBasePath);
   } else {
     testCase = await loadTestWithVars(test, sourceBasePath);
@@ -706,12 +709,12 @@ async function loadTestsFromGlobWithEnv(
       testCases = await readStandaloneTestsFile(testFile, basePath);
     } else if (testFile.endsWith('.yaml') || testFile.endsWith('.yml')) {
       const rawContent = loadYaml(await fsPromises.readFile(testFile, 'utf-8'));
-      testCases = maybeLoadConfigFromExternalFile(rawContent) as TestCase[];
+      testCases = maybeLoadConfigFromExternalFile(rawContent, 'test-config') as TestCase[];
       testCases = await _deref(testCases, testFile);
     } else if (testFile.endsWith('.jsonl')) {
       const fileContent = await fsPromises.readFile(testFile, 'utf-8');
       const rawCases = parseJsonlLines(fileContent, testFile);
-      testCases = maybeLoadConfigFromExternalFile(rawCases) as TestCase[];
+      testCases = maybeLoadConfigFromExternalFile(rawCases, 'test-config') as TestCase[];
       testCases = await _deref(testCases, testFile);
     } else if (testFile.endsWith('.json')) {
       const fileContent = await fsPromises.readFile(testFile, 'utf8');
@@ -719,7 +722,7 @@ async function loadTestsFromGlobWithEnv(
         fileContent,
         `Failed to parse JSON test file ${testFile}`,
       );
-      testCases = maybeLoadConfigFromExternalFile(rawContent) as TestCase[];
+      testCases = maybeLoadConfigFromExternalFile(rawContent, 'test-config') as TestCase[];
       testCases = await _deref(testCases, testFile);
     } else {
       throw new Error(`Unsupported file type for test file: ${testFile}`);

@@ -878,6 +878,13 @@ describe('file utilities', () => {
       });
     });
 
+    it('should not treat an assert key as assertion context without test-config opt-in', () => {
+      (fs.readFileSync as ReturnType<typeof vi.fn>).mockReturnValue('console.log("hi")');
+      const result = maybeLoadConfigFromExternalFile({ assert: [{ value: 'file://snippet.js' }] });
+      expect(result.assert[0].value).toBe('console.log("hi")');
+      expect(fs.readFileSync).toHaveBeenCalledTimes(1);
+    });
+
     describe('maybeLoadConfigFromExternalFile with assertion detection', () => {
       it('should preserve Python assertion file references', () => {
         const config = {
@@ -888,7 +895,7 @@ describe('file utilities', () => {
             },
           ],
         };
-        const result = maybeLoadConfigFromExternalFile(config);
+        const result = maybeLoadConfigFromExternalFile(config, 'test-config');
         expect(result.assert[0].value).toBe('file://good_assertion.py');
         expect(fs.readFileSync).not.toHaveBeenCalled();
       });
@@ -902,7 +909,7 @@ describe('file utilities', () => {
             },
           ],
         };
-        const result = maybeLoadConfigFromExternalFile(config);
+        const result = maybeLoadConfigFromExternalFile(config, 'test-config');
         expect(result.assert[0].value).toBe('file://assertion.js:checkResult');
         expect(fs.readFileSync).not.toHaveBeenCalled();
       });
@@ -912,7 +919,7 @@ describe('file utilities', () => {
         const config = {
           util: 'file://helper.py',
         };
-        const result = maybeLoadConfigFromExternalFile(config);
+        const result = maybeLoadConfigFromExternalFile(config, 'test-config');
         expect(result.util).toBe('def utility(): pass');
         expect(fs.readFileSync).toHaveBeenCalled();
       });
@@ -930,7 +937,7 @@ describe('file utilities', () => {
             },
           ],
         };
-        const result = maybeLoadConfigFromExternalFile(config);
+        const result = maybeLoadConfigFromExternalFile(config, 'test-config');
         expect(result.tests[0].assert[0].value).toBe('file://nested_assertion.py');
         expect(fs.readFileSync).not.toHaveBeenCalled();
       });
@@ -948,7 +955,7 @@ describe('file utilities', () => {
             },
           ],
         };
-        const result = maybeLoadConfigFromExternalFile(config);
+        const result = maybeLoadConfigFromExternalFile(config, 'test-config');
         expect(result.tests[0].assert[0].value).toBe('file://assert.js');
         expect(fs.readFileSync).not.toHaveBeenCalled();
       });
@@ -962,7 +969,7 @@ describe('file utilities', () => {
             },
           ],
         };
-        const result = maybeLoadConfigFromExternalFile(config);
+        const result = maybeLoadConfigFromExternalFile(config, 'test-config');
         expect(result.assert[0].value).toBe('file://assert.rb:Validators::Format.check_length');
         expect(fs.readFileSync).not.toHaveBeenCalled();
       });
@@ -976,7 +983,7 @@ describe('file utilities', () => {
             },
           ],
         };
-        const result = maybeLoadConfigFromExternalFile(config);
+        const result = maybeLoadConfigFromExternalFile(config, 'test-config');
         expect(result.assert[0].assert[0].value).toBe('file://assert.js');
         expect(fs.readFileSync).not.toHaveBeenCalled();
       });
@@ -991,7 +998,7 @@ describe('file utilities', () => {
             },
           ],
         };
-        const result = maybeLoadConfigFromExternalFile(config);
+        const result = maybeLoadConfigFromExternalFile(config, 'test-config');
         expect(result.assert[0].value).toEqual(['source', 'FROM_TXT']);
         expect(fs.readFileSync).toHaveBeenCalledTimes(1);
       });
@@ -1007,7 +1014,7 @@ describe('file utilities', () => {
             },
           ],
         };
-        const result = maybeLoadConfigFromExternalFile(config);
+        const result = maybeLoadConfigFromExternalFile(config, 'test-config');
         expect(result.assert[0].config.helper).toBe('source');
         expect(fs.readFileSync).toHaveBeenCalledTimes(1);
       });
@@ -1030,7 +1037,7 @@ describe('file utilities', () => {
             },
           ],
         };
-        const result = maybeLoadConfigFromExternalFile(config);
+        const result = maybeLoadConfigFromExternalFile(config, 'test-config');
         expect(result.assert[0].value).toBe('file://python_assert.py');
         expect(result.assert[1].value).toBe('some data'); // contains assertion loads file
         expect(result.assert[2].value).toBe('file://js_assert.js');
