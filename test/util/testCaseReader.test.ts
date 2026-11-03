@@ -398,6 +398,8 @@ not valid json`,
       { assert: [], description: 'Row #1', options: {}, vars: { var1: 'value1', var2: 'value2' } },
       { assert: [], description: 'Row #2', options: {}, vars: { var1: 'value3', var2: 'value4' } },
     ]);
+    const args = vi.mocked(maybeLoadConfigFromExternalFile).mock.calls[0];
+    expect(args[1]).toBeUndefined();
   });
 
   it('should read Google Sheets and return test cases', async () => {
