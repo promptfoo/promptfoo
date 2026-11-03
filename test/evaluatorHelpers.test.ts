@@ -595,6 +595,21 @@ describe('evaluatorHelpers', () => {
         clearPromptTemplateCache();
       }
     });
+
+    it('should not share a cache key between filtered and filterless templates', async () => {
+      clearPromptTemplateCache();
+      try {
+        await renderPrompt(toPrompt('{{ text }}'), { text: 'x' }, { up: (s: string) => s });
+        // The filter map got some id fN, so its key looks like `fN:...`. A filterless
+        // template whose text starts with `fN:` must not pick that entry up.
+        for (let i = 1; i <= 50; i++) {
+          const rendered = await renderPrompt(toPrompt(`f${i}:{{ text }}`), { text: 'x' });
+          expect(rendered).toBe(`f${i}:x`);
+        }
+      } finally {
+        clearPromptTemplateCache();
+      }
+    });
   });
 
   describe('renderPrompt with prompt functions', () => {
