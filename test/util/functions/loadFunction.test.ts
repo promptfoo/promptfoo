@@ -312,6 +312,14 @@ describe('parseFileUrl', () => {
     });
   });
 
+  it('should keep a colon in a directory name before the script file', () => {
+    const result = parseFileUrl('file://project.js:old/hooks.js:handler');
+    expect(result).toEqual({
+      filePath: 'project.js:old/hooks.js',
+      functionName: 'handler',
+    });
+  });
+
   it('should parse file URL without function name', () => {
     const result = parseFileUrl('file:///path/to/file.js');
     expect(result).toEqual({
