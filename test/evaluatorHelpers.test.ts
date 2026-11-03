@@ -1076,6 +1076,41 @@ describe('evaluatorHelpers', () => {
       expect(renderedPrompt).toBe('HelloAda');
     });
 
+    it('should preserve loop-local set dependencies', async () => {
+      const template = '{% for item in items %}{% set label = item %}{{ label ~ "!" }}{% endfor %}';
+      const renderedPrompt = await renderPrompt(
+        toPrompt('{{v}}'),
+        { v: template, items: ['a', 'b'] },
+        {},
+      );
+
+      expect(renderedPrompt).toBe('a!b!');
+    });
+
+    it('should ignore comment contents when computing nesting depth', async () => {
+      const template = '{# {{ #} {{x}}';
+      const renderedPrompt = await renderPrompt(
+        toPrompt('{"text": "{{v}}"}'),
+        { v: template, x: 'yes' },
+        {},
+      );
+
+      expect(renderedPrompt).toBe(
+        JSON.stringify({ text: getNunjucksEngine().renderString(template, { x: 'yes' }) }, null, 2),
+      );
+    });
+
+    it('should preserve comment markers inside raw and quoted literals', async () => {
+      const template = `{% raw %}{{x}}{# keep #}{% endraw %}{{ '{# keep #}' }}`;
+      const renderedPrompt = await renderPrompt(
+        toPrompt('{"text": "{{v}}"}'),
+        { v: template, x: 'ignored' },
+        {},
+      );
+
+      expect(renderedPrompt).toBe(JSON.stringify({ text: '{{x}}{# keep #}{# keep #}' }, null, 2));
+    });
+
     it('should ignore set tags inside comments when collecting external dependencies', async () => {
       const renderedPrompt = await renderPrompt(
         toPrompt('{{v}}'),
@@ -1202,6 +1237,12 @@ describe('evaluatorHelpers', () => {
     it('should surface render errors for vars used through expression reads', async () => {
       await expect(
         renderPrompt(toPrompt("{{ v ~ 'tail' }}"), { v: '{% unknown %}' }, {}),
+      ).rejects.toThrow('unknown block tag: unknown');
+    });
+
+    it('should surface render errors through transitive variable dependencies', async () => {
+      await expect(
+        renderPrompt(toPrompt('{{alias}}'), { alias: '{{v | safe}}', v: '{% unknown %}' }, {}),
       ).rejects.toThrow('unknown block tag: unknown');
     });
 
