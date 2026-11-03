@@ -102,16 +102,17 @@ function normalizeFilePath(filePath: string): string {
 /**
  * Extracts the file path and optional function name from a `file://` URL.
  *
- * Scans colons from the left and splits at the first one whose prefix is a
- * script file (JS/TS, `.py`, `.rb`). This keeps namespaced Ruby methods
- * (`Validators::Format.check_length`) intact, skips a leading drive-letter
- * colon (`file://C:`), and leaves colons in other file names as part of the
- * path. Colons at index 0 or 1 are never treated as the function separator.
+ * Splits at the last colon when its prefix is a script file (JS/TS, `.py`,
+ * `.rb`), so colons in directories and file names stay part of the path. For
+ * Ruby namespaced methods (`Validators::Format.check_length`) the last colon
+ * is inside the method name, so a `.rb` prefix with `::` in the suffix splits
+ * at the first colon instead. Colons at index 0 or 1 are never separators.
  *
  * Examples:
  *   `file://callbacks.js`                        → `{ filePath: 'callbacks.js' }`
  *   `file://callbacks.js:fn`                     → `{ filePath: 'callbacks.js', functionName: 'fn' }`
  *   `file://assert.rb:Validators::Format.check`  → `{ filePath: 'assert.rb', functionName: 'Validators::Format.check' }`
+ *   `file://dir:name/hooks.js:handler`           → `{ filePath: 'dir:name/hooks.js', functionName: 'handler' }`
  *   `file://C:/cb.js:fn`                         → `{ filePath: 'C:/cb.js', functionName: 'fn' }`
  *   `file://C:`                                  → `{ filePath: 'C:' }` (drive-letter colon preserved)
  *   `file://2026-05-27T12:00:00.js`              → `{ filePath: '2026-05-27T12:00:00.js' }` (colon is part of path)
@@ -127,27 +128,30 @@ export function parseFileUrl(fileUrl: string): { filePath: string; functionName?
 
   const urlWithoutProtocol = fileUrl.slice('file://'.length);
 
-  // A :functionName suffix belongs to the first colon that follows a script
-  // file extension. Scanning from the left keeps namespaced Ruby methods
-  // (Validators::Format.check) intact and skips the colon in a Windows drive.
-  // Colons in other file names stay part of the path.
-  for (
-    let colonIndex = urlWithoutProtocol.indexOf(':');
-    colonIndex !== -1;
-    colonIndex = urlWithoutProtocol.indexOf(':', colonIndex + 1)
-  ) {
-    if (colonIndex <= 1) {
-      continue;
-    }
-    const candidateFilePath = urlWithoutProtocol.slice(0, colonIndex);
-    if (
-      isJavascriptFile(candidateFilePath) ||
-      candidateFilePath.endsWith('.py') ||
-      candidateFilePath.endsWith('.rb')
-    ) {
+  // The function suffix starts after the script file. Use the last colon so
+  // directories and file names that contain a colon stay part of the path.
+  const lastColonIndex = urlWithoutProtocol.lastIndexOf(':');
+  if (lastColonIndex > 1) {
+    const candidateFilePath = urlWithoutProtocol.slice(0, lastColonIndex);
+    if (isScriptFilePath(candidateFilePath)) {
       return {
         filePath: normalizeFilePath(candidateFilePath),
-        functionName: urlWithoutProtocol.slice(colonIndex + 1),
+        functionName: urlWithoutProtocol.slice(lastColonIndex + 1),
+      };
+    }
+  }
+
+  // Ruby namespaced methods contain additional colons (Validators::Format.check),
+  // so the last colon is inside the method name. Split at the first colon after
+  // the .rb file instead.
+  const firstColonIndex = urlWithoutProtocol.indexOf(':');
+  if (firstColonIndex > 1) {
+    const candidateFilePath = urlWithoutProtocol.slice(0, firstColonIndex);
+    const functionName = urlWithoutProtocol.slice(firstColonIndex + 1);
+    if (candidateFilePath.endsWith('.rb') && functionName.includes('::')) {
+      return {
+        filePath: normalizeFilePath(candidateFilePath),
+        functionName,
       };
     }
   }
@@ -155,6 +159,10 @@ export function parseFileUrl(fileUrl: string): { filePath: string; functionName?
   return {
     filePath: normalizeFilePath(urlWithoutProtocol),
   };
+}
+
+function isScriptFilePath(filePath: string): boolean {
+  return isJavascriptFile(filePath) || filePath.endsWith('.py') || filePath.endsWith('.rb');
 }
 
 /**

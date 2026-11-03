@@ -967,6 +967,51 @@ describe('file utilities', () => {
         expect(fs.readFileSync).not.toHaveBeenCalled();
       });
 
+      it('should preserve script references in nested assert-set values', () => {
+        const config = {
+          assert: [
+            {
+              type: 'assert-set',
+              assert: [{ type: 'contains', value: 'file://assert.js' }],
+            },
+          ],
+        };
+        const result = maybeLoadConfigFromExternalFile(config);
+        expect(result.assert[0].assert[0].value).toBe('file://assert.js');
+        expect(fs.readFileSync).not.toHaveBeenCalled();
+      });
+
+      it('should load script files in assertion value arrays', () => {
+        (fs.readFileSync as ReturnType<typeof vi.fn>).mockReturnValue('source');
+        const config = {
+          assert: [
+            {
+              type: 'contains-any',
+              value: ['file://assert.js', 'FROM_TXT'],
+            },
+          ],
+        };
+        const result = maybeLoadConfigFromExternalFile(config);
+        expect(result.assert[0].value).toEqual(['source', 'FROM_TXT']);
+        expect(fs.readFileSync).toHaveBeenCalledTimes(1);
+      });
+
+      it('should load script files in assertion config normally', () => {
+        (fs.readFileSync as ReturnType<typeof vi.fn>).mockReturnValue('source');
+        const config = {
+          assert: [
+            {
+              type: 'contains',
+              value: 'x',
+              config: { helper: 'file://assert.js' },
+            },
+          ],
+        };
+        const result = maybeLoadConfigFromExternalFile(config);
+        expect(result.assert[0].config.helper).toBe('source');
+        expect(fs.readFileSync).toHaveBeenCalledTimes(1);
+      });
+
       it('should handle mixed assertion types', () => {
         (fs.readFileSync as ReturnType<typeof vi.fn>).mockReturnValue('some data');
         const config = {

@@ -23,6 +23,8 @@ import { loadYaml } from './yamlLoad';
 
 import type { NunjucksFilterMap, OutputFile, VarValue } from '../types';
 
+type FileLoadContext = 'assertion' | 'assertion-item' | 'general' | 'vars';
+
 const loadedFileMimeTypes = Symbol('loadedFileMimeTypes');
 type VarsWithFileMimeTypes = Record<string, unknown> & {
   [loadedFileMimeTypes]?: ReadonlyMap<string, string>;
@@ -115,7 +117,7 @@ export function getNunjucksEngineForFilePath(): nunjucks.Environment {
  * @param filePath - The input to process. Can be a file path string starting with "file://",
  * an array of file paths, or any other type of data.
  * @param context - Optional context to control file loading behavior. 'assertion' context
- * preserves Python/JS file references instead of loading their content.
+ * preserves script file references (JS/TS, Python, Ruby) instead of loading their content.
  * @returns The loaded content if the input was a file path, otherwise the original input.
  * For JSON and YAML files, the content is parsed into an object.
  * For other file types, the raw file content is returned as a string.
@@ -124,7 +126,7 @@ export function getNunjucksEngineForFilePath(): nunjucks.Environment {
  */
 export function maybeLoadFromExternalFile(
   filePath: string | object | Function | undefined | null,
-  context?: 'assertion' | 'general' | 'vars',
+  context?: FileLoadContext,
 ) {
   if (Array.isArray(filePath)) {
     return filePath.map((path) => {
@@ -312,6 +314,28 @@ export function getResolvedRelativePath(filePath: string, isCloudConfig?: boolea
   return path.join(process.cwd(), filePath);
 }
 
+function getChildContext(
+  key: string,
+  config: Record<string, any>,
+  context: FileLoadContext | undefined,
+): FileLoadContext | undefined {
+  if (key === 'assert') {
+    return context === 'vars' ? context : 'assertion-item';
+  }
+  if (key === 'vars') {
+    return 'vars';
+  }
+  if (context === 'assertion-item') {
+    return key === 'value' && typeof config[key] === 'string' ? 'assertion' : 'general';
+  }
+  const isAssertionValue =
+    key === 'value' &&
+    'type' in config &&
+    typeof config.type === 'string' &&
+    (config.type === 'python' || config.type === 'javascript');
+  return isAssertionValue ? 'assertion' : context;
+}
+
 /**
  * Recursively loads external file references from a configuration object.
  *
@@ -322,7 +346,7 @@ export function getResolvedRelativePath(filePath: string, isCloudConfig?: boolea
  */
 export function maybeLoadConfigFromExternalFile(
   config: any,
-  context?: 'assertion' | 'general' | 'vars',
+  context?: FileLoadContext,
   basePath?: string,
 ): any {
   if (basePath !== undefined) {
@@ -334,25 +358,7 @@ export function maybeLoadConfigFromExternalFile(
   if (typeof config === 'object' && config !== null) {
     const result: Record<string, any> = {};
     for (const key of Object.keys(config)) {
-      // Detect assertion contexts: if we have a sibling 'type' key with 'python' or 'javascript'
-      // and current key is 'value', switch to assertion context
-      const isAssertionValue =
-        key === 'value' &&
-        'type' in config &&
-        typeof config.type === 'string' &&
-        (config.type === 'python' || config.type === 'javascript');
-
-      // Detect vars contexts: if we're processing a 'vars' key, switch to vars context
-      // This preserves file:// glob patterns for test case expansion
-      const isVarsField = key === 'vars';
-
-      const childContext = isAssertionValue
-        ? 'assertion'
-        : isVarsField
-          ? 'vars'
-          : key === 'assert' && context !== 'vars'
-            ? 'assertion'
-            : context;
+      const childContext = getChildContext(key, config, context);
       const value = maybeLoadConfigFromExternalFile(config[key], childContext);
 
       if (key === '__proto__') {
