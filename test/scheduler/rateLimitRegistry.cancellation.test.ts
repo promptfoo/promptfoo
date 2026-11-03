@@ -202,8 +202,7 @@ describe('RateLimitRegistry cancellation during scheduling', () => {
       expect(Object.values(registry.getMetrics())[0].retriedRequests).toBe(1);
       // The registry race and cancellable backoff each hold one listener.
       expect(getEventListeners(controller.signal, 'abort')).toHaveLength(2);
-      const state = [...registry['states'].values()][0];
-      expect(state['latencies']).toHaveLength(1);
+      expect(invoke).toHaveBeenCalledOnce();
 
       // Time spent in retry backoff is not another provider attempt.
       await vi.advanceTimersByTimeAsync(17);
@@ -215,12 +214,10 @@ describe('RateLimitRegistry cancellation during scheduling', () => {
       expect(vi.getTimerCount()).toBe(0);
       await vi.advanceTimersByTimeAsync(120000);
       expect(invoke).toHaveBeenCalledOnce();
-      expect(state['latencies']).toHaveLength(1);
       expect(Object.values(registry.getMetrics())[0]).toMatchObject({
         activeRequests: 0,
         queueDepth: 0,
         failedRequests: 1,
-        avgLatencyMs: 0,
       });
     },
   );

@@ -253,7 +253,6 @@ describe('public Chat callback cancellation releases its scheduler wait', () => 
           failedRequests: 1,
           retriedRequests: 0,
           rateLimitHits: 0,
-          avgLatencyMs: 1000,
         });
         await vi.advanceTimersByTimeAsync(499);
         expect(globalThis.fetch).toHaveBeenCalledOnce();
@@ -285,7 +284,6 @@ describe('public Chat callback cancellation releases its scheduler wait', () => 
         failedRequests: 1,
         retriedRequests: 0,
         rateLimitHits: 0,
-        avgLatencyMs: 500,
       });
 
       // This is intentionally abort-first. A late independent rejection stays

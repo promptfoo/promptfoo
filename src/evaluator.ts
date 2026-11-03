@@ -6176,9 +6176,6 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
                 failedRequests: m.failedRequests,
                 rateLimitHits: m.rateLimitHits,
                 retriedRequests: m.retriedRequests,
-                avgLatencyMs: Math.round(m.avgLatencyMs),
-                p50LatencyMs: Math.round(m.p50LatencyMs),
-                p99LatencyMs: Math.round(m.p99LatencyMs),
               });
             }
           }

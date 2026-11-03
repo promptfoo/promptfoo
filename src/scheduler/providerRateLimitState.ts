@@ -57,9 +57,6 @@ export interface ProviderMetrics {
   failedRequests: number;
   rateLimitHits: number;
   retriedRequests: number;
-  avgLatencyMs: number;
-  p50LatencyMs: number;
-  p99LatencyMs: number;
 }
 
 type ProviderExecuteOptions<T> = RateLimitExecuteOptions<T> & {
@@ -86,8 +83,6 @@ export class ProviderRateLimitState extends EventEmitter {
   private failedRequests = 0;
   private rateLimitHits = 0;
   private retriedRequests = 0;
-  /** Keep the latest 100 latency measurements for bounded metric sorting and storage. */
-  private latencies: number[] = [];
 
   // Track if we've emitted ratelimit:learned for this provider
   private hasLearnedLimits = false;
@@ -106,12 +101,6 @@ export class ProviderRateLimitState extends EventEmitter {
       maxConcurrency: options.maxConcurrency,
       minConcurrency: options.minConcurrency,
       queueTimeoutMs: options.queueTimeoutMs,
-      onSlotAcquired: (queueDepth) => {
-        this.emit('slot:acquired', { rateLimitKey: this.rateLimitKey, queueDepth });
-      },
-      onSlotReleased: (queueDepth) => {
-        this.emit('slot:released', { rateLimitKey: this.rateLimitKey, queueDepth });
-      },
     });
   }
 
@@ -176,7 +165,6 @@ export class ProviderRateLimitState extends EventEmitter {
             this.slotQueue.release();
           }
         };
-        const startTime = Date.now();
         let retryError: Error | undefined;
         let retryResult: T | undefined;
         let isRateLimited: boolean;
@@ -220,9 +208,6 @@ export class ProviderRateLimitState extends EventEmitter {
           }
           // Completed calls retain their result and quota even if cancellation arrived
           // during completion. Cancellation still prevents another attempt.
-          if (this.latencies.push(Date.now() - startTime) > 100) {
-            this.latencies.shift();
-          }
           releaseSlot();
 
           // Keep an independent failure's diagnostic and metadata intact, but
@@ -247,12 +232,6 @@ export class ProviderRateLimitState extends EventEmitter {
             return finalizedResult;
           }
         } catch (error) {
-          if (ownsSlot) {
-            if (this.latencies.push(Date.now() - startTime) > 100) {
-              this.latencies.shift();
-            }
-          }
-
           if (isResponseHeadersObserverError(onResponseHeaders, error)) {
             throw error;
           }
@@ -465,16 +444,13 @@ export class ProviderRateLimitState extends EventEmitter {
   }
 
   /**
-   * Get current queue depth without sorting latencies.
-   * Use this for frequent checks instead of getMetrics().
+   * Get current queue depth without building the full diagnostic snapshot.
    */
   getQueueDepth(): number {
     return this.slotQueue.getQueueDepth();
   }
 
   getMetrics(): ProviderMetrics {
-    const sorted = [...this.latencies].sort((a, b) => a - b);
-
     return {
       rateLimitKey: this.rateLimitKey,
       activeRequests: this.slotQueue.getActiveCount(),
@@ -485,10 +461,6 @@ export class ProviderRateLimitState extends EventEmitter {
       failedRequests: this.failedRequests,
       rateLimitHits: this.rateLimitHits,
       retriedRequests: this.retriedRequests,
-      avgLatencyMs: sorted.length > 0 ? sorted.reduce((a, b) => a + b, 0) / sorted.length : 0,
-      // Percentiles: for n elements, pX is at index floor((n-1) * X/100)
-      p50LatencyMs: sorted[Math.floor((sorted.length - 1) * 0.5)] ?? 0,
-      p99LatencyMs: sorted[Math.floor((sorted.length - 1) * 0.99)] ?? 0,
     };
   }
 

@@ -179,13 +179,12 @@ To see rate limit events, enable debug logging:
 LOG_LEVEL=debug promptfoo eval -c config.yaml
 ```
 
-Events logged:
+Scheduler debug messages include:
 
-- `ratelimit:hit` - Rate limit encountered
-- `ratelimit:learned` - Provider limits discovered from headers
-- `ratelimit:warning` - Approaching rate limit threshold
-- `concurrency:decreased` / `concurrency:increased` - Adaptive concurrency changes
-- `request:retrying` - Retry in progress
+- `Rate limit hit` - Rate limit encountered
+- `Learned rate limits` - Provider limits discovered from headers
+- `Concurrency decreased` / `Concurrency increased` - Adaptive concurrency changes
+- `Final metrics` - Request, failure, rate-limit, and retry counts at evaluation cleanup
 
 ## Best Practices
 
@@ -193,7 +192,7 @@ Events logged:
 
 2. **Use caching** - Enable [caching](/docs/configuration/caching) to avoid re-running identical requests
 
-3. **Monitor debug logs** - If evaluations are slow, check for frequent `ratelimit:hit` events
+3. **Monitor debug logs** - If evaluations are slow, check for frequent `Rate limit hit` messages
 
 4. **Consider provider tiers** - Higher API tiers typically have higher rate limits; the scheduler will automatically use whatever limits the provider allows
 
