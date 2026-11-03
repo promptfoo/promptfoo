@@ -1,15 +1,34 @@
 import { createServer, type Server } from 'http';
 import { AddressInfo } from 'net';
 
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { handleWebhook } from '../../src/assertions/webhook';
-import { mockProcessEnv } from '../util/utils';
+import { mockProcessEnv, PROXY_ENV_KEYS } from '../util/utils';
 
 import type { AssertionParams } from '../../src/types/index';
 
+const transport = vi.hoisted(() => vi.fn());
+vi.mock('../../src/util/fetch/monkeyPatchFetch', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../src/util/fetch/monkeyPatchFetch')>()),
+  monkeyPatchFetch: transport,
+}));
+
 const servers: Server[] = [];
+let restoreProxyEnv = () => {};
+
+beforeEach(() => {
+  // Keep loopback requests off any developer/CI proxy that lacks a NO_PROXY
+  // exemption for 127.0.0.1.
+  restoreProxyEnv = mockProcessEnv(
+    Object.fromEntries(PROXY_ENV_KEYS.map((key) => [key, undefined])),
+  );
+  transport.mockImplementation((url: RequestInfo, options?: RequestInit) => fetch(url, options));
+});
 
 afterEach(async () => {
+  restoreProxyEnv();
+  transport.mockReset();
+  vi.useRealTimers();
   for (const server of servers.splice(0)) {
     server.closeAllConnections();
     await new Promise<void>((resolve, reject) => {
@@ -64,33 +83,32 @@ describe('handleWebhook', () => {
   });
 
   it('times out a webhook response whose body stalls after the headers', async () => {
+    vi.useFakeTimers();
     const restoreEnv = mockProcessEnv({ WEBHOOK_TIMEOUT: '1000' });
-    try {
-      const url = await startServer((_req, res) => {
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        // Send the headers and a partial body, then never finish the response.
-        res.write('{"pass":');
-      });
+    // Send a partial body and never close it: the deadline must cover the body
+    // read rather than only the header exchange.
+    const stalledBody = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode('{"pass":'));
+      },
+    });
+    transport.mockResolvedValue(
+      new Response(stalledBody, {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    );
 
-      const startedAt = Date.now();
-      const result = await Promise.race([
-        handleWebhook(webhookParams(url)),
-        new Promise<never>((_, reject) => {
-          const watchdog = setTimeout(
-            () => reject(new Error('handleWebhook did not honor WEBHOOK_TIMEOUT')),
-            5000,
-          );
-          watchdog.unref();
-        }),
-      ]);
-      const elapsed = Date.now() - startedAt;
+    try {
+      const resultPromise = handleWebhook(webhookParams('http://127.0.0.1/webhook'));
+      await vi.runAllTimersAsync();
+      const result = await resultPromise;
 
       expect(result.pass).toBe(false);
       expect(result.reason).toBe('Webhook error: Request timed out after 1000 ms');
-      expect(elapsed).toBeGreaterThanOrEqual(900);
-      expect(elapsed).toBeLessThan(4000);
     } finally {
       restoreEnv();
+      vi.useRealTimers();
     }
   });
 });
