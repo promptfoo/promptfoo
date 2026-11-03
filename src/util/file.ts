@@ -329,7 +329,7 @@ function getChildContext(
     return key === 'value' && typeof config[key] === 'string' ? 'assertion' : 'general';
   }
   if (context === 'test-config') {
-    return 'test-config';
+    return key === 'tests' ? 'test-config' : 'general';
   }
   const isAssertionValue =
     key === 'value' &&

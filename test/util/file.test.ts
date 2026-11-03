@@ -885,6 +885,18 @@ describe('file utilities', () => {
       expect(fs.readFileSync).toHaveBeenCalledTimes(1);
     });
 
+    it('should not treat assert keys in data-only test fields as assertions', () => {
+      (fs.readFileSync as ReturnType<typeof vi.fn>).mockReturnValue('console.log("hi")');
+      const config = {
+        providerOutput: { assert: [{ value: 'file://snippet.js' }] },
+        assert: [{ type: 'contains', value: 'file://assert.js' }],
+      };
+      const result = maybeLoadConfigFromExternalFile(config, 'test-config');
+      expect(result.providerOutput.assert[0].value).toBe('console.log("hi")');
+      expect(result.assert[0].value).toBe('file://assert.js');
+      expect(fs.readFileSync).toHaveBeenCalledTimes(1);
+    });
+
     describe('maybeLoadConfigFromExternalFile with assertion detection', () => {
       it('should preserve Python assertion file references', () => {
         const config = {

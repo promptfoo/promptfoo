@@ -249,7 +249,7 @@ async function readLocalStandaloneTestsFile(
       feature: 'yaml tests file',
     });
     const rawContent = loadYaml(await fsPromises.readFile(resolvedVarsPath, 'utf-8'));
-    const rows = maybeLoadConfigFromExternalFile(rawContent, 'test-config') as unknown as CsvRow[];
+    const rows = maybeLoadConfigFromExternalFile(rawContent) as unknown as CsvRow[];
     return csvRowsToTestCases(rows);
   }
 
