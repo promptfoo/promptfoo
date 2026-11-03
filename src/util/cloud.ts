@@ -882,8 +882,7 @@ export async function getPoliciesFromCloud(ids: string[], teamId: string): Promi
 export async function validateLinkedTargetId(linkedTargetId: string): Promise<void> {
   // Validate format: promptfoo://provider/{id}
   if (!isCloudProvider(linkedTargetId)) {
-    const apiHost = cloudConfig.getApiHost();
-    const appHost = apiHost.replace('/api', '').replace(':3201', '');
+    const appHost = cloudConfig.getAppUrl();
 
     throw new Error(
       dedent`
@@ -930,8 +929,7 @@ export async function validateLinkedTargetId(linkedTargetId: string): Promise<vo
       linkedTargetId,
       error,
     });
-    const apiHost = cloudConfig.getApiHost();
-    const appHost = apiHost.replace('/api', '').replace(':3201', '');
+    const appHost = cloudConfig.getAppUrl();
 
     throw new Error(
       dedent`
@@ -941,7 +939,7 @@ export async function validateLinkedTargetId(linkedTargetId: string): Promise<vo
 
         Troubleshooting steps:
         1. Verify you're logged in to the correct organization
-           Run: promptfoo auth status
+           Run: promptfoo auth whoami
 
         2. Check that the target exists in your cloud dashboard:
            ${appHost}/redteam/targets

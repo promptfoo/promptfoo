@@ -43,6 +43,7 @@ describe('cloud utils', () => {
     vi.resetAllMocks();
 
     mockCloudConfig.getApiHost.mockReturnValue('https://api.example.com');
+    mockCloudConfig.getAppUrl.mockReturnValue('https://app.example.com');
     mockCloudConfig.getApiKey.mockReturnValue('test-api-key');
     mockCloudConfig.getAuthHeaderName.mockReturnValue('Authorization');
     mockCloudConfig.getAuthHeaders.mockReturnValue({ Authorization: 'Bearer test-api-key' });
@@ -2272,6 +2273,8 @@ describe('cloud utils', () => {
       await expect(promise).rejects.toThrow(invalidPrefix);
       await expect(promise).rejects.toThrow('promptfoo://provider/');
       await expect(promise).rejects.toThrow('To get a valid linkedTargetId:');
+      await expect(promise).rejects.toThrow('Log in to Promptfoo Cloud: https://app.example.com\n');
+      await expect(promise).rejects.toThrow('https://app.example.com/redteam/targets');
     });
 
     it('should throw error when target does not exist in cloud', async () => {
@@ -2284,7 +2287,8 @@ describe('cloud utils', () => {
       await expect(promise).rejects.toThrow('linkedTargetId not found');
       await expect(promise).rejects.toThrow(validLinkedTargetId);
       await expect(promise).rejects.toThrow('Troubleshooting steps');
-      await expect(promise).rejects.toThrow('promptfoo auth status');
+      await expect(promise).rejects.toThrow('promptfoo auth whoami');
+      await expect(promise).rejects.toThrow('https://app.example.com/redteam/targets');
     });
 
     it('should throw error when API returns non-ok response', async () => {
