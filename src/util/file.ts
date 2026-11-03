@@ -23,7 +23,7 @@ import { loadYaml } from './yamlLoad';
 
 import type { NunjucksFilterMap, OutputFile, VarValue } from '../types';
 
-type FileLoadContext = 'assertion' | 'assertion-item' | 'general' | 'vars';
+type FileLoadContext = 'assertion' | 'assertion-item' | 'general' | 'test-config' | 'vars';
 
 const loadedFileMimeTypes = Symbol('loadedFileMimeTypes');
 type VarsWithFileMimeTypes = Record<string, unknown> & {
@@ -320,13 +320,16 @@ function getChildContext(
   context: FileLoadContext | undefined,
 ): FileLoadContext | undefined {
   if (key === 'assert') {
-    return context === 'vars' ? context : 'assertion-item';
+    return context === 'test-config' || context === 'assertion-item' ? 'assertion-item' : context;
   }
   if (key === 'vars') {
     return 'vars';
   }
   if (context === 'assertion-item') {
     return key === 'value' && typeof config[key] === 'string' ? 'assertion' : 'general';
+  }
+  if (context === 'test-config') {
+    return 'test-config';
   }
   const isAssertionValue =
     key === 'value' &&
