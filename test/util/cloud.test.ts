@@ -2265,6 +2265,7 @@ describe('cloud utils', () => {
     });
 
     it('should throw error for invalid prefix', async () => {
+      mockCloudConfig.getApiHost.mockReturnValue('https://api.promptfoo.app');
       const invalidPrefix = 'wrong://provider/12345678-1234-1234-1234-123456789abc';
 
       const promise = validateLinkedTargetId(invalidPrefix);
@@ -2278,6 +2279,7 @@ describe('cloud utils', () => {
     });
 
     it('should throw error when target does not exist in cloud', async () => {
+      mockCloudConfig.getApiHost.mockReturnValue('https://api.promptfoo.app');
       const validLinkedTargetId = 'promptfoo://provider/12345678-1234-1234-1234-123456789abc';
 
       mockFetchWithProxy.mockRejectedValueOnce(new Error('Not found'));
@@ -2289,6 +2291,17 @@ describe('cloud utils', () => {
       await expect(promise).rejects.toThrow('Troubleshooting steps');
       await expect(promise).rejects.toThrow('promptfoo auth whoami');
       await expect(promise).rejects.toThrow('https://app.example.com/redteam/targets');
+    });
+
+    it('should link to a self-hosted app derived from the API host', async () => {
+      mockCloudConfig.getApiHost.mockReturnValue('https://promptfoo.example.com/api');
+
+      const promise = validateLinkedTargetId('wrong://provider/123');
+
+      await expect(promise).rejects.toThrow(
+        'Log in to Promptfoo Cloud: https://promptfoo.example.com\n',
+      );
+      await expect(promise).rejects.toThrow('https://promptfoo.example.com/redteam/targets');
     });
 
     it('should throw error when API returns non-ok response', async () => {

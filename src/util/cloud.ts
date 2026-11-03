@@ -2,7 +2,7 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 
 import dedent from 'dedent';
 import { CLOUD_PROVIDER_PREFIX } from '../constants';
-import { cloudConfig } from '../globalConfig/cloud';
+import { CLOUD_API_HOST, cloudConfig } from '../globalConfig/cloud';
 import logger from '../logger';
 import { type UnifiedConfig, UnifiedConfigSchema } from '../types/index';
 import { ProviderOptionsSchema } from '../validators/providers';
@@ -869,6 +869,19 @@ export async function getPoliciesFromCloud(ids: string[], teamId: string): Promi
 }
 
 /**
+ * Returns the Cloud dashboard URL for links in error messages. The hosted API
+ * maps to the app URL saved at login; a self-hosted API is served from the
+ * app's origin under `/api`.
+ */
+function getCloudAppUrl(): string {
+  const apiHost = cloudConfig.getApiHost();
+  if (apiHost === CLOUD_API_HOST) {
+    return cloudConfig.getAppUrl();
+  }
+  return apiHost.replace(/\/api$/, '').replace(':3201', '');
+}
+
+/**
  * Validates linkedTargetId format and existence.
  * linkedTargetId is a Promptfoo Cloud feature that links custom provider results
  * to an existing target instead of creating duplicates.
@@ -882,7 +895,7 @@ export async function getPoliciesFromCloud(ids: string[], teamId: string): Promi
 export async function validateLinkedTargetId(linkedTargetId: string): Promise<void> {
   // Validate format: promptfoo://provider/{id}
   if (!isCloudProvider(linkedTargetId)) {
-    const appHost = cloudConfig.getAppUrl();
+    const appHost = getCloudAppUrl();
 
     throw new Error(
       dedent`
@@ -929,7 +942,7 @@ export async function validateLinkedTargetId(linkedTargetId: string): Promise<vo
       linkedTargetId,
       error,
     });
-    const appHost = cloudConfig.getAppUrl();
+    const appHost = getCloudAppUrl();
 
     throw new Error(
       dedent`
