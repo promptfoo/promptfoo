@@ -55,13 +55,14 @@ export THEGRID_API_KEY=<your-the-grid-key>
 
 `GET https://api.thegrid.ai/v1/models` returns the current list with context windows and capability flags.
 
-| Instrument                                   | Use it for                                      |
-| -------------------------------------------- | ----------------------------------------------- |
-| `text-standard`, `text-prime`, `text-max`    | General generation, increasing quality and cost |
-| `code-standard`, `code-prime`, `code-max`    | Code reading and generation                     |
-| `agent-standard`, `agent-prime`, `agent-max` | Multi-step tool use                             |
+| Instrument                                                                                                                                                | Use it for                                      |
+| --------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------- |
+| `text-standard`, `text-prime`, `text-max`                                                                                                                 | General generation, increasing quality and cost |
+| `code-standard`, `code-prime`, `code-max`                                                                                                                 | Code reading and generation                     |
+| `agent-standard`, `agent-prime`, `agent-max`                                                                                                              | Multi-step tool use                             |
+| `bytedance-pro-latest`, `claude-opus-latest`, `deepseek-pro-latest`, `gemini-pro-latest`, `glm-latest`, `gpt-sol-latest`, `kimi-latest`, `minimax-latest` | One lab's current model (lab-pinned)            |
 
-Lab-pinned instruments such as `claude-opus-latest` and `gemini-pro-latest` restrict routing to one lab, but they are still moving targets: the underlying version changes when that lab ships a new model.
+Lab-pinned instruments (the last row) restrict routing to one lab, but they are still moving targets: the underlying version changes when that lab ships a new model.
 
 :::caution Not suitable for reproducible benchmarks
 
