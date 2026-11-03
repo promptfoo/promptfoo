@@ -102,19 +102,19 @@ function normalizeFilePath(filePath: string): string {
 /**
  * Extracts the file path and optional function name from a `file://` URL.
  *
- * Splits at the **last** `:` rather than the first so Windows drive-letter
- * prefixes (`C:`, `D:`, ...) are preserved in `filePath`. The `lastColonIndex
- * > 1` guard prevents splitting at a leading drive-letter colon (`file://C:`
- * with no function name) or at the empty-path edge case (`file://:fn`). Only
- * JavaScript and Python callback files support the named-export suffix, so
- * colons in other valid POSIX paths remain part of the path.
+ * Scans colons from the left and splits at the first one whose prefix is a
+ * script file (JS/TS, `.py`, `.rb`). This keeps namespaced Ruby methods
+ * (`Validators::Format.check_length`) intact, skips a leading drive-letter
+ * colon (`file://C:`), and leaves colons in other file names as part of the
+ * path. Colons at index 0 or 1 are never treated as the function separator.
  *
  * Examples:
- *   `file://callbacks.js`             → `{ filePath: 'callbacks.js' }`
- *   `file://callbacks.js:fn`          → `{ filePath: 'callbacks.js', functionName: 'fn' }`
- *   `file://C:/cb.js:fn`              → `{ filePath: 'C:/cb.js', functionName: 'fn' }`
- *   `file://C:`                       → `{ filePath: 'C:' }` (drive-letter colon preserved)
- *   `file://2026-05-27T12:00:00.js`   → `{ filePath: '2026-05-27T12:00:00.js' }` (colon is part of path)
+ *   `file://callbacks.js`                        → `{ filePath: 'callbacks.js' }`
+ *   `file://callbacks.js:fn`                     → `{ filePath: 'callbacks.js', functionName: 'fn' }`
+ *   `file://assert.rb:Validators::Format.check`  → `{ filePath: 'assert.rb', functionName: 'Validators::Format.check' }`
+ *   `file://C:/cb.js:fn`                         → `{ filePath: 'C:/cb.js', functionName: 'fn' }`
+ *   `file://C:`                                  → `{ filePath: 'C:' }` (drive-letter colon preserved)
+ *   `file://2026-05-27T12:00:00.js`              → `{ filePath: '2026-05-27T12:00:00.js' }` (colon is part of path)
  *
  * @param fileUrl The `file://` URL.
  * @returns The file path and optional function name.
