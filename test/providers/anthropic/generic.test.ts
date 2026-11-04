@@ -69,6 +69,16 @@ describe('AnthropicGenericProvider', () => {
       },
     );
 
+    it('sends the compatible API version and x-api-key to a custom endpoint', async () => {
+      const provider = new AnthropicGenericProvider('claude-sonnet-4-6', {
+        config: { apiKey: 'gateway-key', apiBaseUrl: 'https://third-party.example' },
+      });
+      const { req } = await (provider.anthropic as any).buildRequest(createMessagesRequest());
+      expect(req.headers.get('anthropic-version')).toBe('2023-06-01');
+      expect(req.headers.get('x-api-key')).toBe('gateway-key');
+      expect(req.headers.has('authorization')).toBe(false);
+    });
+
     it('should initialize with the given model name', () => {
       const provider = new AnthropicGenericProvider('claude-3-5-sonnet-20241022');
       expect(provider.modelName).toBe('claude-3-5-sonnet-20241022');

@@ -756,6 +756,36 @@ describe('Provider Registry', () => {
     });
 
     describe('OpenAI endpoint defaults', () => {
+      it.each(['https://api.openai.com/v1', 'https://gov.api.openai.com/v1'])(
+        'requires an explicit Discovery endpoint on %s',
+        async (apiBaseUrl) => {
+          await expect(
+            registry.create('openai:gpt-rosalind-discovery', {
+              options: { config: { apiBaseUrl } },
+            }),
+          ).rejects.toThrow(
+            'Select openai:responses:gpt-rosalind-discovery or openai:chat:gpt-rosalind-discovery',
+          );
+        },
+      );
+
+      it.each([
+        ['chat', OpenAiChatCompletionProvider],
+        ['responses', OpenAiResponsesProvider],
+      ])('preserves explicit Discovery %s routing', async (endpoint, Provider) => {
+        const provider = await registry.create(`openai:${endpoint}:gpt-rosalind-discovery`);
+        expect(provider).toBeInstanceOf(Provider);
+        expect(provider).toHaveProperty('modelName', 'gpt-rosalind-discovery');
+      });
+
+      it('preserves the Discovery shorthand on custom gateways', async () => {
+        const provider = await registry.create('openai:gpt-rosalind-discovery', {
+          options: { env: { OPENAI_API_BASE_URL: 'https://gateway.example/v1' } },
+        });
+        expect(provider).toBeInstanceOf(OpenAiChatCompletionProvider);
+        expect(provider).toHaveProperty('modelName', 'gpt-rosalind-discovery');
+      });
+
       it.each(['gpt-daybreak-blue-latest', 'gpt-daybreak-red-latest'])(
         'selects Responses only for native Daybreak shorthand %s',
         async (model) => {

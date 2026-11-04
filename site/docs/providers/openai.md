@@ -98,6 +98,8 @@ OpenAI has deprecated the Daybreak Blue and Red model aliases. Select a model yo
 
 Projects with trusted access can use `openai:gpt-rosalind-research` or `openai:gpt-5.6-cyber` on the native Responses endpoint. For Rosalind Research and Discovery, Standard input, cached input, and output cost $5, $0.50, and $25 per million tokens respectively. See [OpenAI pricing](https://developers.openai.com/api/docs/pricing).
 
+Promptfoo requires an explicit endpoint for Rosalind Discovery on native OpenAI hosts. Select `openai:responses:gpt-rosalind-discovery` or `openai:chat:gpt-rosalind-discovery` for an endpoint your project supports.
+
 <Link id="gpt-51" />
 <Link id="available-models" />
 <Link id="key-features" />

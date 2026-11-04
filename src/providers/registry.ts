@@ -1342,6 +1342,16 @@ export const providerMap: ProviderFactory[] = [
         );
       }
       if (
+        modelType === 'gpt-rosalind-discovery' &&
+        isOpenAiFirstPartyApiUrl(
+          resolveOpenAiApiUrl(providerOptions.config ?? {}, providerOptions.env),
+        )
+      ) {
+        throw new Error(
+          'Promptfoo requires an explicit API endpoint for Rosalind Discovery on native OpenAI hosts. Select openai:responses:gpt-rosalind-discovery or openai:chat:gpt-rosalind-discovery for an endpoint your project supports.',
+        );
+      }
+      if (
         shouldDefaultToOpenAiResponses(modelType) ||
         ((OPENAI_DAYBREAK_ALIASES.has(modelType) || modelType === 'gpt-rosalind-research') &&
           isOpenAiFirstPartyApiUrl(
