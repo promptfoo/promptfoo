@@ -33,12 +33,6 @@ declare const BUILD_FORMAT: 'esm' | 'cjs' | undefined;
  * calling getDirectory() at module load time can cause issues with mock setup.
  */
 let currentDir: string | undefined;
-function getCurrentDir(): string {
-  if (!currentDir) {
-    currentDir = getDirectory();
-  }
-  return currentDir;
-}
 
 /**
  * Options for runDbMigrations.
@@ -53,7 +47,7 @@ export type RunDbMigrationsOptions = {
 };
 
 function resolveMigrationsFolder(): string {
-  const dir = getCurrentDir();
+  const dir = (currentDir ||= getDirectory());
   if (dir.includes('dist/src')) {
     // When running from bundled dist (e.g., npx promptfoo or dist/src/main.js)
     // Navigate to project root and find drizzle folder in dist

@@ -6,6 +6,22 @@ import { fetchWithCache } from '../../../src/cache';
 import logger from '../../../src/logger';
 import { HttpProvider } from '../../../src/providers/http';
 
+const createToolsAndChoiceBodyTemplate = () => ({
+  messages: '{{ prompt }}',
+  tools: '{{ tools }}',
+  tool_choice: '{{ tool_choice }}',
+});
+
+const createToolsBodyTemplate = () => ({
+  messages: '{{ prompt }}',
+  tools: '{{ tools }}',
+});
+
+const createToolChoiceBodyTemplate = () => ({
+  messages: '{{ prompt }}',
+  tool_choice: '{{ tool_choice }}',
+});
+
 describe('tools and tool_choice template variables', () => {
   const mockUrl = 'http://example.com/api';
 
@@ -18,10 +34,7 @@ describe('tools and tool_choice template variables', () => {
       config: {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: {
-          messages: '{{ prompt }}',
-          tools: '{{ tools }}',
-        },
+        body: createToolsBodyTemplate(),
       },
     });
 
@@ -74,10 +87,7 @@ describe('tools and tool_choice template variables', () => {
       config: {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: {
-          messages: '{{ prompt }}',
-          tool_choice: '{{ tool_choice }}',
-        },
+        body: createToolChoiceBodyTemplate(),
       },
     });
 
@@ -121,11 +131,7 @@ describe('tools and tool_choice template variables', () => {
       config: {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: {
-          messages: '{{ prompt }}',
-          tools: '{{ tools }}',
-          tool_choice: '{{ tool_choice }}',
-        },
+        body: createToolsAndChoiceBodyTemplate(),
       },
     });
 
@@ -243,10 +249,7 @@ describe('transformToolsFormat integration', () => {
       config: {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: {
-          messages: '{{ prompt }}',
-          tools: '{{ tools }}',
-        },
+        body: createToolsBodyTemplate(),
         tools: openaiTools,
         transformToolsFormat: 'openai',
       },
@@ -283,10 +286,7 @@ describe('transformToolsFormat integration', () => {
       config: {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: {
-          messages: '{{ prompt }}',
-          tools: '{{ tools }}',
-        },
+        body: createToolsBodyTemplate(),
         tools: [
           {
             type: 'function',
@@ -348,11 +348,7 @@ describe('transformToolsFormat integration', () => {
       config: {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: {
-          messages: '{{ prompt }}',
-          tools: '{{ tools }}',
-          tool_choice: '{{ tool_choice }}',
-        },
+        body: createToolsAndChoiceBodyTemplate(),
         tools: [
           {
             type: 'function',
@@ -407,11 +403,7 @@ describe('transformToolsFormat integration', () => {
       config: {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: {
-          messages: '{{ prompt }}',
-          tools: '{{ tools }}',
-          tool_choice: '{{ tool_choice }}',
-        },
+        body: createToolsAndChoiceBodyTemplate(),
         tools: [{ type: 'function', function: { name: 'my_tool' } }],
         tool_choice: 'required',
         transformToolsFormat: 'anthropic',
@@ -462,10 +454,7 @@ describe('transformToolsFormat integration', () => {
       config: {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: {
-          messages: '{{ prompt }}',
-          tools: '{{ tools }}',
-        },
+        body: createToolsBodyTemplate(),
         tools: anthropicTools,
         transformToolsFormat: 'anthropic', // Won't transform - not in OpenAI format
       },
@@ -501,10 +490,7 @@ describe('transformToolsFormat integration', () => {
       config: {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: {
-          messages: '{{ prompt }}',
-          tools: '{{ tools }}',
-        },
+        body: createToolsBodyTemplate(),
         tools: [{ type: 'function', function: { name: 'provider_tool' } }],
         transformToolsFormat: 'anthropic',
       },
@@ -560,10 +546,7 @@ describe('transformToolsFormat integration', () => {
       config: {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: {
-          messages: '{{ prompt }}',
-          tool_choice: '{{ tool_choice }}',
-        },
+        body: createToolChoiceBodyTemplate(),
         tool_choice: 'required',
         transformToolsFormat: 'openai',
         // No tools configured
@@ -595,11 +578,7 @@ describe('transformToolsFormat integration', () => {
       config: {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: {
-          messages: '{{ prompt }}',
-          tools: '{{ tools }}',
-          tool_choice: '{{ tool_choice }}',
-        },
+        body: createToolsAndChoiceBodyTemplate(),
         tools: [], // Empty array
         tool_choice: 'auto',
         transformToolsFormat: 'openai',
@@ -631,11 +610,7 @@ describe('transformToolsFormat integration', () => {
       config: {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: {
-          messages: '{{ prompt }}',
-          tools: '{{ tools }}',
-          tool_choice: '{{ tool_choice }}',
-        },
+        body: createToolsAndChoiceBodyTemplate(),
         tools: [{ normalized: true, name: 'my_tool' }],
         tool_choice: 'auto',
         transformToolsFormat: 'openai',

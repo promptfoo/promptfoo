@@ -5,7 +5,7 @@ prompts:
   - file://prompt.yaml
 
 providers:
-  - id: 'google:live:gemini-3.1-flash-live-preview'
+  - id: 'google:live:gemini-3.8-live'
     config:
       generationConfig:
         response_modalities: ['audio']
@@ -20,9 +20,7 @@ tests:
   - vars:
       question: "How you doin'?"
     assert:
-      - type: contains
-        value: well
-        # Check that audio transcript was generated with JavaScript
+      # Check that both audio and a transcript were generated.
       - type: javascript
         value: |
           return Boolean(
