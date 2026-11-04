@@ -236,10 +236,12 @@ describe('redteamInit', () => {
 
     expect(modelPrompt?.[0].choices).toEqual(
       expect.arrayContaining([
+        expect.objectContaining({ value: 'google:gemini-4-argon' }),
         expect.objectContaining({ value: 'google:gemini-3.8-flash' }),
         expect.objectContaining({ value: 'google:gemini-3.7-flash' }),
         expect.objectContaining({ value: 'google:gemini-3.6-flash' }),
         expect.objectContaining({ value: 'google:gemini-3.5-flash-lite' }),
+        expect.objectContaining({ value: 'vertex:gemini-4-argon' }),
         expect.objectContaining({ value: 'vertex:gemini-3.8-flash' }),
         expect.objectContaining({ value: 'vertex:gemini-3.7-flash' }),
         expect.objectContaining({ value: 'vertex:gemini-3.6-flash' }),
@@ -274,6 +276,7 @@ describe('redteamInit', () => {
   });
 
   it.each([
+    'vertex:gemini-4-argon',
     'vertex:gemini-3.8-flash',
     'vertex:gemini-3.7-flash',
     'vertex:gemini-3.6-flash',
