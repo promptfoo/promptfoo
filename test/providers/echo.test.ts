@@ -132,10 +132,14 @@ describe('EchoProvider', () => {
       const provider = new EchoProvider({ delay: 60_000 });
       const controller = new AbortController();
       const response = provider.callApi('Test input', {}, { abortSignal: controller.signal });
-      const rejection = expect(response).rejects.toThrow('cancelled by user');
+      const reason = new Error('pause this evaluation');
+      const rejection = expect(response).rejects.toMatchObject({
+        name: 'AbortError',
+        cause: reason,
+      });
 
       await vi.advanceTimersByTimeAsync(100);
-      controller.abort();
+      controller.abort(reason);
 
       await rejection;
       expect(vi.getTimerCount()).toBe(0);
@@ -149,7 +153,7 @@ describe('EchoProvider', () => {
 
       await expect(
         provider.callApi('Test input', {}, { abortSignal: controller.signal }),
-      ).rejects.toThrow('cancelled by user');
+      ).rejects.toBe(controller.signal.reason);
       expect(vi.getTimerCount()).toBe(0);
     });
 
