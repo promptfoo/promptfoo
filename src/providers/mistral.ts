@@ -7,9 +7,9 @@ import {
   getScopedCacheKey,
   isCacheEnabled,
 } from '../cache';
-import { getEnvString } from '../envars';
+import { getEnvString, getProviderEnvString } from '../envars';
 import logger from '../logger';
-import { type GenAISpanContext, type GenAISpanResult, withGenAISpan } from '../tracing/genaiTracer';
+import { extractGenAIResponse, type GenAISpanContext, withGenAISpan } from '../tracing/genaiTracer';
 import { maybeLoadToolsFromExternalFile } from '../util';
 import { resolveProviderEnv } from './env';
 import { calculateCost, getRequestTimeoutMs, parseChatPrompt } from './shared';
@@ -262,7 +262,7 @@ interface MistralChatCompletionOptions {
 const MISTRAL_CACHE_HASH_KEY = 'promptfoo:mistral:cache-key:v1';
 const MISTRAL_INFLIGHT_REQUESTS = new Map<string, Promise<MistralFetchResult>>();
 
-type MistralFetchResult = { data: any; cached: boolean };
+type MistralFetchResult = { data: any; cached: boolean; status?: number; statusText?: string };
 
 function hashMistralCacheValue(value: unknown): string {
   const serialized = typeof value === 'string' ? value : JSON.stringify(value);
@@ -500,6 +500,21 @@ function calculateMistralCost(
   return tokenCost + (promptAudioSeconds / 60) * 0.004;
 }
 
+function resolveMistralApiKey(
+  provider: MistralChatCompletionProvider | MistralEmbeddingProvider,
+): string | undefined {
+  const namedKey = provider.config.apiKeyEnvar
+    ? (getProviderEnvString(provider.env, provider.config.apiKeyEnvar) ??
+      getEnvString(provider.config.apiKeyEnvar as EnvVarKey))
+    : undefined;
+  return (
+    provider.config.apiKey ||
+    (namedKey ??
+      getProviderEnvString(provider.env, 'MISTRAL_API_KEY') ??
+      getEnvString('MISTRAL_API_KEY'))
+  );
+}
+
 export class MistralChatCompletionProvider implements ApiProvider {
   modelName: string;
   config: MistralChatCompletionOptions;
@@ -544,13 +559,7 @@ export class MistralChatCompletionProvider implements ApiProvider {
   }
 
   getApiKey(): string | undefined {
-    const namedKey = this.config.apiKeyEnvar
-      ? (this.env?.[this.config.apiKeyEnvar] ?? getEnvString(this.config.apiKeyEnvar as EnvVarKey))
-      : undefined;
-    return (
-      this.config.apiKey ||
-      (namedKey ?? this.env?.MISTRAL_API_KEY ?? getEnvString('MISTRAL_API_KEY'))
-    );
+    return resolveMistralApiKey(this);
   }
 
   private getCacheIdentityHash(apiUrl: string): string {
@@ -581,23 +590,10 @@ export class MistralChatCompletionProvider implements ApiProvider {
       traceparent: context?.traceparent,
     };
 
-    // Result extractor to set response attributes on the span
-    const resultExtractor = (response: ProviderResponse): GenAISpanResult => {
-      const result: GenAISpanResult = {};
-      if (response.tokenUsage) {
-        result.tokenUsage = {
-          prompt: response.tokenUsage.prompt,
-          completion: response.tokenUsage.completion,
-          total: response.tokenUsage.total,
-        };
-      }
-      return result;
-    };
-
     return withGenAISpan(
       spanContext,
       () => this.callApiInternal(prompt, context, config),
-      resultExtractor,
+      extractGenAIResponse,
     );
   }
 
@@ -776,13 +772,7 @@ export class MistralEmbeddingProvider implements ApiProvider {
   }
 
   getApiKey(): string | undefined {
-    const namedKey = this.config.apiKeyEnvar
-      ? (this.env?.[this.config.apiKeyEnvar] ?? getEnvString(this.config.apiKeyEnvar as EnvVarKey))
-      : undefined;
-    return (
-      this.config.apiKey ||
-      (namedKey ?? this.env?.MISTRAL_API_KEY ?? getEnvString('MISTRAL_API_KEY'))
-    );
+    return resolveMistralApiKey(this);
   }
 
   private getCacheIdentityHash(apiUrl: string): string {
@@ -830,6 +820,8 @@ export class MistralEmbeddingProvider implements ApiProvider {
 
     let data;
     let cached = false;
+    let status: number | undefined;
+    let statusText: string | undefined;
     const cache = isCacheEnabled() ? getCache() : undefined;
     if (cache) {
       try {
@@ -854,7 +846,7 @@ export class MistralEmbeddingProvider implements ApiProvider {
       });
 
       try {
-        ({ data, cached } = await fetchMistralWithDedupe(
+        ({ data, cached, status, statusText } = await fetchMistralWithDedupe(
           cacheKey,
           async () => {
             return (await fetchWithCache(
@@ -880,6 +872,10 @@ export class MistralEmbeddingProvider implements ApiProvider {
         options?.abortSignal?.throwIfAborted();
         logger.error(`API call error: ${err}`);
         throw err;
+      }
+
+      if (status !== undefined && (status < 200 || status >= 300)) {
+        throw new Error(`Mistral embeddings API error: ${status} ${statusText}`);
       }
     }
 

@@ -1,6 +1,7 @@
 import chalk from 'chalk';
 import dedent from 'dedent';
 import cliState from '../cliState';
+import { getExplicitProviderEnv, setExplicitProviderEnv } from '../envOverrides';
 import logger from '../logger';
 import { isApiProvider } from '../types/providers';
 import {
@@ -88,11 +89,18 @@ export async function loadApiProvider(
   providerPath: string,
   context: LoadApiProviderContext = {},
 ): Promise<ApiProvider> {
-  const env = context.env ?? cliState.env;
+  const suiteEnv = context.env ?? cliState.env;
+  const env = suiteEnv && { ...suiteEnv };
+  setExplicitProviderEnv(env, undefined);
   const basePath = context.basePath ?? cliState.basePath;
   return cliState.withBasePath(basePath, () =>
     cliState.withEnv(env, () =>
-      createApiProvider(providerPath, { ...context, basePath, env }, undefined, context.env),
+      createApiProvider(
+        providerPath,
+        { ...context, basePath, env },
+        undefined,
+        context.env ? env : undefined,
+      ),
     ),
   );
 }
@@ -136,6 +144,13 @@ async function createApiProvider(
     Object.prototype.hasOwnProperty.call(templateEnv, apiKeyEnvar)
   ) {
     mergedEnv[apiKeyEnvar] = templateEnv[apiKeyEnvar];
+    const explicit = getExplicitProviderEnv(templateEnv);
+    if (explicit?.[apiKeyEnvar] !== undefined) {
+      setExplicitProviderEnv(mergedEnv, {
+        ...getExplicitProviderEnv(mergedEnv),
+        [apiKeyEnvar]: explicit[apiKeyEnvar],
+      });
+    }
   }
 
   const providerOptions: ProviderOptions = {
@@ -499,10 +514,6 @@ async function loadApiProvidersWithEnv(
             throw new Error(
               `Invalid provider at index ${idx}: expected a provider id string, ProviderOptions with an 'id' field, or a ProviderOptionsMap (e.g. { "openai:responses:gpt-5.4": { config: ... } }). Got: ${describeInvalidProvider(provider)}`,
             );
-          default: {
-            const _exhaustive: never = descriptor;
-            throw new Error(`Unhandled provider kind: ${(_exhaustive as any).kind}`);
-          }
         }
       }),
     );
