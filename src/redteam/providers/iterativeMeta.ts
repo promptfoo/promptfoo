@@ -45,6 +45,7 @@ import {
   externalizeResponseForRedteamHistory,
   getGraderAssertionValue,
   getTargetResponse,
+  preserveSelectedError,
   redteamProviderManager,
   runRedteamGrader,
   type TargetResponse,
@@ -89,6 +90,8 @@ interface IterativeMetaMetadata {
     outputImage?: MediaData;
     score: number;
     graderPassed: boolean | undefined;
+    graderError?: string;
+    gradingInputHash?: string;
     guardrails: GuardrailResponse | undefined;
     trace?: Record<string, unknown>;
     traceSummary?: string;
@@ -232,7 +235,10 @@ export async function runMetaAgentRedteam({
                 ? '[Hidden for privacy]'
                 : lastResponse.output,
               responseLength: lastResponse.output.length,
-              graderPassed: redteamHistory[i - 1].graderPassed || false,
+              graderPassed:
+                storedGraderResult?.metadata?.graderError === true
+                  ? undefined
+                  : redteamHistory[i - 1].graderPassed || false,
               graderReason: storedGraderResult?.reason,
             }
           : undefined,
@@ -469,6 +475,9 @@ export async function runMetaAgentRedteam({
     );
     lastResponse = targetResponse;
     accumulateResponseTokenUsage(totalTokenUsage, targetResponse);
+    if (targetResponse.error && options?.abortSignal?.aborted) {
+      break;
+    }
 
     // Fetch trace context if tracing is enabled
     let traceContext: TraceContextData | null = null;
@@ -647,6 +656,11 @@ export async function runMetaAgentRedteam({
       }
     }
 
+    const graderError =
+      graderResult?.metadata?.graderError === true
+        ? graderResult.reason || 'Grading failed'
+        : undefined;
+
     // Store in redteam history for Messages tab
     redteamHistory.push({
       prompt: attackPrompt, // Original text for transcript
@@ -663,7 +677,11 @@ export async function runMetaAgentRedteam({
           ? { data: targetResponse.image.data, format: targetResponse.image.format }
           : undefined,
       score: 0, // Not used in meta strategy
-      graderPassed: graderResult?.pass,
+      graderPassed: graderError ? undefined : graderResult?.pass,
+      graderError,
+      gradingInputHash: graderError
+        ? storedGraderResult?.metadata?.redteamGradingInputHash
+        : undefined,
       guardrails: undefined,
       trace: traceContext ? formatTraceForMetadata(traceContext) : undefined,
       traceSummary: computedTraceSummary,
@@ -671,8 +689,8 @@ export async function runMetaAgentRedteam({
       inputVars: currentRenderInputVars,
     });
 
-    // Check if vulnerability was achieved
-    if (graderResult?.pass === false) {
+    // Only a valid grader verdict can establish a vulnerability.
+    if (graderResult?.pass === false && !graderError) {
       vulnerabilityAchieved = true;
       bestPrompt = finalAttackPrompt; // Use transformed prompt (e.g., fetchPrompt) not jailbreak
       bestResponse = targetResponse.output;
@@ -688,29 +706,32 @@ export async function runMetaAgentRedteam({
   }
 
   const error = agentRequestError || failClosedError || lastResponse?.error;
-  return {
-    output: bestResponse || lastResponse?.output || '',
-    prompt: bestPrompt,
-    ...(error ? { error } : {}),
-    metadata: {
-      finalIteration,
-      vulnerabilityAchieved,
-      // Use the last prompt sent to target (e.g., fetchPrompt for indirect-web-pwn layer)
-      // This ensures UI shows what was actually sent, not the pre-transform jailbreak
-      redteamFinalPrompt: lastFinalAttackPrompt || bestPrompt,
-      storedGraderResult,
-      stopReason,
-      redteamHistory,
-      sessionIds,
-      traceSnapshots:
-        traceSnapshots.length > 0
-          ? traceSnapshots.map((t) => formatTraceForMetadata(t))
-          : undefined,
-      // Include display vars from per-turn layer transforms (e.g., fetchPrompt, webPageUrl)
-      ...(lastTransformDisplayVars && { transformDisplayVars: lastTransformDisplayVars }),
+  return preserveSelectedError(
+    {
+      output: bestResponse || lastResponse?.output || '',
+      prompt: bestPrompt,
+      ...(error ? { error } : {}),
+      metadata: {
+        finalIteration,
+        vulnerabilityAchieved,
+        // Use the last prompt sent to target (e.g., fetchPrompt for indirect-web-pwn layer)
+        // This ensures UI shows what was actually sent, not the pre-transform jailbreak
+        redteamFinalPrompt: lastFinalAttackPrompt || bestPrompt,
+        storedGraderResult,
+        stopReason,
+        redteamHistory,
+        sessionIds,
+        traceSnapshots:
+          traceSnapshots.length > 0
+            ? traceSnapshots.map((t) => formatTraceForMetadata(t))
+            : undefined,
+        // Include display vars from per-turn layer transforms (e.g., fetchPrompt, webPageUrl)
+        ...(lastTransformDisplayVars && { transformDisplayVars: lastTransformDisplayVars }),
+      },
+      tokenUsage: totalTokenUsage,
     },
-    tokenUsage: totalTokenUsage,
-  };
+    agentRequestError || failClosedError ? undefined : lastResponse,
+  );
 }
 
 class RedteamIterativeMetaProvider implements ApiProvider {

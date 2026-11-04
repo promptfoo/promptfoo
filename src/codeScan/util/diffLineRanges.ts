@@ -265,23 +265,13 @@ export function clampCommentLines(
 
   // Clamp the start line
   const clampedStartLine = clampToValidLine(filepath, startLine, ranges);
-  if (clampedStartLine === null) {
-    return {
-      startLine: null,
-      line: clampedEndLine,
-    };
-  }
-
-  // Ensure start <= end (if start > end after clamping, make it single-line)
-  if (clampedStartLine > clampedEndLine) {
-    return {
-      startLine: null,
-      line: clampedEndLine,
-    };
-  }
-
-  // If start and end are the same, make it single-line
-  if (clampedStartLine === clampedEndLine) {
+  // Missing or equal start lines make a single-line comment. Also ensure start <= end:
+  // if start > end after clamping, make it single-line.
+  if (
+    clampedStartLine === null ||
+    clampedStartLine > clampedEndLine ||
+    clampedStartLine === clampedEndLine
+  ) {
     return {
       startLine: null,
       line: clampedEndLine,

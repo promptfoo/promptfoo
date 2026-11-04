@@ -26,7 +26,7 @@ const TableSettingsModal = ({
   resultsTableZoom,
   onResultsTableZoomChange,
 }: SettingsModalProps) => {
-  const { resetToDefaults } = useSettingsState(open);
+  const { resetToDefaults } = useSettingsState();
 
   const handleClose = () => {
     onClose();

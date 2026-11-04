@@ -29,7 +29,7 @@ Classify Fashion MNIST images with two OpenAI vision models and a JSON response 
    npx promptfoo@latest view
    ```
 
-4. Optionally, regenerate the dataset using Python 3.10 or newer. The included CSV is ready to evaluate without Python.
+4. Optionally, regenerate the dataset using Python 3.11 or newer. The included CSV is ready to evaluate without Python.
 
    ```sh
    python3 -m venv venv
@@ -42,7 +42,7 @@ Classify Fashion MNIST images with two OpenAI vision models and a JSON response 
 
    Use `--num_samples 10 --filename sample.csv` to choose a sample size and output file. To reuse downloaded data offline, pass `--data-dir /path/to/fashion-mnist` containing `train-images-idx3-ubyte.gz` and `train-labels-idx1-ubyte.gz`. The output columns remain `index`, `label`, and `image_base64`.
 
-   Run the offline generator checks with `python -m unittest discover -p '*_test.py'`.
+   Run the offline generator checks with `python -m unittest discover -p 'test_dataset_gen.py'`.
 
 5. Experiment with the configuration:
    - Modify the JSON schema in `promptfooconfig.yaml` to add or adjust required fields

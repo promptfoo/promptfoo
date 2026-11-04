@@ -59,6 +59,8 @@ def load_dataset(data_dir: Path | None = None) -> tuple[bytes, bytes]:
 
 def image_to_base64(pixels: bytes) -> str:
     """Encode one 28x28 grayscale image as JPEG, matching the eval input format."""
+    if not isinstance(pixels, bytes) or len(pixels) != 28 * 28:
+        raise ValueError("Expected 28x28 grayscale pixel bytes")
     buffer = io.BytesIO()
     Image.frombytes("L", (28, 28), pixels).save(buffer, format="JPEG")
     return base64.b64encode(buffer.getvalue()).decode("ascii")

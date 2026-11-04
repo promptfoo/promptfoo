@@ -198,7 +198,7 @@ test('clicking button calls updateItems', () => {
 
 ### Additional Store Test References
 
-- `src/app/src/store/providersStore.test.ts` - Basic store testing
+- `src/app/src/stores/redteamJobStore.test.ts` - Basic store testing
 - `src/app/src/stores/evalConfig.test.ts` - Configuration state
 - `src/app/src/stores/userStore.test.ts` - Async operations with act()
 
