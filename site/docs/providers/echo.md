@@ -43,8 +43,6 @@ providers:
     delay: 500
 ```
 
-The simulated delay stops when the provider call is cancelled, including when a test times out.
-
 ### Example
 
 ```yaml title="promptfooconfig.yaml"
