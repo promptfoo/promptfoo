@@ -1,11 +1,13 @@
+import { setTimeout as delayWithSignal } from 'node:timers/promises';
 import crypto from 'crypto';
 
 import { z } from 'zod';
-import { getEnvFloat, getEnvInt, getEnvString } from '../envars';
+import { getEnvString } from '../envars';
 import logger from '../logger';
 import telemetry from '../telemetry';
 import { getTransformErrorMessage, TransformInputType, transform } from '../util/transform';
 import { StringOrFunctionSchema } from '../validators/shared';
+import { resolveProviderEnv } from './env';
 
 import type { EnvOverrides } from '../types/env';
 import type {
@@ -91,6 +93,12 @@ interface SageMakerOptions extends ProviderOptions {
  */
 abstract class SageMakerGenericProvider {
   env?: EnvOverrides;
+
+  protected getNumericEnv(key: string, integer: boolean, defaultValue: number): number {
+    const value = this.env?.[key] ?? getEnvString(key);
+    const parsed = integer ? Number.parseInt(value ?? '', 10) : Number.parseFloat(value ?? '');
+    return Number.isNaN(parsed) ? defaultValue : parsed;
+  }
   sagemakerRuntime?: any; // SageMaker runtime client
   private initializedRuntime?: { client: any; region: string };
   config: SageMakerConfig;
@@ -182,7 +190,7 @@ abstract class SageMakerGenericProvider {
         const runtimeRegion = region ?? this.getRegion();
         const runtime = new SageMakerRuntimeClient({
           region: runtimeRegion,
-          maxAttempts: getEnvInt('AWS_SAGEMAKER_MAX_RETRIES', 3),
+          maxAttempts: this.getNumericEnv('AWS_SAGEMAKER_MAX_RETRIES', true, 3),
           retryMode: 'adaptive',
           ...(credentials ? { credentials } : {}),
         });
@@ -206,9 +214,7 @@ abstract class SageMakerGenericProvider {
   getRegion(): string {
     return (
       this.config?.region ||
-      this.env?.AWS_REGION ||
-      getEnvString('AWS_REGION') ||
-      getEnvString('AWS_DEFAULT_REGION') ||
+      resolveProviderEnv(this.env, ['AWS_REGION', 'AWS_DEFAULT_REGION'])?.value ||
       'us-east-1'
     );
   }
@@ -453,15 +459,16 @@ export class SageMakerCompletionProvider extends SageMakerGenericProvider implem
    * Format the request payload based on model type
    */
   formatPayload(prompt: string): string {
-    const maxTokens = this.config.maxTokens ?? getEnvInt('AWS_SAGEMAKER_MAX_TOKENS') ?? 1024;
+    const maxTokens =
+      this.config.maxTokens ?? this.getNumericEnv('AWS_SAGEMAKER_MAX_TOKENS', true, 1024);
     const temperature =
       typeof this.config.temperature === 'number'
         ? this.config.temperature
-        : (getEnvFloat('AWS_SAGEMAKER_TEMPERATURE') ?? 0.7);
+        : this.getNumericEnv('AWS_SAGEMAKER_TEMPERATURE', false, 0.7);
     const topP =
       typeof this.config.topP === 'number'
         ? this.config.topP
-        : (getEnvFloat('AWS_SAGEMAKER_TOP_P') ?? 1.0);
+        : this.getNumericEnv('AWS_SAGEMAKER_TOP_P', false, 1.0);
     const stopSequences = this.config.stopSequences || [];
 
     let payload: any;
@@ -846,6 +853,8 @@ export class SageMakerEmbeddingProvider
   extends SageMakerGenericProvider
   implements ApiEmbeddingProvider
 {
+  readonly supportsEmbeddingCancellation = true;
+
   async callApi(): Promise<ProviderResponse> {
     throw new Error(
       'callApi is not implemented for embedding provider. Use callEmbeddingApi instead.',
@@ -882,7 +891,9 @@ export class SageMakerEmbeddingProvider
   async callEmbeddingApi(
     text: string,
     context?: CallApiContextParams,
+    options?: CallApiOptionsParams,
   ): Promise<ProviderEmbeddingResponse> {
+    const signal = options?.abortSignal;
     // Import cache functions dynamically to avoid circular dependencies
     const { isCacheEnabled, getCache } = await import('../cache');
 
@@ -943,7 +954,12 @@ export class SageMakerEmbeddingProvider
       logger.debug(
         `Applying delay of ${delayMs}ms before calling SageMaker embedding endpoint ${this.getEndpointName()}`,
       );
-      await sleep(delayMs);
+      await (signal
+        ? delayWithSignal(delayMs, undefined, { signal }).catch((error) => {
+            signal.throwIfAborted();
+            throw error;
+          })
+        : sleep(delayMs));
     }
 
     // Not in cache or cache disabled, make the actual API call
@@ -993,7 +1009,9 @@ export class SageMakerEmbeddingProvider
       });
 
       const startTime = Date.now();
-      const response = await runtime.send(command);
+      const response = signal
+        ? await runtime.send(command, { abortSignal: signal })
+        : await runtime.send(command);
       const endTime = Date.now();
       const _latency = endTime - startTime;
 
@@ -1102,6 +1120,7 @@ export class SageMakerEmbeddingProvider
 
       return result;
     } catch (error: any) {
+      signal?.throwIfAborted();
       logger.error(`SageMaker embedding API error: ${error}`);
       return {
         error: `SageMaker embedding API error: ${error.message || String(error)}`,
