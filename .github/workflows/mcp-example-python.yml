@@ -2,16 +2,13 @@ name: Python MCP Server Example
 
 on:
   pull_request:
-    paths:
+    paths: &watched-paths
       - 'examples/redteam-mcp-agent/**'
       - '.nvmrc'
       - '.github/workflows/mcp-example-python.yml'
   push:
     branches: [main]
-    paths:
-      - 'examples/redteam-mcp-agent/**'
-      - '.nvmrc'
-      - '.github/workflows/mcp-example-python.yml'
+    paths: *watched-paths
 
 permissions:
   contents: read

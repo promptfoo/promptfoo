@@ -10,15 +10,12 @@ import logger from '../../logger';
 import { sha256 } from '../../util/createHash';
 import {
   formatRateLimitErrorMessage,
+  getAbortError,
   HttpRateLimitError,
   isAbortError,
 } from '../../util/fetch/errors';
 import { fetchWithRetries } from '../../util/fetch/index';
-import {
-  maybeLoadResponseFormatFromExternalFile,
-  maybeLoadToolsFromExternalFile,
-  renderVarsInObject,
-} from '../../util/index';
+import { renderVarsInObject } from '../../util/index';
 import { isSecretField, sanitizeUrl } from '../../util/sanitizer';
 import { sleep } from '../../util/time';
 import { FunctionCallbackHandler } from '../functionCallbackUtils';
@@ -46,10 +43,18 @@ import {
   isGpt6Model,
 } from './gpt6';
 import {
+  type PreparedOpenAiResponseFormat,
+  prepareOpenAiReasoning,
+  prepareOpenAiResponseFormat,
+  prepareOpenAiTools,
+} from './prepare';
+import {
   appendOpenAiApiPath,
   assertOpenAiApiModel,
   classifyOpenAiGatewayStreamError,
+  flattenResponseTool,
   formatOpenAiError,
+  getOpenAiEffectiveServiceTier,
   getOpenAiGatewayErrorType,
   getOpenAiPartialOutput,
   getOpenAiPolicyRefusal,
@@ -57,16 +62,21 @@ import {
   hasSensitiveOpenAiCacheString,
   isAzureOpenAiEndpoint,
   isCustomOpenAiEndpoint,
+  normalizeOpenAiBillingModelName,
+  normalizeOpenAiServiceTierForWire,
+  OPENAI_BILLING_MODELS,
+  RETIRED_OPENAI_MODEL_IDS,
 } from './util';
 
-import type { EnvOverrides } from '../../types/env';
 import type {
   CallApiContextParams,
   CallApiOptionsParams,
   ProviderResponse,
 } from '../../types/index';
+import type { ProviderOptions } from '../../types/providers';
 import type { FetchOptions } from '../../util/fetch/types';
-import type { OpenAiCompletionOptions, ReasoningEffort } from './types';
+import type { OpenAiBillingConfig, OpenAiRequestBody, OpenAiResponsesConfig } from './config';
+import type { ReasoningEffort } from './types';
 
 // OpenAI SDK has APIError class for exceptions, but not a type for error responses
 // in the JSON body. This interface represents the structure when the API returns
@@ -170,16 +180,6 @@ const inFlightBackgroundResponses = new Map<
     billed: boolean;
   }
 >();
-
-function getAbortError(signal: AbortSignal): Error {
-  const reason = signal.reason;
-  if (reason instanceof Error && reason.name === 'AbortError') {
-    return reason;
-  }
-  const error = new Error(reason instanceof Error ? reason.message : 'Request was aborted');
-  error.name = 'AbortError';
-  return error;
-}
 
 function isSensitiveBackgroundCacheHeader(key: string): boolean {
   return (
@@ -801,13 +801,13 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     'o3-mini',
     'o3-mini-2025-01-31',
     'gpt-5-codex-mini',
-  ];
+  ].filter((model) => !RETIRED_OPENAI_MODEL_IDS.has(model));
 
-  config: OpenAiCompletionOptions;
+  config: OpenAiResponsesConfig;
 
   constructor(
     modelName: string,
-    options: { config?: OpenAiCompletionOptions; id?: string; env?: EnvOverrides } = {},
+    options: Pick<ProviderOptions<OpenAiResponsesConfig>, 'config' | 'id' | 'env'> = {},
   ) {
     super(modelName, options);
     this.config = options.config ? { ...options.config } : {};
@@ -825,11 +825,38 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     return modelName === 'codex-mini-latest' || super.isReasoningModel(modelName);
   }
 
+  protected isReasoningCapabilityModel(modelName: string): boolean {
+    const configuredModelName = this.getCapabilityModelName().replace(/(^|\/)ft:/, '$1');
+    if (modelName === configuredModelName) {
+      return this.isReasoningModel();
+    }
+
+    return modelName === 'codex-mini-latest' || super.isReasoningModel(modelName);
+  }
+
+  protected supportsTemperatureForCapabilityModel(modelName: string): boolean {
+    const configuredModelName = this.getCapabilityModelName().replace(/(^|\/)ft:/, '$1');
+    return modelName === configuredModelName
+      ? this.supportsTemperature()
+      : !this.isReasoningCapabilityModel(modelName);
+  }
+
+  private getEffectiveModelName(config: OpenAiBillingConfig): string {
+    const passthroughModel = (config.passthrough as { model?: unknown } | undefined)?.model;
+    return typeof passthroughModel === 'string'
+      ? this.normalizeCapabilityModelName(passthroughModel)
+      : this.getCapabilityModelName();
+  }
+
+  protected getBillingModelName(config: OpenAiBillingConfig): string {
+    return this.getEffectiveModelName(config);
+  }
+
   private usesGatewayErrorFormat(): boolean {
     return this.getGenAISystem() === 'openai' && isCustomOpenAiEndpoint(this.getApiUrl());
   }
 
-  protected getBillingUsage(data: any, _config: OpenAiCompletionOptions): any {
+  protected getBillingUsage(data: any, _config: OpenAiBillingConfig): any {
     return data.usage;
   }
 
@@ -840,7 +867,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
   protected applyBilling(
     result: ProviderResponse,
     data: any,
-    config: OpenAiCompletionOptions,
+    config: OpenAiBillingConfig,
     cached: boolean,
   ): ProviderResponse {
     if (this.getGenAISystem() === 'openai' && isOpenRouterEndpoint(this.getApiUrl())) {
@@ -855,12 +882,8 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     }
     const serviceTier =
       (data as { service_tier?: string | null }).service_tier ?? config.service_tier;
-    const passthroughModel = (config.passthrough as { model?: unknown } | undefined)?.model;
-    const modelName =
-      typeof passthroughModel === 'string' && passthroughModel !== this.modelName
-        ? passthroughModel
-        : this.getBillingModelName(config);
-    const unprefixedModelName = modelName.split('/').pop() ?? modelName;
+    const modelName = this.getBillingModelName(config);
+    const unprefixedModelName = normalizeOpenAiBillingModelName(modelName);
     const bedrockEndpoint = this.getBedrockEndpoint();
     const isBedrock = this.getGenAISystem() === 'bedrock' || bedrockEndpoint !== undefined;
     const runtimeProfile =
@@ -876,8 +899,9 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       bedrockEndpoint === 'runtime'
         ? Boolean(runtimeProfile && runtimeProfile[1] !== 'global')
         : isBedrock || this.modelName.startsWith('openai.');
+    const billingLookupModel = normalizeOpenAiBillingModelName(billingModelName);
     const responseCost = calculateOpenAIUsageCost(
-      billingModelName,
+      billingLookupModel,
       config,
       this.getBillingUsage(data, config),
       {
@@ -901,7 +925,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     }
     const observableToolCost = cached
       ? 0
-      : calculateObservableOpenAIToolCost(data, billingModelName, config);
+      : calculateObservableOpenAIToolCost(data, billingLookupModel, config);
 
     return {
       ...result,
@@ -930,7 +954,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
 
   private getPolicyResponse(
     data: OpenAIResponsesResponse,
-    config: OpenAiCompletionOptions,
+    config: OpenAiBillingConfig & { response_format?: PreparedOpenAiResponseFormat },
     cached: boolean,
     status: number,
     statusText: string,
@@ -971,14 +995,29 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     );
   }
 
-  private getDeploymentCapabilities(config: OpenAiCompletionOptions) {
+  private getDeploymentCapabilities(config: OpenAiResponsesConfig) {
+    const effectiveModelName = this.getEffectiveModelName(config);
+    const capabilityModelName = effectiveModelName.replace(/(^|\/)ft:/, '$1');
+    const isEffectiveGpt5Model =
+      capabilityModelName.startsWith('gpt-5') || capabilityModelName.includes('/gpt-5');
+    const isEffectiveReasoningModel = this.isReasoningCapabilityModel(capabilityModelName);
+    const supportsTemperature = this.supportsTemperatureForCapabilityModel(capabilityModelName);
+    // Azure model ids can be opaque deployment names. Preserve explicit capability hints
+    // for those overrides; known OpenAI models supply their own capabilities instead.
     const passthroughModel = (config.passthrough as { model?: unknown } | undefined)?.model;
-    const capabilityModelName =
-      typeof passthroughModel === 'string' ? passthroughModel : this.getCapabilityModelName();
-    const isGPT6Model = isGpt6Model(capabilityModelName);
+    const normalizedModelName = normalizeOpenAiBillingModelName(effectiveModelName);
+    const modelLookupName = normalizedModelName.startsWith('ft:')
+      ? normalizedModelName.split(':')[1]
+      : normalizedModelName;
+    const isKnownModelOverride =
+      typeof passthroughModel === 'string' &&
+      OPENAI_BILLING_MODELS.some(({ id }) => id === modelLookupName);
     const hasAzureCustomDeploymentHost =
-      typeof passthroughModel !== 'string' &&
-      [config.apiHost, config.apiBaseUrl, this.getApiUrl()].some(isAzureOpenAiEndpoint);
+      !isKnownModelOverride &&
+      [config.apiHost, config.apiBaseUrl, this.getApiUrl()].some((endpoint) =>
+        isAzureOpenAiEndpoint(endpoint),
+      );
+    const isGPT6Model = isGpt6Model(capabilityModelName);
     const isAzureResponsesDeploymentWithReasoningConfig =
       hasAzureCustomDeploymentHost &&
       (config.reasoning !== undefined || config.reasoning_effort !== undefined);
@@ -988,33 +1027,31 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     // should promote a custom deployment to "reasoning model" status, otherwise
     // max_output_tokens defaults change unexpectedly.
     const isReasoningModel =
-      this.isReasoningModel(capabilityModelName) ||
-      isGPT6Model ||
-      isAzureResponsesDeploymentWithReasoningConfig;
+      isGPT6Model || isEffectiveReasoningModel || isAzureResponsesDeploymentWithReasoningConfig;
     const supportsVerbosity =
-      this.isGPT5Model(capabilityModelName) ||
-      isGPT6Model ||
-      isAzureResponsesDeploymentWithVerbosityConfig;
+      isGPT6Model || isEffectiveGpt5Model || isAzureResponsesDeploymentWithVerbosityConfig;
 
     return {
       isGPT6Model,
       isAzureResponsesDeploymentWithReasoningConfig,
       isReasoningModel,
       supportsVerbosity,
-      // GPT-6 request rules remove sampling unless the final reasoning effort permits it.
-      supportsTemperature: isGPT6Model || this.supportsTemperature(capabilityModelName),
+      supportsTemperature: isGPT6Model || supportsTemperature,
     };
   }
 
   async getOpenAiBody(
     prompt: string,
     context?: CallApiContextParams,
-    _callApiOptions?: CallApiOptionsParams,
+    callApiOptions?: CallApiOptionsParams,
   ) {
-    const config = {
-      ...this.config,
-      ...context?.prompt?.config,
-    };
+    const promptConfig = context?.prompt?.config;
+    const mergedConfig: OpenAiResponsesConfig = { ...this.config, ...promptConfig };
+    const passthrough: Record<string, unknown> | undefined = mergedConfig.passthrough
+      ? { ...mergedConfig.passthrough }
+      : undefined;
+    const config = { ...mergedConfig, passthrough };
+    const effectiveServiceTier = getOpenAiEffectiveServiceTier(this.config, promptConfig);
 
     // Chat-format content parts are translated to their Responses equivalents so multimodal
     // prompts authored for the chat API work here too (the Responses API rejects
@@ -1051,15 +1088,15 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
 
     const gpt6Reasoning = isGPT6Model
       ? getGpt6ResponsesReasoning(this.config, context?.prompt?.config, (value) =>
-          renderVarsInObject(value, context?.vars),
+          renderVarsInObject(value, context?.vars ?? {}),
         )
       : undefined;
     const renderedReasoning = isGPT6Model
-      ? (gpt6Reasoning as typeof config.reasoning)
-      : (renderVarsInObject(config.reasoning, context?.vars) as typeof config.reasoning);
+      ? gpt6Reasoning
+      : prepareOpenAiReasoning(config.reasoning, context?.vars);
     const renderedReasoningEffort =
       isReasoningModel && !isGPT6Model
-        ? (renderVarsInObject(config.reasoning_effort, context?.vars) as ReasoningEffort)
+        ? (renderVarsInObject(config.reasoning_effort, context?.vars ?? {}) as ReasoningEffort)
         : undefined;
     const effectiveReasoningEffort = renderedReasoning?.effort ?? renderedReasoningEffort;
     const hasAzureReasoningEffort =
@@ -1082,10 +1119,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     const instructions = config.instructions;
 
     // Load response_format from external file if needed (handles nested schema loading)
-    const responseFormat = maybeLoadResponseFormatFromExternalFile(
-      config.response_format,
-      context?.vars,
-    );
+    const responseFormat = prepareOpenAiResponseFormat(config.response_format, context?.vars);
 
     let textFormat;
     if (responseFormat) {
@@ -1125,29 +1159,20 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
 
     // Load tools from external file if needed
     // Store in variable so we can include in both body and returned config
-    const loadedTools = config.tools
-      ? await maybeLoadToolsFromExternalFile(config.tools, context?.vars)
-      : undefined;
+    const loadedTools = await prepareOpenAiTools(
+      config.tools,
+      context?.vars,
+      callApiOptions?.abortSignal,
+    );
     const responsesTools = Array.isArray(loadedTools)
-      ? loadedTools.map((tool) => {
-          if (tool?.type !== 'function' || !tool.function) {
-            return tool;
-          }
-          const { function: functionDefinition, ...rest } = tool;
-          return { ...rest, ...functionDefinition };
-        })
+      ? loadedTools.map(flattenResponseTool)
       : loadedTools;
-    const toolChoice =
-      config.tool_choice &&
-      typeof config.tool_choice === 'object' &&
-      config.tool_choice.type === 'function' &&
-      config.tool_choice.function?.name
-        ? { type: 'function', name: config.tool_choice.function.name }
-        : config.tool_choice;
+    const toolChoice = flattenResponseTool(config.tool_choice);
 
-    const body = {
+    const bodyFields = {
       model: this.modelName,
       input,
+      ...(config.access_programs === undefined ? {} : { access_programs: config.access_programs }),
       ...(maxOutputTokens === undefined ? {} : { max_output_tokens: maxOutputTokens }),
       ...(reasoningEffort ? { reasoning: { effort: reasoningEffort } } : {}),
       ...(temperature === undefined ? {} : { temperature }),
@@ -1186,7 +1211,19 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
         ? {}
         : { prompt_cache_retention: config.prompt_cache_retention }),
       ...(config.passthrough || {}),
+      ...(effectiveServiceTier === undefined || effectiveServiceTier === null
+        ? {}
+        : {
+            service_tier: normalizeOpenAiServiceTierForWire(effectiveServiceTier, this.getApiUrl()),
+          }),
     };
+    const body: OpenAiRequestBody<typeof bodyFields> = bodyFields;
+    // A nullable prompt tier clears an inherited provider tier. Preserve an
+    // explicitly nullable passthrough field, but never leave a stale string on
+    // the wire while the effective billing tier is null.
+    if (effectiveServiceTier === null && config.passthrough?.service_tier !== null) {
+      delete body.service_tier;
+    }
     assertOpenAiApiModel(body.model, this.getApiUrl());
 
     // Handle reasoning parameters for reasoning models
@@ -1223,7 +1260,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       body,
       config: {
         ...config,
-        service_tier: body.service_tier,
+        service_tier: effectiveServiceTier,
         tools: Array.isArray(body.tools) ? body.tools : loadedTools, // Include effective tools for downstream validation.
         response_format: responseFormat,
       },
@@ -1259,7 +1296,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
 
     const spanContext = buildChatSpanContext({
       system: this.getGenAISystem(),
-      model: this.modelName,
+      model: String(effectiveBody.model),
       providerId: this.id(),
       prompt,
       context,
@@ -1292,11 +1329,12 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     apiKey: string | undefined,
   ): Promise<ProviderResponse> {
     const { body, config, abortSignal } = prepared;
+    const effectiveModelName = this.getEffectiveModelName(config);
 
     // Validate deep research models have required tools. Use the capability model name so
     // detection stays consistent with the other capability checks (isGPT5Model, isReasoningModel,
     // the gpt-5-pro timeout regex) for subclasses that strip a vendor prefix.
-    const isDeepResearchModel = this.getCapabilityModelName().includes('deep-research');
+    const isDeepResearchModel = effectiveModelName.includes('deep-research');
     if (isDeepResearchModel) {
       const hasDataSource = config.tools?.some(
         (tool: any) =>
@@ -1309,7 +1347,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       );
       if (!hasDataSource) {
         return {
-          error: `Deep research model ${this.modelName} requires at least one data source. Configure web_search, web_search_preview, file_search with vector_store_ids, or an MCP tool.`,
+          error: `Deep research model ${effectiveModelName} requires at least one data source. Configure web_search, web_search_preview, file_search with vector_store_ids, or an MCP tool.`,
         };
       }
 
@@ -1318,7 +1356,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       for (const mcpTool of mcpTools) {
         if (mcpTool.require_approval !== 'never') {
           return {
-            error: `Deep research model ${this.modelName} requires MCP tools to have require_approval: 'never'. Update your MCP tool configuration:\ntools:\n  - type: mcp\n    require_approval: never`,
+            error: `Deep research model ${effectiveModelName} requires MCP tools to have require_approval: 'never'. Update your MCP tool configuration:\ntools:\n  - type: mcp\n    require_approval: never`,
           };
         }
       }
@@ -1326,12 +1364,12 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
 
     // Calculate timeout for long-running models and background responses.
     let timeout = getRequestTimeoutMs();
-    const isGpt5ProModel = /(^|\/)gpt-5(?:\.\d+)?-pro(?:-|$)/.test(this.getCapabilityModelName());
+    const isGpt5ProModel = /(^|\/)gpt-5(?:\.\d+)?-pro(?:-|$)/.test(effectiveModelName);
     const isLongRunningModel = isDeepResearchModel || isGpt5ProModel || body.background === true;
     if (isLongRunningModel) {
       const evalTimeout = getEnvInt('PROMPTFOO_EVAL_TIMEOUT_MS', 0);
       timeout = evalTimeout > 0 ? evalTimeout : LONG_RUNNING_MODEL_TIMEOUT_MS;
-      logger.debug(`Using timeout of ${timeout}ms for long-running model ${this.modelName}`);
+      logger.debug(`Using timeout of ${timeout}ms for long-running model ${effectiveModelName}`);
     }
 
     let data: OpenAIResponsesResponse;
