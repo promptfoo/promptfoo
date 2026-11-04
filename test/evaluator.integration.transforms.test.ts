@@ -33,6 +33,10 @@ vi.mock('../src/cache', () => ({
     set: vi.fn(),
     wrap: vi.fn((_key: any, fn: any) => fn()),
   })),
+  isCacheEnabled: vi.fn(() => true),
+  withCacheEnabled: vi.fn(async (_enabled: boolean | undefined, fn: () => Promise<unknown>) =>
+    fn(),
+  ),
   withCacheNamespace: vi.fn(async (_namespace: string | undefined, fn: () => Promise<unknown>) =>
     fn(),
   ),

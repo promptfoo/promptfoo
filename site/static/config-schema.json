@@ -17,58 +17,58 @@
           "$ref": "#/definitions/__schema2"
         },
         "prompts": {
-          "$ref": "#/definitions/__schema183"
+          "$ref": "#/definitions/__schema191"
         },
         "tests": {
-          "$ref": "#/definitions/__schema184"
+          "$ref": "#/definitions/__schema192"
         },
         "scenarios": {
-          "$ref": "#/definitions/__schema201"
-        },
-        "defaultTest": {
-          "$ref": "#/definitions/__schema202"
-        },
-        "outputPath": {
-          "$ref": "#/definitions/__schema203"
-        },
-        "sharing": {
-          "$ref": "#/definitions/__schema204"
-        },
-        "nunjucksFilters": {
-          "$ref": "#/definitions/__schema205"
-        },
-        "env": {
-          "$ref": "#/definitions/__schema206"
-        },
-        "derivedMetrics": {
-          "$ref": "#/definitions/__schema207"
-        },
-        "extensions": {
-          "$ref": "#/definitions/__schema208"
-        },
-        "metadata": {
           "$ref": "#/definitions/__schema209"
         },
-        "redteam": {
+        "defaultTest": {
           "$ref": "#/definitions/__schema210"
         },
+        "outputPath": {
+          "$ref": "#/definitions/__schema211"
+        },
+        "sharing": {
+          "$ref": "#/definitions/__schema212"
+        },
+        "nunjucksFilters": {
+          "$ref": "#/definitions/__schema213"
+        },
+        "env": {
+          "$ref": "#/definitions/__schema214"
+        },
+        "derivedMetrics": {
+          "$ref": "#/definitions/__schema215"
+        },
+        "extensions": {
+          "$ref": "#/definitions/__schema216"
+        },
+        "metadata": {
+          "$ref": "#/definitions/__schema217"
+        },
+        "redteam": {
+          "$ref": "#/definitions/__schema218"
+        },
         "writeLatestResults": {
-          "$ref": "#/definitions/__schema240"
+          "$ref": "#/definitions/__schema248"
         },
         "tracing": {
-          "$ref": "#/definitions/__schema241"
-        },
-        "basePath": {
-          "$ref": "#/definitions/__schema246"
-        },
-        "evaluateOptions": {
-          "$ref": "#/definitions/__schema247"
-        },
-        "commandLineOptions": {
           "$ref": "#/definitions/__schema249"
         },
+        "basePath": {
+          "$ref": "#/definitions/__schema254"
+        },
+        "evaluateOptions": {
+          "$ref": "#/definitions/__schema255"
+        },
+        "commandLineOptions": {
+          "$ref": "#/definitions/__schema257"
+        },
         "targets": {
-          "$ref": "#/definitions/__schema250"
+          "$ref": "#/definitions/__schema258"
         }
       },
       "required": ["prompts"],
@@ -278,399 +278,423 @@
             "CF_AIG_TOKEN": {
               "$ref": "#/definitions/__schema48"
             },
-            "COMETAPI_KEY": {
+            "CEREBRAS_API_KEY": {
               "$ref": "#/definitions/__schema49"
             },
-            "COHERE_API_BASE_URL": {
+            "COMETAPI_KEY": {
               "$ref": "#/definitions/__schema50"
             },
-            "COHERE_API_KEY": {
+            "COHERE_API_BASE_URL": {
               "$ref": "#/definitions/__schema51"
             },
-            "COHERE_CLIENT_NAME": {
+            "COHERE_API_KEY": {
               "$ref": "#/definitions/__schema52"
             },
-            "DATABRICKS_TOKEN": {
+            "COHERE_CLIENT_NAME": {
               "$ref": "#/definitions/__schema53"
             },
-            "DATABRICKS_WORKSPACE_URL": {
+            "DATABRICKS_TOKEN": {
               "$ref": "#/definitions/__schema54"
             },
-            "DEEPSEEK_API_KEY": {
+            "DATABRICKS_WORKSPACE_URL": {
               "$ref": "#/definitions/__schema55"
             },
-            "DOCKER_MODEL_RUNNER_BASE_URL": {
+            "DASHSCOPE_API_KEY": {
               "$ref": "#/definitions/__schema56"
             },
-            "DOCKER_MODEL_RUNNER_API_KEY": {
+            "DEEPSEEK_API_KEY": {
               "$ref": "#/definitions/__schema57"
             },
-            "ELEVENLABS_API_KEY": {
+            "DOCKER_MODEL_RUNNER_BASE_URL": {
               "$ref": "#/definitions/__schema58"
             },
-            "ENVOY_API_BASE_URL": {
+            "DOCKER_MODEL_RUNNER_API_KEY": {
               "$ref": "#/definitions/__schema59"
             },
-            "ENVOY_API_KEY": {
+            "ELEVENLABS_API_KEY": {
               "$ref": "#/definitions/__schema60"
             },
-            "F5_API_BASE_URL": {
+            "ENVOY_API_BASE_URL": {
               "$ref": "#/definitions/__schema61"
             },
-            "F5_API_KEY": {
+            "ENVOY_API_KEY": {
               "$ref": "#/definitions/__schema62"
             },
-            "FAL_KEY": {
+            "F5_API_BASE_URL": {
               "$ref": "#/definitions/__schema63"
             },
-            "FIREWORKS_API_BASE_URL": {
+            "F5_API_KEY": {
               "$ref": "#/definitions/__schema64"
             },
-            "FIREWORKS_API_KEY": {
+            "FAL_KEY": {
               "$ref": "#/definitions/__schema65"
             },
-            "GITHUB_TOKEN": {
+            "FIREWORKS_API_BASE_URL": {
               "$ref": "#/definitions/__schema66"
             },
-            "GOOGLE_API_HOST": {
+            "FIREWORKS_API_KEY": {
               "$ref": "#/definitions/__schema67"
             },
-            "GOOGLE_APPLICATION_CREDENTIALS": {
+            "GITHUB_TOKEN": {
               "$ref": "#/definitions/__schema68"
             },
-            "GOOGLE_API_BASE_URL": {
+            "GOOGLE_API_HOST": {
               "$ref": "#/definitions/__schema69"
             },
-            "GOOGLE_API_KEY": {
+            "GOOGLE_APPLICATION_CREDENTIALS": {
               "$ref": "#/definitions/__schema70"
             },
-            "GOOGLE_CLOUD_PROJECT": {
+            "GOOGLE_API_BASE_URL": {
               "$ref": "#/definitions/__schema71"
             },
-            "GOOGLE_CLOUD_LOCATION": {
+            "GOOGLE_API_KEY": {
               "$ref": "#/definitions/__schema72"
             },
-            "GOOGLE_PROJECT_ID": {
+            "GOOGLE_CLOUD_PROJECT": {
               "$ref": "#/definitions/__schema73"
             },
-            "GOOGLE_LOCATION": {
+            "GOOGLE_CLOUD_LOCATION": {
               "$ref": "#/definitions/__schema74"
             },
-            "GOOGLE_GENERATIVE_AI_API_KEY": {
+            "GOOGLE_PROJECT_ID": {
               "$ref": "#/definitions/__schema75"
             },
-            "GOOGLE_GENAI_USE_VERTEXAI": {
+            "GOOGLE_LOCATION": {
               "$ref": "#/definitions/__schema76"
             },
-            "GEMINI_API_KEY": {
+            "GOOGLE_GENERATIVE_AI_API_KEY": {
               "$ref": "#/definitions/__schema77"
             },
-            "GROQ_API_KEY": {
+            "GOOGLE_GENAI_USE_VERTEXAI": {
               "$ref": "#/definitions/__schema78"
             },
-            "HELICONE_API_KEY": {
+            "GEMINI_API_KEY": {
               "$ref": "#/definitions/__schema79"
             },
-            "HF_API_TOKEN": {
+            "GROQ_API_KEY": {
               "$ref": "#/definitions/__schema80"
             },
-            "HF_TOKEN": {
+            "HELICONE_API_KEY": {
               "$ref": "#/definitions/__schema81"
             },
-            "HYPERBOLIC_API_KEY": {
+            "HF_API_TOKEN": {
               "$ref": "#/definitions/__schema82"
             },
-            "HUGGING_FACE_HUB_TOKEN": {
+            "HF_TOKEN": {
               "$ref": "#/definitions/__schema83"
             },
-            "JFROG_API_KEY": {
+            "HYPERBOLIC_API_KEY": {
               "$ref": "#/definitions/__schema84"
             },
-            "LANGFUSE_BASE_URL": {
+            "HUGGING_FACE_HUB_TOKEN": {
               "$ref": "#/definitions/__schema85"
             },
-            "LANGFUSE_HOST": {
+            "JFROG_API_KEY": {
               "$ref": "#/definitions/__schema86"
             },
-            "LANGFUSE_PUBLIC_KEY": {
+            "LANGFUSE_BASE_URL": {
               "$ref": "#/definitions/__schema87"
             },
-            "LANGFUSE_SECRET_KEY": {
+            "LANGFUSE_HOST": {
               "$ref": "#/definitions/__schema88"
             },
-            "LITELLM_API_BASE": {
+            "LANGFUSE_PUBLIC_KEY": {
               "$ref": "#/definitions/__schema89"
             },
-            "LITELLM_API_KEY": {
+            "LANGFUSE_SECRET_KEY": {
               "$ref": "#/definitions/__schema90"
             },
-            "LLAMA_BASE_URL": {
+            "LITELLM_API_BASE": {
               "$ref": "#/definitions/__schema91"
             },
-            "LOCALAI_BASE_URL": {
+            "LITELLM_API_KEY": {
               "$ref": "#/definitions/__schema92"
             },
-            "MISTRAL_API_BASE_URL": {
+            "LLAMA_BASE_URL": {
               "$ref": "#/definitions/__schema93"
             },
-            "MISTRAL_API_HOST": {
+            "LLAMA_API_KEY": {
               "$ref": "#/definitions/__schema94"
             },
-            "MISTRAL_API_KEY": {
+            "LOCALAI_BASE_URL": {
               "$ref": "#/definitions/__schema95"
             },
-            "MINIMAX_API_KEY": {
+            "LOCALAI_TEMPERATURE": {
               "$ref": "#/definitions/__schema96"
             },
-            "MOONSHOT_API_KEY": {
+            "MISTRAL_API_BASE_URL": {
               "$ref": "#/definitions/__schema97"
             },
-            "MLFLOW_GATEWAY_API_KEY": {
+            "MISTRAL_API_HOST": {
               "$ref": "#/definitions/__schema98"
             },
-            "MLFLOW_GATEWAY_URL": {
+            "MISTRAL_API_KEY": {
               "$ref": "#/definitions/__schema99"
             },
-            "MODEL_API_KEY": {
+            "MINIMAX_API_KEY": {
               "$ref": "#/definitions/__schema100"
             },
-            "MODELSLAB_API_KEY": {
+            "MOONSHOT_API_KEY": {
               "$ref": "#/definitions/__schema101"
             },
-            "N8N_API_KEY": {
+            "MLFLOW_GATEWAY_API_KEY": {
               "$ref": "#/definitions/__schema102"
             },
-            "NSCALE_SERVICE_TOKEN": {
+            "MLFLOW_GATEWAY_URL": {
               "$ref": "#/definitions/__schema103"
             },
-            "NSCALE_API_KEY": {
+            "MODEL_API_KEY": {
               "$ref": "#/definitions/__schema104"
             },
-            "NOVITA_API_KEY": {
+            "MODELSLAB_API_KEY": {
               "$ref": "#/definitions/__schema105"
             },
-            "NVIDIA_API_BASE_URL": {
+            "N8N_API_KEY": {
               "$ref": "#/definitions/__schema106"
             },
-            "NVIDIA_API_KEY": {
+            "NSCALE_SERVICE_TOKEN": {
               "$ref": "#/definitions/__schema107"
             },
-            "OLLAMA_API_KEY": {
+            "NSCALE_API_KEY": {
               "$ref": "#/definitions/__schema108"
             },
-            "OLLAMA_BASE_URL": {
+            "NOVITA_API_KEY": {
               "$ref": "#/definitions/__schema109"
             },
-            "OPENAI_API_BASE_URL": {
+            "NVIDIA_API_BASE_URL": {
               "$ref": "#/definitions/__schema110"
             },
-            "OPENAI_API_HOST": {
+            "NVIDIA_API_KEY": {
               "$ref": "#/definitions/__schema111"
             },
-            "OPENAI_API_KEY": {
+            "OLLAMA_API_KEY": {
               "$ref": "#/definitions/__schema112"
             },
-            "OPENAI_BASE_URL": {
+            "OLLAMA_BASE_URL": {
               "$ref": "#/definitions/__schema113"
             },
-            "OPENAI_ORGANIZATION": {
+            "OPENAI_API_BASE_URL": {
               "$ref": "#/definitions/__schema114"
             },
-            "CLAWDBOT_GATEWAY_PASSWORD": {
+            "OPENAI_API_HOST": {
               "$ref": "#/definitions/__schema115"
             },
-            "CLAWDBOT_GATEWAY_TOKEN": {
+            "OPENAI_API_KEY": {
               "$ref": "#/definitions/__schema116"
             },
-            "CLAWDBOT_GATEWAY_URL": {
+            "OPENAI_BASE_URL": {
               "$ref": "#/definitions/__schema117"
             },
-            "CODEX_API_KEY": {
+            "OPENAI_ORGANIZATION": {
               "$ref": "#/definitions/__schema118"
             },
-            "OPENCLAW_CONFIG_PATH": {
+            "CLAWDBOT_GATEWAY_PASSWORD": {
               "$ref": "#/definitions/__schema119"
             },
-            "OPENCLAW_GATEWAY_PASSWORD": {
+            "CLAWDBOT_GATEWAY_TOKEN": {
               "$ref": "#/definitions/__schema120"
             },
-            "OPENCLAW_GATEWAY_PORT": {
+            "CLAWDBOT_GATEWAY_URL": {
               "$ref": "#/definitions/__schema121"
             },
-            "OPENCLAW_GATEWAY_TOKEN": {
+            "CODEX_API_KEY": {
               "$ref": "#/definitions/__schema122"
             },
-            "OPENCLAW_GATEWAY_URL": {
+            "OPENCLAW_CONFIG_PATH": {
               "$ref": "#/definitions/__schema123"
             },
-            "ORCAROUTER_API_KEY": {
+            "OPENCLAW_GATEWAY_PASSWORD": {
               "$ref": "#/definitions/__schema124"
             },
-            "PALM_API_HOST": {
+            "OPENCLAW_GATEWAY_PORT": {
               "$ref": "#/definitions/__schema125"
             },
-            "PALM_API_KEY": {
+            "OPENCLAW_GATEWAY_TOKEN": {
               "$ref": "#/definitions/__schema126"
             },
-            "PORTKEY_API_BASE_URL": {
+            "OPENCLAW_GATEWAY_URL": {
               "$ref": "#/definitions/__schema127"
             },
-            "PORTKEY_API_KEY": {
+            "ORCAROUTER_API_KEY": {
               "$ref": "#/definitions/__schema128"
             },
-            "PROMPTFOO_CA_CERT_PATH": {
+            "PALM_API_HOST": {
               "$ref": "#/definitions/__schema129"
             },
-            "PROMPTFOO_DISABLE_TEMPLATE_ENV_VARS": {
+            "PALM_API_KEY": {
               "$ref": "#/definitions/__schema130"
             },
-            "PROMPTFOO_DISABLE_TEMPLATING": {
+            "PERPLEXITY_API_KEY": {
               "$ref": "#/definitions/__schema131"
             },
-            "PROMPTFOO_MAX_CONCURRENCY": {
+            "PORTKEY_API_BASE_URL": {
               "$ref": "#/definitions/__schema132"
             },
-            "PROMPTFOO_PFX_CERT_PATH": {
+            "PORTKEY_API_KEY": {
               "$ref": "#/definitions/__schema133"
             },
-            "PROMPTFOO_TRACING_ENABLED": {
+            "PROMPTFOO_CA_CERT_PATH": {
               "$ref": "#/definitions/__schema134"
             },
-            "PROMPTFOO_PFX_PASSWORD": {
+            "PROMPTFOO_DISABLE_TEMPLATE_ENV_VARS": {
               "$ref": "#/definitions/__schema135"
             },
-            "PROMPTFOO_JKS_CERT_PATH": {
+            "PROMPTFOO_DISABLE_TEMPLATING": {
               "$ref": "#/definitions/__schema136"
             },
-            "PROMPTFOO_JKS_PASSWORD": {
+            "PROMPTFOO_MAX_CONCURRENCY": {
               "$ref": "#/definitions/__schema137"
             },
-            "PROMPTFOO_JKS_ALIAS": {
+            "PROMPTFOO_PFX_CERT_PATH": {
               "$ref": "#/definitions/__schema138"
             },
-            "PROMPTFOO_INSECURE_SSL": {
+            "PROMPTFOO_TRACING_ENABLED": {
               "$ref": "#/definitions/__schema139"
             },
-            "QUIVERAI_API_KEY": {
+            "PROMPTFOO_PFX_PASSWORD": {
               "$ref": "#/definitions/__schema140"
             },
-            "QWAK_TOKEN": {
+            "PROMPTFOO_JKS_CERT_PATH": {
               "$ref": "#/definitions/__schema141"
             },
-            "REPLICATE_API_KEY": {
+            "PROMPTFOO_JKS_PASSWORD": {
               "$ref": "#/definitions/__schema142"
             },
-            "REPLICATE_API_TOKEN": {
+            "PROMPTFOO_JKS_ALIAS": {
               "$ref": "#/definitions/__schema143"
             },
-            "SHAREPOINT_BASE_URL": {
+            "PROMPTFOO_INSECURE_SSL": {
               "$ref": "#/definitions/__schema144"
             },
-            "SHAREPOINT_CERT_PATH": {
+            "PROMPTFOO_PYTHON": {
               "$ref": "#/definitions/__schema145"
             },
-            "SHAREPOINT_CLIENT_ID": {
+            "PROMPTFOO_PYTHON_WORKERS": {
               "$ref": "#/definitions/__schema146"
             },
-            "SHAREPOINT_TENANT_ID": {
+            "QUIVERAI_API_KEY": {
               "$ref": "#/definitions/__schema147"
             },
-            "SLACK_BOT_TOKEN": {
+            "QWAK_TOKEN": {
               "$ref": "#/definitions/__schema148"
             },
-            "SNOWFLAKE_ACCOUNT_IDENTIFIER": {
+            "REPLICATE_API_KEY": {
               "$ref": "#/definitions/__schema149"
             },
-            "TOGETHER_API_KEY": {
+            "REPLICATE_API_TOKEN": {
               "$ref": "#/definitions/__schema150"
             },
-            "TYPESAFE_API_KEY": {
+            "SHAREPOINT_BASE_URL": {
               "$ref": "#/definitions/__schema151"
             },
-            "VERCEL_AI_GATEWAY_API_KEY": {
+            "SHAREPOINT_CERT_PATH": {
               "$ref": "#/definitions/__schema152"
             },
-            "VERCEL_AI_GATEWAY_BASE_URL": {
+            "SHAREPOINT_CLIENT_ID": {
               "$ref": "#/definitions/__schema153"
             },
-            "VERTEX_API_HOST": {
+            "SHAREPOINT_TENANT_ID": {
               "$ref": "#/definitions/__schema154"
             },
-            "VERTEX_API_KEY": {
+            "SLACK_BOT_TOKEN": {
               "$ref": "#/definitions/__schema155"
             },
-            "VERTEX_API_VERSION": {
+            "SNOWFLAKE_ACCOUNT_IDENTIFIER": {
               "$ref": "#/definitions/__schema156"
             },
-            "VERTEX_PROJECT_ID": {
+            "TOGETHER_API_KEY": {
               "$ref": "#/definitions/__schema157"
             },
-            "VERTEX_PUBLISHER": {
+            "TRUEFOUNDRY_API_KEY": {
               "$ref": "#/definitions/__schema158"
             },
-            "VERTEX_REGION": {
+            "TYPESAFE_API_KEY": {
               "$ref": "#/definitions/__schema159"
             },
-            "VOYAGE_API_BASE_URL": {
+            "VERCEL_AI_GATEWAY_API_KEY": {
               "$ref": "#/definitions/__schema160"
             },
-            "VOYAGE_API_KEY": {
+            "VERCEL_AI_GATEWAY_BASE_URL": {
               "$ref": "#/definitions/__schema161"
             },
-            "WATSONX_AI_APIKEY": {
+            "VERTEX_API_HOST": {
               "$ref": "#/definitions/__schema162"
             },
-            "WATSONX_AI_AUTH_TYPE": {
+            "VERTEX_API_KEY": {
               "$ref": "#/definitions/__schema163"
             },
-            "WATSONX_AI_BEARER_TOKEN": {
+            "VERTEX_API_VERSION": {
               "$ref": "#/definitions/__schema164"
             },
-            "WATSONX_AI_PROJECT_ID": {
+            "VERTEX_PROJECT_ID": {
               "$ref": "#/definitions/__schema165"
             },
-            "XAI_API_BASE_URL": {
+            "VERTEX_PUBLISHER": {
               "$ref": "#/definitions/__schema166"
             },
-            "XAI_API_KEY": {
+            "VERTEX_REGION": {
               "$ref": "#/definitions/__schema167"
             },
-            "AZURE_CONTENT_SAFETY_ENDPOINT": {
+            "VOYAGE_API_BASE_URL": {
               "$ref": "#/definitions/__schema168"
             },
-            "AZURE_CONTENT_SAFETY_API_KEY": {
+            "VOYAGE_API_KEY": {
               "$ref": "#/definitions/__schema169"
             },
-            "AZURE_CONTENT_SAFETY_API_VERSION": {
+            "WATSONX_AI_APIKEY": {
               "$ref": "#/definitions/__schema170"
             },
-            "AWS_REGION": {
+            "WATSONX_AI_AUTH_TYPE": {
               "$ref": "#/definitions/__schema171"
             },
-            "AWS_DEFAULT_REGION": {
+            "WATSONX_AI_BEARER_TOKEN": {
               "$ref": "#/definitions/__schema172"
             },
-            "AWS_SAGEMAKER_MAX_TOKENS": {
+            "WATSONX_AI_PROJECT_ID": {
               "$ref": "#/definitions/__schema173"
             },
-            "AWS_SAGEMAKER_TEMPERATURE": {
+            "XAI_API_BASE_URL": {
               "$ref": "#/definitions/__schema174"
             },
-            "AWS_SAGEMAKER_TOP_P": {
+            "XAI_API_KEY": {
               "$ref": "#/definitions/__schema175"
             },
-            "AWS_SAGEMAKER_MAX_RETRIES": {
+            "AZURE_CONTENT_SAFETY_ENDPOINT": {
               "$ref": "#/definitions/__schema176"
             },
-            "PROMPTFOO_EVAL_TIMEOUT_MS": {
+            "AZURE_CONTENT_SAFETY_API_KEY": {
               "$ref": "#/definitions/__schema177"
+            },
+            "AZURE_CONTENT_SAFETY_API_VERSION": {
+              "$ref": "#/definitions/__schema178"
+            },
+            "AWS_REGION": {
+              "$ref": "#/definitions/__schema179"
+            },
+            "AWS_DEFAULT_REGION": {
+              "$ref": "#/definitions/__schema180"
+            },
+            "AWS_SAGEMAKER_MAX_TOKENS": {
+              "$ref": "#/definitions/__schema181"
+            },
+            "AWS_SAGEMAKER_TEMPERATURE": {
+              "$ref": "#/definitions/__schema182"
+            },
+            "AWS_SAGEMAKER_TOP_P": {
+              "$ref": "#/definitions/__schema183"
+            },
+            "AWS_SAGEMAKER_MAX_RETRIES": {
+              "$ref": "#/definitions/__schema184"
+            },
+            "PROMPTFOO_EVAL_TIMEOUT_MS": {
+              "$ref": "#/definitions/__schema185"
             }
           }
         },
         "inputs": {
           "allOf": [
             {
-              "$ref": "#/definitions/__schema178"
+              "$ref": "#/definitions/__schema186"
             }
           ]
         }
@@ -1193,6 +1217,30 @@
       "type": "string"
     },
     "__schema178": {
+      "type": "string"
+    },
+    "__schema179": {
+      "type": "string"
+    },
+    "__schema180": {
+      "type": "string"
+    },
+    "__schema181": {
+      "type": "string"
+    },
+    "__schema182": {
+      "type": "string"
+    },
+    "__schema183": {
+      "type": "string"
+    },
+    "__schema184": {
+      "type": "string"
+    },
+    "__schema185": {
+      "type": "string"
+    },
+    "__schema186": {
       "type": "object",
       "propertyNames": {
         "type": "string",
@@ -1208,13 +1256,13 @@
             "type": "object",
             "properties": {
               "config": {
-                "$ref": "#/definitions/__schema179"
+                "$ref": "#/definitions/__schema187"
               },
               "description": {
-                "$ref": "#/definitions/__schema181"
+                "$ref": "#/definitions/__schema189"
               },
               "type": {
-                "$ref": "#/definitions/__schema182"
+                "$ref": "#/definitions/__schema190"
               }
             },
             "required": ["description"]
@@ -1222,7 +1270,7 @@
         ]
       }
     },
-    "__schema179": {
+    "__schema187": {
       "type": "object",
       "properties": {
         "benign": {
@@ -1236,24 +1284,24 @@
           "minItems": 1,
           "type": "array",
           "items": {
-            "$ref": "#/definitions/__schema180"
+            "$ref": "#/definitions/__schema188"
           }
         }
       }
     },
-    "__schema180": {
+    "__schema188": {
       "type": "string",
       "minLength": 1
     },
-    "__schema181": {
+    "__schema189": {
       "type": "string",
       "minLength": 1
     },
-    "__schema182": {
+    "__schema190": {
       "type": "string",
       "enum": ["text", "pdf", "docx", "image"]
     },
-    "__schema183": {
+    "__schema191": {
       "anyOf": [
         {
           "type": "string"
@@ -1317,7 +1365,7 @@
         }
       ]
     },
-    "__schema184": {
+    "__schema192": {
       "anyOf": [
         {
           "type": "string"
@@ -1330,62 +1378,62 @@
                 "type": "string"
               },
               {
-                "$ref": "#/definitions/__schema185"
+                "$ref": "#/definitions/__schema193"
               },
               {
-                "$ref": "#/definitions/__schema200"
+                "$ref": "#/definitions/__schema208"
               }
             ]
           }
         },
         {
-          "$ref": "#/definitions/__schema200"
+          "$ref": "#/definitions/__schema208"
         }
       ]
     },
-    "__schema185": {
+    "__schema193": {
       "type": "object",
       "properties": {
         "description": {
-          "$ref": "#/definitions/__schema186"
+          "$ref": "#/definitions/__schema194"
         },
         "vars": {
-          "$ref": "#/definitions/__schema187"
+          "$ref": "#/definitions/__schema195"
         },
         "provider": {
-          "$ref": "#/definitions/__schema188"
-        },
-        "providers": {
-          "$ref": "#/definitions/__schema190"
-        },
-        "prompts": {
-          "$ref": "#/definitions/__schema191"
-        },
-        "providerOutput": {
-          "$ref": "#/definitions/__schema192"
-        },
-        "assert": {
-          "$ref": "#/definitions/__schema193"
-        },
-        "assertScoringFunction": {
           "$ref": "#/definitions/__schema196"
         },
-        "options": {
-          "$ref": "#/definitions/__schema197"
-        },
-        "threshold": {
+        "providers": {
           "$ref": "#/definitions/__schema198"
         },
-        "metadata": {
+        "prompts": {
           "$ref": "#/definitions/__schema199"
+        },
+        "providerOutput": {
+          "$ref": "#/definitions/__schema200"
+        },
+        "assert": {
+          "$ref": "#/definitions/__schema201"
+        },
+        "assertScoringFunction": {
+          "$ref": "#/definitions/__schema204"
+        },
+        "options": {
+          "$ref": "#/definitions/__schema205"
+        },
+        "threshold": {
+          "$ref": "#/definitions/__schema206"
+        },
+        "metadata": {
+          "$ref": "#/definitions/__schema207"
         }
       }
     },
-    "__schema186": {
+    "__schema194": {
       "type": "string"
     },
-    "__schema187": {},
-    "__schema188": {
+    "__schema195": {},
+    "__schema196": {
       "anyOf": [
         {
           "type": "string"
@@ -1394,18 +1442,27 @@
           "$ref": "#/definitions/__schema5"
         },
         {
-          "$ref": "#/definitions/__schema189"
+          "$ref": "#/definitions/__schema197"
         }
       ]
     },
-    "__schema189": {
+    "__schema197": {
       "type": "object",
       "properties": {
         "id": {},
         "callApi": {},
         "callEmbeddingApi": {},
+        "supportsEmbeddingCancellation": {
+          "type": "boolean"
+        },
         "callClassificationApi": {},
         "label": {},
+        "prompts": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
         "transform": {
           "type": "string"
         },
@@ -1416,26 +1473,26 @@
         "inputs": {
           "allOf": [
             {
-              "$ref": "#/definitions/__schema178"
+              "$ref": "#/definitions/__schema186"
             }
           ]
         }
       },
       "required": ["id", "callApi"]
     },
-    "__schema190": {
+    "__schema198": {
       "type": "array",
       "items": {
         "type": "string"
       }
     },
-    "__schema191": {
+    "__schema199": {
       "type": "array",
       "items": {
         "type": "string"
       }
     },
-    "__schema192": {
+    "__schema200": {
       "anyOf": [
         {
           "type": "string"
@@ -1449,7 +1506,7 @@
         }
       ]
     },
-    "__schema193": {
+    "__schema201": {
       "type": "array",
       "items": {
         "anyOf": [
@@ -1465,7 +1522,7 @@
                 "items": {
                   "allOf": [
                     {
-                      "$ref": "#/definitions/__schema194"
+                      "$ref": "#/definitions/__schema202"
                     }
                   ]
                 }
@@ -1490,23 +1547,23 @@
             "required": ["type", "assert"]
           },
           {
-            "$ref": "#/definitions/__schema194"
+            "$ref": "#/definitions/__schema202"
           }
         ]
       }
     },
-    "__schema194": {
+    "__schema202": {
       "type": "object",
       "properties": {
         "type": {
           "anyOf": [
             {
-              "$ref": "#/definitions/__schema195"
+              "$ref": "#/definitions/__schema203"
             },
             {
               "allOf": [
                 {
-                  "$ref": "#/definitions/__schema195"
+                  "$ref": "#/definitions/__schema203"
                 }
               ]
             },
@@ -1541,11 +1598,22 @@
         },
         "contextTransform": {
           "type": "string"
+        },
+        "normalizeUnicode": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "string",
+              "enum": ["NFC", "NFD", "NFKC", "NFKD"]
+            }
+          ]
         }
       },
       "required": ["type"]
     },
-    "__schema195": {
+    "__schema203": {
       "type": "string",
       "enum": [
         "agent-rubric",
@@ -1594,7 +1662,9 @@
         "perplexity-score",
         "python",
         "regex",
+        "rouge-l",
         "rouge-n",
+        "rouge-s",
         "ruby",
         "similar",
         "similar:cosine",
@@ -1616,7 +1686,7 @@
         "word-count"
       ]
     },
-    "__schema196": {
+    "__schema204": {
       "anyOf": [
         {
           "type": "string",
@@ -1625,7 +1695,7 @@
         {}
       ]
     },
-    "__schema197": {
+    "__schema205": {
       "type": "object",
       "properties": {
         "prefix": {
@@ -1736,10 +1806,10 @@
       },
       "additionalProperties": {}
     },
-    "__schema198": {
+    "__schema206": {
       "type": "number"
     },
-    "__schema199": {
+    "__schema207": {
       "type": "object",
       "properties": {
         "pluginConfig": {},
@@ -1747,7 +1817,7 @@
       },
       "additionalProperties": {}
     },
-    "__schema200": {
+    "__schema208": {
       "type": "object",
       "properties": {
         "path": {
@@ -1789,7 +1859,7 @@
       },
       "required": ["path"]
     },
-    "__schema201": {
+    "__schema209": {
       "type": "array",
       "items": {
         "anyOf": [
@@ -1810,77 +1880,77 @@
                     "description": {
                       "allOf": [
                         {
-                          "$ref": "#/definitions/__schema186"
+                          "$ref": "#/definitions/__schema194"
                         }
                       ]
                     },
                     "vars": {
                       "allOf": [
                         {
-                          "$ref": "#/definitions/__schema187"
+                          "$ref": "#/definitions/__schema195"
                         }
                       ]
                     },
                     "provider": {
                       "allOf": [
                         {
-                          "$ref": "#/definitions/__schema188"
+                          "$ref": "#/definitions/__schema196"
                         }
                       ]
                     },
                     "providers": {
                       "allOf": [
                         {
-                          "$ref": "#/definitions/__schema190"
+                          "$ref": "#/definitions/__schema198"
                         }
                       ]
                     },
                     "prompts": {
                       "allOf": [
                         {
-                          "$ref": "#/definitions/__schema191"
+                          "$ref": "#/definitions/__schema199"
                         }
                       ]
                     },
                     "providerOutput": {
                       "allOf": [
                         {
-                          "$ref": "#/definitions/__schema192"
+                          "$ref": "#/definitions/__schema200"
                         }
                       ]
                     },
                     "assert": {
                       "allOf": [
                         {
-                          "$ref": "#/definitions/__schema193"
+                          "$ref": "#/definitions/__schema201"
                         }
                       ]
                     },
                     "assertScoringFunction": {
                       "allOf": [
                         {
-                          "$ref": "#/definitions/__schema196"
+                          "$ref": "#/definitions/__schema204"
                         }
                       ]
                     },
                     "options": {
                       "allOf": [
                         {
-                          "$ref": "#/definitions/__schema197"
+                          "$ref": "#/definitions/__schema205"
                         }
                       ]
                     },
                     "threshold": {
                       "allOf": [
                         {
-                          "$ref": "#/definitions/__schema198"
+                          "$ref": "#/definitions/__schema206"
                         }
                       ]
                     },
                     "metadata": {
                       "allOf": [
                         {
-                          "$ref": "#/definitions/__schema199"
+                          "$ref": "#/definitions/__schema207"
                         }
                       ]
                     }
@@ -1890,7 +1960,7 @@
               "tests": {
                 "type": "array",
                 "items": {
-                  "$ref": "#/definitions/__schema185"
+                  "$ref": "#/definitions/__schema193"
                 }
               }
             },
@@ -1899,7 +1969,7 @@
         ]
       }
     },
-    "__schema202": {
+    "__schema210": {
       "anyOf": [
         {
           "type": "string"
@@ -1908,40 +1978,40 @@
           "type": "object",
           "properties": {
             "vars": {
-              "$ref": "#/definitions/__schema187"
+              "$ref": "#/definitions/__schema195"
             },
             "provider": {
-              "$ref": "#/definitions/__schema188"
-            },
-            "providers": {
-              "$ref": "#/definitions/__schema190"
-            },
-            "prompts": {
-              "$ref": "#/definitions/__schema191"
-            },
-            "providerOutput": {
-              "$ref": "#/definitions/__schema192"
-            },
-            "assert": {
-              "$ref": "#/definitions/__schema193"
-            },
-            "assertScoringFunction": {
               "$ref": "#/definitions/__schema196"
             },
-            "options": {
-              "$ref": "#/definitions/__schema197"
-            },
-            "threshold": {
+            "providers": {
               "$ref": "#/definitions/__schema198"
             },
-            "metadata": {
+            "prompts": {
               "$ref": "#/definitions/__schema199"
+            },
+            "providerOutput": {
+              "$ref": "#/definitions/__schema200"
+            },
+            "assert": {
+              "$ref": "#/definitions/__schema201"
+            },
+            "assertScoringFunction": {
+              "$ref": "#/definitions/__schema204"
+            },
+            "options": {
+              "$ref": "#/definitions/__schema205"
+            },
+            "threshold": {
+              "$ref": "#/definitions/__schema206"
+            },
+            "metadata": {
+              "$ref": "#/definitions/__schema207"
             }
           }
         }
       ]
     },
-    "__schema203": {
+    "__schema211": {
       "anyOf": [
         {
           "type": "string"
@@ -1954,7 +2024,7 @@
         }
       ]
     },
-    "__schema204": {
+    "__schema212": {
       "anyOf": [
         {
           "type": "boolean"
@@ -1972,7 +2042,7 @@
         }
       ]
     },
-    "__schema205": {
+    "__schema213": {
       "type": "object",
       "propertyNames": {
         "type": "string"
@@ -1981,7 +2051,7 @@
         "type": "string"
       }
     },
-    "__schema206": {
+    "__schema214": {
       "anyOf": [
         {
           "type": "object",
@@ -2112,392 +2182,416 @@
             "CF_AIG_TOKEN": {
               "$ref": "#/definitions/__schema48"
             },
-            "COMETAPI_KEY": {
+            "CEREBRAS_API_KEY": {
               "$ref": "#/definitions/__schema49"
             },
-            "COHERE_API_BASE_URL": {
+            "COMETAPI_KEY": {
               "$ref": "#/definitions/__schema50"
             },
-            "COHERE_API_KEY": {
+            "COHERE_API_BASE_URL": {
               "$ref": "#/definitions/__schema51"
             },
-            "COHERE_CLIENT_NAME": {
+            "COHERE_API_KEY": {
               "$ref": "#/definitions/__schema52"
             },
-            "DATABRICKS_TOKEN": {
+            "COHERE_CLIENT_NAME": {
               "$ref": "#/definitions/__schema53"
             },
-            "DATABRICKS_WORKSPACE_URL": {
+            "DATABRICKS_TOKEN": {
               "$ref": "#/definitions/__schema54"
             },
-            "DEEPSEEK_API_KEY": {
+            "DATABRICKS_WORKSPACE_URL": {
               "$ref": "#/definitions/__schema55"
             },
-            "DOCKER_MODEL_RUNNER_BASE_URL": {
+            "DASHSCOPE_API_KEY": {
               "$ref": "#/definitions/__schema56"
             },
-            "DOCKER_MODEL_RUNNER_API_KEY": {
+            "DEEPSEEK_API_KEY": {
               "$ref": "#/definitions/__schema57"
             },
-            "ELEVENLABS_API_KEY": {
+            "DOCKER_MODEL_RUNNER_BASE_URL": {
               "$ref": "#/definitions/__schema58"
             },
-            "ENVOY_API_BASE_URL": {
+            "DOCKER_MODEL_RUNNER_API_KEY": {
               "$ref": "#/definitions/__schema59"
             },
-            "ENVOY_API_KEY": {
+            "ELEVENLABS_API_KEY": {
               "$ref": "#/definitions/__schema60"
             },
-            "F5_API_BASE_URL": {
+            "ENVOY_API_BASE_URL": {
               "$ref": "#/definitions/__schema61"
             },
-            "F5_API_KEY": {
+            "ENVOY_API_KEY": {
               "$ref": "#/definitions/__schema62"
             },
-            "FAL_KEY": {
+            "F5_API_BASE_URL": {
               "$ref": "#/definitions/__schema63"
             },
-            "FIREWORKS_API_BASE_URL": {
+            "F5_API_KEY": {
               "$ref": "#/definitions/__schema64"
             },
-            "FIREWORKS_API_KEY": {
+            "FAL_KEY": {
               "$ref": "#/definitions/__schema65"
             },
-            "GITHUB_TOKEN": {
+            "FIREWORKS_API_BASE_URL": {
               "$ref": "#/definitions/__schema66"
             },
-            "GOOGLE_API_HOST": {
+            "FIREWORKS_API_KEY": {
               "$ref": "#/definitions/__schema67"
             },
-            "GOOGLE_APPLICATION_CREDENTIALS": {
+            "GITHUB_TOKEN": {
               "$ref": "#/definitions/__schema68"
             },
-            "GOOGLE_API_BASE_URL": {
+            "GOOGLE_API_HOST": {
               "$ref": "#/definitions/__schema69"
             },
-            "GOOGLE_API_KEY": {
+            "GOOGLE_APPLICATION_CREDENTIALS": {
               "$ref": "#/definitions/__schema70"
             },
-            "GOOGLE_CLOUD_PROJECT": {
+            "GOOGLE_API_BASE_URL": {
               "$ref": "#/definitions/__schema71"
             },
-            "GOOGLE_CLOUD_LOCATION": {
+            "GOOGLE_API_KEY": {
               "$ref": "#/definitions/__schema72"
             },
-            "GOOGLE_PROJECT_ID": {
+            "GOOGLE_CLOUD_PROJECT": {
               "$ref": "#/definitions/__schema73"
             },
-            "GOOGLE_LOCATION": {
+            "GOOGLE_CLOUD_LOCATION": {
               "$ref": "#/definitions/__schema74"
             },
-            "GOOGLE_GENERATIVE_AI_API_KEY": {
+            "GOOGLE_PROJECT_ID": {
               "$ref": "#/definitions/__schema75"
             },
-            "GOOGLE_GENAI_USE_VERTEXAI": {
+            "GOOGLE_LOCATION": {
               "$ref": "#/definitions/__schema76"
             },
-            "GEMINI_API_KEY": {
+            "GOOGLE_GENERATIVE_AI_API_KEY": {
               "$ref": "#/definitions/__schema77"
             },
-            "GROQ_API_KEY": {
+            "GOOGLE_GENAI_USE_VERTEXAI": {
               "$ref": "#/definitions/__schema78"
             },
-            "HELICONE_API_KEY": {
+            "GEMINI_API_KEY": {
               "$ref": "#/definitions/__schema79"
             },
-            "HF_API_TOKEN": {
+            "GROQ_API_KEY": {
               "$ref": "#/definitions/__schema80"
             },
-            "HF_TOKEN": {
+            "HELICONE_API_KEY": {
               "$ref": "#/definitions/__schema81"
             },
-            "HYPERBOLIC_API_KEY": {
+            "HF_API_TOKEN": {
               "$ref": "#/definitions/__schema82"
             },
-            "HUGGING_FACE_HUB_TOKEN": {
+            "HF_TOKEN": {
               "$ref": "#/definitions/__schema83"
             },
-            "JFROG_API_KEY": {
+            "HYPERBOLIC_API_KEY": {
               "$ref": "#/definitions/__schema84"
             },
-            "LANGFUSE_BASE_URL": {
+            "HUGGING_FACE_HUB_TOKEN": {
               "$ref": "#/definitions/__schema85"
             },
-            "LANGFUSE_HOST": {
+            "JFROG_API_KEY": {
               "$ref": "#/definitions/__schema86"
             },
-            "LANGFUSE_PUBLIC_KEY": {
+            "LANGFUSE_BASE_URL": {
               "$ref": "#/definitions/__schema87"
             },
-            "LANGFUSE_SECRET_KEY": {
+            "LANGFUSE_HOST": {
               "$ref": "#/definitions/__schema88"
             },
-            "LITELLM_API_BASE": {
+            "LANGFUSE_PUBLIC_KEY": {
               "$ref": "#/definitions/__schema89"
             },
-            "LITELLM_API_KEY": {
+            "LANGFUSE_SECRET_KEY": {
               "$ref": "#/definitions/__schema90"
             },
-            "LLAMA_BASE_URL": {
+            "LITELLM_API_BASE": {
               "$ref": "#/definitions/__schema91"
             },
-            "LOCALAI_BASE_URL": {
+            "LITELLM_API_KEY": {
               "$ref": "#/definitions/__schema92"
             },
-            "MISTRAL_API_BASE_URL": {
+            "LLAMA_BASE_URL": {
               "$ref": "#/definitions/__schema93"
             },
-            "MISTRAL_API_HOST": {
+            "LLAMA_API_KEY": {
               "$ref": "#/definitions/__schema94"
             },
-            "MISTRAL_API_KEY": {
+            "LOCALAI_BASE_URL": {
               "$ref": "#/definitions/__schema95"
             },
-            "MINIMAX_API_KEY": {
+            "LOCALAI_TEMPERATURE": {
               "$ref": "#/definitions/__schema96"
             },
-            "MOONSHOT_API_KEY": {
+            "MISTRAL_API_BASE_URL": {
               "$ref": "#/definitions/__schema97"
             },
-            "MLFLOW_GATEWAY_API_KEY": {
+            "MISTRAL_API_HOST": {
               "$ref": "#/definitions/__schema98"
             },
-            "MLFLOW_GATEWAY_URL": {
+            "MISTRAL_API_KEY": {
               "$ref": "#/definitions/__schema99"
             },
-            "MODEL_API_KEY": {
+            "MINIMAX_API_KEY": {
               "$ref": "#/definitions/__schema100"
             },
-            "MODELSLAB_API_KEY": {
+            "MOONSHOT_API_KEY": {
               "$ref": "#/definitions/__schema101"
             },
-            "N8N_API_KEY": {
+            "MLFLOW_GATEWAY_API_KEY": {
               "$ref": "#/definitions/__schema102"
             },
-            "NSCALE_SERVICE_TOKEN": {
+            "MLFLOW_GATEWAY_URL": {
               "$ref": "#/definitions/__schema103"
             },
-            "NSCALE_API_KEY": {
+            "MODEL_API_KEY": {
               "$ref": "#/definitions/__schema104"
             },
-            "NOVITA_API_KEY": {
+            "MODELSLAB_API_KEY": {
               "$ref": "#/definitions/__schema105"
             },
-            "NVIDIA_API_BASE_URL": {
+            "N8N_API_KEY": {
               "$ref": "#/definitions/__schema106"
             },
-            "NVIDIA_API_KEY": {
+            "NSCALE_SERVICE_TOKEN": {
               "$ref": "#/definitions/__schema107"
             },
-            "OLLAMA_API_KEY": {
+            "NSCALE_API_KEY": {
               "$ref": "#/definitions/__schema108"
             },
-            "OLLAMA_BASE_URL": {
+            "NOVITA_API_KEY": {
               "$ref": "#/definitions/__schema109"
             },
-            "OPENAI_API_BASE_URL": {
+            "NVIDIA_API_BASE_URL": {
               "$ref": "#/definitions/__schema110"
             },
-            "OPENAI_API_HOST": {
+            "NVIDIA_API_KEY": {
               "$ref": "#/definitions/__schema111"
             },
-            "OPENAI_API_KEY": {
+            "OLLAMA_API_KEY": {
               "$ref": "#/definitions/__schema112"
             },
-            "OPENAI_BASE_URL": {
+            "OLLAMA_BASE_URL": {
               "$ref": "#/definitions/__schema113"
             },
-            "OPENAI_ORGANIZATION": {
+            "OPENAI_API_BASE_URL": {
               "$ref": "#/definitions/__schema114"
             },
-            "CLAWDBOT_GATEWAY_PASSWORD": {
+            "OPENAI_API_HOST": {
               "$ref": "#/definitions/__schema115"
             },
-            "CLAWDBOT_GATEWAY_TOKEN": {
+            "OPENAI_API_KEY": {
               "$ref": "#/definitions/__schema116"
             },
-            "CLAWDBOT_GATEWAY_URL": {
+            "OPENAI_BASE_URL": {
               "$ref": "#/definitions/__schema117"
             },
-            "CODEX_API_KEY": {
+            "OPENAI_ORGANIZATION": {
               "$ref": "#/definitions/__schema118"
             },
-            "OPENCLAW_CONFIG_PATH": {
+            "CLAWDBOT_GATEWAY_PASSWORD": {
               "$ref": "#/definitions/__schema119"
             },
-            "OPENCLAW_GATEWAY_PASSWORD": {
+            "CLAWDBOT_GATEWAY_TOKEN": {
               "$ref": "#/definitions/__schema120"
             },
-            "OPENCLAW_GATEWAY_PORT": {
+            "CLAWDBOT_GATEWAY_URL": {
               "$ref": "#/definitions/__schema121"
             },
-            "OPENCLAW_GATEWAY_TOKEN": {
+            "CODEX_API_KEY": {
               "$ref": "#/definitions/__schema122"
             },
-            "OPENCLAW_GATEWAY_URL": {
+            "OPENCLAW_CONFIG_PATH": {
               "$ref": "#/definitions/__schema123"
             },
-            "ORCAROUTER_API_KEY": {
+            "OPENCLAW_GATEWAY_PASSWORD": {
               "$ref": "#/definitions/__schema124"
             },
-            "PALM_API_HOST": {
+            "OPENCLAW_GATEWAY_PORT": {
               "$ref": "#/definitions/__schema125"
             },
-            "PALM_API_KEY": {
+            "OPENCLAW_GATEWAY_TOKEN": {
               "$ref": "#/definitions/__schema126"
             },
-            "PORTKEY_API_BASE_URL": {
+            "OPENCLAW_GATEWAY_URL": {
               "$ref": "#/definitions/__schema127"
             },
-            "PORTKEY_API_KEY": {
+            "ORCAROUTER_API_KEY": {
               "$ref": "#/definitions/__schema128"
             },
-            "PROMPTFOO_CA_CERT_PATH": {
+            "PALM_API_HOST": {
               "$ref": "#/definitions/__schema129"
             },
-            "PROMPTFOO_DISABLE_TEMPLATE_ENV_VARS": {
+            "PALM_API_KEY": {
               "$ref": "#/definitions/__schema130"
             },
-            "PROMPTFOO_DISABLE_TEMPLATING": {
+            "PERPLEXITY_API_KEY": {
               "$ref": "#/definitions/__schema131"
             },
-            "PROMPTFOO_MAX_CONCURRENCY": {
+            "PORTKEY_API_BASE_URL": {
               "$ref": "#/definitions/__schema132"
             },
-            "PROMPTFOO_PFX_CERT_PATH": {
+            "PORTKEY_API_KEY": {
               "$ref": "#/definitions/__schema133"
             },
-            "PROMPTFOO_TRACING_ENABLED": {
+            "PROMPTFOO_CA_CERT_PATH": {
               "$ref": "#/definitions/__schema134"
             },
-            "PROMPTFOO_PFX_PASSWORD": {
+            "PROMPTFOO_DISABLE_TEMPLATE_ENV_VARS": {
               "$ref": "#/definitions/__schema135"
             },
-            "PROMPTFOO_JKS_CERT_PATH": {
+            "PROMPTFOO_DISABLE_TEMPLATING": {
               "$ref": "#/definitions/__schema136"
             },
-            "PROMPTFOO_JKS_PASSWORD": {
+            "PROMPTFOO_MAX_CONCURRENCY": {
               "$ref": "#/definitions/__schema137"
             },
-            "PROMPTFOO_JKS_ALIAS": {
+            "PROMPTFOO_PFX_CERT_PATH": {
               "$ref": "#/definitions/__schema138"
             },
-            "PROMPTFOO_INSECURE_SSL": {
+            "PROMPTFOO_TRACING_ENABLED": {
               "$ref": "#/definitions/__schema139"
             },
-            "QUIVERAI_API_KEY": {
+            "PROMPTFOO_PFX_PASSWORD": {
               "$ref": "#/definitions/__schema140"
             },
-            "QWAK_TOKEN": {
+            "PROMPTFOO_JKS_CERT_PATH": {
               "$ref": "#/definitions/__schema141"
             },
-            "REPLICATE_API_KEY": {
+            "PROMPTFOO_JKS_PASSWORD": {
               "$ref": "#/definitions/__schema142"
             },
-            "REPLICATE_API_TOKEN": {
+            "PROMPTFOO_JKS_ALIAS": {
               "$ref": "#/definitions/__schema143"
             },
-            "SHAREPOINT_BASE_URL": {
+            "PROMPTFOO_INSECURE_SSL": {
               "$ref": "#/definitions/__schema144"
             },
-            "SHAREPOINT_CERT_PATH": {
+            "PROMPTFOO_PYTHON": {
               "$ref": "#/definitions/__schema145"
             },
-            "SHAREPOINT_CLIENT_ID": {
+            "PROMPTFOO_PYTHON_WORKERS": {
               "$ref": "#/definitions/__schema146"
             },
-            "SHAREPOINT_TENANT_ID": {
+            "QUIVERAI_API_KEY": {
               "$ref": "#/definitions/__schema147"
             },
-            "SLACK_BOT_TOKEN": {
+            "QWAK_TOKEN": {
               "$ref": "#/definitions/__schema148"
             },
-            "SNOWFLAKE_ACCOUNT_IDENTIFIER": {
+            "REPLICATE_API_KEY": {
               "$ref": "#/definitions/__schema149"
             },
-            "TOGETHER_API_KEY": {
+            "REPLICATE_API_TOKEN": {
               "$ref": "#/definitions/__schema150"
             },
-            "TYPESAFE_API_KEY": {
+            "SHAREPOINT_BASE_URL": {
               "$ref": "#/definitions/__schema151"
             },
-            "VERCEL_AI_GATEWAY_API_KEY": {
+            "SHAREPOINT_CERT_PATH": {
               "$ref": "#/definitions/__schema152"
             },
-            "VERCEL_AI_GATEWAY_BASE_URL": {
+            "SHAREPOINT_CLIENT_ID": {
               "$ref": "#/definitions/__schema153"
             },
-            "VERTEX_API_HOST": {
+            "SHAREPOINT_TENANT_ID": {
               "$ref": "#/definitions/__schema154"
             },
-            "VERTEX_API_KEY": {
+            "SLACK_BOT_TOKEN": {
               "$ref": "#/definitions/__schema155"
             },
-            "VERTEX_API_VERSION": {
+            "SNOWFLAKE_ACCOUNT_IDENTIFIER": {
               "$ref": "#/definitions/__schema156"
             },
-            "VERTEX_PROJECT_ID": {
+            "TOGETHER_API_KEY": {
               "$ref": "#/definitions/__schema157"
             },
-            "VERTEX_PUBLISHER": {
+            "TRUEFOUNDRY_API_KEY": {
               "$ref": "#/definitions/__schema158"
             },
-            "VERTEX_REGION": {
+            "TYPESAFE_API_KEY": {
               "$ref": "#/definitions/__schema159"
             },
-            "VOYAGE_API_BASE_URL": {
+            "VERCEL_AI_GATEWAY_API_KEY": {
               "$ref": "#/definitions/__schema160"
             },
-            "VOYAGE_API_KEY": {
+            "VERCEL_AI_GATEWAY_BASE_URL": {
               "$ref": "#/definitions/__schema161"
             },
-            "WATSONX_AI_APIKEY": {
+            "VERTEX_API_HOST": {
               "$ref": "#/definitions/__schema162"
             },
-            "WATSONX_AI_AUTH_TYPE": {
+            "VERTEX_API_KEY": {
               "$ref": "#/definitions/__schema163"
             },
-            "WATSONX_AI_BEARER_TOKEN": {
+            "VERTEX_API_VERSION": {
               "$ref": "#/definitions/__schema164"
             },
-            "WATSONX_AI_PROJECT_ID": {
+            "VERTEX_PROJECT_ID": {
               "$ref": "#/definitions/__schema165"
             },
-            "XAI_API_BASE_URL": {
+            "VERTEX_PUBLISHER": {
               "$ref": "#/definitions/__schema166"
             },
-            "XAI_API_KEY": {
+            "VERTEX_REGION": {
               "$ref": "#/definitions/__schema167"
             },
-            "AZURE_CONTENT_SAFETY_ENDPOINT": {
+            "VOYAGE_API_BASE_URL": {
               "$ref": "#/definitions/__schema168"
             },
-            "AZURE_CONTENT_SAFETY_API_KEY": {
+            "VOYAGE_API_KEY": {
               "$ref": "#/definitions/__schema169"
             },
-            "AZURE_CONTENT_SAFETY_API_VERSION": {
+            "WATSONX_AI_APIKEY": {
               "$ref": "#/definitions/__schema170"
             },
-            "AWS_REGION": {
+            "WATSONX_AI_AUTH_TYPE": {
               "$ref": "#/definitions/__schema171"
             },
-            "AWS_DEFAULT_REGION": {
+            "WATSONX_AI_BEARER_TOKEN": {
               "$ref": "#/definitions/__schema172"
             },
-            "AWS_SAGEMAKER_MAX_TOKENS": {
+            "WATSONX_AI_PROJECT_ID": {
               "$ref": "#/definitions/__schema173"
             },
-            "AWS_SAGEMAKER_TEMPERATURE": {
+            "XAI_API_BASE_URL": {
               "$ref": "#/definitions/__schema174"
             },
-            "AWS_SAGEMAKER_TOP_P": {
+            "XAI_API_KEY": {
               "$ref": "#/definitions/__schema175"
             },
-            "AWS_SAGEMAKER_MAX_RETRIES": {
+            "AZURE_CONTENT_SAFETY_ENDPOINT": {
               "$ref": "#/definitions/__schema176"
             },
-            "PROMPTFOO_EVAL_TIMEOUT_MS": {
+            "AZURE_CONTENT_SAFETY_API_KEY": {
               "$ref": "#/definitions/__schema177"
+            },
+            "AZURE_CONTENT_SAFETY_API_VERSION": {
+              "$ref": "#/definitions/__schema178"
+            },
+            "AWS_REGION": {
+              "$ref": "#/definitions/__schema179"
+            },
+            "AWS_DEFAULT_REGION": {
+              "$ref": "#/definitions/__schema180"
+            },
+            "AWS_SAGEMAKER_MAX_TOKENS": {
+              "$ref": "#/definitions/__schema181"
+            },
+            "AWS_SAGEMAKER_TEMPERATURE": {
+              "$ref": "#/definitions/__schema182"
+            },
+            "AWS_SAGEMAKER_TOP_P": {
+              "$ref": "#/definitions/__schema183"
+            },
+            "AWS_SAGEMAKER_MAX_RETRIES": {
+              "$ref": "#/definitions/__schema184"
+            },
+            "PROMPTFOO_EVAL_TIMEOUT_MS": {
+              "$ref": "#/definitions/__schema185"
             },
             "PROMPTFOO_DISABLE_TELEMETRY": {
               "type": "string"
@@ -2515,7 +2609,7 @@
         }
       ]
     },
-    "__schema207": {
+    "__schema215": {
       "type": "array",
       "items": {
         "type": "object",
@@ -2535,7 +2629,7 @@
         "required": ["name", "value"]
       }
     },
-    "__schema208": {
+    "__schema216": {
       "anyOf": [
         {
           "type": "array",
@@ -2548,21 +2642,21 @@
         }
       ]
     },
-    "__schema209": {
+    "__schema217": {
       "type": "object",
       "propertyNames": {
         "type": "string"
       },
       "additionalProperties": {}
     },
-    "__schema210": {
+    "__schema218": {
       "type": "object",
       "properties": {
         "injectVar": {
           "description": "Variable to inject. Can be a string or array of strings. If string, it's transformed to an array. Inferred from the prompts by default.",
           "allOf": [
             {
-              "$ref": "#/definitions/__schema211"
+              "$ref": "#/definitions/__schema219"
             }
           ]
         },
@@ -2570,7 +2664,7 @@
           "description": "Purpose override string - describes the prompt templates",
           "allOf": [
             {
-              "$ref": "#/definitions/__schema212"
+              "$ref": "#/definitions/__schema220"
             }
           ]
         },
@@ -2578,7 +2672,7 @@
           "description": "Additional instructions for test generation applied to each plugin",
           "allOf": [
             {
-              "$ref": "#/definitions/__schema213"
+              "$ref": "#/definitions/__schema221"
             }
           ]
         },
@@ -2586,7 +2680,7 @@
           "description": "Provider used for generating adversarial inputs",
           "allOf": [
             {
-              "$ref": "#/definitions/__schema214"
+              "$ref": "#/definitions/__schema222"
             }
           ]
         },
@@ -2594,7 +2688,7 @@
           "description": "Number of tests to generate",
           "allOf": [
             {
-              "$ref": "#/definitions/__schema215"
+              "$ref": "#/definitions/__schema223"
             }
           ]
         },
@@ -2602,7 +2696,7 @@
           "description": "Language(s) of tests to generate for this plugin",
           "allOf": [
             {
-              "$ref": "#/definitions/__schema216"
+              "$ref": "#/definitions/__schema224"
             }
           ]
         },
@@ -2610,7 +2704,7 @@
           "description": "Compliance frameworks to include across reports and commands",
           "allOf": [
             {
-              "$ref": "#/definitions/__schema217"
+              "$ref": "#/definitions/__schema225"
             }
           ]
         },
@@ -2618,7 +2712,7 @@
           "description": "Names of people, brands, or organizations related to your LLM application",
           "allOf": [
             {
-              "$ref": "#/definitions/__schema219"
+              "$ref": "#/definitions/__schema227"
             }
           ]
         },
@@ -2626,7 +2720,7 @@
           "description": "Security contexts for testing multiple states - each context has its own purpose",
           "allOf": [
             {
-              "$ref": "#/definitions/__schema220"
+              "$ref": "#/definitions/__schema228"
             }
           ]
         },
@@ -2634,7 +2728,7 @@
           "default": ["default"],
           "type": "array",
           "items": {
-            "$ref": "#/definitions/__schema223"
+            "$ref": "#/definitions/__schema231"
           },
           "description": "Plugins to use for redteam generation"
         },
@@ -2642,15 +2736,15 @@
           "default": ["default"],
           "type": "array",
           "items": {
-            "$ref": "#/definitions/__schema231"
+            "$ref": "#/definitions/__schema239"
           },
-          "description": "Strategies to use for redteam generation.\n\nDefaults to basic, jailbreak:meta, jailbreak:composite\nSupports audio, authoritative-markup-injection, base64, basic, best-of-n, camelcase, citation, crescendo, custom, default, emoji, gcg, goat, hex, homoglyph, image, indirect-web-pwn, jailbreak, jailbreak-templates, jailbreak:composite, jailbreak:goblin, jailbreak:hydra, jailbreak:likert, jailbreak:meta, jailbreak:tree, layer, leetspeak, math-prompt, mischievous-user, morse, multilingual, other-encodings, piglatin, prompt-injection, retry, rot13, video"
+          "description": "Strategies to use for redteam generation.\n\nDefaults to basic, jailbreak:meta, jailbreak:composite\nSupports arabic-presentation-forms, audio, authoritative-markup-injection, base64, basic, best-of-n, camelcase, citation, crescendo, custom, default, emoji, gcg, goat, hex, homoglyph, image, indirect-web-pwn, jailbreak, jailbreak-templates, jailbreak:composite, jailbreak:goblin, jailbreak:hydra, jailbreak:likert, jailbreak:meta, jailbreak:tree, layer, leetspeak, math-prompt, mischievous-user, morse, multilingual, other-encodings, piglatin, prompt-injection, retry, rot13, video"
         },
         "maxConcurrency": {
           "description": "Maximum number of concurrent API calls",
           "allOf": [
             {
-              "$ref": "#/definitions/__schema234"
+              "$ref": "#/definitions/__schema242"
             }
           ]
         },
@@ -2658,7 +2752,7 @@
           "description": "Maximum number of characters allowed per generated user message",
           "allOf": [
             {
-              "$ref": "#/definitions/__schema235"
+              "$ref": "#/definitions/__schema243"
             }
           ]
         },
@@ -2666,7 +2760,7 @@
           "description": "Delay in milliseconds between plugin API calls",
           "allOf": [
             {
-              "$ref": "#/definitions/__schema236"
+              "$ref": "#/definitions/__schema244"
             }
           ]
         },
@@ -2674,7 +2768,7 @@
           "description": "Whether to exclude target output from the agentific attack generation process",
           "allOf": [
             {
-              "$ref": "#/definitions/__schema237"
+              "$ref": "#/definitions/__schema245"
             }
           ]
         },
@@ -2682,7 +2776,7 @@
           "description": "Tracing defaults applied to all strategies unless overridden",
           "allOf": [
             {
-              "$ref": "#/definitions/__schema238"
+              "$ref": "#/definitions/__schema246"
             }
           ]
         },
@@ -2690,40 +2784,40 @@
           "description": "Global grading examples that apply to all plugins",
           "allOf": [
             {
-              "$ref": "#/definitions/__schema239"
+              "$ref": "#/definitions/__schema247"
             }
           ]
         }
       }
     },
-    "__schema211": {
+    "__schema219": {
       "type": "string"
     },
-    "__schema212": {
+    "__schema220": {
       "type": "string"
     },
-    "__schema213": {
+    "__schema221": {
       "type": "string"
     },
-    "__schema214": {
+    "__schema222": {
       "anyOf": [
         {
           "type": "string"
         },
         {
-          "$ref": "#/definitions/__schema189"
+          "$ref": "#/definitions/__schema197"
         },
         {
           "$ref": "#/definitions/__schema5"
         }
       ]
     },
-    "__schema215": {
+    "__schema223": {
       "type": "integer",
       "exclusiveMinimum": 0,
       "maximum": 9007199254740991
     },
-    "__schema216": {
+    "__schema224": {
       "anyOf": [
         {
           "type": "string"
@@ -2736,14 +2830,14 @@
         }
       ]
     },
-    "__schema217": {
+    "__schema225": {
       "minItems": 1,
       "type": "array",
       "items": {
-        "$ref": "#/definitions/__schema218"
+        "$ref": "#/definitions/__schema226"
       }
     },
-    "__schema218": {
+    "__schema226": {
       "type": "string",
       "enum": [
         "mitre:atlas",
@@ -2757,13 +2851,13 @@
         "dod:ai:ethics"
       ]
     },
-    "__schema219": {
+    "__schema227": {
       "type": "array",
       "items": {
         "type": "string"
       }
     },
-    "__schema220": {
+    "__schema228": {
       "type": "array",
       "items": {
         "type": "object",
@@ -2776,7 +2870,7 @@
             "description": "Optional purpose/context for this context - used for generation and grading, or inherited from the root redteam purpose when omitted or blank",
             "allOf": [
               {
-                "$ref": "#/definitions/__schema221"
+                "$ref": "#/definitions/__schema229"
               }
             ]
           },
@@ -2784,7 +2878,7 @@
             "description": "Variables passed to provider (e.g., context_file, user_role)",
             "allOf": [
               {
-                "$ref": "#/definitions/__schema222"
+                "$ref": "#/definitions/__schema230"
               }
             ]
           }
@@ -2792,10 +2886,10 @@
         "required": ["id"]
       }
     },
-    "__schema221": {
+    "__schema229": {
       "type": "string"
     },
-    "__schema222": {
+    "__schema230": {
       "type": "object",
       "propertyNames": {
         "type": "string"
@@ -2804,15 +2898,15 @@
         "type": "string"
       }
     },
-    "__schema223": {
+    "__schema231": {
       "anyOf": [
         {
           "anyOf": [
             {
-              "$ref": "#/definitions/__schema224"
+              "$ref": "#/definitions/__schema232"
             },
             {
-              "$ref": "#/definitions/__schema225"
+              "$ref": "#/definitions/__schema233"
             }
           ],
           "description": "Name of the plugin or path to custom plugin"
@@ -2823,10 +2917,10 @@
             "id": {
               "anyOf": [
                 {
-                  "$ref": "#/definitions/__schema226"
+                  "$ref": "#/definitions/__schema234"
                 },
                 {
-                  "$ref": "#/definitions/__schema227"
+                  "$ref": "#/definitions/__schema235"
                 }
               ],
               "description": "Name of the plugin"
@@ -2835,7 +2929,7 @@
               "description": "Number of tests to generate for this plugin",
               "allOf": [
                 {
-                  "$ref": "#/definitions/__schema228"
+                  "$ref": "#/definitions/__schema236"
                 }
               ]
             },
@@ -2843,7 +2937,7 @@
               "description": "Plugin-specific configuration",
               "allOf": [
                 {
-                  "$ref": "#/definitions/__schema229"
+                  "$ref": "#/definitions/__schema237"
                 }
               ]
             },
@@ -2851,645 +2945,7 @@
               "description": "Severity level for this plugin",
               "allOf": [
                 {
-                  "$ref": "#/definitions/__schema230"
-                }
-              ]
-            }
-          },
-          "required": ["id"]
-        }
-      ]
-    },
-    "__schema224": {
-      "type": "string",
-      "enum": [
-        "aegis",
-        "agentic:memory-poisoning",
-        "ascii-smuggling",
-        "beavertails",
-        "bfla",
-        "bias",
-        "bias:age",
-        "bias:disability",
-        "bias:gender",
-        "bias:race",
-        "bola",
-        "cca",
-        "coding-agent:all",
-        "coding-agent:automation-poisoning",
-        "coding-agent:core",
-        "coding-agent:delayed-ci-exfil",
-        "coding-agent:generated-vulnerability",
-        "coding-agent:network-egress-bypass",
-        "coding-agent:procfs-credential-read",
-        "coding-agent:repo-prompt-injection",
-        "coding-agent:sandbox-read-escape",
-        "coding-agent:sandbox-write-escape",
-        "coding-agent:secret-env-read",
-        "coding-agent:secret-file-read",
-        "coding-agent:steganographic-exfil",
-        "coding-agent:terminal-output-injection",
-        "coding-agent:verifier-sabotage",
-        "competitors",
-        "contracts",
-        "coppa",
-        "cross-session-leak",
-        "cyberseceval",
-        "data-exfil",
-        "debug-access",
-        "default",
-        "divergent-repetition",
-        "dod:ai:ethics",
-        "dod:ai:ethics:01",
-        "dod:ai:ethics:02",
-        "dod:ai:ethics:03",
-        "dod:ai:ethics:04",
-        "dod:ai:ethics:05",
-        "donotanswer",
-        "ecommerce",
-        "ecommerce:compliance-bypass",
-        "ecommerce:order-fraud",
-        "ecommerce:pci-dss",
-        "ecommerce:price-manipulation",
-        "eu:ai-act",
-        "eu:ai-act:annex3:biometric-id",
-        "eu:ai-act:annex3:critical-infrastructure",
-        "eu:ai-act:annex3:education",
-        "eu:ai-act:annex3:employment",
-        "eu:ai-act:annex3:essential-services",
-        "eu:ai-act:annex3:justice-democracy",
-        "eu:ai-act:annex3:law-enforcement",
-        "eu:ai-act:annex3:migration-border",
-        "eu:ai-act:art5:biometric-categorisation",
-        "eu:ai-act:art5:exploitation-of-vulnerabilities",
-        "eu:ai-act:art5:remote-biometric-id-live",
-        "eu:ai-act:art5:remote-biometric-id-post",
-        "eu:ai-act:art5:social-scoring",
-        "eu:ai-act:art5:subliminal-manipulation",
-        "excessive-agency",
-        "ferpa",
-        "financial",
-        "financial:calculation-error",
-        "financial:compliance-violation",
-        "financial:confidential-disclosure",
-        "financial:counterfactual",
-        "financial:data-leakage",
-        "financial:defamation",
-        "financial:hallucination",
-        "financial:impartiality",
-        "financial:japan-fiea-suitability",
-        "financial:misconduct",
-        "financial:sox-compliance",
-        "financial:sycophancy",
-        "foundation",
-        "gdpr",
-        "gdpr:art15",
-        "gdpr:art17",
-        "gdpr:art22",
-        "gdpr:art25",
-        "gdpr:art32",
-        "gdpr:art5",
-        "gdpr:art9",
-        "goal-misalignment",
-        "guardrails-eval",
-        "hallucination",
-        "harmbench",
-        "harmful",
-        "harmful:chemical-biological-weapons",
-        "harmful:child-exploitation",
-        "harmful:copyright-violations",
-        "harmful:cybercrime",
-        "harmful:cybercrime:malicious-code",
-        "harmful:graphic-content",
-        "harmful:harassment-bullying",
-        "harmful:hate",
-        "harmful:illegal-activities",
-        "harmful:illegal-drugs",
-        "harmful:illegal-drugs:meth",
-        "harmful:indiscriminate-weapons",
-        "harmful:insults",
-        "harmful:intellectual-property",
-        "harmful:misinformation-disinformation",
-        "harmful:non-violent-crime",
-        "harmful:privacy",
-        "harmful:profanity",
-        "harmful:radicalization",
-        "harmful:self-harm",
-        "harmful:sex-crime",
-        "harmful:sexual-content",
-        "harmful:specialized-advice",
-        "harmful:unsafe-practices",
-        "harmful:violent-crime",
-        "harmful:weapons:ied",
-        "hijacking",
-        "illegal-activity",
-        "imitation",
-        "indirect-prompt-injection",
-        "insurance",
-        "insurance:coverage-discrimination",
-        "insurance:data-disclosure",
-        "insurance:network-misinformation",
-        "insurance:phi-disclosure",
-        "intent",
-        "iso:42001",
-        "iso:42001:accountability",
-        "iso:42001:fairness",
-        "iso:42001:privacy",
-        "iso:42001:robustness",
-        "iso:42001:safety",
-        "iso:42001:security",
-        "iso:42001:transparency",
-        "mcp",
-        "medical",
-        "medical:anchoring-bias",
-        "medical:fda:ai-disclosure",
-        "medical:fda:cyber-access-control",
-        "medical:fda:cyber-audit-tampering",
-        "medical:hallucination",
-        "medical:incorrect-knowledge",
-        "medical:off-label-use",
-        "medical:prioritization-error",
-        "medical:sycophancy",
-        "misinformation",
-        "mitre:atlas",
-        "mitre:atlas:ai-attack-staging",
-        "mitre:atlas:ai-model-access",
-        "mitre:atlas:collection",
-        "mitre:atlas:command-and-control",
-        "mitre:atlas:credential-access",
-        "mitre:atlas:defense-evasion",
-        "mitre:atlas:discovery",
-        "mitre:atlas:execution",
-        "mitre:atlas:exfiltration",
-        "mitre:atlas:impact",
-        "mitre:atlas:initial-access",
-        "mitre:atlas:lateral-movement",
-        "mitre:atlas:ml-attack-staging",
-        "mitre:atlas:persistence",
-        "mitre:atlas:privilege-escalation",
-        "mitre:atlas:reconnaissance",
-        "mitre:atlas:resource-development",
-        "model-identification",
-        "nist:ai",
-        "nist:ai:measure",
-        "nist:ai:measure:1.1",
-        "nist:ai:measure:1.2",
-        "nist:ai:measure:2.1",
-        "nist:ai:measure:2.10",
-        "nist:ai:measure:2.11",
-        "nist:ai:measure:2.12",
-        "nist:ai:measure:2.13",
-        "nist:ai:measure:2.2",
-        "nist:ai:measure:2.3",
-        "nist:ai:measure:2.4",
-        "nist:ai:measure:2.5",
-        "nist:ai:measure:2.6",
-        "nist:ai:measure:2.7",
-        "nist:ai:measure:2.8",
-        "nist:ai:measure:2.9",
-        "nist:ai:measure:3.1",
-        "nist:ai:measure:3.2",
-        "nist:ai:measure:3.3",
-        "nist:ai:measure:4.1",
-        "nist:ai:measure:4.2",
-        "nist:ai:measure:4.3",
-        "off-topic",
-        "overreliance",
-        "owasp:agentic",
-        "owasp:agentic:asi01",
-        "owasp:agentic:asi02",
-        "owasp:agentic:asi03",
-        "owasp:agentic:asi04",
-        "owasp:agentic:asi05",
-        "owasp:agentic:asi06",
-        "owasp:agentic:asi07",
-        "owasp:agentic:asi08",
-        "owasp:agentic:asi09",
-        "owasp:agentic:asi10",
-        "owasp:api",
-        "owasp:api:01",
-        "owasp:api:02",
-        "owasp:api:03",
-        "owasp:api:04",
-        "owasp:api:05",
-        "owasp:api:06",
-        "owasp:api:07",
-        "owasp:api:08",
-        "owasp:api:09",
-        "owasp:api:10",
-        "owasp:llm",
-        "owasp:llm:01",
-        "owasp:llm:02",
-        "owasp:llm:03",
-        "owasp:llm:04",
-        "owasp:llm:05",
-        "owasp:llm:06",
-        "owasp:llm:07",
-        "owasp:llm:08",
-        "owasp:llm:09",
-        "owasp:llm:10",
-        "owasp:llm:redteam:implementation",
-        "owasp:llm:redteam:model",
-        "owasp:llm:redteam:runtime",
-        "owasp:llm:redteam:system",
-        "personal-safety",
-        "pharmacy",
-        "pharmacy:controlled-substance-compliance",
-        "pharmacy:dosage-calculation",
-        "pharmacy:drug-interaction",
-        "pii",
-        "pii:api-db",
-        "pii:direct",
-        "pii:session",
-        "pii:social",
-        "pliny",
-        "policy",
-        "politics",
-        "prompt-extraction",
-        "rag-document-exfiltration",
-        "rag-poisoning",
-        "rag-source-attribution",
-        "rbac",
-        "realestate",
-        "realestate:accessibility-discrimination",
-        "realestate:advertising-discrimination",
-        "realestate:discriminatory-listings",
-        "realestate:fair-housing-discrimination",
-        "realestate:lending-discrimination",
-        "realestate:source-of-income",
-        "realestate:steering",
-        "realestate:valuation-bias",
-        "reasoning-dos",
-        "religion",
-        "shell-injection",
-        "special-token-injection",
-        "sql-injection",
-        "ssrf",
-        "system-prompt-override",
-        "teen-safety",
-        "teen-safety:age-restricted-goods-and-services",
-        "teen-safety:dangerous-content",
-        "teen-safety:dangerous-roleplay",
-        "teen-safety:harmful-body-ideals",
-        "telecom",
-        "telecom:accessibility-violation",
-        "telecom:account-takeover",
-        "telecom:billing-misinformation",
-        "telecom:coverage-misinformation",
-        "telecom:cpni-disclosure",
-        "telecom:e911-misinformation",
-        "telecom:fraud-enablement",
-        "telecom:law-enforcement-request-handling",
-        "telecom:location-disclosure",
-        "telecom:porting-misinformation",
-        "telecom:tcpa-violation",
-        "telecom:unauthorized-changes",
-        "tool-discovery",
-        "tool-discovery:multi-turn",
-        "toxic-chat",
-        "toxicity",
-        "unsafebench",
-        "unverifiable-claims",
-        "vlguard",
-        "vlsu",
-        "wordplay",
-        "xstest"
-      ]
-    },
-    "__schema225": {
-      "type": "string"
-    },
-    "__schema226": {
-      "type": "string",
-      "enum": [
-        "aegis",
-        "agentic:memory-poisoning",
-        "ascii-smuggling",
-        "beavertails",
-        "bfla",
-        "bias",
-        "bias:age",
-        "bias:disability",
-        "bias:gender",
-        "bias:race",
-        "bola",
-        "cca",
-        "coding-agent:all",
-        "coding-agent:automation-poisoning",
-        "coding-agent:core",
-        "coding-agent:delayed-ci-exfil",
-        "coding-agent:generated-vulnerability",
-        "coding-agent:network-egress-bypass",
-        "coding-agent:procfs-credential-read",
-        "coding-agent:repo-prompt-injection",
-        "coding-agent:sandbox-read-escape",
-        "coding-agent:sandbox-write-escape",
-        "coding-agent:secret-env-read",
-        "coding-agent:secret-file-read",
-        "coding-agent:steganographic-exfil",
-        "coding-agent:terminal-output-injection",
-        "coding-agent:verifier-sabotage",
-        "competitors",
-        "contracts",
-        "coppa",
-        "cross-session-leak",
-        "cyberseceval",
-        "data-exfil",
-        "debug-access",
-        "default",
-        "divergent-repetition",
-        "dod:ai:ethics",
-        "dod:ai:ethics:01",
-        "dod:ai:ethics:02",
-        "dod:ai:ethics:03",
-        "dod:ai:ethics:04",
-        "dod:ai:ethics:05",
-        "donotanswer",
-        "ecommerce",
-        "ecommerce:compliance-bypass",
-        "ecommerce:order-fraud",
-        "ecommerce:pci-dss",
-        "ecommerce:price-manipulation",
-        "eu:ai-act",
-        "eu:ai-act:annex3:biometric-id",
-        "eu:ai-act:annex3:critical-infrastructure",
-        "eu:ai-act:annex3:education",
-        "eu:ai-act:annex3:employment",
-        "eu:ai-act:annex3:essential-services",
-        "eu:ai-act:annex3:justice-democracy",
-        "eu:ai-act:annex3:law-enforcement",
-        "eu:ai-act:annex3:migration-border",
-        "eu:ai-act:art5:biometric-categorisation",
-        "eu:ai-act:art5:exploitation-of-vulnerabilities",
-        "eu:ai-act:art5:remote-biometric-id-live",
-        "eu:ai-act:art5:remote-biometric-id-post",
-        "eu:ai-act:art5:social-scoring",
-        "eu:ai-act:art5:subliminal-manipulation",
-        "excessive-agency",
-        "ferpa",
-        "financial",
-        "financial:calculation-error",
-        "financial:compliance-violation",
-        "financial:confidential-disclosure",
-        "financial:counterfactual",
-        "financial:data-leakage",
-        "financial:defamation",
-        "financial:hallucination",
-        "financial:impartiality",
-        "financial:japan-fiea-suitability",
-        "financial:misconduct",
-        "financial:sox-compliance",
-        "financial:sycophancy",
-        "foundation",
-        "gdpr",
-        "gdpr:art15",
-        "gdpr:art17",
-        "gdpr:art22",
-        "gdpr:art25",
-        "gdpr:art32",
-        "gdpr:art5",
-        "gdpr:art9",
-        "goal-misalignment",
-        "guardrails-eval",
-        "hallucination",
-        "harmbench",
-        "harmful",
-        "harmful:chemical-biological-weapons",
-        "harmful:child-exploitation",
-        "harmful:copyright-violations",
-        "harmful:cybercrime",
-        "harmful:cybercrime:malicious-code",
-        "harmful:graphic-content",
-        "harmful:harassment-bullying",
-        "harmful:hate",
-        "harmful:illegal-activities",
-        "harmful:illegal-drugs",
-        "harmful:illegal-drugs:meth",
-        "harmful:indiscriminate-weapons",
-        "harmful:insults",
-        "harmful:intellectual-property",
-        "harmful:misinformation-disinformation",
-        "harmful:non-violent-crime",
-        "harmful:privacy",
-        "harmful:profanity",
-        "harmful:radicalization",
-        "harmful:self-harm",
-        "harmful:sex-crime",
-        "harmful:sexual-content",
-        "harmful:specialized-advice",
-        "harmful:unsafe-practices",
-        "harmful:violent-crime",
-        "harmful:weapons:ied",
-        "hijacking",
-        "illegal-activity",
-        "imitation",
-        "indirect-prompt-injection",
-        "insurance",
-        "insurance:coverage-discrimination",
-        "insurance:data-disclosure",
-        "insurance:network-misinformation",
-        "insurance:phi-disclosure",
-        "intent",
-        "iso:42001",
-        "iso:42001:accountability",
-        "iso:42001:fairness",
-        "iso:42001:privacy",
-        "iso:42001:robustness",
-        "iso:42001:safety",
-        "iso:42001:security",
-        "iso:42001:transparency",
-        "mcp",
-        "medical",
-        "medical:anchoring-bias",
-        "medical:fda:ai-disclosure",
-        "medical:fda:cyber-access-control",
-        "medical:fda:cyber-audit-tampering",
-        "medical:hallucination",
-        "medical:incorrect-knowledge",
-        "medical:off-label-use",
-        "medical:prioritization-error",
-        "medical:sycophancy",
-        "misinformation",
-        "mitre:atlas",
-        "mitre:atlas:ai-attack-staging",
-        "mitre:atlas:ai-model-access",
-        "mitre:atlas:collection",
-        "mitre:atlas:command-and-control",
-        "mitre:atlas:credential-access",
-        "mitre:atlas:defense-evasion",
-        "mitre:atlas:discovery",
-        "mitre:atlas:execution",
-        "mitre:atlas:exfiltration",
-        "mitre:atlas:impact",
-        "mitre:atlas:initial-access",
-        "mitre:atlas:lateral-movement",
-        "mitre:atlas:ml-attack-staging",
-        "mitre:atlas:persistence",
-        "mitre:atlas:privilege-escalation",
-        "mitre:atlas:reconnaissance",
-        "mitre:atlas:resource-development",
-        "model-identification",
-        "nist:ai",
-        "nist:ai:measure",
-        "nist:ai:measure:1.1",
-        "nist:ai:measure:1.2",
-        "nist:ai:measure:2.1",
-        "nist:ai:measure:2.10",
-        "nist:ai:measure:2.11",
-        "nist:ai:measure:2.12",
-        "nist:ai:measure:2.13",
-        "nist:ai:measure:2.2",
-        "nist:ai:measure:2.3",
-        "nist:ai:measure:2.4",
-        "nist:ai:measure:2.5",
-        "nist:ai:measure:2.6",
-        "nist:ai:measure:2.7",
-        "nist:ai:measure:2.8",
-        "nist:ai:measure:2.9",
-        "nist:ai:measure:3.1",
-        "nist:ai:measure:3.2",
-        "nist:ai:measure:3.3",
-        "nist:ai:measure:4.1",
-        "nist:ai:measure:4.2",
-        "nist:ai:measure:4.3",
-        "off-topic",
-        "overreliance",
-        "owasp:agentic",
-        "owasp:agentic:asi01",
-        "owasp:agentic:asi02",
-        "owasp:agentic:asi03",
-        "owasp:agentic:asi04",
-        "owasp:agentic:asi05",
-        "owasp:agentic:asi06",
-        "owasp:agentic:asi07",
-        "owasp:agentic:asi08",
-        "owasp:agentic:asi09",
-        "owasp:agentic:asi10",
-        "owasp:api",
-        "owasp:api:01",
-        "owasp:api:02",
-        "owasp:api:03",
-        "owasp:api:04",
-        "owasp:api:05",
-        "owasp:api:06",
-        "owasp:api:07",
-        "owasp:api:08",
-        "owasp:api:09",
-        "owasp:api:10",
-        "owasp:llm",
-        "owasp:llm:01",
-        "owasp:llm:02",
-        "owasp:llm:03",
-        "owasp:llm:04",
-        "owasp:llm:05",
-        "owasp:llm:06",
-        "owasp:llm:07",
-        "owasp:llm:08",
-        "owasp:llm:09",
-        "owasp:llm:10",
-        "owasp:llm:redteam:implementation",
-        "owasp:llm:redteam:model",
-        "owasp:llm:redteam:runtime",
-        "owasp:llm:redteam:system",
-        "personal-safety",
-        "pharmacy",
-        "pharmacy:controlled-substance-compliance",
-        "pharmacy:dosage-calculation",
-        "pharmacy:drug-interaction",
-        "pii",
-        "pii:api-db",
-        "pii:direct",
-        "pii:session",
-        "pii:social",
-        "pliny",
-        "policy",
-        "politics",
-        "prompt-extraction",
-        "rag-document-exfiltration",
-        "rag-poisoning",
-        "rag-source-attribution",
-        "rbac",
-        "realestate",
-        "realestate:accessibility-discrimination",
-        "realestate:advertising-discrimination",
-        "realestate:discriminatory-listings",
-        "realestate:fair-housing-discrimination",
-        "realestate:lending-discrimination",
-        "realestate:source-of-income",
-        "realestate:steering",
-        "realestate:valuation-bias",
-        "reasoning-dos",
-        "religion",
-        "shell-injection",
-        "special-token-injection",
-        "sql-injection",
-        "ssrf",
-        "system-prompt-override",
-        "teen-safety",
-        "teen-safety:age-restricted-goods-and-services",
-        "teen-safety:dangerous-content",
-        "teen-safety:dangerous-roleplay",
-        "teen-safety:harmful-body-ideals",
-        "telecom",
-        "telecom:accessibility-violation",
-        "telecom:account-takeover",
-        "telecom:billing-misinformation",
-        "telecom:coverage-misinformation",
-        "telecom:cpni-disclosure",
-        "telecom:e911-misinformation",
-        "telecom:fraud-enablement",
-        "telecom:law-enforcement-request-handling",
-        "telecom:location-disclosure",
-        "telecom:porting-misinformation",
-        "telecom:tcpa-violation",
-        "telecom:unauthorized-changes",
-        "tool-discovery",
-        "tool-discovery:multi-turn",
-        "toxic-chat",
-        "toxicity",
-        "unsafebench",
-        "unverifiable-claims",
-        "vlguard",
-        "vlsu",
-        "wordplay",
-        "xstest"
-      ]
-    },
-    "__schema227": {
-      "type": "string"
-    },
-    "__schema228": {
-      "type": "integer",
-      "exclusiveMinimum": 0,
-      "maximum": 9007199254740991
-    },
-    "__schema229": {
-      "type": "object",
-      "propertyNames": {
-        "type": "string"
-      },
-      "additionalProperties": {}
-    },
-    "__schema230": {
-      "type": "string",
-      "enum": ["critical", "high", "medium", "low", "informational"]
-    },
-    "__schema231": {
-      "anyOf": [
-        {
-          "$ref": "#/definitions/__schema232"
-        },
-        {
-          "type": "object",
-          "properties": {
-            "id": {
-              "$ref": "#/definitions/__schema232"
-            },
-            "config": {
-              "description": "Strategy-specific configuration",
-              "allOf": [
-                {
-                  "$ref": "#/definitions/__schema233"
+                  "$ref": "#/definitions/__schema238"
                 }
               ]
             }
@@ -3499,10 +2955,649 @@
       ]
     },
     "__schema232": {
+      "type": "string",
+      "enum": [
+        "aegis",
+        "agentic:memory-poisoning",
+        "ascii-smuggling",
+        "beavertails",
+        "bfla",
+        "bias",
+        "bias:age",
+        "bias:disability",
+        "bias:gender",
+        "bias:race",
+        "bola",
+        "cca",
+        "coding-agent:all",
+        "coding-agent:automation-poisoning",
+        "coding-agent:core",
+        "coding-agent:delayed-ci-exfil",
+        "coding-agent:generated-vulnerability",
+        "coding-agent:network-egress-bypass",
+        "coding-agent:procfs-credential-read",
+        "coding-agent:repo-prompt-injection",
+        "coding-agent:sandbox-read-escape",
+        "coding-agent:sandbox-write-escape",
+        "coding-agent:secret-env-read",
+        "coding-agent:secret-file-read",
+        "coding-agent:steganographic-exfil",
+        "coding-agent:terminal-output-injection",
+        "coding-agent:verifier-sabotage",
+        "competitors",
+        "contracts",
+        "coppa",
+        "cross-session-leak",
+        "cyberseceval",
+        "data-exfil",
+        "debug-access",
+        "default",
+        "divergent-repetition",
+        "dod:ai:ethics",
+        "dod:ai:ethics:01",
+        "dod:ai:ethics:02",
+        "dod:ai:ethics:03",
+        "dod:ai:ethics:04",
+        "dod:ai:ethics:05",
+        "donotanswer",
+        "ecommerce",
+        "ecommerce:compliance-bypass",
+        "ecommerce:order-fraud",
+        "ecommerce:pci-dss",
+        "ecommerce:price-manipulation",
+        "eu:ai-act",
+        "eu:ai-act:annex3:biometric-id",
+        "eu:ai-act:annex3:critical-infrastructure",
+        "eu:ai-act:annex3:education",
+        "eu:ai-act:annex3:employment",
+        "eu:ai-act:annex3:essential-services",
+        "eu:ai-act:annex3:justice-democracy",
+        "eu:ai-act:annex3:law-enforcement",
+        "eu:ai-act:annex3:migration-border",
+        "eu:ai-act:art5:biometric-categorisation",
+        "eu:ai-act:art5:exploitation-of-vulnerabilities",
+        "eu:ai-act:art5:remote-biometric-id-live",
+        "eu:ai-act:art5:remote-biometric-id-post",
+        "eu:ai-act:art5:social-scoring",
+        "eu:ai-act:art5:subliminal-manipulation",
+        "excessive-agency",
+        "ferpa",
+        "financial",
+        "financial:calculation-error",
+        "financial:compliance-violation",
+        "financial:confidential-disclosure",
+        "financial:counterfactual",
+        "financial:data-leakage",
+        "financial:defamation",
+        "financial:hallucination",
+        "financial:impartiality",
+        "financial:japan-fiea-suitability",
+        "financial:misconduct",
+        "financial:sox-compliance",
+        "financial:sycophancy",
+        "foundation",
+        "gdpr",
+        "gdpr:art15",
+        "gdpr:art17",
+        "gdpr:art22",
+        "gdpr:art25",
+        "gdpr:art32",
+        "gdpr:art5",
+        "gdpr:art9",
+        "goal-misalignment",
+        "guardrails-eval",
+        "hallucination",
+        "harmbench",
+        "harmful",
+        "harmful:chemical-biological-weapons",
+        "harmful:child-exploitation",
+        "harmful:copyright-violations",
+        "harmful:cybercrime",
+        "harmful:cybercrime:malicious-code",
+        "harmful:graphic-content",
+        "harmful:harassment-bullying",
+        "harmful:hate",
+        "harmful:illegal-activities",
+        "harmful:illegal-drugs",
+        "harmful:illegal-drugs:meth",
+        "harmful:indiscriminate-weapons",
+        "harmful:insults",
+        "harmful:intellectual-property",
+        "harmful:misinformation-disinformation",
+        "harmful:non-violent-crime",
+        "harmful:privacy",
+        "harmful:profanity",
+        "harmful:radicalization",
+        "harmful:self-harm",
+        "harmful:sex-crime",
+        "harmful:sexual-content",
+        "harmful:specialized-advice",
+        "harmful:unsafe-practices",
+        "harmful:violent-crime",
+        "harmful:weapons:ied",
+        "hijacking",
+        "illegal-activity",
+        "imitation",
+        "indirect-prompt-injection",
+        "insurance",
+        "insurance:coverage-discrimination",
+        "insurance:data-disclosure",
+        "insurance:network-misinformation",
+        "insurance:phi-disclosure",
+        "intent",
+        "iso:42001",
+        "iso:42001:accountability",
+        "iso:42001:fairness",
+        "iso:42001:privacy",
+        "iso:42001:robustness",
+        "iso:42001:safety",
+        "iso:42001:security",
+        "iso:42001:transparency",
+        "mcp",
+        "medical",
+        "medical:anchoring-bias",
+        "medical:fda:ai-disclosure",
+        "medical:fda:cyber-access-control",
+        "medical:fda:cyber-audit-tampering",
+        "medical:hallucination",
+        "medical:incorrect-knowledge",
+        "medical:off-label-use",
+        "medical:prioritization-error",
+        "medical:sycophancy",
+        "misinformation",
+        "mitre:atlas",
+        "mitre:atlas:ai-attack-staging",
+        "mitre:atlas:ai-model-access",
+        "mitre:atlas:collection",
+        "mitre:atlas:command-and-control",
+        "mitre:atlas:credential-access",
+        "mitre:atlas:defense-evasion",
+        "mitre:atlas:discovery",
+        "mitre:atlas:execution",
+        "mitre:atlas:exfiltration",
+        "mitre:atlas:impact",
+        "mitre:atlas:initial-access",
+        "mitre:atlas:lateral-movement",
+        "mitre:atlas:ml-attack-staging",
+        "mitre:atlas:persistence",
+        "mitre:atlas:privilege-escalation",
+        "mitre:atlas:reconnaissance",
+        "mitre:atlas:resource-development",
+        "model-identification",
+        "nist:ai",
+        "nist:ai:measure",
+        "nist:ai:measure:1.1",
+        "nist:ai:measure:1.2",
+        "nist:ai:measure:2.1",
+        "nist:ai:measure:2.10",
+        "nist:ai:measure:2.11",
+        "nist:ai:measure:2.12",
+        "nist:ai:measure:2.13",
+        "nist:ai:measure:2.2",
+        "nist:ai:measure:2.3",
+        "nist:ai:measure:2.4",
+        "nist:ai:measure:2.5",
+        "nist:ai:measure:2.6",
+        "nist:ai:measure:2.7",
+        "nist:ai:measure:2.8",
+        "nist:ai:measure:2.9",
+        "nist:ai:measure:3.1",
+        "nist:ai:measure:3.2",
+        "nist:ai:measure:3.3",
+        "nist:ai:measure:4.1",
+        "nist:ai:measure:4.2",
+        "nist:ai:measure:4.3",
+        "off-topic",
+        "overreliance",
+        "owasp:agentic",
+        "owasp:agentic:asi01",
+        "owasp:agentic:asi02",
+        "owasp:agentic:asi03",
+        "owasp:agentic:asi04",
+        "owasp:agentic:asi05",
+        "owasp:agentic:asi06",
+        "owasp:agentic:asi07",
+        "owasp:agentic:asi08",
+        "owasp:agentic:asi09",
+        "owasp:agentic:asi10",
+        "owasp:api",
+        "owasp:api:01",
+        "owasp:api:02",
+        "owasp:api:03",
+        "owasp:api:04",
+        "owasp:api:05",
+        "owasp:api:06",
+        "owasp:api:07",
+        "owasp:api:08",
+        "owasp:api:09",
+        "owasp:api:10",
+        "owasp:llm",
+        "owasp:llm:01",
+        "owasp:llm:02",
+        "owasp:llm:03",
+        "owasp:llm:04",
+        "owasp:llm:05",
+        "owasp:llm:06",
+        "owasp:llm:07",
+        "owasp:llm:08",
+        "owasp:llm:09",
+        "owasp:llm:10",
+        "owasp:llm:redteam:implementation",
+        "owasp:llm:redteam:model",
+        "owasp:llm:redteam:runtime",
+        "owasp:llm:redteam:system",
+        "personal-safety",
+        "pharmacy",
+        "pharmacy:controlled-substance-compliance",
+        "pharmacy:dosage-calculation",
+        "pharmacy:drug-interaction",
+        "pii",
+        "pii:api-db",
+        "pii:direct",
+        "pii:session",
+        "pii:social",
+        "pliny",
+        "policy",
+        "politics",
+        "prompt-extraction",
+        "rag-document-exfiltration",
+        "rag-poisoning",
+        "rag-source-attribution",
+        "rbac",
+        "realestate",
+        "realestate:accessibility-discrimination",
+        "realestate:advertising-discrimination",
+        "realestate:discriminatory-listings",
+        "realestate:fair-housing-discrimination",
+        "realestate:lending-discrimination",
+        "realestate:source-of-income",
+        "realestate:steering",
+        "realestate:valuation-bias",
+        "reasoning-dos",
+        "religion",
+        "shell-injection",
+        "special-token-injection",
+        "sql-injection",
+        "ssrf",
+        "system-prompt-override",
+        "teen-safety",
+        "teen-safety:age-restricted-goods-and-services",
+        "teen-safety:dangerous-content",
+        "teen-safety:dangerous-roleplay",
+        "teen-safety:harmful-body-ideals",
+        "telecom",
+        "telecom:accessibility-violation",
+        "telecom:account-takeover",
+        "telecom:billing-misinformation",
+        "telecom:coverage-misinformation",
+        "telecom:cpni-disclosure",
+        "telecom:e911-misinformation",
+        "telecom:fraud-enablement",
+        "telecom:law-enforcement-request-handling",
+        "telecom:location-disclosure",
+        "telecom:porting-misinformation",
+        "telecom:tcpa-violation",
+        "telecom:unauthorized-changes",
+        "tool-discovery",
+        "tool-discovery:multi-turn",
+        "toxic-chat",
+        "toxicity",
+        "unsafebench",
+        "unverifiable-claims",
+        "vlguard",
+        "vlsu",
+        "wordplay",
+        "xstest"
+      ]
+    },
+    "__schema233": {
+      "type": "string"
+    },
+    "__schema234": {
+      "type": "string",
+      "enum": [
+        "aegis",
+        "agentic:memory-poisoning",
+        "ascii-smuggling",
+        "beavertails",
+        "bfla",
+        "bias",
+        "bias:age",
+        "bias:disability",
+        "bias:gender",
+        "bias:race",
+        "bola",
+        "cca",
+        "coding-agent:all",
+        "coding-agent:automation-poisoning",
+        "coding-agent:core",
+        "coding-agent:delayed-ci-exfil",
+        "coding-agent:generated-vulnerability",
+        "coding-agent:network-egress-bypass",
+        "coding-agent:procfs-credential-read",
+        "coding-agent:repo-prompt-injection",
+        "coding-agent:sandbox-read-escape",
+        "coding-agent:sandbox-write-escape",
+        "coding-agent:secret-env-read",
+        "coding-agent:secret-file-read",
+        "coding-agent:steganographic-exfil",
+        "coding-agent:terminal-output-injection",
+        "coding-agent:verifier-sabotage",
+        "competitors",
+        "contracts",
+        "coppa",
+        "cross-session-leak",
+        "cyberseceval",
+        "data-exfil",
+        "debug-access",
+        "default",
+        "divergent-repetition",
+        "dod:ai:ethics",
+        "dod:ai:ethics:01",
+        "dod:ai:ethics:02",
+        "dod:ai:ethics:03",
+        "dod:ai:ethics:04",
+        "dod:ai:ethics:05",
+        "donotanswer",
+        "ecommerce",
+        "ecommerce:compliance-bypass",
+        "ecommerce:order-fraud",
+        "ecommerce:pci-dss",
+        "ecommerce:price-manipulation",
+        "eu:ai-act",
+        "eu:ai-act:annex3:biometric-id",
+        "eu:ai-act:annex3:critical-infrastructure",
+        "eu:ai-act:annex3:education",
+        "eu:ai-act:annex3:employment",
+        "eu:ai-act:annex3:essential-services",
+        "eu:ai-act:annex3:justice-democracy",
+        "eu:ai-act:annex3:law-enforcement",
+        "eu:ai-act:annex3:migration-border",
+        "eu:ai-act:art5:biometric-categorisation",
+        "eu:ai-act:art5:exploitation-of-vulnerabilities",
+        "eu:ai-act:art5:remote-biometric-id-live",
+        "eu:ai-act:art5:remote-biometric-id-post",
+        "eu:ai-act:art5:social-scoring",
+        "eu:ai-act:art5:subliminal-manipulation",
+        "excessive-agency",
+        "ferpa",
+        "financial",
+        "financial:calculation-error",
+        "financial:compliance-violation",
+        "financial:confidential-disclosure",
+        "financial:counterfactual",
+        "financial:data-leakage",
+        "financial:defamation",
+        "financial:hallucination",
+        "financial:impartiality",
+        "financial:japan-fiea-suitability",
+        "financial:misconduct",
+        "financial:sox-compliance",
+        "financial:sycophancy",
+        "foundation",
+        "gdpr",
+        "gdpr:art15",
+        "gdpr:art17",
+        "gdpr:art22",
+        "gdpr:art25",
+        "gdpr:art32",
+        "gdpr:art5",
+        "gdpr:art9",
+        "goal-misalignment",
+        "guardrails-eval",
+        "hallucination",
+        "harmbench",
+        "harmful",
+        "harmful:chemical-biological-weapons",
+        "harmful:child-exploitation",
+        "harmful:copyright-violations",
+        "harmful:cybercrime",
+        "harmful:cybercrime:malicious-code",
+        "harmful:graphic-content",
+        "harmful:harassment-bullying",
+        "harmful:hate",
+        "harmful:illegal-activities",
+        "harmful:illegal-drugs",
+        "harmful:illegal-drugs:meth",
+        "harmful:indiscriminate-weapons",
+        "harmful:insults",
+        "harmful:intellectual-property",
+        "harmful:misinformation-disinformation",
+        "harmful:non-violent-crime",
+        "harmful:privacy",
+        "harmful:profanity",
+        "harmful:radicalization",
+        "harmful:self-harm",
+        "harmful:sex-crime",
+        "harmful:sexual-content",
+        "harmful:specialized-advice",
+        "harmful:unsafe-practices",
+        "harmful:violent-crime",
+        "harmful:weapons:ied",
+        "hijacking",
+        "illegal-activity",
+        "imitation",
+        "indirect-prompt-injection",
+        "insurance",
+        "insurance:coverage-discrimination",
+        "insurance:data-disclosure",
+        "insurance:network-misinformation",
+        "insurance:phi-disclosure",
+        "intent",
+        "iso:42001",
+        "iso:42001:accountability",
+        "iso:42001:fairness",
+        "iso:42001:privacy",
+        "iso:42001:robustness",
+        "iso:42001:safety",
+        "iso:42001:security",
+        "iso:42001:transparency",
+        "mcp",
+        "medical",
+        "medical:anchoring-bias",
+        "medical:fda:ai-disclosure",
+        "medical:fda:cyber-access-control",
+        "medical:fda:cyber-audit-tampering",
+        "medical:hallucination",
+        "medical:incorrect-knowledge",
+        "medical:off-label-use",
+        "medical:prioritization-error",
+        "medical:sycophancy",
+        "misinformation",
+        "mitre:atlas",
+        "mitre:atlas:ai-attack-staging",
+        "mitre:atlas:ai-model-access",
+        "mitre:atlas:collection",
+        "mitre:atlas:command-and-control",
+        "mitre:atlas:credential-access",
+        "mitre:atlas:defense-evasion",
+        "mitre:atlas:discovery",
+        "mitre:atlas:execution",
+        "mitre:atlas:exfiltration",
+        "mitre:atlas:impact",
+        "mitre:atlas:initial-access",
+        "mitre:atlas:lateral-movement",
+        "mitre:atlas:ml-attack-staging",
+        "mitre:atlas:persistence",
+        "mitre:atlas:privilege-escalation",
+        "mitre:atlas:reconnaissance",
+        "mitre:atlas:resource-development",
+        "model-identification",
+        "nist:ai",
+        "nist:ai:measure",
+        "nist:ai:measure:1.1",
+        "nist:ai:measure:1.2",
+        "nist:ai:measure:2.1",
+        "nist:ai:measure:2.10",
+        "nist:ai:measure:2.11",
+        "nist:ai:measure:2.12",
+        "nist:ai:measure:2.13",
+        "nist:ai:measure:2.2",
+        "nist:ai:measure:2.3",
+        "nist:ai:measure:2.4",
+        "nist:ai:measure:2.5",
+        "nist:ai:measure:2.6",
+        "nist:ai:measure:2.7",
+        "nist:ai:measure:2.8",
+        "nist:ai:measure:2.9",
+        "nist:ai:measure:3.1",
+        "nist:ai:measure:3.2",
+        "nist:ai:measure:3.3",
+        "nist:ai:measure:4.1",
+        "nist:ai:measure:4.2",
+        "nist:ai:measure:4.3",
+        "off-topic",
+        "overreliance",
+        "owasp:agentic",
+        "owasp:agentic:asi01",
+        "owasp:agentic:asi02",
+        "owasp:agentic:asi03",
+        "owasp:agentic:asi04",
+        "owasp:agentic:asi05",
+        "owasp:agentic:asi06",
+        "owasp:agentic:asi07",
+        "owasp:agentic:asi08",
+        "owasp:agentic:asi09",
+        "owasp:agentic:asi10",
+        "owasp:api",
+        "owasp:api:01",
+        "owasp:api:02",
+        "owasp:api:03",
+        "owasp:api:04",
+        "owasp:api:05",
+        "owasp:api:06",
+        "owasp:api:07",
+        "owasp:api:08",
+        "owasp:api:09",
+        "owasp:api:10",
+        "owasp:llm",
+        "owasp:llm:01",
+        "owasp:llm:02",
+        "owasp:llm:03",
+        "owasp:llm:04",
+        "owasp:llm:05",
+        "owasp:llm:06",
+        "owasp:llm:07",
+        "owasp:llm:08",
+        "owasp:llm:09",
+        "owasp:llm:10",
+        "owasp:llm:redteam:implementation",
+        "owasp:llm:redteam:model",
+        "owasp:llm:redteam:runtime",
+        "owasp:llm:redteam:system",
+        "personal-safety",
+        "pharmacy",
+        "pharmacy:controlled-substance-compliance",
+        "pharmacy:dosage-calculation",
+        "pharmacy:drug-interaction",
+        "pii",
+        "pii:api-db",
+        "pii:direct",
+        "pii:session",
+        "pii:social",
+        "pliny",
+        "policy",
+        "politics",
+        "prompt-extraction",
+        "rag-document-exfiltration",
+        "rag-poisoning",
+        "rag-source-attribution",
+        "rbac",
+        "realestate",
+        "realestate:accessibility-discrimination",
+        "realestate:advertising-discrimination",
+        "realestate:discriminatory-listings",
+        "realestate:fair-housing-discrimination",
+        "realestate:lending-discrimination",
+        "realestate:source-of-income",
+        "realestate:steering",
+        "realestate:valuation-bias",
+        "reasoning-dos",
+        "religion",
+        "shell-injection",
+        "special-token-injection",
+        "sql-injection",
+        "ssrf",
+        "system-prompt-override",
+        "teen-safety",
+        "teen-safety:age-restricted-goods-and-services",
+        "teen-safety:dangerous-content",
+        "teen-safety:dangerous-roleplay",
+        "teen-safety:harmful-body-ideals",
+        "telecom",
+        "telecom:accessibility-violation",
+        "telecom:account-takeover",
+        "telecom:billing-misinformation",
+        "telecom:coverage-misinformation",
+        "telecom:cpni-disclosure",
+        "telecom:e911-misinformation",
+        "telecom:fraud-enablement",
+        "telecom:law-enforcement-request-handling",
+        "telecom:location-disclosure",
+        "telecom:porting-misinformation",
+        "telecom:tcpa-violation",
+        "telecom:unauthorized-changes",
+        "tool-discovery",
+        "tool-discovery:multi-turn",
+        "toxic-chat",
+        "toxicity",
+        "unsafebench",
+        "unverifiable-claims",
+        "vlguard",
+        "vlsu",
+        "wordplay",
+        "xstest"
+      ]
+    },
+    "__schema235": {
+      "type": "string"
+    },
+    "__schema236": {
+      "type": "integer",
+      "exclusiveMinimum": 0,
+      "maximum": 9007199254740991
+    },
+    "__schema237": {
+      "type": "object",
+      "propertyNames": {
+        "type": "string"
+      },
+      "additionalProperties": {}
+    },
+    "__schema238": {
+      "type": "string",
+      "enum": ["critical", "high", "medium", "low", "informational"]
+    },
+    "__schema239": {
+      "anyOf": [
+        {
+          "$ref": "#/definitions/__schema240"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "id": {
+              "$ref": "#/definitions/__schema240"
+            },
+            "config": {
+              "description": "Strategy-specific configuration",
+              "allOf": [
+                {
+                  "$ref": "#/definitions/__schema241"
+                }
+              ]
+            }
+          },
+          "required": ["id"]
+        }
+      ]
+    },
+    "__schema240": {
       "anyOf": [
         {
           "type": "string",
           "enum": [
+            "arabic-presentation-forms",
             "audio",
             "authoritative-markup-injection",
             "base64",
@@ -3550,32 +3645,32 @@
         }
       ]
     },
-    "__schema233": {
+    "__schema241": {
       "type": "object",
       "propertyNames": {
         "type": "string"
       },
       "additionalProperties": {}
     },
-    "__schema234": {
+    "__schema242": {
       "type": "integer",
       "exclusiveMinimum": 0,
       "maximum": 9007199254740991
     },
-    "__schema235": {
+    "__schema243": {
       "type": "integer",
       "exclusiveMinimum": 0,
       "maximum": 9007199254740991
     },
-    "__schema236": {
+    "__schema244": {
       "type": "integer",
       "minimum": 0,
       "maximum": 9007199254740991
     },
-    "__schema237": {
+    "__schema245": {
       "type": "boolean"
     },
-    "__schema238": {
+    "__schema246": {
       "type": "object",
       "properties": {
         "enabled": {
@@ -3627,14 +3722,14 @@
           "additionalProperties": {
             "allOf": [
               {
-                "$ref": "#/definitions/__schema238"
+                "$ref": "#/definitions/__schema246"
               }
             ]
           }
         }
       }
     },
-    "__schema239": {
+    "__schema247": {
       "type": "array",
       "items": {
         "type": "object",
@@ -3655,10 +3750,10 @@
         "required": ["output", "pass", "score", "reason"]
       }
     },
-    "__schema240": {
+    "__schema248": {
       "type": "boolean"
     },
-    "__schema241": {
+    "__schema249": {
       "type": "object",
       "properties": {
         "enabled": {
@@ -3769,19 +3864,19 @@
                   "const": "tempo"
                 },
                 "endpoint": {
-                  "$ref": "#/definitions/__schema242"
+                  "$ref": "#/definitions/__schema250"
                 },
                 "auth": {
                   "type": "object",
                   "properties": {
                     "token": {
-                      "$ref": "#/definitions/__schema243"
+                      "$ref": "#/definitions/__schema251"
                     },
                     "username": {
-                      "$ref": "#/definitions/__schema244"
+                      "$ref": "#/definitions/__schema252"
                     },
                     "password": {
-                      "$ref": "#/definitions/__schema245"
+                      "$ref": "#/definitions/__schema253"
                     }
                   }
                 },
@@ -3810,7 +3905,7 @@
                   "const": "braintrust"
                 },
                 "endpoint": {
-                  "$ref": "#/definitions/__schema242"
+                  "$ref": "#/definitions/__schema250"
                 },
                 "projectId": {
                   "type": "string",
@@ -3852,7 +3947,7 @@
                   "const": "langfuse"
                 },
                 "endpoint": {
-                  "$ref": "#/definitions/__schema242"
+                  "$ref": "#/definitions/__schema250"
                 },
                 "auth": {
                   "type": "object",
@@ -3898,26 +3993,26 @@
         }
       }
     },
-    "__schema242": {
+    "__schema250": {
       "type": "string",
       "format": "uri"
     },
-    "__schema243": {
+    "__schema251": {
       "type": "string",
       "minLength": 1
     },
-    "__schema244": {
+    "__schema252": {
       "type": "string",
       "minLength": 1
     },
-    "__schema245": {
+    "__schema253": {
       "type": "string",
       "minLength": 1
     },
-    "__schema246": {
+    "__schema254": {
       "type": "string"
     },
-    "__schema247": {
+    "__schema255": {
       "type": "object",
       "properties": {
         "cache": {
@@ -3960,14 +4055,14 @@
           "type": "boolean"
         },
         "filterRange": {
-          "$ref": "#/definitions/__schema248"
+          "$ref": "#/definitions/__schema256"
         }
       }
     },
-    "__schema248": {
+    "__schema256": {
       "type": "string"
     },
-    "__schema249": {
+    "__schema257": {
       "type": "object",
       "properties": {
         "description": {
@@ -4099,7 +4194,7 @@
         "filterRange": {
           "allOf": [
             {
-              "$ref": "#/definitions/__schema248"
+              "$ref": "#/definitions/__schema256"
             }
           ]
         },
@@ -4172,7 +4267,7 @@
         }
       }
     },
-    "__schema250": {
+    "__schema258": {
       "allOf": [
         {
           "$ref": "#/definitions/__schema3"

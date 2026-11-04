@@ -72,6 +72,24 @@ describe('PostHogProvider', () => {
     },
   );
 
+  it('loads user identity even when telemetry is disabled', async () => {
+    vi.stubEnv('VITE_POSTHOG_KEY', 'test-posthog-key');
+    vi.stubEnv('VITE_POSTHOG_HOST', 'https://test.posthog.com');
+    vi.stubEnv('VITE_PROMPTFOO_DISABLE_TELEMETRY', 'true');
+    const { PostHogProvider } = await import('./PostHogProvider');
+
+    render(
+      <PostHogProvider>
+        <span>Page content</span>
+      </PostHogProvider>,
+    );
+
+    expect(screen.getByText('Page content')).toBeInTheDocument();
+    expect(mockFetchEmail).toHaveBeenCalledTimes(1);
+    expect(mockFetchUserId).toHaveBeenCalledTimes(1);
+    expect(posthog.init).not.toHaveBeenCalled();
+  });
+
   describe('when telemetry is enabled', () => {
     beforeEach(() => {
       vi.stubEnv('VITE_POSTHOG_KEY', 'test-posthog-key');
