@@ -664,16 +664,22 @@ evalRouter.post('/replay', async (req: Request, res: Response): Promise<void> =>
         if (ref.kind !== 'options' && ref.kind !== 'map' && ref.kind !== 'named') {
           return provider;
         }
-        const options = 'loadOptions' in ref ? ref.loadOptions : undefined;
+        let options = 'loadOptions' in ref ? ref.loadOptions : undefined;
         let providerPath = ref.loadProviderPath;
         if (/\{[{%]/.test(providerPath)) {
-          // Echo is local and has no operation or transport settings. Other
-          // dynamic identities must go through a full evaluation configuration.
+          // Resolve only the local echo fixture. Generic loader options can trigger
+          // transforms or linked-target validation even when the factory is echo.
           const rendered = renderEnvOnlyInObject(providerPath, options?.env);
-          if (rendered !== 'echo') {
+          const hasExtraOptions = Object.keys(options ?? {}).some(
+            (key) => !['id', 'label', 'env', 'prompts'].includes(key),
+          );
+          if (rendered !== 'echo' || hasExtraOptions) {
             throw new Error('Cannot identify the replay provider safely');
           }
           providerPath = rendered;
+          if (options) {
+            options = { id: options.id, ...(options.label ? { label: options.label } : {}) };
+          }
         }
         if (ref.kind === 'map') {
           return {

@@ -1913,6 +1913,34 @@ describe('OpenAICodexSecurityProvider', () => {
       expect(response.metadata?.manifestPath).toBe(result.manifestPath);
       expect(response.metadata).not.toHaveProperty('coverage');
       expect(response.metadata).not.toHaveProperty('coveragePath');
+
+      const raw = result.toJSON();
+      const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'promptfoo-reviewed-report-'));
+      const file = path.join(dir, 'result.json');
+      try {
+        await fs.writeFile(file, JSON.stringify(raw));
+        await expect(readCodexSecurityReport(file)).resolves.toMatchObject({
+          summary: { status: 'interrupted', coverage: { completeness: 'unknown' } },
+        });
+        for (const invalid of [
+          { ...raw, review: { excludedPaths: [] } },
+          { ...raw, review: undefined },
+          { ...raw, coverage: { scanId: 'wrong' } },
+          { ...raw, findings: { ...raw.findings, scanId: 'wrong' } },
+          {
+            ...raw,
+            manifest: {
+              ...raw.manifest,
+              scan: { ...raw.manifest.scan, coverageRef: 'coverage.json' },
+            },
+          },
+        ]) {
+          await fs.writeFile(file, JSON.stringify(invalid));
+          await expect(readCodexSecurityReport(file)).rejects.toThrow();
+        }
+      } finally {
+        await fs.rm(dir, { recursive: true, force: true });
+      }
     });
 
     it('reports multiple incompatible trusted SDK versions together', async () => {

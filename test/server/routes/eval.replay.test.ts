@@ -155,10 +155,24 @@ describe('POST /api/eval/replay provider boundary', () => {
     const options = { id: 'saved-label', env: { REPLAY_FIXTURE_PROVIDER: 'echo' } };
     storedConfig([{ '{{ env.REPLAY_FIXTURE_PROVIDER }}': options }], undefined, ['saved-label']);
     expect((await replay(0, 0)).status).toBe(200);
-    expect(evaluate.mock.calls[0][0].providers).toEqual([
-      { echo: { ...options, prompts: ['Replay'] } },
-    ]);
+    const providers = evaluate.mock.calls[0][0].providers;
+    expect(providers).toEqual([{ echo: { id: 'saved-label', prompts: ['Replay'] } }]);
+    const [loaded] = await loadApiProviders(providers);
+    expect(loaded.id()).toBe('saved-label');
+    await expect(loaded.callApi('local echo fixture')).resolves.toMatchObject({
+      output: 'local echo fixture',
+      cost: 0,
+    });
   });
+
+  it.each([{ config: { linkedTargetId: 'remote' } }, { transform: 'synthetic' }, { delay: 5 }])(
+    'rejects loader options on templated echo before evaluation: %j',
+    async (extraOptions) => {
+      storedConfig([{ '{{ env.NAME }}': { env: { NAME: 'echo' }, ...extraOptions } }]);
+      expect((await replay()).status).toBe(400);
+      expect(evaluate).not.toHaveBeenCalled();
+    },
+  );
 
   it.each([
     'openai:gpt-6-luna',

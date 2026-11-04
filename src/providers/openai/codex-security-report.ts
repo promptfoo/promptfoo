@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { constants } from 'node:fs';
 import fs from 'node:fs/promises';
+import { isDeepStrictEqual } from 'node:util';
 
 import { z } from 'zod';
 import { CodexSecurityReplaySchema } from '../../contracts/codexSecurity';
@@ -10,44 +11,68 @@ import type { CodexSecurityReplay, CodexSecurityResult } from '../../contracts/c
 
 const ScopePathsSchema = z.array(z.string().refine((value) => value.trim().length > 0));
 
-const ScanReportSchema = z.object({
-  manifest: z.object({
-    documentType: z.literal('codex-security.scan-manifest'),
-    schemaVersion: z.literal('1.0'),
-    scan: z.object({
-      id: z.string().min(1),
-      status: z.enum(['completed', 'failed', 'canceled', 'interrupted']),
-      scope: z
-        .object({
-          includePaths: ScopePathsSchema.nullable().optional(),
-          excludePaths: ScopePathsSchema.nullable().optional(),
-        })
-        .nullable()
-        .optional(),
+const ScanModeSchema = z.enum([
+  'repository',
+  'scoped_path',
+  'diff',
+  'commit',
+  'branch_diff',
+  'working_tree',
+  'deep_repository',
+]);
+const ReviewSchema = z.object({ excludedPaths: ScopePathsSchema });
+
+const ScanReportSchema = z
+  .object({
+    manifest: z.object({
+      documentType: z.literal('codex-security.scan-manifest'),
+      schemaVersion: z.literal('1.0'),
+      scan: z.object({
+        id: z.string().min(1),
+        status: z.enum(['completed', 'failed', 'canceled', 'interrupted']),
+        mode: ScanModeSchema.optional(),
+        review: ReviewSchema.optional(),
+        coverageRef: z.string().optional(),
+        scope: z
+          .object({
+            includePaths: ScopePathsSchema.nullable().optional(),
+            excludePaths: ScopePathsSchema.nullable().optional(),
+          })
+          .nullable()
+          .optional(),
+      }),
     }),
-  }),
-  findings: z.object({
-    documentType: z.literal('codex-security.findings'),
-    schemaVersion: z.literal('1.0'),
-    scanId: z.string().min(1),
-    findings: z.array(z.object({ findingId: z.string().min(1) })),
-  }),
-  coverage: z.object({
-    documentType: z.literal('codex-security.coverage'),
-    schemaVersion: z.literal('1.0'),
-    scanId: z.string().min(1),
-    mode: z.enum([
-      'repository',
-      'scoped_path',
-      'diff',
-      'commit',
-      'branch_diff',
-      'working_tree',
-      'deep_repository',
-    ]),
-    completeness: z.enum(['complete', 'partial', 'unknown']),
-  }),
-});
+    findings: z.object({
+      documentType: z.literal('codex-security.findings'),
+      schemaVersion: z.literal('1.0'),
+      scanId: z.string().min(1),
+      findings: z.array(z.object({ findingId: z.string().min(1) })),
+    }),
+    coverage: z
+      .object({
+        documentType: z.literal('codex-security.coverage'),
+        schemaVersion: z.literal('1.0'),
+        scanId: z.string().min(1),
+        mode: ScanModeSchema,
+        completeness: z.enum(['complete', 'partial', 'unknown']),
+      })
+      .optional(),
+    review: ReviewSchema.optional(),
+  })
+  .refine(({ manifest, coverage, review }) => {
+    if (coverage) {
+      return true;
+    }
+    // The 0.8 SDK moved review evidence into the manifest and its serialized result.
+    // Never accept a truncated legacy coverage report or conflicting exclusions.
+    const scan = manifest.scan;
+    return (
+      scan.mode !== undefined &&
+      scan.coverageRef === undefined &&
+      review !== undefined &&
+      isDeepStrictEqual(scan.review?.excludedPaths, review.excludedPaths)
+    );
+  });
 
 const ValidationReportSchema = z.object({
   disposition: z.enum(['reportable', 'suppressed', 'not_applicable', 'deferred']),
@@ -109,13 +134,14 @@ function payloadSummary(raw: unknown, source: CodexSecurityResult['source']) {
   const validation = isScan ? null : ValidationReportSchema.safeParse(raw);
   if (!(scan?.success || validation?.success)) {
     throw new Error(
-      'Codex Security report_file must contain a serialized ScanResult.toJSON() with version 1.0 manifest, findings, and coverage documents, or a validation result with disposition and report.',
+      'Codex Security report_file must contain a serialized ScanResult.toJSON() with matching version 1.0 manifest, findings, and coverage or review evidence, or a validation result with disposition and report.',
     );
   }
   if (
     scan?.success &&
     (scan.data.manifest.scan.id !== scan.data.findings.scanId ||
-      scan.data.manifest.scan.id !== scan.data.coverage.scanId)
+      (scan.data.coverage !== undefined &&
+        scan.data.manifest.scan.id !== scan.data.coverage.scanId))
   ) {
     throw new Error('Codex Security report_file contains mismatched scan IDs.');
   }
