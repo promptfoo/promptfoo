@@ -4,14 +4,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { OtelConfig } from '../../src/tracing/otelConfig';
 
 // Create mock functions that will be used across tests
-const { mockRegister, mockShutdown, mockForceFlush, mockAddSpanProcessor, mockSetLogger } =
-  vi.hoisted(() => ({
-    mockRegister: vi.fn(),
-    mockShutdown: vi.fn(),
-    mockForceFlush: vi.fn(),
-    mockAddSpanProcessor: vi.fn(),
-    mockSetLogger: vi.fn(),
-  }));
+const { mockRegister, mockShutdown, mockForceFlush, mockSetLogger } = vi.hoisted(() => ({
+  mockRegister: vi.fn(),
+  mockShutdown: vi.fn(),
+  mockForceFlush: vi.fn(),
+  mockSetLogger: vi.fn(),
+}));
 
 // Track constructor calls
 let nodeTracerProviderCalls: unknown[] = [];
@@ -20,21 +18,16 @@ let localExporterCalls: unknown[] = [];
 let batchProcessorCalls: unknown[] = [];
 let resourceCalls: unknown[] = [];
 
-vi.mock('@opentelemetry/sdk-trace-node', () => {
+vi.mock('@opentelemetry/sdk-trace', () => {
   // Use a class-like constructor function
   return {
-    NodeTracerProvider: class MockNodeTracerProvider {
+    TracerProvider: class MockTracerProvider {
       constructor(options: unknown) {
         nodeTracerProviderCalls.push(options);
-      }
-      register(config: unknown) {
-        trace.setGlobalTracerProvider(this as never);
-        mockRegister(config);
       }
       getTracer = vi.fn();
       shutdown = mockShutdown;
       forceFlush = mockForceFlush;
-      addSpanProcessor = mockAddSpanProcessor;
     },
     BatchSpanProcessor: class MockBatchSpanProcessor {
       exporter: unknown;
@@ -64,6 +57,8 @@ vi.mock('node:module', async (importOriginal) => {
 });
 
 vi.mock('@opentelemetry/core', () => ({
+  getStringFromEnv: vi.fn(),
+  getNumberFromEnv: vi.fn(),
   W3CTraceContextPropagator: class MockW3CTraceContextPropagator {},
 }));
 
@@ -79,19 +74,25 @@ vi.mock('@opentelemetry/semantic-conventions', () => ({
   ATTR_SERVICE_VERSION: 'service.version',
 }));
 
-vi.mock('@opentelemetry/api', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('@opentelemetry/api')>()),
-  diag: {
-    setLogger: mockSetLogger,
-  },
-  DiagConsoleLogger: class MockDiagConsoleLogger {},
-  DiagLogLevel: {
-    DEBUG: 0,
-  },
-  propagation: {
-    setGlobalPropagator: vi.fn(),
-  },
-}));
+vi.mock('@opentelemetry/api', async (importOriginal) => {
+  const api = await importOriginal<typeof import('@opentelemetry/api')>();
+  return {
+    ...api,
+    diag: { ...api.diag, setLogger: mockSetLogger },
+    trace: {
+      disable: () => api.trace.disable(),
+      getTracerProvider: () => api.trace.getTracerProvider(),
+      setGlobalTracerProvider: (
+        provider: Parameters<typeof api.trace.setGlobalTracerProvider>[0],
+      ) => {
+        mockRegister(provider);
+        return api.trace.setGlobalTracerProvider(provider);
+      },
+    },
+    context: { setGlobalContextManager: vi.fn() },
+    propagation: { setGlobalPropagator: vi.fn() },
+  };
+});
 
 vi.mock('../../src/logger', () => ({
   default: {

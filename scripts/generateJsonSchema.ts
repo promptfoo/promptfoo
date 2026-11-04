@@ -28,16 +28,7 @@ function forceStringTransformSchemas(node: unknown): void {
     return;
   }
 
-  if (Array.isArray(node)) {
-    for (const item of node) {
-      forceStringTransformSchemas(item);
-    }
-    return;
-  }
-
-  const schemaObject = node as Record<string, unknown>;
-
-  for (const [key, value] of Object.entries(schemaObject)) {
+  for (const [key, value] of Object.entries(node)) {
     if (
       transformSchemaKeys.has(key) &&
       value &&

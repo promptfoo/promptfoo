@@ -9,9 +9,9 @@ import {
 import { ExportResultCode, W3CTraceContextPropagator } from '@opentelemetry/core';
 import {
   InMemorySpanExporter,
-  NodeTracerProvider,
+  TracerProvider as SDKTracerProvider,
   SimpleSpanProcessor,
-} from '@opentelemetry/sdk-trace-node';
+} from '@opentelemetry/sdk-trace';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   acquireOtel,
@@ -20,9 +20,10 @@ import {
   isOtelInitialized,
   shutdownOtel,
 } from '../../src/tracing/otelSdk';
+import { registerTracerProvider } from '../../src/tracing/tracerProvider';
 import type { Span, Tracer, TracerProvider } from '@opentelemetry/api';
 import type { ExportResult } from '@opentelemetry/core';
-import type { ReadableSpan, SpanProcessor } from '@opentelemetry/sdk-trace-node';
+import type { ReadableSpan, SpanProcessor } from '@opentelemetry/sdk-trace';
 
 import type { OtelConfig } from '../../src/tracing/otelConfig';
 
@@ -86,7 +87,7 @@ function wrapSavedProvider(
 }
 
 describe('real OTEL SDK lifecycle', () => {
-  let hostProvider: NodeTracerProvider | undefined;
+  let hostProvider: SDKTracerProvider | undefined;
 
   beforeEach(() => {
     trace.disable();
@@ -316,10 +317,10 @@ describe('real OTEL SDK lifecycle', () => {
 
   it('borrows an external SDK without modifying or shutting down its global registrations', async () => {
     const hostExporter = new InMemorySpanExporter();
-    hostProvider = new NodeTracerProvider({
-      spanProcessors: [new SimpleSpanProcessor(hostExporter)],
+    hostProvider = new SDKTracerProvider({
+      spanProcessors: [new SimpleSpanProcessor({ exporter: hostExporter })],
     });
-    hostProvider.register({ propagator: new W3CTraceContextPropagator() });
+    registerTracerProvider(hostProvider, new W3CTraceContextPropagator());
     const hostGlobal = trace.getTracerProvider();
     const hostShutdown = vi.spyOn(hostProvider, 'shutdown');
     const release = await acquireOtel(config);
@@ -355,11 +356,11 @@ describe('real OTEL SDK lifecycle', () => {
     await releaseOwned();
 
     const hostExporter = new InMemorySpanExporter();
-    hostProvider = new NodeTracerProvider({
-      spanProcessors: [new SimpleSpanProcessor(hostExporter)],
+    hostProvider = new SDKTracerProvider({
+      spanProcessors: [new SimpleSpanProcessor({ exporter: hostExporter })],
     });
     // No trace.disable(): the final owned lease must free the registration slot.
-    hostProvider.register({ contextManager: null, propagator: null });
+    trace.setGlobalTracerProvider(hostProvider);
     const hostGlobal = trace.getTracerProvider();
     const hostShutdown = vi.spyOn(hostProvider, 'shutdown');
     const releaseBorrowed = await acquireOtel(config);
@@ -392,11 +393,11 @@ describe('real OTEL SDK lifecycle', () => {
 
   it('matches native SDK affinity when a replacement host processor uses an older cached tracer', async () => {
     const originalExporter = new InMemorySpanExporter();
-    const originalProvider = new NodeTracerProvider({
-      spanProcessors: [new SimpleSpanProcessor(originalExporter)],
+    const originalProvider = new SDKTracerProvider({
+      spanProcessors: [new SimpleSpanProcessor({ exporter: originalExporter })],
     });
     try {
-      originalProvider.register();
+      registerTracerProvider(originalProvider);
       const originalTracer = trace.getTracer('original-native');
       const hostExporter = new InMemorySpanExporter();
       const processor: SpanProcessor = {
@@ -407,11 +408,11 @@ describe('real OTEL SDK lifecycle', () => {
         async forceFlush() {},
         async shutdown() {},
       };
-      hostProvider = new NodeTracerProvider({
-        spanProcessors: [processor, new SimpleSpanProcessor(hostExporter)],
+      hostProvider = new SDKTracerProvider({
+        spanProcessors: [processor, new SimpleSpanProcessor({ exporter: hostExporter })],
       });
       trace.disable();
-      hostProvider.register({ contextManager: null, propagator: null });
+      trace.setGlobalTracerProvider(hostProvider);
       trace.getTracer('replacement-native').startSpan('host-parent').end();
       await originalProvider.forceFlush();
       await hostProvider.forceFlush();
@@ -452,11 +453,11 @@ describe('real OTEL SDK lifecycle', () => {
         async forceFlush() {},
         async shutdown() {},
       };
-      hostProvider = new NodeTracerProvider({
-        spanProcessors: [processor, new SimpleSpanProcessor(hostExporter)],
+      hostProvider = new SDKTracerProvider({
+        spanProcessors: [processor, new SimpleSpanProcessor({ exporter: hostExporter })],
       });
       trace.disable();
-      hostProvider.register({ contextManager: null, propagator: null });
+      trace.setGlobalTracerProvider(hostProvider);
       trace.getTracer('host-parent').startSpan('host-parent').end();
       await hostProvider.forceFlush();
       await release();
@@ -491,11 +492,11 @@ describe('real OTEL SDK lifecycle', () => {
         async forceFlush() {},
         async shutdown() {},
       };
-      hostProvider = new NodeTracerProvider({
-        spanProcessors: [processor, new SimpleSpanProcessor(hostExporter)],
+      hostProvider = new SDKTracerProvider({
+        spanProcessors: [processor, new SimpleSpanProcessor({ exporter: hostExporter })],
       });
       trace.disable();
-      hostProvider.register({ contextManager: null, propagator: null });
+      trace.setGlobalTracerProvider(hostProvider);
       hostTracer = trace.getTracer('host-owned-cache');
       hostTracer.startSpan('host-parent').end();
       await hostProvider.forceFlush();
@@ -564,11 +565,11 @@ describe('real OTEL SDK lifecycle', () => {
 
   it('preserves borrowed host callback binding, nested spans and errors', async () => {
     const hostExporter = new InMemorySpanExporter();
-    hostProvider = new NodeTracerProvider({
-      spanProcessors: [new SimpleSpanProcessor(hostExporter)],
+    hostProvider = new SDKTracerProvider({
+      spanProcessors: [new SimpleSpanProcessor({ exporter: hostExporter })],
     });
     const hostTracer = hostProvider.getTracer('host-callback');
-    hostProvider.register();
+    registerTracerProvider(hostProvider);
     trace.disable();
     const binding = {};
     const extraArgument = {};
@@ -641,13 +642,13 @@ describe('real OTEL SDK lifecycle', () => {
     const cached = trace.getTracer('cached-during-shutdown');
     cached.startSpan('before-shutdown').end();
     let finishShutdown!: () => void;
-    const originalShutdown = NodeTracerProvider.prototype.shutdown;
+    const originalShutdown = SDKTracerProvider.prototype.shutdown;
     let shutdownStarted!: () => void;
     const started = new Promise<void>((resolve) => {
       shutdownStarted = resolve;
     });
-    vi.spyOn(NodeTracerProvider.prototype, 'shutdown').mockImplementationOnce(async function (
-      this: NodeTracerProvider,
+    vi.spyOn(SDKTracerProvider.prototype, 'shutdown').mockImplementationOnce(async function (
+      this: SDKTracerProvider,
     ) {
       shutdownStarted();
       await new Promise<void>((resolve) => {
@@ -664,10 +665,10 @@ describe('real OTEL SDK lifecycle', () => {
 
     trace.disable();
     const hostExporter = new InMemorySpanExporter();
-    hostProvider = new NodeTracerProvider({
-      spanProcessors: [new SimpleSpanProcessor(hostExporter)],
+    hostProvider = new SDKTracerProvider({
+      spanProcessors: [new SimpleSpanProcessor({ exporter: hostExporter })],
     });
-    hostProvider.register({ contextManager: null, propagator: null });
+    trace.setGlobalTracerProvider(hostProvider);
     const hostGlobal = trace.getTracerProvider();
     const beforeShutdown = cached.startSpan('cached-owned-before-shutdown-completes');
     expect(beforeShutdown.isRecording()).toBe(false);
@@ -690,8 +691,8 @@ describe('real OTEL SDK lifecycle', () => {
   it('preserves independently installed host context and propagation across owned shutdown', async () => {
     const hostPropagator = new W3CTraceContextPropagator();
     const hostInject = vi.spyOn(hostPropagator, 'inject');
-    hostProvider = new NodeTracerProvider();
-    hostProvider.register({ propagator: hostPropagator });
+    hostProvider = new SDKTracerProvider();
+    registerTracerProvider(hostProvider, hostPropagator);
     trace.disable();
 
     const hostParent = hostProvider.getTracer('host').startSpan('host-parent');

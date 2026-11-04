@@ -35,13 +35,17 @@ function fixture() {
     start: vi.fn().mockResolvedValue(undefined),
     close: vi.fn().mockResolvedValue(undefined),
   };
+  const scopedResource = { shutdown: vi.fn().mockResolvedValue(undefined) };
   const runtime: EvaluatorRuntime<InMemoryEvaluation> = {
     createEvaluationStore: () => store,
     createResultWriters: () => [writer],
-    createTracingLifecycle: vi.fn(() => lifecycle),
+    createTracingLifecycle: vi.fn(() => {
+      providerRegistry.register(scopedResource);
+      return lifecycle;
+    }),
   };
   const suite: TestSuite = { providers: [], prompts: [], tests: [] };
-  return { evaluation, store, writer, lifecycle, runtime, suite };
+  return { evaluation, store, writer, lifecycle, runtime, suite, scopedResource };
 }
 
 function snapshotTracingHandlers() {
@@ -60,7 +64,6 @@ describe('evaluator tracing lifecycle port', () => {
       PROMPTFOO_TRACING_ENABLED: 'false',
       PROMPTFOO_MAX_EVAL_TIME_MS: undefined,
     });
-    vi.spyOn(providerRegistry, 'shutdownAll').mockResolvedValue(undefined);
   });
 
   afterEach(() => {
@@ -124,7 +127,7 @@ describe('evaluator tracing lifecycle port', () => {
   it.each([new Error('start failed'), undefined])(
     'preserves a partial-start rejection identity (%s) through all cleanup',
     async (primaryError) => {
-      const { evaluation, runtime, suite, writer, lifecycle } = fixture();
+      const { evaluation, runtime, suite, writer, lifecycle, scopedResource } = fixture();
       suite.tracing = { enabled: true };
       lifecycle.start.mockRejectedValue(primaryError);
       lifecycle.close.mockRejectedValue(new Error('tracing close failed'));
@@ -139,7 +142,7 @@ describe('evaluator tracing lifecycle port', () => {
         lifecycle.close.mock.invocationCallOrder[0],
       );
       expect(lifecycle.close.mock.invocationCallOrder[0]).toBeLessThan(
-        vi.mocked(providerRegistry.shutdownAll).mock.invocationCallOrder[0],
+        scopedResource.shutdown.mock.invocationCallOrder[0],
       );
       expect(clearScheduler).toHaveBeenLastCalledWith(undefined);
       expect(cliState.maxConcurrency).toBeUndefined();
@@ -149,7 +152,7 @@ describe('evaluator tracing lifecycle port', () => {
   it.each([new Error('evaluation failed'), undefined])(
     'preserves evaluation rejection identity (%s) when tracing cleanup fails',
     async (primaryError) => {
-      const { evaluation, runtime, suite, store, lifecycle } = fixture();
+      const { evaluation, runtime, suite, store, lifecycle, scopedResource } = fixture();
       suite.tracing = { enabled: true };
       vi.spyOn(store, 'appendPrompts').mockRejectedValue(primaryError);
       lifecycle.close.mockRejectedValue(new Error('tracing cleanup failed'));
@@ -157,21 +160,21 @@ describe('evaluator tracing lifecycle port', () => {
       await expect(evaluate(suite, evaluation, { silent: true }, runtime)).rejects.toBe(
         primaryError,
       );
-      expect(providerRegistry.shutdownAll).toHaveBeenCalledOnce();
+      expect(scopedResource.shutdown).toHaveBeenCalledOnce();
     },
   );
 
   it('surfaces tracing teardown failures after continuing provider and scheduler cleanup', async () => {
-    const { evaluation, runtime, suite, lifecycle } = fixture();
+    const { evaluation, runtime, suite, lifecycle, scopedResource } = fixture();
     const closeError = new Error('tracing cleanup failed');
     suite.tracing = { enabled: true };
     lifecycle.close.mockRejectedValue(closeError);
-    vi.mocked(providerRegistry.shutdownAll).mockRejectedValue(new Error('provider cleanup failed'));
+    scopedResource.shutdown.mockRejectedValue(new Error('provider cleanup failed'));
     const clearScheduler = vi.spyOn(redteamProviderManager, 'setRateLimitRegistry');
 
     await expect(evaluate(suite, evaluation, { silent: true }, runtime)).rejects.toBe(closeError);
 
-    expect(providerRegistry.shutdownAll).toHaveBeenCalledOnce();
+    expect(scopedResource.shutdown).toHaveBeenCalledOnce();
     expect(clearScheduler).toHaveBeenLastCalledWith(undefined);
   });
 });

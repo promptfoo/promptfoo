@@ -22,9 +22,11 @@ export function createNodeTracingLifecycle(
   let closePromise: Promise<void> | undefined;
 
   return {
-    start() {
+    start(signal) {
       startPromise ??= (async () => {
+        signal?.throwIfAborted();
         receiverAcquired = await startOtlpReceiverIfNeeded(testSuite, evaluationId);
+        signal?.throwIfAborted();
         releaseSdk = await acquireOtel(getDefaultOtelConfig());
       })();
       return startPromise;

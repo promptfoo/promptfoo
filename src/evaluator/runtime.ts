@@ -65,7 +65,7 @@ export interface EvaluationStore<
 
 /** Per-evaluation lifecycle. close() must release resources even when start() rejects. */
 export interface EvaluatorTracingLifecycle {
-  start(): Promise<void>;
+  start(signal?: AbortSignal): Promise<void>;
   close(): Promise<void>;
 }
 
