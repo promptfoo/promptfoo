@@ -4,6 +4,7 @@ import { Badge } from '@app/components/ui/badge';
 import { Card, CardContent } from '@app/components/ui/card';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
 import { cn } from '@app/lib/utils';
+import { calculateAttackSuccessRate } from '@promptfoo/presentation/redteamMetrics';
 import {
   ALIASED_PLUGIN_MAPPINGS,
   DOD_AI_ETHICS_PRINCIPLE_NAMES,
@@ -14,7 +15,6 @@ import {
   Severity,
   severityDisplayNames,
 } from '@promptfoo/redteam/constants';
-import { calculateAttackSuccessRate } from '@promptfoo/redteam/metrics';
 import { CheckCircle, Info } from 'lucide-react';
 import { compareByASRDescending } from '../utils/utils';
 import {

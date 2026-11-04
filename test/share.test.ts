@@ -835,6 +835,11 @@ describe('createShareableUrl', () => {
         const dataUrl = 'data:image/png;base64,cHJpdmF0ZSBvdXRwdXQ=';
         const svgUrl = 'data:image/svg+xml,%3Csvg%3Eprivate%20output%3C%2Fsvg%3E';
         const preview = { samples: [outputUri, dataUrl, svgUrl], caption: 'data:ready' };
+        const conversationOutput = [
+          { text: 'native-conversation-private', thoughtSignature: 'private-signature' },
+          { inlineData: { mimeType: 'image/png', data: 'bmF0aXZlLXByaXZhdGU=' } },
+          { fileData: { mimeType: 'image/png', fileUri: outputUri } },
+        ];
         const row = {
           id: 'media-row',
           testCase: { vars: { input: inputUri } },
@@ -847,6 +852,7 @@ describe('createShareableUrl', () => {
           response: {
             output: outputUri,
             providerTransformedOutput: outputUri,
+            conversationOutput,
             audio: { data: outputUri },
             video: { url: outputUri },
             images: [{ url: outputUri }],
@@ -868,6 +874,12 @@ describe('createShareableUrl', () => {
 
         await createShareableUrl(mockEval as Eval);
 
+        expect(row.response.conversationOutput).toBe(conversationOutput);
+        expect(row.response.conversationOutput[0]).toEqual({
+          text: 'native-conversation-private',
+          thoughtSignature: 'private-signature',
+        });
+
         const scans = cloud
           ? vi.mocked(uploadBlobRefsForShare).mock.calls
           : vi.mocked(inlineBlobRefsForShare).mock.calls;
@@ -876,6 +888,8 @@ describe('createShareableUrl', () => {
           expect(JSON.stringify(value)).not.toContain(outputUri);
           expect(JSON.stringify(value)).not.toContain(dataUrl);
           expect(JSON.stringify(value)).not.toContain(svgUrl);
+          expect(JSON.stringify(value)).not.toContain('native-conversation-private');
+          expect(JSON.stringify(value)).not.toContain('bmF0aXZlLXByaXZhdGU=');
           expect(JSON.stringify(value)).toContain(inputUri);
         }
         const [uploaded] = JSON.parse(mockFetch.mock.calls[1][1].body);
@@ -1141,12 +1155,22 @@ describe('createShareableUrl', () => {
       vi.stubEnv('PROMPTFOO_STRIP_TEST_VARS', 'false');
       vi.stubEnv('PROMPTFOO_STRIP_METADATA', 'false');
       vi.stubEnv('PROMPTFOO_STRIP_RESPONSE_OUTPUT', 'false');
+      const grader = { id: 'echo', prompts: ['private-nested-selector'] };
       const testCase = {
+        options: { provider: { text: grader } },
         vars: { input: 'private-input' },
         metadata: { note: 'private-note' },
         providerOutput: 'private-output',
       };
-      mockEval.config = {
+      const provider = {
+        id: () => 'echo',
+        callApi: vi.fn(),
+        prompts: ['private-provider-selector'],
+      };
+      const providerPromptMap = { echo: ['private-explicit-selector'] };
+      const config = {
+        providerPromptMap,
+        providers: [{ id: provider.id(), prompts: [...provider.prompts] }],
         env: {
           PROMPTFOO_STRIP_PROMPT_TEXT: 'true',
           PROMPTFOO_STRIP_TEST_VARS: 'true',
@@ -1155,6 +1179,7 @@ describe('createShareableUrl', () => {
         },
         tests: [testCase],
       };
+      mockEval.config = config;
       mockEval.getTraces = vi.fn().mockResolvedValue([
         {
           metadata: { note: 'private-trace-note' },
@@ -1171,7 +1196,20 @@ describe('createShareableUrl', () => {
       ]);
       mockEval.prompts = [{ raw: 'private-prompt', label: 'public', provider: 'echo' }];
       mockEval.fetchResultsBatched = vi.fn().mockImplementation(async function* () {
-        yield [{ id: 'row', testCase }];
+        yield [
+          {
+            id: 'row',
+            testCase,
+            provider,
+            prompt: { raw: 'Hello', label: 'Greeting', config: { provider: grader } },
+            gradingResult: {
+              pass: true,
+              score: 1,
+              reason: 'ok',
+              assertion: { type: 'equals', value: 'ok', provider: grader },
+            },
+          },
+        ];
       });
       mockFetch
         .mockResolvedValueOnce({ ok: true, json: async () => ({ id: mockEval.id }) })
@@ -1184,6 +1222,15 @@ describe('createShareableUrl', () => {
         }
         expect(JSON.parse(mockFetch.mock.calls[0][1].body).traces).toEqual([
           { spans: [{ attributes: { operation: 'provider-call' } }] },
+        ]);
+        expect(grader.prompts).toEqual(['private-nested-selector']);
+        expect(provider.prompts).toEqual(['private-provider-selector']);
+        expect(mockEval.config).toMatchObject({ providerPromptMap });
+        expect(
+          JSON.parse(mockFetch.mock.calls[0][1].body).config.providerPromptMap,
+        ).toBeUndefined();
+        expect(mockEval.config.providers).toEqual([
+          { id: 'echo', prompts: ['private-provider-selector'] },
         ]);
         expect(testCase.vars.input).toBe('private-input');
         expect(getEnvBool('PROMPTFOO_STRIP_TEST_VARS')).toBe(false);
