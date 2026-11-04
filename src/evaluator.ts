@@ -19,6 +19,7 @@ import { getCache, isCacheEnabled, withCacheEnabled, withCacheNamespace } from '
 import cliState from './cliState';
 import { DEFAULT_MAX_CONCURRENCY, FILE_METADATA_KEY } from './constants';
 import { getEnvBool, getEnvInt, getEvalTimeoutMs, getMaxEvalTimeMs, isCI } from './envars';
+import { compileDerivedMetricFormula } from './evaluator/derivedMetricFormula';
 import { collectFileMetadata, renderPrompt, runExtensionHook } from './evaluatorHelpers';
 import logger, { globalLogCallback, isDebugEnabled, setLogCallback } from './logger';
 import { selectMaxScore } from './matchers/comparison';
@@ -79,7 +80,6 @@ import {
   TestSuiteConfigSchema,
 } from './types/index';
 import { type ApiProvider, isApiProvider } from './types/providers';
-import { compileDerivedMetricFormula } from './util/eval/derivedMetricFormula';
 import { createDefaultPromptMetrics, updatePromptResultCounts } from './util/eval/promptMetrics';
 import { isAbortError, isNonTransientHttpStatus } from './util/fetch/errors';
 import { isCallerAbortError } from './util/fetch/requestSignal';
