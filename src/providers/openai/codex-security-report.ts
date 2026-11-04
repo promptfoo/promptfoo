@@ -61,7 +61,7 @@ const ScanReportSchema = z
   })
   .refine(({ manifest, coverage, review }) => {
     if (coverage) {
-      return true;
+      return review === undefined && manifest.scan.review === undefined;
     }
     // The 0.8 SDK moved review evidence into the manifest and its serialized result.
     // Never accept a truncated legacy coverage report or conflicting exclusions.
