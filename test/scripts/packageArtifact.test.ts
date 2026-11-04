@@ -338,6 +338,23 @@ ${nativeSource}`,
         const stat = fs.readFileSync(`/proc/${pid}/stat`, 'utf8');
         return stat.slice(stat.lastIndexOf(')') + 2, stat.lastIndexOf(')') + 3) !== 'Z';
       }
+      if (process.platform === 'darwin') {
+        // Match the fixture supervisor: exited descendants can await reaping on macOS too.
+        const status = spawnSync('ps', ['-p', String(pid), '-o', 'stat='], {
+          encoding: 'utf8',
+          timeout: 1_000,
+        });
+        if (status.error) {
+          throw status.error;
+        }
+        if (status.status === 1 && !status.stdout.trim() && !status.stderr.trim()) {
+          return false; // The process exited between kill(0) and ps.
+        }
+        if (status.status !== 0) {
+          throw new Error(`Could not inspect fixture process ${pid}: ${status.stderr}`);
+        }
+        return !status.stdout.trim().startsWith('Z');
+      }
       return true;
     } catch (error) {
       if (['ESRCH', 'ENOENT'].includes((error as NodeJS.ErrnoException).code ?? '')) {
@@ -472,6 +489,45 @@ if (process.argv[2] !== '--child') {
     expect(fs.readdirSync(temporary)).toEqual([]);
   });
 
+  it.each(['spawn', 'env'] as const)(
+    'removes owned state and signal listeners when %s throws during startup',
+    (failure) => {
+      const { root, temporary } = prepareConsumer('');
+      const fixture = path.join(root, 'startup-failure.mjs');
+      fs.writeFileSync(
+        fixture,
+        `import assert from 'node:assert/strict';
+import childProcess from 'node:child_process';
+import { syncBuiltinESMExports } from 'node:module';
+const failure = new Error('injected-startup-failure');
+if (${JSON.stringify(failure)} === 'spawn') {
+  childProcess.spawn = () => { throw failure; };
+  syncBuiltinESMExports();
+}
+const { runIsolated } = await import('./isolated.mjs');
+const signals = ['SIGINT', 'SIGTERM'];
+const before = signals.map((signal) => process.listenerCount(signal));
+await assert.rejects(runIsolated(import.meta.url, {
+  label: 'startup-failure',
+  env: () => {
+    if (${JSON.stringify(failure)} === 'env') throw failure;
+    return {};
+  },
+}), (error) => error === failure);
+assert.deepEqual(signals.map((signal) => process.listenerCount(signal)), before);
+`,
+      );
+      const result = spawnSync(process.execPath, [fixture], {
+        encoding: 'utf8',
+        timeout: 8_000,
+        env: { ...process.env, TMPDIR: temporary, TMP: temporary, TEMP: temporary },
+      });
+      expect(result.error).toBeUndefined();
+      expect(result.status, result.stderr).toBe(0);
+      expect(fs.readdirSync(temporary)).toEqual([]);
+    },
+  );
+
   it.each(['success', 'throw', 'exit-code', 'abrupt', 'lingering'] as const)(
     'supervises detached descendants through fixture completion (%s)',
     async (mode) => {
@@ -597,13 +653,15 @@ Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0);`
   );
 
   it.runIf(process.platform !== 'win32').each([
-    { signal: 'SIGINT', detached: false },
-    { signal: 'SIGTERM', detached: false },
-    { signal: 'SIGINT', detached: true },
-    { signal: 'SIGTERM', detached: true },
+    { signal: 'SIGINT', detached: false, duringSpawn: false },
+    { signal: 'SIGTERM', detached: false, duringSpawn: false },
+    { signal: 'SIGINT', detached: true, duringSpawn: false },
+    { signal: 'SIGTERM', detached: true, duringSpawn: false },
+    { signal: 'SIGINT', detached: true, duringSpawn: true },
+    { signal: 'SIGTERM', detached: true, duringSpawn: true },
   ] as const)(
-    'terminates owned processes and cleans state on $signal (detached: $detached)',
-    async ({ signal, detached }) => {
+    'terminates owned processes and cleans state on $signal (detached: $detached, during spawn: $duringSpawn)',
+    async ({ signal, detached, duringSpawn }) => {
       const descendant = `require('node:fs').writeFileSync(process.argv[1], String(process.pid));
 setInterval(() => {}, 1000);`;
       const { root, temporary, nativeDir, fixture } = prepareConsumer(
@@ -617,14 +675,34 @@ Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0);`,
       const preload = path.join(root, 'delayed-signal.mjs');
       fs.writeFileSync(
         preload,
-        `const originalKill = process.kill;
+        `import childProcess from 'node:child_process';
+import fs from 'node:fs';
+import { syncBuiltinESMExports } from 'node:module';
+const originalKill = process.kill;
 process.kill = function (pid, signal) {
   if (pid === process.pid && ['SIGINT', 'SIGTERM'].includes(signal)) {
     setTimeout(() => originalKill.call(process, pid, signal), 50).unref();
     return true;
   }
   return originalKill.call(process, pid, signal);
-};`,
+};
+if (${duringSpawn}) {
+  const originalSpawn = childProcess.spawn;
+  childProcess.spawn = function (...args) {
+    const child = originalSpawn.apply(this, args);
+    if (args[1]?.includes('--fixture-child')) {
+      const deadline = Date.now() + 3_000;
+      while (!${JSON.stringify(pidFiles)}.every((file) => fs.existsSync(file))) {
+        if (Date.now() >= deadline) throw new Error('Fixture children did not start');
+        Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 10);
+      }
+      // Deliver cancellation after real children start, before spawn returns to the supervisor.
+      originalKill.call(process, process.pid, ${JSON.stringify(signal)});
+    }
+    return child;
+  };
+  syncBuiltinESMExports();
+}`,
       );
       const output = path.join(root, 'supervisor.log');
       const descriptor = fs.openSync(output, 'w');
@@ -650,7 +728,9 @@ process.kill = function (pid, signal) {
           timeout: 3_000,
           interval: 20,
         });
-        expect(supervisor.kill(signal)).toBe(true);
+        if (!duringSpawn) {
+          expect(supervisor.kill(signal)).toBe(true);
+        }
         const result = await closed;
         expect(result, fs.readFileSync(output, 'utf8')).toEqual({ code: null, signal });
         const pids = pidFiles.map((file) => Number(fs.readFileSync(file, 'utf8')));

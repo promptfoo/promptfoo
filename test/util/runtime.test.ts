@@ -24,21 +24,18 @@ describe('runtime utilities', () => {
   });
 
   describe('printBorder', () => {
-    it('should call logger.info with a border string', () => {
+    it.each([
+      'should call logger.info with a border string',
+      'should print a border of repeated equals signs',
+    ])('%s', () => {
       printBorder();
 
       expect(logger.info).toHaveBeenCalledTimes(1);
       const call = vi.mocked(logger.info).mock.calls[0][0];
       expect(typeof call).toBe('string');
       expect(call).toMatch(/^=+$/);
-    });
-
-    it('should print a border of repeated equals signs', () => {
-      printBorder();
-
-      const border = vi.mocked(logger.info).mock.calls[0][0] as string;
-      expect(border.length).toBeGreaterThan(0);
-      expect(border.split('').every((char) => char === '=')).toBe(true);
+      expect(call.length).toBeGreaterThan(0);
+      expect(call.split('').every((char) => char === '=')).toBe(true);
     });
   });
 
