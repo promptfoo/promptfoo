@@ -68,7 +68,7 @@ import type { EnvOverrides } from '../../types/env';
 import type { ApiProvider, CallApiContextParams, ProviderResponse } from '../../types/providers';
 import type { TokenUsage, VarValue } from '../../types/shared';
 import type { ClaudeEffort, ClaudeThinkingConfig } from '../anthropic/types';
-import type { MCPConfig, MCPTool } from '../mcp/types';
+import type { MCPConfig, MCPTool, McpToolCallEntry } from '../mcp/types';
 
 function getOneHourCacheWriteTokens(
   cacheDetails?: ReadonlyArray<{ ttl?: string; inputTokens?: number }>,
@@ -316,6 +316,9 @@ function formatMcpToolResult(name: string, content: unknown): string {
 function formatMcpToolError(name: string, message: string): string {
   return `MCP Tool Error (${name}): ${message}`;
 }
+
+// Execution status is sufficient for assertions; do not retain private tool payloads.
+type McpToolCallStatus = Pick<McpToolCallEntry, 'name' | 'is_error'> & { output: null };
 
 interface StreamingToolUseBlock {
   toolUseId?: string;
@@ -1311,18 +1314,18 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
   private async dispatchMcpToolCall(
     name: string,
     input: unknown,
-  ): Promise<{ output: string; error?: string }> {
+  ): Promise<{ output: string; error?: string; isError: boolean }> {
     try {
       const mcpResult = await this.mcpClient!.callTool(name, parseToolInput(input));
       if (isMcpErrorResult(mcpResult)) {
         const msg = formatMcpToolError(name, getMcpErrorMessage(mcpResult));
-        return { output: msg, error: msg };
+        return { output: msg, error: msg, isError: true };
       }
-      return { output: formatMcpToolResult(name, mcpResult?.content) };
+      return { output: formatMcpToolResult(name, mcpResult?.content), isError: false };
     } catch (err) {
       logger.error(`[Bedrock Converse] MCP tool execution failed for ${name}: ${err}`);
       const msg = formatMcpToolError(name, errorMessage(err));
-      return { output: msg, error: msg };
+      return { output: msg, error: msg, isError: true };
     }
   }
 
@@ -1334,19 +1337,29 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
   private async formatStreamingToolUseBlocks(
     blocks: StreamingToolUseBlock[],
     toolsDisabled: boolean,
-  ): Promise<{ toolUseParts: string[]; mcpErrors: string[] }> {
+  ): Promise<{
+    toolUseParts: string[];
+    mcpErrors: string[];
+    toolCalls: McpToolCallStatus[];
+    hasPendingToolCalls: boolean;
+  }> {
     const toolUseParts: string[] = [];
     const mcpErrors: string[] = [];
+    const toolCalls: McpToolCallStatus[] = [];
+    let hasInvalidMcpInput = false;
+    let hasPendingToolCalls = false;
     const mcpTools = this.mcpClient?.getAllTools() ?? [];
 
     for (const toolBlock of blocks) {
       if (!toolBlock.name) {
+        hasPendingToolCalls = true;
         continue;
       }
       const { value: parsedInput, failed: parseFailed } = parseStreamingToolInput(toolBlock.input);
       const matchedMcpTool = mcpTools.find((tool) => tool.name === toolBlock.name);
 
       if (toolsDisabled || !this.mcpClient || !matchedMcpTool) {
+        hasPendingToolCalls = true;
         toolUseParts.push(
           JSON.stringify({
             type: 'tool_use',
@@ -1359,20 +1372,32 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
       }
 
       if (parseFailed) {
+        hasInvalidMcpInput = true;
         const msg = formatMcpToolError(toolBlock.name, 'model emitted invalid JSON arguments');
         toolUseParts.push(msg);
         mcpErrors.push(msg);
         continue;
       }
 
-      const { output, error } = await this.dispatchMcpToolCall(toolBlock.name, parsedInput);
+      const { output, error, isError } = await this.dispatchMcpToolCall(
+        toolBlock.name,
+        parsedInput,
+      );
+      toolCalls.push({ name: toolBlock.name, is_error: isError, output: null });
       toolUseParts.push(output);
       if (error) {
         mcpErrors.push(error);
       }
     }
 
-    return { toolUseParts, mcpErrors };
+    // Omit execution evidence for an incomplete turn: a successful subcall must
+    // not mask another MCP request rejected before dispatch. Keep its error.
+    return {
+      toolUseParts,
+      mcpErrors,
+      toolCalls: hasInvalidMcpInput ? [] : toolCalls,
+      hasPendingToolCalls,
+    };
   }
 
   /**
@@ -1383,12 +1408,13 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
    */
   private async executeMcpToolCalls(
     blocks: { name: string; input: unknown }[],
-  ): Promise<{ results: string[]; errors: string[] }> {
+  ): Promise<{ results: string[]; errors: string[]; toolCalls: McpToolCallStatus[] }> {
     const results: string[] = [];
     const errors: string[] = [];
+    const toolCalls: McpToolCallStatus[] = [];
 
     if (!this.mcpClient) {
-      return { results, errors };
+      return { results, errors, toolCalls };
     }
     const tools = this.mcpClient.getAllTools();
 
@@ -1396,14 +1422,15 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
       if (!name || !tools.find((tool) => tool.name === name)) {
         continue;
       }
-      const { output, error } = await this.dispatchMcpToolCall(name, input);
+      const { output, error, isError } = await this.dispatchMcpToolCall(name, input);
+      toolCalls.push({ name, is_error: isError, output: null });
       results.push(output);
       if (error) {
         errors.push(error);
       }
     }
 
-    return { results, errors };
+    return { results, errors, toolCalls };
   }
 
   /**
@@ -1539,6 +1566,12 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
         }
         dispatchResults.push(...mcpResult.results);
         mcpErrors.push(...mcpResult.errors);
+        if (mcpResult.toolCalls.length > 0) {
+          metadata.toolCalls = mcpResult.toolCalls;
+          if (mcpEligible.length < toolUseBlocks.length) {
+            metadata.hasPendingToolCalls = true;
+          }
+        }
       }
 
       // 2) functionToolCallbacks for any remaining (non-MCP) tool_use blocks.
@@ -1763,10 +1796,8 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
       }
 
       // Format tool use blocks for output (same as non-streaming)
-      const { toolUseParts, mcpErrors } = await this.formatStreamingToolUseBlocks(
-        Array.from(toolUseBlocks.values()),
-        toolsDisabled,
-      );
+      const { toolUseParts, mcpErrors, toolCalls, hasPendingToolCalls } =
+        await this.formatStreamingToolUseBlocks(Array.from(toolUseBlocks.values()), toolsDisabled);
 
       // Combine reasoning, output, and tool use. Skip whitespace-only
       // reasoning — omitted-display adaptive thinking streams empty deltas.
@@ -1785,6 +1816,12 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
       // Check for malformed output stop reasons (added in AWS SDK 3.943.0)
       let malformedError: string | undefined;
       const metadata: Record<string, unknown> = {};
+      if (toolCalls.length > 0) {
+        metadata.toolCalls = toolCalls;
+        if (hasPendingToolCalls) {
+          metadata.hasPendingToolCalls = true;
+        }
+      }
       if (stopReason) {
         metadata.stopReason = stopReason;
       }

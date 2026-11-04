@@ -2415,6 +2415,64 @@ describe('HttpProvider - API Key Authentication', () => {
     expect(url).toContain('api_key=raw-query-key');
   });
 
+  it('should preserve augmented headers when adding query authentication to a raw request', async () => {
+    const provider = new HttpProvider('http://example.com', {
+      config: {
+        request: [
+          'POST /api/data?existing=value HTTP/1.1',
+          'Host: example.com',
+          'Content-Type: text/plain',
+          'Content-Length: 999',
+          'Authorization: Bearer fixture-token',
+          'traceparent: stale-template-trace',
+          'tracestate: stale=template',
+          'X-Custom: preserved',
+          '',
+          '{{prompt}}',
+        ].join('\r\n'),
+        auth: {
+          type: 'api_key',
+          value: '{{keyValue}}',
+          placement: 'query',
+          keyName: '{{keyName}}',
+        },
+      },
+    });
+    vi.mocked(fetchWithCache).mockResolvedValueOnce({
+      data: '{}',
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+    });
+    const traceparent = '00-0123456789abcdef0123456789abcdef-0123456789abcdef-01';
+
+    await provider.callApi('body', {
+      prompt: { raw: 'body', label: 'test' },
+      vars: { keyName: 'api_key', keyValue: 'key with spaces & special=chars' },
+      traceparent,
+      tracestate: 'vendor=fixture',
+    });
+
+    expect(fetchWithCache).toHaveBeenCalledTimes(1);
+    const [requestUrl, options] = vi.mocked(fetchWithCache).mock.calls[0];
+    const url = new URL(requestUrl as string);
+    expect(url.searchParams.get('existing')).toBe('value');
+    expect(url.searchParams.get('api_key')).toBe('key with spaces & special=chars');
+    expect(options).toMatchObject({
+      method: 'POST',
+      body: 'body',
+      headers: {
+        host: 'example.com',
+        'content-type': 'text/plain',
+        authorization: 'Bearer fixture-token',
+        'x-custom': 'preserved',
+        traceparent,
+        tracestate: 'vendor=fixture',
+      },
+    });
+    expect(options?.headers).not.toHaveProperty('content-length');
+  });
+
   it('should use custom key name for API key header', async () => {
     const provider = new HttpProvider(mockUrl, {
       config: {

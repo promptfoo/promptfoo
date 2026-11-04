@@ -68,6 +68,7 @@ import {
   normalizeOpenAiBillingModelName,
   normalizeOpenAiServiceTierForWire,
   OPENAI_CHAT_MODELS,
+  validateChatCompletionMessage,
   validateFunctionCall,
 } from './util';
 import type OpenAI from 'openai';
@@ -78,6 +79,7 @@ import type {
   ProviderResponse,
 } from '../../types/index';
 import type { ProviderOptions } from '../../types/providers';
+import type { FunctionCall } from '../functionCallbackTypes';
 import type { McpToolCallEntry } from '../mcp/types';
 import type { OpenAiBillingConfig, OpenAiChatConfig, OpenAiRequestBody } from './config';
 import type { ReasoningEffort } from './types';
@@ -1114,7 +1116,22 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         };
       }
       throwIfAborted(callApiOptions?.abortSignal);
-      const message = data.choices[0].message;
+      const rawMessage = data.choices[0].message;
+      // OpenRouter may omit the type on complete function calls. Normalize the
+      // local message before execution and validation, without changing cached data.
+      const message =
+        this.usesOpenRouter() && Array.isArray(rawMessage.tool_calls)
+          ? {
+              ...rawMessage,
+              tool_calls: rawMessage.tool_calls.map((call: unknown) => {
+                const validated = validateChatCompletionMessage({ tool_calls: [call] })
+                  ?.toolCalls?.[0];
+                return validated && validated.type === undefined
+                  ? { ...validated, type: 'function' }
+                  : call;
+              }),
+            }
+          : rawMessage;
       const finishReason = normalizeFinishReason(data.choices[0].finish_reason);
       const cost = this.calculateResponseCost(data, config, cached);
       const providerMetadata = this.getProviderResponseMetadata(data);
@@ -1173,10 +1190,57 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       const functionCalls: any = message.function_call
         ? [message.function_call]
         : message.tool_calls;
+      // Callback output replaces the model's calls with text. Retain the original
+      // ordinary calls for schema assertions, including unknown/unprocessed calls.
+      // Legacy stays first so execution indexes still identify the routed calls,
+      // while modern calls emitted alongside it remain available for validation.
+      const emittedCalls = [
+        ...(message.function_call ? [message.function_call] : []),
+        ...(Array.isArray(message.tool_calls)
+          ? message.tool_calls
+          : message.tool_calls == null
+            ? []
+            : [undefined]), // A malformed container must not become a valid singleton call.
+      ];
+      // Empty native arrays leave text intact and must not override assertion transforms.
+      const functionToolCalls =
+        Array.isArray(functionCalls) &&
+        functionCalls.length > 0 &&
+        (config.functionToolCallbacks || this.mcpClient)
+          ? emittedCalls.map((call: any, index) => {
+              const legacy = !!message.function_call && index === 0;
+              const payload = legacy ? call : call?.function;
+              return {
+                ...(!legacy && call?.id !== undefined ? { id: call.id } : {}),
+                type: legacy ? 'function' : call?.type,
+                function: { name: payload?.name, arguments: payload?.arguments },
+              };
+            })
+          : undefined;
+      const mcpFunctionCallIndexes = new Set<number>();
+      const callbackFunctionCalls = new Map<number, FunctionCall>();
+      const getFunctionToolCallMetadata = () =>
+        functionToolCalls
+          ? {
+              functionToolCalls: functionToolCalls.flatMap((call, index) => {
+                if (mcpFunctionCallIndexes.has(index)) {
+                  return [];
+                }
+                const routedCall = callbackFunctionCalls.get(index);
+                // Keep original shape checks while also validating the arguments
+                // actually selected for an ordinary callback.
+                return routedCall &&
+                  (call.function.name !== routedCall.name ||
+                    call.function.arguments !== routedCall.arguments)
+                  ? [call, { type: 'function', function: routedCall }]
+                  : [call];
+              }),
+            }
+          : {};
       if (functionCalls && (config.functionToolCallbacks || this.mcpClient)) {
         const results = [];
         let hasSuccessfulCallback = false;
-        for (const functionCall of functionCalls) {
+        for (const [functionCallIndex, functionCall] of functionCalls.entries()) {
           throwIfAborted(callApiOptions?.abortSignal);
           const functionName = functionCall.name || functionCall.function?.name;
 
@@ -1186,6 +1250,17 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
             const mcpTool = mcpTools.find((tool) => tool.name === functionName);
             if (mcpTool) {
               const rawArgs = functionCall.arguments || functionCall.function?.arguments || '{}';
+              // Exclude only this routed, correctly typed request. Reused names,
+              // IDs, or top-level routing fields cannot hide a different call.
+              const retainedCall = functionToolCalls?.[functionCallIndex];
+              if (
+                retainedCall?.type === 'function' &&
+                typeof retainedCall.function.name === 'string' &&
+                retainedCall.function.name === functionName &&
+                retainedCall.function.arguments === rawArgs
+              ) {
+                mcpFunctionCallIndexes.add(functionCallIndex);
+              }
               const toolCallId = functionCall.id ?? functionCall.call_id;
               // Declared outside the try so the catch below can still report the
               // arguments; parsing stays inside it, so malformed JSON keeps failing
@@ -1279,9 +1354,11 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
           if (config.functionToolCallbacks && config.functionToolCallbacks[functionName]) {
             try {
               throwIfAborted(callApiOptions?.abortSignal);
+              const args = functionCall.arguments || functionCall.function?.arguments;
+              callbackFunctionCalls.set(functionCallIndex, { name: functionName, arguments: args });
               const functionResult = await this.executeFunctionCallback(
                 functionName,
-                functionCall.arguments || functionCall.function?.arguments,
+                args,
                 config,
                 functionCall.call_id ?? functionCall.id,
                 callApiOptions?.abortSignal,
@@ -1329,6 +1406,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
                 headers: responseHeaders ?? {},
               },
               ...(mcpToolCalls.length > 0 && { toolCalls: mcpToolCalls }),
+              ...getFunctionToolCallMetadata(),
             },
           };
         }
@@ -1368,6 +1446,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
               headers: responseHeaders ?? {},
             },
             ...(mcpToolCalls.length > 0 && { toolCalls: mcpToolCalls }),
+            ...getFunctionToolCallMetadata(),
           },
         };
       }
@@ -1396,6 +1475,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
             message.annotations.length > 0 && { annotations: message.annotations }),
           ...(citations.length > 0 && { citations }),
           ...(mcpToolCalls.length > 0 && { toolCalls: mcpToolCalls }),
+          ...getFunctionToolCallMetadata(),
         },
       };
     } catch (err) {

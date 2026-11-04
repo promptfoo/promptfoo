@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { runAssertion } from '../../src/assertions/index';
 import { clearCache, isCacheEnabled, withCacheEnabled } from '../../src/cache';
 import { OpenRouterProvider } from '../../src/providers/openrouter';
 import { createProviderRateLimitOptions } from '../../src/scheduler/providerWrapper';
@@ -7,6 +8,8 @@ import * as fetchModule from '../../src/util/fetch/index';
 import { createChatCompletion } from '../factories/literalFixtures';
 import { mockProcessEnv } from '../util/utils';
 import { createInvalidRequestResponse } from './mockProviderResponses';
+
+import type { ProviderResponse } from '../../src/types/index';
 
 const { createFileUtilitiesFactory } = await vi.hoisted(() => import('../factories/moduleMocks'));
 
@@ -1820,6 +1823,176 @@ describe('OpenRouter', () => {
       });
     });
 
+    describe('tool-call normalization', () => {
+      const createCall = (fields: Record<string, unknown> = {}): Record<string, unknown> => ({
+        id: 'call_weather',
+        function: { name: 'get_weather', arguments: '{"location":"Paris"}' },
+        ...fields,
+      });
+
+      async function callWithTools(toolCalls: unknown[], message = {}) {
+        const provider = new OpenRouterProvider('google/gemini-2.5-pro', {
+          config: {
+            apiKey: 'test-key',
+            tools: [
+              {
+                type: 'function',
+                function: {
+                  name: 'get_weather',
+                  parameters: {
+                    type: 'object',
+                    properties: { location: { type: 'string' } },
+                    required: ['location'],
+                    additionalProperties: false,
+                  },
+                },
+              },
+            ],
+          },
+        });
+        mockedFetchWithRetries.mockResolvedValueOnce(
+          Response.json({
+            choices: [{ message: { content: null, tool_calls: toolCalls, ...message } }],
+          }),
+        );
+        return {
+          provider,
+          response: await provider.callApi('Weather?', {
+            bustCache: true,
+            prompt: { raw: 'Weather?', label: 'Weather?' },
+            vars: {},
+          }),
+        };
+      }
+
+      async function expectValidity(
+        provider: OpenRouterProvider,
+        providerResponse: ProviderResponse,
+        valid: boolean,
+      ) {
+        const grades = [];
+        for (const inverse of [false, true]) {
+          grades.push(
+            await runAssertion({
+              provider,
+              providerResponse,
+              assertion: {
+                type: inverse ? 'not-is-valid-openai-tools-call' : 'is-valid-openai-tools-call',
+              },
+              test: {},
+            }),
+          );
+        }
+        expect(grades.map(({ pass, score }) => ({ pass, score }))).toEqual([
+          { pass: valid, score: valid ? 1 : 0 },
+          { pass: !valid, score: valid ? 0 : 1 },
+        ]);
+        for (const grade of grades) {
+          expect(grade.reason).not.toContain('PRIVATE_ARGUMENT');
+        }
+      }
+
+      it.each(
+        [undefined, 'function'].flatMap((type) => [
+          { type, arguments: ' { "location" : "\\u0050aris" } ', valid: true },
+          { type, arguments: '{"location":42,"private":"PRIVATE_ARGUMENT"}', valid: false },
+          { type, arguments: 'PRIVATE_ARGUMENT:{', valid: false },
+        ]),
+      )('validates normalized calls and preserves argument bytes: %j', async (testCase) => {
+        const call = createCall({
+          ...(testCase.type === undefined ? {} : { type: testCase.type }),
+          function: { name: 'get_weather', arguments: testCase.arguments },
+        });
+        const { provider, response } = await callWithTools([call]);
+        expect(response.error).toBeUndefined();
+        await expectValidity(provider, response, testCase.valid);
+        expect(response.output).toEqual([{ ...call, type: 'function' }]);
+        await expectValidity(provider, JSON.parse(JSON.stringify(response)), testCase.valid);
+      });
+
+      it('preserves call order, duplicate IDs, and native typed calls', async () => {
+        const first = createCall({
+          extra: 'retained',
+          function: {
+            name: 'get_weather',
+            arguments: '{ "location": "Paris" }',
+            extra: 'retained',
+          },
+        });
+        const second = createCall({
+          type: 'function',
+          function: { name: 'get_weather', arguments: '{"location":"London"}' },
+        });
+        const { provider, response } = await callWithTools([first, second]);
+        expect(response.output).toEqual([{ ...first, type: 'function' }, second]);
+        await expectValidity(provider, response, true);
+      });
+
+      it.each([null, '', ' ', 'unsupported', 'function_call', 'custom'])(
+        'rejects an explicit unsupported type without coercion: %j',
+        async (type) => {
+          const { response } = await callWithTools([createCall({ type })]);
+          expect(response.error).toBe('Malformed response data: unusable choices[0].message');
+          expect(response.output).toBeUndefined();
+        },
+      );
+
+      it.each([
+        null,
+        { id: 'call_bad', function: null },
+        { id: 'call_bad', function: { name: '', arguments: '{}' } },
+        { id: 'call_bad', function: { name: 'get_weather', arguments: {} } },
+        { function: { name: 'get_weather', arguments: '{}' } },
+        { id: 'call_bad', custom: { name: 'shell', input: 'PRIVATE_ARGUMENT' } },
+      ])('rejects malformed untyped calls without dropping array entries: %j', async (call) => {
+        const { response } = await callWithTools([createCall({ type: 'function' }), call], {
+          content: 'Do not use text to hide a malformed call.',
+        });
+        expect(response.error).toBe('Malformed response data: unusable choices[0].message');
+        expect(response.error).not.toContain('PRIVATE_ARGUMENT');
+        expect(response.output).toBeUndefined();
+      });
+
+      it.each([
+        createCall({ function: { name: 'get_weather', arguments: '{"location":42}' } }),
+        createCall({ type: 'custom', custom: { name: 'shell', input: 'PRIVATE_ARGUMENT' } }),
+      ])('validates every call and preserves explicit custom calls: %j', async (second) => {
+        const { provider, response } = await callWithTools([createCall(), second]);
+        expect(response.error).toBeUndefined();
+        expect(response.output).toEqual([
+          { ...createCall(), type: 'function' },
+          { ...second, type: second.type === undefined ? 'function' : second.type },
+        ]);
+        await expectValidity(provider, response, false);
+      });
+
+      it('keeps legacy function-call precedence', async () => {
+        const legacy = { name: 'get_weather', arguments: '{ "location": "Rome" }' };
+        const { response } = await callWithTools([createCall()], { function_call: legacy });
+        expect(response.error).toBeUndefined();
+        expect(response.output).toEqual(legacy);
+      });
+
+      it.each([
+        { selected: '{"location":42}', alias: '{"location":"Paris"}', valid: true },
+        { selected: '{"location":"Paris"}', alias: '{"location":42}', valid: false },
+      ])('preserves existing direct-output legacy alias semantics: %j', async (testCase) => {
+        for (const type of [undefined, 'function']) {
+          const call = createCall({
+            ...(type === undefined ? {} : { type }),
+            function: {
+              name: 'get_weather',
+              arguments: testCase.selected,
+              function_call: { name: 'get_weather', arguments: testCase.alias },
+            },
+          });
+          const { provider, response } = await callWithTools([call]);
+          expect(response.output).toEqual([{ ...call, type: 'function' }]);
+          await expectValidity(provider, response, testCase.valid);
+        }
+      });
+    });
+
     describe('Thinking tokens handling', () => {
       beforeEach(() => {
         mockProcessEnv({ OPENROUTER_API_KEY: 'test-key' });
@@ -2329,7 +2502,7 @@ describe('OpenRouter', () => {
           numRequests: 1,
         });
       });
-      it('keeps a complete function call whose type discriminator is omitted', async () => {
+      it('normalizes a complete function call whose type discriminator is omitted', async () => {
         // OpenRouter sometimes sends tool_calls entries with no `type`; the
         // payload is unambiguous, so the call must survive rather than take
         // the whole message down as malformed.
@@ -2360,10 +2533,11 @@ describe('OpenRouter', () => {
         const result = await provider.callApi('Weather?');
 
         expect(result.error).toBeUndefined();
-        // the call survives verbatim; no synthetic discriminator is added
+        // Preserve the payload while normalizing the omitted discriminator.
         expect(result.output).toEqual([
           {
             id: 'call_abc123',
+            type: 'function',
             function: { name: 'get_weather', arguments: '{"location": "San Francisco"}' },
           },
         ]);

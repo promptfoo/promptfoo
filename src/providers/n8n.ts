@@ -137,37 +137,45 @@ function extractN8nOutput(data: any): string | any {
 /**
  * Extracts tool calls from n8n agent responses
  */
-function extractToolCalls(data: any): any[] | undefined {
+function extractToolCalls(data: any):
+  | {
+      toolCalls: any[];
+      toolCallsSource: 'declaration' | 'activity';
+    }
+  | undefined {
   if (!data) {
     return undefined;
   }
 
   // Direct tool_calls field
   if (data.tool_calls && Array.isArray(data.tool_calls)) {
-    return data.tool_calls;
+    return { toolCalls: data.tool_calls, toolCallsSource: 'declaration' };
   }
 
   // Nested in response
   if (data.response?.tool_calls && Array.isArray(data.response.tool_calls)) {
-    return data.response.tool_calls;
+    return { toolCalls: data.response.tool_calls, toolCallsSource: 'declaration' };
   }
 
   // n8n AI Agent format with actions
   if (data.actions && Array.isArray(data.actions)) {
-    return data.actions.map((action: any) => ({
-      name: action.tool || action.name || action.action,
-      arguments: action.input || action.arguments || action.params,
-    }));
+    return {
+      toolCalls: data.actions.map((action: any) => ({
+        name: action.tool || action.name || action.action,
+        arguments: action.input || action.arguments || action.params,
+      })),
+      toolCallsSource: 'activity',
+    };
   }
 
   // Array response (check first item)
   if (Array.isArray(data) && data.length > 0) {
     const firstItem = data[0];
     if (firstItem.tool_calls) {
-      return firstItem.tool_calls;
+      return { toolCalls: firstItem.tool_calls, toolCallsSource: 'declaration' };
     }
     if (firstItem.json?.tool_calls) {
-      return firstItem.json.tool_calls;
+      return { toolCalls: firstItem.json.tool_calls, toolCallsSource: 'declaration' };
     }
     if (firstItem.json !== undefined) {
       return extractToolCalls(firstItem.json);
@@ -632,7 +640,7 @@ export class N8nProvider implements ApiProvider {
     const output = await this.parseResponse(data, rawText);
 
     // Extract tool calls if present
-    const toolCalls = extractToolCalls(data);
+    const toolCallMetadata = extractToolCalls(data);
 
     // Build response
     const response: ProviderResponse = {
@@ -647,8 +655,12 @@ export class N8nProvider implements ApiProvider {
     // invoked"; treating that as truthy would pollute every response with an
     // empty `metadata.toolCalls`, breaking downstream filters that test
     // `metadata?.toolCalls?.length > 0`.
-    if (toolCalls && toolCalls.length > 0) {
-      response.metadata = { toolCalls };
+    if (toolCallMetadata && toolCallMetadata.toolCalls.length > 0) {
+      response.metadata = toolCallMetadata;
+    } else if (Array.isArray(data?.output) && data.output.length > 0) {
+      // Raw webhook items can resemble execution results, but are declarations
+      // from the workflow, not evidence of MCP execution by this provider.
+      response.metadata = { toolCallsSource: 'declaration' };
     }
     if (sessionId) {
       response.sessionId = sessionId;
@@ -656,7 +668,7 @@ export class N8nProvider implements ApiProvider {
 
     logger.debug(`[n8n] Response received`, {
       latencyMs,
-      hasToolCalls: !!toolCalls,
+      hasToolCalls: !!toolCallMetadata,
       hasSessionId: !!sessionId,
     });
 

@@ -454,8 +454,8 @@ function normalizeOllamaRequestMessages(messages: unknown): unknown {
 
 /**
  * Collects tool calls from every chunk (they arrive one per chunk before `done: true`)
- * and normalizes them to the OpenAI shape, where `arguments` is a JSON string rather
- * than an object.
+ * and normalizes them to the OpenAI function-call shape, with an explicit type and
+ * `arguments` as a JSON string rather than an object.
  */
 function collectOllamaToolCalls(lines: OllamaChatJsonL[]) {
   return lines
@@ -466,7 +466,10 @@ function collectOllamaToolCalls(lines: OllamaChatJsonL[]) {
       return Array.isArray(calls) ? calls : [];
     })
     .filter((call: any) => typeof call?.function?.name === 'string')
-    .map((call: { function: { name: string; arguments: any } }) => ({
+    .map((call: { type?: unknown; function: { name: string; arguments: any } }) => ({
+      // Native Ollama calls omit type. Preserve explicit values from proxies so
+      // malformed/custom calls cannot become valid function calls here.
+      type: call.type === undefined ? 'function' : call.type,
       function: {
         name: call.function.name,
         arguments:

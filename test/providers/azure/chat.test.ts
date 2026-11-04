@@ -1,8 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { runAssertion } from '../../../src/assertions/index';
 import { fetchWithCache } from '../../../src/cache';
 import { runEval } from '../../../src/evaluator';
 import logger from '../../../src/logger';
 import { AzureChatCompletionProvider } from '../../../src/providers/azure/chat';
+import { MCPClient } from '../../../src/providers/mcp/client';
 import {
   createAzureApiOptions,
   createChatMessage,
@@ -14,6 +16,8 @@ import { mockProcessEnv } from '../../util/utils';
 import { createMockFetchResponse } from '../mockProviderResponses';
 import { registerAzureConfigTests } from './configTests';
 import { createAzureReasoningChecks, createAzureResponseChecks } from './sharedChecks';
+
+import type { ProviderResponse } from '../../../src/types/index';
 
 const createSampledAzureOptions = () => ({
   config: {
@@ -1412,6 +1416,334 @@ describe('AzureChatCompletionProvider', () => {
 
       expect(result.error).toBeUndefined();
       expect(result.output).toBe('15');
+    });
+  });
+
+  describe('tool-call container validation with callbacks', () => {
+    const modernArgs = '{ "value": 1 }\n';
+    const legacyArgs = '{ "value": 2 }\n';
+    const modernCall = {
+      id: 'modern-call',
+      type: 'function',
+      function: { name: 'modern', arguments: modernArgs },
+    };
+    const legacyCall = { name: 'legacy', arguments: legacyArgs };
+
+    beforeEach(() => {
+      vi.mocked(fetchWithCache).mockReset();
+    });
+
+    const respondWith = (message: Record<string, unknown>) => {
+      vi.mocked(fetchWithCache).mockResolvedValueOnce(
+        createMockFetchResponse({
+          choices: [{ message: { role: 'assistant', content: null, ...message } }],
+          usage: createChatUsage(),
+        }),
+      );
+    };
+
+    const expectToolsVerdicts = async (
+      target: AzureChatCompletionProvider,
+      response: ProviderResponse,
+      valid: boolean,
+      assertionTransform?: string,
+    ) => {
+      for (const providerResponse of [response, JSON.parse(JSON.stringify(response))]) {
+        for (const inverse of [false, true]) {
+          const result = await runAssertion({
+            prompt: 'Use the requested tools',
+            provider: target,
+            providerResponse,
+            test: { vars: {} },
+            assertion: {
+              type: inverse ? 'not-is-valid-openai-tools-call' : 'is-valid-openai-tools-call',
+              ...(assertionTransform ? { transform: assertionTransform } : {}),
+            },
+          });
+          const pass = valid !== inverse;
+          expect(result, result.reason).toMatchObject({ pass, score: pass ? 1 : 0 });
+        }
+      }
+    };
+
+    it.each([
+      {
+        name: 'singleton modern call',
+        message: { tool_calls: modernCall },
+        output: 'modern result',
+        modernCount: 1,
+        legacyCount: 0,
+        valid: false,
+      },
+      {
+        name: 'singleton modern call beside legacy',
+        message: { tool_calls: modernCall, function_call: legacyCall },
+        output: 'modern result\nlegacy result',
+        modernCount: 1,
+        legacyCount: 1,
+        valid: false,
+      },
+      {
+        name: 'malformed object beside legacy',
+        message: { tool_calls: {}, function_call: legacyCall },
+        output: '{}\nlegacy result',
+        modernCount: 0,
+        legacyCount: 1,
+        valid: false,
+      },
+      {
+        name: 'string beside legacy',
+        message: { tool_calls: 'malformed-modern', function_call: legacyCall },
+        output: 'malformed-modern\nlegacy result',
+        modernCount: 0,
+        legacyCount: 1,
+        valid: false,
+      },
+      {
+        name: 'zero beside legacy',
+        message: { tool_calls: 0, function_call: legacyCall },
+        output: 'legacy result',
+        modernCount: 0,
+        legacyCount: 1,
+        valid: false,
+      },
+      {
+        name: 'false beside legacy',
+        message: { tool_calls: false, function_call: legacyCall },
+        output: 'legacy result',
+        modernCount: 0,
+        legacyCount: 1,
+        valid: false,
+      },
+      {
+        name: 'empty string beside legacy',
+        message: { tool_calls: '', function_call: legacyCall },
+        output: 'legacy result',
+        modernCount: 0,
+        legacyCount: 1,
+        valid: false,
+      },
+      {
+        name: 'valid modern array',
+        message: { tool_calls: [modernCall] },
+        output: 'modern result',
+        modernCount: 1,
+        legacyCount: 0,
+        valid: true,
+      },
+      {
+        name: 'valid modern array beside legacy',
+        message: { tool_calls: [modernCall], function_call: legacyCall },
+        output: 'modern result\nlegacy result',
+        modernCount: 1,
+        legacyCount: 1,
+        valid: true,
+      },
+      {
+        name: 'legacy without a modern field',
+        message: { function_call: legacyCall },
+        output: 'legacy result',
+        modernCount: 0,
+        legacyCount: 1,
+        valid: true,
+      },
+      {
+        name: 'null modern field beside legacy',
+        message: { tool_calls: null, function_call: legacyCall },
+        output: 'legacy result',
+        modernCount: 0,
+        legacyCount: 1,
+        valid: true,
+      },
+      {
+        name: 'empty modern array beside legacy',
+        message: { tool_calls: [], function_call: legacyCall },
+        output: 'legacy result',
+        modernCount: 0,
+        legacyCount: 1,
+        valid: true,
+      },
+      {
+        name: 'empty modern array without calls',
+        message: { tool_calls: [] },
+        output: [],
+        modernCount: 0,
+        legacyCount: 0,
+        valid: false,
+      },
+    ])('validates $name without changing execution', async (testCase) => {
+      const modern = vi.fn().mockResolvedValue('modern result');
+      const legacy = vi.fn().mockResolvedValue('legacy result');
+      const target = new AzureChatCompletionProvider('test-deployment', {
+        config: {
+          apiKey: 'test-key',
+          apiHost: 'test.azure.com',
+          tools: ['modern', 'legacy'].map((name) => ({
+            type: 'function',
+            function: {
+              name,
+              parameters: {
+                type: 'object',
+                properties: { value: { type: 'number' } },
+                required: ['value'],
+                additionalProperties: false,
+              },
+            },
+          })),
+          functionToolCallbacks: { modern, legacy },
+        },
+      });
+      respondWith(testCase.message);
+
+      try {
+        const response = await target.callApi('Use the requested tools');
+
+        expect(response.error).toBeUndefined();
+        expect(response.output).toEqual(testCase.output);
+        expect(modern).toHaveBeenCalledTimes(testCase.modernCount);
+        expect(legacy).toHaveBeenCalledTimes(testCase.legacyCount);
+        expect(response.metadata?.toolCalls).toBeUndefined();
+        if (testCase.modernCount) {
+          expect(modern).toHaveBeenCalledWith(modernArgs, undefined);
+          expect(response.metadata?.functionToolCalls?.[0]).toEqual(modernCall);
+        }
+        if (testCase.legacyCount) {
+          expect(legacy).toHaveBeenCalledWith(legacyArgs, undefined);
+          expect(response.metadata?.functionToolCalls).toContainEqual({
+            type: 'function',
+            function: legacyCall,
+          });
+        }
+        await expectToolsVerdicts(target, response, testCase.valid);
+      } finally {
+        await target.cleanup();
+      }
+    });
+
+    it.each([
+      { name: 'valid assertion transform', site: 'assertion', valid: true, content: null },
+      { name: 'invalid assertion transform', site: 'assertion', valid: false, content: null },
+      { name: 'no transform', site: 'none', valid: false, content: null },
+      { name: 'non-null text', site: 'none', valid: false, content: 'unchanged model text' },
+    ])('preserves empty-call behavior with $name', async (testCase) => {
+      const callback = vi.fn().mockResolvedValue('callback result');
+      const target = new AzureChatCompletionProvider('test-deployment', {
+        config: {
+          apiKey: 'test-key',
+          apiHost: 'test.azure.com',
+          tools: [
+            {
+              type: 'function',
+              function: {
+                name: 'modern',
+                parameters: {
+                  type: 'object',
+                  properties: { value: { type: 'number' } },
+                  required: ['value'],
+                },
+              },
+            },
+          ],
+          functionToolCallbacks: { modern: callback },
+        },
+      });
+      const transformedCalls = [
+        {
+          ...modernCall,
+          function: {
+            name: 'modern',
+            arguments: testCase.valid ? modernArgs : '{"value":"invalid"}',
+          },
+        },
+      ];
+      const transform = JSON.stringify(transformedCalls);
+      const assertionTransform = testCase.site === 'assertion' ? transform : undefined;
+      respondWith({ content: testCase.content, tool_calls: [] });
+
+      try {
+        const response = await target.callApi('Use the requested tools');
+
+        expect(response.error).toBeUndefined();
+        expect(response.output).toEqual(testCase.content ?? []);
+        expect(response.metadata).toBeUndefined();
+        expect(callback).not.toHaveBeenCalled();
+        await expectToolsVerdicts(target, response, testCase.valid, assertionTransform);
+      } finally {
+        await target.cleanup();
+      }
+    });
+
+    it.each([
+      { name: 'singleton modern MCP', modern: 'singleton', legacy: false, valid: false },
+      { name: 'false modern field beside legacy MCP', modern: 'false', legacy: true, valid: false },
+      { name: 'valid modern MCP array', modern: 'array', legacy: false, valid: true },
+      { name: 'legacy MCP without a modern field', modern: 'absent', legacy: true, valid: true },
+      { name: 'null modern field beside legacy MCP', modern: 'null', legacy: true, valid: true },
+    ])('preserves compact execution evidence for $name', async (testCase) => {
+      vi.spyOn(MCPClient.prototype, 'initialize').mockResolvedValue(undefined);
+      vi.spyOn(MCPClient.prototype, 'cleanup').mockResolvedValue(undefined);
+      vi.spyOn(MCPClient.prototype, 'getAllTools').mockReturnValue([
+        {
+          name: 'list_resources',
+          description: 'List available resources',
+          inputSchema: { type: 'object' },
+        },
+      ]);
+      const callTool = vi.spyOn(MCPClient.prototype, 'callTool').mockResolvedValue({
+        content: 'private-mcp-output',
+      });
+      const callback = vi.fn().mockResolvedValue('ordinary callback result');
+      const target = new AzureChatCompletionProvider('test-deployment', {
+        config: {
+          apiKey: 'test-key',
+          apiHost: 'test.azure.com',
+          mcp: { enabled: true, server: { command: 'mocked-mcp-command', args: [] } },
+          functionToolCallbacks: { list_resources: callback },
+        },
+      });
+      const call = {
+        id: 'private-mcp-id',
+        type: 'function',
+        function: {
+          name: 'list_resources',
+          arguments: '{ "query": "private-mcp-input" }',
+        },
+      };
+      const message: Record<string, unknown> = {};
+      if (testCase.modern === 'singleton') {
+        message.tool_calls = call;
+      } else if (testCase.modern === 'array') {
+        message.tool_calls = [call];
+      } else if (testCase.modern === 'false') {
+        message.tool_calls = false;
+      } else if (testCase.modern === 'null') {
+        message.tool_calls = null;
+      }
+      if (testCase.legacy) {
+        message.function_call = call.function;
+      }
+      respondWith(message);
+
+      try {
+        const response = await target.callApi('Use the requested tools');
+
+        expect(response.error).toBeUndefined();
+        expect(response.output).toBe('MCP Tool Result (list_resources): private-mcp-output');
+        expect(callTool).toHaveBeenCalledExactlyOnceWith('list_resources', {
+          query: 'private-mcp-input',
+        });
+        expect(callback).not.toHaveBeenCalled();
+        expect(response.metadata?.toolCalls).toEqual([
+          { name: 'list_resources', is_error: false, output: null },
+        ]);
+        expect(response.metadata?.functionToolCalls).toEqual(testCase.valid ? [] : [null]);
+        for (const privateValue of ['private-mcp-input', 'private-mcp-id', 'private-mcp-output']) {
+          expect(JSON.stringify(response.metadata)).not.toContain(privateValue);
+        }
+        await expectToolsVerdicts(target, response, testCase.valid);
+      } finally {
+        await target.cleanup();
+      }
     });
   });
 });

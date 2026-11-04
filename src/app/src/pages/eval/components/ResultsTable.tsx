@@ -1911,16 +1911,41 @@ function ResultsTable({
     if (
       previousControls.failureFilter === failureFilter &&
       previousControls.filterMode === filterMode &&
-      previousControls.debouncedSearchText === debouncedSearchText &&
       previousControls.appliedFiltersString === appliedFiltersString
     ) {
-      return;
+      if (previousControls.debouncedSearchText === debouncedSearchText) {
+        return;
+      }
+
+      const url = new URL(window.location.href);
+      // URL navigation can update search and a destination row together. Local
+      // search edits already remove the old target in ResultsView before updating
+      // the URL, so leave an incoming target for the row-jump effect below.
+      if (
+        (url.searchParams.get('search') || '') === (debouncedSearchText || '') &&
+        (url.searchParams.has('rowId') || parseEvalOutputPromptHash(url.hash) !== null)
+      ) {
+        const rowId = url.searchParams.get('rowId');
+        if (isFilteringActive && !(rowId && Number.isInteger(Number(rowId)))) {
+          // A details hash identifies a global test, not its filtered position.
+          // Preserve it for the dialog, but start the new search on its first page.
+          setPagination((prev) => ({ ...prev, pageIndex: 0 }));
+        }
+        return;
+      }
     }
 
     clearRowDeepLink();
     // Use functional update to avoid stale closure over pagination state
     setPagination((prev) => ({ ...prev, pageIndex: 0 }));
-  }, [clearRowDeepLink, failureFilter, filterMode, debouncedSearchText, appliedFiltersString]);
+  }, [
+    clearRowDeepLink,
+    failureFilter,
+    filterMode,
+    debouncedSearchText,
+    appliedFiltersString,
+    isFilteringActive,
+  ]);
 
   // Add a ref to track the current evalId to compare with new values
   const previousEvalIdRef = useRef<string | null>(null);

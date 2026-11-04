@@ -326,6 +326,7 @@ export class ElevenLabsAgentsProvider implements ApiProvider {
 
         // Tool usage data
         toolCalls,
+        ...(toolCalls.length ? { toolCallsSource: 'activity' } : {}),
         toolUsageAnalysis,
         toolUsageSummary,
 

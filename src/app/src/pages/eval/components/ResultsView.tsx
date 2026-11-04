@@ -279,9 +279,9 @@ export default function ResultsView({
   const { updateConfig } = useMainStore();
 
   const { showToast } = useToast();
-  const initialSearchText = searchParams.get('search') || '';
-  const [searchInputValue, setSearchInputValue] = React.useState(initialSearchText); // local, for responsive input
-  const [debouncedSearchText, setDebouncedSearchText] = React.useState(initialSearchText); // debounced, for table/URL/pill
+  const urlSearchText = searchParams.get('search') || '';
+  const [searchInputValue, setSearchInputValue] = React.useState(urlSearchText); // local, for responsive input
+  const [debouncedSearchText, setDebouncedSearchText] = React.useState(urlSearchText); // debounced, for table/URL/pill
 
   // Debounced update for URL, table, and pill. Search changes can change the
   // visible result set, so drop any existing details deep-link while replacing the URL.
@@ -303,6 +303,14 @@ export default function ResultsView({
       { replace: true },
     );
   }, 300);
+
+  React.useEffect(() => {
+    // Navigation wins over pending typing. Do not let an older debounce replace
+    // the new URL, and keep the input, table, and badge on the same search.
+    debouncedUpdate.cancel();
+    setSearchInputValue(urlSearchText);
+    setDebouncedSearchText(urlSearchText);
+  }, [urlSearchText, debouncedUpdate]);
 
   const handleClearSearch = () => {
     setSearchInputValue('');
