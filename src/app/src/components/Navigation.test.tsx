@@ -246,15 +246,18 @@ describe('Navigation', () => {
     expect(topLevelNavLink).toHaveClass('text-foreground');
   });
 
-  it('does not activate Model Audit NavLink on /model-audit/history/:id path', () => {
-    renderNavigation({ initialEntries: [`${LEGACY_MODEL_AUDIT_HISTORY_ROUTE}/123`] });
-    const navBar = screen.getByRole('banner');
-    const topLevelNavLink = within(navBar).getByRole('link', { name: 'Model Audit' });
-    expect(topLevelNavLink).toBeDefined();
-    expect(topLevelNavLink).toHaveAttribute('href', MODEL_AUDIT_ROUTES.ROOT);
-    expect(topLevelNavLink).not.toHaveClass('bg-primary/10');
-    expect(topLevelNavLink).toHaveClass('text-foreground');
-  });
+  it.each(['123', 'details/123'])(
+    'does not activate Model Audit NavLink on /model-audit/history/%s',
+    (path) => {
+      renderNavigation({ initialEntries: [`${LEGACY_MODEL_AUDIT_HISTORY_ROUTE}/${path}`] });
+      const navBar = screen.getByRole('banner');
+      const topLevelNavLink = within(navBar).getByRole('link', { name: 'Model Audit' });
+      expect(topLevelNavLink).toBeDefined();
+      expect(topLevelNavLink).toHaveAttribute('href', MODEL_AUDIT_ROUTES.ROOT);
+      expect(topLevelNavLink).not.toHaveClass('bg-primary/10');
+      expect(topLevelNavLink).toHaveClass('text-foreground');
+    },
+  );
 
   describe('Create Dropdown', () => {
     it('opens dropdown on click and shows Model Audit option', async () => {
@@ -307,24 +310,6 @@ describe('Navigation', () => {
       expect(screen.queryByText('Model Audit', { selector: 'div' })).not.toBeInTheDocument();
     });
 
-    it('supports keyboard navigation in dropdown', async () => {
-      const user = userEvent.setup();
-      renderNavigation();
-
-      const createButton = screen.getByText('New');
-
-      // Click to open dropdown
-      await user.click(createButton);
-
-      // Verify dropdown opens and items are accessible
-      const modelAuditItem = screen.getByText('Model Audit', { selector: 'div' }).closest('a');
-      expect(modelAuditItem).toHaveAttribute('href', MODEL_AUDIT_ROUTES.SETUP);
-
-      // Verify keyboard accessibility of the link
-      expect(modelAuditItem).toBeInTheDocument();
-      expect(modelAuditItem).not.toHaveAttribute('aria-hidden', 'true');
-    });
-
     it('shows correct descriptions for all dropdown items', async () => {
       const user = userEvent.setup();
       renderNavigation();
@@ -347,84 +332,30 @@ describe('Navigation', () => {
     });
   });
 
-  describe('Model Audit NavLink Active States', () => {
-    it('activates Model Audit NavLink on /model-audit path', () => {
-      renderNavigation({ initialEntries: [MODEL_AUDIT_ROUTES.ROOT] });
-
-      // Find the top-level Model Audit NavLink (not the dropdown item)
-      const allModelAuditLinks = screen.getAllByRole('link', { name: 'Model Audit' });
-      const topLevelModelAuditLink = allModelAuditLinks.find(
-        (link) => link.getAttribute('href') === MODEL_AUDIT_ROUTES.ROOT,
-      );
-      expect(topLevelModelAuditLink).toBeDefined();
-      expect(topLevelModelAuditLink).toHaveClass('bg-primary/10');
-      expect(topLevelModelAuditLink).toHaveClass('text-foreground');
-    });
-
-    it('activates Model Audit NavLink on /model-audit/:id path', () => {
-      renderNavigation({ initialEntries: [MODEL_AUDIT_ROUTES.DETAIL('123')] });
-
-      const allModelAuditLinks = screen.getAllByRole('link', { name: 'Model Audit' });
-      const topLevelModelAuditLink = allModelAuditLinks.find(
-        (link) => link.getAttribute('href') === MODEL_AUDIT_ROUTES.ROOT,
-      );
-      expect(topLevelModelAuditLink).toBeDefined();
-      expect(topLevelModelAuditLink).toHaveClass('bg-primary/10');
-      expect(topLevelModelAuditLink).toHaveClass('text-foreground');
-    });
-
-    it('does not activate Model Audit NavLink on /model-audit/setup path', () => {
-      renderNavigation({ initialEntries: [MODEL_AUDIT_ROUTES.SETUP] });
-
-      const allModelAuditLinks = screen.getAllByRole('link', { name: 'Model Audit' });
-      const topLevelModelAuditLink = allModelAuditLinks.find(
-        (link) => link.getAttribute('href') === MODEL_AUDIT_ROUTES.ROOT,
-      );
-      expect(topLevelModelAuditLink).toBeDefined();
-      expect(topLevelModelAuditLink).not.toHaveClass('bg-primary/10');
-      expect(topLevelModelAuditLink).toHaveClass('text-foreground');
-    });
-
-    it('does not activate Model Audit NavLink on /model-audit/history path', () => {
-      renderNavigation({ initialEntries: [LEGACY_MODEL_AUDIT_HISTORY_ROUTE] });
-
-      const allModelAuditLinks = screen.getAllByRole('link', { name: 'Model Audit' });
-      const topLevelModelAuditLink = allModelAuditLinks.find(
-        (link) => link.getAttribute('href') === MODEL_AUDIT_ROUTES.ROOT,
-      );
-      expect(topLevelModelAuditLink).toBeDefined();
-      expect(topLevelModelAuditLink).not.toHaveClass('bg-primary/10');
-      expect(topLevelModelAuditLink).toHaveClass('text-foreground');
-    });
-
-    it('does not activate Model Audit NavLink on deeply nested paths under excluded routes like /model-audit/history/details/123', () => {
-      renderNavigation({ initialEntries: [`${LEGACY_MODEL_AUDIT_HISTORY_ROUTE}/details/123`] });
-
-      const allModelAuditLinks = screen.getAllByRole('link', { name: 'Model Audit' });
-      const topLevelModelAuditLink = allModelAuditLinks.find(
-        (link) => link.getAttribute('href') === MODEL_AUDIT_ROUTES.ROOT,
-      );
-      expect(topLevelModelAuditLink).toBeDefined();
-      expect(topLevelModelAuditLink).not.toHaveClass('bg-primary/10');
-      expect(topLevelModelAuditLink).toHaveClass('text-foreground');
-    });
-  });
-
-  describe('Accessibility', () => {
-    it('has proper ARIA attributes on dropdown trigger', async () => {
+  it.each(['{Enter}', ' '])(
+    'opens the New menu with %s and restores focus on Escape',
+    async (key) => {
       const user = userEvent.setup();
       renderNavigation();
+      const trigger = screen.getByRole('button', { name: 'New' });
+      expect(trigger).toHaveAttribute('aria-expanded', 'false');
+      // Exercise the actual tab order instead of focusing through an implementation shortcut.
+      for (let i = 0; document.activeElement !== trigger && i < 12; i++) {
+        await user.tab();
+      }
+      expect(trigger).toHaveFocus();
+      await user.keyboard(key);
+      expect(trigger).toHaveAttribute('aria-expanded', 'true');
+      await user.keyboard('{ArrowDown}');
+      const firstItem = screen.getByRole('link', { name: /Eval.*Create and configure/ });
+      expect(firstItem).toHaveFocus();
+      await user.keyboard('{Escape}');
+      expect(trigger).toHaveAttribute('aria-expanded', 'false');
+      expect(trigger).toHaveFocus();
+    },
+  );
 
-      const createButton = screen.getByText('New').closest('button');
-      expect(createButton).toBeInTheDocument();
-
-      // Check basic accessibility - button should be focusable
-      await user.click(createButton!);
-
-      // Verify dropdown functionality works
-      expect(screen.getByText('Model Audit', { selector: 'div' })).toBeInTheDocument();
-    });
-
+  describe('Accessibility', () => {
     it('has accessible link labels for Model Audit', async () => {
       const user = userEvent.setup();
       renderNavigation();
@@ -434,22 +365,6 @@ describe('Navigation', () => {
       const modelAuditLink = screen.getByText('Model Audit', { selector: 'div' }).closest('a');
       expect(modelAuditLink).toHaveAttribute('href', MODEL_AUDIT_ROUTES.SETUP);
       expect(modelAuditLink).toBeInTheDocument();
-    });
-
-    it('supports keyboard navigation patterns', async () => {
-      const user = userEvent.setup();
-      renderNavigation();
-
-      const createButton = screen.getByText('New').closest('button');
-
-      // Should be focusable
-      expect(createButton).not.toHaveAttribute('tabindex', '-1');
-
-      // Focus and activate with click (keyboard simulation is complex with MUI)
-      createButton?.focus();
-      await user.click(createButton!);
-
-      expect(screen.getByText('Model Audit', { selector: 'div' })).toBeInTheDocument();
     });
   });
 

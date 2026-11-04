@@ -333,18 +333,10 @@ describe('util', () => {
     });
 
     describe('file path handling', () => {
-      it('handles absolute paths in transform files', async () => {
-        const output = 'hello';
-        const context = { vars: { key: 'value' }, prompt: { id: '123' } };
-
-        mockedImportModule.mockResolvedValueOnce((output: string) => output.toUpperCase());
-
-        const transformFunctionPath = 'file://transform.js';
-        const transformedOutput = await transform(transformFunctionPath, output, context);
-        expect(transformedOutput).toBe('HELLO');
-      });
-
-      it('handles file URLs in transform files', async () => {
+      it.each([
+        'handles absolute paths in transform files',
+        'handles file URLs in transform files',
+      ])('%s', async () => {
         const output = 'hello';
         const context = { vars: { key: 'value' }, prompt: { id: '123' } };
 

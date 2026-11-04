@@ -188,6 +188,9 @@ export type OpenAiCompletionOptions = OpenAiSharedOptions & {
   };
 
   // Responses API specific options
+  access_programs?: {
+    cyber?: 'standard' | 'daybreak_blue' | 'daybreak_red';
+  };
   instructions?: string;
   max_output_tokens?: number;
   max_tool_calls?: number;

@@ -98,6 +98,7 @@ export function projectProviderResponse(
     projectedResponse.output = '[output stripped]';
     delete projectedResponse.raw;
     delete projectedResponse.providerTransformedOutput;
+    delete projectedResponse.conversationOutput;
     delete projectedResponse.audio;
     delete projectedResponse.video;
     delete projectedResponse.images;
@@ -674,11 +675,12 @@ export function sanitizeGradingResultForDb<T>(gradingResult: T): T {
 }
 
 // `__promptfoo` is reserved at the metadata top level for promptfoo-internal namespaced data
-// (currently `traceLinkage`). User-supplied non-object values under this key are overwritten —
+// (currently `traceLinkage` and `repeatLinkage`). User-supplied non-object values are overwritten —
 // log so the rare collision is visible. Mirrored in `EvalQueries.getMetadataKeysFromEval` /
 // `getMetadataValuesFromEval`, which hide the namespace from the metadata-discovery API.
 export const PROMPTFOO_METADATA_KEY = '__promptfoo';
 const TRACE_LINKAGE_KEY = 'traceLinkage';
+const REPEAT_LINKAGE_KEY = 'repeatLinkage';
 
 function asRecord(value: unknown): Record<string, unknown> | undefined {
   return value && typeof value === 'object' && !Array.isArray(value)
@@ -736,6 +738,84 @@ export function stripTraceLinkageFromMetadata<T extends Record<string, unknown> 
   }
 
   return strippedMetadata as T;
+}
+
+export function persistRepeatMetadata(
+  metadata: EvaluateResult['metadata'],
+  repeatIndex: EvaluateResult['repeatIndex'],
+  repeatGroupId: EvaluateResult['repeatGroupId'],
+): EvaluateResult['metadata'] {
+  if (repeatIndex === undefined || !repeatGroupId) {
+    return stripRepeatLinkageFromMetadata(metadata);
+  }
+
+  const metadataRecord = metadata ?? {};
+  const promptfooMetadata = asRecord(metadataRecord[PROMPTFOO_METADATA_KEY]);
+  if (metadataRecord[PROMPTFOO_METADATA_KEY] !== undefined && promptfooMetadata === undefined) {
+    logger.warn(
+      `[EvalResult] Overwriting non-object metadata.${PROMPTFOO_METADATA_KEY} with internal repeat linkage; the key is reserved for promptfoo internals.`,
+    );
+  }
+  if (promptfooMetadata && REPEAT_LINKAGE_KEY in promptfooMetadata) {
+    logger.warn(
+      `[EvalResult] Overwriting metadata.${PROMPTFOO_METADATA_KEY}.${REPEAT_LINKAGE_KEY} with internal repeat linkage; the path is reserved for promptfoo internals.`,
+    );
+  }
+
+  return {
+    ...metadataRecord,
+    [PROMPTFOO_METADATA_KEY]: {
+      ...(promptfooMetadata ?? {}),
+      [REPEAT_LINKAGE_KEY]: { repeatIndex, repeatGroupId },
+    },
+  };
+}
+
+export function stripRepeatLinkageFromMetadata<
+  T extends Record<string, unknown> | null | undefined,
+>(metadata: T): T {
+  const metadataRecord = asRecord(metadata);
+  const promptfooMetadata = asRecord(metadataRecord?.[PROMPTFOO_METADATA_KEY]);
+  if (!metadataRecord || !promptfooMetadata || !(REPEAT_LINKAGE_KEY in promptfooMetadata)) {
+    return metadata;
+  }
+
+  const { [REPEAT_LINKAGE_KEY]: _repeatLinkage, ...remainingPromptfooMetadata } = promptfooMetadata;
+  const strippedMetadata = { ...metadataRecord };
+  delete strippedMetadata[PROMPTFOO_METADATA_KEY];
+  if (Object.keys(remainingPromptfooMetadata).length > 0) {
+    strippedMetadata[PROMPTFOO_METADATA_KEY] = remainingPromptfooMetadata;
+  }
+
+  return strippedMetadata as T;
+}
+
+export function surfaceRepeatMetadata(metadata: Record<string, unknown> | null | undefined): {
+  repeatIndex?: number;
+  repeatGroupId?: string;
+  metadata: Record<string, unknown>;
+} {
+  const metadataRecord = metadata ?? {};
+  const promptfooMetadata = asRecord(metadataRecord[PROMPTFOO_METADATA_KEY]);
+  const repeatLinkage = asRecord(promptfooMetadata?.[REPEAT_LINKAGE_KEY]);
+
+  const repeatIndex =
+    typeof repeatLinkage?.repeatIndex === 'number' &&
+    Number.isInteger(repeatLinkage.repeatIndex) &&
+    repeatLinkage.repeatIndex >= 0
+      ? repeatLinkage.repeatIndex
+      : undefined;
+  const repeatGroupId =
+    typeof repeatLinkage?.repeatGroupId === 'string' && repeatLinkage.repeatGroupId.length > 0
+      ? repeatLinkage.repeatGroupId
+      : undefined;
+
+  const hasRepeatLinkage = promptfooMetadata != null && REPEAT_LINKAGE_KEY in promptfooMetadata;
+  return {
+    repeatIndex,
+    repeatGroupId,
+    metadata: hasRepeatLinkage ? stripRepeatLinkageFromMetadata(metadataRecord) : metadataRecord,
+  };
 }
 
 export function surfaceTraceMetadata(metadata: Record<string, unknown> | null | undefined): {
