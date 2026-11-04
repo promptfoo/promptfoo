@@ -282,14 +282,15 @@ export class HuggingfaceTextGenerationProvider implements ApiProvider {
           error: `API call error: ${response.data.error}`,
         };
       }
-      if (!response.data[0] && !response.data.generated_text) {
+      const output = response.data.generated_text ?? response.data[0]?.generated_text;
+      if (typeof output !== 'string') {
         return {
           error: `Malformed response data: ${response.data}`,
         };
       }
 
       return {
-        output: response.data.generated_text || response.data[0]?.generated_text,
+        output,
       };
     } catch (err) {
       return {

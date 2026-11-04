@@ -329,6 +329,58 @@ describe('HuggingfaceChatCompletionProvider', () => {
   });
 });
 
+describe('HuggingfaceTextGenerationProvider inference responses', () => {
+  beforeEach(() => {
+    mockFetch.mockReset();
+  });
+
+  afterEach(async () => {
+    vi.clearAllMocks();
+    await clearCache();
+  });
+
+  it.each([
+    { name: 'empty object response', response: { generated_text: '' }, output: '' },
+    { name: 'empty array response', response: [{ generated_text: '' }], output: '' },
+    { name: 'object response', response: { generated_text: 'Output' }, output: 'Output' },
+    { name: 'array response', response: [{ generated_text: 'Output' }], output: 'Output' },
+  ])('preserves generated text from $name', async ({ response, output }) => {
+    mockFetch.mockResolvedValue({
+      ...defaultMockResponse,
+      text: vi.fn().mockResolvedValue(JSON.stringify(response)),
+    });
+    const provider = new HuggingfaceTextGenerationProvider('test-model');
+
+    expect(await provider.callApi('Test prompt')).toEqual({ output });
+  });
+
+  it('preserves API errors even when generated text is present', async () => {
+    mockFetch.mockResolvedValue({
+      ...defaultMockResponse,
+      text: vi
+        .fn()
+        .mockResolvedValue(JSON.stringify({ error: 'Model unavailable', generated_text: '' })),
+    });
+    const provider = new HuggingfaceTextGenerationProvider('test-model');
+
+    expect(await provider.callApi('Test prompt')).toEqual({
+      error: 'API call error: Model unavailable',
+    });
+  });
+
+  it('rejects responses without generated text', async () => {
+    mockFetch.mockResolvedValue({
+      ...defaultMockResponse,
+      text: vi.fn().mockResolvedValue(JSON.stringify({})),
+    });
+    const provider = new HuggingfaceTextGenerationProvider('test-model');
+
+    expect(await provider.callApi('Test prompt')).toEqual({
+      error: 'Malformed response data: [object Object]',
+    });
+  });
+});
+
 describe('HuggingfaceTextGenerationProvider chat delegation', () => {
   beforeEach(() => {
     mockProcessEnv({ HF_TOKEN: 'test-hf-token' });
