@@ -3,15 +3,10 @@ import React from 'react';
 import { useHistory, useLocation } from '@docusaurus/router';
 import { act, cleanup, renderHook, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { router } from '../../test/storeRouter';
 import { CartProvider, useCartContext } from './CartProvider';
 
-// Use the same router instance as Docusaurus, not the app workspace's router.
-const router = await vi.hoisted(async () => {
-  const { createRequire } = await import('node:module');
-  const require = createRequire(import.meta.url);
-  return createRequire(require.resolve('@docusaurus/core/package.json'))('react-router-dom');
-});
-vi.mock('@docusaurus/router', () => router);
+vi.mock('@docusaurus/router', async () => (await import('../../test/storeRouter')).router);
 vi.mock('./useFourthwall', () => ({
   useCart: () => ({
     cart: null,
