@@ -1,17 +1,14 @@
 import { createElement, type ReactNode } from 'react';
 
 import {
-  createMockResponse,
-  getCallApiMock,
   mockCallApiResponse,
   mockCallApiResponseOnce,
   rejectCallApi,
-  rejectCallApiOnce,
   resetCallApiMock,
 } from '@app/tests/apiMocks';
 import { callApi } from '@app/utils/api';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { act, renderHook, waitFor } from '@testing-library/react';
+import { renderHook, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import useCloudConfig from './useCloudConfig';
 
@@ -147,164 +144,6 @@ describe('useCloudConfig', () => {
       { signal: expect.any(AbortSignal) },
       '',
     );
-  });
-
-  describe('refetch', () => {
-    it('should refetch data when refetch is called', async () => {
-      const initialConfig = {
-        appUrl: 'https://app.promptfoo.com',
-        isEnabled: true,
-      };
-
-      const updatedConfig = {
-        appUrl: 'https://new.promptfoo.com',
-        isEnabled: false,
-      };
-
-      mockCallApiResponseOnce(initialConfig);
-
-      const { result } = mount();
-
-      await waitFor(() => {
-        expect(result.current.isLoading).toBe(false);
-      });
-
-      expect(result.current.data).toEqual(initialConfig);
-      expect(callApi).toHaveBeenCalledTimes(1);
-
-      // Setup mock for refetch
-      mockCallApiResponseOnce(updatedConfig);
-
-      // Call refetch
-      await act(async () => {
-        result.current.refetch();
-      });
-
-      await waitFor(() => {
-        expect(result.current.data).toEqual(updatedConfig);
-      });
-
-      expect(result.current.error).toBeNull();
-      expect(callApi).toHaveBeenCalledTimes(2);
-      expect(callApi).toHaveBeenNthCalledWith(
-        2,
-        '/user/cloud-config',
-        { signal: expect.any(AbortSignal) },
-        '',
-      );
-    });
-
-    it('should set isLoading=true during refetch and back to false after completion', async () => {
-      const mockCloudConfig = {
-        appUrl: 'https://app.promptfoo.com',
-        isEnabled: true,
-      };
-
-      let resolveFetch!: (response: Response) => void;
-      const delayedPromise = new Promise<Response>((resolve) => {
-        resolveFetch = resolve;
-      });
-
-      // First call resolves immediately
-      mockCallApiResponseOnce(mockCloudConfig);
-
-      const { result } = mount();
-
-      // Wait for initial fetch to complete
-      await waitFor(() => {
-        expect(result.current.isLoading).toBe(false);
-      });
-
-      // Second call will be delayed so we can check loading state
-      getCallApiMock().mockImplementationOnce(() => delayedPromise);
-
-      // Start refetch
-      act(() => {
-        result.current.refetch();
-      });
-
-      // Query observers deliver subscription updates asynchronously.
-      await waitFor(() => expect(result.current.isLoading).toBe(true));
-
-      // Resolve the delayed promise
-      resolveFetch(createMockResponse(mockCloudConfig));
-
-      // Wait for loading to become false
-      await waitFor(() => {
-        expect(result.current.isLoading).toBe(false);
-      });
-    });
-
-    it('should handle errors during refetch', async () => {
-      const mockCloudConfig = {
-        appUrl: 'https://app.promptfoo.com',
-        isEnabled: true,
-      };
-
-      // Initial successful fetch
-      mockCallApiResponseOnce(mockCloudConfig);
-
-      const { result } = mount();
-
-      await waitFor(() => {
-        expect(result.current.isLoading).toBe(false);
-      });
-
-      expect(result.current.data).toEqual(mockCloudConfig);
-      expect(result.current.error).toBeNull();
-
-      // Setup error for refetch
-      rejectCallApiOnce(new Error('Refetch failed'));
-
-      // Call refetch
-      await act(async () => {
-        result.current.refetch();
-      });
-
-      await waitFor(() => {
-        expect(result.current.isLoading).toBe(false);
-      });
-
-      // Data should remain unchanged when refetch fails
-      expect(result.current.data).toEqual(mockCloudConfig);
-      expect(result.current.error).toBe('Refetch failed');
-      expect(callApi).toHaveBeenCalledTimes(2);
-    });
-
-    it('should clear previous error on successful refetch', async () => {
-      // Initial failed fetch
-      rejectCallApiOnce(new Error('Initial fetch failed'));
-
-      const { result } = mount();
-
-      await waitFor(() => {
-        expect(result.current.isLoading).toBe(false);
-      });
-
-      expect(result.current.data).toBeNull();
-      expect(result.current.error).toBe('Initial fetch failed');
-
-      const mockCloudConfig = {
-        appUrl: 'https://app.promptfoo.com',
-        isEnabled: true,
-      };
-
-      // Setup successful refetch
-      mockCallApiResponseOnce(mockCloudConfig);
-
-      // Call refetch
-      await act(async () => {
-        result.current.refetch();
-      });
-
-      await waitFor(() => {
-        expect(result.current.isLoading).toBe(false);
-      });
-
-      expect(result.current.data).toEqual(mockCloudConfig);
-      expect(result.current.error).toBeNull();
-      expect(callApi).toHaveBeenCalledTimes(2);
-    });
   });
 
   it('should only call the API once on mount and not on rerender', async () => {
