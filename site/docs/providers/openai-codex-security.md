@@ -24,11 +24,7 @@ The SDK is installed separately when you use this provider. Install Promptfoo an
 npm install promptfoo @openai/codex-security@^0.2.0
 ```
 
-Native operations require `@openai/codex-security` version `^0.2.0`, which includes patched TOML parsing and the updated archive extractor. Use Node.js `^22.22.0`, `^24.0.0`, or `^26.0.0`, plus Python 3.10 or later. Python 3.10 also requires `tomli`; use `python_path` to select an interpreter when needed.
-
-Promptfoo loads the SDK from its own installation; it does not execute SDK packages found in the target repository or eval directory. For a global installation, install both packages together with `npm install -g promptfoo @openai/codex-security@^0.2.0`.
-
-Use a supported saved Codex/ChatGPT login, or set `OPENAI_API_KEY` or `CODEX_API_KEY` before starting the Promptfoo server or CLI. Credentials belong to that process: the Setup API keys dialog and provider-scoped environment overrides cannot supply a different key to this provider. With `auth: auto`, the SDK prefers an environment API key when both a key and a saved login are available. Set `auth: chatgpt` to select the saved login, or `auth: api-key` to require an environment key. See the [SDK authentication documentation](https://learn.chatgpt.com/docs/security/sdk#configure-the-runtime-and-credentials).
+Promptfoo supports Codex Security SDK versions from 0.2.0 through 0.8.x. The examples that measure file coverage use 0.2.x. To evaluate the current scan result format, install `@openai/codex-security@^0.8.0`. Use Node.js `^22.22.0`, `^24.0.0`, or `^26.0.0` to satisfy both Promptfoo and the SDK. Promptfoo loads the SDK only from its own installation; it does not execute SDK packages found in the target repository or evaluation directory. For a global installation, install both packages together with `npm install -g promptfoo @openai/codex-security@^0.2.0`. Use a supported saved Codex/ChatGPT login, or set `OPENAI_API_KEY` or `CODEX_API_KEY` before starting the Promptfoo server or CLI. Credentials belong to that process: the Setup API keys dialog and provider-scoped environment overrides cannot supply a different key to this provider. With `auth: auto`, the SDK prefers an environment API key when both a key and a saved login are available. Set `auth: chatgpt` to select the saved login, or `auth: api-key` to require an environment key. See the [SDK authentication documentation](https://learn.chatgpt.com/docs/security/sdk#configure-the-runtime-and-credentials).
 
 Codex Security access, Trusted Access, and model availability depend on the authenticated account and organization.
 
@@ -160,6 +156,8 @@ providers:
 
 Set `working_tree: true` to review uncommitted changes instead. `head_ref` cannot be combined with `working_tree`, and path-scoped scans cannot be combined with Git diff targets. Diff targets require `repository` to be the Git worktree root and both selected revisions to be available locally.
 
+SDK 0.7 and later require committed-ref scans to use a clean, full checkout at the requested head revision.
+
 ## Validate findings
 
 Pass a structured finding directly or load it from `finding_file`:
@@ -174,6 +172,8 @@ providers:
 ```
 
 Validation returns JSON containing `disposition`, `report`, `outputDir`, and `threadId`. If `finding` and `finding_file` are omitted, the provider uses a structured `finding` eval-row variable when available; otherwise, it uses the rendered prompt as the finding text. Set `output_dir` to choose its evidence directory. Validation does not report reliable token/cost totals, and scan budget or deep-scan settings do not apply to it.
+
+Starting with SDK 0.3, standalone validation is a source-only assessment in a read-only sandbox. Read the returned `report`; it does not reproduce the finding at runtime or write validation report files.
 
 :::warning
 
@@ -212,7 +212,17 @@ Unset model, reasoning and deep-scan controls use the installed SDK's effective 
 
 ## Results, cost, and assertions
 
-Native repository scans return `ScanResult.toJSON()` in `output`, including `manifest`, `findings`, `coverage`, artifact paths, and SDK cost data. Imports retain that SDK-shaped JSON too. Native execution also reports standard Promptfoo token and cost metrics when the SDK supplies them.
+Repository scans return `ScanResult.toJSON()` in `output`, including `manifest`, `findings`, artifact paths, and SDK cost data. SDK 0.2.x–0.7.x expose file coverage in `metadata.coverage` and `metadata.coveragePath`. Starting with 0.8.0, `metadata.review.excludedPaths` lists additional excluded paths. File-coverage metrics require an SDK that reports coverage. Promptfoo also normalizes SDK-reported values into:
+
+- `tokenUsage.prompt`, `tokenUsage.completion`, `tokenUsage.cached`, and `tokenUsage.total`.
+- `tokenUsage.completionDetails.reasoning`, `cacheReadInputTokens`, and `cacheCreationInputTokens` when reported.
+- `cost`, using the security SDK's `estimatedUsd` value.
+- `metadata.operation`, `metadata.mode`, `metadata.model`, `metadata.reasoningEffort`, `metadata.findingsCount`, artifact paths, warnings, SDK version, and plugin version.
+- `metadata.skillCalls` for native scan and finding-validation operation routing.
+
+`metadata.manifestPath` locates the saved scan manifest. In SDK 0.8, inspect `manifest.scan.status`, warnings, scope, and limitations alongside review exclusions. Exclusions alone do not establish complete coverage.
+
+Finding validation does not currently expose reliable token or cost totals, so the provider leaves those fields unset.
 
 `metadata.codexSecurity` is the versioned summary shared by native and saved-report results. Version 1 includes:
 
@@ -239,6 +249,8 @@ Coverage can be `complete`, `partial`, or `unknown`. A result with zero findings
 
 Use [named assertion metrics](/docs/configuration/expected-outputs#assertion-properties) to expose explicit checks in the comparison table. For example, require complete coverage:
 
+The `CompleteCoverage` assertion below applies only to SDK versions that report `coverage.completeness`, including the 0.2.x version used by this example. Remove that assertion when evaluating SDK 0.8 and inspect its scan evidence instead.
+
 ```yaml
 assert:
   - type: javascript
@@ -252,9 +264,10 @@ This checks reported coverage, not detection accuracy. For recall and precision,
 
 ## Troubleshooting
 
-- **Zero findings with partial coverage:** Inspect `metadata.codexSecurity.warnings`, the raw output's `coverage.deferred`, and `coverage.json`. Discarded findings or malformed evidence references indicate an incomplete scan, not a clean repository.
+- **Zero findings with partial coverage:** For legacy coverage SDKs, inspect `metadata.codexSecurity.warnings`, `metadata.coverage.deferred`, and `coverage.json`. With SDK 0.8, inspect the saved manifest's scan status, warnings, scope, and limitations, plus `metadata.review`. Discarded findings or malformed evidence references indicate an incomplete scan, not a clean repository.
 - **Deep scan cost appears too low:** Install SDK version `^0.2.0`. SDKs before `0.1.18` can omit independently launched discovery and deduplication workers from token and cost totals.
 - **Sandbox preflight fails:** SDK 0.2.0 checks Unix sandbox support before paid model calls. Run scans in an environment that supports the Codex sandbox.
+- **Scan output parent rejected:** On Unix, SDK 0.8 requires a private output directory owned by the current user. Every ancestor must belong to that user or root and must not allow group or world writes unless it has the sticky bit. Choose a private location with trusted ancestors; a private leaf directory alone does not satisfy this check.
 - **SDK fails to load:** Install Promptfoo and the SDK together, and use Node.js `^22.22.0`, `^24.0.0`, or `^26.0.0`.
 - **Python is unavailable:** Install Python 3.10+ (`tomli` is also required on 3.10), or point `python_path` at the supported interpreter. A successful local preflight does not verify Python or model access.
 - **Authentication or access fails:** Sign in with Codex or set `OPENAI_API_KEY` / `CODEX_API_KEY`; confirm that the account has the required Codex Security and Trusted Access permissions.
