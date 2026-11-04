@@ -113,6 +113,8 @@ prompts:
 
 The provider returns Codex's final assistant text as `output`. It also records thread ids, turn ids, item counts, command/file/tool metadata, approval decisions, and token usage under `metadata.codexAppServer`.
 
+When the server reports reasoning output tokens, Promptfoo includes the count in `tokenUsage.completionDetails.reasoning`.
+
 For downstream coding-agent checks, `raw` also includes SDK-compatible `items` and `usage` fields alongside the protocol-shaped thread and turn payloads. That keeps trajectory-style assertions aligned between `openai:codex-app-server` and `openai:codex-sdk` without losing the richer app-server metadata.
 
 ## Safety Defaults

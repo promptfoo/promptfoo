@@ -325,21 +325,25 @@ describe('bedrock openaiResponses helper', () => {
       );
     });
 
-    it('defaults GPT-6 Astra to us-west-2 in the factory and direct constructor', async () => {
-      const provider = createBedrockOpenAiResponsesProvider('openai.gpt-6-astra', {
+    it.each([
+      ['openai.gpt-6-astra', 'us-west-2'],
+      ['openai.gpt-6.1-terra', 'us-east-1'],
+    ])('defaults %s to %s in the factory and direct constructor', async (modelId, region) => {
+      const provider = createBedrockOpenAiResponsesProvider(modelId, {
         config: { apiKey: 'bedrock-key' },
       });
-      const direct = new BedrockOpenAiResponsesProvider('openai.gpt-6-astra', {
+      const direct = new BedrockOpenAiResponsesProvider(modelId, {
         config: { apiKey: 'bedrock-key' },
       });
 
-      expect(provider.getApiUrl()).toBe('https://bedrock-mantle.us-west-2.api.aws/openai/v1');
-      expect(direct.getApiUrl()).toBe('https://bedrock-mantle.us-west-2.api.aws/openai/v1');
+      const apiBaseUrl = `https://bedrock-mantle.${region}.api.aws/openai/v1`;
+      expect(provider.getApiUrl()).toBe(apiBaseUrl);
+      expect(direct.getApiUrl()).toBe(apiBaseUrl);
 
       await provider.callApi('hello');
       expect(fetchWithCache).toHaveBeenCalledWith(
-        'https://bedrock-mantle.us-west-2.api.aws/openai/v1/responses',
-        expect.objectContaining({ body: expect.stringContaining('"model":"openai.gpt-6-astra"') }),
+        `${apiBaseUrl}/responses`,
+        expect.objectContaining({ body: expect.stringContaining(`"model":"${modelId}"`) }),
         expect.any(Number),
         'json',
         true,
@@ -369,6 +373,7 @@ describe('bedrock openaiResponses helper', () => {
 
     it.each([
       ['openai.gpt-6-astra', 'us-east-1'],
+      ['openai.gpt-6.1-terra', 'us-west-2'],
       ['openai.gpt-6-sol', 'us-west-2'],
       ['openai.gpt-6-luna', 'us-east-2'],
       ['openai.gpt-5.6-sol', 'us-gov-west-1'],

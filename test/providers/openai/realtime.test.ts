@@ -316,6 +316,62 @@ describe('OpenAI Realtime Provider', () => {
   });
 
   describe('Basic Functionality', () => {
+    it.each([
+      ['direct', 'failed', { error: { message: 'The model failed.' } }, 'The model failed.'],
+      ['client-secret', 'cancelled', { reason: 'client_cancelled' }, 'client_cancelled'],
+      ['persistent', 'incomplete', { reason: 'max_output_tokens' }, 'max_output_tokens'],
+    ] as const)(
+      'reports a %s socket turn with status %s before running tools',
+      async (mode, status, details, reason) => {
+        const functionCallHandler = vi.fn().mockResolvedValue('tool output');
+        const provider = new OpenAiRealtimeProvider('gpt-realtime-2.1', {
+          config: { functionCallHandler },
+        });
+        const runTurn = () => {
+          if (mode === 'persistent') {
+            provider.persistentConnection = mockWs;
+            return provider.callApi('hello', createLoanConversationContext() as any);
+          }
+          return mode === 'direct'
+            ? provider.callApi('hello')
+            : provider.webSocketRequest('test-secret', 'hello');
+        };
+        try {
+          const result = runTurn();
+          await flushMicrotasks();
+          const handler = lastMessageHandler();
+          emitOutputTextDone(handler, 'partial answer');
+          emitFunctionCall(handler, 'save');
+          emitFunctionCallArgumentsDone(handler);
+          await emitRealtimeEvent(handler, {
+            type: 'response.done',
+            response: {
+              status,
+              status_details: details,
+              usage: {
+                input_tokens: 5,
+                output_tokens: 3,
+                total_tokens: 8,
+                input_token_details: { text_tokens: 5, audio_tokens: 0, cached_tokens: 0 },
+                output_token_details: { text_tokens: 3, audio_tokens: 0 },
+              },
+            },
+          });
+
+          await expect(result).resolves.toMatchObject({
+            error: `Realtime response ${status}: ${reason}`,
+            tokenUsage: { prompt: 5, completion: 3, total: 8 },
+            ...(mode === 'client-secret'
+              ? {}
+              : { cost: expect.closeTo((5 * 4 + 3 * 24) / 1e6, 10) }),
+          });
+          expect(functionCallHandler).not.toHaveBeenCalled();
+        } finally {
+          provider.cleanup();
+        }
+      },
+    );
+
     it('sends one user item after session readiness on the client-secret socket', async () => {
       const provider = new OpenAiRealtimeProvider('gpt-realtime-1.5');
       const promise = provider.webSocketRequest('test-secret', 'hello');
@@ -640,6 +696,21 @@ describe('OpenAI Realtime Provider', () => {
         reasoning: {
           effort: 'high',
         },
+      });
+    });
+
+    it('sends multilingual transcription hints and a custom voice in the session', async () => {
+      const transcription = {
+        model: 'gpt-transcribe',
+        languages: ['en', 'fr'],
+        keywords: ['OpenAI'],
+      };
+      const voice = { id: 'voice_123' };
+      const provider = new OpenAiRealtimeProvider('gpt-realtime-2.1', {
+        config: { input_audio_transcription: transcription, voice },
+      });
+      expect(await provider.getRealtimeSessionBody()).toMatchObject({
+        audio: { input: { transcription }, output: { voice } },
       });
     });
 
