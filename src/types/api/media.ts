@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { GetBlobParamsSchema } from './blobs';
 
 // GET /api/media/:type/:filename
 
@@ -6,6 +7,14 @@ export const MediaParamsSchema = z.object({
   type: z.enum(['audio', 'image', 'video']),
   filename: z.string().regex(/^[a-f0-9]{12}\.[a-z0-9]+$/i, 'Invalid media filename'),
 });
+
+export const MediaRouteParamsSchema = z.discriminatedUnion('type', [
+  MediaParamsSchema,
+  z.object({
+    type: z.literal('blob'),
+    filename: GetBlobParamsSchema.shape.hash.toLowerCase(),
+  }),
+]);
 
 export type MediaParams = z.infer<typeof MediaParamsSchema>;
 

@@ -7,6 +7,7 @@ import {
   DefaultSuggestionsProvider,
   DefaultWebSearchProvider,
 } from '../../../src/providers/openai/defaults';
+import { mockProcessEnv } from '../../util/utils';
 
 describe('OpenAI default providers', () => {
   describe('DefaultEmbeddingProvider', () => {
@@ -40,6 +41,52 @@ describe('OpenAI default providers', () => {
       expect(DefaultSuggestionsProvider.id()).toBe('openai:gpt-6-sol');
       expect(DefaultSuggestionsProvider.config).toEqual({});
     });
+  });
+
+  describe('output limits from the environment', () => {
+    const chatDefaults = [
+      ['grading', DefaultGradingProvider],
+      ['JSON grading', DefaultGradingJsonProvider],
+      ['suggestions', DefaultSuggestionsProvider],
+    ] as const;
+
+    it.each(chatDefaults)(
+      'does not cap the %s provider with the limit for non-reasoning requests',
+      async (_name, provider) => {
+        // Users set OPENAI_MAX_TOKENS to bound their target's visible output. Applied to a
+        // grader that reasons, it can use up the whole budget before any output is written.
+        const restore = mockProcessEnv({
+          OPENAI_MAX_TOKENS: '256',
+          OPENAI_MAX_COMPLETION_TOKENS: undefined,
+        });
+        try {
+          const { body } = await provider.getOpenAiBody('Grade this output.');
+
+          expect(body).not.toHaveProperty('max_completion_tokens');
+          expect(body).not.toHaveProperty('max_tokens');
+        } finally {
+          restore();
+        }
+      },
+    );
+
+    it.each(chatDefaults)(
+      'caps the %s provider with the limit for reasoning Chat requests',
+      async (_name, provider) => {
+        const restore = mockProcessEnv({
+          OPENAI_MAX_TOKENS: '256',
+          OPENAI_MAX_COMPLETION_TOKENS: '4000',
+        });
+        try {
+          const { body } = await provider.getOpenAiBody('Grade this output.');
+
+          expect(body.max_completion_tokens).toBe(4000);
+          expect(body).not.toHaveProperty('max_tokens');
+        } finally {
+          restore();
+        }
+      },
+    );
   });
 
   describe('DefaultModerationProvider', () => {

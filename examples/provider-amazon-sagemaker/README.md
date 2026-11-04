@@ -29,6 +29,28 @@ This example shows how to:
    npm install -g @aws-sdk/client-sagemaker-runtime
    ```
 
+## Optional Python deployment helper
+
+Promptfoo evals use Node.js and need no Python packages. To create a test endpoint
+with `deploy-test-model.py`, use Python 3.10 or newer and install Boto3:
+
+```bash
+python -m pip install 'boto3>=1.43.98,<2'
+python deploy-test-model.py --help
+```
+
+The helper uses Boto3, so the `sagemaker` Python SDK is not required. Deployment
+creates billable AWS resources. Configure a
+[SageMaker execution role](https://docs.aws.amazon.com/sagemaker/latest/dg/sagemaker-roles.html)
+that SageMaker can assume to access the model's resources.
+
+The AWS identity running the helper needs `sagemaker:CreateModel`,
+`sagemaker:CreateEndpointConfig`, `sagemaker:CreateEndpoint`, and
+`sagemaker:DescribeEndpoint`. It also needs `iam:GetRole` when using `--role-name`,
+or `iam:ListRoles` for automatic role discovery, plus
+[`iam:PassRole`](https://docs.aws.amazon.com/IAM/latest/UserGuide/id_roles_use_passrole.html)
+scoped to the selected execution role. To skip deployment, use an existing endpoint.
+
 ## Environment Variables
 
 This example requires the following environment variables:

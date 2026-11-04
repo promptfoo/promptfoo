@@ -169,9 +169,7 @@ export class ElevenLabsWebSocketClient {
   }
 
   private stopKeepAlive(): void {
-    if (this.keepAliveTimer) {
-      clearInterval(this.keepAliveTimer);
-      this.keepAliveTimer = null;
-    }
+    clearInterval(this.keepAliveTimer ?? undefined);
+    this.keepAliveTimer = null;
   }
 }
