@@ -1,8 +1,10 @@
 // provider-simple-traced.js
 // Local retrieval simulation for site/docs/guides/trace-based-agent-evals.md.
 
-const { trace, context, SpanStatusCode } = require('@opentelemetry/api');
-const { BatchSpanProcessor, NodeTracerProvider } = require('@opentelemetry/sdk-trace-node');
+const { trace, context, propagation, SpanStatusCode } = require('@opentelemetry/api');
+const { BatchSpanProcessor, TracerProvider } = require('@opentelemetry/sdk-trace');
+const { AsyncLocalStorageContextManager } = require('@opentelemetry/context-async-hooks');
+const { W3CTraceContextPropagator } = require('@opentelemetry/core');
 const { OTLPTraceExporter } = require('@opentelemetry/exporter-trace-otlp-http');
 const { resourceFromAttributes } = require('@opentelemetry/resources');
 const { ATTR_SERVICE_NAME, ATTR_SERVICE_VERSION } = require('@opentelemetry/semantic-conventions');
@@ -23,22 +25,25 @@ const exporter = new OTLPTraceExporter({
 });
 
 // Use BatchSpanProcessor for better timing handling
-const spanProcessor = new BatchSpanProcessor(exporter, {
+const spanProcessor = new BatchSpanProcessor({
+  exporter,
   maxQueueSize: 100,
   maxExportBatchSize: 10,
   scheduledDelayMillis: 500, // Wait 500ms before exporting
   exportTimeoutMillis: 30000,
 });
 
-// Initialize OpenTelemetry with span processor in constructor (v2.x API)
-const provider = new NodeTracerProvider({
+// Initialize OpenTelemetry with span processor in constructor (v3.x API)
+const provider = new TracerProvider({
   resource: resourceFromAttributes({
     [ATTR_SERVICE_NAME]: 'simple-traced-provider',
     [ATTR_SERVICE_VERSION]: '1.0.0',
   }),
   spanProcessors: [spanProcessor],
 });
-provider.register();
+trace.setGlobalTracerProvider(provider);
+context.setGlobalContextManager(new AsyncLocalStorageContextManager().enable());
+propagation.setGlobalPropagator(new W3CTraceContextPropagator());
 
 const tracer = trace.getTracer('simple-traced-provider', '1.0.0');
 

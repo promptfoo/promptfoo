@@ -61,6 +61,41 @@ describe('provider operation retry ownership', () => {
     return handled;
   }
 
+  it('delays later n8n calls after a 429 without replaying the webhook', async () => {
+    const fetch = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response('busy', {
+          status: 429,
+          statusText: 'Too Many Requests',
+          headers: { 'retry-after': '30' },
+        }),
+      )
+      .mockResolvedValue(
+        new Response(JSON.stringify({ output: 'ready' }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        }),
+      );
+    vi.stubGlobal('fetch', fetch);
+    const provider = new N8nProvider('https://retry.fixture.test/n8n');
+    const wrapped = wrapProviderWithRateLimiting(provider, registry);
+    const first = wrapped.callApi('first');
+    await vi.advanceTimersByTimeAsync(0);
+    expect((await first).metadata?.http?.status).toBe(429);
+    expect(fetch).toHaveBeenCalledOnce();
+    const second = wrapped.callApi('second');
+    await vi.advanceTimersByTimeAsync(29_999);
+    expect(fetch).toHaveBeenCalledOnce();
+    await vi.runAllTimersAsync();
+    expect((await second).output).toBe('ready');
+    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(Object.values(registry.getMetrics())[0]).toMatchObject({
+      failedRequests: 1,
+      retriedRequests: 0,
+    });
+  });
+
   it.each([0, 1, 3])(
     'retains HTTP scheduler recovery with maxRetries=%i after transport exhaustion',
     async (maxRetries) => {

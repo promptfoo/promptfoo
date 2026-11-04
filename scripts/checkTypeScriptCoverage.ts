@@ -3,30 +3,12 @@ import path from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
 
-const scriptDir = path.dirname(fileURLToPath(import.meta.url));
-const repoRoot = path.resolve(scriptDir, '..');
+const repoRoot = path.resolve(import.meta.dirname, '..');
 const rootOwnedPrefixes = ['src/', 'test/', 'scripts/'];
 const externalProjectPrefixes = ['src/app/', 'test/code-scan-action/'];
 
 function normalizePath(filePath: string): string {
   return filePath.split(path.sep).join('/');
-}
-
-function isTypeScriptFile(filePath: string): boolean {
-  return (
-    filePath.endsWith('.ts') ||
-    filePath.endsWith('.tsx') ||
-    filePath.endsWith('.mts') ||
-    filePath.endsWith('.cts')
-  );
-}
-
-function hasPrefix(filePath: string, prefixes: string[]): boolean {
-  return prefixes.some((prefix) => filePath.startsWith(prefix));
-}
-
-function isRootOwnedTypeScriptFile(filePath: string): boolean {
-  return !filePath.includes('/') || hasPrefix(filePath, rootOwnedPrefixes);
 }
 
 export function getTrackedTypeScriptFiles(): string[] {
@@ -40,9 +22,10 @@ export function getTrackedTypeScriptFiles(): string[] {
     .map(normalizePath)
     .filter(
       (filePath) =>
-        isTypeScriptFile(filePath) &&
-        isRootOwnedTypeScriptFile(filePath) &&
-        !hasPrefix(filePath, externalProjectPrefixes),
+        /\.(?:[cm]?ts|tsx)$/.test(filePath) &&
+        (!filePath.includes('/') ||
+          rootOwnedPrefixes.some((prefix) => filePath.startsWith(prefix))) &&
+        !externalProjectPrefixes.some((prefix) => filePath.startsWith(prefix)),
     )
     .sort();
 }
