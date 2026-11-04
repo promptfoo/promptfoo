@@ -1258,7 +1258,10 @@ describe('OpenAI assertions', () => {
           const provider = new OpenAiChatCompletionProvider('test-provider', {
             config: {
               functions,
-              tools: functions.map<OpenAiTool>((definition) => ({ type: 'function', function: definition })),
+              tools: functions.map<OpenAiTool>((definition) => ({
+                type: 'function',
+                function: definition,
+              })),
             },
           });
           const output =
