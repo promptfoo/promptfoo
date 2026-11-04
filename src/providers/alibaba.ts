@@ -8,6 +8,7 @@ const KNOWN_MODELS = new Set([
   // Qwen3.8
   'qwen3.8-max',
   'qwen3.8-max-0902',
+  'qwen3.8-max-2026-09-02',
   'qwen3.8-flash',
   'qwen3.8-omni-flash',
 
@@ -225,50 +226,37 @@ const KNOWN_MODELS = new Set([
 
 const API_BASE_URL = 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1';
 
+function getAlibabaProviderOptions(modelName: string, options: ProviderOptions) {
+  if (!modelName) {
+    throw new Error('Alibaba modelName is required');
+  }
+  if (!KNOWN_MODELS.has(modelName)) {
+    logger.warn(
+      `Unknown Alibaba Cloud model: ${modelName}. Known models: ${Array.from(KNOWN_MODELS).join(', ')}`,
+    );
+  }
+  return {
+    ...options,
+    config: {
+      ...options.config,
+      apiBaseUrl: options.config?.apiBaseUrl ?? API_BASE_URL,
+      apiKeyEnvar: 'DASHSCOPE_API_KEY',
+    },
+  };
+}
+
 export class AlibabaChatCompletionProvider extends OpenAiChatCompletionProvider {
   protected override getGenAISystem(): string {
     return 'alibaba';
   }
 
   constructor(modelName: string, options: ProviderOptions = {}) {
-    if (!modelName) {
-      throw new Error('Alibaba modelName is required');
-    }
-    if (!KNOWN_MODELS.has(modelName)) {
-      logger.warn(
-        `Unknown Alibaba Cloud model: ${modelName}. Known models: ${Array.from(KNOWN_MODELS).join(', ')}`,
-      );
-    }
-
-    super(modelName, {
-      ...options,
-      config: {
-        ...options.config,
-        apiBaseUrl: options.config?.apiBaseUrl ?? API_BASE_URL,
-        apiKeyEnvar: 'DASHSCOPE_API_KEY',
-      },
-    });
+    super(modelName, getAlibabaProviderOptions(modelName, options));
   }
 }
 
 export class AlibabaEmbeddingProvider extends OpenAiEmbeddingProvider {
   constructor(modelName: string, options: ProviderOptions = {}) {
-    if (!modelName) {
-      throw new Error('Alibaba modelName is required');
-    }
-    if (!KNOWN_MODELS.has(modelName)) {
-      logger.warn(
-        `Unknown Alibaba Cloud model: ${modelName}. Known models: ${Array.from(KNOWN_MODELS).join(', ')}`,
-      );
-    }
-
-    super(modelName, {
-      ...options,
-      config: {
-        ...options.config,
-        apiBaseUrl: options.config?.apiBaseUrl ?? API_BASE_URL,
-        apiKeyEnvar: 'DASHSCOPE_API_KEY',
-      },
-    });
+    super(modelName, getAlibabaProviderOptions(modelName, options));
   }
 }

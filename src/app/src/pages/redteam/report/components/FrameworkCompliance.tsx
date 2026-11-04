@@ -3,13 +3,13 @@ import React from 'react';
 import { Card, CardContent } from '@app/components/ui/card';
 import { cn } from '@app/lib/utils';
 import { formatASRForDisplay } from '@app/utils/redteam';
+import { calculateAttackSuccessRate } from '@promptfoo/presentation/redteamMetrics';
 import {
   ALIASED_PLUGIN_MAPPINGS,
   FRAMEWORK_COMPLIANCE_IDS,
   type FrameworkComplianceId,
   Severity,
 } from '@promptfoo/redteam/constants';
-import { calculateAttackSuccessRate } from '@promptfoo/redteam/metrics';
 import FrameworkCard from './FrameworkCard';
 import {
   categorizePlugins,
