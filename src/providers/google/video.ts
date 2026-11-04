@@ -423,7 +423,7 @@ export class GoogleVideoProvider implements ApiProvider {
 
   private async getAiStudioHeaders(config: GoogleVideoOptions): Promise<Record<string, string>> {
     const apiKey = this.getApiKey(config);
-    if (!apiKey) {
+    if (!apiKey && config.apiKeyRequired !== false) {
       throw new Error(
         'Google API key is not set. Set GOOGLE_API_KEY or GEMINI_API_KEY, or add `apiKey` to the provider config.',
       );
@@ -431,7 +431,7 @@ export class GoogleVideoProvider implements ApiProvider {
 
     return {
       'Content-Type': 'application/json',
-      'x-goog-api-key': apiKey,
+      ...(apiKey ? { 'x-goog-api-key': apiKey } : {}),
     };
   }
 
@@ -1138,11 +1138,12 @@ export class GoogleVideoProvider implements ApiProvider {
         vertexai: true,
         projectId,
       };
-    } else if (!this.getApiKey(effectiveConfig)) {
+    } else if (!this.getApiKey(effectiveConfig) && effectiveConfig.apiKeyRequired !== false) {
       const missingApiKeyError =
         'Google Veo video generation via Google AI Studio requires an API key. Set GOOGLE_API_KEY or GEMINI_API_KEY, or add `apiKey` to the provider config.';
 
-      if (effectiveConfig.vertexai === false) {
+      const useVertexEnv = resolveProviderEnv(this.env, ['GOOGLE_GENAI_USE_VERTEXAI'])?.value;
+      if (effectiveConfig.vertexai === false || useVertexEnv === 'false' || useVertexEnv === '0') {
         return { error: missingApiKeyError };
       }
 

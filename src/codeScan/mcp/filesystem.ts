@@ -204,12 +204,11 @@ export function waitForFilesystemMcpServerReady(
     };
 
     const settle = (callback: () => void) => {
-      if (settled) {
-        return;
+      if (!settled) {
+        settled = true;
+        cleanup();
+        callback();
       }
-      settled = true;
-      cleanup();
-      callback();
     };
 
     const onStderr = (chunk: Buffer) => {
@@ -300,22 +299,20 @@ export async function stopFilesystemMcpServer(mcpProcess: ChildProcess): Promise
     };
 
     const onExit = () => {
-      if (settled) {
-        return;
+      if (!settled) {
+        settled = true;
+        cleanup();
+        logger.debug('MCP server stopped');
+        resolve();
       }
-      settled = true;
-      cleanup();
-      logger.debug('MCP server stopped');
-      resolve();
     };
 
     const onError = (error: Error) => {
-      if (settled) {
-        return;
+      if (!settled) {
+        settled = true;
+        cleanup();
+        reject(new FilesystemMcpError(`Failed to stop filesystem MCP server: ${error.message}`));
       }
-      settled = true;
-      cleanup();
-      reject(new FilesystemMcpError(`Failed to stop filesystem MCP server: ${error.message}`));
     };
 
     const sendSignal = (signal: NodeJS.Signals) => {
