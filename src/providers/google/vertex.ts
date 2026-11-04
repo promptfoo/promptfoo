@@ -8,6 +8,7 @@ import {
   type GenAISpanContext,
   withGenAISpan,
 } from '../../tracing/genaiTracer';
+import { inheritProviderCapabilities } from '../../types/providers';
 import { fetchWithProxy } from '../../util/fetch/index';
 import { loadYaml } from '../../util/yamlLoad';
 import {
@@ -1369,6 +1370,10 @@ export class VertexChatProvider extends GoogleGenericProvider {
 }
 
 export class VertexEmbeddingProvider implements ApiEmbeddingProvider {
+  static readonly declaredProviderCapabilities = ['callEmbeddingApi'] as const;
+  readonly promptfooCapabilities = inheritProviderCapabilities(
+    VertexEmbeddingProvider.declaredProviderCapabilities,
+  );
   readonly supportsEmbeddingCancellation = true;
 
   modelName: string;

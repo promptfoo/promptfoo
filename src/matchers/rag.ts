@@ -11,6 +11,7 @@ import {
   CONTEXT_RELEVANCE_BAD,
 } from '../prompts/index';
 import { getDefaultProviders } from '../providers/defaults';
+import { hasProviderCapability } from '../types/providers';
 import invariant from '../util/invariant';
 import { accumulateTokenUsage } from '../util/tokenUsageUtils';
 import {
@@ -44,6 +45,10 @@ export async function matchesAnswerRelevance(
     grading?.provider,
     defaults.embeddingProvider,
     'answer relevancy check',
+  );
+  invariant(
+    hasProviderCapability(embeddingProvider, 'callEmbeddingApi'),
+    `Provider ${embeddingProvider.id()} must implement callEmbeddingApi for answer relevance`,
   );
   const textProvider = await getAndCheckProvider(
     'text',
@@ -86,11 +91,6 @@ export async function matchesAnswerRelevance(
     );
     candidateQuestions.push(resp.output);
   }
-
-  invariant(
-    typeof embeddingProvider.callEmbeddingApi === 'function',
-    `Provider ${embeddingProvider.id()} must implement callEmbeddingApi for similarity check`,
-  );
 
   const inputEmbeddingResp = await callGradingProvider(
     embeddingProvider,

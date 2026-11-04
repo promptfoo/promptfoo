@@ -10,6 +10,7 @@ import {
 import { getEnvString, getProviderEnvString } from '../envars';
 import logger from '../logger';
 import { extractGenAIResponse, type GenAISpanContext, withGenAISpan } from '../tracing/genaiTracer';
+import { inheritProviderCapabilities } from '../types/providers';
 import { maybeLoadToolsFromExternalFile } from '../util';
 import { resolveProviderEnv } from './env';
 import { calculateCost, getRequestTimeoutMs, parseChatPrompt } from './shared';
@@ -725,6 +726,10 @@ export class MistralChatCompletionProvider implements ApiProvider {
 }
 
 export class MistralEmbeddingProvider implements ApiProvider {
+  static readonly declaredProviderCapabilities = ['callEmbeddingApi'] as const;
+  readonly promptfooCapabilities = inheritProviderCapabilities(
+    MistralEmbeddingProvider.declaredProviderCapabilities,
+  );
   readonly supportsEmbeddingCancellation = true;
 
   modelName: string;

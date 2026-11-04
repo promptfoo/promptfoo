@@ -2,6 +2,7 @@ import { type FetchWithCacheResult, fetchWithCache } from '../cache';
 import { getEnvString, getProviderEnvString } from '../envars';
 import logger from '../logger';
 import { extractGenAIResponse, type GenAISpanContext, withGenAISpan } from '../tracing/genaiTracer';
+import { inheritProviderCapabilities } from '../types/providers';
 import { normalizeFinishReason } from '../util/finishReason';
 import { maybeLoadToolsFromExternalFile } from '../util/index';
 import { resolveProviderEnv } from './env';
@@ -851,6 +852,10 @@ export class OllamaChatProvider implements ApiProvider {
 }
 
 export class OllamaEmbeddingProvider extends OllamaCompletionProvider {
+  static readonly declaredProviderCapabilities = ['callEmbeddingApi'] as const;
+  readonly promptfooCapabilities = inheritProviderCapabilities(
+    OllamaEmbeddingProvider.declaredProviderCapabilities,
+  );
   readonly supportsEmbeddingCancellation = true;
 
   async callEmbeddingApi(

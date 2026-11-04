@@ -5,6 +5,7 @@ import { getCache, isCacheEnabled } from '../cache';
 import { getEnvOverrides, getEnvString, getProviderEnvString } from '../envars';
 import { getExplicitProviderEnv } from '../envOverrides';
 import logger from '../logger';
+import { inheritProviderCapabilities } from '../types/providers';
 import { sha256 } from '../util/createHash';
 import { normalizeFinishReason } from '../util/finishReason';
 import { getRequestTimeoutMs, parseChatPrompt } from './shared';
@@ -525,6 +526,10 @@ export class VercelAiProvider implements ApiProvider {
  * Vercel AI Gateway embedding provider.
  */
 export class VercelAiEmbeddingProvider implements ApiEmbeddingProvider {
+  static readonly declaredProviderCapabilities = ['callEmbeddingApi'] as const;
+  readonly promptfooCapabilities = inheritProviderCapabilities(
+    VercelAiEmbeddingProvider.declaredProviderCapabilities,
+  );
   readonly supportsEmbeddingCancellation = true;
 
   public modelName: string;

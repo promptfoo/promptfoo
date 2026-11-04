@@ -1,3 +1,13 @@
+import {
+  type ApiEmbeddingProvider,
+  type ApiProvider,
+  type CallApiContextParams,
+  type CallApiOptionsParams,
+  inheritProviderCapabilities,
+  type ProviderEmbeddingResponse,
+  type ProviderOptions,
+  type ProviderResponse,
+} from '../types/providers';
 import { resolveProviderCreatorInput } from './creator';
 import { resolveProviderEnv } from './env';
 import { OpenAiChatCompletionProvider } from './openai/chat';
@@ -5,49 +15,62 @@ import { OpenAiCompletionProvider } from './openai/completion';
 import { OpenAiEmbeddingProvider } from './openai/embedding';
 import { hasOpenAiGatewayCredentials } from './openai/util';
 
-import type {
-  ApiEmbeddingProvider,
-  ApiProvider,
-  CallApiContextParams,
-  CallApiOptionsParams,
-  ProviderEmbeddingResponse,
-  ProviderOptions,
-  ProviderResponse,
-} from '../types/providers';
 import type { ProviderCreatorOptions } from './creator';
 import type { OpenAiCompletionOptions } from './openai/types';
 
-type LiteLLMCompletionOptions = OpenAiCompletionOptions;
+type LiteLLMDelegate =
+  | OpenAiChatCompletionProvider
+  | OpenAiCompletionProvider
+  | OpenAiEmbeddingProvider;
 
-/**
- * Base class for LiteLLM providers that maintains LiteLLM identity
- */
-abstract class LiteLLMProviderWrapper implements ApiProvider {
-  protected provider:
-    | OpenAiChatCompletionProvider
-    | OpenAiCompletionProvider
-    | OpenAiEmbeddingProvider;
-  protected providerType: string;
+abstract class LiteLLMProviderWrapper<TProvider extends LiteLLMDelegate>
+  implements ApiProvider<TProvider['config']>
+{
+  static readonly declaredProviderCapabilities = {
+    text: ['callApi'],
+    embedding: ['callEmbeddingApi'],
+  } as const;
+  declare readonly promptfooCapabilities: readonly ('callApi' | 'callEmbeddingApi')[];
+  readonly getApiKey: () => string | undefined;
+  declare readonly cleanup?: ApiProvider['cleanup'];
+  declare readonly validateFunctionToolCall?: OpenAiChatCompletionProvider['validateFunctionToolCall'];
 
-  constructor(provider: LiteLLMProviderWrapper['provider'], providerType: string, id?: string) {
-    this.provider = provider;
-    this.providerType = providerType;
-    if (id !== undefined) {
-      this.id = () => id;
+  constructor(
+    protected readonly provider: TProvider,
+    protected readonly providerType: 'chat' | 'completion' | 'embedding',
+    private readonly customId?: string,
+  ) {
+    this.getApiKey = provider.getApiKey.bind(provider);
+    Object.defineProperty(this, 'promptfooCapabilities', {
+      value: inheritProviderCapabilities(
+        LiteLLMProviderWrapper.declaredProviderCapabilities[
+          providerType === 'embedding' ? 'embedding' : 'text'
+        ],
+      ),
+      configurable: true,
+      writable: true,
+    });
+    if ('cleanup' in provider && !('cleanup' in Object.getPrototypeOf(this))) {
+      this.cleanup = provider.cleanup.bind(provider);
+    }
+    if (
+      'validateFunctionToolCall' in provider &&
+      !('validateFunctionToolCall' in Object.getPrototypeOf(this))
+    ) {
+      this.validateFunctionToolCall = provider.validateFunctionToolCall.bind(provider);
     }
   }
 
   get modelName(): string {
     return this.provider.modelName;
   }
-
-  get config(): any {
+  get config(): TProvider['config'] {
     return this.provider.config;
   }
 
   id(): string {
     const typePrefix = this.providerType === 'chat' ? '' : `:${this.providerType}`;
-    return `litellm${typePrefix}:${this.modelName}`;
+    return this.customId || `litellm${typePrefix}:${this.modelName}`;
   }
 
   toString(): string {
@@ -60,14 +83,10 @@ abstract class LiteLLMProviderWrapper implements ApiProvider {
       provider: 'litellm',
       model: this.modelName,
       type: this.providerType,
-      config: {
-        ...this.config,
-        ...(this.getApiKey && this.getApiKey() && { apiKey: undefined }),
-      },
+      config: { ...this.config, ...(this.getApiKey() && { apiKey: undefined }) },
     };
   }
 
-  // Delegate all other methods to the wrapped provider
   async callApi(
     prompt: string,
     context?: CallApiContextParams,
@@ -100,52 +119,28 @@ abstract class LiteLLMProviderWrapper implements ApiProvider {
       error: `${response.error}\nNo LiteLLM API key was configured. Set LITELLM_API_KEY or the provider's apiKey or apiKeyEnvar. OPENAI_API_KEY is not used by default.`,
     };
   }
-
-  getApiKey?: () => string | undefined;
 }
 
-/**
- * LiteLLM Chat Provider
- */
-class LiteLLMChatProvider extends LiteLLMProviderWrapper {
-  constructor(modelName: string, options: ProviderOptions) {
-    const provider = new OpenAiChatCompletionProvider(modelName, options);
-    super(provider, 'chat', options.id);
-    // Bind getApiKey if it exists
-    if (provider.getApiKey) {
-      this.getApiKey = provider.getApiKey.bind(provider);
-    }
+class LiteLLMChatProvider extends LiteLLMProviderWrapper<OpenAiChatCompletionProvider> {
+  constructor(modelName: string, options: ProviderOptions = {}) {
+    super(new OpenAiChatCompletionProvider(modelName, options), 'chat', options.id);
   }
 }
 
-/**
- * LiteLLM Completion Provider
- */
-class LiteLLMCompletionProvider extends LiteLLMProviderWrapper {
+class LiteLLMCompletionProvider extends LiteLLMProviderWrapper<OpenAiCompletionProvider> {
   constructor(modelName: string, options: ProviderOptions) {
-    const provider = new OpenAiCompletionProvider(modelName, options);
-    super(provider, 'completion', options.id);
-    if (provider.getApiKey) {
-      this.getApiKey = provider.getApiKey.bind(provider);
-    }
+    super(new OpenAiCompletionProvider(modelName, options), 'completion', options.id);
   }
 }
 
-/**
- * LiteLLM Embedding Provider
- */
-class LiteLLMEmbeddingProvider extends LiteLLMProviderWrapper implements ApiEmbeddingProvider {
+class LiteLLMEmbeddingProvider
+  extends LiteLLMProviderWrapper<OpenAiEmbeddingProvider>
+  implements ApiEmbeddingProvider
+{
   readonly supportsEmbeddingCancellation = true;
 
-  private embeddingProvider: OpenAiEmbeddingProvider;
-
   constructor(modelName: string, options: ProviderOptions) {
-    const provider = new OpenAiEmbeddingProvider(modelName, options);
-    super(provider, 'embedding', options.id);
-    this.embeddingProvider = provider;
-    if (provider.getApiKey) {
-      this.getApiKey = provider.getApiKey.bind(provider);
-    }
+    super(new OpenAiEmbeddingProvider(modelName, options), 'embedding', options.id);
   }
 
   async callEmbeddingApi(
@@ -153,7 +148,7 @@ class LiteLLMEmbeddingProvider extends LiteLLMProviderWrapper implements ApiEmbe
     context?: CallApiContextParams,
     options?: CallApiOptionsParams,
   ): Promise<ProviderEmbeddingResponse> {
-    return this.withAuthHint(await this.embeddingProvider.callEmbeddingApi(text, context, options));
+    return this.withAuthHint(await this.provider.callEmbeddingApi(text, context, options));
   }
 }
 
@@ -205,20 +200,13 @@ export function createLiteLLMProvider(
   // Build the config object with proper defaults
   // omitDefaults: true ensures temperature/max_tokens are not sent unless explicitly
   // configured, allowing the LiteLLM proxy to apply its own model-specific defaults.
-  const mergedConfig: LiteLLMCompletionOptions = {
+  const mergedConfig: OpenAiCompletionOptions = {
     apiKeyEnvar: 'LITELLM_API_KEY',
     apiKeyRequired: false,
     apiBaseUrl: resolvedApiBaseUrl,
     omitDefaults: true,
+    ...Object.fromEntries(Object.entries(config).filter(([, value]) => value != null)),
   };
-
-  // Merge configs, with explicit config values taking precedence
-  // Only override properties that are actually defined and not null in config
-  Object.keys(config).forEach((key) => {
-    if (config[key] !== undefined && config[key] !== null) {
-      (mergedConfig as any)[key] = config[key];
-    }
-  });
 
   // Construct the provider options
   const litellmConfig: ProviderOptions = {

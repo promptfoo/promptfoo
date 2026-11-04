@@ -103,6 +103,7 @@ describe('index.ts exports', () => {
     'getInputType',
     'getModelPricing',
     'guardrails',
+    'hasProviderCapability',
     'isApiProvider',
     'isGradingResult',
     'isProviderOptions',

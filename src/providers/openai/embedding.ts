@@ -1,5 +1,6 @@
 import { fetchWithCache } from '../../cache';
 import logger from '../../logger';
+import { inheritProviderCapabilities } from '../../types/providers';
 import { getRequestTimeoutMs, shouldBustProviderCache, withResponseCacheMetadata } from '../shared';
 import { OpenAiGenericProvider } from '.';
 import { calculateOpenAIUsageCost } from './billing';
@@ -44,6 +45,10 @@ function decodeBase64Embedding(value: string): number[] {
 }
 
 export class OpenAiEmbeddingProvider extends OpenAiGenericProvider {
+  static readonly declaredProviderCapabilities = ['callEmbeddingApi'] as const;
+  readonly promptfooCapabilities = inheritProviderCapabilities(
+    OpenAiEmbeddingProvider.declaredProviderCapabilities,
+  );
   readonly supportsEmbeddingCancellation = true;
 
   declare config: OpenAiEmbeddingOptions;

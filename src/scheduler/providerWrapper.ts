@@ -5,6 +5,7 @@
  * code paths that bypass the main evaluator.
  */
 
+import { hasFunctionToolCallValidator } from '../contracts/providers';
 import { composeResponseHeadersObservers } from '../util/fetch/responseHeadersObserver';
 import { isSafeCost, isSafeTokenCount } from '../util/numeric';
 import { parseRetryAfter } from './headerParser';
@@ -18,6 +19,7 @@ import type {
   ApiProvider,
   CallApiContextParams,
   CallApiOptionsParams,
+  CancellableEmbeddingProvider,
   ProviderResponse,
   TokenUsage,
 } from '../types/providers';
@@ -92,9 +94,9 @@ export function isRateLimitWrapped(provider: ApiProvider): boolean {
  * Create rate limit detection options for ProviderResponse.
  * Shared between providerWrapper and evaluator for consistency.
  */
-export function createProviderRateLimitOptions(
+export function createProviderRateLimitOptions<Result extends ProviderResponse = ProviderResponse>(
   abortSignal?: AbortSignal,
-): RateLimitExecuteOptions<ProviderResponse> {
+): RateLimitExecuteOptions<Result> {
   return {
     ...(abortSignal && { abortSignal }),
     // Provider errors are values carrying output, usage and HTTP metadata.
@@ -176,7 +178,7 @@ export function createProviderRateLimitOptions(
 /**
  * Wrap a provider with rate limiting.
  *
- * The wrapped provider will use the registry for all callApi calls,
+ * The wrapped provider uses the registry for every supported operation,
  * automatically handling rate limits, retries, and adaptive concurrency.
  *
  * @param provider - The provider to wrap
@@ -192,12 +194,54 @@ export function wrapProviderWithRateLimiting(
     return provider;
   }
 
-  const originalCallApi = provider.callApi.bind(provider);
+  const wrapOperation = <Args extends unknown[], Result extends ProviderResponse>(
+    operation: (...args: Args) => Promise<Result>,
+    signalFor?: (...args: Args) => AbortSignal | undefined,
+  ) => {
+    return (...args: Args): Promise<Result> =>
+      registry.execute<Result>(
+        provider,
+        () => operation.apply(provider, args),
+        createProviderRateLimitOptions<Result>(signalFor?.(...args)),
+      );
+  };
 
   const wrappedProvider: ApiProvider = {
     ...provider,
+    promptfooCapabilities: provider.promptfooCapabilities,
+    [Symbol.for('promptfoo.capabilityDelegate')]: provider,
     // Explicitly delegate id() since prototype methods aren't copied by spread
     id: () => provider.id(),
+    config: provider.config,
+    handlesOwnDelay: provider.handlesOwnDelay,
+    handlesOwnRetries: provider.handlesOwnRetries,
+    supportsEmbeddingCancellation: provider.supportsEmbeddingCancellation,
+    cleanup: provider.cleanup?.bind(provider),
+    cleanupAfterEvaluation: provider.cleanupAfterEvaluation?.bind(provider),
+    getSessionId: provider.getSessionId?.bind(provider),
+    getAudioInputFormat: provider.getAudioInputFormat?.bind(provider),
+    toJSON: provider.toJSON?.bind(provider),
+    ...(hasFunctionToolCallValidator(provider) && {
+      validateFunctionToolCall: provider.validateFunctionToolCall.bind(provider),
+    }),
+    callClassificationApi: provider.callClassificationApi
+      ? wrapOperation(provider.callClassificationApi, (_input, options) => options?.abortSignal)
+      : undefined,
+    callEmbeddingApi: provider.callEmbeddingApi
+      ? provider.supportsEmbeddingCancellation
+        ? wrapOperation(
+            (provider as CancellableEmbeddingProvider).callEmbeddingApi,
+            (_input: string, _context?: CallApiContextParams, options?: CallApiOptionsParams) =>
+              options?.abortSignal,
+          )
+        : wrapOperation(provider.callEmbeddingApi)
+      : undefined,
+    callSimilarityApi: provider.callSimilarityApi
+      ? wrapOperation(provider.callSimilarityApi)
+      : undefined,
+    callModerationApi: provider.callModerationApi
+      ? wrapOperation(provider.callModerationApi)
+      : undefined,
     callApi: async (
       prompt: string,
       context?: CallApiContextParams,
@@ -206,7 +250,7 @@ export function wrapProviderWithRateLimiting(
       return registry.execute(
         provider,
         (onResponseHeaders) =>
-          originalCallApi(
+          provider.callApi(
             prompt,
             context,
             onResponseHeaders

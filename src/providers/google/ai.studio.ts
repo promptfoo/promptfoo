@@ -1,5 +1,6 @@
 import { fetchWithCache } from '../../cache';
 import logger from '../../logger';
+import { inheritProviderCapabilities } from '../../types/providers';
 import { getNunjucksEngine } from '../../util/templates';
 import { resolveProviderEnv } from '../env';
 import {
@@ -547,6 +548,10 @@ export class AIStudioEmbeddingProvider
   extends AIStudioChatProvider
   implements ApiEmbeddingProvider
 {
+  static readonly declaredProviderCapabilities = ['callEmbeddingApi'] as const;
+  readonly promptfooCapabilities = inheritProviderCapabilities(
+    AIStudioEmbeddingProvider.declaredProviderCapabilities,
+  );
   readonly supportsEmbeddingCancellation = true;
 
   id(): string {

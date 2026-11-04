@@ -247,6 +247,10 @@ All standard LiteLLM parameters are passed through:
 4. **Rate limiting**: LiteLLM handles rate limiting automatically
 5. **Cost tracking**: LiteLLM provides built-in cost tracking
 
+## Custom IDs and grading
+
+Custom provider IDs appear unchanged in evaluation results. LiteLLM embedding providers support similarity assertions but cannot serve as text graders.
+
 ## Troubleshooting
 
 If you encounter issues:
