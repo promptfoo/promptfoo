@@ -35,9 +35,7 @@ type JunitSuite = {
   displayName: string;
   errors: number;
   failures: number;
-  skipped: number;
   testcases: { testIdx: number; testcase: Record<string, unknown> }[];
-  tests: number;
   timeMs: number;
 };
 
@@ -122,39 +120,22 @@ function getFailureDetails(result: JunitProjectedResult): string {
 }
 
 function projectEvalResult(result: EvalResult | EvaluateResult): JunitProjectedResult {
-  if ('toEvaluateResult' in result) {
-    const projected = result.toEvaluateResult();
-    return {
-      description: projected.description,
-      error: projected.error,
-      failureReason: projected.failureReason,
-      gradingResult: projected.gradingResult,
-      latencyMs: projected.latencyMs,
-      prompt: projected.prompt,
-      promptId: projected.promptId,
-      promptIdx: projected.promptIdx,
-      provider: projected.provider,
-      score: projected.score,
-      success: projected.success,
-      testCase: projected.testCase,
-      testIdx: projected.testIdx,
-    };
-  }
+  const projected = 'toEvaluateResult' in result ? result.toEvaluateResult() : result;
 
   return {
-    description: result.description,
-    error: result.error,
-    failureReason: result.failureReason,
-    gradingResult: result.gradingResult,
-    latencyMs: result.latencyMs,
-    prompt: result.prompt,
-    promptId: result.promptId,
-    promptIdx: result.promptIdx,
-    provider: result.provider,
-    score: result.score,
-    success: result.success,
-    testCase: result.testCase,
-    testIdx: result.testIdx,
+    description: projected.description,
+    error: projected.error,
+    failureReason: projected.failureReason,
+    gradingResult: projected.gradingResult,
+    latencyMs: projected.latencyMs,
+    prompt: projected.prompt,
+    promptId: projected.promptId,
+    promptIdx: projected.promptIdx,
+    provider: projected.provider,
+    score: projected.score,
+    success: projected.success,
+    testCase: projected.testCase,
+    testIdx: projected.testIdx,
   };
 }
 
@@ -210,9 +191,7 @@ async function buildJunitSuites(evalRecord: Eval): Promise<JunitSuite[]> {
         displayName: '',
         errors: 0,
         failures: 0,
-        skipped: 0,
         testcases: [],
-        tests: 0,
         timeMs: 0,
       };
       suites.set(key, suite);
@@ -223,7 +202,6 @@ async function buildJunitSuites(evalRecord: Eval): Promise<JunitSuite[]> {
       testcase: buildJunitTestCase(result),
       testIdx: result.testIdx,
     });
-    suite.tests += 1;
     suite.timeMs += result.latencyMs;
     if (!result.success) {
       if (result.failureReason === ResultFailureReason.ASSERT) {
@@ -289,10 +267,9 @@ function buildJunitTestCase(result: JunitProjectedResult) {
 
 export async function createJunitXml(evalRecord: Eval): Promise<string> {
   const suites = await buildJunitSuites(evalRecord);
-  const tests = suites.reduce((sum, suite) => sum + suite.tests, 0);
+  const tests = suites.reduce((sum, suite) => sum + suite.testcases.length, 0);
   const failures = suites.reduce((sum, suite) => sum + suite.failures, 0);
   const errors = suites.reduce((sum, suite) => sum + suite.errors, 0);
-  const skipped = suites.reduce((sum, suite) => sum + suite.skipped, 0);
   const totalTimeMs = suites.reduce((sum, suite) => sum + suite.timeMs, 0);
   const timestamp = getEvaluationTimestamp(evalRecord);
 
@@ -311,15 +288,15 @@ export async function createJunitXml(evalRecord: Eval): Promise<string> {
       '@_errors': errors,
       '@_failures': failures,
       '@_name': 'promptfoo',
-      '@_skipped': skipped,
+      '@_skipped': 0,
       '@_tests': tests,
       '@_time': formatDurationSeconds(totalTimeMs),
       testsuite: suites.map((suite) => ({
         '@_errors': suite.errors,
         '@_failures': suite.failures,
         '@_name': suite.displayName,
-        '@_skipped': suite.skipped,
-        '@_tests': suite.tests,
+        '@_skipped': 0,
+        '@_tests': suite.testcases.length,
         '@_time': formatDurationSeconds(suite.timeMs),
         ...(timestamp ? { '@_timestamp': timestamp } : {}),
         testcase: suite.testcases

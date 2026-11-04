@@ -1,5 +1,5 @@
 import { fetchWithCache } from '../cache';
-import { getEnvString } from '../envars';
+import { getEnvString, getProviderEnvString } from '../envars';
 import logger from '../logger';
 import { resolveProviderEnv } from './env';
 import { calculateCost, getRequestTimeoutMs, parseChatPrompt } from './shared';
@@ -14,48 +14,20 @@ import type {
 } from '../types/index';
 
 const AI21_CHAT_MODELS = [
-  {
-    id: 'jamba-mini',
+  ...['jamba-mini', 'jamba-mini-2', 'jamba-mini-2-2026-01'].map((id) => ({
+    id,
     cost: {
       input: 0.2 / 1000000,
       output: 0.4 / 1000000,
     },
-  },
-  {
-    id: 'jamba-mini-2',
-    cost: {
-      input: 0.2 / 1000000,
-      output: 0.4 / 1000000,
-    },
-  },
-  {
-    id: 'jamba-mini-2-2026-01',
-    cost: {
-      input: 0.2 / 1000000,
-      output: 0.4 / 1000000,
-    },
-  },
-  {
-    id: 'jamba-large',
+  })),
+  ...['jamba-large', 'jamba-large-1.7', 'jamba-large-1.7-2025-07'].map((id) => ({
+    id,
     cost: {
       input: 2 / 1000000,
       output: 8 / 1000000,
     },
-  },
-  {
-    id: 'jamba-large-1.7',
-    cost: {
-      input: 2 / 1000000,
-      output: 8 / 1000000,
-    },
-  },
-  {
-    id: 'jamba-large-1.7-2025-07',
-    cost: {
-      input: 2 / 1000000,
-      output: 8 / 1000000,
-    },
-  },
+  })),
 ];
 
 interface AI21ChatCompletionOptions {
@@ -143,10 +115,12 @@ export class AI21ChatCompletionProvider implements ApiProvider {
 
   getApiKey(): string | undefined {
     const namedKey = this.config.apiKeyEnvar
-      ? (this.env?.[this.config.apiKeyEnvar] ?? getEnvString(this.config.apiKeyEnvar as EnvVarKey))
+      ? (getProviderEnvString(this.env, this.config.apiKeyEnvar) ??
+        getEnvString(this.config.apiKeyEnvar as EnvVarKey))
       : undefined;
     return (
-      this.config.apiKey || (namedKey ?? this.env?.AI21_API_KEY ?? getEnvString('AI21_API_KEY'))
+      this.config.apiKey ||
+      (namedKey ?? getProviderEnvString(this.env, 'AI21_API_KEY') ?? getEnvString('AI21_API_KEY'))
     );
   }
 

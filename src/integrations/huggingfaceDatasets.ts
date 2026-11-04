@@ -133,7 +133,7 @@ export function parseDatasetPath(path: string): {
   const [owner, repo] = pathPart.split('/');
 
   // Start with default parameters
-  const defaultParams = new URLSearchParams({
+  const queryParams = new URLSearchParams({
     split: 'test',
     config: 'default',
   });
@@ -142,10 +142,6 @@ export function parseDatasetPath(path: string): {
   const userParams = new URLSearchParams(queryPart || '');
 
   // Merge user params into defaults (user params override defaults)
-  const queryParams = new URLSearchParams();
-  for (const [key, value] of defaultParams) {
-    queryParams.set(key, value);
-  }
   for (const [key, value] of userParams) {
     queryParams.set(key, value);
   }
