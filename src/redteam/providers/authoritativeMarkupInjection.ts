@@ -33,6 +33,7 @@ interface AuthoritativeMarkupInjectionConfig {
 }
 
 export default class AuthoritativeMarkupInjectionProvider implements ApiProvider {
+  readonly usesOriginalProvider = true;
   readonly config: AuthoritativeMarkupInjectionConfig;
 
   id() {

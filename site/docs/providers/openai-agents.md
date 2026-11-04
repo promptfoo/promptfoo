@@ -44,6 +44,10 @@ For a one-off inline-agent eval, run this from an empty directory outside an exi
 npx --yes --package=promptfoo --package=@openai/agents@^0.14.1 promptfoo eval -c /absolute/path/config.yaml --no-cache
 ```
 
+You can also supply OpenAI credentials and endpoints through provider or top-level `env`, `--env-file`, or `config.apiKey` and `config.apiBaseUrl`. Agents with a custom SDK `Model` object keep that model's client.
+
+Gateways with their own credentials or `apiKeyRequired: false` receive an OpenAI key only when selected through `config.apiKey` or `config.apiKeyEnvar`.
+
 ## Basic Usage
 
 ```yaml
@@ -235,6 +239,8 @@ Supported inline session types are:
 | `openai-conversations`        | Server-managed OpenAI Conversations API history                          |
 | `openai-responses-compaction` | Responses API history with automatic compaction over an underlying store |
 
+If the model URL contains credentials, set `session.baseURL` when supplying a separate session `apiKey`.
+
 For more control, export an SDK `Session` instance or a factory from a file:
 
 ```yaml
@@ -389,6 +395,8 @@ export default [
 For `SandboxAgent` workflows, use the SDK's sandbox capability helpers in the exported agent file. Prefer an explicit capability list such as `shell()` plus `skills({ ... })` when you know the model only needs those tools; the SDK's broader default capability set can expose tools that a particular model does not support.
 
 ## Retry Policies
+
+For Promptfoo-created clients, `config.maxRetries` sets the OpenAI client's HTTP retry limit (default: 2). Promptfoo does not restart a failed agent run, which could repeat tools that already completed.
 
 OpenAI Agents SDK v0.7 added opt-in retry settings on `modelSettings.retry`. Promptfoo supports YAML-friendly retry policy presets and passes them to the SDK as runtime callbacks.
 

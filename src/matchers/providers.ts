@@ -104,7 +104,10 @@ export function callGradingProvider<T extends ProviderResponse>(
       return executionContext.rateLimitRegistry.execute(
         provider,
         callProvider,
-        createProviderRateLimitOptions(executionContext.abortSignal),
+        createProviderRateLimitOptions(
+          executionContext.abortSignal,
+          provider.usesOriginalProvider ? callContext?.originalProvider : undefined,
+        ),
       );
     }
 

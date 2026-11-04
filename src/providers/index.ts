@@ -31,9 +31,6 @@ import type {
   ProvidersConfig,
 } from '../types/providers';
 
-type ProviderFunctionWithMetadata = ProviderFunction &
-  Pick<ApiProvider, 'label' | 'prompts' | 'transform' | 'delay' | 'inputs' | 'config'>;
-
 const FORWARDED_PROVIDER_METADATA_KEYS = [
   'label',
   'prompts',
@@ -41,7 +38,12 @@ const FORWARDED_PROVIDER_METADATA_KEYS = [
   'delay',
   'inputs',
   'config',
-] as const satisfies ReadonlyArray<keyof ProviderFunctionWithMetadata>;
+  'handlesOwnRetries',
+  'usesOriginalProvider',
+] as const satisfies ReadonlyArray<keyof ApiProvider>;
+
+type ProviderFunctionWithMetadata = ProviderFunction &
+  Pick<ApiProvider, (typeof FORWARDED_PROVIDER_METADATA_KEYS)[number]>;
 
 function createProviderFromFunction(
   provider: ProviderFunctionWithMetadata,
@@ -102,6 +104,7 @@ async function createApiProvider(
   context: LoadApiProviderContext,
   completeTemplateEnv?: EnvOverrides,
   callerEnv?: EnvOverrides,
+  originalEnvLayers?: (EnvOverrides | undefined)[],
 ): Promise<ApiProvider> {
   const { options = {}, basePath, env } = context;
 
@@ -121,10 +124,16 @@ async function createApiProvider(
   // like {{ vars.* }} for per-test customization at callApi() time
   const renderedConfig = options.config ? renderTemplate(options.config) : undefined;
   const renderedId = options.id ? renderTemplate(options.id) : undefined;
+  // An outer wrapper may contain proxy aliases in different scopes before the
+  // concrete provider is known. Preserve their precedence until resolving it.
+  const envLayers =
+    originalEnvLayers &&
+    /^(?:openai:agents(?::|$)|(?:google|palm):live:)/.test(renderedProviderPath)
+      ? originalEnvLayers
+      : [env, options.env];
   const mergedEnv = mergeProviderEnv(
     { id: renderedProviderPath, config: renderedConfig },
-    env,
-    options.env,
+    ...envLayers,
   );
 
   // Named selectors use the complete namespace, not implicit native-alias pruning.
@@ -206,7 +215,15 @@ async function createApiProvider(
     };
 
     const provider = await cliState.withEnv(mergedOptions.env, () =>
-      createApiProvider(cloudProvider.id, mergedContext, cloudTemplateEnv),
+      createApiProvider(
+        cloudProvider.id,
+        mergedContext,
+        cloudTemplateEnv,
+        undefined,
+        originalEnvLayers
+          ? [cloudProvider.env, ...originalEnvLayers]
+          : [env, cloudProvider.env, options.env],
+      ),
     );
     // Preserve the target already fetched above for per-evaluation grading context.
     provider.config ??= {};
@@ -268,6 +285,10 @@ async function createApiProvider(
           },
         },
         fileTemplateEnv,
+        undefined,
+        originalEnvLayers
+          ? [fileContent.env, ...originalEnvLayers]
+          : [env, fileContent.env, callerEnv, options.env],
       ),
     );
   }

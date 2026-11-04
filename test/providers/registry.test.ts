@@ -70,6 +70,19 @@ vi.mock('../../src/redteam/remoteGeneration', async (importOriginal) => {
 });
 
 describe('Provider Registry', () => {
+  it.each(['openai:agents-api:fixture', 'openai:chat:fixture', 'openai:codex-sdk'])(
+    'does not apply Agents SDK proxy merging to %s',
+    (providerPath) => {
+      expect(
+        mergeProviderEnv(
+          providerPath,
+          { https_proxy: 'http://suite.example:8080' },
+          { HTTPS_PROXY: '' },
+        ),
+      ).toEqual({ https_proxy: 'http://suite.example:8080', HTTPS_PROXY: '' });
+    },
+  );
+
   describe('OpenAI Decisions', () => {
     it.each([
       ['openai:decisions:gpt-6-luna', undefined, 'gpt-6-luna'],

@@ -1190,7 +1190,10 @@ async function callActiveProvider({
       ? await rateLimitRegistry.execute(
           activeProvider,
           callApi,
-          createProviderRateLimitOptions(abortSignal),
+          createProviderRateLimitOptions(
+            abortSignal,
+            activeProvider.usesOriginalProvider ? originalProvider : undefined,
+          ),
         )
       : await callApi();
   } catch (error) {

@@ -41,14 +41,16 @@ export function isRateLimitWrapped(provider: ApiProvider): boolean {
 }
 
 /**
- * Create rate limit detection options for ProviderResponse.
+ * Create rate-limit detection and retry options for ProviderResponse.
  * Shared between providerWrapper and evaluator for consistency.
  */
 export function createProviderRateLimitOptions(
   abortSignal?: AbortSignal,
+  originalProvider?: ApiProvider,
 ): RateLimitExecuteOptions<ProviderResponse> {
   return {
     ...(abortSignal && { abortSignal }),
+    handlesOwnRetries: originalProvider?.handlesOwnRetries,
     // Provider errors are values carrying output, usage and HTTP metadata.
     // Keep that evidence when the scheduler has no retries left.
     onRateLimitExhausted: (result, error) =>
@@ -146,7 +148,10 @@ export function wrapProviderWithRateLimiting(
                 }
               : options,
           ),
-        createProviderRateLimitOptions(options?.abortSignal),
+        createProviderRateLimitOptions(
+          options?.abortSignal,
+          provider.usesOriginalProvider ? context?.originalProvider : undefined,
+        ),
       );
     },
   };

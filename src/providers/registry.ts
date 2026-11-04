@@ -138,6 +138,12 @@ function getProviderEnvAliasGroups(
   providerPath: string,
   config?: ProviderOptions['config'],
 ): readonly (readonly string[])[] {
+  if (/^openai:agents(?::|$)/.test(providerPath)) {
+    return ['HTTP_PROXY', 'HTTPS_PROXY', 'ALL_PROXY', 'NO_PROXY'].map((key) => [
+      key.toLowerCase(),
+      key,
+    ]);
+  }
   if (
     config?.vertexai === true &&
     /^(?:google|palm):(?:(?:interactions:)?gemini-omni-flash-preview$|(?:image:)?[^:]*-image)/.test(
@@ -274,9 +280,21 @@ export function mergeProviderEnv(
     }
     merged ??= {};
     for (const aliases of aliasGroups) {
-      // Empty entries retain their existing per-variable meaning; a non-empty
-      // alias selects this scope without retaining a conflicting lower alias.
-      if (aliases.some((key) => layer[key])) {
+      // Credential tuples and proxy case aliases select a scope even when empty.
+      // Other aliases preserve their existing per-name empty masks.
+      const selectsScope =
+        aliases.includes('AWS_ACCESS_KEY_ID') ||
+        aliases.includes('AZURE_CLIENT_ID') ||
+        aliases.some((key) => key.endsWith('_PROXY'));
+      if (
+        aliases.some((key) =>
+          selectsScope
+            ? layer[key] !== undefined
+            : /^(?:google|palm|vertex):/.test(providerPath) && key.endsWith('API_KEY')
+              ? layer[key]?.trim()
+              : layer[key],
+        )
+      ) {
         for (const key of aliases) {
           delete merged[key];
         }

@@ -58,6 +58,7 @@ export interface RateLimitRegistryRef {
     provider: ApiProvider,
     callFn: (onResponseHeaders?: CallApiOptionsParams['onResponseHeaders']) => Promise<T>,
     options?: {
+      handlesOwnRetries?: boolean;
       abortSignal?: AbortSignal;
       getHeaders?: (result: T) => Record<string, string> | undefined;
       isRateLimited?: (result: T | undefined, error?: Error) => boolean;

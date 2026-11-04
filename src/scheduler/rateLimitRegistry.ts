@@ -117,7 +117,8 @@ export class RateLimitRegistry extends EventEmitter {
           isRateLimited: options?.isRateLimited,
           canRetry: () => !nestedCallStarted,
           getRetryAfter: options?.getRetryAfter,
-          maxRetriesOverride: provider.handlesOwnRetries ? 0 : providerMaxRetries,
+          maxRetriesOverride:
+            provider.handlesOwnRetries || options?.handlesOwnRetries ? 0 : providerMaxRetries,
         },
       );
 
