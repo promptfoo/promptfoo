@@ -215,6 +215,5 @@ export async function partitionReviewCommentsByDiff(
   context: PullRequestContext,
   comments: Comment[],
 ) {
-  const octokit = github.getOctokit(token);
-  return partitionReviewCommentsWithOctokit(octokit, context, comments);
+  return partitionReviewCommentsWithOctokit(github.getOctokit(token), context, comments);
 }

@@ -21,13 +21,11 @@ import { scanResponseToSarif } from '../../src/codeScan/util/sarif';
 import {
   CodeScanSeverity,
   type Comment,
-  type FileChange,
   FileChangeStatus,
   formatSeverity,
   type PullRequestContext,
   type ScanResponse,
 } from '../../src/types/codeScan';
-import { getGitHubOIDCToken } from './auth';
 import { generateConfigFile } from './config';
 import {
   assertCurrentPRHead,
@@ -39,8 +37,8 @@ import {
 interface ActionInputs {
   apiHost: string;
   minimumSeverity: string;
-  configPath: string;
   diffsOnly: boolean;
+  configPath: string;
   guidanceText: string;
   guidanceFile: string;
   githubToken: string;
@@ -70,59 +68,6 @@ function formatError(error: unknown): string {
 }
 
 const DEFAULT_MINIMUM_SEVERITY = 'medium';
-const DEFAULT_API_HOST = 'https://api.promptfoo.app';
-
-/**
- * Resolve the effective minimum severity from the two supported inputs.
- *
- * The two inputs do NOT carry defaults in `action.yml`. That keeps
- * `core.getInput()` returning `''` when a workflow has not set the input,
- * which is what lets a workflow that only sets the alias (`minimum-severity`)
- * actually take effect. Precedence is:
- *
- *   1. `min-severity` if set
- *   2. `minimum-severity` if set
- *   3. fallback to `DEFAULT_MINIMUM_SEVERITY`
- *
- * If both are set to different values, `min-severity` wins and a warning is
- * emitted so the workflow author can collapse the inputs.
- */
-function resolveMinimumSeverityInput(): string {
-  const primary = core.getInput('min-severity').trim().toLowerCase();
-  const alias = core.getInput('minimum-severity').trim().toLowerCase();
-
-  if (primary && alias && primary !== alias) {
-    core.warning(
-      `Both min-severity (${primary}) and minimum-severity (${alias}) are set; using min-severity. minimum-severity is an alias and should only be set when min-severity is unset.`,
-    );
-  }
-
-  return primary || alias || DEFAULT_MINIMUM_SEVERITY;
-}
-
-function resolveDiffsOnlyInput(): boolean {
-  return core.getInput('diffs-only').trim() ? core.getBooleanInput('diffs-only') : false;
-}
-
-function warnIgnoredInputsWhenConfigPathSet(configPath: string): void {
-  if (!configPath) {
-    return;
-  }
-
-  const ignoredInputs = [
-    'min-severity',
-    'minimum-severity',
-    'diffs-only',
-    'guidance',
-    'guidance-file',
-  ].filter((name) => core.getInput(name).trim());
-
-  if (ignoredInputs.length > 0) {
-    core.warning(
-      `config-path supplies scan policy; ignoring Action input${ignoredInputs.length === 1 ? '' : 's'}: ${ignoredInputs.join(', ')}`,
-    );
-  }
-}
 
 // Exact versions only (optionally with a prerelease suffix). Anything looser — a range,
 // a dist-tag, a git/URL spec, or an extra npm flag — must be rejected because the value
@@ -140,39 +85,6 @@ const EXACT_SEMVER_PATTERN = new RegExp(
 );
 // semver's own MAX_LENGTH; also bounds regex work on hostile input.
 const MAX_VERSION_LENGTH = 256;
-
-function resolvePromptfooVersionInput(): string {
-  const override = core.getInput('promptfoo-version').trim();
-  if (!override) {
-    return defaultPromptfooVersion;
-  }
-  if (override.length > MAX_VERSION_LENGTH || !EXACT_SEMVER_PATTERN.test(override)) {
-    throw new Error(
-      `Invalid promptfoo-version "${override}": expected an exact version like 0.121.0`,
-    );
-  }
-  return override;
-}
-
-function getActionInputs(): ActionInputs {
-  const configPath = core.getInput('config-path').trim();
-  warnIgnoredInputsWhenConfigPathSet(configPath);
-
-  return {
-    apiHost: core.getInput('api-host').trim() || DEFAULT_API_HOST,
-    minimumSeverity: configPath ? DEFAULT_MINIMUM_SEVERITY : resolveMinimumSeverityInput(),
-    configPath,
-    diffsOnly: configPath ? false : resolveDiffsOnlyInput(),
-    guidanceText: core.getInput('guidance'),
-    guidanceFile: core.getInput('guidance-file'),
-    githubToken: core.getInput('github-token', { required: true }),
-    enableForkPrs: core.getBooleanInput('enable-fork-prs'),
-    // core.getInput returns '' when unset; normalize so a falsy check at the call site
-    // doesn't have to special-case the empty-string sentinel.
-    sarifOutputPath: core.getInput('sarif-output-path').trim() || undefined,
-    promptfooVersion: resolvePromptfooVersionInput(),
-  };
-}
 
 const SUBPROCESS_ENV_EXCLUSIONS = [
   'ACTIONS_ID_TOKEN_REQUEST_TOKEN',
@@ -208,106 +120,6 @@ function createSubprocessEnv(): Record<string, string> {
   return env;
 }
 
-function createScanEnv(oidcToken: string | undefined): Record<string, string> {
-  const env = createSubprocessEnv();
-  if (oidcToken) {
-    env.GITHUB_OIDC_TOKEN = oidcToken;
-  }
-  return env;
-}
-
-function loadGuidance(inputs: ActionInputs): string | undefined {
-  if (inputs.configPath) {
-    return undefined;
-  }
-
-  if (inputs.guidanceText && inputs.guidanceFile) {
-    throw new Error('Cannot specify both guidance and guidance-file inputs');
-  }
-
-  if (inputs.guidanceText) {
-    return inputs.guidanceText;
-  }
-
-  if (!inputs.guidanceFile) {
-    return undefined;
-  }
-
-  try {
-    const guidance = fs.readFileSync(inputs.guidanceFile, 'utf-8');
-    core.info(`📖 Loaded guidance from: ${inputs.guidanceFile}`);
-    return guidance;
-  } catch (error) {
-    throw new Error(`Failed to read guidance file: ${formatError(error)}`);
-  }
-}
-
-function isSetupPR(files: FileChange[]): boolean {
-  const setupWorkflowPath = '.github/workflows/promptfoo-code-scan.yml';
-  return (
-    files.length === 1 &&
-    files[0].path === setupWorkflowPath &&
-    files[0].status === FileChangeStatus.ADDED
-  );
-}
-
-function getCurrentRepositoryFullName(): string {
-  const repository = github.context.payload.repository as { full_name?: string } | undefined;
-  return repository?.full_name || `${github.context.repo.owner}/${github.context.repo.repo}`;
-}
-
-function isPullRequestFromFork(): boolean {
-  const pullRequest = github.context.payload.pull_request as PullRequestForkPayload | undefined;
-  if (!pullRequest) {
-    return false;
-  }
-
-  const headRepoFullName = pullRequest?.head?.repo?.full_name;
-  const baseRepoFullName = pullRequest?.base?.repo?.full_name || getCurrentRepositoryFullName();
-
-  if (!headRepoFullName || !baseRepoFullName) {
-    core.warning(
-      'Unable to determine PR source repository from GitHub event payload; treating it as a fork PR',
-    );
-    return true;
-  }
-
-  return headRepoFullName !== baseRepoFullName;
-}
-
-function shouldSkipForkPullRequest(enableForkPrs: boolean): boolean {
-  return !enableForkPrs && isPullRequestFromFork();
-}
-
-async function authenticateWithOidc(): Promise<string | undefined> {
-  try {
-    const oidcToken = await getGitHubOIDCToken('promptfoo');
-    core.info('🔐 Got OIDC token for server authentication');
-    return oidcToken;
-  } catch (error) {
-    // OIDC tokens are not available for fork PRs (GitHub security restriction)
-    // For fork PRs, the server will use PR-based authentication instead
-    core.info(`OIDC token not available: ${formatError(error)}`);
-    core.info('For fork PRs, this is expected. Authentication will use PR context instead.');
-    return undefined;
-  }
-}
-
-function resolveConfigPath(
-  configPath: string,
-  minimumSeverity: string,
-  guidance: string | undefined,
-  diffsOnly: boolean,
-): string {
-  if (configPath) {
-    return configPath;
-  }
-
-  const generatedConfigPath = generateConfigFile(minimumSeverity, guidance, diffsOnly);
-  core.info(`📝 Generated temporary config at ${generatedConfigPath}`);
-  return generatedConfigPath;
-}
-
 async function getBaseBranch(githubToken: string, context: PullRequestContext): Promise<string> {
   if (process.env.GITHUB_BASE_REF) {
     return process.env.GITHUB_BASE_REF;
@@ -315,8 +127,7 @@ async function getBaseBranch(githubToken: string, context: PullRequestContext): 
 
   // For workflow_dispatch, fetch PR details to get actual base branch
   core.info('📥 Fetching PR details to determine base branch...');
-  const octokit = github.getOctokit(githubToken);
-  const { data: pr } = await octokit.rest.pulls.get({
+  const { data: pr } = await github.getOctokit(githubToken).rest.pulls.get({
     owner: context.owner,
     repo: context.repo,
     pull_number: context.number,
@@ -324,99 +135,6 @@ async function getBaseBranch(githubToken: string, context: PullRequestContext): 
 
   core.info(`✅ PR targets base branch: ${pr.base.ref}`);
   return pr.base.ref;
-}
-
-function getGitCommand(): string {
-  const gitPath = resolveSafePathExecutables(
-    process.platform === 'win32' ? ['git.exe'] : ['git'],
-  ).next().value?.executable;
-  if (!gitPath) {
-    throw new Error('Git not found outside the checkout; install Git and add it to PATH');
-  }
-  return `"${gitPath}"`;
-}
-
-function createGitEnv(): Record<string, string> {
-  const env = createSubprocessEnv();
-  // Keep helper selection, repository selection, and configuration local to this invocation.
-  for (const key of Object.keys(env)) {
-    if (key.toUpperCase().startsWith('GIT_')) {
-      delete env[key];
-    }
-  }
-  return {
-    ...env,
-    GIT_CONFIG_GLOBAL: os.devNull,
-    GIT_CONFIG_NOSYSTEM: '1',
-    GIT_TERMINAL_PROMPT: '0',
-  };
-}
-
-async function fetchBaseBranch(baseBranch: string, githubToken: string): Promise<void> {
-  core.info(`📥 Fetching base branch: ${baseBranch}...`);
-
-  try {
-    const basicAuth = Buffer.from(`x-access-token:${githubToken}`).toString('base64');
-    await exec.exec(getGitCommand(), ['fetch', 'origin', `${baseBranch}:${baseBranch}`], {
-      env: {
-        ...createGitEnv(),
-        GIT_CONFIG_COUNT: '3',
-        GIT_CONFIG_KEY_0: 'http.https://github.com/.extraheader',
-        GIT_CONFIG_VALUE_0: '',
-        GIT_CONFIG_KEY_1: 'http.https://github.com/.extraheader',
-        GIT_CONFIG_VALUE_1: `AUTHORIZATION: basic ${basicAuth}`,
-        GIT_CONFIG_KEY_2: 'core.hooksPath',
-        GIT_CONFIG_VALUE_2: '/dev/null',
-      },
-    });
-    core.info(`✅ Base branch ${baseBranch} fetched successfully`);
-  } catch (error) {
-    core.warning(`Failed to fetch base branch ${baseBranch}: ${formatError(error)}`);
-    core.warning('Git diff may fail if base branch is not available');
-  }
-}
-
-async function assertWorkspaceHead(context: PullRequestContext): Promise<void> {
-  let output = '';
-  const exitCode = await exec.exec(getGitCommand(), ['rev-parse', 'HEAD'], {
-    env: createGitEnv(),
-    listeners: {
-      stdout: (data: Buffer) => {
-        output += data.toString();
-      },
-    },
-    ignoreReturnCode: true,
-  });
-  const workspaceHead = output.trim();
-  if (exitCode !== 0 || !workspaceHead || workspaceHead !== context.sha) {
-    throw new Error(
-      `Workspace HEAD (${workspaceHead || 'unknown'}) does not match PR head ${context.sha}`,
-    );
-  }
-}
-
-function buildCliArgs(
-  apiHost: string,
-  configPath: string,
-  baseBranch: string,
-  context: PullRequestContext,
-): string[] {
-  const repoPath = process.env.GITHUB_WORKSPACE || process.cwd();
-  return [
-    'code-scans',
-    'run',
-    repoPath,
-    ...(apiHost ? ['--api-host', apiHost] : []),
-    '--config',
-    configPath,
-    '--base',
-    baseBranch,
-    '--compare',
-    'HEAD',
-    '--json',
-    '--github-pr',
-    `${context.owner}/${context.repo}#${context.number}`,
-  ];
 }
 
 function createMockScanResponse(): ScanResponse {
@@ -451,14 +169,6 @@ function createMockScanResponse(): ScanResponse {
 
   core.info('✅ Mock scan completed successfully');
   return scanResponse;
-}
-
-function parseScanOutput(scanOutput: string): ScanResponse {
-  try {
-    return JSON.parse(scanOutput);
-  } catch (error) {
-    throw new Error(`Failed to parse CLI output as JSON: ${formatError(error)}`);
-  }
 }
 
 // Owns every hardening decision for the scanner install as one unit so a future npm
@@ -500,6 +210,221 @@ function getNpmCliCandidates(directory: string): string[] {
     // Linux/macOS Node distributions install npm under the sibling lib directory.
     path.join(directory, '..', 'lib', 'node_modules', 'npm', 'bin', 'npm-cli.js'),
   ];
+}
+
+async function installPromptfooCli(promptfooVersion: string, installDir: string): Promise<string> {
+  const installCwd = process.env.RUNNER_TEMP || os.tmpdir();
+
+  // Isolate npm configuration from the checkout and runner. Separate empty user
+  // and global config paths prevent npm from reading either config file.
+  // Keep workflow npm settings available to the scanner's nested npx calls.
+  const env = createSubprocessEnv();
+  // The isolated install always uses the public registry; inherited private-registry
+  // credentials are unnecessary here but remain available to the scanner's nested npx.
+  delete env.NODE_AUTH_TOKEN;
+  delete env.NPM_TOKEN;
+  for (const key of Object.keys(env)) {
+    if (key.toLowerCase().startsWith('npm_config_')) {
+      delete env[key];
+    }
+  }
+  const npmCliPath = resolveNpmCliPath();
+
+  core.info(`📦 Installing promptfoo@${promptfooVersion}...`);
+  await exec.exec(
+    process.execPath,
+    [
+      npmCliPath,
+      'install',
+      '--prefix',
+      installDir,
+      `promptfoo@${promptfooVersion}`,
+      '--ignore-scripts',
+      '--registry=https://registry.npmjs.org/',
+      '--userconfig',
+      path.join(installDir, 'user'),
+      '--globalconfig',
+      path.join(installDir, 'global'),
+    ],
+    { env, cwd: installCwd },
+  );
+  core.info('✅ Promptfoo installed successfully');
+
+  const packageDir = path.join(installDir, 'node_modules', 'promptfoo');
+  const packageManifest = JSON.parse(
+    fs.readFileSync(path.join(packageDir, 'package.json'), 'utf-8'),
+  ) as {
+    bin?: string | Record<string, unknown>;
+  };
+  const relativeEntrypoint =
+    typeof packageManifest.bin === 'string' ? packageManifest.bin : packageManifest.bin?.promptfoo;
+
+  if (typeof relativeEntrypoint !== 'string' || !relativeEntrypoint) {
+    throw new Error('Installed promptfoo package does not declare a promptfoo executable');
+  }
+
+  const entrypoint = path.resolve(packageDir, relativeEntrypoint);
+  if (!isFileWithinDirectory(packageDir, entrypoint)) {
+    throw new Error('Installed promptfoo executable must remain within its package directory');
+  }
+
+  // npm generally rejects unsafe tar entries, but canonicalizing also prevents a
+  // package-internal symlink from redirecting the OIDC-bearing scanner elsewhere.
+  const canonicalPackageDir = fs.realpathSync(packageDir);
+  const canonicalEntrypoint = fs.realpathSync(entrypoint);
+  if (!isFileWithinDirectory(canonicalPackageDir, canonicalEntrypoint)) {
+    throw new Error('Installed promptfoo executable must remain within its package directory');
+  }
+
+  return canonicalEntrypoint;
+}
+
+function buildCommentBody(comment: Comment): string {
+  let body = formatSeverity(comment.severity) + comment.finding;
+
+  if (comment.fix) {
+    body += `\n\n<details>\n<summary>💡 Suggested Fix</summary>\n\n${comment.fix}\n</details>`;
+  }
+
+  if (comment.aiAgentPrompt) {
+    body += `\n\n<details>\n<summary>🤖 AI Agent Prompt</summary>\n\n${comment.aiAgentPrompt}\n</details>`;
+  }
+
+  return body;
+}
+
+function toReviewComment(comment: Comment) {
+  // GitHub's createReview API requires start_line < line for multi-line comments and
+  // rejects the entire review (422) otherwise. Comments routed here are clamped upstream
+  // by partitionReviewCommentsByDiff, but guard explicitly so this never depends on a
+  // caller having run that clamp. The ternary also narrows startLine to `number`,
+  // dropping the null/undefined the API type rejects.
+  const startLine =
+    comment.startLine && comment.line && comment.startLine < comment.line
+      ? comment.startLine
+      : undefined;
+  return {
+    path: comment.file!,
+    line: comment.line || undefined,
+    start_line: startLine,
+    side: 'RIGHT' as const,
+    start_side: startLine ? ('RIGHT' as const) : undefined,
+    body: buildCommentBody(comment),
+  };
+}
+
+// The shared symlink-safe containment check lives at src/util/isPathWithinDir.ts, but
+// importing it transitively pulls src/logger.ts (and the winston stack) into this bundle,
+// adding ~800KB to every action download. The inline check below covers the same threat
+// model — path-traversal via `..` plus symlink escape via post-mkdir realpath — without
+// the bundle cost.
+function isPathWithinOrEqualTo(child: string, parent: string): boolean {
+  // Case-sensitive comparison. Both `child` and `parent` are produced by path.resolve on
+  // the same workspace prefix in real use, so casing always matches. An earlier version
+  // lowercased on darwin/win32 to handle hypothetical case-mismatched user input, but
+  // that opened a bypass on case-sensitive APFS volumes (where /Path/A and /path/a are
+  // distinct on disk yet would compare equal here). The post-mkdir realpath check in
+  // emitSarifOutput canonicalizes against the actual filesystem, which is the right place
+  // to handle case folding if the underlying volume does it.
+  const pWithSep = parent.endsWith(path.sep) ? parent : parent + path.sep;
+  return child === parent || child.startsWith(pWithSep);
+}
+
+function lstatOrNull(p: string): fs.Stats | null {
+  try {
+    return fs.lstatSync(p);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException)?.code === 'ENOENT') {
+      return null;
+    }
+    throw error;
+  }
+}
+
+function emitSarifOutput(scanResponse: ScanResponse, rawPath: string): void {
+  // SARIF output is supplementary — never sink an otherwise-successful scan over a write failure.
+  let resolved: string;
+  try {
+    // runCodeScan input normalization maps empty/whitespace to undefined, and the call site
+    // skips emitSarifOutput entirely in that case, so we don't repeat the empty check here.
+    const workspace = process.env.GITHUB_WORKSPACE || process.cwd();
+    resolved = path.resolve(workspace, rawPath);
+    if (resolved === workspace || !isPathWithinOrEqualTo(resolved, workspace)) {
+      throw new Error(
+        `sarif-output-path "${rawPath}" resolves outside GITHUB_WORKSPACE; refusing to write`,
+      );
+    }
+  } catch (error) {
+    core.warning(formatError(error));
+    return;
+  }
+
+  try {
+    // Trailing newline for POSIX-text-file friendliness; some downstream tools require it.
+    const body = `${JSON.stringify(scanResponseToSarif(scanResponse), null, 2)}\n`;
+    const parent = path.dirname(resolved);
+
+    // Defense before mkdir: if any existing ancestor of `parent` is a symlink that
+    // resolves outside the workspace, mkdir -p would follow it and create directories
+    // outside the sandbox. Refuse before mutating the filesystem.
+    const realWorkspace = fs.realpathSync(process.env.GITHUB_WORKSPACE || process.cwd());
+    let realAncestor: string;
+    // Walk up from `parent` until realpathSync resolves successfully, returning the canonical
+    // path of the deepest existing ancestor. Used to detect symlinks anywhere in the parent
+    // chain *before* mkdir -p has a chance to follow them out of the workspace.
+    let current = parent;
+    while (true) {
+      try {
+        realAncestor = fs.realpathSync(current);
+        break;
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException)?.code !== 'ENOENT') {
+          throw error;
+        }
+        const next = path.dirname(current);
+        if (next === current) {
+          throw new Error(`No existing ancestor for "${parent}"`);
+        }
+        current = next;
+      }
+    }
+    if (!isPathWithinOrEqualTo(realAncestor, realWorkspace)) {
+      throw new Error(
+        `sarif-output-path "${resolved}" resolves outside GITHUB_WORKSPACE via symlink; refusing to write`,
+      );
+    }
+
+    fs.mkdirSync(parent, { recursive: true });
+
+    // Defense before write: if `resolved` already exists as a symlink, refuse —
+    // writeFileSync follows symlinks and would write through to the link target.
+    if (lstatOrNull(resolved)?.isSymbolicLink()) {
+      throw new Error(
+        `sarif-output-path "${resolved}" is an existing symlink; refusing to overwrite`,
+      );
+    }
+
+    // Close the TOCTOU window between the lstat check and the write: on POSIX, opening with
+    // O_NOFOLLOW makes the call fail atomically if `resolved` was raced into a symlink. On
+    // Windows O_NOFOLLOW is not exposed, so we fall back to plain writeFileSync (the lstat
+    // check above is the only defense there — acceptable given the Actions threat model).
+    const noFollow = (fs.constants as { O_NOFOLLOW?: number }).O_NOFOLLOW;
+    if (typeof noFollow === 'number') {
+      const flags = fs.constants.O_WRONLY | fs.constants.O_CREAT | fs.constants.O_TRUNC | noFollow;
+      const fd = fs.openSync(resolved, flags, 0o644);
+      try {
+        fs.writeSync(fd, body);
+      } finally {
+        fs.closeSync(fd);
+      }
+    } else {
+      fs.writeFileSync(resolved, body);
+    }
+    core.setOutput('sarif-path', resolved);
+    core.info(`📝 Wrote SARIF output to ${resolved}`);
+  } catch (error) {
+    core.warning(`Failed to write SARIF output to "${resolved}": ${formatError(error)}`);
+  }
 }
 
 function resolveSafeNpmCliCandidate(
@@ -599,159 +524,95 @@ function resolveNpmCliPath(): string {
   throw new Error('npm CLI not found; install npm or configure Node.js with actions/setup-node');
 }
 
-function resolveInstalledPromptfooEntrypoint(installDir: string): string {
-  const packageDir = path.join(installDir, 'node_modules', 'promptfoo');
-  const packageManifest = JSON.parse(
-    fs.readFileSync(path.join(packageDir, 'package.json'), 'utf-8'),
-  ) as {
-    bin?: string | Record<string, unknown>;
-  };
-  const relativeEntrypoint =
-    typeof packageManifest.bin === 'string' ? packageManifest.bin : packageManifest.bin?.promptfoo;
-
-  if (typeof relativeEntrypoint !== 'string' || !relativeEntrypoint) {
-    throw new Error('Installed promptfoo package does not declare a promptfoo executable');
+async function authenticateWithOidc(): Promise<string | undefined> {
+  try {
+    const oidcToken = await getGitHubOIDCToken();
+    core.info('🔐 Got OIDC token for server authentication');
+    return oidcToken;
+  } catch (error) {
+    // OIDC tokens are not available for fork PRs (GitHub security restriction)
+    // For fork PRs, the server will use PR-based authentication instead
+    core.info(`OIDC token not available: ${formatError(error)}`);
+    core.info('For fork PRs, this is expected. Authentication will use PR context instead.');
+    return undefined;
   }
-
-  const entrypoint = path.resolve(packageDir, relativeEntrypoint);
-  if (!isFileWithinDirectory(packageDir, entrypoint)) {
-    throw new Error('Installed promptfoo executable must remain within its package directory');
-  }
-
-  // npm generally rejects unsafe tar entries, but canonicalizing also prevents a
-  // package-internal symlink from redirecting the OIDC-bearing scanner elsewhere.
-  const canonicalPackageDir = fs.realpathSync(packageDir);
-  const canonicalEntrypoint = fs.realpathSync(entrypoint);
-  if (!isFileWithinDirectory(canonicalPackageDir, canonicalEntrypoint)) {
-    throw new Error('Installed promptfoo executable must remain within its package directory');
-  }
-
-  return canonicalEntrypoint;
 }
 
-async function installPromptfooCli(promptfooVersion: string): Promise<string> {
-  const installCwd = process.env.RUNNER_TEMP || os.tmpdir();
+async function getGitHubOIDCToken(): Promise<string> {
+  try {
+    return await core.getIDToken('promptfoo');
+  } catch (error) {
+    throw new Error(`Failed to get GitHub OIDC token: ${formatError(error)}`);
+  }
+}
 
-  // npm reads its registry (and other config) from both env vars and user/global
-  // .npmrc files. A PR-controlled step running before this action can poison either:
-  // set npm_config_registry via $GITHUB_ENV, or write `registry=https://attacker/` to
-  // $HOME/.npmrc — redirecting this exact install to an attacker registry whose
-  // promptfoo tarball then runs as the scanner. Close both channels for the install:
-  //  - strip every npm_config_*/NPM_CONFIG_* env var, and
-  //  - point --userconfig/--globalconfig at fresh empty files so no on-disk .npmrc is
-  //    consulted (two distinct paths: npm rejects loading one file as both).
-  // The pinned version therefore resolves from the explicitly selected public registry.
-  // This deliberately bypasses runner-admin npm mirrors configured via env or .npmrc
-  // for this one install (the SaaS scan already requires public egress); the scan
-  // subprocess keeps workflow-provided npm config because its nested npx (MCP)
-  // invocations rely on it.
+function getGitCommand(): string {
+  const gitPath = resolveSafePathExecutables(
+    process.platform === 'win32' ? ['git.exe'] : ['git'],
+  ).next().value?.executable;
+  if (!gitPath) {
+    throw new Error('Git not found outside the checkout; install Git and add it to PATH');
+  }
+  return `"${gitPath}"`;
+}
+
+function createGitEnv(): Record<string, string> {
   const env = createSubprocessEnv();
-  // The isolated install always uses the public registry; inherited private-registry
-  // credentials are unnecessary here but remain available to the scanner's nested npx.
-  delete env.NODE_AUTH_TOKEN;
-  delete env.NPM_TOKEN;
+  // Keep helper selection, repository selection, and configuration local to this invocation.
   for (const key of Object.keys(env)) {
-    if (key.toLowerCase().startsWith('npm_config_')) {
+    if (key.toUpperCase().startsWith('GIT_')) {
       delete env[key];
     }
   }
-  const installDir = fs.mkdtempSync(path.join(installCwd, 'promptfoo-install-'));
-  const emptyUserConfig = path.join(installDir, 'user');
-  const emptyGlobalConfig = path.join(installDir, 'global');
-  const npmCliPath = resolveNpmCliPath();
-
-  core.info(`📦 Installing promptfoo@${promptfooVersion}...`);
-  await exec.exec(
-    process.execPath,
-    [
-      npmCliPath,
-      'install',
-      '--prefix',
-      installDir,
-      `promptfoo@${promptfooVersion}`,
-      '--ignore-scripts',
-      '--registry=https://registry.npmjs.org/',
-      '--userconfig',
-      emptyUserConfig,
-      '--globalconfig',
-      emptyGlobalConfig,
-    ],
-    { env, cwd: installCwd },
-  );
-  core.info('✅ Promptfoo installed successfully');
-
-  return resolveInstalledPromptfooEntrypoint(installDir);
+  return {
+    ...env,
+    GIT_CONFIG_GLOBAL: os.devNull,
+    GIT_CONFIG_NOSYSTEM: '1',
+    GIT_TERMINAL_PROMPT: '0',
+  };
 }
 
-async function runPromptfooScan(
-  cliArgs: string[],
-  oidcToken: string | undefined,
-  promptfooVersion: string,
-): Promise<ScanResponse> {
-  const promptfooEntrypoint = await installPromptfooCli(promptfooVersion);
+async function fetchBaseBranch(baseBranch: string, githubToken: string): Promise<void> {
+  core.info(`📥 Fetching base branch: ${baseBranch}...`);
 
-  core.info('🚀 Running promptfoo code-scans run...');
+  try {
+    const basicAuth = Buffer.from(`x-access-token:${githubToken}`).toString('base64');
+    await exec.exec(getGitCommand(), ['fetch', 'origin', `${baseBranch}:${baseBranch}`], {
+      env: {
+        ...createGitEnv(),
+        GIT_CONFIG_COUNT: '3',
+        GIT_CONFIG_KEY_0: 'http.https://github.com/.extraheader',
+        GIT_CONFIG_VALUE_0: '',
+        GIT_CONFIG_KEY_1: 'http.https://github.com/.extraheader',
+        GIT_CONFIG_VALUE_1: `AUTHORIZATION: basic ${basicAuth}`,
+        GIT_CONFIG_KEY_2: 'core.hooksPath',
+        GIT_CONFIG_VALUE_2: '/dev/null',
+      },
+    });
+    core.info(`✅ Base branch ${baseBranch} fetched successfully`);
+  } catch (error) {
+    core.warning(`Failed to fetch base branch ${baseBranch}: ${formatError(error)}`);
+    core.warning('Git diff may fail if base branch is not available');
+  }
+}
 
-  let scanOutput = '';
-  let scanError = '';
-  const scanEnv = createScanEnv(oidcToken);
-
-  const exitCode = await exec.exec(process.execPath, [promptfooEntrypoint, ...cliArgs], {
-    env: scanEnv,
+async function assertWorkspaceHead(context: PullRequestContext): Promise<void> {
+  let output = '';
+  const exitCode = await exec.exec(getGitCommand(), ['rev-parse', 'HEAD'], {
+    env: createGitEnv(),
     listeners: {
       stdout: (data: Buffer) => {
-        scanOutput += data.toString();
-      },
-      stderr: (data: Buffer) => {
-        scanError += data.toString();
+        output += data.toString();
       },
     },
     ignoreReturnCode: true,
   });
-
-  if (exitCode === 0) {
-    core.info('✅ Scan completed successfully');
-    return parseScanOutput(scanOutput);
+  const workspaceHead = output.trim();
+  if (exitCode !== 0 || !workspaceHead || workspaceHead !== context.sha) {
+    throw new Error(
+      `Workspace HEAD (${workspaceHead || 'unknown'}) does not match PR head ${context.sha}`,
+    );
   }
-
-  // Keep compatibility with CLI releases that reported an authorized fork skip as text
-  // while the action and CLI roll out independently.
-  if (`${scanOutput}\n${scanError}`.includes('Fork PR scanning not authorized')) {
-    return {
-      success: true,
-      comments: [],
-      skipReason: FORK_PR_AUTH_SKIP_REASON,
-    };
-  }
-
-  core.error(`CLI exited with code ${exitCode}`);
-  core.error(`Error output: ${scanError}`);
-  throw new Error(`Code scan failed with exit code ${exitCode}`);
-}
-
-function getScanResponse(
-  cliArgs: string[],
-  oidcToken: string | undefined,
-  promptfooVersion: string,
-): Promise<ScanResponse> {
-  if (process.env.ACT === 'true') {
-    return Promise.resolve(createMockScanResponse());
-  }
-  return runPromptfooScan(cliArgs, oidcToken, promptfooVersion);
-}
-
-function buildCommentBody(comment: Comment): string {
-  let body = formatSeverity(comment.severity) + comment.finding;
-
-  if (comment.fix) {
-    body += `\n\n<details>\n<summary>💡 Suggested Fix</summary>\n\n${comment.fix}\n</details>`;
-  }
-
-  if (comment.aiAgentPrompt) {
-    body += `\n\n<details>\n<summary>🤖 AI Agent Prompt</summary>\n\n${comment.aiAgentPrompt}\n</details>`;
-  }
-
-  return body;
 }
 
 function buildGeneralCommentBody(comment: Comment): string {
@@ -765,20 +626,54 @@ function buildGeneralCommentBody(comment: Comment): string {
   return location ? `**${location}**\n\n${body}` : body;
 }
 
-function toReviewComment(comment: Comment) {
-  // GitHub rejects multi-line comments unless start_line is strictly before line.
-  const startLine =
-    comment.startLine && comment.line && comment.startLine < comment.line
-      ? comment.startLine
-      : undefined;
-  return {
-    path: comment.file!,
-    line: comment.line || undefined,
-    start_line: startLine,
-    side: 'RIGHT' as const,
-    start_side: startLine ? ('RIGHT' as const) : undefined,
-    body: buildCommentBody(comment),
-  };
+function resolveDiffsOnlyInput(): boolean {
+  return core.getInput('diffs-only').trim() ? core.getBooleanInput('diffs-only') : false;
+}
+
+function warnIgnoredInputsWhenConfigPathSet(configPath: string): void {
+  if (!configPath) {
+    return;
+  }
+
+  const ignoredInputs = [
+    'min-severity',
+    'minimum-severity',
+    'diffs-only',
+    'guidance',
+    'guidance-file',
+  ].filter((name) => core.getInput(name).trim());
+
+  if (ignoredInputs.length > 0) {
+    core.warning(
+      `config-path supplies scan policy; ignoring Action input${ignoredInputs.length === 1 ? '' : 's'}: ${ignoredInputs.join(', ')}`,
+    );
+  }
+}
+
+function loadGuidance(inputs: ActionInputs): string | undefined {
+  if (inputs.configPath) {
+    return undefined;
+  }
+
+  if (inputs.guidanceText && inputs.guidanceFile) {
+    throw new Error('Cannot specify both guidance and guidance-file inputs');
+  }
+
+  if (inputs.guidanceText) {
+    return inputs.guidanceText;
+  }
+
+  if (!inputs.guidanceFile) {
+    return undefined;
+  }
+
+  try {
+    const guidance = fs.readFileSync(inputs.guidanceFile, 'utf-8');
+    core.info(`📖 Loaded guidance from: ${inputs.guidanceFile}`);
+    return guidance;
+  } catch (error) {
+    throw new Error(`Failed to read guidance file: ${formatError(error)}`);
+  }
 }
 
 async function postReview(
@@ -919,135 +814,6 @@ async function postFallbackComments(
   );
 }
 
-// The shared symlink-safe containment check lives at src/util/isPathWithinDir.ts, but
-// importing it transitively pulls src/logger.ts (and the winston stack) into this bundle,
-// adding ~800KB to every action download. The inline check below covers the same threat
-// model — path-traversal via `..` plus symlink escape via post-mkdir realpath — without
-// the bundle cost.
-function isPathWithinOrEqualTo(child: string, parent: string): boolean {
-  // Case-sensitive comparison. Both `child` and `parent` are produced by path.resolve on
-  // the same workspace prefix in real use, so casing always matches. An earlier version
-  // lowercased on darwin/win32 to handle hypothetical case-mismatched user input, but
-  // that opened a bypass on case-sensitive APFS volumes (where /Path/A and /path/a are
-  // distinct on disk yet would compare equal here). The post-mkdir realpath check in
-  // writeSarifFile canonicalizes against the actual filesystem, which is the right place
-  // to handle case folding if the underlying volume does it.
-  const pWithSep = parent.endsWith(path.sep) ? parent : parent + path.sep;
-  return child === parent || child.startsWith(pWithSep);
-}
-
-function resolveSarifOutputPath(rawPath: string): string {
-  // getActionInputs normalizes empty/whitespace input to undefined and the call site
-  // skips emitSarifOutput entirely in that case, so we don't repeat the empty check here.
-  const workspace = process.env.GITHUB_WORKSPACE || process.cwd();
-  const resolved = path.resolve(workspace, rawPath);
-  if (resolved === workspace || !isPathWithinOrEqualTo(resolved, workspace)) {
-    throw new Error(
-      `sarif-output-path "${rawPath}" resolves outside GITHUB_WORKSPACE; refusing to write`,
-    );
-  }
-  return resolved;
-}
-
-function serializeSarif(scanResponse: ScanResponse): string {
-  // Trailing newline for POSIX-text-file friendliness; some downstream tools require it.
-  return `${JSON.stringify(scanResponseToSarif(scanResponse), null, 2)}\n`;
-}
-
-// Walk up from `p` until realpathSync resolves successfully, returning the canonical
-// path of the deepest existing ancestor. Used to detect symlinks anywhere in the parent
-// chain *before* mkdir -p has a chance to follow them out of the workspace.
-function realpathDeepestExisting(p: string): string {
-  let current = p;
-  while (true) {
-    try {
-      return fs.realpathSync(current);
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException)?.code !== 'ENOENT') {
-        throw error;
-      }
-      const next = path.dirname(current);
-      if (next === current) {
-        throw new Error(`No existing ancestor for "${p}"`);
-      }
-      current = next;
-    }
-  }
-}
-
-function lstatOrNull(p: string): fs.Stats | null {
-  try {
-    return fs.lstatSync(p);
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException)?.code === 'ENOENT') {
-      return null;
-    }
-    throw error;
-  }
-}
-
-function writeSarifFile(resolved: string, body: string): void {
-  const parent = path.dirname(resolved);
-  const workspace = process.env.GITHUB_WORKSPACE || process.cwd();
-
-  // Defense before mkdir: if any existing ancestor of `parent` is a symlink that
-  // resolves outside the workspace, mkdir -p would follow it and create directories
-  // outside the sandbox. Refuse before mutating the filesystem.
-  const realWorkspace = fs.realpathSync(workspace);
-  const realAncestor = realpathDeepestExisting(parent);
-  if (!isPathWithinOrEqualTo(realAncestor, realWorkspace)) {
-    throw new Error(
-      `sarif-output-path "${resolved}" resolves outside GITHUB_WORKSPACE via symlink; refusing to write`,
-    );
-  }
-
-  fs.mkdirSync(parent, { recursive: true });
-
-  // Defense before write: if `resolved` already exists as a symlink, refuse —
-  // writeFileSync follows symlinks and would write through to the link target.
-  if (lstatOrNull(resolved)?.isSymbolicLink()) {
-    throw new Error(
-      `sarif-output-path "${resolved}" is an existing symlink; refusing to overwrite`,
-    );
-  }
-
-  // Close the TOCTOU window between the lstat check and the write: on POSIX, opening with
-  // O_NOFOLLOW makes the call fail atomically if `resolved` was raced into a symlink. On
-  // Windows O_NOFOLLOW is not exposed, so we fall back to plain writeFileSync (the lstat
-  // check above is the only defense there — acceptable given the Actions threat model).
-  const noFollow = (fs.constants as { O_NOFOLLOW?: number }).O_NOFOLLOW;
-  if (typeof noFollow === 'number') {
-    const flags = fs.constants.O_WRONLY | fs.constants.O_CREAT | fs.constants.O_TRUNC | noFollow;
-    const fd = fs.openSync(resolved, flags, 0o644);
-    try {
-      fs.writeSync(fd, body);
-    } finally {
-      fs.closeSync(fd);
-    }
-  } else {
-    fs.writeFileSync(resolved, body);
-  }
-}
-
-function emitSarifOutput(scanResponse: ScanResponse, rawPath: string): void {
-  // SARIF output is supplementary — never sink an otherwise-successful scan over a write failure.
-  let resolved: string;
-  try {
-    resolved = resolveSarifOutputPath(rawPath);
-  } catch (error) {
-    core.warning(formatError(error));
-    return;
-  }
-
-  try {
-    writeSarifFile(resolved, serializeSarif(scanResponse));
-    core.setOutput('sarif-path', resolved);
-    core.info(`📝 Wrote SARIF output to ${resolved}`);
-  } catch (error) {
-    core.warning(`Failed to write SARIF output to "${resolved}": ${formatError(error)}`);
-  }
-}
-
 function emitConfiguredSarifOutput(scanResponse: ScanResponse, inputs: ActionInputs): void {
   if (inputs.sarifOutputPath) {
     emitSarifOutput(scanResponse, inputs.sarifOutputPath);
@@ -1112,36 +878,90 @@ async function handleScanResponse(
   }
 }
 
-function logActCommentPreview(comments: Comment[]): void {
-  if (process.env.ACT !== 'true' || comments.length === 0) {
-    return;
-  }
-
-  core.info('🧪 Running in act - showing comment preview:');
-  comments.forEach((comment: Comment, index: number) => {
-    core.info(`  ${index + 1}. ${comment.file}:${comment.line}`);
-    const preview = comment.fix
-      ? `${comment.finding.substring(0, 80)}... [+ suggested fix]`
-      : comment.finding.substring(0, 100);
-    core.info(`     ${preview}${comment.finding.length > 100 ? '...' : ''}`);
-  });
-}
-
-function cleanupConfig(configPath: string, finalConfigPath: string): void {
-  if (!configPath) {
-    fs.unlinkSync(finalConfigPath);
+async function run(): Promise<void> {
+  try {
+    await runCodeScan();
+  } catch (error) {
+    core.setFailed(formatError(error));
   }
 }
 
 async function runCodeScan(): Promise<void> {
-  const inputs = getActionInputs();
+  const apiHostInput = core.getInput('api-host').trim() || 'https://api.promptfoo.app';
+  const configPath = core.getInput('config-path').trim();
+  warnIgnoredInputsWhenConfigPathSet(configPath);
+  /**
+   * Resolve the effective minimum severity from the two supported inputs.
+   *
+   * The two inputs do NOT carry defaults in `action.yml`. That keeps
+   * `core.getInput()` returning `''` when a workflow has not set the input,
+   * which is what lets a workflow that only sets the alias (`minimum-severity`)
+   * actually take effect. Precedence is:
+   *
+   *   1. `min-severity` if set
+   *   2. `minimum-severity` if set
+   *   3. fallback to `DEFAULT_MINIMUM_SEVERITY`
+   *
+   * If both are set to different values, `min-severity` wins and a warning is
+   * emitted so the workflow author can collapse the inputs.
+   */
 
-  if (shouldSkipForkPullRequest(inputs.enableForkPrs)) {
-    core.info('🔀 Fork PR detected and enable-fork-prs is false; skipping Promptfoo Code Scan');
-    core.info(
-      'A maintainer can trigger a scan by commenting @promptfoo-scanner, or enable fork PR scans with enable-fork-prs: true',
+  const primary = core.getInput('min-severity').trim().toLowerCase();
+  const alias = core.getInput('minimum-severity').trim().toLowerCase();
+
+  if (!configPath && primary && alias && primary !== alias) {
+    core.warning(
+      `Both min-severity (${primary}) and minimum-severity (${alias}) are set; using min-severity. minimum-severity is an alias and should only be set when min-severity is unset.`,
     );
-    return;
+  }
+
+  const inputs: ActionInputs = {
+    apiHost: apiHostInput,
+    minimumSeverity: primary || alias || DEFAULT_MINIMUM_SEVERITY,
+    configPath,
+    diffsOnly: !configPath && resolveDiffsOnlyInput(),
+    guidanceText: core.getInput('guidance'),
+    guidanceFile: core.getInput('guidance-file'),
+    githubToken: core.getInput('github-token', { required: true }),
+    enableForkPrs: core.getBooleanInput('enable-fork-prs'),
+    // core.getInput returns '' when unset; normalize so a falsy check at the call site
+    // doesn't have to special-case the empty-string sentinel.
+    sarifOutputPath: core.getInput('sarif-output-path').trim() || undefined,
+    promptfooVersion: defaultPromptfooVersion,
+  };
+
+  const override = core.getInput('promptfoo-version').trim();
+  if (override) {
+    if (override.length > MAX_VERSION_LENGTH || !EXACT_SEMVER_PATTERN.test(override)) {
+      throw new Error(
+        `Invalid promptfoo-version "${override}": expected an exact version like 0.121.0`,
+      );
+    }
+    inputs.promptfooVersion = override;
+  }
+
+  if (!inputs.enableForkPrs) {
+    const pullRequest = github.context.payload.pull_request as PullRequestForkPayload | undefined;
+    if (pullRequest) {
+      const headRepoFullName = pullRequest?.head?.repo?.full_name;
+      const baseRepoFullName =
+        pullRequest?.base?.repo?.full_name ||
+        (github.context.payload.repository as { full_name?: string } | undefined)?.full_name ||
+        `${github.context.repo.owner}/${github.context.repo.repo}`;
+
+      if (!headRepoFullName || !baseRepoFullName) {
+        core.warning(
+          'Unable to determine PR source repository from GitHub event payload; treating it as a fork PR',
+        );
+      }
+      if (!headRepoFullName || !baseRepoFullName || headRepoFullName !== baseRepoFullName) {
+        core.info('🔀 Fork PR detected and enable-fork-prs is false; skipping Promptfoo Code Scan');
+        core.info(
+          'A maintainer can trigger a scan by commenting @promptfoo-scanner, or enable fork PR scans with enable-fork-prs: true',
+        );
+        return;
+      }
+    }
   }
 
   const guidance = loadGuidance(inputs);
@@ -1155,42 +975,130 @@ async function runCodeScan(): Promise<void> {
   core.info('🔎 Checking if this is a setup PR...');
   const files = await getPRFiles(inputs.githubToken, context);
 
-  if (isSetupPR(files)) {
+  const setupWorkflowPath = '.github/workflows/promptfoo-code-scan.yml';
+  if (
+    files.length === 1 &&
+    files[0].path === setupWorkflowPath &&
+    files[0].status === FileChangeStatus.ADDED
+  ) {
     core.info('✅ Setup PR detected - workflow file will be added on merge');
     return;
   }
 
   core.info('✅ Not a setup PR - proceeding with security scan');
 
-  const oidcToken = await authenticateWithOidc();
-
-  const finalConfigPath = resolveConfigPath(
-    inputs.configPath,
-    inputs.minimumSeverity,
-    guidance,
-    inputs.diffsOnly,
-  );
+  let finalConfigPath = inputs.configPath;
+  const minimumSeverity = inputs.minimumSeverity;
+  if (!finalConfigPath) {
+    finalConfigPath = generateConfigFile(minimumSeverity, guidance, inputs.diffsOnly);
+    core.info(`📝 Generated temporary config at ${finalConfigPath}`);
+  }
 
   try {
     const baseBranch = await getBaseBranch(inputs.githubToken, context);
     await fetchBaseBranch(baseBranch, inputs.githubToken);
 
-    const cliArgs = buildCliArgs(inputs.apiHost, finalConfigPath, baseBranch, context);
-    const scanResponse = await getScanResponse(cliArgs, oidcToken, inputs.promptfooVersion);
+    const apiHost = inputs.apiHost;
+    const cliArgs = [
+      'code-scans',
+      'run',
+      process.env.GITHUB_WORKSPACE || process.cwd(),
+      ...(apiHost ? ['--api-host', apiHost] : []),
+      '--config',
+      finalConfigPath,
+      '--base',
+      baseBranch,
+      '--compare',
+      'HEAD',
+      '--json',
+      '--github-pr',
+      `${context.owner}/${context.repo}#${context.number}`,
+    ];
+
+    const promptfooVersion = inputs.promptfooVersion;
+    async function runPromptfooScan(): Promise<ScanResponse> {
+      const installCwd = process.env.RUNNER_TEMP || os.tmpdir();
+      const installDir = fs.mkdtempSync(path.join(installCwd, 'promptfoo-install-'));
+      try {
+        const promptfooEntrypoint = await installPromptfooCli(promptfooVersion, installDir);
+        // OIDC tokens are short-lived; installation must not consume their authentication window.
+        const oidcToken = await authenticateWithOidc();
+
+        core.info('🚀 Running promptfoo code-scans run...');
+
+        let scanOutput = '';
+        let scanError = '';
+        const scanEnv = createSubprocessEnv();
+        if (oidcToken) {
+          scanEnv.GITHUB_OIDC_TOKEN = oidcToken;
+        }
+
+        const exitCode = await exec.exec(process.execPath, [promptfooEntrypoint, ...cliArgs], {
+          env: scanEnv,
+          listeners: {
+            stdout: (data: Buffer) => {
+              scanOutput += data.toString();
+            },
+            stderr: (data: Buffer) => {
+              scanError += data.toString();
+            },
+          },
+          ignoreReturnCode: true,
+        });
+
+        if (exitCode === 0) {
+          core.info('✅ Scan completed successfully');
+
+          try {
+            return JSON.parse(scanOutput);
+          } catch (error) {
+            throw new Error(`Failed to parse CLI output as JSON: ${formatError(error)}`);
+          }
+        }
+
+        // Keep compatibility with CLI releases that reported an authorized fork skip as text
+        // while the action and CLI roll out independently.
+        if (`${scanOutput}\n${scanError}`.includes('Fork PR scanning not authorized')) {
+          return {
+            success: true,
+            comments: [],
+            skipReason: FORK_PR_AUTH_SKIP_REASON,
+          };
+        }
+
+        core.error(`CLI exited with code ${exitCode}`);
+        core.error(`Error output: ${scanError}`);
+        throw new Error(`Code scan failed with exit code ${exitCode}`);
+      } finally {
+        try {
+          fs.rmSync(installDir, { recursive: true, force: true });
+        } catch (error) {
+          core.warning(`Failed to remove temporary Promptfoo CLI install: ${formatError(error)}`);
+        }
+      }
+    }
+
+    const scanResponse = await (process.env.ACT === 'true'
+      ? Promise.resolve(createMockScanResponse())
+      : runPromptfooScan());
 
     await assertWorkspaceHead(context);
     await handleScanResponse(scanResponse, inputs, context);
-    logActCommentPreview(scanResponse.comments);
+    const comments = scanResponse.comments;
+    if (process.env.ACT === 'true' && comments.length !== 0) {
+      core.info('🧪 Running in act - showing comment preview:');
+      comments.forEach((comment: Comment, index: number) => {
+        core.info(`  ${index + 1}. ${comment.file}:${comment.line}`);
+        const preview = comment.fix
+          ? `${comment.finding.substring(0, 80)}... [+ suggested fix]`
+          : comment.finding.substring(0, 100);
+        core.info(`     ${preview}${comment.finding.length > 100 ? '...' : ''}`);
+      });
+    }
   } finally {
-    cleanupConfig(inputs.configPath, finalConfigPath);
-  }
-}
-
-async function run(): Promise<void> {
-  try {
-    await runCodeScan();
-  } catch (error) {
-    core.setFailed(formatError(error));
+    if (!inputs.configPath) {
+      fs.unlinkSync(finalConfigPath);
+    }
   }
 }
 

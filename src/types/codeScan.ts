@@ -54,24 +54,28 @@ export interface SeverityCounts {
 // Severity Utility Functions
 // ============================================================================
 
+function getSeverityValues(severity: CodeScanSeverity): [string, number] {
+  switch (severity) {
+    case CodeScanSeverity.CRITICAL:
+      return ['🔴', 4];
+    case CodeScanSeverity.HIGH:
+      return ['🟠', 3];
+    case CodeScanSeverity.MEDIUM:
+      return ['🟡', 2];
+    case CodeScanSeverity.LOW:
+      return ['🔵', 1];
+    case CodeScanSeverity.NONE:
+      return ['👍', -1];
+  }
+}
+
 /**
  * Get emoji representation for a severity level
  * @param severity - The severity level
  * @returns Emoji string representing the severity
  */
 export function getSeverityEmoji(severity: CodeScanSeverity): string {
-  switch (severity) {
-    case CodeScanSeverity.CRITICAL:
-      return '🔴';
-    case CodeScanSeverity.HIGH:
-      return '🟠';
-    case CodeScanSeverity.MEDIUM:
-      return '🟡';
-    case CodeScanSeverity.LOW:
-      return '🔵';
-    case CodeScanSeverity.NONE:
-      return '👍';
-  }
+  return getSeverityValues(severity)?.[0];
 }
 
 /**
@@ -80,18 +84,7 @@ export function getSeverityEmoji(severity: CodeScanSeverity): string {
  * @returns Numeric rank (higher = more severe)
  */
 export function getSeverityRank(severity: CodeScanSeverity): number {
-  switch (severity) {
-    case CodeScanSeverity.CRITICAL:
-      return 4;
-    case CodeScanSeverity.HIGH:
-      return 3;
-    case CodeScanSeverity.MEDIUM:
-      return 2;
-    case CodeScanSeverity.LOW:
-      return 1;
-    case CodeScanSeverity.NONE:
-      return -1;
-  }
+  return getSeverityValues(severity)?.[1];
 }
 
 /**
@@ -130,19 +123,23 @@ export function formatSeverity(
   return `${emoji} ${displayText}`;
 }
 
-/**
- * Count comments by severity level
- * @param comments - Array of comments with severity property (optional severity)
- * @returns Object with counts for each severity level
- */
-export function countBySeverity(comments: Array<{ severity?: CodeScanSeverity }>): SeverityCounts {
+export function filterBySeverity<T extends { severity?: CodeScanSeverity }>(comments: T[]): T[] {
   const validSeverities: CodeScanSeverity[] = [
     CodeScanSeverity.CRITICAL,
     CodeScanSeverity.HIGH,
     CodeScanSeverity.MEDIUM,
     CodeScanSeverity.LOW,
   ];
-  const issuesOnly = comments.filter((c) => c.severity && validSeverities.includes(c.severity));
+  return comments.filter((c) => c.severity && validSeverities.includes(c.severity));
+}
+
+/**
+ * Count comments by severity level
+ * @param comments - Array of comments with severity property (optional severity)
+ * @returns Object with counts for each severity level
+ */
+export function countBySeverity(comments: Array<{ severity?: CodeScanSeverity }>): SeverityCounts {
+  const issuesOnly = filterBySeverity(comments);
 
   return {
     total: issuesOnly.length,
