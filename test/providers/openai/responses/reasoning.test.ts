@@ -1,3 +1,5 @@
+import { createApiKeyOptions, createResponseMessage } from '../../../factories/literalFixtures';
+import { createMockFetchResponse } from '../../mockProviderResponses';
 // Load-bearing: registers shared vi.mock / beforeEach hooks before any
 // module-under-test import below. See ./setup.ts for details.
 import './setup';
@@ -9,16 +11,60 @@ import { LONG_RUNNING_MODEL_TIMEOUT_MS } from '../../../../src/providers/shared'
 import { setOpenAiEnv } from './setup';
 import type { Mock } from 'vitest';
 
+const createReasoningResponse = (text: string) => ({
+  output: [createResponseMessage(text)],
+  usage: { input_tokens: 100, output_tokens: 200 },
+});
+const CUSTOM_OPENAI_API_BASE_URL = 'https://gateway.example/v1';
+
 describe('OpenAiResponsesProvider reasoning models', () => {
+  it.each(['gpt-daybreak-blue-latest', 'gpt-daybreak-red-latest'])(
+    'preserves %s reasoning through provider and prompt model overrides',
+    async (model) => {
+      const direct = new OpenAiResponsesProvider(model, {
+        config: { apiKey: 'test-key', reasoning_effort: 'high' },
+      });
+      const { body: directBody } = await direct.getOpenAiBody('Test prompt');
+      expect(directBody.reasoning).toEqual({ effort: 'high' });
+      expect(directBody).not.toHaveProperty('temperature');
+      expect(directBody).not.toHaveProperty('max_output_tokens');
+
+      for (const perPrompt of [false, true]) {
+        const provider = new OpenAiResponsesProvider('gpt-4.1', {
+          config: {
+            apiKey: 'test-key',
+            reasoning_effort: 'high',
+            ...(!perPrompt && { passthrough: { model } }),
+          },
+        });
+        const { body } = await provider.getOpenAiBody(
+          'Test prompt',
+          perPrompt
+            ? {
+                vars: {},
+                prompt: {
+                  raw: 'Test prompt',
+                  label: 'override',
+                  config: { passthrough: { model } },
+                },
+              }
+            : undefined,
+        );
+        expect(body.model).toBe(model);
+        expect(body.reasoning).toEqual(directBody.reasoning);
+        expect(body).not.toHaveProperty('temperature');
+        expect(body).not.toHaveProperty('max_output_tokens');
+      }
+    },
+  );
+
   it('should prefer OPENAI_MAX_COMPLETION_TOKENS over OPENAI_MAX_TOKENS for reasoning models', async () => {
     setOpenAiEnv({
       OPENAI_MAX_COMPLETION_TOKENS: '4096',
       OPENAI_MAX_TOKENS: '2048',
     });
 
-    const provider = new OpenAiResponsesProvider('o1-preview', {
-      config: { apiKey: 'test-key' },
-    });
+    const provider = new OpenAiResponsesProvider('o1', createApiKeyOptions());
 
     const { body } = await provider.getOpenAiBody('Test prompt');
     expect(body.max_output_tokens).toBe(4096);
@@ -27,18 +73,14 @@ describe('OpenAiResponsesProvider reasoning models', () => {
   it('should fall back to OPENAI_MAX_TOKENS for reasoning models when OPENAI_MAX_COMPLETION_TOKENS is unset', async () => {
     setOpenAiEnv({ OPENAI_MAX_TOKENS: '2048' });
 
-    const provider = new OpenAiResponsesProvider('o1-preview', {
-      config: { apiKey: 'test-key' },
-    });
+    const provider = new OpenAiResponsesProvider('o1', createApiKeyOptions());
 
     const { body } = await provider.getOpenAiBody('Test prompt');
     expect(body.max_output_tokens).toBe(2048);
   });
 
   it('should not apply a hardcoded max_output_tokens default for reasoning models', async () => {
-    const provider = new OpenAiResponsesProvider('o1-preview', {
-      config: { apiKey: 'test-key' },
-    });
+    const provider = new OpenAiResponsesProvider('o1', createApiKeyOptions());
 
     const { body } = await provider.getOpenAiBody('Test prompt');
     expect(body.max_output_tokens).toBeUndefined();
@@ -46,9 +88,10 @@ describe('OpenAiResponsesProvider reasoning models', () => {
   });
 
   it('should treat fine-tuned o-series models as reasoning models', async () => {
-    const provider = new OpenAiResponsesProvider('ft:o4-mini-2025-04-16:company::model', {
-      config: { apiKey: 'test-key' },
-    });
+    const provider = new OpenAiResponsesProvider(
+      'ft:o4-mini-2025-04-16:company::model',
+      createApiKeyOptions(),
+    );
 
     const { body } = await provider.getOpenAiBody('Test prompt');
 
@@ -89,12 +132,7 @@ describe('OpenAiResponsesProvider reasoning models', () => {
     };
 
     // Setup mock for fetchWithCache
-    vi.mocked(cache.fetchWithCache).mockResolvedValue({
-      data: mockApiResponse,
-      cached: false,
-      status: 200,
-      statusText: 'OK',
-    });
+    vi.mocked(cache.fetchWithCache).mockResolvedValue(createMockFetchResponse(mockApiResponse));
 
     // Initialize the provider with reasoning model settings
     const provider = new OpenAiResponsesProvider('o1-pro', {
@@ -136,7 +174,7 @@ describe('OpenAiResponsesProvider reasoning models', () => {
     { model: 'o3', reasoningEffort: 'high', maxOutputTokens: 2000 },
     { model: 'o3-pro', reasoningEffort: 'high', maxOutputTokens: 2000 },
     { model: 'o4-mini', reasoningEffort: 'medium', maxOutputTokens: 1000 },
-    { model: 'codex-mini-latest', reasoningEffort: 'medium', maxOutputTokens: 1000 },
+    { model: 'gpt-5-codex-mini', reasoningEffort: 'medium', maxOutputTokens: 1000 },
   ] as const)(
     'should configure $model model correctly with reasoning parameters',
     async ({ model, reasoningEffort, maxOutputTokens }) => {
@@ -159,12 +197,7 @@ describe('OpenAiResponsesProvider reasoning models', () => {
         usage: { input_tokens: 10, output_tokens: 10, total_tokens: 20 },
       };
 
-      vi.mocked(cache.fetchWithCache).mockResolvedValue({
-        data: mockApiResponse,
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      });
+      vi.mocked(cache.fetchWithCache).mockResolvedValue(createMockFetchResponse(mockApiResponse));
 
       const provider = new OpenAiResponsesProvider(model, {
         config: {
@@ -223,6 +256,7 @@ describe('OpenAiResponsesProvider reasoning models', () => {
       const provider = new OpenAiResponsesProvider('o3-deep-research', {
         config: {
           apiKey: 'test-key',
+          apiBaseUrl: CUSTOM_OPENAI_API_BASE_URL,
           tools: [{ type: 'code_interpreter' } as any],
         },
       });
@@ -234,16 +268,7 @@ describe('OpenAiResponsesProvider reasoning models', () => {
     });
 
     it('should accept deep research models with web_search_preview tool', async () => {
-      const mockData = {
-        output: [
-          {
-            type: 'message',
-            role: 'assistant',
-            content: [{ type: 'output_text', text: 'Research complete' }],
-          },
-        ],
-        usage: { input_tokens: 100, output_tokens: 200 },
-      };
+      const mockData = createReasoningResponse('Research complete');
 
       (cache.fetchWithCache as Mock).mockResolvedValueOnce({
         data: mockData,
@@ -255,6 +280,7 @@ describe('OpenAiResponsesProvider reasoning models', () => {
       const provider = new OpenAiResponsesProvider('o4-mini-deep-research', {
         config: {
           apiKey: 'test-key',
+          apiBaseUrl: CUSTOM_OPENAI_API_BASE_URL,
           tools: [{ type: 'web_search_preview' } as any],
         },
       });
@@ -279,23 +305,18 @@ describe('OpenAiResponsesProvider reasoning models', () => {
       },
     ])('should accept a supported deep research data source %#', async ({ tools }) => {
       (cache.fetchWithCache as Mock).mockResolvedValueOnce({
-        data: {
-          output: [
-            {
-              type: 'message',
-              role: 'assistant',
-              content: [{ type: 'output_text', text: 'Research complete' }],
-            },
-          ],
-          usage: { input_tokens: 100, output_tokens: 200 },
-        },
+        data: createReasoningResponse('Research complete'),
         status: 200,
         statusText: 'OK',
         cached: false,
       });
 
       const result = await new OpenAiResponsesProvider('o3-deep-research', {
-        config: { apiKey: 'test-key', tools: tools as any },
+        config: {
+          apiKey: 'test-key',
+          apiBaseUrl: CUSTOM_OPENAI_API_BASE_URL,
+          tools: tools as any,
+        },
       }).callApi('Test prompt');
 
       expect(result.error).toBeUndefined();
@@ -310,7 +331,11 @@ describe('OpenAiResponsesProvider reasoning models', () => {
       },
     ])('should not count file_search $label as a deep research data source', async ({ tools }) => {
       const provider = new OpenAiResponsesProvider('o3-deep-research', {
-        config: { apiKey: 'test-key', tools: tools as any },
+        config: {
+          apiKey: 'test-key',
+          apiBaseUrl: CUSTOM_OPENAI_API_BASE_URL,
+          tools: tools as any,
+        },
       });
 
       const result = await provider.callApi('Test prompt');
@@ -325,6 +350,7 @@ describe('OpenAiResponsesProvider reasoning models', () => {
       const provider = new OpenAiResponsesProvider('o3-deep-research', {
         config: {
           apiKey: 'test-key',
+          apiBaseUrl: CUSTOM_OPENAI_API_BASE_URL,
           tools: [
             {
               type: 'mcp',
@@ -342,16 +368,7 @@ describe('OpenAiResponsesProvider reasoning models', () => {
     });
 
     it('should use longer timeout for deep research models', async () => {
-      const mockData = {
-        output: [
-          {
-            type: 'message',
-            role: 'assistant',
-            content: [{ type: 'output_text', text: 'Research complete' }],
-          },
-        ],
-        usage: { input_tokens: 100, output_tokens: 200 },
-      };
+      const mockData = createReasoningResponse('Research complete');
 
       (cache.fetchWithCache as Mock).mockResolvedValueOnce({
         data: mockData,
@@ -363,6 +380,7 @@ describe('OpenAiResponsesProvider reasoning models', () => {
       const provider = new OpenAiResponsesProvider('o3-deep-research', {
         config: {
           apiKey: 'test-key',
+          apiBaseUrl: CUSTOM_OPENAI_API_BASE_URL,
           tools: [{ type: 'web_search_preview' } as any],
         },
       });
@@ -381,16 +399,7 @@ describe('OpenAiResponsesProvider reasoning models', () => {
     });
 
     it('should use longer timeout for gpt-5-pro models', async () => {
-      const mockData = {
-        output: [
-          {
-            type: 'message',
-            role: 'assistant',
-            content: [{ type: 'output_text', text: 'Response complete' }],
-          },
-        ],
-        usage: { input_tokens: 100, output_tokens: 200 },
-      };
+      const mockData = createReasoningResponse('Response complete');
 
       (cache.fetchWithCache as Mock).mockResolvedValueOnce({
         data: mockData,
@@ -399,11 +408,7 @@ describe('OpenAiResponsesProvider reasoning models', () => {
         cached: false,
       });
 
-      const provider = new OpenAiResponsesProvider('gpt-5-pro', {
-        config: {
-          apiKey: 'test-key',
-        },
-      });
+      const provider = new OpenAiResponsesProvider('gpt-5-pro', createApiKeyOptions());
 
       await provider.callApi('Test prompt');
 
@@ -419,16 +424,7 @@ describe('OpenAiResponsesProvider reasoning models', () => {
     });
 
     it('should use longer timeout for gpt-5.2-pro models', async () => {
-      const mockData = {
-        output: [
-          {
-            type: 'message',
-            role: 'assistant',
-            content: [{ type: 'output_text', text: 'Response complete' }],
-          },
-        ],
-        usage: { input_tokens: 100, output_tokens: 200 },
-      };
+      const mockData = createReasoningResponse('Response complete');
 
       (cache.fetchWithCache as Mock).mockResolvedValueOnce({
         data: mockData,
@@ -437,11 +433,7 @@ describe('OpenAiResponsesProvider reasoning models', () => {
         cached: false,
       });
 
-      const provider = new OpenAiResponsesProvider('gpt-5.2-pro', {
-        config: {
-          apiKey: 'test-key',
-        },
-      });
+      const provider = new OpenAiResponsesProvider('gpt-5.2-pro', createApiKeyOptions());
 
       await provider.callApi('Test prompt');
 
@@ -458,16 +450,7 @@ describe('OpenAiResponsesProvider reasoning models', () => {
     it.each(['gpt-5.4-pro', 'gpt-5.5-pro'])(
       'should use longer timeout for %s models',
       async (model) => {
-        const mockData = {
-          output: [
-            {
-              type: 'message',
-              role: 'assistant',
-              content: [{ type: 'output_text', text: 'Response complete' }],
-            },
-          ],
-          usage: { input_tokens: 100, output_tokens: 200 },
-        };
+        const mockData = createReasoningResponse('Response complete');
 
         (cache.fetchWithCache as Mock).mockResolvedValueOnce({
           data: mockData,
@@ -476,11 +459,7 @@ describe('OpenAiResponsesProvider reasoning models', () => {
           cached: false,
         });
 
-        const provider = new OpenAiResponsesProvider(model, {
-          config: {
-            apiKey: 'test-key',
-          },
-        });
+        const provider = new OpenAiResponsesProvider(model, createApiKeyOptions());
 
         await provider.callApi('Test prompt');
 
@@ -496,16 +475,7 @@ describe('OpenAiResponsesProvider reasoning models', () => {
     );
 
     it('should use longer timeout for gpt-5.5-pro models', async () => {
-      const mockData = {
-        output: [
-          {
-            type: 'message',
-            role: 'assistant',
-            content: [{ type: 'output_text', text: 'Response complete' }],
-          },
-        ],
-        usage: { input_tokens: 100, output_tokens: 200 },
-      };
+      const mockData = createReasoningResponse('Response complete');
 
       (cache.fetchWithCache as Mock).mockResolvedValueOnce({
         data: mockData,
@@ -514,11 +484,7 @@ describe('OpenAiResponsesProvider reasoning models', () => {
         cached: false,
       });
 
-      const provider = new OpenAiResponsesProvider('gpt-5.5-pro', {
-        config: {
-          apiKey: 'test-key',
-        },
-      });
+      const provider = new OpenAiResponsesProvider('gpt-5.5-pro', createApiKeyOptions());
 
       await provider.callApi('Test prompt');
 
@@ -539,30 +505,17 @@ describe('OpenAiResponsesProvider reasoning models', () => {
             type: 'reasoning',
             summary: [], // Empty array (edge case)
           },
-          {
-            type: 'message',
-            role: 'assistant',
-            content: [
-              {
-                type: 'output_text',
-                text: 'Final answer',
-              },
-            ],
-          },
+          createResponseMessage('Final answer'),
         ],
         usage: { input_tokens: 10, output_tokens: 20, total_tokens: 30 },
       };
 
-      vi.mocked(cache.fetchWithCache).mockResolvedValue({
-        data: mockData,
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      });
+      vi.mocked(cache.fetchWithCache).mockResolvedValue(createMockFetchResponse(mockData));
 
       const provider = new OpenAiResponsesProvider('o3-deep-research', {
         config: {
           apiKey: 'test-key',
+          apiBaseUrl: CUSTOM_OPENAI_API_BASE_URL,
           tools: [{ type: 'web_search_preview' } as any],
         },
       });
@@ -583,27 +536,14 @@ describe('OpenAiResponsesProvider reasoning models', () => {
           type: 'reasoning',
           summary: [{ type: 'summary_text', text: 'Valid reasoning summary' }],
         },
-        {
-          type: 'message',
-          role: 'assistant',
-          content: [{ type: 'output_text', text: 'Final answer' }],
-        },
+        createResponseMessage('Final answer'),
       ],
       usage: { input_tokens: 10, output_tokens: 20, total_tokens: 30 },
     };
 
-    vi.mocked(cache.fetchWithCache).mockResolvedValue({
-      data: mockData,
-      cached: false,
-      status: 200,
-      statusText: 'OK',
-    });
+    vi.mocked(cache.fetchWithCache).mockResolvedValue(createMockFetchResponse(mockData));
 
-    const provider = new OpenAiResponsesProvider('gpt-4o', {
-      config: {
-        apiKey: 'test-key',
-      },
-    });
+    const provider = new OpenAiResponsesProvider('gpt-4o', createApiKeyOptions());
 
     const result = await provider.callApi('Test prompt');
     expect(result.error).toBeUndefined();
