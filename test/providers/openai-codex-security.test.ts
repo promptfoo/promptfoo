@@ -1922,7 +1922,7 @@ describe('OpenAICodexSecurityProvider', () => {
         await expect(readCodexSecurityReport(file)).resolves.toMatchObject({
           summary: { status: 'interrupted', coverage: { completeness: 'unknown' } },
         });
-        const injectedCoverage = { ...createScanResult().coverage, scanId: raw.manifest.scan.id };
+        const injectedCoverage = { ...createScanResult().coverage, scanId: result.manifest.scan.id };
         for (const invalid of [
           { ...raw, coverage: injectedCoverage },
           { ...raw, coverage: injectedCoverage, review: { excludedPaths: [] } },
@@ -1930,12 +1930,12 @@ describe('OpenAICodexSecurityProvider', () => {
           { ...raw, review: { excludedPaths: [] } },
           { ...raw, review: undefined },
           { ...raw, coverage: { scanId: 'wrong' } },
-          { ...raw, findings: { ...raw.findings, scanId: 'wrong' } },
+          { ...raw, findings: { ...result.findings, scanId: 'wrong' } },
           {
             ...raw,
             manifest: {
-              ...raw.manifest,
-              scan: { ...raw.manifest.scan, coverageRef: 'coverage.json' },
+              ...result.manifest,
+              scan: { ...result.manifest.scan, coverageRef: 'coverage.json' },
             },
           },
         ]) {
