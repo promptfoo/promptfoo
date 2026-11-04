@@ -798,7 +798,7 @@ describe('generateEvalSummary', () => {
         errors: 0,
         duration: 5000,
         maxConcurrency: 4,
-        tracker: mockTracker,
+        providerUsage,
       };
 
       const withHits = stripAnsi(generateEvalSummary({ ...baseParams, cacheHits: 4 }).join('\n'));
@@ -1018,7 +1018,7 @@ describe('generateEvalSummary', () => {
         errors: 1,
         duration: 5,
         maxConcurrency: 2,
-        tracker: mockTracker,
+        providerUsage,
         repeatStability: {
           totalGroups: 2,
           unstableGroups: 1,

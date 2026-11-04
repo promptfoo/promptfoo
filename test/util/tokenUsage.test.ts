@@ -67,7 +67,7 @@ describe('evaluation token usage', () => {
       trackResponseUsage('target', { tokenUsage: { total: 5, completion: 5 } });
       trackResponseUsage('target', { tokenUsage: { total: Number.NaN } });
       trackResponseUsage('target', {
-        get tokenUsage() {
+        get tokenUsage(): never {
           throw new Error('invalid usage');
         },
       });
