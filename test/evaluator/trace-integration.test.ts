@@ -19,6 +19,20 @@ import type {
   TestSuite,
 } from '../../src/types/index';
 
+const createTraceProviderConfig = () => ({
+  id: 'mock-provider',
+  response: { output: 'Test response', tokenUsage: {} },
+});
+
+const createSerialOptions = () => ({
+  maxConcurrency: 1,
+});
+
+const createTracingContext = () => ({
+  tracingEnabled: true,
+  evaluationId: 'test-eval-id',
+});
+
 // Mock dependencies
 vi.mock('../../src/telemetry', () => ({
   default: { record: vi.fn() },
@@ -187,20 +201,12 @@ describe('evaluator trace integration', () => {
     });
 
     const testSuite: TestSuite = {
-      providers: [
-        createMockProvider({
-          id: 'mock-provider',
-          response: { output: 'Test response', tokenUsage: {} },
-        }),
-      ],
+      providers: [createMockProvider(createTraceProviderConfig())],
       prompts: [{ raw: 'Test prompt', label: 'test' }],
       tests: [
         {
           vars: { input: 'test' },
-          metadata: {
-            tracingEnabled: true,
-            evaluationId: 'test-eval-id',
-          },
+          metadata: createTracingContext(),
           assert: [
             {
               type: 'javascript',
@@ -227,9 +233,7 @@ describe('evaluator trace integration', () => {
       },
     };
 
-    const options: EvaluateOptions = {
-      maxConcurrency: 1,
-    };
+    const options: EvaluateOptions = createSerialOptions();
 
     // Run evaluation
     await evaluate(testSuite, mockEval, options);
@@ -292,12 +296,7 @@ describe('evaluator trace integration', () => {
   it('flushes and shuts down OTEL after successful tracing initialization', async () => {
     await evaluate(
       {
-        providers: [
-          createMockProvider({
-            id: 'mock-provider',
-            response: { output: 'Test response', tokenUsage: {} },
-          }),
-        ],
+        providers: [createMockProvider(createTraceProviderConfig())],
         prompts: [{ raw: 'Test prompt', label: 'test' }],
         tests: [{}],
         tracing: { enabled: true },
@@ -316,12 +315,7 @@ describe('evaluator trace integration', () => {
     vi.mocked(evaluatorTracing.generateTraceContextIfNeeded).mockResolvedValue(null);
 
     const testSuite: TestSuite = {
-      providers: [
-        createMockProvider({
-          id: 'mock-provider',
-          response: { output: 'Test response', tokenUsage: {} },
-        }),
-      ],
+      providers: [createMockProvider(createTraceProviderConfig())],
       prompts: [{ raw: 'Test prompt', label: 'test' }],
       tests: [
         {
@@ -341,9 +335,7 @@ describe('evaluator trace integration', () => {
       // Tracing not enabled in test suite
     };
 
-    const options: EvaluateOptions = {
-      maxConcurrency: 1,
-    };
+    const options: EvaluateOptions = createSerialOptions();
 
     // Run evaluation
     await evaluate(testSuite, mockEval, options);
@@ -388,20 +380,12 @@ describe('evaluator trace integration', () => {
     });
 
     const testSuite: TestSuite = {
-      providers: [
-        createMockProvider({
-          id: 'mock-provider',
-          response: { output: 'Test response', tokenUsage: {} },
-        }),
-      ],
+      providers: [createMockProvider(createTraceProviderConfig())],
       prompts: [{ raw: 'Test prompt', label: 'test' }],
       tests: [
         {
           vars: { input: 'test' },
-          metadata: {
-            tracingEnabled: true,
-            evaluationId: 'test-eval-id',
-          },
+          metadata: createTracingContext(),
           assert: [
             {
               type: 'javascript',
@@ -415,9 +399,7 @@ describe('evaluator trace integration', () => {
       ],
     };
 
-    const options: EvaluateOptions = {
-      maxConcurrency: 1,
-    };
+    const options: EvaluateOptions = createSerialOptions();
 
     // Run evaluation
     await evaluate(testSuite, mockEval, options);

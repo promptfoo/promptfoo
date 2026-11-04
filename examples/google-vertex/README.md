@@ -49,6 +49,8 @@ cd google-vertex
    export GOOGLE_CLOUD_PROJECT=your-project-id
    ```
 
+The text providers in the basic and Gemini comparison configurations set `expressMode: false` to keep using ADC or service-account credentials when a Google API key is also present.
+
 ## Configurations
 
 This example includes:
@@ -65,9 +67,9 @@ The Gemini Flash examples use Vertex AI's `global` endpoint. Gemini 3.8 Flash,
 premium. The examples use `thinkingLevel` because these models no longer support
 manual sampling parameters such as `temperature`, `topP`, and `topK`.
 
-> Some example targets and the basic grading provider use Gemini 2.5 on Vertex.
-> Check the [Vertex AI release notes](https://docs.cloud.google.com/vertex-ai/generative-ai/docs/release-notes)
-> for retirement dates, and test supported replacements before they retire.
+> Check the [Vertex model lifecycle](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/model-versions)
+> before running these configurations. Test supported replacements for retiring targets and
+> explicitly configured grading providers.
 
 ## Running Examples
 
