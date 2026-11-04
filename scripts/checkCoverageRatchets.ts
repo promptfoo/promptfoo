@@ -15,12 +15,10 @@ export interface CoverageThresholds {
   statements: number;
 }
 
-interface Position {
-  line: number;
-}
-
 interface StatementLocation {
-  start: Position;
+  start: {
+    line: number;
+  };
 }
 
 interface FileCoverage {
@@ -193,17 +191,51 @@ export function parseChangedFileList(output: string): ChangedFile[] {
     });
 }
 
+function resolveExplicitCoverageBase(baseRef: string, cwd: string): string {
+  for (const candidate of [baseRef, `refs/remotes/origin/${baseRef}`]) {
+    try {
+      return git(
+        ['rev-parse', '--verify', '--end-of-options', `${candidate}^{commit}`],
+        cwd,
+      ).trim();
+    } catch {
+      // Actions checkouts keep other branch names only as remote-tracking refs.
+    }
+  }
+
+  // Only fetch a single ref, never a refspec that could rewrite local branches.
+  git(['check-ref-format', '--allow-onelevel', baseRef], cwd);
+  git(['fetch', '--no-tags', 'origin', baseRef], cwd);
+  // Read FETCH_HEAD only after a successful fetch, so a missing ref cannot reuse
+  // the previous fetch's commit and silently check the wrong diff.
+  return git(['rev-parse', '--verify', 'FETCH_HEAD^{commit}'], cwd).trim();
+}
+
 export function getChangedFiles(cwd: string, baseRef?: string): ChangedFile[] {
+  if (baseRef) {
+    if (baseRef.startsWith('-')) {
+      throw new Error('Coverage base must be a commit or ref, not a git option');
+    }
+
+    // An explicit base is authoritative. Never silently check a different diff
+    // when the requested ref is missing or its merge base is unavailable.
+    try {
+      const baseSha = resolveExplicitCoverageBase(baseRef, cwd);
+      return parseChangedFileList(
+        git(['diff', '--name-status', '--diff-filter=ACMRTUXB', `${baseSha}...HEAD`, '--'], cwd),
+      );
+    } catch (error) {
+      throw new Error(`Unable to determine changed files from explicit coverage base ${baseRef}`, {
+        cause: error,
+      });
+    }
+  }
+
   fetchGithubBaseRef(cwd);
 
   const diffCommands: string[][] = [];
   const isGithubActions = process.env.GITHUB_ACTIONS === 'true';
   const githubBaseSha = readGithubPullRequestBaseSha();
-
-  if (baseRef) {
-    fetchGitRef(baseRef, cwd);
-    diffCommands.push(['diff', '--name-status', '--diff-filter=ACMRTUXB', `${baseRef}...HEAD`]);
-  }
 
   if (githubBaseSha) {
     fetchGitRef(githubBaseSha, cwd);
@@ -272,6 +304,8 @@ function isSourceFile(filePath: string): boolean {
     !filePath.endsWith('.test.tsx') &&
     !filePath.endsWith('.spec.ts') &&
     !filePath.endsWith('.spec.tsx') &&
+    !filePath.endsWith('.browser.ts') &&
+    !filePath.endsWith('.browser.tsx') &&
     !filePath.endsWith('.stories.tsx')
   );
 }
@@ -292,8 +326,12 @@ function isCriticalPath(report: CoverageReportConfig, filePath: string): boolean
   );
 }
 
-function pct(covered: number, total: number): number {
-  return total === 0 ? 100 : (covered / total) * 100;
+function summarizeTotals(covered: number, total: number): CoverageTotals {
+  return {
+    covered,
+    total,
+    pct: total === 0 ? 100 : (covered / total) * 100,
+  };
 }
 
 export function summarizeFileCoverage(fileCoverage: FileCoverage): FileCoverageSummary {
@@ -323,26 +361,10 @@ export function summarizeFileCoverage(fileCoverage: FileCoverage): FileCoverageS
   const coveredLines = [...lineCoverage.values()].filter(Boolean).length;
 
   return {
-    branches: {
-      covered: coveredBranches,
-      total: branchHits.length,
-      pct: pct(coveredBranches, branchHits.length),
-    },
-    functions: {
-      covered: coveredFunctions,
-      total: functions.length,
-      pct: pct(coveredFunctions, functions.length),
-    },
-    lines: {
-      covered: coveredLines,
-      total: lineCoverage.size,
-      pct: pct(coveredLines, lineCoverage.size),
-    },
-    statements: {
-      covered: coveredStatements,
-      total: statements.length,
-      pct: pct(coveredStatements, statements.length),
-    },
+    branches: summarizeTotals(coveredBranches, branchHits.length),
+    functions: summarizeTotals(coveredFunctions, functions.length),
+    lines: summarizeTotals(coveredLines, lineCoverage.size),
+    statements: summarizeTotals(coveredStatements, statements.length),
   };
 }
 

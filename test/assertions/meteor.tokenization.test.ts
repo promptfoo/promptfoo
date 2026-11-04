@@ -3,8 +3,7 @@ import { handleMeteorAssertion } from '../../src/assertions/meteor';
 
 import type { AssertionParams } from '../../src/types/index';
 
-// Calls the REAL handleMeteorAssertion (meteor.test.ts mocks it, so the actual
-// tokenization is not covered there).
+// Exercise tokenization with the real Natural implementation.
 const meteor = (overrides: Partial<AssertionParams>) =>
   handleMeteorAssertion({
     assertion: { type: 'meteor' },
@@ -79,9 +78,12 @@ describe('handleMeteorAssertion tokenization (real implementation)', () => {
     );
   });
 
-  it('rejects empty reference arrays', async () => {
-    await expect(meteor({ renderedValue: [] })).rejects.toThrow('Invalid inputs');
-  });
+  it.each(['', 'nonempty output'])(
+    'rejects empty reference arrays for output %j',
+    async (outputString) => {
+      await expect(meteor({ renderedValue: [], outputString })).rejects.toThrow('Invalid inputs');
+    },
+  );
 
   it('does not create tokens for whitespace-only input', async () => {
     const result = await meteor({ renderedValue: '\r\n ', outputString: ' \t\n ' });
@@ -90,7 +92,7 @@ describe('handleMeteorAssertion tokenization (real implementation)', () => {
   });
 
   it('scores empty and whitespace-only candidates as zero', async () => {
-    for (const outputString of ['', '   \t  ']) {
+    for (const outputString of ['', '   \t  ', '\u00a0\r\n']) {
       expect(await meteor({ outputString })).toMatchObject({
         pass: false,
         score: 0,
@@ -108,6 +110,27 @@ describe('handleMeteorAssertion tokenization (real implementation)', () => {
         reason: 'METEOR assertion passed',
       });
     }
+  });
+
+  it('uses the configured threshold for empty output', async () => {
+    expect(
+      await meteor({ assertion: { type: 'meteor', threshold: 0 }, outputString: '' }),
+    ).toMatchObject({ pass: true, score: 0 });
+    expect(
+      await meteor({
+        assertion: { type: 'meteor', threshold: 0 },
+        inverse: true,
+        outputString: '',
+      }),
+    ).toMatchObject({ pass: false, score: 1 });
+  });
+
+  it('preserves internal dots while stripping trailing dots', async () => {
+    const clean = (await meteor({ renderedValue: 'one.two three', outputString: 'one.two three' }))
+      .score;
+    expect(
+      (await meteor({ renderedValue: 'one.two... three.', outputString: 'one.two three' })).score,
+    ).toBeCloseTo(clean, 10);
   });
 
   it('preserves punctuation-only token scoring', async () => {

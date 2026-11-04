@@ -1,0 +1,28 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'OpenAI GPT OSS through the Amazon Bedrock Responses API'
+
+# Authentication: use an Amazon Bedrock API key OR standard AWS credentials.
+# API key: export AWS_BEARER_TOKEN_BEDROCK="..."
+# AWS credentials: use explicit keys, config.profile/AWS_PROFILE, or the default
+# credential chain. Promptfoo generates short-lived bearer tokens for requests
+# using the optional @aws/bedrock-token-generator package.
+# Unset AWS_BEARER_TOKEN_BEDROCK when using AWS credentials to avoid overriding them.
+
+prompts:
+  - 'Answer concisely: {{question}}'
+
+providers:
+  - id: bedrock:responses:openai.gpt-oss-120b
+    label: GPT OSS 120B (Responses API)
+    config:
+      region: us-east-1
+      reasoning_effort: medium
+      max_output_tokens: 1024
+      store: false
+
+tests:
+  - vars:
+      question: What is the capital of France? Reply with only the city name.
+    assert:
+      - type: equals
+        value: Paris

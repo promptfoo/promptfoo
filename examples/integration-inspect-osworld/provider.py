@@ -440,7 +440,7 @@ def _missing_inspect_message(command: str) -> str:
     if shutil.which(command) is None:
         return (
             f"Could not find Inspect CLI command '{command}'. Install prerequisites with "
-            "`pip install 'inspect-evals[osworld]' openai anthropic` or set "
+            "`python -m pip install 'inspect-evals[osworld]'` plus the SDK for your selected model, or set "
             "providers[0].config.inspectCommand."
         )
     return f"Could not execute Inspect CLI command '{command}'."
