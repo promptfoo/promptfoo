@@ -1,12 +1,13 @@
 import { afterEach, expect, it, vi } from 'vitest';
+import logger from '../../src/logger';
 import {
   cleanupProgressAfterError,
   cleanupProgressReporters,
   logWebUiEvalStepStart,
+  ProgressBarManager,
   updateComparisonReporterProgress,
   updateComparisonReporterTotals,
-} from '../../src/evaluator/progress';
-import logger from '../../src/logger';
+} from '../../src/progress/evaluationProgress';
 
 afterEach(() => vi.restoreAllMocks());
 
@@ -51,4 +52,28 @@ it('logs web progress using the provider label or the provider ID', () => {
     test: { vars: { count: 3 } },
   });
   expect(info).toHaveBeenLastCalledWith('[1/2] Running labeled with vars: count=3');
+});
+
+it('routes comparison progress to the terminal bar and flushes it before stopping', () => {
+  const progressBarManager = new ProgressBarManager(false);
+  const total = vi.spyOn(progressBarManager, 'updateTotalCount');
+  const comparison = vi.spyOn(progressBarManager, 'updateComparisonProgress');
+  const remove = vi.spyOn(progressBarManager, 'removeLogInterceptor');
+  const complete = vi.spyOn(progressBarManager, 'complete');
+  const stop = vi.spyOn(progressBarManager, 'stop');
+  const reporters = { progressBarManager, ciProgressReporter: null, runEvalOptions: [{}] };
+
+  updateComparisonReporterTotals({ ...reporters, compareRowsCount: 2 });
+  updateComparisonReporterProgress({
+    ...reporters,
+    compareCount: 1,
+    isWebUI: false,
+    label: 'comparison',
+    promptRaw: 'sample',
+  });
+  expect(total).toHaveBeenCalledWith(2);
+  expect(comparison).toHaveBeenCalledWith('sample');
+  cleanupProgressReporters(progressBarManager, null);
+  expect(remove).toHaveBeenCalledBefore(complete);
+  expect(complete).toHaveBeenCalledBefore(stop);
 });
