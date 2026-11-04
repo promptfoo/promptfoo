@@ -20,9 +20,9 @@ import {
 import { OpenAiGenericProvider } from '.';
 import {
   appendOpenAiApiPath,
-  assertOpenAiApiModel,
   hasSensitiveOpenAiCachePath,
   hasSensitiveOpenAiCacheString,
+  isOpenAiFirstPartyApiUrl,
 } from './util';
 
 import type { MediaStorageRef } from '../../storage/types';
@@ -244,7 +244,7 @@ export function calculateVideoCost(
 // =============================================================================
 
 /**
- * OpenAI Video Provider for Sora video generation.
+ * Sora-compatible Videos API provider for custom endpoints.
  *
  * Supports:
  * - Text-to-video generation
@@ -495,6 +495,13 @@ export class OpenAiVideoProvider extends OpenAiGenericProvider {
     context?: CallApiContextParams,
     _callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
+    const apiUrl = this.getApiUrl();
+    if (isOpenAiFirstPartyApiUrl(apiUrl)) {
+      throw new Error(
+        'OpenAI retired the Videos API on September 24, 2026. Configure a custom apiBaseUrl that supports the Videos API to use openai:video.',
+      );
+    }
+
     // Validate API key
     if (this.requiresApiKey() && !this.getApiKey()) {
       throw new Error(this.getMissingApiKeyErrorMessage());
@@ -506,7 +513,6 @@ export class OpenAiVideoProvider extends OpenAiGenericProvider {
     };
 
     const model = (config.model || this.modelName) as OpenAiVideoModel;
-    assertOpenAiApiModel(model, this.getApiUrl());
     const size = (config.size || DEFAULT_SIZE) as OpenAiVideoCreateSize;
     const seconds = config.seconds || DEFAULT_SECONDS;
     const evalId = context?.evaluationId;
@@ -533,15 +539,12 @@ export class OpenAiVideoProvider extends OpenAiGenericProvider {
 
     // Generate deterministic cache key from inputs
     // Note: remix_video_id is excluded from cache key as remixes should always regenerate
-    const apiUrl = this.getApiUrl();
     const requestHeaders = this.getAuthHeaders(config.headers);
-    let sendsToOpenAiApi = false;
     let hasSensitiveUrlCredentials = false;
     let hasSensitiveUrlPath = false;
     try {
       const parsedApiUrl = new URL(apiUrl);
       const normalizedApiUrl = parsedApiUrl.toString();
-      sendsToOpenAiApi = parsedApiUrl.hostname.toLowerCase() === 'api.openai.com';
       hasSensitiveUrlCredentials = sanitizeUrl(normalizedApiUrl) !== normalizedApiUrl;
       hasSensitiveUrlPath = hasSensitiveOpenAiCachePath(decodeURIComponent(parsedApiUrl.pathname));
     } catch {
@@ -566,11 +569,10 @@ export class OpenAiVideoProvider extends OpenAiGenericProvider {
     );
     const cacheScope = {
       ...safeCacheHeaders,
-      ...(sendsToOpenAiApi ? {} : { 'api-base-url': sanitizeUrl(apiUrl) }),
+      'api-base-url': sanitizeUrl(apiUrl),
     };
     const usesAuthenticatedCustomEndpoint =
-      !sendsToOpenAiApi &&
-      (hasSensitiveUrlCredentials || Object.keys(requestHeaders).some(isSensitiveCacheHeader));
+      hasSensitiveUrlCredentials || Object.keys(requestHeaders).some(isSensitiveCacheHeader);
     const hasProjectDiscriminator = Object.keys(safeCacheHeaders).some((key) =>
       /(?:^|[-_])(?:project|tenant|account)(?:[-_]|$)/i.test(key),
     );
