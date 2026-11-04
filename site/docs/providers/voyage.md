@@ -43,3 +43,5 @@ defaultTest:
 ```
 
 `apiBaseUrl` can also be set with the `VOYAGE_API_BASE_URL` environment variable.
+
+An explicit `config.apiKey` takes precedence. When `apiKeyEnvar` is set, Promptfoo reads that named key from the provider environment, then the evaluation environment, then the process environment. A missing or empty named key does not fall back to `VOYAGE_API_KEY`.

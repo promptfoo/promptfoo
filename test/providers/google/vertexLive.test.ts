@@ -1,9 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import WebSocket from 'ws';
 import logger from '../../../src/logger';
+import { matchesLlmRubric } from '../../../src/matchers/llmGrading';
 import { GoogleAuthManager } from '../../../src/providers/google/auth';
 import { VertexLiveProvider } from '../../../src/providers/google/vertexLive';
 import { loadApiProvider } from '../../../src/providers/index';
+import { wrapProviderWithRateLimiting } from '../../../src/scheduler/providerWrapper';
+import { RateLimitRegistry } from '../../../src/scheduler/rateLimitRegistry';
 import { TestProviderRequestSchema } from '../../../src/types/api/providers';
 import { TestSuiteConfigSchema } from '../../../src/types/index';
 import { ProviderOptionsSchema } from '../../../src/validators/providers';
@@ -81,6 +84,40 @@ describe('VertexLiveProvider', () => {
         interactionStatus: 'IDLE',
       },
     });
+
+  it.each([false, true])(
+    'keeps native image grading with a custom ID, wrapped=%s',
+    async (wrapped) => {
+      const provider = new VertexLiveProvider(model, {
+        id: 'openai:responses:custom',
+        config: { projectId: 'my-project' },
+      });
+      const call = vi
+        .spyOn(provider, 'callApi')
+        .mockResolvedValue({ output: '{"pass":true,"score":1,"reason":"Visible image"}' });
+      const registry = new RateLimitRegistry({ maxConcurrency: 1 });
+      try {
+        const result = await matchesLlmRubric(
+          'Inspect image',
+          '',
+          { provider: wrapped ? wrapProviderWithRateLimiting(provider, registry) : provider },
+          undefined,
+          undefined,
+          { providerResponse: { images: [{ data: 'aW1hZ2U=', mimeType: 'image/png' }] } },
+        );
+        expect(result.pass).toBe(true);
+        expect(provider.id()).toBe('openai:responses:custom');
+        const prompt = JSON.parse(call.mock.calls[0][0]);
+        expect(
+          prompt.findLast((message: { role: string }) => message.role === 'user').content,
+        ).toContainEqual({
+          inlineData: { mimeType: 'image/png', data: 'aW1hZ2U=' },
+        });
+      } finally {
+        registry.dispose();
+      }
+    },
+  );
 
   it.each([model, 'gemini-3.8-live', extendedModel])(
     'connects %s to Vertex with OAuth headers, audio, and a transcript',

@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   createProviderRateLimitOptions,
+  getOriginalProvider,
   isRateLimitWrapped,
   wrapProvidersWithRateLimiting,
   wrapProviderWithRateLimiting,
@@ -57,6 +58,27 @@ describe('providerWrapper', () => {
       expect(wrappedProvider.config).toEqual({ apiKey: 'test-key' });
     });
 
+    it('retains the original provider for identity checks while scheduling calls once', async () => {
+      mockExecute.mockImplementation(async (_provider, callFn) => callFn());
+      const wrappedProvider = wrapProviderWithRateLimiting(mockProvider, mockRegistry);
+      const wrappedAgain = wrapProviderWithRateLimiting(wrappedProvider, mockRegistry);
+
+      expect(getOriginalProvider(mockProvider)).toBe(mockProvider);
+      expect(getOriginalProvider(wrappedProvider)).toBe(mockProvider);
+      expect(getOriginalProvider(wrappedAgain)).toBe(mockProvider);
+      expect(wrappedAgain).toBe(wrappedProvider);
+      // Spreading public provider properties must not leak the private original reference.
+      expect(getOriginalProvider({ ...wrappedProvider })).not.toBe(mockProvider);
+
+      expect(await wrappedAgain.callApi('image rubric')).toEqual({ output: 'test output' });
+      expect(mockExecute).toHaveBeenCalledTimes(1);
+      expect(mockProvider.callApi).toHaveBeenCalledExactlyOnceWith(
+        'image rubric',
+        undefined,
+        undefined,
+      );
+    });
+
     it('should preserve id() method from class prototype', () => {
       // This tests the specific bug where spread operator doesn't copy prototype methods.
       // When a provider is a class instance, id() is on the prototype, not an own property.
@@ -73,6 +95,16 @@ describe('providerWrapper', () => {
 
       // Verify that id() works on the wrapped provider
       expect(wrappedProvider.id()).toBe('class-based-provider');
+    });
+
+    it('preserves wrappers created by module copies using the legacy boolean marker', () => {
+      Object.defineProperty(mockProvider, Symbol.for('promptfoo.rateLimitWrapped'), {
+        value: true,
+      });
+
+      expect(isRateLimitWrapped(mockProvider)).toBe(true);
+      expect(getOriginalProvider(mockProvider)).toBe(mockProvider);
+      expect(wrapProviderWithRateLimiting(mockProvider, mockRegistry)).toBe(mockProvider);
     });
 
     it('should not double-wrap already wrapped providers', () => {

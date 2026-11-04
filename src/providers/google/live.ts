@@ -444,7 +444,7 @@ export const tryGetThenPost = async <T = unknown>(url: string, data?: unknown): 
 };
 
 export class GoogleLiveProvider implements ApiProvider {
-  config: GoogleProviderConfig;
+  config: GoogleProviderConfig & { apiKeyEnvar?: string };
   modelName: string;
   readonly env?: ProviderOptions['env'];
   protected readonly isVertex: boolean = false;
@@ -454,6 +454,10 @@ export class GoogleLiveProvider implements ApiProvider {
     this.modelName = modelName;
     this.config = options.config || {};
     this.env = options.env;
+    const id = options.id;
+    if (id) {
+      this.id = () => id;
+    }
   }
 
   validateFunctionToolCall(output: string | object, vars?: CallApiContextParams['vars']): void {
@@ -499,10 +503,7 @@ export class GoogleLiveProvider implements ApiProvider {
 
   getApiKey(): string | undefined {
     // Priority aligned with Python SDK: GOOGLE_API_KEY > GEMINI_API_KEY
-    return resolveProviderApiKey({ apiKey: this.config.apiKey }, this.env, [
-      'GOOGLE_API_KEY',
-      'GEMINI_API_KEY',
-    ]);
+    return resolveProviderApiKey(this.config, this.env, ['GOOGLE_API_KEY', 'GEMINI_API_KEY']);
   }
 
   private async getAccessToken(config: CompletionOptions): Promise<string | undefined> {
@@ -1036,12 +1037,15 @@ export class GoogleLiveProvider implements ApiProvider {
         }
 
         const result: ProviderResponse = {
-          output: {
-            text: outputText,
-            toolCall: { functionCalls: function_calls_total },
-            statefulApiState,
-            ...(thinking && { thinking }),
-          },
+          output:
+            context?.isGrading && context.prompt.label === 'llm-rubric'
+              ? outputText
+              : {
+                  text: outputText,
+                  toolCall: { functionCalls: function_calls_total },
+                  statefulApiState,
+                  ...(thinking && { thinking }),
+                },
           metadata: {},
         };
 
