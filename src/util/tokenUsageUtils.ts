@@ -527,7 +527,9 @@ export function accumulateGenerationTokenUsage(target: TokenUsage, update: unkno
     (usage) =>
       usage &&
       (Object.values(usage).some((value) => typeof value === 'number' && value !== 0) ||
-        Object.values(usage.completionDetails ?? {}).some((value) => typeof value === 'number' && value !== 0)),
+        Object.values(usage.completionDetails ?? {}).some(
+          (value) => typeof value === 'number' && value !== 0,
+        )),
   );
   if (!hasUsage) {
     return false;
