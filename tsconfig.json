@@ -25,7 +25,6 @@
     "test/",
     "scripts/",
     "packages/contracts/",
-    "site/src/utils/markdown.ts",
     "./package.json",
     "src/**/*.json",
     "test/**/*.json",

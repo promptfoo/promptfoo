@@ -120,17 +120,11 @@ describe('ModelAuditSetupPage', () => {
     historyError: null,
     totalCount: 0,
     pageSize: 25,
-    currentPage: 0,
     sortModel: [{ field: 'createdAt', sort: 'desc' as const }],
-    searchQuery: '',
     fetchHistoricalScans: mockFetchHistoricalScans,
     fetchScanById: vi.fn(),
     deleteHistoricalScan: vi.fn(),
-    setPageSize: vi.fn(),
-    setCurrentPage: vi.fn(),
     setSortModel: vi.fn(),
-    setSearchQuery: vi.fn(),
-    resetFilters: vi.fn(),
   });
 
   beforeEach(() => {

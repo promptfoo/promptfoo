@@ -1,3 +1,5 @@
+import { createSingleAssertionTest } from '../factories/literalFixtures';
+
 import './setup';
 
 import { randomUUID } from 'crypto';
@@ -165,6 +167,7 @@ describeEvaluator('evaluator repeat cache isolation', () => {
       'result-repeat-1-miss-2',
     ]);
     expect(firstSummary.results.map((result) => result.response?.cached)).toEqual([false, false]);
+    expect(firstSummary.stats).not.toHaveProperty('cacheHits');
 
     const secondEval = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
     await evaluate(testSuite, secondEval, { maxConcurrency: 1 });
@@ -176,6 +179,7 @@ describeEvaluator('evaluator repeat cache isolation', () => {
       'result-repeat-1-miss-2',
     ]);
     expect(secondSummary.results.map((result) => result.response?.cached)).toEqual([true, true]);
+    expect(secondSummary.stats.cacheHits).toBe(2);
     expect(await getCache().get('manual-provider-key')).toEqual(baselineResponse);
   });
 
@@ -355,16 +359,7 @@ describeEvaluator('evaluator repeat cache isolation', () => {
     const testSuite: TestSuite = {
       providers: [provider],
       prompts: [toPrompt('Prompt A'), toPrompt('Prompt B')],
-      tests: [
-        {
-          assert: [
-            {
-              type: 'select-best',
-              value: 'choose the best one',
-            },
-          ],
-        },
-      ],
+      tests: [createSingleAssertionTest('select-best', 'choose the best one')],
     };
 
     try {
@@ -428,16 +423,7 @@ describeEvaluator('evaluator repeat cache isolation', () => {
     const testSuite: TestSuite = {
       providers: [provider],
       prompts: [toPrompt('Prompt A'), toPrompt('Prompt B')],
-      tests: [
-        {
-          assert: [
-            {
-              type: 'select-best',
-              value: 'choose the best one',
-            },
-          ],
-        },
-      ],
+      tests: [createSingleAssertionTest('select-best', 'choose the best one')],
     };
 
     const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
