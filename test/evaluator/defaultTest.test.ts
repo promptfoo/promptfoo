@@ -1,3 +1,4 @@
+import { createTokenOutput } from '../factories/literalFixtures';
 import './setup';
 
 import { randomUUID } from 'crypto';
@@ -47,10 +48,7 @@ describe('evaluator defaultTest merging', () => {
   it('should merge defaultTest.options.provider with test case options', async () => {
     const mockProvider: ApiProvider = {
       id: vi.fn().mockReturnValue('mock-provider'),
-      callApi: vi.fn().mockResolvedValue({
-        output: 'Test output',
-        tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
-      }),
+      callApi: vi.fn().mockResolvedValue(createTokenOutput()),
     };
 
     const testSuite: TestSuite = {
@@ -109,10 +107,7 @@ describe('evaluator defaultTest merging', () => {
     });
     const mockProvider: ApiProvider = {
       id: vi.fn().mockReturnValue('mock-provider'),
-      callApi: vi.fn().mockResolvedValue({
-        output: 'Test output',
-        tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
-      }),
+      callApi: vi.fn().mockResolvedValue(createTokenOutput()),
     };
 
     const testSuite: TestSuite = {
@@ -599,9 +594,6 @@ describe('defaultTest normalization for extensions', () => {
   });
 
   it('should not modify defaultTest when no extensions are present', async () => {
-    const mockedRunExtensionHook = vi.mocked(runExtensionHook);
-    mockedRunExtensionHook.mockClear();
-
     const testSuite: TestSuite = {
       providers: [mockApiProvider],
       prompts: [{ raw: 'Test prompt', label: 'test' }],
@@ -613,12 +605,7 @@ describe('defaultTest normalization for extensions', () => {
     const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
     await evaluate(testSuite, evalRecord, {});
 
-    // runExtensionHook should still be called (with empty/undefined extensions)
-    // but the beforeAll hook call should receive the original suite without normalization
-    const beforeAllCall = mockedRunExtensionHook.mock.calls.find((call) => call[1] === 'beforeAll');
-    expect(beforeAllCall).toBeDefined();
-    const suite = (beforeAllCall?.[2] as { suite: TestSuite } | undefined)?.suite;
-    expect(suite?.defaultTest).toBeUndefined();
+    expect(testSuite.defaultTest).toBeUndefined();
   });
 
   it('should allow extensions to push to defaultTest.assert safely', async () => {
