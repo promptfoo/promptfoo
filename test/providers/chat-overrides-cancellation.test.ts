@@ -166,8 +166,8 @@ describe.each([
 
   it('leaves a completed cache entry reusable after cancelling a cache hit', async () => {
     // fetchWithCache reads the backing store with an already-scoped key.
-    // Capture that store before entering the namespace-aware getCache facade.
-    const backing = cache.getCache();
+    // Capture the enabled store before entering the namespace-aware getCache facade.
+    const backing = await cache.withCacheEnabled(true, async () => cache.getCache());
     await cache.withCacheNamespace(randomUUID(), () =>
       cache.withCacheEnabled(true, async () => {
         vi.mocked(globalThis.fetch).mockResolvedValueOnce(response());

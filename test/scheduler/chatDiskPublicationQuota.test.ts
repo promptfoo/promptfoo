@@ -1,4 +1,4 @@
-import { readFile } from 'node:fs/promises';
+import { readFile, realpath } from 'node:fs/promises';
 import path from 'node:path';
 import { setImmediate } from 'node:timers/promises';
 
@@ -254,7 +254,8 @@ describe('Chat completed quota during default disk publication', () => {
       pendingCalls.push(first);
       const disk = await publicationStarted.promise;
       expect(disk).toBeInstanceOf(modules.disk.KeyvFile);
-      expect(disk.opts.filename).toBe(path.join(cacheDirectory, 'cache.json'));
+      expect(path.basename(disk.opts.filename)).toBe('cache.json');
+      expect(await realpath(path.dirname(disk.opts.filename))).toBe(await realpath(cacheDirectory));
       expect(disk.opts.writeDelay).toBe(100);
       expect(firstResponse.bodyUsed).toBe(true);
       expect(cacheSet).toHaveBeenCalledOnce();

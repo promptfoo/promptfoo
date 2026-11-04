@@ -469,7 +469,7 @@ export async function get_tools() {
     }));
 
   it('rejects cancellation racing a completed cache lookup without evicting it', async () => {
-    const backingCache = cache.getCache();
+    const backingCache = await cache.withCacheEnabled(true, async () => cache.getCache());
     await withCompletedCache(async () => {
       fetch.mockResolvedValueOnce(response());
       const target = provider();

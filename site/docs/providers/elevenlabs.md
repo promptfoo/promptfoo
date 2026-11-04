@@ -163,6 +163,8 @@ providers:
           passingThreshold: 0.8
 ```
 
+With `agentConfig`, each provider instance creates and reuses its own agent until cleanup deletes it. This lifecycle is independent of response-cache settings. Agents supplied through `agentId` are never deleted by Promptfoo.
+
 ### Supporting APIs
 
 Additional audio processing capabilities:

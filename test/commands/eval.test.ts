@@ -4,7 +4,7 @@ import * as path from 'path';
 
 import { Command } from 'commander';
 import { afterEach, beforeEach, describe, expect, it, Mocked, vi } from 'vitest';
-import { disableCache, withCacheEnabled, withCacheNamespace } from '../../src/cache';
+import { isCacheEnabled } from '../../src/cache';
 import cliState from '../../src/cliState';
 import {
   doEval as commandDoEval,
@@ -68,7 +68,6 @@ import type {
   UnifiedConfig,
 } from '../../src/types/index';
 
-vi.mock('../../src/cache');
 vi.mock('../../src/evaluator');
 vi.mock('../../src/globalConfig/accounts');
 vi.mock('../../src/globalConfig/cloud', async (importOriginal) => {
@@ -1251,8 +1250,12 @@ describe('evalCommand', () => {
 
   it('should handle --no-cache option', async () => {
     const cmdObj = { cache: false };
+    vi.mocked(evaluate).mockImplementationOnce(async () => {
+      expect(isCacheEnabled()).toBe(false);
+      return new Eval(defaultConfig);
+    });
     await doEval(cmdObj, defaultConfig, defaultConfigPath, {});
-    expect(disableCache).toHaveBeenCalledTimes(1);
+    expect(isCacheEnabled()).toBe(true);
   });
 
   it('should handle --write option', async () => {
@@ -2281,8 +2284,6 @@ describe('evalCommand', () => {
     record.runtimeOptions = { cache: false };
     const findById = vi.spyOn(Eval, 'findById').mockResolvedValueOnce(record);
     const latest = vi.spyOn(Eval, 'latest').mockResolvedValueOnce(record);
-    vi.mocked(withCacheEnabled).mockImplementation((_enabled, callback) => callback());
-    vi.mocked(withCacheNamespace).mockImplementation((_namespace, callback) => callback());
     if (mode === 'retry-errors') {
       vi.mocked(getErrorResultIds).mockResolvedValueOnce(['mocked-retry-row']);
     }
@@ -2351,8 +2352,6 @@ describe('evalCommand', () => {
       findById.mockRestore();
       latest.mockRestore();
       tracker.mockRestore();
-      vi.mocked(withCacheEnabled).mockReset();
-      vi.mocked(withCacheNamespace).mockReset();
       vi.mocked(evaluate).mockReset();
     }
   });

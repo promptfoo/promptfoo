@@ -105,8 +105,8 @@ describe('Google public request boundaries', () => {
     async (transport) => {
       await withFreshCache(async () => {
         const cache = await getCache();
-        const cacheGet = vi.spyOn(cache, 'get');
-        const cacheSet = vi.spyOn(cache, 'set');
+        const cacheGet = vi.spyOn(cache.stores[0], 'get');
+        const cacheSet = vi.spyOn(cache.stores[0], 'set');
         const first = await loadVertex(transport, {
           service_tier: 'priority',
           headers: { 'X-Tenant-Id': 'tenant-a' },
@@ -140,7 +140,7 @@ describe('Google public request boundaries', () => {
     async (transport) => {
       await withFreshCache(async () => {
         const cache = await getCache();
-        const cacheSet = vi.spyOn(cache, 'set');
+        const cacheSet = vi.spyOn(cache.stores[0], 'set');
         const priority = await loadVertex(transport, { service_tier: 'priority' });
         const flex = await loadVertex(transport, {
           service_tier: 'priority',
@@ -158,7 +158,9 @@ describe('Google public request boundaries', () => {
         const keys = cacheSet.mock.calls.map(([key]) => key);
         expect(new Set(keys).size).toBe(2);
         for (const key of keys) {
-          expect(key).toMatch(/^vertex:gemini-3\.5-flash-lite:[a-f0-9]{64}$/);
+          expect(key).toMatch(
+            /^google-boundary-[\w-]+:vertex:gemini-3\.5-flash-lite:[a-f0-9]{64}$/,
+          );
           expect(key).not.toContain('test-access-token');
           expect(key).not.toContain('test-api-key');
         }

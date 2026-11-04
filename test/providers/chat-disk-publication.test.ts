@@ -106,7 +106,10 @@ describe('public Chat outcomes during default disk publication', () => {
     const observation = {
       started: started.promise.then((disk) => {
         expect(disk).toBeInstanceOf(KeyvFileClass);
-        expect(disk.opts.filename).toBe(path.join(cacheDirectory, 'cache.json'));
+        expect(path.basename(disk.opts.filename)).toBe('cache.json');
+        expect(fs.realpathSync(path.dirname(disk.opts.filename))).toBe(
+          fs.realpathSync(cacheDirectory),
+        );
         expect(disk.opts.writeDelay).toBe(100);
       }),
       settled: false,

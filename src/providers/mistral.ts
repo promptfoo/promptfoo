@@ -3,7 +3,7 @@ import { createHmac } from 'crypto';
 import {
   fetchWithCache,
   getAbortSignalScopedKey,
-  getCache,
+  getCacheWriteContext,
   getScopedCacheKey,
   isCacheEnabled,
 } from '../cache';
@@ -277,10 +277,14 @@ function getMistralAuthCacheNamespace(apiKey: string): string {
 
 function fetchMistralWithDedupe(
   cacheKey: string,
+  clearGeneration: number,
   fetcher: () => Promise<MistralFetchResult>,
   abortSignal?: AbortSignal,
 ): Promise<MistralFetchResult> {
-  const inflightCacheKey = getAbortSignalScopedKey(getScopedCacheKey(cacheKey), abortSignal);
+  const inflightCacheKey = getAbortSignalScopedKey(
+    `${clearGeneration}:${getScopedCacheKey(cacheKey)}`,
+    abortSignal,
+  );
   let inflightRequest = MISTRAL_INFLIGHT_REQUESTS.get(inflightCacheKey);
   if (!inflightRequest) {
     inflightRequest = fetcher().finally(() => {
@@ -616,24 +620,23 @@ export class MistralChatCompletionProvider implements ApiProvider {
       : undefined;
     const params = buildMistralChatParams(this.modelName, messages, config, loadedTools);
 
+    const cacheContext = getCacheWriteContext();
+    const clearGeneration = cacheContext.generation;
     const cacheKey = `mistral:chat:${this.modelName}:${this.getCacheIdentityHash(
       apiUrl,
     )}:${getMistralAuthCacheNamespace(apiKey)}:${hashMistralCacheValue(params)}`;
     if (isCacheEnabled()) {
-      const cache = getCache();
-      if (cache) {
-        const cachedResult = await cache.get<ProviderResponse>(cacheKey);
-        if (cachedResult) {
-          logger.debug('Returning cached Mistral response', { model: this.modelName });
-          return {
-            ...cachedResult,
-            cached: true,
-            tokenUsage: {
-              ...cachedResult.tokenUsage,
-              cached: cachedResult.tokenUsage?.total,
-            },
-          };
-        }
+      const cachedResult = await cacheContext.get<ProviderResponse>(cacheKey);
+      if (cachedResult) {
+        logger.debug('Returning cached Mistral response', { model: this.modelName });
+        return {
+          ...cachedResult,
+          cached: true,
+          tokenUsage: {
+            ...cachedResult.tokenUsage,
+            cached: cachedResult.tokenUsage?.total,
+          },
+        };
       }
     }
 
@@ -647,7 +650,7 @@ export class MistralChatCompletionProvider implements ApiProvider {
       cached = false;
 
     try {
-      ({ data, cached } = await fetchMistralWithDedupe(cacheKey, async () => {
+      ({ data, cached } = await fetchMistralWithDedupe(cacheKey, clearGeneration, async () => {
         return (await fetchWithCache(
           url,
           {
@@ -714,7 +717,7 @@ export class MistralChatCompletionProvider implements ApiProvider {
 
     if (isCacheEnabled()) {
       try {
-        await getCache().set(cacheKey, result);
+        await cacheContext.set(cacheKey, result);
       } catch (err) {
         logger.error(`Failed to cache response: ${String(err)}`);
       }
@@ -814,6 +817,8 @@ export class MistralEmbeddingProvider implements ApiProvider {
 
     const apiUrl = this.getApiUrl();
     const url = `${apiUrl}/embeddings`;
+    const cacheContext = getCacheWriteContext();
+    const clearGeneration = cacheContext.generation;
     const cacheKey = `mistral:embedding:${this.modelName}:${this.getCacheIdentityHash(
       apiUrl,
     )}:${getMistralAuthCacheNamespace(apiKey)}:${hashMistralCacheValue(body)}`;
@@ -822,16 +827,17 @@ export class MistralEmbeddingProvider implements ApiProvider {
     let cached = false;
     let status: number | undefined;
     let statusText: string | undefined;
-    const cache = isCacheEnabled() ? getCache() : undefined;
-    if (cache) {
+    const useCache = isCacheEnabled();
+    if (useCache) {
       try {
-        const cachedData = await cache.get<any>(cacheKey);
+        const cachedData = await cacheContext.get<any>(cacheKey, options?.abortSignal);
         if (cachedData) {
           logger.debug('Returning cached Mistral embedding response', { model: this.modelName });
           data = cachedData;
           cached = true;
         }
       } catch (err) {
+        options?.abortSignal?.throwIfAborted();
         logger.error(`Failed to read Mistral embedding cache: ${String(err)}`);
       }
     }
@@ -848,6 +854,7 @@ export class MistralEmbeddingProvider implements ApiProvider {
       try {
         ({ data, cached, status, statusText } = await fetchMistralWithDedupe(
           cacheKey,
+          clearGeneration,
           async () => {
             return (await fetchWithCache(
               url,
@@ -898,9 +905,9 @@ export class MistralEmbeddingProvider implements ApiProvider {
         cost: calculateMistralCost(this.modelName, this.config, promptTokens, completionTokens),
         ...(cached ? { cached: true } : {}),
       };
-      if (!cached && cache) {
+      if (!cached && useCache) {
         try {
-          await cache.set(cacheKey, data);
+          await cacheContext.set(cacheKey, data);
         } catch (err) {
           logger.error(`Failed to cache Mistral embedding response: ${String(err)}`);
         }
