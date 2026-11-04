@@ -1,5 +1,5 @@
-import { propagation } from '@opentelemetry/api';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { context, createTraceState, propagation, ROOT_CONTEXT, trace } from '@opentelemetry/api';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import cliState from '../../src/cliState';
 import { getEnvBool, getEnvString } from '../../src/envars';
 import { isLoggedIntoCloud } from '../../src/globalConfig/accounts';
@@ -499,6 +499,36 @@ describe('getRemoteGenerationUrlForUnaligned', () => {
 });
 
 describe('getRemoteGenerationHeaders', () => {
+  afterEach(() => {
+    propagation.disable();
+    vi.restoreAllMocks();
+  });
+
+  it.each([{ fields: [] }, { fields: ['b3'] }])(
+    'keeps W3C headers with host propagator fields $fields',
+    ({ fields }) => {
+      propagation.disable();
+      const inject = vi.fn();
+      propagation.setGlobalPropagator({ fields: () => fields, inject, extract: (ctx) => ctx });
+      const active = trace.setSpanContext(ROOT_CONTEXT, {
+        traceId: '0123456789abcdef0123456789abcdef',
+        spanId: '0123456789abcdef',
+        traceFlags: 1,
+        traceState: createTraceState('vendor=state'),
+      });
+      vi.spyOn(context, 'active').mockReturnValue(active);
+
+      expect(getRemoteGenerationHeaders()).toEqual({
+        'Content-Type': 'application/json',
+        traceparent: '00-0123456789abcdef0123456789abcdef-0123456789abcdef-01',
+        tracestate: 'vendor=state',
+      });
+      expect(propagation.fields()).toEqual(fields);
+      expect(inject).not.toHaveBeenCalled();
+      propagation.inject(context.active(), {});
+      expect(inject).toHaveBeenCalledOnce();
+    },
+  );
   it('returns JSON headers without cloud credentials', () => {
     expect(getRemoteGenerationHeaders()).toEqual({
       'Content-Type': 'application/json',
@@ -513,35 +543,34 @@ describe('getRemoteGenerationHeaders', () => {
   });
 
   it('propagates W3C trace headers without forwarding baggage', () => {
-    const inject = vi.spyOn(propagation, 'inject').mockImplementation((_context, carrier) => {
-      const headers = carrier as Record<string, string>;
-      headers.traceparent = '00-0123456789abcdef0123456789abcdef-0123456789abcdef-01';
-      headers.tracestate = 'vendor=state';
-      headers.baggage = 'customer-secret=do-not-forward';
-    });
+    const active = propagation.setBaggage(
+      trace.setSpanContext(ROOT_CONTEXT, {
+        traceId: '0123456789abcdef0123456789abcdef',
+        spanId: '0123456789abcdef',
+        traceFlags: 1,
+        traceState: createTraceState('vendor=state'),
+      }),
+      propagation.createBaggage({ 'customer-secret': { value: 'do-not-forward' } }),
+    );
+    vi.spyOn(context, 'active').mockReturnValue(active);
 
-    try {
-      expect(getRemoteGenerationHeaders()).toEqual({
-        'Content-Type': 'application/json',
-        traceparent: '00-0123456789abcdef0123456789abcdef-0123456789abcdef-01',
-        tracestate: 'vendor=state',
-      });
-    } finally {
-      inject.mockRestore();
-    }
+    expect(getRemoteGenerationHeaders()).toEqual({
+      'Content-Type': 'application/json',
+      traceparent: '00-0123456789abcdef0123456789abcdef-0123456789abcdef-01',
+      tracestate: 'vendor=state',
+    });
   });
 
   it('preserves an explicitly supplied traceparent', () => {
-    const inject = vi.spyOn(propagation, 'inject').mockImplementation((_context, carrier) => {
-      (carrier as Record<string, string>).traceparent = 'automatically-injected';
+    const active = trace.setSpanContext(ROOT_CONTEXT, {
+      traceId: '0123456789abcdef0123456789abcdef',
+      spanId: '0123456789abcdef',
+      traceFlags: 1,
     });
+    vi.spyOn(context, 'active').mockReturnValue(active);
 
-    try {
-      expect(getRemoteGenerationHeaders({ traceparent: 'explicit-parent' })).toMatchObject({
-        traceparent: 'explicit-parent',
-      });
-    } finally {
-      inject.mockRestore();
-    }
+    expect(getRemoteGenerationHeaders({ traceparent: 'explicit-parent' })).toMatchObject({
+      traceparent: 'explicit-parent',
+    });
   });
 });

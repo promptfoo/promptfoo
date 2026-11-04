@@ -1,9 +1,9 @@
-import { context, propagation } from '@opentelemetry/api';
 import cliState from '../cliState';
 import { getEnvBool, getEnvString } from '../envars';
 import { isLoggedIntoCloud } from '../globalConfig/accounts';
 import { CloudConfig } from '../globalConfig/cloud';
 import { hasCodexDefaultCredentials } from '../providers/openai/codexDefaults';
+import { getTraceContextHeaders } from '../tracing/otelSdk';
 import { remoteGenerationContextPayload as buildRemoteGenerationContextPayload } from './remoteGenerationContext';
 
 export { remoteGenerationContextPayload } from './remoteGenerationContext';
@@ -54,13 +54,9 @@ export function getRemoteGenerationUrl(): string {
 export function getRemoteGenerationHeaders(
   extraHeaders?: Record<string, string>,
 ): Record<string, string> {
-  const propagatedHeaders: Record<string, string> = {};
-  propagation.inject(context.active(), propagatedHeaders);
-
   return {
     'Content-Type': 'application/json',
-    ...(propagatedHeaders.traceparent ? { traceparent: propagatedHeaders.traceparent } : {}),
-    ...(propagatedHeaders.tracestate ? { tracestate: propagatedHeaders.tracestate } : {}),
+    ...getTraceContextHeaders(),
     ...extraHeaders,
   };
 }

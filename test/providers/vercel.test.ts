@@ -231,12 +231,38 @@ describe('VercelAiProvider', () => {
         expect.objectContaining({
           experimental_telemetry: {
             isEnabled: true,
+            tracer: expect.objectContaining({ startSpan: expect.any(Function) }),
             functionId: 'vercel:openai/gpt-4o-mini',
             recordInputs: false,
             recordOutputs: false,
           },
         }),
       );
+    });
+
+    it('links explicit parents independently of the host propagator', async () => {
+      const { generateText } = await import('ai');
+      spanExporter.reset();
+      const extract = vi.spyOn(propagation, 'extract').mockImplementation((ctx) => ctx);
+      vi.mocked(generateText).mockImplementationOnce(async (options) => {
+        const tracer = options.experimental_telemetry!.tracer!;
+        tracer.startSpan('fixture SDK call').end();
+        return { text: 'Traced response', usage: {}, finishReason: 'stop' } as any;
+      });
+      try {
+        const result = await new VercelAiProvider('fixture/model').callApi('Hello', {
+          prompt: { raw: 'Hello', label: 'test' },
+          traceparent: testTraceparent,
+          vars: {},
+        });
+        expect(result.output).toBe('Traced response');
+        await testTracerProvider.forceFlush();
+        const [span] = spanExporter.getFinishedSpans();
+        expect(span.spanContext().traceId).toBe('0123456789abcdef0123456789abcdef');
+        expect(span.parentSpanContext?.spanId).toBe('0123456789abcdef');
+      } finally {
+        extract.mockRestore();
+      }
     });
 
     it('keeps a matching active child span instead of flattening the trace hierarchy', async () => {
@@ -520,6 +546,7 @@ describe('VercelAiProvider', () => {
         expect.objectContaining({
           experimental_telemetry: {
             isEnabled: true,
+            tracer: expect.objectContaining({ startSpan: expect.any(Function) }),
             functionId: 'vercel:openai/gpt-4o',
             recordInputs: false,
             recordOutputs: false,
@@ -1322,6 +1349,7 @@ describe('VercelAiProvider', () => {
         expect.objectContaining({
           experimental_telemetry: expect.objectContaining({
             isEnabled: true,
+            tracer: expect.objectContaining({ startSpan: expect.any(Function) }),
             recordInputs: false,
             recordOutputs: false,
           }),
@@ -1553,6 +1581,7 @@ describe('VercelAiEmbeddingProvider', () => {
         expect.objectContaining({
           experimental_telemetry: {
             isEnabled: true,
+            tracer: expect.objectContaining({ startSpan: expect.any(Function) }),
             functionId: 'vercel:embedding:openai/text-embedding-3-small',
             recordInputs: false,
             recordOutputs: false,
