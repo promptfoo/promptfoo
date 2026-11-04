@@ -624,7 +624,7 @@ describe('code-scan-action main', () => {
         ]) {
           expect(options?.env?.[key]).toBeUndefined();
         }
-        expect(options?.env?.GIT_CONFIG_GLOBAL).toBe(os.devNull);
+        expect(options?.env?.GIT_CONFIG_GLOBAL).toBe('/dev/null');
         expect(options?.env?.GIT_CONFIG_NOSYSTEM).toBe('1');
         if (args?.[0] === 'rev-parse') {
           expect(options?.env?.GIT_CONFIG_COUNT).toBeUndefined();

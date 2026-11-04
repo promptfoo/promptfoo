@@ -1,6 +1,6 @@
 import { execFileSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { devNull, tmpdir } from 'node:os';
+import { tmpdir } from 'node:os';
 import path from 'node:path';
 
 import * as yaml from 'js-yaml';
@@ -14,7 +14,7 @@ it('loads base policy and relative guidance while scanning the PR head', () => {
   const directory = mkdtempSync(path.join(tmpdir(), 'promptfoo-policy-test-'));
   const repo = path.join(directory, 'checkout');
   mkdirSync(path.join(repo, '.github'), { recursive: true });
-  const env = { ...process.env, GIT_CONFIG_GLOBAL: devNull, GIT_CONFIG_NOSYSTEM: '1' };
+  const env = { ...process.env, GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1' };
   const git = (...args: string[]) =>
     execFileSync('git', args, { cwd: repo, env, encoding: 'utf8' }).trim();
   try {

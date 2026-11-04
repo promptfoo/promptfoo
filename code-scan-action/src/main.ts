@@ -566,7 +566,8 @@ function createGitEnv(): Record<string, string> {
   }
   return {
     ...env,
-    GIT_CONFIG_GLOBAL: os.devNull,
+    // Git for Windows recognizes its POSIX null path, not Node's device namespace.
+    GIT_CONFIG_GLOBAL: '/dev/null',
     GIT_CONFIG_NOSYSTEM: '1',
     GIT_TERMINAL_PROMPT: '0',
   };
