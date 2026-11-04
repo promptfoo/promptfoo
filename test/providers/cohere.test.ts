@@ -1,7 +1,13 @@
+import { type Span, SpanStatusCode, type Tracer, trace } from '@opentelemetry/api';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache } from '../../src/cache';
+import EvalResult, {
+  getStripFlags,
+  sanitizeResultForJsonlArtifact,
+} from '../../src/models/evalResult';
 import { CohereChatCompletionProvider, CohereEmbeddingProvider } from '../../src/providers/cohere';
 import { loadApiProvider } from '../../src/providers/index';
+import { ResultFailureReason } from '../../src/types/index';
 
 vi.mock('../../src/cache', () => ({
   fetchWithCache: vi.fn(),
@@ -14,6 +20,7 @@ describe('CohereChatCompletionProvider', () => {
 
   afterEach(() => {
     vi.resetAllMocks();
+    vi.restoreAllMocks();
     vi.unstubAllEnvs();
   });
 
@@ -305,6 +312,7 @@ describe('CohereChatCompletionProvider', () => {
     expect(result).toEqual({
       cached: false,
       output: 'Hello world',
+      finishReason: 'stop',
       tokenUsage: {
         cached: 0,
         completion: 2,
@@ -313,6 +321,168 @@ describe('CohereChatCompletionProvider', () => {
         total: 7,
       },
     });
+  });
+
+  it.each([
+    ['STOP_SEQUENCE', 'stop'],
+    ['MAX_TOKENS', 'length'],
+    ['FUTURE_REASON', 'future_reason'],
+    [undefined, undefined],
+  ])('preserves the v2 finish reason %s as %s', async (rawReason, finishReason) => {
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      cached: false,
+      data: {
+        finish_reason: rawReason,
+        message: { role: 'assistant', content: [{ type: 'text', text: 'Partial answer' }] },
+        usage: { tokens: { input_tokens: 5, output_tokens: 2 } },
+      },
+    } as any);
+    const provider = new CohereChatCompletionProvider('command-a-plus-05-2026', {
+      config: { apiKey: 'test-key' },
+    });
+
+    const result = await provider.callApi('Hello');
+
+    expect(result.error).toBeUndefined();
+    expect(result.output).toBe('Partial answer');
+    expect(result.finishReason).toBe(finishReason);
+  });
+
+  it.each(
+    ['command-a-plus-05-2026', 'north-mini-code-1-0'].flatMap((modelName) =>
+      ['ERROR', 'TIMEOUT'].flatMap((finishReason) =>
+        ['Partial answer', undefined].map((output) => ({ modelName, finishReason, output })),
+      ),
+    ),
+  )(
+    'reports $finishReason for $modelName with output $output as a provider error',
+    async ({ modelName, finishReason, output }) => {
+      vi.mocked(fetchWithCache).mockResolvedValue({
+        cached: false,
+        status: 200,
+        data: {
+          finish_reason: finishReason,
+          message: {
+            role: 'assistant',
+            content: output === undefined ? [] : [{ type: 'text', text: output }],
+          },
+          usage: { tokens: { input_tokens: 5, output_tokens: 2 }, cached_tokens: 3 },
+        },
+      } as any);
+      const provider = new CohereChatCompletionProvider(modelName, {
+        config: { apiKey: 'test-key' },
+      });
+
+      const result = await provider.callApi('Hello');
+
+      expect(result).toMatchObject({
+        error: `Cohere v2 Chat API generation failed with finish_reason ${finishReason}.`,
+        finishReason: finishReason.toLowerCase(),
+        cached: false,
+        tokenUsage: { prompt: 5, completion: 2, total: 7, cached: 3, numRequests: 1 },
+      });
+      expect(result.output).toBeUndefined();
+      if (output !== undefined) {
+        expect(result.raw).toEqual(output);
+      }
+    },
+  );
+
+  it.each(
+    ['ERROR', 'TIMEOUT'].flatMap((finishReason) =>
+      [false, true].map((stripOutput) => ({ finishReason, stripOutput })),
+    ),
+  )(
+    'keeps $finishReason partial diagnostics within response-output stripping (strip: $stripOutput)',
+    async ({ finishReason, stripOutput }) => {
+      const diagnostic = 'private partial completion fixture';
+      vi.mocked(fetchWithCache).mockResolvedValue({
+        cached: false,
+        data: {
+          finish_reason: finishReason,
+          message: { role: 'assistant', content: [{ type: 'text', text: diagnostic }] },
+          usage: { tokens: { input_tokens: 3, output_tokens: 2 } },
+        },
+      } as any);
+      const provider = new CohereChatCompletionProvider('command-a-plus-05-2026', {
+        config: { apiKey: 'test-key' },
+      });
+      const response = await provider.callApi('Hello');
+      const model = new EvalResult({
+        id: 'cohere-strip-result',
+        evalId: 'cohere-strip-eval',
+        promptIdx: 0,
+        testIdx: 0,
+        testCase: { vars: {} },
+        prompt: { raw: 'Hello', label: 'fixture' },
+        provider: { id: provider.id() },
+        success: false,
+        score: 0,
+        failureReason: ResultFailureReason.ERROR,
+        error: response.error,
+        response,
+        // The evaluator copies provider metadata onto the result as well.
+        metadata: response.metadata,
+        gradingResult: null,
+      });
+      const flags = getStripFlags({
+        PROMPTFOO_STRIP_RESPONSE_OUTPUT: String(stripOutput),
+        PROMPTFOO_STRIP_METADATA: 'false',
+      });
+      for (const projected of [
+        model.toEvaluateResult(flags),
+        sanitizeResultForJsonlArtifact(model.toEvaluateResult(getStripFlags()), flags),
+      ]) {
+        expect(projected.error).toBe(response.error);
+        expect(projected.response?.tokenUsage).toMatchObject({
+          prompt: 3,
+          completion: 2,
+          total: 5,
+        });
+        if (stripOutput) {
+          expect(JSON.stringify(projected)).not.toContain(diagnostic);
+          expect(projected.response?.output).toBe('[output stripped]');
+        } else {
+          expect(JSON.stringify(projected)).toContain(diagnostic);
+          expect(projected.response?.output).toBeUndefined();
+        }
+      }
+    },
+  );
+
+  it.each([
+    ['MAX_TOKENS', 'length', SpanStatusCode.OK],
+    ['ERROR', 'error', SpanStatusCode.ERROR],
+    ['TIMEOUT', 'timeout', SpanStatusCode.ERROR],
+  ])('records v2 %s finish reasons in GenAI spans', async (rawReason, finishReason, statusCode) => {
+    const span = {
+      setAttribute: vi.fn(),
+      setStatus: vi.fn(),
+      end: vi.fn(),
+      recordException: vi.fn(),
+    } as unknown as Span;
+    const startActiveSpan = vi.fn(
+      (_name, _options, _parent, callback: (span: Span) => Promise<unknown>) => callback(span),
+    );
+    vi.spyOn(trace, 'getTracer').mockReturnValue({ startActiveSpan } as unknown as Tracer);
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      cached: false,
+      data: {
+        finish_reason: rawReason,
+        message: { role: 'assistant', content: [{ type: 'text', text: 'Partial answer' }] },
+        usage: { tokens: { input_tokens: 5, output_tokens: 2 } },
+      },
+    } as any);
+    const provider = new CohereChatCompletionProvider('command-a-plus-05-2026', {
+      config: { apiKey: 'test-key' },
+    });
+
+    await provider.callApi('Hello');
+
+    expect(span.setAttribute).toHaveBeenCalledWith('gen_ai.response.finish_reasons', [
+      finishReason,
+    ]);
+    expect(span.setStatus).toHaveBeenCalledWith(expect.objectContaining({ code: statusCode }));
   });
 
   it('preserves and normalizes citations from v2 text responses', async () => {
@@ -920,6 +1090,7 @@ describe('CohereChatCompletionProvider', () => {
     vi.mocked(fetchWithCache).mockResolvedValue({
       cached: false,
       data: {
+        finish_reason: 'TOOL_CALL',
         message: { role: 'assistant', content: [], tool_calls: toolCalls },
         usage: { tokens: { input_tokens: 6, output_tokens: 3 } },
       },
@@ -931,6 +1102,7 @@ describe('CohereChatCompletionProvider', () => {
 
     await expect(provider.callApi('What is the weather?')).resolves.toMatchObject({
       output: toolCalls,
+      finishReason: 'tool_calls',
       tokenUsage: { prompt: 6, completion: 3, total: 9 },
     });
   });
