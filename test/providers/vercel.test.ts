@@ -13,8 +13,8 @@ import {
   VercelAiEmbeddingProvider,
   VercelAiProvider,
 } from '../../src/providers/vercel';
-import * as fips from '../../src/util/fips';
 import { registerTracerProvider } from '../../src/tracing/tracerProvider';
+import * as fips from '../../src/util/fips';
 import { mockProcessEnv } from '../util/utils';
 
 const createFreshTextResult = () => ({

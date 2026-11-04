@@ -20,11 +20,11 @@ import {
   PROMPTFOO_TEAM_ID_HEADER,
   preserveCloudAuthRedirects,
 } from './util/fetch/monkeyPatchFetch';
-import { assertFipsDispatcher, resolveTlsOptions } from './util/fetch/tls';
-import { isFipsEnabled } from './util/fips';
 import { getEffectiveRequestSignal } from './util/fetch/requestSignal';
 import { ResponseBodyTimeoutError, readWithResponseDeadline } from './util/fetch/responseDeadline';
 import { getFetchRetryContextMaxRetries } from './util/fetch/retryContext';
+import { assertFipsDispatcher, resolveTlsOptions } from './util/fetch/tls';
+import { isFipsEnabled } from './util/fips';
 import { isSecretField, looksLikeSecret, sanitizeUrlForLogging } from './util/sanitizer';
 import { sleep } from './util/time';
 import type { Cache } from 'cache-manager';
