@@ -20,8 +20,14 @@ export interface RateLimitExecuteOptions<T> {
   isRateLimited?: (result: T | undefined, error?: Error) => boolean;
   /** Extract retry-after delay from result or error */
   getRetryAfter?: (result: T | undefined, error?: Error) => number | undefined;
+  /** Detect retryable result-level transient failures that are not rate limits. */
+  isRetryableResult?: (result: T) => boolean;
+  /** Merge bounded prior retry results into the terminal result. */
+  finalizeResult?: (result: T, retryResults: readonly T[]) => T;
   /** Preserve a structured failure result when retries are exhausted. Defaults to throwing. */
   onRateLimitExhausted?: (result: T, error: Error) => T;
+  /** Returning false vetoes another attempt, e.g. a nested call that already retried. */
+  canRetry?: () => boolean;
 }
 
 // Word-bounded: a bare "429" substring also matches token counts and request

@@ -18,11 +18,13 @@ import { createDecompressionInterceptor, stripDecompressionHeaders } from './dec
 import {
   extractRateLimitErrorCode,
   extractRateLimitErrorType,
+  getAbortError,
   HttpRateLimitError,
   type SystemError,
 } from './errors';
 import { monkeyPatchFetch, preserveCloudAuthRedirects } from './monkeyPatchFetch';
 import { getEffectiveRequestSignal } from './requestSignal';
+import { readWithResponseDeadline, trackResponseDeadline } from './responseDeadline';
 import { getFetchRetryContextMaxRetries } from './retryContext';
 
 import type { FetchOptions } from './types';
@@ -359,7 +361,7 @@ export async function fetchWithProxy(
 export function fetchWithTimeout(
   url: RequestInfo,
   options: FetchOptions = {},
-  timeout: number,
+  configuredTimeout: number | `${number}`,
 ): Promise<Response> {
   return new Promise((resolve, reject) => {
     const timeoutController = new AbortController();
@@ -370,6 +372,9 @@ export function fetchWithTimeout(
       ? AbortSignal.any([options.signal, timeoutController.signal])
       : timeoutController.signal;
 
+    // Provider config templates can render numeric settings as strings.
+    const timeout = Number(configuredTimeout);
+    const expiresAt = performance.now() + timeout;
     const timeoutId = setTimeout(() => {
       timeoutController.abort();
       reject(new Error(`Request timed out after ${timeout} ms`));
@@ -381,6 +386,7 @@ export function fetchWithTimeout(
     })
       .then((response) => {
         clearTimeout(timeoutId);
+        trackResponseDeadline(response, { controller: timeoutController, expiresAt, timeout });
         resolve(response);
       })
       .catch((error) => {
@@ -441,21 +447,6 @@ export function computeRateLimitWaitMs(response: Response): number {
  */
 const RATE_LIMIT_JITTER_MS = 1000;
 
-/**
- * Handle rate limiting by waiting the appropriate amount of time, plus a
- * uniform random jitter to avoid synchronized retry storms when many
- * concurrent requests hit the same rate limit.
- */
-function getAbortError(signal: AbortSignal): Error {
-  const reason = signal.reason;
-  if (reason instanceof Error && reason.name === 'AbortError') {
-    return reason;
-  }
-  const error = new Error(reason instanceof Error ? reason.message : 'Request was aborted');
-  error.name = 'AbortError';
-  return error;
-}
-
 async function sleepWithAbort(waitTime: number, signal?: AbortSignal | null): Promise<void> {
   if (!signal) {
     await sleep(waitTime);
@@ -478,6 +469,11 @@ async function sleepWithAbort(waitTime: number, signal?: AbortSignal | null): Pr
   });
 }
 
+/**
+ * Handle rate limiting by waiting the appropriate amount of time, plus a
+ * uniform random jitter to avoid synchronized retry storms when many
+ * concurrent requests hit the same rate limit.
+ */
 export async function handleRateLimit(
   response: Response,
   signal?: AbortSignal | null,
@@ -544,7 +540,9 @@ async function peekRateLimitBody(
 
   let text: string;
   try {
-    text = await readBoundedText(cloned, RATE_LIMIT_BODY_PEEK_BYTES, { requireStream: true });
+    text = await readWithResponseDeadline(response, () =>
+      readBoundedText(cloned, RATE_LIMIT_BODY_PEEK_BYTES, { requireStream: true }),
+    );
   } catch (err) {
     if (signal?.aborted) {
       throw getAbortError(signal);

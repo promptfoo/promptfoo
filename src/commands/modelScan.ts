@@ -160,22 +160,6 @@ function logProcessError(result: Pick<SpawnResult, 'code' | 'signal'>): number |
 }
 
 /**
- * Determine if a model should be re-scanned based on version changes.
- */
-function shouldRescan(
-  existingVersion: string | null | undefined,
-  currentVersion: string | null,
-): boolean {
-  if (!currentVersion) {
-    return false;
-  }
-  if (!existingVersion) {
-    return true;
-  }
-  return existingVersion !== currentVersion;
-}
-
-/**
  * Spawn modelaudit with proper signal handling and Promise wrapper.
  * Returns stdout/stderr content when capturing output, or empty strings for inherited stdio.
  *
@@ -189,8 +173,6 @@ function spawnModelAudit(
   options: {
     captureOutput: boolean;
     env: NodeJS.ProcessEnv;
-    onStdout?: (data: string) => void;
-    onStderr?: (data: string) => void;
   },
 ): Promise<SpawnResult> {
   return new Promise((resolve, reject) => {
@@ -224,13 +206,11 @@ function spawnModelAudit(
       childProcess.stdout?.on('data', (data: Buffer) => {
         const str = data.toString();
         stdout += str;
-        options.onStdout?.(str);
       });
 
       childProcess.stderr?.on('data', (data: Buffer) => {
         const str = data.toString();
         stderr += str;
-        options.onStderr?.(str);
       });
     }
 
@@ -333,26 +313,25 @@ async function runPassthroughModelAudit(
 }
 
 /**
- * Check for existing scan and determine if re-scan is needed.
- * Returns the existing audit if found and re-scan should happen.
+ * Find an existing audit to update and capture its pre-scan revision.
+ * Scans always run; the lookup only selects the persistence context.
  */
 async function checkExistingScan(
   paths: string[],
   options: ScanOptions,
   currentScannerVersion: string | null,
 ): Promise<{
-  shouldSkip: boolean;
   existingAudit: ModelAudit | null;
   huggingFaceRevision?: HuggingFaceRevisionSnapshot;
 }> {
   if (paths.length !== 1 || !isHuggingFaceModel(paths[0])) {
-    return { shouldSkip: false, existingAudit: null };
+    return { existingAudit: null };
   }
 
   try {
     const metadata = await getHuggingFaceMetadata(paths[0]);
     if (!metadata) {
-      return { shouldSkip: false, existingAudit: null };
+      return { existingAudit: null };
     }
 
     const parsed = parseHuggingFaceModel(paths[0]);
@@ -365,41 +344,31 @@ async function checkExistingScan(
     };
 
     if (!existing) {
-      return { shouldSkip: false, existingAudit: null, huggingFaceRevision };
+      return { existingAudit: null, huggingFaceRevision };
     }
 
     if (hasScannerSelectionOptions(options)) {
       logger.debug('Re-scanning with scanner selection options');
-      return { shouldSkip: false, existingAudit: existing, huggingFaceRevision };
-    }
-
-    if (hasPersistedScannerSelection(existing.metadata)) {
+    } else if (hasPersistedScannerSelection(existing.metadata)) {
       logger.debug('Re-scanning because cached revision used scanner selection options');
-      return { shouldSkip: false, existingAudit: existing, huggingFaceRevision };
-    }
-
-    // Force flag - re-scan but update existing record
-    if (options.force) {
+    } else if (options.force) {
+      // Force flag - re-scan but update existing record
       logger.debug(`Re-scanning (--force): ${modelId}`);
-      return { shouldSkip: false, existingAudit: existing, huggingFaceRevision };
-    }
-
-    // Version changed - re-scan
-    if (shouldRescan(existing.scannerVersion, currentScannerVersion)) {
+    } else if (currentScannerVersion && existing.scannerVersion !== currentScannerVersion) {
+      // Version changed - re-scan
       const reason = existing.scannerVersion
         ? `modelaudit upgraded from ${existing.scannerVersion} to ${currentScannerVersion}`
         : `previous scan missing version info (now using ${currentScannerVersion})`;
       logger.debug(`Re-scanning: ${reason}`);
-      return { shouldSkip: false, existingAudit: existing, huggingFaceRevision };
+    } else {
+      // HuggingFace aliases are mutable. Without a pinned revision handed to the scanner,
+      // a cached alias match is not strong enough evidence to skip a fresh scan safely.
+      logger.debug(`Re-scanning mutable HuggingFace alias: ${modelId}`);
     }
-
-    // HuggingFace aliases are mutable. Without a pinned revision handed to the scanner,
-    // a cached alias match is not strong enough evidence to skip a fresh scan safely.
-    logger.debug(`Re-scanning mutable HuggingFace alias: ${modelId}`);
-    return { shouldSkip: false, existingAudit: existing, huggingFaceRevision };
+    return { existingAudit: existing, huggingFaceRevision };
   } catch (error) {
     logger.debug(`Failed to check for existing scan: ${error}`);
-    return { shouldSkip: false, existingAudit: null };
+    return { existingAudit: null };
   }
 }
 
@@ -938,22 +907,10 @@ export function modelScanCommand(program: Command): void {
       // Determine if we should save to database
       const saveToDatabase = options.write === undefined || options.write === true;
 
-      // Check for existing scan (skip or get audit to update)
-      let existingAuditToUpdate: ModelAudit | null = null;
-      let huggingFaceRevision: HuggingFaceRevisionSnapshot | undefined;
-      if (saveToDatabase) {
-        const {
-          shouldSkip,
-          existingAudit,
-          huggingFaceRevision: scannedRevision,
-        } = await checkExistingScan(paths, options, currentScannerVersion);
-        if (shouldSkip) {
-          process.exitCode = 0;
-          return;
-        }
-        existingAuditToUpdate = existingAudit;
-        huggingFaceRevision = scannedRevision;
-      }
+      // Look up the audit to update and its pre-scan revision.
+      const { existingAudit: existingAuditToUpdate, huggingFaceRevision } = saveToDatabase
+        ? await checkExistingScan(paths, options, currentScannerVersion)
+        : { existingAudit: null, huggingFaceRevision: undefined };
 
       // Parse CLI arguments
       const outputFormat = saveToDatabase ? 'json' : options.format || 'text';

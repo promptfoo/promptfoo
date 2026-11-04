@@ -3,7 +3,8 @@ import { GoogleAuthManager } from '../../../src/providers/google/auth';
 import { mockProcessEnv } from '../../util/utils';
 
 // Mock dependencies
-vi.mock('../../../src/envars', () => ({
+vi.mock('../../../src/envars', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../../src/envars')>()),
   getEnvString: vi.fn(),
   getEnvOverrides: vi.fn(),
 }));
@@ -68,16 +69,18 @@ describe('GoogleAuthManager', () => {
   });
 
   describe('getApiKey', () => {
+    const createGoogleApiKeyLookup = () => (key: string, defaultValue?: string) => {
+      if (key === 'GOOGLE_API_KEY') {
+        return 'google-key';
+      }
+      if (key === 'GEMINI_API_KEY') {
+        return 'gemini-key';
+      }
+      return defaultValue as string;
+    };
+
     it('should prioritize config.apiKey over all env vars', () => {
-      vi.mocked(getEnvString).mockImplementation((key: string, defaultValue?: string) => {
-        if (key === 'GOOGLE_API_KEY') {
-          return 'google-key';
-        }
-        if (key === 'GEMINI_API_KEY') {
-          return 'gemini-key';
-        }
-        return defaultValue as string;
-      });
+      vi.mocked(getEnvString).mockImplementation(createGoogleApiKeyLookup());
 
       const result = GoogleAuthManager.getApiKey({ apiKey: 'config-key' });
 
@@ -123,15 +126,7 @@ describe('GoogleAuthManager', () => {
     });
 
     it('should prioritize GOOGLE_API_KEY over GEMINI_API_KEY (Python SDK alignment)', () => {
-      vi.mocked(getEnvString).mockImplementation((key: string, defaultValue?: string) => {
-        if (key === 'GOOGLE_API_KEY') {
-          return 'google-key';
-        }
-        if (key === 'GEMINI_API_KEY') {
-          return 'gemini-key';
-        }
-        return defaultValue as string;
-      });
+      vi.mocked(getEnvString).mockImplementation(createGoogleApiKeyLookup());
 
       const result = GoogleAuthManager.getApiKey({});
 
@@ -196,15 +191,7 @@ describe('GoogleAuthManager', () => {
     });
 
     it('should log debug when both GOOGLE_API_KEY and GEMINI_API_KEY are set (SDK aligned)', () => {
-      vi.mocked(getEnvString).mockImplementation((key: string, defaultValue?: string) => {
-        if (key === 'GOOGLE_API_KEY') {
-          return 'google-key';
-        }
-        if (key === 'GEMINI_API_KEY') {
-          return 'gemini-key';
-        }
-        return defaultValue as string;
-      });
+      vi.mocked(getEnvString).mockImplementation(createGoogleApiKeyLookup());
 
       GoogleAuthManager.getApiKey({});
 

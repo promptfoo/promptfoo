@@ -4,19 +4,13 @@ import { promisify } from 'util';
 
 import { getCache, isCacheEnabled } from '../../cache';
 import { getProcessEnv } from '../../envars';
-import { getFileHashes, parseScriptParts } from '../../providers/scriptCompletion';
+import { getFileHashes, parseScriptParts, stripText } from '../../providers/scriptCompletion';
 import invariant from '../../util/invariant';
 import { safeJsonStringify } from '../../util/json';
 
 import type { ApiProvider, Prompt, PromptFunctionContext, VarValue } from '../../types/index';
 
 const execFileAsync = promisify(execFile);
-
-const ANSI_ESCAPE = /\x1b(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])/g;
-
-function stripText(text: string) {
-  return text.replace(ANSI_ESCAPE, '');
-}
 
 /**
  * Executable prompt function. Executes any script/binary and returns its output as the prompt.

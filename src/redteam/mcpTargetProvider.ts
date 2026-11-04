@@ -97,7 +97,7 @@ class RedteamMcpTargetProvider implements ApiProvider {
   ): Promise<ProviderResponse> {
     const signal = options?.abortSignal;
     signal?.throwIfAborted();
-    const tools = await this.getTools();
+    const tools = await (this.toolsPromise ??= this.target.getAvailableTools());
     signal?.throwIfAborted();
 
     if (tools.length === 0) {
@@ -202,11 +202,6 @@ class RedteamMcpTargetProvider implements ApiProvider {
 
   async cleanup(): Promise<void> {
     await this.target.cleanup?.();
-  }
-
-  private getTools(): Promise<MCPTool[]> {
-    this.toolsPromise ??= this.target.getAvailableTools();
-    return this.toolsPromise;
   }
 }
 

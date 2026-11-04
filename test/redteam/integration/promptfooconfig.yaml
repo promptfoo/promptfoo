@@ -4,7 +4,7 @@ targets:
   - id: http
     label: test-chatbot
     config:
-      url: https://acme-cx-chatbot.promptfoo.dev/chat
+      url: '{{env.PROMPTFOO_INTEGRATION_TARGET_URL}}'
       method: POST
       headers:
         Content-Type: application/json
