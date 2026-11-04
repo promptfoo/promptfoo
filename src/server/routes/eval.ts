@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { HUMAN_ASSERTION_TYPE } from '../../constants';
+import { getEnvBool } from '../../envars';
 import { getUserEmail, setUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
 import Eval, { EvalQueries } from '../../models/eval';
@@ -25,13 +26,13 @@ import {
 } from '../../util/eval/evalTableUtils';
 import invariant from '../../util/invariant';
 import { isProviderConfigFileReference, normalizeProviderRef } from '../../util/providerRef';
-import { renderEnvOnlyInObject } from '../../util/render';
 import {
   redactAzureBlobSasTokens,
   restoreAzureBlobSasTokens,
   sanitizeObject,
 } from '../../util/sanitizer';
 import { shouldShareResults } from '../../util/sharing';
+import { getTemplateEnvValue } from '../../util/templates';
 import { evalJobService } from '../services/evalJobService';
 import { setDownloadHeaders } from '../utils/downloadHelpers';
 import { replyValidationError, sendError } from '../utils/errors';
@@ -667,18 +668,39 @@ evalRouter.post('/replay', async (req: Request, res: Response): Promise<void> =>
         let options = 'loadOptions' in ref ? ref.loadOptions : undefined;
         let providerPath = ref.loadProviderPath;
         if (/\{[{%]/.test(providerPath)) {
-          // Resolve only the local echo fixture. Generic loader options can trigger
-          // transforms or linked-target validation even when the factory is echo.
-          const rendered = renderEnvOnlyInObject(providerPath, options?.env);
+          // Permit one direct environment lookup for the built-in local echo.
+          // Never evaluate expressions or pass operational options to the generic loader.
+          const lookup = /^\{\{\s*env\.([A-Za-z_][A-Za-z0-9_]*)\s*\}\}$/.exec(providerPath);
           const hasExtraOptions = Object.keys(options ?? {}).some(
             (key) => !['id', 'label', 'env', 'prompts'].includes(key),
           );
-          if (rendered !== 'echo' || hasExtraOptions) {
+          const alias = options?.id === providerPath ? undefined : options?.id;
+          const dynamicMetadata = [alias, options?.label].some(
+            (value) => value !== undefined && (typeof value !== 'string' || /\{[{%#]/.test(value)),
+          );
+          if (
+            !lookup ||
+            lookup[0] !== providerPath ||
+            hasExtraOptions ||
+            dynamicMetadata ||
+            getEnvBool('PROMPTFOO_DISABLE_TEMPLATING')
+          ) {
             throw new Error('Cannot identify the replay provider safely');
           }
-          providerPath = rendered;
+          const key = lookup[1];
+          const value =
+            options?.env && Object.hasOwn(options.env, key)
+              ? options.env[key]
+              : getTemplateEnvValue(key);
+          if (value !== 'echo') {
+            throw new Error('Cannot identify the replay provider safely');
+          }
+          providerPath = 'echo';
           if (options) {
-            options = { id: options.id, ...(options.label ? { label: options.label } : {}) };
+            options = {
+              id: alias ?? providerPath,
+              ...(options.label ? { label: options.label } : {}),
+            };
           }
         }
         if (ref.kind === 'map') {

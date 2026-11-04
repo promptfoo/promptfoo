@@ -463,6 +463,11 @@ const templateEnv: Record<string, string | undefined> = new Proxy(
   },
 );
 
+/** Read a single template-visible environment value without creating or running a template engine. */
+export function getTemplateEnvValue(key: string): string | undefined {
+  return templateEnv[key];
+}
+
 /**
  * Get a Nunjucks engine instance with optional filters and configuration.
  * @param filters - Optional map of custom Nunjucks filters.

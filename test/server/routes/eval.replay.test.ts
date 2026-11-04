@@ -16,7 +16,9 @@ import { evaluateWithSource } from '../../../src/node';
 import { loadApiProviders } from '../../../src/providers/index';
 import { createApp } from '../../../src/server/server';
 import * as fetchUtils from '../../../src/util/fetch/index';
+import * as providerRefs from '../../../src/util/providerRef';
 import { normalizeProviderRef } from '../../../src/util/providerRef';
+import * as templates from '../../../src/util/templates';
 
 const evaluate = vi.mocked(evaluateWithSource);
 
@@ -164,6 +166,26 @@ describe('POST /api/eval/replay provider boundary', () => {
       cost: 0,
     });
   });
+
+  it.each([
+    { '{{ env.NAME | lower }}': { env: { NAME: 'echo' } } },
+    { '{{ env.NAME }}': { id: '{{ env.DISPLAY }}', env: { NAME: 'echo' } } },
+    { '{{ env.NAME }}': { label: '{{ env.DISPLAY }}', env: { NAME: 'echo' } } },
+    { 'echo{{ env.EMPTY }}': { env: { EMPTY: '' } } },
+  ])(
+    'rejects template expressions and dynamic display metadata before evaluation',
+    async (provider) => {
+      const renderer = vi.spyOn(templates, 'getNunjucksEngine');
+      const fileLoader = vi.spyOn(providerRefs, 'readProviderConfigFile');
+      const fetch = vi.spyOn(fetchUtils, 'fetchWithProxy');
+      storedConfig([provider]);
+      expect((await replay()).status).toBe(400);
+      expect(renderer).not.toHaveBeenCalled();
+      expect(fileLoader).not.toHaveBeenCalled();
+      expect(fetch).not.toHaveBeenCalled();
+      expect(evaluate).not.toHaveBeenCalled();
+    },
+  );
 
   it.each([{ config: { linkedTargetId: 'remote' } }, { transform: 'synthetic' }, { delay: 5 }])(
     'rejects loader options on templated echo before evaluation: %j',
