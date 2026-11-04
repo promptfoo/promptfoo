@@ -7,84 +7,21 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { CodeScanOutputFormat, type FileRecord } from '../../src/types/codeScan';
 
-describe('Scanner - No Files to Scan', () => {
-  it('should filter out files with skipReason when determining includedFiles', () => {
-    // Simulate the result from processDiff with all files skipped
-    const files: FileRecord[] = [
-      {
-        path: 'package-lock.json',
-        status: 'M',
-        skipReason: 'denylist',
-        shaA: 'abc123',
-        shaB: 'def456',
-        linesAdded: 10,
-        linesRemoved: 5,
-      },
-      {
-        path: 'large-file.bin',
-        status: 'M',
-        skipReason: 'blob too large',
-        shaA: 'abc124',
-        shaB: 'def457',
-        linesAdded: 100,
-        linesRemoved: 50,
-      },
-    ];
-
-    // This is the same logic used in scanner/index.ts
-    const includedFiles = files.filter((f) => !f.skipReason && f.patch);
-
-    expect(includedFiles).toHaveLength(0);
-  });
-
-  it('should correctly identify included files when some have no skipReason', () => {
-    const files: FileRecord[] = [
-      {
-        path: 'package-lock.json',
-        status: 'M',
-        skipReason: 'denylist',
-        shaA: 'abc123',
-        shaB: 'def456',
-        linesAdded: 10,
-        linesRemoved: 5,
-      },
-      {
-        path: 'src/index.ts',
-        status: 'M',
-        shaA: 'abc124',
-        shaB: 'def457',
-        linesAdded: 5,
-        linesRemoved: 2,
-        patch: '@@ -1,3 +1,4 @@\n+const test = true;\n const existing = true;',
-      },
-    ];
-
-    const includedFiles = files.filter((f) => !f.skipReason && f.patch);
-
-    expect(includedFiles).toHaveLength(1);
-    expect(includedFiles[0].path).toBe('src/index.ts');
-  });
-
-  it('should handle empty file array', () => {
-    const files: FileRecord[] = [];
-
-    const includedFiles = files.filter((f) => !f.skipReason && f.patch);
-
-    expect(includedFiles).toHaveLength(0);
-  });
-});
-
 describe('Scanner machine-readable output', () => {
   function mockScanner({
     initialLogLevel = 'info',
     loadConfigError,
     processDiffError,
     configApiHost,
+    files = [],
+    dirtyFiles,
   }: {
     initialLogLevel?: string;
     loadConfigError?: Error;
     processDiffError?: Error;
     configApiHost?: string;
+    files?: FileRecord[];
+    dirtyFiles?: Array<{ path: string }>;
   } = {}) {
     let currentLogLevel = initialLogLevel;
 
@@ -95,7 +32,14 @@ describe('Scanner machine-readable output', () => {
     vi.doMock('../../src/codeScan/git/diffProcessor', () => ({
       processDiff: processDiffError
         ? vi.fn().mockRejectedValue(processDiffError)
-        : vi.fn().mockResolvedValue([]),
+        : vi.fn().mockResolvedValue(files),
+    }));
+    vi.doMock('../../src/codeScan/git/metadata', () => ({
+      extractMetadata: vi.fn().mockResolvedValue({ branch: 'feature', commitMessages: [] }),
+    }));
+    vi.doMock('../../src/codeScan/scanner/request', async (importOriginal) => ({
+      ...(await importOriginal<typeof import('../../src/codeScan/scanner/request')>()),
+      executeScanRequestWithRetry: vi.fn().mockResolvedValue({ success: true, comments: [] }),
     }));
     vi.doMock('../../src/codeScan/git/diff', () => ({
       validateOnBranch: vi.fn().mockResolvedValue('main'),
@@ -119,9 +63,10 @@ describe('Scanner machine-readable output', () => {
       };
     });
     vi.doMock('simple-git', () => ({
-      default: vi.fn(() => ({
+      simpleGit: vi.fn(() => ({
         branch: vi.fn().mockResolvedValue({ current: 'main', all: ['main'] }),
         revparse: vi.fn().mockResolvedValue('abc123'),
+        status: vi.fn().mockResolvedValue({ files: dirtyFiles ?? [] }),
       })),
     }));
     vi.doMock('../../src/util/agent/agentClient', () => ({
@@ -213,6 +158,55 @@ describe('Scanner machine-readable output', () => {
 
   afterEach(() => {
     vi.restoreAllMocks();
+  });
+
+  const changedFile: FileRecord = {
+    path: 'src/index.ts',
+    status: 'M',
+    shaA: 'abc123',
+    shaB: 'def456',
+    linesAdded: 1,
+    linesRemoved: 0,
+    patch: '@@ -1 +1,2 @@\n existing\n+added',
+  };
+
+  it.each([
+    { name: 'skipped files with patches', files: [{ ...changedFile, skipReason: 'denylist' }] },
+    { name: 'files without patches', files: [{ ...changedFile, patch: undefined }] },
+  ])('does not submit $name for scanning', async ({ files }) => {
+    mockScanner({ files });
+    const { executeScan } = await import('../../src/codeScan/scanner/index');
+    const { executeScanRequestWithRetry } = await import('../../src/codeScan/scanner/request');
+    const { displayScanResults } = await import('../../src/codeScan/scanner/output');
+
+    await executeScan('/test/repo', { json: true, diffsOnly: true });
+
+    expect(executeScanRequestWithRetry).not.toHaveBeenCalled();
+    expect(displayScanResults).toHaveBeenCalledWith(
+      { success: true, comments: [], review: 'No files to scan' },
+      expect.any(Number),
+      { format: CodeScanOutputFormat.JSON, githubPr: undefined },
+    );
+  });
+
+  it('submits the diff when a usable file is present among skipped files', async () => {
+    const files = [
+      { ...changedFile, path: 'package-lock.json', skipReason: 'denylist' },
+      changedFile,
+    ];
+    mockScanner({ files });
+    const { executeScan } = await import('../../src/codeScan/scanner/index');
+    const { executeScanRequestWithRetry } = await import('../../src/codeScan/scanner/request');
+
+    await executeScan('/test/repo', { json: true, diffsOnly: true });
+
+    expect(executeScanRequestWithRetry).toHaveBeenCalledOnce();
+    // The request retains skipped-file metadata alongside the usable diff.
+    expect(executeScanRequestWithRetry).toHaveBeenCalledWith(
+      expect.any(Object),
+      expect.objectContaining({ files, sessionId: 'test-session-id' }),
+      expect.objectContaining({ abortController: expect.any(AbortController) }),
+    );
   });
 
   it.each([
@@ -379,5 +373,53 @@ describe('Scanner machine-readable output', () => {
     expect(mcp.bridgeDisconnect).not.toHaveBeenCalled();
     expect(socketEmit).not.toHaveBeenCalled();
     expect(consoleErrorSpy).toHaveBeenCalledWith('Scan failed: bridge failed');
+  });
+
+  describe('empty-scan messaging', () => {
+    const patchless: FileRecord = {
+      path: ':foo.ts',
+      status: 'M',
+      shaA: 'a',
+      shaB: 'b',
+      linesAdded: 0,
+      linesRemoved: 0,
+    };
+    it.each([
+      {
+        name: 'empty diff',
+        files: [],
+        dirtyFiles: [],
+        messages: ['No files to scan in main...HEAD', 'no net file changes'],
+      },
+      {
+        name: 'empty diff with uncommitted files',
+        files: [],
+        dirtyFiles: [{ path: 'index.js' }, { path: 'lib/util.js' }],
+        messages: ['2 uncommitted file(s)'],
+      },
+      {
+        name: 'skipped files with uncommitted work',
+        files: [{ ...patchless, path: 'package-lock.json', skipReason: 'denylist' as const }],
+        dirtyFiles: [{ path: 'src/index.ts' }],
+        messages: ['skipped: denylist', '1 uncommitted file(s)'],
+      },
+      {
+        name: 'unpatched records without skip reasons',
+        files: [patchless],
+        dirtyFiles: [],
+        messages: ['1 changed file(s) contain no scannable patches'],
+      },
+    ])('explains $name', async ({ files, dirtyFiles, messages }) => {
+      mockScanner({ files, dirtyFiles });
+      const { executeScan } = await import('../../src/codeScan/scanner/index');
+      const logger = (await import('../../src/logger')).default;
+      await executeScan('/test/repo', { diffsOnly: true });
+      for (const message of messages) {
+        expect(logger.info).toHaveBeenCalledWith(expect.stringContaining(message));
+      }
+      if (files.every((file) => !file.skipReason)) {
+        expect(logger.info).not.toHaveBeenCalledWith(expect.stringContaining('skipped:'));
+      }
+    });
   });
 });

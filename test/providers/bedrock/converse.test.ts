@@ -5,6 +5,64 @@ import { mockProcessEnv } from '../../util/utils';
 import type { ContentBlock, StopReason } from '@aws-sdk/client-bedrock-runtime';
 
 // Define mock module type
+const createNamedMcpOptions = () => ({
+  enabled: true,
+  server: { command: 'npx', args: ['test-mcp'], name: 'test-server' },
+});
+
+const createThinkingBudgetOptions = () => ({
+  config: {
+    region: 'us-east-1',
+    thinking: {
+      type: 'enabled' as const,
+      budget_tokens: 16000,
+    },
+  },
+});
+
+const createToolUseStartedEvent = () => ({
+  contentBlockStart: {
+    contentBlockIndex: 0,
+    start: { toolUse: { toolUseId: 'tool-123', name: 'list_resources' } },
+  },
+});
+
+const createListResourcesToolTurn = () => ({
+  toolUse: { id: 'tool-123', name: 'list_resources', input: {} },
+  stopReason: 'tool_use' as const,
+});
+
+const createAdditionalThinkingOptions = () => ({
+  config: {
+    region: 'us-east-1',
+    additionalModelRequestFields: { top_k: 40, thinking: { type: 'disabled' as const } },
+  },
+});
+
+const createCalculatorTool = () => ({
+  name: 'calculator',
+  description: 'A calculator',
+  input_schema: {
+    type: 'object' as const,
+    properties: { expression: { type: 'string' as const } },
+  },
+});
+
+const createCachedUsageResponse = () => ({
+  usage: {
+    inputTokens: 100,
+    outputTokens: 50,
+    totalTokens: 750,
+    cacheReadInputTokens: 500,
+    cacheWriteInputTokens: 100,
+  },
+});
+
+const createCalculatorToolTurn = () => ({
+  toolUse: { id: 'tool-123', name: 'calculator', input: { expression: '2+2' } },
+  stopReason: 'tool_use' as const,
+});
+
 interface MockBedrockModule {
   BedrockRuntime: Mock;
   ConverseCommand: Mock;
@@ -26,6 +84,10 @@ interface MockConverseCommandOutput {
     totalTokens?: number;
     cacheReadInputTokens?: number;
     cacheWriteInputTokens?: number;
+    cacheDetails?: Array<{
+      ttl: '5m' | '1h';
+      inputTokens: number;
+    }>;
   };
   stopReason?: StopReason;
   metrics?: {
@@ -182,6 +244,10 @@ function createMockConverseResponse(
       totalTokens: number;
       cacheReadInputTokens?: number;
       cacheWriteInputTokens?: number;
+      cacheDetails?: Array<{
+        ttl: '5m' | '1h';
+        inputTokens: number;
+      }>;
     };
     stopReason?: StopReason;
     latencyMs?: number;
@@ -235,6 +301,21 @@ function createMockConverseResponse(
     },
   };
 }
+
+const createMcpOptions = () => ({
+  config: {
+    region: 'us-east-1',
+    mcp: createNamedMcpOptions(),
+  },
+});
+
+const createStreamingMcpOptions = () => ({
+  config: {
+    region: 'us-east-1',
+    streaming: true,
+    mcp: createNamedMcpOptions(),
+  },
+});
 
 describe('AwsBedrockConverseProvider', () => {
   beforeEach(() => {
@@ -463,22 +544,11 @@ describe('AwsBedrockConverseProvider', () => {
       const provider = new AwsBedrockConverseProvider('anthropic.claude-3-5-sonnet-20241022-v2:0', {
         config: {
           region: 'us-east-1',
-          tools: [
-            {
-              name: 'calculator',
-              description: 'A calculator',
-              input_schema: { type: 'object', properties: { expression: { type: 'string' } } },
-            },
-          ],
+          tools: [createCalculatorTool()],
         },
       });
 
-      mockSend.mockResolvedValueOnce(
-        createMockConverseResponse('', {
-          toolUse: { id: 'tool-123', name: 'calculator', input: { expression: '2+2' } },
-          stopReason: 'tool_use',
-        }),
-      );
+      mockSend.mockResolvedValueOnce(createMockConverseResponse('', createCalculatorToolTurn()));
 
       const result = await provider.callApi('What is 2+2?');
 
@@ -503,10 +573,7 @@ describe('AwsBedrockConverseProvider', () => {
               showThinking,
               ...(dispatch === 'mcp'
                 ? {
-                    mcp: {
-                      enabled: true,
-                      server: { command: 'npx', args: ['test-mcp'], name: 'test-server' },
-                    },
+                    mcp: createNamedMcpOptions(),
                   }
                 : {}),
               ...(dispatch === 'callback' ? { functionToolCallbacks: { [name]: callback } } : {}),
@@ -627,13 +694,7 @@ describe('AwsBedrockConverseProvider', () => {
       const provider = new AwsBedrockConverseProvider('anthropic.claude-3-5-sonnet-20241022-v2:0', {
         config: {
           region: 'us-east-1',
-          tools: [
-            {
-              name: 'calculator',
-              description: 'A calculator',
-              input_schema: { type: 'object', properties: { expression: { type: 'string' } } },
-            },
-          ],
+          tools: [createCalculatorTool()],
           functionToolCallbacks: {
             calculator: (args: string) => {
               const parsed = JSON.parse(args);
@@ -645,12 +706,7 @@ describe('AwsBedrockConverseProvider', () => {
         },
       });
 
-      mockSend.mockResolvedValueOnce(
-        createMockConverseResponse('', {
-          toolUse: { id: 'tool-123', name: 'calculator', input: { expression: '2+2' } },
-          stopReason: 'tool_use',
-        }),
-      );
+      mockSend.mockResolvedValueOnce(createMockConverseResponse('', createCalculatorToolTurn()));
 
       const result = await provider.callApi('What is 2+2?');
 
@@ -659,10 +715,7 @@ describe('AwsBedrockConverseProvider', () => {
     });
 
     it('should initialize and clean up MCP when configured', async () => {
-      const mcpConfig = {
-        enabled: true,
-        server: { command: 'npx', args: ['test-mcp'], name: 'test-server' },
-      };
+      const mcpConfig = createNamedMcpOptions();
       const provider = new AwsBedrockConverseProvider('anthropic.claude-3-5-sonnet-20241022-v2:0', {
         config: {
           region: 'us-east-1',
@@ -679,15 +732,10 @@ describe('AwsBedrockConverseProvider', () => {
     });
 
     it('should expose shutdown() that delegates to cleanup', async () => {
-      const provider = new AwsBedrockConverseProvider('anthropic.claude-3-5-sonnet-20241022-v2:0', {
-        config: {
-          region: 'us-east-1',
-          mcp: {
-            enabled: true,
-            server: { command: 'npx', args: ['test-mcp'], name: 'test-server' },
-          },
-        },
-      });
+      const provider = new AwsBedrockConverseProvider(
+        'anthropic.claude-3-5-sonnet-20241022-v2:0',
+        createMcpOptions(),
+      );
 
       // The evaluator calls provider.shutdown() via providerRegistry.shutdownAll().
       // Without this method, MCP transports (including stdio child processes) leak.
@@ -697,15 +745,10 @@ describe('AwsBedrockConverseProvider', () => {
     });
 
     it('should be safe to call cleanup() multiple times', async () => {
-      const provider = new AwsBedrockConverseProvider('anthropic.claude-3-5-sonnet-20241022-v2:0', {
-        config: {
-          region: 'us-east-1',
-          mcp: {
-            enabled: true,
-            server: { command: 'npx', args: ['test-mcp'], name: 'test-server' },
-          },
-        },
-      });
+      const provider = new AwsBedrockConverseProvider(
+        'anthropic.claude-3-5-sonnet-20241022-v2:0',
+        createMcpOptions(),
+      );
 
       await provider.cleanup();
       await provider.cleanup();
@@ -715,15 +758,10 @@ describe('AwsBedrockConverseProvider', () => {
 
     it('should still attempt cleanup when MCP initialization failed', async () => {
       mcpMocks.mockInitialize.mockRejectedValueOnce(new Error('handshake failed'));
-      const provider = new AwsBedrockConverseProvider('anthropic.claude-3-5-sonnet-20241022-v2:0', {
-        config: {
-          region: 'us-east-1',
-          mcp: {
-            enabled: true,
-            server: { command: 'npx', args: ['test-mcp'], name: 'test-server' },
-          },
-        },
-      });
+      const provider = new AwsBedrockConverseProvider(
+        'anthropic.claude-3-5-sonnet-20241022-v2:0',
+        createMcpOptions(),
+      );
 
       // cleanup() must not re-throw the init failure; it must drain whatever
       // partial state exists so we don't leak transports.
@@ -750,15 +788,10 @@ describe('AwsBedrockConverseProvider', () => {
 
     it('should surface MCP init failure as ProviderResponse.error on callApi', async () => {
       mcpMocks.mockInitialize.mockRejectedValueOnce(new Error('handshake failed'));
-      const provider = new AwsBedrockConverseProvider('anthropic.claude-3-5-sonnet-20241022-v2:0', {
-        config: {
-          region: 'us-east-1',
-          mcp: {
-            enabled: true,
-            server: { command: 'npx', args: ['test-mcp'], name: 'test-server' },
-          },
-        },
-      });
+      const provider = new AwsBedrockConverseProvider(
+        'anthropic.claude-3-5-sonnet-20241022-v2:0',
+        createMcpOptions(),
+      );
 
       const result = await provider.callApi('hi');
       expect(result.error).toContain('MCP initialization failed');
@@ -772,15 +805,10 @@ describe('AwsBedrockConverseProvider', () => {
       // the constructor attaches a sink-handler that records the error so it
       // can be reported lazily on the first callApi (which awaits the promise
       // and observes the rejection through the recorded error field).
-      const provider = new AwsBedrockConverseProvider('anthropic.claude-3-5-sonnet-20241022-v2:0', {
-        config: {
-          region: 'us-east-1',
-          mcp: {
-            enabled: true,
-            server: { command: 'npx', args: ['test-mcp'], name: 'test-server' },
-          },
-        },
-      });
+      const provider = new AwsBedrockConverseProvider(
+        'anthropic.claude-3-5-sonnet-20241022-v2:0',
+        createMcpOptions(),
+      );
 
       // callApi awaits initializationPromise internally, which forces the .catch
       // handler in the constructor to run and populate mcpInitError. No manual
@@ -790,15 +818,10 @@ describe('AwsBedrockConverseProvider', () => {
     });
 
     it('should include MCP tools in Converse toolConfig', async () => {
-      const provider = new AwsBedrockConverseProvider('anthropic.claude-3-5-sonnet-20241022-v2:0', {
-        config: {
-          region: 'us-east-1',
-          mcp: {
-            enabled: true,
-            server: { command: 'npx', args: ['test-mcp'], name: 'test-server' },
-          },
-        },
-      });
+      const provider = new AwsBedrockConverseProvider(
+        'anthropic.claude-3-5-sonnet-20241022-v2:0',
+        createMcpOptions(),
+      );
 
       mockSend.mockResolvedValueOnce(createMockConverseResponse('Test'));
 
@@ -828,10 +851,7 @@ describe('AwsBedrockConverseProvider', () => {
       const provider = new AwsBedrockConverseProvider('anthropic.claude-3-5-sonnet-20241022-v2:0', {
         config: {
           region: 'us-east-1',
-          mcp: {
-            enabled: true,
-            server: { command: 'npx', args: ['test-mcp'], name: 'test-server' },
-          },
+          mcp: createNamedMcpOptions(),
           functionToolCallbacks: {
             list_resources: functionCallback,
           },
@@ -865,21 +885,11 @@ describe('AwsBedrockConverseProvider', () => {
       mcpMocks.mockCallTool.mockResolvedValueOnce({
         content: [{ text: 'known' }, { json: { count: 2 } }, { unknown: 'value' }],
       });
-      const provider = new AwsBedrockConverseProvider('anthropic.claude-3-5-sonnet-20241022-v2:0', {
-        config: {
-          region: 'us-east-1',
-          mcp: {
-            enabled: true,
-            server: { command: 'npx', args: ['test-mcp'], name: 'test-server' },
-          },
-        },
-      });
-      mockSend.mockResolvedValueOnce(
-        createMockConverseResponse('', {
-          toolUse: { id: 'tool-123', name: 'list_resources', input: {} },
-          stopReason: 'tool_use',
-        }),
+      const provider = new AwsBedrockConverseProvider(
+        'anthropic.claude-3-5-sonnet-20241022-v2:0',
+        createMcpOptions(),
       );
+      mockSend.mockResolvedValueOnce(createMockConverseResponse('', createListResourcesToolTurn()));
 
       const result = await provider.callApi('List resources');
 
@@ -898,22 +908,12 @@ describe('AwsBedrockConverseProvider', () => {
         content: 'MCP server failed',
         isError: true,
       });
-      const provider = new AwsBedrockConverseProvider('anthropic.claude-3-5-sonnet-20241022-v2:0', {
-        config: {
-          region: 'us-east-1',
-          mcp: {
-            enabled: true,
-            server: { command: 'npx', args: ['test-mcp'], name: 'test-server' },
-          },
-        },
-      });
-
-      mockSend.mockResolvedValueOnce(
-        createMockConverseResponse('', {
-          toolUse: { id: 'tool-123', name: 'list_resources', input: {} },
-          stopReason: 'tool_use',
-        }),
+      const provider = new AwsBedrockConverseProvider(
+        'anthropic.claude-3-5-sonnet-20241022-v2:0',
+        createMcpOptions(),
       );
+
+      mockSend.mockResolvedValueOnce(createMockConverseResponse('', createListResourcesToolTurn()));
 
       const result = await provider.callApi('List resources');
 
@@ -926,22 +926,12 @@ describe('AwsBedrockConverseProvider', () => {
 
     it('should propagate thrown MCP errors into ProviderResponse.error', async () => {
       mcpMocks.mockCallTool.mockRejectedValueOnce(new Error('connection refused'));
-      const provider = new AwsBedrockConverseProvider('anthropic.claude-3-5-sonnet-20241022-v2:0', {
-        config: {
-          region: 'us-east-1',
-          mcp: {
-            enabled: true,
-            server: { command: 'npx', args: ['test-mcp'], name: 'test-server' },
-          },
-        },
-      });
-
-      mockSend.mockResolvedValueOnce(
-        createMockConverseResponse('', {
-          toolUse: { id: 'tool-123', name: 'list_resources', input: {} },
-          stopReason: 'tool_use',
-        }),
+      const provider = new AwsBedrockConverseProvider(
+        'anthropic.claude-3-5-sonnet-20241022-v2:0',
+        createMcpOptions(),
       );
+
+      mockSend.mockResolvedValueOnce(createMockConverseResponse('', createListResourcesToolTurn()));
 
       const result = await provider.callApi('List resources');
 
@@ -950,15 +940,10 @@ describe('AwsBedrockConverseProvider', () => {
     });
 
     it('should not crash on malformed JSON tool_use input from the model', async () => {
-      const provider = new AwsBedrockConverseProvider('anthropic.claude-3-5-sonnet-20241022-v2:0', {
-        config: {
-          region: 'us-east-1',
-          mcp: {
-            enabled: true,
-            server: { command: 'npx', args: ['test-mcp'], name: 'test-server' },
-          },
-        },
-      });
+      const provider = new AwsBedrockConverseProvider(
+        'anthropic.claude-3-5-sonnet-20241022-v2:0',
+        createMcpOptions(),
+      );
 
       mockSend.mockResolvedValueOnce(
         createMockConverseResponse('', {
@@ -984,10 +969,7 @@ describe('AwsBedrockConverseProvider', () => {
       const provider = new AwsBedrockConverseProvider('anthropic.claude-3-5-sonnet-20241022-v2:0', {
         config: {
           region: 'us-east-1',
-          mcp: {
-            enabled: true,
-            server: { command: 'npx', args: ['test-mcp'], name: 'test-server' },
-          },
+          mcp: createNamedMcpOptions(),
           tools: [
             // Same name as the mocked MCP tool -> Bedrock would reject as duplicate
             {
@@ -1061,10 +1043,7 @@ describe('AwsBedrockConverseProvider', () => {
       const provider = new AwsBedrockConverseProvider('anthropic.claude-3-5-sonnet-20241022-v2:0', {
         config: {
           region: 'us-east-1',
-          mcp: {
-            enabled: true,
-            server: { command: 'npx', args: ['test-mcp'], name: 'test-server' },
-          },
+          mcp: createNamedMcpOptions(),
           functionToolCallbacks: {
             calculator: localCallback,
           },
@@ -1116,15 +1095,10 @@ describe('AwsBedrockConverseProvider', () => {
       // happen first so the evaluator's shutdownAll() can still call cleanup
       // on the partially-initialized client.
       mcpMocks.mockInitialize.mockRejectedValueOnce(new Error('handshake failed'));
-      const provider = new AwsBedrockConverseProvider('anthropic.claude-3-5-sonnet-20241022-v2:0', {
-        config: {
-          region: 'us-east-1',
-          mcp: {
-            enabled: true,
-            server: { command: 'npx', args: ['test-mcp'], name: 'test-server' },
-          },
-        },
-      });
+      const provider = new AwsBedrockConverseProvider(
+        'anthropic.claude-3-5-sonnet-20241022-v2:0',
+        createMcpOptions(),
+      );
 
       // Wait for the init promise to settle. We can observe that registration
       // happened by triggering shutdownAll(): the resulting cleanup() call
@@ -1146,15 +1120,10 @@ describe('AwsBedrockConverseProvider', () => {
       });
       mcpMocks.mockInitialize.mockImplementationOnce(() => initStall);
 
-      const provider = new AwsBedrockConverseProvider('anthropic.claude-3-5-sonnet-20241022-v2:0', {
-        config: {
-          region: 'us-east-1',
-          mcp: {
-            enabled: true,
-            server: { command: 'npx', args: ['test-mcp'], name: 'test-server' },
-          },
-        },
-      });
+      const provider = new AwsBedrockConverseProvider(
+        'anthropic.claude-3-5-sonnet-20241022-v2:0',
+        createMcpOptions(),
+      );
 
       mockSend.mockResolvedValueOnce(createMockConverseResponse('hi'));
 
@@ -1181,15 +1150,10 @@ describe('AwsBedrockConverseProvider', () => {
       // A failed MCP init should not block requests where the test case has
       // explicitly opted out of tools.
       mcpMocks.mockInitialize.mockRejectedValueOnce(new Error('handshake failed'));
-      const provider = new AwsBedrockConverseProvider('anthropic.claude-3-5-sonnet-20241022-v2:0', {
-        config: {
-          region: 'us-east-1',
-          mcp: {
-            enabled: true,
-            server: { command: 'npx', args: ['test-mcp'], name: 'test-server' },
-          },
-        },
-      });
+      const provider = new AwsBedrockConverseProvider(
+        'anthropic.claude-3-5-sonnet-20241022-v2:0',
+        createMcpOptions(),
+      );
 
       mockSend.mockResolvedValueOnce(createMockConverseResponse('regular text'));
 
@@ -1206,20 +1170,14 @@ describe('AwsBedrockConverseProvider', () => {
         config: {
           region: 'us-east-1',
           tool_choice: 'none' as any,
-          mcp: {
-            enabled: true,
-            server: { command: 'npx', args: ['test-mcp'], name: 'test-server' },
-          },
+          mcp: createNamedMcpOptions(),
         },
       });
 
       // Even if the response somehow contains a tool_use block, MCP must not run
       // when the user disabled tools.
       mockSend.mockResolvedValueOnce(
-        createMockConverseResponse('answer', {
-          toolUse: { id: 'tool-123', name: 'list_resources', input: {} },
-          stopReason: 'tool_use',
-        }),
+        createMockConverseResponse('answer', createListResourcesToolTurn()),
       );
 
       const result = await provider.callApi('hi');
@@ -1231,25 +1189,14 @@ describe('AwsBedrockConverseProvider', () => {
       const provider = new AwsBedrockConverseProvider('anthropic.claude-3-5-sonnet-20241022-v2:0', {
         config: {
           region: 'us-east-1',
-          tools: [
-            {
-              name: 'calculator',
-              description: 'A calculator',
-              input_schema: { type: 'object', properties: { expression: { type: 'string' } } },
-            },
-          ],
+          tools: [createCalculatorTool()],
           functionToolCallbacks: {
             other_function: () => 'other result',
           },
         },
       });
 
-      mockSend.mockResolvedValueOnce(
-        createMockConverseResponse('', {
-          toolUse: { id: 'tool-123', name: 'calculator', input: { expression: '2+2' } },
-          stopReason: 'tool_use',
-        }),
-      );
+      mockSend.mockResolvedValueOnce(createMockConverseResponse('', createCalculatorToolTurn()));
 
       const result = await provider.callApi('What is 2+2?');
 
@@ -1406,15 +1353,7 @@ describe('AwsBedrockConverseProvider', () => {
         config: { region: 'us-east-1' },
       });
       mockSend.mockResolvedValueOnce(
-        createMockConverseResponse('Response', {
-          usage: {
-            inputTokens: 100,
-            outputTokens: 50,
-            totalTokens: 750,
-            cacheReadInputTokens: 500,
-            cacheWriteInputTokens: 100,
-          },
-        }),
+        createMockConverseResponse('Response', createCachedUsageResponse()),
       );
 
       const result = await provider.callApi('Test');
@@ -1422,6 +1361,33 @@ describe('AwsBedrockConverseProvider', () => {
       // Regional rates: uncached input $11, cache read $1.10,
       // cache write $13.75, and output $55 per million tokens.
       expect(result.cost).toBeCloseTo(0.005775, 8);
+    });
+
+    it('should bill one-hour prompt cache writes separately in Claude cost', async () => {
+      const provider = new AwsBedrockConverseProvider('global.anthropic.claude-fable-5', {
+        config: { region: 'us-east-1' },
+      });
+      mockSend.mockResolvedValueOnce(
+        createMockConverseResponse('Response', {
+          usage: {
+            inputTokens: 100,
+            outputTokens: 50,
+            totalTokens: 750,
+            cacheReadInputTokens: 500,
+            cacheWriteInputTokens: 100,
+            cacheDetails: [
+              { ttl: '1h', inputTokens: 40 },
+              { ttl: '5m', inputTokens: 60 },
+            ],
+          },
+        }),
+      );
+
+      const result = await provider.callApi('Test');
+
+      // Base rates: uncached input $10, cache read $1, five-minute write $12.50,
+      // one-hour write $20, and output $50 per million tokens.
+      expect(result.cost).toBeCloseTo(0.00555, 8);
     });
 
     it('should not apply the regional premium for a global inference-profile ARN', async () => {
@@ -1463,15 +1429,7 @@ describe('AwsBedrockConverseProvider', () => {
         config: { region: 'us-east-1' },
       });
       mockSend.mockResolvedValueOnce(
-        createMockConverseResponse('Response', {
-          usage: {
-            inputTokens: 100,
-            outputTokens: 50,
-            totalTokens: 750,
-            cacheReadInputTokens: 500,
-            cacheWriteInputTokens: 100,
-          },
-        }),
+        createMockConverseResponse('Response', createCachedUsageResponse()),
       );
 
       const result = await provider.callApi('Test');
@@ -1497,15 +1455,10 @@ describe('AwsBedrockConverseProvider', () => {
         },
       ]);
 
-      const provider = new AwsBedrockConverseProvider('anthropic.claude-3-5-sonnet-20241022-v2:0', {
-        config: {
-          region: 'us-east-1',
-          mcp: {
-            enabled: true,
-            server: { command: 'npx', args: ['test-mcp'], name: 'test-server' },
-          },
-        },
-      });
+      const provider = new AwsBedrockConverseProvider(
+        'anthropic.claude-3-5-sonnet-20241022-v2:0',
+        createMcpOptions(),
+      );
 
       mockSend.mockResolvedValueOnce(createMockConverseResponse('ok'));
       await provider.callApi('hi');
@@ -1535,22 +1488,12 @@ describe('AwsBedrockConverseProvider', () => {
         ],
       });
 
-      const provider = new AwsBedrockConverseProvider('anthropic.claude-3-5-sonnet-20241022-v2:0', {
-        config: {
-          region: 'us-east-1',
-          mcp: {
-            enabled: true,
-            server: { command: 'npx', args: ['test-mcp'], name: 'test-server' },
-          },
-        },
-      });
-
-      mockSend.mockResolvedValueOnce(
-        createMockConverseResponse('', {
-          toolUse: { id: 'tool-123', name: 'list_resources', input: {} },
-          stopReason: 'tool_use',
-        }),
+      const provider = new AwsBedrockConverseProvider(
+        'anthropic.claude-3-5-sonnet-20241022-v2:0',
+        createMcpOptions(),
       );
+
+      mockSend.mockResolvedValueOnce(createMockConverseResponse('', createListResourcesToolTurn()));
 
       const result = await provider.callApi('hi');
       expect(result.output).toBe(
@@ -1559,15 +1502,10 @@ describe('AwsBedrockConverseProvider', () => {
     });
 
     it('should coerce array tool_use input into empty args (parseToolInput safety)', async () => {
-      const provider = new AwsBedrockConverseProvider('anthropic.claude-3-5-sonnet-20241022-v2:0', {
-        config: {
-          region: 'us-east-1',
-          mcp: {
-            enabled: true,
-            server: { command: 'npx', args: ['test-mcp'], name: 'test-server' },
-          },
-        },
-      });
+      const provider = new AwsBedrockConverseProvider(
+        'anthropic.claude-3-5-sonnet-20241022-v2:0',
+        createMcpOptions(),
+      );
 
       mockSend.mockResolvedValueOnce(
         createMockConverseResponse('', {
@@ -2287,27 +2225,33 @@ Third line`;
       );
     });
 
-    it('should include service tier when specified', async () => {
-      const provider = new AwsBedrockConverseProvider('anthropic.claude-3-5-sonnet-20241022-v2:0', {
-        config: {
-          region: 'us-east-1',
-          serviceTier: { type: 'priority' },
-        },
-      });
+    it.each(['priority', 'reserved'] as const)(
+      'should include %s service tier when specified',
+      async (serviceTier) => {
+        const provider = new AwsBedrockConverseProvider(
+          'anthropic.claude-3-5-sonnet-20241022-v2:0',
+          {
+            config: {
+              region: 'us-east-1',
+              serviceTier: { type: serviceTier },
+            },
+          },
+        );
 
-      mockSend.mockResolvedValueOnce(createMockConverseResponse('Test'));
+        mockSend.mockResolvedValueOnce(createMockConverseResponse('Test'));
 
-      await provider.callApi('Test');
+        await provider.callApi('Test');
 
-      const { ConverseCommand } = (await import(
-        '@aws-sdk/client-bedrock-runtime'
-      )) as unknown as MockBedrockModule;
-      expect(ConverseCommand).toHaveBeenCalledWith(
-        expect.objectContaining({
-          serviceTier: { type: 'priority' },
-        }),
-      );
-    });
+        const { ConverseCommand } = (await import(
+          '@aws-sdk/client-bedrock-runtime'
+        )) as unknown as MockBedrockModule;
+        expect(ConverseCommand).toHaveBeenCalledWith(
+          expect.objectContaining({
+            serviceTier: { type: serviceTier },
+          }),
+        );
+      },
+    );
   });
 
   describe('guardrails', () => {
@@ -2391,15 +2335,10 @@ Third line`;
 
   describe('additional model request fields', () => {
     it('should include thinking config in additional fields', async () => {
-      const provider = new AwsBedrockConverseProvider('anthropic.claude-3-5-sonnet-20241022-v2:0', {
-        config: {
-          region: 'us-east-1',
-          thinking: {
-            type: 'enabled',
-            budget_tokens: 16000,
-          },
-        },
-      });
+      const provider = new AwsBedrockConverseProvider(
+        'anthropic.claude-3-5-sonnet-20241022-v2:0',
+        createThinkingBudgetOptions(),
+      );
 
       mockSend.mockResolvedValueOnce(createMockConverseResponse('Test'));
 
@@ -2421,15 +2360,10 @@ Third line`;
     });
 
     it('should convert manual thinking to adaptive for Claude Opus 4.8', async () => {
-      const provider = new AwsBedrockConverseProvider('anthropic.claude-opus-4-8', {
-        config: {
-          region: 'us-east-1',
-          thinking: {
-            type: 'enabled',
-            budget_tokens: 16000,
-          },
-        },
-      });
+      const provider = new AwsBedrockConverseProvider(
+        'anthropic.claude-opus-4-8',
+        createThinkingBudgetOptions(),
+      );
 
       mockSend.mockResolvedValueOnce(createMockConverseResponse('Test'));
 
@@ -2450,12 +2384,10 @@ Third line`;
     });
 
     it('should convert manual thinking to adaptive for Claude Opus 5', async () => {
-      const provider = new AwsBedrockConverseProvider('anthropic.claude-opus-5', {
-        config: {
-          region: 'us-east-1',
-          thinking: { type: 'enabled', budget_tokens: 16000 },
-        },
-      });
+      const provider = new AwsBedrockConverseProvider(
+        'anthropic.claude-opus-5',
+        createThinkingBudgetOptions(),
+      );
 
       mockSend.mockResolvedValueOnce(createMockConverseResponse('Test'));
 
@@ -2530,12 +2462,10 @@ Third line`;
       // Opus 5 rejects `thinking: disabled` only at effort xhigh/max, and the Bedrock path
       // never forwards `output_config.effort` — so the API sees the default effort (`high`)
       // and `disabled` is valid. Dropping it here would needlessly re-enable thinking.
-      const provider = new AwsBedrockConverseProvider('anthropic.claude-opus-5', {
-        config: {
-          region: 'us-east-1',
-          additionalModelRequestFields: { top_k: 40, thinking: { type: 'disabled' } },
-        },
-      });
+      const provider = new AwsBedrockConverseProvider(
+        'anthropic.claude-opus-5',
+        createAdditionalThinkingOptions(),
+      );
       mockSend.mockResolvedValueOnce(createMockConverseResponse('Test'));
 
       await provider.callApi('Test');
@@ -2706,15 +2636,10 @@ Third line`;
         }),
       );
 
-      const disabledProvider = new AwsBedrockConverseProvider('anthropic.claude-fable-5', {
-        config: {
-          region: 'us-east-1',
-          additionalModelRequestFields: {
-            top_k: 40,
-            thinking: { type: 'disabled' },
-          },
-        },
-      });
+      const disabledProvider = new AwsBedrockConverseProvider(
+        'anthropic.claude-fable-5',
+        createAdditionalThinkingOptions(),
+      );
       mockSend.mockResolvedValueOnce(createMockConverseResponse('Test'));
 
       await disabledProvider.callApi('Test');
@@ -2724,10 +2649,9 @@ Third line`;
       );
     });
 
-    it('strips raw sampling fields for Claude Sonnet 5 and preserves disabled thinking', async () => {
-      // Sonnet 5 is sampling-deprecated (rejects temperature/top_p/top_k) but NOT always-on,
-      // so raw additionalModelRequestFields must have those stripped and manual thinking
-      // converted to adaptive — while `thinking: { type: 'disabled' }` is preserved (unlike Fable).
+    it('strips unsupported raw sampling fields while preserving Sonnet 5 thinking choices', async () => {
+      // Sonnet 5 rejects sampling controls. Manual thinking converts to adaptive,
+      // while an explicit disabled request remains supported.
       const provider = new AwsBedrockConverseProvider('anthropic.claude-sonnet-5', {
         config: {
           region: 'us-east-1',
@@ -2752,16 +2676,25 @@ Third line`;
         }),
       );
 
-      const disabledProvider = new AwsBedrockConverseProvider('anthropic.claude-sonnet-5', {
-        config: {
-          region: 'us-east-1',
-          additionalModelRequestFields: { top_k: 40, thinking: { type: 'disabled' } },
-        },
-      });
+      const disabledProvider = new AwsBedrockConverseProvider(
+        'anthropic.claude-sonnet-5',
+        createAdditionalThinkingOptions(),
+      );
       mockSend.mockResolvedValueOnce(createMockConverseResponse('Test'));
 
       await disabledProvider.callApi('Test');
 
+      expect(ConverseCommand).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          additionalModelRequestFields: { thinking: { type: 'disabled' } },
+        }),
+      );
+
+      const typedDisabledProvider = new AwsBedrockConverseProvider('anthropic.claude-sonnet-5', {
+        config: { region: 'us-east-1', thinking: { type: 'disabled' } },
+      });
+      mockSend.mockResolvedValueOnce(createMockConverseResponse('Test'));
+      await typedDisabledProvider.callApi('Test');
       expect(ConverseCommand).toHaveBeenLastCalledWith(
         expect.objectContaining({
           additionalModelRequestFields: { thinking: { type: 'disabled' } },
@@ -3757,6 +3690,36 @@ Third line`;
       expect(result.cost).toBeCloseTo(0.0005445, 8);
     });
 
+    it('should bill one-hour prompt cache writes separately in streaming cost', async () => {
+      const provider = new AwsBedrockConverseProvider('global.anthropic.claude-fable-5', {
+        config: { region: 'us-east-1', streaming: true },
+      });
+      const streamEvents = [
+        { contentBlockDelta: { contentBlockIndex: 0, delta: { text: 'Hello' } } },
+        { messageStop: { stopReason: 'end_turn' } },
+        {
+          metadata: {
+            usage: {
+              inputTokens: 100,
+              outputTokens: 50,
+              totalTokens: 750,
+              cacheReadInputTokens: 500,
+              cacheWriteInputTokens: 100,
+              cacheDetails: [
+                { ttl: '1h', inputTokens: 40 },
+                { ttl: '5m', inputTokens: 60 },
+              ],
+            },
+          },
+        },
+      ];
+      mockSend.mockResolvedValueOnce({ stream: createMockStream(streamEvents) });
+
+      const result = await provider.callApiStreaming('Test');
+
+      expect(result.cost).toBeCloseTo(0.00555, 8);
+    });
+
     it('should handle streaming tool use response', async () => {
       mockSend.mockReset();
       const provider = new AwsBedrockConverseProvider('anthropic.claude-3-5-sonnet-20241022-v2:0', {
@@ -3817,24 +3780,13 @@ Third line`;
 
     it('should execute MCP tools from streaming tool use responses', async () => {
       mockSend.mockReset();
-      const provider = new AwsBedrockConverseProvider('anthropic.claude-3-5-sonnet-20241022-v2:0', {
-        config: {
-          region: 'us-east-1',
-          streaming: true,
-          mcp: {
-            enabled: true,
-            server: { command: 'npx', args: ['test-mcp'], name: 'test-server' },
-          },
-        },
-      });
+      const provider = new AwsBedrockConverseProvider(
+        'anthropic.claude-3-5-sonnet-20241022-v2:0',
+        createStreamingMcpOptions(),
+      );
 
       const streamEvents = [
-        {
-          contentBlockStart: {
-            contentBlockIndex: 0,
-            start: { toolUse: { toolUseId: 'tool-123', name: 'list_resources' } },
-          },
-        },
+        createToolUseStartedEvent(),
         {
           contentBlockDelta: {
             contentBlockIndex: 0,
@@ -3865,24 +3817,13 @@ Third line`;
         content: '',
         error: 'MCP server failed',
       });
-      const provider = new AwsBedrockConverseProvider('anthropic.claude-3-5-sonnet-20241022-v2:0', {
-        config: {
-          region: 'us-east-1',
-          streaming: true,
-          mcp: {
-            enabled: true,
-            server: { command: 'npx', args: ['test-mcp'], name: 'test-server' },
-          },
-        },
-      });
+      const provider = new AwsBedrockConverseProvider(
+        'anthropic.claude-3-5-sonnet-20241022-v2:0',
+        createStreamingMcpOptions(),
+      );
 
       const streamEvents = [
-        {
-          contentBlockStart: {
-            contentBlockIndex: 0,
-            start: { toolUse: { toolUseId: 'tool-123', name: 'list_resources' } },
-          },
-        },
+        createToolUseStartedEvent(),
         { contentBlockDelta: { contentBlockIndex: 0, delta: { toolUse: { input: '{}' } } } },
         { messageStop: { stopReason: 'tool_use' } },
       ];
@@ -3904,20 +3845,12 @@ Third line`;
           region: 'us-east-1',
           streaming: true,
           tool_choice: 'none' as any,
-          mcp: {
-            enabled: true,
-            server: { command: 'npx', args: ['test-mcp'], name: 'test-server' },
-          },
+          mcp: createNamedMcpOptions(),
         },
       });
 
       const streamEvents = [
-        {
-          contentBlockStart: {
-            contentBlockIndex: 0,
-            start: { toolUse: { toolUseId: 'tool-123', name: 'list_resources' } },
-          },
-        },
+        createToolUseStartedEvent(),
         { contentBlockDelta: { contentBlockIndex: 0, delta: { toolUse: { input: '{}' } } } },
         { messageStop: { stopReason: 'tool_use' } },
       ];
@@ -3932,24 +3865,13 @@ Third line`;
 
     it('should report error when streaming tool_use input is invalid JSON', async () => {
       mockSend.mockReset();
-      const provider = new AwsBedrockConverseProvider('anthropic.claude-3-5-sonnet-20241022-v2:0', {
-        config: {
-          region: 'us-east-1',
-          streaming: true,
-          mcp: {
-            enabled: true,
-            server: { command: 'npx', args: ['test-mcp'], name: 'test-server' },
-          },
-        },
-      });
+      const provider = new AwsBedrockConverseProvider(
+        'anthropic.claude-3-5-sonnet-20241022-v2:0',
+        createStreamingMcpOptions(),
+      );
 
       const streamEvents = [
-        {
-          contentBlockStart: {
-            contentBlockIndex: 0,
-            start: { toolUse: { toolUseId: 'tool-123', name: 'list_resources' } },
-          },
-        },
+        createToolUseStartedEvent(),
         { contentBlockDelta: { contentBlockIndex: 0, delta: { toolUse: { input: '{broken' } } } },
         { messageStop: { stopReason: 'tool_use' } },
       ];
@@ -3964,16 +3886,10 @@ Third line`;
 
     it('should combine streaming text with MCP tool results', async () => {
       mockSend.mockReset();
-      const provider = new AwsBedrockConverseProvider('anthropic.claude-3-5-sonnet-20241022-v2:0', {
-        config: {
-          region: 'us-east-1',
-          streaming: true,
-          mcp: {
-            enabled: true,
-            server: { command: 'npx', args: ['test-mcp'], name: 'test-server' },
-          },
-        },
-      });
+      const provider = new AwsBedrockConverseProvider(
+        'anthropic.claude-3-5-sonnet-20241022-v2:0',
+        createStreamingMcpOptions(),
+      );
 
       const streamEvents = [
         { contentBlockDelta: { contentBlockIndex: 0, delta: { text: 'Let me check.' } } },

@@ -4,7 +4,9 @@ import { getDb } from '../database/index';
 import { evalResultsTable } from '../database/tables';
 import {
   getStripFlags,
+  persistRepeatMetadata,
   persistTraceMetadata,
+  projectGradingResult,
   projectOutputMetadata,
   projectPrompt,
   projectProviderResponse,
@@ -14,6 +16,8 @@ import {
   sanitizeForDbWithSecrets,
   sanitizeGradingResultForDb,
   sanitizeProvider,
+  serializeResultProviderRefs,
+  surfaceRepeatMetadata,
   surfaceTraceMetadata,
 } from '../evaluator/resultProcessing';
 import { hashPrompt } from '../prompts/utils';
@@ -58,19 +62,17 @@ export default class EvalResult {
       testCase,
       traceId,
       evaluationId,
-    } = result;
+      repeatIndex,
+      repeatGroupId,
+    } = serializeResultProviderRefs(result);
 
-    // Persist trace linkage inside a private metadata namespace so it survives
-    // EvalResult round-trips without a Drizzle schema migration.
-    const persistedMetadata = persistTraceMetadata(metadata, traceId, evaluationId);
-
-    // Normalize provider for storage and extract blobs from responses.
-    const preSanitizeTestCase = {
-      ...testCase,
-      ...(testCase.provider && {
-        provider: sanitizeProvider(testCase.provider),
-      }),
-    };
+    // Persist trace and repeat linkage inside a private metadata namespace so they
+    // survive EvalResult round-trips without a Drizzle schema migration.
+    const persistedMetadata = persistTraceMetadata(
+      persistRepeatMetadata(metadata, repeatIndex, repeatGroupId),
+      traceId,
+      evaluationId,
+    );
 
     const processedResponse = await extractAndStoreBinaryData(result.response, {
       evalId,
@@ -88,7 +90,7 @@ export default class EvalResult {
     const args = {
       id: crypto.randomUUID(),
       evalId,
-      testCase: sanitizeForDbWithSecrets(preSanitizeTestCase),
+      testCase: sanitizeForDbWithSecrets(testCase),
       promptIdx: result.promptIdx,
       testIdx: result.testIdx,
       prompt: sanitizeForDbWithSecrets(prompt),
@@ -135,17 +137,25 @@ export default class EvalResult {
             promptIdx: result.promptIdx,
           })
         : result.response;
-      processedResults.push({ ...result, response: processedResponse ?? undefined });
+      processedResults.push({
+        ...serializeResultProviderRefs(result),
+        response: processedResponse ?? undefined,
+      });
     }
 
     await db.transaction(async (tx) => {
       for (const result of processedResults) {
         // See `createFromEvaluateResult` for why `testCase` and `prompt` go
         // through the credential-redacting sanitizer while the other fields
-        // stay on the lighter `sanitizeForDb`. Trace IDs travel inside metadata
-        // via `persistTraceMetadata`; strip the top-level fields so the DB write
-        // only carries known-schema columns.
-        const { traceId: _traceId, evaluationId: _evaluationId, ...rest } = result;
+        // stay on the lighter `sanitizeForDb`. Trace and repeat linkage travel inside
+        // metadata; strip the top-level fields so the DB write only carries known-schema columns.
+        const {
+          traceId: _traceId,
+          evaluationId: _evaluationId,
+          repeatIndex: _repeatIndex,
+          repeatGroupId: _repeatGroupId,
+          ...rest
+        } = result;
         const sanitizedResult = {
           ...rest,
           testCase: sanitizeForDbWithSecrets(result.testCase),
@@ -154,7 +164,11 @@ export default class EvalResult {
             response: sanitizeForDb(result.response),
             gradingResult: sanitizeForDb(result.gradingResult),
             metadata: sanitizeForDb(
-              persistTraceMetadata(result.metadata, result.traceId, result.evaluationId),
+              persistTraceMetadata(
+                persistRepeatMetadata(result.metadata, result.repeatIndex, result.repeatGroupId),
+                result.traceId,
+                result.evaluationId,
+              ),
             ),
           }),
           namedScores: sanitizeForDb(result.namedScores),
@@ -309,6 +323,8 @@ export default class EvalResult {
   metadata: Record<string, any>;
   traceId?: string;
   evaluationId?: string;
+  repeatIndex?: number;
+  repeatGroupId?: string;
   failureReason: ResultFailureReason;
   persisted: boolean;
   pluginId?: string;
@@ -352,11 +368,13 @@ export default class EvalResult {
     this.provider = opts.provider;
     this.latencyMs = opts.latencyMs || 0;
     this.cost = opts.cost || 0;
-    ({
-      metadata: this.metadata,
-      traceId: this.traceId,
-      evaluationId: this.evaluationId,
-    } = surfaceTraceMetadata(opts.metadata));
+    const surfacedTrace = surfaceTraceMetadata(opts.metadata);
+    const surfacedRepeat = surfaceRepeatMetadata(surfacedTrace.metadata);
+    this.metadata = surfacedRepeat.metadata;
+    this.traceId = surfacedTrace.traceId;
+    this.evaluationId = surfacedTrace.evaluationId;
+    this.repeatIndex = surfacedRepeat.repeatIndex;
+    this.repeatGroupId = surfacedRepeat.repeatGroupId;
     this.failureReason = isResultFailureReason(opts.failureReason)
       ? opts.failureReason
       : ResultFailureReason.NONE;
@@ -366,16 +384,26 @@ export default class EvalResult {
 
   async save() {
     const db = await getDb();
-    // Trace linkage and `pluginId` aren't schema columns — `pluginId` is re-derived from
-    // testCase metadata in the constructor, and trace linkage travels inside the metadata
-    // JSON via persistTraceMetadata. Drizzle would drop them silently, but excluding them
-    // explicitly keeps the write payload aligned with the schema.
-    const { traceId: _traceId, evaluationId: _evaluationId, pluginId: _pluginId, ...rest } = this;
+    // Trace/repeat linkage and `pluginId` aren't schema columns — `pluginId` is re-derived
+    // from testCase metadata, while linkage travels inside the metadata JSON. Drizzle would
+    // drop them silently, but excluding them explicitly keeps the payload aligned with the schema.
+    const {
+      traceId: _traceId,
+      evaluationId: _evaluationId,
+      repeatIndex: _repeatIndex,
+      repeatGroupId: _repeatGroupId,
+      pluginId: _pluginId,
+      ...rest
+    } = serializeResultProviderRefs(this);
     const persistedValues = {
       ...rest,
       error: this.error ?? null,
-      gradingResult: sanitizeGradingResultForDb(this.gradingResult),
-      metadata: persistTraceMetadata(this.metadata, this.traceId, this.evaluationId),
+      gradingResult: sanitizeGradingResultForDb(rest.gradingResult),
+      metadata: persistTraceMetadata(
+        persistRepeatMetadata(this.metadata, this.repeatIndex, this.repeatGroupId),
+        this.traceId,
+        this.evaluationId,
+      ),
     };
     //check if this exists in the db
     if (this.persisted) {
@@ -412,6 +440,7 @@ export default class EvalResult {
       stripMetadata: shouldStripMetadata,
       stripVars: shouldStripTestVars,
       stripOutput: shouldStripResponseOutput,
+      stripPromptText: shouldStripPromptText,
     });
     // Mirror the live accounting in the evaluator: a response counts as one provider
     // request even when it reports no token usage, and a grading result counts as one
@@ -433,7 +462,9 @@ export default class EvalResult {
       }),
       description: this.description || undefined,
       error: this.error || undefined,
-      gradingResult: shouldStripGradingResult ? null : this.gradingResult,
+      gradingResult: shouldStripGradingResult
+        ? null
+        : projectGradingResult(this.gradingResult, shouldStripPromptText),
       id: this.id,
       latencyMs: this.latencyMs,
       namedScores: this.namedScores,
@@ -442,6 +473,10 @@ export default class EvalResult {
       promptIdx: this.promptIdx,
       ...(this.traceId ? { traceId: this.traceId } : {}),
       ...(this.evaluationId ? { evaluationId: this.evaluationId } : {}),
+      ...(this.repeatGroupId !== undefined && {
+        repeatGroupId: this.repeatGroupId,
+        repeatIndex: this.repeatIndex,
+      }),
       provider: { id: this.provider.id, label: this.provider.label },
       response,
       score: this.score,
@@ -476,10 +511,13 @@ export { getResultIndexKey } from '../evaluator/resultIndex';
 export {
   getStripFlags,
   PROMPTFOO_METADATA_KEY,
+  persistRepeatMetadata,
   persistTraceMetadata,
   projectPrompt,
   projectTracesForOutput,
   sanitizeProvider,
   sanitizeResultForJsonlArtifact,
+  stripRepeatLinkageFromMetadata,
   stripTraceLinkageFromMetadata,
+  toSerializableProviderRef,
 } from '../evaluator/resultProcessing';
