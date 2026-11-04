@@ -120,6 +120,7 @@ describeEvaluator('evaluator execution control', () => {
       tests: [{}],
     };
     const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    useEvaluationTimers();
     const controller = new AbortController();
     const pending = evaluate(testSuite, evalRecord, {
       maxConcurrency: 1,
@@ -134,7 +135,9 @@ describeEvaluator('evaluator execution control', () => {
       expect(await EvalResult.getCompletedIndexPairs(evalRecord.id)).toEqual(new Set());
     } finally {
       controller.abort();
+      await vi.runAllTimersAsync();
       await pending;
+      vi.useRealTimers();
     }
   });
 

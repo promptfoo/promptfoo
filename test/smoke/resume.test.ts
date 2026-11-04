@@ -85,6 +85,12 @@ function spawnCli(
     stdio: ['pipe', 'pipe', 'pipe'],
   });
 
+  // Observe termination immediately: cancellation can finish before waitForExit is called.
+  // The close event also guarantees that all stdout/stderr data has been collected.
+  const exited = new Promise<number>((resolve) => {
+    child.once('close', (code) => resolve(code ?? 1));
+  });
+
   const outputWaiters: Array<{
     pattern: string | RegExp;
     resolve: (output: string) => void;
@@ -168,12 +174,9 @@ function spawnCli(
         );
       }, timeoutMs);
 
-      child.on('exit', (code) => {
+      exited.then((exitCode) => {
         clearTimeout(timer);
-        // Small delay to collect remaining output
-        setTimeout(() => {
-          resolve({ stdout, stderr, exitCode: code ?? 1 });
-        }, 100);
+        resolve({ stdout, stderr, exitCode });
       });
     });
   };

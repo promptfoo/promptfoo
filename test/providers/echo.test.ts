@@ -1,10 +1,12 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { EchoProvider } from '../../src/providers/echo';
+import * as time from '../../src/util/time';
 
 describe('EchoProvider', () => {
   afterEach(() => {
     vi.useRealTimers();
     vi.clearAllMocks();
+    vi.restoreAllMocks();
   });
 
   describe('constructor', () => {
@@ -155,6 +157,18 @@ describe('EchoProvider', () => {
         provider.callApi('Test input', {}, { abortSignal: controller.signal }),
       ).rejects.toBe(controller.signal.reason);
       expect(vi.getTimerCount()).toBe(0);
+    });
+
+    it('preserves delay errors unrelated to cancellation', async () => {
+      const provider = new EchoProvider({ delay: 100 });
+      const controller = new AbortController();
+      const error = new Error('delay failed');
+      vi.spyOn(time, 'sleepWithAbort').mockRejectedValueOnce(error);
+
+      await expect(
+        provider.callApi('Test input', {}, { abortSignal: controller.signal }),
+      ).rejects.toBe(error);
+      expect(controller.signal.aborted).toBe(false);
     });
 
     it('completes a delay with an active signal', async () => {
