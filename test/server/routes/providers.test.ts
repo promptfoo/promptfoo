@@ -1,11 +1,18 @@
 import type { IncomingMessage, Server, ServerResponse } from 'node:http';
 
-import request from 'supertest';
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createApp } from '../../../src/server/server';
+import { createConfigItem } from '../../factories/literalFixtures';
+import { setupTestServer } from '../../util/testServer';
 
 import type { ProviderTestResult } from '../../../src/node/testProvider';
 import type { ApiProvider, ProviderOptions } from '../../../src/types/providers';
+
+const createGeneratedChatConfig = () => ({
+  url: 'https://api.example.com/v1/chat',
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+});
 
 // Mock dependencies
 vi.mock('../../../src/providers/index');
@@ -48,25 +55,9 @@ function deferred<T>() {
 }
 
 describe('Providers Routes', () => {
-  let api: ReturnType<typeof request.agent>;
   let server: Server;
-
-  beforeAll(async () => {
-    await new Promise<void>((resolve, reject) => {
-      server = createApp().listen(0, '127.0.0.1', (error?: Error) =>
-        error ? reject(error) : resolve(),
-      );
-    });
-    api = request.agent(server);
-  });
-
-  afterAll(async () => {
-    if (!server.listening) {
-      return;
-    }
-    await new Promise<void>((resolve, reject) => {
-      server.close((error) => (error ? reject(error) : resolve()));
-    });
+  const api = setupTestServer(createApp, undefined, (listeningServer) => {
+    server = listeningServer;
   });
 
   beforeEach(() => {
@@ -197,10 +188,7 @@ describe('Providers Routes', () => {
     });
 
     it('should handle valid request without prompt (optional)', async () => {
-      const providerOptions: ProviderOptions = {
-        id: 'http://example.com/api',
-        config: {},
-      };
+      const providerOptions: ProviderOptions = createConfigItem('http://example.com/api');
 
       const mockResult: ProviderTestResult = {
         success: true,
@@ -546,10 +534,7 @@ describe('Providers Routes', () => {
     });
 
     it('should handle connectivity test failure', async () => {
-      const providerOptions: ProviderOptions = {
-        id: 'http://example.com/api',
-        config: {},
-      };
+      const providerOptions: ProviderOptions = createConfigItem('http://example.com/api');
 
       const mockResult: ProviderTestResult = {
         success: false,
@@ -580,10 +565,7 @@ describe('Providers Routes', () => {
     });
 
     it('should handle successful test with analysis and suggestions', async () => {
-      const providerOptions: ProviderOptions = {
-        id: 'http://example.com/api',
-        config: {},
-      };
+      const providerOptions: ProviderOptions = createConfigItem('http://example.com/api');
 
       const mockResult: ProviderTestResult = {
         success: true,
@@ -719,11 +701,7 @@ describe('Providers Routes', () => {
 
   describe('POST /providers/http-generator validation', () => {
     it('should return generated HTTP configuration objects from the cloud API', async () => {
-      const generatedConfig = {
-        url: 'https://api.example.com/v1/chat',
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-      };
+      const generatedConfig = createGeneratedChatConfig();
       mockedFetchWithProxy.mockResolvedValue({
         ok: true,
         status: 200,
@@ -755,11 +733,7 @@ describe('Providers Routes', () => {
         Authorization: 'Bearer test-onprem-key',
       });
 
-      const generatedConfig = {
-        url: 'https://api.example.com/v1/chat',
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-      };
+      const generatedConfig = createGeneratedChatConfig();
       mockedFetchWithProxy.mockResolvedValue({
         ok: true,
         status: 200,

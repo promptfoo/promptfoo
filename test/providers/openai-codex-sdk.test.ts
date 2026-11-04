@@ -2821,6 +2821,7 @@ describe('OpenAICodexSDKProvider', () => {
           sdkEntryPoint: '@openai/codex-sdk',
           codexPathOverride: '/custom/path/to/codex',
           env: expect.any(Object),
+          signal: expect.any(AbortSignal),
         });
         const preflightEnv = mockCompatibilityPreflight.mock.calls[0][0].env;
         expect(preflightEnv).not.toHaveProperty('CODEX_API_KEY');
@@ -2861,9 +2862,16 @@ describe('OpenAICodexSDKProvider', () => {
         expect(MockCodex).toHaveBeenCalled();
       });
 
-      it('should abort promptly while a shared compatibility preflight continues', async () => {
+      it('should abort promptly by cancelling its owned compatibility preflight', async () => {
         const preflight = createDeferred<void>();
-        mockCompatibilityPreflight.mockReturnValue(preflight.promise);
+        mockCompatibilityPreflight.mockImplementation(({ signal }) => {
+          signal.addEventListener(
+            'abort',
+            () => preflight.reject(new DOMException('Probe aborted', 'AbortError')),
+            { once: true },
+          );
+          return preflight.promise;
+        });
         const abortController = new AbortController();
         const provider = new OpenAICodexSDKProvider({
           config: { codex_path_override: '/custom/codex' },
@@ -2877,8 +2885,8 @@ describe('OpenAICodexSDKProvider', () => {
         abortController.abort();
 
         await expect(resultPromise).resolves.toEqual({ error: 'OpenAI Codex SDK call aborted' });
+        expect(mockCompatibilityPreflight.mock.calls[0][0].signal.aborted).toBe(true);
         expect(MockCodex).not.toHaveBeenCalled();
-        preflight.resolve(undefined);
       });
 
       it('should not start compatibility preflight after aborting during SDK import', async () => {
@@ -2899,6 +2907,109 @@ describe('OpenAICodexSDKProvider', () => {
         await expect(resultPromise).resolves.toEqual({ error: 'OpenAI Codex SDK call aborted' });
         expect(mockCompatibilityPreflight).not.toHaveBeenCalled();
         expect(MockCodex).not.toHaveBeenCalled();
+      });
+
+      it('does not launch a probe after cleanup during SDK import', async () => {
+        const sdkImport = createDeferred<typeof mockCodexSDK>();
+        mockImportModule.mockReturnValueOnce(sdkImport.promise);
+        const provider = new OpenAICodexSDKProvider({
+          config: { codex_path_override: '/custom/codex' },
+          env: { OPENAI_API_KEY: 'test-api-key' },
+        });
+        const result = provider.callApi('Test prompt');
+        await vi.waitFor(() => expect(mockImportModule).toHaveBeenCalled());
+        await provider.cleanup();
+        sdkImport.resolve(mockCodexSDK);
+        await expect(result).resolves.toEqual({
+          error: expect.stringContaining('interrupted by cleanup'),
+        });
+        expect(mockCompatibilityPreflight.mock.calls.length).toBe(0);
+        expect(MockCodex).not.toHaveBeenCalled();
+      });
+
+      it('waits for owned preflight settlement during cleanup', async () => {
+        const preflight = createDeferred<void>();
+        let signal: AbortSignal | undefined;
+        mockCompatibilityPreflight.mockImplementation((options) => {
+          signal = options.signal;
+          return preflight.promise;
+        });
+        const provider = new OpenAICodexSDKProvider({
+          config: { codex_path_override: '/custom/codex' },
+          env: { OPENAI_API_KEY: 'test-api-key' },
+        });
+        const result = provider.callApi('Test prompt');
+        await vi.waitFor(() => expect(mockCompatibilityPreflight).toHaveBeenCalledOnce());
+        let cleanupSettled = false;
+        const cleanup = provider.cleanup().then(() => {
+          cleanupSettled = true;
+        });
+        try {
+          await Promise.resolve();
+          expect(signal?.aborted).toBe(true);
+          expect(cleanupSettled).toBe(false);
+        } finally {
+          preflight.resolve();
+          await Promise.all([result, cleanup]);
+        }
+        expect(cleanupSettled).toBe(true);
+        expect(MockCodex).not.toHaveBeenCalled();
+      });
+
+      it('registers preflight ownership before starting the helper', async () => {
+        const provider = new OpenAICodexSDKProvider({
+          config: { codex_path_override: '/custom/codex' },
+          env: { OPENAI_API_KEY: 'test-api-key' },
+        });
+        let cleanup: Promise<void> | undefined;
+        mockCompatibilityPreflight.mockImplementation(({ signal }) => {
+          cleanup = provider.cleanup();
+          expect(signal.aborted).toBe(true);
+          return Promise.reject(signal.reason);
+        });
+        await expect(provider.callApi('Test prompt')).resolves.toEqual({
+          error: 'OpenAI Codex SDK call aborted',
+        });
+        await cleanup;
+        expect(MockCodex).not.toHaveBeenCalled();
+      });
+
+      it('owns separate preflight cancellation for concurrent callers', async () => {
+        const probes = [createDeferred<void>(), createDeferred<void>()];
+        const signals: Array<AbortSignal | undefined> = [];
+        mockCompatibilityPreflight.mockImplementation((options) => {
+          const pending = probes[signals.length];
+          signals.push(options.signal);
+          options.signal?.addEventListener(
+            'abort',
+            () => pending.reject(new DOMException('Probe aborted', 'AbortError')),
+            { once: true },
+          );
+          return pending.promise;
+        });
+        mockRun.mockResolvedValue(createMockResponse('Response'));
+        const provider = new OpenAICodexSDKProvider({
+          config: { codex_path_override: '/custom/codex' },
+          env: { OPENAI_API_KEY: 'test-api-key' },
+        });
+        const controller = new AbortController();
+        const first = provider.callApi('First prompt', undefined, {
+          abortSignal: controller.signal,
+        });
+        const second = provider.callApi('Second prompt');
+        try {
+          await vi.waitFor(() => expect(mockCompatibilityPreflight).toHaveBeenCalledTimes(2));
+          controller.abort();
+          await expect(first).resolves.toEqual({ error: 'OpenAI Codex SDK call aborted' });
+          expect(signals[0]?.aborted).toBe(true);
+          expect(signals[1]?.aborted).toBe(false);
+          probes[1].resolve();
+          await expect(second).resolves.toMatchObject({ output: 'Response' });
+          expect(MockCodex).toHaveBeenCalledOnce();
+        } finally {
+          probes.forEach((probe) => probe.resolve());
+          await Promise.allSettled([first, second]);
+        }
       });
 
       it('should reject an incompatible SDK and CLI before starting a Codex turn', async () => {
