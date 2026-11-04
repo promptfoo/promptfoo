@@ -1,24 +1,21 @@
-import { useMemo } from 'react';
-
 import { TooltipProvider } from '@app/components/ui/tooltip';
+import { createMockResponse, mockCallApiResponse } from '@app/tests/apiMocks';
 import { mockWindowLocation } from '@app/tests/browserMocks';
 import { callApi } from '@app/utils/api';
-import { ResultFailureReason } from '@promptfoo/types';
-import { render, renderHook, screen, waitFor } from '@testing-library/react';
+import { ResultFailureReason } from '@promptfoo/types/results';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router';
-import { beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import App from './Report';
 import type { EvaluateResult, GradingResult, ResultsFile } from '@promptfoo/types';
 
-// Helper to render with all needed providers
-const renderWithProviders = (ui: React.ReactElement) => {
-  return render(
+const renderWithProviders = (ui: React.ReactElement) =>
+  render(
     <TooltipProvider>
       <MemoryRouter initialEntries={[`/reports${window.location.search}`]}>{ui}</MemoryRouter>
     </TooltipProvider>,
   );
-};
 
 vi.mock('@app/utils/api');
 const mockRecordEvent = vi.hoisted(() => vi.fn());
@@ -58,7 +55,11 @@ vi.mock('./Overview', () => ({
   },
 }));
 vi.mock('@app/components/EnterpriseBanner', () => ({ default: () => null }));
-vi.mock('./StrategyStats', () => ({ default: () => null }));
+vi.mock('./StrategyStats', () => ({
+  default: ({ strategyStats }: { strategyStats: unknown }) => (
+    <pre data-testid="strategy-stats">{JSON.stringify(strategyStats)}</pre>
+  ),
+}));
 vi.mock('./RiskCategories', () => ({
   default: ({
     failuresByPlugin,
@@ -80,6 +81,9 @@ vi.mock('./RiskCategories', () => ({
           .map((pass) => pass.prompt)
           .join('|')}
       </div>
+      <pre hidden data-testid="report-groups">
+        {JSON.stringify({ failuresByPlugin, passesByPlugin })}
+      </pre>
     </>
   ),
 }));
@@ -92,481 +96,155 @@ vi.mock('./FrameworkCompliance', () => ({
 vi.mock('./ReportDownloadButton', () => ({ default: () => null }));
 vi.mock('./ReportSettingsDialogButton', () => ({ default: () => null }));
 
-describe('Report filtering logic', () => {
-  const createMockResult = (promptIdx: number, pluginId: string, pass: boolean): EvaluateResult =>
-    ({
-      promptIdx,
-      success: pass,
-      gradingResult: { pass },
-      prompt: { raw: 'test', label: 'test' },
-      response: { output: 'test output' },
-      vars: { prompt: 'test prompt' },
-      provider: {
-        id: `provider-${promptIdx}`,
-        label: `Provider ${promptIdx}`,
-      },
-      metadata: {
-        pluginId,
-      },
-    }) as unknown as EvaluateResult;
+const readStrategyStats = () => JSON.parse(screen.getByTestId('strategy-stats').textContent!);
 
-  const createMockEvalData = (numPrompts: number, results: EvaluateResult[]): ResultsFile =>
-    ({
-      version: 4,
-      createdAt: '2025-01-01T00:00:00Z',
-      config: { redteam: {} },
-      prompts: Array.from({ length: numPrompts }, (_, i) => ({
-        id: `prompt-${i}`,
-        raw: '{{prompt}}',
-        label: `Prompt ${i}`,
-        provider: `Provider ${i}`,
-      })),
-      results: {
-        version: 3,
-        timestamp: '2025-01-01T00:00:00Z',
-        results,
-      },
-    }) as unknown as ResultsFile;
+beforeEach(() => {
+  vi.clearAllMocks();
+  mockWindowLocation({ search: '?evalId=test-eval-id' });
+});
+
+describe('Report filtering logic', () => {
+  const readGroups = () =>
+    JSON.parse(screen.getByTestId('report-groups').textContent!) as {
+      failuresByPlugin: Record<string, { result: EvaluateResult }[]>;
+      passesByPlugin: Record<string, { result: EvaluateResult }[]>;
+    };
+
+  async function renderReportData(numPrompts: number, results: EvaluateResult[]) {
+    mockCallApiResponse({ data: createComponentMockEvalData(numPrompts, results) });
+    const view = renderWithProviders(<App evalId="first" />);
+    await screen.findByTestId('report-groups');
+    return view;
+  }
+
+  async function selectTarget(provider = 'Provider 1') {
+    await userEvent.click(screen.getByRole('combobox'));
+    await userEvent.click(await screen.findByRole('option', { name: provider }));
+    await waitFor(() =>
+      expect(screen.getByRole('combobox')).toHaveTextContent(`Target: ${provider}`),
+    );
+  }
 
   describe('failuresByPlugin filtering', () => {
-    it('should include all failures when only one prompt exists', () => {
-      const results = [
-        createMockResult(0, 'plugin1', false),
-        createMockResult(0, 'plugin2', false),
-      ];
-      const evalData = createMockEvalData(1, results);
-      const selectedPromptIndex = 0;
-
-      // Simulate the useMemo logic
-      const { result } = renderHook(() =>
-        // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
-        useMemo(() => {
-          if (!evalData) {
-            return {};
-          }
-
-          const prompts = evalData.prompts || [];
-          const selectedPrompt = prompts[selectedPromptIndex];
-
-          const failures: Record<string, any[]> = {};
-          evalData.results.results.forEach((result) => {
-            // Filter by selected target/provider if multiple targets exist
-            if (prompts.length > 1 && selectedPrompt && result.promptIdx !== selectedPromptIndex) {
-              return;
-            }
-
-            const pluginId = result.metadata?.pluginId;
-            if (!pluginId) {
-              return;
-            }
-
-            if (!result.success || !result.gradingResult?.pass) {
-              if (!failures[pluginId]) {
-                failures[pluginId] = [];
-              }
-              failures[pluginId].push(result);
-            }
-          });
-          return failures;
-        }, [evalData, selectedPromptIndex]),
-      );
-
-      expect(Object.keys(result.current)).toHaveLength(2);
-      expect(result.current['plugin1']).toHaveLength(1);
-      expect(result.current['plugin2']).toHaveLength(1);
+    it('should include all failures when only one prompt exists', async () => {
+      await renderReportData(1, [
+        createComponentMockResult(0, 'plugin1', false),
+        createComponentMockResult(0, 'plugin2', false),
+      ]);
+      const failures = readGroups().failuresByPlugin;
+      expect(Object.keys(failures)).toHaveLength(2);
+      expect(failures.plugin1).toHaveLength(1);
+      expect(failures.plugin2).toHaveLength(1);
+      expect(readStrategyStats()).toEqual({ basic: { pass: 0, total: 2, failCount: 2 } });
     });
 
-    it('should filter failures by promptIdx when multiple prompts exist', () => {
-      const results = [
-        createMockResult(0, 'plugin1', false), // Failure for prompt 0
-        createMockResult(1, 'plugin1', false), // Failure for prompt 1
-        createMockResult(0, 'plugin2', false), // Failure for prompt 0
-        createMockResult(1, 'plugin2', true), // Pass for prompt 1
-      ];
-      const evalData = createMockEvalData(2, results);
-
-      // Test selecting prompt 0
-      const { result: result0 } = renderHook(() =>
-        // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
-        useMemo(() => {
-          if (!evalData) {
-            return {};
-          }
-
-          const prompts = evalData.prompts || [];
-          const selectedPrompt = prompts[0];
-
-          const failures: Record<string, any[]> = {};
-          evalData.results.results.forEach((result) => {
-            if (prompts.length > 1 && selectedPrompt && result.promptIdx !== 0) {
-              return;
-            }
-
-            const pluginId = result.metadata?.pluginId;
-            if (!pluginId) {
-              return;
-            }
-
-            if (!result.success || !result.gradingResult?.pass) {
-              if (!failures[pluginId]) {
-                failures[pluginId] = [];
-              }
-              failures[pluginId].push(result);
-            }
-          });
-          return failures;
-        }, [evalData]),
-      );
-
-      // Should only include failures from prompt 0
-      expect(Object.keys(result0.current)).toHaveLength(2);
-      expect(result0.current['plugin1']).toHaveLength(1);
-      expect(result0.current['plugin1'][0].promptIdx).toBe(0);
-      expect(result0.current['plugin2']).toHaveLength(1);
-      expect(result0.current['plugin2'][0].promptIdx).toBe(0);
-
-      // Test selecting prompt 1
-      const { result: result1 } = renderHook(() =>
-        // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
-        useMemo(() => {
-          if (!evalData) {
-            return {};
-          }
-
-          const prompts = evalData.prompts || [];
-          const selectedPrompt = prompts[1];
-
-          const failures: Record<string, any[]> = {};
-          evalData.results.results.forEach((result) => {
-            if (prompts.length > 1 && selectedPrompt && result.promptIdx !== 1) {
-              return;
-            }
-
-            const pluginId = result.metadata?.pluginId;
-            if (!pluginId) {
-              return;
-            }
-
-            if (!result.success || !result.gradingResult?.pass) {
-              if (!failures[pluginId]) {
-                failures[pluginId] = [];
-              }
-              failures[pluginId].push(result);
-            }
-          });
-          return failures;
-        }, [evalData]),
-      );
-
-      // Should only include failures from prompt 1
-      expect(Object.keys(result1.current)).toHaveLength(1);
-      expect(result1.current['plugin1']).toHaveLength(1);
-      expect(result1.current['plugin1'][0].promptIdx).toBe(1);
-      expect(result1.current['plugin2']).toBeUndefined(); // Prompt 1 passed plugin2
+    it('should filter failures by promptIdx when multiple prompts exist', async () => {
+      await renderReportData(2, [
+        createComponentMockResult(0, 'plugin1', false),
+        createComponentMockResult(1, 'plugin1', false),
+        createComponentMockResult(0, 'plugin2', false),
+        createComponentMockResult(1, 'plugin2', true),
+      ]);
+      const first = readGroups().failuresByPlugin;
+      expect(Object.keys(first)).toHaveLength(2);
+      expect(first.plugin1).toHaveLength(1);
+      expect(first.plugin1[0].result.promptIdx).toBe(0);
+      expect(first.plugin2).toHaveLength(1);
+      expect(first.plugin2[0].result.promptIdx).toBe(0);
+      await selectTarget();
+      const second = readGroups().failuresByPlugin;
+      expect(Object.keys(second)).toHaveLength(1);
+      expect(second.plugin1).toHaveLength(1);
+      expect(second.plugin1[0].result.promptIdx).toBe(1);
+      expect(second.plugin2).toBeUndefined();
+      expect(readStrategyStats()).toEqual({ basic: { pass: 1, total: 2, failCount: 1 } });
     });
   });
 
   describe('categoryStats filtering', () => {
-    it('should filter category stats by promptIdx when multiple prompts exist', () => {
-      const results = [
-        createMockResult(0, 'harmful:violent-crime', false),
-        createMockResult(1, 'harmful:violent-crime', true),
-        createMockResult(0, 'pii:direct', true),
-        createMockResult(1, 'pii:direct', false),
-      ];
-      const evalData = createMockEvalData(2, results);
-
-      // Test selecting prompt 0
-      const { result: result0 } = renderHook(() =>
-        // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
-        useMemo(() => {
-          if (!evalData) {
-            return {};
-          }
-
-          const prompts = evalData.prompts || [];
-          const selectedPrompt = prompts[0];
-
-          return evalData.results.results.reduce<
-            Record<string, { pass: number; fail: number; error: number }>
-          >((acc, row) => {
-            if (prompts.length > 1 && selectedPrompt && row.promptIdx !== 0) {
-              return acc;
-            }
-
-            const pluginId = row.metadata?.pluginId;
-            if (!pluginId) {
-              return acc;
-            }
-
-            if (!acc[pluginId]) {
-              acc[pluginId] = { pass: 0, fail: 0, error: 0 };
-            }
-
-            if (row.success && row.gradingResult?.pass) {
-              acc[pluginId].pass++;
-            } else {
-              acc[pluginId].fail++;
-            }
-
-            return acc;
-          }, {});
-        }, [evalData]),
-      );
-
-      // Prompt 0: violent-crime failed, pii:direct passed
-      expect(result0.current['harmful:violent-crime']).toEqual({
-        pass: 0,
-        fail: 1,
-        error: 0,
+    it('should filter category stats by promptIdx when multiple prompts exist', async () => {
+      await renderReportData(2, [
+        createComponentMockResult(0, 'harmful:violent-crime', false),
+        createComponentMockResult(1, 'harmful:violent-crime', true),
+        createComponentMockResult(0, 'pii:direct', true),
+        createComponentMockResult(1, 'pii:direct', false),
+      ]);
+      expect(JSON.parse(screen.getByTestId('overview-category-stats').textContent!)).toEqual({
+        'harmful:violent-crime': { pass: 0, total: 1, passWithFilter: 0, failCount: 1 },
+        'pii:direct': { pass: 1, total: 1, passWithFilter: 1, failCount: 0 },
       });
-      expect(result0.current['pii:direct']).toEqual({ pass: 1, fail: 0, error: 0 });
-
-      // Test selecting prompt 1
-      const { result: result1 } = renderHook(() =>
-        // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
-        useMemo(() => {
-          if (!evalData) {
-            return {};
-          }
-
-          const prompts = evalData.prompts || [];
-          const selectedPrompt = prompts[1];
-
-          return evalData.results.results.reduce<
-            Record<string, { pass: number; fail: number; error: number }>
-          >((acc, row) => {
-            if (prompts.length > 1 && selectedPrompt && row.promptIdx !== 1) {
-              return acc;
-            }
-
-            const pluginId = row.metadata?.pluginId;
-            if (!pluginId) {
-              return acc;
-            }
-
-            if (!acc[pluginId]) {
-              acc[pluginId] = { pass: 0, fail: 0, error: 0 };
-            }
-
-            if (row.success && row.gradingResult?.pass) {
-              acc[pluginId].pass++;
-            } else {
-              acc[pluginId].fail++;
-            }
-
-            return acc;
-          }, {});
-        }, [evalData]),
-      );
-
-      // Prompt 1: violent-crime passed, pii:direct failed
-      expect(result1.current['harmful:violent-crime']).toEqual({
-        pass: 1,
-        fail: 0,
-        error: 0,
+      await selectTarget();
+      expect(JSON.parse(screen.getByTestId('overview-category-stats').textContent!)).toEqual({
+        'harmful:violent-crime': { pass: 1, total: 1, passWithFilter: 1, failCount: 0 },
+        'pii:direct': { pass: 0, total: 1, passWithFilter: 0, failCount: 1 },
       });
-      expect(result1.current['pii:direct']).toEqual({ pass: 0, fail: 1, error: 0 });
     });
   });
 
   describe('target selector behavior', () => {
-    it('should not filter results when only one prompt exists', () => {
-      const results = [
-        createMockResult(0, 'plugin1', false),
-        createMockResult(0, 'plugin2', true),
-        createMockResult(0, 'plugin3', false),
-      ];
-      const evalData = createMockEvalData(1, results);
-      const selectedPromptIndex = 0;
-
-      const { result } = renderHook(() =>
-        // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
-        useMemo(() => {
-          if (!evalData) {
-            return {};
-          }
-
-          const prompts = evalData.prompts || [];
-          const selectedPrompt = prompts[selectedPromptIndex];
-
-          const failures: Record<string, any[]> = {};
-          evalData.results.results.forEach((result) => {
-            // Filter by selected target/provider if multiple targets exist
-            if (prompts.length > 1 && selectedPrompt && result.promptIdx !== selectedPromptIndex) {
-              return;
-            }
-
-            const pluginId = result.metadata?.pluginId;
-            if (!pluginId) {
-              return;
-            }
-
-            if (!result.success || !result.gradingResult?.pass) {
-              if (!failures[pluginId]) {
-                failures[pluginId] = [];
-              }
-              failures[pluginId].push(result);
-            }
-          });
-          return failures;
-        }, [evalData, selectedPromptIndex]),
-      );
-
-      // All failures should be included since there's only one prompt
-      expect(Object.keys(result.current)).toHaveLength(2);
-      expect(result.current['plugin1']).toHaveLength(1);
-      expect(result.current['plugin3']).toHaveLength(1);
+    it('should not filter results when only one prompt exists', async () => {
+      await renderReportData(1, [
+        createComponentMockResult(0, 'plugin1', false),
+        createComponentMockResult(0, 'plugin2', true),
+        createComponentMockResult(0, 'plugin3', false),
+      ]);
+      const failures = readGroups().failuresByPlugin;
+      expect(Object.keys(failures)).toHaveLength(2);
+      expect(failures.plugin1).toHaveLength(1);
+      expect(failures.plugin3).toHaveLength(1);
     });
 
-    it('should handle edge case when selectedPromptIndex is out of bounds', () => {
+    it('should handle edge case when selectedPromptIndex is out of bounds', async () => {
       const results = [
-        createMockResult(0, 'plugin1', false),
-        createMockResult(1, 'plugin1', false),
+        createComponentMockResult(0, 'plugin1', false),
+        createComponentMockResult(1, 'plugin1', false),
       ];
-      const evalData = createMockEvalData(2, results);
-      const selectedPromptIndex = 999; // Out of bounds
-
-      const { result } = renderHook(() =>
-        // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
-        useMemo(() => {
-          if (!evalData) {
-            return {};
-          }
-
-          const prompts = evalData.prompts || [];
-          const selectedPrompt = prompts[selectedPromptIndex]; // undefined
-
-          const failures: Record<string, any[]> = {};
-          evalData.results.results.forEach((result) => {
-            // Should handle undefined selectedPrompt gracefully
-            if (prompts.length > 1 && selectedPrompt && result.promptIdx !== selectedPromptIndex) {
-              return;
-            }
-
-            const pluginId = result.metadata?.pluginId;
-            if (!pluginId) {
-              return;
-            }
-
-            if (!result.success || !result.gradingResult?.pass) {
-              if (!failures[pluginId]) {
-                failures[pluginId] = [];
-              }
-              failures[pluginId].push(result);
-            }
-          });
-          return failures;
-        }, [evalData, selectedPromptIndex]),
+      const { rerender } = await renderReportData(3, results);
+      await selectTarget('Provider 2');
+      mockCallApiResponse({ data: createComponentMockEvalData(2, results) });
+      rerender(
+        <TooltipProvider>
+          <MemoryRouter>
+            <App evalId="second" />
+          </MemoryRouter>
+        </TooltipProvider>,
       );
-
-      // When selectedPrompt is undefined, filtering is skipped, so all failures included
-      expect(Object.keys(result.current)).toHaveLength(1);
-      expect(result.current['plugin1']).toHaveLength(2);
+      await waitFor(() => expect(screen.queryByRole('combobox')).not.toBeInTheDocument());
+      const failures = readGroups().failuresByPlugin;
+      expect(Object.keys(failures)).toHaveLength(1);
+      expect(failures.plugin1).toHaveLength(2);
     });
 
-    it('should correctly identify provider labels for each prompt', () => {
-      const results = [
-        createMockResult(0, 'plugin1', false),
-        createMockResult(1, 'plugin1', false),
-      ];
-      const evalData = createMockEvalData(2, results);
-
-      // Verify the mock data structure includes provider labels
-      expect(evalData.prompts?.[0]?.provider).toBe('Provider 0');
-      expect(evalData.prompts?.[1]?.provider).toBe('Provider 1');
-      expect(evalData.prompts?.[0]?.label).toBe('Prompt 0');
-      expect(evalData.prompts?.[1]?.label).toBe('Prompt 1');
+    it('should correctly identify provider labels for each prompt', async () => {
+      await renderReportData(2, [
+        createComponentMockResult(0, 'plugin1', false),
+        createComponentMockResult(1, 'plugin1', false),
+      ]);
+      expect(screen.getByRole('combobox')).toHaveTextContent('Target: Provider 0');
+      await selectTarget();
+      expect(screen.getByRole('combobox')).toHaveTextContent('Target: Provider 1');
     });
   });
 
   describe('passesByPlugin filtering', () => {
-    it('should filter passes by promptIdx when multiple prompts exist', () => {
-      const results = [
-        createMockResult(0, 'plugin1', true), // Pass for prompt 0
-        createMockResult(1, 'plugin1', false), // Fail for prompt 1
-        createMockResult(0, 'plugin2', false), // Fail for prompt 0
-        createMockResult(1, 'plugin2', true), // Pass for prompt 1
-      ];
-      const evalData = createMockEvalData(2, results);
-
-      // Test selecting prompt 0
-      const { result: result0 } = renderHook(() =>
-        // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
-        useMemo(() => {
-          if (!evalData) {
-            return {};
-          }
-
-          const prompts = evalData.prompts || [];
-          const selectedPrompt = prompts[0];
-
-          const passes: Record<string, any[]> = {};
-          evalData.results.results.forEach((result) => {
-            if (prompts.length > 1 && selectedPrompt && result.promptIdx !== 0) {
-              return;
-            }
-
-            const pluginId = result.metadata?.pluginId;
-            if (!pluginId) {
-              return;
-            }
-
-            if (result.success && result.gradingResult?.pass) {
-              if (!passes[pluginId]) {
-                passes[pluginId] = [];
-              }
-              passes[pluginId].push(result);
-            }
-          });
-          return passes;
-        }, [evalData]),
-      );
-
-      // Prompt 0: plugin1 passed, plugin2 failed
-      expect(Object.keys(result0.current)).toHaveLength(1);
-      expect(result0.current['plugin1']).toHaveLength(1);
-      expect(result0.current['plugin1'][0].promptIdx).toBe(0);
-      expect(result0.current['plugin2']).toBeUndefined();
-
-      // Test selecting prompt 1
-      const { result: result1 } = renderHook(() =>
-        // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
-        useMemo(() => {
-          if (!evalData) {
-            return {};
-          }
-
-          const prompts = evalData.prompts || [];
-          const selectedPrompt = prompts[1];
-
-          const passes: Record<string, any[]> = {};
-          evalData.results.results.forEach((result) => {
-            if (prompts.length > 1 && selectedPrompt && result.promptIdx !== 1) {
-              return;
-            }
-
-            const pluginId = result.metadata?.pluginId;
-            if (!pluginId) {
-              return;
-            }
-
-            if (result.success && result.gradingResult?.pass) {
-              if (!passes[pluginId]) {
-                passes[pluginId] = [];
-              }
-              passes[pluginId].push(result);
-            }
-          });
-          return passes;
-        }, [evalData]),
-      );
-
-      // Prompt 1: plugin1 failed, plugin2 passed
-      expect(Object.keys(result1.current)).toHaveLength(1);
-      expect(result1.current['plugin2']).toHaveLength(1);
-      expect(result1.current['plugin2'][0].promptIdx).toBe(1);
-      expect(result1.current['plugin1']).toBeUndefined();
+    it('should filter passes by promptIdx when multiple prompts exist', async () => {
+      await renderReportData(2, [
+        createComponentMockResult(0, 'plugin1', true),
+        createComponentMockResult(1, 'plugin1', false),
+        createComponentMockResult(0, 'plugin2', false),
+        createComponentMockResult(1, 'plugin2', true),
+      ]);
+      const first = readGroups().passesByPlugin;
+      expect(Object.keys(first)).toHaveLength(1);
+      expect(first.plugin1).toHaveLength(1);
+      expect(first.plugin1[0].result.promptIdx).toBe(0);
+      expect(first.plugin2).toBeUndefined();
+      await selectTarget();
+      const second = readGroups().passesByPlugin;
+      expect(Object.keys(second)).toHaveLength(1);
+      expect(second.plugin2).toHaveLength(1);
+      expect(second.plugin2[0].result.promptIdx).toBe(1);
+      expect(second.plugin1).toBeUndefined();
     });
   });
 });
@@ -624,7 +302,7 @@ const createComponentMockEvalData = (
   }) as unknown as ResultsFile;
 
 describe('App component target selection', () => {
-  const mockCallApi = callApi as Mock;
+  const mockCallApi = vi.mocked(callApi);
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -634,7 +312,7 @@ describe('App component target selection', () => {
 
   it('clears embedded actions when switching reports and unmounting', async () => {
     const evalData = createComponentMockEvalData(1, []);
-    mockCallApi.mockResolvedValueOnce({ ok: true, json: async () => ({ data: evalData }) });
+    mockCallApi.mockResolvedValueOnce(createMockResponse({ data: evalData }));
     const onActionsReady = vi.fn();
     const wrap = (id: string) => (
       <TooltipProvider>
@@ -668,8 +346,8 @@ describe('App component target selection', () => {
       },
     ];
     mockCallApi.mockReset();
-    mockCallApi.mockResolvedValueOnce({ ok: true, json: async () => ({ data: evalData }) });
-    mockCallApi.mockResolvedValue({ ok: true, json: async () => ({ data: fullTools }) });
+    mockCallApi.mockResolvedValueOnce(createMockResponse({ data: evalData }));
+    mockCallApi.mockResolvedValue(createMockResponse({ data: fullTools }));
     renderWithProviders(<App evalId="test-eval-id" />);
     const button = await screen.findByText('Tools:');
     expect(mockCallApi).toHaveBeenCalledTimes(1);
@@ -689,33 +367,32 @@ describe('App component target selection', () => {
   });
 
   it.each([
-    { name: 'HTTP 503', response: { ok: false, status: 503 } },
-    { name: 'empty array', response: { ok: true, json: async () => ({ data: [] }) } },
-    { name: 'missing data', response: { ok: true, json: async () => ({}) } },
-    { name: 'null body', response: { ok: true, json: async () => null } },
-    { name: 'non-array data', response: { ok: true, json: async () => ({ data: {} }) } },
-    { name: 'string data', response: { ok: true, json: async () => ({ data: 'Read' }) } },
+    { name: 'HTTP 503', response: createMockResponse(null, { status: 503 }) },
+    { name: 'empty array', response: createMockResponse({ data: [] }) },
+    { name: 'missing data', response: createMockResponse({}) },
+    { name: 'null body', response: createMockResponse(null) },
+    { name: 'non-array data', response: createMockResponse({ data: {} }) },
+    { name: 'string data', response: createMockResponse({ data: 'Read' }) },
   ])('retries saved tool definitions after $name', async ({ response }) => {
     const evalData = createComponentMockEvalData(1, []);
     evalData.config.providers = [
       { id: 'echo', config: { tools: [{ type: 'function', function: { name: 'example' } }] } },
     ];
     mockCallApi.mockReset();
-    mockCallApi.mockResolvedValueOnce({ ok: true, json: async () => ({ data: evalData }) });
+    mockCallApi.mockResolvedValueOnce(createMockResponse({ data: evalData }));
     mockCallApi.mockResolvedValueOnce(response);
     renderWithProviders(<App evalId="test-eval-id" />);
     const button = await screen.findByText('Tools:');
     await userEvent.click(button);
     expect(await screen.findByRole('alert')).toHaveTextContent('Select Tools to retry');
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
-    mockCallApi.mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({
+    mockCallApi.mockResolvedValueOnce(
+      createMockResponse({
         data: [
           { type: 'function', function: { name: 'recovered', parameters: { type: 'object' } } },
         ],
       }),
-    });
+    );
     await userEvent.click(button);
     expect(await screen.findByRole('dialog', { name: 'Available Tools' })).toHaveTextContent(
       'recovered',
@@ -729,14 +406,11 @@ describe('App component target selection', () => {
     async (emptyFirst) => {
       const evalData = createComponentMockEvalData(1, []);
       evalData.config.providers = [{ id: 'claude-agent-sdk', config: { tools: ['Read', 'Edit'] } }];
-      mockCallApi.mockResolvedValueOnce({ ok: true, json: async () => ({ data: evalData }) });
+      mockCallApi.mockResolvedValueOnce(createMockResponse({ data: evalData }));
       if (emptyFirst) {
-        mockCallApi.mockResolvedValueOnce({ ok: true, json: async () => ({ data: [] }) });
+        mockCallApi.mockResolvedValueOnce(createMockResponse({ data: [] }));
       }
-      mockCallApi.mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({ data: ['Read', 'Edit'] }),
-      });
+      mockCallApi.mockResolvedValueOnce(createMockResponse({ data: ['Read', 'Edit'] }));
       renderWithProviders(<App evalId="test-eval-id" />);
       const button = await screen.findByText('Tools:');
       await userEvent.click(button);
@@ -764,10 +438,7 @@ describe('App component target selection', () => {
         results: [createComponentMockResult(0, 'plugin1', false)],
       },
     } as unknown as ResultsFile;
-    mockCallApi.mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve({ data: evalData }),
-    });
+    mockCallApiResponse({ data: evalData });
 
     renderWithProviders(<App evalId="test-eval-id" />);
 
@@ -784,10 +455,7 @@ describe('App component target selection', () => {
       createComponentMockResult(1, 'plugin3', false),
     ];
     const evalData = createComponentMockEvalData(2, results);
-    mockCallApi.mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve({ data: evalData }),
-    });
+    mockCallApiResponse({ data: evalData });
 
     renderWithProviders(<App evalId="test-eval-id" />);
 
@@ -820,10 +488,7 @@ describe('App component target selection', () => {
     evalData.prompts?.forEach((prompt) => {
       prompt.metrics = undefined;
     });
-    mockCallApi.mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve({ data: evalData }),
-    });
+    mockCallApi.mockResolvedValue(createMockResponse({ data: evalData }));
 
     renderWithProviders(<App evalId="test-eval-id" />);
 
@@ -843,10 +508,7 @@ describe('App component target selection', () => {
       },
     } as unknown as EvaluateResult;
     const evalData = createComponentMockEvalData(1, [layerResult]);
-    mockCallApi.mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve({ data: evalData }),
-    });
+    mockCallApi.mockResolvedValue(createMockResponse({ data: evalData }));
 
     renderWithProviders(<App evalId="test-eval-id" />);
 
@@ -867,10 +529,7 @@ describe('App component target selection', () => {
       },
     } as unknown as EvaluateResult;
     const evalData = createComponentMockEvalData(1, [layerResult]);
-    mockCallApi.mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve({ data: evalData }),
-    });
+    mockCallApi.mockResolvedValue(createMockResponse({ data: evalData }));
 
     renderWithProviders(<App evalId="test-eval-id" />);
 
@@ -885,10 +544,7 @@ describe('App component target selection', () => {
     } as EvaluateResult;
     const evalData = createComponentMockEvalData(1, [result]);
     evalData.config.redteam = { injectVar: 'toString' };
-    mockCallApi.mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve({ data: evalData }),
-    });
+    mockCallApi.mockResolvedValue(createMockResponse({ data: evalData }));
 
     renderWithProviders(<App evalId="test-eval-id" />);
 
@@ -909,10 +565,7 @@ describe('App component target selection', () => {
       vars: { prompt: 'FAIL_WITHOUT_GRADING' },
     } as EvaluateResult;
     const evalData = createComponentMockEvalData(1, [passingResult, failingResult]);
-    mockCallApi.mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve({ data: evalData }),
-    });
+    mockCallApi.mockResolvedValue(createMockResponse({ data: evalData }));
 
     renderWithProviders(<App evalId="test-eval-id" />);
 
@@ -944,10 +597,7 @@ describe('App component target selection', () => {
       historicalPluginResult,
       historicalPolicyResult,
     ]);
-    mockCallApi.mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve({ data: evalData }),
-    });
+    mockCallApi.mockResolvedValue(createMockResponse({ data: evalData }));
 
     renderWithProviders(<App evalId="test-eval-id" />);
 
@@ -965,7 +615,7 @@ describe('App component target selection', () => {
 });
 
 describe('App component report loading', () => {
-  const mockCallApi = callApi as Mock;
+  const mockCallApi = vi.mocked(callApi);
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -982,15 +632,12 @@ describe('App component report loading', () => {
     mockCallApi
       .mockImplementationOnce((_path, options) => {
         return new Promise((_resolve, reject) => {
-          options.signal.addEventListener('abort', () => {
+          options?.signal?.addEventListener('abort', () => {
             reject(new DOMException('The operation was aborted', 'AbortError'));
           });
         });
       })
-      .mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ data: evalData }),
-      });
+      .mockResolvedValueOnce(createMockResponse({ data: evalData }));
 
     const renderReport = (evalId: string) => (
       <TooltipProvider>
@@ -1011,7 +658,7 @@ describe('App component report loading', () => {
         }),
       );
     });
-    const firstSignal = mockCallApi.mock.calls[0][1].signal as AbortSignal;
+    const firstSignal = mockCallApi.mock.calls[0][1]?.signal as AbortSignal;
 
     rerender(renderReport('eval-two'));
 
@@ -1035,14 +682,8 @@ describe('App component report loading', () => {
       createComponentMockResult(0, 'plugin1', true),
     ]);
     mockCallApi
-      .mockResolvedValueOnce({
-        ok: false,
-        status: 503,
-      })
-      .mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ data: evalData }),
-      });
+      .mockResolvedValueOnce(createMockResponse(null, { status: 503 }))
+      .mockResolvedValueOnce(createMockResponse({ data: evalData }));
 
     renderWithProviders(<App evalId="eval-retry" />);
 
@@ -1069,10 +710,7 @@ describe('App component report loading', () => {
     mockRecordEvent.mockImplementationOnce(() => {
       throw new Error('telemetry unavailable');
     });
-    mockCallApi.mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve({ data: evalData }),
-    });
+    mockCallApi.mockResolvedValue(createMockResponse({ data: evalData }));
 
     try {
       renderWithProviders(<App evalId="eval-telemetry" />);
@@ -1095,10 +733,7 @@ describe('App component report loading', () => {
       failures: 410,
       errors: 1,
     } as any;
-    mockCallApi.mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve({ data: evalData }),
-    });
+    mockCallApi.mockResolvedValue(createMockResponse({ data: evalData }));
 
     renderWithProviders(<App evalId="eval-incomplete" />);
 
@@ -1119,10 +754,7 @@ describe('App component report loading', () => {
       failures: 0,
       errors: 0,
     } as any;
-    mockCallApi.mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve({ data: evalData }),
-    });
+    mockCallApi.mockResolvedValue(createMockResponse({ data: evalData }));
 
     renderWithProviders(<App evalId="eval-partial" />);
 
@@ -1136,10 +768,7 @@ describe('App component report loading', () => {
     const retry = createComponentMockResult(0, 'plugin1', true);
     const evalData = createComponentMockEvalData(1, [retry, { ...retry, id: 'retry-2' }]);
     evalData.results.stats = { successes: 2, failures: 0, errors: 0 } as any;
-    mockCallApi.mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve({ data: evalData }),
-    });
+    mockCallApi.mockResolvedValue(createMockResponse({ data: evalData }));
 
     renderWithProviders(<App evalId="eval-duplicate-retry" />);
 
@@ -1149,23 +778,13 @@ describe('App component report loading', () => {
 });
 
 describe('App component target selector rendering', () => {
-  const mockCallApi = callApi as Mock;
-
-  beforeEach(() => {
-    vi.clearAllMocks();
-    mockWindowLocation({ search: '?evalId=test-eval-id' });
-  });
-
   it('should render the target selector dropdown when there are multiple prompts', async () => {
     const results = [
       createComponentMockResult(0, 'plugin1', true),
       createComponentMockResult(1, 'plugin1', false),
     ];
     const evalData = createComponentMockEvalData(2, results);
-    mockCallApi.mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve({ data: evalData }),
-    });
+    mockCallApiResponse({ data: evalData });
 
     renderWithProviders(<App evalId="test-eval-id" />);
 
@@ -1176,10 +795,7 @@ describe('App component target selector rendering', () => {
   it('should render a static chip when there is only one prompt', async () => {
     const results = [createComponentMockResult(0, 'plugin1', true)];
     const evalData = createComponentMockEvalData(1, results);
-    mockCallApi.mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve({ data: evalData }),
-    });
+    mockCallApiResponse({ data: evalData });
 
     renderWithProviders(<App evalId="test-eval-id" />);
 
@@ -1194,9 +810,7 @@ describe('App component target selector rendering', () => {
     const user = userEvent.setup();
     const results = [createComponentMockResult(0, 'plugin1', true)];
     const evalData = createComponentMockEvalData(1, results);
-    mockCallApi.mockResolvedValue({
-      json: () => Promise.resolve({ data: evalData }),
-    });
+    mockCallApiResponse({ data: evalData });
 
     renderWithProviders(<App evalId="test-eval-id" />);
 
@@ -1215,9 +829,7 @@ describe('App component target selector rendering', () => {
   it('preserves a reported target probe count of zero', async () => {
     const results = [createComponentMockResult(0, 'plugin1', true)];
     const evalData = createComponentMockEvalData(1, results, 0);
-    mockCallApi.mockResolvedValue({
-      json: () => Promise.resolve({ data: evalData }),
-    });
+    mockCallApiResponse({ data: evalData });
 
     renderWithProviders(<App evalId="test-eval-id" />);
 
@@ -1252,9 +864,7 @@ describe('App component target selector rendering', () => {
         },
       },
     };
-    mockCallApi.mockResolvedValue({
-      json: () => Promise.resolve({ data: evalData }),
-    });
+    mockCallApiResponse({ data: evalData });
 
     renderWithProviders(<App evalId="test-eval-id" />);
 
@@ -1301,9 +911,7 @@ describe('App component target selector rendering', () => {
         },
       },
     };
-    mockCallApi.mockResolvedValue({
-      json: () => Promise.resolve({ data: evalData }),
-    });
+    mockCallApiResponse({ data: evalData });
 
     renderWithProviders(<App evalId="test-eval-id" />);
 
@@ -1320,10 +928,7 @@ describe('App component target selector rendering', () => {
   it('keeps report header actions in normal flow on narrow screens', async () => {
     const results = [createComponentMockResult(0, 'plugin1', true)];
     const evalData = createComponentMockEvalData(1, results);
-    mockCallApi.mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve({ data: evalData }),
-    });
+    mockCallApiResponse({ data: evalData });
 
     renderWithProviders(<App evalId="test-eval-id" />);
 
@@ -1339,10 +944,7 @@ describe('App component target selector rendering', () => {
   it('allows embedded reports to shrink within narrow result views', async () => {
     const results = [createComponentMockResult(0, 'plugin1', true)];
     const evalData = createComponentMockEvalData(1, results);
-    mockCallApi.mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve({ data: evalData }),
-    });
+    mockCallApiResponse({ data: evalData });
 
     const { container } = renderWithProviders(<App evalId="test-eval-id" embedded />);
 
@@ -1353,13 +955,6 @@ describe('App component target selector rendering', () => {
 });
 
 describe('App component categoryStats calculation with moderation', () => {
-  const mockCallApi = callApi as Mock;
-
-  beforeEach(() => {
-    vi.clearAllMocks();
-    mockWindowLocation({ search: '?evalId=test-eval-id' });
-  });
-
   it('should correctly increment passWithFilter but not pass when moderation tests fail but other tests pass', async () => {
     const pluginId = 'testPlugin';
     const moderationFailure: GradingResult = {
@@ -1379,10 +974,7 @@ describe('App component categoryStats calculation with moderation', () => {
       createComponentMockResult(0, pluginId, false, [moderationFailure, passingTest]),
     ];
     const evalData = createComponentMockEvalData(1, results);
-    mockCallApi.mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve({ data: evalData }),
-    });
+    mockCallApiResponse({ data: evalData });
 
     renderWithProviders(<App evalId="test-eval-id" />);
 
@@ -1402,11 +994,72 @@ describe('App component categoryStats calculation with moderation', () => {
 });
 
 describe('Filter panel regression tests', () => {
-  const mockCallApi = callApi as Mock;
+  it('excludes provider errors and composes category, strategy, status, and search filters', async () => {
+    const user = userEvent.setup();
+    const customFailure = createComponentMockResult(0, 'pii:direct', false);
+    const customPass = createComponentMockResult(0, 'pii:direct', true);
+    const basicFailure = createComponentMockResult(0, 'pii:direct', false);
+    const otherCategory = createComponentMockResult(0, 'harmful:violent-crime', false);
+    const providerError = createComponentMockResult(0, 'pii:direct', false);
+    for (const result of [customFailure, customPass, otherCategory, providerError]) {
+      result.testCase.metadata = { strategyId: 'custom' };
+    }
+    customFailure.response = { output: 'Selected failure output' };
+    providerError.error = 'transport unavailable';
+    providerError.failureReason = ResultFailureReason.ERROR;
+    mockCallApiResponse({
+      data: createComponentMockEvalData(1, [
+        customFailure,
+        customPass,
+        basicFailure,
+        otherCategory,
+        providerError,
+      ]),
+    });
+    renderWithProviders(<App evalId="test-eval-id" />);
+    const readGroups = () => JSON.parse(screen.getByTestId('report-groups').textContent!);
+    await screen.findByTestId('report-groups');
+    expect(JSON.stringify(readGroups())).not.toContain('transport unavailable');
+    expect(readGroups().failuresByPlugin['pii:direct']).toHaveLength(2);
+    expect(readStrategyStats()).toEqual({
+      custom: { pass: 1, total: 3, failCount: 2 },
+      basic: { pass: 0, total: 1, failCount: 1 },
+    });
 
-  beforeEach(() => {
-    vi.clearAllMocks();
-    mockWindowLocation({ search: '?evalId=test-eval-id' });
+    await user.click(screen.getAllByLabelText('filter results')[0]);
+    const [status, category, strategy] = screen.getAllByRole('combobox');
+    await user.click(category);
+    await user.click(await screen.findByRole('option', { name: 'pii:direct' }));
+    expect(Object.keys(readGroups().failuresByPlugin)).toEqual(['pii:direct']);
+    expect(readStrategyStats()).toEqual({
+      custom: { pass: 1, total: 2, failCount: 1 },
+      basic: { pass: 0, total: 1, failCount: 1 },
+    });
+
+    await user.click(strategy);
+    await user.click(await screen.findByRole('option', { name: 'custom' }));
+    expect(readStrategyStats()).toEqual({ custom: { pass: 1, total: 2, failCount: 1 } });
+    expect(screen.getByTestId('overview-total')).toHaveTextContent('2');
+
+    await user.click(status);
+    await user.click(await screen.findByRole('option', { name: 'Pass Only' }));
+    expect(readGroups().failuresByPlugin).toEqual({});
+    expect(readStrategyStats()).toEqual({ custom: { pass: 1, total: 1, failCount: 0 } });
+
+    await user.click(status);
+    await user.click(await screen.findByRole('option', { name: 'Fail Only' }));
+    expect(readGroups().passesByPlugin).toEqual({});
+    expect(readStrategyStats()).toEqual({ custom: { pass: 0, total: 1, failCount: 1 } });
+    expect(screen.getByTestId('overview-total')).toHaveTextContent('1');
+
+    const search = screen.getByPlaceholderText('Search prompts & outputs');
+    await user.type(search, 'SELECTED');
+    expect(readStrategyStats()).toEqual({ custom: { pass: 0, total: 1, failCount: 1 } });
+    await user.clear(search);
+    await user.type(search, 'missing');
+    expect(readGroups()).toEqual({ failuresByPlugin: {}, passesByPlugin: {} });
+    expect(readStrategyStats()).toEqual({});
+    expect(screen.getByTestId('overview-total')).toHaveTextContent('0');
   });
 
   it('should open filter panel without errors when filter button is clicked', async () => {
@@ -1417,10 +1070,7 @@ describe('Filter panel regression tests', () => {
       createComponentMockResult(0, 'pii:direct', true),
     ];
     const evalData = createComponentMockEvalData(1, results);
-    mockCallApi.mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve({ data: evalData }),
-    });
+    mockCallApiResponse({ data: evalData });
 
     renderWithProviders(<App evalId="test-eval-id" />);
 
@@ -1442,6 +1092,16 @@ describe('Filter panel regression tests', () => {
     expect(screen.getByPlaceholderText('Search preview text')).toBeInTheDocument();
     expect(screen.getByText('Risk Categories')).toBeInTheDocument();
     expect(screen.getByText('Strategies')).toBeInTheDocument();
+    const search = screen.getByPlaceholderText('Search prompts & outputs');
+    expect(readStrategyStats()).toEqual({ basic: { pass: 1, total: 2, failCount: 1 } });
+    await userEvent.type(search, 'prompt');
+    expect(readStrategyStats()).toEqual({ basic: { pass: 1, total: 2, failCount: 1 } });
+    await userEvent.clear(search);
+    await userEvent.type(search, 'missing');
+    expect(readStrategyStats()).toEqual({});
+    expect(screen.getByTestId('overview-total')).toHaveTextContent('0');
+    await userEvent.clear(search);
+    expect(screen.getByTestId('overview-total')).toHaveTextContent('2');
   });
 
   it('should not use empty string values in Select components', async () => {
@@ -1450,11 +1110,9 @@ describe('Filter panel regression tests', () => {
       createComponentMockResult(0, 'harmful:violent-crime', false),
       createComponentMockResult(0, 'pii:direct', true),
     ];
+    results[1].testCase.metadata = { strategyId: 'custom' };
     const evalData = createComponentMockEvalData(1, results);
-    mockCallApi.mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve({ data: evalData }),
-    });
+    mockCallApiResponse({ data: evalData });
 
     renderWithProviders(<App evalId="test-eval-id" />);
 
@@ -1505,6 +1163,11 @@ describe('Filter panel regression tests', () => {
     // Click "All Strategies" - this would throw an error if value was ""
     const allStrategiesOption = screen.getByRole('option', { name: 'All Strategies' });
     await userEvent.click(allStrategiesOption);
+
+    expect(readStrategyStats()).toEqual({
+      basic: { pass: 0, total: 1, failCount: 1 },
+      custom: { pass: 1, total: 1, failCount: 0 },
+    });
 
     // If we got here without errors, the fix is working
     expect(screen.getByText('Filters')).toBeInTheDocument();

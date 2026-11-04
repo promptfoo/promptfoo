@@ -1,7 +1,7 @@
-import type { Server } from 'node:http';
+import fs from 'node:fs';
 
-import request from 'supertest';
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { setupTestServer } from '../../util/testServer';
 
 // Mock dependencies BEFORE imports
 vi.mock('../../../src/node', () => ({
@@ -22,12 +22,13 @@ vi.mock('../../../src/models/eval', () => ({
 }));
 vi.mock('../../../src/globalConfig/accounts');
 
-import logger from '../../../src/logger';
+import logger, { globalLogCallback, setLogCallback } from '../../../src/logger';
 import Eval from '../../../src/models/eval';
 import { evaluateWithSource } from '../../../src/node';
 import { createApp } from '../../../src/server/server';
 import { shouldShareResults } from '../../../src/util/sharing';
 
+const originalLogError = logger.error.bind(logger);
 const errorSpy = vi.spyOn(logger, 'error');
 const mockedEvalCreate = vi.mocked(Eval.create);
 const mockedEvalFindById = vi.mocked(Eval.findById);
@@ -35,26 +36,7 @@ const mockedEvaluateWithSource = vi.mocked(evaluateWithSource);
 const mockedShouldShareResults = vi.mocked(shouldShareResults);
 
 describe('Eval Routes - Sharing behavior', () => {
-  let api: ReturnType<typeof request.agent>;
-  let server: Server;
-
-  beforeAll(async () => {
-    await new Promise<void>((resolve, reject) => {
-      server = createApp().listen(0, '127.0.0.1', (error?: Error) =>
-        error ? reject(error) : resolve(),
-      );
-    });
-    api = request.agent(server);
-  });
-
-  afterAll(async () => {
-    if (!server.listening) {
-      return;
-    }
-    await new Promise<void>((resolve, reject) => {
-      server.close((error) => (error ? reject(error) : resolve()));
-    });
-  });
+  const api = setupTestServer(createApp);
 
   beforeEach(() => {
     vi.resetAllMocks();
@@ -77,6 +59,17 @@ describe('Eval Routes - Sharing behavior', () => {
     prompts: ['test prompt'],
     providers: ['echo'],
     tests: [{ vars: { input: 'test' } }],
+  };
+
+  const captureStreamedLogs = () => {
+    const previous = globalLogCallback;
+    const messages: string[] = [];
+    errorSpy.mockImplementation(originalLogError);
+    setLogCallback((message) => messages.push(message));
+    logger.error('Public callback control');
+    expect(messages).toEqual(['Public callback control']);
+    messages.length = 0;
+    return { messages, restore: () => setLogCallback(previous) };
   };
 
   it('does not let a job request change the server file-resolution directory', async () => {
@@ -165,17 +158,22 @@ describe('Eval Routes - Sharing behavior', () => {
     });
 
     const inProgressResponse = await api.get(`/api/eval/job/${jobId}`);
-    expect(inProgressResponse.body.status).toBe('in-progress');
-    expect(inProgressResponse.body.evalId).toBeUndefined();
+    expect(inProgressResponse.body).toEqual({
+      status: 'in-progress',
+      progress: 0,
+      total: 0,
+      logs: [],
+    });
 
     resolveSummary!({ results: [] });
 
     await vi.waitFor(async () => {
       const completedResponse = await api.get(`/api/eval/job/${jobId}`);
-      expect(completedResponse.body).toMatchObject({
+      expect(completedResponse.body).toEqual({
         status: 'complete',
         evalId: 'eval-result-id',
         result: { results: [] },
+        logs: [],
       });
     });
   });
@@ -222,9 +220,105 @@ describe('Eval Routes - Sharing behavior', () => {
 
     await vi.waitFor(async () => {
       const response = await api.get(`/api/eval/job/${jobId}`);
-      expect(response.body.status).toBe('error');
+      expect(response.body).toEqual({
+        status: 'error',
+        logs: ['Error: summary boom'],
+      });
     });
   });
+
+  it.runIf(process.platform !== 'win32').each([
+    ['missing', 'unavailable'],
+    ['invalid JSON', 'invalid-json'],
+    ['array', 'invalid-result'],
+    ['string', 'invalid-result'],
+    ['number', 'invalid-result'],
+    ['boolean', 'invalid-result'],
+  ])('returns a generic JSON error for a %s snapshot', async (failure, category) => {
+    mockedEvaluateWithSource.mockResolvedValueOnce({
+      id: 'eval-result-id',
+      toEvaluateSummary: vi.fn().mockResolvedValue({ results: [] }),
+    } as any);
+    const open = vi.spyOn(fs, 'openSync');
+    let snapshotPath: string | undefined;
+    let original: string | undefined;
+    let streamed: ReturnType<typeof captureStreamedLogs> | undefined;
+    try {
+      const created = await postJob(minimalTestSuite);
+      const jobUrl = `/api/eval/job/${created.body.id}`;
+      await vi.waitFor(async () => {
+        expect((await api.get(jobUrl)).body).toMatchObject({ status: 'complete' });
+      });
+      snapshotPath = open.mock.calls.find(
+        ([file]) => typeof file === 'string' && file.includes('promptfoo-job-results-'),
+      )?.[0] as string;
+      expect(snapshotPath).toBeDefined();
+      original = fs.readFileSync(snapshotPath, 'utf8');
+      if (failure === 'missing') {
+        fs.unlinkSync(snapshotPath);
+      } else {
+        const contents: Record<string, string> = {
+          'invalid JSON': 'private malformed snapshot',
+          array: '[]',
+          string: '"private snapshot text"',
+          number: '42',
+          boolean: 'true',
+        };
+        fs.writeFileSync(snapshotPath, contents[failure]);
+      }
+
+      streamed = captureStreamedLogs();
+      const response = await api.get(jobUrl).expect(500);
+      expect(response.headers['content-type']).toContain('application/json');
+      expect(response.body).toEqual({ error: 'Failed to load eval job' });
+      expect(errorSpy).toHaveBeenCalledWith('Failed to load eval job', { error: { category } });
+      expect(streamed.messages.join('\n')).toContain('Failed to load eval job');
+      expect(response.text).not.toContain(snapshotPath);
+      expect(response.text).not.toContain('private malformed snapshot');
+      expect(streamed.messages.join('\n')).not.toMatch(
+        /ZodError|SyntaxError|private|readResult|ENOENT/,
+      );
+      fs.writeFileSync(snapshotPath, original, { mode: 0o600 });
+      expect((await api.get(jobUrl).expect(200)).body).toMatchObject({
+        status: 'complete',
+        result: { results: [] },
+      });
+    } finally {
+      streamed?.restore();
+      open.mockRestore();
+      if (snapshotPath && original) {
+        fs.writeFileSync(snapshotPath, original, { mode: 0o600 });
+      }
+    }
+  });
+
+  it.runIf(process.platform !== 'win32')(
+    'publishes a job failure without storage paths when saving its snapshot fails',
+    async () => {
+      const streamed = captureStreamedLogs();
+      const write = vi.spyOn(fs, 'writeFileSync').mockImplementationOnce(() => {
+        throw Object.assign(new Error('ENOSPC /private/snapshot/path'), {
+          code: 'ENOSPC',
+          path: '/private/snapshot/path',
+        });
+      });
+      try {
+        const created = await postJob(minimalTestSuite);
+        await vi.waitFor(async () => {
+          const response = await api.get(`/api/eval/job/${created.body.id}`).expect(200);
+          expect(response.body).toMatchObject({
+            status: 'error',
+            logs: ['Error: Failed to store eval job result snapshot'],
+          });
+          expect(response.text).not.toContain('/private/snapshot/path');
+        });
+        expect(streamed.messages.join('\n')).not.toContain('/private/snapshot/path');
+      } finally {
+        streamed.restore();
+        write.mockRestore();
+      }
+    },
+  );
 
   it('should not log the raw job body on evaluation failure', async () => {
     mockedEvaluateWithSource.mockRejectedValueOnce(new Error('boom'));

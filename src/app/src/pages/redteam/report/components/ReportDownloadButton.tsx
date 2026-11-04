@@ -15,8 +15,8 @@ import { downloadBlob } from '@app/hooks/useDownloadEval';
 import { useTelemetry } from '@app/hooks/useTelemetry';
 import { useToast } from '@app/hooks/useToast';
 import { callApi } from '@app/utils/api';
-import { escapeCsvFormula } from '@promptfoo/csv';
 import { displayNameOverrides } from '@promptfoo/redteam/constants';
+import { escapeCsvFormula } from '@promptfoo/util/text';
 import { stringify } from 'csv-stringify/browser/esm/sync';
 import {
   getPluginIdFromResult,

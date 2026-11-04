@@ -1,9 +1,9 @@
-import { getActualPrompt } from '@app/utils/providerResponse';
 import { type categoryAliases, categoryAliasesReverse } from '@promptfoo/redteam/constants';
 import {
   deserializePolicyIdFromMetric,
   isPolicyMetric,
 } from '@promptfoo/redteam/plugins/policy/utils';
+import { getActualPrompt } from '@promptfoo/util/providerResponse';
 import type { EvaluateResult, GradingResult } from '@promptfoo/types';
 
 // TODO(ian): Need a much easier way to get the pluginId (and strategyId) from a result

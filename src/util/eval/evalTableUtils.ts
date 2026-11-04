@@ -1,6 +1,6 @@
 import { stringify as csvStringify } from 'csv-stringify/sync';
-import { escapeCsvFormula } from '../../csv';
 import { ResultFailureReason } from '../../types/index';
+import { escapeCsvFormula } from '../text';
 
 import type Eval from '../../models/eval';
 import type {
@@ -261,7 +261,6 @@ function scanBatchForDiscovery(
 }
 
 type StreamRow = {
-  testIdx: number;
   vars: string[];
   outputs: Array<{
     text: string;
@@ -302,7 +301,6 @@ function batchToStreamRows(
     let row = rowsByTestIdx.get(result.testIdx);
     if (!row) {
       row = {
-        testIdx: result.testIdx,
         vars: varNames.map((varName) => {
           const value = result.testCase?.vars?.[varName];
           return value === undefined ? '' : String(value);

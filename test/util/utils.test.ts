@@ -71,6 +71,47 @@ describe('mockProcessEnv', () => {
     expect(process.env.PROMPTFOO_TEST_UTIL_ORIGINAL).toBe('original');
     expect(process.env.PROMPTFOO_TEST_UTIL_OVERRIDE).toBeUndefined();
   });
+
+  it('clears selected prefixes before overrides while preserving and restoring the environment', () => {
+    const restoreOriginal = mockProcessEnv({
+      OTEL_RESOURCE_ATTRIBUTES: 'deployment.environment=developer',
+      OTEL_TRACES_EXPORTER: 'console',
+      CLAUDE_CODE_ENABLE_TELEMETRY: '1',
+      OTELISH_TEST_VALUE: 'keep-prefix-boundary',
+      PATH: '/test/bin',
+      HTTPS_PROXY: 'http://proxy.example.test:8080',
+      CI: 'true',
+      VITEST_POOL_ID: 'test-pool',
+    });
+    const originalEnv = { ...process.env };
+    const envReference = process.env;
+
+    try {
+      const restoreEnv = mockProcessEnv(
+        { OTEL_TRACES_EXPORTER: 'none' },
+        { clearPrefixes: ['OTEL_', 'CLAUDE_CODE_'] },
+      );
+
+      expect(process.env).toBe(envReference);
+      expect(process.env.OTEL_RESOURCE_ATTRIBUTES).toBeUndefined();
+      expect(process.env.CLAUDE_CODE_ENABLE_TELEMETRY).toBeUndefined();
+      expect(process.env.OTEL_TRACES_EXPORTER).toBe('none');
+      expect(process.env).toMatchObject({
+        OTELISH_TEST_VALUE: 'keep-prefix-boundary',
+        PATH: '/test/bin',
+        HTTPS_PROXY: 'http://proxy.example.test:8080',
+        CI: 'true',
+        VITEST_POOL_ID: 'test-pool',
+      });
+
+      restoreEnv();
+
+      expect(process.env).toBe(envReference);
+      expect({ ...process.env }).toEqual(originalEnv);
+    } finally {
+      restoreOriginal();
+    }
+  });
 });
 
 describe('mockGlobal', () => {
