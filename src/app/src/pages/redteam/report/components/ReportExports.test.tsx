@@ -1,6 +1,7 @@
 import type { ComponentProps } from 'react';
 
 import { TooltipProvider } from '@app/components/ui/tooltip';
+import { ToastProvider } from '@app/contexts/ToastContext';
 import { mockCallApiResponse } from '@app/tests/apiMocks';
 import { mockBrowserProperty, restoreBrowserMocks } from '@app/tests/browserMocks';
 import { render, screen } from '@testing-library/react';
@@ -83,6 +84,7 @@ describe('report exports', () => {
             evalData={evalData}
           />
         </TooltipProvider>,
+        { wrapper: ToastProvider },
       );
       await user.click(screen.getByRole('button', { name: 'download report' }));
       await user.click(screen.getByRole('menuitem', { name: format }));
@@ -122,6 +124,7 @@ describe('report exports', () => {
         <TooltipProvider>
           <ReportDownloadButton evalId="test-eval" evalDescription="Example" evalData={evalData} />
         </TooltipProvider>,
+        { wrapper: ToastProvider },
       );
       await user.click(screen.getByRole('button', { name: 'download report' }));
       await user.click(screen.getByRole('menuitem', { name: format }));

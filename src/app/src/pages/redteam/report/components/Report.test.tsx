@@ -1052,7 +1052,7 @@ describe('Filter panel regression tests', () => {
     expect(readStrategyStats()).toEqual({ custom: { pass: 0, total: 1, failCount: 1 } });
     expect(screen.getByTestId('overview-total')).toHaveTextContent('1');
 
-    const search = screen.getByPlaceholderText('Search prompts & outputs');
+    const search = screen.getByRole('textbox', { name: 'Search preview text' });
     await user.type(search, 'SELECTED');
     expect(readStrategyStats()).toEqual({ custom: { pass: 0, total: 1, failCount: 1 } });
     await user.clear(search);
@@ -1092,7 +1092,7 @@ describe('Filter panel regression tests', () => {
     expect(screen.getByPlaceholderText('Search preview text')).toBeInTheDocument();
     expect(screen.getByText('Risk Categories')).toBeInTheDocument();
     expect(screen.getByText('Strategies')).toBeInTheDocument();
-    const search = screen.getByPlaceholderText('Search prompts & outputs');
+    const search = screen.getByRole('textbox', { name: 'Search preview text' });
     expect(readStrategyStats()).toEqual({ basic: { pass: 1, total: 2, failCount: 1 } });
     await userEvent.type(search, 'prompt');
     expect(readStrategyStats()).toEqual({ basic: { pass: 1, total: 2, failCount: 1 } });
