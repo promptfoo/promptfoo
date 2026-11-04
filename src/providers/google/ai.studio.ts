@@ -19,6 +19,8 @@ import {
   formatCandidateContents,
   geminiFormatAndSystemInstructions,
   getCandidate,
+  getGoogleApiBaseUrl,
+  getGoogleGuardrails,
   getGoogleResponseServiceTier,
   getLastPromptSafetyRatings,
   isNonCandidateStreamChunk,
@@ -39,7 +41,6 @@ import type {
   ApiEmbeddingProvider,
   CallApiContextParams,
   CallApiOptionsParams,
-  GuardrailResponse,
   ProviderEmbeddingResponse,
   ProviderResponse,
 } from '../../types/index';
@@ -119,21 +120,7 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
    * Get the base URL for Google AI Studio API.
    */
   private getApiBaseUrl(): string {
-    if (this.config.apiHost) {
-      return `https://${getNunjucksEngine().renderString(this.config.apiHost, {})}`;
-    }
-    if (this.config.apiBaseUrl) {
-      return this.config.apiBaseUrl;
-    }
-    const endpoint = resolveProviderEnv(this.env, [
-      'GOOGLE_API_HOST',
-      'PALM_API_HOST',
-      'GOOGLE_API_BASE_URL',
-    ]);
-    if (endpoint?.name === 'GOOGLE_API_BASE_URL') {
-      return endpoint.value;
-    }
-    return `https://${getNunjucksEngine().renderString(endpoint?.value || DEFAULT_API_HOST, {})}`;
+    return getGoogleApiBaseUrl(this.config, this.env);
   }
 
   /**
@@ -343,7 +330,9 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
               modality.toUpperCase(),
             ) ?? ['AUDIO'],
           speechConfig: config.generationConfig?.speechConfig ?? {
-            voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Kore' } },
+            voiceConfig: this.modelName.startsWith('gemini-3.8-')
+              ? { voice: 'Kore' }
+              : { prebuiltVoiceConfig: { voiceName: 'Kore' } },
           },
         }),
       },
@@ -381,7 +370,9 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
     let responseHeaders: unknown;
     let responseTimestamp: number | undefined;
     try {
-      const endpoint = this.getApiEndpoint('generateContent');
+      const endpoint = this.getApiEndpoint(
+        config.streaming === true ? 'streamGenerateContent' : 'generateContent',
+      );
       const headers = await this.getAuthHeaders();
       const authDiscriminator = createAuthCacheDiscriminator(headers);
       const response = await fetchWithCache(
@@ -423,12 +414,16 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
         }
 
         const candidateForChunk = getCandidate(datum);
-        if (candidateForChunk.finishReason === 'STOP' && !candidateForChunk.content?.parts) {
+        candidate = { ...candidate, ...candidateForChunk };
+        if (
+          !candidateForChunk.content?.parts &&
+          (candidateForChunk.finishReason === 'STOP' ||
+            candidateForChunk.finishReason === 'MAX_TOKENS')
+        ) {
           continue;
         }
 
-        candidate = candidateForChunk;
-        output = mergeParts(output, formatCandidateContents(candidate));
+        output = mergeParts(output, formatCandidateContents(candidateForChunk));
       }
 
       if (output === undefined || output === '' || candidate === undefined) {
@@ -442,22 +437,10 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
     const finalCandidate = candidate;
 
     try {
-      let guardrails: GuardrailResponse | undefined;
-      const promptSafetyRatings = getLastPromptSafetyRatings(dataWithResponse);
-
-      if (promptSafetyRatings || finalCandidate.safetyRatings) {
-        const flaggedInput = promptSafetyRatings?.some((r) => r.probability !== 'NEGLIGIBLE');
-        const flaggedOutput = finalCandidate.safetyRatings?.some(
-          (r) => r.probability !== 'NEGLIGIBLE',
-        );
-        const flagged = flaggedInput || flaggedOutput;
-
-        guardrails = {
-          flaggedInput,
-          flaggedOutput,
-          flagged,
-        };
-      }
+      const guardrails = getGoogleGuardrails(
+        getLastPromptSafetyRatings(dataWithResponse),
+        finalCandidate.safetyRatings,
+      );
 
       const grounding = collectGroundingMetadata(dataWithResponse);
       const thoughtSignatures = collectThoughtSignatures(dataWithResponse);

@@ -293,6 +293,54 @@ describe('getStandaloneEvals', () => {
   });
 });
 
+describe('getTestCases', () => {
+  beforeAll(async () => {
+    await runDbMigrations();
+  });
+
+  beforeEach(resetEvalTables);
+
+  afterEach(() => {
+    vi.resetAllMocks();
+    vi.unstubAllEnvs();
+  });
+
+  it('returns sanitized test cases without loading eval results', async () => {
+    const tests = [
+      {
+        description: 'says hello',
+        vars: { name: 'Ada' },
+        metadata: { topic: 'greeting' },
+      },
+    ];
+    const created = await createEvalWithPrompts({
+      tests,
+      env: { PROMPTFOO_STRIP_METADATA: 'true' },
+    });
+    const persisted = await Eval.findById(created.id);
+    expect(persisted?.config.tests).toEqual(tests);
+
+    const toResultsFile = vi.spyOn(Eval.prototype, 'toResultsFile');
+    const findResults = vi.spyOn(EvalResult, 'findManyByEvalId');
+    try {
+      const datasets = await getTestCases();
+
+      expect(datasets).toHaveLength(1);
+      expect(datasets[0].testCases).toEqual([
+        {
+          description: 'says hello',
+          vars: { name: 'Ada' },
+        },
+      ]);
+      expect(toResultsFile).not.toHaveBeenCalled();
+      expect(findResults).not.toHaveBeenCalled();
+    } finally {
+      toResultsFile.mockRestore();
+      findResults.mockRestore();
+    }
+  });
+});
+
 describe('migration 0024 repair semantics', () => {
   beforeAll(async () => {
     await runDbMigrations();

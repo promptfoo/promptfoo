@@ -78,6 +78,7 @@ export interface Part {
   functionCall?: FunctionCall | StreamedFunctionCall;
   functionResponse?: FunctionResponse;
   thoughtSignature?: string;
+  speechMetadata?: { speaker?: string; style?: string };
   fileData?: FileData;
 }
 
@@ -161,11 +162,18 @@ export type ClaudeThinkingConfig =
   // Claude Sonnet 5.5's lowest setting: no up-front thinking. It takes no other field.
   | { type: 'between_tools' };
 
+interface GoogleVoiceConfig {
+  /** Gemini 3.8 TTS prebuilt name or existing stored voice ID. */
+  voice?: string;
+  prebuiltVoiceConfig?: {
+    voiceName?: string;
+  };
+}
+
 export interface GoogleSpeechConfig {
-  voiceConfig?: {
-    prebuiltVoiceConfig?: {
-      voiceName?: string;
-    };
+  voiceConfig?: GoogleVoiceConfig;
+  multiSpeakerVoiceConfig?: {
+    speakerVoiceConfigs: { speaker: string; voiceConfig: GoogleVoiceConfig }[];
   };
   languageCode?: string;
 }

@@ -2,6 +2,7 @@ import React from 'react';
 
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@app/components/ui/dialog';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
+import { downloadBlob } from '@app/hooks/useDownloadEval';
 import { cn } from '@app/lib/utils';
 import { toPortableConfig } from '@app/utils/portableConfig';
 import * as yaml from 'js-yaml';
@@ -35,14 +36,7 @@ export default function ConfigModal({ open, onClose }: ConfigModalProps) {
 
   const handleDownloadClick = () => {
     const blob = new Blob([yamlConfig], { type: 'text/yaml;charset=utf-8' });
-    const href = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = href;
-    link.download = 'config.yaml';
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(href);
+    downloadBlob(blob, 'config.yaml');
   };
 
   const handleClose = () => {
