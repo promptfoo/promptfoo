@@ -5,8 +5,8 @@ import { join } from 'path';
 import * as yaml from 'js-yaml';
 import { getEnvString } from '../../envars';
 import logger from '../../logger';
+import { JsonProviderOptionsWithIdSchema } from '../../types/api/providers';
 import { loadYaml } from '../../util/yamlLoad';
-import { ProviderOptionsSchema } from '../../validators/providers';
 
 import type { ProviderOptions } from '../../types/providers';
 
@@ -14,7 +14,8 @@ interface ServerConfig {
   providers?: (string | ProviderOptions)[];
 }
 
-let cachedConfig: ServerConfig | null = null;
+// Undefined is not loaded; null means no catalog existed when configuration was loaded.
+let cachedConfig: ServerConfig | null | undefined;
 
 /**
  * Get the path to the UI providers config file
@@ -45,8 +46,8 @@ export function getServerConfigPath(): string | null {
  * @returns Server configuration object
  */
 export function loadServerConfig(): ServerConfig {
-  if (cachedConfig) {
-    return cachedConfig;
+  if (cachedConfig !== undefined) {
+    return cachedConfig ?? {};
   }
 
   const configPath = getServerConfigPath();
@@ -107,8 +108,13 @@ export function loadServerConfig(): ServerConfig {
   } else {
     logger.debug('No server config file found, using defaults');
   }
-  cachedConfig = {};
-  return cachedConfig;
+  cachedConfig = configPath ? {} : null;
+  return cachedConfig ?? {};
+}
+
+export function hasCustomProviderConfig(): boolean {
+  loadServerConfig();
+  return cachedConfig !== null;
 }
 
 /**
@@ -132,22 +138,13 @@ export function getAvailableProviders(): ProviderOptions[] {
     const normalized = typeof p === 'string' ? { id: p } : p;
 
     // Validate against schema
-    const result = ProviderOptionsSchema.safeParse(normalized);
+    const result = JsonProviderOptionsWithIdSchema.safeParse(normalized);
 
     if (!result.success) {
       logger.warn('Invalid provider configuration in ui-providers.yaml, skipping', {
         providerIndex: i,
         provider: normalized,
         validationErrors: result.error.issues,
-      });
-      continue;
-    }
-
-    // Ensure id is present (required for providers even though schema makes it optional)
-    if (!result.data.id) {
-      logger.warn('Provider missing required "id" field in ui-providers.yaml, skipping', {
-        providerIndex: i,
-        provider: normalized,
       });
       continue;
     }

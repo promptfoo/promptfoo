@@ -94,7 +94,7 @@ const OpenApiEvalTableJsonResponseSchema = z.union([
   EvalSchemas.Table.JsonExportResponse,
 ]);
 
-export const SERVER_OPENAPI_ROUTE_COUNT = 67;
+export const SERVER_OPENAPI_ROUTE_COUNT = 68;
 
 type OpenApiSchema = NonNullable<ZodMediaTypeObject['schema']>;
 type OpenApiResponse = ResponseConfig & { description: string };
@@ -837,6 +837,18 @@ export function createServerOpenApiRegistry() {
     summary: 'Get provider config status',
     responses: {
       200: jsonResponse(ProviderSchemas.ConfigStatus.Response),
+      500: jsonResponse(ErrorResponseSchema, 'Server error'),
+    },
+  });
+
+  register({
+    method: 'get',
+    path: '/api/providers',
+    operationId: 'getProviders',
+    tags: ['Providers'],
+    summary: 'Get configured provider catalog',
+    responses: {
+      200: jsonResponse(ProviderSchemas.Catalog.Response),
       500: jsonResponse(ErrorResponseSchema, 'Server error'),
     },
   });

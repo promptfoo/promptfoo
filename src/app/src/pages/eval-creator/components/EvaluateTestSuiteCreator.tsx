@@ -29,6 +29,7 @@ import { countTests, normalizePrompts, normalizeProviders } from './setupReadine
 import TestCasesSection from './TestCasesSection';
 import YamlEditor from './YamlEditor';
 import { validateYamlConfigDraft } from './yamlConfigValidation';
+import type { ProviderOptions } from '@promptfoo/types';
 
 type SetupStepId = 1 | 2 | 3 | 4;
 type EditorTab = 'ui' | 'yaml';
@@ -80,7 +81,8 @@ function ErrorFallback({
 const EvaluateTestSuiteCreator = () => {
   const { showToast } = useToast();
   const [resetDialogOpen, setResetDialogOpen] = useState(false);
-  const [hasCustomConfig, setHasCustomConfig] = useState(false);
+  const [availableProviders, setAvailableProviders] = useState<ProviderOptions[] | null>([]);
+  const hasCustomConfig = availableProviders !== null;
   const [activeStep, setActiveStep] = useState<SetupStepId>(1);
   const [editorTab, setEditorTab] = useState<EditorTab>('ui');
   const [resetKey, setResetKey] = useState(0);
@@ -95,31 +97,33 @@ const EvaluateTestSuiteCreator = () => {
     useStore.persist.rehydrate();
   }, []);
 
-  // Fetch config status to determine if ConfigureEnvButton should be shown
+  // Load the optional server-configured provider catalog.
   // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   useEffect(() => {
     let isMounted = true;
 
-    const fetchConfigStatus = async () => {
+    const fetchProviderCatalog = async () => {
       try {
-        const response = await callApi('/providers/config-status');
-        if (response.ok) {
-          const data = await response.json();
-          if (isMounted) {
-            setHasCustomConfig(data.hasCustomConfig || false);
-          }
+        const response = await callApi('/providers');
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}`);
+        }
+        const data = await response.json();
+        const payload = data?.data;
+        if (isMounted) {
+          setAvailableProviders(payload?.hasCustomConfig ? (payload.providers ?? []) : null);
         }
       } catch (err) {
         console.error('Failed to fetch provider config status:', err);
         const errorMessage = err instanceof Error ? err.message : 'Unknown error occurred';
         showToast(`Failed to load configuration status: ${errorMessage}`, 'error');
         if (isMounted) {
-          setHasCustomConfig(false);
+          setAvailableProviders([]);
         }
       }
     };
 
-    fetchConfigStatus();
+    fetchProviderCatalog();
 
     return () => {
       isMounted = false;
@@ -477,6 +481,7 @@ const EvaluateTestSuiteCreator = () => {
                       <ProvidersListSection
                         providers={normalizedProviders}
                         onChange={(p) => updateConfig({ providers: p })}
+                        availableProviders={availableProviders}
                       />
                     </ErrorBoundary>
                   </StepSection>

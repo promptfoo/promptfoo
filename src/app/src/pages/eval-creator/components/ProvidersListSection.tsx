@@ -18,6 +18,8 @@ import type { ProviderOptions } from '@promptfoo/types';
 interface ProvidersListSectionProps {
   providers: ProviderOptions[];
   onChange: (providers: ProviderOptions[]) => void;
+  /** Configured ui-providers.yaml catalog. Null/undefined means unrestricted. */
+  availableProviders?: ProviderOptions[] | null;
 }
 
 function getProviderLabel(provider: ProviderOptions): string {
@@ -73,7 +75,11 @@ function getProviderType(provider: ProviderOptions): string {
   return 'Custom';
 }
 
-export function ProvidersListSection({ providers, onChange }: ProvidersListSectionProps) {
+export function ProvidersListSection({
+  providers,
+  onChange,
+  availableProviders,
+}: ProvidersListSectionProps) {
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
   const [providerToDelete, setProviderToDelete] = useState<number | null>(null);
@@ -100,6 +106,13 @@ export function ProvidersListSection({ providers, onChange }: ProvidersListSecti
   const cancelDeleteProvider = () => {
     setProviderToDelete(null);
   };
+
+  const addProviderButton = (
+    <Button onClick={() => setIsAddDialogOpen(true)} className="w-full" variant="outline">
+      <Plus className="size-4 mr-2" />
+      Add Provider
+    </Button>
+  );
 
   return (
     <div className="space-y-4">
@@ -155,10 +168,7 @@ export function ProvidersListSection({ providers, onChange }: ProvidersListSecti
         </div>
       ) : (
         <div className="space-y-4">
-          <Button onClick={() => setIsAddDialogOpen(true)} className="w-full" variant="outline">
-            <Plus className="size-4 mr-2" />
-            Add Provider
-          </Button>
+          {addProviderButton}
           <Card className="p-8 text-center bg-muted/30 border-dashed">
             <p className="text-sm text-muted-foreground mb-4">No providers configured yet.</p>
             <p className="text-xs text-muted-foreground">
@@ -169,18 +179,14 @@ export function ProvidersListSection({ providers, onChange }: ProvidersListSecti
       )}
 
       {/* Add provider button */}
-      {providers.length > 0 && (
-        <Button onClick={() => setIsAddDialogOpen(true)} className="w-full" variant="outline">
-          <Plus className="size-4 mr-2" />
-          Add Provider
-        </Button>
-      )}
+      {providers.length > 0 && addProviderButton}
 
       {/* Add provider dialog */}
       <AddProviderDialog
         open={isAddDialogOpen}
         onClose={() => setIsAddDialogOpen(false)}
         onSave={handleAddProvider}
+        availableProviders={availableProviders}
       />
 
       {/* Edit provider dialog */}
@@ -190,6 +196,7 @@ export function ProvidersListSection({ providers, onChange }: ProvidersListSecti
           onClose={() => setEditingIndex(null)}
           onSave={(provider) => handleEditProvider(editingIndex, provider)}
           initialProvider={providers[editingIndex]}
+          availableProviders={availableProviders}
         />
       )}
 
