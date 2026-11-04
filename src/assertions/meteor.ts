@@ -18,8 +18,8 @@ type WordNetInstance = {
 };
 
 const NATURAL_INSTALL_HELP =
-  'Install it alongside Promptfoo: npm install promptfoo natural@^8.1.1. ' +
-  'For a global installation, use npm install -g promptfoo natural@^8.1.1.';
+  'Install it alongside Promptfoo: npm install promptfoo natural@^8.2.3. ' +
+  'For a global installation, use npm install -g promptfoo natural@^8.2.3.';
 
 let PorterStemmer: Stemmer | undefined;
 let WordNet: (new () => WordNetInstance) | undefined;
@@ -49,9 +49,9 @@ async function ensureNaturalPackage(): Promise<void> {
     );
   }
 
-  if (!semverSatisfies(metadata.version, '^8.1.1')) {
+  if (!semverSatisfies(metadata.version, '^8.2.3')) {
     throw new Error(
-      `METEOR requires natural@^8.1.1; found ${metadata.version}. ${NATURAL_INSTALL_HELP}`,
+      `METEOR requires natural@^8.2.3; found ${metadata.version}. ${NATURAL_INSTALL_HELP}`,
     );
   }
   // Natural's top-level CommonJS export does not expose named ESM exports.
@@ -218,10 +218,10 @@ async function calculateSingleMeteorScore(
   const [stemMatches, remainingCandidateAfterStem, remainingReferenceAfterStem] =
     await matchStemEnums(remainingCandidate, remainingReference);
 
-  // Stage 3: Synonym matches
+  // WordNet indexes original words, while the previous stage compares stems.
   const synonymMatches = await matchSynonymEnums(
-    remainingCandidateAfterStem,
-    remainingReferenceAfterStem,
+    remainingCandidateAfterStem.map(([idx]) => enumCandidate[idx]),
+    remainingReferenceAfterStem.map(([idx]) => enumReference[idx]),
   );
 
   // Combine all matches

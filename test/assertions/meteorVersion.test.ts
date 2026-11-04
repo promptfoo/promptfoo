@@ -15,19 +15,19 @@ afterEach(() => {
 });
 
 describe('METEOR optional dependency compatibility', () => {
-  it.each(['7.1.0', '8.1.0', '9.0.0', 'invalid'])(
+  it.each(['7.1.0', '8.1.0', '8.2.2', '9.0.0', 'invalid'])(
     'rejects unsupported Natural %s only when METEOR is used',
     async (version) => {
       vi.resetModules();
       vi.doMock('natural/package.json', () => ({ default: { version } }));
       const { handleMeteorAssertion } = await import('../../src/assertions/meteor');
       await expect(handleMeteorAssertion(params)).rejects.toThrow(
-        `METEOR requires natural@^8.1.1; found ${version}.`,
+        `METEOR requires natural@^8.2.3; found ${version}.`,
       );
     },
   );
 
-  it.each(['8.1.1', '8.2.0'])('loads compatible Natural %s', async (version) => {
+  it.each(['8.2.3', '8.3.0'])('loads compatible Natural %s', async (version) => {
     vi.resetModules();
     vi.doMock('natural/package.json', () => ({ default: { version } }));
     const { handleMeteorAssertion } = await import('../../src/assertions/meteor');

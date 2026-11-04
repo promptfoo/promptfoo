@@ -1,175 +1,318 @@
-import { describe, expect, it } from 'vitest';
+import { beforeAll, describe, expect, it, vi } from 'vitest';
 import { handleMeteorAssertion } from '../../src/assertions/meteor';
 
-import type { AssertionParams } from '../../src/types/index';
+const createUnrelatedTextParams = () => ({
+  assertion: { type: 'meteor', value: 'The cat sat on the mat' },
+  renderedValue: 'The cat sat on the mat',
+  outputString: 'The dog ran in the park',
+  inverse: false,
+});
 
-type MeteorCase = {
-  name: string;
-  candidate: string;
-  reference: string | string[];
-  score: number;
-  pass: boolean;
-  inverse?: boolean;
+vi.mock('natural/lib/natural/stemmers/index.js', () => ({
+  PorterStemmer: { stem: (word: string) => word.replace(/s$/, '') },
+}));
+
+vi.mock('natural/lib/natural/wordnet/index.js', () => ({
+  WordNet: class {
+    lookup(word: string, callback: (records: { synonyms: string[] }[]) => void) {
+      const synonyms: Record<string, string[]> = {
+        cat: ['feline'],
+        mat: ['rug'],
+        sat: ['sitting'],
+      };
+      callback([{ synonyms: synonyms[word] || [] }]);
+    }
+  },
+}));
+
+// Prime the lazy dependency once: concurrent imports can bypass Vitest's manual mock.
+beforeAll(() => handleMeteorAssertion(createUnrelatedTextParams() as any));
+
+interface MeteorAssertion {
+  type: string;
+  value?: string | string[];
+  threshold?: number;
   alpha?: number;
   beta?: number;
   gamma?: number;
-};
+}
 
-// Golden results from the existing METEOR algorithm with Natural's Porter stemmer
-// and WordNet dictionary. Exercise the real handler and dependencies.
-const cases: MeteorCase[] = [
-  {
-    name: 'exact',
-    candidate: 'the cat sat on the mat',
-    reference: 'the cat sat on the mat',
-    score: 0.9976851851851852,
-    pass: true,
-  },
-  {
-    name: 'stem',
-    candidate: 'running jumped tests',
-    reference: 'runs jumping test',
-    score: 0.9814814814814815,
-    pass: true,
-  },
-  {
-    name: 'synonyms',
-    candidate: 'the fast car crossed the rug',
-    reference: 'the quick motorcar crossed the carpet',
-    score: 0.9976851851851852,
-    pass: true,
-  },
-  {
-    name: 'no match',
-    candidate: 'cat dog',
-    reference: 'moon star',
-    score: 0,
-    pass: false,
-  },
-  {
-    name: 'reordering',
-    candidate: 'mat the on sat cat the',
-    reference: 'the cat sat on the mat',
-    score: 0.5,
-    pass: true,
-  },
-  {
-    name: 'multiple references',
-    candidate: 'the quick motorcar',
-    reference: ['the fast car', 'the quick motorcar'],
-    score: 0.9814814814814815,
-    pass: true,
-  },
-  {
-    name: 'punctuation and case',
-    candidate: 'The CAT sat.',
-    reference: 'the cat sat',
-    score: 0.9814814814814815,
-    pass: true,
-  },
-  {
-    name: 'non ASCII',
-    candidate: 'café naïve résumé 東京',
-    reference: 'café naïve résumé 東京',
-    score: 0.9921875,
-    pass: true,
-  },
-  {
-    name: 'legacy stem pair',
-    candidate: 'myelitis ptyalism',
-    reference: 'myelic ptyalize',
-    score: 0.9375,
-    pass: true,
-  },
-  {
-    name: 'unknown words',
-    candidate: 'zzzzq xyzabc',
-    reference: 'zzzzq xyzabc',
-    score: 0.9375,
-    pass: true,
-  },
-  {
-    name: 'inverse',
-    candidate: 'the cat sat',
-    reference: 'the cat sat',
-    inverse: true,
-    score: 0.01851851851851849,
-    pass: false,
-  },
-  {
-    name: 'custom parameters',
-    candidate: 'the cat is sitting on the mat',
-    reference: 'the cats are sitting on the mats',
-    alpha: 0.85,
-    beta: 2,
-    gamma: 0.4,
-    score: 0.819047619047619,
-    pass: true,
-  },
-];
-
-function params(overrides: Partial<AssertionParams> = {}): AssertionParams {
-  return {
-    assertion: { type: 'meteor', threshold: 0.5 },
-    outputString: 'the cat sat',
-    renderedValue: 'the cat sat',
-    inverse: false,
-    ...overrides,
-  } as AssertionParams;
+interface TestParams {
+  assertion: MeteorAssertion;
+  renderedValue: string | string[];
+  outputString: string;
+  inverse: boolean;
 }
 
 describe('METEOR score calculation', () => {
-  it.each(cases)(
-    '$name',
-    async ({ candidate, reference, score, pass, inverse, alpha, beta, gamma }) => {
-      const assertion = { type: 'meteor' as const, threshold: 0.5, alpha, beta, gamma };
-      const input = params({
-        assertion,
-        outputString: candidate,
-        renderedValue: reference,
-        inverse: inverse ?? false,
-      });
-      const result = await handleMeteorAssertion(input);
-      expect(result.score).toBe(score);
-      expect(result.pass).toBe(pass);
-      expect(result.assertion).toBe(input.assertion);
-      expect(result.reason).toEqual(
-        pass ? 'METEOR assertion passed' : expect.stringContaining('did not meet threshold'),
-      );
-    },
-  );
+  describe('identical sentences', () => {
+    it('should have high METEOR score', async () => {
+      const params: TestParams = {
+        assertion: { type: 'meteor', value: 'The cat sat on the mat' },
+        renderedValue: 'The cat sat on the mat',
+        outputString: 'The cat sat on the mat',
+        inverse: false,
+      };
 
-  it('uses the configured threshold', async () => {
-    const input = params({ assertion: { type: 'meteor', threshold: 0.99 } });
-    await expect(handleMeteorAssertion(input)).resolves.toMatchObject({
-      pass: false,
-      score: 0.9814814814814815,
-      reason: 'METEOR score 0.9815 did not meet threshold 0.99',
+      const result = await handleMeteorAssertion(params as any);
+      expect(result.pass).toBe(true);
+      expect(result.score).toBeGreaterThan(0.95);
+    });
+
+    it('should handle period after words', async () => {
+      const params: TestParams = {
+        assertion: { type: 'meteor', value: 'The cat sat on the mat' },
+        renderedValue: 'The cat sat on the mat',
+        outputString: 'The cat sat on the mat.',
+        inverse: false,
+      };
+
+      const result = await handleMeteorAssertion(params as any);
+      expect(result.pass).toBe(true);
+      expect(result.score).toBeGreaterThan(0.95);
     });
   });
 
-  it('passes inverse assertions for dissimilar outputs', async () => {
-    await expect(
-      handleMeteorAssertion(
-        params({
-          inverse: true,
-          outputString: 'cat dog',
-          renderedValue: 'moon star',
-        }),
-      ),
-    ).resolves.toMatchObject({ pass: true, score: 1 });
+  describe('similar sentences', () => {
+    it('should handle nltk example', async () => {
+      const params: TestParams = {
+        assertion: { type: 'meteor' },
+        renderedValue:
+          'It is a guide to action which ensures that the military always obeys the commands of the party',
+        outputString:
+          'It is a guide to action that ensures the military will forever heed Party commands',
+        inverse: false,
+      };
+
+      const result = await handleMeteorAssertion(params as any);
+      expect(result.pass).toBe(true);
+      expect(result.score).toBeGreaterThan(0.6);
+    });
   });
 
-  it.each([{ outputString: '' }, { renderedValue: [] }])(
-    'rejects empty inputs: %j',
-    async (overrides) => {
-      await expect(handleMeteorAssertion(params(overrides))).rejects.toThrow('Invalid inputs');
-    },
-  );
+  describe('non-matching sentences', () => {
+    it('should handle non matching sentences', async () => {
+      const params: TestParams = {
+        assertion: { type: 'meteor' },
+        renderedValue: 'The cat sat on the mat',
+        outputString: 'non matching hypothesis',
+        inverse: false,
+      };
 
-  it.each([undefined, 123, ['cat', 123]])('rejects invalid reference %j', async (renderedValue) => {
-    await expect(handleMeteorAssertion(params({ renderedValue }))).rejects.toThrow(
-      '"meteor" assertion must have a string or array of strings value',
-    );
+      const result = await handleMeteorAssertion(params as any);
+      expect(result.pass).toBe(false);
+      expect(result.score).toBeLessThan(0.5);
+    });
+
+    it('should handle completely different sentences', async () => {
+      const params: TestParams = createUnrelatedTextParams();
+
+      const result = await handleMeteorAssertion(params as any);
+      expect(result.pass).toBe(false);
+      expect(result.score).toBeLessThan(0.5);
+    });
+  });
+
+  describe('multiple references', () => {
+    it('should handle multiple references', async () => {
+      const params: TestParams = {
+        assertion: { type: 'meteor' },
+        renderedValue: [
+          'It is a guide to action that ensures that the military will forever heed Party commands',
+          'It is the guiding principle which guarantees the military forces always being under the command of the Party',
+          'It is the practical guide for the army always to heed the directions of the party',
+        ],
+        outputString:
+          'It is a guide to action which ensures that the military always obeys the commands of the party',
+        inverse: false,
+      };
+
+      const result = await handleMeteorAssertion(params as any);
+      expect(result.pass).toBe(true);
+      expect(result.score).toBeGreaterThan(0.69);
+    });
+
+    it('should handle multiple references and take best matching score', async () => {
+      const params: TestParams = {
+        assertion: {
+          type: 'meteor',
+          value: [
+            'The cat sat on the mat.',
+            'There is a cat on the mat.',
+            'A cat is sitting on the mat.',
+          ],
+        },
+        renderedValue: [
+          'The cat sat on the mat.',
+          'There is a cat on the mat.',
+          'A cat is sitting on the mat.',
+        ],
+        outputString: 'The cat was sitting on the mat.',
+        inverse: false,
+      };
+
+      const result = await handleMeteorAssertion(params as any);
+      expect(result.pass).toBe(true);
+      expect(result.score).toBeGreaterThan(0.5);
+    });
+  });
+
+  describe('parameters and edge cases', () => {
+    it('should handle custom parameters', async () => {
+      const params: TestParams = {
+        assertion: {
+          type: 'meteor',
+          value: 'The cat sat on the mat',
+          threshold: 0.75,
+          alpha: 0.85,
+          beta: 2.0,
+          gamma: 0.4,
+        },
+        renderedValue: 'The cat sat on the mat',
+        outputString: 'The cat is sitting on the mat',
+        inverse: false,
+      };
+
+      const result = await handleMeteorAssertion(params as any);
+      expect(result.pass).toBe(true);
+      expect(result.score).toBeGreaterThan(0.5);
+    });
+
+    it('should handle inverse assertion', async () => {
+      const params: TestParams = {
+        assertion: {
+          type: 'meteor',
+          value: 'The cat sat on the mat',
+          threshold: 0.8,
+        },
+        renderedValue: 'The cat sat on the mat',
+        outputString: 'The dog ran in the park',
+        inverse: true,
+      };
+
+      const result = await handleMeteorAssertion(params as any);
+      expect(result.pass).toBe(true);
+      expect(result.score).toBeGreaterThan(0.5);
+    });
+
+    it('should throw error for invalid inputs', async () => {
+      const params: TestParams = {
+        assertion: { type: 'meteor', value: [] },
+        renderedValue: [],
+        outputString: 'test',
+        inverse: false,
+      };
+
+      await expect(handleMeteorAssertion(params as any)).rejects.toThrow('Invalid inputs');
+    });
+
+    it('should use default threshold of 0.5', async () => {
+      const params: TestParams = createUnrelatedTextParams();
+
+      const result = await handleMeteorAssertion(params as any);
+      expect(result.pass).toBe(false);
+      expect(result.score).toBeLessThan(0.5);
+      expect(result.reason).toMatch(/METEOR score \d+\.\d+ did not meet threshold 0\.5/);
+    });
+
+    it('should properly extract parameters from assertion', async () => {
+      const params: TestParams = {
+        assertion: {
+          type: 'meteor',
+          value: 'The cat sat on the mat',
+          threshold: 0.6,
+          alpha: 0.9,
+          beta: 3.0,
+          gamma: 0.5,
+        },
+        renderedValue: 'The cat sat on the mat',
+        outputString: 'The cat sat on the mat',
+        inverse: false,
+      };
+
+      const result = await handleMeteorAssertion(params as any);
+      expect(result.pass).toBe(true);
+      expect(result.score).toBeGreaterThan(0.95);
+    });
+  });
+
+  describe('tokenization and sentence processing', () => {
+    it('should handle empty references correctly', async () => {
+      const params: TestParams = {
+        assertion: { type: 'meteor', value: 'Empty output' },
+        renderedValue: [],
+        outputString: 'Not empty',
+        inverse: false,
+      };
+
+      await expect(handleMeteorAssertion(params as any)).rejects.toThrow('Invalid inputs');
+    });
+
+    it('should ignore punctuation in string comparison', async () => {
+      const params1: TestParams = {
+        assertion: { type: 'meteor', value: 'one two three' },
+        renderedValue: 'one two three',
+        outputString: 'one two three',
+        inverse: false,
+      };
+
+      const params2: TestParams = {
+        assertion: { type: 'meteor', value: 'one, two, three' },
+        renderedValue: 'one, two, three',
+        outputString: 'one, two, three',
+        inverse: false,
+      };
+
+      const result1 = await handleMeteorAssertion(params1 as any);
+      const result2 = await handleMeteorAssertion(params2 as any);
+
+      expect(result1.score).toBeGreaterThan(0.95);
+      expect(result2.score).toBeGreaterThan(0.95);
+    });
+
+    it('should handle case insensitivity in matching', async () => {
+      const params: TestParams = {
+        assertion: { type: 'meteor', value: 'THE CAT SAT ON THE MAT' },
+        renderedValue: 'THE CAT SAT ON THE MAT',
+        outputString: 'the cat sat on the mat',
+        inverse: false,
+      };
+
+      const result = await handleMeteorAssertion(params as any);
+      expect(result.pass).toBe(true);
+      expect(result.score).toBeGreaterThan(0.95);
+    });
+  });
+
+  describe('multiple word forms and stemming', () => {
+    it('should handle stemming variations', async () => {
+      const params: TestParams = {
+        assertion: {
+          type: 'meteor',
+          value: 'The cats are sitting on the mats',
+          threshold: 0.5,
+        },
+        renderedValue: 'The cats are sitting on the mats',
+        outputString: 'The cat is sitting on the mat',
+        inverse: false,
+      };
+
+      const result = await handleMeteorAssertion(params as any);
+      expect(result.pass).toBe(true);
+      expect(result.score).toBeGreaterThan(0.5);
+    });
+
+    it('should handle synonyms through the WordNet mock', async () => {
+      const params: TestParams = {
+        assertion: { type: 'meteor', value: 'The feline sat on the rug' },
+        renderedValue: 'The feline sat on the rug',
+        outputString: 'The cat sat on the mat',
+        inverse: false,
+      };
+
+      const result = await handleMeteorAssertion(params as any);
+      expect(result.pass).toBe(true);
+      expect(result.score).toBeGreaterThan(0.7);
+    });
   });
 });

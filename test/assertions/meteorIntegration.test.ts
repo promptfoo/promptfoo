@@ -53,8 +53,8 @@ describe('METEOR assertion', () => {
   });
 
   it.each([
-    'The "natural" package is required for METEOR assertions. Install it alongside Promptfoo: npm install promptfoo natural@^8.1.1.',
-    'METEOR requires natural@^8.1.1; found 7.1.0. Install it alongside Promptfoo: npm install promptfoo natural@^8.1.1.',
+    'The "natural" package is required for METEOR assertions. Install it alongside Promptfoo: npm install promptfoo natural@^8.2.3.',
+    'METEOR requires natural@^8.2.3; found 7.1.0. Install it alongside Promptfoo: npm install promptfoo natural@^8.2.3.',
   ])('returns an actionable dependency failure: %s', async (message) => {
     mockHandleMeteorAssertion.mockRejectedValue(new Error(message));
 

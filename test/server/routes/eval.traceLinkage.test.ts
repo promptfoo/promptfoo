@@ -1,45 +1,16 @@
-import type { Server } from 'node:http';
-
-import request from 'supertest';
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { getDb } from '../../../src/database/index';
+import { beforeEach, describe, expect, it } from 'vitest';
 import { runDbMigrations } from '../../../src/migrate';
 import EvalResult from '../../../src/models/evalResult';
 import { createApp } from '../../../src/server/server';
 import { createEvaluateResult } from '../../factories/eval';
 import EvalFactory from '../../factories/evalFactory';
+import { clearEvalTables } from '../../util/evalDb';
+import { setupTestServer } from '../../util/testServer';
 
 describe('Eval Routes - Trace linkage persistence', () => {
-  let api: ReturnType<typeof request.agent>;
-  let server: Server;
+  const api = setupTestServer(createApp, runDbMigrations);
 
-  beforeAll(async () => {
-    await runDbMigrations();
-    await new Promise<void>((resolve, reject) => {
-      server = createApp().listen(0, '127.0.0.1', (error?: Error) =>
-        error ? reject(error) : resolve(),
-      );
-    });
-    api = request.agent(server);
-  });
-
-  afterAll(async () => {
-    if (!server.listening) {
-      return;
-    }
-    await new Promise<void>((resolve, reject) => {
-      server.close((error) => (error ? reject(error) : resolve()));
-    });
-  });
-
-  beforeEach(async () => {
-    const db = await getDb();
-    await db.run('DELETE FROM eval_results');
-    await db.run('DELETE FROM evals_to_datasets');
-    await db.run('DELETE FROM evals_to_prompts');
-    await db.run('DELETE FROM evals_to_tags');
-    await db.run('DELETE FROM evals');
-  });
+  beforeEach(() => clearEvalTables());
 
   it('keeps trace linkage when v4 eval saves include traced rows', async () => {
     const tracedResult = createEvaluateResult({

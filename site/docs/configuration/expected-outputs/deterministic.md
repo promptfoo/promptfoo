@@ -354,6 +354,23 @@ assert:
     value: 'file://path/to/expected.json'
 ```
 
+#### Unicode normalization
+
+String `equals` and `contains` assertions compare without Unicode normalization by default. To treat composed and decomposed characters such as `é` and `e` + a combining acute accent as equivalent, set `normalizeUnicode: true`:
+
+```yaml
+assert:
+  - type: equals
+    value: 'café'
+    normalizeUnicode: true
+```
+
+`true` selects NFC. You can also specify `NFC`, `NFD`, `NFKC`, or `NFKD`; `false` or omission preserves the original comparison. Both the expected string and the full output are normalized before comparison. For `contains`, this can also remove a substring match: `e` no longer matches `e` + a combining acute accent after NFC composes it into `é`.
+
+NFKC and NFKD additionally fold compatibility characters, including ligatures, non-breaking spaces, and superscripts. For example, `normalizeUnicode: NFKC` makes `x²` equal to `x2`. Choose these forms only when those distinctions should not affect the result. See [Unicode normalization forms](https://unicode.org/reports/tr15/) for the differences.
+
+The option also applies to `not-equals` and `not-contains`. It does not change case sensitivity, normalize nested values in object equality, or apply to other assertion types.
+
 ### Is-JSON
 
 The `is-json` assertion checks if the LLM output is a valid JSON string.
@@ -435,7 +452,7 @@ assert:
         - root.sibling
 ```
 
-This checks if the XML is a supported well-formed document and contains the specified elements. The elements are specified as dot-separated paths, allowing for nested element checking.
+This checks if the XML is a supported well-formed document and contains the specified elements. The elements are specified as dot-separated paths, allowing for nested element checking. Required paths match actual XML element names, including names such as `toString`; inherited JavaScript object properties do not count.
 
 #### How it works
 
@@ -602,6 +619,10 @@ This ensures that any JSON LLM output adheres to the schema specified in the `to
 - Pass if MCP tool calls succeed (output contains "MCP Tool Result")
 - Fail if MCP tool calls fail (output contains "MCP Tool Error")
 - Continue to validate traditional function tools as before
+
+`not-is-valid-openai-tools-call` and `not-is-valid-function-call` invert the validation result. A configuration error, such as no tools configured, a tool schema that does not compile, or a provider that cannot validate function calls, still fails.
+
+Negation checks for an invalid call, so a failed MCP call can also pass. To check that no tool was called, assert on the absence of tool calls instead. Custom provider validators should throw `InvalidToolCallError` from `promptfoo/contracts` for invalid calls and ordinary errors for configuration or operational failures.
 
 Example with MCP tools:
 
@@ -1520,14 +1541,14 @@ For additional context, read about the metric on [Wikipedia](https://en.wikipedi
 METEOR requires `natural`, which is not included in the default installation. Install it with Promptfoo in your project:
 
 ```bash
-npm install promptfoo natural@^8.1.1
+npm install promptfoo natural@^8.2.3
 ```
 
-For a global installation, use `npm install -g promptfoo natural@^8.1.1`.
+For a global installation, use `npm install -g promptfoo natural@^8.2.3`.
 
-For a one-off eval, run `npx --package=promptfoo --package=natural@^8.1.1 promptfoo eval -c /absolute/path/to/promptfooconfig.yaml` from an empty directory outside an npm project. If either package is installed locally, use the project installation command above.
+For a one-off eval, run `npx --package=promptfoo --package=natural@^8.2.3 promptfoo eval -c /absolute/path/to/promptfooconfig.yaml` from an empty directory outside an npm project. If either package is installed locally, use the project installation command above.
 
-If `natural` is missing or outside the supported `^8.1.1` range, METEOR assertions return `pass: false` and `score: 0`, with installation instructions in the reason. Other assertions work normally.
+If `natural` is missing or outside the supported `^8.2.3` range, METEOR assertions return `pass: false` and `score: 0`, with installation instructions in the reason. Other assertions work normally.
 :::
 
 #### How METEOR Works
