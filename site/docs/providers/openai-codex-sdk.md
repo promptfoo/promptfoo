@@ -23,7 +23,7 @@ For direct model API calls, use the [OpenAI provider](/docs/providers/openai).
 Use Node.js 22.22.0 or later. In your eval project, install Promptfoo and the SDK:
 
 ```bash
-npm install --save-dev promptfoo @openai/codex-sdk@^0.156.1
+npm install --save-dev promptfoo "@openai/codex-sdk@>=0.156.1 <0.167.0"
 ```
 
 The SDK includes the Codex CLI. Neither is included in the default Promptfoo install. The provider checks SDK compatibility when called; automatic grader selection uses Codex only when a compatible SDK is available.
@@ -36,7 +36,7 @@ The SDK includes the Codex CLI. Neither is included in the default Promptfoo ins
 
 Choose one authentication method:
 
-- **ChatGPT sign-in:** run `npx --package @openai/codex@^0.156.1 codex login` and complete the browser flow. Remove `config.apiKey` and any `OPENAI_API_KEY` or `CODEX_API_KEY` values from your shell, `.env`, and eval config to reuse that login. Promptfoo automatically loads `.env` from the directory where you run it.
+- **ChatGPT sign-in:** run `npx --package "@openai/codex@>=0.156.1 <0.167.0" codex login` and complete the browser flow. Remove `config.apiKey` and any `OPENAI_API_KEY` or `CODEX_API_KEY` values from your shell, `.env`, and eval config to reuse that login. Promptfoo automatically loads `.env` from the directory where you run it.
 - **API key:** set `OPENAI_API_KEY` in your shell or secret manager. `CODEX_API_KEY` is also supported. API usage is billed separately from ChatGPT subscriptions.
 
 For custom Codex homes, CI, and AWS credentials, see [authentication and environment](#authentication-and-environment). OpenAI's [authentication guide](https://learn.chatgpt.com/docs/auth) covers account access and login storage.
@@ -94,7 +94,7 @@ These IDs select the same provider:
 
 A model in the ID takes precedence over the provider's `config.model`. To compare models, add one provider entry per model.
 
-Choose a model your account can access from [OpenAI's Codex model guide](https://learn.chatgpt.com/docs/models). Use a concrete model such as `gpt-6-sol` for repeatable comparisons. Omitting it lets Codex choose from its configuration, so results can change when that configuration or its defaults change. GPT-6 Sol and Luna require [Codex 0.156.1 or later](https://github.com/openai/codex/releases/tag/rust-v0.156.1); Astra requires 0.153.1 or later. The installation above includes a compatible runtime.
+Choose a model your account can access from [OpenAI's Codex model guide](https://learn.chatgpt.com/docs/models). Use a concrete model such as `gpt-6-sol` for repeatable comparisons. Omitting it lets Codex choose from its configuration, so results can change when that configuration or its defaults change. GPT-6 Sol and Luna require [Codex 0.156.1 or later](https://github.com/openai/codex/releases/tag/rust-v0.156.1); Astra requires 0.153.1 or later. The [Codex 0.165.0 catalog](https://github.com/openai/codex/releases/tag/rust-v0.165.0) includes GPT-6.1 Sol and Terra with Ultra reasoning. Availability depends on your Codex version and account.
 
 Set reasoning effort when you need to compare speed and answer quality:
 
