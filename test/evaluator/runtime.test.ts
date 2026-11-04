@@ -14,6 +14,7 @@ import logger from '../../src/logger';
 import Eval from '../../src/models/eval';
 import { generateIdFromPrompt } from '../../src/models/prompt';
 import { EvalEvaluationStore } from '../../src/node/evaluationStore';
+import { nodeEvaluatorRuntime } from '../../src/node/evaluatorRuntime';
 import { generatePrompts } from '../../src/suggestions';
 import { ResultFailureReason, type TestSuite } from '../../src/types/index';
 import { promptYesNo } from '../../src/util/readline';
@@ -112,6 +113,33 @@ describeEvaluator('evaluator runtime ports', () => {
       }
     },
   );
+
+  it('does not inherit Node suite resolution when an explicit runtime omits it', async () => {
+    const resolver = vi
+      .spyOn(nodeEvaluatorRuntime, 'resolveRuntimeTestSuite')
+      .mockImplementation(() => {
+        throw new Error('Unexpected Node resolver fallback');
+      });
+    try {
+      const evaluation = createInMemoryEvaluation();
+      const runtime = createInMemoryRuntime(new InMemoryEvaluationStore(evaluation));
+      await expect(
+        evaluate(
+          {
+            providers: [mockApiProvider],
+            prompts: [toPrompt('Test prompt')],
+            tests: [{}],
+          },
+          evaluation,
+          {},
+          runtime,
+        ),
+      ).resolves.toBe(evaluation);
+      expect(resolver).not.toHaveBeenCalled();
+    } finally {
+      resolver.mockRestore();
+    }
+  });
 
   it('uses the store resume lookup without importing a concrete result model', async () => {
     const evaluation = createInMemoryEvaluation({

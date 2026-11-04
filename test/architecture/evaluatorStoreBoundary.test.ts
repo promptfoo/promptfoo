@@ -8,13 +8,13 @@ import { extractModuleSpecifiers } from '../../scripts/architectureUtils';
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 
 describe('evaluator store boundary', () => {
-  it('keeps the evaluator independent from concrete models', () => {
-    const evaluatorPath = 'src/evaluator.ts';
+  it('keeps the evaluator independent from concrete models and Node composition', () => {
+    const evaluatorPath = 'src/evaluator/engine.ts';
     const source = readFileSync(path.join(repoRoot, evaluatorPath), 'utf8');
 
     expect(
       extractModuleSpecifiers(source, evaluatorPath).filter((specifier) =>
-        /(?:^|\/)models(?:\/|$)/.test(specifier),
+        /(?:^|\/)(?:models|node)(?:\/|$)/.test(specifier),
       ),
     ).toEqual([]);
   });
