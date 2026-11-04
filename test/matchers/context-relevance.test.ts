@@ -3,6 +3,16 @@ import { DEFAULT_RAG_ASSERTION_THRESHOLD } from '../../src/assertions/ragDefault
 import { matchesContextRelevance } from '../../src/matchers/rag';
 import { DefaultGradingProvider } from '../../src/providers/openai/defaults';
 
+const createOutputResponse = (output: string = 'Paris is the capital of France') => ({
+  output,
+  tokenUsage: { total: 10, prompt: 5, completion: 5 },
+});
+
+const createParisAndFranceResponse = () => ({
+  output: 'Paris is the capital of France. France is in Europe.',
+  tokenUsage: { total: 10, prompt: 5, completion: 5 },
+});
+
 describe('matchesContextRelevance (RAGAS Context Relevance)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -39,10 +49,7 @@ describe('matchesContextRelevance (RAGAS Context Relevance)', () => {
 
     // Mock LLM extracting 1 relevant sentence
     const mockCallApi = vi.fn().mockImplementation(() => {
-      return Promise.resolve({
-        output: 'Paris is the capital of France',
-        tokenUsage: { total: 10, prompt: 5, completion: 5 },
-      });
+      return Promise.resolve(createOutputResponse());
     });
 
     vi.spyOn(DefaultGradingProvider, 'callApi').mockImplementation(mockCallApi);
@@ -74,10 +81,7 @@ describe('matchesContextRelevance (RAGAS Context Relevance)', () => {
 
     // Mock LLM extracting 1 relevant sentence out of the 3 in the context.
     const mockCallApi = vi.fn().mockImplementation(() => {
-      return Promise.resolve({
-        output: 'Paris is the capital of France.',
-        tokenUsage: { total: 10, prompt: 5, completion: 5 },
-      });
+      return Promise.resolve(createOutputResponse('Paris is the capital of France.'));
     });
 
     vi.spyOn(DefaultGradingProvider, 'callApi').mockImplementation(mockCallApi);
@@ -103,10 +107,7 @@ describe('matchesContextRelevance (RAGAS Context Relevance)', () => {
       'Paris is the capital of France. France is in Europe. The weather is nice today.';
     const threshold = 0.5;
 
-    const mockCallApi = vi.fn().mockResolvedValue({
-      output: 'Paris is the capital of France. France is in Europe.',
-      tokenUsage: { total: 10, prompt: 5, completion: 5 },
-    });
+    const mockCallApi = vi.fn().mockResolvedValue(createParisAndFranceResponse());
     vi.spyOn(DefaultGradingProvider, 'callApi').mockImplementation(mockCallApi);
 
     const result = await matchesContextRelevance(input, context, threshold);
@@ -128,10 +129,9 @@ describe('matchesContextRelevance (RAGAS Context Relevance)', () => {
       'Paris is the capital of France. France is in Europe. The weather is nice today.\n';
     const threshold = 0.3;
 
-    const mockCallApi = vi.fn().mockResolvedValue({
-      output: 'Paris is the capital of France.',
-      tokenUsage: { total: 10, prompt: 5, completion: 5 },
-    });
+    const mockCallApi = vi
+      .fn()
+      .mockResolvedValue(createOutputResponse('Paris is the capital of France.'));
     vi.spyOn(DefaultGradingProvider, 'callApi').mockImplementation(mockCallApi);
 
     const result = await matchesContextRelevance(input, context, threshold);
@@ -202,10 +202,7 @@ describe('matchesContextRelevance (RAGAS Context Relevance)', () => {
     const threshold = 0.5;
 
     // Grader returns one line verbatim (prose with two sentences, no newline).
-    const mockCallApi = vi.fn().mockResolvedValue({
-      output: 'Paris is the capital of France. France is in Europe.',
-      tokenUsage: { total: 10, prompt: 5, completion: 5 },
-    });
+    const mockCallApi = vi.fn().mockResolvedValue(createParisAndFranceResponse());
     vi.spyOn(DefaultGradingProvider, 'callApi').mockImplementation(mockCallApi);
 
     const result = await matchesContextRelevance(input, context, threshold);
@@ -354,10 +351,7 @@ This policy excludes all staff going on any outgoing structured programs, short 
 
       // Mock LLM extracting 1 relevant sentence
       const mockCallApi = vi.fn().mockImplementation(() => {
-        return Promise.resolve({
-          output: 'Paris is the capital of France',
-          tokenUsage: { total: 10, prompt: 5, completion: 5 },
-        });
+        return Promise.resolve(createOutputResponse());
       });
 
       vi.spyOn(DefaultGradingProvider, 'callApi').mockImplementation(mockCallApi);

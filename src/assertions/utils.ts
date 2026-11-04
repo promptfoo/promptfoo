@@ -51,24 +51,36 @@ export function getFinalTest(test: TestCase, assertion: Assertion) {
   return Object.freeze(ret);
 }
 
+/**
+ * Imports a JavaScript assertion file and returns the function it exports.
+ * Throws when the file cannot be loaded or does not export a function.
+ */
+export async function resolveJavaScriptFileFunction(
+  filePath: string,
+  functionName: string | undefined,
+  // biome-ignore lint/suspicious/noExplicitAny: I think this is hotloading JS
+): Promise<(...args: any[]) => any> {
+  const requiredModule = await importModule(filePath, functionName);
+  if (functionName && typeof requiredModule[functionName] === 'function') {
+    return requiredModule[functionName];
+  } else if (typeof requiredModule === 'function') {
+    return requiredModule;
+  } else if (requiredModule.default && typeof requiredModule.default === 'function') {
+    return requiredModule.default;
+  }
+  throw new Error(
+    `Assertion malformed: ${filePath} must export a function or have a default export as a function`,
+  );
+}
+
 export async function loadFromJavaScriptFile(
   filePath: string,
   functionName: string | undefined,
   args: unknown[],
   // biome-ignore lint/suspicious/noExplicitAny: I think this is hotloading JS
 ): Promise<any> {
-  const requiredModule = await importModule(filePath, functionName);
-  if (functionName && typeof requiredModule[functionName] === 'function') {
-    return requiredModule[functionName](...args);
-  } else if (typeof requiredModule === 'function') {
-    return requiredModule(...args);
-  } else if (requiredModule.default && typeof requiredModule.default === 'function') {
-    return requiredModule.default(...args);
-  } else {
-    throw new Error(
-      `Assertion malformed: ${filePath} must export a function or have a default export as a function`,
-    );
-  }
+  const fn = await resolveJavaScriptFileFunction(filePath, functionName);
+  return fn(...args);
 }
 
 export function processFileReference(fileRef: string): object | string {

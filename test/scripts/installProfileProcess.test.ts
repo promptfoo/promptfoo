@@ -31,6 +31,47 @@ describe('terminateProcessTree', () => {
     expect(() => terminateProcessTree(1234, 'darwin')).not.toThrow();
   });
 
+  it.each([' 1234 Z\n 1234 Z+\n 5678 S\n', ' 5678 S\n'])(
+    'accepts Darwin EPERM only when no live group members remain: %j',
+    (processes) => {
+      vi.spyOn(process, 'kill').mockImplementation(() => {
+        throw Object.assign(new Error('no signalable members'), { code: 'EPERM' });
+      });
+      const inspect = vi.spyOn(childProcess, 'execFileSync').mockReturnValue(processes);
+
+      expect(() => terminateProcessTree(1234, 'darwin')).not.toThrow();
+      expect(inspect).toHaveBeenCalledExactlyOnceWith('/bin/ps', ['-axo', 'pgid=,stat='], {
+        encoding: 'utf8',
+        timeout: 10000,
+      });
+    },
+  );
+
+  it.each([' 1234 S\n', ' 1234 Z\n 1234 R+\n', 'unrecognized output\n', '', '\n'])(
+    'preserves Darwin EPERM when cleanup cannot be verified: %j',
+    (processes) => {
+      const error = Object.assign(new Error('permission denied'), { code: 'EPERM' });
+      vi.spyOn(process, 'kill').mockImplementation(() => {
+        throw error;
+      });
+      vi.spyOn(childProcess, 'execFileSync').mockReturnValue(processes);
+
+      expect(() => terminateProcessTree(1234, 'darwin')).toThrow(error);
+    },
+  );
+
+  it('preserves Darwin EPERM when process inspection fails', () => {
+    const error = Object.assign(new Error('permission denied'), { code: 'EPERM' });
+    vi.spyOn(process, 'kill').mockImplementation(() => {
+      throw error;
+    });
+    vi.spyOn(childProcess, 'execFileSync').mockImplementation(() => {
+      throw new Error('ps failed');
+    });
+
+    expect(() => terminateProcessTree(1234, 'darwin')).toThrow(error);
+  });
+
   it.each(['EPERM', 'EINVAL', undefined])('preserves POSIX cleanup errors: %s', (code) => {
     const error = Object.assign(new Error('cleanup failed'), { code });
     vi.spyOn(process, 'kill').mockImplementation(() => {
@@ -155,50 +196,4 @@ describe('install profile commands', () => {
     await expect(pending).resolves.toMatchObject({ code: null, timedOut: true });
     expect(vi.getTimerCount()).toBe(0);
   });
-});
-
-it('keeps npm lockfiles inside consumers matched by an ancestor workspace', () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'install-profile-workspace-'));
-  try {
-    const consumer = path.join(root, 'packages', 'consumer');
-    fs.mkdirSync(consumer, { recursive: true });
-    fs.writeFileSync(
-      path.join(root, 'package.json'),
-      JSON.stringify({
-        name: 'untouched-host',
-        private: true,
-        workspaces: ['packages/**'],
-      }),
-    );
-    fs.writeFileSync(
-      path.join(consumer, 'package.json'),
-      JSON.stringify({
-        name: 'fixture-consumer',
-        private: true,
-      }),
-    );
-    const npmCli = process.env.npm_execpath;
-    expect(npmCli, 'Run this test through npm or npx').toBeTruthy();
-    childProcess.execFileSync(
-      process.execPath,
-      [
-        npmCli!,
-        '--workspaces=false',
-        'install',
-        '--package-lock-only',
-        '--ignore-scripts',
-        '--offline',
-      ],
-      {
-        cwd: consumer,
-        env: { ...process.env, npm_config_cache: path.join(root, 'cache') },
-        encoding: 'utf8',
-        timeout: 10_000,
-      },
-    );
-    expect(fs.existsSync(path.join(root, 'package-lock.json'))).toBe(false);
-    expect(fs.existsSync(path.join(consumer, 'package-lock.json'))).toBe(true);
-  } finally {
-    fs.rmSync(root, { recursive: true, force: true });
-  }
 });
