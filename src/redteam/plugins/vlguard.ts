@@ -162,20 +162,6 @@ export class VLGuardDatasetManager {
   }
 
   /**
-   * Set the split to use for fetching records
-   */
-  setSplit(split: VLGuardSplit): void {
-    this.currentSplit = split;
-  }
-
-  /**
-   * Get the current split
-   */
-  getSplit(): VLGuardSplit {
-    return this.currentSplit;
-  }
-
-  /**
    * Clear the cache - useful for testing
    */
   static clearCache(): void {
@@ -509,7 +495,7 @@ export class VLGuardDatasetManager {
   async getFilteredRecords(limit: number, config?: VLGuardPluginConfig): Promise<VLGuardInput[]> {
     // Set the split from config (default: 'both' for maximum coverage)
     const split = config?.split ?? 'both';
-    this.setSplit(split);
+    this.currentSplit = split;
     logger.debug(`[vlguard] Using ${split === 'both' ? 'both splits' : `${split} split`}`);
 
     await this.ensureDatasetLoaded();

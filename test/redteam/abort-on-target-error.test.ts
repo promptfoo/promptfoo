@@ -3,13 +3,14 @@ import http from 'http';
 import { AddressInfo } from 'net';
 
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+import { getDb } from '../../src/database/index';
 import { evaluate } from '../../src/evaluator';
 import { runDbMigrations } from '../../src/migrate';
 import Eval from '../../src/models/eval';
 import { findTargetErrorStatus, isNonTransientHttpStatus } from '../../src/util/fetch/errors';
 import { createMockProvider } from '../factories/provider';
 
-import type { ApiProvider, Prompt, TestSuite } from '../../src/types';
+import type { ApiProvider, EvaluateResult, Prompt, TestSuite } from '../../src/types';
 
 function toPrompt(text: string): Prompt {
   return { raw: text, label: text };
@@ -23,6 +24,23 @@ describe('abort on target error', () => {
   let server: http.Server;
   let serverPort: number;
   let serverUrl: string;
+
+  async function callTestHttpServer() {
+    const response = await fetch(serverUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prompt: 'test' }),
+    });
+    return {
+      output: await response.text(),
+      metadata: {
+        http: {
+          status: response.status,
+          statusText: response.statusText,
+        },
+      },
+    };
+  }
 
   beforeAll(async () => {
     // Create a mock server that returns 403 Forbidden
@@ -53,23 +71,9 @@ describe('abort on target error', () => {
     // Create a mock provider that returns 403
     const mockApiProvider = createMockProvider({
       id: 'test-http-provider',
-      callApi: vi.fn<ApiProvider['callApi']>().mockImplementation(async () => {
-        // Simulate HTTP call to our mock server
-        const response = await fetch(serverUrl, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ prompt: 'test' }),
-        });
-        return {
-          output: await response.text(),
-          metadata: {
-            http: {
-              status: response.status,
-              statusText: response.statusText,
-            },
-          },
-        };
-      }),
+      callApi: vi
+        .fn<ApiProvider['callApi']>()
+        .mockImplementation(/* Simulate HTTP call to our mock server */ callTestHttpServer),
     });
 
     const testSuite: TestSuite = {
@@ -109,26 +113,46 @@ describe('abort on target error', () => {
     expect(isNonTransientHttpStatus(403)).toBe(true);
   });
 
+  it('should count the row that stopped the scan', async () => {
+    const good = createMockProvider({
+      id: 'good-provider',
+      callApi: vi.fn<ApiProvider['callApi']>().mockResolvedValue({ output: 'pong' }),
+    });
+    const bad = createMockProvider({
+      id: 'bad-provider',
+      callApi: vi.fn<ApiProvider['callApi']>().mockResolvedValue({
+        error: 'API error: 404 Not Found',
+        metadata: { http: { status: 404, statusText: 'Not Found' } },
+      }),
+    });
+    const testSuite: TestSuite = {
+      providers: [good, bad],
+      prompts: [toPrompt('Reply pong {{ n }}')],
+      tests: [{ vars: { n: 1 } }, { vars: { n: 2 } }, { vars: { n: 3 } }],
+    };
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+
+    await evaluate(testSuite, evalRecord, { maxConcurrency: 1 });
+
+    // The scan stops at the first 404, and that row is an error like any other. Without it
+    // the totals would read "1 passed, 0 errors".
+    expect(bad.callApi).toHaveBeenCalledTimes(1);
+    const totals = evalRecord.prompts.reduce(
+      (sum, prompt) => ({
+        passed: sum.passed + (prompt.metrics?.testPassCount ?? 0),
+        errors: sum.errors + (prompt.metrics?.testErrorCount ?? 0),
+      }),
+      { passed: 0, errors: 0 },
+    );
+    expect(totals).toEqual({ passed: 1, errors: 1 });
+    expect(findTargetErrorStatus(await evalRecord.getResults())).toBe(404);
+  });
+
   it('should include HTTP status in result metadata', async () => {
     // Create a mock provider that returns 403
     const mockApiProvider = createMockProvider({
       id: 'test-http-provider',
-      callApi: vi.fn<ApiProvider['callApi']>().mockImplementation(async () => {
-        const response = await fetch(serverUrl, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ prompt: 'test' }),
-        });
-        return {
-          output: await response.text(),
-          metadata: {
-            http: {
-              status: response.status,
-              statusText: response.statusText,
-            },
-          },
-        };
-      }),
+      callApi: vi.fn<ApiProvider['callApi']>().mockImplementation(callTestHttpServer),
     });
 
     const testSuite: TestSuite = {
@@ -204,6 +228,54 @@ describe('Eval.findTargetErrorStatus() - efficient DB query', () => {
     // This should do an efficient DB query, not load all results
     const targetErrorStatus = await evalRecord.findTargetErrorStatus();
     expect(targetErrorStatus).toBe(403);
+  });
+
+  it('should find a target error in a row that could not be saved', async () => {
+    const evalRecord = await Eval.create({}, [toPrompt('Test prompt')], { id: randomUUID() });
+    expect(await evalRecord.findTargetErrorStatus()).toBeUndefined();
+
+    // The evaluator hands over a row whose database write failed. It is not in the database,
+    // so only the eval record knows that the target returned 403.
+    evalRecord.recordResultPersistenceFailure({
+      promptIdx: 0,
+      testIdx: 0,
+      response: { output: 'Forbidden', metadata: { http: { status: 403 } } },
+    } as EvaluateResult);
+    // The command drops loaded results before it reports, which must not lose the row.
+    evalRecord.clearResults();
+
+    expect(await evalRecord.findTargetErrorStatus()).toBe(403);
+  });
+
+  it('should still find a saved target error when the database cannot be queried', async () => {
+    const mockApiProvider = createMockProvider({
+      id: 'test-http-provider-unqueryable',
+      response: {
+        output: 'Forbidden',
+        metadata: { http: { status: 403, statusText: 'Forbidden' } },
+      },
+    });
+    const testSuite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [toPrompt('Test prompt')],
+      tests: [{ vars: {} }],
+    };
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, { maxConcurrency: 1 });
+    // The command drops loaded results before it reports.
+    evalRecord.clearResults();
+
+    const db = await getDb();
+    const select = vi.spyOn(db, 'select').mockImplementation(() => {
+      throw new Error('database is locked');
+    });
+    try {
+      // The row was saved, but nothing can be read back. What the run itself saw still counts.
+      expect(await evalRecord.findTargetErrorStatus()).toBe(403);
+    } finally {
+      select.mockRestore();
+    }
+    expect(await evalRecord.findTargetErrorStatus()).toBe(403);
   });
 
   it('should return undefined when no target error exists', async () => {

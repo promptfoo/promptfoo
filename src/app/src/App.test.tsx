@@ -100,6 +100,8 @@ describe.each(['', '/promptfoo'])('App routes with basename "%s"', (basename) =>
 
   it.each([
     ['/', '/eval', 'EvalPage'],
+    ['/dashboard', '/eval', 'EvalPage'],
+    ['/dashboard/', '/eval', 'EvalPage'],
     ['/progress', '/history', 'HistoryPage'],
     ['/model-audit/history', '/model-audits', 'ModelAuditHistoryPage'],
     ['/redteam', '/redteam/setup', 'RedteamSetupPage'],
@@ -162,5 +164,13 @@ describe.each(['', '/promptfoo'])('App routes with basename "%s"', (basename) =>
       expect(activeRouter.state.location.pathname).toBe(basename + '/launcher');
       expect(activeRouter.state.historyAction).toBe('REPLACE');
     });
+  });
+
+  it('redirects dashboard to the latest eval even when the launcher is enabled', async () => {
+    vi.stubEnv('VITE_PROMPTFOO_LAUNCHER', 'true');
+    const activeRouter = renderRoute('/dashboard', basename);
+    expect(await screen.findByText('EvalPage')).toBeInTheDocument();
+    expect(activeRouter.state.location.pathname).toBe(basename + '/eval');
+    expect(activeRouter.state.historyAction).toBe('REPLACE');
   });
 });

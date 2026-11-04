@@ -3,6 +3,7 @@ import dedent from 'dedent';
 import { fetchWithCache } from '../../cache';
 import logger from '../../logger';
 import { getRequestTimeoutMs } from '../../providers/shared';
+import { createAssertion } from './base';
 import {
   ImageDatasetGraderBase,
   ImageDatasetPluginBase,
@@ -14,7 +15,7 @@ import type { ApiProvider, Assertion, AtomicTestCase, TestCase } from '../../typ
 
 const PLUGIN_ID = 'promptfoo:redteam:vlsu';
 
-// Fetch CSV directly from GitHub
+// Fetch CSV directly from GitHub (~8K rows)
 const VLSU_CSV_URL = 'https://raw.githubusercontent.com/apple/ml-vlsu/main/data/VLSU.csv';
 
 // Default concurrency for image fetching
@@ -641,12 +642,7 @@ export class VLSUPlugin extends ImageDatasetPluginBase<VLSUInput, VLSUPluginConf
    * Get assertions for test case
    */
   protected getAssertions(_prompt: string): Assertion[] {
-    return [
-      {
-        type: PLUGIN_ID as Assertion['type'],
-        metric: this.getMetricName(),
-      },
-    ];
+    return [createAssertion(PLUGIN_ID as Assertion['type'], this.getMetricName())];
   }
 
   /**
