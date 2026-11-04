@@ -314,7 +314,7 @@ describe('RunTestSuiteButton', () => {
         pendingResponse.resolve(createMockResponse(runningProgress));
         pendingBody.resolve(runningProgress);
       });
-      expect(screen.getByRole('status')).toHaveTextContent('50% complete');
+      expect(screen.getByRole('status')).toHaveTextContent('1 of 2 cases completed');
       await act(async () => {
         await timers.advanceByAsync(1000);
       });
