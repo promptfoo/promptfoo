@@ -2,11 +2,7 @@ import { type Expression, parseExpressionAt } from 'acorn';
 
 type ScoreFormula = (scores: Record<string, number>) => number;
 
-const operations = new Map<string, (left: number, right: number) => number>([
-  ['+', (a, b) => a + b],
-  ['-', (a, b) => a - b],
-  ['*', (a, b) => a * b],
-  ['/', (a, b) => a / b],
+const comparisons = new Map<string, (left: number, right: number) => number>([
   ['>', (a, b) => Number(a > b)],
   ['>=', (a, b) => Number(a >= b)],
   ['<', (a, b) => Number(a < b)],
@@ -14,6 +10,18 @@ const operations = new Map<string, (left: number, right: number) => number>([
   ['==', (a, b) => Number(a === b)],
   ['!=', (a, b) => Number(a !== b)],
 ]);
+
+const operations = new Map<string, (left: number, right: number) => number>([
+  ['+', (a, b) => a + b],
+  ['-', (a, b) => a - b],
+  ['*', (a, b) => a * b],
+  ['/', (a, b) => a / b],
+  ...comparisons,
+]);
+
+function isUnparenthesizedComparison(node: Expression): boolean {
+  return node.type === 'BinaryExpression' && comparisons.has(node.operator);
+}
 
 function compile(node: Expression): ScoreFormula {
   switch (node.type) {
@@ -47,6 +55,14 @@ function compile(node: Expression): ScoreFormula {
     case 'BinaryExpression': {
       const operation = operations.get(node.operator);
       if (operation && node.left.type !== 'PrivateIdentifier') {
+        if (
+          comparisons.has(node.operator) &&
+          (isUnparenthesizedComparison(node.left) || isUnparenthesizedComparison(node.right))
+        ) {
+          throw new Error(
+            'Use separate comparisons in a conditional instead of a comparison chain',
+          );
+        }
         const left = compile(node.left);
         const right = compile(node.right);
         return (scores) => operation(left(scores), right(scores));
