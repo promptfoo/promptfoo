@@ -69,8 +69,9 @@ describe('OpenRouter completed refusals during disk publication', () => {
     cacheModule = await import('../../src/cache');
     ({ loadApiProvider } = await import('../../src/providers'));
     observers = await import('../../src/util/fetch/responseHeadersObserver');
-    const { KeyvFile } = await import('keyv-file');
-    expect(cacheModule.getCache().stores[0].store).toBeInstanceOf(KeyvFile);
+    const marker = randomUUID();
+    await cacheModule.getCache().set(marker, marker);
+    expect(fs.readFileSync(path.join(directory, 'cache.json'), 'utf8')).toContain(marker);
   });
 
   beforeEach(async () => {
