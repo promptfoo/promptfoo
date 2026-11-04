@@ -106,10 +106,6 @@ vi.mock('python-shell', () => ({
 }));
 
 describe('Python Utils', () => {
-  afterEach(() => {
-    vi.resetAllMocks();
-    vi.useRealTimers();
-  });
   beforeEach(() => {
     vi.clearAllMocks();
     mockExecFileAsync.mockReset();

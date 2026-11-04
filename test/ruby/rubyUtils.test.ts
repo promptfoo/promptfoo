@@ -60,9 +60,6 @@ afterEach(() => {
 });
 
 describe('Ruby utilities', () => {
-  afterEach(() => {
-    vi.resetAllMocks();
-  });
   beforeEach(() => {
     vi.clearAllMocks();
     mockExecFileAsync.mockReset();
@@ -88,6 +85,7 @@ describe('Ruby utilities', () => {
         mockExecFileAsync.mockReset().mockResolvedValue({ stdout, stderr: '' });
         expect(await rubyUtils.tryPath('/custom/ruby')).toBe('/custom/ruby');
         expect(mockExecFileAsync).toHaveBeenCalledWith('/custom/ruby', ['--version'], {
+          env: expect.any(Object),
           timeout: 2500,
           killSignal: 'SIGKILL',
         });
