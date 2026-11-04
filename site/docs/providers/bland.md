@@ -86,7 +86,7 @@ prompts:
       ]
 ```
 
-Every response includes `sessionId` (the Bland chat ID). When a test passes `sessionId` in its vars, the provider continues that chat instead of starting a new one, which is how stateful multi-turn red team strategies talk to a Bland agent. Stateless strategies send the whole conversation as a chat-formatted prompt, which works too.
+Every response includes `sessionId` (the Bland chat ID). When a later call passes that `sessionId` in its vars, the provider continues the chat instead of starting a new one, which is how stateful multi-turn red team strategies talk to a Bland agent. Only chats the provider opened in the current run are continued, so a client-side correlation ID in `sessionId` (such as `transformVars: '{ ...vars, sessionId: context.uuid }'`) still starts a fresh chat. Stateless strategies send the whole conversation as a chat-formatted prompt, which works too.
 
 ```yaml
 redteam:

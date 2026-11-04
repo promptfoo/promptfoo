@@ -5,6 +5,7 @@ import { getCache, isCacheEnabled } from '../../src/cache';
 import { BlandProvider, createBlandProvider, getUserTurns } from '../../src/providers/bland';
 import { loadApiProvider } from '../../src/providers/index';
 import { fetchWithTimeout } from '../../src/util/fetch/index';
+import { trackResponseDeadline } from '../../src/util/fetch/responseDeadline';
 
 import type { BlandTurnData } from '../../src/providers/bland';
 
@@ -293,13 +294,26 @@ describe('BlandProvider', () => {
 
     it('sends a chat-looking prompt verbatim when continuing a session', async () => {
       const api = fakeBland(echo);
+      const provider = createBlandProvider('bland:agent:a', { config: { includeGreeting: false } });
+      const first = await provider.callApi('hello');
       const prompt = JSON.stringify([{ role: 'user', content: 'x' }]);
-      await createBlandProvider('bland:agent:a').callApi(prompt, {
-        vars: { sessionId: 'chat-9' },
+      await provider.callApi(prompt, {
+        vars: { sessionId: first.sessionId! },
         prompt: { raw: prompt, label: 'p' },
       });
-      expect(api.requests).toHaveLength(1);
-      expect(api.requests[0].body).toEqual({ message: prompt });
+      expect(api.requests.at(-1)?.body).toEqual({ message: prompt });
+    });
+
+    it('starts a new chat when sessionId is a client-side ID, not a Bland chat', async () => {
+      // Red team configs often set sessionId to a fresh UUID per test for correlation.
+      const api = fakeBland(echo);
+      const result = await createBlandProvider('bland:agent:a').callApi('hi', {
+        vars: { sessionId: '0b4f3c1e-8d1a-4c55-9b7e-2f6a9d1c7e10' },
+        prompt: { raw: 'hi', label: 'hi' },
+      });
+      expect(api.requests[0].url).toBe('https://api.bland.ai/v1/pathway/chat/create');
+      expect(result.sessionId).toMatch(/^chat-/);
+      expect(result.output).toBe('You said: hi');
     });
   });
 
@@ -429,6 +443,23 @@ describe('BlandProvider', () => {
 
       await expect(pending).rejects.toThrow(/abort/i);
       expect(fetchWithTimeout).toHaveBeenCalledTimes(2);
+    });
+
+    it('keeps the request timeout active while reading a stalled body', async () => {
+      vi.mocked(fetchWithTimeout).mockImplementation(async () => {
+        // Headers arrive, then the body never finishes.
+        const response = new Response(new ReadableStream({ start() {} }), { status: 200 });
+        trackResponseDeadline(response, {
+          controller: new AbortController(),
+          expiresAt: performance.now() + 20,
+          timeout: 20,
+        });
+        return response;
+      });
+      const result = await createBlandProvider('bland:agent:a', {
+        config: { timeout: 20 },
+      }).callApi('hi');
+      expect(result.error).toMatch(/timed out after 20 ms/);
     });
 
     it('never asks the scheduler to replay a call', () => {

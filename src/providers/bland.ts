@@ -1,6 +1,7 @@
 import { getEnvString, getProviderEnvString } from '../envars';
 import logger from '../logger';
 import { fetchWithTimeout } from '../util/fetch/index';
+import { readWithResponseDeadline } from '../util/fetch/responseDeadline';
 import { getNunjucksEngine } from '../util/templates';
 import { getRequestTimeoutMs, parseChatPrompt } from './shared';
 
@@ -83,6 +84,13 @@ interface BlandTurn {
   nodeId?: string;
   nodeName?: string;
 }
+
+/**
+ * Chats this process opened. `vars.sessionId` only continues one of these: red team
+ * configs commonly set `sessionId` to a client-side UUID for correlation, and treating
+ * that as a Bland chat ID would skip creating the chat.
+ */
+const openedChats = new Set<string>();
 
 class BlandApiError extends Error {
   constructor(
@@ -296,7 +304,7 @@ export class BlandProvider implements ApiProvider {
         continue;
       }
 
-      const text = await response.text();
+      const text = await readWithResponseDeadline(response, () => response.text());
       let json: BlandEnvelope<T> | undefined;
       try {
         json = text ? (JSON.parse(text) as BlandEnvelope<T>) : undefined;
@@ -348,6 +356,7 @@ export class BlandProvider implements ApiProvider {
     if (!data?.chat_id) {
       throw new Error('Bland did not return a chat_id for the new chat');
     }
+    openedChats.add(data.chat_id);
     return data.chat_id;
   }
 
@@ -444,10 +453,9 @@ export class BlandProvider implements ApiProvider {
       };
     }
 
+    const sessionId = context?.vars?.sessionId;
     const existingSession =
-      typeof context?.vars?.sessionId === 'string' && context.vars.sessionId
-        ? context.vars.sessionId
-        : undefined;
+      typeof sessionId === 'string' && openedChats.has(sessionId) ? sessionId : undefined;
     const turns = existingSession ? [prompt] : getUserTurns(prompt);
 
     const transcript: BlandTurn[] = [];
