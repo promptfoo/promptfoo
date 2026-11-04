@@ -13,8 +13,8 @@ import {
 } from '../src/evaluatorHelpers';
 import logger from '../src/logger';
 import { AIStudioChatProvider } from '../src/providers/google/ai.studio';
-import { getPackageVersion } from '../src/util/packageVersion';
 import { runPython } from '../src/python/pythonUtils';
+import { getPackageVersion } from '../src/util/packageVersion';
 import { transform } from '../src/util/transform';
 import { createMockProvider } from './factories/provider';
 import { mockProcessEnv } from './util/utils';
