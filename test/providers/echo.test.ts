@@ -135,10 +135,7 @@ describe('EchoProvider', () => {
       const controller = new AbortController();
       const response = provider.callApi('Test input', {}, { abortSignal: controller.signal });
       const reason = new Error('pause this evaluation');
-      const rejection = expect(response).rejects.toMatchObject({
-        name: 'AbortError',
-        cause: reason,
-      });
+      const rejection = expect(response).rejects.toBe(reason);
 
       await vi.advanceTimersByTimeAsync(100);
       controller.abort(reason);

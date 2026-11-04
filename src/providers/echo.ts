@@ -1,4 +1,3 @@
-import { getCallerAbortError } from '../util/fetch/requestSignal';
 import { sleep, sleepWithAbort } from '../util/time';
 
 import type { ApiProvider, ProviderOptions, ProviderResponse } from '../types/providers';
@@ -38,7 +37,7 @@ export class EchoProvider implements ApiProvider {
           await sleepWithAbort(this.delay, context.abortSignal);
         } catch (error) {
           if (context.abortSignal.aborted) {
-            throw getCallerAbortError(context.abortSignal);
+            throw context.abortSignal.reason;
           }
           throw error;
         }
