@@ -1037,12 +1037,15 @@ export class GoogleLiveProvider implements ApiProvider {
         }
 
         const result: ProviderResponse = {
-          output: {
-            text: outputText,
-            toolCall: { functionCalls: function_calls_total },
-            statefulApiState,
-            ...(thinking && { thinking }),
-          },
+          output:
+            context?.isGrading && context.prompt.label === 'llm-rubric'
+              ? outputText
+              : {
+                  text: outputText,
+                  toolCall: { functionCalls: function_calls_total },
+                  statefulApiState,
+                  ...(thinking && { thinking }),
+                },
           metadata: {},
         };
 

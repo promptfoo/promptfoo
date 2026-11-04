@@ -822,7 +822,10 @@ describe('GoogleLiveProvider', () => {
         setImmediate(() => {
           mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
           simulateSetupMessage(mockWs);
-          simulateTextMessage(mockWs, 'Fixture image response');
+          simulateTextMessage(
+            mockWs,
+            JSON.stringify({ pass: true, reason: 'Fixture image response' }),
+          );
           simulateCompletionMessage(mockWs);
         });
         return mockWs;
@@ -838,7 +841,7 @@ describe('GoogleLiveProvider', () => {
           { providerResponse: { images: [{ data: 'aW1hZ2U=', mimeType: 'image/png' }] } },
         );
 
-        expect(result.pass).toBe(true);
+        expect(result.pass, result.reason).toBe(true);
         expect(grader.id()).toBe(id || `google:live:${model}`);
         const messages = mockWs.send.mock.calls.map(([message]) => JSON.parse(message as string));
         expect(messages.slice(1)).toEqual([
