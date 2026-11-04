@@ -62,6 +62,26 @@ describe('evaluation token usage', () => {
     });
   });
 
+  it('returns independent evaluation usage snapshots and keeps malformed usage from overwriting prior totals', async () => {
+    const evaluation = await withTokenUsageTracking(async () => {
+      trackResponseUsage('target', { tokenUsage: { total: 5, completion: 5 } });
+      trackResponseUsage('target', { tokenUsage: { total: Number.NaN } });
+      trackResponseUsage('target', {
+        get tokenUsage() {
+          throw new Error('invalid usage');
+        },
+      });
+      trackResponseUsage('absent', undefined);
+      return {};
+    });
+    const snapshot = getProviderTokenUsage(evaluation);
+    const usage = snapshot.get('target')!;
+    expect(usage).toMatchObject({ total: 5, completion: 5, numRequests: 3 });
+    expect(snapshot.has('absent')).toBe(false);
+    usage.total = 99;
+    expect(getProviderTokenUsage(evaluation).get('target')?.total).toBe(5);
+  });
+
   it('restores parent accounting after a nested run and a failed nested run', async () => {
     let child!: object;
     const parent = await withTokenUsageTracking(async () => {
