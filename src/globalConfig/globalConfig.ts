@@ -12,10 +12,56 @@ import { loadYaml } from '../util/yamlLoad';
 import type { GlobalConfig } from '../configTypes';
 
 export function writeGlobalConfig(config: GlobalConfig): void {
-  fs.writeFileSync(
-    path.join(getConfigDirectoryPath(true), 'promptfoo.yaml') /* createIfNotExists */,
-    yaml.dump(config),
-  );
+  let configPath = path.join(getConfigDirectoryPath(true), 'promptfoo.yaml');
+  // Replace the backing file, preserving relative, chained, and dangling config links.
+  for (
+    let links = 0;
+    fs.lstatSync(configPath, { throwIfNoEntry: false })?.isSymbolicLink();
+    links++
+  ) {
+    if (links === 40) {
+      throw new Error('Cannot write global config: too many symbolic links');
+    }
+    const target = fs.readlinkSync(configPath);
+    // Keep target components intact: a directory symlink followed by '..' must be
+    // traversed by the filesystem, not collapsed by path.resolve or path.join.
+    configPath = path.isAbsolute(target)
+      ? target
+      : `${fs.realpathSync(path.dirname(configPath))}${path.sep}${target}`;
+  }
+  const temporaryPath = `${configPath}.${crypto.randomUUID()}.tmp`;
+  const mode = fs.existsSync(configPath) ? fs.statSync(configPath).mode & 0o777 : 0o600;
+  try {
+    fs.writeFileSync(temporaryPath, yaml.dump(config), { mode, flag: 'wx' });
+    // Preserve existing permissions even when the process umask is more restrictive.
+    fs.chmodSync(temporaryPath, mode);
+    fs.renameSync(temporaryPath, configPath);
+  } finally {
+    fs.rmSync(temporaryPath, { force: true });
+  }
+}
+
+/** Read the latest config and persist only the caller's changes in one replacement. */
+export function updateGlobalConfig(update: (config: GlobalConfig) => void): void {
+  const config = readGlobalConfig();
+  update(config);
+  writeGlobalConfig(config);
+}
+
+/** Email verification belongs to the saved address, not to the installation. */
+export function updateAccountEmail(config: GlobalConfig, email?: string): void {
+  const account = (config.account ??= {});
+  if (email) {
+    if (account.email !== email) {
+      account.emailValidated = false;
+      account.emailNeedsValidation = true;
+    }
+    account.email = email;
+  } else {
+    delete account.email;
+    delete account.emailValidated;
+    delete account.emailNeedsValidation;
+  }
 }
 
 export function readGlobalConfig(): GlobalConfig {
@@ -29,10 +75,7 @@ export function readGlobalConfig(): GlobalConfig {
       writeGlobalConfig(globalConfig);
     }
   } else {
-    if (!fs.existsSync(configDir)) {
-      fs.mkdirSync(configDir, { recursive: true });
-    }
-    fs.writeFileSync(configFilePath, yaml.dump(globalConfig));
+    writeGlobalConfig(globalConfig);
   }
 
   return globalConfig;
@@ -43,20 +86,13 @@ export function readGlobalConfig(): GlobalConfig {
  * @param partialConfig New keys to merge into the existing config.
  */
 export function writeGlobalConfigPartial(partialConfig: Partial<GlobalConfig>): void {
-  const currentConfig = readGlobalConfig();
-  // Create a shallow copy of the current config
-  const updatedConfig: GlobalConfig = { ...currentConfig };
-
-  // Use Object.entries for better type safety
-  Object.entries(partialConfig).forEach(([key, value]) => {
-    if (value !== undefined && value !== null) {
-      // Type assertion: we know key is valid from partialConfig, and value matches the key's type
-      (updatedConfig as Record<string, unknown>)[key] = value;
-    } else {
-      // Remove the property if value is falsy
-      delete (updatedConfig as Record<string, unknown>)[key];
+  updateGlobalConfig((config) => {
+    for (const [key, value] of Object.entries(partialConfig)) {
+      if (value !== undefined && value !== null) {
+        (config as Record<string, unknown>)[key] = value;
+      } else {
+        delete (config as Record<string, unknown>)[key];
+      }
     }
   });
-
-  writeGlobalConfig(updatedConfig);
 }

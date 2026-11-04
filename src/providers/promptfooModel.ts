@@ -1,5 +1,7 @@
 import { cloudConfig } from '../globalConfig/cloud';
 import logger from '../logger';
+import { ensureCloudTeamContext } from '../util/cloud';
+import { PROMPTFOO_TEAM_ID_HEADER } from '../util/fetch/monkeyPatchFetch';
 import { fetchWithProviderProxy } from './fetch';
 
 import type {
@@ -101,10 +103,9 @@ export class PromptfooModelProvider implements ApiProvider {
         config: this.config,
       };
 
-      const baseUrl = cloudConfig.getApiHost();
-      const url = `${baseUrl}/api/v1/task`; // Use the standard task endpoint (auth is handled conditionally on the server)
-
-      const authHeaders = cloudConfig.getAuthHeaders();
+      await ensureCloudTeamContext();
+      const { apiHost, headers: authHeaders, teamId } = cloudConfig.getRequestConfig();
+      const url = `${apiHost}/api/v1/task`;
       if (!authHeaders) {
         throw new Error(
           'No Promptfoo auth token available. Please log in with `promptfoo auth login`',
@@ -115,9 +116,11 @@ export class PromptfooModelProvider implements ApiProvider {
       logger.debug('[PromptfooModel] Sending request', { url, payload });
       const response = await fetchWithProviderProxy(url, {
         method: 'POST',
+        skipCloudAuthInjection: true,
         headers: {
           'Content-Type': 'application/json',
           ...authHeaders,
+          ...(teamId ? { [PROMPTFOO_TEAM_ID_HEADER]: teamId } : {}),
         },
         body,
       });

@@ -27,6 +27,7 @@ import {
   neverGenerateRemote,
 } from '../remoteGeneration';
 import { remoteGenerationContextPayload } from '../remoteGenerationContext';
+import { resolveRemoteGenerationUrl } from '../remoteGenerationRequest';
 import {
   assertRemoteMaterializationHandled,
   buildRemoteMaterializedInputVariables,
@@ -376,7 +377,7 @@ export default class GoatProvider implements ApiProvider {
           });
           logger.debug(`[GOAT] Sending request to ${getRemoteGenerationUrl()}: ${body}`);
           response = await fetchWithProxy(
-            getRemoteGenerationUrl(),
+            await resolveRemoteGenerationUrl({ targetId: this.config.targetId }),
             {
               body,
               headers: getRemoteGenerationHeaders(),
@@ -421,7 +422,7 @@ export default class GoatProvider implements ApiProvider {
 
         logger.debug(`[GOAT] Sending request to ${getRemoteGenerationUrl()}: ${body}`);
         response = await fetchWithProxy(
-          getRemoteGenerationUrl(),
+          await resolveRemoteGenerationUrl({ targetId: this.config.targetId }),
           {
             body,
             headers: getRemoteGenerationHeaders(),

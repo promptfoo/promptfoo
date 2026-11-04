@@ -19,6 +19,8 @@ const createGradingResponse = () => ({
   tokenUsage: { total: 100 },
 });
 
+vi.mock('../../src/util/cloud', () => ({ ensureCloudTeamContext: vi.fn() }));
+
 vi.mock('../../src/cache');
 vi.mock('../../src/envars');
 vi.mock('../../src/util/fetch/index.ts');

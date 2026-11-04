@@ -3,6 +3,8 @@ import { BLOB_SCAN_MAX_DEPTH, BLOB_SCAN_MAX_STRING_LENGTH, collectBlobHashes } f
 import { getShareAuthorizedBlob } from './index';
 import { uploadBlobRemote } from './remoteUpload';
 
+import type { cloudConfig } from '../globalConfig/cloud';
+
 export type RemoteBlobUploadCache = Map<string, Promise<boolean>>;
 
 interface ShareBlobUploadContext {
@@ -10,6 +12,7 @@ interface ShareBlobUploadContext {
   remoteEvalId: string;
   promptIdx?: number;
   testIdx?: number;
+  requestConfig?: ReturnType<typeof cloudConfig.getRequestConfig>;
 }
 
 export function createRemoteBlobUploadCache(): RemoteBlobUploadCache {
@@ -41,13 +44,18 @@ async function uploadAuthorizedBlob(
       return false;
     }
 
-    const result = await uploadBlobRemote(blob.data, blob.metadata.mimeType, {
-      evalId: context.remoteEvalId,
-      promptIdx: context.promptIdx,
-      testIdx: context.testIdx,
-      location: 'share',
-      kind: blob.metadata.mimeType.split('/', 1)[0],
-    });
+    const result = await uploadBlobRemote(
+      blob.data,
+      blob.metadata.mimeType,
+      {
+        evalId: context.remoteEvalId,
+        promptIdx: context.promptIdx,
+        testIdx: context.testIdx,
+        location: 'share',
+        kind: blob.metadata.mimeType.split('/', 1)[0],
+      },
+      context.requestConfig,
+    );
 
     if (!result) {
       logger.warn('[Share] Failed to upload referenced blob; shared media may be unavailable', {

@@ -213,6 +213,7 @@ describe('TrueFoundry', () => {
           mockedFetchWithRetries.mock.calls[0];
         expect(url).toBe(`${TRUEFOUNDRY_API_BASE}/chat/completions`);
         expect(request).toEqual({
+          cloudAuthHeaderName: null,
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -793,6 +794,7 @@ describe('TrueFoundry', () => {
         mockedFetchWithRetries.mock.calls[0];
       expect(url).toBe(`${TRUEFOUNDRY_API_BASE}/embeddings`);
       expect(request).toEqual({
+        cloudAuthHeaderName: null,
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

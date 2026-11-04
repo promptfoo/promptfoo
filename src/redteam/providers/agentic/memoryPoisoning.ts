@@ -9,8 +9,9 @@ import {
   createEmptyTokenUsage,
 } from '../../../util/tokenUsageUtils';
 import { REDTEAM_MEMORY_POISONING_PLUGIN_ID } from '../../plugins/agentic/constants';
-import { getRemoteGenerationHeaders, getRemoteGenerationUrl } from '../../remoteGeneration';
+import { getRemoteGenerationHeaders } from '../../remoteGeneration';
 import { remoteGenerationContextPayload } from '../../remoteGenerationContext';
+import { resolveRemoteGenerationUrl } from '../../remoteGenerationRequest';
 import { throwIfTargetPromptExceedsMaxChars } from '../../shared/promptLength';
 import { callTargetProvider, messagesToRedteamHistory } from '../shared';
 
@@ -69,7 +70,7 @@ export class MemoryPoisoningProvider implements ApiProvider {
 
       // Generate a scenario containing memories and follow up questions/commands which are dependent on the memories.
       const scenarioRes = await fetchWithProxy(
-        getRemoteGenerationUrl(),
+        await resolveRemoteGenerationUrl({ targetId: this.targetId }),
         {
           body: JSON.stringify({
             task: 'agentic:memory-poisoning-scenario',

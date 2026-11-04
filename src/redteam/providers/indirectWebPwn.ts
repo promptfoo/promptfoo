@@ -11,6 +11,7 @@ import {
 } from '../../util/tokenUsageUtils';
 import { getRemoteGenerationHeaders, getRemoteGenerationUrl } from '../remoteGeneration';
 import { remoteGenerationContextPayload } from '../remoteGenerationContext';
+import { resolveRemoteGenerationUrl } from '../remoteGenerationRequest';
 import { WebPageTrackingIdsSchema } from '../types/webPage';
 import { getTargetResponse, isTargetCallAbortError } from './shared';
 
@@ -130,7 +131,7 @@ export default class IndirectWebPwnProvider implements ApiProvider {
     goal?: string,
     purpose?: string,
   ): Promise<CreateWebPageResponse> {
-    const url = getRemoteGenerationUrl();
+    const url = await resolveRemoteGenerationUrl({ targetId: this.config.targetId });
     logger.debug('[IndirectWebPwn] Creating web page via task API', {
       url,
       testCaseId,

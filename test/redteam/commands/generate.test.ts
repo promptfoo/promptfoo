@@ -229,7 +229,6 @@ vi.mock('../../../src/util/cloud', async () => ({
   getCloudDatabaseId: vi.fn(),
   getPluginSeverityOverridesFromCloud: vi.fn(),
   isCloudProvider: vi.fn(),
-  getDefaultTeam: vi.fn().mockResolvedValue({ id: 'test-team-id', name: 'Test Team' }),
   checkCloudPermissions: vi.fn().mockResolvedValue(undefined),
   resolveTeamId: vi.fn().mockResolvedValue({ id: 'resolved-team-id', name: 'Resolved Team' }),
 }));
@@ -1832,7 +1831,11 @@ describe('doGenerateRedteam', () => {
       resetCommonMocks();
       vi.mocked(getCustomPolicies).mockReset();
       vi.mocked(resolveTeamId).mockReset();
-      vi.mocked(resolveTeamId).mockResolvedValue({ id: 'resolved-team-id', name: 'Resolved Team' });
+      vi.mocked(resolveTeamId).mockResolvedValue({
+        id: 'resolved-team-id',
+        name: 'Resolved Team',
+        organizationId: 'org-1',
+      });
       vi.mocked(getCustomPolicies).mockResolvedValue(new Map());
 
       mockProvider = createMockProvider({

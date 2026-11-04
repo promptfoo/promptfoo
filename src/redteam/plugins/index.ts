@@ -22,7 +22,6 @@ import { buildPromptInputDescriptions } from '../inputVariables';
 import {
   getRemoteGenerationExplicitlyDisabledError,
   getRemoteGenerationHeaders,
-  getRemoteGenerationUrl,
   getRemoteHealthUrl,
   neverGenerateRemote,
   shouldGenerateRemote,
@@ -31,6 +30,7 @@ import {
   type RedteamGenerationContext,
   remoteGenerationContextPayload,
 } from '../remoteGenerationContext';
+import { resolveRemoteGenerationUrl } from '../remoteGenerationRequest';
 import {
   assertRemoteMaterializationHandled,
   type RemoteMaterializationResponse,
@@ -396,7 +396,7 @@ async function fetchRemoteTestCases(
       [MAX_CHARS_PER_MESSAGE_MODIFIER_KEY]: maxCharsModifier,
     };
   }
-  const body = JSON.stringify({
+  const body = {
     config: configForRemote,
     injectVar,
     // Send inputs at top level for server compatibility (server expects it there)
@@ -407,7 +407,7 @@ async function fetchRemoteTestCases(
     ...remoteGenerationContextPayload(redteamGenerationContext),
     version: VERSION,
     email: getUserEmail(),
-  });
+  };
 
   interface PluginGenerationResponse extends RemoteMaterializationResponse {
     result?: TestCase[];
@@ -417,11 +417,11 @@ async function fetchRemoteTestCases(
   let responseRecorded = false;
   try {
     const { cached, data, status, statusText } = await fetchWithCache<PluginGenerationResponse>(
-      getRemoteGenerationUrl(),
+      await resolveRemoteGenerationUrl(body),
       {
         method: 'POST',
         headers: getRemoteGenerationHeaders(),
-        body,
+        body: JSON.stringify(body),
       },
       getRequestTimeoutMs(),
     );

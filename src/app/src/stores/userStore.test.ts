@@ -1,6 +1,6 @@
 import { callApi, fetchUserId } from '@app/utils/api';
 import { act } from '@testing-library/react';
-import { beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 import { useUserStore } from './userStore';
 
 vi.mock('@app/utils/api', () => ({
@@ -17,8 +17,13 @@ describe('useUserStore', () => {
   const initialState = useUserStore.getState();
 
   beforeEach(() => {
-    vi.clearAllMocks();
+    vi.resetAllMocks();
     useUserStore.setState(initialState, true);
+  });
+
+  afterEach(() => {
+    useUserStore.setState(initialState, true);
+    vi.resetAllMocks();
   });
 
   const verifyInitialState = () => {
@@ -193,40 +198,30 @@ describe('useUserStore', () => {
       expect(useUserStore.getState().isLoading).toBe(false);
     });
 
-    it('should clear user state even on logout API failure', async () => {
-      // Set initial state
-      useUserStore.getState().setEmail('test@example.com');
-      useUserStore.getState().setUserId('test-user-id');
+    it.each(['API failure', 'network error'])(
+      'preserves the signed-in user and propagates %s',
+      async (failure) => {
+        useUserStore.setState({
+          email: 'test@example.com',
+          userId: 'test-user-id',
+          isLoading: false,
+        });
+        if (failure === 'API failure') {
+          mockedCallApi.mockResolvedValue({ ok: false, status: 500 });
+        } else {
+          mockedCallApi.mockRejectedValue(new Error('Network error'));
+        }
 
-      mockedCallApi.mockResolvedValue({
-        ok: false,
-        status: 500,
-      });
-
-      await act(async () => {
-        await useUserStore.getState().logout();
-      });
-
-      // Should still clear state even if API call fails
-      verifyEmailState(null);
-      verifyUserIdState(null);
-      expect(useUserStore.getState().isLoading).toBe(false);
-    });
-
-    it('should clear user state on logout network error', async () => {
-      // Set initial state
-      useUserStore.getState().setEmail('test@example.com');
-
-      mockedCallApi.mockRejectedValue(new Error('Network error'));
-
-      await act(async () => {
-        await useUserStore.getState().logout();
-      });
-
-      // Should clear state even on network error
-      verifyEmailState(null);
-      verifyUserIdState(null);
-    });
+        await expect(useUserStore.getState().logout()).rejects.toThrow(
+          failure === 'API failure' ? 'Logout failed' : 'Network error',
+        );
+        expect(useUserStore.getState()).toMatchObject({
+          email: 'test@example.com',
+          userId: 'test-user-id',
+          isLoading: false,
+        });
+      },
+    );
   });
 
   describe('clearUser', () => {

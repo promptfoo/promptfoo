@@ -19,8 +19,8 @@ import {
 import { cloudConfig } from '../../src/globalConfig/cloud';
 import {
   readGlobalConfig,
+  updateGlobalConfig,
   writeGlobalConfig,
-  writeGlobalConfigPartial,
 } from '../../src/globalConfig/globalConfig';
 import logger from '../../src/logger';
 import telemetry from '../../src/telemetry';
@@ -46,7 +46,12 @@ vi.mock('../../src/telemetry', () => {
   };
 });
 vi.mock('../../src/util/fetch/index.ts');
-vi.mock('../../src/globalConfig/globalConfig');
+vi.mock('../../src/globalConfig/globalConfig', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../src/globalConfig/globalConfig')>()),
+  readGlobalConfig: vi.fn(),
+  updateGlobalConfig: vi.fn(),
+  writeGlobalConfig: vi.fn(),
+}));
 vi.mock('../../src/util');
 vi.mock('../../src/logger');
 
@@ -54,6 +59,12 @@ describe('accounts', () => {
   beforeEach(() => {
     vi.stubEnv('PROMPTFOO_API_KEY', undefined);
     vi.clearAllMocks();
+    vi.mocked(updateGlobalConfig).mockImplementation((update) => {
+      const config = structuredClone(readGlobalConfig() ?? {});
+      update(config);
+      writeGlobalConfig(config);
+      vi.mocked(readGlobalConfig).mockReturnValue(config);
+    });
   });
 
   afterEach(() => {
@@ -87,7 +98,7 @@ describe('accounts', () => {
       expect(result).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i);
 
       // Should have saved the config with the new ID
-      expect(writeGlobalConfig).toHaveBeenCalledWith({
+      expect(vi.mocked(writeGlobalConfig).mock.lastCall?.[0]).toMatchObject({
         account: { email: 'test@example.com' },
         id: result,
       });
@@ -105,7 +116,7 @@ describe('accounts', () => {
       expect(result).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i);
 
       // Should have saved the config with the new ID
-      expect(writeGlobalConfig).toHaveBeenCalledWith({
+      expect(vi.mocked(writeGlobalConfig).mock.lastCall?.[0]).toMatchObject({
         id: result,
       });
     });
@@ -120,7 +131,7 @@ describe('accounts', () => {
       expect(result).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i);
 
       // Should have saved the config with the new ID
-      expect(writeGlobalConfig).toHaveBeenCalledWith({
+      expect(vi.mocked(writeGlobalConfig).mock.lastCall?.[0]).toMatchObject({
         id: result,
       });
     });
@@ -210,8 +221,8 @@ describe('accounts', () => {
       });
       const email = 'test@example.com';
       setUserEmail(email);
-      expect(writeGlobalConfigPartial).toHaveBeenCalledWith({
-        account: { email },
+      expect(vi.mocked(writeGlobalConfig).mock.lastCall?.[0]).toMatchObject({
+        account: { email, emailValidated: false, emailNeedsValidation: true },
       });
     });
   });
@@ -223,9 +234,7 @@ describe('accounts', () => {
         account: { email: 'test@example.com' },
       });
       clearUserEmail();
-      expect(writeGlobalConfigPartial).toHaveBeenCalledWith({
-        account: {},
-      });
+      expect(vi.mocked(writeGlobalConfig).mock.lastCall?.[0]?.account).toEqual({});
     });
 
     it('should handle clearing when no account exists', () => {
@@ -233,17 +242,13 @@ describe('accounts', () => {
         id: 'test-id',
       });
       clearUserEmail();
-      expect(writeGlobalConfigPartial).toHaveBeenCalledWith({
-        account: {},
-      });
+      expect(vi.mocked(writeGlobalConfig).mock.lastCall?.[0]?.account).toEqual({});
     });
 
     it('should handle clearing when global config is empty', () => {
       vi.mocked(readGlobalConfig).mockReturnValue({});
       clearUserEmail();
-      expect(writeGlobalConfigPartial).toHaveBeenCalledWith({
-        account: {},
-      });
+      expect(vi.mocked(writeGlobalConfig).mock.lastCall?.[0]?.account).toEqual({});
     });
   });
 
@@ -356,7 +361,7 @@ describe('accounts', () => {
 
       await promptForEmailUnverified();
 
-      expect(writeGlobalConfigPartial).toHaveBeenCalledWith({
+      expect(vi.mocked(writeGlobalConfig).mock.lastCall?.[0]).toMatchObject({
         account: { email: 'new@example.com' },
       });
       // save consent is now called after validation, not in promptForEmailUnverified

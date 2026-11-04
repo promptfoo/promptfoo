@@ -19,6 +19,12 @@ const mockFsMkdirSync = vi.hoisted(() => vi.fn());
 const mockFsWriteFileSync = vi.hoisted(() => vi.fn());
 const mockFsReaddirSync = vi.hoisted(() => vi.fn());
 
+// File mocks below describe input fixtures, not the installation's saved account.
+vi.mock('../../../src/globalConfig/globalConfig', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../../src/globalConfig/globalConfig')>()),
+  readGlobalConfig: vi.fn(() => ({ id: 'test-installation' })),
+}));
+
 vi.mock('fs', async (importOriginal) => {
   const actual = await importOriginal<typeof import('fs')>();
   return {

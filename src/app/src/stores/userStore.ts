@@ -53,23 +53,16 @@ export const useUserStore = create<UserState>((set, getState) => ({
     }
   },
   logout: async () => {
-    try {
-      const response = await callApi('/user/logout', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      });
-
-      if (!response.ok) {
-        console.error('Logout failed');
-      }
-    } catch (error) {
-      console.error('Error during logout:', error);
-    } finally {
-      // Clear local state even if logout fails.
-      getState().clearUser();
+    const response = await callApi('/user/logout', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    });
+    if (!response.ok) {
+      throw new Error('Logout failed. Please try again.');
     }
+    getState().clearUser();
   },
   clearUser: () =>
     set((state) => ({

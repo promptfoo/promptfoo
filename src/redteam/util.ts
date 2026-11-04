@@ -13,12 +13,9 @@ import {
   type MaterializedInputVariablesResult,
   materializeInputVariablesWithMetadata,
 } from './inputVariables';
-import {
-  getRemoteGenerationHeaders,
-  getRemoteGenerationUrl,
-  neverGenerateRemote,
-} from './remoteGeneration';
+import { getRemoteGenerationHeaders, neverGenerateRemote } from './remoteGeneration';
 import { remoteGenerationContextPayload } from './remoteGenerationContext';
+import { resolveRemoteGenerationUrl } from './remoteGenerationRequest';
 
 import type { ApiProvider, CallApiContextParams, ProviderResponse } from '../types/index';
 
@@ -369,7 +366,7 @@ export async function extractGoalFromPrompt(
   let responseRecorded = false;
   try {
     const { cached, data, status, statusText } = await fetchWithCache<ExtractIntentResponse>(
-      getRemoteGenerationUrl(),
+      await resolveRemoteGenerationUrl(requestBody),
       {
         method: 'POST',
         headers: getRemoteGenerationHeaders(),

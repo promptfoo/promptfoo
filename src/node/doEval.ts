@@ -31,7 +31,12 @@ import { flushOtel, shutdownOtel } from '../tracing/otelSdk';
 import { EMAIL_OK_STATUS } from '../types/email';
 import { isCliEventSource } from '../types/eventSource';
 import { CommandLineOptionsSchema, MAX_SUGGESTIONS_COUNT, TestSuiteSchema } from '../types/index';
-import { checkCloudPermissions, getEvalConfigFromCloud, getOrgContext } from '../util/cloud';
+import {
+  checkCloudPermissions,
+  getEvalConfigFromCloud,
+  getOrgContext,
+  resolveCloudTeam,
+} from '../util/cloud';
 import { loadDefaultConfig } from '../util/config/default';
 import { DEFAULT_CONFIG_EXTENSIONS } from '../util/config/extensions';
 import {
@@ -791,7 +796,7 @@ async function doEvalWithEnv(
       });
     }
 
-    await checkCloudPermissions(config as UnifiedConfig);
+    const cloudTeam = await checkCloudPermissions(config as UnifiedConfig);
 
     const providerFilter = resumeEval ? persistedProviderFilter : cliProviderFilter;
 
@@ -1061,9 +1066,17 @@ async function doEvalWithEnv(
     // Start sharing in background (don't await yet) - this allows us to show results immediately
     const willShare = wantsToShare && canShareEval;
     let sharePromise: Promise<string | null> | null = null;
+    let shareTeamPromise: ReturnType<typeof resolveCloudTeam> | undefined;
     if (willShare) {
       // Start the share operation in background with silent mode (no progress bar)
-      sharePromise = createShareableUrl(evalRecord, { silent: true });
+      shareTeamPromise = cloudTeam
+        ? Promise.resolve(cloudTeam)
+        : resolveCloudTeam(evalRecord.config);
+      sharePromise = shareTeamPromise.then((team) =>
+        createShareableUrl(evalRecord, { silent: true, ...(team && { cloudTeam: team }) }),
+      );
+      // Handle early failures while rendering results; the original promise is reported below.
+      void sharePromise.catch(() => {});
     }
 
     const { successes, failures, errors, cacheHits, tokenUsage } = evalRecord.getStats();
@@ -1163,14 +1176,13 @@ async function doEvalWithEnv(
     // Now wait for share to complete and show spinner (as the last output)
     let shareableUrl: string | null = null;
     if (sharePromise != null) {
-      // Determine org context for spinner text
-      const orgContext = await getOrgContext();
-      const orgSuffix = orgContext
-        ? ` to ${orgContext.organizationName}${orgContext.teamName ? ` > ${orgContext.teamName}` : ''}`
-        : '';
-
       // Only show spinner in TTY (not CI)
       if (process.stdout.isTTY && !isCI()) {
+        const team = await shareTeamPromise?.catch(() => undefined);
+        const orgContext = team ? await getOrgContext(team) : null;
+        const orgSuffix = orgContext
+          ? ` to ${orgContext.organizationName}${orgContext.teamName ? ` > ${orgContext.teamName}` : ''}`
+          : '';
         const spinner = ora({
           text: `Sharing${orgSuffix}...`,
           prefixText: chalk.dim('»'),
