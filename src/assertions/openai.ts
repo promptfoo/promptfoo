@@ -205,7 +205,7 @@ export const handleIsValidOpenAiToolsCall = async ({
     return verdict(false, 'OpenAI did not return a valid-looking tools response');
   }
 
-  let tools = (provider as OpenAiChatCompletionProvider).config?.tools;
+  let tools: unknown = (provider as OpenAiChatCompletionProvider).config?.tools;
   try {
     if (tools) {
       const loadedTools = await maybeLoadToolsFromExternalFile(tools, test.vars);
