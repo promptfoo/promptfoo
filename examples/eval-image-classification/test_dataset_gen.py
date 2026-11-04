@@ -19,7 +19,9 @@ class DatasetGenerationTest(unittest.TestCase):
         self.directory = tempfile.TemporaryDirectory()
         self.addCleanup(self.directory.cleanup)
         self.path = Path(self.directory.name)
-        self.images = struct.pack(">IIII", 2051, 20, 28, 28) + b"".join(bytes([pixel]) * 784 for pixel in range(20))
+        self.images = struct.pack(">IIII", 2051, 20, 28, 28) + b"".join(
+            bytes([pixel]) * 784 for pixel in range(20)
+        )
         self.labels = struct.pack(">II", 2049, 20) + bytes(range(10)) * 2
         self.write_fixture()
 
