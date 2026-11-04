@@ -194,15 +194,15 @@ describe('OpenAICodexSDKProvider', () => {
     await clearCache();
   });
 
-  it.each(['0.156.0', '0.166.0', '1.0.0', 'invalid', null])(
+  it.each(['0.156.0', '0.166.0-beta.1', '0.167.0', '1.0.0', 'invalid', null])(
     'rejects incompatible SDK %s before importing it',
     async (version) => {
       vi.mocked(getPackageVersion).mockReturnValue(version);
       const provider = new OpenAICodexSDKProvider({ config: { apiKey: 'test-key' } });
       const response = await provider.callApi('test');
-      expect(response.error).toContain('requires @openai/codex-sdk@>=0.156.1 <0.166.0');
+      expect(response.error).toContain('requires @openai/codex-sdk@>=0.156.1 <0.167.0');
       expect(response.error).toContain(
-        'npm install promptfoo "@openai/codex-sdk@>=0.156.1 <0.166.0"',
+        'npm install promptfoo "@openai/codex-sdk@>=0.156.1 <0.167.0"',
       );
       expect(importModule).not.toHaveBeenCalled();
     },
@@ -381,7 +381,8 @@ describe('OpenAICodexSDKProvider', () => {
 
   describe('callApi', () => {
     describe('basic functionality', () => {
-      it('should successfully call API with simple prompt', async () => {
+      it('runs a simple prompt with SDK 0.166.0', async () => {
+        vi.mocked(getPackageVersion).mockReturnValue('0.166.0');
         mockRun.mockResolvedValue(
           createMockResponse('Test response', {
             input_tokens: 10,

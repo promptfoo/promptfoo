@@ -111,8 +111,7 @@ function isValidTraceparent(traceparent: string | undefined): traceparent is str
 /**
  * OpenAI Codex SDK Provider
  *
- * This provider requires the @openai/codex-sdk package to be installed separately:
- *   npm install promptfoo @openai/codex-sdk@^0.156.1
+ * Install the optional @openai/codex-sdk package in the eval project.
  *
  * Key features:
  * - Supports API key auth or existing Codex/ChatGPT login state
@@ -597,7 +596,7 @@ function buildCodexRateLimitResponse(
   };
 }
 
-export const CODEX_SDK_VERSION_RANGE = '>=0.156.1 <0.166.0';
+export const CODEX_SDK_VERSION_RANGE = '>=0.156.1 <0.167.0';
 
 export function resolveCodexSdkPackage(): string | null {
   const basePaths = [

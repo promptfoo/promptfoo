@@ -933,7 +933,7 @@ const { results } = await record.toEvaluateSummary();
 assert.equal(results.length, installed ? 4 : 2);
 const expectedSdkErrors = {
   'openai:codex-sdk': {
-    install: 'npm install promptfoo "@openai/codex-sdk@>=0.156.1 <0.166.0"',
+    install: 'npm install promptfoo "@openai/codex-sdk@>=0.156.1 <0.167.0"',
     incompatible: 'found 0.154.0',
   },
   'anthropic:claude-agent-sdk': {
