@@ -264,10 +264,10 @@ async function calculateWithOptimizedQuery(opts: FilteredMetricsOptions): Promis
       SUM(score) as total_score,
       SUM(latency_ms) as total_latency,
       SUM(cost) as total_cost,
-      SUM(CASE WHEN json_extract(response, '$.incurredCost') IS NOT NULL
-        OR json_extract(response, '$.cached') = 1 THEN 1 ELSE 0 END) as has_incurred_cost,
-      SUM(COALESCE(json_extract(response, '$.incurredCost'),
-        CASE WHEN json_extract(response, '$.cached') = 1 THEN 0 ELSE cost END, 0)) as incurred_cost,
+      SUM(CASE WHEN json_extract(${response}, '$.incurredCost') IS NOT NULL
+        OR json_extract(${response}, '$.cached') = 1 THEN 1 ELSE 0 END) as has_incurred_cost,
+      SUM(COALESCE(json_extract(${response}, '$.incurredCost'),
+        CASE WHEN json_extract(${response}, '$.cached') = 1 THEN 0 ELSE cost END, 0)) as incurred_cost,
       -- Token usage aggregation (token usage is inside response JSON)
       SUM(${jsonUsageTotal(response, targetPath)}) as total_tokens,
       SUM(${jsonUsageNumber(response, targetPath, 'prompt')}) as prompt_tokens,
