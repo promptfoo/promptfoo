@@ -6,6 +6,7 @@ import { describe, expect, it, vi } from 'vitest';
 import * as cache from '../../../../src/cache';
 import { BedrockOpenAiResponsesProvider } from '../../../../src/providers/bedrock/openaiResponses';
 import { OpenAiResponsesProvider } from '../../../../src/providers/openai/responses';
+import { fetchWithRetries } from '../../../../src/util/fetch/index';
 
 const responseData = {
   id: 'resp_astra',
@@ -407,12 +408,16 @@ describe('GPT-6 Sol and Luna Responses billing', () => {
         [false, data],
         [true, `data: ${JSON.stringify({ type: 'response.failed', response: data })}\n\n`],
       ] as const) {
-        vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
-          cached: false,
-          status: 200,
-          statusText: 'OK',
-          data: upstream,
-        });
+        if (stream) {
+          vi.mocked(fetchWithRetries).mockResolvedValueOnce(new Response(upstream as string));
+        } else {
+          vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
+            cached: false,
+            status: 200,
+            statusText: 'OK',
+            data: upstream,
+          });
+        }
         const result = await new OpenAiResponsesProvider(`openai/${model}`, {
           config: { apiKey: 'test-key', apiBaseUrl: 'https://openrouter.ai/api/v1', stream },
         }).callApi('A test prompt');
@@ -512,7 +517,11 @@ describe('GPT-6 Sol and Luna Responses billing', () => {
             'https://openrouter.ai/api/v1',
             'https://proxy.example.test/openrouter/api/v1',
           ]) {
-            vi.mocked(cache.fetchWithCache).mockResolvedValueOnce(createMockFetchResponse(raw));
+            if (stream) {
+              vi.mocked(fetchWithRetries).mockResolvedValueOnce(new Response(raw as string));
+            } else {
+              vi.mocked(cache.fetchWithCache).mockResolvedValueOnce(createMockFetchResponse(raw));
+            }
             const result = await new OpenAiResponsesProvider(`openai/${model}`, {
               config: { apiKey: 'test-key', apiBaseUrl, stream },
             }).callApi('A benign test prompt');
@@ -666,7 +675,9 @@ describe('GPT-6 Sol and Luna Responses billing', () => {
       ]) {
         for (const { events, refusal } of cases) {
           const raw = events.map((event) => `data: ${JSON.stringify(event)}\n\n`).join('');
-          vi.mocked(cache.fetchWithCache).mockResolvedValueOnce(createMockFetchResponse(raw));
+          vi.mocked(fetchWithRetries).mockResolvedValueOnce(
+            new Response(raw, { status: 200, statusText: 'OK' }),
+          );
           const result = await new OpenAiResponsesProvider(model, {
             config: { apiKey: 'test-key', apiBaseUrl, stream: true },
           }).callApi('A benign test prompt');
