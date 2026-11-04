@@ -38,3 +38,7 @@ declare module 'ibm-cloud-sdk-core' {
 
 // Optional dependency used by transformers providers through dynamic imports.
 declare module '@huggingface/transformers';
+
+// Optional peer dependency, imported lazily by the HTTP provider only when JKS
+// signature auth or mTLS is configured, and cast at the use site.
+declare module 'jks-js';

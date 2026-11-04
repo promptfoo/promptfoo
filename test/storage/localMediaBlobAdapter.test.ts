@@ -95,6 +95,53 @@ describe('local media blob adapter', () => {
     expect(await fs.readFile(path.join(staging, 'data'))).toEqual(payload);
   });
 
+  it.each(['delete', 'stale lookup'] as const)(
+    'preserves later legacy index entries during %s from an older snapshot',
+    async (operation) => {
+      const legacyKey = await writeLegacy();
+      const laterPayload = Buffer.from('later legacy content');
+      const laterHash = createHash('sha256').update(laterPayload).digest('hex');
+      const laterKey = `image/${laterHash.slice(0, 12)}.jpg`;
+      await fs.writeFile(path.join(directory, laterKey), laterPayload);
+      const indexPath = path.join(directory, 'hash-index.json');
+      const laterIndex = JSON.stringify({ [hash]: legacyKey, [laterHash]: laterKey });
+      await fs.writeFile(indexPath, laterIndex);
+
+      if (operation === 'delete') {
+        await provider.delete(legacyKey);
+      } else {
+        await fs.unlink(path.join(directory, legacyKey));
+        expect(await provider.findByHash(hash)).toBeNull();
+      }
+
+      expect(await fs.readFile(indexPath, 'utf8')).toBe(laterIndex);
+      const restarted = new LocalFileSystemProvider({ basePath: directory });
+      expect(await restarted.findByHash(laterHash)).toBe(laterKey);
+      expect(await restarted.retrieve(laterKey)).toEqual(laterPayload);
+      expect(await restarted.findByHash(hash)).toBeNull();
+      const replacement = await restarted.store(payload, metadata);
+      expect(replacement.ref.key).toBe(key);
+      expect(replacement.deduplicated).toBe(false);
+      expect(await restarted.findByHash(hash)).toBe(key);
+      expect(await fs.readFile(indexPath, 'utf8')).toBe(laterIndex);
+    },
+  );
+
+  it('preserves the legacy index when deleting the data fails', async () => {
+    const legacyKey = await writeLegacy();
+    const indexPath = path.join(directory, 'hash-index.json');
+    const originalIndex = await fs.readFile(indexPath, 'utf8');
+    const legacyPath = path.join(directory, legacyKey);
+    await fs.unlink(legacyPath);
+    await fs.mkdir(legacyPath);
+
+    await expect(provider.delete(legacyKey)).rejects.toMatchObject({
+      code: expect.stringMatching(/^(EISDIR|EPERM)$/),
+    });
+    expect(await fs.readFile(indexPath, 'utf8')).toBe(originalIndex);
+    expect((await fs.stat(legacyPath)).isDirectory()).toBe(true);
+  });
+
   it('stores new bytes by full hash and preserves the media reference metadata', async () => {
     const first = await storeMedia(payload, metadata);
     expect(first).toEqual({
@@ -314,7 +361,9 @@ describe('local media blob adapter', () => {
       JSON.stringify({ [hash]: `image/${hash.slice(0, 12)}.jpg` }),
     );
     const restarted = new LocalFileSystemProvider({ basePath: directory });
+    const originalIndex = await fs.readFile(path.join(directory, 'hash-index.json'), 'utf8');
     const result = await restarted.store(payload, metadata);
+    expect(await fs.readFile(path.join(directory, 'hash-index.json'), 'utf8')).toBe(originalIndex);
     expect(result.ref.key).toBe(key);
     expect(await restarted.findByHash(hash)).toBe(key);
     expect(await restarted.retrieve(key)).toEqual(payload);

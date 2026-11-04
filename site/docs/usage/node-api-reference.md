@@ -114,6 +114,8 @@ async function loadApiProvider(
 
 **Returns:** Configured `ApiProvider` instance ready to call
 
+When calling a provider directly, use `await provider.cleanup?.()` in a `finally` block after its last call to release workers, connections, or model pipelines. Finish active calls before cleanup; use an abort signal to cancel an individual request.
+
 **Example:**
 
 ```typescript
@@ -123,9 +125,12 @@ const openaiProvider = await loadApiProvider('openai:chat:gpt-5.5', {
   env: { OPENAI_API_KEY: process.env.MY_SECRET_KEY },
 });
 
-const response = await openaiProvider.callApi('Hello, world!');
-
-console.log(response.output);
+try {
+  const response = await openaiProvider.callApi('Hello, world!');
+  console.log(response.output);
+} finally {
+  await openaiProvider.cleanup?.();
+}
 ```
 
 **Supported Provider Types:**
