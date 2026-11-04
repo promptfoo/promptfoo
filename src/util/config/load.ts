@@ -16,6 +16,7 @@ import { importModule } from '../../esm';
 import logger from '../../logger';
 import { readPrompts, readProviderPromptMap } from '../../prompts/index';
 import { loadApiProviders, resolveProviderConfigs } from '../../providers/index';
+import { trackConfiguredProviders } from '../../providers/lifecycle';
 import telemetry from '../../telemetry';
 import {
   type CommandLineOptions,
@@ -1177,6 +1178,7 @@ async function resolveLoadedConfig(
     env: runtimeEnv,
     basePath,
   });
+  trackConfiguredProviders(parsedProviders, filteredProviderConfigs);
   const testConfigs = await readTestSources(
     testSources?.length
       ? testSources
