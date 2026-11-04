@@ -19,7 +19,7 @@ import cliState from './cliState';
 import { DEFAULT_MAX_CONCURRENCY, FILE_METADATA_KEY } from './constants';
 import { getEnvBool, getEnvInt, getEvalTimeoutMs, getMaxEvalTimeMs, isCI } from './envars';
 import { collectFileMetadata, renderPrompt, runExtensionHook } from './evaluatorHelpers';
-import logger, { globalLogCallback, setLogCallback } from './logger';
+import logger, { globalLogCallback, isDebugEnabled, setLogCallback } from './logger';
 import { selectMaxScore } from './matchers/comparison';
 import { getGradingProvider } from './matchers/providers';
 import {
@@ -537,6 +537,8 @@ function getRedteamInjectVar(test: AtomicTestCase, prompt: Prompt, testSuite?: T
 }
 
 const deferredGradingPromises = new WeakMap<EvaluateResult, Promise<void>>();
+// Only retain a boolean; transforms may intentionally remove private output.
+const changedGradingOutputs = new WeakSet<EvaluateResult>();
 
 const PROVIDER_GROUPED_ASSERTION_TYPES = new Set<AssertionType>([
   ...MODEL_GRADED_ASSERTION_TYPES,
@@ -763,7 +765,12 @@ function applyDeferredGradingError(
       pass: false,
       score: 0,
       reason: row.error!,
-      metadata: { [PROMPTFOO_METADATA_KEY]: { assertionGradingInterrupted: true } },
+      metadata: {
+        [PROMPTFOO_METADATA_KEY]: {
+          assertionGradingInterrupted: true,
+          ...(changedGradingOutputs.has(row) && { assertionGradingOutputChanged: true }),
+        },
+      },
     };
   }
 }
@@ -853,7 +860,6 @@ function createRunEvalState({
  * producer in lockstep.
  */
 const EVAL_RUNTIME_VAR_KEYS = ['__evalId', '__evalStepId', '__repeatIndex'] as const;
-const EVAL_RUNTIME_VAR_KEY_SET: ReadonlySet<string> = new Set(EVAL_RUNTIME_VAR_KEYS);
 type EvalRuntimeVars = Partial<Record<(typeof EVAL_RUNTIME_VAR_KEYS)[number], Vars[string]>>;
 
 function getEvalRuntimeVars({
@@ -884,11 +890,10 @@ function getEvalRuntimeVars({
  * with the provider call context.
  */
 function omitEvalRuntimeVars(vars: Vars): Vars {
-  const result: Vars = {};
-  for (const [key, value] of Object.entries(vars)) {
-    if (!EVAL_RUNTIME_VAR_KEY_SET.has(key)) {
-      result[key] = value;
-    }
+  // Keep non-serialized metadata needed by assertion and grader providers.
+  const result: Vars = { ...vars };
+  for (const key of EVAL_RUNTIME_VAR_KEYS) {
+    delete result[key];
   }
   return result;
 }
@@ -1456,7 +1461,6 @@ async function applyRunEvalResponseOutcome({
   abortSignal,
   deferGrading,
   evalId,
-  isRedteam,
   latencyMs,
   onGradingStarted,
   prompt,
@@ -1476,7 +1480,6 @@ async function applyRunEvalResponseOutcome({
   abortSignal?: AbortSignal;
   deferGrading?: boolean;
   evalId?: string;
-  isRedteam: boolean;
   latencyMs: number;
   onGradingStarted?: (row: EvaluateResult) => void;
   prompt: Prompt;
@@ -1501,7 +1504,12 @@ async function applyRunEvalResponseOutcome({
   }
 
   if (response.output === null || response.output === undefined) {
-    applyEmptyResponseOutcome(ret, isRedteam);
+    // An absent provider result is an integration error, including in redteam
+    // scans. An intentional empty string still proceeds to the assertions.
+    ret.success = false;
+    ret.score = 0;
+    ret.error = 'No output';
+    ret.failureReason = ResultFailureReason.ERROR;
     return;
   }
 
@@ -1525,16 +1533,6 @@ async function applyRunEvalResponseOutcome({
     traceContext,
     vars,
   });
-}
-
-function applyEmptyResponseOutcome(ret: EvaluateResult, isRedteam: boolean) {
-  if (isRedteam) {
-    ret.success = true;
-  } else {
-    ret.success = false;
-    ret.score = 0;
-    ret.error = 'No output';
-  }
 }
 
 async function gradeRunEvalResponse({
@@ -1607,18 +1605,27 @@ async function gradeRunEvalResponse({
     invariant(providerCallQueue, 'providerCallQueue is required when deferGrading is enabled');
   }
   ret.response = processedResponse;
-  onGradingStarted?.({
-    ...ret,
-    response: {
-      ...processedResponse,
-      metadata: { ...processedResponse.metadata },
-      providerTransformedOutput,
-    },
-    testCase: { ...test, vars: { ...vars } },
-    tokenUsage: structuredClone(ret.tokenUsage),
-    namedScores: { ...ret.namedScores },
-    metadata: { ...ret.metadata },
-  });
+  const outputChanged = !isDeepStrictEqual(providerTransformedOutput, processedResponse.output);
+  if (outputChanged) {
+    changedGradingOutputs.add(ret);
+  }
+  if (onGradingStarted) {
+    const gradingSnapshot: EvaluateResult = {
+      ...ret,
+      response: {
+        ...processedResponse,
+        metadata: { ...processedResponse.metadata },
+      },
+      testCase: { ...test, vars: { ...vars } },
+      tokenUsage: structuredClone(ret.tokenUsage),
+      namedScores: { ...ret.namedScores },
+      metadata: { ...ret.metadata },
+    };
+    if (outputChanged) {
+      changedGradingOutputs.add(gradingSnapshot);
+    }
+    onGradingStarted(gradingSnapshot);
+  }
   const gradingPromise = withProviderCallExecutionContext(
     { ...getProviderCallExecutionContext(), abortSignal, providerCallQueue, rateLimitRegistry },
     () =>
@@ -1644,7 +1651,6 @@ async function gradeRunEvalResponse({
     }
     applyDeferredGradingError(ret, error, abortSignal);
     if (interrupted) {
-      ret.response = { ...processedResponse, providerTransformedOutput };
       ret.testCase = { ...test, vars: { ...vars } };
     }
   });
@@ -1978,7 +1984,6 @@ async function runEvalInContext(
             abortSignal,
             deferGrading,
             evalId,
-            isRedteam,
             latencyMs,
             prompt,
             promptIdx: promptIndex,
@@ -4070,6 +4075,8 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
         const previousNamedScores = row.namedScores;
         const metadataChanged =
           result.gradingResult?.metadata?.[PROMPTFOO_METADATA_KEY]?.assertionGradingMetadataChanged;
+        const outputChanged =
+          result.gradingResult?.metadata?.[PROMPTFOO_METADATA_KEY]?.assertionGradingOutputChanged;
         row.error = undefined;
         row.failureReason = ResultFailureReason.NONE;
         row.gradingResult = undefined;
@@ -4081,6 +4088,11 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
         const timeout =
           timeoutMs > 0 ? setTimeout(() => timeoutController.abort(), timeoutMs) : undefined;
         try {
+          if (outputChanged) {
+            throw new Error(
+              'Cannot resume assertion grading: a transform changed the output. Rerun the test to grade the original inputs.',
+            );
+          }
           if (metadataChanged) {
             throw new Error(
               'Cannot resume assertion grading: afterEach changed metadata. Rerun the test to grade the original inputs.',
@@ -4116,7 +4128,11 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
                     return runAssertions({
                       prompt: result.prompt.raw,
                       provider: step.provider,
-                      providerResponse,
+                      providerResponse: {
+                        ...providerResponse,
+                        providerTransformedOutput:
+                          providerResponse.providerTransformedOutput ?? providerResponse.output,
+                      },
                       test,
                       vars: test.vars ?? {},
                       latencyMs: row.latencyMs,
@@ -4139,7 +4155,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
         } finally {
           clearTimeout(timeout);
         }
-        if (metadataChanged) {
+        if (metadataChanged || outputChanged) {
           row.namedScores = previousNamedScores;
         } else {
           await applyAfterEachHook(row, test, testSuite);
@@ -4176,6 +4192,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
             row,
           });
         }
+        this.currentResultKeys.add(getResultIndexKey(row));
         this.trackRowStats(row);
         this.trackFinalJsonlResult(result);
         await this.store.saveResult(result);
@@ -4278,10 +4295,6 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
 
       await this.persistEvalRow(row);
 
-      if (this.abortIfTargetUnavailable(row, context)) {
-        break;
-      }
-
       const metrics = context.prompts[row.promptIdx].metrics;
       invariant(metrics, 'Expected prompt.metrics to be set');
       this.updatePromptMetricsForRow({
@@ -4292,6 +4305,12 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
         promptEvalCount: reservePromptEvalCount(context, row.promptIdx),
         row,
       });
+
+      // The row that stops the eval is counted first, like any other error. Otherwise the
+      // summary and the exit code would report only the rows that passed before it.
+      if (this.abortIfTargetUnavailable(row, context)) {
+        break;
+      }
 
       context.options.progressCallback?.(
         context.numComplete,
@@ -4944,6 +4963,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       const previous = internalMetadata?.comparisonBeforeAbort as GradingState | undefined;
       if (previous) {
         Object.assign(result, getGradingState(previous));
+        this.currentResultKeys.add(getResultIndexKey(result));
         this.stats[result.success ? 'successes' : 'failures']++;
         const metrics = prompts[result.promptIdx]?.metrics;
         if (metrics) {
@@ -5041,8 +5061,10 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
             { pass: false, score: 0, reason: result.error!, assertion: compareAssertion },
             this.stats.tokenUsage,
           );
-          this.stats[wasSuccess ? 'successes' : 'failures']--;
-          this.stats.errors++;
+          if (this.currentResultKeys.has(getResultIndexKey(result))) {
+            this.stats[wasSuccess ? 'successes' : 'failures']--;
+            this.stats.errors++;
+          }
           const metrics = prompts[result.promptIdx]?.metrics;
           if (metrics) {
             metrics[wasSuccess ? 'testPassCount' : 'testFailCount']--;
@@ -5057,9 +5079,18 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
         return;
       }
       const graderId = comparisonProviderId(assertion.provider ?? savedTest.options?.provider);
-      // Provider errors can contain credentials or config source snippets.
+      // Provider errors can contain credentials or config source snippets, so saved results get
+      // a generic reason. The run's log file records debug messages even without --verbose, so
+      // the cause is logged only when debug output was asked for.
+      if (isDebugEnabled()) {
+        logger.debug('[Evaluator] select-best grading failed', {
+          error: error instanceof Error ? (error.stack ?? error.message) : String(error),
+          graderId,
+          testIdx,
+        });
+      }
       const message =
-        'Check the grader configuration and credentials. Supply a grader configuration matching the saved result to resume, or rerun the evaluation.';
+        'Check the grader configuration and credentials. Supply a grader configuration matching the saved result to resume, or rerun the evaluation. Run with --verbose to log the underlying error.';
       const reason = `${COMPARISON_ERROR_PREFIX}${graderId ? ` (${graderId})` : ''}: ${message}`;
       gradingResults = [];
       for (const result of resultsToCompare) {

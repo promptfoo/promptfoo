@@ -173,6 +173,22 @@ describe('DownloadMenu', () => {
     });
   });
 
+  it('leaves the saved base path out of the downloaded YAML config', async () => {
+    vi.mocked(useResultsViewStore).mockReturnValue({
+      table: mockTable,
+      config: { ...mockConfig, basePath: '/home/user/project' },
+      evalId: mockEvalId,
+    });
+
+    renderDownloadDialog();
+    await userEvent.click(screen.getByText('Download YAML Config'));
+
+    await waitFor(() => {
+      expect(yamlDumpMock).toHaveBeenCalledTimes(1);
+    });
+    expect(yamlDumpMock.mock.calls[0][0]).toEqual(mockConfig);
+  });
+
   it('downloads CSV when clicking the button', async () => {
     renderDownloadDialog();
     // Hook options should be set after component renders

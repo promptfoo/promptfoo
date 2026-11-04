@@ -5,6 +5,7 @@
 import dedent from 'dedent';
 import logger from '../../logger';
 import { fetchWithProxy } from '../../util/fetch/index';
+import { sampleArray } from '../../util/generation';
 import { RedteamGraderBase, RedteamPluginBase } from './base';
 
 import type { Assertion, TestCase } from '../../types/index';
@@ -69,7 +70,7 @@ export class PlinyPlugin extends RedteamPluginBase {
     const texts = await fetchAllTexts();
 
     // Take n random texts, or all if we have fewer than n
-    const selectedTexts = texts.sort(() => Math.random() - 0.5).slice(0, Math.min(n, texts.length));
+    const selectedTexts = sampleArray(texts, n);
 
     return selectedTexts.map((text) => ({
       vars: {

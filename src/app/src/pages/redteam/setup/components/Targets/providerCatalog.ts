@@ -285,7 +285,7 @@ const providerCatalog: ProviderTypeOption[] = [
   {
     value: 'openai',
     label: 'OpenAI',
-    description: 'GPT-6 Luna, Sol, and Astra; GPT-5.6 Terra',
+    description: 'GPT-6.1 Sol, GPT-6 Luna and Astra, and GPT-5.6 Terra',
     tag: 'providers',
     recommended: true,
     defaultId: DEFAULT_OPENAI_TARGET_ID,
@@ -320,7 +320,7 @@ const providerCatalog: ProviderTypeOption[] = [
   {
     value: 'deepseek',
     label: 'DeepSeek',
-    description: 'DeepSeek-V3 and R1 models',
+    description: 'DeepSeek V4.1 Flash and V4 Pro models',
     tag: 'providers',
     defaultId: 'deepseek:deepseek-flash',
     editor: 'foundation',

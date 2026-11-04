@@ -97,6 +97,11 @@ export function evalCommand(
       defaultConfig?.commandLineOptions?.cache ?? defaultConfig?.evaluateOptions?.cache,
     )
     .option('--remote', 'Force remote inference wherever possible (used for red teams)', false)
+    .option(
+      '--safe-mode',
+      'Disable dynamic inline JavaScript execution for transforms and assertions',
+      defaultConfig?.commandLineOptions?.safeMode,
+    )
 
     // Filtering and subset selection
     .option('-n, --filter-first-n <number>', 'Only run the first N tests')
@@ -132,7 +137,7 @@ export function evalCommand(
     )
     .option(
       '--filter-metadata <key=value>',
-      'Only run tests whose metadata matches the key=value pair. Can be specified multiple times for AND logic (e.g. --filter-metadata type=unit --filter-metadata env=prod)',
+      'Only run tests whose metadata matches key=value. Comma-separated values use OR, and \\, is a literal comma; repeated flags use AND, even for the same key (e.g. --filter-metadata type=unit,integration --filter-metadata env=prod)',
       (value: string, previous: string[] | undefined) => {
         return previous ? [...previous, value] : [value];
       },

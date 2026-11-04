@@ -14,6 +14,7 @@ import {
   sanitizeResultForJsonlArtifact,
 } from '../../src/models/evalResult';
 import { RateLimitRegistry } from '../../src/scheduler/rateLimitRegistry';
+import telemetry from '../../src/telemetry';
 import * as evaluatorTracing from '../../src/tracing/evaluatorTracing';
 import * as targetTracer from '../../src/tracing/targetTracer';
 import { ResultFailureReason } from '../../src/types/index';
@@ -183,6 +184,7 @@ describeEvaluator('cancellation at target and comparison boundaries', () => {
           },
         ],
       };
+      const recordEvent = vi.spyOn(telemetry, 'record');
       const record = await Eval.create({}, suite.prompts, { id: randomUUID() });
       const evaluation = evaluate(suite, record, {
         abortSignal: controller.signal,
@@ -234,6 +236,13 @@ describeEvaluator('cancellation at target and comparison boundaries', () => {
         );
         expect(rows.every((row) => !row.metadata?.__promptfoo?.comparisonBeforeAbort)).toBe(true);
         expect(provider.callApi).toHaveBeenCalledTimes(2);
+        expect(
+          recordEvent.mock.calls.filter(([event]) => event === 'eval_ran').at(-1)?.[1],
+        ).toMatchObject({
+          numPasses: ordinaryPass ? 1 : 0,
+          numFails: ordinaryPass ? 1 : 2,
+          numErrors: 0,
+        });
         expect(resumed!.getStats()).toMatchObject({
           successes: ordinaryPass ? 1 : 0,
           failures: ordinaryPass ? 1 : 2,
@@ -244,6 +253,7 @@ describeEvaluator('cancellation at target and comparison boundaries', () => {
         await evaluation;
         cliState.resume = false;
         compare.mockRestore();
+        recordEvent.mockRestore();
       }
     },
   );

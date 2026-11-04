@@ -531,6 +531,10 @@ export class CrescendoProvider implements ApiProvider {
           break;
         }
 
+        if (lastResponse.error) {
+          continue;
+        }
+
         // Check if the target is asking a blocking question that needs an answer to proceed
         const unblockingResult = await tryUnblocking({
           messages: this.memory.getConversation(this.targetConversationId),
@@ -597,6 +601,10 @@ export class CrescendoProvider implements ApiProvider {
               context.vars['sessionId'] = lastResponse.sessionId;
             }
           }
+        }
+
+        if (lastResponse.error) {
+          continue;
         }
 
         const [isRefusal, refusalRationale] = await this.getRefusalScore(
@@ -1291,7 +1299,7 @@ export class CrescendoProvider implements ApiProvider {
       testIdx: context?.testIdx,
       promptIdx: context?.promptIdx,
     });
-    logger.debug(`[Crescendo] Target response: ${JSON.stringify(targetResponse)}`);
+    logger.debug('[Crescendo] Target response', { response: targetResponse });
 
     invariant(
       Object.prototype.hasOwnProperty.call(targetResponse, 'output'),

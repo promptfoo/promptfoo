@@ -35,12 +35,12 @@ providers:
 | [Python](./python.md)                                   | Custom - Python file                                             | `file://path/to/custom_provider.py`                                                                                   |
 | [Ruby](./ruby.md)                                       | Custom - Ruby file                                               | `file://path/to/custom_provider.rb`                                                                                   |
 | [Shell Command](./custom-script.md)                     | Custom - script-based providers                                  | `exec: python chain.py`                                                                                               |
-| [OpenAI ChatKit](./openai-chatkit.md)                   | ChatKit workflows; Agent Builder retires November 30, 2026       | `openai:chatkit:wf_xxxxx`                                                                                             |
 | [OpenAI Agents](./openai-agents.md)                     | OpenAI Agents SDK agents and handoffs                            | `openai:agents:my-agent`                                                                                              |
 | [OpenAI Agents API](./openai-agents-api.md)             | Managed Codex sessions and hosted sandboxes                      | `openai:agents-api:gpt-6-astra`                                                                                       |
 | [OpenAI Codex App Server](./openai-codex-app-server.md) | Experimental Codex app-server provider for streamed agent events | `openai:codex-app-server`                                                                                             |
 | [OpenAI Codex SDK](./openai-codex-sdk.md)               | OpenAI Codex SDK for code generation and analysis                | `openai:codex-sdk`                                                                                                    |
 | [OpenAI Codex Security SDK](./openai-codex-security.md) | Security scans, finding validation, coverage, and cost evals     | `openai:codex-security`                                                                                               |
+| [OpenAI Decisions API](./openai-decisions.md)           | Structured predicates, classifications, and ordered scores       | `openai:decisions:gpt-6-luna`                                                                                         |
 | [OpenAI GPT-Live](./openai-live.md)                     | Full-duplex voice with backend delegation                        | `openai:live:gpt-live-1`                                                                                              |
 | [Open Interpreter](./openinterpreter.md)                | Open Interpreter coding agent with sandbox and approval controls | `openinterpreter:gpt-5.4`                                                                                             |
 | [Abliteration](./abliteration.md)                       | OpenAI-compatible chat and multimodal models                     | `abliteration:abliterated-model-large-v2`                                                                             |
@@ -59,13 +59,14 @@ providers:
 | [CometAPI](./cometapi.md)                               | 500+ AI models from multiple providers via unified API           | `cometapi:chat:gpt-5-mini` or `cometapi:image:dall-e-3`                                                               |
 | [Cohere](./cohere.md)                                   | Cohere's language models                                         | `cohere:command-a-03-2025`                                                                                            |
 | [Databricks](./databricks.md)                           | Databricks Foundation Model APIs                                 | `databricks:databricks-meta-llama-3-3-70b-instruct`                                                                   |
-| [DeepSeek](./deepseek.md)                               | DeepSeek's language models                                       | `deepseek:deepseek-r1`                                                                                                |
+| [DeepSeek](./deepseek.md)                               | DeepSeek's language models                                       | `deepseek:deepseek-flash`                                                                                             |
 | [Docker Model Runner](./docker.md)                      | Evaluate with local models                                       | `docker:ai/llama3.2:3B-Q4_K_M`                                                                                        |
 | [Envoy AI Gateway](./envoy.md)                          | OpenAI-compatible AI Gateway proxy                               | `envoy:my-model`                                                                                                      |
 | [ElevenLabs](./elevenlabs.md)                           | Speech, transcription, agents, and audio utilities               | `elevenlabs:tts`, `elevenlabs:stt`, `elevenlabs:agents`                                                               |
 | [F5](./f5.md)                                           | OpenAI-compatible AI Gateway interface                           | `f5:path-name`                                                                                                        |
 | [fal.ai](./fal.md)                                      | Image Generation Provider                                        | `fal:image:fal-ai/fast-sdxl`                                                                                          |
 | [Fireworks AI](./fireworks.md)                          | Various hosted models                                            | `fireworks:accounts/fireworks/models/gpt-oss-120b`                                                                    |
+| [FlexAI](./flexai.md)                                   | OpenAI-compatible chat and embedding models                      | `openai:chat:DeepSeek-V4-Flash-0731`                                                                                  |
 | [Google AI Studio](./google.md)                         | Gemini models, Live API, image generation, and Veo video         | `google:gemini-3.8-flash`, `google:gemini-3.1-flash-image`, `google:video:veo-3.1-generate-preview`                   |
 | [Google Vertex AI](./vertex.md)                         | Google Cloud models, Live API, and Veo video                     | `vertex:gemini-3.8-flash`, `vertex:live:gemini-live-2.5-flash-native-audio`, `vertex:video:veo-3.1-generate-001`      |
 | [Groq](./groq.md)                                       | High-performance inference API                                   | `groq:openai/gpt-oss-120b`                                                                                            |
@@ -87,7 +88,7 @@ providers:
 | [OpenClaw](./openclaw.md)                               | Personal AI assistant framework with agent tools                 | `openclaw`                                                                                                            |
 | [OpenCode SDK](./opencode-sdk.md)                       | OpenCode agent using its configured model                        | `opencode:sdk`                                                                                                        |
 | [OpenLLM](./openllm.md)                                 | BentoML's model serving framework                                | Compatible with OpenAI syntax                                                                                         |
-| [OpenRouter](./openrouter.md)                           | Unified API for multiple providers                               | `openrouter:openai/gpt-5.4`                                                                                           |
+| [OpenRouter](./openrouter.md)                           | Unified API for multiple providers                               | `openrouter:openai/gpt-5.6-sol`                                                                                       |
 | [OrcaRouter](./orcarouter.md)                           | Adaptive multi-provider router with workload-aware routing       | `orcarouter:openai/gpt-5.5`, `orcarouter:orcarouter/auto`                                                             |
 | [Perplexity AI](./perplexity.md)                        | Search-augmented chat with citations                             | `perplexity:sonar-pro`                                                                                                |
 | [Portkey](../integrations/portkey.md)                   | OpenAI-compatible gateway with Portkey configuration headers     | `portkey:<model>`                                                                                                     |
@@ -97,6 +98,7 @@ providers:
 | [Snowflake Cortex](./snowflake.md)                      | Snowflake's AI platform with Claude, GPT, and Llama models       | `snowflake:mistral-large2`                                                                                            |
 | [Together AI](./togetherai.md)                          | Various hosted models                                            | Compatible with OpenAI syntax                                                                                         |
 | [TrueFoundry](./truefoundry.md)                         | Enterprise AI Gateway (LLM, MCP, and Agent Gateway)              | `truefoundry:openai-main/gpt-5`, `truefoundry:anthropic-main/claude-sonnet-5`                                         |
+| [TypeSafe](./typesafe.md)                               | Jev System One model for fast grading and classification         | `typesafe:jev-latest`, `typesafe:jev-1.13.0`                                                                          |
 | [Vercel AI Gateway](./vercel.md)                        | Unified AI Gateway with 0% markup and built-in failover          | `vercel:openai/gpt-4o-mini`, `vercel:anthropic/claude-sonnet-5`                                                       |
 | [Voyage AI](./voyage.md)                                | Specialized embedding models                                     | `voyage:voyage-3`                                                                                                     |
 | [vLLM](./vllm.md)                                       | Local OpenAI-compatible serving and self-hosted judges           | `openai:chat:<served-model-name>` with `apiBaseUrl`                                                                   |
@@ -117,7 +119,7 @@ providers:
 | [Sequence](./sequence.md)                               | Custom - Multi-prompt sequencing                                 | `sequence` with config.inputs array                                                                                   |
 | [Simulated User](./simulated-user.md)                   | Custom - Conversation simulator                                  | `promptfoo:simulated-user`                                                                                            |
 | [WatsonX](./watsonx.md)                                 | IBM's WatsonX                                                    | `watsonx:ibm/granite-4-h-small`                                                                                       |
-| [X.AI](./xai.md)                                        | X.AI's models (text, image, video, voice)                        | `xai:grok-4.3`, `xai:image:grok-imagine-image`, `xai:video:grok-imagine-video`, `xai:voice:grok-voice-think-fast-1.0` |
+| [X.AI](./xai.md)                                        | X.AI's models (text, image, video, voice)                        | `xai:grok-4.3`, `xai:image:grok-imagine-image`, `xai:video:grok-imagine-video`, `xai:voice:grok-voice-think-fast-2.0` |
 
 ## Provider Syntax
 
@@ -145,8 +147,7 @@ Providers are specified using various syntax options:
    ```yaml
    - id: openai:gpt-5
      config:
-       temperature: 0.7
-       max_tokens: 150
+       max_completion_tokens: 150
    ```
 
 3. File-based configuration:
@@ -155,8 +156,6 @@ Providers are specified using various syntax options:
 
    ```yaml title="provider.yaml"
    id: openai:chat:gpt-5
-   config:
-     temperature: 0.7
    ```
 
    Or multiple providers:
@@ -271,6 +270,7 @@ Many providers support these common configuration options:
 
 - `temperature`: Controls randomness (0.0 to 1.0)
 - `max_tokens`: Maximum number of tokens to generate
+- `max_completion_tokens`: Output token cap for OpenAI reasoning models such as GPT-5
 - `top_p`: Nucleus sampling parameter
 - `frequency_penalty`: Penalizes frequent tokens
 - `presence_penalty`: Penalizes new tokens based on presence in text
@@ -282,8 +282,7 @@ Example:
 providers:
   - id: openai:gpt-5
     config:
-      temperature: 0.7
-      max_tokens: 150
+      max_completion_tokens: 150
       top_p: 0.9
       frequency_penalty: 0.5
       presence_penalty: 0.5
@@ -302,7 +301,6 @@ Enable MCP for a provider by adding the `mcp` block to your provider's configura
 providers:
   - id: openai:gpt-5
     config:
-      temperature: 0.7
       mcp:
         enabled: true
         server:

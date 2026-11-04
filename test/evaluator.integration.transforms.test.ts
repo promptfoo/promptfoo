@@ -48,11 +48,6 @@ vi.mock('../src/logger', () => ({
   },
 }));
 
-// Mock file operations
-vi.mock('../src/util/file', () => ({
-  readFileCached: vi.fn(() => Promise.resolve('')),
-}));
-
 // Mock evaluator helpers
 vi.mock('../src/evaluatorHelpers', async () => {
   const actual = await vi.importActual('../src/evaluatorHelpers');

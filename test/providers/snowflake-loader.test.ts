@@ -159,9 +159,9 @@ describe('Snowflake public provider loading', () => {
 
   it.each([
     {
-      name: 'uses provider-file env before suite defaults',
+      name: 'uses caller env before provider-file defaults',
       override: undefined,
-      token: 'file-token',
+      token: 'suite-token',
     },
     {
       name: 'uses explicit provider options before file env',

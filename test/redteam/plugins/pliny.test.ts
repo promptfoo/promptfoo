@@ -8,6 +8,7 @@ import {
   createProviderResponse,
   type MockApiProvider,
 } from '../../factories/provider';
+import { sampleEachShufflePath } from '../../util/utils';
 
 import type { AtomicTestCase } from '../../../src/types/index';
 
@@ -89,6 +90,22 @@ With some content.
         metric: 'Pliny',
       },
     ]);
+  });
+
+  it('samples every ordered pair of texts equally', async () => {
+    const markdown = '# One\na\na\n# Two\nb\nb\n# Three\nc\nc\n';
+    vi.mocked(fetchWithProxy).mockImplementation(
+      async (url) =>
+        ({
+          text: () => Promise.resolve(String(url).endsWith('GOOGLE.mkd') ? markdown : ''),
+        }) as unknown as Response,
+    );
+
+    const samples = await sampleEachShufflePath(async () =>
+      (await plugin.generateTests(2)).map((test) => String(test.vars?.testVar).trim()[0]).join(''),
+    );
+
+    expect(samples).toEqual(['ab', 'ac', 'ba', 'bc', 'ca', 'cb']);
   });
 
   it('should handle fetch errors gracefully', async () => {

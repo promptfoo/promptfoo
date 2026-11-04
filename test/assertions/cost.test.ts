@@ -37,6 +37,37 @@ describe('handleCost', () => {
     );
   });
 
+  describe('named cost metric', () => {
+    const assertion = { type: 'cost' as const, metric: 'inference_cost', weight: 0 };
+
+    it.each([0, 0.005, 2])('records cost %s without a threshold', (cost) => {
+      expect(handleCost(params({ assertion, cost }))).toMatchObject({
+        pass: true,
+        score: cost,
+        assertion,
+      });
+    });
+
+    it.each([undefined, Number.NaN, Number.POSITIVE_INFINITY, -1])(
+      'rejects unavailable or invalid cost %s',
+      (cost) => {
+        expect(() => handleCost(params({ assertion, cost }))).toThrow();
+      },
+    );
+
+    it('still requires a threshold when the assertion affects the score', () => {
+      expect(() =>
+        handleCost(params({ assertion: { ...assertion, weight: 1 }, cost: 0.005 })),
+      ).toThrow('Cost assertion must have a threshold');
+    });
+
+    it('requires a threshold for an inverted cost assertion', () => {
+      expect(() => handleCost(params({ assertion, cost: 0.005, inverse: true }))).toThrow(
+        'Cost assertion must have a threshold',
+      );
+    });
+  });
+
   describe('inverse (not-cost)', () => {
     it('fails when cost is within threshold', () => {
       const result = handleCost(params({ cost: 0.005, inverse: true }));

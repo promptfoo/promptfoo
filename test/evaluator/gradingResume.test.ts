@@ -92,7 +92,7 @@ describeEvaluator('resuming interrupted grouped assertion grading', () => {
           { vars: { name: 'Ada' }, assert: [{ type: 'javascript', value: () => true }] },
           {
             vars: { name: 'Ada' },
-            options: { transform: 'output + "-test"' },
+            options: { transform: 'output' },
             assert: [{ type: 'llm-rubric', value: 'fixture', provider: grader }],
           },
         ],
@@ -119,10 +119,10 @@ describeEvaluator('resuming interrupted grouped assertion grading', () => {
         expect(interrupted).toMatchObject({
           failureReason: ResultFailureReason.ERROR,
           response: {
-            output: 'original target output-provider-test',
-            providerTransformedOutput: 'original target output-provider',
+            output: 'original target output-provider',
           },
         });
+        expect(interrupted.response).not.toHaveProperty('providerTransformedOutput');
         const stripFlags = getStripFlags({ PROMPTFOO_STRIP_RESPONSE_OUTPUT: 'true' });
         for (const projection of [
           asEvaluateResult(interrupted, stripFlags),
@@ -183,7 +183,7 @@ describeEvaluator('resuming interrupted grouped assertion grading', () => {
             prompt: 'hello Ada',
             vars: { name: 'Ada' },
             providerResponse: expect.objectContaining({
-              output: 'original target output-provider-test',
+              output: 'original target output-provider',
               providerTransformedOutput: 'original target output-provider',
             }),
           }),
