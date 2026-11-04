@@ -1204,6 +1204,8 @@ tests:
 
 Google models support tool calling via the `tools` and `tool_config` config fields. The model returns tool calls in its response for your application to execute.
 
+OpenAI-style prompt history with `tool_calls` and `tool_call_id` is converted to Gemini function-call and result parts. Existing Gemini thought signatures are preserved; imported calls without signatures use Google's documented [synthetic-history marker](https://ai.google.dev/gemini-api/docs/generate-content/thought-signatures#faqs).
+
 ```yaml
 providers:
   - id: google:gemini-3.6-flash
