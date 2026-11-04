@@ -44,8 +44,8 @@ import { isNonTransientHttpStatus, NON_TRANSIENT_HTTP_STATUSES } from '../util/f
 import invariant from '../util/invariant';
 import {
   sanitizeConfigForOutput,
+  sanitizeConfigForPersistence,
   sanitizeRuntimeOptions,
-  sanitizeTracingConfigForPersistence,
 } from '../util/sanitizer';
 import { getCurrentTimestamp } from '../util/time';
 import {
@@ -498,7 +498,8 @@ export default class Eval {
     const author = opts && 'author' in opts ? (opts.author ?? null) : getAuthor();
     const db = await getDb();
 
-    const datasetId = sha256(JSON.stringify(config.tests || []));
+    const savedConfig = sanitizeConfigForPersistence(config);
+    const datasetId = sha256(JSON.stringify(savedConfig.tests || []));
 
     const durationResults = {
       ...(opts?.durationMs !== undefined && { durationMs: opts.durationMs }),
@@ -518,7 +519,7 @@ export default class Eval {
           createdAt: createdAt.getTime(),
           author,
           description: config.description,
-          config: sanitizeTracingConfigForPersistence(config),
+          config: savedConfig,
           results: durationResults,
           vars: opts?.vars || [],
           runtimeOptions: sanitizeRuntimeOptions(opts?.runtimeOptions),
@@ -575,7 +576,7 @@ export default class Eval {
         .insert(datasetsTable)
         .values({
           id: datasetId,
-          tests: config.tests,
+          tests: savedConfig.tests,
         })
         .onConflictDoNothing()
         .run();
@@ -688,7 +689,7 @@ export default class Eval {
   async save() {
     const db = await getDb();
     const updateObj: Record<string, unknown> = {
-      config: sanitizeTracingConfigForPersistence(this.config),
+      config: sanitizeConfigForPersistence(this.config),
       isRedteam: this.config.redteam !== undefined,
       prompts: this.prompts,
       description: this.config.description,
@@ -1676,7 +1677,7 @@ export default class Eval {
     });
 
     // Deep clone to prevent mutation issues
-    const newConfig = structuredClone(sanitizeTracingConfigForPersistence(this.config));
+    const newConfig = structuredClone(sanitizeConfigForPersistence(this.config));
     newConfig.description = copyDescription;
 
     const newPrompts = structuredClone(this.prompts);
@@ -1696,7 +1697,7 @@ export default class Eval {
           createdAt: Date.now(),
           author,
           description: copyDescription,
-          config: sanitizeTracingConfigForPersistence(newConfig),
+          config: newConfig,
           results: {},
           prompts: newPrompts,
           vars: newVars,
@@ -1753,24 +1754,17 @@ export default class Eval {
         }
       }
 
-      // Copy dataset relationship
-      const datasetRel = await tx
-        .select()
-        .from(evalsToDatasetsTable)
-        .where(eq(evalsToDatasetsTable.evalId, this.id))
-        .limit(1)
-        .all();
-
-      if (datasetRel.length > 0) {
-        await tx
-          .insert(evalsToDatasetsTable)
-          .values({
-            evalId: newEvalId,
-            datasetId: datasetRel[0].datasetId,
-          })
-          .onConflictDoNothing()
-          .run();
-      }
+      const datasetId = sha256(JSON.stringify(newConfig.tests || []));
+      await tx
+        .insert(datasetsTable)
+        .values({ id: datasetId, tests: newConfig.tests })
+        .onConflictDoNothing()
+        .run();
+      await tx
+        .insert(evalsToDatasetsTable)
+        .values({ evalId: newEvalId, datasetId })
+        .onConflictDoNothing()
+        .run();
 
       // Copy results in batches to avoid memory exhaustion
       const BATCH_SIZE = 1000;

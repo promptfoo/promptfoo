@@ -441,6 +441,12 @@
         "LOCALAI_TEMPERATURE": {
           "type": "string"
         },
+        "META_API_KEY": {
+          "type": "string"
+        },
+        "MUSE_CLI_PATH": {
+          "type": "string"
+        },
         "MISTRAL_API_BASE_URL": {
           "type": "string"
         },
@@ -927,6 +933,9 @@
         },
         "callClassificationApi": {},
         "label": {},
+        "supportsAgenticGrading": {
+          "type": "boolean"
+        },
         "prompts": {
           "type": "array",
           "items": {
