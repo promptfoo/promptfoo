@@ -11,6 +11,7 @@ import logger from '../../src/logger';
 import { OpenAICodexSDKProvider } from '../../src/providers/openai/codex-sdk';
 import { providerRegistry } from '../../src/providers/providerRegistry';
 import { getTraceparent } from '../../src/tracing/genaiTracer';
+import { getPackageVersion } from '../../src/util/packageVersion';
 import { checkProviderApiKeys } from '../../src/util/provider';
 import { createDeferred, mockProcessEnv } from '../util/utils';
 
@@ -54,6 +55,7 @@ vi.mock('../../src/esm', async (importOriginal) => {
 
 // Mock the SDK package (for type safety)
 vi.mock('@openai/codex-sdk', () => mockCodexSDK);
+vi.mock('../../src/util/packageVersion', () => ({ getPackageVersion: vi.fn() }));
 
 vi.mock('../../src/tracing/genaiTracer', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../src/tracing/genaiTracer')>()),
@@ -144,6 +146,7 @@ describe('OpenAICodexSDKProvider', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(getPackageVersion).mockReturnValue('0.156.1');
     originalBasePath = cliState.basePath;
     cliState.basePath = undefined;
     originalOpenAiApiKey = process.env.OPENAI_API_KEY;
@@ -181,6 +184,18 @@ describe('OpenAICodexSDKProvider', () => {
     restoreEnvVar('CODEX_API_KEY', originalCodexApiKey);
     await clearCache();
   });
+
+  it.each(['0.144.0', '0.157.0', '1.0.0', 'invalid', null])(
+    'rejects incompatible SDK %s before importing it',
+    async (version) => {
+      vi.mocked(getPackageVersion).mockReturnValue(version);
+      const provider = new OpenAICodexSDKProvider({ config: { apiKey: 'test-key' } });
+      const response = await provider.callApi('test');
+      expect(response.error).toContain('requires @openai/codex-sdk@^0.156.1');
+      expect(response.error).toContain('npm install promptfoo @openai/codex-sdk@^0.156.1');
+      expect(importModule).not.toHaveBeenCalled();
+    },
+  );
 
   it.each([false, true])('honors inherit_process_env=%s for file defaults', (inheritProcessEnv) => {
     const provider = new OpenAICodexSDKProvider({ config: {} });
@@ -4333,7 +4348,7 @@ describe('OpenAICodexSDKProvider', () => {
       { threadId: undefined, finishCleanupFirst: false },
       { threadId: 'explicit-thread', finishCleanupFirst: false },
     ])(
-      'restores queued thread cleanup coverage (threadId=$threadId, finishCleanupFirst=$finishCleanupFirst)',
+      'interrupts queued turns during cleanup (threadId=$threadId, finishCleanupFirst=$finishCleanupFirst)',
       async ({ threadId, finishCleanupFirst }) => {
         const firstRun = createDeferred<ReturnType<typeof createMockResponse>>();
         const destruction = createDeferred<void>();
@@ -4363,7 +4378,7 @@ describe('OpenAICodexSDKProvider', () => {
           expect(mockRun).toHaveBeenCalledTimes(1);
 
           cleanup = provider.cleanup();
-          expect(providerRegistry.has(provider)).toBe(true);
+          expect(providerRegistry.has(provider)).toBe(false);
           expect((provider as any).threads.size).toBe(0);
           if (finishCleanupFirst) {
             destruction.resolve();
@@ -4373,13 +4388,16 @@ describe('OpenAICodexSDKProvider', () => {
 
           firstRun.resolve(createMockResponse('First response'));
           expect(await firstCall).toMatchObject({ output: 'First response' });
-          expect(await queuedCall).toMatchObject({ output: 'Queued response' });
+          expect((await queuedCall).error).toContain('interrupted by cleanup');
           destruction.resolve();
           await cleanup;
-          expect(mockRun).toHaveBeenCalledTimes(2);
-          expect((provider as any).threads.size).toBe(1);
-          expect.soft(providerRegistry.has(provider)).toBe(true);
+          expect(mockRun).toHaveBeenCalledTimes(1);
+          expect((provider as any).threads.size).toBe(0);
+          expect(providerRegistry.has(provider)).toBe(false);
 
+          expect(await provider.callApi('Fresh call')).toMatchObject({ output: 'Queued response' });
+          expect(MockCodex).toHaveBeenCalledTimes(2);
+          expect(providerRegistry.has(provider)).toBe(true);
           await providerRegistry.shutdownAll();
           expect((provider as any).threads.size).toBe(0);
           expect(providerRegistry.has(provider)).toBe(false);
@@ -4392,9 +4410,9 @@ describe('OpenAICodexSDKProvider', () => {
       },
     );
 
-    it.each([false, true])(
-      'releases cleanup registration and restores it on reuse unless shutdown=%s',
-      async (shutdown) => {
+    it.each(['cleanup', 'shutdown', 'shutdownAll'] as const)(
+      'registers reused resources after %s',
+      async (method) => {
         mockRun.mockResolvedValue(createMockResponse('Response'));
         const destroy = vi.fn();
         MockCodex.mockImplementation(function () {
@@ -4409,17 +4427,104 @@ describe('OpenAICodexSDKProvider', () => {
         await provider.cleanup();
         await provider.cleanup();
         expect(providerRegistry.has(provider)).toBe(false);
-        if (shutdown) {
-          await provider.shutdown();
-        }
 
         for (const prompt of ['First reuse', 'Second reuse']) {
           expect(await provider.callApi(prompt)).toMatchObject({ output: 'Response' });
-          expect(providerRegistry.has(provider)).toBe(!shutdown);
-          await provider.cleanup();
+          expect(providerRegistry.has(provider)).toBe(true);
+          if (method === 'shutdownAll') {
+            await providerRegistry.shutdownAll();
+          } else {
+            await provider[method]();
+          }
           expect(providerRegistry.has(provider)).toBe(false);
         }
         expect(destroy).toHaveBeenCalledTimes(2);
+      },
+    );
+
+    it.each([false, true])(
+      'interrupts an SDK load pending when cleanup starts (deep_tracing=%s)',
+      async (deepTracing) => {
+        const module = createDeferred<typeof mockCodexSDK>();
+        mockImportModule.mockReturnValueOnce(module.promise);
+        mockRun.mockResolvedValue(createMockResponse('Fresh response'));
+        const provider = new OpenAICodexSDKProvider({ config: { deep_tracing: deepTracing } });
+        const pendingCall = provider.callApi('Pending call');
+
+        try {
+          await vi.waitFor(() => expect(mockImportModule).toHaveBeenCalledTimes(1));
+          await provider.cleanup();
+          module.resolve(mockCodexSDK);
+          expect((await pendingCall).error).toContain('interrupted by cleanup');
+          expect(MockCodex).not.toHaveBeenCalled();
+          expect(providerRegistry.has(provider)).toBe(false);
+
+          expect(await provider.callApi('Fresh call')).toMatchObject({ output: 'Fresh response' });
+          expect(MockCodex).toHaveBeenCalledTimes(1);
+          expect(providerRegistry.has(provider)).toBe(true);
+        } finally {
+          module.resolve(mockCodexSDK);
+          await pendingCall;
+          await provider.cleanup();
+        }
+      },
+    );
+
+    it.each([
+      { method: 'cleanup', differentConfig: false },
+      { method: 'cleanup', differentConfig: true },
+      { method: 'shutdown', differentConfig: false },
+      { method: 'shutdown', differentConfig: true },
+      { method: 'shutdownAll', differentConfig: false },
+      { method: 'shutdownAll', differentConfig: true },
+    ] as const)(
+      'preserves fresh instances during $method (differentConfig=$differentConfig)',
+      async ({ method, differentConfig }) => {
+        const destruction = createDeferred<void>();
+        const original = {
+          startThread: vi.fn().mockReturnValue(mockThread),
+          destroy: vi.fn().mockReturnValue(destruction.promise),
+        };
+        const replacement = {
+          startThread: vi.fn().mockReturnValue(mockThread),
+          destroy: vi.fn().mockResolvedValue(undefined),
+        };
+        MockCodex.mockImplementationOnce(function () {
+          return original;
+        }).mockImplementationOnce(function () {
+          return replacement;
+        });
+        mockRun.mockResolvedValue(createMockResponse('Response'));
+        const provider = new OpenAICodexSDKProvider({ config: { persist_threads: true } });
+        expect(await provider.callApi('Original call')).toMatchObject({ output: 'Response' });
+        const cleanup =
+          method === 'shutdownAll' ? providerRegistry.shutdownAll() : provider[method]();
+
+        try {
+          expect(original.destroy).toHaveBeenCalledTimes(1);
+          expect(providerRegistry.has(provider)).toBe(false);
+          const context = differentConfig
+            ? ({ prompt: { config: { model: 'gpt-6-luna' } } } as CallApiContextParams)
+            : undefined;
+          expect(await provider.callApi('Fresh call', context)).toMatchObject({
+            output: 'Response',
+          });
+          expect(MockCodex).toHaveBeenCalledTimes(2);
+          expect(replacement.startThread).toHaveBeenCalledTimes(1);
+
+          destruction.resolve();
+          await cleanup;
+          expect(replacement.destroy).not.toHaveBeenCalled();
+          expect(providerRegistry.has(provider)).toBe(true);
+
+          await providerRegistry.shutdownAll();
+          expect(replacement.destroy).toHaveBeenCalledTimes(1);
+          expect(providerRegistry.has(provider)).toBe(false);
+        } finally {
+          destruction.resolve();
+          await cleanup;
+          await provider.cleanup();
+        }
       },
     );
 

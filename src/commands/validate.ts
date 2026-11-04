@@ -281,7 +281,7 @@ async function loadProvidersForTesting(
 
     // Cloud target
     if (isUuid(target)) {
-      const providerOptions = await getProviderFromCloud(target);
+      const providerOptions = await getProviderFromCloud(target, {});
       const patchedOptions = isHttpProvider(providerOptions)
         ? patchHttpConfigForValidation(providerOptions)
         : providerOptions;

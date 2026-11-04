@@ -479,6 +479,10 @@ const config: Config = {
       {
         redirects: [
           {
+            from: '/docs/write-for-promptfoo',
+            to: '/docs/contributing/',
+          },
+          {
             from: '/docs/category/troubleshooting',
             to: '/docs/usage/troubleshooting/',
           },

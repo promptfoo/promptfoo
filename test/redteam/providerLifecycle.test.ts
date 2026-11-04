@@ -117,7 +117,7 @@ describe('generation provider cleanup ownership', () => {
   it.each([
     ['plugin', 'during drain'],
     ['plugin', 'after drain timeout'],
-    ['scheduler', 'after drain timeout'],
+    ['scheduler', 'immediately on cancellation'],
   ] as const)(
     'blocks %s retries and cleans once when a concurrent provider settles %s',
     async (retry, completion) => {
@@ -141,7 +141,7 @@ describe('generation provider cleanup ownership', () => {
           started.resolve();
           await releaseSecond.promise;
           if (registry) {
-            // The real scheduler retries this error after the cleanup deadline.
+            // The real scheduler must cancel this retry before the cleanup deadline.
             throw new Error('HTTP 429 retry after 2');
           }
           // The real plugin will retry an empty response unless cancellation stops it.
@@ -190,7 +190,7 @@ describe('generation provider cleanup ownership', () => {
         expect(cleanup).toHaveBeenCalledOnce();
         // The third queued plugin and the second plugin's late retry must never call the provider.
         expect(call).toHaveBeenCalledTimes(2);
-        expect(cleanupWhileSecondPending).toBe(0);
+        expect(cleanupWhileSecondPending).toBe(registry ? 1 : 0);
         if (registry) {
           expect(Object.values(registry.getMetrics())[0]).toMatchObject({
             completedRequests: 1,

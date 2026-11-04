@@ -197,6 +197,15 @@ describe('evaluatorHelpers', () => {
       expect(renderedPrompt).toBe('Test value1');
     });
 
+    it('should not corrupt dollar-sign sequences when pre-resolving nested variables', async () => {
+      const renderedPrompt = await renderPrompt(
+        toPrompt('Say {{greeting}}'),
+        { greeting: 'Cost is {{price}}', price: 'only $`5' },
+        {},
+      );
+      expect(renderedPrompt).toBe('Say Cost is only $`5');
+    });
+
     it('should handle complex variable substitutions in non-JSON prompts', async () => {
       const prompt = toPrompt('{{ var1[var2] }}');
       const renderedPrompt = await renderPrompt(
@@ -634,6 +643,17 @@ describe('evaluatorHelpers', () => {
       };
       expect(resolveVariables(variables)).toEqual(expected);
     });
+
+    it.each(['ordinary text', '$$', '$&', '$`', "$'"])(
+      'should insert %s literally into repeated placeholders',
+      (price) => {
+        const variables = { greeting: 'Say {{price}} then {{price}}!', price };
+        expect(resolveVariables(variables)).toEqual({
+          greeting: `Say ${price} then ${price}!`,
+          price,
+        });
+      },
+    );
   });
 
   describe('runExtensionHook', () => {

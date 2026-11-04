@@ -50,6 +50,46 @@ describe('SlotQueue', () => {
     return promise;
   }
 
+  describe('cancellation', () => {
+    it.each(['already aborted', 'quota wait'] as const)(
+      'preserves the cancellation reason and removes timers during %s',
+      async (phase) => {
+        queue = new SlotQueue({ maxConcurrency: 1, minConcurrency: 1 });
+        const controller = new AbortController();
+        const reason = { message: 'request cancelled' };
+        queue.markRateLimited(60_000);
+        if (phase === 'already aborted') {
+          controller.abort(reason);
+        }
+        const pending = queue.acquire('cancelled', controller.signal);
+        const rejected = expect(pending).rejects.toBe(reason);
+        if (phase === 'quota wait') {
+          expect(queue.getQueueDepth()).toBe(1);
+          controller.abort(reason);
+        }
+        await rejected;
+        expect(queue.getQueueDepth()).toBe(0);
+        expect(queue.getActiveCount()).toBe(0);
+        expect(vi.getTimerCount()).toBe(0);
+        // Cancelling one request must not reset the shared provider quota.
+        expect(queue.getResetAt()).toBe(Date.now() + 60_000);
+      },
+    );
+
+    it('detaches the abort listener once the slot has been acquired', async () => {
+      queue = new SlotQueue({ maxConcurrency: 1, minConcurrency: 1 });
+      const controller = new AbortController();
+      const remove = vi.spyOn(controller.signal, 'removeEventListener');
+      await queue.acquire('active', controller.signal);
+      expect(remove).toHaveBeenCalledWith('abort', expect.any(Function));
+      controller.abort();
+      expect(queue.getActiveCount()).toBe(1);
+      queue.release();
+      expect(queue.getActiveCount()).toBe(0);
+      expect(vi.getTimerCount()).toBe(0);
+    });
+  });
+
   describe('Constructor - initial state', () => {
     it('should initialize with correct default values', () => {
       queue = new SlotQueue({

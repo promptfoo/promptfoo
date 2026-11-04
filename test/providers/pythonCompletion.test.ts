@@ -1005,56 +1005,65 @@ describe('PythonProvider', () => {
   });
 
   describe.each(['cleanup', 'shutdown'] as const)('%s', (method) => {
-    it('retains a replacement pool created while interrupted initialization is closing', async () => {
-      await providerRegistry.shutdownAll();
-      const initialization = createDeferred<void>();
-      const disposal = createDeferred<void>();
-      const oldPool = {
-        initialize: vi.fn().mockReturnValue(initialization.promise),
-        execute: vi.fn(),
-        shutdown: vi.fn().mockReturnValue(disposal.promise),
-      };
-      const replacementPool = {
-        initialize: vi.fn().mockResolvedValue(undefined),
-        execute: vi.fn().mockResolvedValue({ output: 'replacement' }),
-        shutdown: vi.fn().mockResolvedValue(undefined),
-      };
-      PythonWorkerPoolMock.mockImplementationOnce(function () {
-        return oldPool as any;
-      }).mockImplementationOnce(function () {
-        return replacementPool as any;
-      });
-      const provider = (await loadApiProvider('python:script.py')) as PythonProvider;
-      const oldCall = provider.callApi('old').catch((error: Error) => error);
-      let cleanup: Promise<void> | undefined;
-
-      try {
-        await vi.waitFor(() => expect(oldPool.initialize).toHaveBeenCalledTimes(1));
-        cleanup = provider[method]();
-        initialization.resolve();
-        await expect(oldCall).resolves.toEqual(
-          new Error('Python provider initialization interrupted by cleanup'),
-        );
-        await vi.waitFor(() => expect(oldPool.shutdown).toHaveBeenCalledTimes(1));
-
-        await expect(provider.callApi('fresh')).resolves.toMatchObject({ output: 'replacement' });
-        expect(providerRegistry.has(provider)).toBe(true);
-        disposal.resolve();
-        await cleanup;
-        expect.soft(providerRegistry.has(provider)).toBe(true);
-        expect(replacementPool.shutdown).not.toHaveBeenCalled();
-
+    it.each([false, true])(
+      'retains a replacement pool while disposing the old pool (initialized=%s)',
+      async (initialized) => {
         await providerRegistry.shutdownAll();
-        expect(replacementPool.shutdown).toHaveBeenCalledTimes(1);
-        expect(providerRegistry.has(provider)).toBe(false);
-      } finally {
-        initialization.resolve();
-        disposal.resolve();
-        await oldCall;
-        await cleanup;
-        await provider.shutdown();
-      }
-    });
+        const initialization = createDeferred<void>();
+        const disposal = createDeferred<void>();
+        const oldPool = {
+          initialize: vi.fn().mockReturnValue(initialization.promise),
+          execute: vi.fn().mockResolvedValue({ output: 'old' }),
+          shutdown: vi.fn().mockReturnValue(disposal.promise),
+        };
+        const replacementPool = {
+          initialize: vi.fn().mockResolvedValue(undefined),
+          execute: vi.fn().mockResolvedValue({ output: 'replacement' }),
+          shutdown: vi.fn().mockResolvedValue(undefined),
+        };
+        PythonWorkerPoolMock.mockImplementationOnce(function () {
+          return oldPool as any;
+        }).mockImplementationOnce(function () {
+          return replacementPool as any;
+        });
+        const provider = (await loadApiProvider('python:script.py')) as PythonProvider;
+        const oldCall = provider.callApi('old').catch((error: Error) => error);
+        let cleanup: Promise<void> | undefined;
+
+        try {
+          await vi.waitFor(() => expect(oldPool.initialize).toHaveBeenCalledTimes(1));
+          if (initialized) {
+            initialization.resolve();
+            await expect(oldCall).resolves.toMatchObject({ output: 'old' });
+          }
+          cleanup = provider[method]();
+          initialization.resolve();
+          if (!initialized) {
+            await expect(oldCall).resolves.toEqual(
+              new Error('Python provider initialization interrupted by cleanup'),
+            );
+          }
+          await vi.waitFor(() => expect(oldPool.shutdown).toHaveBeenCalledTimes(1));
+
+          await expect(provider.callApi('fresh')).resolves.toMatchObject({ output: 'replacement' });
+          expect(providerRegistry.has(provider)).toBe(true);
+          disposal.resolve();
+          await cleanup;
+          expect.soft(providerRegistry.has(provider)).toBe(true);
+          expect(replacementPool.shutdown).not.toHaveBeenCalled();
+
+          await providerRegistry.shutdownAll();
+          expect(replacementPool.shutdown).toHaveBeenCalledTimes(1);
+          expect(providerRegistry.has(provider)).toBe(false);
+        } finally {
+          initialization.resolve();
+          disposal.resolve();
+          await oldCall;
+          await cleanup;
+          await provider.shutdown();
+        }
+      },
+    );
 
     it.each([
       { stage: 'configuration', rejectInitialization: false },

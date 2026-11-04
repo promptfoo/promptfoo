@@ -1318,7 +1318,7 @@ class CodexAppServerConnection {
 }
 
 export class OpenAICodexAppServerProvider implements ApiProvider {
-  private restoreRegistrationOnUse = false;
+  private readonly registerForCleanup: boolean;
   private cleanupGeneration = 0;
 
   config: CodexAppServerConfig;
@@ -1348,13 +1348,17 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
       id?: string;
       config?: CodexAppServerConfig;
       env?: EnvOverrides;
+      registerForCleanup?: boolean;
     } = {},
   ) {
+    this.registerForCleanup = options.registerForCleanup ?? true;
     this.config = parseCodexAppServerConfig(options.config);
     this.env = options.env;
     this.apiKey = this.getApiKey();
     this.providerId = options.id ?? this.providerId;
-    providerRegistry.register(this);
+    if (this.registerForCleanup) {
+      providerRegistry.register(this);
+    }
   }
 
   id(): string {
@@ -1380,8 +1384,7 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
   }
 
   async cleanup(): Promise<void> {
-    // New resource use during teardown consumes this flag and retains registration.
-    this.restoreRegistrationOnUse ||= providerRegistry.has(this);
+    providerRegistry.unregister(this);
     this.cleanupGeneration++;
     this.resolveActiveTurns(new Error('codex app-server provider cleanup interrupted active turn'));
     this.threads.clear();
@@ -1408,18 +1411,10 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
         }),
       ),
     );
-    if (this.restoreRegistrationOnUse) {
-      providerRegistry.unregister(this);
-    }
   }
 
   async shutdown(): Promise<void> {
-    try {
-      await this.cleanup();
-    } finally {
-      this.restoreRegistrationOnUse = false;
-      providerRegistry.unregister(this);
-    }
+    await this.cleanup();
   }
 
   async callApi(
@@ -1874,9 +1869,8 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
       onClose: (error) => this.handleConnectionClose(connectionKey, connectionInstanceId, error),
     });
 
-    if (this.restoreRegistrationOnUse) {
+    if (this.registerForCleanup) {
       providerRegistry.register(this);
-      this.restoreRegistrationOnUse = false;
     }
 
     this.initializingConnections.add(connection);

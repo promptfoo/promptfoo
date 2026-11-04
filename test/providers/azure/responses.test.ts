@@ -431,6 +431,47 @@ describe('AzureResponsesProvider', () => {
       });
     });
 
+    it('should preserve partial output and expose its incomplete finish reason', async () => {
+      const mockResponse = {
+        id: 'resp_azure_incomplete',
+        status: 'incomplete',
+        incomplete_details: { reason: 'max_output_tokens' },
+        output: [
+          {
+            type: 'message',
+            role: 'assistant',
+            status: 'incomplete',
+            content: [{ type: 'output_text', text: 'Partial Azure answer' }],
+          },
+        ],
+        usage: { input_tokens: 10, output_tokens: 20, total_tokens: 30 },
+      };
+      mockFetchWithCache.mockResolvedValue({
+        data: mockResponse,
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+      const provider = new AzureResponsesProvider('gpt-4.1-test');
+
+      const result = await provider.callApi('Hello');
+
+      expect(result.error).toBeUndefined();
+      expect(result.output).toBe('Partial Azure answer');
+      expect(result.raw).toEqual(mockResponse);
+      expect(result.finishReason).toBe('length');
+      expect(result.metadata).toMatchObject({
+        responseStatus: 'incomplete',
+        incompleteReason: 'max_output_tokens',
+      });
+      expect(result.tokenUsage).toEqual({
+        prompt: 10,
+        completion: 20,
+        total: 30,
+        numRequests: 1,
+      });
+    });
+
     it('should provide clear error for missing API host', async () => {
       const provider = new AzureResponsesProvider('gpt-4.1-test');
       vi.spyOn(provider, 'getApiBaseUrl').mockReturnValue('');

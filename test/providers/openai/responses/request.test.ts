@@ -564,6 +564,11 @@ describe('OpenAiResponsesProvider request building', () => {
 
     expect(result.error).toBeUndefined();
     expect(result.output).toBe('Partial but usable output');
+    expect(result.finishReason).toBe('length');
+    expect(result.metadata).toMatchObject({
+      responseStatus: 'incomplete',
+      incompleteReason: 'max_output_tokens',
+    });
     expect(updateCache).toHaveBeenCalledWith(
       expect.objectContaining({ id: 'resp_background', status: 'incomplete' }),
       200,

@@ -6265,9 +6265,9 @@ describe('OpenAICodexAppServerProvider', () => {
     expect(server.proc.kill).toHaveBeenCalledWith('SIGKILL');
   });
 
-  it.each([false, true])(
-    'releases cleanup registration and restores it on reuse unless shutdown=%s',
-    async (shutdown) => {
+  it.each(['cleanup', 'shutdown', 'shutdownAll'] as const)(
+    'registers reused resources after %s',
+    async (method) => {
       const provider = new OpenAICodexAppServerProvider({
         config: { thread_cleanup: 'none' },
       });
@@ -6275,28 +6275,33 @@ describe('OpenAICodexAppServerProvider', () => {
       await provider.cleanup();
       await provider.cleanup();
       expect(providerRegistry.has(provider)).toBe(false);
-      if (shutdown) {
-        await provider.shutdown();
-      }
 
       for (const prompt of ['First reuse', 'Second reuse']) {
         const server = createMockAppServer({ autoCompleteThread: 'thr_reuse' });
         mocks.spawn.mockReturnValue(server.proc);
         expect((await provider.callApi(prompt)).error).toBeUndefined();
-        expect(providerRegistry.has(provider)).toBe(!shutdown);
-        await provider.cleanup();
+        expect(providerRegistry.has(provider)).toBe(true);
+        if (method === 'shutdownAll') {
+          await providerRegistry.shutdownAll();
+        } else {
+          await provider[method]();
+        }
         expect(providerRegistry.has(provider)).toBe(false);
         expect(server.proc.kill).toHaveBeenCalledWith('SIGTERM');
       }
     },
   );
 
-  it.each([
-    { name: 'Codex app-server', Provider: OpenAICodexAppServerProvider },
-    { name: 'OpenInterpreter', Provider: OpenInterpreterProvider },
-  ])(
-    'keeps fresh $name resources registered while an older cleanup finishes',
-    async ({ Provider }) => {
+  it.each(
+    [
+      { name: 'Codex app-server', Provider: OpenAICodexAppServerProvider },
+      { name: 'OpenInterpreter', Provider: OpenInterpreterProvider },
+    ].flatMap((provider) =>
+      (['cleanup', 'shutdown', 'shutdownAll'] as const).map((method) => ({ ...provider, method })),
+    ),
+  )(
+    'keeps fresh $name resources registered while an older $method finishes',
+    async ({ Provider, method }) => {
       vi.useFakeTimers();
       const originalServer = createMockAppServer({ autoCompleteThread: 'thr_cleanup_overlap' });
       const replacementServer = createMockAppServer({ autoCompleteThread: 'thr_cleanup_overlap' });
@@ -6322,9 +6327,10 @@ describe('OpenAICodexAppServerProvider', () => {
 
       try {
         expect((await provider.callApi('Original call')).error).toBeUndefined();
-        const cleanup = provider.cleanup();
+        const cleanup =
+          method === 'shutdownAll' ? providerRegistry.shutdownAll() : provider[method]();
         expect(originalServer.proc.exitCode).toBeNull();
-        expect(providerRegistry.has(provider)).toBe(true);
+        expect(providerRegistry.has(provider)).toBe(false);
 
         expect((await provider.callApi('Fresh call during cleanup')).error).toBeUndefined();
         expect(mocks.spawn).toHaveBeenCalledTimes(2);
@@ -6339,6 +6345,7 @@ describe('OpenAICodexAppServerProvider', () => {
         expect.soft(providerRegistry.has(provider)).toBe(true);
         expect(replacementServer.proc.exitCode).toBeNull();
         if (interpreterHome) {
+          expect(fs.existsSync(interpreterHome)).toBe(true);
           expect(providerRegistry.has(delegate)).toBe(false);
         }
 

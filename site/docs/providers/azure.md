@@ -216,6 +216,8 @@ Realtime prompts can include `input_image` parts in the user message. The previe
 
 The Azure OpenAI Responses API supports stateful conversations, MCP servers, code interpreter, and background tasks.
 
+Incomplete responses preserve partial text and expose `metadata.responseStatus` and `metadata.incompleteReason`. When the reason is `max_output_tokens`, `finishReason` is `length`, so a `finish-reason` assertion can detect the output limit. Promptfoo does not automatically retry or continue incomplete output.
+
 ### Using the Responses API
 
 To use the Azure Responses API with promptfoo, use the `azure:responses` provider type:

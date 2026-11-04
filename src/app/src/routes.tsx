@@ -3,6 +3,7 @@ import { useEffect } from 'react';
 import { createRoutesFromElements, Navigate, Outlet, Route, useLocation } from 'react-router';
 import ErrorBoundary from './components/ErrorBoundary';
 import PageShell from './components/PageShell';
+import { EVAL_ROUTES } from './constants/routes';
 import { useTelemetry } from './hooks/useTelemetry';
 import DatasetsPage from './pages/datasets/page';
 import EvalPage from './pages/eval/page';
@@ -44,11 +45,13 @@ export function createAppRoutes() {
             index
             element={
               <Navigate
-                to={import.meta.env.VITE_PROMPTFOO_LAUNCHER ? '/launcher' : '/eval'}
+                to={import.meta.env.VITE_PROMPTFOO_LAUNCHER ? '/launcher' : EVAL_ROUTES.ROOT}
                 replace
               />
             }
           />
+          {/* Recover stale links to the removed local dashboard with the latest eval. */}
+          <Route path="/dashboard" element={<Navigate to={EVAL_ROUTES.ROOT} replace />} />
           <Route path="/datasets" element={<DatasetsPage />} />
           <Route path="/eval" element={<EvalPage />} />
           <Route path="/evals" element={<EvalsIndexPage />} />

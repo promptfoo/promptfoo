@@ -429,7 +429,7 @@ describeEvaluator('evaluator transforms', () => {
     expect(mockApiProviderWithTransform.callApi).toHaveBeenCalledTimes(1);
   });
 
-  it('evaluate with no output', async () => {
+  it.each([false, true])('evaluate with no output and redteam=%s', async (isRedteam) => {
     const mockApiProviderNoOutput: ApiProvider = {
       id: vi.fn().mockReturnValue('test-provider-no-output'),
       callApi: vi.fn().mockResolvedValue({
@@ -442,13 +442,15 @@ describeEvaluator('evaluator transforms', () => {
       providers: [mockApiProviderNoOutput],
       prompts: [toPrompt('Test prompt')],
       tests: [],
+      redteam: isRedteam ? {} : undefined,
     };
     const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
     await evaluate(testSuite, evalRecord, {});
     const summary = await evalRecord.toEvaluateSummary();
 
     expect(summary.stats.successes).toBe(0);
-    expect(summary.stats.failures).toBe(1);
+    expect(summary.stats.failures).toBe(0);
+    expect(summary.stats.errors).toBe(1);
     expect(summary.results[0].error).toBe('No output');
     expect(summary.results[0].success).toBe(false);
     expect(summary.results[0].score).toBe(0);

@@ -280,9 +280,11 @@ export class AssertionsResult {
       this.failedContentSafetyChecks = true;
     }
 
+    // Zero-weight assertions collect measurements without affecting the aggregate score.
+    const metricWeight = weight === 0 ? 1 : weight;
     if (metric) {
-      this.namedScores[metric] = (this.namedScores[metric] ?? 0) + result.score * weight;
-      this.namedScoreWeights[metric] = (this.namedScoreWeights[metric] ?? 0) + weight;
+      this.namedScores[metric] = (this.namedScores[metric] ?? 0) + result.score * metricWeight;
+      this.namedScoreWeights[metric] = (this.namedScoreWeights[metric] ?? 0) + metricWeight;
     }
 
     if (result.namedScores) {
@@ -293,7 +295,7 @@ export class AssertionsResult {
             Object.prototype.hasOwnProperty.call(result.namedScoreWeights, metricName)
               ? (result.namedScoreWeights[metricName] ?? 1)
               : 1;
-          const weightedIncomingWeight = incomingWeight * weight;
+          const weightedIncomingWeight = incomingWeight * metricWeight;
           this.namedScores[metricName] =
             (this.namedScores[metricName] ?? 0) + score * weightedIncomingWeight;
           this.namedScoreWeights[metricName] =
