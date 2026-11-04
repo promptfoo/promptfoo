@@ -42,7 +42,7 @@ describe('OpenAI model CLI smoke tests', () => {
                   prompt_tokens: 100,
                   completion_tokens: 20,
                   total_tokens: 120,
-                  prompt_tokens_details: { cached_tokens: 40 },
+                  prompt_tokens_details: { cached_tokens: 40, cache_write_tokens: 0 },
                 },
               }
             : {
@@ -58,7 +58,7 @@ describe('OpenAI model CLI smoke tests', () => {
                   input_tokens: 100,
                   output_tokens: 20,
                   total_tokens: 120,
-                  input_tokens_details: { cached_tokens: 40 },
+                  input_tokens_details: { cached_tokens: 40, cache_write_tokens: 0 },
                 },
               }),
         }),

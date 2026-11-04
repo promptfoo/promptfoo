@@ -1,8 +1,9 @@
 import { traceSpanDurationConfigError } from '../contracts/validators/traceAssertionConfig';
-import { matchesPattern } from './traceUtils';
+import { filterTraceSpans, withTraceAttributeFilterContext } from './traceUtils';
 
 import type { AssertionParams, GradingResult } from '../types/index';
 import type { TraceSpan } from '../types/tracing';
+import type { TraceSpanAttributeFilter } from './traceUtils';
 
 type PercentileMethod = 'nearest' | 'linear';
 
@@ -12,6 +13,7 @@ interface TraceSpanDurationValue {
   percentile?: number;
   method?: PercentileMethod;
   requirePresence?: boolean;
+  attributes?: TraceSpanAttributeFilter;
 }
 
 function calculatePercentile(
@@ -57,7 +59,14 @@ export const handleTraceSpanDuration = ({
     throw new Error('trace-span-duration assertion must have a value object with max property');
   }
 
-  const { pattern = '*', max, percentile, method = 'nearest', requirePresence = false } = value;
+  const {
+    pattern = '*',
+    max,
+    percentile,
+    method = 'nearest',
+    requirePresence = false,
+    attributes,
+  } = value;
   const configError = traceSpanDurationConfigError(value);
   if (configError) {
     throw new Error(configError);
@@ -65,13 +74,9 @@ export const handleTraceSpanDuration = ({
   const spans = assertionValueContext.trace.spans as TraceSpan[];
 
   // Filter spans by pattern and calculate durations
-  const matchingSpans = spans.filter((span) => {
-    return (
-      matchesPattern(span.name, pattern) &&
-      span.startTime !== undefined &&
-      span.endTime !== undefined
-    );
-  });
+  const matchingSpans = filterTraceSpans(spans, pattern, attributes).filter(
+    (span) => span.startTime !== undefined && span.endTime !== undefined,
+  );
 
   if (matchingSpans.length === 0) {
     const pass = !inverse && !requirePresence;
@@ -80,7 +85,12 @@ export const handleTraceSpanDuration = ({
         ? `not-trace-span-duration: no spans matched pattern "${pattern}" while requirePresence is true`
         : `not-trace-span-duration: no spans matched pattern "${pattern}", so the latency budget was satisfied`
       : `No spans found matching pattern "${pattern}" with complete timing data${requirePresence ? ' (requirePresence: true)' : ''}`;
-    return { pass, score: pass ? 1 : 0, reason, assertion };
+    return {
+      pass,
+      score: pass ? 1 : 0,
+      reason: withTraceAttributeFilterContext(reason, attributes),
+      assertion,
+    };
   }
 
   if (
@@ -147,7 +157,7 @@ export const handleTraceSpanDuration = ({
   return {
     pass,
     score: pass ? 1 : 0,
-    reason,
+    reason: withTraceAttributeFilterContext(reason, attributes),
     assertion,
   };
 };
