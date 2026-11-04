@@ -158,27 +158,22 @@ export class FilesystemBlobStorageProvider implements BlobStorageProvider {
   }
 
   async deleteByHash(hash: string): Promise<void> {
+    let filePath: string;
     try {
-      const filePath = this.hashToPath(hash);
-      const metaPath = this.metadataPath(filePath);
-
-      // Delete files (ignore ENOENT errors)
-      try {
-        await fsPromises.unlink(filePath);
-      } catch (error) {
-        if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
-          throw error;
-        }
-      }
-      try {
-        await fsPromises.unlink(metaPath);
-      } catch (error) {
-        if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
-          throw error;
-        }
-      }
+      filePath = this.hashToPath(hash);
     } catch {
-      // Ignore invalid hashes/path traversal attempts
+      // Invalid hashes and path traversal attempts remain a no-op.
+      return;
+    }
+
+    for (const targetPath of [filePath, this.metadataPath(filePath)]) {
+      try {
+        await fsPromises.unlink(targetPath);
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+          throw error;
+        }
+      }
     }
   }
 

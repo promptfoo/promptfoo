@@ -88,6 +88,19 @@ export const ApiProviderSchema = z.unknown().transform((input, ctx) => {
       result.data.promptfooCapabilities,
     );
   }
+  for (const method of [
+    'id',
+    'callApi',
+    'callEmbeddingApi',
+    'callClassificationApi',
+    'callSimilarityApi',
+    'callModerationApi',
+  ] as const) {
+    const operation = result.data[method];
+    if (operation) {
+      Object.assign(result.data, { [method]: operation.bind(input) });
+    }
+  }
   // Keep subclass declarations available after Zod copies the provider object.
   Object.defineProperty(result.data, Symbol.for('promptfoo.capabilityDelegate'), {
     value: input,
@@ -108,4 +121,8 @@ export const ProvidersSchema = z.union([
   ),
 ]);
 
-export const ProviderSchema = z.union([z.string(), ApiProviderSchema, ProviderOptionsSchema]);
+export const ProviderSchema = z.union([
+  z.string(),
+  ApiProviderSchema,
+  ProviderOptionsSchema.extend({ callApi: z.never().optional() }),
+]);
