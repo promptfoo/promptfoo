@@ -1,11 +1,15 @@
 import path from 'path';
 
 import { trace } from '@opentelemetry/api';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import cliState from '../../src/cliState';
 import { importModule } from '../../src/esm';
 import logger from '../../src/logger';
-import { FunctionCallbackHandler } from '../../src/providers/functionCallbackUtils';
+import {
+  FunctionCallbackHandler,
+  loadProviderCallbackFromFileUrl,
+} from '../../src/providers/functionCallbackUtils';
+import { CallbackPathTraversalError } from '../../src/util/functions/loadFunction';
 
 import type { FunctionCallbackConfig } from '../../src/providers/functionCallbackTypes';
 
@@ -23,6 +27,59 @@ vi.mock('../../src/logger', () => ({
 
 const mockImportModule = vi.mocked(importModule);
 const mockLogger = vi.mocked(logger);
+
+describe('loadProviderCallbackFromFileUrl', () => {
+  beforeEach(() => {
+    vi.resetAllMocks();
+  });
+
+  afterEach(() => {
+    vi.resetAllMocks();
+  });
+
+  it.each([undefined, '[Bedrock Converse]'])(
+    'loads the named callback and preserves the log prefix %s',
+    async (logPrefix) => {
+      const callback = vi.fn().mockReturnValue('callback result');
+      mockImportModule.mockResolvedValueOnce(callback);
+
+      await expect(
+        loadProviderCallbackFromFileUrl('file://callbacks.js:lookup', logPrefix),
+      ).resolves.toBe(callback);
+      expect(mockImportModule).toHaveBeenCalledWith(
+        path.resolve(cliState.basePath!, 'callbacks.js'),
+        'lookup',
+      );
+      expect(mockLogger.debug).toHaveBeenCalledWith(
+        `${logPrefix ? `${logPrefix} ` : ''}Loading function from ${path.resolve(cliState.basePath!, 'callbacks.js')}:lookup`,
+      );
+    },
+  );
+
+  it('preserves callback traversal errors by identity', async () => {
+    const error = new CallbackPathTraversalError('../callback.js', '/test/basePath');
+    mockImportModule.mockRejectedValueOnce(error);
+
+    await expect(loadProviderCallbackFromFileUrl('file://callback.js')).rejects.toBe(error);
+  });
+
+  it('rejects paths outside the base directory before importing the callback', async () => {
+    await expect(loadProviderCallbackFromFileUrl('file://../callback.js')).rejects.toBeInstanceOf(
+      CallbackPathTraversalError,
+    );
+    expect(mockImportModule).not.toHaveBeenCalled();
+  });
+
+  it('preserves the callback reference and cause when a module cannot be loaded', async () => {
+    const error = new Error('module unavailable');
+    mockImportModule.mockRejectedValueOnce(error);
+
+    await expect(loadProviderCallbackFromFileUrl('file://callback.js')).rejects.toMatchObject({
+      message: 'Error loading function from file://callback.js: module unavailable',
+      cause: error,
+    });
+  });
+});
 
 describe('FunctionCallbackHandler', () => {
   let handler: FunctionCallbackHandler;

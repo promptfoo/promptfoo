@@ -69,17 +69,11 @@ describe('ModelAuditResult', () => {
     historyError: null,
     totalCount: 0,
     pageSize: 25,
-    currentPage: 0,
     sortModel: [{ field: 'createdAt', sort: 'desc' as const }],
-    searchQuery: '',
     fetchHistoricalScans: vi.fn(),
     fetchScanById: mockFetchScanById,
     deleteHistoricalScan: mockDeleteHistoricalScan,
-    setPageSize: vi.fn(),
-    setCurrentPage: vi.fn(),
     setSortModel: vi.fn(),
-    setSearchQuery: vi.fn(),
-    resetFilters: vi.fn(),
   });
 
   beforeEach(() => {
@@ -204,10 +198,9 @@ describe('ModelAuditResult', () => {
     renderComponent('test-scan-id');
 
     await waitFor(() => {
-      // Component uses icons and background colors, not text
-      // Verify the scan name is rendered (indicates component loaded)
       expect(screen.getByRole('heading', { name: 'Test Scan' })).toBeInTheDocument();
     });
+    expect(document.querySelector('.lucide-circle-check-big')).toBeInTheDocument();
   });
 
   it('should show issues found status when has errors', async () => {
@@ -218,10 +211,9 @@ describe('ModelAuditResult', () => {
     renderComponent('test-scan-id');
 
     await waitFor(() => {
-      // Component uses icons and background colors, not text
-      // Verify the scan name is rendered (indicates component loaded)
       expect(screen.getByRole('heading', { name: 'Test Scan' })).toBeInTheDocument();
     });
+    expect(document.querySelector('.lucide-triangle-alert')).toBeInTheDocument();
   });
 
   it('should open delete confirmation dialog when delete is clicked', async () => {

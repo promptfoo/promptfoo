@@ -330,7 +330,7 @@ describe('DataTable', () => {
     expect(screen.getByText('Banana')).toBeInTheDocument();
 
     // Type a search term that matches nothing
-    const searchInput = screen.getByPlaceholderText('Search...');
+    const searchInput = screen.getByRole('searchbox', { name: 'Search table' });
     await user.click(searchInput);
     await user.keyboard('{Control>}a{/Control}');
     await user.paste('xyz-no-match');
@@ -340,7 +340,7 @@ describe('DataTable', () => {
     expect(screen.queryByText('Banana')).not.toBeInTheDocument();
 
     // But toolbar should still be visible so user can clear/modify the filter
-    expect(screen.getByPlaceholderText('Search...')).toBeInTheDocument();
+    expect(screen.getByRole('searchbox', { name: 'Search table' })).toBeInTheDocument();
     expect(screen.getByTestId('custom-action')).toBeInTheDocument();
     expect(screen.getByText('No results match your search')).toBeInTheDocument();
   });
@@ -388,7 +388,7 @@ describe('DataTable', () => {
 
     expect(screen.queryByText('No data found')).not.toBeInTheDocument();
     expect(screen.getByText('No results match your search')).toBeInTheDocument();
-    expect(screen.getByPlaceholderText('Search...')).toBeInTheDocument();
+    expect(screen.getByRole('searchbox', { name: 'Search table' })).toBeInTheDocument();
   });
 
   it('should preserve column visibility state when reopening the column menu', async () => {
@@ -605,7 +605,7 @@ describe('DataTable', () => {
 
       expect(screen.queryByRole('button', { name: /^Filters/ })).not.toBeInTheDocument();
       expect(screen.queryByRole('button', { name: 'Filter Name' })).not.toBeInTheDocument();
-      expect(screen.queryByPlaceholderText('Search...')).not.toBeInTheDocument();
+      expect(screen.queryByRole('searchbox', { name: 'Search table' })).not.toBeInTheDocument();
     });
 
     it('should allow explicit manual column filters for server-side rows', async () => {
@@ -631,7 +631,7 @@ describe('DataTable', () => {
       );
 
       expect(screen.getByRole('button', { name: /^Filters/ })).toBeInTheDocument();
-      expect(screen.queryByPlaceholderText('Search...')).not.toBeInTheDocument();
+      expect(screen.queryByRole('searchbox', { name: 'Search table' })).not.toBeInTheDocument();
 
       await user.click(screen.getByRole('button', { name: 'Filter Name' }));
       const filterInput = await screen.findByPlaceholderText('Value...');

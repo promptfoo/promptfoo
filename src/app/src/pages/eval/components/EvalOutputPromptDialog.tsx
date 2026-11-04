@@ -10,6 +10,7 @@ import {
 } from '@app/components/ui/sheet';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@app/components/ui/tabs';
 import { HIDDEN_METADATA_KEYS } from '@app/constants';
+import { getRedteamHistoryMessages } from '@app/utils/redteamHistory';
 import { Check, Copy, X } from 'lucide-react';
 import ChatMessages, { type Message } from './ChatMessages';
 import { DebuggingPanel } from './DebuggingPanel';
@@ -25,15 +26,6 @@ import type { Citation } from './Citations';
 import type { ResultsFilterOperator, ResultsFilterType } from './store';
 
 const subtitleTypographyClassName = 'mb-2 font-medium text-base';
-
-interface RedteamHistoryEntry {
-  prompt?: string;
-  promptAudio?: { data?: string; format?: string };
-  promptImage?: { data?: string; format?: string };
-  output?: string;
-  outputAudio?: { data?: string; format?: string };
-  outputImage?: { data?: string; format?: string };
-}
 
 interface CodeDisplayProps {
   content: string;
@@ -336,28 +328,7 @@ export default function EvalOutputPromptDialog({
     output || replayOutput || metadata?.redteamFinalPrompt || citationsData,
   );
 
-  const redteamHistoryRaw = (metadata?.redteamHistory || metadata?.redteamTreeHistory || []) as
-    | RedteamHistoryEntry[]
-    | unknown[];
-  const redteamHistoryMessages = (Array.isArray(redteamHistoryRaw) ? redteamHistoryRaw : [])
-    .filter((entry): entry is RedteamHistoryEntry => {
-      const e = entry as RedteamHistoryEntry;
-      return Boolean(e?.prompt && e?.output);
-    })
-    .flatMap((entry: RedteamHistoryEntry) => [
-      {
-        role: 'user' as const,
-        content: entry.prompt!,
-        audio: entry.promptAudio,
-        image: entry.promptImage,
-      },
-      {
-        role: 'assistant' as const,
-        content: entry.output!,
-        audio: entry.outputAudio,
-        image: entry.outputImage,
-      },
-    ]);
+  const redteamHistoryMessages = getRedteamHistoryMessages(metadata);
 
   const hasEvaluationData = gradingResults && gradingResults.length > 0;
   const hasMessagesData = parsedMessages.length > 0 || redteamHistoryMessages.length > 0;

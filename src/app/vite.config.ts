@@ -7,6 +7,7 @@ import path from 'path';
 import react from '@vitejs/plugin-react';
 import { configDefaults } from 'vitest/config';
 import packageJson from '../../package.json' with { type: 'json' };
+import { browserInventoryPlugin } from './vite.browser-inventory';
 import {
   browserModulesPlugin,
   reactCompilerPlugin,
@@ -74,7 +75,12 @@ export default {
     port: 3000,
   },
   base: process.env.VITE_PUBLIC_BASENAME || '/',
-  plugins: [browserModulesPlugin(), reactCompilerPlugin(), ...react()],
+  plugins: [
+    browserModulesPlugin(),
+    reactCompilerPlugin(),
+    ...react(),
+    browserInventoryPlugin({ posthogKeyPresent: Boolean(process.env.PROMPTFOO_POSTHOG_KEY) }),
+  ],
   resolve: {
     alias: {
       '@app': path.resolve(__dirname, './src'),

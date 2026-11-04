@@ -39,14 +39,6 @@ vi.mock('./store', () => ({
   useTableStore: vi.fn(),
 }));
 
-// Mock API calls
-vi.mock('@app/utils/api', () => ({
-  callApi: vi.fn(),
-  fetchUserEmail: vi.fn(() => Promise.resolve('test@example.com')),
-  fetchUserId: vi.fn(() => Promise.resolve('test-user-id')),
-  updateEvalAuthor: vi.fn(() => Promise.resolve({})),
-}));
-
 describe('ResultsCharts', () => {
   const defaultProps = {};
 
@@ -308,7 +300,7 @@ describe('ResultsCharts', () => {
     }).not.toThrow();
   });
 
-  it('should render without errors when scores array has a single data point', () => {
+  it.each([2, -2])('counts uniform custom scores of %s in a single histogram bin', (score) => {
     const mockTable = {
       head: {
         prompts: [
@@ -317,15 +309,13 @@ describe('ResultsCharts', () => {
         ],
         vars: [],
       },
-      body: [
-        {
-          outputs: [
-            { score: 0.8, pass: true, text: 'valid output' },
-            { score: 0.8, pass: true, text: 'valid output' },
-          ],
-          vars: [],
-        },
-      ],
+      body: Array.from({ length: 3 }, () => ({
+        outputs: [
+          { score, pass: score > 0, text: 'valid output' },
+          { score, pass: score > 0, text: 'valid output' },
+        ],
+        vars: [],
+      })),
     };
 
     const scores = calculateScores(mockTable);
@@ -340,7 +330,12 @@ describe('ResultsCharts', () => {
 
     const { container } = render(<ResultsCharts {...defaultProps} scores={scores} />);
 
-    expect(() => render(<ResultsCharts {...defaultProps} scores={scores} />)).not.toThrow();
+    const histogram = vi
+      .mocked(Chart)
+      .mock.calls.map(([, config]) => config)
+      .find((config) => config.options?.plugins?.title?.text === 'Score Distribution');
+    expect(histogram?.data.labels).toEqual([score]);
+    expect(histogram?.data.datasets.map((dataset) => dataset.data)).toEqual([[3], [3]]);
 
     const canvasElements = container.querySelectorAll('canvas');
     expect(canvasElements.length).toBeGreaterThan(0);
@@ -487,7 +482,7 @@ describe('ResultsCharts', () => {
       ).toContain('right first output');
     });
 
-    it('handles empty recentEvals array gracefully', () => {
+    it('renders only three equal-width charts when the evaluation has a description', () => {
       const mockTable = {
         head: {
           prompts: [{ provider: 'test-provider-1' }, { provider: 'test-provider-2' }],
@@ -526,9 +521,11 @@ describe('ResultsCharts', () => {
 
       const { container } = render(<ResultsCharts {...defaultProps} scores={scores} />);
 
-      expect(container).toBeDefined();
-
-      expect(screen.queryByText('PerformanceOverTimeChart')).toBeNull();
+      const canvases = container.querySelectorAll('canvas');
+      expect(canvases).toHaveLength(3);
+      for (const canvas of canvases) {
+        expect(canvas.parentElement).toHaveStyle({ width: '33%' });
+      }
     });
   });
 
@@ -704,6 +701,21 @@ describe('ResultsCharts', () => {
       ).toHaveAccessibleDescription(
         'Normalized named scores by provider. Prompt 1 (test-provider-1): accuracy 100.00%, precision 100.00%, recall 100.00%; Prompt 2 (test-provider-2): accuracy 88.89%, precision 87.50%, recall 85.71%.',
       );
+      const configs = vi.mocked(Chart).mock.calls.map(([, config]) => config);
+      const metricChart = configs.find((config) => config.data.labels?.includes('accuracy'));
+      expect(metricChart).toMatchObject({
+        type: 'bar',
+        data: {
+          labels: ['accuracy', 'precision', 'recall'],
+          datasets: [
+            { label: 'test-provider-1', data: [1, 1, 1] },
+            { label: 'test-provider-2', data: [0.8 / 0.9, 0.7 / 0.8, 0.6 / 0.7] },
+          ],
+        },
+      });
+      expect(
+        configs.some((config) => config.options?.plugins?.title?.text === 'Score Distribution'),
+      ).toBe(false);
     });
 
     it('should render finite metric chart values if named scores are all zero', () => {
@@ -1039,7 +1051,10 @@ describe('ResultsCharts', () => {
   it('handles empty columnVisibility and includes all prompts', () => {
     const mockTable = {
       head: {
-        prompts: [{ provider: 'test-provider-1' }, { provider: 'test-provider-2' }],
+        prompts: [
+          { provider: 'test-provider-1', metrics: { testPassCount: 2, testFailCount: 0 } },
+          { provider: 'test-provider-2', metrics: { testPassCount: 1, testFailCount: 1 } },
+        ],
         vars: [],
       },
       body: [
@@ -1071,9 +1086,20 @@ describe('ResultsCharts', () => {
       fetchEvalData: vi.fn(),
     });
 
-    const { container } = render(<ResultsCharts {...defaultProps} scores={scores} />);
-
-    const canvasElements = container.querySelectorAll('canvas');
-    expect(canvasElements.length).toBeGreaterThanOrEqual(3);
+    render(<ResultsCharts {...defaultProps} scores={scores} />);
+    const passRate = vi
+      .mocked(Chart)
+      .mock.calls.map(([, config]) => config)
+      .find((config) => config.options?.plugins?.title?.text === 'Pass Rate');
+    expect(passRate).toMatchObject({
+      type: 'bar',
+      data: {
+        labels: ['Pass Rate (%)'],
+        datasets: [
+          { label: 'test-provider-1', data: [100] },
+          { label: 'test-provider-2', data: [50] },
+        ],
+      },
+    });
   });
 });
