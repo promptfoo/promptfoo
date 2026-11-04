@@ -1,6 +1,6 @@
 import { mockBrowserProperty, mockClipboard, mockObjectUrl } from '@app/tests/browserMocks';
 import { renderWithProviders } from '@app/utils/testutils';
-import { convertResultsToTable } from '@promptfoo/util/convertEvalResultsToTable';
+import { convertResultsToTable } from '@promptfoo/presentation/evalResults';
 import { screen } from '@testing-library/dom';
 import { act, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
