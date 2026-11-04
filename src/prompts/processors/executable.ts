@@ -3,17 +3,11 @@ import { stat as fsStat, readFile } from 'fs/promises';
 
 import { getCache, isCacheEnabled } from '../../cache';
 import { getProcessEnv } from '../../envars';
-import { getFileHashes, parseScriptParts } from '../../providers/scriptCompletion';
+import { getFileHashes, parseScriptParts, stripText } from '../../providers/scriptCompletion';
 import invariant from '../../util/invariant';
 import { safeJsonStringify } from '../../util/json';
 
 import type { ApiProvider, Prompt, PromptFunctionContext, VarValue } from '../../types/index';
-
-const ANSI_ESCAPE = /\x1b(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])/g;
-
-function stripText(text: string) {
-  return text.replace(ANSI_ESCAPE, '');
-}
 
 /**
  * Executable prompt function. Executes any script/binary and returns its output as the prompt.
@@ -82,11 +76,9 @@ export const executablePromptFunction = async (
       const standardOutput = stripText(Buffer.from(stdout).toString('utf8').trim());
       const errorOutput = stripText(Buffer.from(stderr).toString('utf8').trim());
 
-      if (errorOutput) {
-        if (!standardOutput) {
-          reject(new Error(errorOutput));
-          return;
-        }
+      if (errorOutput && !standardOutput) {
+        reject(new Error(errorOutput));
+        return;
       }
 
       if (fileHashes.length > 0 && isCacheEnabled()) {
@@ -107,15 +99,17 @@ export const executablePromptFunction = async (
  * @param filePath - Path to the executable file (can include arguments).
  * @param prompt - The raw prompt data.
  * @param functionName - Not used for executables, but kept for interface consistency.
+ * @param displayPath - Path used for generated labels and the binary/unreadable content fallback.
  * @returns Array of prompts generated from the executable.
  */
 export async function processExecutableFile(
   filePath: string,
   prompt: Partial<Prompt>,
   _functionName?: string,
+  displayPath: string = filePath,
 ): Promise<Prompt[]> {
   // For display purposes, try to read the file if it exists and is a text file
-  let rawContent = filePath;
+  let rawContent = displayPath;
   const scriptParts = parseScriptParts(filePath);
   const firstPart = scriptParts[0];
 
@@ -135,7 +129,7 @@ export async function processExecutableFile(
     }
   }
 
-  const label = prompt.label ?? filePath;
+  const label = prompt.label ?? displayPath;
 
   return [
     {

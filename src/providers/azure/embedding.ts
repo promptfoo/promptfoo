@@ -1,17 +1,28 @@
 import { fetchWithCache } from '../../cache';
-import { inheritProviderCapabilities, type ProviderEmbeddingResponse } from '../../types/providers';
+import { inheritProviderCapabilities } from '../../types/providers';
 import invariant from '../../util/invariant';
 import { getRequestTimeoutMs } from '../shared';
 import { DEFAULT_AZURE_API_VERSION } from './defaults';
 import { AzureGenericProvider } from './generic';
+
+import type {
+  CallApiContextParams,
+  CallApiOptionsParams,
+  ProviderEmbeddingResponse,
+} from '../../types/index';
 
 export class AzureEmbeddingProvider extends AzureGenericProvider {
   static readonly declaredProviderCapabilities = ['callEmbeddingApi'] as const;
   readonly promptfooCapabilities = inheritProviderCapabilities(
     AzureEmbeddingProvider.declaredProviderCapabilities,
   );
+  readonly supportsEmbeddingCancellation = true;
 
-  async callEmbeddingApi(text: string): Promise<ProviderEmbeddingResponse> {
+  async callEmbeddingApi(
+    text: string,
+    _context?: CallApiContextParams,
+    options?: CallApiOptionsParams,
+  ): Promise<ProviderEmbeddingResponse> {
     await this.ensureInitialized();
     invariant(this.authHeaders, 'auth headers are not initialized');
     if (!this.getApiBaseUrl()) {
@@ -38,10 +49,12 @@ export class AzureEmbeddingProvider extends AzureGenericProvider {
             ...this.config.headers,
           },
           body: JSON.stringify(body),
+          ...(options?.abortSignal && { signal: options.abortSignal }),
         },
         getRequestTimeoutMs(),
       )) as unknown as any);
     } catch (err) {
+      options?.abortSignal?.throwIfAborted();
       return {
         error: `API call error: ${String(err)}`,
         tokenUsage: {

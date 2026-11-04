@@ -1,8 +1,8 @@
 import { z } from 'zod';
-import { InputsSchema } from '../redteam/types';
-import { ProviderEnvOverridesSchema } from '../types/env';
+import { ProviderEnvOverridesSchema } from '../contracts/env';
+import { InputsSchema } from '../contracts/shared';
+import { StringOrFunctionSchema } from '../contracts/validators/shared';
 import { inheritProviderCapabilities } from '../types/providers';
-import { StringOrFunctionSchema } from './shared';
 
 import type {
   CallApiFunction,
@@ -35,6 +35,7 @@ export const ApiProviderObjectSchema = z.object({
   callEmbeddingApi: z
     .custom<(prompt: string) => Promise<ProviderEmbeddingResponse>>((v) => typeof v === 'function')
     .optional(),
+  supportsEmbeddingCancellation: z.boolean().optional(),
   callClassificationApi: z
     .custom<(prompt: string) => Promise<ProviderClassificationResponse>>(
       (v) => typeof v === 'function',
@@ -63,6 +64,7 @@ export const ApiProviderObjectSchema = z.object({
     .readonly()
     .optional(),
   label: z.custom<ProviderLabel>().optional(),
+  prompts: z.array(z.string()).optional(),
   transform: StringOrFunctionSchema.optional(),
   delay: z.number().optional(),
   config: z.any().optional(),

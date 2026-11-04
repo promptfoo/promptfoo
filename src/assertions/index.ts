@@ -100,7 +100,12 @@ import {
   handleTrajectoryToolSequence,
   handleTrajectoryToolUsed,
 } from './trajectory';
-import { coerceString, getFinalTest, loadFromJavaScriptFile, processFileReference } from './utils';
+import {
+  coerceString,
+  getFinalTest,
+  processFileReference,
+  resolveJavaScriptFileFunction,
+} from './utils';
 import { handleWebhook } from './webhook';
 import { handleWordCount } from './wordCount';
 import { handleIsXml } from './xml';
@@ -270,7 +275,8 @@ const ASSERTION_HANDLERS: Record<
   meteor: async (params: AssertionParams) => {
     try {
       const { handleMeteorAssertion } = await import('./meteor.js');
-      return handleMeteorAssertion(params);
+      // Await so missing-dependency rejections reach the catch below.
+      return await handleMeteorAssertion(params);
     } catch (error) {
       if (
         error instanceof Error &&
@@ -281,7 +287,7 @@ const ASSERTION_HANDLERS: Record<
           pass: false,
           score: 0,
           reason:
-            'METEOR assertion requires the natural package. Please install it using: npm install natural@^8.1.0',
+            'METEOR assertion requires the natural package. Please install it using: npm install natural@^8.2.3',
           assertion: params.assertion,
         };
       }
@@ -297,7 +303,9 @@ const ASSERTION_HANDLERS: Record<
   python: handlePython,
   regex: handleRegex,
   ruby: handleRuby,
+  'rouge-l': handleRougeScore,
   'rouge-n': handleRougeScore,
+  'rouge-s': handleRougeScore,
   'search-rubric': handleSearchRubric,
   'skill-used': handleSkillUsed,
   similar: handleSimilar,
@@ -479,6 +487,9 @@ async function runAssertionInternal({
   type ValueFromScriptType = string | boolean | number | GradingResult | object | undefined;
   let renderedValue = assertion.value;
   let valueFromScript: ValueFromScriptType;
+  // A JavaScript file or package function that throws becomes a failed result. It still goes
+  // through the common post-processing below, so overrides such as weight: 0 apply.
+  let scriptFailure: GradingResult | undefined;
   if (typeof renderedValue === 'string') {
     if (renderedValue.startsWith('file://')) {
       const basePath = cliState.basePath || '';
@@ -495,7 +506,18 @@ async function runAssertionInternal({
       filePath = path.resolve(basePath, filePath);
 
       if (isJavascriptFile(filePath)) {
-        valueFromScript = await loadFromJavaScriptFile(filePath, functionName, [output, context]);
+        // Load errors (missing file or export) are config mistakes and still throw.
+        const assertionFunction = await resolveJavaScriptFileFunction(filePath, functionName);
+        try {
+          valueFromScript = await assertionFunction(output, context);
+        } catch (error) {
+          scriptFailure = {
+            pass: false,
+            score: 0,
+            reason: `Custom function threw error: ${(error as Error)?.message ?? String(error)}`,
+            assertion,
+          };
+        }
         logger.debug(`Javascript script ${filePath} output: ${valueFromScript}`);
       } else if (filePath.endsWith('.py')) {
         try {
@@ -544,7 +566,16 @@ async function runAssertionInternal({
         );
       }
 
-      valueFromScript = await Promise.resolve(requiredModule(output, context));
+      try {
+        valueFromScript = await Promise.resolve(requiredModule(output, context));
+      } catch (error) {
+        scriptFailure = {
+          pass: false,
+          score: 0,
+          reason: `Custom function threw error: ${(error as Error)?.message ?? String(error)}`,
+          assertion,
+        };
+      }
     } else {
       // It's a normal string value
       renderedValue = nunjucks.renderString(renderedValue, resolvedVars);
@@ -649,13 +680,13 @@ async function runAssertionInternal({
   };
 
   // Check for redteam assertions first
-  if (assertionParams.baseType.startsWith('promptfoo:redteam:')) {
+  if (!scriptFailure && assertionParams.baseType.startsWith('promptfoo:redteam:')) {
     return handleRedteam(assertionParams, claimStoredGradingUsage);
   }
 
   const handler = ASSERTION_HANDLERS[assertionParams.baseType as keyof typeof ASSERTION_HANDLERS];
-  if (handler) {
-    const result = await handler(assertionParams);
+  if (scriptFailure || handler) {
+    const result = scriptFailure ?? (await handler(assertionParams));
 
     // Store rendered assertion value in metadata if it differs from the original template
     // This allows the UI to display substituted variable values instead of raw templates

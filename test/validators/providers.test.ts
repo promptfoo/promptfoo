@@ -1,9 +1,15 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { InputsSchema } from '../../src/contracts/shared';
 import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
 import { OpenAiEmbeddingProvider } from '../../src/providers/openai/embedding';
 import { createTogetherAiProvider } from '../../src/providers/togetherai';
-import { hasProviderCapability } from '../../src/types/providers';
-import { ProviderOptionsSchema, ProviderSchema } from '../../src/validators/providers';
+import { type ApiProvider, hasProviderCapability } from '../../src/types/providers';
+import {
+  ApiProviderObjectSchema,
+  ApiProviderSchema,
+  ProviderOptionsSchema,
+  ProviderSchema,
+} from '../../src/validators/providers';
 import { createMockProvider } from '../factories/provider';
 
 afterEach(() => {
@@ -11,6 +17,26 @@ afterEach(() => {
 });
 
 describe('ProviderOptionsSchema', () => {
+  it('uses the canonical input schema for configured and callable providers', () => {
+    expect(ProviderOptionsSchema.shape.inputs.unwrap()).toBe(InputsSchema);
+    expect(ApiProviderObjectSchema.shape.inputs.unwrap()).toBe(InputsSchema);
+    const inputs = { question: 'User question', context: { type: 'text', description: 'Context' } };
+    expect(ProviderOptionsSchema.parse({ inputs }).inputs).toEqual(inputs);
+    expect(
+      ApiProviderSchema.parse({ id: () => 'local', callApi: async () => ({}), inputs }).inputs,
+    ).toEqual(inputs);
+  });
+
+  it.each([{ 'invalid-name': 'question' }, { question: 42 }, { question: { type: 'unknown' } }])(
+    'rejects invalid input contracts: %j',
+    (inputs) => {
+      expect(ProviderOptionsSchema.safeParse({ inputs }).success).toBe(false);
+      expect(
+        ApiProviderSchema.safeParse({ id: () => 'local', callApi: async () => ({}), inputs })
+          .success,
+      ).toBe(false);
+    },
+  );
   it('should filter unknown keys without erroring', () => {
     const input = {
       id: 'test-provider',
@@ -68,6 +94,25 @@ describe('ProviderOptionsSchema', () => {
 });
 
 describe('ProviderSchema union', () => {
+  it('preserves the explicit embedding cancellation capability without requiring it', async () => {
+    const provider = {
+      id: () => 'custom-embedding',
+      callApi: vi.fn(async () => ({ output: 'text' })),
+      callEmbeddingApi: vi.fn(async () => ({ embedding: [1, 0] })),
+    };
+    expect(ApiProviderSchema.parse(provider)).not.toHaveProperty('supportsEmbeddingCancellation');
+    const parsed = ProviderSchema.parse({
+      ...provider,
+      supportsEmbeddingCancellation: true,
+    }) as ApiProvider;
+    expect(parsed.supportsEmbeddingCancellation).toBe(true);
+    expect(await parsed.callEmbeddingApi?.('input')).toEqual({ embedding: [1, 0] });
+    expect(provider.callEmbeddingApi).toHaveBeenCalledWith('input');
+    expect(
+      ApiProviderSchema.safeParse({ ...provider, supportsEmbeddingCancellation: 'true' }).success,
+    ).toBe(false);
+  });
+
   it('should match ApiProviderSchema before ProviderOptionsSchema when callApi is present', () => {
     const input = createMockProvider({
       id: 'custom-provider',
