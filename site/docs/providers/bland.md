@@ -1,7 +1,7 @@
 ---
 title: Bland Provider
 sidebar_label: Bland
-description: Evaluate and red team Bland voice agents and conversational pathways in text, turn by turn, through Bland's pathway chat API.
+description: Evaluate and red team Bland voice agents and conversational pathways in text, turn by turn, through Bland's pathway chat API, with multi-turn sessions.
 sidebar_position: 42
 keywords: [bland, voice agents, phone agents, conversational pathways, red teaming, multi-turn]
 ---

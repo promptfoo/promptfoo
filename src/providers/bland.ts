@@ -85,13 +85,6 @@ interface BlandTurn {
   nodeName?: string;
 }
 
-/**
- * Chats this process opened. `vars.sessionId` only continues one of these: red team
- * configs commonly set `sessionId` to a client-side UUID for correlation, and treating
- * that as a Bland chat ID would skip creating the chat.
- */
-const openedChats = new Set<string>();
-
 class BlandApiError extends Error {
   constructor(
     message: string,
@@ -204,6 +197,13 @@ export class BlandProvider implements ApiProvider {
   private readonly targetId: string;
   private readonly env?: EnvOverrides;
   private readonly providerId?: string;
+  /**
+   * Chats this provider opened in the current evaluation, with their transcripts so far.
+   * `vars.sessionId` only continues one of these: red team configs commonly set
+   * `sessionId` to a client-side UUID for correlation, and treating that as a Bland chat
+   * ID would skip creating the chat.
+   */
+  private readonly openedChats = new Map<string, BlandTurn[]>();
 
   constructor(
     targetType: BlandTargetType,
@@ -299,6 +299,16 @@ export class BlandProvider implements ApiProvider {
 
       if (response.status === 429 && attempt < MAX_RATE_LIMIT_RETRIES) {
         const delay = retryAfterMs(response);
+        // Let the scheduler mark the shared queue rate limited, so other queued Bland
+        // calls wait for the same window instead of each burning their own retries.
+        if (callOptions?.onResponseHeaders) {
+          const headers = Object.fromEntries(response.headers.entries());
+          callOptions.onResponseHeaders(headers, {
+            headers,
+            status: 429,
+            resetAt: Date.now() + delay,
+          });
+        }
         logger.debug('[Bland] Rate limited, retrying the same request', { path, delay, attempt });
         await waitForRetry(delay, callOptions?.abortSignal);
         continue;
@@ -356,7 +366,7 @@ export class BlandProvider implements ApiProvider {
     if (!data?.chat_id) {
       throw new Error('Bland did not return a chat_id for the new chat');
     }
-    openedChats.add(data.chat_id);
+    this.openedChats.set(data.chat_id, []);
     return data.chat_id;
   }
 
@@ -440,6 +450,11 @@ export class BlandProvider implements ApiProvider {
     };
   }
 
+  /** Forget this evaluation's chats so a later run in the same process starts fresh ones. */
+  cleanupAfterEvaluation(): void {
+    this.openedChats.clear();
+  }
+
   async callApi(
     prompt: string,
     context?: CallApiContextParams,
@@ -455,15 +470,24 @@ export class BlandProvider implements ApiProvider {
 
     const sessionId = context?.vars?.sessionId;
     const existingSession =
-      typeof sessionId === 'string' && openedChats.has(sessionId) ? sessionId : undefined;
-    const turns = existingSession ? [prompt] : getUserTurns(prompt);
+      typeof sessionId === 'string' && this.openedChats.has(sessionId) ? sessionId : undefined;
+    // A continued chat already holds the earlier turns, so only the newest user turn is
+    // sent. Stateful strategies may still pass a rendered chat template here.
+    const turns = existingSession ? getUserTurns(prompt).slice(-1) : getUserTurns(prompt);
 
-    const transcript: BlandTurn[] = [];
+    // Continuations extend the chat's transcript so metadata always covers the whole
+    // conversation, greeting included.
+    const transcript: BlandTurn[] = existingSession
+      ? [...(this.openedChats.get(existingSession) ?? [])]
+      : [];
     const state: { chatId?: string; last?: BlandTurnData } = { chatId: existingSession };
 
     try {
       await this.converse(state, turns, transcript, apiKey, context, callOptions);
     } catch (err) {
+      if (state.chatId && this.openedChats.has(state.chatId)) {
+        this.openedChats.set(state.chatId, transcript);
+      }
       if (
         callOptions?.abortSignal?.aborted ||
         (err instanceof Error && err.name === 'AbortError')
@@ -483,6 +507,9 @@ export class BlandProvider implements ApiProvider {
       };
     }
 
+    if (state.chatId) {
+      this.openedChats.set(state.chatId, transcript);
+    }
     // Not cached: a response carries a live chat ID that stateful callers continue, and
     // every conversation runs the agent's real tools and webhooks.
     return this.buildResponse(state.chatId, state.last, transcript);

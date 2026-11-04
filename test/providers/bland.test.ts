@@ -292,16 +292,54 @@ describe('BlandProvider', () => {
       expect(api.requests.at(-1)?.body).toEqual({ message: 'second' });
     });
 
-    it('sends a chat-looking prompt verbatim when continuing a session', async () => {
+    it('sends only the newest user turn of a chat template when continuing a session', async () => {
+      // Stateful strategies such as Crescendo pass the rendered target template on
+      // every round; the chat already holds the earlier turns.
       const api = fakeBland(echo);
       const provider = createBlandProvider('bland:agent:a', { config: { includeGreeting: false } });
       const first = await provider.callApi('hello');
-      const prompt = JSON.stringify([{ role: 'user', content: 'x' }]);
+      const prompt = JSON.stringify([
+        { role: 'system', content: 'You are a patient.' },
+        { role: 'user', content: 'hello' },
+        { role: 'assistant', content: 'You said: hello' },
+        { role: 'user', content: 'can I move my visit?' },
+      ]);
       await provider.callApi(prompt, {
         vars: { sessionId: first.sessionId! },
         prompt: { raw: prompt, label: 'p' },
       });
-      expect(api.requests.at(-1)?.body).toEqual({ message: prompt });
+      expect(api.turns().map((r) => r.body)).toEqual([
+        { message: 'hello' },
+        { message: 'can I move my visit?' },
+      ]);
+    });
+
+    it('returns the whole transcript, greeting included, after a continuation', async () => {
+      fakeBland(echo);
+      const provider = createBlandProvider('bland:agent:a');
+      const first = await provider.callApi('first');
+      const second = await provider.callApi('second', {
+        vars: { sessionId: first.sessionId! },
+        prompt: { raw: 'second', label: 'second' },
+      });
+      const transcript = (second.metadata as any).bland.transcript;
+      expect(transcript.map((t: any) => t.user)).toEqual([null, 'first', 'second']);
+      expect(second.output).toBe('You said: second');
+      // The first response's transcript is not changed by the continuation.
+      expect((first.metadata as any).bland.transcript).toHaveLength(2);
+    });
+
+    it('does not continue chats from an earlier evaluation after cleanup', async () => {
+      const api = fakeBland(echo);
+      const provider = createBlandProvider('bland:agent:a');
+      const first = await provider.callApi('first');
+      await provider.cleanupAfterEvaluation?.({ reason: 'evaluation-complete' });
+      const rerun = await provider.callApi('again', {
+        vars: { sessionId: first.sessionId! },
+        prompt: { raw: 'again', label: 'again' },
+      });
+      expect(rerun.sessionId).toBe('chat-2');
+      expect(api.requests.filter((r) => r.url.endsWith('/create'))).toHaveLength(2);
     });
 
     it('starts a new chat when sessionId is a client-side ID, not a Bland chat', async () => {
@@ -417,13 +455,22 @@ describe('BlandProvider', () => {
           return real(url, options as any, 0);
         });
 
-        const pending = createBlandProvider('bland:agent:a').callApi('hi');
+        const onResponseHeaders = vi.fn();
+        const pending = createBlandProvider('bland:agent:a').callApi('hi', undefined, {
+          onResponseHeaders,
+        });
         await vi.advanceTimersByTimeAsync(1000);
         const result = await pending;
 
         expect(result.output).toBe('You said: hi');
         expect(api.turns().map((r) => r.body)).toEqual([{}, { message: 'hi' }]);
         expect(fetchWithTimeout).toHaveBeenCalledTimes(4);
+        // The backoff is published so the scheduler can hold other queued calls.
+        expect(onResponseHeaders).toHaveBeenCalledTimes(1);
+        const [headers, backoff] = onResponseHeaders.mock.calls[0];
+        expect(headers['retry-after']).toBe('1');
+        expect(backoff).toMatchObject({ status: 429, headers });
+        expect(typeof backoff.resetAt).toBe('number');
       } finally {
         vi.useRealTimers();
       }
