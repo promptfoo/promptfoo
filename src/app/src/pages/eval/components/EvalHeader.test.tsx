@@ -3,6 +3,7 @@ import { act } from 'react';
 import { TooltipProvider } from '@app/components/ui/tooltip';
 import { fetchUserEmail } from '@app/utils/api';
 import { cleanup, render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import EvalHeader from './EvalHeader';
@@ -52,7 +53,8 @@ function setCounts(counts: (number | undefined)[]) {
   });
 }
 
-function renderHeader() {
+async function renderDetails() {
+  const user = userEvent.setup();
   render(
     <TooltipProvider>
       <MemoryRouter>
@@ -65,6 +67,7 @@ function renderHeader() {
       </MemoryRouter>
     </TooltipProvider>,
   );
+  await user.click(screen.getByRole('button', { name: 'More evaluation details' }));
 }
 
 describe('EvalHeader probe counts', () => {
@@ -85,15 +88,15 @@ describe('EvalHeader probe counts', () => {
     { counts: [undefined, 0], expected: 0 },
     { counts: [undefined, undefined], expected: 12 },
     { counts: [], expected: 12 },
-  ])('shows $expected for $counts', ({ counts, expected }) => {
+  ])('shows $expected for $counts', async ({ counts, expected }) => {
     setCounts(counts);
-    renderHeader();
+    await renderDetails();
     expect(screen.getByText('PROBES').closest('button')).toHaveTextContent(`PROBES${expected}`);
   });
 
-  it('updates when the table prompt metrics change', () => {
+  it('updates when the table prompt metrics change', async () => {
     setCounts([0, 2]);
-    renderHeader();
+    await renderDetails();
     setCounts([3, 4]);
     expect(screen.getByText('PROBES').closest('button')).toHaveTextContent('PROBES7');
   });
