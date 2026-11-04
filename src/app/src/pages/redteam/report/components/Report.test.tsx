@@ -68,7 +68,11 @@ vi.mock('./RiskCategories', () => ({
   }) => {
     const groups = { failuresByPlugin, passesByPlugin };
     reportGroupings(groups);
-    return <pre hidden data-testid="report-groups">{JSON.stringify(groups)}</pre>;
+    return (
+      <pre hidden data-testid="report-groups">
+        {JSON.stringify(groups)}
+      </pre>
+    );
   },
 }));
 vi.mock('./TestSuites', () => ({ default: () => null }));
