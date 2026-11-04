@@ -150,6 +150,83 @@ describe('generated prompt selection', () => {
       { eventSource: 'library', generateSuggestions: true, suggestionsCount },
       { ...nodeEvaluatorRuntime, selectPrompt: async () => true },
     );
-    expect(generatePrompts).toHaveBeenCalledWith('Original prompt', expected);
+    expect(generatePrompts).toHaveBeenCalledWith('Original prompt', expected, undefined);
+  });
+
+  it('passes caller cancellation to prompt generation before asking for approval', async () => {
+    const controller = new AbortController();
+    const reason = new Error('stop prompt suggestions');
+    let started!: () => void;
+    const generating = new Promise<void>((resolve) => {
+      started = resolve;
+    });
+    vi.mocked(generatePrompts).mockImplementation(async (_prompt, _num, signal) => {
+      started();
+      return new Promise((_resolve, reject) => {
+        signal?.addEventListener('abort', () => reject(signal.reason), { once: true });
+      });
+    });
+
+    const evaluation = evaluate(
+      createTestSuite(),
+      new Eval({}),
+      {
+        eventSource: 'library',
+        generateSuggestions: true,
+        abortSignal: controller.signal,
+      },
+      { ...nodeEvaluatorRuntime, selectPrompt: promptYesNo },
+    );
+    const rejection = expect(evaluation).rejects.toBe(reason);
+    try {
+      await generating;
+      expect(generatePrompts).toHaveBeenCalledWith('Original prompt', 1, controller.signal);
+      controller.abort(reason);
+      await rejection;
+      expect(promptYesNo).not.toHaveBeenCalled();
+    } finally {
+      controller.abort(reason);
+      await Promise.allSettled([evaluation]);
+    }
+  });
+
+  it('passes the global timeout to prompt generation and stops before asking for approval', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    let observedSignal: AbortSignal | undefined;
+    let started!: () => void;
+    const generating = new Promise<void>((resolve) => {
+      started = resolve;
+    });
+    vi.mocked(generatePrompts).mockImplementation(async (_prompt, _num, signal) => {
+      observedSignal = signal;
+      started();
+      return new Promise((_resolve, reject) => {
+        signal?.addEventListener('abort', () => reject(signal.reason), { once: true });
+      });
+    });
+
+    const evaluation = evaluate(
+      createTestSuite(),
+      new Eval({}),
+      {
+        eventSource: 'library',
+        generateSuggestions: true,
+        maxEvalTimeMs: 100,
+      },
+      { ...nodeEvaluatorRuntime, selectPrompt: promptYesNo },
+    );
+    const rejection = expect(evaluation).rejects.toMatchObject({ name: 'AbortError' });
+    try {
+      await generating;
+      expect(observedSignal?.aborted).toBe(false);
+      await vi.advanceTimersByTimeAsync(100);
+      await rejection;
+      expect(observedSignal?.aborted).toBe(true);
+      expect(promptYesNo).not.toHaveBeenCalled();
+    } finally {
+      await vi.advanceTimersByTimeAsync(100);
+      await Promise.allSettled([evaluation]);
+      vi.useRealTimers();
+    }
   });
 });

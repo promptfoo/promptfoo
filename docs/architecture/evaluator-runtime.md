@@ -8,6 +8,10 @@ The evaluator has three source entry points:
 | `src/node/evaluateTestSuite.ts` | Supply the default Node runtime for the existing three-argument evaluator API. |
 | `src/evaluator.ts`              | Preserve the established source exports and overloads.                         |
 
+Terminal progress rendering and log coordination live in
+`src/progress/evaluationProgress.ts`. The compatibility facade preserves the existing
+progress manager and variable-formatting exports.
+
 The public `promptfoo.evaluate()` API continues to resolve configuration through
 Node composition and return an `Eval` record, including its summary and persistence
 methods. These source boundaries do not introduce another npm package or a new

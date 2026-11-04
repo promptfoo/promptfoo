@@ -175,6 +175,7 @@ export async function filterTestsByResults(
   // This captures runtime-generated tests (e.g., from remote plugins like cipher-code, wordplay)
   // that exist in results but not in the config file.
   const extractedTests: TestCase[] = [];
+  const extractedTestKeys = new Set<string>();
   const matchedResultKeys = new Set<string>();
 
   // Track which results matched config tests
@@ -210,19 +211,21 @@ export async function filterTestsByResults(
     }
 
     // Skip if we already extracted a test with these vars (dedup within extraction)
-    if (extractedTests.some((t) => JSON.stringify(filterRuntimeVars(t.vars)) === resultKey)) {
+    if (extractedTestKeys.has(resultKey)) {
       continue;
     }
 
     // Extract test case, filtering runtime vars and omitting provider (security)
-    extractedTests.push({
+    const extractedTest: TestCase = {
       description: result.testCase.description,
       vars: filterRuntimeVars(result.testCase.vars) || {},
       assert: result.testCase.assert,
       metadata: result.testCase.metadata,
       options: result.testCase.options,
       // Intentionally omit: provider (security - may contain stale credentials)
-    });
+    };
+    extractedTests.push(extractedTest);
+    extractedTestKeys.add(JSON.stringify(filterRuntimeVars(extractedTest.vars)));
   }
 
   if (extractedTests.length > 0) {
