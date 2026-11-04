@@ -570,14 +570,14 @@ export function createServerOpenApiRegistry() {
     summary: 'Append traces to an evaluation',
     request: {
       params: EvalSchemas.AddTraces.Params,
-      body: jsonBody('AddTracesRequest', EvalSchemas.AddTraces.Request),
+      body: jsonBody(EvalSchemas.AddTraces.Request),
     },
     responses: {
       204: noContent('Traces added'),
-      400: validationError(),
-      404: notFound('Evaluation not found'),
-      409: errorResponse('Trace ID already belongs to another evaluation'),
-      500: serverError(),
+      400: jsonResponse(ErrorResponseSchema, 'Validation error'),
+      404: jsonResponse(ErrorResponseSchema, 'Evaluation not found'),
+      409: jsonResponse(ErrorResponseSchema, 'Trace ID already belongs to another evaluation'),
+      500: jsonResponse(ErrorResponseSchema, 'Server error'),
     },
   });
 
@@ -1185,14 +1185,17 @@ export function createServerOpenApiRegistry() {
     tags: ['Blobs'],
     summary: 'Upload blob bytes to local storage',
     request: {
-      body: jsonBody('UploadBlobRequest', BlobsSchemas.Upload.Request),
+      body: jsonBody(BlobsSchemas.Upload.Request),
     },
     responses: {
-      200: jsonResponse('UploadBlobResponse', BlobsSchemas.Upload.Response),
-      400: validationError(),
-      404: notFound('Blob storage is disabled or evaluation was not found'),
-      413: errorResponse('Blob exceeds maximum size'),
-      500: serverError(),
+      200: jsonResponse(BlobsSchemas.Upload.Response),
+      400: jsonResponse(ErrorResponseSchema, 'Validation error'),
+      404: jsonResponse(
+        ErrorResponseSchema,
+        'Blob storage is disabled or evaluation was not found',
+      ),
+      413: jsonResponse(ErrorResponseSchema, 'Blob exceeds maximum size'),
+      500: jsonResponse(ErrorResponseSchema, 'Server error'),
     },
   });
 

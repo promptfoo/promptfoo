@@ -6,7 +6,7 @@ import { sanitizeTraceAttributes } from './sanitizeAttributes';
 import { isRelevantSpan, matchesSpanFilter } from './spanFilter';
 import { SPAN_ROLE_ATTRIBUTE } from './spanRoles';
 
-import type { TraceData } from '../types/tracing';
+import type { TraceData, TraceSpan } from '../types/tracing';
 
 interface StoreTraceData extends Omit<TraceData, 'spans'> {
   evaluationId: string;
@@ -14,16 +14,7 @@ interface StoreTraceData extends Omit<TraceData, 'spans'> {
   metadata?: Record<string, any>;
 }
 
-export interface SpanData {
-  spanId: string;
-  parentSpanId?: string;
-  name: string;
-  startTime: number;
-  endTime?: number;
-  attributes?: Record<string, any>;
-  statusCode?: number;
-  statusMessage?: string;
-}
+export type SpanData = TraceSpan;
 
 export interface ParsedTrace {
   traceId: string;
