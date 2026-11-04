@@ -33,6 +33,13 @@ providers:
 defaultTest:
   assert:
     - type: is-json
+    - type: javascript
+      metric: CompletedRootCommand
+      value: |
+        const { turnId, toolCalls } = context.providerResponse.metadata ?? {};
+        return Boolean(turnId && toolCalls?.some(call =>
+          call.turnId === turnId && call.type === 'command_execution' && call.status === 'completed'
+        ));
 
 tests:
   - vars:

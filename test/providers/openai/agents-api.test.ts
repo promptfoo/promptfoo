@@ -1430,6 +1430,23 @@ describe('OpenAiAgentsApiProvider', () => {
     expect(fetchWithRetries).toHaveBeenCalledTimes(1);
   });
 
+  it.each([undefined, null, '', ' ', '..'])(
+    'rejects a completed root turn with invalid ID %j before reading its messages',
+    async (id) => {
+      mockApi((pathname) => {
+        if (pathname.endsWith('/turns')) {
+          return json(page([{ ...turn, id }]));
+        }
+        return pathname.endsWith('/items') ? json(page([{ ...message, turn_id: id }])) : undefined;
+      });
+      const result = await provider({ retainSession: true }).callApi('hi');
+      expect(result.error).toMatch(/turn ID/i);
+      expect(result.output).toBeUndefined();
+      expect(result.metadata).toMatchObject({ sessionCancelled: true, sessionDeleted: true });
+      expect(calls().some(({ pathname }) => pathname.endsWith('/items'))).toBe(false);
+    },
+  );
+
   it('reports an invalid list response', async () => {
     vi.mocked(fetchWithRetries)
       .mockResolvedValueOnce(json(session))
@@ -2277,6 +2294,44 @@ describe('OpenAiAgentsApiProvider', () => {
     expect(priority.cost).toBeCloseTo(standard.cost! * 2);
   });
 
+  it.each([
+    { resource: 'session', status: 200 },
+    { resource: 'turn', status: 204 },
+  ])(
+    'keeps the completed turn when an optional $resource usage read is empty ($status)',
+    async ({ resource, status }) => {
+      vi.useFakeTimers();
+      let sessionReads = 0;
+      let emptyReads = 0;
+      mockApi((path, method) => {
+        if (method !== 'GET') {
+          return undefined;
+        }
+        if (path.endsWith('/sess_test')) {
+          sessionReads++;
+          if (resource !== 'session' || sessionReads === 1) {
+            return json({ ...session, usage: null });
+          }
+        } else if (resource !== 'turn' || !path.endsWith('/turns/turn_test')) {
+          return undefined;
+        }
+        emptyReads++;
+        return new Response(null, { status });
+      });
+      const pending = provider({ usageTimeoutMs: 25, pollIntervalMs: 5 }).callApi('hi');
+      await vi.advanceTimersByTimeAsync(25);
+      const result = await pending;
+      expect(emptyReads).toBeGreaterThan(0);
+      expect(result.error).toBeUndefined();
+      expect(result).toMatchObject({
+        output: '42',
+        tokenUsage: { total: usage.total_tokens },
+        metadata: { sessionDeleted: true },
+      });
+      expect(result.metadata).not.toHaveProperty('sessionCancelled');
+    },
+  );
+
   it('keeps a successful answer when final usage stays unavailable', async () => {
     vi.useFakeTimers();
     mockApi(withoutUsage);
@@ -2622,16 +2677,83 @@ describe('OpenAiAgentsApiProvider', () => {
     });
   });
 
-  it('skips the usage wait when usageTimeoutMs is 0', async () => {
+  it('starts no optional usage reads with a zero budget', async () => {
+    vi.useFakeTimers();
     mockApi(withoutUsage);
-    const result = await provider({ usageTimeoutMs: 0 }).callApi('hi');
+    const pending = provider({ usageTimeoutMs: 0 }).callApi('hi');
+    await vi.advanceTimersByTimeAsync(0);
+    const result = await pending;
     expect(result.metadata).toMatchObject({ usageUnavailable: true, sessionDeleted: true });
     expect(
       calls().filter(
         (request) => request.method === 'GET' && request.pathname.endsWith('/sess_test'),
       ),
     ).toHaveLength(1);
+    expect(calls().some((request) => request.pathname.endsWith('/turns/turn_test'))).toBe(false);
   });
+
+  it('refreshes usage immediately when its budget is shorter than the poll interval', async () => {
+    vi.useFakeTimers();
+    let sessionReads = 0;
+    mockApi((path, method) => {
+      if (method === 'GET' && path.endsWith('/sess_test') && ++sessionReads > 1) {
+        return json(session);
+      }
+      return withoutUsage(path, method);
+    });
+    const pending = provider({ usageTimeoutMs: 500, pollIntervalMs: 1_000 }).callApi('hi');
+    await vi.advanceTimersByTimeAsync(0);
+    expect(sessionReads).toBe(2);
+    await expect(pending).resolves.toMatchObject({
+      output: '42',
+      tokenUsage: { total: usage.total_tokens },
+      metadata: { sessionDeleted: true },
+    });
+  });
+
+  it.each(['usage deadline', 'eval cancellation'] as const)(
+    'interrupts an in-flight usage request on %s',
+    async (stop) => {
+      vi.useFakeTimers();
+      const initialSession = { ...session, usage: null };
+      const initialTurn = { ...turn, usage: null };
+      const stalledRead = vi.fn<typeof fetchWithRetries>((_url, options) => {
+        const signal = options!.signal!;
+        return new Promise((_resolve, reject) => {
+          signal.addEventListener('abort', () => reject(signal.reason), { once: true });
+        });
+      });
+      vi.mocked(fetchWithRetries)
+        .mockResolvedValueOnce(json(initialSession))
+        .mockResolvedValueOnce(json(page([initialTurn])))
+        .mockResolvedValueOnce(json(initialSession))
+        .mockResolvedValueOnce(json(page([message])))
+        .mockImplementationOnce(stalledRead)
+        .mockResolvedValueOnce(json(turn));
+      const controller = new AbortController();
+      const pending = provider({ usageTimeoutMs: 25, pollIntervalMs: 5 }).callApi('hi', undefined, {
+        abortSignal: controller.signal,
+      });
+      await vi.advanceTimersByTimeAsync(5);
+      expect(stalledRead).toHaveBeenCalledOnce();
+      if (stop === 'eval cancellation') {
+        const rejected = expect(pending).rejects.toThrow('cancel eval');
+        controller.abort(new Error('cancel eval'));
+        await rejected;
+      } else {
+        await vi.advanceTimersByTimeAsync(20);
+        expect(stalledRead.mock.calls[0][1]?.signal?.aborted).toBe(true);
+        // The root turn reported usage before the stalled session read hit its deadline.
+        expect(await pending).toMatchObject({
+          output: '42',
+          tokenUsage: { total: usage.total_tokens },
+          metadata: { sessionDeleted: true },
+        });
+      }
+      expect(calls().at(-1)?.method).toBe('DELETE');
+      expect(calls().at(-1)?.options?.signal?.aborted).toBe(false);
+    },
+  );
 
   it('does not turn a completed answer into a timeout while waiting for usage', async () => {
     vi.useFakeTimers();
