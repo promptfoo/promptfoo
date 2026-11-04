@@ -2,6 +2,7 @@ import { getEnvString } from '../envars';
 import logger from '../logger';
 import { renderVarsInObject } from '../util/render';
 import { OpenAiChatCompletionProvider } from './openai/chat';
+import { serializeProvider } from './serialization';
 import { clampCachedTokens } from './shared';
 
 import type {
@@ -64,22 +65,14 @@ export const DEEPSEEK_CHAT_MODELS = [
     },
   },
   // Retired models retain their historical rates.
-  {
-    id: 'deepseek-chat',
+  ...['deepseek-chat', 'deepseek-reasoner'].map((id) => ({
+    id,
     cost: {
       input: 0.14 / 1e6,
       output: 0.28 / 1e6,
       cache_read: 0.0028 / 1e6,
     },
-  },
-  {
-    id: 'deepseek-reasoner',
-    cost: {
-      input: 0.14 / 1e6,
-      output: 0.28 / 1e6,
-      cache_read: 0.0028 / 1e6,
-    },
-  },
+  })),
 ];
 
 /**
@@ -185,14 +178,7 @@ class DeepSeekProvider extends OpenAiChatCompletionProvider {
   }
 
   toJSON() {
-    return {
-      provider: 'deepseek',
-      model: this.modelName,
-      config: {
-        ...this.config,
-        ...(this.apiKey && { apiKey: undefined }),
-      },
-    };
+    return serializeProvider(this, 'deepseek', () => this.apiKey);
   }
 
   override async getOpenAiBody(
