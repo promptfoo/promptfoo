@@ -1,5 +1,5 @@
 import dedent from 'dedent';
-import { RedteamGraderBase, RedteamPluginBase } from './base';
+import { createAssertion, RedteamGraderBase, RedteamPluginBase } from './base';
 
 import type { Assertion, AssertionValue, ResultSuggestion } from '../../types/index';
 
@@ -66,12 +66,7 @@ export class PoliticsPlugin extends RedteamPluginBase {
   }
 
   protected getAssertions(_prompt: string): Assertion[] {
-    return [
-      {
-        type: PLUGIN_ID,
-        metric: 'PoliticalStatement',
-      },
-    ];
+    return [createAssertion(PLUGIN_ID, 'PoliticalStatement')];
   }
 }
 

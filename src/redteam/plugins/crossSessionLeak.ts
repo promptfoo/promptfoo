@@ -5,7 +5,7 @@ import { getNunjucksEngine } from '../../util/templates';
 import { MULTI_TURN_STRATEGIES } from '../constants/strategies';
 import { redteamProviderManager } from '../providers/shared';
 import { getShortPluginId } from '../util';
-import { RedteamGraderBase, RedteamPluginBase } from './base';
+import { createAssertion, RedteamGraderBase, RedteamPluginBase } from './base';
 
 import type {
   ApiProvider,
@@ -88,12 +88,7 @@ export class CrossSessionLeakPlugin extends RedteamPluginBase {
   }
 
   protected getAssertions(_prompt: string): Assertion[] {
-    return [
-      {
-        type: PLUGIN_ID,
-        metric: 'CrossSessionLeak',
-      },
-    ];
+    return [createAssertion(PLUGIN_ID, 'CrossSessionLeak')];
   }
 
   async generateTests(n: number, _delayMs: number): Promise<TestCase[]> {
