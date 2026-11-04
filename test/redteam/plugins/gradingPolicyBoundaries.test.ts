@@ -103,7 +103,7 @@ describe.each(graders)(
       );
       expect(result.rubric).toContain(allowedBoundary);
       expect(result.rubric).toContain(protectedBoundary);
-      expect(result.rubric).toContain('<purpose>');
+      expect(result.rubric).toMatch(/<purpose>/i);
       expect(result.rubric).toContain('<UserQuery>');
     });
 

@@ -1,9 +1,18 @@
 import { describe, expect, it } from 'vitest';
 import { handleContainsJson, handleIsJson } from '../../src/assertions/json';
+import cliState from '../../src/cliState';
+import { validateFunctionCall } from '../../src/providers/google/util';
+import { resetAjv } from '../../src/util/json';
 import { createMockProvider, createProviderResponse } from '../factories/provider';
 import { createAtomicTestCase } from '../factories/testSuite';
 
 import type { AssertionParams, AssertionValue } from '../../src/types/index';
+
+const createNameSchema = () => ({
+  type: 'object',
+  required: ['name'],
+  properties: { name: { type: 'string' } },
+});
 
 const mockProvider = createMockProvider({
   id: 'mock',
@@ -37,6 +46,51 @@ const NAME_SCHEMA_YAML = [
   '    type: string',
 ].join('\n');
 
+describe.each([
+  { type: 'is-json' as const, handler: handleIsJson },
+  { type: 'contains-json' as const, handler: handleContainsJson },
+])('$type ordering annotations', ({ type, handler }) => {
+  it.each(['false', 'true'])(
+    'works before and after function validation (relaxed=%s)',
+    (disabled) => {
+      resetAjv();
+      cliState.withEnv({ PROMPTFOO_DISABLE_AJV_STRICT_MODE: disabled }, () => {
+        const params = makeParams({
+          assertion: { type },
+          renderedValue: {
+            type: 'object',
+            properties: { name: { type: 'string' } },
+            required: ['name'],
+            property_ordering: ['name'],
+          },
+          outputString: '{"name":"fixture"}',
+        });
+        expect(handler(params).pass).toBe(true);
+        expect(handler({ ...params, outputString: '{"name":1}' }).pass).toBe(false);
+        validateFunctionCall(
+          [{ functionCall: { name: 'fixture', args: { name: 'fixture' } } }],
+          [
+            {
+              functionDeclarations: [
+                {
+                  name: 'fixture',
+                  parameters: {
+                    type: 'OBJECT',
+                    properties: { name: { type: 'STRING' } },
+                    required: ['name'],
+                  },
+                },
+              ],
+            },
+          ],
+        );
+        expect(handler(params).pass).toBe(true);
+        expect(handler({ ...params, outputString: '{"name":1}' }).pass).toBe(false);
+      });
+    },
+  );
+});
+
 describe('handleIsJson', () => {
   it('passes for valid JSON with no schema', () => {
     const result = handleIsJson(
@@ -46,6 +100,15 @@ describe('handleIsJson', () => {
       }),
     );
     expect(result.pass).toBe(true);
+  });
+
+  it('rejects an encoded scheme instead of validating against the built-in JSON meta-schema', () => {
+    const params = makeParams({
+      assertion: { type: 'is-json' },
+      renderedValue: '$ref: "%68ttp://json-schema.org/draft-07/schema#"',
+      outputString: '{}',
+    });
+    expect(() => handleIsJson(params)).toThrow('URI scheme is malformed.');
   });
 
   it('validates against a YAML string schema', () => {
@@ -74,11 +137,7 @@ describe('handleIsJson', () => {
       makeParams({
         assertion: { type: 'is-json', value: 'file://schema.json' },
         renderedValue: 'file://schema.json' as AssertionValue,
-        valueFromScript: {
-          type: 'object',
-          required: ['name'],
-          properties: { name: { type: 'string' } },
-        },
+        valueFromScript: createNameSchema(),
         outputString: '{"name": "promptfoo"}',
       }),
     );
@@ -148,11 +207,7 @@ describe('handleContainsJson', () => {
       makeParams({
         assertion: { type: 'contains-json', value: 'file://schema.json' },
         renderedValue: 'file://schema.json' as AssertionValue,
-        valueFromScript: {
-          type: 'object',
-          required: ['name'],
-          properties: { name: { type: 'string' } },
-        },
+        valueFromScript: createNameSchema(),
         outputString: 'result: {"name": "promptfoo"}',
       }),
     );

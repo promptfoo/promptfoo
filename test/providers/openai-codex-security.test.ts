@@ -19,6 +19,10 @@ import { createDeferred } from '../util/utils';
 
 import type { CallApiContextParams } from '../../src/types/index';
 
+const createDeepScanConfig = () => ({
+  config: { operation: 'deep-security-scan' as const },
+});
+
 vi.mock('../../src/esm', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../src/esm')>()),
   importModule: vi.fn(),
@@ -499,9 +503,7 @@ describe('OpenAICodexSecurityProvider', () => {
           },
         }),
       );
-      const provider = new OpenAICodexSecurityProvider({
-        config: { operation: 'deep-security-scan' },
-      });
+      const provider = new OpenAICodexSecurityProvider(createDeepScanConfig());
 
       const response = await provider.callApi('Run a complete deep scan');
 
@@ -519,9 +521,7 @@ describe('OpenAICodexSecurityProvider', () => {
     });
 
     it('distinguishes SDK prompt-cache tokens from cached Promptfoo scan responses', async () => {
-      const provider = new OpenAICodexSecurityProvider({
-        config: { operation: 'deep-security-scan' },
-      });
+      const provider = new OpenAICodexSecurityProvider(createDeepScanConfig());
 
       const freshResponse = await provider.callApi('Run a complete deep scan');
       const tokenUsage = createEmptyTokenUsage();
@@ -874,9 +874,7 @@ describe('OpenAICodexSecurityProvider', () => {
         });
         throw new Error('Deep scan worker was interrupted');
       });
-      const provider = new OpenAICodexSecurityProvider({
-        config: { operation: 'deep-security-scan' },
-      });
+      const provider = new OpenAICodexSecurityProvider(createDeepScanConfig());
 
       expect(await provider.callApi('Scan')).toMatchObject({
         error: 'Codex Security operation failed: Deep scan worker was interrupted',

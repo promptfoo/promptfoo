@@ -1,11 +1,18 @@
 import { mockBrowserProperty, mockClipboard, mockObjectUrl } from '@app/tests/browserMocks';
 import { renderWithProviders } from '@app/utils/testutils';
 import { screen } from '@testing-library/dom';
-import { waitFor } from '@testing-library/react';
+import { act, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import * as yaml from 'js-yaml';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { DownloadDialog } from './DownloadMenu';
 import { useTableStore as useResultsViewStore } from './store';
+
+const createPassingTableRow = () => ({
+  test: { vars: { testVar: 'value2' } },
+  vars: ['value3', 'value4'],
+  outputs: [{ pass: true, text: 'passed output' }],
+});
 
 // Helper to render DownloadDialog with open state
 function renderDownloadDialog() {
@@ -28,42 +35,29 @@ vi.mock('../../../hooks/useToast', () => ({
   }),
 }));
 
-// Mock the new download hooks
-const mockDownloadCsvFn = vi.fn();
-const mockDownloadJsonFn = vi.fn();
-let csvHookOptions:
-  | { onSuccess?: (fileName: string) => void; onError?: (error: Error) => void }
-  | undefined;
-let jsonHookOptions:
-  | { onSuccess?: (fileName: string) => void; onError?: (error: Error) => void }
-  | undefined;
-let csvIsLoading = false;
-let jsonIsLoading = false;
-
-const { downloadBlobMock, useDownloadEvalMock } = vi.hoisted(() => ({
-  downloadBlobMock: vi.fn(),
-  useDownloadEvalMock: vi.fn(),
+const { mockDownloadCsvFn, mockDownloadJsonFn } = vi.hoisted(() => ({
+  mockDownloadCsvFn: vi.fn(),
+  mockDownloadJsonFn: vi.fn(),
 }));
 
-vi.mock('../../../hooks/useDownloadEval', () => ({
-  downloadBlob: downloadBlobMock,
-  DownloadFormat: {
-    CSV: 'csv',
-    JSON: 'json',
-  },
-  useDownloadEval: useDownloadEvalMock,
+vi.mock('../../../utils/api/downloads', () => ({
+  downloadResultsCsv: mockDownloadCsvFn,
+  downloadResultsJson: mockDownloadJsonFn,
 }));
 
-const { yamlDumpMock } = vi.hoisted(() => ({
-  yamlDumpMock: vi.fn().mockReturnValue('mocked yaml'),
-}));
+vi.mock('js-yaml', { spy: true });
+const yamlDumpMock = vi.mocked(yaml.dump);
 
-vi.mock('js-yaml', () => ({
-  default: {
-    dump: yamlDumpMock,
-  },
-  dump: yamlDumpMock,
-}));
+async function readDownloadedBlob() {
+  await waitFor(() => expect(URL.createObjectURL).toHaveBeenCalled());
+  const blob = vi.mocked(URL.createObjectURL).mock.calls.slice(-1)[0][0] as Blob;
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result));
+    reader.onerror = () => reject(reader.error);
+    reader.readAsText(blob);
+  });
+}
 
 describe('DownloadMenu', () => {
   const mockTable = {
@@ -77,11 +71,7 @@ describe('DownloadMenu', () => {
         vars: ['value1', 'value2'],
         outputs: [{ pass: false, text: 'failed output' }],
       },
-      {
-        test: { vars: { testVar: 'value2' } },
-        vars: ['value3', 'value4'],
-        outputs: [{ pass: true, text: 'passed output' }],
-      },
+      createPassingTableRow(),
     ],
   };
 
@@ -95,55 +85,14 @@ describe('DownloadMenu', () => {
   const mockEvalId = 'test-eval-id';
 
   beforeEach(() => {
-    csvIsLoading = false;
-    jsonIsLoading = false;
-    csvHookOptions = undefined;
-    jsonHookOptions = undefined;
     mockClipboard();
     mockObjectUrl('mocked-blob-url');
     mockBrowserProperty(global.navigator, 'msSaveOrOpenBlob', vi.fn());
 
     yamlDumpMock.mockClear();
-    yamlDumpMock.mockReturnValue('mocked yaml');
 
-    downloadBlobMock.mockReset();
-    downloadBlobMock.mockImplementation((blob: Blob, fileName: string) => {
-      const url = global.URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = fileName;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      global.URL.revokeObjectURL(url);
-    });
-
-    mockDownloadCsvFn.mockReset();
-    mockDownloadCsvFn.mockImplementation(async () => {
-      csvHookOptions?.onSuccess?.(`${mockEvalId}.csv`);
-      return `${mockEvalId}.csv`;
-    });
-
-    mockDownloadJsonFn.mockReset();
-    mockDownloadJsonFn.mockImplementation(async () => {
-      jsonHookOptions?.onSuccess?.(`${mockEvalId}.json`);
-      return `${mockEvalId}.json`;
-    });
-
-    useDownloadEvalMock.mockReset();
-    useDownloadEvalMock.mockImplementation(
-      (
-        format: string,
-        options?: { onSuccess?: (fileName: string) => void; onError?: (error: Error) => void },
-      ) => {
-        if (format === 'csv') {
-          csvHookOptions = options;
-          return { download: mockDownloadCsvFn, isLoading: csvIsLoading };
-        }
-        jsonHookOptions = options;
-        return { download: mockDownloadJsonFn, isLoading: jsonIsLoading };
-      },
-    );
+    mockDownloadCsvFn.mockReset().mockResolvedValue(new Blob(['csv results']));
+    mockDownloadJsonFn.mockReset().mockResolvedValue(new Blob(['json results']));
 
     vi.mocked(useResultsViewStore).mockReturnValue({
       table: mockTable,
@@ -191,42 +140,91 @@ describe('DownloadMenu', () => {
 
   it('downloads CSV when clicking the button', async () => {
     renderDownloadDialog();
-    // Hook options should be set after component renders
-    expect(csvHookOptions?.onSuccess).toBeInstanceOf(Function);
     await userEvent.click(screen.getByText('Download Results CSV'));
 
     await waitFor(() => {
       expect(mockDownloadCsvFn).toHaveBeenCalledWith(mockEvalId);
+      expect(vi.mocked(HTMLAnchorElement.prototype.click).mock.contexts[0]).toHaveAttribute(
+        'download',
+        `${mockEvalId}.csv`,
+      );
+      expect(showToastMock).toHaveBeenCalledWith('CSV downloaded successfully', 'success');
     });
   });
 
   it('downloads Table JSON when clicking the button', async () => {
     renderDownloadDialog();
-    // Hook options should be set after component renders
-    expect(jsonHookOptions?.onSuccess).toBeInstanceOf(Function);
     await userEvent.click(screen.getByText('Download Results JSON'));
 
     await waitFor(() => {
       expect(mockDownloadJsonFn).toHaveBeenCalledWith(mockEvalId);
+      expect(vi.mocked(HTMLAnchorElement.prototype.click).mock.contexts[0]).toHaveAttribute(
+        'download',
+        `${mockEvalId}.json`,
+      );
+      expect(showToastMock).toHaveBeenCalledWith('JSON downloaded successfully', 'success');
     });
   });
 
   it('shows loading state while CSV download is in progress', async () => {
-    csvIsLoading = true;
+    let finish!: (blob: Blob) => void;
+    mockDownloadCsvFn.mockReturnValueOnce(
+      new Promise<Blob>((resolve) => {
+        finish = resolve;
+      }),
+    );
 
     renderDownloadDialog();
 
+    await userEvent.click(screen.getByRole('button', { name: 'Download Results CSV' }));
     const csvButton = screen.getByRole('button', { name: 'Downloading...' });
     expect(csvButton).toBeDisabled();
+    await act(async () => finish(new Blob(['results'])));
+    expect(csvButton).toBeEnabled();
   });
 
   it('shows loading state while JSON download is in progress', async () => {
-    jsonIsLoading = true;
+    let finish!: (blob: Blob) => void;
+    mockDownloadJsonFn.mockReturnValueOnce(
+      new Promise<Blob>((resolve) => {
+        finish = resolve;
+      }),
+    );
 
     renderDownloadDialog();
 
+    await userEvent.click(screen.getByRole('button', { name: 'Download Results JSON' }));
     const jsonButton = screen.getByRole('button', { name: 'Downloading...' });
     expect(jsonButton).toBeDisabled();
+    await act(async () => finish(new Blob(['results'])));
+    expect(jsonButton).toBeEnabled();
+  });
+
+  it.each(['CSV', 'JSON'])('recovers after a failed %s download', async (format) => {
+    (format === 'CSV' ? mockDownloadCsvFn : mockDownloadJsonFn).mockRejectedValueOnce(
+      new Error('download failed'),
+    );
+    renderDownloadDialog();
+    const button = screen.getByRole('button', { name: `Download Results ${format}` });
+    await userEvent.click(button);
+    expect(showToastMock).toHaveBeenCalledWith(
+      `Failed to download ${format}: download failed`,
+      'error',
+    );
+    expect(button).toBeEnabled();
+    expect(global.URL.createObjectURL).not.toHaveBeenCalled();
+  });
+
+  it('clears loading when saving the downloaded blob throws', async () => {
+    vi.mocked(global.URL.createObjectURL).mockImplementationOnce(() => {
+      throw new Error('save failed');
+    });
+    renderDownloadDialog();
+    const button = screen.getByRole('button', { name: 'Download Results CSV' });
+    await userEvent.click(button);
+    expect(showToastMock).toHaveBeenCalledWith('Failed to download CSV: save failed', 'error');
+    expect(button).toBeEnabled();
+    expect(global.URL.revokeObjectURL).not.toHaveBeenCalled();
   });
 
   it('downloads DPO JSON when clicking the button', async () => {
@@ -237,6 +235,22 @@ describe('DownloadMenu', () => {
       expect(global.URL.createObjectURL).toHaveBeenCalledWith(expect.any(Blob));
       expect(HTMLAnchorElement.prototype.click).toHaveBeenCalled();
     });
+    expect(JSON.parse(await readDownloadedBlob())).toEqual([
+      {
+        chosen: [],
+        rejected: ['failed output'],
+        vars: { testVar: 'value' },
+        providers: ['provider1'],
+        prompts: ['label1'],
+      },
+      {
+        chosen: ['passed output'],
+        rejected: [],
+        vars: { testVar: 'value2' },
+        providers: ['provider1'],
+        prompts: ['label1'],
+      },
+    ]);
   });
 
   it('downloads Human Eval Test YAML when clicking the button', async () => {
@@ -247,6 +261,16 @@ describe('DownloadMenu', () => {
       expect(global.URL.createObjectURL).toHaveBeenCalledWith(expect.any(Blob));
       expect(HTMLAnchorElement.prototype.click).toHaveBeenCalled();
     });
+    expect(yaml.load(await readDownloadedBlob())).toEqual([
+      {
+        vars: { testVar: 'value', output: 'failed output' },
+        assert: [{ type: 'javascript', value: '!JSON.parse(output).pass' }],
+      },
+      {
+        vars: { testVar: 'value2', output: 'passed output' },
+        assert: [{ type: 'javascript', value: 'JSON.parse(output).pass' }],
+      },
+    ]);
   });
 
   it('handles malformed output structures in DPO JSON export without crashing', async () => {
@@ -276,6 +300,22 @@ describe('DownloadMenu', () => {
     await waitFor(() => {
       expect(global.URL.createObjectURL).toHaveBeenCalledWith(expect.any(Blob));
     });
+    expect(JSON.parse(await readDownloadedBlob())).toEqual([
+      {
+        chosen: [null],
+        rejected: [],
+        vars: { testVar: 'value' },
+        providers: ['provider1'],
+        prompts: ['label1'],
+      },
+      {
+        chosen: [],
+        rejected: ['passed output'],
+        vars: { testVar: 'value2' },
+        providers: ['provider1'],
+        prompts: ['label1'],
+      },
+    ]);
   });
 
   it('shows a toast when evalId is not available', async () => {
@@ -304,11 +344,7 @@ describe('DownloadMenu', () => {
             vars: ['value1', 'value2'],
             outputs: [{ pass: false, text: 'failed output', gradingResult: null }],
           },
-          {
-            test: { vars: { testVar: 'value2' } },
-            vars: ['value3', 'value4'],
-            outputs: [{ pass: true, text: 'passed output' }],
-          },
+          createPassingTableRow(),
         ],
       },
       config: mockConfig,
@@ -321,6 +357,16 @@ describe('DownloadMenu', () => {
     await waitFor(() => {
       expect(global.URL.createObjectURL).toHaveBeenCalledWith(expect.any(Blob));
     });
+    expect(yaml.load(await readDownloadedBlob())).toEqual([
+      {
+        vars: { testVar: 'value', output: 'failed output' },
+        assert: [{ type: 'javascript', value: '!JSON.parse(output).pass' }],
+      },
+      {
+        vars: { testVar: 'value2', output: 'passed output' },
+        assert: [{ type: 'javascript', value: 'JSON.parse(output).pass' }],
+      },
+    ]);
   });
 
   it('handles deeply nested null properties in outputs without crashing', () => {
@@ -333,11 +379,7 @@ describe('DownloadMenu', () => {
             vars: ['value1', 'value2'],
             outputs: [{ pass: false, text: 'failed output', gradingResult: { scores: null } }],
           },
-          {
-            test: { vars: { testVar: 'value2' } },
-            vars: ['value3', 'value4'],
-            outputs: [{ pass: true, text: 'passed output' }],
-          },
+          createPassingTableRow(),
         ],
       },
       config: mockConfig,
@@ -349,14 +391,24 @@ describe('DownloadMenu', () => {
     }).not.toThrow();
   });
 
-  it('downloads Burp Suite Payloads when clicking the button', async () => {
+  it('downloads unique escaped attack payload lines from the configured inject variable', async () => {
+    vi.mocked(useResultsViewStore).mockReturnValue({
+      table: {
+        ...mockTable,
+        body: [
+          { test: { vars: { attack: 'first\nline' } }, outputs: [] },
+          { test: { vars: { attack: 'quote " plus &' } }, outputs: [] },
+          { test: { vars: { attack: 'first\nline' } }, outputs: [] },
+          { test: { vars: { other: 'excluded' } }, outputs: [] },
+        ],
+      },
+      config: { redteam: { injectVar: 'attack' } },
+      evalId: mockEvalId,
+    });
     renderDownloadDialog();
     await userEvent.click(screen.getByText('Burp Payloads'));
-
-    await waitFor(() => {
-      expect(global.URL.createObjectURL).toHaveBeenCalledWith(expect.any(Blob));
-      expect(HTMLAnchorElement.prototype.click).toHaveBeenCalled();
-    });
+    expect(await readDownloadedBlob()).toBe('first%5Cnline\nquote%20%5C%22%20plus%20%26');
+    expect(HTMLAnchorElement.prototype.click).toHaveBeenCalled();
   });
 
   it('properly categorizes download options into sections', async () => {
