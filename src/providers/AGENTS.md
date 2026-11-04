@@ -166,3 +166,7 @@ ls examples/myprovider/promptfooconfig.yaml
 The loader normalizes configuration and environment once. Factories receive those `ProviderOptions`; existing public creators accept them as `providerOptions`. `creator.ts` adapts the older nested `config` input at those public boundaries.
 
 `families/compatible.ts` loads the Cerebras, Envoy, LiteLLM, Novita, Nscale, and TogetherAI creators on demand, before the generic file fallback. Preserve each creator's aliases, default subtype, and colon-containing model names.
+
+## Gemini requests and responses
+
+AI Studio and Vertex share prompt and tool preparation, streamed-response parsing and provider token accounting in `google/gemini.ts`. Their provider classes own wire request construction, transport, caching, pricing, and public response metadata. Cover parser changes in `test/providers/google/geminiPipeline.test.ts`.

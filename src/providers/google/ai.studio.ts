@@ -10,6 +10,7 @@ import {
   withResponseCacheMetadata,
 } from '../shared';
 import { GoogleGenericProvider, type GoogleProviderOptions } from './base';
+import { getGeminiTokenUsage, parseGeminiContent, prepareGeminiRequest } from './gemini';
 import { CHAT_MODELS } from './shared';
 import {
   calculateGoogleCost,
@@ -17,24 +18,15 @@ import {
   collectGroundingMetadata,
   collectThoughtSignatures,
   createAuthCacheDiscriminator,
-  formatCandidateContents,
-  geminiFormatAndSystemInstructions,
-  getCandidate,
   getGoogleApiBaseUrl,
   getGoogleGuardrails,
   getGoogleResponseServiceTier,
   getLastPromptSafetyRatings,
-  isNonCandidateStreamChunk,
   mergeGoogleCompletionOptions,
-  mergeGoogleRequestTools,
-  mergeParts,
   normalizeGeminiAudio,
-  normalizeGoogleServiceTier,
   normalizeSafetySettings,
   parseConfigResponseSchema,
   removeDeprecatedGeminiGenerationParams,
-  removeGoogleFunctionDeclarations,
-  resolveGoogleToolConfig,
 } from './util';
 
 import type { EnvOverrides } from '../../types/env';
@@ -45,7 +37,7 @@ import type {
   ProviderEmbeddingResponse,
   ProviderResponse,
 } from '../../types/index';
-import type { CompletionOptions, GoogleProviderConfig } from './types';
+import type { CompletionOptions } from './types';
 import type { GeminiResponseData } from './util';
 
 const DEFAULT_API_HOST = 'generativelanguage.googleapis.com';
@@ -269,47 +261,20 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
       );
     }
 
-    // Merge configs from the provider and the prompt
-    const promptConfig = context?.prompt?.config as Partial<GoogleProviderConfig> | undefined;
-    const config = mergeGoogleCompletionOptions(this.config, promptConfig);
-    const promptBasePath = promptConfig?.basePath ?? this.config.basePath;
-
-    const { contents, systemInstruction } = geminiFormatAndSystemInstructions(
-      prompt,
-      context?.vars,
-      config.systemInstruction,
-      {
-        basePath:
-          promptConfig?.systemInstruction === undefined ? this.config.basePath : promptBasePath,
-        useAssistantRole: config.useAssistantRole,
-      },
-    );
-
-    const { toolConfig, toolsDisabled } = resolveGoogleToolConfig(config);
-    // Get all tools (MCP + config tools) using base class method
-    const allTools = await this.getAllTools(context, {
-      skipExecutableToolFiles: toolsDisabled,
-    });
-    const requestTools = toolsDisabled ? removeGoogleFunctionDeclarations(allTools) : allTools;
     const {
-      service_tier: passthroughServiceTier,
-      serviceTier: camelCasePassthroughServiceTier,
-      tools: passthroughTools,
-      // resolveGoogleToolConfig already folds these in; keeping them in the raw spread would
-      // let a conflicting passthrough mode overwrite a resolved NONE, so the request would
-      // carry mode ANY with the declarations already stripped.
-      toolConfig: _passthroughToolConfig,
-      tool_config: _passthroughToolConfigSnakeCase,
-      ...passthrough
-    } = config.passthrough || {};
-    const serviceTier = normalizeGoogleServiceTier(
-      passthroughServiceTier ?? camelCasePassthroughServiceTier ?? config.service_tier,
+      config,
+      promptConfig,
+      promptBasePath,
+      contents,
+      systemInstruction,
+      toolConfig,
+      toolsDisabled,
+      passthrough,
+      serviceTier,
+      mergedTools,
+    } = await prepareGeminiRequest(this.config, prompt, context, (options) =>
+      this.getAllTools(context, options),
     );
-    const requestPassthroughTools =
-      toolsDisabled && passthroughTools !== undefined
-        ? removeGoogleFunctionDeclarations(passthroughTools)
-        : passthroughTools;
-    const mergedTools = mergeGoogleRequestTools(requestTools, requestPassthroughTools);
 
     const body: Record<string, any> = {
       contents,
@@ -399,43 +364,16 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
       };
     }
 
-    const dataWithResponse = (Array.isArray(data) ? data : [data]) as GeminiResponseData[];
-    const lastData = dataWithResponse[dataWithResponse.length - 1];
-    if (!lastData) {
-      return {
-        error: `No response data found in response: ${JSON.stringify(data)}`,
-      };
-    }
-    let output: ReturnType<typeof formatCandidateContents> | undefined;
-    let candidate: ReturnType<typeof getCandidate> | undefined;
+    let parsed: ReturnType<typeof parseGeminiContent>;
     try {
-      for (const datum of dataWithResponse) {
-        if (Array.isArray(data) && isNonCandidateStreamChunk(datum)) {
-          continue;
-        }
-
-        const candidateForChunk = getCandidate(datum);
-        candidate = { ...candidate, ...candidateForChunk };
-        if (
-          !candidateForChunk.content?.parts &&
-          (candidateForChunk.finishReason === 'STOP' ||
-            candidateForChunk.finishReason === 'MAX_TOKENS')
-        ) {
-          continue;
-        }
-
-        output = mergeParts(output, formatCandidateContents(candidateForChunk));
-      }
-
-      if (output === undefined || output === '' || candidate === undefined) {
-        throw new Error(`No output found in response: ${JSON.stringify(data)}`);
-      }
+      parsed = parseGeminiContent(data, 'ai-studio');
     } catch (err) {
-      return {
-        error: `${String(err)}`,
-      };
+      return { error: String(err) };
     }
-    const finalCandidate = candidate;
+    if (parsed.kind === 'response') {
+      return parsed.response;
+    }
+    const { output, candidate: finalCandidate, data: dataWithResponse, lastData } = parsed;
 
     try {
       const guardrails = getGoogleGuardrails(
@@ -450,26 +388,7 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
         lastData.usageMetadata,
       );
 
-      const tokenUsage = {
-        prompt:
-          lastData.usageMetadata?.promptTokenCount === undefined
-            ? undefined
-            : lastData.usageMetadata.promptTokenCount +
-              (lastData.usageMetadata?.toolUsePromptTokenCount ?? 0),
-        completion: lastData.usageMetadata?.candidatesTokenCount,
-        total: lastData.usageMetadata?.totalTokenCount,
-        numRequests: 1,
-        ...(lastData.usageMetadata?.cachedContentTokenCount !== undefined && {
-          cached: lastData.usageMetadata.cachedContentTokenCount,
-        }),
-        ...(lastData.usageMetadata?.thoughtsTokenCount !== undefined && {
-          completionDetails: {
-            reasoning: lastData.usageMetadata.thoughtsTokenCount,
-            acceptedPrediction: 0,
-            rejectedPrediction: 0,
-          },
-        }),
-      };
+      const tokenUsage = getGeminiTokenUsage(lastData.usageMetadata, 'ai-studio');
 
       // Include thinking tokens in output cost - Google bills them as output tokens
       const completionForCost =
