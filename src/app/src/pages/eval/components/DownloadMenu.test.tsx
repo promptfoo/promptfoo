@@ -442,13 +442,7 @@ describe('DownloadMenu', () => {
 
       renderDownloadDialog();
       await userEvent.click(screen.getByText('Burp Payloads'));
-      const blob = downloadBlobMock.mock.calls[0][0] as Blob;
-      const content = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(reader.result as string);
-        reader.onerror = () => reject(reader.error);
-        reader.readAsText(blob);
-      });
+      const content = await readDownloadedBlob();
       expect(content).toBe(encodeURIComponent(JSON.stringify(attack).slice(1, -1)));
       expect(resultsFile).toEqual(original);
     },
@@ -470,12 +464,7 @@ describe('DownloadMenu', () => {
       });
       renderDownloadDialog();
       await userEvent.click(screen.getByText('Burp Payloads'));
-      const content = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(reader.result as string);
-        reader.onerror = () => reject(reader.error);
-        reader.readAsText(downloadBlobMock.mock.calls[0][0]);
-      });
+      const content = await readDownloadedBlob();
       expect(content).toBe(expected);
     },
   );
