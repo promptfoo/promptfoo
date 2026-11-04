@@ -1,22 +1,35 @@
 import * as fs from 'fs';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+const { createEsLoggerModule } = await vi.hoisted(() => import('../../factories/logger'));
+
 import { disableCache, enableCache } from '../../../src/cache';
 import { LumaRayVideoProvider } from '../../../src/providers/bedrock/luma-ray';
 
 import type { CallApiContextParams } from '../../../src/types/providers';
 
-// Mock hoisted for proper isolation with dynamic imports
-const mockBedrockSend = vi.hoisted(() => vi.fn());
-const mockS3Send = vi.hoisted(() => vi.fn());
-const mockStoreBlob = vi.hoisted(() =>
-  vi.fn().mockResolvedValue({
+const createInvocationResponse = () => ({
+  invocationArn: 'arn:aws:bedrock:us-east-1:123:async-invoke/job-1',
+});
+
+function createStoredVideoBlob() {
+  return {
     ref: {
       uri: 'blob://test-video-hash',
       hash: 'test-video-hash',
     },
-  }),
-);
+  };
+}
+
+const createPendingInvocation = () => ({
+  status: 'InProgress',
+});
+
+// Mock hoisted for proper isolation with dynamic imports
+const mockBedrockSend = vi.hoisted(() => vi.fn());
+const mockS3Send = vi.hoisted(() => vi.fn());
+const mockStoreBlob = vi.hoisted(() => vi.fn().mockResolvedValue(createStoredVideoBlob()));
 
 vi.mock('@aws-sdk/client-bedrock-runtime', () => {
   return {
@@ -50,15 +63,7 @@ vi.mock('../../../src/blobs', () => ({
   storeBlob: mockStoreBlob,
 }));
 
-vi.mock('../../../src/logger', () => ({
-  __esModule: true,
-  default: {
-    debug: vi.fn(),
-    info: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-  },
-}));
+vi.mock('../../../src/logger', () => createEsLoggerModule());
 
 vi.mock('../../../src/util/time', () => ({
   sleep: vi.fn().mockResolvedValue(undefined),
@@ -102,12 +107,7 @@ describe('LumaRayVideoProvider', () => {
       },
     });
 
-    mockStoreBlob.mockResolvedValue({
-      ref: {
-        uri: 'blob://test-video-hash',
-        hash: 'test-video-hash',
-      },
-    });
+    mockStoreBlob.mockResolvedValue(createStoredVideoBlob());
   }
 
   beforeEach(() => {
@@ -410,15 +410,9 @@ describe('LumaRayVideoProvider', () => {
     it('should poll until job is completed', async () => {
       mockBedrockSend
         .mockReset()
-        .mockResolvedValueOnce({
-          invocationArn: 'arn:aws:bedrock:us-east-1:123:async-invoke/job-1',
-        })
-        .mockResolvedValueOnce({
-          status: 'InProgress',
-        })
-        .mockResolvedValueOnce({
-          status: 'InProgress',
-        })
+        .mockResolvedValueOnce(createInvocationResponse())
+        .mockResolvedValueOnce(createPendingInvocation())
+        .mockResolvedValueOnce(createPendingInvocation())
         .mockResolvedValueOnce({
           status: 'Completed',
           invocationArn: 'arn:aws:bedrock:us-east-1:123:async-invoke/job-1',
@@ -438,9 +432,7 @@ describe('LumaRayVideoProvider', () => {
     it('should return error when job fails', async () => {
       mockBedrockSend
         .mockReset()
-        .mockResolvedValueOnce({
-          invocationArn: 'arn:aws:bedrock:us-east-1:123:async-invoke/job-1',
-        })
+        .mockResolvedValueOnce(createInvocationResponse())
         .mockResolvedValueOnce({
           status: 'Failed',
           failureMessage: 'Content policy violation',
@@ -541,12 +533,8 @@ describe('LumaRayVideoProvider', () => {
       // Mock always returning InProgress
       mockBedrockSend
         .mockReset()
-        .mockResolvedValueOnce({
-          invocationArn: 'arn:aws:bedrock:us-east-1:123:async-invoke/job-1',
-        })
-        .mockResolvedValue({
-          status: 'InProgress',
-        });
+        .mockResolvedValueOnce(createInvocationResponse())
+        .mockResolvedValue(createPendingInvocation());
 
       // Mock Date.now to simulate timeout
       const originalDateNow = Date.now;
@@ -566,9 +554,7 @@ describe('LumaRayVideoProvider', () => {
     it('should handle missing output location in response', async () => {
       mockBedrockSend
         .mockReset()
-        .mockResolvedValueOnce({
-          invocationArn: 'arn:aws:bedrock:us-east-1:123:async-invoke/job-1',
-        })
+        .mockResolvedValueOnce(createInvocationResponse())
         .mockResolvedValueOnce({
           status: 'Completed',
           // Missing outputDataConfig

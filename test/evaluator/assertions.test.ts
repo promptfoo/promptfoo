@@ -1,3 +1,5 @@
+import { createSingleAssertionTest } from '../factories/literalFixtures';
+
 import './setup';
 
 import { randomUUID } from 'crypto';
@@ -349,16 +351,7 @@ describeEvaluator('evaluator assertions', () => {
     const testSuite: TestSuite = {
       providers: [mockApiProvider],
       prompts: [toPrompt('Test prompt')],
-      tests: [
-        {
-          assert: [
-            {
-              type: 'llm-rubric',
-              value: 'output is a test output',
-            },
-          ],
-        },
-      ],
+      tests: [createSingleAssertionTest('llm-rubric', 'output is a test output')],
       defaultTest: {
         options: {
           provider: mockGradingApiProviderPasses,
@@ -575,16 +568,7 @@ describeEvaluator('evaluator assertions', () => {
     const testSuite: TestSuite = {
       providers: [mockApiProvider],
       prompts: [toPrompt('Test prompt')],
-      tests: [
-        {
-          assert: [
-            {
-              type: 'llm-rubric',
-              value: 'output is a test output',
-            },
-          ],
-        },
-      ],
+      tests: [createSingleAssertionTest('llm-rubric', 'output is a test output')],
       defaultTest: {
         options: {
           provider: mockGradingApiProviderFails,
