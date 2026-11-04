@@ -137,6 +137,52 @@ describe('POST /api/eval/replay provider boundary', () => {
     expect((await replay(testIndex, 1)).status).toBe(400);
   });
 
+  it.each([undefined, 0])(
+    'replays a saved env-templated provider as its resolved identity',
+    async (promptIndex) => {
+      vi.stubEnv('REPLAY_FIXTURE_PROVIDER', 'echo');
+      try {
+        storedConfig([{ id: '{{ env.REPLAY_FIXTURE_PROVIDER }}' }], undefined, ['echo']);
+        expect((await replay(0, promptIndex)).status).toBe(200);
+        expect(evaluate.mock.calls[0][0].providers).toEqual([{ id: 'echo', prompts: ['Replay'] }]);
+      } finally {
+        vi.unstubAllEnvs();
+      }
+    },
+  );
+
+  it('resolves a mapped provider in its saved env scope and preserves its display ID', async () => {
+    const options = { id: 'saved-label', env: { REPLAY_FIXTURE_PROVIDER: 'echo' } };
+    storedConfig([{ '{{ env.REPLAY_FIXTURE_PROVIDER }}': options }], undefined, ['saved-label']);
+    expect((await replay(0, 0)).status).toBe(200);
+    expect(evaluate.mock.calls[0][0].providers).toEqual([
+      { echo: { ...options, prompts: ['Replay'] } },
+    ]);
+  });
+
+  it.each([
+    'openai:gpt-6-luna',
+    'openai:codex-security',
+    'openai:codex-security:scan',
+    'file://providers.yaml',
+    'promptfoo://provider/12345678-1234-1234-1234-123456789abc',
+    'provider.js',
+    'ruby:provider.rb',
+    '',
+  ])(
+    'blocks ambiguous or operation-sensitive env-templated targets before replay: %s',
+    async (value) => {
+      vi.stubEnv('REPLAY_FIXTURE_PROVIDER', value);
+      try {
+        storedConfig([{ id: '{{ env.REPLAY_FIXTURE_PROVIDER }}' }]);
+        expect((await replay()).status).toBe(400);
+        expect(evaluate).not.toHaveBeenCalled();
+      } finally {
+        vi.unstubAllEnvs();
+      }
+    },
+  );
+
   it('resolves relative provider files from the saved config base path', async () => {
     await fs.writeFile(path.join(directory, 'target.json'), JSON.stringify({ id: 'echo' }));
     storedConfig(['file://target.json'], directory);

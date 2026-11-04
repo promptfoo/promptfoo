@@ -25,6 +25,7 @@ import {
 } from '../../util/eval/evalTableUtils';
 import invariant from '../../util/invariant';
 import { isProviderConfigFileReference, normalizeProviderRef } from '../../util/providerRef';
+import { renderEnvOnlyInObject } from '../../util/render';
 import {
   redactAzureBlobSasTokens,
   restoreAzureBlobSasTokens,
@@ -660,11 +661,30 @@ evalRouter.post('/replay', async (req: Request, res: Response): Promise<void> =>
       // Replay replaces saved prompt-routing filters, while retaining local options.
       const candidates = (Array.isArray(resolved) ? resolved : [resolved]).map((provider) => {
         const ref = normalizeProviderRef(provider);
-        if (ref.kind === 'options' || ref.kind === 'map') {
-          const options = { ...ref.loadOptions, prompts: ['Replay'] };
-          return ref.kind === 'map' ? { [ref.loadProviderPath]: options } : options;
+        if (ref.kind !== 'options' && ref.kind !== 'map' && ref.kind !== 'named') {
+          return provider;
         }
-        return ref.kind === 'named' ? { id: ref.loadProviderPath, prompts: ['Replay'] } : provider;
+        const options = 'loadOptions' in ref ? ref.loadOptions : undefined;
+        let providerPath = ref.loadProviderPath;
+        if (/\{[{%]/.test(providerPath)) {
+          // Echo is local and has no operation or transport settings. Other
+          // dynamic identities must go through a full evaluation configuration.
+          const rendered = renderEnvOnlyInObject(providerPath, options?.env);
+          if (rendered !== 'echo') {
+            throw new Error('Cannot identify the replay provider safely');
+          }
+          providerPath = rendered;
+        }
+        if (ref.kind === 'map') {
+          return {
+            [providerPath]: {
+              ...options,
+              id: options?.id === ref.loadProviderPath ? providerPath : options?.id,
+              prompts: ['Replay'],
+            },
+          };
+        }
+        return { ...options, id: providerPath, prompts: ['Replay'] };
       });
       for (const candidate of candidates) {
         const ref = normalizeProviderRef(candidate);
