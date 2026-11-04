@@ -20,6 +20,9 @@ from unittest.mock import patch
 
 from fixture import ResponsesFixture
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from trace_cli_assertions import assert_remote_trace_result
+
 ROOT = Path(__file__).resolve().parents[4]
 EXAMPLE = ROOT / "examples/openai-agents"
 
@@ -117,6 +120,51 @@ class EnvironmentIsolationTests(unittest.TestCase):
 
 class OpenAIAgentsCliTest(unittest.TestCase):
     cli = ("node", str(ROOT / "dist/src/entrypoint.js"))
+
+    def assert_complete_trace_goal(self, work, env, goal):
+        # A local provider has no remote exporter. Exercise the same model judge
+        # with a complete trace while the user-facing remote case stays fail-closed.
+        config = work / "complete-goal.json"
+        output = work / "complete-goal-results.json"
+        config.write_text(
+            json.dumps(
+                {
+                    "prompts": [
+                        "Seat updated to 14C; the baggage allowance is 50 pounds."
+                    ],
+                    "providers": ["echo"],
+                    "tracing": {"enabled": True, "otlp": {"http": {"enabled": False}}},
+                    "tests": [{"metadata": {"tracingEnabled": True}, "assert": [goal]}],
+                }
+            )
+        )
+        result = subprocess.run(
+            [
+                *self.cli,
+                "eval",
+                "-c",
+                str(config),
+                "--no-cache",
+                "--no-share",
+                "--env-file",
+                env["DOTENV_PATH"],
+                "-o",
+                str(output),
+            ],
+            cwd=ROOT,
+            env=env,
+            capture_output=True,
+            check=False,
+            text=True,
+            timeout=60,
+        )
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        [row] = json.loads(output.read_text())["results"]["results"]
+        self.assertTrue(row["success"], row)
+        [component] = row["gradingResult"]["componentResults"]
+        self.assertEqual(component["assertion"], goal)
+        self.assertTrue(component["pass"], component)
+        self.assertIn("Fixture goal achieved", component["reason"])
 
     def run_config(self, failure: str | None = None) -> None:
         fixture = ResponsesFixture(failure)
@@ -350,31 +398,28 @@ class OpenAIAgentsCliTest(unittest.TestCase):
                         self.assertFalse(row["success"], row)
                         self.assertEqual(row["score"], 0, row)
                         self.assertIn(expected, row["error"])
-                elif failure == "wrong-tool-args":
-                    self.assertNotEqual(process.returncode, 0, log)
-                    self.assertEqual(data["stats"]["errors"], 0, data["stats"])
-                    self.assertEqual(data["stats"]["failures"], 2, data["stats"])
-                    for row in rows:
-                        if row["success"]:
-                            continue
-                        self.assertTrue(
-                            any(
-                                not item["pass"]
-                                and item["assertion"]["type"]
-                                == "trajectory:tool-args-match"
-                                for item in row["gradingResult"]["componentResults"]
-                            ),
-                            row,
-                        )
                 else:
-                    self.assertEqual(process.returncode, 0, log)
-                    self.assertEqual(data["stats"]["successes"], 6, data["stats"])
-                    self.assertEqual(data["stats"]["failures"], 0)
+                    self.assertEqual(process.returncode, 100, log)
+                    self.assertEqual(data["stats"]["successes"], 0)
+                    self.assertEqual(data["stats"]["failures"], 6)
                     self.assertEqual(data["stats"]["errors"], 0)
+                    self.assertCountEqual((row["testIdx"] for row in rows), range(6))
+                    # All six cases forbid error spans. The first also grades the
+                    # complete trajectory, and the FAQ case forbids a seat update.
+                    incomplete_by_case = [{13, 14}, {2, 3}, {6}, {7}, {20}, {9}]
                     for row in rows:
-                        self.assertTrue(row["success"], row)
-                        self.assertFalse(row.get("error"), row)
-                        self.assertEqual(row["score"], 1, row)
+                        index = row["testIdx"]
+                        failed = set()
+                        if failure == "wrong-tool-args":
+                            # The fixture submits seat 15D instead of 14C or 16F.
+                            failed = {0: {0, 1, 5}, 3: {0, 2, 6}}.get(index, set())
+                        assert_remote_trace_result(
+                            self,
+                            row,
+                            config["tests"][index]["assert"],
+                            incomplete=incomplete_by_case[index],
+                            failed=failed,
+                        )
                         usage = row["response"]["tokenUsage"]
                         self.assertGreater(usage["numRequests"], 0)
                         self.assertEqual(usage["prompt"], 20 * usage["numRequests"])
@@ -383,14 +428,12 @@ class OpenAIAgentsCliTest(unittest.TestCase):
                             usage["completionDetails"]["reasoning"],
                             2 * usage["numRequests"],
                         )
-                        self.assertTrue(
-                            all(
-                                item["pass"]
-                                for item in row["gradingResult"]["componentResults"]
-                            ),
-                            row,
+                    self.assertEqual(fixture.judges, 0)
+                    if not failure:
+                        self.assert_complete_trace_goal(
+                            work, env, config["tests"][0]["assert"][14]
                         )
-                    self.assertEqual(fixture.judges, 1)
+                        self.assertEqual(fixture.judges, 1)
                     self.assertEqual(len(fixture.histories), 1)
                     self.assertEqual(len(fixture.sandbox_directories), 1)
                     for directory in fixture.sandbox_directories:
@@ -446,7 +489,7 @@ class OpenAIAgentsCliTest(unittest.TestCase):
                             }.issubset(parents)
                         )
                 print(
-                    f"Agents original config: {failure or 'success=true score=1 errors=0; all 65 assertions passed'}; wrapper OTLP={optional}"
+                    f"Agents original config: {failure or 'observed assertions passed; whole-trace assertions incomplete'}; wrapper OTLP={optional}"
                 )
         finally:
             server.shutdown()
