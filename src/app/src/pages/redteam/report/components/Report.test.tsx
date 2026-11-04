@@ -11,7 +11,7 @@ import type { EvaluateResult, GradingResult, ResultsFile } from '@promptfoo/type
 
 const renderWithProviders = (ui: React.ReactElement) =>
   render(
-    <TooltipProvider>
+    <TooltipProvider delayDuration={0}>
       <MemoryRouter
         initialEntries={[
           `${window.location.pathname}${window.location.search}${window.location.hash}`,
@@ -757,12 +757,10 @@ describe('Filter panel regression tests', () => {
     ).toBeInTheDocument();
     expect(
       screen.getByRole('combobox', { name: 'Filter report results by risk category' }),
-    ).toBeInTheDocument();
+    ).toHaveTextContent('Risk Categories');
     expect(
       screen.getByRole('combobox', { name: 'Filter report results by strategy' }),
-    ).toBeInTheDocument();
-    expect(screen.getByText('Risk Categories')).toBeInTheDocument();
-    expect(screen.getByText('Strategies')).toBeInTheDocument();
+    ).toHaveTextContent('Strategies');
     const search = screen.getByPlaceholderText('Search prompts & outputs');
     expect(readStrategyStats()).toEqual({ basic: { pass: 1, total: 2, failCount: 1 } });
     await userEvent.type(search, 'prompt');
