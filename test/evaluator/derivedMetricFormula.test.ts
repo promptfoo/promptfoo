@@ -8,6 +8,7 @@ describe('derived metric formulas', () => {
     ['-(total + 2) / +__count + 0.5 * 1e1', 1],
     ['total >= 6 ? total / __count : missing', 3],
     ['total == __count ? missing : (total - 2)', 4],
+    ['(total > 0) == (__count >= 2)', 1],
   ])('evaluates %s', (formula, expected) => {
     expect(compileDerivedMetricFormula('score', formula)(scores)).toBe(expected);
   });
@@ -15,6 +16,8 @@ describe('derived metric formulas', () => {
   it.each([
     'score = 7',
     'total; 42',
+    '0 < total < 1 ? 1 : 0',
+    'total == 6 < __count',
     'total.constructor',
     'total["name"]',
     '1 ? 42 : evaluate("2+2")',

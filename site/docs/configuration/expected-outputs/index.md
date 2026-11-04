@@ -561,7 +561,7 @@ Unsupported formula syntax stops the evaluation before any test cases run. Durin
 
 ### Mathematical expressions
 
-String formulas support numeric literals, named scores, `__count`, parentheses, and the arithmetic operators `+`, `-`, `*`, and `/`. Use numeric comparisons (`<`, `<=`, `>`, `>=`, `==`, `!=`) and `condition ? a : b` to handle cases such as a zero denominator. Each formula can contain up to 1,024 characters. Function calls, property access, and assignments are rejected.
+String formulas support numeric literals, named scores, `__count`, parentheses, and the arithmetic operators `+`, `-`, `*`, and `/`. Use numeric comparisons (`<`, `<=`, `>`, `>=`, `==`, `!=`) and `condition ? a : b` to handle cases such as a zero denominator. For a range check, write `score > 0 ? (score < 1 ? 1 : 0) : 0`. Chained comparisons such as `0 < score < 1` are rejected. Each formula can contain up to 1,024 characters. Function calls, property access, and assignments are rejected.
 
 ```yaml
 derivedMetrics:
