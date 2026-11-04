@@ -25,6 +25,35 @@ import type {
 } from '../../types/index';
 import type { OpenAiCompletionOptions } from './types';
 
+function sendRealtimeEvent(event: any, ws: WebSocket, generateEventId: () => string) {
+  if (!event.event_id) {
+    event.event_id = generateEventId();
+  }
+  logger.debug(`Sending event: ${JSON.stringify(event)}`);
+  ws.send(JSON.stringify(event));
+  return event.event_id;
+}
+
+function logRealtimeClose(code: number, reason: Buffer, getTimeout: () => NodeJS.Timeout) {
+  logger.debug(`WebSocket closed with code ${code}: ${reason}`);
+  clearTimeout(getTimeout());
+
+  // Provide more detailed error messages for common WebSocket close codes
+  if (code === 1006) {
+    logger.error(
+      'WebSocket connection closed abnormally - this often indicates a network or firewall issue',
+    );
+  } else if (code === 1008) {
+    logger.error(
+      'WebSocket connection rejected due to policy violation (possibly wrong API key or permissions)',
+    );
+  } else if (code === 403 || reason.includes('403')) {
+    logger.error(
+      'WebSocket connection received 403 Forbidden - verify API key permissions and rate limits',
+    );
+  }
+}
+
 const MAX_RESPONSE_OUTPUT_TOKENS_MAX = 4096;
 
 const DEFAULT_TOOL_CALL_TIMEOUT_MS = 30_000;
@@ -706,10 +735,6 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
     this.lastAudioItemId = null;
     this.currentAudioBuffer = [];
     this.isProcessingAudio = false;
-    if (this.audioTimeout) {
-      clearTimeout(this.audioTimeout);
-      this.audioTimeout = null;
-    }
   }
 
   async getRealtimeSessionBody() {
@@ -782,14 +807,7 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
       let toolIterations = 0;
       const maxToolIterations = this.getMaxToolIterations();
 
-      const sendEvent = (event: any) => {
-        if (!event.event_id) {
-          event.event_id = this.generateEventId();
-        }
-        logger.debug(`Sending event: ${JSON.stringify(event)}`);
-        ws.send(JSON.stringify(event));
-        return event.event_id;
-      };
+      const sendEvent = (event: any) => sendRealtimeEvent(event, ws, () => this.generateEventId());
 
       let initialPromptSent = false;
       const sendInitialPrompt = () => {
@@ -1188,23 +1206,7 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
       });
 
       ws.on('close', (code, reason) => {
-        logger.debug(`WebSocket closed with code ${code}: ${reason}`);
-        clearTimeout(timeout);
-
-        // Provide more detailed error messages for common WebSocket close codes
-        if (code === 1006) {
-          logger.error(
-            'WebSocket connection closed abnormally - this often indicates a network or firewall issue',
-          );
-        } else if (code === 1008) {
-          logger.error(
-            'WebSocket connection rejected due to policy violation (possibly wrong API key or permissions)',
-          );
-        } else if (code === 403 || reason.includes('403')) {
-          logger.error(
-            'WebSocket connection received 403 Forbidden - verify API key permissions and rate limits',
-          );
-        }
+        logRealtimeClose(code, reason, () => timeout);
 
         // Only reject if we haven't received a completed response or error
         const connectionClosedPrematurely = responseDone === false && responseError.length === 0;
@@ -1496,14 +1498,7 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
       const functionCallResults: string[] = [];
       let toolIterations = 0;
       const maxToolIterations = this.getMaxToolIterations();
-      const sendEvent = (event: any) => {
-        if (!event.event_id) {
-          event.event_id = this.generateEventId();
-        }
-        logger.debug(`Sending event: ${JSON.stringify(event)}`);
-        ws.send(JSON.stringify(event));
-        return event.event_id;
-      };
+      const sendEvent = (event: any) => sendRealtimeEvent(event, ws, () => this.generateEventId());
 
       ws.on('open', async () => {
         try {
@@ -1906,23 +1901,7 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
       });
 
       ws.on('close', (code, reason) => {
-        logger.debug(`WebSocket closed with code ${code}: ${reason}`);
-        clearTimeout(timeout);
-
-        // Provide more detailed error messages for common WebSocket close codes
-        if (code === 1006) {
-          logger.error(
-            'WebSocket connection closed abnormally - this often indicates a network or firewall issue',
-          );
-        } else if (code === 1008) {
-          logger.error(
-            'WebSocket connection rejected due to policy violation (possibly wrong API key or permissions)',
-          );
-        } else if (code === 403 || reason.includes('403')) {
-          logger.error(
-            'WebSocket connection received 403 Forbidden - verify API key permissions and rate limits',
-          );
-        }
+        logRealtimeClose(code, reason, () => timeout);
 
         // Only reject if we haven't received a completed response or error
         const connectionClosedPrematurely = responseDone === false && responseError.length === 0;
@@ -2574,10 +2553,6 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
   cleanup(): void {
     if (this.persistentConnection) {
       logger.info('Cleaning up persistent WebSocket connection');
-      // Clear all timeouts
-      this.activeTimeouts.forEach((t) => clearTimeout(t));
-      this.activeTimeouts.clear();
-
       // Reset audio state
       this.resetAudioState();
 

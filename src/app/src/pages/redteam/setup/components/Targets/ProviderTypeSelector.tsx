@@ -5,6 +5,12 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tool
 import { useTelemetry } from '@app/hooks/useTelemetry';
 import { cn } from '@app/lib/utils';
 import { CheckCircle, HelpCircle, Search, X } from 'lucide-react';
+import {
+  hasCustomOpenAiBaseUrl,
+  isLocalOpenAiProviderType,
+  isOpenAiChatProviderId,
+  withLocalProviderType,
+} from './helpers';
 import { allProviderOptions, createDefaultProvider } from './providerCatalog';
 import { hasSpecificDocumentation } from './providerDocumentationMap';
 
@@ -77,7 +83,23 @@ export default function ProviderTypeSelector({
       provider_tag: selectedOption?.tag,
     });
 
-    setProvider(createDefaultProvider(value, currentLabel), value);
+    if (
+      isLocalOpenAiProviderType(value) &&
+      provider &&
+      isOpenAiChatProviderId(provider.id) &&
+      (providerType === value ||
+        (!isLocalOpenAiProviderType(providerType) && hasCustomOpenAiBaseUrl(provider.config)))
+    ) {
+      setProvider(
+        { ...provider, config: withLocalProviderType(provider.id, provider.config, value) },
+        value,
+      );
+      return;
+    }
+    setProvider(
+      provider && providerType === value ? provider : createDefaultProvider(value, currentLabel),
+      value,
+    );
   };
 
   // Filter available options if availableProviderIds is provided, by search term, and by tag
@@ -118,11 +140,11 @@ export default function ProviderTypeSelector({
             onClick={() => setSelectedTag(undefined)}
             disabled={disableModelSelection}
             className={cn(
-              'rounded-md px-3 py-1.5 text-sm font-medium transition-colors',
+              'rounded-md border px-3 py-1.5 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50',
               'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
               selectedTag === undefined
-                ? 'bg-primary text-primary-foreground'
-                : 'bg-muted text-muted-foreground hover:bg-muted/80 hover:text-foreground',
+                ? 'border-primary bg-primary text-primary-foreground'
+                : 'border-border bg-card text-foreground enabled:hover:border-primary/50 enabled:hover:bg-primary/5',
             )}
           >
             All ({getTagCount(undefined)})
@@ -134,11 +156,11 @@ export default function ProviderTypeSelector({
               onClick={() => handleTagToggle(filter.key)}
               disabled={disableModelSelection}
               className={cn(
-                'rounded-md px-3 py-1.5 text-sm font-medium transition-colors',
+                'rounded-md border px-3 py-1.5 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50',
                 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
                 selectedTag === filter.key
-                  ? 'bg-primary text-primary-foreground'
-                  : 'bg-muted text-muted-foreground hover:bg-muted/80 hover:text-foreground',
+                  ? 'border-primary bg-primary text-primary-foreground'
+                  : 'border-border bg-card text-foreground enabled:hover:border-primary/50 enabled:hover:bg-primary/5',
               )}
             >
               {filter.label} ({getTagCount(filter.key)})
@@ -210,10 +232,11 @@ export default function ProviderTypeSelector({
                   className={cn(
                     'flex w-full cursor-pointer items-center rounded-lg border p-4 transition-colors',
                     'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
-                    isSelected
-                      ? 'border-2 border-primary bg-primary/5'
-                      : 'border-border hover:bg-muted/50',
-                    disableModelSelection && 'cursor-not-allowed opacity-60',
+                    isSelected ? 'border-2 border-primary bg-primary/5' : 'border-border bg-card',
+                    !isSelected &&
+                      !disableModelSelection &&
+                      'hover:border-primary/50 hover:bg-primary/5',
+                    disableModelSelection && 'cursor-not-allowed bg-muted opacity-60',
                   )}
                 >
                   <div className="min-w-0 flex-1">

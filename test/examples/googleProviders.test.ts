@@ -6,6 +6,7 @@ import { runAssertion, runAssertions } from '../../src/assertions';
 import { disableCache, enableCache, fetchWithCache, isCacheEnabled } from '../../src/cache';
 import cliState from '../../src/cliState';
 import { renderPrompt } from '../../src/evaluatorHelpers';
+import { loadApiProvider } from '../../src/providers';
 import { resolveConfigs } from '../../src/util/config/load';
 import {
   buildConfiguredProviderMap,
@@ -84,6 +85,7 @@ describe('Google example provider contracts', () => {
     vi.resetAllMocks();
     restoreEnv = mockProcessEnv({
       GOOGLE_API_KEY: 'example-native-key',
+      GOOGLE_APPLICATION_CREDENTIALS: undefined,
       GOOGLE_GENERATIVE_AI_API_KEY: undefined,
       GEMINI_API_KEY: undefined,
       PALM_API_KEY: undefined,
@@ -118,6 +120,7 @@ describe('Google example provider contracts', () => {
     // it through a native import as well as Vitest's transformed module graph.
     vi.spyOn(GoogleAuth.prototype, 'getClient').mockResolvedValue({
       request: oauthRequest,
+      transporter: { defaults: {} },
     } as unknown as Awaited<ReturnType<GoogleAuth['getClient']>>);
     vi.spyOn(GoogleAuth.prototype, 'getProjectId').mockImplementation(
       async () => 'sdk-detected-project',
@@ -282,6 +285,23 @@ describe('Google example provider contracts', () => {
     );
   });
 
+  it.each([
+    'google:image:imagen-3.0-generate-002',
+    'google:gemini-2.5-flash-image',
+    'google:live:gemini-2.0-flash-exp',
+  ])('preflights credentials for the real %s provider', async (id) => {
+    const provider = await loadApiProvider(id);
+    expect([...checkProviderApiKeys([provider])]).toEqual([]);
+    mockProcessEnv({ GOOGLE_API_KEY: undefined });
+    expect([...checkProviderApiKeys([provider])]).toEqual([['GOOGLE_API_KEY', [id]]]);
+    const configured = await loadApiProvider(id, {
+      options: { config: { apiKey: 'preflight-test-key' } },
+    });
+    expect([...checkProviderApiKeys([configured])]).toEqual([]);
+    expect(requests).toHaveLength(0);
+    expect(oauthRequest).not.toHaveBeenCalled();
+  });
+
   it('rejects the native image example without credentials before any request', async () => {
     mockProcessEnv({ GOOGLE_API_KEY: undefined });
     const { provider, prompt } = await loadExample('google-imagen');
@@ -307,6 +327,52 @@ describe('Google example provider contracts', () => {
     expect(requests).toHaveLength(testSuite.providers.length);
     expect(oauthRequest).not.toHaveBeenCalled();
   });
+
+  it.each([
+    { name: 'ADC only', apiKey: undefined, credentialsFile: undefined },
+    { name: 'ADC plus an API key', apiKey: 'example-native-key', credentialsFile: undefined },
+    {
+      name: 'a service account plus an API key',
+      apiKey: 'example-native-key',
+      credentialsFile: 'synthetic-service-account.json',
+    },
+  ])(
+    'basic Vertex example keeps OAuth and independent grading with $name',
+    async ({ apiKey, credentialsFile }) => {
+      mockProcessEnv({
+        GOOGLE_API_KEY: apiKey,
+        GOOGLE_APPLICATION_CREDENTIALS: credentialsFile,
+        GOOGLE_PROJECT_ID: 'example-project',
+      });
+      const { testSuite, provider, test, prompt } = await loadExample('google-vertex');
+      for (const target of testSuite.providers) {
+        await target.callApi(prompt, {
+          vars: test.vars ?? {},
+          prompt: { raw: prompt, label: prompt },
+        });
+      }
+      // Exercise the declared optional text grader; the existing example assertions use embeddings.
+      const grading = await runAssertion({
+        test,
+        provider,
+        prompt,
+        providerResponse: { output: 'Here is an answer to the question.' },
+        assertion: { type: 'llm-rubric', value: 'The output answers the question.' },
+      });
+      expect(grading.pass).toBe(true);
+      expect(requests).toHaveLength(3);
+      expect(JSON.stringify(requests[0].body.systemInstruction)).toContain('Mooo!');
+      expect(JSON.stringify(requests[1].body.systemInstruction)).toContain('Baaaah!');
+      const graderInstructions = JSON.stringify(requests[2].body.systemInstruction);
+      expect(graderInstructions).toContain('You are grading output');
+      expect(graderInstructions).not.toContain('Always talk like a cow. Mooo!');
+      expect(graderInstructions).not.toContain('Always talk like a sheep. Baaaah!');
+      expect(requests[2].url).toBe(
+        'https://aiplatform.googleapis.com/v1/projects/example-project/locations/global/publishers/google/models/gemini-3.8-flash:generateContent',
+      );
+      expect(requests.every(({ auth }) => auth === 'oauth')).toBe(true);
+    },
+  );
 
   it.each([
     { directory: 'google-aistudio-tools', vertex: false },

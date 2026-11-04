@@ -13,11 +13,89 @@ import {
   FS_READONLY_TOOLS,
   OpenCodeSDKProvider,
 } from '../../src/providers/opencode-sdk';
+import { createAnthropicEnvOptions } from '../factories/literalFixtures';
 import { createDeferred, mockProcessEnv } from '../util/utils';
 import type { MockInstance } from 'vitest';
 
 import type { OpenCodeSDKConfig } from '../../src/providers/opencode-sdk';
 import type { CallApiContextParams } from '../../src/types/index';
+
+const createSkillEnabledOptions = () => ({
+  config: { tools: { skill: true } },
+  env: { ANTHROPIC_API_KEY: 'test-api-key' },
+});
+
+const createIntermediateSkillMessage = () => ({
+  info: { id: 'intermediate-msg-1', role: 'assistant' },
+  parts: [
+    {
+      type: 'tool' as const,
+      tool: 'skill',
+      state: { status: 'completed', input: { name: 'code-standards' } },
+    },
+  ],
+});
+
+const createCurrentAssistantAnchor = () => ({
+  id: 'assistant-msg-1',
+  parentID: 'user-msg-1',
+});
+
+const createStructuredTaskOptions = () => ({
+  config: {
+    format: {
+      type: 'json_schema' as const,
+      schema: {
+        type: 'object' as const,
+        properties: {
+          language: { type: 'string' as const },
+          task: { type: 'string' as const },
+        },
+        required: ['language', 'task'],
+      },
+    },
+  },
+  env: { OPENAI_API_KEY: 'test-api-key' },
+});
+
+const createOldSkillMessage = () => ({
+  info: { id: 'assistant-msg-0', role: 'assistant' },
+  parts: [createSkillPart('old-skill', 'old-skill', '/repo/.agents/skills/old-skill')],
+});
+
+const createSkillPart = (
+  name: string = 'review-standards',
+  stateMetadataName: string = 'review-standards',
+  dir: string = '/repo/.agents/skills/review-standards',
+) => ({
+  type: 'tool' as const,
+  tool: 'skill',
+  state: {
+    status: 'completed',
+    input: { name },
+    metadata: {
+      name: stateMetadataName,
+      dir,
+    },
+  },
+});
+
+const createConversationMessage = (id: string, role: string, text: string) => ({
+  info: { id, role },
+  parts: [{ type: 'text' as const, text }],
+});
+
+const createPersistentSessionOptions = () => ({
+  config: { persist_sessions: true },
+  env: { ANTHROPIC_API_KEY: 'test-api-key' },
+});
+
+const createWeatherMcpConfig = () => ({
+  weather: {
+    type: 'local' as const,
+    command: ['deterministic-weather-mcp'],
+  },
+});
 
 vi.mock('../../src/cliState', () => ({
   default: { basePath: '/test/basePath' },
@@ -343,6 +421,16 @@ describe('OpenCodeSDKProvider', () => {
 
   describe('callApi', () => {
     describe('basic functionality', () => {
+      const createV1SdkImporter = () => async (modulePath: string) => {
+        if (/[/\\]dist[/\\]v2[/\\]/.test(modulePath)) {
+          throw new Error('v2 unavailable');
+        }
+        return {
+          createOpencode: mockCreateOpencode,
+          createOpencodeClient: mockCreateOpencodeClient,
+        };
+      };
+
       it('passes scoped env-file defaults to the server while preserving provider overrides', async () => {
         const { default: cliState } =
           await vi.importActual<typeof import('../../src/cliState')>('../../src/cliState');
@@ -382,9 +470,7 @@ describe('OpenCodeSDKProvider', () => {
           ),
         );
 
-        const provider = new OpenCodeSDKProvider({
-          env: { ANTHROPIC_API_KEY: 'test-api-key' },
-        });
+        const provider = new OpenCodeSDKProvider(createAnthropicEnvOptions());
         const result = await provider.callApi('Test prompt');
 
         expect(result.output).toBe('Test response');
@@ -422,9 +508,7 @@ describe('OpenCodeSDKProvider', () => {
           }),
         );
 
-        const provider = new OpenCodeSDKProvider({
-          env: { ANTHROPIC_API_KEY: 'test-api-key' },
-        });
+        const provider = new OpenCodeSDKProvider(createAnthropicEnvOptions());
         const result = await provider.callApi('Test prompt');
 
         expect(result.cost).toBeUndefined();
@@ -445,9 +529,7 @@ describe('OpenCodeSDKProvider', () => {
           ),
         );
 
-        const provider = new OpenCodeSDKProvider({
-          env: { ANTHROPIC_API_KEY: 'test-api-key' },
-        });
+        const provider = new OpenCodeSDKProvider(createAnthropicEnvOptions());
         const result = await provider.callApi('Test prompt');
 
         expect(result.tokenUsage).toEqual({
@@ -465,15 +547,7 @@ describe('OpenCodeSDKProvider', () => {
 
       it('should fall back to the v1 nested request shape when v2 is unavailable', async () => {
         const { importModule } = await import('../../src/esm');
-        vi.mocked(importModule).mockImplementation(async (modulePath: string) => {
-          if (/[/\\]dist[/\\]v2[/\\]/.test(modulePath)) {
-            throw new Error('v2 unavailable');
-          }
-          return {
-            createOpencode: mockCreateOpencode,
-            createOpencodeClient: mockCreateOpencodeClient,
-          };
-        });
+        vi.mocked(importModule).mockImplementation(createV1SdkImporter());
 
         const provider = new OpenCodeSDKProvider({
           config: {
@@ -543,15 +617,7 @@ describe('OpenCodeSDKProvider', () => {
 
       it('applies static v1 permission policy through the locally started server', async () => {
         const { importModule } = await import('../../src/esm');
-        vi.mocked(importModule).mockImplementation(async (modulePath: string) => {
-          if (/[/\\]dist[/\\]v2[/\\]/.test(modulePath)) {
-            throw new Error('v2 unavailable');
-          }
-          return {
-            createOpencode: mockCreateOpencode,
-            createOpencodeClient: mockCreateOpencodeClient,
-          };
-        });
+        vi.mocked(importModule).mockImplementation(createV1SdkImporter());
         const provider = new OpenCodeSDKProvider({
           config: {
             working_dir: '/test/dir',
@@ -586,15 +652,7 @@ describe('OpenCodeSDKProvider', () => {
 
       it('atomically reapplies a complete v1 tools policy on persisted sessions', async () => {
         const { importModule } = await import('../../src/esm');
-        vi.mocked(importModule).mockImplementation(async (modulePath: string) => {
-          if (/[/\\]dist[/\\]v2[/\\]/.test(modulePath)) {
-            throw new Error('v2 unavailable');
-          }
-          return {
-            createOpencode: mockCreateOpencode,
-            createOpencodeClient: mockCreateOpencodeClient,
-          };
-        });
+        vi.mocked(importModule).mockImplementation(createV1SdkImporter());
         const provider = new OpenCodeSDKProvider({
           config: { persist_sessions: true, tools: { bash: true } },
           env: { ANTHROPIC_API_KEY: 'test-api-key' },
@@ -612,15 +670,7 @@ describe('OpenCodeSDKProvider', () => {
 
       it('applies v1 explicit-session tools atomically on each prompt', async () => {
         const { importModule } = await import('../../src/esm');
-        vi.mocked(importModule).mockImplementation(async (modulePath: string) => {
-          if (/[/\\]dist[/\\]v2[/\\]/.test(modulePath)) {
-            throw new Error('v2 unavailable');
-          }
-          return {
-            createOpencode: mockCreateOpencode,
-            createOpencodeClient: mockCreateOpencodeClient,
-          };
-        });
+        vi.mocked(importModule).mockImplementation(createV1SdkImporter());
         const firstPrompt = createDeferred<ReturnType<typeof createMockPromptResponse>>();
         mockSessionPrompt
           .mockImplementationOnce(() => firstPrompt.promise)
@@ -649,15 +699,7 @@ describe('OpenCodeSDKProvider', () => {
 
       it('normalizes apply_patch in custom-agent tools on v1', async () => {
         const { importModule } = await import('../../src/esm');
-        vi.mocked(importModule).mockImplementation(async (modulePath: string) => {
-          if (/[/\\]dist[/\\]v2[/\\]/.test(modulePath)) {
-            throw new Error('v2 unavailable');
-          }
-          return {
-            createOpencode: mockCreateOpencode,
-            createOpencodeClient: mockCreateOpencodeClient,
-          };
-        });
+        vi.mocked(importModule).mockImplementation(createV1SdkImporter());
         const provider = new OpenCodeSDKProvider({
           config: {
             custom_agent: {
@@ -687,15 +729,7 @@ describe('OpenCodeSDKProvider', () => {
 
       it('rejects v1 explicit-session pattern permissions before prompting', async () => {
         const { importModule } = await import('../../src/esm');
-        vi.mocked(importModule).mockImplementation(async (modulePath: string) => {
-          if (/[/\\]dist[/\\]v2[/\\]/.test(modulePath)) {
-            throw new Error('v2 unavailable');
-          }
-          return {
-            createOpencode: mockCreateOpencode,
-            createOpencodeClient: mockCreateOpencodeClient,
-          };
-        });
+        vi.mocked(importModule).mockImplementation(createV1SdkImporter());
         const provider = new OpenCodeSDKProvider({
           config: { session_id: 'shared-v1', permission: { bash: 'deny' } },
           env: { ANTHROPIC_API_KEY: 'test-api-key' },
@@ -711,15 +745,7 @@ describe('OpenCodeSDKProvider', () => {
 
       it('rejects a v1 prompt-level policy before starting or poisoning the server', async () => {
         const { importModule } = await import('../../src/esm');
-        vi.mocked(importModule).mockImplementation(async (modulePath: string) => {
-          if (/[/\\]dist[/\\]v2[/\\]/.test(modulePath)) {
-            throw new Error('v2 unavailable');
-          }
-          return {
-            createOpencode: mockCreateOpencode,
-            createOpencodeClient: mockCreateOpencodeClient,
-          };
-        });
+        vi.mocked(importModule).mockImplementation(createV1SdkImporter());
         const provider = new OpenCodeSDKProvider({
           config: { permission: { bash: 'deny' } },
           env: { ANTHROPIC_API_KEY: 'test-api-key' },
@@ -748,15 +774,7 @@ describe('OpenCodeSDKProvider', () => {
 
       it('allows static v1 permissions on provider-owned persisted sessions', async () => {
         const { importModule } = await import('../../src/esm');
-        vi.mocked(importModule).mockImplementation(async (modulePath: string) => {
-          if (/[/\\]dist[/\\]v2[/\\]/.test(modulePath)) {
-            throw new Error('v2 unavailable');
-          }
-          return {
-            createOpencode: mockCreateOpencode,
-            createOpencodeClient: mockCreateOpencodeClient,
-          };
-        });
+        vi.mocked(importModule).mockImplementation(createV1SdkImporter());
         const provider = new OpenCodeSDKProvider({
           config: { persist_sessions: true, permission: { bash: 'deny' } },
           env: { ANTHROPIC_API_KEY: 'test-api-key' },
@@ -779,9 +797,7 @@ describe('OpenCodeSDKProvider', () => {
           ]),
         );
 
-        const provider = new OpenCodeSDKProvider({
-          env: { ANTHROPIC_API_KEY: 'test-api-key' },
-        });
+        const provider = new OpenCodeSDKProvider(createAnthropicEnvOptions());
         const result = await provider.callApi('Test prompt');
 
         expect(result.output).toBe('Part 1\nPart 2');
@@ -789,26 +805,10 @@ describe('OpenCodeSDKProvider', () => {
 
       it('should normalize first-class skill tool parts into skillCalls metadata', async () => {
         mockSessionPrompt.mockResolvedValue(
-          createMockPromptResponse([
-            {
-              type: 'tool',
-              tool: 'skill',
-              state: {
-                status: 'completed',
-                input: { name: 'review-standards' },
-                metadata: {
-                  name: 'review-standards',
-                  dir: '/repo/.agents/skills/review-standards',
-                },
-              },
-            },
-            { type: 'text', text: 'Skill applied.' },
-          ]),
+          createMockPromptResponse([createSkillPart(), { type: 'text', text: 'Skill applied.' }]),
         );
 
-        const provider = new OpenCodeSDKProvider({
-          env: { ANTHROPIC_API_KEY: 'test-api-key' },
-        });
+        const provider = new OpenCodeSDKProvider(createAnthropicEnvOptions());
         const result = await provider.callApi('Use the review-standards skill');
 
         expect(result.metadata?.skillCalls).toEqual([
@@ -835,9 +835,7 @@ describe('OpenCodeSDKProvider', () => {
           ]),
         );
 
-        const provider = new OpenCodeSDKProvider({
-          env: { ANTHROPIC_API_KEY: 'test-api-key' },
-        });
+        const provider = new OpenCodeSDKProvider(createAnthropicEnvOptions());
         const result = await provider.callApi('Use the missing skill');
 
         expect(result.metadata?.skillCalls).toEqual([
@@ -857,10 +855,7 @@ describe('OpenCodeSDKProvider', () => {
         // parentID on the assistant message anchors the slice to the user message
         // that triggered this prompt, so only the relevant turns are inspected.
         mockSessionPrompt.mockResolvedValue(
-          createMockPromptResponseWithAnchors('All done.', {
-            id: 'assistant-msg-1',
-            parentID: 'user-msg-1',
-          }),
+          createMockPromptResponseWithAnchors('All done.', createCurrentAssistantAnchor()),
         );
         // Session messages use { info: { id }, parts } structure (matching the real API)
         mockSessionMessages.mockResolvedValue([
@@ -869,20 +864,7 @@ describe('OpenCodeSDKProvider', () => {
             info: { id: 'user-msg-0', role: 'user' },
             parts: [{ type: 'text', text: 'Previous prompt' }],
           },
-          {
-            info: { id: 'assistant-msg-0', role: 'assistant' },
-            parts: [
-              {
-                type: 'tool',
-                tool: 'skill',
-                state: {
-                  status: 'completed',
-                  input: { name: 'old-skill' },
-                  metadata: { name: 'old-skill', dir: '/repo/.agents/skills/old-skill' },
-                },
-              },
-            ],
-          },
+          createOldSkillMessage(),
           // Messages belonging to THIS prompt (anchor: user-msg-1)
           {
             info: { id: 'user-msg-1', role: 'user' },
@@ -905,16 +887,10 @@ describe('OpenCodeSDKProvider', () => {
               },
             ],
           },
-          {
-            info: { id: 'assistant-msg-1', role: 'assistant' },
-            parts: [{ type: 'text', text: 'All done.' }],
-          },
+          createConversationMessage('assistant-msg-1', 'assistant', 'All done.'),
         ]);
 
-        const provider = new OpenCodeSDKProvider({
-          config: { tools: { skill: true } },
-          env: { ANTHROPIC_API_KEY: 'test-api-key' },
-        });
+        const provider = new OpenCodeSDKProvider(createSkillEnabledOptions());
         const result = await provider.callApi('Apply the code standards skill');
 
         // Only the skill from THIS prompt's turns must appear — not old-skill
@@ -933,16 +909,10 @@ describe('OpenCodeSDKProvider', () => {
         // is in flight, messages after the current assistant message must be excluded.
         // The end anchor (assistantMessage.id) bounds the slice from above.
         mockSessionPrompt.mockResolvedValue(
-          createMockPromptResponseWithAnchors('Done.', {
-            id: 'assistant-msg-1',
-            parentID: 'user-msg-1',
-          }),
+          createMockPromptResponseWithAnchors('Done.', createCurrentAssistantAnchor()),
         );
         mockSessionMessages.mockResolvedValue([
-          {
-            info: { id: 'user-msg-1', role: 'user' },
-            parts: [{ type: 'text', text: 'Current prompt' }],
-          },
+          createConversationMessage('user-msg-1', 'user', 'Current prompt'),
           {
             info: { id: 'assistant-msg-1', role: 'assistant' },
             parts: [{ type: 'text', text: 'Done.' }],
@@ -955,23 +925,12 @@ describe('OpenCodeSDKProvider', () => {
           {
             info: { id: 'concurrent-intermediate', role: 'assistant' },
             parts: [
-              {
-                type: 'tool',
-                tool: 'skill',
-                state: {
-                  status: 'completed',
-                  input: { name: 'other-skill' },
-                  metadata: { name: 'other-skill', dir: '/repo/.agents/skills/other-skill' },
-                },
-              },
+              createSkillPart('other-skill', 'other-skill', '/repo/.agents/skills/other-skill'),
             ],
           },
         ]);
 
-        const provider = new OpenCodeSDKProvider({
-          config: { tools: { skill: true } },
-          env: { ANTHROPIC_API_KEY: 'test-api-key' },
-        });
+        const provider = new OpenCodeSDKProvider(createSkillEnabledOptions());
         const result = await provider.callApi('Current prompt');
 
         // other-skill from the concurrent prompt must not appear
@@ -980,28 +939,11 @@ describe('OpenCodeSDKProvider', () => {
 
       it('should fall back to final response parts when session.messages fails', async () => {
         mockSessionPrompt.mockResolvedValue(
-          createMockPromptResponse([
-            {
-              type: 'tool',
-              tool: 'skill',
-              state: {
-                status: 'completed',
-                input: { name: 'review-standards' },
-                metadata: {
-                  name: 'review-standards',
-                  dir: '/repo/.agents/skills/review-standards',
-                },
-              },
-            },
-            { type: 'text', text: 'Done.' },
-          ]),
+          createMockPromptResponse([createSkillPart(), { type: 'text', text: 'Done.' }]),
         );
         mockSessionMessages.mockRejectedValue(new Error('messages endpoint unavailable'));
 
-        const provider = new OpenCodeSDKProvider({
-          config: { tools: { skill: true } },
-          env: { ANTHROPIC_API_KEY: 'test-api-key' },
-        });
+        const provider = new OpenCodeSDKProvider(createSkillEnabledOptions());
         const result = await provider.callApi('Use skill');
 
         // The fetch was attempted and failed
@@ -1029,30 +971,14 @@ describe('OpenCodeSDKProvider', () => {
         );
         // History from earlier prompts only; user-msg-9 is absent
         mockSessionMessages.mockResolvedValue([
-          {
-            info: { id: 'assistant-msg-0', role: 'assistant' },
-            parts: [
-              {
-                type: 'tool',
-                tool: 'skill',
-                state: {
-                  status: 'completed',
-                  input: { name: 'old-skill' },
-                  metadata: { name: 'old-skill', dir: '/repo/.agents/skills/old-skill' },
-                },
-              },
-            ],
-          },
+          createOldSkillMessage(),
           {
             info: { id: 'assistant-msg-9', role: 'assistant' },
             parts: [{ type: 'text', text: 'Done.' }],
           },
         ]);
 
-        const provider = new OpenCodeSDKProvider({
-          config: { tools: { skill: true } },
-          env: { ANTHROPIC_API_KEY: 'test-api-key' },
-        });
+        const provider = new OpenCodeSDKProvider(createSkillEnabledOptions());
         const result = await provider.callApi('Current prompt');
 
         // old-skill from the unanchored history must not be attributed
@@ -1061,36 +987,19 @@ describe('OpenCodeSDKProvider', () => {
 
       it('should not attribute later skill calls when the assistant end anchor is missing from history', async () => {
         mockSessionPrompt.mockResolvedValue(
-          createMockPromptResponseWithAnchors('Done.', {
-            id: 'assistant-msg-1',
-            parentID: 'user-msg-1',
-          }),
+          createMockPromptResponseWithAnchors('Done.', createCurrentAssistantAnchor()),
         );
         mockSessionMessages.mockResolvedValue([
-          {
-            info: { id: 'user-msg-1', role: 'user' },
-            parts: [{ type: 'text', text: 'Current prompt' }],
-          },
+          createConversationMessage('user-msg-1', 'user', 'Current prompt'),
           {
             info: { id: 'concurrent-assistant', role: 'assistant' },
             parts: [
-              {
-                type: 'tool',
-                tool: 'skill',
-                state: {
-                  status: 'completed',
-                  input: { name: 'other-skill' },
-                  metadata: { name: 'other-skill', dir: '/repo/.agents/skills/other-skill' },
-                },
-              },
+              createSkillPart('other-skill', 'other-skill', '/repo/.agents/skills/other-skill'),
             ],
           },
         ]);
 
-        const provider = new OpenCodeSDKProvider({
-          config: { tools: { skill: true } },
-          env: { ANTHROPIC_API_KEY: 'test-api-key' },
-        });
+        const provider = new OpenCodeSDKProvider(createSkillEnabledOptions());
         const result = await provider.callApi('Current prompt');
 
         expect(mockSessionMessages).toHaveBeenCalledTimes(1);
@@ -1103,10 +1012,7 @@ describe('OpenCodeSDKProvider', () => {
         delete (promptResponse.data.info as Record<string, unknown>).id;
         mockSessionPrompt.mockResolvedValue(promptResponse);
 
-        const provider = new OpenCodeSDKProvider({
-          config: { tools: { skill: true } },
-          env: { ANTHROPIC_API_KEY: 'test-api-key' },
-        });
+        const provider = new OpenCodeSDKProvider(createSkillEnabledOptions());
         const result = await provider.callApi('Current prompt');
 
         expect(mockSessionMessages).not.toHaveBeenCalled();
@@ -1118,10 +1024,7 @@ describe('OpenCodeSDKProvider', () => {
         delete (promptResponse.data.info as Record<string, unknown>).parentID;
         mockSessionPrompt.mockResolvedValue(promptResponse);
 
-        const provider = new OpenCodeSDKProvider({
-          config: { tools: { skill: true } },
-          env: { ANTHROPIC_API_KEY: 'test-api-key' },
-        });
+        const provider = new OpenCodeSDKProvider(createSkillEnabledOptions());
         const result = await provider.callApi('Current prompt');
 
         expect(mockSessionMessages).not.toHaveBeenCalled();
@@ -1142,30 +1045,12 @@ describe('OpenCodeSDKProvider', () => {
         // The tool policy denies everything by default via the `*` wildcard, but
         // permission rules are applied after it and win on a last-match basis.
         mockSessionPrompt.mockResolvedValue(
-          createMockPromptResponseWithAnchors('All done.', {
-            id: 'assistant-msg-1',
-            parentID: 'user-msg-1',
-          }),
+          createMockPromptResponseWithAnchors('All done.', createCurrentAssistantAnchor()),
         );
         mockSessionMessages.mockResolvedValue([
-          {
-            info: { id: 'user-msg-1', role: 'user' },
-            parts: [{ type: 'text', text: 'Use the skill' }],
-          },
-          {
-            info: { id: 'intermediate-msg-1', role: 'assistant' },
-            parts: [
-              {
-                type: 'tool',
-                tool: 'skill',
-                state: { status: 'completed', input: { name: 'code-standards' } },
-              },
-            ],
-          },
-          {
-            info: { id: 'assistant-msg-1', role: 'assistant' },
-            parts: [{ type: 'text', text: 'All done.' }],
-          },
+          createConversationMessage('user-msg-1', 'user', 'Use the skill'),
+          createIntermediateSkillMessage(),
+          createConversationMessage('assistant-msg-1', 'assistant', 'All done.'),
         ]);
 
         const provider = new OpenCodeSDKProvider({
@@ -1182,30 +1067,15 @@ describe('OpenCodeSDKProvider', () => {
 
       it('should fetch session history when a patterned policy allows some skills', async () => {
         mockSessionPrompt.mockResolvedValue(
-          createMockPromptResponseWithAnchors('All done.', {
-            id: 'assistant-msg-1',
-            parentID: 'user-msg-1',
-          }),
+          createMockPromptResponseWithAnchors('All done.', createCurrentAssistantAnchor()),
         );
         mockSessionMessages.mockResolvedValue([
           {
             info: { id: 'user-msg-1', role: 'user' },
             parts: [{ type: 'text', text: 'Use the code standards skill' }],
           },
-          {
-            info: { id: 'intermediate-msg-1', role: 'assistant' },
-            parts: [
-              {
-                type: 'tool',
-                tool: 'skill',
-                state: { status: 'completed', input: { name: 'code-standards' } },
-              },
-            ],
-          },
-          {
-            info: { id: 'assistant-msg-1', role: 'assistant' },
-            parts: [{ type: 'text', text: 'All done.' }],
-          },
+          createIntermediateSkillMessage(),
+          createConversationMessage('assistant-msg-1', 'assistant', 'All done.'),
         ]);
 
         const provider = new OpenCodeSDKProvider({
@@ -1230,9 +1100,7 @@ describe('OpenCodeSDKProvider', () => {
       it('should skip session.messages fetch when tools config is omitted (skill disabled by default)', async () => {
         // The default tool policy denies every tool through the `*` wildcard, so
         // no skill parts can exist and the fetch must be skipped.
-        const provider = new OpenCodeSDKProvider({
-          env: { ANTHROPIC_API_KEY: 'test-api-key' },
-        });
+        const provider = new OpenCodeSDKProvider(createAnthropicEnvOptions());
         const result = await provider.callApi('Do something with default tools');
 
         expect(mockSessionMessages).not.toHaveBeenCalled();
@@ -1246,10 +1114,7 @@ describe('OpenCodeSDKProvider', () => {
           return createMockPromptResponse([{ type: 'text', text: 'Late response' }]);
         });
 
-        const provider = new OpenCodeSDKProvider({
-          config: { tools: { skill: true } },
-          env: { ANTHROPIC_API_KEY: 'test-api-key' },
-        });
+        const provider = new OpenCodeSDKProvider(createSkillEnabledOptions());
         const result = await provider.callApi('Do something', undefined, {
           abortSignal: controller.signal,
         });
@@ -1265,10 +1130,7 @@ describe('OpenCodeSDKProvider', () => {
           return [];
         });
 
-        const provider = new OpenCodeSDKProvider({
-          config: { tools: { skill: true } },
-          env: { ANTHROPIC_API_KEY: 'test-api-key' },
-        });
+        const provider = new OpenCodeSDKProvider(createSkillEnabledOptions());
         const result = await provider.callApi('Do something', undefined, {
           abortSignal: controller.signal,
         });
@@ -1288,46 +1150,17 @@ describe('OpenCodeSDKProvider', () => {
 
       it('should use the v1 nested request shape for the history fetch when v2 is unavailable', async () => {
         const { importModule } = await import('../../src/esm');
-        vi.mocked(importModule).mockImplementation(async (modulePath: string) => {
-          if (/[/\\]dist[/\\]v2[/\\]/.test(modulePath)) {
-            throw new Error('v2 unavailable');
-          }
-          return {
-            createOpencode: mockCreateOpencode,
-            createOpencodeClient: mockCreateOpencodeClient,
-          };
-        });
+        vi.mocked(importModule).mockImplementation(createV1SdkImporter());
         mockSessionPrompt.mockResolvedValue(
-          createMockPromptResponseWithAnchors('All done.', {
-            id: 'assistant-msg-1',
-            parentID: 'user-msg-1',
-          }),
+          createMockPromptResponseWithAnchors('All done.', createCurrentAssistantAnchor()),
         );
         mockSessionMessages.mockResolvedValue([
-          {
-            info: { id: 'user-msg-1', role: 'user' },
-            parts: [{ type: 'text', text: 'Use the skill' }],
-          },
-          {
-            info: { id: 'intermediate-msg-1', role: 'assistant' },
-            parts: [
-              {
-                type: 'tool',
-                tool: 'skill',
-                state: { status: 'completed', input: { name: 'code-standards' } },
-              },
-            ],
-          },
-          {
-            info: { id: 'assistant-msg-1', role: 'assistant' },
-            parts: [{ type: 'text', text: 'All done.' }],
-          },
+          createConversationMessage('user-msg-1', 'user', 'Use the skill'),
+          createIntermediateSkillMessage(),
+          createConversationMessage('assistant-msg-1', 'assistant', 'All done.'),
         ]);
 
-        const provider = new OpenCodeSDKProvider({
-          config: { tools: { skill: true } },
-          env: { ANTHROPIC_API_KEY: 'test-api-key' },
-        });
+        const provider = new OpenCodeSDKProvider(createSkillEnabledOptions());
         const result = await provider.callApi('Use the skill');
 
         expect(mockSessionMessages).toHaveBeenCalledWith({
@@ -1343,9 +1176,7 @@ describe('OpenCodeSDKProvider', () => {
         const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
         mockSessionPrompt.mockRejectedValue(new Error('Network error'));
 
-        const provider = new OpenCodeSDKProvider({
-          env: { ANTHROPIC_API_KEY: 'test-api-key' },
-        });
+        const provider = new OpenCodeSDKProvider(createAnthropicEnvOptions());
         const result = await provider.callApi('Test prompt');
 
         expect(result.error).toBe('Error calling OpenCode SDK: Network error');
@@ -1357,9 +1188,7 @@ describe('OpenCodeSDKProvider', () => {
       it('should handle empty parts in response', async () => {
         mockSessionPrompt.mockResolvedValue(createMockPromptResponse([], { input: 5, output: 10 }));
 
-        const provider = new OpenCodeSDKProvider({
-          env: { ANTHROPIC_API_KEY: 'test-api-key' },
-        });
+        const provider = new OpenCodeSDKProvider(createAnthropicEnvOptions());
         const result = await provider.callApi('Test prompt');
 
         expect(result.output).toBe('');
@@ -1375,22 +1204,7 @@ describe('OpenCodeSDKProvider', () => {
           ),
         );
 
-        const provider = new OpenCodeSDKProvider({
-          config: {
-            format: {
-              type: 'json_schema',
-              schema: {
-                type: 'object',
-                properties: {
-                  language: { type: 'string' },
-                  task: { type: 'string' },
-                },
-                required: ['language', 'task'],
-              },
-            },
-          },
-          env: { OPENAI_API_KEY: 'test-api-key' },
-        });
+        const provider = new OpenCodeSDKProvider(createStructuredTaskOptions());
         const result = await provider.callApi('Test prompt');
 
         expect(result.output).toBe('{"language":"python","task":"Generate Fibonacci output"}');
@@ -1410,22 +1224,7 @@ describe('OpenCodeSDKProvider', () => {
           ),
         );
 
-        const provider = new OpenCodeSDKProvider({
-          config: {
-            format: {
-              type: 'json_schema',
-              schema: {
-                type: 'object',
-                properties: {
-                  language: { type: 'string' },
-                  task: { type: 'string' },
-                },
-                required: ['language', 'task'],
-              },
-            },
-          },
-          env: { OPENAI_API_KEY: 'test-api-key' },
-        });
+        const provider = new OpenCodeSDKProvider(createStructuredTaskOptions());
         const result = await provider.callApi('Test prompt');
 
         expect(result.output).toBe('{"language":"python","task":"Generate Fibonacci output"}');
@@ -1434,9 +1233,7 @@ describe('OpenCodeSDKProvider', () => {
 
     describe('working directory', () => {
       it('should use temp directory when no working_dir specified', async () => {
-        const provider = new OpenCodeSDKProvider({
-          env: { ANTHROPIC_API_KEY: 'test-api-key' },
-        });
+        const provider = new OpenCodeSDKProvider(createAnthropicEnvOptions());
         await provider.callApi('Test prompt');
 
         expect(tempDirSpy).toHaveBeenCalledWith(expect.stringContaining('promptfoo-opencode-sdk-'));
@@ -1522,9 +1319,7 @@ describe('OpenCodeSDKProvider', () => {
 
     describe('session management', () => {
       it('should create new session for each call by default', async () => {
-        const provider = new OpenCodeSDKProvider({
-          env: { ANTHROPIC_API_KEY: 'test-api-key' },
-        });
+        const provider = new OpenCodeSDKProvider(createAnthropicEnvOptions());
 
         await provider.callApi('Prompt 1');
         await provider.callApi('Prompt 2');
@@ -1538,9 +1333,7 @@ describe('OpenCodeSDKProvider', () => {
           server: { url: string; close: typeof mockServerClose };
         }>();
         mockCreateOpencode.mockReturnValue(initialization.promise);
-        const provider = new OpenCodeSDKProvider({
-          env: { ANTHROPIC_API_KEY: 'test-api-key' },
-        });
+        const provider = new OpenCodeSDKProvider(createAnthropicEnvOptions());
 
         const firstCall = provider.callApi('First');
         const secondCall = provider.callApi('Second');
@@ -1847,10 +1640,7 @@ describe('OpenCodeSDKProvider', () => {
       );
 
       it('should reuse session when persist_sessions is true without cache', async () => {
-        const provider = new OpenCodeSDKProvider({
-          config: { persist_sessions: true },
-          env: { ANTHROPIC_API_KEY: 'test-api-key' },
-        });
+        const provider = new OpenCodeSDKProvider(createPersistentSessionOptions());
 
         await provider.callApi('Same prompt');
         await provider.callApi('Same prompt');
@@ -1863,10 +1653,7 @@ describe('OpenCodeSDKProvider', () => {
         mockSessionPrompt
           .mockImplementationOnce(() => firstPrompt.promise)
           .mockResolvedValueOnce(createMockPromptResponse([{ type: 'text', text: 'Second' }]));
-        const provider = new OpenCodeSDKProvider({
-          config: { persist_sessions: true },
-          env: { ANTHROPIC_API_KEY: 'test-api-key' },
-        });
+        const provider = new OpenCodeSDKProvider(createPersistentSessionOptions());
 
         const firstCall = provider.callApi('First');
         await vi.waitFor(() => expect(mockSessionPrompt).toHaveBeenCalledTimes(1));
@@ -1886,10 +1673,7 @@ describe('OpenCodeSDKProvider', () => {
       it('should abort while waiting for a serialized persisted session', async () => {
         const firstPrompt = createDeferred<ReturnType<typeof createMockPromptResponse>>();
         mockSessionPrompt.mockImplementationOnce(() => firstPrompt.promise);
-        const provider = new OpenCodeSDKProvider({
-          config: { persist_sessions: true },
-          env: { ANTHROPIC_API_KEY: 'test-api-key' },
-        });
+        const provider = new OpenCodeSDKProvider(createPersistentSessionOptions());
 
         const firstCall = provider.callApi('First');
         await vi.waitFor(() => expect(mockSessionPrompt).toHaveBeenCalledTimes(1));
@@ -1917,9 +1701,7 @@ describe('OpenCodeSDKProvider', () => {
       });
 
       it('should delete non-persistent sessions after each call', async () => {
-        const provider = new OpenCodeSDKProvider({
-          env: { ANTHROPIC_API_KEY: 'test-api-key' },
-        });
+        const provider = new OpenCodeSDKProvider(createAnthropicEnvOptions());
 
         await provider.callApi('Test prompt');
 
@@ -1932,9 +1714,7 @@ describe('OpenCodeSDKProvider', () => {
         const debugSpy = vi.spyOn(logger, 'debug').mockImplementation(() => {});
         mockSessionDelete.mockRejectedValue(new Error('delete failed'));
 
-        const provider = new OpenCodeSDKProvider({
-          env: { ANTHROPIC_API_KEY: 'test-api-key' },
-        });
+        const provider = new OpenCodeSDKProvider(createAnthropicEnvOptions());
 
         const result = await provider.callApi('Test prompt');
 
@@ -1953,9 +1733,7 @@ describe('OpenCodeSDKProvider', () => {
         const abortController = new AbortController();
         abortController.abort();
 
-        const provider = new OpenCodeSDKProvider({
-          env: { ANTHROPIC_API_KEY: 'test-api-key' },
-        });
+        const provider = new OpenCodeSDKProvider(createAnthropicEnvOptions());
 
         const result = await provider.callApi('Test prompt', undefined, {
           abortSignal: abortController.signal,
@@ -1971,9 +1749,7 @@ describe('OpenCodeSDKProvider', () => {
         abortError.name = 'AbortError';
         mockSessionPrompt.mockRejectedValue(abortError);
 
-        const provider = new OpenCodeSDKProvider({
-          env: { ANTHROPIC_API_KEY: 'test-api-key' },
-        });
+        const provider = new OpenCodeSDKProvider(createAnthropicEnvOptions());
 
         const result = await provider.callApi('Test prompt');
 
@@ -2002,9 +1778,7 @@ describe('OpenCodeSDKProvider', () => {
           ),
         );
 
-        const provider = new OpenCodeSDKProvider({
-          env: { ANTHROPIC_API_KEY: 'test-api-key' },
-        });
+        const provider = new OpenCodeSDKProvider(createAnthropicEnvOptions());
 
         // First call
         const result1 = await provider.callApi('Test prompt');
@@ -2129,12 +1903,7 @@ describe('OpenCodeSDKProvider', () => {
 
         const provider = new OpenCodeSDKProvider({
           config: {
-            mcp: {
-              weather: {
-                type: 'local',
-                command: ['deterministic-weather-mcp'],
-              },
-            },
+            mcp: createWeatherMcpConfig(),
           },
           env: { ANTHROPIC_API_KEY: 'test-api-key' },
         });
@@ -2176,12 +1945,7 @@ describe('OpenCodeSDKProvider', () => {
         const provider = new OpenCodeSDKProvider({
           config: {
             cache_mcp: true,
-            mcp: {
-              weather: {
-                type: 'local',
-                command: ['deterministic-weather-mcp'],
-              },
-            },
+            mcp: createWeatherMcpConfig(),
           },
           env: { ANTHROPIC_API_KEY: 'test-api-key' },
         });
@@ -2302,9 +2066,7 @@ describe('OpenCodeSDKProvider', () => {
           createMockPromptResponse([{ type: 'text', text: 'Fresh response' }]),
         );
 
-        const provider = new OpenCodeSDKProvider({
-          env: { ANTHROPIC_API_KEY: 'test-api-key' },
-        });
+        const provider = new OpenCodeSDKProvider(createAnthropicEnvOptions());
 
         // First call
         await provider.callApi('Test prompt');
@@ -2415,9 +2177,7 @@ describe('OpenCodeSDKProvider', () => {
       });
 
       it('should work without model config', async () => {
-        const provider = new OpenCodeSDKProvider({
-          env: { ANTHROPIC_API_KEY: 'test-api-key' },
-        });
+        const provider = new OpenCodeSDKProvider(createAnthropicEnvOptions());
 
         await provider.callApi('Test prompt');
 
@@ -2434,9 +2194,7 @@ describe('OpenCodeSDKProvider', () => {
 
   describe('cleanup', () => {
     it('should close server on cleanup', async () => {
-      const provider = new OpenCodeSDKProvider({
-        env: { ANTHROPIC_API_KEY: 'test-api-key' },
-      });
+      const provider = new OpenCodeSDKProvider(createAnthropicEnvOptions());
 
       // Make a call to initialize server
       await provider.callApi('Test prompt');
@@ -2448,10 +2206,7 @@ describe('OpenCodeSDKProvider', () => {
     });
 
     it('should delete tracked persistent sessions on cleanup', async () => {
-      const provider = new OpenCodeSDKProvider({
-        config: { persist_sessions: true },
-        env: { ANTHROPIC_API_KEY: 'test-api-key' },
-      });
+      const provider = new OpenCodeSDKProvider(createPersistentSessionOptions());
 
       await provider.callApi('Test prompt');
       await provider.cleanup();
@@ -2464,9 +2219,7 @@ describe('OpenCodeSDKProvider', () => {
 
   describe('buildToolsConfig', () => {
     it('should disable all tools when no working_dir', async () => {
-      const provider = new OpenCodeSDKProvider({
-        env: { ANTHROPIC_API_KEY: 'test-api-key' },
-      });
+      const provider = new OpenCodeSDKProvider(createAnthropicEnvOptions());
 
       // Access private method through callApi behavior
       await provider.callApi('Test prompt');
@@ -2718,9 +2471,7 @@ describe('OpenCodeSDKProvider', () => {
 
   describe('new tools configuration', () => {
     it('should include question, skill, lsp tools in disabled mode by default', async () => {
-      const provider = new OpenCodeSDKProvider({
-        env: { ANTHROPIC_API_KEY: 'test-api-key' },
-      });
+      const provider = new OpenCodeSDKProvider(createAnthropicEnvOptions());
 
       await provider.callApi('Test prompt');
 
@@ -3149,9 +2900,7 @@ describe('OpenCodeSDKProvider', () => {
     });
 
     it('does not include parentID when parent_session_id is unset', async () => {
-      const provider = new OpenCodeSDKProvider({
-        env: { ANTHROPIC_API_KEY: 'test-api-key' },
-      });
+      const provider = new OpenCodeSDKProvider(createAnthropicEnvOptions());
 
       await provider.callApi('Test prompt');
 
@@ -3203,9 +2952,7 @@ describe('OpenCodeSDKProvider', () => {
 
     it('does not warn when enable_streaming is unset', async () => {
       const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
-      const provider = new OpenCodeSDKProvider({
-        env: { ANTHROPIC_API_KEY: 'test-api-key' },
-      });
+      const provider = new OpenCodeSDKProvider(createAnthropicEnvOptions());
 
       await provider.callApi('Test prompt');
 
@@ -3241,9 +2988,7 @@ describe('OpenCodeSDKProvider', () => {
           }),
       );
 
-      const provider = new OpenCodeSDKProvider({
-        env: { ANTHROPIC_API_KEY: 'test-api-key' },
-      });
+      const provider = new OpenCodeSDKProvider(createAnthropicEnvOptions());
 
       const callPromise = provider.callApi('Test prompt', undefined, {
         abortSignal: controller.signal,
@@ -3260,18 +3005,14 @@ describe('OpenCodeSDKProvider', () => {
     });
 
     it('does not call session.abort when no signal is provided', async () => {
-      const provider = new OpenCodeSDKProvider({
-        env: { ANTHROPIC_API_KEY: 'test-api-key' },
-      });
+      const provider = new OpenCodeSDKProvider(createAnthropicEnvOptions());
       await provider.callApi('Test prompt');
       expect(mockSessionAbort).not.toHaveBeenCalled();
     });
 
     it('does not call session.abort when the signal never fires', async () => {
       const controller = new AbortController();
-      const provider = new OpenCodeSDKProvider({
-        env: { ANTHROPIC_API_KEY: 'test-api-key' },
-      });
+      const provider = new OpenCodeSDKProvider(createAnthropicEnvOptions());
 
       await provider.callApi('Test prompt', undefined, {
         abortSignal: controller.signal,
@@ -3283,9 +3024,7 @@ describe('OpenCodeSDKProvider', () => {
     it('returns the abort-before-start error when the signal is already aborted', async () => {
       const controller = new AbortController();
       controller.abort();
-      const provider = new OpenCodeSDKProvider({
-        env: { ANTHROPIC_API_KEY: 'test-api-key' },
-      });
+      const provider = new OpenCodeSDKProvider(createAnthropicEnvOptions());
 
       const result = await provider.callApi('Test prompt', undefined, {
         abortSignal: controller.signal,
