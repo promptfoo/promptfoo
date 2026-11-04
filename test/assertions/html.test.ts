@@ -216,6 +216,18 @@ describe('handleContainsHtml', () => {
 });
 
 describe('handleIsHtml', () => {
+  const verifyValidHtml = (html: string) => {
+    const params: AssertionParams = {
+      ...defaultParams,
+      assertion: { type: 'is-html' },
+      outputString: html,
+      inverse: false,
+    };
+
+    const result = handleIsHtml(params);
+    expect(result.pass).toBe(true);
+  };
+
   it('should pass when output is valid HTML', () => {
     const validHtmlExamples = [
       '<div>Hello World</div>',
@@ -321,17 +333,7 @@ describe('handleIsHtml', () => {
       '<form><input type="text" /><button>Submit</button></form>',
     ];
 
-    fragments.forEach((html) => {
-      const params: AssertionParams = {
-        ...defaultParams,
-        assertion: { type: 'is-html' },
-        outputString: html,
-        inverse: false,
-      };
-
-      const result = handleIsHtml(params);
-      expect(result.pass).toBe(true);
-    });
+    fragments.forEach(verifyValidHtml);
   });
 
   it('should reject mixed content', () => {
@@ -363,33 +365,13 @@ describe('handleIsHtml', () => {
       '<title>Page</title>',
     ];
 
-    headOnlyExamples.forEach((html) => {
-      const params: AssertionParams = {
-        ...defaultParams,
-        assertion: { type: 'is-html' },
-        outputString: html,
-        inverse: false,
-      };
-
-      const result = handleIsHtml(params);
-      expect(result.pass).toBe(true);
-    });
+    headOnlyExamples.forEach(verifyValidHtml);
   });
 
   it('should accept SVG and template wrappers', () => {
     const fragments = ['<svg><circle /></svg>', '<template><div>x</div></template>'];
 
-    fragments.forEach((html) => {
-      const params: AssertionParams = {
-        ...defaultParams,
-        assertion: { type: 'is-html' },
-        outputString: html,
-        inverse: false,
-      };
-
-      const result = handleIsHtml(params);
-      expect(result.pass).toBe(true);
-    });
+    fragments.forEach(verifyValidHtml);
   });
 
   it('should accept custom elements', () => {
@@ -398,17 +380,7 @@ describe('handleIsHtml', () => {
       '<CUSTOM-ELEMENT>Uppercase custom element</CUSTOM-ELEMENT>',
     ];
 
-    fragments.forEach((html) => {
-      const params: AssertionParams = {
-        ...defaultParams,
-        assertion: { type: 'is-html' },
-        outputString: html,
-        inverse: false,
-      };
-
-      const result = handleIsHtml(params);
-      expect(result.pass).toBe(true);
-    });
+    fragments.forEach(verifyValidHtml);
   });
 
   it('should reject doctype-only input', () => {
