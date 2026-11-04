@@ -61,7 +61,10 @@ jobs:
           const policyDir = fs.mkdtempSync(path.join(process.env.RUNNER_TEMP, 'promptfoo-scan-policy-'));
           const archive = `${policyDir}.tar`;
           execFileSync('git', ['archive', '--format=tar', '--output', archive, process.env.BASE_SHA]);
-          execFileSync('tar', ['-xf', archive, '-C', policyDir]);
+          // GNU tar interprets a Windows drive prefix on an archive name as a remote host.
+          execFileSync('tar', ['-xf', path.basename(archive), '-C', path.basename(policyDir)], {
+            cwd: path.dirname(archive),
+          });
           fs.unlinkSync(archive);
           fs.appendFileSync(process.env.GITHUB_OUTPUT, `config_path=${path.join(policyDir, '.github/promptfoo-code-scan.yaml')}\n`);
 
