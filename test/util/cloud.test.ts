@@ -345,6 +345,18 @@ describe('cloud utils', () => {
       );
     });
 
+    it('preserves supported provider overrides when parsing a cloud target', async () => {
+      const env = {
+        AZURE_AI_PROJECT_URL: 'https://project.example.invalid',
+        SNOWFLAKE_ACCOUNT_IDENTIFIER: 'provider-account',
+        GOOGLE_APPLICATION_CREDENTIALS: '/fixture/credentials.json',
+        PROMPTFOO_TRACING_ENABLED: 'false',
+        PROMPTFOO_MAX_CONCURRENCY: '3',
+      };
+      mockFetchWithProxy.mockResolvedValueOnce(Response.json({ config: { id: 'fixture', env } }));
+      expect((await getProviderFromCloud('fixture')).env).toEqual(env);
+    });
+
     it('should throw error when cloud config is not enabled', async () => {
       mockCloudConfig.isEnabled.mockReturnValue(false);
 

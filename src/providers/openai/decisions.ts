@@ -25,6 +25,7 @@ import { escapeRegExp } from '../../util/text';
 import { normalizeResponsesInput } from '../responses/input';
 import { getResponsesTokenUsage } from '../responses/processor';
 import { getRequestTimeoutMs } from '../shared';
+import { decodeUrlComponent } from '../urlEncoding';
 import { calculateOpenAIUsageCost } from './billing';
 import { hasHeaderOverride, OpenAiGenericProvider } from './index';
 import { appendOpenAiApiPath, assertOpenAiApiModel, hasSensitiveOpenAiCacheString } from './util';
@@ -203,14 +204,6 @@ function hasSensitiveValue(value: unknown): boolean {
   return value !== null && typeof value === 'object'
     ? Object.values(value).some(hasSensitiveValue)
     : false;
-}
-
-function decodeUrlComponent(value: string): string {
-  try {
-    return decodeURIComponent(value);
-  } catch {
-    return value;
-  }
 }
 
 /** Collect gateway authentication forms without changing the supplied headers. */

@@ -20,22 +20,26 @@ describe.each([
   },
   {
     packageName: 'ibm-cloud-sdk-core' as const,
-    range: '^5.6.2',
-    compatible: '5.6.123',
-    unsupported: ['5.6.1', '6.0.0'],
+    range: '5.6.2',
+    compatible: '5.6.2',
+    unsupported: ['5.6.1', '5.6.3', '6.0.0'],
   },
 ])(
   'optional WatsonX dependency $packageName',
   ({ packageName, range, compatible, unsupported }) => {
     let directory: string;
 
-    function installFixture(version?: unknown) {
-      const sdkDirectory = path.join(directory, 'node_modules', packageName);
+    function installFixture(
+      version?: unknown,
+      fixturePackageName = packageName,
+      installDirectory = directory,
+    ) {
+      const sdkDirectory = path.join(installDirectory, 'node_modules', fixturePackageName);
       fs.mkdirSync(path.join(sdkDirectory, 'dist'), { recursive: true });
       fs.writeFileSync(
         path.join(sdkDirectory, 'package.json'),
         JSON.stringify({
-          name: packageName,
+          name: fixturePackageName,
           version,
           exports: { '.': { import: './dist/index.mjs', require: './dist/index.cjs' } },
         }),
@@ -48,6 +52,9 @@ describe.each([
     beforeEach(() => {
       directory = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-watsonx-availability-'));
       vi.mocked(getDirectory).mockReset().mockReturnValue(path.join(directory, 'dist/src'));
+      if (packageName === '@ibm-cloud/watsonx-ai') {
+        installFixture('5.6.2', 'ibm-cloud-sdk-core');
+      }
     });
 
     afterEach(() => {
@@ -58,10 +65,10 @@ describe.each([
     it('explains co-installation before loading an absent package', async () => {
       const load = vi.fn();
       await expect(loadWatsonXDependency(packageName, load)).rejects.toThrow(
-        `The ${packageName} package is required for the WatsonX provider. Install it with: npm install promptfoo @ibm-cloud/watsonx-ai@^1.7.16 ibm-cloud-sdk-core@^5.6.2`,
+        `The ${packageName} package is required for the WatsonX provider. Install it with: npm install promptfoo @ibm-cloud/watsonx-ai@^1.7.16 ibm-cloud-sdk-core@5.6.2\nnpm install --save-exact ibm-cloud-sdk-core@5.6.2`,
       );
       await expect(loadWatsonXDependency(packageName, load)).rejects.toThrow(
-        'npm install -g promptfoo @ibm-cloud/watsonx-ai@^1.7.16 ibm-cloud-sdk-core@^5.6.2',
+        'npm install -g promptfoo @ibm-cloud/watsonx-ai@^1.7.16 ibm-cloud-sdk-core@5.6.2\nnpm install -g --save-exact ibm-cloud-sdk-core@5.6.2',
       );
       expect(load).not.toHaveBeenCalled();
     });
@@ -83,6 +90,31 @@ describe.each([
       const module = { client: vi.fn() };
       await expect(loadWatsonXDependency(packageName, async () => module)).resolves.toBe(module);
     });
+
+    if (packageName === '@ibm-cloud/watsonx-ai') {
+      it.each(['5.6.3', '5.6.123', undefined])(
+        'rejects nested core SDK %j despite a compatible top-level copy',
+        async (version) => {
+          const sdkDirectory = installFixture(compatible);
+          installFixture(version, 'ibm-cloud-sdk-core', sdkDirectory);
+          const load = vi.fn();
+
+          await expect(loadWatsonXDependency(packageName, load)).rejects.toThrow(
+            `requires ibm-cloud-sdk-core@5.6.2 (found ${version ?? 'unknown'})`,
+          );
+          expect(load).not.toHaveBeenCalled();
+        },
+      );
+
+      it('loads WatsonX with a compatible nested core SDK', async () => {
+        const sdkDirectory = installFixture(compatible);
+        installFixture('5.6.2', 'ibm-cloud-sdk-core', sdkDirectory);
+        const load = vi.fn().mockResolvedValue('compatible');
+
+        await expect(loadWatsonXDependency(packageName, load)).resolves.toBe('compatible');
+        expect(load).toHaveBeenCalledOnce();
+      });
+    }
 
     it("checks Promptfoo's package instead of an unrelated current-directory installation", async () => {
       installFixture(compatible);

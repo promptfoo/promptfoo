@@ -228,7 +228,7 @@ export default function LauncherPage() {
           </a>{' '}
           or join our{' '}
           <a
-            href="https://discord.gg/promptfoo"
+            href="https://discord.gg/gHPS9jjfbs"
             target="_blank"
             rel="noopener noreferrer"
             className="text-primary hover:underline"
