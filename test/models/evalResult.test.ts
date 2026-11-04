@@ -2395,6 +2395,25 @@ describe('EvalResult', () => {
     );
   });
 
+  it('retains empty legacy queue placeholders without serializing queue entries or config', () => {
+    const toJSON = vi.fn(() => ({ renamed: 'fixture-credential' }));
+    const readQueue = vi.fn(() => new Map());
+    const provider = {
+      id: () => 'fixture',
+      callApi: vi.fn(),
+      config: { toJSON },
+      threadRunQueues: new Map([['private session', 'fixture-credential']]),
+      runtimeOnly: 'fixture-credential',
+    };
+    Object.defineProperty(provider, 'sessionQueues', { get: readQueue, enumerable: true });
+
+    const saved = toSerializableProviderRef(provider);
+
+    expect(saved).toEqual({ id: 'fixture', config: '[REDACTED]', threadRunQueues: {} });
+    expect(toJSON).not.toHaveBeenCalled();
+    expect(readQueue).not.toHaveBeenCalled();
+  });
+
   it('omits runtime-only provider state and function transforms from replay references', () => {
     const provider = {
       id: () => 'echo',

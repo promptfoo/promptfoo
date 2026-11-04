@@ -430,8 +430,18 @@ function getDataProperties(value: object): Record<string, unknown> {
 /** Snapshot live provider references for replay without retaining runtime client state. */
 export function toSerializableProviderRef(provider: unknown): unknown {
   if (isApiProvider(provider)) {
+    const reference = sanitizeProvider(provider);
+    if (reference.config === REDACTED) {
+      // Preserve the empty objects historically exported for these Maps without reading their entries.
+      for (const key of ['threadPromiseConnectionInstances', 'threadRunQueues', 'sessionQueues']) {
+        const field = Object.getOwnPropertyDescriptor(provider, key);
+        if (field?.enumerable && field.value instanceof Map) {
+          Object.assign(reference, { [key]: {} });
+        }
+      }
+    }
     return {
-      ...sanitizeProvider(provider),
+      ...reference,
       ...sanitizeObject(
         {
           transform: typeof provider.transform === 'string' ? provider.transform : undefined,
