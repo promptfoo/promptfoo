@@ -355,8 +355,8 @@ nested key like `authorization` inside a `headers` object is matched by the patt
 `authorization`, but a full dotted path such as `request.headers.authorization` will **not**
 match the nested leaf key — use the key's own name.
 Redaction covers span **attributes** (recursively, including nested objects and arrays),
-and a span `name` or `statusMessage` **only when it exactly echoes the value of a redacted
-attribute**. A secret that appears solely in a span name, status/error message, or log
+and a span `name` or `statusMessage` when it exactly matches a redacted string, including
+a string inside a redacted object or array. A secret that appears solely in a span name, status/error message, or log
 body — without also being a redacted attribute value — is not detected. Redaction also does
 **not** scan arbitrary free text or trace `metadata` (such as test `vars`), so avoid placing
 secrets in test variables when traces are retained.
@@ -392,6 +392,8 @@ Traces created only when spans arrive at the receiver (no evaluation row) use th
 registered evaluation policy from `evaluation.id`, then fall back to the active receiver's
 startup defaults. Similarly, `acceptFormats` configures the active HTTP receiver endpoint
 and is not changed by an overlapping evaluation.
+
+Target-only trace queries keep application spans that arrive over OTLP HTTP or through an external trace provider, even when the application supplies a grader role. The receiver preserves roles from Promptfoo's own OpenTelemetry exporter when it sends wrapper spans directly to the receiver. Older exports may contain roles supplied by the application. Use a trusted sender or collect a fresh trace when relying on those roles to exclude grader activity.
 
 The OTLP receiver `host` defaults to loopback (`127.0.0.1`). If your exporter runs in a
 different container or host and must reach the receiver over the network, set
