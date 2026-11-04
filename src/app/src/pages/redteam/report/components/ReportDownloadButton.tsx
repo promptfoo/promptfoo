@@ -56,8 +56,8 @@ const ReportDownloadButton = ({ evalId, evalDescription, evalData }: ReportDownl
         }
       }
 
-      const pass = result.success;
-      const score = result.score;
+      const pass = result.success ?? result.gradingResult?.pass;
+      const score = result.score ?? result.gradingResult?.score;
 
       return {
         'Test ID': index + 1,
