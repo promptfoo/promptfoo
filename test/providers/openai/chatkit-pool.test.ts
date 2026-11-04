@@ -4,6 +4,8 @@ import * as http from 'http';
 
 import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 import { ChatKitBrowserPool } from '../../../src/providers/openai/chatkit-pool';
+import { providerRegistry } from '../../../src/providers/providerRegistry';
+import { createDeferred } from '../../util/utils';
 
 // Create hoisted mocks to access them in tests
 const mockPage = vi.hoisted(() => ({
@@ -176,6 +178,7 @@ describe('ChatKitBrowserPool', () => {
   describe('initialize', () => {
     it('does not allocate a server for an incompatible SDK and can retry', async () => {
       const instance = ChatKitBrowserPool.getInstance();
+      onTestFinished(() => instance.shutdown());
       playwrightMetadata.version = '1.62.0';
       await expect(instance.initialize()).rejects.toThrow(
         'installed playwright package (1.62.0) is incompatible',
@@ -185,16 +188,40 @@ describe('ChatKitBrowserPool', () => {
       playwrightMetadata.version = '1.63.0';
       await instance.initialize();
       expect(mockChromium.launch).toHaveBeenCalledOnce();
+      expect(providerRegistry.has(instance)).toBe(true);
+      await providerRegistry.shutdownAll();
+      expect(mockBrowser.close).toHaveBeenCalledOnce();
     });
 
-    it('closes its server when the browser binary is absent and can retry', async () => {
+    it('closes its server when the browser binary is absent and tracks a pending retry', async () => {
       const instance = ChatKitBrowserPool.getInstance();
       mockChromium.launch.mockRejectedValueOnce(new Error("Executable doesn't exist"));
       await expect(instance.initialize()).rejects.toThrow('npx playwright install chromium');
       const server = vi.mocked(http.createServer).mock.results[0].value;
       expect(server.close).toHaveBeenCalledOnce();
-      await instance.initialize();
+      const started = createDeferred<void>();
+      const launch = createDeferred<typeof mockBrowser>();
+      mockChromium.launch.mockImplementationOnce(() => {
+        started.resolve();
+        return launch.promise;
+      });
+      const retry = instance.initialize().catch((error) => error);
+      onTestFinished(async () => {
+        launch.resolve(mockBrowser);
+        await retry;
+        await instance.shutdown();
+      });
+
+      await started.promise;
+      expect(providerRegistry.has(instance)).toBe(true);
+      await providerRegistry.shutdownAll();
+      expect(server.close).toHaveBeenCalledTimes(2);
+      expect(server.closeAllConnections).toHaveBeenCalledTimes(2);
+      launch.resolve(mockBrowser);
+      expect(await retry).toEqual(new Error('ChatKit pool shut down'));
       expect(mockChromium.launch).toHaveBeenCalledTimes(2);
+      expect(mockBrowser.close).toHaveBeenCalledOnce();
+      expect(providerRegistry.has(instance)).toBe(false);
     });
 
     it('closes unfinished HTTP requests after launch failure before retrying on the same port', async () => {
@@ -213,12 +240,13 @@ describe('ChatKitBrowserPool', () => {
       let connection: Socket | undefined;
       let socket: Socket | undefined;
       let socketClosed: Promise<unknown> | undefined;
-      onTestFinished(() => {
+      onTestFinished(async () => {
         socket?.destroy();
         for (const ownedServer of [server, retryServer]) {
           ownedServer.closeAllConnections();
           ownedServer.close(() => {});
         }
+        await instance.shutdown();
       });
       mockChromium.launch.mockImplementationOnce(async () => {
         const connected = once(server, 'connection');
@@ -242,7 +270,10 @@ describe('ChatKitBrowserPool', () => {
       await instance.initialize();
       expect((retryServer.address() as { port: number }).port).toBe(port);
       expect(mockChromium.launch).toHaveBeenCalledTimes(2);
-      await instance.shutdown();
+      await providerRegistry.shutdownAll();
+      expect(retryServer.listening).toBe(false);
+      expect(mockBrowser.close).toHaveBeenCalledOnce();
+      expect(providerRegistry.has(instance)).toBe(false);
     });
 
     it('keeps initialization pending until its failed-launch server finishes closing', async () => {
@@ -270,6 +301,7 @@ describe('ChatKitBrowserPool', () => {
       'preserves launch errors when server close fails via %s',
       async (failure) => {
         const instance = ChatKitBrowserPool.getInstance();
+        onTestFinished(() => instance.shutdown());
         const server = http.createServer();
         vi.mocked(server.close).mockImplementationOnce((callback) => {
           const error = new Error('Server is not running');

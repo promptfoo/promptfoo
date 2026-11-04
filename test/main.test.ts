@@ -51,7 +51,7 @@ vi.mock('undici', async () => ({
   getGlobalDispatcher: mockGetGlobalDispatcher,
 }));
 
-// Mock code scan commands to avoid ESM import issues with execa
+// Keep code scan command initialization isolated from these CLI lifecycle tests.
 vi.mock('../src/codeScan', () => ({
   codeScansCommand: vi.fn(),
 }));

@@ -456,6 +456,9 @@ type EnvVars = {
   // TrueFoundry
   TRUEFOUNDRY_API_KEY?: string;
 
+  // TypeSafe
+  TYPESAFE_API_KEY?: string;
+
   // Vertex AI
   VERTEX_API_VERSION?: string;
 

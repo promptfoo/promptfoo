@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import cliState from '../../../src/cliState';
+import { withProviderCleanup } from '../../../src/providers/lifecycle';
 import { PromptfooChatCompletionProvider } from '../../../src/providers/promptfoo';
 import {
   ATTACKER_MODEL,
@@ -231,6 +232,43 @@ describe('shared redteam provider utilities', () => {
 
       expect(result).toBe(mockApiProvider);
       expect(mockedLoadApiProviders).toHaveBeenCalledWith(['test-provider']);
+    });
+
+    it.each(['getProvider', 'getGradingProvider'] as const)(
+      'cleans newly configured %s providers after success and failure',
+      async (method) => {
+        for (const fail of [false, true]) {
+          const provider = createMockProvider({ cleanup: true });
+          mockedLoadApiProviders.mockResolvedValue([provider]);
+          const operation = withProviderCleanup(async () => {
+            expect(await redteamProviderManager[method]({ provider: 'owned' })).toBe(provider);
+            expect(provider.cleanup).not.toHaveBeenCalled();
+            if (fail) {
+              throw new Error('evaluation failed');
+            }
+          });
+          if (fail) {
+            await expect(operation).rejects.toThrow('evaluation failed');
+          } else {
+            await operation;
+          }
+          expect(provider.cleanup).toHaveBeenCalledOnce();
+        }
+      },
+    );
+
+    it.each([
+      ['setProvider', 'getProvider'],
+      ['setGradingProvider', 'getGradingProvider'],
+    ] as const)('keeps supplied and %s cached providers caller-owned', async (setter, getter) => {
+      const provider = createMockProvider({ cleanup: true });
+      mockedLoadApiProviders.mockResolvedValue([provider]);
+      await redteamProviderManager[setter]('cached');
+      await withProviderCleanup(async () => {
+        expect(await redteamProviderManager[getter]({ provider })).toBe(provider);
+        expect(await redteamProviderManager[getter]({})).toBe(provider);
+      });
+      expect(provider.cleanup).not.toHaveBeenCalled();
     });
 
     it('loads configured providers through an injected provider loader', async () => {

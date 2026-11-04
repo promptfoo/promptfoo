@@ -91,13 +91,16 @@ export async function loadApiProvider(
   const env = context.env ?? cliState.env;
   const basePath = context.basePath ?? cliState.basePath;
   return cliState.withBasePath(basePath, () =>
-    cliState.withEnv(env, () => createApiProvider(providerPath, { ...context, basePath, env })),
+    cliState.withEnv(env, () =>
+      createApiProvider(providerPath, { ...context, basePath, env }, context.env),
+    ),
   );
 }
 
 async function createApiProvider(
   providerPath: string,
   context: LoadApiProviderContext,
+  callerEnv: EnvOverrides | undefined,
 ): Promise<ApiProvider> {
   const { options = {}, basePath, env } = context;
 
@@ -120,8 +123,8 @@ async function createApiProvider(
   const providerOptions: ProviderOptions = {
     id: renderedId,
     config: {
+      ...(basePath !== undefined && { basePath }),
       ...renderedConfig,
-      basePath,
     },
     env: mergedEnv,
   };
@@ -204,20 +207,17 @@ async function createApiProvider(
 
     const resolvedFilePath = renderEnvOnlyInObject(
       fileContent.id,
-      mergeProviderEnv('', env, fileContent.env, options.env),
+      mergeProviderEnv('', env, fileContent.env, callerEnv, options.env),
     );
-    // Provider files own their defaults; Codex SDK explicitly gives suite key aliases precedence.
-    const mergedFileEnv = mergeProviderEnv(resolvedFilePath, env, fileContent.env, options.env);
-    if (mergedFileEnv && /^openai:(?:codex-sdk|codex)(?::|$)/.test(resolvedFilePath)) {
-      const aliases = [fileContent.env, env, options.env].map(
-        (scope) =>
-          scope && { OPENAI_API_KEY: scope.OPENAI_API_KEY, CODEX_API_KEY: scope.CODEX_API_KEY },
-      );
-      delete mergedFileEnv.OPENAI_API_KEY;
-      delete mergedFileEnv.CODEX_API_KEY;
-      Object.assign(mergedFileEnv, mergeProviderEnv(resolvedFilePath, ...aliases));
-    }
-
+    // Explicit callers can override file defaults. An inherited evaluation environment
+    // remains below file defaults, as it does for files expanded by loadApiProviders.
+    const mergedFileEnv = mergeProviderEnv(
+      resolvedFilePath,
+      env,
+      fileContent.env,
+      callerEnv,
+      options.env,
+    );
     return loadApiProvider(resolvedFilePath, {
       basePath,
       options: {
@@ -362,41 +362,39 @@ export function resolveProviderConfigs(
   return results;
 }
 
-async function loadProviderBatch<T>(
-  loads: Promise<T>[],
-  providers: (value: T) => ApiProvider[],
+async function loadProviderBatch(
+  loads: Promise<ApiProvider | ApiProvider[]>[],
   callerOwned = new Set<ApiProvider>(),
-): Promise<T[]> {
+): Promise<ApiProvider[]> {
   const created = new Set<ApiProvider>();
+  let failed = false;
+  const cleanup = async (provider: ApiProvider) => {
+    try {
+      await cleanupProvider(provider);
+    } catch (error) {
+      logger.warn('Provider cleanup failed after provider load error', { error });
+    }
+  };
   const tracked = loads.map(async (load) => {
     const value = await load;
-    for (const provider of providers(value)) {
-      created.add(provider);
+    const providers = Array.isArray(value) ? value : [value];
+    const cleanups: Promise<void>[] = [];
+    for (const provider of providers) {
+      if (!callerOwned.has(provider) && !created.has(provider)) {
+        created.add(provider);
+        if (failed) {
+          cleanups.push(cleanup(provider));
+        }
+      }
     }
-    return value;
+    await Promise.all(cleanups);
+    return providers;
   });
   try {
-    return await Promise.all(tracked);
+    return (await Promise.all(tracked)).flat();
   } catch (error) {
-    const cleaned = new Set<ApiProvider>();
-    const cleanup = async (provider: ApiProvider) => {
-      if (callerOwned.has(provider) || cleaned.has(provider)) {
-        return;
-      }
-      cleaned.add(provider);
-      try {
-        await cleanupProvider(provider);
-      } catch (error) {
-        logger.warn('Provider cleanup failed after provider load error', { error });
-      }
-    };
-    await Promise.allSettled([...created].map(cleanup));
-    for (const load of tracked) {
-      void load.then(
-        (value) => Promise.allSettled(providers(value).map(cleanup)),
-        () => undefined,
-      );
-    }
+    failed = true;
+    await Promise.all([...created].map(cleanup));
     throw error;
   }
 }
@@ -421,7 +419,6 @@ async function loadProvidersFromFile(
       invariant(config.id, `Provider config in ${relativePath} must have an id`);
       return loadApiProvider(config.id, { options: config, basePath, env });
     }),
-    (provider) => [provider],
   );
 }
 
@@ -460,7 +457,7 @@ async function loadApiProvidersWithEnv(
   } else if (isApiProvider(providerPaths)) {
     return [providerPaths];
   } else if (Array.isArray(providerPaths)) {
-    const providerResults = await loadProviderBatch(
+    return loadProviderBatch(
       providerPaths.map(async (provider, idx) => {
         if (isApiProvider(provider)) {
           return [provider];
@@ -502,10 +499,8 @@ async function loadApiProvidersWithEnv(
           }
         }
       }),
-      (providers) => providers,
       new Set(providerPaths.filter(isApiProvider)),
     );
-    return providerResults.flat();
   }
   throw new Error('Invalid providers list');
 }

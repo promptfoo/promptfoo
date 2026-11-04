@@ -88,6 +88,7 @@ describe('Alibaba Cloud Provider', () => {
     it.each([
       'qwen3.8-max',
       'qwen3.8-max-0902',
+      'qwen3.8-max-2026-09-02',
       'qwen3.8-flash',
       'qwen3.8-omni-flash',
       'qwen3.7-max-2026-06-08',

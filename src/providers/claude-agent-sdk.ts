@@ -5,6 +5,8 @@ import type { Stats } from 'node:fs';
 
 import { trace as otelTrace, SpanStatusCode } from '@opentelemetry/api';
 import dedent from 'dedent';
+import semverLt from 'semver/functions/lt.js';
+import semverValid from 'semver/functions/valid.js';
 import cliState from '../cliState';
 import { getEnvString, getProcessEnv } from '../envars';
 import { importModule, resolvePackageEntryPoint } from '../esm';
@@ -20,6 +22,7 @@ import {
   sanitizeBody,
   withGenAISpan,
 } from '../tracing/genaiTracer';
+import { getPackageVersion } from '../util/packageVersion';
 import { safeResolve } from '../util/pathUtils';
 import {
   cacheResponse,
@@ -372,7 +375,51 @@ export const CLAUDE_CODE_MODEL_ALIASES = [
  * Helper to load the Claude Agent SDK ESM module
  * Uses resolvePackageEntryPoint to handle ESM-only packages with restrictive exports
  */
-async function loadClaudeCodeSDK(): Promise<typeof import('@anthropic-ai/claude-agent-sdk')> {
+/** The first Agent SDK release that accepts a `{ type: 'custom' }` system prompt. */
+const CUSTOM_SYSTEM_PROMPT_OBJECT_SDK_VERSION = '0.3.257';
+
+interface LoadedClaudeCodeSDK {
+  sdk: typeof import('@anthropic-ai/claude-agent-sdk');
+  /** Version of the resolved package, when its manifest can be read. */
+  version?: string;
+}
+
+function getClaudeCodeSDKVersion(entryPoint: string): string | undefined {
+  try {
+    return getPackageVersion('@anthropic-ai/claude-agent-sdk', entryPoint) ?? undefined;
+  } catch {
+    // A manifest that cannot be read only leaves the version unknown.
+    return undefined;
+  }
+}
+
+/**
+ * Agent SDKs before 0.3.257 ignore a `{ type: 'custom' }` system prompt and run the agent with
+ * Claude Code's default prompt instead. They take a custom prompt as a string, and they never
+ * record prompts, so the string behaves like `snapshot: false` does on newer SDKs.
+ */
+function withSupportedSystemPrompt<T extends { options: Pick<QueryOptions, 'systemPrompt'> }>(
+  queryParams: T,
+  sdkVersion: string | undefined,
+): T {
+  const { systemPrompt } = queryParams.options;
+  if (
+    typeof systemPrompt === 'object' &&
+    !Array.isArray(systemPrompt) &&
+    systemPrompt.type === 'custom' &&
+    sdkVersion &&
+    semverValid(sdkVersion) &&
+    semverLt(sdkVersion, CUSTOM_SYSTEM_PROMPT_OBJECT_SDK_VERSION)
+  ) {
+    return {
+      ...queryParams,
+      options: { ...queryParams.options, systemPrompt: systemPrompt.prompt },
+    };
+  }
+  return queryParams;
+}
+
+async function loadClaudeCodeSDK(): Promise<LoadedClaudeCodeSDK> {
   const basePath =
     cliState.basePath && path.isAbsolute(cliState.basePath) ? cliState.basePath : process.cwd();
 
@@ -394,7 +441,10 @@ async function loadClaudeCodeSDK(): Promise<typeof import('@anthropic-ai/claude-
   }
 
   try {
-    return await importModule(claudeCodePath);
+    return {
+      sdk: await importModule(claudeCodePath),
+      version: getClaudeCodeSDKVersion(claudeCodePath),
+    };
   } catch (err) {
     logger.error(`Failed to load Claude Agent SDK: ${err}`);
     if ((err as any).stack) {
@@ -1387,6 +1437,7 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
   // Could later potentially support Claude Agent SDK via external CLI calls, as well as Bedrock/Vertex providers
   private providerId = 'anthropic:claude-agent-sdk';
   private claudeCodeModule?: typeof import('@anthropic-ai/claude-agent-sdk');
+  private claudeCodeVersion?: string;
   private readonly credentialCacheScope = crypto.randomUUID();
 
   constructor(
@@ -2039,10 +2090,14 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
 
           // Dynamically import the ESM module once and cache it
           if (!this.claudeCodeModule) {
-            this.claudeCodeModule = await loadClaudeCodeSDK();
+            const loaded = await loadClaudeCodeSDK();
+            this.claudeCodeModule = loaded.sdk;
+            this.claudeCodeVersion = loaded.version;
           }
 
-          const res = await this.claudeCodeModule.query(queryParams);
+          const res = await this.claudeCodeModule.query(
+            withSupportedSystemPrompt(queryParams, this.claudeCodeVersion),
+          );
           query = res;
 
           // Collect tool calls and results from intermediate messages

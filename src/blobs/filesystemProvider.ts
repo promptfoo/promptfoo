@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as fsPromises from 'node:fs/promises';
 import * as path from 'node:path';
+import { setTimeout as sleep } from 'node:timers/promises';
 
 import logger from '../logger';
 import { getConfigDirectoryPath } from '../util/config/manage';
@@ -27,6 +28,25 @@ function computeHash(data: Buffer): string {
 
 function buildUri(hash: string): string {
   return `${BLOB_SCHEME}${hash}`;
+}
+
+async function publishFile(source: string, destination: string): Promise<void> {
+  for (let retry = 0; ; retry++) {
+    try {
+      await fsPromises.rename(source, destination);
+      return;
+    } catch (error) {
+      if (
+        process.platform !== 'win32' ||
+        retry === 5 ||
+        !['EPERM', 'EACCES', 'EBUSY'].includes((error as NodeJS.ErrnoException)?.code ?? '')
+      ) {
+        throw error;
+      }
+      // Windows can briefly lock a competing writer's destination. Keep replacement atomic.
+      await sleep(50 * (retry + 1));
+    }
+  }
 }
 
 export class FilesystemBlobStorageProvider implements BlobStorageProvider {
@@ -119,8 +139,8 @@ export class FilesystemBlobStorageProvider implements BlobStorageProvider {
         flag: 'wx',
       });
       // Publish complete bytes first: a failed data rename must not change another writer's MIME.
-      await fsPromises.rename(stagedData, filePath);
-      await fsPromises.rename(stagedMetadata, this.metadataPath(filePath));
+      await publishFile(stagedData, filePath);
+      await publishFile(stagedMetadata, this.metadataPath(filePath));
     } finally {
       try {
         await fsPromises.rm(stagingDir, { recursive: true, force: true });

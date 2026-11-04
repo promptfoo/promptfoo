@@ -1,12 +1,13 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   isRateLimitWrapped,
   wrapProvidersWithRateLimiting,
   wrapProviderWithRateLimiting,
 } from '../../src/scheduler/providerWrapper';
+import { RateLimitRegistry } from '../../src/scheduler/rateLimitRegistry';
 import { createMockProvider } from '../factories/provider';
+import { mockProcessEnv } from '../util/utils';
 
-import type { RateLimitRegistry } from '../../src/scheduler/rateLimitRegistry';
 import type { ApiProvider, ProviderResponse } from '../../src/types/providers';
 
 describe('providerWrapper', () => {
@@ -86,6 +87,94 @@ describe('providerWrapper', () => {
 
       expect(isRateLimitWrapped(wrappedProvider)).toBe(true);
       expect(isRateLimitWrapped(mockProvider)).toBe(false);
+    });
+  });
+
+  describe('cancellation with the real scheduler', () => {
+    let registry: RateLimitRegistry;
+    let restoreEnv: () => void;
+
+    beforeEach(() => {
+      restoreEnv = mockProcessEnv({ PROMPTFOO_DISABLE_ADAPTIVE_SCHEDULER: 'false' });
+      registry = new RateLimitRegistry({ maxConcurrency: 1 });
+    });
+
+    afterEach(() => {
+      registry.dispose();
+      restoreEnv();
+      vi.useRealTimers();
+    });
+
+    it('does not retry an expired AbortSignal.timeout reason', async () => {
+      const abortSignal = AbortSignal.timeout(0);
+      await new Promise<void>((resolve) => {
+        abortSignal.addEventListener('abort', () => resolve(), { once: true });
+      });
+      expect(abortSignal.reason.name).toBe('TimeoutError');
+      vi.useFakeTimers();
+
+      const provider = createMockProvider({ config: { maxRetries: 2 } });
+      const retrying = vi.fn();
+      registry.on('request:retrying', retrying);
+      const wrapped = wrapProviderWithRateLimiting(provider, registry);
+      const result = wrapped.callApi('expired', undefined, { abortSignal }).catch((error) => error);
+      await vi.runAllTimersAsync();
+
+      expect(await result).toBe(abortSignal.reason);
+      expect(provider.callApi).not.toHaveBeenCalled();
+      expect(retrying).not.toHaveBeenCalled();
+      expect(Object.values(registry.getMetrics())[0]).toMatchObject({
+        totalRequests: 1,
+        failedRequests: 1,
+        completedRequests: 0,
+        retriedRequests: 0,
+        rateLimitHits: 0,
+        activeRequests: 0,
+        queueDepth: 0,
+      });
+      expect(vi.getTimerCount()).toBe(0);
+    });
+
+    it('preserves timeout retries for another invocation sharing the provider', async () => {
+      vi.useFakeTimers();
+      const reason = new Error('429 rate limit timeout');
+      const cancelledSignal = AbortSignal.abort(reason);
+      const activeSignal = new AbortController().signal;
+      const response = { output: 'recovered', tokenUsage: { total: 5, numRequests: 1 } };
+      const provider = createMockProvider({ config: { maxRetries: 1 } });
+      provider.callApi.mockRejectedValueOnce(new DOMException('Request timeout', 'TimeoutError'));
+      provider.callApi.mockResolvedValueOnce(response);
+      const retrying = vi.fn();
+      registry.on('request:retrying', retrying);
+      const wrapped = wrapProviderWithRateLimiting(provider, registry);
+
+      const cancelled = wrapped
+        .callApi('cancelled', undefined, { abortSignal: cancelledSignal })
+        .catch((error) => error);
+      const active = wrapped.callApi('active', undefined, { abortSignal: activeSignal });
+      await vi.runAllTimersAsync();
+
+      expect(await cancelled).toBe(reason);
+      expect(await active).toBe(response);
+      expect(provider.callApi).toHaveBeenCalledTimes(2);
+      expect(provider.callApi).toHaveBeenNthCalledWith(1, 'active', undefined, {
+        abortSignal: activeSignal,
+      });
+      expect(provider.callApi).toHaveBeenNthCalledWith(2, 'active', undefined, {
+        abortSignal: activeSignal,
+      });
+      expect(retrying).toHaveBeenCalledOnce();
+      expect(Object.values(registry.getMetrics())[0]).toMatchObject({
+        totalRequests: 2,
+        failedRequests: 1,
+        completedRequests: 1,
+        retriedRequests: 1,
+        rateLimitHits: 0,
+        activeRequests: 0,
+        queueDepth: 0,
+      });
+      expect(activeSignal.aborted).toBe(false);
+      expect(vi.getTimerCount()).toBe(0);
     });
   });
 

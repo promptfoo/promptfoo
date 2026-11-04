@@ -1,7 +1,7 @@
-import { type GradingResult, isGradingResult } from '../types/index';
+import { type GradingResult } from '../types/index';
 import invariant from '../util/invariant';
 import { getProcessShim } from '../util/processShim';
-import { normalizeScriptAssertionResult } from './scriptResultNormalization';
+import { asGradingResult, normalizeScriptAssertionResult } from './scriptResultNormalization';
 
 import type { AssertionParams } from '../types/index';
 
@@ -107,17 +107,16 @@ class JavascriptAssertionValidationError extends Error {}
 
 const validateResult = async (result: unknown): Promise<boolean | number | GradingResult> => {
   result = await Promise.resolve(result);
-  if (
-    typeof result === 'boolean' ||
-    (typeof result === 'number' && Number.isFinite(result)) ||
-    isGradingResult(result)
-  ) {
+  if (typeof result === 'boolean' || (typeof result === 'number' && Number.isFinite(result))) {
     return result;
-  } else {
-    throw new JavascriptAssertionValidationError(
-      `Custom function must return a boolean, a finite number, or a GradingResult object with finite scores and weights. Got type ${typeof result}.`,
-    );
   }
+  const gradingResult = asGradingResult(result);
+  if (gradingResult) {
+    return gradingResult;
+  }
+  throw new JavascriptAssertionValidationError(
+    `Custom function must return a boolean, a finite number, or a GradingResult object with finite scores and weights. Got type ${typeof result}.`,
+  );
 };
 
 function serializeFunctionAssertion(assertion: AssertionParams['assertion']) {

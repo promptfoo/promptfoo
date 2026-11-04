@@ -18,6 +18,14 @@ import type {
 } from '../types/index';
 
 const MISTRAL_CHAT_MODELS = [
+  // Z.ai GLM 5.3 hosted by Mistral: https://docs.mistral.ai/models/zai-glm-5-3
+  {
+    id: 'zai-glm-5-3',
+    cost: {
+      input: 1.4 / 1000000,
+      output: 4.4 / 1000000,
+    },
+  },
   ...['open-mistral-7b', 'mistral-tiny', 'mistral-tiny-2312'].map((id) => ({
     id,
     cost: {
@@ -25,6 +33,7 @@ const MISTRAL_CHAT_MODELS = [
       output: 0.25 / 1000000,
     },
   })),
+  // Mistral NeMo (deprecated 2026-05-22) — retained for historical cost scoring.
   ...[
     'open-mistral-nemo',
     'open-mistral-nemo-2407',
@@ -44,7 +53,7 @@ const MISTRAL_CHAT_MODELS = [
       output: 3 / 1000000,
     },
   },
-  // Mistral Small 3.2 (deprecated 2026-07-30) — historical pricing for cached results
+  // Mistral Small 3.2 (deprecated 2026-04-30) — historical pricing for cached results
   {
     id: 'mistral-small-2506',
     cost: {
@@ -52,16 +61,15 @@ const MISTRAL_CHAT_MODELS = [
       output: 0.3 / 1000000,
     },
   },
-  // Mistral Small 4 — `mistral-small-latest` and `magistral-small-latest` (Magistral Small
-  // was folded into Mistral Small 4) both resolve to `mistral-small-2603`
-  ...['mistral-small-2603', 'mistral-small-latest', 'magistral-small-latest'].map((id) => ({
+  // Mistral Small 4 — `mistral-small-latest` resolves to `mistral-small-2603`.
+  ...['mistral-small-2603', 'mistral-small-latest'].map((id) => ({
     id,
     cost: {
       input: 0.15 / 1000000,
       output: 0.6 / 1000000,
     },
   })),
-  // Mistral Medium 1 (retired) — historical pricing for cached results
+  // Mistral Medium 1 (retired) — historical pricing for cached results.
   {
     id: 'mistral-medium-2312',
     cost: {
@@ -77,15 +85,15 @@ const MISTRAL_CHAT_MODELS = [
       output: 2 / 1000000,
     },
   })),
-  // Mistral Medium 3.5 — `mistral-medium-latest`, bare `mistral-medium`, and the
-  // `mistral-medium-3` / `mistral-medium-3-5` aliases all resolve to `mistral-medium-2604`
+  // Mistral Medium 3.5 published aliases plus compatibility IDs retained from
+  // live API/catalog verification for existing configs and cached-result costs.
   ...[
-    'mistral-medium-2604',
-    'mistral-medium-3.5',
     'mistral-medium-3-5',
     'mistral-medium-3',
     'mistral-medium-latest',
     'mistral-medium',
+    'mistral-medium-3.5',
+    'mistral-medium-2604',
   ].map((id) => ({
     id,
     cost: {
@@ -152,9 +160,14 @@ const MISTRAL_CHAT_MODELS = [
       output: 6 / 1000000,
     },
   })),
-  // Magistral Small standalone reasoning snapshots. `magistral-small-latest` was
-  // repointed to Mistral Small 4 (priced above); 2506/2507 retired, 2509 deprecated.
-  ...['magistral-small-2506', 'magistral-small-2507', 'magistral-small-2509'].map((id) => ({
+  // Magistral Small standalone reasoning snapshots. The deprecated
+  // `magistral-small-latest` alias still resolves to the 2509 snapshot.
+  ...[
+    'magistral-small-2506',
+    'magistral-small-2507',
+    'magistral-small-2509',
+    'magistral-small-latest',
+  ].map((id) => ({
     id,
     cost: {
       input: 0.5 / 1000000,
@@ -194,7 +207,23 @@ const MISTRAL_CHAT_MODELS = [
       output: 0.2 / 1000000,
     },
   })),
-  // Devstral 2 — `mistral-code-agent-latest` is the Mistral Code agent alias
+  // Leanstral 1.5 public preview (retires 2026-09-30).
+  {
+    id: 'labs-leanstral-1-5',
+    cost: {
+      input: 0,
+      output: 0,
+    },
+  },
+  // Voxtral Small token pricing. Mistral bills audio input separately per minute.
+  {
+    id: 'voxtral-small-2507',
+    cost: {
+      input: 0.1 / 1000000,
+      output: 0.4 / 1000000,
+    },
+  },
+  // Devstral 2 (deprecated 2026-05-22) — retained for historical cost scoring.
   ...[
     'devstral-2512',
     'devstral-latest',
@@ -497,11 +526,24 @@ function calculateMistralCost(
   config: MistralChatCompletionOptions,
   promptTokens?: number,
   completionTokens?: number,
+  promptAudioSeconds?: unknown,
 ): number | undefined {
-  return calculateCost(modelName, config, promptTokens, completionTokens, [
+  const tokenCost = calculateCost(modelName, config, promptTokens, completionTokens, [
     ...MISTRAL_CHAT_MODELS,
     ...MISTRAL_EMBEDDING_MODELS,
   ]);
+  if (modelName !== 'voxtral-small-2507' || promptAudioSeconds == null) {
+    return tokenCost;
+  }
+  if (
+    tokenCost === undefined ||
+    typeof promptAudioSeconds !== 'number' ||
+    !Number.isFinite(promptAudioSeconds) ||
+    promptAudioSeconds < 0
+  ) {
+    return undefined;
+  }
+  return tokenCost + (promptAudioSeconds / 60) * 0.004;
 }
 
 export class MistralChatCompletionProvider implements ApiProvider {
@@ -558,7 +600,7 @@ export class MistralChatCompletionProvider implements ApiProvider {
   }
 
   getApiKey(): string | undefined {
-    logger.debug(`Mistral apiKeyenvar: ${this.config.apiKeyEnvar}`);
+    logger.debug(`Mistral apiKeyEnvar: ${this.config.apiKeyEnvar}`);
     const apiKeyCandidate =
       this.config?.apiKey ||
       (this.config?.apiKeyEnvar
@@ -724,6 +766,7 @@ export class MistralChatCompletionProvider implements ApiProvider {
         config,
         data.usage?.prompt_tokens,
         data.usage?.completion_tokens,
+        data.usage?.prompt_audio_seconds,
       ),
       ...(data.choices.length > 1 && {
         metadata: {
@@ -759,8 +802,9 @@ export class MistralEmbeddingProvider implements ApiProvider {
       env?: EnvOverrides;
     } = {},
   ) {
-    const { modelName, config, env } = options;
+    const { modelName, config, env, id } = options;
     this.modelName = modelName || 'mistral-embed';
+    this.id = id ? () => id : this.id;
     if (!MistralEmbeddingProvider.MISTRAL_EMBEDDING_MODELS_NAMES.includes(this.modelName)) {
       logger.warn(`Using unknown Mistral embedding model: ${this.modelName}`);
     }
@@ -799,7 +843,7 @@ export class MistralEmbeddingProvider implements ApiProvider {
   }
 
   getApiKey(): string | undefined {
-    logger.debug(`Mistral apiKeyenvar: ${this.config.apiKeyEnvar}`);
+    logger.debug(`Mistral apiKeyEnvar: ${this.config.apiKeyEnvar}`);
     const apiKeyCandidate =
       this.config?.apiKey ||
       (this.config?.apiKeyEnvar

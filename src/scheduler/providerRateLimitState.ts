@@ -131,6 +131,7 @@ export class ProviderRateLimitState extends EventEmitter {
     requestId: string,
     callFn: () => Promise<T>,
     options: {
+      abortSignal?: AbortSignal;
       getHeaders?: (result: T) => Record<string, string> | undefined;
       isRateLimited?: (result: T | undefined, error?: Error) => boolean;
       getRetryAfter?: (result: T | undefined, error?: Error) => number | undefined;
@@ -232,6 +233,11 @@ export class ProviderRateLimitState extends EventEmitter {
 
         // Release slot
         this.slotQueue.release();
+
+        if (options.abortSignal?.aborted) {
+          this.failedRequests++;
+          throw error;
+        }
 
         // Check if rate limited (from error, not result)
         const isRateLimited =

@@ -794,6 +794,25 @@ describe('AssertionsResult', () => {
       );
     });
 
+    it('records the named score shapes earlier releases accepted from scoring functions', async () => {
+      const assertionsResult = new AssertionsResult({});
+      const scoringFunction = vi.fn().mockResolvedValue({
+        pass: true,
+        score: 0.9,
+        reason: 'Custom scoring',
+        namedScores: { exact_match: true, skipped: null },
+      });
+
+      const result = await assertionsResult.testResult(scoringFunction);
+
+      expect(result).toMatchObject({
+        pass: true,
+        score: 0.9,
+        reason: 'Custom scoring',
+        namedScores: { exact_match: 1, skipped: 0 },
+      });
+    });
+
     it('exposes completion details to typed scoring functions', async () => {
       const assertionsResult = new AssertionsResult({});
       assertionsResult.addResult({

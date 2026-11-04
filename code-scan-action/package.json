@@ -23,7 +23,7 @@
     "@actions/github": "^9.1.0"
   },
   "devDependencies": {
-    "@types/node": "^24.13.5",
+    "@types/node": "^24.13.6",
     "esbuild": "^0.28.0",
     "typescript": "^7.0.0"
   },

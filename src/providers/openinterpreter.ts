@@ -502,6 +502,8 @@ function normalizePrompt(
 }
 
 export class OpenInterpreterProvider implements ApiProvider {
+  private restoreRegistrationOnUse = false;
+
   readonly config: OpenInterpreterConfig;
   readonly env?: EnvOverrides;
 
@@ -563,6 +565,11 @@ export class OpenInterpreterProvider implements ApiProvider {
     context?: CallApiContextParams,
     callOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
+    if (this.restoreRegistrationOnUse) {
+      providerRegistry.register(this);
+      this.restoreRegistrationOnUse = false;
+    }
+
     // cleanup() removes the temporary INTERPRETER_HOME; recreate it so the
     // provider stays usable when a long-lived process reuses it afterwards.
     if (this.temporaryHome && !fs.existsSync(this.temporaryHome)) {
@@ -664,10 +671,14 @@ export class OpenInterpreterProvider implements ApiProvider {
   }
 
   async cleanup(): Promise<void> {
+    this.restoreRegistrationOnUse ||= providerRegistry.has(this);
     try {
       await this.delegate.cleanup();
     } finally {
       this.removeTemporaryHome();
+    }
+    if (this.restoreRegistrationOnUse) {
+      providerRegistry.unregister(this);
     }
   }
 
@@ -675,6 +686,7 @@ export class OpenInterpreterProvider implements ApiProvider {
     try {
       await this.cleanup();
     } finally {
+      this.restoreRegistrationOnUse = false;
       providerRegistry.unregister(this);
     }
   }

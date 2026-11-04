@@ -1,5 +1,6 @@
 import { APIError } from '@anthropic-ai/sdk';
 import dedent from 'dedent';
+import { satisfies } from 'semver';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   clearCache,
@@ -1451,6 +1452,27 @@ describe('AnthropicMessagesProvider', () => {
       expect(result.cost).toBeGreaterThan(0);
     });
 
+    it('prices the actual response inference geography from workspace defaults', async () => {
+      const provider = createProvider('claude-opus-4-8');
+
+      vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValue({
+        content: [{ type: 'text', text: 'Test response' }],
+        stop_reason: 'end_turn',
+        usage: {
+          input_tokens: 1_000_000,
+          output_tokens: 1_000_000,
+          cache_read_input_tokens: 0,
+          cache_creation_input_tokens: 0,
+          inference_geo: 'us',
+          server_tool_use: null,
+        },
+      } as unknown as Anthropic.Messages.Message);
+
+      const result = await provider.callApi('Test prompt');
+
+      expect(result.cost).toBeCloseTo(33, 10);
+    });
+
     it('should forward cache tokens from cached responses', async () => {
       const provider = createProvider('claude-3-5-sonnet-20241022');
 
@@ -1923,6 +1945,74 @@ describe('AnthropicMessagesProvider', () => {
         total: 26,
         completionDetails: { reasoning: 5 },
       });
+    });
+
+    it('preserves cache TTL usage across MCP continuation rounds for billing', async () => {
+      provider = createProvider('claude-opus-4-8', {
+        config: {
+          mcp: {
+            enabled: true,
+            server: {
+              command: 'npm',
+              args: ['start'],
+            },
+          },
+        },
+      });
+
+      mcpMocks.callTool.mockResolvedValueOnce({ content: 'Found Acme Solar.' });
+
+      vi.spyOn(provider.anthropic.messages, 'create')
+        .mockResolvedValueOnce({
+          content: [
+            {
+              type: 'tool_use',
+              id: 'toolu_search',
+              name: 'search_companies',
+              input: { query: 'clean energy' },
+            },
+          ],
+          stop_reason: 'tool_use',
+          usage: {
+            input_tokens: 10,
+            output_tokens: 5,
+            cache_read_input_tokens: 2,
+            cache_creation_input_tokens: 7,
+            cache_creation: {
+              ephemeral_5m_input_tokens: 3,
+              ephemeral_1h_input_tokens: 4,
+            },
+            server_tool_use: null,
+          },
+        } as Anthropic.Messages.Message)
+        .mockResolvedValueOnce({
+          content: [{ type: 'text', text: 'Acme Solar matches your query.' }],
+          stop_reason: 'end_turn',
+          usage: {
+            input_tokens: 7,
+            output_tokens: 4,
+            cache_read_input_tokens: 1,
+            cache_creation_input_tokens: 5,
+            cache_creation: {
+              ephemeral_5m_input_tokens: 2,
+              ephemeral_1h_input_tokens: 3,
+            },
+            server_tool_use: null,
+          },
+        } as Anthropic.Messages.Message);
+
+      const result = await provider.callApi('Find clean energy companies');
+
+      expect(result.tokenUsage).toMatchObject({
+        prompt: 32,
+        completion: 9,
+        total: 41,
+        completionDetails: {
+          cacheReadInputTokens: 3,
+          cacheCreationInputTokens: 12,
+        },
+      });
+      expect(result.cost).toBeCloseTo(0.00041275, 10);
     });
 
     it('does not cache MCP continuation results by default', async () => {
@@ -5046,14 +5136,44 @@ describe('AnthropicMessagesProvider', () => {
         type: 'message',
         usage: { input_tokens: 10, output_tokens: 5 },
       } as Anthropic.Messages.Message;
-      vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValue(mockResp);
+      const createSpy = vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValue(mockResp);
 
       const result = await provider.callApi('Test prompt');
 
       expect(result.output).toBe('Response');
+      expect(createSpy.mock.calls[0][0]).not.toHaveProperty('temperature');
+      expect(createSpy.mock.calls[0][0]).not.toHaveProperty('top_p');
+      expect(createSpy.mock.calls[0][0]).not.toHaveProperty('top_k');
       expect(warnSpy).not.toHaveBeenCalledWith(
         expect.stringContaining('Using unknown Anthropic model'),
       );
+    });
+
+    it.each([
+      { name: 'default', sampling: {} },
+      { name: 'explicit', sampling: { temperature: 0.5, top_p: 0.7, top_k: 40 } },
+    ])('omits $name sampling parameters with adaptive thinking', async ({ sampling }) => {
+      const provider = createProvider('claude-mythos-preview', {
+        config: { thinking: { type: 'adaptive' }, ...sampling },
+      });
+      const createSpy = vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValue({
+        content: [{ type: 'text', text: 'Response' }],
+        model: 'claude-mythos-preview',
+        id: 'msg-mythos-preview-sampling',
+        role: 'assistant',
+        stop_reason: 'end_turn',
+        stop_sequence: null,
+        type: 'message',
+        usage: { input_tokens: 10, output_tokens: 5 },
+      } as Anthropic.Messages.Message);
+
+      await provider.callApi('Test prompt');
+
+      const params = createSpy.mock.calls[0][0];
+      expect(params.thinking).toEqual({ type: 'adaptive' });
+      expect(params).not.toHaveProperty('temperature');
+      expect(params).not.toHaveProperty('top_p');
+      expect(params).not.toHaveProperty('top_k');
     });
   });
 
@@ -5336,9 +5456,45 @@ describe('AnthropicMessagesProvider', () => {
       const headers = (requestOptions?.headers ?? {}) as Record<string, string>;
       expect(headers['anthropic-beta']).toContain('claude-code-20250219');
       expect(headers['anthropic-beta']).toContain('oauth-2025-04-20');
-      expect(headers['user-agent']).toBe('claude-cli/1.0.0 (external, promptfoo)');
+      expect(headers['user-agent']).toBe('claude-cli/2.1.285 (external, promptfoo)');
       expect(headers['x-app']).toBe('cli');
     });
+
+    it.each([false, true])(
+      'sends a supported OAuth client version to newer models (stream: %s)',
+      async (stream) => {
+        mockProcessEnv({ ANTHROPIC_API_KEY: undefined });
+        claudeCodeAuthMocks.loadClaudeCodeCredential.mockReturnValue(validCredential());
+        const model = 'claude-opus-5-5';
+        const oauthProvider = createProvider(model, {
+          config: { apiKeyRequired: false, stream },
+        });
+        const message = mockMessageResponse(model);
+        const createSpy = vi
+          .spyOn(oauthProvider.anthropic.messages, 'create')
+          .mockResolvedValue(message);
+        const streamSpy = vi.spyOn(oauthProvider.anthropic.messages, 'stream').mockReturnValue({
+          finalMessage: async () => message,
+        } as ReturnType<typeof oauthProvider.anthropic.messages.stream>);
+
+        const response = await oauthProvider.callApi('hello');
+
+        expect(response.error).toBeUndefined();
+        expect(response.output).toBe('ok');
+        const requestSpy = stream ? streamSpy : createSpy;
+        expect(requestSpy).toHaveBeenCalledTimes(1);
+        const [params, requestOptions] = requestSpy.mock.calls[0];
+        expect(params.model).toBe(model);
+        const headers = (requestOptions?.headers ?? {}) as Record<string, string>;
+        const match = /^claude-cli\/(\d+\.\d+\.\d+) \(external, promptfoo\)$/.exec(
+          headers['user-agent'],
+        );
+        expect(match).not.toBeNull();
+        // The API rejects this model below 2.1.280; compare semver components
+        // correctly across minor/major releases. See issue #11322.
+        expect(satisfies(match?.[1] ?? '', '>=2.1.280')).toBe(true);
+      },
+    );
 
     it('isolates response-cache namespaces for distinct Claude Code OAuth tenants', async () => {
       mockProcessEnv({ ANTHROPIC_API_KEY: undefined });
@@ -5514,7 +5670,7 @@ describe('AnthropicMessagesProvider', () => {
 
       const [, requestOptions] = createSpy.mock.calls[0];
       const headers = (requestOptions?.headers ?? {}) as Record<string, string>;
-      expect(headers['user-agent']).toBe('claude-cli/1.0.0 (external, promptfoo)');
+      expect(headers['user-agent']).toBe('claude-cli/2.1.285 (external, promptfoo)');
       expect(headers['x-app']).toBe('cli');
     });
 
@@ -5541,7 +5697,7 @@ describe('AnthropicMessagesProvider', () => {
       const headers = (requestOptions?.headers ?? {}) as Record<string, string>;
       expect(headers['anthropic-beta']).toContain('claude-code-20250219');
       expect(headers['anthropic-beta']).toContain('oauth-2025-04-20');
-      expect(headers['user-agent']).toBe('claude-cli/1.0.0 (external, promptfoo)');
+      expect(headers['user-agent']).toBe('claude-cli/2.1.285 (external, promptfoo)');
       expect(headers['x-app']).toBe('cli');
     });
   });

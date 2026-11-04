@@ -143,7 +143,11 @@ export async function synthesize({
     respObjects.length >= 1,
     `Expected at least one JSON object in the response for personas, got ${respObjects.length}`,
   );
-  const personas = (respObjects[0] as { personas: string[] }).personas;
+  const personas = (respObjects[0] as { personas?: unknown }).personas;
+  invariant(
+    Array.isArray(personas),
+    'Expected the personas response to contain a "personas" array.',
+  );
   logger.debug(
     `Generated ${personas.length} persona${personas.length === 1 ? '' : 's'}:\n${personas.map((p) => `  - ${p}`).join('\n')}`,
   );

@@ -23,7 +23,7 @@ To use the MCP provider, you need to have an MCP server running. This can be a l
 
 The most basic MCP provider configuration:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: mcp
     config:
@@ -93,6 +93,11 @@ providers:
           Authorization: 'Bearer token'
           X-API-Key: 'your-api-key'
 ```
+
+Remote MCP connections reject redirects to a different origin to avoid forwarding credentials or
+request bodies to another destination. Configure `server.url` with the final MCP endpoint if your
+server redirects to a different host or port. POST requests support 307/308 redirects within the same
+origin, plus same-host HTTP-to-HTTPS upgrades when both URLs use their default ports.
 
 #### Multiple Servers
 
@@ -478,10 +483,9 @@ execute before the bail-out. `metadata.toolCalls` uses the same field names as t
 
 ## Red Team Testing with MCP
 
-The MCP provider is particularly powerful for red team testing of agentic systems. Here's a recommended configuration for comprehensive security testing:
+The MCP provider is useful for red team testing of agentic systems. Here's a recommended configuration for security testing:
 
-```yaml title="promptfooconfig.yaml"
-# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+```yaml
 description: MCP Red Team Security Testing
 
 providers:

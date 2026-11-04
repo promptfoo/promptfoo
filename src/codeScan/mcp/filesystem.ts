@@ -5,73 +5,102 @@
  */
 
 import { type ChildProcess, execFile, spawn } from 'child_process';
-import { realpathSync } from 'fs';
-import { delimiter, dirname, isAbsolute, join, relative, resolve, sep } from 'path';
+import { existsSync, realpathSync } from 'fs';
+import { createRequire } from 'module';
+import { dirname, isAbsolute, join, relative, resolve, sep } from 'path';
+import { pathToFileURL } from 'url';
 import { promisify } from 'util';
 
 import logger from '../../logger';
 import { FilesystemMcpError } from '../../types/codeScan';
 
+const require = createRequire(import.meta.url);
+const execFileAsync = promisify(execFile);
+
 const FILESYSTEM_MCP_READY_MARKER = 'running on stdio';
 const FILESYSTEM_MCP_READY_TIMEOUT_MS = 30000;
-const execFileAsync = promisify(execFile);
 
 function formatFilesystemMcpExitReason(code: number | null, signal: NodeJS.Signals | null): string {
   return code === null ? (signal ? `signal ${signal}` : 'unknown reason') : `code ${code}`;
 }
 
+// The server reads no configuration from the environment; pass only what Node needs.
+const FILESYSTEM_MCP_ENV_KEYS = new Set([
+  'HOME',
+  'PATH',
+  'SYSTEMROOT',
+  'TEMP',
+  'TMP',
+  'TMPDIR',
+  'USERPROFILE',
+]);
+
 function createFilesystemMcpEnv(): NodeJS.ProcessEnv {
-  const env = { ...process.env };
-
-  delete env.NPM_CONFIG_BEFORE;
-  delete env.npm_config_before;
-
-  if (process.platform === 'win32') {
-    // npm's generated server shim invokes node through PATH. Prefer this runtime and
-    // remove duplicate case variants, since Windows environment keys are case-insensitive.
-    for (const key of Object.keys(env)) {
-      if (key.toLowerCase() === 'path') {
-        delete env[key];
-      }
-    }
-    env.PATH = [dirname(process.execPath), process.env.PATH].filter(Boolean).join(delimiter);
-  }
-
-  return env;
+  // Match case-insensitively: Windows keeps names such as Path and SystemRoot.
+  return Object.fromEntries(
+    Object.entries(process.env).filter(([key]) => FILESYSTEM_MCP_ENV_KEYS.has(key.toUpperCase())),
+  );
 }
 
-/**
- * Windows npm shims are .cmd files, which spawn() cannot run without a shell. Run npm's
- * npx-cli.js under this Node instead, preferring its bundled npm; a bare node.exe (such as
- * the GitHub Actions runtime) falls back to PATH.
- */
-function getNpxLaunch(rootDir: string): { command: string; args: string[]; cwd: string } {
-  if (process.platform !== 'win32') {
-    return { command: 'npx', args: [], cwd: rootDir };
+function resolveFilesystemMcpServerEntry(): string {
+  try {
+    return require.resolve('@modelcontextprotocol/server-filesystem/dist/index.js');
+  } catch {
+    throw new Error(
+      'The @modelcontextprotocol/server-filesystem package is required to scan beyond the diff. Reinstall promptfoo with optional dependencies or use --diffs-only.',
+    );
   }
+}
+
+function getFilesystemMcpLaunch(rootDir: string): { args: string[]; cwd: string } {
+  // Preserve a caller's numeric heap limit without forwarding ambient loaders or preloads.
+  const heapLimit = [
+    ...(process.env.NODE_OPTIONS ?? '').matchAll(
+      /(?:^|\s)--max[-_]old[-_]space[-_]size(?:=|\s+)([1-9]\d*)(?=\s|$)/g,
+    ),
+  ].at(-1)?.[1];
+  const nodeArgs = heapLimit ? [`--max-old-space-size=${heapLimit}`] : [];
   const canonicalRoot = realpathSync(rootDir);
-  // Read process.env directly so PATH lookup stays case-insensitive on Windows.
-  const searchDirs = (process.env.PATH ?? '').split(delimiter).filter(isAbsolute);
-  for (const dir of [dirname(process.execPath), ...searchDirs]) {
-    try {
-      const npxCli = realpathSync(join(dir, 'node_modules', 'npm', 'bin', 'npx-cli.js'));
-      const relativePath = relative(canonicalRoot, npxCli);
-      if (
-        relativePath !== '..' &&
-        !relativePath.startsWith(`..${sep}`) &&
-        !isAbsolute(relativePath)
-      ) {
-        continue;
-      }
-      // npm invokes the server through a shell, so its cwd must also stay outside the repo.
-      return { command: process.execPath, args: [npxCli], cwd: dirname(npxCli) };
-    } catch {
-      // Skip missing or inaccessible npm installations.
+  const outsideRoot = (file: string): string => {
+    const canonicalFile = realpathSync(file);
+    const relativePath = relative(canonicalRoot, canonicalFile);
+    if (
+      relativePath !== '..' &&
+      !relativePath.startsWith(`..${sep}`) &&
+      !isAbsolute(relativePath)
+    ) {
+      throw new Error(
+        'The filesystem MCP launcher must be installed outside the scanned repository. Use an external promptfoo installation or --diffs-only.',
+      );
     }
+    return canonicalFile;
+  };
+
+  const entry = outsideRoot(resolveFilesystemMcpServerEntry());
+  if (!process.versions.pnp) {
+    return { args: [...nodeArgs, entry, canonicalRoot], cwd: dirname(entry) };
   }
-  throw new Error(
-    'npx not found outside the scanned repository: install npm alongside Node.js or on PATH',
-  );
+
+  // Resolve only the installed package's loaders; never inherit ambient NODE_OPTIONS.
+  const pnpLoader = outsideRoot(require.resolve('pnpapi'));
+  const esmLoader = join(dirname(pnpLoader), '.pnp.loader.mjs');
+  if (!existsSync(esmLoader)) {
+    throw new Error(
+      'The filesystem MCP server needs Yarn ESM support. Enable pnpEnableEsmLoader and reinstall, use nodeLinker: node-modules, or use --diffs-only.',
+    );
+  }
+  return {
+    args: [
+      ...nodeArgs,
+      '--require',
+      pnpLoader,
+      '--experimental-loader',
+      pathToFileURL(outsideRoot(esmLoader)).href,
+      entry,
+      canonicalRoot,
+    ],
+    cwd: dirname(pnpLoader),
+  };
 }
 
 /**
@@ -92,18 +121,12 @@ export function startFilesystemMcpServer(rootDir: string): ChildProcess {
   logger.debug(`Root directory: ${absoluteRootDir}`);
 
   try {
-    // Spawn the filesystem MCP server
-    // Using npx to run @modelcontextprotocol/server-filesystem
-    const { command, args, cwd } = getNpxLaunch(absoluteRootDir);
-    const mcpProcess = spawn(
-      command,
-      [...args, '-y', '@modelcontextprotocol/server-filesystem', absoluteRootDir],
-      {
-        stdio: ['pipe', 'pipe', 'pipe'], // stdin/stdout/stderr all piped
-        cwd,
-        env: createFilesystemMcpEnv(),
-      },
-    );
+    const { args, cwd } = getFilesystemMcpLaunch(absoluteRootDir);
+    const mcpProcess = spawn(process.execPath, args, {
+      stdio: ['pipe', 'pipe', 'pipe'],
+      cwd,
+      env: createFilesystemMcpEnv(),
+    });
 
     // Filter stderr to suppress expected timeout warnings
     mcpProcess.stderr?.on('data', (chunk: Buffer) => {
@@ -145,9 +168,8 @@ export function startFilesystemMcpServer(rootDir: string): ChildProcess {
 /**
  * Wait until the filesystem MCP server is ready to accept JSON-RPC messages.
  *
- * The child process is started through npx, which can spend time resolving or
- * installing the package before the MCP server takes over stdin. Announcing the
- * runner before that point lets the cloud side send initialize too early.
+ * The server starts reading stdin only after it validates its root directory.
+ * Announcing the runner before that point lets the cloud side send initialize too early.
  */
 export function waitForFilesystemMcpServerReady(
   mcpProcess: ChildProcess,
@@ -247,7 +269,7 @@ export async function stopFilesystemMcpServer(mcpProcess: ChildProcess): Promise
   logger.debug(`Stopping MCP server (pid: ${mcpProcess.pid})...`);
 
   if (process.platform === 'win32') {
-    // SIGTERM force-kills only npm on Windows. taskkill also stops its shell and server.
+    // Stop the complete process tree on Windows, including any server subprocesses.
     const windowsDir = process.env.SystemRoot;
     if (!windowsDir || !isAbsolute(windowsDir)) {
       throw new FilesystemMcpError('Cannot locate the Windows system directory for MCP cleanup');
@@ -266,21 +288,59 @@ export async function stopFilesystemMcpServer(mcpProcess: ChildProcess): Promise
     return;
   }
 
-  return new Promise((resolve) => {
-    const timeout = setTimeout(() => {
-      // Force kill if graceful shutdown takes too long
-      logger.debug('MCP server did not exit gracefully, force killing...');
-      mcpProcess.kill('SIGKILL');
-      resolve();
-    }, 5000); // 5 second timeout
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    let exitTimeout: ReturnType<typeof setTimeout> | undefined;
 
-    mcpProcess.on('exit', () => {
+    const cleanup = () => {
       clearTimeout(timeout);
+      clearTimeout(exitTimeout);
+      mcpProcess.off('exit', onExit);
+      mcpProcess.off('error', onError);
+    };
+
+    const onExit = () => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      cleanup();
       logger.debug('MCP server stopped');
       resolve();
-    });
+    };
 
-    // Try graceful shutdown first
-    mcpProcess.kill('SIGTERM');
+    const onError = (error: Error) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      cleanup();
+      reject(new FilesystemMcpError(`Failed to stop filesystem MCP server: ${error.message}`));
+    };
+
+    const sendSignal = (signal: NodeJS.Signals) => {
+      try {
+        // False can mean the child already exited but its exit event is still queued.
+        // Keep waiting for that event or the bounded confirmation deadline.
+        mcpProcess.kill(signal);
+      } catch (error) {
+        onError(error instanceof Error ? error : new Error(String(error)));
+      }
+    };
+
+    const timeout = setTimeout(() => {
+      logger.debug('MCP server did not exit gracefully, force killing...');
+      sendSignal('SIGKILL');
+      if (!settled) {
+        // Start the confirmation window after escalation, even when the event loop was delayed.
+        exitTimeout = setTimeout(() => {
+          onError(new Error(`Timed out waiting for process ${mcpProcess.pid} to exit`));
+        }, 5000);
+      }
+    }, 5000);
+
+    mcpProcess.once('exit', onExit);
+    mcpProcess.once('error', onError);
+    sendSignal('SIGTERM');
   });
 }

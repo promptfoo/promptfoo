@@ -8,8 +8,8 @@ import {
 } from '../../src/assertions/synthesis';
 import { getDefaultProviders } from '../../src/providers/defaults';
 import { loadApiProvider } from '../../src/providers/index';
-import { withProviderCleanup } from '../../src/providers/lifecycle';
 import { createMockProvider } from '../factories/provider';
+import { createDeferred } from '../util/utils';
 
 import type { ApiProvider, TestCase } from '../../src/types/index';
 
@@ -28,6 +28,11 @@ beforeEach(() => {
 afterEach(() => vi.restoreAllMocks());
 
 describe('synthesize', () => {
+  const questions = [
+    { label: 'Greeting', question: 'Does the response include a greeting?' },
+    { label: 'Length', question: 'Is the response under ten words?' },
+  ];
+
   it('should generate assertions based on config prompts and existing assertions', async () => {
     let i = 0;
     const mockProvider = createMockProvider({
@@ -59,14 +64,7 @@ describe('synthesize', () => {
   it('cleans an owned provider after both assertion conversions finish', async () => {
     const provider = createMockProvider({ cleanup: true });
     provider.callApi
-      .mockResolvedValueOnce({
-        output: {
-          questions: [
-            { label: 'Greeting', question: 'Does the response include a greeting?' },
-            { label: 'Length', question: 'Is the response under ten words?' },
-          ],
-        },
-      })
+      .mockResolvedValueOnce({ output: { questions } })
       .mockImplementation(async (prompt) => ({
         output: prompt.includes('Is the response under ten words?')
           ? 'return len(output.split()) < 10'
@@ -74,17 +72,13 @@ describe('synthesize', () => {
       }));
     vi.mocked(loadApiProvider).mockResolvedValue(provider);
 
-    const result = await withProviderCleanup(async () => {
-      const assertions = await synthesize({
-        provider: 'fixture-provider',
-        prompts: ['Return a short greeting.'],
-        instructions: 'Use the provided greeting criteria.',
-        tests: [{}],
-        numQuestions: 2,
-        type: 'llm-rubric',
-      });
-      expect(provider.cleanup).not.toHaveBeenCalled();
-      return assertions;
+    const result = await synthesize({
+      provider: 'fixture-provider',
+      prompts: ['Return a short greeting.'],
+      instructions: 'Use the provided greeting criteria.',
+      tests: [{}],
+      numQuestions: 2,
+      type: 'llm-rubric',
     });
 
     expect(result).toHaveLength(2);
@@ -111,37 +105,102 @@ describe('synthesize', () => {
     vi.mocked(loadApiProvider).mockResolvedValue(provider);
 
     await expect(
-      withProviderCleanup(() =>
-        synthesize({ provider: 'fixture-provider', prompts: ['Return a greeting.'], tests: [] }),
-      ),
+      synthesize({ provider: 'fixture-provider', prompts: ['Return a greeting.'], tests: [] }),
     ).rejects.toThrow(message);
 
     expect(provider.callApi).toHaveBeenCalledOnce();
     expect(provider.cleanup).toHaveBeenCalledOnce();
   });
 
-  it('preserves a conversion error when cleanup also fails', async () => {
-    const conversionError = new Error('fixture conversion failed');
+  it('reports a cleanup failure after successful synthesis', async () => {
+    const cleanupError = new Error('fixture cleanup failed');
     const provider = createMockProvider({
-      cleanup: async () => {
-        throw new Error('fixture cleanup failed');
+      response: { output: { questions: [] } },
+      cleanup: () => {
+        throw cleanupError;
       },
     });
-    provider.callApi
-      .mockResolvedValueOnce({
-        output: { questions: [{ label: 'Greeting', question: 'Does it include a greeting?' }] },
-      })
-      .mockRejectedValueOnce(conversionError);
     vi.mocked(loadApiProvider).mockResolvedValue(provider);
 
     await expect(
-      withProviderCleanup(() =>
-        synthesize({ provider: 'fixture-provider', prompts: ['Return a greeting.'], tests: [] }),
-      ),
-    ).rejects.toBe(conversionError);
-
-    expect(provider.callApi).toHaveBeenCalledTimes(2);
+      synthesize({ provider: 'fixture-provider', prompts: ['Return a greeting.'], tests: [] }),
+    ).rejects.toBe(cleanupError);
     expect(provider.cleanup).toHaveBeenCalledOnce();
+  });
+
+  it.each([false, true])(
+    'drains conversions and preserves their error (cleanup fails: %s)',
+    async (cleanupFails) => {
+      const conversionError = new Error('fixture conversion failed');
+      const provider = createMockProvider({ cleanup: true });
+      if (cleanupFails) {
+        provider.cleanup!.mockRejectedValue(new Error('fixture cleanup failed'));
+      }
+      let cleanedBeforeLastResponse: boolean | undefined;
+      provider.callApi
+        .mockResolvedValueOnce({ output: { questions } })
+        .mockImplementation(async (prompt) => {
+          if (prompt.includes('Does the response include a greeting?')) {
+            throw conversionError;
+          }
+          await new Promise<void>((resolve) => setImmediate(resolve));
+          cleanedBeforeLastResponse = provider.cleanup!.mock.calls.length > 0;
+          return { output: 'None' };
+        });
+      vi.mocked(loadApiProvider).mockResolvedValue(provider);
+
+      await expect(
+        synthesize({
+          provider: 'fixture-provider',
+          prompts: ['Return a greeting.'],
+          tests: [],
+          numQuestions: 2,
+        }),
+      ).rejects.toBe(conversionError);
+      expect(cleanedBeforeLastResponse).toBe(false);
+      expect(provider.callApi).toHaveBeenCalledTimes(3);
+      expect(provider.cleanup).toHaveBeenCalledOnce();
+    },
+  );
+
+  it('bounds cleanup when a failed conversion has a sibling that ignores cancellation', async () => {
+    vi.useFakeTimers();
+    const stalled = createDeferred<void>();
+    const conversionError = new Error('conversion failed');
+    const signals: AbortSignal[] = [];
+    const provider = createMockProvider({ cleanup: true });
+    provider.callApi
+      .mockResolvedValueOnce({ output: { questions } })
+      .mockImplementation(async (prompt, _context, options) => {
+        signals.push(options!.abortSignal!);
+        if (prompt.includes('Does the response include a greeting?')) {
+          throw conversionError;
+        }
+        stalled.resolve();
+        return new Promise<never>(() => {});
+      });
+    vi.mocked(loadApiProvider).mockResolvedValue(provider);
+
+    try {
+      const result = synthesize({
+        provider: 'fixture-provider',
+        prompts: ['hello'],
+        tests: [],
+        numQuestions: 2,
+      });
+      const rejected = expect(result).rejects.toBe(conversionError);
+      await stalled.promise;
+      await vi.advanceTimersByTimeAsync(0);
+      expect(signals).toHaveLength(2);
+      expect(signals.every((signal) => signal.aborted)).toBe(true);
+      await vi.advanceTimersByTimeAsync(999);
+      expect(provider.cleanup).not.toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(1);
+      await rejected;
+      expect(provider.cleanup).toHaveBeenCalledOnce();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('leaves the shared default provider open after test-suite synthesis', async () => {
@@ -155,11 +214,9 @@ describe('synthesize', () => {
       synthesizeProvider: provider,
     });
 
-    const result = await withProviderCleanup(() =>
-      synthesizeFromTestSuite(
-        { providers: [], prompts: [{ raw: 'Return a greeting.', label: 'Greeting' }] },
-        {},
-      ),
+    const result = await synthesizeFromTestSuite(
+      { providers: [], prompts: [{ raw: 'Return a greeting.', label: 'Greeting' }] },
+      {},
     );
 
     expect(result).toEqual([

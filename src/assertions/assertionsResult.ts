@@ -1,7 +1,7 @@
 import { isDeepStrictEqual } from 'node:util';
 
 import { getEnvBool } from '../envars';
-import { isGradingResult } from '../types/index';
+import { asGradingResult } from './scriptResultNormalization';
 
 import type { AssertionSet, GradingResult, ScoringFunction } from '../types/index';
 
@@ -393,13 +393,15 @@ export class AssertionsResult {
 
     if (scoringFunction) {
       try {
-        const scoringResult = await scoringFunction(normalizedNamedScores, {
-          threshold: this.threshold,
-          parentAssertionSet: this._parentAssertionSet,
-          componentResults: flattenedComponentResults,
-          tokensUsed: this.tokensUsed,
-        });
-        if (!isGradingResult(scoringResult)) {
+        const scoringResult = asGradingResult(
+          await scoringFunction(normalizedNamedScores, {
+            threshold: this.threshold,
+            parentAssertionSet: this._parentAssertionSet,
+            componentResults: flattenedComponentResults,
+            tokensUsed: this.tokensUsed,
+          }),
+        );
+        if (!scoringResult) {
           throw new Error('assertion scoring function must return a GradingResult');
         }
         this.result = {

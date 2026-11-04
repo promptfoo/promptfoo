@@ -18,6 +18,7 @@ import {
 import { transformMCPConfigToClaudeCode } from '../../src/providers/mcp/transform';
 import * as genaiTracer from '../../src/tracing/genaiTracer';
 import * as traceStore from '../../src/tracing/store';
+import { getPackageVersion } from '../../src/util/packageVersion';
 import { checkProviderApiKeys } from '../../src/util/provider';
 import { mockProcessEnv } from '../util/utils';
 import type {
@@ -79,6 +80,7 @@ vi.mock('../../src/esm', async (importOriginal) => {
   };
 });
 vi.mock('../../src/providers/mcp/transform');
+vi.mock('../../src/util/packageVersion', () => ({ getPackageVersion: vi.fn() }));
 vi.mock('node:module', async (importOriginal) => {
   return {
     ...(await importOriginal()),
@@ -292,6 +294,7 @@ describe('ClaudeCodeSDKProvider', () => {
   beforeEach(async () => {
     vi.clearAllMocks();
     mockQuery.mockReset();
+    vi.mocked(getPackageVersion).mockReset();
     Object.values(fsMocks).forEach((mock) => mock.mockReset());
 
     // Setup importModule to return our mockQuery
@@ -610,6 +613,85 @@ describe('ClaudeCodeSDKProvider', () => {
       );
     },
   );
+
+  it.each(['0.2.129', '0.3.159', '0.3.252'])(
+    'passes a custom system prompt as a string to Agent SDK %s, which ignores the object form',
+    async (sdkVersion) => {
+      vi.mocked(getPackageVersion).mockReturnValue(sdkVersion);
+      mockQuery.mockReturnValue(createMockResponse('Response'));
+      const provider = new ClaudeCodeSDKProvider({
+        config: { apiKey: 'test-key', custom_system_prompt: 'You are a pirate.' },
+      });
+
+      await provider.callApi('Hello');
+      // The version is read once, when the SDK is loaded.
+      await provider.callApi('Hello again');
+
+      expect(getPackageVersion).toHaveBeenCalledExactlyOnceWith(
+        '@anthropic-ai/claude-agent-sdk',
+        '@anthropic-ai/claude-agent-sdk',
+      );
+      expect(mockQuery).toHaveBeenCalledTimes(2);
+      for (const [queryParams] of mockQuery.mock.calls) {
+        expect(queryParams.options.systemPrompt).toBe('You are a pirate.');
+      }
+    },
+  );
+
+  it.each(['0.3.257', '0.3.280', '1.0.0', 'not-a-version', null])(
+    'keeps the unrecorded custom system prompt object for Agent SDK %s',
+    async (sdkVersion) => {
+      vi.mocked(getPackageVersion).mockReturnValue(sdkVersion);
+      mockQuery.mockReturnValue(createMockResponse('Response'));
+      const provider = new ClaudeCodeSDKProvider({
+        config: { apiKey: 'test-key', custom_system_prompt: 'You are a pirate.' },
+      });
+
+      await provider.callApi('Hello');
+
+      expect(mockQuery.mock.calls[0][0].options.systemPrompt).toEqual({
+        type: 'custom',
+        prompt: 'You are a pirate.',
+        snapshot: false,
+      });
+    },
+  );
+
+  it('keeps the custom system prompt object when the Agent SDK manifest cannot be read', async () => {
+    vi.mocked(getPackageVersion).mockImplementation(() => {
+      throw new SyntaxError('Unexpected token in package.json');
+    });
+    mockQuery.mockReturnValue(createMockResponse('Response'));
+    const provider = new ClaudeCodeSDKProvider({
+      config: { apiKey: 'test-key', custom_system_prompt: 'You are a pirate.' },
+    });
+
+    const result = await provider.callApi('Hello');
+
+    expect(result.error).toBeUndefined();
+    expect(mockQuery.mock.calls[0][0].options.systemPrompt).toEqual({
+      type: 'custom',
+      prompt: 'You are a pirate.',
+      snapshot: false,
+    });
+  });
+
+  it('leaves the preset system prompt unchanged for an older Agent SDK', async () => {
+    vi.mocked(getPackageVersion).mockReturnValue('0.3.252');
+    mockQuery.mockReturnValue(createMockResponse('Response'));
+    const provider = new ClaudeCodeSDKProvider({
+      config: { apiKey: 'test-key', append_system_prompt: 'Be brief.' },
+    });
+
+    await provider.callApi('Hello');
+
+    expect(mockQuery.mock.calls[0][0].options.systemPrompt).toEqual({
+      type: 'preset',
+      preset: 'claude_code',
+      append: 'Be brief.',
+      snapshot: false,
+    });
+  });
 
   it.each([
     {
@@ -2114,6 +2196,16 @@ describe('ClaudeCodeSDKProvider', () => {
     });
 
     describe('config.env passthrough (OTEL / subprocess env)', () => {
+      let restoreEnv: () => void;
+
+      beforeEach(() => {
+        restoreEnv = mockProcessEnv({ OTEL_RESOURCE_ATTRIBUTES: undefined });
+      });
+
+      afterEach(() => {
+        restoreEnv();
+      });
+
       it('passes file defaults below explicit subprocess environment values', async () => {
         mockQuery.mockReturnValue(createMockResponse('ok'));
         const provider = new ClaudeCodeSDKProvider({

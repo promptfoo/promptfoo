@@ -232,7 +232,15 @@ export class GoogleAuthManager {
 
     // Check for Python SDK environment variables
     const useVertexEnv = getEnvString('GOOGLE_GENAI_USE_VERTEXAI');
-    const cloudProject = getEnvString('GOOGLE_CLOUD_PROJECT');
+    const cloudProject = env?.GOOGLE_CLOUD_PROJECT || getEnvString('GOOGLE_CLOUD_PROJECT');
+    const hasProjectEnvironment = Boolean(
+      env?.VERTEX_PROJECT_ID ||
+        env?.GOOGLE_PROJECT_ID ||
+        env?.GOOGLE_CLOUD_PROJECT ||
+        getEnvString('VERTEX_PROJECT_ID') ||
+        getEnvString('GOOGLE_PROJECT_ID') ||
+        getEnvString('GOOGLE_CLOUD_PROJECT'),
+    );
 
     // SDK alignment: project/location and apiKey are mutually exclusive
     // Only applies to explicit config values, not env vars (matching SDK behavior)
@@ -272,7 +280,7 @@ export class GoogleAuthManager {
     }
 
     // Vertex mode requires either API key or project ID
-    if (vertexai && !apiKey && !projectId && !cloudProject && !credentials) {
+    if (vertexai && !apiKey && !projectId && !hasProjectEnvironment && !credentials) {
       const hasAdc = Boolean(
         env?.GOOGLE_APPLICATION_CREDENTIALS || process.env.GOOGLE_APPLICATION_CREDENTIALS,
       );
@@ -318,14 +326,13 @@ export class GoogleAuthManager {
     }
 
     // 3. Auto-detect from config/env (explicit project/credentials suggests Vertex)
-    const hasProjectId = Boolean(
-      config.projectId ||
-        env?.VERTEX_PROJECT_ID ||
-        getEnvString('VERTEX_PROJECT_ID') ||
-        env?.GOOGLE_PROJECT_ID ||
-        getEnvString('GOOGLE_PROJECT_ID') ||
-        getEnvString('GOOGLE_CLOUD_PROJECT'),
-    );
+    const providerProjectId =
+      env?.VERTEX_PROJECT_ID || env?.GOOGLE_PROJECT_ID || env?.GOOGLE_CLOUD_PROJECT;
+    const processProjectId =
+      getEnvString('VERTEX_PROJECT_ID') ||
+      getEnvString('GOOGLE_PROJECT_ID') ||
+      getEnvString('GOOGLE_CLOUD_PROJECT');
+    const hasProjectId = Boolean(config.projectId || providerProjectId || processProjectId);
     const hasCredentials = Boolean(config.credentials);
 
     if (hasProjectId || hasCredentials) {
@@ -468,10 +475,9 @@ export class GoogleAuthManager {
    *
    * Priority:
    * 1. config.projectId
-   * 2. VERTEX_PROJECT_ID env var
-   * 3. GOOGLE_PROJECT_ID env var
-   * 4. GOOGLE_CLOUD_PROJECT env var (Python SDK compatibility)
-   * 5. Auto-detected from OAuth credentials
+   * 2. Provider-scoped VERTEX_PROJECT_ID / GOOGLE_PROJECT_ID / GOOGLE_CLOUD_PROJECT
+   * 3. Process-wide VERTEX_PROJECT_ID / GOOGLE_PROJECT_ID / GOOGLE_CLOUD_PROJECT
+   * 4. Auto-detected from OAuth credentials
    *
    * @param config - Provider configuration
    * @param env - Environment overrides
@@ -487,32 +493,47 @@ export class GoogleAuthManager {
     },
     env?: EnvOverrides,
   ): Promise<string> {
+    const providerVertexProjectId = env?.VERTEX_PROJECT_ID;
+    const providerGoogleProjectId = env?.GOOGLE_PROJECT_ID;
+    const providerCloudProject = env?.GOOGLE_CLOUD_PROJECT;
+    const providerProjectId =
+      providerVertexProjectId || providerGoogleProjectId || providerCloudProject;
+    const processVertexProjectId = getEnvString('VERTEX_PROJECT_ID');
+    const processGoogleProjectId = getEnvString('GOOGLE_PROJECT_ID');
+    const processCloudProject = getEnvString('GOOGLE_CLOUD_PROJECT');
+    const processProjectId =
+      processVertexProjectId || processGoogleProjectId || processCloudProject;
+    const selectedVertexProjectId =
+      !config.projectId &&
+      (providerVertexProjectId || (!providerProjectId && processVertexProjectId));
+    const selectedGoogleProjectId =
+      !config.projectId &&
+      !selectedVertexProjectId &&
+      (providerGoogleProjectId || (!providerProjectId && processGoogleProjectId));
+
+    if (selectedVertexProjectId) {
+      logger.debug(
+        '[Google] VERTEX_PROJECT_ID is not a standard SDK env var. Consider using GOOGLE_CLOUD_PROJECT.',
+      );
+    }
+    if (selectedGoogleProjectId) {
+      logger.debug(
+        '[Google] GOOGLE_PROJECT_ID is not a standard SDK env var. Consider using GOOGLE_CLOUD_PROJECT.',
+      );
+    }
+
+    const configuredProjectId = config.projectId || providerProjectId || processProjectId;
+    if (configuredProjectId) {
+      return configuredProjectId;
+    }
+
     const { projectId: authProjectId } = await this.getOAuthClient({
       credentials: config.credentials,
       googleAuthOptions: config.googleAuthOptions,
       keyFilename: config.keyFilename,
       scopes: config.scopes,
     });
-
-    // Check for non-SDK env vars and warn
-    const vertexProjectId = env?.VERTEX_PROJECT_ID || getEnvString('VERTEX_PROJECT_ID');
-    const googleProjectId = env?.GOOGLE_PROJECT_ID || getEnvString('GOOGLE_PROJECT_ID');
-    const cloudProject = getEnvString('GOOGLE_CLOUD_PROJECT');
-
-    if (vertexProjectId && !config.projectId) {
-      logger.debug(
-        '[Google] VERTEX_PROJECT_ID is not a standard SDK env var. Consider using GOOGLE_CLOUD_PROJECT.',
-      );
-    }
-    if (googleProjectId && !config.projectId && !vertexProjectId) {
-      logger.debug(
-        '[Google] GOOGLE_PROJECT_ID is not a standard SDK env var. Consider using GOOGLE_CLOUD_PROJECT.',
-      );
-    }
-
-    return (
-      config.projectId || vertexProjectId || googleProjectId || cloudProject || authProjectId || ''
-    );
+    return authProjectId || '';
   }
 
   /**
@@ -520,34 +541,44 @@ export class GoogleAuthManager {
    *
    * Priority:
    * 1. config.region
-   * 2. VERTEX_REGION env var
-   * 3. GOOGLE_CLOUD_LOCATION env var (Python SDK compatibility)
-   * 4. Default: 'global' for Vertex AI without API key (SDK aligned), 'us-central1' otherwise
+   * 2. Provider-scoped VERTEX_REGION / GOOGLE_CLOUD_LOCATION overrides
+   * 3. Process-wide VERTEX_REGION / GOOGLE_CLOUD_LOCATION env vars
+   * 4. Model-specific fallback region
+   * 5. Default: 'global' for Vertex AI without API key (SDK aligned), 'us-central1' otherwise
    *
    * @param config - Provider configuration
    * @param env - Environment overrides
    * @param hasApiKey - Whether an API key is configured (affects default region)
+   * @param modelDefaultRegion - Model-specific fallback region
    * @returns Resolved region
    */
   static resolveRegion(
     config: { region?: string },
     env?: EnvOverrides,
     hasApiKey?: boolean,
+    modelDefaultRegion?: string,
   ): string {
-    // Check for non-SDK env vars
-    const vertexRegion = env?.VERTEX_REGION || getEnvString('VERTEX_REGION');
-    const cloudLocation = getEnvString('GOOGLE_CLOUD_LOCATION');
+    const processVertexRegion = getEnvString('VERTEX_REGION');
+    const processCloudLocation = getEnvString('GOOGLE_CLOUD_LOCATION');
+    const providerRegion = env?.VERTEX_REGION || env?.GOOGLE_CLOUD_LOCATION;
+    const processRegion = processVertexRegion || processCloudLocation;
+    const configuredRegion = config.region || providerRegion || processRegion;
+    const selectedVertexRegion =
+      !config.region &&
+      (env?.VERTEX_REGION || (!env?.GOOGLE_CLOUD_LOCATION && processVertexRegion));
 
-    if (vertexRegion && !config.region) {
+    if (selectedVertexRegion) {
       logger.debug(
         '[Google] VERTEX_REGION is not a standard SDK env var. Consider using GOOGLE_CLOUD_LOCATION.',
       );
     }
 
-    const configuredRegion = config.region || vertexRegion || cloudLocation;
-
     if (configuredRegion) {
       return configuredRegion;
+    }
+
+    if (modelDefaultRegion) {
+      return modelDefaultRegion;
     }
 
     // SDK alignment: default to 'global' when Vertex AI mode without API key

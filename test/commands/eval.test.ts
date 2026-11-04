@@ -1728,7 +1728,15 @@ describe('evalCommand', () => {
     const previousExitCode = process.exitCode;
     process.exitCode = undefined;
     const mockEvalRecord = new Eval(defaultConfig);
-    vi.mocked(evaluate).mockResolvedValueOnce(mockEvalRecord);
+    const cleanup = vi.fn().mockRejectedValue(new Error('cleanup failed'));
+    vi.mocked(evaluate).mockImplementationOnce(async () => {
+      trackProvider({
+        id: () => 'cleanup-provider',
+        callApi: async () => ({ output: 'ok' }),
+        cleanup,
+      });
+      return mockEvalRecord;
+    });
 
     try {
       const result = await doEval(
@@ -1743,6 +1751,7 @@ describe('evalCommand', () => {
       // would silently mis-report 0 tests / 0 successes for watch failures.
       expect(result).toBe(mockEvalRecord);
       expect(process.exitCode).toBe(1);
+      expect(cleanup).toHaveBeenCalledOnce();
     } finally {
       process.exitCode = previousExitCode;
     }
@@ -1825,6 +1834,45 @@ describe('evalCommand', () => {
     loggerInfoSpy.mockRestore();
     loggerErrorSpy.mockRestore();
   });
+
+  it.each([
+    { flags: { vars: 'cases.csv' }, basePath: undefined, expected: '/suite/cases.csv' },
+    { flags: { vars: 'cases.csv' }, basePath: '/assets', expected: '/assets/cases.csv' },
+    { flags: { tests: 'cases.csv' }, basePath: undefined, expected: '/working/cases.csv' },
+    {
+      flags: { tests: 'cases.csv', vars: 'ignored.csv' },
+      basePath: undefined,
+      expected: '/working/cases.csv',
+    },
+  ])(
+    'watches the released CLI test-file base: $flags, $basePath',
+    async ({ flags, basePath, expected }) => {
+      const config = { prompts: [], providers: [], tests: [], basePath } as UnifiedConfig;
+      vi.mocked(resolveConfigs).mockResolvedValueOnce({
+        config,
+        testSuite: { prompts: [], providers: [] },
+        basePath: path.resolve(basePath ?? '/suite'),
+      });
+      vi.mocked(evaluate).mockImplementationOnce(
+        async (_testSuite, evalRecord) => evalRecord as Eval,
+      );
+      const cwd = vi.spyOn(process, 'cwd').mockReturnValue(path.resolve('/working'));
+      try {
+        await doEval(
+          { watch: true, config: ['/suite/promptfooconfig.yaml'], write: false, ...flags },
+          config,
+          undefined,
+          {},
+        );
+        expect(chokidarMocks.watch).toHaveBeenCalledWith(
+          expect.arrayContaining([path.resolve(expected)]),
+          { ignored: /^\./, persistent: true },
+        );
+      } finally {
+        cwd.mockRestore();
+      }
+    },
+  );
 
   it('should resume an existing eval with persisted prompts', async () => {
     const resumeEval = new Eval({ prompts: [] } as UnifiedConfig);
@@ -2176,31 +2224,89 @@ describe('evalCommand', () => {
     }
   });
 
-  it('should await async provider cleanup after evaluation', async () => {
-    const cleanup = vi.fn().mockResolvedValue(undefined);
-    const provider = {
-      id: () => 'cleanup-provider',
-      callApi: async () => ({ output: 'ok' }),
-      cleanup,
-    } as ApiProvider;
-    vi.mocked(resolveConfigs).mockImplementationOnce(async () => {
-      trackProvider(provider);
-      return {
-        config: {} as UnifiedConfig,
-        testSuite: {
-          prompts: [],
-          providers: [provider],
-        },
-        basePath: path.resolve('/'),
-      };
+  it('should set the failed-test exit code when the eval was stopped by an unavailable target', async () => {
+    const previousExitCode = process.exitCode;
+    process.exitCode = undefined;
+    const loggerInfoSpy = vi.spyOn(logger, 'info').mockImplementation(() => logger);
+    vi.mocked(evaluate).mockImplementationOnce(async (_testSuite, evalRecord) => {
+      // Every row that ran before the stop passed.
+      (evalRecord as Eval).prompts = [
+        { metrics: { testPassCount: 1, testFailCount: 0, testErrorCount: 0 } },
+      ] as any;
+      vi.spyOn(evalRecord as Eval, 'findTargetErrorStatus').mockResolvedValue(404);
+      return evalRecord as Eval;
     });
-    vi.mocked(evaluate).mockImplementationOnce(
-      async (_testSuite, evalRecord) => evalRecord as Eval,
-    );
 
-    await doEval({}, defaultConfig, defaultConfigPath, {});
+    try {
+      await doEval({ write: false }, defaultConfig, defaultConfigPath, { eventSource: 'cli' });
 
-    expect(cleanup).toHaveBeenCalledTimes(1);
+      expect(process.exitCode).toBe(100);
+      expect(loggerInfoSpy).not.toHaveBeenCalledWith(expect.stringContaining('Pass rate'));
+    } finally {
+      loggerInfoSpy.mockRestore();
+      process.exitCode = previousExitCode;
+    }
+  });
+
+  it.each([
+    ['every earlier row passed', { testPassCount: 1, testFailCount: 0, testErrorCount: 0 }],
+    ['the stopping row is an error', { testPassCount: 1, testFailCount: 0, testErrorCount: 1 }],
+  ])(
+    'should clean up providers after an eval that an unavailable target stopped, when %s',
+    async (_name, metrics) => {
+      const previousExitCode = process.exitCode;
+      process.exitCode = undefined;
+      const cleanup = vi.fn().mockResolvedValue(undefined);
+      const provider = {
+        id: () => 'cleanup-provider',
+        callApi: async () => ({ output: 'ok' }),
+        cleanup,
+      } as ApiProvider;
+      vi.mocked(resolveConfigs).mockImplementationOnce(async () => {
+        trackProvider(provider);
+        return {
+          config: {} as UnifiedConfig,
+          testSuite: { prompts: [], providers: [provider] },
+          basePath: path.resolve('/'),
+        };
+      });
+      vi.mocked(evaluate).mockImplementationOnce(async (_testSuite, evalRecord) => {
+        (evalRecord as Eval).prompts = [{ metrics }] as any;
+        vi.spyOn(evalRecord as Eval, 'findTargetErrorStatus').mockResolvedValue(403);
+        return evalRecord as Eval;
+      });
+
+      try {
+        await doEval({ write: false }, defaultConfig, defaultConfigPath, { eventSource: 'cli' });
+
+        // Providers can hold child processes and sockets, which a failing exit code must not
+        // leave behind.
+        expect(process.exitCode).toBe(100);
+        expect(cleanup).toHaveBeenCalledTimes(1);
+      } finally {
+        process.exitCode = previousExitCode;
+      }
+    },
+  );
+
+  it("should leave the exit code alone when a reusable caller's eval was stopped by an unavailable target", async () => {
+    const previousExitCode = process.exitCode;
+    process.exitCode = undefined;
+    vi.mocked(evaluate).mockImplementationOnce(async (_testSuite, evalRecord) => {
+      (evalRecord as Eval).prompts = [
+        { metrics: { testPassCount: 1, testFailCount: 0, testErrorCount: 0 } },
+      ] as any;
+      vi.spyOn(evalRecord as Eval, 'findTargetErrorStatus').mockResolvedValue(404);
+      return evalRecord as Eval;
+    });
+
+    try {
+      await doEval({ write: false }, defaultConfig, defaultConfigPath, { eventSource: 'library' });
+
+      expect(process.exitCode).toBeUndefined();
+    } finally {
+      process.exitCode = previousExitCode;
+    }
   });
 
   it('cleans constructed providers after evaluation fails', async () => {
@@ -2237,50 +2343,58 @@ describe('evalCommand', () => {
     expect(cleanup).not.toHaveBeenCalled();
   });
 
-  it('reports cleanup failure when the selected exit code is zero', async () => {
-    const previousExitCode = process.exitCode;
-    const provider = {
-      id: () => 'cleanup-provider',
-      callApi: async () => ({ output: 'ok' }),
-      cleanup: vi.fn().mockRejectedValue(new Error('cleanup failed')),
-    };
-    vi.mocked(evaluate).mockImplementationOnce(async (_suite, record) => {
-      trackProvider(provider);
-      process.exitCode = 0;
-      return record as Eval;
-    });
-    try {
-      await expect(doEval({}, defaultConfig, defaultConfigPath, {})).rejects.toThrow(
-        'cleanup failed',
-      );
-      expect(provider.cleanup).toHaveBeenCalledOnce();
-    } finally {
-      process.exitCode = previousExitCode;
-    }
-  });
-
-  it('preserves configured failure exit codes when cleanup rejects', async () => {
-    const previousExitCode = process.exitCode;
-    const provider = {
-      id: () => 'cleanup-provider',
-      callApi: async () => ({ output: 'ok' }),
-      cleanup: vi.fn().mockRejectedValue(new Error('cleanup failed')),
-    };
-    vi.mocked(evaluate).mockImplementationOnce(async (_suite, record) => {
-      trackProvider(provider);
-      process.exitCode = 42;
-      return record as Eval;
-    });
-    try {
-      await expect(
-        doEval({}, defaultConfig, defaultConfigPath, { eventSource: 'cli' }),
-      ).resolves.toBeDefined();
-      expect(process.exitCode).toBe(42);
-      expect(provider.cleanup).toHaveBeenCalledOnce();
-    } finally {
-      process.exitCode = previousExitCode;
-    }
-  });
+  it.each([
+    ['library', undefined, undefined],
+    ['library', 42, undefined],
+    ['cli', undefined, undefined],
+    ['cli', 42, undefined],
+    ['cli', undefined, 42],
+    ['cli', 42, 42],
+    ['cli', undefined, 0],
+    ['cli', 42, 0],
+  ] as const)(
+    'handles %s cleanup failure (initial exit=%s, selected failure=%s)',
+    async (eventSource, initialExitCode, failedExitCode) => {
+      const previousExitCode = process.exitCode;
+      const cleanupError = new Error('cleanup failed');
+      const provider = {
+        id: () => 'cleanup-provider',
+        callApi: async () => ({ output: 'ok' }),
+        cleanup: vi.fn().mockRejectedValue(cleanupError),
+      };
+      vi.mocked(evaluate).mockImplementationOnce(async (_suite, record) => {
+        trackProvider(provider);
+        (record as Eval).prompts = [
+          {
+            metrics: {
+              testPassCount: failedExitCode === undefined ? 1 : 0,
+              testFailCount: failedExitCode === undefined ? 0 : 1,
+              testErrorCount: 0,
+            },
+          },
+        ] as any;
+        return record as Eval;
+      });
+      try {
+        process.exitCode = initialExitCode;
+        vi.stubEnv('PROMPTFOO_PASS_RATE_THRESHOLD', '100');
+        vi.stubEnv('PROMPTFOO_FAILED_TEST_EXIT_CODE', String(failedExitCode ?? 42));
+        const evaluation = doEval({ write: false }, defaultConfig, defaultConfigPath, {
+          eventSource,
+        });
+        if (failedExitCode === 42) {
+          await expect(evaluation).resolves.toBeInstanceOf(Eval);
+        } else {
+          await expect(evaluation).rejects.toBe(cleanupError);
+        }
+        expect(process.exitCode).toBe(failedExitCode ?? initialExitCode);
+        expect(provider.cleanup).toHaveBeenCalledOnce();
+      } finally {
+        process.exitCode = previousExitCode;
+        vi.unstubAllEnvs();
+      }
+    },
+  );
 
   it('should handle redteam config', async () => {
     const cmdObj = {};
