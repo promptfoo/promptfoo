@@ -334,7 +334,6 @@
     "keyv": "^6.1.0",
     "keyv-file": "^5.3.3",
     "lru-cache": "^11.5.3",
-    "mathjs": "^15.1.1",
     "minimatch": "^10.2.4",
     "nunjucks": "^3.2.4",
     "openai": "^7.20.0",
