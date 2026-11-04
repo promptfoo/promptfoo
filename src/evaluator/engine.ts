@@ -16,16 +16,6 @@ import { getEnvBool, getEvalTimeoutMs, getMaxEvalTimeMs, isCI } from '../envars'
 import { runExtensionHook } from '../evaluatorHelpers';
 import logger, { isDebugEnabled } from '../logger';
 import { selectMaxScore } from '../matchers/comparison';
-import { CIProgressReporter } from '../progress/ciProgressReporter';
-import {
-  cleanupProgressAfterError,
-  cleanupProgressReporters,
-  formatVarsForDisplay,
-  logWebUiEvalStepStart,
-  ProgressBarManager,
-  updateComparisonReporterProgress,
-  updateComparisonReporterTotals,
-} from '../progress/evaluationProgress';
 import { generateIdFromPrompt } from '../prompts/id';
 import { maybeEmitAzureOpenAiWarning } from '../providers/azure/warnings';
 import { providerRegistry } from '../providers/providerRegistry';
@@ -43,7 +33,6 @@ import {
 } from '../tracing/evaluatorTracing';
 import { getDefaultOtelConfig } from '../tracing/otelConfig';
 import { flushOtel, initializeOtel, shutdownOtel } from '../tracing/otelSdk';
-import { isCliEventSource } from '../types/eventSource';
 import {
   type Assertion,
   type AssertionOrSet,
@@ -87,7 +76,6 @@ import {
   providerToIdentifier,
   sanitizeProviderIdForLog,
 } from '../util/provider';
-import { promptYesNo } from '../util/readline';
 import {
   isNonCredentialHeader,
   isSecretEnvVarName,
@@ -109,6 +97,14 @@ import {
 import { TransformInputType, transform } from '../util/transform';
 import { compileDerivedMetricFormula } from './derivedMetricFormula';
 import { PromptSuggestionsRejectedError } from './errors';
+import {
+  cleanupProgressAfterError,
+  cleanupProgressReporters,
+  formatVarsForDisplay,
+  logWebUiEvalStepStart,
+  updateComparisonReporterProgress,
+  updateComparisonReporterTotals,
+} from './progress';
 import { getResultIndexKey } from './resultIndex';
 import { PROMPTFOO_METADATA_KEY, sanitizeResultForJsonlArtifact } from './resultProcessing';
 import {
@@ -136,11 +132,13 @@ import type {
 import type { InternalEvaluateOptions } from '../types/internal';
 import type { CallApiContextParams } from '../types/providers';
 import type {
+  EvaluatorCiProgressReporter as CIProgressReporter,
   EvaluationRecord,
   EvaluationStore,
   EvaluationStoreResult,
   EvaluatorResultWriter,
   EvaluatorRuntime,
+  EvaluatorProgressBar as ProgressBarManager,
 } from './runtime';
 
 export {
@@ -566,10 +564,16 @@ async function runBeforeAllExtensions(testSuite: TestSuite): Promise<TestSuite> 
 async function maybeAddGeneratedPrompts(
   testSuite: TestSuite,
   options: InternalEvaluateOptions,
+  selectPrompt: EvaluatorRuntime['selectPrompt'],
   abortSignal?: AbortSignal,
 ) {
   if (!options.generateSuggestions) {
-    return true;
+    return;
+  }
+  if (!selectPrompt) {
+    throw new PromptSuggestionsRejectedError(
+      'Generated prompt suggestions require a selectPrompt approval callback.',
+    );
   }
 
   // Library callers bypass CLI/config schema validation, so re-clamp here.
@@ -607,7 +611,7 @@ async function maybeAddGeneratedPrompts(
     logger.info(`${prompt}`);
     logger.info('--------------------------------------------------------');
 
-    const selected = await promptYesNo('Do you want to test this prompt?', false);
+    const selected = await selectPrompt(prompt);
     abortSignal?.throwIfAborted();
     if (selected) {
       testSuite.prompts.push({ raw: prompt, label: prompt });
@@ -618,13 +622,9 @@ async function maybeAddGeneratedPrompts(
   }
 
   if (numAdded > 0) {
-    return true;
+    return;
   }
   logger.info(chalk.red('No prompts selected. Aborting.'));
-  if (isCliEventSource(options)) {
-    process.exitCode = 1;
-    return false;
-  }
   throw new PromptSuggestionsRejectedError();
 }
 
@@ -2160,7 +2160,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     testSuite: TestSuite,
     store: EvaluationStore<TEvaluation, TResult>,
     options: InternalEvaluateOptions,
-    runtime: EvaluatorRuntime<TEvaluation, TResult>,
+    private readonly runtime: EvaluatorRuntime<TEvaluation, TResult>,
   ) {
     this.testSuite = testSuite;
     this.store = store;
@@ -3881,11 +3881,13 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     }
     testSuite = await runBeforeAllExtensions(testSuite);
     const derivedMetrics = prepareDerivedMetrics(testSuite.derivedMetrics);
-    if (
-      !restorePromptColumns &&
-      !(await maybeAddGeneratedPrompts(testSuite, options, providerAbortSignal))
-    ) {
-      return this.store.evaluation;
+    if (!restorePromptColumns) {
+      await maybeAddGeneratedPrompts(
+        testSuite,
+        options,
+        this.runtime.selectPrompt?.bind(this.runtime),
+        providerAbortSignal,
+      );
     }
 
     let tests = buildTestsFromSuite(testSuite);
@@ -3967,14 +3969,17 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       `Progress bar settings: showProgressBar=${this.options.showProgressBar}, isWebUI=${isWebUI}`,
     );
 
-    if (isCI() && !isWebUI) {
-      // Use CI-friendly progress reporter
-      ciProgressReporter = new CIProgressReporter(runEvalOptions.length);
-      ciProgressReporter.start();
-    } else if (this.options.showProgressBar && process.stderr.isTTY) {
-      // Use visual progress bars
-      progressBarManager = new ProgressBarManager(isWebUI);
-    }
+    ({ progressBarManager = null, ciProgressReporter = null } =
+      this.runtime.createProgressReporters?.(runEvalOptions.length) ?? {});
+    invariant(
+      !(progressBarManager && ciProgressReporter),
+      'Evaluator runtime must supply at most one progress reporter',
+    );
+    const cleanupAndRethrow = (error: unknown): never => {
+      cleanupProgressAfterError(progressBarManager, ciProgressReporter, error);
+      throw error;
+    };
+    ciProgressReporter?.start();
 
     this.options.progressCallback = (completed, total, index, evalStep, metrics) => {
       if (originalProgressCallback) {
@@ -4041,8 +4046,8 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     }
 
     // Now start the progress bar after info messages
-    if (this.options.showProgressBar && progressBarManager) {
-      await progressBarManager.initialize(runEvalOptions, concurrency, 0);
+    if (progressBarManager) {
+      await progressBarManager.initialize(runEvalOptions, concurrency, 0).catch(cleanupAndRethrow);
       progressBarManager.installLogInterceptor();
     }
 
@@ -4080,7 +4085,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
         rowsWithMaxScoreAssertion,
         rowsWithSelectBestAssertion,
         runEvalOptions,
-      }))
+      }).catch(cleanupAndRethrow))
     ) {
       return this.saveInterruptedEval({
         ciProgressReporter,
@@ -4109,7 +4114,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       usesConversationVar,
       varNames,
       vars,
-    });
+    }).catch(cleanupAndRethrow);
     return this.store.evaluation;
   }
 

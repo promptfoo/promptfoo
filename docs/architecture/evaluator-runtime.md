@@ -9,9 +9,9 @@ The evaluator separates row execution, suite orchestration, and runtime composit
 | `src/node/evaluateTestSuite.ts` | Supply the default Node runtime for the existing three-argument evaluator API. |
 | `src/evaluator/index.ts`        | Preserve the established source exports and overloads.                         |
 
-Terminal progress rendering and log coordination live in
-`src/progress/evaluationProgress.ts`. The compatibility facade preserves the existing
-progress manager and variable-formatting exports.
+The Node progress bar lives in `src/node/evaluatorProgress.ts`. Comparison reporting and
+variable formatting live in `src/evaluator/progress.ts`. The evaluator exports the progress
+bar and formatter through `src/progress/evaluationProgress.ts`.
 
 The public `promptfoo.evaluate()` API continues to resolve configuration through
 Node composition and return an `Eval` record, including its summary and persistence
@@ -36,6 +36,20 @@ handling.
 `src/evaluator/errors.ts`. Existing facade, evaluator, command, and Node error
 exports reference these same classes so `instanceof` checks remain valid.
 
+## CLI and library policy
+
+Generated prompt variants require a runtime `selectPrompt` approval callback.
+Without a selector, generation requests fail with `PromptSuggestionsRejectedError`
+before contacting the suggestions provider. Only approved variants are added to the suite.
+The optional `createProgressReporters` callback supplies at most one progress sink;
+execution updates and closes it, while the runtime owns reporter selection.
+
+Only CLI composition installs interactive prompt selection, terminal/CI reporters,
+and the process exit status for rejected suggestions. Library, web, and MCP calls
+retain progress callbacks without taking over the terminal or process exit policy.
+An explicit runtime can reject all suggestions with
+`PromptSuggestionsRejectedError`; the implementation never changes exit status.
+
 ## Scope of isolation
 
 The implementation has no direct imports of database models or default Node
@@ -43,7 +57,9 @@ composition. The fresh-process regression rejects any import of the default Node
 runtime and runs overlapping evaluations with independent stores and writers,
 without migrations or database files.
 
-This does not make the entire evaluator dependency graph portable. Assertions,
+This does not make the entire evaluator dependency graph portable. Dataset loading
+still reaches `cli-progress` through the Hugging Face integration; removing the
+engine's terminal adapter does not exclude that package from the dependency graph. Assertions,
 provider registration, tracing (including local OTLP reception), cache context,
 and product configuration still have their existing dependencies and lifecycle
 behavior. Store isolation is a separate guarantee from provider-resource and

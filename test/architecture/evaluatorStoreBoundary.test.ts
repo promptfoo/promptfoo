@@ -13,8 +13,11 @@ describe('evaluator store boundary', () => {
     const source = readFileSync(path.join(repoRoot, evaluatorPath), 'utf8');
 
     expect(
-      extractModuleSpecifiers(source, evaluatorPath).filter((specifier) =>
-        /(?:^|\/)(?:models|node)(?:\/|$)/.test(specifier),
+      extractModuleSpecifiers(source, evaluatorPath).filter(
+        (specifier) =>
+          /(?:^|\/)(?:models|node)(?:\/|$)/.test(specifier) ||
+          specifier === 'cli-progress' ||
+          specifier.endsWith('/util/readline'),
       ),
     ).toEqual([]);
   });

@@ -108,9 +108,11 @@ describe('CIProgressReporter', () => {
 
   it('should handle errors', () => {
     const reporter = new CIProgressReporter(100);
+    reporter.start();
     reporter.error('Test error message');
 
     expect(logger.error).toHaveBeenCalledWith('[Evaluation Error] Test error message');
+    expect(vi.getTimerCount()).toBe(0);
   });
 
   it('should emit GitHub Actions error annotation', () => {
