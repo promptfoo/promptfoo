@@ -45,41 +45,6 @@ export function getOtelConfigFromEnv(): OtelConfig {
 }
 
 /**
- * Get OTEL configuration from YAML config object.
- * Returns partial config that can be merged with env-based config.
- */
-export function getOtelConfigFromYaml(config: Record<string, unknown>): Partial<OtelConfig> {
-  const tracing = config?.tracing as Record<string, unknown> | undefined;
-  if (!tracing) {
-    return {};
-  }
-
-  return {
-    ...(typeof tracing.enabled === 'boolean' && { enabled: tracing.enabled }),
-    ...(typeof tracing.serviceName === 'string' && { serviceName: tracing.serviceName }),
-    ...(typeof tracing.endpoint === 'string' && { endpoint: tracing.endpoint }),
-    ...(typeof tracing.localExport === 'boolean' && { localExport: tracing.localExport }),
-    ...(typeof tracing.debug === 'boolean' && { debug: tracing.debug }),
-  };
-}
-
-/**
- * Merge OTEL configurations with priority: yaml > env > defaults.
- */
-export function mergeOtelConfigs(
-  envConfig: OtelConfig,
-  yamlConfig: Partial<OtelConfig>,
-): OtelConfig {
-  return {
-    enabled: yamlConfig.enabled ?? envConfig.enabled,
-    serviceName: yamlConfig.serviceName ?? envConfig.serviceName,
-    endpoint: yamlConfig.endpoint ?? envConfig.endpoint,
-    localExport: yamlConfig.localExport ?? envConfig.localExport,
-    debug: yamlConfig.debug ?? envConfig.debug,
-  };
-}
-
-/**
  * Get default OTEL configuration with tracing enabled.
  * Used when tracing is enabled via test metadata but no explicit config provided.
  */

@@ -8,7 +8,6 @@ import {
   type ProviderResponse,
   ResultFailureReason,
   type TokenUsage,
-  type Vars,
 } from '../../types/index';
 import { sha256 } from '../../util/createHash';
 import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../util/tokenUsageUtils';
@@ -18,10 +17,6 @@ import type { OpenAIEvalsImportResult, OpenAIEvalsJsonlRow, OpenAISample } from 
 
 const OPENAI_EVALS_PROVIDER_PREFIX = 'openai-evals';
 const OPENAI_EVALS_IMPORT_FORMAT = 'dashboard-output-items-jsonl';
-
-function createOpenAIItemVars(item: Record<string, unknown>): Vars {
-  return { item };
-}
 
 function createOpenAIEvalsPrompt(runId: string, rows: OpenAIEvalsJsonlRow[]): CompletedPrompt {
   const hasStringInput = rows.every((row) => typeof row.item['input'] === 'string');
@@ -40,7 +35,7 @@ function createOpenAIEvalsPrompt(runId: string, rows: OpenAIEvalsJsonlRow[]): Co
 function createOpenAITestCase(row: OpenAIEvalsJsonlRow): AtomicTestCase {
   return {
     description: `Imported OpenAI eval item ${row.data_source_idx}`,
-    vars: createOpenAIItemVars(row.item),
+    vars: { item: row.item },
     metadata: {
       openaiRunId: row.run_id,
       openaiDataSourceIdx: row.data_source_idx,
@@ -215,7 +210,7 @@ function createOpenAIResult(
   promptIdx: number,
   importedPrompt: CompletedPrompt,
 ): EvaluateResult {
-  const vars = createOpenAIItemVars(row.item);
+  const vars = { item: row.item };
   const gradingResult = createOpenAIGradingResult(row);
   const response = createOpenAIResponse(row.sample);
   const error = getOpenAISampleError(row.sample);

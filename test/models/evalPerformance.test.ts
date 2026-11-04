@@ -10,7 +10,14 @@ import {
 } from '../../src/models/evalPerformance';
 import { ResultFailureReason } from '../../src/types/index';
 import { createEvaluateResult } from '../factories/eval';
+import { clearEvalTables } from '../util/evalDb';
 import { createDeferred } from '../util/utils';
+
+const createSingleResultConfig = () => ({
+  providers: [{ id: 'provider-1' }],
+  prompts: ['Test prompt'],
+  tests: [{ vars: { input: 'test1' } }],
+});
 
 describe('evalPerformance', () => {
   afterEach(() => {
@@ -21,15 +28,7 @@ describe('evalPerformance', () => {
     await runDbMigrations();
   });
 
-  beforeEach(async () => {
-    const db = await getDb();
-    await db.run('DELETE FROM eval_results');
-    await db.run('DELETE FROM evals_to_datasets');
-    await db.run('DELETE FROM evals_to_prompts');
-    await db.run('DELETE FROM evals_to_tags');
-    await db.run('DELETE FROM evals');
-    clearCountCache();
-  });
+  beforeEach(() => clearEvalTables(() => clearCountCache()));
 
   /**
    * Helper to create an eval and add results for provider x test combinations.
@@ -104,14 +103,9 @@ describe('evalPerformance', () => {
     });
 
     it('should return 0 for an eval with no results', async () => {
-      const eval_ = await Eval.create(
-        {
-          providers: [{ id: 'provider-1' }],
-          prompts: ['Test prompt'],
-          tests: [{ vars: { input: 'test1' } }],
-        },
-        [{ raw: 'Test prompt', label: 'Test prompt' }],
-      );
+      const eval_ = await Eval.create(createSingleResultConfig(), [
+        { raw: 'Test prompt', label: 'Test prompt' },
+      ]);
 
       const count = await getCachedResultsCount(eval_.id);
       expect(count).toBe(0);
@@ -315,14 +309,9 @@ describe('evalPerformance', () => {
     });
 
     it('should return 0 for an eval with no results', async () => {
-      const eval_ = await Eval.create(
-        {
-          providers: [{ id: 'provider-1' }],
-          prompts: ['Test prompt'],
-          tests: [{ vars: { input: 'test1' } }],
-        },
-        [{ raw: 'Test prompt', label: 'Test prompt' }],
-      );
+      const eval_ = await Eval.create(createSingleResultConfig(), [
+        { raw: 'Test prompt', label: 'Test prompt' },
+      ]);
 
       const count = await getTotalResultRowCount(eval_.id);
       expect(count).toBe(0);

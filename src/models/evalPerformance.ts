@@ -22,9 +22,8 @@ interface CountCacheEntry {
 }
 
 // Simple in-memory cache for counts with 5-minute TTL
-const distinctCountCache = new Map<string, CountCacheEntry>();
+const countCache = new Map<string, CountCacheEntry>();
 const pendingDistinctCounts = new Map<string, symbol>();
-const totalRowCountCache = new Map<string, CountCacheEntry>();
 const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 
 /**
@@ -45,7 +44,7 @@ export async function getCachedResultsCounts(
   const counts = new Map<string, number>();
   const missingIds: string[] = [];
   for (const evalId of new Set(evalIds)) {
-    const cached = distinctCountCache.get(`distinct:${evalId}`);
+    const cached = countCache.get(`distinct:${evalId}`);
     if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
       counts.set(evalId, cached.count);
     } else {
@@ -80,7 +79,7 @@ export async function getCachedResultsCounts(
         const count = batchCounts.get(evalId) ?? 0;
         counts.set(evalId, count);
         if (pendingDistinctCounts.get(evalId) === token) {
-          distinctCountCache.set(`distinct:${evalId}`, { count, timestamp });
+          countCache.set(`distinct:${evalId}`, { count, timestamp });
         }
       }
     } finally {
@@ -104,7 +103,7 @@ export async function getCachedResultsCounts(
  */
 export async function getTotalResultRowCount(evalId: string): Promise<number> {
   const cacheKey = `total:${evalId}`;
-  const cached = totalRowCountCache.get(cacheKey);
+  const cached = countCache.get(cacheKey);
 
   if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
     logger.debug(`Using cached total row count for eval ${evalId}: ${cached.count}`);
@@ -127,20 +126,19 @@ export async function getTotalResultRowCount(evalId: string): Promise<number> {
   logger.debug(`Total row count query for eval ${evalId}: ${count} in ${duration}ms`);
 
   // Cache the result
-  totalRowCountCache.set(cacheKey, { count, timestamp: Date.now() });
+  countCache.set(cacheKey, { count, timestamp: Date.now() });
 
   return count;
 }
 
 export function clearCountCache(evalId?: string) {
   if (evalId) {
-    distinctCountCache.delete(`distinct:${evalId}`);
+    countCache.delete(`distinct:${evalId}`);
     pendingDistinctCounts.delete(evalId);
-    totalRowCountCache.delete(`total:${evalId}`);
+    countCache.delete(`total:${evalId}`);
   } else {
-    distinctCountCache.clear();
+    countCache.clear();
     pendingDistinctCounts.clear();
-    totalRowCountCache.clear();
   }
 }
 

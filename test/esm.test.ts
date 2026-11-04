@@ -36,10 +36,6 @@ describe('ESM utilities', () => {
   });
 
   describe('getWrapperDir', () => {
-    afterEach(() => {
-      clearWrapperDirCache();
-    });
-
     it('returns python wrapper directory', () => {
       const result = getWrapperDir('python');
       expect(result).toContain('python');
@@ -58,19 +54,17 @@ describe('ESM utilities', () => {
       expect(result).toMatch(/golang$/);
     });
 
-    it('caches wrapper directory paths', () => {
-      const first = getWrapperDir('python');
-      const second = getWrapperDir('python');
-      expect(first).toBe(second);
-    });
-
-    it('clears cache when clearWrapperDirCache is called', () => {
-      const first = getWrapperDir('python');
+    it('resolves a wrapper directory once until the cache is cleared', () => {
       clearWrapperDirCache();
-      // After clearing, the next call should still return the same path
-      // (the path computation is deterministic)
+      const join = vi.spyOn(path, 'join');
+      const resolutions = () => join.mock.calls.filter((args) => args.at(-1) === 'python');
+      const first = getWrapperDir('python');
       const second = getWrapperDir('python');
       expect(first).toBe(second);
+      expect(resolutions()).toHaveLength(1);
+      clearWrapperDirCache();
+      expect(getWrapperDir('python')).toBe(first);
+      expect(resolutions()).toHaveLength(2);
     });
   });
 
@@ -340,24 +334,19 @@ describe('ESM utilities', () => {
       expect(result()).toBe('esm default test result');
     });
 
-    it('sets error.cause with both ESM and CJS errors when combined error is thrown', () => {
-      const esmError = new Error('require is not defined');
-      const cjsError = new Error('Cannot find module');
-      const combinedError = new Error(
-        'Failed to load module test.js:\n' +
-          '  ESM import error: require is not defined\n' +
-          '  CJS fallback error: Cannot find module',
-        { cause: { esmError, cjsError } },
-      );
+    it('sets error.cause with both ESM and CJS errors when combined error is thrown', async () => {
+      const modulePath = path.resolve(testDir, '__fixtures__/testModuleCjsFallbackError.js');
+      const error = await importModule(modulePath).catch((err) => err);
 
-      expect(combinedError).toBeInstanceOf(Error);
-      expect(combinedError.message).toContain('Failed to load module');
-      expect(combinedError.message).toContain('ESM import error');
-      expect(combinedError.message).toContain('CJS fallback error');
-      expect(combinedError.cause).toBeDefined();
-      const cause = combinedError.cause as { esmError: Error; cjsError: Error };
-      expect(cause.esmError).toBe(esmError);
-      expect(cause.cjsError).toBe(cjsError);
+      expect(error).toBeInstanceOf(Error);
+      expect(error.message).toContain('Failed to load module');
+      expect(error.message).toContain('ESM import error');
+      expect(error.message).toContain('CJS fallback error');
+      expect(error.cause.esmError).toBeInstanceOf(Error);
+      expect(error.cause.cjsError).toBeInstanceOf(Error);
+      expect(error.cause.esmError.message).toBe('require is not defined');
+      expect(error.cause.cjsError.message).toBe('require is not defined');
+      expect(error.cause.esmError).not.toBe(error.cause.cjsError);
     });
 
     describe('CJS fallback for .js files', () => {
