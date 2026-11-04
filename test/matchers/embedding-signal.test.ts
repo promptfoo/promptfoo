@@ -104,6 +104,22 @@ describe('embedding graders receive evaluation cancellation', () => {
     },
   );
 
+  it.each([true, false])(
+    'passes cache context only to opted-in embedding providers: %s',
+    async (optedIn) => {
+      const context = { prompt: { raw: 'input', label: 'fixture' }, vars: {}, bustCache: true };
+      provider.supportsEmbeddingCancellation = optedIn;
+      const signal = new AbortController().signal;
+      await withProviderCallExecutionContext({ abortSignal: signal }, () =>
+        callEmbeddingProvider(provider, 'input', context),
+      );
+      expect(embed.mock.calls).toEqual(
+        optedIn ? [['input', context, { abortSignal: signal }]] : [['input']],
+      );
+      expect(embed.mock.contexts).toEqual([provider]);
+    },
+  );
+
   it.each([
     ['an error response reports the cancellation', true],
     ['a finished embedding is kept', false],

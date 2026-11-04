@@ -20,6 +20,7 @@ import {
 import type {
   ApiEmbeddingProvider,
   ApiSimilarityProvider,
+  CallApiContextParams,
   GradingConfig,
   GradingResult,
   TokenUsage,
@@ -54,6 +55,10 @@ function buildSimilarityResult(
   metric: SimilarityMetric,
   tokensUsed: TokenUsage,
 ): Omit<GradingResult, 'assertion'> {
+  if (!Number.isFinite(similarity)) {
+    return fail(`Invalid similarity score: ${similarity}`, tokensUsed);
+  }
+
   if (metric === 'euclidean') {
     // For distance metrics: lower is better, threshold is maximum distance
     const distance = similarity;
@@ -108,10 +113,14 @@ async function calculateProviderSimilarity(
   output: string,
   metric: SimilarityMetric,
   tokensUsed: TokenUsage,
+  callContext?: CallApiContextParams,
 ): Promise<number | Omit<GradingResult, 'assertion'>> {
   if (metric === 'cosine' && 'callSimilarityApi' in finalProvider) {
-    const similarityResp = await callGradingProvider(finalProvider, 'similarity', () =>
-      finalProvider.callSimilarityApi(expected, output),
+    const similarityResp = await callGradingProvider(
+      finalProvider,
+      'similarity',
+      () => finalProvider.callSimilarityApi(expected, output),
+      { callContext },
     );
     accumulateTokenUsage(tokensUsed, similarityResp.tokenUsage);
     if (similarityResp.error) {
@@ -142,14 +151,14 @@ async function calculateProviderSimilarity(
     callGradingProvider(
       finalProvider,
       'similarity.embedding',
-      () => callEmbeddingProvider(finalProvider, expected),
-      { operationName: 'embeddings' },
+      (context) => callEmbeddingProvider(finalProvider, expected, context),
+      { operationName: 'embeddings', callContext },
     ),
     callGradingProvider(
       finalProvider,
       'similarity.embedding',
-      () => callEmbeddingProvider(finalProvider, output),
-      { operationName: 'embeddings' },
+      (context) => callEmbeddingProvider(finalProvider, output, context),
+      { operationName: 'embeddings', callContext },
     ),
   ]);
 
@@ -184,6 +193,7 @@ export async function matchesSimilarity(
   inverse: boolean = false,
   grading?: GradingConfig,
   metric: SimilarityMetric = 'cosine',
+  callContext?: CallApiContextParams,
 ): Promise<Omit<GradingResult, 'assertion'>> {
   if (
     metric === 'cosine' &&
@@ -219,6 +229,7 @@ export async function matchesSimilarity(
     output,
     metric,
     tokensUsed,
+    callContext,
   );
 
   if (typeof similarity !== 'number') {

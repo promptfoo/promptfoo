@@ -1,4 +1,4 @@
-import { getEnvString } from '../../envars';
+import { getEnvString, getProviderEnvString } from '../../envars';
 import logger from '../../logger';
 import { resolveProviderApiKey } from '../credentials';
 import { resolveProviderEnv } from '../env';
@@ -12,14 +12,17 @@ import type {
   CallApiOptionsParams,
   ProviderResponse,
 } from '../../types/index';
-import type { AzureCompletionOptions, AzureProviderOptions } from './types';
+import type { AzureCompletionOptions, AzureProviderOptions, AzureResponsesOptions } from './types';
 
-export class AzureGenericProvider implements ApiProvider {
+export class AzureGenericProvider<
+  TConfig extends AzureCompletionOptions | AzureResponsesOptions = AzureCompletionOptions,
+> implements ApiProvider
+{
   deploymentName: string;
   apiHost?: string;
   apiBaseUrl?: string;
 
-  config: AzureCompletionOptions;
+  config: Partial<TConfig>;
   env?: EnvOverrides;
 
   authHeaders?: Record<string, string>;
@@ -39,7 +42,7 @@ export class AzureGenericProvider implements ApiProvider {
   /** Refresh the bearer token when it is within this window of expiring. */
   private static readonly TOKEN_REFRESH_WINDOW_MS = 5 * 60 * 1000;
 
-  constructor(deploymentName: string, options: AzureProviderOptions = {}) {
+  constructor(deploymentName: string, options: AzureProviderOptions<TConfig> = {}) {
     const { config, id, env } = options;
     this.env = env;
 
@@ -144,14 +147,18 @@ export class AzureGenericProvider implements ApiProvider {
   private async createTokenCredential(): Promise<TokenCredential> {
     const clientSecret =
       this.config?.azureClientSecret ||
-      (this.env?.AZURE_CLIENT_SECRET ?? getEnvString('AZURE_CLIENT_SECRET'));
+      (getProviderEnvString(this.env, 'AZURE_CLIENT_SECRET') ??
+        getEnvString('AZURE_CLIENT_SECRET'));
     const clientId =
-      this.config?.azureClientId || (this.env?.AZURE_CLIENT_ID ?? getEnvString('AZURE_CLIENT_ID'));
+      this.config?.azureClientId ||
+      (getProviderEnvString(this.env, 'AZURE_CLIENT_ID') ?? getEnvString('AZURE_CLIENT_ID'));
     const tenantId =
-      this.config?.azureTenantId || (this.env?.AZURE_TENANT_ID ?? getEnvString('AZURE_TENANT_ID'));
+      this.config?.azureTenantId ||
+      (getProviderEnvString(this.env, 'AZURE_TENANT_ID') ?? getEnvString('AZURE_TENANT_ID'));
     const authorityHost =
       this.config?.azureAuthorityHost ||
-      (this.env?.AZURE_AUTHORITY_HOST ?? getEnvString('AZURE_AUTHORITY_HOST'));
+      (getProviderEnvString(this.env, 'AZURE_AUTHORITY_HOST') ??
+        getEnvString('AZURE_AUTHORITY_HOST'));
 
     try {
       const { ClientSecretCredential, AzureCliCredential } = await import('@azure/identity');
@@ -191,7 +198,7 @@ export class AzureGenericProvider implements ApiProvider {
     const credential = await this.getAzureTokenCredential();
     const tokenScope =
       this.config?.azureTokenScope ||
-      (this.env?.AZURE_TOKEN_SCOPE ?? getEnvString('AZURE_TOKEN_SCOPE'));
+      (getProviderEnvString(this.env, 'AZURE_TOKEN_SCOPE') ?? getEnvString('AZURE_TOKEN_SCOPE'));
     const tokenResponse = await credential.getToken(
       tokenScope || 'https://cognitiveservices.azure.com/.default',
     );
