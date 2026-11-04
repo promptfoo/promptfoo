@@ -7,6 +7,8 @@ import {
   OllamaCompletionProvider,
   OllamaEmbeddingProvider,
 } from '../../src/providers/ollama';
+import * as util from '../../src/util/index';
+import { createDeferred } from '../util/utils';
 import { createAttributeRecordingSpan } from './openai/tracing';
 
 import type { CallApiContextParams } from '../../src/types/index';
@@ -63,6 +65,41 @@ const createCustomProviderOptions = () => ({
 });
 
 vi.mock('../../src/cache');
+
+describe.each([
+  ['chat', OllamaChatProvider],
+  ['completion', OllamaCompletionProvider],
+] as const)('Ollama %s cancellation', (_name, Provider) => {
+  beforeEach(() => vi.resetAllMocks());
+
+  it('skips a request canceled before dispatch', async () => {
+    const signal = AbortSignal.abort(new Error('canceled before dispatch'));
+    await expect(
+      new Provider('test').callApi('hello', undefined, { abortSignal: signal }),
+    ).rejects.toThrow('canceled before dispatch');
+    expect(fetchWithCache).not.toHaveBeenCalled();
+  });
+
+  it('forwards the caller signal to the active request', async () => {
+    const controller = new AbortController();
+    const started = createDeferred<void>();
+    vi.mocked(fetchWithCache).mockImplementationOnce(async (_url, request) => {
+      started.resolve();
+      expect(request?.signal).toBe(controller.signal);
+      return new Promise((_resolve, reject) => {
+        controller.signal.addEventListener('abort', () => reject(controller.signal.reason), {
+          once: true,
+        });
+      });
+    });
+    const pending = new Provider('test').callApi('hello', undefined, {
+      abortSignal: controller.signal,
+    });
+    await started.promise;
+    controller.abort(new Error('canceled during dispatch'));
+    await expect(pending).rejects.toThrow('canceled during dispatch');
+  });
+});
 
 describe('OllamaCompletionProvider', () => {
   beforeEach(() => {
@@ -560,6 +597,23 @@ describe('OllamaCompletionProvider', () => {
 describe('OllamaChatProvider', () => {
   beforeEach(() => {
     vi.resetAllMocks();
+  });
+
+  it('stops waiting when tool loading is cancelled', async () => {
+    const loader = vi
+      .spyOn(util, 'maybeLoadToolsFromExternalFile')
+      .mockImplementationOnce(() => new Promise(() => {}));
+    const controller = new AbortController();
+    const provider = new OllamaChatProvider('llama3.3', { config: { tools: [] } });
+    try {
+      const call = provider.callApi('hello', undefined, { abortSignal: controller.signal });
+      await vi.waitFor(() => expect(loader).toHaveBeenCalledOnce());
+      controller.abort(new Error('cancelled tool loader'));
+      await expect(call).rejects.toThrow('cancelled tool loader');
+      expect(fetchWithCache).not.toHaveBeenCalled();
+    } finally {
+      loader.mockRestore();
+    }
   });
 
   it('should construct with model name and options', () => {
