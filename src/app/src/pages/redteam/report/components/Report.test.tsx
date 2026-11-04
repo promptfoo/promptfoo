@@ -3,10 +3,10 @@ import { mockCallApiResponse } from '@app/tests/apiMocks';
 import { mockWindowLocation } from '@app/tests/browserMocks';
 import { callApi } from '@app/utils/api';
 import { ResultFailureReason } from '@promptfoo/types/results';
-import { act, render, renderHook, screen, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router';
-import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import App from './Report';
 import type { EvaluateResult, GradingResult, ResultsFile } from '@promptfoo/types';
 
