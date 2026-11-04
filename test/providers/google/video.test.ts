@@ -626,6 +626,43 @@ describe('GoogleVideoProvider', () => {
     );
   });
 
+  describe('Vertex endpoint configuration', () => {
+    it.each(['VERTEX_REGION', 'GOOGLE_CLOUD_LOCATION', 'GOOGLE_LOCATION'] as const)(
+      'prefers scoped %s over process region settings',
+      async (key) => {
+        const restoreEnv = mockProcessEnv({
+          VERTEX_REGION: 'us-central1',
+          GOOGLE_LOCATION: 'us-east1',
+        });
+        try {
+          const provider = new GoogleVideoProvider('veo-3.1-generate-preview', {
+            env: { [key]: 'europe-west4', VERTEX_API_HOST: 'scoped.example.test' },
+          });
+          mockRequest.mockRejectedValueOnce(new Error('fixture stop'));
+          await provider.callApi('A calm landscape');
+          expect(mockRequest.mock.calls[0][0].url).toBe(
+            'https://scoped.example.test/v1/projects/test-project/locations/europe-west4/publishers/google/models/veo-3.1-generate-preview:predictLongRunning',
+          );
+        } finally {
+          restoreEnv();
+        }
+      },
+    );
+
+    it('keeps a configured custom host for creation and polling', async () => {
+      const result = await callVideoProviderWithPromptConfig(
+        'Vertex',
+        { apiHost: 'vertex-proxy.example.test' },
+        { apiHost: 'ignored-prompt-host.example.test' },
+      );
+      expect(result.error).toBeUndefined();
+      expect(mockRequest).toHaveBeenCalledTimes(2);
+      for (const [request] of mockRequest.mock.calls) {
+        expect(new URL(request.url).hostname).toBe('vertex-proxy.example.test');
+      }
+    });
+  });
+
   describe('validateAspectRatio', () => {
     it('should accept 16:9', () => {
       expect(validateAspectRatio('16:9')).toEqual({ valid: true });
@@ -2362,6 +2399,37 @@ describe('GoogleVideoProvider', () => {
       const body = getLastVideoCreateRequestBody(transport);
       expect(body.parameters.durationSeconds).toBe(4);
       expect(body.instances[0]).not.toHaveProperty('durationSeconds');
+    });
+
+    it.each(videoTransports)('extracts MP4 data URL bytes for %s', async (transport) => {
+      for (const sourceVideo of [
+        'data:video/mp4;base64,c291cmNl',
+        'data:video/mp4;name=clip.mp4;base64,c291cmNl',
+      ]) {
+        const result = await callVideoProviderWithPromptConfig(transport, { sourceVideo }, {});
+        expect(result.error).toBeUndefined();
+        expect(getLastVideoCreateRequestBody(transport).instances[0].video).toEqual(
+          transport === 'Vertex'
+            ? { bytesBase64Encoded: 'c291cmNl', mimeType: 'video/mp4' }
+            : { inlineData: { mimeType: 'video/mp4', data: 'c291cmNl' } },
+        );
+      }
+    });
+
+    it.each([
+      'https://example.test/video.mp4',
+      'data:image/png;base64,c291cmNl',
+      'data:video/webm;base64,c291cmNl',
+      'data:video/mp4,c291cmNl',
+      'data:video/mp4;base64, ',
+      'data:video/mp4;base64,invalid%data',
+    ])('rejects unsupported source video %s before any request', async (sourceVideo) => {
+      const provider = new GoogleVideoProvider('veo-3.1-generate-preview', {
+        config: { sourceVideo },
+      });
+      expect((await provider.callApi('Extend video')).error).toBeDefined();
+      expect(mockRequest).not.toHaveBeenCalled();
+      expect(mockFetchWithTimeout).not.toHaveBeenCalled();
     });
 
     it('should handle blob storage deduplication', async () => {

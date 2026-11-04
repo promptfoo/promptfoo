@@ -4,6 +4,7 @@ import path from 'path';
 
 import { storeBlob } from '../../blobs';
 import logger from '../../logger';
+import { parseDataUrl } from '../../util/dataUrl';
 import { fetchWithTimeout } from '../../util/fetch/index';
 import { ellipsize } from '../../util/text';
 import { sleep } from '../../util/time';
@@ -322,6 +323,7 @@ function mergeGoogleVideoRequestConfig(
       ...promptConfig,
       // Prompts may shape media generation, but provider settings own the authenticated request.
       apiKey: providerConfig.apiKey,
+      apiHost: providerConfig.apiHost,
       vertexai: providerConfig.vertexai,
       projectId: providerConfig.projectId,
       region: providerConfig.region,
@@ -413,7 +415,10 @@ export class GoogleVideoProvider implements ApiProvider {
   ): Promise<string> {
     const location = this.getLocation(config);
     const projectId = await this.getProjectId(config);
-    const host = getVertexApiHost(location);
+    const host =
+      config.apiHost ||
+      resolveProviderEnv(this.env, ['VERTEX_API_HOST'])?.value ||
+      getVertexApiHost(location);
     return `https://${host}/v1/projects/${projectId}/locations/${location}/publishers/google/models/${model}:${action}`;
   }
 
@@ -469,6 +474,16 @@ export class GoogleVideoProvider implements ApiProvider {
       }
       return { data: fs.readFileSync(filePath).toString('base64') };
     }
+    if (/^data:/i.test(videoPath)) {
+      const dataUrl = parseDataUrl(videoPath);
+      if (
+        dataUrl?.mimeType.toLowerCase() === 'video/mp4' &&
+        /^[A-Za-z0-9+/]+={0,2}$/.test(dataUrl.base64Data)
+      ) {
+        return { data: dataUrl.base64Data };
+      }
+      return { error: 'Video data URLs must contain base64 MP4 data.' };
+    }
     return { data: videoPath };
   }
 
@@ -506,9 +521,10 @@ export class GoogleVideoProvider implements ApiProvider {
       return undefined;
     }
     if (
-      /^data:/i.test(sourceVideo) ||
       (sourceVideo.includes('://') && !sourceVideo.startsWith('file://')) ||
-      (!sourceVideo.startsWith('file://') && !/^[A-Za-z0-9+/]+={0,2}$/.test(sourceVideo))
+      (!sourceVideo.startsWith('file://') &&
+        !/^data:/i.test(sourceVideo) &&
+        !/^[A-Za-z0-9+/]+={0,2}$/.test(sourceVideo))
     ) {
       return 'Vertex AI Veo video extension requires a gs:// URI, base64 video data, or a file:// path.';
     }
@@ -851,14 +867,11 @@ export class GoogleVideoProvider implements ApiProvider {
     config: GoogleVideoOptions,
   ): Promise<{ operation?: GoogleVideoOperation; error?: string }> {
     const startTime = Date.now();
-    const location = this.getLocation(config);
-    const projectId = await this.getProjectId(config);
 
     // Veo uses fetchPredictOperation endpoint for polling (POST request)
     // https://docs.cloud.google.com/vertex-ai/generative-ai/docs/model-reference/veo-video-generation
     const model = config.model || this.modelName;
-    const host = getVertexApiHost(location);
-    const url = `https://${host}/v1/projects/${projectId}/locations/${location}/publishers/google/models/${model}:fetchPredictOperation`;
+    const url = await this.getVertexEndpoint('fetchPredictOperation', model, config);
 
     logger.debug(`[Google Video] Polling operation via fetchPredictOperation: ${url}`);
 
