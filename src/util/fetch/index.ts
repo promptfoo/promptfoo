@@ -18,14 +18,23 @@ import { createDecompressionInterceptor, stripDecompressionHeaders } from './dec
 import {
   extractRateLimitErrorCode,
   extractRateLimitErrorType,
+  getAbortError,
   HttpRateLimitError,
   type SystemError,
 } from './errors';
 import { monkeyPatchFetch, preserveCloudAuthRedirects } from './monkeyPatchFetch';
+import { getEffectiveRequestSignal } from './requestSignal';
+import { readWithResponseDeadline, trackResponseDeadline } from './responseDeadline';
 import { getFetchRetryContextMaxRetries } from './retryContext';
 import { assertFipsDispatcher, resolveTlsOptions } from './tls';
 
 import type { FetchOptions } from './types';
+
+export type FetchRateLimitObservation = {
+  headers: Record<string, string>;
+  status: number;
+  resetAt: number;
+};
 
 // Credential failures are not transient HTTP failures and must not be retried by this layer.
 class RequestAuthenticationError extends Error {}
@@ -362,7 +371,7 @@ export async function fetchWithProxy(
 export function fetchWithTimeout(
   url: RequestInfo,
   options: FetchOptions = {},
-  timeout: number,
+  configuredTimeout: number | `${number}`,
 ): Promise<Response> {
   return new Promise((resolve, reject) => {
     const timeoutController = new AbortController();
@@ -373,6 +382,9 @@ export function fetchWithTimeout(
       ? AbortSignal.any([options.signal, timeoutController.signal])
       : timeoutController.signal;
 
+    // Provider config templates can render numeric settings as strings.
+    const timeout = Number(configuredTimeout);
+    const expiresAt = performance.now() + timeout;
     const timeoutId = setTimeout(() => {
       timeoutController.abort();
       reject(new Error(`Request timed out after ${timeout} ms`));
@@ -384,6 +396,7 @@ export function fetchWithTimeout(
     })
       .then((response) => {
         clearTimeout(timeoutId);
+        trackResponseDeadline(response, { controller: timeoutController, expiresAt, timeout });
         resolve(response);
       })
       .catch((error) => {
@@ -444,21 +457,6 @@ export function computeRateLimitWaitMs(response: Response): number {
  */
 const RATE_LIMIT_JITTER_MS = 1000;
 
-/**
- * Handle rate limiting by waiting the appropriate amount of time, plus a
- * uniform random jitter to avoid synchronized retry storms when many
- * concurrent requests hit the same rate limit.
- */
-function getAbortError(signal: AbortSignal): Error {
-  const reason = signal.reason;
-  if (reason instanceof Error && reason.name === 'AbortError') {
-    return reason;
-  }
-  const error = new Error(reason instanceof Error ? reason.message : 'Request was aborted');
-  error.name = 'AbortError';
-  return error;
-}
-
 async function sleepWithAbort(waitTime: number, signal?: AbortSignal | null): Promise<void> {
   if (!signal) {
     await sleep(waitTime);
@@ -481,11 +479,26 @@ async function sleepWithAbort(waitTime: number, signal?: AbortSignal | null): Pr
   });
 }
 
+/**
+ * Handle rate limiting by waiting the appropriate amount of time, plus a
+ * uniform random jitter to avoid synchronized retry storms when many
+ * concurrent requests hit the same rate limit.
+ */
 export async function handleRateLimit(
   response: Response,
   signal?: AbortSignal | null,
+  onRateLimitBackoff?: (observation: FetchRateLimitObservation) => void,
 ): Promise<void> {
   const waitTime = computeRateLimitWaitMs(response);
+  if (!signal?.aborted) {
+    onRateLimitBackoff?.(
+      Object.freeze({
+        headers: Object.freeze(Object.fromEntries(response.headers.entries())),
+        status: response.status,
+        resetAt: Date.now() + waitTime,
+      }),
+    );
+  }
   const jitter = Math.floor(Math.random() * RATE_LIMIT_JITTER_MS);
   const totalWait = waitTime + jitter;
   logger.debug(
@@ -512,19 +525,23 @@ const RATE_LIMIT_BODY_PEEK_BYTES = 64 * 1024;
  * response may still be observed by upstream wrappers (logging middleware,
  * monkey-patched fetch); cloning preserves their ability to read the body.
  *
- * Failures (clone, read, parse) degrade to `{ body: undefined, code:
- * undefined }` and are logged at debug level. Losing the body code only
+ * Clone/read failures degrade to `{ body: undefined, code: undefined }`
+ * unless the caller cancelled the unfinished peek. Losing the body code only
  * widens classification from `quota` to `rate_limit`, which is the safer
  * (retryable) side of the misclassification.
  */
 async function peekRateLimitBody(
   response: Response,
   logEnabled: boolean,
+  signal?: AbortSignal | null,
 ): Promise<{ body: unknown; code: string | undefined; type: string | undefined }> {
   let cloned: Response;
   try {
     cloned = response.clone();
   } catch (err) {
+    if (signal?.aborted) {
+      throw getAbortError(signal);
+    }
     if (logEnabled) {
       logger.debug(`[fetch] peekRateLimitBody: clone failed, skipping body code lookup: ${err}`);
     }
@@ -533,8 +550,13 @@ async function peekRateLimitBody(
 
   let text: string;
   try {
-    text = await readBoundedText(cloned, RATE_LIMIT_BODY_PEEK_BYTES, { requireStream: true });
+    text = await readWithResponseDeadline(response, () =>
+      readBoundedText(cloned, RATE_LIMIT_BODY_PEEK_BYTES, { requireStream: true }),
+    );
   } catch (err) {
+    if (signal?.aborted) {
+      throw getAbortError(signal);
+    }
     if (logEnabled) {
       logger.debug(`[fetch] peekRateLimitBody: body read failed: ${err}`);
     }
@@ -703,6 +725,7 @@ async function handleRateLimitedResponse(
   maxRetries: number,
   logEnabled: boolean,
   signal?: AbortSignal | null,
+  onRateLimitBackoff?: (observation: FetchRateLimitObservation) => void,
 ): Promise<void> {
   // Only the 429 path produces a structured error. A 200 OK with
   // `X-RateLimit-Remaining=0` is a soft hint that we're approaching a limit —
@@ -717,7 +740,7 @@ async function handleRateLimitedResponse(
   // sees the same classification callers do.
   let rateLimitError: HttpRateLimitError | undefined;
   if (isHardRateLimit) {
-    const { body, code, type } = await peekRateLimitBody(response, logEnabled);
+    const { body, code, type } = await peekRateLimitBody(response, logEnabled, signal);
     rateLimitError = buildHttpRateLimitError(response, body, code, type);
   }
 
@@ -754,7 +777,7 @@ async function handleRateLimitedResponse(
       `Rate limited on URL ${safeUrl}: HTTP ${response.status} ${response.statusText}, attempt ${attempt + 1}/${maxRetries + 1}, waiting before retry...`,
     );
   }
-  await handleRateLimit(response, signal);
+  await handleRateLimit(response, signal, onRateLimitBackoff);
 }
 
 function formatFetchErrorMessage(error: unknown, url: RequestInfo): string {
@@ -779,6 +802,7 @@ export async function fetchWithRetries(
   options: FetchOptions = {},
   timeout: number,
   maxRetries?: number,
+  onRateLimitBackoff?: (observation: FetchRateLimitObservation) => void,
 ): Promise<Response> {
   options = preserveCloudAuthRedirects(url, options);
   const contextMaxRetries = getFetchRetryContextMaxRetries();
@@ -786,7 +810,7 @@ export async function fetchWithRetries(
 
   let lastErrorMessage: string | undefined;
   const backoff = getEnvInt('PROMPTFOO_REQUEST_BACKOFF_MS', 5000);
-  const signal = options.signal ?? (url instanceof Request ? url.signal : undefined);
+  const signal = getEffectiveRequestSignal(url, options);
   const logEnabled =
     new Headers(getFetchWithProxyHeaders(url, options)).get('x-promptfoo-silent') !== 'true';
 
@@ -805,7 +829,15 @@ export async function fetchWithRetries(
       }
 
       if (response && isRateLimited(response)) {
-        await handleRateLimitedResponse(response, url, i, maxRetries, logEnabled, signal);
+        await handleRateLimitedResponse(
+          response,
+          url,
+          i,
+          maxRetries,
+          logEnabled,
+          signal,
+          onRateLimitBackoff,
+        );
         continue;
       }
 
@@ -815,17 +847,17 @@ export async function fetchWithRetries(
       if (error instanceof Error && error.name === 'AbortError') {
         throw error;
       }
-      if (signal?.aborted) {
-        throw getAbortError(signal);
-      }
-
-      // Do not retry policy rejections, credential failures, or already-final rate-limit errors.
+      // Preserve completed policy and rate-limit diagnostics even if cancellation
+      // arrives after the response. These failures never consume another retry.
       if (
         error instanceof CloudAuthRedirectError ||
         error instanceof HttpRateLimitError ||
         error instanceof RequestAuthenticationError
       ) {
         throw error;
+      }
+      if (signal?.aborted) {
+        throw getAbortError(signal);
       }
 
       const errorMessage = formatFetchErrorMessage(error, url);

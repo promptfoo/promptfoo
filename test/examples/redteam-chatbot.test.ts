@@ -1,5 +1,7 @@
 import fs from 'node:fs';
+import { createRequire } from 'node:module';
 import path from 'node:path';
+import { format } from 'node:util';
 import { runInNewContext } from 'node:vm';
 import type { Server } from 'node:http';
 
@@ -9,6 +11,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const appPath = path.resolve(__dirname, '../../examples/redteam-chatbot/app.js');
 const appSource = fs.readFileSync(appPath, 'utf8');
+const requireExample = createRequire(appPath);
 
 // Run the actual CommonJS example with an inert provider and no startup listener.
 function loadExample(loadApiProvider: ReturnType<typeof vi.fn>) {
@@ -24,6 +27,9 @@ function loadExample(loadApiProvider: ReturnType<typeof vi.fn>) {
           }
           if (name === 'promptfoo') {
             return { loadApiProvider };
+          }
+          if (name === './defaultErrorHandler.cjs') {
+            return requireExample(name);
           }
           throw new Error(`Unexpected example dependency: ${name}`);
         },
@@ -128,5 +134,34 @@ describe('redteam chatbot provider selection', () => {
     expect(response.status).toBe(400);
     expect(response.body).toEqual({ error: 'Missing required field: api_provider' });
     expect(loadApiProvider).not.toHaveBeenCalled();
+  });
+
+  it('handles malformed JSON through the shipped adapter and remains healthy', async () => {
+    const canary = 'chatbot-attached-body-canary';
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {});
+    app.set('env', 'production');
+    const invalid = await request(app)
+      .post('/chat')
+      .set('Content-Type', 'application/json')
+      .send(`{"payloadNote":"${canary}","padding":"${'x'.repeat(512)}","broken":}`);
+
+    expect(invalid.status).toBe(400);
+    expect(invalid.headers['content-type']).toContain('text/html');
+    expect(invalid.text).toContain('Bad Request');
+    expect(invalid.text).not.toContain(canary);
+    expect(loadApiProvider).not.toHaveBeenCalled();
+    expect(callApi).not.toHaveBeenCalled();
+
+    const valid = await request(app)
+      .post('/chat')
+      .set('Authorization', 'Bearer fixture')
+      .send({ api_provider: 'openai', chat_history: [{ role: 'user', content: 'Hello' }] });
+    expect(valid.status).toBe(200);
+    expect(loadApiProvider).toHaveBeenCalledOnce();
+    expect(callApi).toHaveBeenCalledOnce();
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    const diagnostic = log.mock.calls.map((args) => format(...args)).join('\n');
+    expect(diagnostic).toContain('SyntaxError');
+    expect(diagnostic).not.toContain(canary);
   });
 });

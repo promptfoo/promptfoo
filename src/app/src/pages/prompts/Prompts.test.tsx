@@ -214,28 +214,6 @@ describe('Prompts', () => {
     expect(screen.queryByTestId('mock-prompt-dialog')).not.toBeInTheDocument();
   });
 
-  it('should not call handleClickOpen if the prompt ID is not found in the data array', () => {
-    const handleClickOpenMock = vi.fn();
-
-    renderWithProviders({ data: mockPrompts });
-
-    const nonexistentId = 'prompt:nonexistent';
-
-    const promptCells = screen.getAllByText('This is the first sample prompt.');
-    const promptsComponent = promptCells[0].closest('[data-rowid]');
-    if (promptsComponent) {
-      const handleRowClick = () => {
-        const index = mockPrompts.findIndex((p) => p.id === nonexistentId);
-        if (index !== -1) {
-          handleClickOpenMock(index);
-        }
-      };
-      handleRowClick();
-    }
-
-    expect(handleClickOpenMock).not.toHaveBeenCalled();
-  });
-
   it('should render correctly in dark mode', () => {
     const { container } = renderWithProviders({
       data: mockPrompts,

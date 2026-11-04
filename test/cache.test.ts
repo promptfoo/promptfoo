@@ -2,6 +2,7 @@ import * as fsPromises from 'node:fs/promises';
 import fs from 'fs';
 import path from 'path';
 
+import { createCache } from 'cache-manager';
 import {
   afterAll,
   afterEach,
@@ -20,10 +21,12 @@ import {
   fetchWithCache,
   getCache,
   getHeadersForCacheKey,
+  getScopedCacheKey,
   isCacheEnabled,
   withCacheEnabled,
   withCacheNamespace,
 } from '../src/cache';
+import { createDiskCache } from '../src/cache/storage';
 import { cloudConfig } from '../src/globalConfig/cloud';
 import logger from '../src/logger';
 import { fetchWithRetries } from '../src/util/fetch/index';
@@ -183,19 +186,13 @@ vi.mock('cache-manager', () => ({
   }),
 }));
 
-// Mock keyv and keyv-file with proper class constructors
-vi.mock('keyv', () => {
-  return {
-    Keyv: class MockKeyv {},
-  };
-});
+// The storage suite exercises real packages; these tests exercise the cache policy layer.
+vi.mock('../src/cache/storage', () => ({ createDiskCache: vi.fn() }));
 
-vi.mock('keyv-file', () => {
-  return {
-    __esModule: true,
-    KeyvFile: class MockKeyvFile {},
-    default: class MockKeyvFile {},
-  };
+beforeEach(() => {
+  vi.mocked(createDiskCache)
+    .mockReset()
+    .mockImplementation((_filename, ttl) => createCache({ ttl, refreshThreshold: 0 }));
 });
 
 const mockFetchWithRetriesResponse = (
@@ -254,17 +251,19 @@ describe('cache configuration', () => {
       delete: expect.any(Function),
       clear: expect.any(Function),
     });
-    expect(cache.stores[0]?.constructor?.name).not.toBe('MockKeyv');
+    expect(createDiskCache).not.toHaveBeenCalled();
   });
 
   it('should use disk cache in non-test environment', async () => {
     mockProcessEnv({ NODE_ENV: 'production' });
     const cacheModule = await import('../src/cache');
     const cache = cacheModule.getCache();
-    // In production, stores array should have at least one store (disk cache)
     expect(cache.stores.length).toBeGreaterThan(0);
-    expect(cache.stores[0]?.constructor?.name).toBe('MockKeyv');
     const expectedCachePath = path.join('/mock/config/path', 'cache');
+    expect(createDiskCache).toHaveBeenCalledWith(
+      path.join(expectedCachePath, 'cache.json'),
+      cacheModule.getCacheTtlMs(),
+    );
     expect(fs.existsSync).toHaveBeenCalledWith(expectedCachePath);
     expect(fs.mkdirSync).toHaveBeenCalledWith(expectedCachePath, { recursive: true });
   });
@@ -325,16 +324,13 @@ describe('cache configuration', () => {
     expect(fs.mkdirSync).toHaveBeenCalledWith('/custom/cache/path', { recursive: true });
   });
 
-  it('should respect cache configuration from environment', async () => {
-    mockProcessEnv({ PROMPTFOO_CACHE_MAX_FILE_COUNT: '100' });
+  it('converts the configured cache TTL from seconds to milliseconds', async () => {
     mockProcessEnv({ PROMPTFOO_CACHE_TTL: '3600' });
-    mockProcessEnv({ PROMPTFOO_CACHE_MAX_SIZE: '1000000' });
     mockProcessEnv({ NODE_ENV: 'production' });
 
     const cacheModule = await import('../src/cache');
-    const cache = cacheModule.getCache();
-    // Should have disk cache store
-    expect(cache.stores.length).toBeGreaterThan(0);
+    cacheModule.getCache();
+    expect(createDiskCache).toHaveBeenLastCalledWith(expect.any(String), 3_600_000);
   });
 
   it('should handle cache directory creation when it exists', async () => {
@@ -829,6 +825,20 @@ describe('fetchWithCache', () => {
       expect(mockFetchWithRetries).toHaveBeenCalledTimes(2);
     });
 
+    it('shares nested namespace policy across separately loaded module copies', async () => {
+      vi.resetModules();
+      const otherCacheModule = await import('../src/cache');
+      await withCacheNamespace('external-provider', async () => {
+        expect(otherCacheModule.getScopedCacheKey('sample')).toBe(getScopedCacheKey('sample'));
+        await otherCacheModule.withCacheNamespace('sample:1', async () => {
+          expect(otherCacheModule.getScopedCacheKey('sample')).toBe(getScopedCacheKey('sample'));
+          expect(getScopedCacheKey('sample')).not.toBe('sample');
+        });
+      });
+      expect(otherCacheModule.getScopedCacheKey('sample')).toBe('sample');
+      expect(getScopedCacheKey('sample')).toBe('sample');
+    });
+
     it('should scope cache disabling to the current async context', async () => {
       expect(isCacheEnabled()).toBe(true);
 
@@ -1194,24 +1204,18 @@ describe('fetchWithCache', () => {
       await expect(fetchWithCache(url, {}, 1000, 'json')).rejects.toThrow('Error parsing response');
     });
 
-    it('should handle request timeout', async () => {
-      vi.useFakeTimers();
-      const mockTimeoutPromise = new Promise((resolve) => {
-        setTimeout(() => resolve(mockFetchWithRetriesResponse(true, response)), 2000);
-      });
-      mockFetchWithRetries.mockImplementationOnce(() => mockTimeoutPromise as Promise<Response>);
+    it('forwards the request timeout and propagates a transport timeout', async () => {
+      const timeoutError = new Error('Request timed out');
+      mockFetchWithRetries.mockRejectedValueOnce(timeoutError);
 
-      const fetchPromise = fetchWithCache(url, {}, 100);
-
-      await expect(
-        Promise.race([
-          fetchPromise,
-          new Promise((_, reject) => {
-            vi.advanceTimersByTime(150);
-            reject(new Error('timeout'));
-          }),
-        ]),
-      ).rejects.toThrow('timeout');
+      await expect(fetchWithCache(url, {}, 100)).rejects.toBe(timeoutError);
+      expect(mockFetchWithRetries).toHaveBeenCalledWith(
+        url,
+        expect.any(Object),
+        100,
+        undefined,
+        expect.any(Function),
+      );
     });
 
     it('should handle network errors', async () => {
@@ -1251,7 +1255,7 @@ describe('fetchWithCache', () => {
         if (signal === controller.signal) {
           resolveSignaledStarted();
           return new Promise<Response>((_resolve, reject) => {
-            signal.addEventListener('abort', () => reject(new Error('Aborted')), { once: true });
+            signal.addEventListener('abort', () => reject(signal.reason), { once: true });
           });
         }
         return Promise.resolve(mockFetchWithRetriesResponse(true, { data: 'unsignaled' }));
@@ -1269,7 +1273,7 @@ describe('fetchWithCache', () => {
 
       expect(signaledResult).toMatchObject({ status: 'rejected' });
       if (signaledResult.status === 'rejected') {
-        expect(signaledResult.reason.message).toBe('Aborted');
+        expect(signaledResult.reason).toBe(controller.signal.reason);
       }
       expect(unsignaledResult).toMatchObject({ status: 'fulfilled' });
       if (unsignaledResult.status === 'fulfilled') {
@@ -1283,6 +1287,10 @@ describe('fetchWithCache', () => {
 
     it('should not let aborted signaled callers join unsignaled in-flight responses', async () => {
       const controller = new AbortController();
+      let resolveSignaledStarted: () => void = () => {};
+      const signaledStarted = new Promise<void>((resolve) => {
+        resolveSignaledStarted = resolve;
+      });
       let resolveUnsignaledFetch: (value: Response) => void = () => {};
       const unsignaledFetch = new Promise<Response>((resolve) => {
         resolveUnsignaledFetch = resolve;
@@ -1291,11 +1299,12 @@ describe('fetchWithCache', () => {
       mockFetchWithRetries.mockImplementation((_requestUrl, requestOptions) => {
         const signal = requestOptions?.signal;
         if (signal === controller.signal) {
+          resolveSignaledStarted();
           if (signal.aborted) {
-            return Promise.reject(new Error('Aborted'));
+            return Promise.reject(signal.reason);
           }
           return new Promise<Response>((_resolve, reject) => {
-            signal.addEventListener('abort', () => reject(new Error('Aborted')), { once: true });
+            signal.addEventListener('abort', () => reject(signal.reason), { once: true });
           });
         }
         return unsignaledFetch;
@@ -1304,7 +1313,7 @@ describe('fetchWithCache', () => {
       const unsignaledPromise = fetchWithCache(url, {}, 1000);
       const signaledPromise = fetchWithCache(url, { signal: controller.signal }, 1000);
 
-      await Promise.resolve();
+      await signaledStarted;
       controller.abort();
       resolveUnsignaledFetch(mockFetchWithRetriesResponse(true, { data: 'unsignaled' }));
       const [unsignaledResult, signaledResult] = await Promise.allSettled([
@@ -1321,7 +1330,7 @@ describe('fetchWithCache', () => {
       }
       expect(signaledResult).toMatchObject({ status: 'rejected' });
       if (signaledResult.status === 'rejected') {
-        expect(signaledResult.reason.message).toBe('Aborted');
+        expect(signaledResult.reason).toBe(controller.signal.reason);
       }
       expect(mockFetchWithRetries).toHaveBeenCalledTimes(2);
     });
@@ -1370,7 +1379,13 @@ describe('fetchWithCache', () => {
       expect(firstResult.cached).toBe(false);
       expect(secondResult.cached).toBe(true);
       expect(mockFetchWithRetries).toHaveBeenCalledTimes(1);
-      expect(mockFetchWithRetries).toHaveBeenCalledWith(url, firstOptions, 1000, undefined);
+      expect(mockFetchWithRetries).toHaveBeenCalledWith(
+        url,
+        firstOptions,
+        1000,
+        undefined,
+        expect.any(Function),
+      );
     });
 
     it('should keep authorization and team isolation when trace contexts change', async () => {

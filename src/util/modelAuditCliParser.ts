@@ -39,79 +39,34 @@ const ModelAuditCliOptionsSchema = z.object({
   noShare: z.boolean().optional(),
 });
 
-type ModelAuditCliOptions = z.infer<typeof ModelAuditCliOptionsSchema>;
-
 /**
- * Configuration mapping from option keys to CLI arguments
- * Note: 'share' and 'noShare' are omitted as they are promptfoo-only options
- */
-const CLI_ARG_MAP: Partial<
-  Record<
-    keyof ModelAuditCliOptions,
-    {
-      flag: string;
-      type: 'boolean' | 'string' | 'number' | 'array' | 'inverted-boolean';
-      transform?: (value: any) => string;
-    }
-  >
-> = {
-  blacklist: { flag: '--blacklist', type: 'array' },
-  format: { flag: '--format', type: 'string' },
-  output: { flag: '--output', type: 'string' },
-  verbose: { flag: '--verbose', type: 'boolean' },
-  quiet: { flag: '--quiet', type: 'boolean' },
-  strict: { flag: '--strict', type: 'boolean' },
-  progress: { flag: '--progress', type: 'boolean' },
-  sbom: { flag: '--sbom', type: 'string' },
-  timeout: { flag: '--timeout', type: 'number', transform: (v) => v.toString() },
-  maxSize: { flag: '--max-size', type: 'string' },
-  dryRun: { flag: '--dry-run', type: 'boolean' },
-  cache: { flag: '--no-cache', type: 'inverted-boolean' },
-  stream: { flag: '--stream', type: 'boolean' },
-  scanners: { flag: '--scanners', type: 'array' },
-  excludeScanner: { flag: '--exclude-scanner', type: 'array' },
-  listScanners: { flag: '--list-scanners', type: 'boolean' },
-};
-
-/**
- * Elegant, configuration-driven CLI argument parser
+ * Translate validated options in schema order into CLI arguments.
+ * 'share' and 'noShare' are omitted as they are promptfoo-only options.
  */
 export function parseModelAuditArgs(paths: string[], options: unknown): string[] {
   const validatedOptions = ModelAuditCliOptionsSchema.parse(options);
   const args: string[] = ['scan', ...paths];
 
-  // Build arguments using configuration map
-  for (const [key, config] of Object.entries(CLI_ARG_MAP) as Array<
-    [keyof ModelAuditCliOptions, (typeof CLI_ARG_MAP)[keyof ModelAuditCliOptions]]
-  >) {
-    const value = validatedOptions[key];
-
-    if (value === undefined || value === null || !config) {
+  for (const [key, value] of Object.entries(validatedOptions)) {
+    if (value === undefined || key === 'share' || key === 'noShare') {
+      continue;
+    }
+    if (key === 'cache') {
+      if (value === false) {
+        args.push('--no-cache');
+      }
       continue;
     }
 
-    switch (config.type) {
-      case 'boolean':
-        if (value) {
-          args.push(config.flag);
-        }
-        break;
-      case 'inverted-boolean':
-        if (value === false) {
-          args.push(config.flag);
-        }
-        break;
-      case 'string':
-        args.push(config.flag, String(value));
-        break;
-      case 'number':
-        args.push(config.flag, config.transform?.(value) ?? String(value));
-        break;
-      case 'array':
-        if (Array.isArray(value)) {
-          value.forEach((item) => args.push(config.flag, String(item)));
-        }
-        break;
+    const flag = '--' + key.replace(/[A-Z]/g, (letter) => '-' + letter.toLowerCase());
+    if (typeof value === 'boolean') {
+      if (value) {
+        args.push(flag);
+      }
+    } else if (Array.isArray(value)) {
+      value.forEach((item) => args.push(flag, String(item)));
+    } else {
+      args.push(flag, String(value));
     }
   }
 
