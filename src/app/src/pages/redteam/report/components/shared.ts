@@ -57,7 +57,10 @@ export function getPromptDisplayString(prompt: string): string {
 }
 
 export function getReportPrompt(result: EvaluateResult, injectVar: string): string {
-  const actualPrompt = getActualPrompt(result.response);
+  const actualPrompt =
+    typeof result.response?.prompt === 'string'
+      ? result.response.prompt
+      : getActualPrompt(result.response);
   if (actualPrompt !== undefined) {
     return actualPrompt;
   }

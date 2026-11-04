@@ -20,11 +20,11 @@ describe('getActualPrompt', () => {
     expect(getActualPrompt(response)).toBe('Hello, world!');
   });
 
-  it('should preserve an explicitly empty string prompt', () => {
+  it('should return undefined for empty string prompt', () => {
     const response: ProviderResponsePrompt = {
       prompt: '',
     };
-    expect(getActualPrompt(response)).toBe('');
+    expect(getActualPrompt(response)).toBeUndefined();
   });
 
   it('should stringify chat message array', () => {
