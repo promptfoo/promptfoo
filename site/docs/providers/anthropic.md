@@ -18,6 +18,8 @@ For agentic evaluations that need built-in file access and skill plugins on top 
 
 To use Anthropic, you need to set the `ANTHROPIC_API_KEY` environment variable or specify the `apiKey` in the provider configuration.
 
+Promptfoo sends `anthropic-version: 2023-06-01` by default so existing evals can replay message histories and use sampling settings on models that support them. When using an Anthropic-compatible gateway, Promptfoo sends the configured API key in the `x-api-key` header.
+
 Create Anthropic API keys [here](https://console.anthropic.com/settings/keys).
 
 Example of setting the environment variable:
@@ -106,9 +108,9 @@ Anthropic does not publish `-latest` aliases — `claude-sonnet-4-5-latest` retu
 parentheses above: `claude-sonnet-4-5` resolves to `claude-sonnet-4-5-20250929`.
 Claude 4.6 and newer are already unversioned IDs, so there is nothing to shorten.
 
-Rows without a parenthetical have no alias. Availability differs by platform — see
-[Retired on the Anthropic API](#retired-on-the-anthropic-api) for the IDs that only work
-through Bedrock, Vertex, and gateways.
+Rows without a parenthetical have no alias.
+[Retired on the Anthropic API](#retired-on-the-anthropic-api) lists retirements from the
+direct Anthropic API. Check the platform guides below for availability through other providers.
 
 :::
 
@@ -537,6 +539,8 @@ Common use cases for caching:
 - Frequently used images
 
 Cache read and creation token counts are tracked in the response's token usage details.
+Cost estimates use the reported cache duration: five-minute writes cost 1.25 times
+the base input rate, and one-hour writes cost twice the base input rate.
 
 See [Anthropic's Prompt Caching Guide](https://platform.claude.com/docs/en/build-with-claude/prompt-caching) for more details on requirements, pricing, and best practices.
 
@@ -744,6 +748,10 @@ from `low` through `max`. It does not support manual sampling controls:
 - **Manual thinking budgets convert to adaptive.** A legacy
   `thinking: { type: 'enabled', budget_tokens: N }` config is converted to
   `thinking: { type: 'adaptive' }`; use `effort` to control reasoning depth.
+
+- **Adaptive thinking is on by default.** Requests without a `thinking` field still use
+  adaptive thinking. Pass `thinking: { type: 'disabled' }` to turn it off, and leave enough
+  `max_tokens` headroom for thinking plus the visible response.
 
 Sonnet 5 uses a 1M-token context window billed at **$2 per million input / $10 per million output**, with no long-context surcharge above 200K tokens. Anthropic made these rates permanent on August 10, 2026, canceling the planned September increase. See [Anthropic's pricing documentation](https://platform.claude.com/docs/en/about-claude/pricing). The newer tokenizer can produce more tokens for the same text, so compare total request costs when migrating from Sonnet 4.6.
 
@@ -1141,7 +1149,12 @@ tests:
 
 - **Caching**: Promptfoo caches previous LLM requests by default.
 - **Token Usage Tracking**: Provides detailed information on the number of tokens used in each request, aiding in usage monitoring and optimization.
-- **Cost Calculation**: Calculates the cost of each request based on the number of tokens generated and the specific model used.
+- **Cost Calculation**: Estimates each request from its model and reported token usage.
+  For Claude 4.6 and later, U.S. inference adds 10% to token costs, including cache
+  reads and writes. The response's `usage.inference_geo` takes precedence over
+  `config.extra_body.inference_geo`. Explicit `cost`, `inputCost`, or `outputCost`
+  overrides take precedence over this surcharge. See
+  [Anthropic pricing](https://platform.claude.com/docs/en/about-claude/pricing#data-residency-pricing).
 
 When using the Anthropic disk response cache across runs, assign each provider a distinct, non-secret `label`. Promptfoo uses that stable label to isolate cached responses without persisting API-key or OAuth-token fingerprints. Unlabeled providers receive an ephemeral per-instance namespace, which safely preserves repeated calls within a run without reusing responses across tenants or processes. Requests with custom headers bypass the disk response cache because those headers may contain tenant credentials.
 

@@ -1,6 +1,6 @@
 # provider-perplexity (Perplexity API Examples)
 
-This example demonstrates how to use Perplexity's search-augmented chat models to get up-to-date answers with citations, structured outputs, and specialized reasoning.
+Compare Perplexity search models, validate structured JSON responses, and configure search filters.
 
 You can run this example with:
 
@@ -13,10 +13,9 @@ cd provider-perplexity
 
 - Real-time web search with academic citations
 - Multiple specialized models for different use cases
-- Structured outputs (JSON schema and regex patterns)
+- Structured outputs with JSON Schema
 - Date-range and location-based search filtering
 - Search domain filtering for trusted sources
-- Chain of thought (CoT) reasoning
 - Deep research capabilities
 
 ## Environment Variables
@@ -39,11 +38,11 @@ This example includes multiple configuration files to demonstrate different Perp
 
 ### 1. Basic Model Comparison (`promptfooconfig.yaml`)
 
-Compares different Perplexity search models against a traditional non-search model (GPT-4o-mini):
+Compares different Perplexity search models against a traditional non-search model (GPT-5 mini):
 
 - `sonar`: Lightweight search model
 - `sonar-pro`: Advanced search model with high context
-- `sonar-reasoning`: Fast reasoning model with step-by-step thinking
+- `sonar-reasoning-pro`: Advanced reasoning with step-by-step thinking
 
 ```bash
 npx promptfoo@latest eval -c promptfooconfig.yaml
@@ -51,10 +50,7 @@ npx promptfoo@latest eval -c promptfooconfig.yaml
 
 ### 2. Structured Outputs (`promptfooconfig.structured-output.yaml`)
 
-Demonstrates Perplexity's structured output capabilities:
-
-- JSON schema enforcement for movie information
-- Regex pattern matching for postal codes
+Demonstrates Perplexity's JSON Schema structured output capability for movie information.
 
 ```bash
 npx promptfoo@latest eval -c promptfooconfig.structured-output.yaml
@@ -76,9 +72,8 @@ npx promptfoo@latest eval -c promptfooconfig.search-filters.yaml
 
 Demonstrates specialized models for research and reasoning:
 
-- `sonar-deep-research`: Comprehensive research model
-- `sonar-reasoning-pro`: Advanced reasoning with Chain of Thought
-- `r1-1776`: Offline model without search capabilities
+- `sonar-deep-research`: Research across multiple sources
+- `sonar-reasoning-pro`: Reasoning with web search
 
 ```bash
 npx promptfoo@latest eval -c promptfooconfig.research-reasoning.yaml
@@ -93,14 +88,3 @@ cd provider-perplexity
 npx promptfoo@latest eval -c <config-file.yaml>
 npx promptfoo@latest view
 ```
-
-## What You'll Learn
-
-These examples will show you how to:
-
-- Use different Perplexity models for specific tasks
-- Control search parameters for better results
-- Get structured outputs in specific formats
-- Utilize location and date-based filtering
-- Leverage specialized research and reasoning capabilities
-- Compare search-augmented models with traditional models

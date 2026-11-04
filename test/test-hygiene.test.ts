@@ -136,6 +136,12 @@ const allowedSkippedTests: AllowedSkip[] = [
     reason: 'Ruby smoke coverage requires the Ruby toolchain',
   },
   {
+    file: 'smoke/sigterm-eval.test.ts',
+    kind: 'skipIf',
+    linePattern: /^describe\.skipIf\(process\.platform === 'win32'\)\('SIGTERM during an eval'/,
+    reason: 'Windows has no POSIX signals, so SIGTERM ends the child without running handlers',
+  },
+  {
     file: 'smoke/extension-hooks.test.ts',
     kind: 'skipIf',
     linePattern: /^it\.skipIf\(!PYTHON_PATH\)\($/,
@@ -216,7 +222,6 @@ const legacyModuleScopePersistentMockFiles = new Set<string>([
   'providers/openai-codex-sdk.test.ts',
   'providers/pythonCompletion.cliState.test.ts',
   'providers/registry.test.ts',
-  'providers/responses/processor.test.ts',
   'providers/sagemaker.test.ts',
   'providers/simulatedUser.test.ts',
   'providers/watsonx.test.ts',
@@ -245,7 +250,6 @@ const legacyModuleScopePersistentMockFiles = new Set<string>([
   'redteam/strategies/simpleAudio.test.ts',
   'redteam/strategies/simpleVideo.test.ts',
   'sagemaker.test.ts',
-  'server/findStaticDir.test.ts',
   'server/server.test.ts',
   'telemetry.test.ts',
   'tracing/integration.test.ts',

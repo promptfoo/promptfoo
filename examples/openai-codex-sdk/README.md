@@ -14,10 +14,10 @@ cd openai-codex-sdk
 Install the OpenAI Codex SDK:
 
 ```bash
-npm install @openai/codex-sdk@^0.156.1
+npm install promptfoo @openai/codex-sdk@^0.156.1
 ```
 
-**Requirements**: Node.js `>=22.22.0` and Codex SDK/CLI `>=0.156.1` for these GPT-6 examples. Codex runs its own agent loop; providers such as `openai:gpt-6-sol` make direct model calls.
+**Requirements**: Node.js `>=22.22.0` and Codex SDK `^0.156.1` (at least `0.156.1`, below `0.157.0`) and its bundled CLI for these GPT-6 examples. Codex runs its own agent loop; providers such as `openai:gpt-6-sol` make direct model calls.
 
 Authenticate with Codex using one of these options:
 
@@ -149,7 +149,7 @@ Export `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` first; they are forwarded
 - **Git Integration**: Automatic repository detection (can be disabled)
 - **Structured Output**: Native JSON schema support with Zod
 - **Streaming Events**: Real-time progress updates
-- **Custom Binary**: Override Codex binary path with `codex_path_override`
+- **Custom Binary**: Override Codex binary path with `codex_path_override`; promptfoo verifies that its version matches the SDK pin unless `skip_codex_version_check: true` is set explicitly
 
 ## Configuration Options
 
