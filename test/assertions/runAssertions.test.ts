@@ -8,6 +8,7 @@ import {
   getGradingAssertionHash,
   getGradingInputHash,
 } from '../../src/redteam/grading/storedResult';
+import { createMockProvider } from '../factories/provider';
 import { mockProcessEnv, TestGrader } from '../util/utils';
 
 import type {
@@ -16,6 +17,26 @@ import type {
   GradingResult,
   ProviderResponse,
 } from '../../src/types/index';
+
+const createAssertion = <TType extends 'equals' | 'contains'>(
+  type: TType,
+  value: string = 'Hello world',
+  weight: number = 2,
+) => ({
+  type,
+  value,
+  weight,
+});
+
+const createExpectedOutputAssertion = () => ({
+  type: 'equals' as const,
+  value: 'Expected output',
+});
+
+const createCrescendoMedicalMetadata = () => ({
+  pluginId: 'medical:prioritization-error',
+  strategyId: 'crescendo',
+});
 
 vi.mock('../../src/redteam/remoteGeneration', () => ({
   shouldGenerateRemote: vi.fn().mockReturnValue(false),
@@ -103,12 +124,7 @@ const _Grader = new TestGrader();
 
 describe('runAssertions', () => {
   const test: AtomicTestCase = {
-    assert: [
-      {
-        type: 'equals',
-        value: 'Expected output',
-      },
-    ],
+    assert: [createExpectedOutputAssertion()],
   };
 
   beforeEach(() => {
@@ -131,6 +147,52 @@ describe('runAssertions', () => {
     expect(result).toMatchObject({
       pass: true,
       reason: 'All assertions passed',
+    });
+  });
+
+  it('records a zero-weight cost metric without changing quality scoring', async () => {
+    const result = await runAssertions({
+      prompt: 'Some prompt',
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+      test: {
+        assert: [
+          { type: 'equals', value: 'Expected output' },
+          { type: 'cost', metric: 'inference_cost', weight: 0 },
+        ],
+      },
+      providerResponse: { output: 'Expected output', cost: 0.005 },
+    });
+
+    expect(result).toMatchObject({
+      pass: true,
+      score: 1,
+      namedScores: { inference_cost: 0.005 },
+      namedScoreWeights: { inference_cost: 1 },
+    });
+  });
+
+  it('retains measurement metrics inside a zero-weight assertion set', async () => {
+    const result = await runAssertions({
+      prompt: 'Some prompt',
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+      test: {
+        assert: [
+          { type: 'equals', value: 'Expected output' },
+          {
+            type: 'assert-set',
+            weight: 0,
+            assert: [{ type: 'cost', metric: 'inference_cost', weight: 0 }],
+          },
+        ],
+      },
+      providerResponse: { output: 'Expected output', cost: 0.005 },
+    });
+
+    expect(result).toMatchObject({
+      pass: true,
+      score: 1,
+      namedScores: { inference_cost: 0.005 },
+      namedScoreWeights: { inference_cost: 1 },
     });
   });
 
@@ -188,18 +250,7 @@ describe('runAssertions', () => {
       provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
       test: {
         threshold: 0.5,
-        assert: [
-          {
-            type: 'equals',
-            value: 'Hello world',
-            weight: 2,
-          },
-          {
-            type: 'contains',
-            value: 'world',
-            weight: 1,
-          },
-        ],
+        assert: [createAssertion('equals'), createAssertion('contains', 'world', 1)],
       },
       providerResponse: { output: 'Hi there world' },
     });
@@ -215,18 +266,7 @@ describe('runAssertions', () => {
       provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
       test: {
         threshold: 0.25,
-        assert: [
-          {
-            type: 'equals',
-            value: 'Hello world',
-            weight: 2,
-          },
-          {
-            type: 'contains',
-            value: 'world',
-            weight: 1,
-          },
-        ],
+        assert: [createAssertion('equals'), createAssertion('contains', 'world', 1)],
       },
       providerResponse: { output: 'Hi there world' },
     });
@@ -234,6 +274,98 @@ describe('runAssertions', () => {
       pass: true,
       reason: 'Aggregate score 0.33 ≥ 0.25 threshold',
     });
+  });
+
+  describe('similarity score compatibility', () => {
+    const createSimilarityProvider = (similarities: Record<string, number>) =>
+      Object.assign(createMockProvider(), {
+        callSimilarityApi: async (expected: string) => ({ similarity: similarities[expected] }),
+      });
+
+    it('preserves full-precision negative metrics excluded from the aggregate', async () => {
+      const provider = createSimilarityProvider({ reference: -0.123456789 });
+      const result = await runAssertions({
+        prompt: 'Some prompt',
+        provider,
+        test: {
+          options: { provider },
+          assert: [
+            { type: 'equals', value: 'output' },
+            { type: 'similar', value: 'reference', metric: 'raw_cosine', weight: 0 },
+          ],
+        },
+        providerResponse: { output: 'output' },
+      });
+
+      expect(result).toMatchObject({
+        pass: true,
+        score: 1,
+        namedScores: { raw_cosine: -0.123456789 },
+        namedScoreWeights: { raw_cosine: 1 },
+      });
+      expect(result.componentResults?.[1]).toMatchObject({ pass: true, score: -0.123456789 });
+    });
+
+    it('applies a negative aggregate threshold to the signed cosine score', async () => {
+      const provider = createSimilarityProvider({ reference: -0.5 });
+      const result = await runAssertions({
+        prompt: 'Some prompt',
+        provider,
+        test: {
+          options: { provider },
+          threshold: -0.25,
+          assert: [{ type: 'similar', value: 'reference', threshold: -0.75 }],
+        },
+        providerResponse: { output: 'output' },
+      });
+
+      expect(result).toMatchObject({ pass: false, score: -0.5 });
+      expect(result.componentResults?.[0]).toMatchObject({ pass: true, score: -0.5 });
+    });
+
+    it('applies an aggregate threshold greater than one to a raw dot product', async () => {
+      const provider = Object.assign(createMockProvider(), {
+        callEmbeddingApi: async (text: string) => ({ embedding: [Number(text)] }),
+      });
+      const result = await runAssertions({
+        prompt: 'Some prompt',
+        provider,
+        test: {
+          options: { provider },
+          threshold: 5,
+          assert: [{ type: 'similar:dot', value: '5', threshold: 5 }],
+        },
+        providerResponse: { output: '2' },
+      });
+
+      expect(result).toMatchObject({ pass: true, score: 10 });
+    });
+
+    it.each([
+      { type: 'similar', pass: false, score: -0.2 },
+      { type: 'not-similar', pass: true, score: 1.2 },
+    ] as const)(
+      'selects the closest negative cosine in $type arrays',
+      async ({ type, pass, score }) => {
+        const provider = createSimilarityProvider({ far: -0.9, closer: -0.2 });
+        const result = await runAssertions({
+          prompt: 'Some prompt',
+          provider,
+          test: {
+            options: { provider },
+            assert: [{ type, value: ['far', 'closer'] }],
+          },
+          providerResponse: { output: 'output' },
+        });
+
+        expect(result).toMatchObject({ pass, score });
+        if (type === 'not-similar') {
+          expect(result.componentResults?.[0].reason).toBe(
+            'Similarity -0.20 is less than threshold 0.75',
+          );
+        }
+      },
+    );
   });
 
   describe('assert-set', () => {
@@ -274,12 +406,7 @@ describe('runAssertions', () => {
         assert: [
           {
             type: 'assert-set',
-            assert: [
-              {
-                type: 'equals',
-                value: 'Expected output',
-              },
-            ],
+            assert: [createExpectedOutputAssertion()],
           },
         ],
       };
@@ -303,18 +430,7 @@ describe('runAssertions', () => {
           {
             type: 'assert-set',
             threshold: 0.25,
-            assert: [
-              {
-                type: 'equals',
-                value: 'Hello world',
-                weight: 2,
-              },
-              {
-                type: 'contains',
-                value: 'Expected',
-                weight: 1,
-              },
-            ],
+            assert: [createAssertion('equals'), createAssertion('contains', 'Expected', 1)],
           },
         ],
       };
@@ -338,18 +454,7 @@ describe('runAssertions', () => {
           {
             type: 'assert-set',
             threshold: 0.5,
-            assert: [
-              {
-                type: 'equals',
-                value: 'Hello world',
-                weight: 2,
-              },
-              {
-                type: 'contains',
-                value: 'Expected',
-                weight: 1,
-              },
-            ],
+            assert: [createAssertion('equals'), createAssertion('contains', 'Expected', 1)],
           },
         ],
       };
@@ -522,10 +627,7 @@ describe('runAssertions', () => {
           value: 'test assertion',
         },
       ],
-      metadata: {
-        pluginId: 'medical:prioritization-error',
-        strategyId: 'crescendo',
-      },
+      metadata: createCrescendoMedicalMetadata(),
     };
 
     const providerResponse: ProviderResponse = {
@@ -583,10 +685,7 @@ describe('runAssertions', () => {
     const test: AtomicTestCase = {
       provider: 'promptfoo:redteam:crescendo',
       assert: [assertion],
-      metadata: {
-        pluginId: 'medical:prioritization-error',
-        strategyId: 'crescendo',
-      },
+      metadata: createCrescendoMedicalMetadata(),
     };
 
     const providerResponse: ProviderResponse = {
@@ -676,10 +775,7 @@ describe('runAssertions', () => {
           type: 'assert-set',
           metric: '{{metricGroup}}',
           assert: [
-            {
-              type: 'equals',
-              value: 'Expected output',
-            },
+            createExpectedOutputAssertion(),
             {
               type: 'contains',
               value: 'output',
