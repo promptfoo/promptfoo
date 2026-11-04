@@ -208,7 +208,6 @@ vi.mock('../../../src/prompts', () => ({
     }
     return [];
   }),
-  readProviderPromptMap: vi.fn().mockReturnValue({}),
 }));
 
 vi.mock('../../../src/assertions', () => ({

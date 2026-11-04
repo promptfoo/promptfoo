@@ -13,6 +13,7 @@ import InputLabel from '@mui/material/InputLabel';
 import MenuItem from '@mui/material/MenuItem';
 import Select from '@mui/material/Select';
 import Typography from '@mui/material/Typography';
+import { BundleModal } from './BundleModal';
 import { useCartContext } from './CartProvider';
 import {
   formatPrice,
@@ -24,8 +25,14 @@ import {
 
 import type { FourthwallAttributeValue } from './types';
 
-export function ProductModal() {
-  const { selectedProduct, closeProductModal, addToCart, isLoading } = useCartContext();
+function SingleProductModal() {
+  const {
+    selectedProduct: catalogItem,
+    closeProductModal,
+    addToCart,
+    isLoading,
+  } = useCartContext();
+  const selectedProduct = catalogItem?.type === 'PRODUCT' ? catalogItem : null;
 
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [selectedVariantId, setSelectedVariantId] = useState<string>('');
@@ -507,5 +514,14 @@ export function ProductModal() {
         </Box>
       </Box>
     </Dialog>
+  );
+}
+
+export function ProductModal() {
+  const { selectedProduct } = useCartContext();
+  return selectedProduct?.type === 'BUNDLE' ? (
+    <BundleModal key={selectedProduct.id} bundle={selectedProduct} />
+  ) : (
+    <SingleProductModal />
   );
 }

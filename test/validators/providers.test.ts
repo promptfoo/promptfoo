@@ -1,7 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
 import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
 import { createTogetherAiProvider } from '../../src/providers/togetherai';
-import { ProviderOptionsSchema, ProviderSchema } from '../../src/validators/providers';
+import {
+  ApiProviderSchema,
+  ProviderOptionsSchema,
+  ProviderSchema,
+} from '../../src/validators/providers';
 import { createMockProvider } from '../factories/provider';
 
 describe('ProviderOptionsSchema', () => {
@@ -62,6 +66,24 @@ describe('ProviderOptionsSchema', () => {
 });
 
 describe('ProviderSchema union', () => {
+  it('preserves the explicit embedding cancellation capability without requiring it', () => {
+    const provider = {
+      id: () => 'custom-embedding',
+      callApi: vi.fn(async () => ({ output: 'text' })),
+      callEmbeddingApi: vi.fn(async () => ({ embedding: [1, 0] })),
+    };
+    expect(ApiProviderSchema.parse(provider)).not.toHaveProperty('supportsEmbeddingCancellation');
+    expect(
+      ProviderSchema.parse({ ...provider, supportsEmbeddingCancellation: true }),
+    ).toMatchObject({
+      supportsEmbeddingCancellation: true,
+      callEmbeddingApi: provider.callEmbeddingApi,
+    });
+    expect(
+      ApiProviderSchema.safeParse({ ...provider, supportsEmbeddingCancellation: 'true' }).success,
+    ).toBe(false);
+  });
+
   it('should match ApiProviderSchema before ProviderOptionsSchema when callApi is present', () => {
     const input = createMockProvider({
       id: 'custom-provider',

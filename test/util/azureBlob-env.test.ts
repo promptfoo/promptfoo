@@ -4,7 +4,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import cliState from '../../src/cliState';
 import { CreateJobRequestSchema } from '../../src/types/api/eval';
 import { readAzureBlobText } from '../../src/util/azureBlob';
-import { ProviderOptionsSchema } from '../../src/validators/providers';
 import { mockProcessEnv } from './utils';
 
 const principal = {
@@ -42,17 +41,6 @@ afterEach(() => {
 
 describe('Azure Blob authentication scopes with the installed SDK', () => {
   it.each([connectionString, ''])(
-    'does not advertise test-file credentials as provider overrides: %j',
-    (value) => {
-      const provider = ProviderOptionsSchema.parse({
-        id: 'echo',
-        env: { AZURE_STORAGE_CONNECTION_STRING: value, OPENAI_API_KEY: 'fixture' },
-      });
-      expect(provider.env).toEqual({ OPENAI_API_KEY: 'fixture' });
-    },
-  );
-
-  it.each([connectionString, ''])(
     'honors a parsed job connection string override of %j',
     async (value) => {
       const parsed = CreateJobRequestSchema.parse({
@@ -70,7 +58,7 @@ describe('Azure Blob authentication scopes with the installed SDK', () => {
   );
 
   it.each(['suite', 'file'] as const)(
-    'uses a %s principal before a host connection string',
+    'preserves connection string precedence with a %s principal',
     async (scope) => {
       const read = () => readAzureBlobText('az://account/container/tests.json');
       const result =
@@ -78,37 +66,36 @@ describe('Azure Blob authentication scopes with the installed SDK', () => {
           ? await cliState.withEnv(principal, read)
           : await cliState.withEnvFileOverrides(principal, read);
       expect(result).toBe('fixture');
+      expect(credential).toBeInstanceOf(StorageSharedKeyCredential);
+    },
+  );
+
+  it.each(['suite', 'file'] as const)(
+    'forwards a %s principal to the installed SDK',
+    async (scope) => {
+      mockProcessEnv({ AZURE_STORAGE_CONNECTION_STRING: undefined });
+      const read = () => readAzureBlobText('az://account/container/tests.json');
+      await (scope === 'suite'
+        ? cliState.withEnv(principal, read)
+        : cliState.withEnvFileOverrides(principal, read));
       expect(credential).toBeInstanceOf(ClientSecretCredential);
     },
   );
 
-  it('uses a suite principal before an invocation-file connection string', async () => {
-    await cliState.withEnvFileOverrides({ AZURE_STORAGE_CONNECTION_STRING: connectionString }, () =>
-      cliState.withEnv(principal, () => readAzureBlobText('az://account/container/tests.json')),
-    );
-    expect(credential).toBeInstanceOf(ClientSecretCredential);
-  });
-
-  it('ignores an ambient connection string for a different account when a principal is scoped', async () => {
+  it('preserves default identity discovery for a blank secret without a host secret to mask', async () => {
     mockProcessEnv({
-      AZURE_STORAGE_CONNECTION_STRING: connectionString.replace(
-        'AccountName=account',
-        'AccountName=otheraccount',
-      ),
+      AZURE_STORAGE_CONNECTION_STRING: undefined,
+      AZURE_CLIENT_SECRET: undefined,
+      AZURE_FEDERATED_TOKEN_FILE: undefined,
+      AZURE_CLIENT_CERTIFICATE_PATH: undefined,
     });
-    await cliState.withEnv(principal, () => readAzureBlobText('az://account/container/tests.json'));
-    expect(credential).toBeInstanceOf(ClientSecretCredential);
+    expect(
+      await cliState.withEnv({ ...principal, AZURE_CLIENT_SECRET: '' }, () =>
+        readAzureBlobText('az://account/container/tests.json'),
+      ),
+    ).toBe('fixture');
+    expect(credential).toBeInstanceOf(DefaultAzureCredential);
   });
-
-  it.each([{ AZURE_CLIENT_ID: 'partial' }, { ...principal, AZURE_CLIENT_SECRET: '' }])(
-    'rejects an incomplete scoped principal without falling through to a host connection string',
-    async (env) => {
-      await expect(
-        cliState.withEnv(env, () => readAzureBlobText('az://account/container/tests.json')),
-      ).rejects.toThrow('Scoped Azure service principal credentials are incomplete');
-      expect(BlobClient.prototype.downloadToBuffer).not.toHaveBeenCalled();
-    },
-  );
 
   it('keeps a higher connection string ahead of a lower principal', async () => {
     await cliState.withEnvFileOverrides(principal, () =>

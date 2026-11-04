@@ -7,10 +7,10 @@ import { useCartContext } from './CartProvider';
 import { ProductCard } from './ProductCard';
 import { PromoCard } from './PromoCard';
 
-import type { FourthwallProduct } from './types';
+import type { FourthwallCatalogItem } from './types';
 
 interface ProductGridProps {
-  products: FourthwallProduct[];
+  products: FourthwallCatalogItem[];
   isLoading: boolean;
   error: string | null;
 }

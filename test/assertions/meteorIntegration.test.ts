@@ -12,12 +12,23 @@ vi.mock('../../src/assertions/meteor', () => ({
 import { runAssertion } from '../../src/assertions';
 
 describe('METEOR assertion', () => {
+  let params: Parameters<typeof runAssertion>[0];
+
   beforeEach(() => {
     mockHandleMeteorAssertion.mockReset();
+    params = {
+      assertion: {
+        type: 'meteor',
+        value: 'Expected output',
+        threshold: 0.7,
+      },
+      test: {},
+      providerResponse: { output: 'Actual output' },
+    };
   });
 
   afterEach(() => {
-    vi.restoreAllMocks();
+    mockHandleMeteorAssertion.mockReset();
   });
 
   it('should use the handleMeteorAssertion when natural is available', async () => {
@@ -25,78 +36,44 @@ describe('METEOR assertion', () => {
       pass: true,
       score: 0.85,
       reason: 'METEOR test passed',
-      assertion: { type: 'meteor' },
+      assertion: params.assertion,
     });
 
-    const result = await runAssertion({
-      prompt: 'Test prompt',
-      provider: {} as any,
-      assertion: {
-        type: 'meteor',
-        value: 'Expected output',
-        threshold: 0.7,
-      },
-      test: {} as any,
-      providerResponse: { output: 'Actual output' },
-    });
+    const result = await runAssertion(params);
 
-    // Verify the mock was called and the result is as expected
-    expect(mockHandleMeteorAssertion).toHaveBeenCalledWith(expect.anything());
+    expect(mockHandleMeteorAssertion).toHaveBeenCalledWith(
+      expect.objectContaining({
+        assertion: params.assertion,
+        renderedValue: 'Expected output',
+        outputString: 'Actual output',
+      }),
+    );
     expect(result.pass).toBe(true);
     expect(result.score).toBe(0.85);
     expect(result.reason).toBe('METEOR test passed');
+    expect(result.assertion).toBe(params.assertion);
   });
 
-  it('should handle errors when natural package is missing', async () => {
-    // Mock handleMeteorAssertion to throw when called (simulates missing 'natural' module)
-    mockHandleMeteorAssertion.mockImplementation(() => {
-      throw new Error("Cannot find module 'natural'");
-    });
+  it.each([
+    "Cannot find module 'natural'",
+    'The "natural" package is required for METEOR assertions. Install it with: npm install natural@^8.1.0',
+  ])('should handle a rejected missing-package error: %s', async (message) => {
+    mockHandleMeteorAssertion.mockRejectedValue(new Error(message));
 
-    const result = await runAssertion({
-      prompt: 'Test prompt',
-      provider: {} as any,
-      assertion: {
-        type: 'meteor',
-        value: 'Expected output',
-        threshold: 0.7,
-      },
-      test: {} as any,
-      providerResponse: { output: 'Actual output' },
-    });
+    const result = await runAssertion(params);
 
-    // Verify the error is handled correctly and returns a friendly message
     expect(result.pass).toBe(false);
     expect(result.score).toBe(0);
     expect(result.reason).toBe(
       'METEOR assertion requires the natural package. Please install it using: npm install natural@^8.1.0',
     );
-    expect(result.assertion).toEqual({
-      type: 'meteor',
-      value: 'Expected output',
-      threshold: 0.7,
-    });
+    expect(result.assertion).toBe(params.assertion);
   });
 
   it('should rethrow other errors that are not related to missing module', async () => {
-    // Mock handleMeteorAssertion to throw a non-module-related error
-    mockHandleMeteorAssertion.mockImplementation(() => {
-      throw new Error('Some other error');
-    });
+    const error = new Error('Some other error');
+    mockHandleMeteorAssertion.mockRejectedValue(error);
 
-    // The error should be rethrown since it's not a "Cannot find module" error
-    await expect(
-      runAssertion({
-        prompt: 'Test prompt',
-        provider: {} as any,
-        assertion: {
-          type: 'meteor',
-          value: 'Expected output',
-          threshold: 0.7,
-        },
-        test: {} as any,
-        providerResponse: { output: 'Actual output' },
-      }),
-    ).rejects.toThrow('Some other error');
+    await expect(runAssertion(params)).rejects.toBe(error);
   });
 });

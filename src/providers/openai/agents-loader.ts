@@ -297,7 +297,7 @@ async function createAgentFromDefinition(definition: AgentDefinition): Promise<A
       handoffDescription: definition.handoffDescription,
       handoffOutputTypeWarningEnabled: definition.handoffOutputTypeWarningEnabled,
       outputType: definition.outputType,
-      tools,
+      tools: tools ?? (Array.isArray(definition.tools) ? [] : undefined),
       handoffs,
       inputGuardrails: definition.inputGuardrails,
       outputGuardrails: definition.outputGuardrails,

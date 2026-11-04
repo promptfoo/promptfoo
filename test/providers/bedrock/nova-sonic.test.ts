@@ -1,17 +1,31 @@
 import { TextEncoder } from 'util';
 
 import { BedrockRuntimeClient } from '@aws-sdk/client-bedrock-runtime';
+import { fromSSO } from '@aws-sdk/credential-provider-sso';
 import { NodeHttp2Handler } from '@smithy/node-http-handler';
 import { afterEach, beforeEach, describe, expect, it, Mock, vi } from 'vitest';
 import { disableCache, enableCache } from '../../../src/cache';
 import { categorizeError, NovaSonicProvider } from '../../../src/providers/bedrock/nova-sonic';
+import { mockProcessEnv } from '../../util/utils';
+
+import type { BedrockAmazonNovaSonicGenerationOptions } from '../../../src/providers/bedrock';
+
+const nodeHttp2HandlerFactory = vi.hoisted(() => ({
+  handle: vi.fn(),
+}));
 
 vi.mock('@smithy/node-http-handler', async (importOriginal) => {
   return {
     ...(await importOriginal()),
-    NodeHttp2Handler: vi.fn(),
+    NodeHttp2Handler: vi.fn().mockImplementation(function () {
+      return { handle: nodeHttp2HandlerFactory.handle };
+    }),
   };
 });
+
+vi.mock('@aws-sdk/credential-provider-sso', () => ({
+  fromSSO: vi.fn(),
+}));
 
 vi.mock('@aws-sdk/client-bedrock-runtime', async (importOriginal) => {
   return {
@@ -68,38 +82,37 @@ function createMockStreamResponse(responseObjects: any[]) {
 
 function captureSonicRequest(mockSend: Mock, responseObjects: any[] = standardTextResponse) {
   const events: any[] = [];
+  let completion: Promise<{ error?: unknown }> | undefined;
   mockSend.mockImplementation(async ({ body }) => {
-    const input = body[Symbol.asyncIterator]();
-    let audioContentName: string | undefined;
-    while (true) {
-      const { value, done } = await input.next();
-      if (done) {
-        throw new Error('Sonic request ended before audio input');
-      }
-      const event = JSON.parse(new TextDecoder().decode(value.chunk.bytes)).event;
-      events.push(event);
-      if (event.contentStart?.type === 'AUDIO') {
-        audioContentName = event.contentStart.contentName;
-      }
-      if (audioContentName && event.contentEnd?.contentName === audioContentName) {
-        break;
-      }
-    }
-    return {
-      body: (async function* () {
-        for (const response of responseObjects) {
-          yield encodeChunk(response);
-          if ('toolUse' in response.event) {
-            for (let i = 0; i < 3; i++) {
-              const { value } = await input.next();
-              events.push(JSON.parse(new TextDecoder().decode(value.chunk.bytes)).event);
-            }
-          }
+    // Consume independently of the response stream: tool errors close that stream
+    // before callApi's finally block sends sessionEnd.
+    completion = (async () => {
+      for await (const value of body) {
+        const event = JSON.parse(new TextDecoder().decode(value.chunk.bytes)).event;
+        events.push(event);
+        if (event.sessionEnd) {
+          return;
         }
-      })(),
-    };
+      }
+      throw new Error('Sonic request ended before sessionEnd');
+    })().then(
+      () => ({}),
+      (error: unknown) => ({ error }),
+    );
+    return createMockStreamResponse(responseObjects);
   });
-  return events;
+  return {
+    events,
+    async waitForCompletion() {
+      if (!completion) {
+        throw new Error('Sonic request was not sent');
+      }
+      const outcome = await completion;
+      if ('error' in outcome) {
+        throw outcome.error;
+      }
+    },
+  };
 }
 
 const standardTextResponse = [
@@ -117,6 +130,89 @@ const standardTextResponse = [
         stopReason: 'END_TURN',
       },
     },
+  },
+];
+
+const inferenceCases: {
+  name: string;
+  config: BedrockAmazonNovaSonicGenerationOptions;
+  expected: { maxTokens: number; temperature: number; topP: number };
+}[] = [
+  {
+    name: 'documented configuration',
+    config: { inferenceConfiguration: { maxTokens: 2048, temperature: 0.4, topP: 0.8 } },
+    expected: { maxTokens: 2048, temperature: 0.4, topP: 0.8 },
+  },
+  {
+    name: 'short alias',
+    config: { inferenceConfig: { maxTokens: 2048, temperature: 0.4, topP: 0.8 } },
+    expected: { maxTokens: 2048, temperature: 0.4, topP: 0.8 },
+  },
+  {
+    name: 'legacy snake case',
+    config: { interfaceConfig: { max_new_tokens: 2048, temperature: 0.4, top_p: 0.8 } },
+    expected: { maxTokens: 2048, temperature: 0.4, topP: 0.8 },
+  },
+  {
+    name: 'legacy camel case',
+    config: { interfaceConfig: { maxTokens: 2048, temperature: 0.4, topP: 0.8 } },
+    expected: { maxTokens: 2048, temperature: 0.4, topP: 0.8 },
+  },
+  {
+    name: 'documented spelling precedence without merging lower aliases',
+    config: {
+      inferenceConfiguration: { temperature: 0 },
+      inferenceConfig: { maxTokens: 2048, temperature: 0.2, topP: 0.5 },
+      interfaceConfig: { maxTokens: 4096, temperature: 0.3, topP: 0.6 },
+    },
+    expected: { maxTokens: 1024, temperature: 0, topP: 0.9 },
+  },
+  {
+    name: 'short alias precedence without merging the legacy alias',
+    config: {
+      inferenceConfig: { temperature: 0 },
+      interfaceConfig: { maxTokens: 4096, temperature: 0.3, topP: 0.6 },
+    },
+    expected: { maxTokens: 1024, temperature: 0, topP: 0.9 },
+  },
+  {
+    name: 'partial legacy configuration',
+    config: { interfaceConfig: { top_p: 0 } },
+    expected: { maxTokens: 1024, temperature: 0.7, topP: 0 },
+  },
+  {
+    name: 'defaults',
+    config: {},
+    expected: { maxTokens: 1024, temperature: 0.7, topP: 0.9 },
+  },
+  {
+    name: 'explicit zero values',
+    config: { inferenceConfiguration: { maxTokens: 0, temperature: 0, topP: 0 } },
+    expected: { maxTokens: 0, temperature: 0, topP: 0 },
+  },
+  {
+    name: 'empty documented configuration precedence',
+    config: {
+      inferenceConfiguration: {},
+      inferenceConfig: { maxTokens: 2048, temperature: 0.2, topP: 0.5 },
+      interfaceConfig: { max_new_tokens: 4096, temperature: 0.3, top_p: 0.6 },
+    },
+    expected: { maxTokens: 1024, temperature: 0.7, topP: 0.9 },
+  },
+  {
+    name: 'legacy camel-case precedence and omission of unsupported fields',
+    config: {
+      interfaceConfig: {
+        maxTokens: 2048,
+        max_new_tokens: 4096,
+        temperature: 0.4,
+        topP: 0,
+        top_p: 0.8,
+        top_k: 20,
+        stopSequences: ['STOP'],
+      },
+    },
+    expected: { maxTokens: 2048, temperature: 0.4, topP: 0 },
   },
 ];
 
@@ -145,35 +241,6 @@ const _audioResponse = [
   },
 ];
 
-const functionCallResponse = [
-  {
-    event: {
-      textOutput: {
-        role: 'ASSISTANT',
-        content: 'I will check the weather for you',
-      },
-    },
-  },
-  {
-    event: {
-      toolUse: {
-        toolName: 'get_weather',
-        toolUseId: 'tool-123',
-        content: JSON.stringify({ location: 'New York' }),
-      },
-    },
-  },
-  {
-    event: {
-      contentEnd: {
-        type: 'TOOL',
-        stopReason: 'TOOL_USE',
-      },
-    },
-  },
-  ...standardTextResponse,
-];
-
 describe('NovaSonic Provider', () => {
   let mockSend: Mock;
   let bedrockClient: any;
@@ -181,6 +248,7 @@ describe('NovaSonic Provider', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    nodeHttp2HandlerFactory.handle.mockReset();
     disableCache();
 
     mockSend = vi.fn().mockResolvedValue(createMockStreamResponse(standardTextResponse));
@@ -286,9 +354,219 @@ describe('NovaSonic Provider', () => {
         maxConcurrentStreams: 20,
       });
     });
+
+    it('should force SigV4 while preserving IAM credentials, profiles, endpoints, and the default chain', async () => {
+      vi.spyOn(NovaSonicProvider.prototype, 'callApi').mockRestore();
+      const restoreEnv = mockProcessEnv({
+        AWS_BEARER_TOKEN_BEDROCK: 'unsupported-bedrock-api-key',
+      });
+      const profileCredentials = vi.fn();
+      vi.mocked(fromSSO).mockReturnValue(profileCredentials);
+
+      try {
+        const explicitCredentialsProvider = new NovaSonicProvider('amazon.nova-sonic-v1:0', {
+          config: {
+            accessKeyId: 'test-access-key',
+            secretAccessKey: 'test-secret-key',
+            sessionToken: 'test-session-token',
+            endpoint: 'https://bedrock.example.com',
+          },
+        });
+        await (explicitCredentialsProvider as any).getBedrockClient();
+
+        const explicitClientConfig = vi.mocked(BedrockRuntimeClient).mock.calls.at(-1)?.[0];
+        expect(explicitClientConfig).toMatchObject({
+          authSchemePreference: ['sigv4'],
+          credentials: {
+            accessKeyId: 'test-access-key',
+            secretAccessKey: 'test-secret-key',
+            sessionToken: 'test-session-token',
+          },
+          endpoint: 'https://bedrock.example.com',
+        });
+
+        const profileProvider = new NovaSonicProvider('amazon.nova-sonic-v1:0', {
+          config: { profile: 'test-profile' },
+        });
+        await (profileProvider as any).getBedrockClient();
+
+        expect(fromSSO).toHaveBeenCalledWith({ profile: 'test-profile' });
+        expect(vi.mocked(BedrockRuntimeClient).mock.calls.at(-1)?.[0]).toMatchObject({
+          authSchemePreference: ['sigv4'],
+          credentials: profileCredentials,
+        });
+
+        const defaultChainProvider = new NovaSonicProvider('amazon.nova-sonic-v1:0');
+        await (defaultChainProvider as any).getBedrockClient();
+
+        const defaultClientConfig = vi.mocked(BedrockRuntimeClient).mock.calls.at(-1)?.[0];
+        expect(defaultClientConfig).toBeDefined();
+        expect(defaultClientConfig).toMatchObject({ authSchemePreference: ['sigv4'] });
+        expect(defaultClientConfig).not.toHaveProperty('credentials');
+        if (!defaultClientConfig) {
+          throw new Error('Expected the Nova Sonic provider to construct a Bedrock client');
+        }
+
+        const { BedrockRuntimeClient: ActualBedrockRuntimeClient } = await vi.importActual<
+          typeof import('@aws-sdk/client-bedrock-runtime')
+        >('@aws-sdk/client-bedrock-runtime');
+        const actualClient = new ActualBedrockRuntimeClient(defaultClientConfig);
+        expect(await actualClient.config.authSchemePreference()).toEqual(['sigv4']);
+        expect(actualClient.config.credentials).toEqual(expect.any(Function));
+        actualClient.destroy();
+      } finally {
+        restoreEnv();
+      }
+    });
+
+    it('should ignore an inherited Bedrock API key and use the SigV4 default credential chain', async () => {
+      vi.spyOn(NovaSonicProvider.prototype, 'callApi').mockRestore();
+      const apiKeyProvider = new NovaSonicProvider('amazon.nova-sonic-v1:0', {
+        config: { apiKey: 'inherited-unused-api-key' },
+      });
+
+      const result = await apiKeyProvider.callApi('Test prompt');
+
+      const clientConfig = vi.mocked(BedrockRuntimeClient).mock.calls.at(-1)?.[0];
+      expect(clientConfig).toMatchObject({ authSchemePreference: ['sigv4'] });
+      expect(clientConfig).not.toHaveProperty('credentials');
+      expect(clientConfig).not.toHaveProperty('token');
+      expect(mockSend).toHaveBeenCalled();
+      expect(result.output).toContain('This is a test response');
+    });
+
+    it.each([
+      {
+        name: 'explicit credentials',
+        config: {
+          accessKeyId: 'test-access-key',
+          secretAccessKey: 'test-secret-key',
+          apiKey: 'unused-api-key',
+        },
+        expectedCredentials: {
+          accessKeyId: 'test-access-key',
+          secretAccessKey: 'test-secret-key',
+        },
+      },
+      {
+        name: 'an AWS profile',
+        config: { profile: 'test-profile', apiKey: 'unused-api-key' },
+        expectedCredentials: expect.any(Function),
+      },
+    ])(
+      'should preserve $name when an API key is also configured',
+      async ({ config, expectedCredentials }) => {
+        vi.spyOn(NovaSonicProvider.prototype, 'callApi').mockRestore();
+        const profileCredentials = vi.fn();
+        vi.mocked(fromSSO).mockReturnValue(profileCredentials);
+        const mixedCredentialsProvider = new NovaSonicProvider('amazon.nova-sonic-v1:0', {
+          config,
+        });
+
+        await mixedCredentialsProvider.callApi('Test prompt');
+
+        expect(vi.mocked(BedrockRuntimeClient).mock.calls.at(-1)?.[0]).toMatchObject({
+          authSchemePreference: ['sigv4'],
+          credentials: config.profile === undefined ? expectedCredentials : profileCredentials,
+        });
+        expect(mockSend).toHaveBeenCalled();
+      },
+    );
+
+    it('should reject Nova 2 Sonic outside its published in-region endpoints', async () => {
+      vi.spyOn(NovaSonicProvider.prototype, 'callApi').mockRestore();
+      const testProvider = new NovaSonicProvider('amazon.nova-2-sonic-v1:0', {
+        config: { region: 'eu-west-1' },
+      });
+
+      await expect((testProvider as any).getBedrockClient()).rejects.toThrow(
+        'Supported Regions: us-east-1, us-west-2, eu-north-1, ap-northeast-1',
+      );
+      expect(BedrockRuntimeClient).not.toHaveBeenCalled();
+    });
+
+    it('rejects an invalid region before creating or cleaning up a session', async () => {
+      vi.spyOn(NovaSonicProvider.prototype, 'callApi').mockRestore();
+      const testProvider = new NovaSonicProvider('amazon.nova-2-sonic-v1:0', {
+        config: { region: 'eu-west-1' },
+      });
+      const createSession = vi.spyOn(testProvider as any, 'createSession');
+      const endSession = vi.spyOn(testProvider as any, 'endSession');
+      vi.useFakeTimers();
+      try {
+        await expect(testProvider.callApi('Test prompt')).rejects.toThrow('Supported Regions:');
+        expect(createSession).not.toHaveBeenCalled();
+        expect(endSession).not.toHaveBeenCalled();
+        expect(BedrockRuntimeClient).not.toHaveBeenCalled();
+        expect(vi.getTimerCount()).toBe(0);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('should allow Nova 2 Sonic custom endpoints outside published regions and retain the signing region', async () => {
+      vi.spyOn(NovaSonicProvider.prototype, 'callApi').mockRestore();
+      const testProvider = new NovaSonicProvider('amazon.nova-2-sonic-v1:0', {
+        config: {
+          region: 'eu-west-1',
+          endpoint: 'https://bedrock.internal.example',
+        },
+      });
+
+      await (testProvider as any).getBedrockClient();
+
+      expect(BedrockRuntimeClient).toHaveBeenCalledWith(
+        expect.objectContaining({
+          region: 'eu-west-1',
+          endpoint: 'https://bedrock.internal.example',
+          authSchemePreference: ['sigv4'],
+        }),
+      );
+    });
   });
 
   describe('API Interactions', () => {
+    it('should reach the stream client when constructed without options', async () => {
+      vi.spyOn(NovaSonicProvider.prototype, 'callApi').mockRestore();
+      vi.spyOn(NovaSonicProvider.prototype, 'endSession').mockRestore();
+      vi.useFakeTimers();
+      const capture = captureSonicRequest(mockSend);
+      const defaultProvider = new NovaSonicProvider();
+
+      const request = defaultProvider.callApi('AA==');
+      await vi.runAllTimersAsync();
+      const result = await request;
+      await capture.waitForCompletion();
+
+      expect(BedrockRuntimeClient).toHaveBeenCalled();
+      expect(mockSend).toHaveBeenCalledWith(
+        expect.objectContaining({ modelId: 'amazon.nova-sonic-v1:0' }),
+      );
+      expect(result).toMatchObject({ output: 'This is a test response\n' });
+      expect(capture.events[0]).toEqual({
+        sessionStart: {
+          inferenceConfiguration: { maxTokens: 1024, temperature: 0.7, topP: 0.9 },
+        },
+      });
+      expect(capture.events.at(-1)).toEqual({ sessionEnd: {} });
+      expect((defaultProvider as any).sessions.size).toBe(0);
+    });
+
+    it('should reject turn detection for Nova Sonic v1 before opening a stream', async () => {
+      vi.spyOn(NovaSonicProvider.prototype, 'callApi').mockRestore();
+      const configuredProvider = new NovaSonicProvider('amazon.nova-sonic-v1:0', {
+        config: {
+          turnDetectionConfiguration: { endpointingSensitivity: 'MEDIUM' },
+        },
+      });
+
+      await expect(configuredProvider.callApi('Test prompt')).rejects.toThrow(
+        'turnDetectionConfiguration is only supported by amazon.nova-2-sonic-v1:0',
+      );
+      expect(BedrockRuntimeClient).not.toHaveBeenCalled();
+      expect(mockSend).not.toHaveBeenCalled();
+    });
+
     it('counts the request when a successful stream does not report token usage', async () => {
       vi.spyOn(NovaSonicProvider.prototype, 'callApi').mockRestore();
 
@@ -337,60 +615,191 @@ describe('NovaSonic Provider', () => {
       expect(createSessionSpy).toHaveBeenCalledWith('mocked-session-id');
     });
 
-    it.each([
-      [
-        'documented configuration',
-        { inferenceConfiguration: { maxTokens: 2048, temperature: 0.4, topP: 0.8 } },
-        { maxTokens: 2048, temperature: 0.4, topP: 0.8 },
-      ],
-      [
-        'short alias',
-        { inferenceConfig: { maxTokens: 2048, temperature: 0.4, topP: 0.8 } },
-        { maxTokens: 2048, temperature: 0.4, topP: 0.8 },
-      ],
-      [
-        'legacy snake case',
-        { interfaceConfig: { max_new_tokens: 2048, temperature: 0.4, top_p: 0.8 } },
-        { maxTokens: 2048, temperature: 0.4, topP: 0.8 },
-      ],
-      [
-        'legacy camel case',
-        { interfaceConfig: { maxTokens: 2048, temperature: 0.4, topP: 0.8 } },
-        { maxTokens: 2048, temperature: 0.4, topP: 0.8 },
-      ],
-      [
-        'documented spelling precedence',
-        {
-          inferenceConfiguration: { temperature: 0 },
-          inferenceConfig: { temperature: 0.2 },
-          interfaceConfig: { temperature: 0.3 },
-        },
-        { maxTokens: 1024, temperature: 0, topP: 0.9 },
-      ],
-      [
-        'short alias precedence',
-        { inferenceConfig: { temperature: 0 }, interfaceConfig: { temperature: 0.3 } },
-        { maxTokens: 1024, temperature: 0, topP: 0.9 },
-      ],
-      [
-        'partial legacy configuration',
-        { interfaceConfig: { top_p: 0 } },
-        { maxTokens: 1024, temperature: 0.7, topP: 0 },
-      ],
-      ['defaults', {}, { maxTokens: 1024, temperature: 0.7, topP: 0.9 }],
-    ])('encodes %s in the session request', async (_label, config, expected) => {
-      vi.useFakeTimers();
-      vi.spyOn(NovaSonicProvider.prototype, 'callApi').mockRestore();
-      const events = captureSonicRequest(mockSend);
-      const configuredProvider = new NovaSonicProvider('amazon.nova-sonic-v1:0', { config });
+    describe.each(['amazon.nova-sonic-v1:0', 'amazon.nova-2-sonic-v1:0'])(
+      '%s serialized requests',
+      (model) => {
+        it.each(inferenceCases)(
+          'encodes $name in the session request',
+          async ({ config, expected }) => {
+            vi.spyOn(NovaSonicProvider.prototype, 'callApi').mockRestore();
+            vi.spyOn(NovaSonicProvider.prototype, 'endSession').mockRestore();
+            vi.useFakeTimers();
+            const capture = captureSonicRequest(mockSend);
+            const turnDetectionConfiguration =
+              model === 'amazon.nova-2-sonic-v1:0'
+                ? { endpointingSensitivity: 'MEDIUM' as const }
+                : undefined;
+            const configuredProvider = new NovaSonicProvider(model, {
+              config: { ...config, region: 'us-east-1', turnDetectionConfiguration },
+            });
 
+            const request = configuredProvider.callApi('AA==');
+            await vi.runAllTimersAsync();
+            const result = await request;
+            await capture.waitForCompletion();
+
+            expect(mockSend).toHaveBeenCalledTimes(1);
+            expect(mockSend).toHaveBeenCalledWith(expect.objectContaining({ modelId: model }));
+            const { events } = capture;
+            expect(events.map((event) => Object.keys(event))).toEqual(
+              [
+                'sessionStart',
+                'promptStart',
+                'contentStart',
+                'textInput',
+                'contentEnd',
+                'contentStart',
+                'audioInput',
+                'contentEnd',
+                'promptEnd',
+                'sessionEnd',
+              ].map((name) => [name]),
+            );
+            expect(events[0]).toEqual({
+              sessionStart: {
+                inferenceConfiguration: expected,
+                ...(turnDetectionConfiguration && { turnDetectionConfiguration }),
+              },
+            });
+            const promptName = events[1].promptStart.promptName;
+            expect(events[1]).toEqual({
+              promptStart: {
+                promptName: expect.any(String),
+                textOutputConfiguration: { mediaType: 'text/plain' },
+                audioOutputConfiguration: {
+                  audioType: 'SPEECH',
+                  encoding: 'base64',
+                  mediaType: 'audio/lpcm',
+                  sampleRateHertz: 16000,
+                  sampleSizeBits: 16,
+                  channelCount: 1,
+                  voiceId: 'tiffany',
+                },
+              },
+            });
+            const contentName = events[5].contentStart.contentName;
+            expect(events[5]).toEqual({
+              contentStart: {
+                promptName,
+                contentName: expect.any(String),
+                type: 'AUDIO',
+                interactive: true,
+                role: 'USER',
+                audioInputConfiguration: {
+                  audioType: 'SPEECH',
+                  encoding: 'base64',
+                  mediaType: 'audio/lpcm',
+                  sampleRateHertz: 8000,
+                  sampleSizeBits: 16,
+                  channelCount: 1,
+                },
+              },
+            });
+            expect(events[6]).toEqual({ audioInput: { promptName, contentName, content: 'AA==' } });
+            expect(events[7]).toEqual({ contentEnd: { promptName, contentName } });
+            expect(events[8]).toEqual({ promptEnd: { promptName } });
+            expect(events[9]).toEqual({ sessionEnd: {} });
+            expect(result).toMatchObject({
+              output: 'This is a test response\n',
+              tokenUsage: { total: 0, numRequests: 1 },
+              cached: false,
+              metadata: { functionCallOccurred: false },
+            });
+            expect(result.error).toBeUndefined();
+            expect((configuredProvider as any).sessions.size).toBe(0);
+          },
+        );
+      },
+    );
+
+    it('should forward the published Nova 2 Sonic prompt configuration', async () => {
+      vi.spyOn(NovaSonicProvider.prototype, 'callApi').mockRestore();
+      vi.spyOn(NovaSonicProvider.prototype, 'endSession').mockRestore();
+      vi.useFakeTimers();
+      const capture = captureSonicRequest(mockSend);
+      const configuredProvider = new NovaSonicProvider('amazon.nova-2-sonic-v1:0', {
+        config: {
+          region: 'us-east-1',
+          interfaceConfig: {
+            maxTokens: 2048,
+            topP: 0.8,
+            temperature: 0.5,
+          },
+          turnDetectionConfiguration: { endpointingSensitivity: 'MEDIUM' },
+          textOutputConfiguration: { mediaType: 'text/plain' },
+          audioOutputConfiguration: {
+            audioType: 'SPEECH',
+            encoding: 'base64',
+            mediaType: 'audio/lpcm',
+            sampleRateHertz: 24000,
+            sampleSizeBits: 16,
+            channelCount: 1,
+            voiceId: 'matthew',
+          },
+          toolConfig: {
+            tools: [
+              {
+                toolSpec: {
+                  name: 'get_weather',
+                  description: 'Get weather information',
+                  inputSchema: {
+                    json: {
+                      type: 'object',
+                      properties: {},
+                      required: [],
+                    },
+                  },
+                },
+              },
+            ],
+          },
+          toolUseOutputConfiguration: { mediaType: 'application/json' },
+        },
+      });
       const request = configuredProvider.callApi('AA==');
       await vi.runAllTimersAsync();
       const result = await request;
+      await capture.waitForCompletion();
 
-      expect(events[0]).toEqual({ sessionStart: { inferenceConfiguration: expected } });
+      expect(mockSend).toHaveBeenCalledWith(
+        expect.objectContaining({ modelId: 'amazon.nova-2-sonic-v1:0' }),
+      );
+      const promptStart = capture.events[1].promptStart;
+      expect(promptStart).toMatchObject({
+        textOutputConfiguration: { mediaType: 'text/plain' },
+        audioOutputConfiguration: {
+          audioType: 'SPEECH',
+          encoding: 'base64',
+          mediaType: 'audio/lpcm',
+          sampleRateHertz: 24000,
+          sampleSizeBits: 16,
+          channelCount: 1,
+          voiceId: 'matthew',
+        },
+        toolConfiguration: {
+          tools: [
+            {
+              toolSpec: {
+                name: 'get_weather',
+              },
+            },
+          ],
+        },
+        toolUseOutputConfiguration: { mediaType: 'application/json' },
+      });
+      expect(capture.events[0]).toEqual({
+        sessionStart: {
+          inferenceConfiguration: {
+            maxTokens: 2048,
+            topP: 0.8,
+            temperature: 0.5,
+          },
+          turnDetectionConfiguration: { endpointingSensitivity: 'MEDIUM' },
+        },
+      });
+      expect(capture.events.at(-1)).toEqual({ sessionEnd: {} });
       expect(result.error).toBeUndefined();
-      expect(result.output).toBe('This is a test response\n');
+      expect((configuredProvider as any).sessions.size).toBe(0);
     });
   });
 
@@ -431,38 +840,81 @@ describe('NovaSonic Provider', () => {
       });
     });
 
-    it('sends an explicit tool error with matching stream event identifiers', async () => {
-      vi.useFakeTimers();
-      vi.spyOn(NovaSonicProvider.prototype, 'callApi').mockRestore();
-      const events = captureSonicRequest(mockSend, functionCallResponse);
+    it.each([
+      { model: 'amazon.nova-sonic-v1:0', content: '{"location":"New York"}' },
+      { model: 'amazon.nova-2-sonic-v1:0', content: '{"location":"New York"}' },
+      { model: 'amazon.nova-2-sonic-v1:0', content: 'malformed JSON arguments' },
+    ])(
+      'reports unsupported tool execution for $model and retains $content',
+      async ({ model, content }) => {
+        vi.spyOn(NovaSonicProvider.prototype, 'callApi').mockRestore();
+        vi.spyOn(NovaSonicProvider.prototype, 'endSession').mockRestore();
+        vi.useFakeTimers();
+        try {
+          const toolProvider = new NovaSonicProvider(model, {
+            config: {
+              region: 'us-east-1',
+              toolConfig: {
+                tools: [
+                  {
+                    toolSpec: {
+                      name: 'get_weather',
+                      description: 'Get weather information',
+                      inputSchema: {
+                        json: {
+                          type: 'object',
+                          properties: { location: { type: 'string' } },
+                          required: ['location'],
+                        },
+                      },
+                    },
+                  },
+                ],
+              },
+              toolUseOutputConfiguration: { mediaType: 'application/json' },
+            },
+          });
+          const toolCall = { toolName: 'get_weather', toolUseId: 'tool-123', content };
+          const capture = captureSonicRequest(mockSend, [
+            { event: { textOutput: { role: 'ASSISTANT', content: 'I will check the weather' } } },
+            { event: { toolUse: toolCall } },
+            { event: { textOutput: { role: 'ASSISTANT', content: 'Unverified forecast' } } },
+            { event: { contentEnd: { stopReason: 'END_TURN' } } },
+          ]);
 
-      const request = provider.callApi('AA==');
-      await vi.runAllTimersAsync();
-      const result = await request;
-      const toolStartIndex = events.findIndex((event) => event.contentStart?.type === 'TOOL');
-      const [start, toolResult, end] = events.slice(toolStartIndex, toolStartIndex + 3);
+          const responsePromise = toolProvider.callApi('c3BlZWNo');
+          await vi.runAllTimersAsync();
+          const result = await responsePromise;
+          await capture.waitForCompletion();
 
-      expect(start.contentStart).toMatchObject({
-        role: 'TOOL',
-        toolResultInputConfiguration: { toolUseId: 'tool-123', type: 'TEXT' },
-      });
-      expect(toolResult.toolResult).toEqual({
-        promptName: start.contentStart.promptName,
-        contentName: start.contentStart.contentName,
-        content: JSON.stringify({
-          error: 'Tool use is not supported by the Nova Sonic provider.',
-          toolName: 'get_weather',
-          toolUseId: 'tool-123',
-        }),
-      });
-      expect(end.contentEnd).toEqual({
-        promptName: start.contentStart.promptName,
-        contentName: start.contentStart.contentName,
-      });
-      expect(result.error).toBeUndefined();
-      expect(result.output).toContain('This is a test response');
-      expect(result.metadata?.functionCallOccurred).toBe(true);
-    });
+          expect(mockSend).toHaveBeenCalledTimes(1);
+          expect(mockSend).toHaveBeenCalledWith(expect.objectContaining({ modelId: model }));
+          expect(result.error).toBe('Tool execution is not supported by the Nova Sonic provider.');
+          expect(result.metadata).toMatchObject({
+            functionCallOccurred: true,
+            toolCalls: [toolCall],
+          });
+          expect(result.output).toBe('I will check the weather\n');
+          expect(result.output).not.toContain('Unverified forecast');
+          const { events } = capture;
+          expect(
+            events.some(
+              (event) =>
+                event.toolResult ||
+                event.contentStart?.type === 'TOOL' ||
+                event.contentStart?.role === 'TOOL',
+            ),
+          ).toBe(false);
+          expect(events.slice(-2)).toEqual([
+            { promptEnd: { promptName: events[1].promptStart.promptName } },
+            { sessionEnd: {} },
+          ]);
+          expect((toolProvider as any).sessions.size).toBe(0);
+        } finally {
+          vi.useRealTimers();
+        }
+      },
+    );
   });
 
   describe('Error Handling', () => {

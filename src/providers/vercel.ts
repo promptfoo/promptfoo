@@ -522,6 +522,8 @@ export class VercelAiProvider implements ApiProvider {
  * Vercel AI Gateway embedding provider.
  */
 export class VercelAiEmbeddingProvider implements ApiEmbeddingProvider {
+  readonly supportsEmbeddingCancellation = true;
+
   public modelName: string;
   public config: VercelAiConfig;
   public env?: EnvOverrides;
@@ -554,6 +556,7 @@ export class VercelAiEmbeddingProvider implements ApiEmbeddingProvider {
   async callEmbeddingApi(
     input: string,
     context?: CallApiContextParams,
+    options?: CallApiOptionsParams,
   ): Promise<ProviderEmbeddingResponse> {
     const config = { ...this.config, apiKey: resolveApiKey(this.config, this.env) };
     const cacheEnabled = isCacheEnabled() && Boolean(config.apiKey);
@@ -580,7 +583,7 @@ export class VercelAiEmbeddingProvider implements ApiEmbeddingProvider {
     }
 
     const timeout = config.timeout ?? getRequestTimeoutMs();
-    const { signal, cleanup } = createTimeoutController(timeout);
+    const { signal, cleanup } = createTimeoutController(timeout, options?.abortSignal);
 
     try {
       const gateway = await createGatewayInstance(config, this.env);
@@ -620,6 +623,7 @@ export class VercelAiEmbeddingProvider implements ApiEmbeddingProvider {
       return response;
     } catch (error) {
       cleanup();
+      options?.abortSignal?.throwIfAborted();
       return handleApiError(error, timeout, 'embedding');
     }
   }

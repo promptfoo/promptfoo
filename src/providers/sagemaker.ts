@@ -1,14 +1,21 @@
+import { setTimeout as delayWithSignal } from 'node:timers/promises';
 import crypto from 'crypto';
 
 import { z } from 'zod';
-import { getEnvString } from '../envars';
+import { getEnvString, getMergedEnvOverrides } from '../envars';
 import logger from '../logger';
 import telemetry from '../telemetry';
 import { getTransformErrorMessage, TransformInputType, transform } from '../util/transform';
 import { StringOrFunctionSchema } from '../validators/shared';
-import { getScopedAwsCredentialConfig, resolveAwsCredentials } from './awsCredentials';
+import {
+  getAwsCredentialCacheNamespace,
+  getAwsCredentialProviderOptions,
+  getAwsSdkProfile,
+  resolveAwsCredentials,
+} from './awsCredentials';
+import { getScopedAwsEndpointOptions } from './awsEndpointConfig';
 import { resolveProviderEnv } from './env';
-import { createEnvironmentScopedState } from './scopedState';
+import { createEnvironmentScopedState, destroyScopedClient } from './scopedState';
 
 import type { EnvOverrides } from '../types/env';
 import type {
@@ -95,21 +102,20 @@ interface SageMakerOptions extends ProviderOptions {
 abstract class SageMakerGenericProvider {
   private readonly getSdkState = createEnvironmentScopedState(
     () => ({
-      namespace: crypto.randomUUID(),
+      cacheNamespace: getAwsCredentialCacheNamespace(this.config, this.env),
       client: undefined as any,
       runtimes: new Map<string, Promise<any>>(),
     }),
-    async (state) => {
-      const clients = await Promise.allSettled(state.runtimes.values());
-      for (const client of clients) {
-        if (client.status === 'fulfilled') {
-          client.value.destroy();
-        }
+    (state) => {
+      for (const initialization of state.runtimes.values()) {
+        destroyScopedClient(undefined, initialization, (error) =>
+          logger.warn('Error destroying late SDK client', { error }),
+        );
       }
     },
   );
-  protected get responseCacheNamespace(): string {
-    return this.getSdkState().namespace;
+  protected get responseCacheNamespace(): string | undefined {
+    return this.getSdkState().cacheNamespace;
   }
   env?: EnvOverrides;
 
@@ -200,14 +206,22 @@ abstract class SageMakerGenericProvider {
           },
         );
         const credentials = await this.getCredentials();
-        const profile = getScopedAwsCredentialConfig(this.config, this.env)?.profile;
+        const profile = getAwsSdkProfile(this.config, this.env);
+        const sdkOptions = { ...getAwsCredentialProviderOptions(this.env), profile };
+        const endpointOptions = await getScopedAwsEndpointOptions(
+          'SageMaker Runtime',
+          sdkOptions,
+          getMergedEnvOverrides(this.env),
+        );
 
         const runtime = new SageMakerRuntimeClient({
+          ...getAwsCredentialProviderOptions(this.env),
+          ...endpointOptions,
           region: runtimeRegion,
           maxAttempts: this.getNumericEnv('AWS_SAGEMAKER_MAX_RETRIES', true, 3),
           retryMode: 'adaptive',
           ...(credentials ? { credentials } : {}),
-          ...(profile ? { profile } : {}),
+          ...(profile === undefined ? {} : { profile }),
         });
 
         state.client = runtime;
@@ -868,6 +882,8 @@ export class SageMakerEmbeddingProvider
   extends SageMakerGenericProvider
   implements ApiEmbeddingProvider
 {
+  readonly supportsEmbeddingCancellation = true;
+
   async callApi(): Promise<ProviderResponse> {
     throw new Error(
       'callApi is not implemented for embedding provider. Use callEmbeddingApi instead.',
@@ -894,7 +910,7 @@ export class SageMakerEmbeddingProvider
 
     // Generate shorter, more efficient hashed keys
     const textHash = crypto.createHash('sha256').update(text).digest('hex').substring(0, 16);
-    const configHash = crypto.createHash('sha256').update(configStr).digest('hex');
+    const configHash = crypto.createHash('sha256').update(configStr).digest('hex').substring(0, 8);
 
     return `sagemaker:embedding:v1:${this.getEndpointName()}:${textHash}:${configHash}`;
   }
@@ -905,7 +921,9 @@ export class SageMakerEmbeddingProvider
   async callEmbeddingApi(
     text: string,
     context?: CallApiContextParams,
+    options?: CallApiOptionsParams,
   ): Promise<ProviderEmbeddingResponse> {
+    const signal = options?.abortSignal;
     // Import cache functions dynamically to avoid circular dependencies
     const { isCacheEnabled, getCache } = await import('../cache');
 
@@ -966,7 +984,12 @@ export class SageMakerEmbeddingProvider
       logger.debug(
         `Applying delay of ${delayMs}ms before calling SageMaker embedding endpoint ${this.getEndpointName()}`,
       );
-      await sleep(delayMs);
+      await (signal
+        ? delayWithSignal(delayMs, undefined, { signal }).catch((error) => {
+            signal.throwIfAborted();
+            throw error;
+          })
+        : sleep(delayMs));
     }
 
     // Not in cache or cache disabled, make the actual API call
@@ -1016,7 +1039,9 @@ export class SageMakerEmbeddingProvider
       });
 
       const startTime = Date.now();
-      const response = await runtime.send(command);
+      const response = signal
+        ? await runtime.send(command, { abortSignal: signal })
+        : await runtime.send(command);
       const endTime = Date.now();
       const _latency = endTime - startTime;
 
@@ -1125,6 +1150,7 @@ export class SageMakerEmbeddingProvider
 
       return result;
     } catch (error: any) {
+      signal?.throwIfAborted();
       logger.error(`SageMaker embedding API error: ${error}`);
       return {
         error: `SageMaker embedding API error: ${error.message || String(error)}`,

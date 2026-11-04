@@ -10,10 +10,14 @@ import {
   validateMCPConfigForClaudeCode,
 } from '../../../src/providers/mcp/transform';
 import * as mcpUtil from '../../../src/providers/mcp/util';
+import { fetchWithProxy } from '../../../src/util/fetch/index';
 import type Anthropic from '@anthropic-ai/sdk';
 
 import type { MCPTool } from '../../../src/providers/mcp/types';
 import type { OpenAiTool } from '../../../src/providers/openai/util';
+
+vi.mock('../../../src/util/fetch/index');
+afterEach(() => vi.resetAllMocks());
 
 describe('transformMCPToolsToOpenAi', () => {
   it('should transform MCP tools to OpenAI format', () => {
@@ -298,7 +302,10 @@ describe('transformMCPConfigToClaudeCode', () => {
   });
 
   it('rejects duplicate names before any OAuth token is fetched', async () => {
-    const tokenRequest = vi.spyOn(mcpUtil, 'getOAuthToken').mockResolvedValue('test-token');
+    const tokenRequest = vi.spyOn(mcpUtil, 'getOAuthTokenWithExpiry').mockResolvedValue({
+      accessToken: 'test-token',
+      expiresAt: Date.now() + 3_600_000,
+    });
     const oauth = {
       type: 'oauth' as const,
       grantType: 'client_credentials' as const,
@@ -969,5 +976,35 @@ describe('transformMCPToolsToGoogle', () => {
 
     expect(parameters?.type).toBe('OBJECT');
     expect(parameters?.properties).toEqual({});
+  });
+});
+
+describe('Claude MCP OAuth discovery', () => {
+  it('discovers the token endpoint from the remote server URL', async () => {
+    vi.mocked(fetchWithProxy)
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({ token_endpoint: 'https://claude-discovery.example.com/token' }),
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ access_token: 'fixture-token', expires_in: 3600 })),
+      );
+    const result = await transformMCPConfigToClaudeCode({
+      server: {
+        name: 'remote',
+        url: 'https://claude-discovery.example.com/mcp/',
+        auth: { type: 'oauth', clientId: 'fixture-client', clientSecret: 'fixture-secret' },
+      },
+    });
+    expect(fetchWithProxy).toHaveBeenNthCalledWith(
+      1,
+      'https://claude-discovery.example.com/mcp/.well-known/oauth-authorization-server',
+      { redirect: 'error' },
+    );
+    expect(result.remote).toMatchObject({
+      url: 'https://claude-discovery.example.com/mcp/',
+      headers: { Authorization: 'Bearer fixture-token' },
+    });
   });
 });

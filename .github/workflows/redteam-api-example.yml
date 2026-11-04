@@ -4,14 +4,12 @@ name: Redteam API example
 
 on:
   pull_request:
-    paths:
+    paths: &watched-paths
       - 'examples/redteam-api-top-10/**'
       - '.github/workflows/redteam-api-example.yml'
   push:
     branches: [main]
-    paths:
-      - 'examples/redteam-api-top-10/**'
-      - '.github/workflows/redteam-api-example.yml'
+    paths: *watched-paths
 
 permissions:
   contents: read
@@ -35,7 +33,7 @@ jobs:
       run:
         working-directory: examples/redteam-api-top-10
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           persist-credentials: false
       - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6

@@ -8,6 +8,7 @@ import { maybeLoadFromExternalFile } from '../util/file';
 import invariant from '../util/invariant';
 import { safeJsonStringify } from '../util/json';
 import { getNunjucksEngine } from '../util/templates';
+import { CHROMIUM_INSTALL_HINT, loadBrowserProviderDependencies } from './browserDependencies';
 import { normalizeResponseTransformResult } from './transformResult';
 
 import type {
@@ -158,11 +159,10 @@ export class BrowserProvider implements ApiProvider {
 
     let chromium, stealth;
     try {
-      ({ chromium } = await import('playwright-extra'));
-      ({ default: stealth } = await import('puppeteer-extra-plugin-stealth'));
+      ({ chromium, stealth } = await loadBrowserProviderDependencies());
     } catch (error) {
       return {
-        error: `Failed to import required modules. Please ensure the following packages are installed:\n\tplaywright @playwright/browser-chromium playwright-extra puppeteer-extra-plugin-stealth\n\nError: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        error: error instanceof Error ? error.message : 'Failed to load browser packages',
       };
     }
 
@@ -230,7 +230,11 @@ export class BrowserProvider implements ApiProvider {
         throw error;
       }
     } catch (error) {
-      return { error: `Browser execution error: ${error}` };
+      const hint =
+        error instanceof Error && error.message.includes("Executable doesn't exist")
+          ? ` ${CHROMIUM_INSTALL_HINT}`
+          : '';
+      return { error: `Browser execution error: ${error}${hint}` };
     } finally {
       if (shouldCloseBrowser && browser) {
         await browser.close();

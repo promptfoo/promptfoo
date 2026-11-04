@@ -256,6 +256,8 @@ describe('AI21ChatCompletionProvider', () => {
         body: expect.stringContaining('"max_tokens":0'),
       }),
       expect.any(Number),
+      'json',
+      undefined,
     );
   });
 

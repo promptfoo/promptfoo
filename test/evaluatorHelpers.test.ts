@@ -13,7 +13,6 @@ import {
 } from '../src/evaluatorHelpers';
 import logger from '../src/logger';
 import { AIStudioChatProvider } from '../src/providers/google/ai.studio';
-import { VertexChatProvider } from '../src/providers/google/vertex';
 import { transform } from '../src/util/transform';
 import { createMockProvider } from './factories/provider';
 import { mockProcessEnv } from './util/utils';
@@ -196,6 +195,15 @@ describe('evaluatorHelpers', () => {
         {},
       );
       expect(renderedPrompt).toBe('Test value1');
+    });
+
+    it('should not corrupt dollar-sign sequences when pre-resolving nested variables', async () => {
+      const renderedPrompt = await renderPrompt(
+        toPrompt('Say {{greeting}}'),
+        { greeting: 'Cost is {{price}}', price: 'only $`5' },
+        {},
+      );
+      expect(renderedPrompt).toBe('Say Cost is only $`5');
     });
 
     it('should handle complex variable substitutions in non-JSON prompts', async () => {
@@ -635,6 +643,17 @@ describe('evaluatorHelpers', () => {
       };
       expect(resolveVariables(variables)).toEqual(expected);
     });
+
+    it.each(['ordinary text', '$$', '$&', '$`', "$'"])(
+      'should insert %s literally into repeated placeholders',
+      (price) => {
+        const variables = { greeting: 'Say {{price}} then {{price}}!', price };
+        expect(resolveVariables(variables)).toEqual({
+          greeting: `Say ${price} then ${price}!`,
+          price,
+        });
+      },
+    );
   });
 
   describe('runExtensionHook', () => {
@@ -1604,6 +1623,7 @@ describe('evaluatorHelpers', () => {
         video1: 'file://path/to/video.mp4',
         video2: 'file://path/to/video.webm',
         video3: 'file://path/to/video.mkv',
+        video4: 'file://path/to/video.ogg',
         text: 'This is not a file',
       };
 
@@ -1624,6 +1644,11 @@ describe('evaluatorHelpers', () => {
           path: 'file://path/to/video.mkv',
           type: 'video',
           format: 'mkv',
+        },
+        video4: {
+          path: 'file://path/to/video.ogg',
+          type: 'video',
+          format: 'ogg',
         },
       });
     });
@@ -1860,24 +1885,23 @@ describe('evaluatorHelpers', () => {
     );
 
     it.each(['m4a', 'M4A', 'M4a'])(
-      'preserves M4A MIME type for Google providers with .%s inputs',
+      'should preserve raw audio data in native templates for .%s',
       async (extension) => {
-        vi.spyOn(fs, 'readFileSync').mockReturnValue(Buffer.from('test-audio-content'));
-        for (const provider of [
-          new AIStudioChatProvider('gemini-3.8-flash'),
-          new VertexChatProvider('gemini-3.8-flash'),
-          new AIStudioChatProvider('gemini-3.8-flash', { id: 'custom-google-id' }),
-          new VertexChatProvider('gemini-3.8-flash', { id: 'custom-vertex-id' }),
-          new AIStudioChatProvider('gemini-3.8-flash', { id: 'palm:gemini-3.8-flash' }),
-        ]) {
-          const rendered = await renderPrompt(
-            toPrompt('{{audio}}'),
-            { audio: `file://test-audio.${extension}` },
-            undefined,
-            provider,
-          );
-          expect(rendered).toBe('data:audio/mp4;base64,dGVzdC1hdWRpby1jb250ZW50');
-        }
+        vi.spyOn(fs, 'readFileSync').mockImplementation(() => {
+          return Buffer.from('test-audio-content');
+        });
+
+        const prompt = toPrompt(
+          '[{"role":"user","parts":[{"inlineData":{"mimeType":"audio/mp4","data":"{{audio}}"}}]}]',
+        );
+        const renderedPrompt = await renderPrompt(prompt, {
+          audio: `file://test-audio.${extension}`,
+        });
+
+        expect(JSON.parse(renderedPrompt)[0].parts[0].inlineData).toEqual({
+          mimeType: 'audio/mp4',
+          data: 'dGVzdC1hdWRpby1jb250ZW50',
+        });
       },
     );
 

@@ -308,6 +308,8 @@ defaultTest:
 
 :::
 
+The [data-exfil red team grader](/docs/red-team/plugins/data-exfil#grading) uses confirmed page-tracking evidence when available. Missing or malformed tracking identifiers fall back to model grading rather than a deterministic pass.
+
 Use the `provider.config` field to set custom parameters such as `temperature`, the output token limit, or API host:
 
 ```yaml

@@ -48,10 +48,11 @@ describe('native credential alias scopes', () => {
         });
         const file = path.join(directory, 'provider.json');
         fs.writeFileSync(file, JSON.stringify(options));
-        const provider = await loadApiProvider(kind === 'file' ? `file://${file}` : route, {
-          env: { [first]: 'suite-key' },
-          ...(kind === 'direct' ? { options } : {}),
-        });
+        const provider = await cliState.withEnv({ [first]: 'suite-key' }, () =>
+          loadApiProvider(kind === 'file' ? `file://${file}` : route, {
+            ...(kind === 'direct' ? { options } : {}),
+          }),
+        );
         expect(apiKey(provider)).toBe('provider-key');
       },
     );

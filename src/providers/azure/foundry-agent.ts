@@ -1,7 +1,7 @@
-import { createHmac, randomUUID } from 'crypto';
+import { createHmac } from 'crypto';
 
 import { getCache, isCacheEnabled } from '../../cache';
-import { getEnvString } from '../../envars';
+import { getEnvString, getMergedEnvOverrides } from '../../envars';
 import logger from '../../logger';
 import { setGenAIResponseAttributes } from '../../tracing/genaiTracer';
 import { createAzureCredential } from '../../util/azureCredentials';
@@ -24,6 +24,7 @@ import {
 } from '../../util/index';
 import { sleepWithAbort } from '../../util/time';
 import { accumulateTokenUsage } from '../../util/tokenUsageUtils';
+import { getCredentialCacheNamespace } from '../credentialCache';
 import { FunctionCallbackHandler } from '../functionCallbackUtils';
 import { getOpenAICompletionTokenDetails, resolveMaxToolIterations } from '../openai/util';
 import { ResponsesProcessor } from '../responses/index';
@@ -77,10 +78,10 @@ type ResponseFunctionCallItem = Extract<
 type EffectiveFoundryConfig = AzureAssistantOptions & Record<string, any>;
 type FunctionToolCallbacks = AzureAssistantOptions['functionToolCallbacks'];
 interface FoundryClientState {
-  cacheNamespace: string;
   projectClient?: Promise<AzureAIProjectClient>;
   agentPromise?: Promise<FoundryAgent>;
   resolvedAgent?: FoundryAgent;
+  cacheNamespace?: string;
 }
 
 const MAX_REQUEST_TIMEOUT_MS = 2_147_483_647;
@@ -294,7 +295,7 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
   private loadedFunctionCallbacks: Record<string, Function> = {};
   private processor: ResponsesProcessor;
   private readonly getClientState = createEnvironmentScopedState<FoundryClientState>(() => ({
-    cacheNamespace: randomUUID(),
+    cacheNamespace: this.selectResponseCacheNamespace(),
   }));
   private warnedUnsupportedFields = new Set<string>();
 
@@ -319,6 +320,70 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
     if (this.assistantConfig.functionToolCallbacks) {
       void this.preloadFunctionCallbacks();
     }
+  }
+
+  private getResponseCacheNamespace(): string | undefined {
+    return this.getClientState().cacheNamespace;
+  }
+
+  private selectResponseCacheNamespace(): string | undefined {
+    const env = getMergedEnvOverrides(this.env);
+    const names = [
+      'AZURE_CLIENT_ID',
+      'AZURE_CLIENT_SECRET',
+      'AZURE_TENANT_ID',
+      'AZURE_FEDERATED_TOKEN_FILE',
+      'AZURE_CLIENT_CERTIFICATE_PATH',
+      'AZURE_CLIENT_CERTIFICATE_PASSWORD',
+      'AZURE_CLIENT_SEND_CERTIFICATE_CHAIN',
+      'AZURE_AUTHORITY_HOST',
+      'AZURE_USERNAME',
+      'AZURE_PASSWORD',
+    ];
+    const hasConfiguredIdentity = [
+      this.config.azureClientId,
+      this.config.azureTenantId,
+      this.config.azureClientSecret,
+      this.config.azureAuthorityHost,
+    ].some((value) => value !== undefined);
+    if (!hasConfiguredIdentity && !names.some((name) => env[name] !== undefined)) {
+      return undefined;
+    }
+    const selector = process.env.AZURE_TOKEN_CREDENTIALS?.trim().toLowerCase();
+    const clientSecret =
+      this.config.azureClientSecret ??
+      env.AZURE_CLIENT_SECRET ??
+      getEnvString('AZURE_CLIENT_SECRET');
+    const password = env.AZURE_PASSWORD ?? getEnvString('AZURE_PASSWORD');
+    const usernameIdentity =
+      (!selector || ['prod', 'environmentcredential'].includes(selector)) &&
+      !clientSecret &&
+      !(env.AZURE_CLIENT_CERTIFICATE_PATH ?? getEnvString('AZURE_CLIENT_CERTIFICATE_PATH')) &&
+      password
+        ? (env.AZURE_USERNAME ?? getEnvString('AZURE_USERNAME'))
+        : undefined;
+    return getCredentialCacheNamespace(
+      [
+        this.config.azureClientId ?? env.AZURE_CLIENT_ID ?? getEnvString('AZURE_CLIENT_ID'),
+        this.config.azureTenantId ?? env.AZURE_TENANT_ID ?? getEnvString('AZURE_TENANT_ID'),
+        usernameIdentity,
+        this.config.azureAuthorityHost ??
+          env.AZURE_AUTHORITY_HOST ??
+          getEnvString('AZURE_AUTHORITY_HOST'),
+        // Availability changes can select a different native fallback identity.
+        // Partition those paths without persisting secrets or their fingerprints.
+        selector,
+        clientSecret
+          ? clientSecret.trim()
+            ? 'secret-present'
+            : 'secret-invalid'
+          : 'secret-absent',
+        password ? 'password-present' : 'password-absent',
+      ],
+      ['AZURE_FEDERATED_TOKEN_FILE', 'AZURE_CLIENT_CERTIFICATE_PATH']
+        .map((name) => env[name] ?? getEnvString(name))
+        .filter((file): file is string => file !== undefined),
+    );
   }
 
   private getProjectUrl(): string {
@@ -1070,7 +1135,8 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
     }
     const maxToolIterations = resolveMaxToolIterations(effectiveConfig.maxToolIterations);
     const projectScope = hashFoundryAgentCacheValue(this.getProjectUrl());
-    const cacheKey = `azure_foundry_agent:${this.deploymentName}:${this.getClientState().cacheNamespace}:${projectScope}:${hashFoundryAgentCacheValue(body)}`;
+    const cacheNamespace = this.getResponseCacheNamespace();
+    const cacheKey = `azure_foundry_agent:${this.deploymentName}:${cacheNamespace ? `${cacheNamespace}:` : ''}${projectScope}:${hashFoundryAgentCacheValue(body)}`;
 
     // Client-side tool behavior is absent from the serialized request body.
     // Callback closures cannot be safely represented in a persistent cache key.

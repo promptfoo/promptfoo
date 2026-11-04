@@ -3,7 +3,6 @@ import * as path from 'path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { runAssertion } from '../../src/assertions/index';
 import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
-import * as pythonUtils from '../../src/python/pythonUtils';
 import { runPython } from '../../src/python/pythonUtils';
 import { runPythonCode } from '../../src/python/wrapper';
 
@@ -51,9 +50,6 @@ describe('Python file references', { timeout: 15000 }, () => {
     vi.mocked(path.extname).mockReset();
     vi.mocked(runPythonCode).mockReset();
     vi.mocked(runPython).mockReset();
-    // Reset Python state to avoid test interference
-    pythonUtils.state.cachedPythonPath = null;
-    pythonUtils.state.validationPromise = null;
   };
 
   beforeEach(() => {
@@ -780,12 +776,39 @@ describe('Python file references', { timeout: 15000 }, () => {
     },
   );
 
+  it('accepts the result shapes earlier releases recorded from Python graders', async () => {
+    vi.mocked(runPythonCode).mockResolvedValueOnce({
+      pass_: true,
+      score: 1,
+      reason: 'ok',
+      named_scores: { exact_match: true, has_citation: false, skipped: null, relevance: '0.5' },
+      component_results: [{ pass_: true, score: 0.75 }, { pass_: false }],
+    });
+
+    const result = await runAssertion({
+      assertion: { type: 'python', value: 'unused' },
+      test: {},
+      providerResponse: { output: 'Test output' },
+    });
+
+    expect(result).toMatchObject({
+      pass: true,
+      score: 1,
+      reason: 'ok',
+      namedScores: { exact_match: 1, has_citation: 0, skipped: 0, relevance: 0.5 },
+      componentResults: [
+        { pass: true, score: 0.75, reason: '' },
+        { pass: false, score: 0, reason: '' },
+      ],
+    });
+  });
+
   it('omits rejected object payloads from validation errors', async () => {
     vi.mocked(runPythonCode).mockResolvedValueOnce({
       pass_: true,
       score: 1,
       reason: 'Custom grade',
-      named_scores: { quality: null },
+      named_scores: { quality: 'high' },
       metadata: { http: { requestHeaders: { authorization: 'diagnostic-placeholder' } } },
     });
 

@@ -89,4 +89,21 @@ describe('Eval Routes - Trace linkage persistence', () => {
       metadata: { source: 'route-append' },
     });
   });
+
+  it('preserves prior result chunks across repeated append requests', async () => {
+    const eval_ = await EvalFactory.create({ numResults: 0 });
+    for (const testIdx of [0, 1]) {
+      const response = await api.post(`/api/eval/${eval_.id}/results`).send([
+        {
+          id: `chunk-result-${testIdx}`,
+          evalId: eval_.id,
+          ...createEvaluateResult({ testIdx }),
+        },
+      ]);
+      expect(response.status).toBe(204);
+    }
+
+    const results = await EvalResult.findManyByEvalId(eval_.id);
+    expect(results.map((result) => result.testIdx).sort()).toEqual([0, 1]);
+  });
 });

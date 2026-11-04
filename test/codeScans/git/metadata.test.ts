@@ -20,7 +20,7 @@ const mockGit: MockSimpleGit = {
 };
 
 vi.mock('simple-git', () => ({
-  default: vi.fn(() => mockGit),
+  simpleGit: vi.fn(() => mockGit),
 }));
 
 describe('Git Metadata', () => {

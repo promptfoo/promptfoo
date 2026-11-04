@@ -170,6 +170,8 @@ describe('Novita providers', () => {
         'json',
         undefined,
         undefined,
+        expect.any(Function),
+        undefined,
       );
       const request = vi.mocked(fetchWithCache).mock.calls[0][1] as RequestInit;
       expect(JSON.parse(request.body as string)).toMatchObject({

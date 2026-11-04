@@ -1,4 +1,4 @@
-import { getEnvOverrides, getEnvString } from '../envars';
+import { getEnvString } from '../envars';
 import logger from '../logger';
 import { getAnthropicProviders } from './anthropic/defaults';
 import { AzureChatCompletionProvider } from './azure/chat';
@@ -6,7 +6,6 @@ import { AzureEmbeddingProvider } from './azure/embedding';
 import { AzureModerationProvider } from './azure/moderation';
 import { resolveProviderApiKey } from './credentials';
 import { AIStudioEmbeddingProvider, getGoogleAiStudioProviders } from './google/ai.studio';
-import { GoogleAuthManager } from './google/auth';
 import { hasGoogleDefaultCredentials } from './google/util';
 import { getGoogleVertexEmbeddingProvider, getGoogleVertexProviders } from './google/vertex';
 import { MistralEmbeddingProvider as MistralEmbeddingApiProvider } from './mistral';
@@ -32,27 +31,6 @@ const EMBEDDING_PROVIDERS: (keyof DefaultProviders)[] = ['embeddingProvider'];
 let defaultCompletionProvider: ApiProvider;
 let defaultEmbeddingProvider: ApiProvider;
 
-function hasScopedGoogleAdc(env?: EnvOverrides): boolean {
-  const masked = new Set<string>();
-  for (const layer of [env, getEnvOverrides(), getEnvOverrides('file')]) {
-    // Explicit ADC, including an empty value, selects its own validation path.
-    if (layer?.GOOGLE_APPLICATION_CREDENTIALS !== undefined) {
-      return true;
-    }
-    for (const key of ['GEMINI_API_KEY', 'GOOGLE_API_KEY', 'PALM_API_KEY']) {
-      const value = layer?.[key];
-      if (masked.has(key) || value === undefined) {
-        continue;
-      }
-      masked.add(key);
-      if (value.trim()) {
-        return false;
-      }
-    }
-  }
-  return false;
-}
-
 async function getEmbeddingProviderForAzureDefaults(env?: EnvOverrides): Promise<ApiProvider> {
   if (defaultEmbeddingProvider) {
     return defaultEmbeddingProvider;
@@ -65,13 +43,9 @@ async function getEmbeddingProviderForAzureDefaults(env?: EnvOverrides): Promise
     return new AzureEmbeddingProvider(embeddingDeploymentName, { env });
   }
 
-  if (hasScopedGoogleAdc(env)) {
-    return getGoogleVertexEmbeddingProvider(env);
-  }
-
   // A chat deployment is not an embedding deployment. Prefer configured embedding
   // API credentials before probing ADC, without changing Azure's chat selection.
-  if (GoogleAuthManager.getApiKey({}, env).apiKey) {
+  if (resolveProviderApiKey(undefined, env, ['GEMINI_API_KEY', 'GOOGLE_API_KEY', 'PALM_API_KEY'])) {
     return new AIStudioEmbeddingProvider('gemini-embedding-001', { env });
   }
   if (resolveProviderApiKey(undefined, env, ['MISTRAL_API_KEY'])) {
@@ -80,7 +54,7 @@ async function getEmbeddingProviderForAzureDefaults(env?: EnvOverrides): Promise
   if (resolveProviderApiKey(undefined, env, ['VOYAGE_API_KEY'])) {
     return new VoyageEmbeddingProvider('voyage-3.5', {}, env);
   }
-  if (await hasGoogleDefaultCredentials(env)) {
+  if (await hasGoogleDefaultCredentials()) {
     return getGoogleVertexEmbeddingProvider(env);
   }
   return getOpenAiProviders(env).embeddingProvider;
@@ -103,9 +77,9 @@ async function getDefaultProviderPreferences(
     resolveProviderApiKey(undefined, env, ['ANTHROPIC_API_KEY']),
   );
   const hasOpenAiCredentials = Boolean(resolveProviderApiKey(undefined, env, ['OPENAI_API_KEY']));
-  const hasScopedAdc = hasScopedGoogleAdc(env);
-  const hasGoogleAiStudioCredentials =
-    !hasScopedAdc && Boolean(GoogleAuthManager.getApiKey({}, env).apiKey);
+  const hasGoogleAiStudioCredentials = Boolean(
+    resolveProviderApiKey(undefined, env, ['GEMINI_API_KEY', 'GOOGLE_API_KEY', 'PALM_API_KEY']),
+  );
   const hasAzureApiKey = resolveProviderApiKey(undefined, env, [
     'AZURE_API_KEY',
     'AZURE_OPENAI_API_KEY',
@@ -130,7 +104,7 @@ async function getDefaultProviderPreferences(
     !hasAnthropicCredentials &&
     !hasGoogleAiStudioCredentials;
   const useGoogleVertexDefaults = shouldUseFallbackDefaults
-    ? hasScopedAdc || (await hasGoogleDefaultCredentials(env))
+    ? await hasGoogleDefaultCredentials()
     : false;
   const useNonGoogleFallbackDefaults = shouldUseFallbackDefaults && !useGoogleVertexDefaults;
   const hasCodexCredentials =

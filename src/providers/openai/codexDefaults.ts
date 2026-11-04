@@ -3,12 +3,17 @@ import fs from 'fs';
 import os from 'os';
 import path from 'path';
 
+import semverSatisfies from 'semver/functions/satisfies.js';
 import { getEnvString } from '../../envars';
-import { getDirectory, resolvePackageEntryPoint } from '../../esm';
 import logger from '../../logger';
+import { getPackageVersion } from '../../util/packageVersion';
 import { resolveProviderApiKey } from '../credentials';
 import { providerRegistry } from '../providerRegistry';
-import { OpenAICodexSDKProvider } from './codex-sdk';
+import {
+  CODEX_SDK_VERSION_RANGE,
+  OpenAICodexSDKProvider,
+  resolveCodexSdkPackage,
+} from './codex-sdk';
 
 import type { EnvOverrides } from '../../types/env';
 import type { DefaultProviders } from '../../types/index';
@@ -19,7 +24,6 @@ const CODEX_DEFAULT_PROVIDERS_CACHE_EVICTION_GRACE_MS = 60_000;
 const CODEX_DEFAULT_PROVIDERS_CACHE_MAX_ENTRIES = 32;
 const CODEX_DEFAULT_PROVIDERS_CACHE_HMAC_CONTEXT = 'promptfoo:codex-default-provider-cache-key';
 const CODEX_DEFAULT_PROVIDERS_CACHE_HMAC_KEY = randomBytes(32);
-const CODEX_SDK_PACKAGE_NAME = '@openai/codex-sdk';
 
 let codexDefaultWorkingDir: string | undefined;
 
@@ -84,7 +88,7 @@ type ManagedCodexDefaultProviderBundle = CodexDefaultProviderBundle & {
 const codexDefaultProvidersByCacheKey = new Map<string, ManagedCodexDefaultProviderBundle>();
 const evictedCodexDefaultProviderBundles = new Set<ManagedCodexDefaultProviderBundle>();
 
-const codexSdkAvailabilityByBaseDir = new Map<string, boolean>();
+const codexSdkAvailabilityByEntryPoint = new Map<string, boolean>();
 
 function getCodexEnvString(env: EnvOverrides | undefined, key: string): string | undefined {
   return env?.[key] ?? getEnvString(key);
@@ -130,19 +134,24 @@ function hasCodexAuthFile(env?: EnvOverrides): boolean {
   }
 }
 
-function hasCodexSdkPackage(baseDir: string): boolean {
-  const cached = codexSdkAvailabilityByBaseDir.get(baseDir);
+function canLoadCodexSdkPackage(): boolean {
+  const entryPoint = resolveCodexSdkPackage();
+  if (!entryPoint) {
+    return false;
+  }
+  const cached = codexSdkAvailabilityByEntryPoint.get(entryPoint);
   if (cached !== undefined) {
     return cached;
   }
-
-  const hasPackage = resolvePackageEntryPoint(CODEX_SDK_PACKAGE_NAME, baseDir) !== null;
-  codexSdkAvailabilityByBaseDir.set(baseDir, hasPackage);
-  return hasPackage;
-}
-
-function canLoadCodexSdkPackage(): boolean {
-  return [process.cwd(), getDirectory()].some((baseDir) => hasCodexSdkPackage(baseDir));
+  let compatible = false;
+  try {
+    const version = getPackageVersion('@openai/codex-sdk', entryPoint);
+    compatible = Boolean(version && semverSatisfies(version, CODEX_SDK_VERSION_RANGE));
+  } catch (error) {
+    logger.debug('[CodexDefaults] Could not read SDK metadata', { error });
+  }
+  codexSdkAvailabilityByEntryPoint.set(entryPoint, compatible);
+  return compatible;
 }
 
 export function hasCodexDefaultCredentials(env?: EnvOverrides): boolean {
@@ -420,6 +429,6 @@ export function clearCodexDefaultProvidersForTesting(): void {
   }
   codexDefaultProvidersByCacheKey.clear();
   evictedCodexDefaultProviderBundles.clear();
-  codexSdkAvailabilityByBaseDir.clear();
+  codexSdkAvailabilityByEntryPoint.clear();
   codexDefaultWorkingDir = undefined;
 }

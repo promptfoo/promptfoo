@@ -1,8 +1,22 @@
 import type { Agent } from 'http';
 
+import { getEnvOverrides } from '../../envars';
 import { getProxyEnvironment, getProxyForUrl } from '../../util/fetch/proxy';
 
 const REQUEST_TIMEOUT_MS = 300_000; // 5 minutes
+
+/** Preserve the SDK's native bearer discovery for invocation-scoped environments. */
+export function getScopedBedrockTokenOptions() {
+  const token =
+    getEnvOverrides()?.AWS_BEARER_TOKEN_BEDROCK ??
+    getEnvOverrides('file')?.AWS_BEARER_TOKEN_BEDROCK;
+  // Media providers historically leave config/provider bearer selection to the
+  // SDK. Only replace the process environment values moved into invocation scope;
+  // an explicit empty token must also prevent rediscovery of the host token.
+  // The SDK prioritizes bearer whenever its environment key exists, including an
+  // empty value. Supplying token alone does not activate that native preference.
+  return token === undefined ? {} : { token: { token }, authSchemePreference: ['httpBearerAuth'] };
+}
 
 /**
  * Matches the geo/global prefix of a system-defined inference profile ID, e.g. the

@@ -125,6 +125,18 @@ path from the allowlist. Avoid adding paths unless the dependency is
 intentionally browser-safe. Allowlist entries are exact files, not directory
 roots.
 
+## Shared presentation helpers
+
+`src/presentation` contains table conversion, report metrics, and configuration
+formatting used by the UI and Node. Browser code imports these modules directly.
+The former paths in `src/util` and `src/redteam` preserve the same exports for
+existing Node and cloud consumers.
+
+These modules remain in the `legacy-runtime` layer because they depend on the
+transitional configuration and result types. Table conversion still updates
+result variables and uses the logger; Vite provides the browser logger and hash
+implementations.
+
 ## Dependency Ownership Report
 
 The dependency report groups direct runtime imports by the private layer that

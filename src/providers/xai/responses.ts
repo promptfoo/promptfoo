@@ -9,11 +9,13 @@ import {
 import { resolveProviderApiKey } from '../credentials';
 import { resolveProviderEnv } from '../env';
 import { FunctionCallbackHandler } from '../functionCallbackUtils';
+import { getOpenAiEffectiveServiceTier } from '../openai/util';
 import { ResponsesProcessor } from '../responses/index';
 import { normalizeResponsesInput } from '../responses/input';
 import { readResponsesStream } from '../responses/stream';
 import { getRequestTimeoutMs } from '../shared';
 import {
+  assertXAIServiceTier,
   calculateXAICost,
   GROK_4_MODELS,
   getXAICostInUsd,
@@ -24,6 +26,7 @@ import {
   validateXAIReasoningEffort,
   type XAICostConfig,
   XAIRequestConfigError,
+  type XAIServiceTier,
 } from './chat';
 
 import type { EnvOverrides } from '../../types/env';
@@ -164,6 +167,8 @@ export interface XAIResponsesConfig extends XAICostConfig {
   stream?: boolean;
   /** Store response for later retrieval */
   store?: boolean;
+  /** Processing tier. Omitted and 'default' use standard processing; 'priority' requests priority processing. */
+  service_tier?: XAIServiceTier;
   /** Additional response data to include, such as encrypted reasoning content */
   include?: string[];
   /** Reasoning configuration for Grok 4.7, Grok 4.6, Grok 4.5, Grok 4.3, or multi-agent models */
@@ -228,24 +233,33 @@ export class XAIResponsesProvider implements ApiProvider {
       modelName: this.modelName,
       providerType: 'xai',
       functionCallbackHandler: this.functionCallbackHandler,
-      costCalculator: (modelName, usage, config) => {
-        const reportedCost = hasXAICostOverrides(config) ? undefined : getXAICostInUsd(usage);
-        return (
-          reportedCost ??
-          calculateXAICost(
-            getXAIRequestModel(modelName, config),
-            config || {},
-            usage?.input_tokens ?? usage?.prompt_tokens,
-            usage?.output_tokens ?? usage?.completion_tokens,
-            usage?.output_tokens_details?.reasoning_tokens ??
-              usage?.completion_tokens_details?.reasoning_tokens,
-            usage?.input_tokens_details?.cached_tokens ??
-              usage?.prompt_tokens_details?.cached_tokens,
-            { apiUrl: this.getApiUrl() },
-          )
-        );
-      },
+      costCalculator: (_modelName, usage, config, responseData) =>
+        this.calculateCost(usage, config, responseData),
     });
+  }
+
+  private calculateCost(
+    usage: any,
+    config: XAIResponsesConfig = {},
+    responseData?: { service_tier?: string },
+  ): number | undefined {
+    const reportedCost = hasXAICostOverrides(config) ? undefined : getXAICostInUsd(usage);
+    return (
+      reportedCost ??
+      calculateXAICost(
+        getXAIRequestModel(this.modelName, config),
+        config,
+        usage?.input_tokens ?? usage?.prompt_tokens,
+        usage?.output_tokens ?? usage?.completion_tokens,
+        usage?.output_tokens_details?.reasoning_tokens ??
+          usage?.completion_tokens_details?.reasoning_tokens,
+        usage?.input_tokens_details?.cached_tokens ?? usage?.prompt_tokens_details?.cached_tokens,
+        {
+          apiUrl: this.getApiUrl(),
+          serviceTier: responseData?.service_tier === 'priority' ? 'priority' : undefined,
+        },
+      )
+    );
   }
 
   id(): string {
@@ -290,10 +304,12 @@ export class XAIResponsesProvider implements ApiProvider {
     context?: CallApiContextParams,
     _callApiOptions?: CallApiOptionsParams,
   ) {
+    const promptConfig = context?.prompt?.config;
     const config = {
       ...this.config,
-      ...context?.prompt?.config,
+      ...promptConfig,
     };
+    const effectiveServiceTier = getOpenAiEffectiveServiceTier(this.config, promptConfig);
     const model = getXAIRequestModel(this.modelName, config);
     const usesGrok47 = model === 'grok-4.7';
 
@@ -352,8 +368,12 @@ export class XAIResponsesProvider implements ApiProvider {
       ...(config.stream ? { stream: config.stream } : {}),
       ...('store' in config ? { store: Boolean(config.store) } : {}),
       ...(config.user ? { user: config.user } : {}),
+      ...(config.service_tier === undefined ? {} : { service_tier: config.service_tier }),
       ...(config.passthrough || {}),
+      ...(effectiveServiceTier === undefined ? {} : { service_tier: effectiveServiceTier }),
     };
+
+    assertXAIServiceTier(body.service_tier);
 
     if (usesGrok47) {
       const reasoning = getXAIRequestOption(
@@ -384,6 +404,7 @@ export class XAIResponsesProvider implements ApiProvider {
       body,
       config: {
         ...config,
+        service_tier: effectiveServiceTier,
         tools: loadedTools,
         response_format: responseFormat,
       },
@@ -491,7 +512,7 @@ export class XAIResponsesProvider implements ApiProvider {
       }
 
       if (status < 200 || status >= 300) {
-        return this.handleUnsuccessfulResponse(data, status, statusText, cached);
+        return this.handleUnsuccessfulResponse(data, status, statusText, cached, config);
       }
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : String(err);
@@ -529,6 +550,7 @@ export class XAIResponsesProvider implements ApiProvider {
     status: number,
     statusText: string,
     cached: boolean,
+    config: XAIResponsesConfig,
   ): ProviderResponse {
     const errorMessage = `xAI API error: ${status} ${statusText}\n${
       typeof data === 'string' ? data : JSON.stringify(data)
@@ -537,6 +559,8 @@ export class XAIResponsesProvider implements ApiProvider {
       return {
         output: errorMessage,
         tokenUsage: this.getTokenUsage(data, cached),
+        cached,
+        cost: cached ? 0 : this.calculateCost(data.usage, config, data),
         isRefusal: true,
       };
     }

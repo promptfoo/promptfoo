@@ -148,6 +148,23 @@ describe('ProviderEditor', () => {
     );
   });
 
+  it('passes the model selection lock to the provider selector', async () => {
+    const user = userEvent.setup();
+    const setProvider = vi.fn();
+    renderWithProviders(
+      <ProviderEditor
+        provider={defaultHttpTarget()}
+        setProvider={setProvider}
+        opts={{ disableModelSelection: true }}
+      />,
+    );
+
+    await user.click(screen.getByText('OpenAI').closest('[role="button"]')!);
+
+    expect(setProvider).not.toHaveBeenCalled();
+    expect(screen.getByLabelText('Search providers')).toBeDisabled();
+  });
+
   it('should call onActionButtonClick when the action button is clicked and validation passes', async () => {
     const user = userEvent.setup();
     const onActionButtonClick = vi.fn();

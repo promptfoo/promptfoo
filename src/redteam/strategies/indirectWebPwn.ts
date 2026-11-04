@@ -1,10 +1,12 @@
 import { createHash, randomUUID } from 'node:crypto';
 
+import { z } from 'zod';
 import { getUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
 import { fetchWithRetries } from '../../util/fetch/index';
 import { getRemoteGenerationHeaders, getRemoteGenerationUrl } from '../remoteGeneration';
 import { remoteGenerationContextPayload } from '../remoteGenerationContext';
+import { WebPageTrackingIdsSchema } from '../types/webPage';
 
 import type { TestCase, TestCaseWithPlugin } from '../../types/index';
 import type {
@@ -82,6 +84,40 @@ function cleanupExpiredPageState(): void {
   }
 }
 
+// Keep outgoing identifiers aligned with the Cloud tracking request contract.
+const webPageTrackingIdsSchema = WebPageTrackingIdsSchema.extend({
+  evalId: z
+    .string()
+    .transform((value) => value.replace(/^eval-/, ''))
+    .pipe(WebPageTrackingIdsSchema.shape.evalId),
+});
+
+/**
+ * Resolve a page's tracking identifiers from runtime metadata. Metadata can come
+ * from a custom provider or a saved test, so TypeScript assertions do not validate
+ * it. A page URL supplies the evaluation ID when it is absent from the context.
+ */
+export function getWebPageTrackingIds(
+  metadata: Record<string, unknown> | undefined,
+  evaluationId: unknown,
+  fallbackWebPageUrl?: unknown,
+): { uuid: string; evalId: string } | null {
+  if (!metadata) {
+    return null;
+  }
+  const urlEvalIds = [metadata.webPageUrl, fallbackWebPageUrl].map((url) =>
+    typeof url === 'string' ? url.match(/\/dynamic-pages\/([^/]+)\//)?.[1] : undefined,
+  );
+  for (const evalId of [evaluationId, ...urlEvalIds]) {
+    const result = webPageTrackingIdsSchema.safeParse({ uuid: metadata.webPageUuid, evalId });
+    if (result.success && typeof evalId === 'string') {
+      // The request boundary strips the local eval- prefix exactly once.
+      return { uuid: result.data.uuid, evalId };
+    }
+  }
+  return null;
+}
+
 /**
  * Check exfil tracking for a page UUID.
  * Returns tracking data that can be used for deterministic grading.
@@ -90,17 +126,22 @@ function cleanupExpiredPageState(): void {
  * @param evalId - The evaluation ID (required by server)
  */
 export async function checkExfilTracking(
-  uuid: string,
-  evalId?: string,
+  uuid: unknown,
+  evalId?: unknown,
 ): Promise<{
   wasExfiltrated: boolean;
   exfilCount: number;
   exfilRecords: WebPageTrackingResponse['exfilRecords'];
 } | null> {
+  const trackingIds = webPageTrackingIdsSchema.safeParse({ uuid, evalId });
+  if (!trackingIds.success) {
+    logger.debug('[IndirectWebPwn] Tracking unavailable: invalid page or evaluation ID', {
+      fields: trackingIds.error.issues.map((issue) => issue.path.join('.')),
+    });
+    return null;
+  }
   try {
     const url = getRemoteGenerationUrl();
-    // Strip "eval-" prefix from evalId for consistency with page creation
-    const normalizedEvalId = evalId?.replace(/^eval-/, '');
     const response = await fetchWithRetries(
       url,
       {
@@ -108,8 +149,7 @@ export async function checkExfilTracking(
         headers: getRemoteGenerationHeaders(),
         body: JSON.stringify({
           task: 'get-web-page-tracking',
-          uuid,
-          evalId: normalizedEvalId,
+          ...trackingIds.data,
         }),
       },
       10000,

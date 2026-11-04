@@ -241,7 +241,41 @@ describe('readLayerConfig', () => {
   it('rejects configs that omit an existing public facade', () => {
     writeConfig({ layers: [coreLayer()] });
 
-    expect(() => readLayerConfig(repoRoot)).toThrow('must define an existing publicFacade path.');
+    expect(() => readLayerConfig(repoRoot)).toThrow(
+      'must define an existing publicFacade file path.',
+    );
+  });
+
+  it('rejects public facades that are directories', () => {
+    writeConfig({ publicFacade: 'src', layers: [coreLayer()] });
+
+    expect(() => readLayerConfig(repoRoot)).toThrow(
+      'must define an existing publicFacade file path.',
+    );
+  });
+
+  it('rejects duplicate or unknown leaf layers', () => {
+    writeConfig({
+      publicFacade: 'src/index.ts',
+      leafLayers: ['core', 'core'],
+      layers: [coreLayer()],
+    });
+    expect(() => readLayerConfig(repoRoot)).toThrow(
+      'leafLayers must be unique, known layer names.',
+    );
+
+    writeConfig({ publicFacade: 'src/index.ts', leafLayers: ['missing'], layers: [coreLayer()] });
+    expect(() => readLayerConfig(repoRoot)).toThrow(
+      'leafLayers must be unique, known layer names.',
+    );
+  });
+
+  it('rejects leaf layers that are not an array', () => {
+    writeConfig({ publicFacade: 'src/index.ts', leafLayers: 'core', layers: [coreLayer()] });
+
+    expect(() => readLayerConfig(repoRoot)).toThrow(
+      'leafLayers must be an array of unique layer names.',
+    );
   });
 
   it('rejects duplicate layer names', () => {

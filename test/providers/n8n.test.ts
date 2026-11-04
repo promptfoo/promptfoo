@@ -1,7 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import logger from '../../src/logger';
 import { createN8nProvider, N8nProvider } from '../../src/providers/n8n';
+import { createProviderRateLimitOptions } from '../../src/scheduler/providerWrapper';
 import { fetchWithRetries } from '../../src/util/fetch';
+import { HttpRateLimitError } from '../../src/util/fetch/errors';
 
 import type { N8nProviderConfig } from '../../src/providers/n8n';
 
@@ -619,7 +621,11 @@ describe('N8nProvider', () => {
 
     it('should treat non-success HTTP responses as provider errors', async () => {
       vi.mocked(fetchWithRetries).mockResolvedValue(
-        createMockResponse('unauthorized', { status: 401, statusText: 'Unauthorized' }),
+        createMockResponse('unauthorized', {
+          status: 401,
+          statusText: 'Unauthorized',
+          headers: { 'x-request-id': 'request-123' },
+        }),
       );
 
       const provider = new N8nProvider('https://n8n.example.com/webhook/agent');
@@ -627,8 +633,85 @@ describe('N8nProvider', () => {
 
       expect(result).toEqual({
         error: 'n8n webhook call error: HTTP 401 Unauthorized',
+        metadata: {
+          rateLimitRetryable: false,
+          http: {
+            status: 401,
+            statusText: 'Unauthorized',
+            headers: { 'content-type': 'text/plain;charset=UTF-8', 'x-request-id': 'request-123' },
+          },
+        },
       });
     });
+
+    it('preserves rate-limit headers without allowing the scheduler to replay the webhook', async () => {
+      vi.mocked(fetchWithRetries).mockRejectedValue(
+        new HttpRateLimitError({
+          status: 429,
+          statusText: 'Too Many Requests',
+          headers: { 'retry-after': '30' },
+        }),
+      );
+      const provider = new N8nProvider('https://n8n.example.com/webhook/agent');
+
+      const result = await provider.callApi('Hello');
+      const retryOptions = createProviderRateLimitOptions();
+
+      expect(fetchWithRetries).toHaveBeenCalledOnce();
+      expect(result.metadata?.http).toMatchObject({
+        status: 429,
+        headers: { 'retry-after': '30' },
+      });
+      expect(provider.handlesOwnRetries).toBe(true);
+      expect(retryOptions.isRateLimited?.(result, undefined)).toBe(true);
+      expect(retryOptions.getHeaders?.(result)).toEqual({ 'retry-after': '30' });
+      expect(retryOptions.getRetryAfter?.(result, undefined)).toBe(30_000);
+    });
+
+    it('keeps hard quota failures out of scheduler backoff', async () => {
+      vi.mocked(fetchWithRetries).mockRejectedValue(
+        new HttpRateLimitError({
+          status: 429,
+          code: 'credit_balance_exhausted',
+          headers: { 'retry-after': '60' },
+        }),
+      );
+      const result = await new N8nProvider('https://n8n.example.com/webhook/agent').callApi(
+        'Hello',
+      );
+      expect(result.metadata).toMatchObject({ rateLimitKind: 'quota', rateLimitRetryable: false });
+      expect(createProviderRateLimitOptions().isRateLimited?.(result, undefined)).toBe(false);
+      expect(fetchWithRetries).toHaveBeenCalledOnce();
+    });
+
+    it.each(['response', 'rate-limit error'])(
+      'sanitizes credentials from %s headers',
+      async (source) => {
+        const headers = {
+          'set-cookie': 'session=secret-cookie',
+          authorization: 'Bearer secret-auth',
+          'x-api-key': 'secret-key',
+          'retry-after': '30',
+          'x-request-id': 'request-safe',
+        };
+        if (source === 'response') {
+          vi.mocked(fetchWithRetries).mockResolvedValue(
+            createMockResponse('denied', { status: 401, headers }),
+          );
+        } else {
+          vi.mocked(fetchWithRetries).mockRejectedValue(
+            new HttpRateLimitError({ status: 429, headers }),
+          );
+        }
+        const result = await new N8nProvider('https://n8n.example.com/webhook/agent').callApi(
+          'Hello',
+        );
+        expect(JSON.stringify(result)).not.toContain('secret-');
+        expect(result.metadata?.http).toMatchObject({
+          headers: { 'retry-after': '30', 'x-request-id': 'request-safe' },
+        });
+      },
+    );
 
     it('should treat n8n error payloads as provider errors', async () => {
       vi.mocked(fetchWithRetries).mockResolvedValue(

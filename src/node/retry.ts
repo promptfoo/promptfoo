@@ -418,6 +418,7 @@ async function retryWithConfig(
     maxConcurrency: effectiveDelay && effectiveDelay > 0 ? 1 : effectiveMaxConcurrency,
     delay: effectiveDelay,
     eventSource: 'cli',
+    restorePromptColumns: !cmdObj.config,
     showProgressBar: !cmdObj.verbose, // Show progress bar unless verbose mode
   };
 

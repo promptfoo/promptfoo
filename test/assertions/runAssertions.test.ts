@@ -134,6 +134,52 @@ describe('runAssertions', () => {
     });
   });
 
+  it('records a zero-weight cost metric without changing quality scoring', async () => {
+    const result = await runAssertions({
+      prompt: 'Some prompt',
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+      test: {
+        assert: [
+          { type: 'equals', value: 'Expected output' },
+          { type: 'cost', metric: 'inference_cost', weight: 0 },
+        ],
+      },
+      providerResponse: { output: 'Expected output', cost: 0.005 },
+    });
+
+    expect(result).toMatchObject({
+      pass: true,
+      score: 1,
+      namedScores: { inference_cost: 0.005 },
+      namedScoreWeights: { inference_cost: 1 },
+    });
+  });
+
+  it('retains measurement metrics inside a zero-weight assertion set', async () => {
+    const result = await runAssertions({
+      prompt: 'Some prompt',
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+      test: {
+        assert: [
+          { type: 'equals', value: 'Expected output' },
+          {
+            type: 'assert-set',
+            weight: 0,
+            assert: [{ type: 'cost', metric: 'inference_cost', weight: 0 }],
+          },
+        ],
+      },
+      providerResponse: { output: 'Expected output', cost: 0.005 },
+    });
+
+    expect(result).toMatchObject({
+      pass: true,
+      score: 1,
+      namedScores: { inference_cost: 0.005 },
+      namedScoreWeights: { inference_cost: 1 },
+    });
+  });
+
   it('should fail when any assertion fails', async () => {
     const output = 'Actual output';
 

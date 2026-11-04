@@ -132,7 +132,6 @@ export class OpenAiGenericProvider implements ApiProvider {
     return 'https://api.openai.com/v1';
   }
 
-  /** Pass a prompt-merged config to resolve that call's endpoint. */
   getApiUrl(config: OpenAiSharedOptions = this.config): string {
     return resolveOpenAiApiUrl(config, this.env, this.getApiUrlDefault());
   }
@@ -165,6 +164,11 @@ export class OpenAiGenericProvider implements ApiProvider {
    */
   protected getCapabilityModelName(): string {
     return this.modelName;
+  }
+
+  /** Normalize capability checks without rewriting the request model. */
+  protected normalizeCapabilityModelName(modelName: string): string {
+    return modelName;
   }
 
   protected isGPT5Model(modelName = this.getCapabilityModelName()): boolean {

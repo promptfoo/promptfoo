@@ -46,10 +46,13 @@ export class VertexLiveProvider extends GoogleLiveProvider {
         !config.credentials &&
         !config.keyFilename &&
         !config.googleAuthOptions?.credentials &&
+        !config.googleAuthOptions?.authClient &&
         !config.googleAuthOptions?.keyFilename &&
         !config.googleAuthOptions?.keyFile &&
+        !config.googleAuthOptions?.apiKey &&
+        !config.googleAuthOptions?.clientOptions?.apiKey &&
         [this.env, getEnvOverrides(), getEnvOverrides('file')].some(
-          (env) => env?.GOOGLE_APPLICATION_CREDENTIALS !== undefined,
+          (layer) => layer?.GOOGLE_APPLICATION_CREDENTIALS !== undefined,
         )
       ) {
         throw error;

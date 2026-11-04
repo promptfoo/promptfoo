@@ -1152,7 +1152,7 @@ describe('TestSuiteConfigSchema', () => {
           DEBUG: 'true',
         },
       };
-      expect(() => TestSuiteConfigSchema.parse(config)).not.toThrow();
+      expect(TestSuiteConfigSchema.parse(config).env).toEqual(config.env);
     });
 
     it('should validate config with number env values converted to strings', () => {
@@ -1164,7 +1164,7 @@ describe('TestSuiteConfigSchema', () => {
           TIMEOUT: 5000,
         },
       };
-      expect(() => TestSuiteConfigSchema.parse(config)).not.toThrow();
+      expect(TestSuiteConfigSchema.parse(config).env).toEqual({ PORT: '3000', TIMEOUT: '5000' });
     });
 
     it('should validate config with boolean env values converted to strings', () => {
@@ -1176,7 +1176,7 @@ describe('TestSuiteConfigSchema', () => {
           VERBOSE: false,
         },
       };
-      expect(() => TestSuiteConfigSchema.parse(config)).not.toThrow();
+      expect(TestSuiteConfigSchema.parse(config).env).toEqual({ DEBUG: 'true', VERBOSE: 'false' });
     });
 
     it('should validate config with undefined env property', () => {
@@ -1195,40 +1195,28 @@ describe('TestSuiteConfigSchema', () => {
         CUSTOM_BOOLEAN_FALSE: false,
       };
 
-      const recordSchema = z.record(
-        z.string(),
-        z.union([z.string(), z.number(), z.boolean()]).transform(String),
-      );
-      const recordResult = recordSchema.safeParse(customEnvVars);
-
-      expect(recordResult.success).toBe(true);
-
-      const parsedData = recordResult.success ? recordResult.data : {};
-
-      expect(parsedData.CUSTOM_STRING_VALUE).toBe('string-value');
-      expect(parsedData.CUSTOM_NUMBER_VALUE).toBe('42');
-      expect(parsedData.CUSTOM_BOOLEAN_TRUE).toBe('true');
-      expect(parsedData.CUSTOM_BOOLEAN_FALSE).toBe('false');
-
       const config = {
         providers: [{ id: 'test-provider' }],
         prompts: ['test prompt'],
         env: customEnvVars,
       };
 
-      const result = TestSuiteConfigSchema.safeParse(config);
+      expect(TestSuiteConfigSchema.parse(config).env).toEqual({
+        CUSTOM_STRING_VALUE: 'string-value',
+        CUSTOM_NUMBER_VALUE: '42',
+        CUSTOM_BOOLEAN_TRUE: 'true',
+        CUSTOM_BOOLEAN_FALSE: 'false',
+      });
+    });
 
-      expect(result.success).toBe(true);
-
-      const testProvider = result.success
-        ? {
-            id: 'test-provider',
-            config: { someConfig: true },
-            env: result.data.env,
-          }
-        : { id: 'test-provider', config: { someConfig: true } };
-
-      expect(Object.keys(testProvider)).toContain('env');
+    it('retains the existing fallback for non-primitive unknown values', () => {
+      expect(
+        TestSuiteConfigSchema.parse({
+          providers: ['echo'],
+          prompts: ['test'],
+          env: { AWS_PROFILE: '', UNSUPPORTED_VALUE: { nested: true } },
+        }).env,
+      ).toEqual({ AWS_PROFILE: '' });
     });
   });
 

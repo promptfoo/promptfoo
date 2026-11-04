@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import cliState from '../../src/cliState';
 import { GolangProvider } from '../../src/providers/golangCompletion';
 
@@ -100,6 +100,11 @@ vi.mock('../../src/util', () => ({
     filePath: '/absolute/path/to/script.go',
   })),
 }));
+
+afterEach(() => {
+  mockExecFile.mockReset();
+  vi.clearAllMocks();
+});
 
 describe('GolangProvider', () => {
   const mockReadFileSync = vi.mocked(fs.readFileSync);
@@ -587,6 +592,48 @@ describe('GolangProvider', () => {
 
       const result = await provider.callEmbeddingApi('test prompt');
       expect(result).toEqual({ embedding: [0.1, 0.2, 0.3] });
+    });
+
+    it.each(['list', 'build', 'execute'])(
+      'cancels the %s embedding subprocess and cleans up',
+      async (phase) => {
+        const controller = new AbortController();
+        const provider = new GolangProvider('script.go', {
+          config: { basePath: '/absolute/path/to' },
+        });
+        mockExecFile.mockImplementation((_file, args, options, callback) => {
+          const currentPhase =
+            args[0] === 'list' ? 'list' : args[0] === 'build' ? 'build' : 'execute';
+          if (currentPhase === phase) {
+            expect(options.signal).toBe(controller.signal);
+            controller.abort(new Error('embedding cancelled'));
+            callback(new Error('embedding cancelled'));
+          } else {
+            callback(null, { stdout: args[0] === 'list' ? '{"Name":"main"}' : '', stderr: '' }, '');
+          }
+          return {};
+        });
+
+        await expect(
+          provider.callEmbeddingApi('test prompt', undefined, { abortSignal: controller.signal }),
+        ).rejects.toThrow('embedding cancelled');
+        expect(provider.supportsEmbeddingCancellation).toBe(true);
+        expect(mockRmSync).toHaveBeenCalledWith(
+          expect.stringContaining('golang-provider'),
+          expect.objectContaining({ recursive: true, force: true }),
+        );
+      },
+    );
+
+    it('does not start an embedding subprocess after cancellation', async () => {
+      const provider = new GolangProvider('script.go', {
+        config: { basePath: '/absolute/path/to' },
+      });
+      const signal = AbortSignal.abort(new Error('already cancelled'));
+      await expect(
+        provider.callEmbeddingApi('test', undefined, { abortSignal: signal }),
+      ).rejects.toThrow('already cancelled');
+      expect(mockExecFile).not.toHaveBeenCalled();
     });
 
     it('should call callClassificationApi successfully', async () => {

@@ -115,6 +115,7 @@ vi.mock('../../../src/envars', () => ({
   getEvalTimeoutMs: vi.fn(() => 0),
   getMaxEvalTimeMs: vi.fn(() => 0),
   getEnvString: mocks.getEnvString,
+  getEnvOverrides: vi.fn(),
   isCI: vi.fn(() => false),
   isNonInteractive: vi.fn(() => true),
 }));

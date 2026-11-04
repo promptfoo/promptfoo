@@ -22,6 +22,7 @@ export const ProviderEnvOverridesSchema = z.object({
   AZURE_API_HOST: z.string().optional(),
   AZURE_API_KEY: z.string().optional(),
   AZURE_AUTHORITY_HOST: z.string().optional(),
+  AZURE_STORAGE_CONNECTION_STRING: z.string().optional(),
   AZURE_CLIENT_ID: z.string().optional(),
   AZURE_CLIENT_SECRET: z.string().optional(),
   AZURE_DEPLOYMENT_NAME: z.string().optional(),
@@ -44,6 +45,7 @@ export const ProviderEnvOverridesSchema = z.object({
   CLOUDFLARE_GATEWAY_ID: z.string().optional(),
   CF_AIG_TOKEN: z.string().optional(),
   COMETAPI_KEY: z.string().optional(),
+  COHERE_API_BASE_URL: z.string().optional(),
   COHERE_API_KEY: z.string().optional(),
   COHERE_CLIENT_NAME: z.string().optional(),
   DATABRICKS_TOKEN: z.string().optional(),
@@ -61,9 +63,9 @@ export const ProviderEnvOverridesSchema = z.object({
   FIREWORKS_API_KEY: z.string().optional(),
   GITHUB_TOKEN: z.string().optional(),
   GOOGLE_API_HOST: z.string().optional(),
+  GOOGLE_APPLICATION_CREDENTIALS: z.string().optional(),
   GOOGLE_API_BASE_URL: z.string().optional(),
   GOOGLE_API_KEY: z.string().optional(),
-  GOOGLE_APPLICATION_CREDENTIALS: z.string().optional(),
   GOOGLE_CLOUD_QUOTA_PROJECT: z.string().optional(),
   GOOGLE_CLOUD_PROJECT: z.string().optional(),
   GOOGLE_CLOUD_LOCATION: z.string().optional(),
@@ -134,6 +136,8 @@ export const ProviderEnvOverridesSchema = z.object({
   PROMPTFOO_JKS_PASSWORD: z.string().optional(),
   PROMPTFOO_JKS_ALIAS: z.string().optional(),
   PROMPTFOO_INSECURE_SSL: z.string().optional(),
+  PROMPTFOO_PYTHON: z.string().optional(),
+  PROMPTFOO_PYTHON_WORKERS: z.string().optional(),
   QUIVERAI_API_KEY: z.string().optional(),
   QWAK_TOKEN: z.string().optional(),
   REPLICATE_API_KEY: z.string().optional(),
@@ -145,6 +149,7 @@ export const ProviderEnvOverridesSchema = z.object({
   SLACK_BOT_TOKEN: z.string().optional(),
   SNOWFLAKE_ACCOUNT_IDENTIFIER: z.string().optional(),
   TOGETHER_API_KEY: z.string().optional(),
+  TYPESAFE_API_KEY: z.string().optional(),
   VERCEL_AI_GATEWAY_API_KEY: z.string().optional(),
   VERCEL_AI_GATEWAY_BASE_URL: z.string().optional(),
   VERTEX_API_HOST: z.string().optional(),
@@ -164,6 +169,31 @@ export const ProviderEnvOverridesSchema = z.object({
   AZURE_CONTENT_SAFETY_ENDPOINT: z.string().optional(),
   AZURE_CONTENT_SAFETY_API_KEY: z.string().optional(),
   AZURE_CONTENT_SAFETY_API_VERSION: z.string().optional(),
+  AWS_ENDPOINT_URL: z.string().optional(),
+  AWS_ENDPOINT_URL_BEDROCK_RUNTIME: z.string().optional(),
+  AWS_ENDPOINT_URL_BEDROCK_AGENT_RUNTIME: z.string().optional(),
+  AWS_ENDPOINT_URL_SAGEMAKER_RUNTIME: z.string().optional(),
+  AWS_ENDPOINT_URL_S3: z.string().optional(),
+  AWS_ENDPOINT_URL_STS: z.string().optional(),
+  AWS_ENDPOINT_URL_SSO: z.string().optional(),
+  AWS_ENDPOINT_URL_SSO_OIDC: z.string().optional(),
+  AWS_USE_FIPS_ENDPOINT: z.string().optional(),
+  AWS_USE_DUALSTACK_ENDPOINT: z.string().optional(),
+  AWS_IGNORE_CONFIGURED_ENDPOINT_URLS: z.string().optional(),
+  AWS_CREDENTIAL_EXPIRATION: z.string().optional(),
+  AWS_CREDENTIAL_SCOPE: z.string().optional(),
+  AWS_ACCOUNT_ID: z.string().optional(),
+  AWS_SHARED_CREDENTIALS_FILE: z.string().optional(),
+  AWS_CONFIG_FILE: z.string().optional(),
+  AWS_WEB_IDENTITY_TOKEN_FILE: z.string().optional(),
+  AWS_ROLE_ARN: z.string().optional(),
+  AWS_ROLE_SESSION_NAME: z.string().optional(),
+  AZURE_CLIENT_CERTIFICATE_PATH: z.string().optional(),
+  AZURE_CLIENT_CERTIFICATE_PASSWORD: z.string().optional(),
+  AZURE_CLIENT_SEND_CERTIFICATE_CHAIN: z.string().optional(),
+  AZURE_FEDERATED_TOKEN_FILE: z.string().optional(),
+  AZURE_USERNAME: z.string().optional(),
+  AZURE_PASSWORD: z.string().optional(),
   AWS_REGION: z.string().optional(),
   AWS_DEFAULT_REGION: z.string().optional(),
   AWS_SAGEMAKER_MAX_TOKENS: z.string().optional(),
@@ -173,19 +203,24 @@ export const ProviderEnvOverridesSchema = z.object({
   PROMPTFOO_EVAL_TIMEOUT_MS: z.string().optional(),
 });
 
+// Configuration loading retains YAML primitives after validating normalized env values.
+const TransportEnvValueSchema = z
+  .union([z.string(), z.number(), z.boolean()])
+  .transform(String)
+  .optional();
+
 // These settings apply to the whole evaluation, not an individual provider.
 export const EnvOverridesSchema = ProviderEnvOverridesSchema.extend({
-  AZURE_STORAGE_CONNECTION_STRING: z.string().optional(),
-  PROMPTFOO_FETCH_CONNECTIONS: z.string().optional(),
-  REQUEST_TIMEOUT_MS: z.string().optional(),
-  ALL_PROXY: z.string().optional(),
-  all_proxy: z.string().optional(),
-  HTTP_PROXY: z.string().optional(),
-  http_proxy: z.string().optional(),
-  HTTPS_PROXY: z.string().optional(),
-  https_proxy: z.string().optional(),
-  NO_PROXY: z.string().optional(),
-  no_proxy: z.string().optional(),
+  PROMPTFOO_FETCH_CONNECTIONS: TransportEnvValueSchema,
+  REQUEST_TIMEOUT_MS: TransportEnvValueSchema,
+  ALL_PROXY: TransportEnvValueSchema,
+  all_proxy: TransportEnvValueSchema,
+  HTTP_PROXY: TransportEnvValueSchema,
+  http_proxy: TransportEnvValueSchema,
+  HTTPS_PROXY: TransportEnvValueSchema,
+  https_proxy: TransportEnvValueSchema,
+  NO_PROXY: TransportEnvValueSchema,
+  no_proxy: TransportEnvValueSchema,
 });
 
 // The runtime schema silently strips unknown keys at parse time (zod's default
@@ -193,4 +228,5 @@ export const EnvOverridesSchema = ProviderEnvOverridesSchema.extend({
 // so downstream code can read arbitrary template variables (e.g.,
 // `{{ env.MY_CUSTOM_VAR }}`) without a cast; callers that need to preserve
 // unknown keys must read them off the unparsed source object.
-export type EnvOverrides = z.infer<typeof EnvOverridesSchema> & Record<string, string | undefined>;
+export type EnvOverrides = z.infer<typeof ProviderEnvOverridesSchema> &
+  Record<string, string | undefined>;

@@ -6,7 +6,7 @@ import path from 'path';
 
 import httpZ from 'http-z';
 import { LRUCache } from 'lru-cache';
-import { Agent, type Dispatcher, interceptors } from 'undici';
+import { Agent, type Dispatcher } from 'undici';
 import { z } from 'zod';
 import { fetchWithCache } from '../cache';
 import cliState from '../cliState';
@@ -21,7 +21,10 @@ import { HttpTlsFieldsSchema } from '../contracts/providerConfig/httpTls';
 import { getEnvString } from '../envars';
 import { importModule } from '../esm';
 import logger from '../logger';
-import { stripDecompressionHeaders } from '../util/fetch/stripDecompressionHeaders';
+import {
+  createDecompressionInterceptor,
+  stripDecompressionHeaders,
+} from '../util/fetch/decompress';
 import {
   maybeLoadConfigFromExternalFile,
   maybeLoadFromExternalFile,
@@ -321,17 +324,15 @@ export function urlEncodeRawRequestPath(rawRequest: string) {
     // Use the built-in URL class to parse and encode the URL
     const parsedUrl = new URL(url, 'http://placeholder-base.com');
 
-    // Replace the original URL in the first line
-    rawRequest = rawRequest.replace(
+    // A callback preserves literal dollar patterns in the URL.
+    return rawRequest.replace(
       firstLine,
-      `${method} ${parsedUrl.pathname}${parsedUrl.search}${protocol ? ' ' + protocol : ''}`,
+      () => `${method} ${parsedUrl.pathname}${parsedUrl.search}${protocol ? ' ' + protocol : ''}`,
     );
   } catch (err) {
     logger.error(`[Http Provider] Error parsing URL in HTTP request: ${String(err)}`);
     throw new Error(`[Http Provider] Error parsing URL in HTTP request: ${String(err)}`);
   }
-
-  return rawRequest;
 }
 
 /**
@@ -1740,7 +1741,7 @@ async function createHttpsAgent(
   return new Agent({
     connect: tlsOptions,
   })
-    .compose(interceptors.decompress({ skipErrorResponses: false }))
+    .compose(createDecompressionInterceptor())
     .compose(stripDecompressionHeaders());
 }
 

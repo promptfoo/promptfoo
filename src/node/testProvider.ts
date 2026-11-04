@@ -104,6 +104,8 @@ export async function testProviderConnectivity({
   const testSuite = {
     providers: [provider],
     prompts: [{ raw: prompt, label: 'Connectivity Test' }],
+    // Diagnostics must run independently of normal evaluation prompt filters.
+    providerPromptMap: { [provider.label || provider.id()]: ['Connectivity Test'] },
     tests: [{ vars }],
   };
 

@@ -18,6 +18,14 @@ beforeEach(() => {
 afterEach(() => restore());
 
 describe('effective proxy environment', () => {
+  it('normalizes raw primitive config values to environment strings', () => {
+    const env = JSON.parse('{"HTTPS_PROXY":8080,"NO_PROXY":false}');
+    cliState.withEnv(env, () => {
+      expect(getProxyEnvironment()).toMatchObject({ https_proxy: '8080', no_proxy: 'false' });
+      expect(getProxyForUrl('https://fixture.example')).toBe('https://8080');
+    });
+  });
+
   it('keeps transport settings out of the per-provider configuration contract', () => {
     const provider = ProviderOptionsSchema.parse({
       id: 'http',
@@ -57,7 +65,7 @@ describe('effective proxy environment', () => {
     'ws_proxy',
     'WSS_PROXY',
     'wss_proxy',
-  ])('excludes unsupported %s from config while retaining resolver compatibility', (name) => {
+  ])('keeps generic %s overrides without exposing them in provider env', (name) => {
     const protocol = name.toLowerCase().replace('_proxy', '');
     const restoreHost = mockProcessEnv({
       [`${protocol}_proxy`]: 'http://host-proxy.example:8080',
@@ -70,8 +78,9 @@ describe('effective proxy environment', () => {
           prompts: ['fixture'],
           env,
         });
-        expect(job.env).toEqual({ ALL_PROXY: '', NO_PROXY: '' });
-        cliState.withEnv(env, () => {
+        expect(job.env).toEqual(env);
+        expect(ProviderOptionsSchema.parse({ id: 'http', env }).env).toEqual({});
+        cliState.withEnv(job.env, () => {
           expect(getProxyForUrl(`${protocol}://external.example`)).toBe(selected);
         });
       }

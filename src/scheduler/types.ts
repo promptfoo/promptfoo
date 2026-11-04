@@ -1,3 +1,4 @@
+import { isResponseHeadersObserverErrorResponse } from '../util/fetch/responseHeadersObserver';
 /**
  * Shared types for the scheduler module.
  */
@@ -13,6 +14,8 @@ import type { ProviderResponse } from '../types/providers';
 export interface RateLimitExecuteOptions<T> {
   /** A delegated provider owns retries; do not replay the enclosing call. */
   handlesOwnRetries?: boolean;
+  /** Cancel queue and retry waits for this caller. */
+  abortSignal?: AbortSignal;
   /** Extract rate limit headers from the result */
   getHeaders?: (result: T) => Record<string, string> | undefined;
   /** Detect if the result indicates a rate limit */
@@ -22,6 +25,10 @@ export interface RateLimitExecuteOptions<T> {
   /** Preserve a structured failure result when retries are exhausted. Defaults to throwing. */
   onRateLimitExhausted?: (result: T, error: Error) => T;
 }
+
+// Word-bounded: a bare "429" substring also matches token counts and request
+// IDs, e.g. "prompt is too long: 204291 tokens".
+const HTTP_429_RE = /\b429\b/;
 
 /**
  * Default rate limit detection for ProviderResponse.
@@ -38,7 +45,12 @@ export function isProviderResponseRateLimited(
   result: ProviderResponse | undefined,
   error: Error | undefined,
 ): boolean {
-  // Respect explicit rate-limit policy decisions as well as hard quotas.
+  if (isResponseHeadersObserverErrorResponse(result)) {
+    return false;
+  }
+  // Tool diagnostics may mention their own quota without describing the model request.
+  const responseError = result?.metadata?.errorOrigin === 'tool' ? undefined : result?.error;
+  // Structured signal — never retry a hard quota.
   if (
     result?.metadata?.rateLimitRetryable === false ||
     result?.metadata?.rateLimitKind === 'quota'
@@ -58,7 +70,7 @@ export function isProviderResponseRateLimited(
   // exceeded: ..."`), so this is a substring match rather than a
   // startsWith. The substring is specific enough that false positives are
   // implausible in normal API error envelopes.
-  if (result?.error?.includes('Quota exceeded:')) {
+  if (responseError?.includes('Quota exceeded:')) {
     return false;
   }
   if (error?.message?.includes('Quota exceeded:')) {
@@ -69,10 +81,10 @@ export function isProviderResponseRateLimited(
     // Check HTTP status code (most reliable)
     result?.metadata?.http?.status === 429 ||
       // Check error field in response
-      result?.error?.includes?.('429') ||
-      result?.error?.toLowerCase?.().includes?.('rate limit') ||
+      HTTP_429_RE.test(responseError ?? '') ||
+      responseError?.toLowerCase?.().includes?.('rate limit') ||
       // Check thrown error message
-      error?.message?.includes('429') ||
+      HTTP_429_RE.test(error?.message ?? '') ||
       error?.message?.toLowerCase().includes('rate limit') ||
       error?.message?.toLowerCase().includes('too many requests'),
   );

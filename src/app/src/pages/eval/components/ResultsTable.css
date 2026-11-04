@@ -519,6 +519,19 @@ table.results-table,
   animation-fill-mode: both;
 }
 
+/* Reuse the expanded and collapsed keyframes when scroll timelines are unavailable. */
+.results-table-scroll-fallback {
+  animation: collapseHeader 1s paused both;
+}
+
+.results-table-scroll-fallback[data-header-collapsed='true'] {
+  animation-delay: -1s;
+}
+
+.results-table-scroll-fallback thead {
+  animation: none;
+}
+
 [data-theme='dark'] .results-table-sticky {
   background: rgb(39 39 42); /* zinc-800 */
 }
@@ -530,7 +543,7 @@ table.results-table,
   z-index: 11;
 }
 
-thead {
+.results-table-sticky:not(.results-table-scroll-fallback) thead {
   animation-name: collapseHeader;
   /** Attach scroll timeline to the root scroll container */
   animation-timeline: scroll();

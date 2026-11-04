@@ -119,7 +119,7 @@ describe('Scanner machine-readable output', () => {
       };
     });
     vi.doMock('simple-git', () => ({
-      default: vi.fn(() => ({
+      simpleGit: vi.fn(() => ({
         branch: vi.fn().mockResolvedValue({ current: 'main', all: ['main'] }),
         revparse: vi.fn().mockResolvedValue('abc123'),
       })),

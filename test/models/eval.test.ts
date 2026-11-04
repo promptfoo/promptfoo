@@ -18,6 +18,7 @@ import { EvalEvaluationStore } from '../../src/node/evaluationStore';
 import { TraceStore } from '../../src/tracing/store';
 import { type EvaluateResult, type Prompt, ResultFailureReason } from '../../src/types/index';
 import { updateResult, writeResultsToDatabase } from '../../src/util/database';
+import { redactAzureBlobSasTokens } from '../../src/util/sanitizer';
 import {
   getCachedStandaloneEvals,
   getStandaloneEvalCacheKey,
@@ -219,6 +220,41 @@ describe('evaluator', () => {
       });
       expect(findResults).not.toHaveBeenCalled();
     });
+  });
+
+  it('preserves duplicate SAS signatures when saving an unchanged redacted config', async () => {
+    const config = {
+      tests: [
+        { vars: { label: 'first', file: 'az://account/container/a.yaml?sig=secret-a' } },
+        { vars: { label: 'second', file: 'az://account/container/a.yaml?sig=secret-b' } },
+      ],
+    };
+    const eval_ = await Eval.create(config, []);
+    await updateResult(eval_.id, redactAzureBlobSasTokens(config));
+    const loaded = await Eval.findById(eval_.id);
+    expect(loaded?.config).toEqual(config);
+  });
+
+  it('reloads summaries after appending to an evaluation with loaded results', async () => {
+    const eval_ = await EvalFactory.create({ numResults: 1 });
+    await eval_.loadResults();
+    const [existing] = await EvalResult.findManyByEvalId(eval_.id);
+    const appended = new EvalResult({
+      ...existing,
+      id: 'appended-result',
+      testIdx: 1,
+      response: existing.response ?? null,
+    });
+    await eval_.setResults([appended]);
+    expect((await eval_.toEvaluateSummary()).results).toHaveLength(2);
+  });
+
+  it('retains persisted rows when an empty upload chunk follows a loaded summary', async () => {
+    const eval_ = await EvalFactory.create({ numResults: 1 });
+    await eval_.loadResults();
+    await eval_.setResults([]);
+    expect((await eval_.toEvaluateSummary()).results).toHaveLength(1);
+    expect(await getCachedResultsCount(eval_.id)).toBe(1);
   });
 
   describe('fetchResultsBatched', () => {
@@ -1776,6 +1812,21 @@ describe('evaluator', () => {
         );
         expect(hasMetric).toBe(true);
       }
+    });
+
+    it('ignores malformed filter entries while applying valid filters', async () => {
+      const validFilter = JSON.stringify({
+        logicOperator: 'and',
+        type: 'metric',
+        operator: 'equals',
+        value: 'accuracy',
+      });
+      const valid = await evalWithResults.getTablePage({ filters: [validFilter] });
+      const mixed = await evalWithResults.getTablePage({
+        filters: ['{bad json', 'null', '[]', validFilter],
+      });
+      expect(mixed.filteredCount).toBe(valid.filteredCount);
+      expect(mixed.body).toEqual(valid.body);
     });
 
     it('should combine multiple filter types', async () => {

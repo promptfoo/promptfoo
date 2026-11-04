@@ -22,6 +22,7 @@ type AnthropicProviders = Pick<
 // response caches to be collected after the invocation, without credential fingerprints.
 const scopedProviders = new WeakMap<object, { env: EnvOverrides; providers: AnthropicProviders }>();
 
+// LLM Rubric Provider
 export class AnthropicLlmRubricProvider extends AnthropicMessagesProvider {
   constructor(
     modelName: string,

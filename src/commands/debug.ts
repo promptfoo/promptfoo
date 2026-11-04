@@ -7,7 +7,7 @@ import logger from '../logger';
 import { resolveConfigs } from '../util/config/load';
 import { getProxyEnvironment } from '../util/fetch/proxy';
 import { pathExists } from '../util/file';
-import { printBorder } from '../util/index';
+import { printBorder, setupEnv } from '../util/index';
 import { sanitizeObject } from '../util/sanitizer';
 import { VERSION } from '../version';
 import type { Command } from 'commander';
@@ -94,5 +94,18 @@ export function debugCommand(
     .command('debug')
     .description('Display debug information for troubleshooting')
     .option('-c, --config [path]', 'Path to configuration file. Defaults to promptfooconfig.yaml')
-    .action((opts) => doDebug({ ...opts, defaultConfig, defaultConfigPath }));
+    .action((opts, command: Command) => {
+      const run = () => doDebug({ ...opts, defaultConfig, defaultConfigPath });
+      const globalOptions = command.optsWithGlobals();
+      const envPath = globalOptions.envFile ?? globalOptions.envPath;
+      if (!envPath?.length) {
+        return run();
+      }
+
+      // The early CLI loader also populates process.env. Keep the file's own layer
+      // so an uppercase proxy override still wins over a lowercase shell alias.
+      const envFileOverrides = {};
+      setupEnv(envPath, { processEnv: envFileOverrides });
+      return cliState.withEnvFileOverrides(envFileOverrides, run);
+    });
 }
