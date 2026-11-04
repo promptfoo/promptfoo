@@ -20,21 +20,19 @@ For technical details on our security model, trust boundaries, and hardening rec
 
 The OSS CLI runs in your environment with your user permissions. It is **permissive by default** and executes user-configured code (custom assertions, custom or script-based providers, transforms, hooks, plugins, and templates in fields that execute code) without sandboxing.
 
-Treat Promptfoo configuration files and everything they reference or evaluate against as trusted code and data. This includes referenced scripts, prompt packs, test fixtures or datasets, configured providers, models, remote content, and model-output feedback loops. Run untrusted configs, scripts, prompt packs, fixtures, datasets, providers, models, remote content, model-output feedback loops, or pull requests only when the run is isolated and secrets are scoped for that run.
+Treat Promptfoo configuration files and sources you configure to supply executable code as trusted code. Selecting a source of eval inputs authorizes the feature to process that content for its documented purpose. The feature's documented security restrictions apply each time it processes that content. Run untrusted configs, scripts, prompt packs, fixtures, datasets, providers, models, remote content, model-output feedback loops, or pull requests only when the run is isolated and secrets are scoped for that run.
 
-Promptfoo OSS is a local eval runner, not a sandbox for adversarial eval content. Adversarial data flowing through the configured template engine and eval pipeline (e.g., model output in grading prompts, variable values rendered through Nunjucks) is normal operation. However, if a code path outside the configured template engine or user-configured code-executing fields promotes runtime data to code, that is a vulnerability.
+Rendering input in an operator-configured template is expected, including when the operator interpolates that input into a field that executes code. Report a vulnerability if Promptfoo executes runtime data as code outside what the operator configured or bypasses a supported security control while processing that data.
 
-**In scope for OSS:** runtime data executed as code outside the configured template engine and code-executing fields; bypasses of documented isolation, access, or sharing controls; and data or credentials sent somewhere the user did not configure.
+A stall or crash is in scope when Promptfoo’s built-in processing consumes disproportionate resources while handling modest attacker-controlled input.
 
-**Out of scope for OSS:** adversarial eval content flowing through the configured template engine and eval pipeline; code execution from explicitly configured custom code or templates in fields that execute code; direct local API or browser access to the OSS local server (`promptfoo view`); and issues requiring users to run untrusted configs, scripts, prompt packs, fixtures, datasets, providers, models, remote content, or model-output feedback loops with local privileges.
+Report disclosures to a user, tenant, or destination the operator did not authorize to receive that data. Sensitive data confined to the same local account is generally a privacy or hardening issue. A documented redaction or exclusion rule, or one you configure using a supported setting, must still protect the data it covers wherever the feature says it applies.
 
 Code Scan does not sandbox repositories or guarantee complete findings. See the [repository security policy](https://github.com/promptfoo/promptfoo/blob/main/SECURITY.md#contributor-ci-and-automation-tooling) for report scope.
 
 When you share an eval, Promptfoo sends its snapshot to your Cloud organization, on-premises deployment, or configured self-hosted endpoint. Your account or config may also enable automatic sharing. A snapshot can include prompts, test vars, model outputs, grading results, traces, configuration, and media.
 
 Saved `PROMPTFOO_STRIP_*` settings remove their documented fields from eval results, exports, and shared snapshots, including shared traces. They do not disable sharing or redact arbitrary content in other fields. Failures of documented redactions or exclusions remain in scope.
-
-Sharing remains in scope if it bypasses a documented control, reaches the wrong destination, exposes another tenant's data, or includes fields or credentials the feature promises to protect. Data confined to your local account is a hardening or privacy issue unless a promised security or redaction control fails.
 
 ### Cloud Services
 
@@ -110,16 +108,16 @@ If you act in good faith and follow this policy, we will not pursue legal action
 
 ## Out-of-Scope
 
-The following are out-of-scope:
+The protections described above also apply when a configured feature processes untrusted input.
 
 - Code execution from explicitly configured custom code or templates in fields that execute code in OSS (expected behavior)
 - Direct local API access or browser access to the OSS local server (`promptfoo view`)
 - Adversarial eval content flowing through the configured template engine and eval pipeline (e.g., model output in grading prompts or reports)
 - Issues requiring users to run untrusted configs, scripts, prompt packs, fixtures, datasets, providers, models, remote content, or model-output feedback loops with local privileges
-- Data that remains in your own local logs, databases, caches, reports, exports, or views, unless a promised security or redaction control fails
-- Eval snapshots sent to their intended recipients while sharing is enabled. Sharing-control bypasses, failed documented redactions or exclusions, unauthorized access, cross-tenant disclosure, and exposed provider credentials remain in scope
+- Sensitive data present only in local logs, databases, caches, reports, exports, or UI views under the same local user account, when Promptfoo honors the security controls that apply to that data
 - Reports based only on spoofed `Origin` or `Sec-Fetch-Site` headers from non-browser clients
 - Social engineering, phishing, or physical attacks
+- Requests to extend best-effort detection of sensitive data beyond the documented or user-configured rules
 - Volumetric denial of service
 - Vulnerabilities in unsupported versions
 - Non-security bugs or feature requests

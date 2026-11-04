@@ -8,9 +8,9 @@ Promptfoo is a developer tool that runs in your environment with your user permi
 
 Some features intentionally execute user-provided code (custom assertions, custom or script-based providers, transforms, hooks, plugins, and templates in fields that execute code). This code execution is **not sandboxed** and should be treated the same way you would treat running a Node.js script locally.
 
-**The guiding principle:** Promptfoo OSS is a local eval runner, not a sandbox for adversarial eval content. If you explicitly run a config, or select/configure a provider, model, fixture, dataset, prompt pack, remote resource, model-output feedback loop, template, or field that Promptfoo evaluates as code, the result is your responsibility. Running evals against adversarial providers, models, fixtures, remote content, or model-output feedback loops carries inherent risk — use isolation and scoped credentials (see Hardening Recommendations). A vulnerability exists when behavior bypasses a supported isolation boundary or hardening control, affects Cloud/on-prem tenant isolation, or sends data or secrets to a destination the user did not configure for the selected eval, account, reporting, sharing, hosted-feature, or Cloud path.
+When you configure a feature to execute code from a source, you trust that source to supply code. When you select a data source or model as input, you authorize the feature to process its content for the documented purpose. The feature's documented security restrictions take precedence over the general trust placed in eval inputs and apply whenever Promptfoo processes or reuses those inputs.
 
-**Important:** Treat Promptfoo configuration files and everything they reference or evaluate against as **trusted code and data**. This includes referenced scripts, prompt packs, test fixtures or datasets, configured providers, models, remote content, and model-output feedback loops. Run untrusted configs, scripts, prompt packs, fixtures, datasets, providers, models, remote content, model-output feedback loops, or pull requests only when the run is isolated and secrets are scoped for that run.
+Promptfoo OSS provides no general sandbox for adversarial eval content. Run untrusted configs, scripts, prompt packs, fixtures, datasets, providers, models, remote content, model-output feedback loops, or pull requests only when the run is isolated and secrets are scoped for that run. A vulnerability exists when behavior bypasses a supported isolation boundary or hardening control, affects Cloud/on-prem tenant isolation, or sends data or secrets to a destination the user did not configure for the selected eval, account, reporting, sharing, hosted-feature, or Cloud path.
 
 ### Local Developer Interfaces
 
@@ -95,11 +95,11 @@ Sharing remains in scope if it bypasses a documented control, reaches the wrong 
 
 **Local artifacts and logs:**
 
-Promptfoo stores logs, caches, databases, traces, reports, and other local artifacts under your account. Keeping data there is not a security vulnerability by itself. A report is in scope if a promised redaction fails, authentication or authorization is bypassed, tenant isolation breaks, or the data reaches another user or tenant outside the configured sharing or Cloud path.
+Promptfoo stores local artifacts such as logs, cache entries, databases, trace data, media blobs, config snapshots, reports, and exported files under the user's local account. Sensitive data confined to that account is generally a privacy or hardening issue. Report it if Promptfoo bypasses an applicable security control, including a redaction or exclusion rule. Also report disclosures to a user, tenant, or destination the operator did not authorize to receive that data.
 
 Local caches, OAuth/token stores, provider response caches, temporary files, debug logs, report databases, and media/blob stores are scoped to the user's local Promptfoo environment. They are not isolation boundaries between different credentials, providers, endpoints, regions, tenants, accounts, evals, projects, or users running under the same local account unless Promptfoo documents such partitioning for a specific feature. Cache keys, token-store keys, and local artifact paths are not guaranteed to include provider identity, endpoint, region, tenant, account, credential, or project identity unless documented. Cache or token reuse, collision, overwrite, or lookup ambiguity within the same local user environment is generally treated as hardening or privacy behavior rather than a security-boundary bypass. Use separate operating-system users, containers, `PROMPTFOO_CONFIG_DIR` values, cache directories, token stores, and credentials when you need isolation between projects, tenants, or accounts.
 
-Shared and Cloud-backed reports include the data needed to inspect an eval, subject to its saved output-stripping settings. Keep secrets out of fields that are not documented as redacted.
+Shared or Cloud-backed reports may include the snapshot needed to view, reproduce, or inspect the result, including prompts, vars, outputs, traces, metadata, provider configuration fields, media/blob references, scan artifacts, and derived artifacts. Keep secrets out of shareable inputs. If a feature documents a redaction or exclusion rule, or you configure one using a supported setting, that rule must protect the data it covers wherever the feature says it applies. Automatic detection beyond those rules is best effort.
 
 Report files, Markdown, HTML, CSV, JSON, screenshots, and other exports are generated artifacts from the user's run. They may contain active markup, formulas, links, media, `data:` URLs, or provider-controlled text. Treat exported artifacts as untrusted when opening them in browsers, spreadsheets, terminals, or other tools.
 
@@ -174,7 +174,7 @@ A good report helps us triage and fix issues faster. Please include:
 We may close reports as one of the following:
 
 - **Invalid** — the reported behavior does not reproduce, depends on stale/nonexistent code, or relies on an unrealistic setup
-- **Out of scope** — the behavior matches the documented trust model or requires explicitly configured trusted code or eval content
+- **Out of scope** — the behavior falls within the documented trust model for the configured feature
 - **Duplicate** — the report is materially the same as an earlier advisory
 - **Already fixed** — the issue is valid but no longer affects the latest supported release
 
@@ -220,7 +220,7 @@ We request CVEs through GitHub Security Advisories when appropriate. Final advis
 
 **We usually request a CVE for:**
 
-- Code execution that bypasses a supported hardening control or isolation boundary outside the documented local eval pipeline
+- Code execution that bypasses a supported hardening control or isolation boundary
 - Bypasses of Cloud/on-prem isolation boundaries
 - Secret or credential leakage to destinations not configured to participate in the selected eval, account, reporting, sharing, hosted-feature, or Cloud path
 - Bypasses of documented sharing, redaction, tenant, access, or credential protections that expose secrets or sensitive eval data
@@ -233,6 +233,8 @@ We request CVEs through GitHub Security Advisories when appropriate. Final advis
 - Web UI XSS with demonstrable impact beyond self-XSS
 
 **We generally do not request a CVE for:**
+
+The entries about configured code and eval content below assume the feature honors its documented security restrictions.
 
 - Issues in explicitly configured custom code or templates in code-executing fields (e.g., JS/Python assertions, custom providers, transforms, hooks, plugins)
 - Adversarial eval content flowing through the configured template engine and eval pipeline (e.g., model output interpolated into grading prompts, `_conversation` history rendered or passed through built-in assertions/graders, values saved with `storeOutputAs` reused as later eval inputs, variable or file-reference values dereferenced by configured eval steps, or data passed to configured providers)
@@ -274,7 +276,7 @@ When a fix is released, we will:
 
 **In scope:**
 
-- Code execution, file access, network access, or secret exposure that bypasses a supported isolation boundary or hardening control outside the documented local eval pipeline
+- Code execution, file access, network access, or secret exposure that bypasses a supported isolation boundary or hardening control
 - Bypasses of documented restrictions or isolation boundaries
 - Data, secret, or credential leakage to destinations not configured to participate in the selected eval, account, reporting, sharing, hosted-feature, or Cloud path, or outside the documented payload for that path
 - Path traversal or arbitrary file read/write that escapes a documented sandbox, authentication/authorization boundary, Cloud/on-prem tenant boundary, or explicit path restriction that Promptfoo identifies as a security boundary
@@ -282,9 +284,11 @@ When a fix is released, we will:
 - Exposure of privileged local developer interfaces only when it bypasses an explicit authentication or authorization control documented for a remote or multi-user deployment
 - Bypasses of documented controls on sharing, redaction, tenant isolation, access, or credentials
 - Sensitive local artifacts that are uploaded, shared, served to other users, or exposed across Cloud/on-prem tenant boundaries outside the documented sharing or Cloud-backed behavior
-- Algorithmic complexity DoS affecting a supported service or isolation boundary (crafted input causing hang/crash with modest input size)
+- Algorithmic denial of service when Promptfoo’s built-in processing consumes disproportionate resources while handling modest attacker-controlled input, stalling or crashing a supported workflow
 
 **Out of scope:**
+
+The protections described above also apply when a configured feature processes untrusted input.
 
 - Code execution from **explicitly configured** custom code or templates in code-executing fields (e.g., JS/Python assertions, custom providers, transforms, hooks, plugins, `file://`-backed scripts)
 - Adversarial eval content flowing through the configured template engine, variable loading or reference dereferencing, built-in assertions, graders, providers, transforms, reports, or model-output feedback loops. This includes model outputs, `_conversation` history, grader outputs, fixture values, values saved with `storeOutputAs`, and other stored runtime values later rendered, dereferenced, or passed through configured eval pipeline steps
@@ -302,8 +306,9 @@ When a fix is released, we will:
 - Sensitive data in your own local logs, caches, databases, traces, reports, exports, or other artifacts. Reports remain in scope if a redaction promise fails, a security boundary is crossed, or data reaches another user or tenant outside the configured sharing or Cloud path
 - Local cache, provider response cache, OAuth/token-store, temporary-file, or artifact namespace reuse, collision, overwrite, or lookup ambiguity between credentials, providers, endpoints, regions, accounts, tenants, projects, or evals within the same local user environment, unless Promptfoo documents the namespace as an isolation boundary for that feature
 - Active content, formulas, links, media, `data:` URLs, or markup in local reports, shared reports, screenshots, CSV/JSON exports, Markdown/HTML renderers, citations, or viewer downloads generated from the user's eval data
-- Eval snapshots sent to their intended Cloud or self-hosted destination while sharing is enabled. Sharing-control bypasses, failed documented redactions or exclusions, unauthorized recipients, cross-tenant access, and exposed provider credentials remain in scope
-- Normal CI, Code Scan, and local agent behavior, including missed findings and checkout changes. Exposed runner credentials, compromised published artifacts, and broken tenant isolation remain in scope
+- Shared or Cloud-backed report snapshots containing prompts, vars, outputs, traces, metadata, provider configuration fields, media/blob references, scan artifacts, or derived artifacts, when shared with the intended recipients and within the feature’s documented payload, unless a redaction or exclusion rule applies to the data on that path
+- Requests to extend best-effort detection of sensitive data to names or formats outside the documented or user-configured rules
+- Repository workflows, example CI snippets, code-scan action configuration, package-manager behavior, local agent/editor automation, maintainer scripts, and other developer automation surfaces unless the issue affects Promptfoo-published packages, released product behavior, Cloud/on-prem tenant isolation, or a documented product security boundary
 - Reports based only on spoofed `Origin` or `Sec-Fetch-Site` headers from non-browser clients
 - Third-party dependency issues that don't materially affect Promptfoo's security posture (report upstream)
 - Social engineering, phishing, or physical attacks

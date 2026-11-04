@@ -18,9 +18,6 @@ import os
 import sys
 from types import ModuleType, SimpleNamespace
 
-settings = json.loads(sys.argv[2])
-observed = {}
-
 class LLM:
     def __init__(self, model, api_key=None):
         if settings.get("error") == "llm":
@@ -64,103 +61,108 @@ class Crew:
 crewai = ModuleType("crewai")
 crewai.LLM, crewai.Agent, crewai.Task, crewai.Crew = LLM, Agent, Task, Crew
 sys.modules["crewai"] = crewai
-spec = importlib.util.spec_from_file_location("recruitment_example", sys.argv[1])
-module = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(module)
-response = module.call_api("Find a Ruby engineer", {"config": settings.get("config", {})}, {})
-print(json.dumps({"response": response, "observed": observed}))
+results = []
+for case in json.loads(sys.argv[2]):
+    settings = case["settings"]
+    observed = {}
+    for key in ("OPENAI_API_KEY", "ANTHROPIC_API_KEY"):
+        os.environ.pop(key, None)
+    os.environ.update(case["credentials"])
+    spec = importlib.util.spec_from_file_location("recruitment_example", sys.argv[1])
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    response = module.call_api("Find a Ruby engineer", {"config": settings.get("config", {})}, {})
+    results.append({"response": response, "observed": observed})
+print(json.dumps(results))
 `;
 
+const cases = [
+  {
+    name: 'uses the default LLM and parses the crew output',
+    settings: { output: CANDIDATES },
+    credentials: { OPENAI_API_KEY: 'fixture-key' },
+    response: { output: CANDIDATES },
+    observed: {
+      model: 'openai/gpt-4.1',
+      api_key: 'fixture-key',
+      inputs: { job_requirements: 'Find a Ruby engineer' },
+    },
+  },
+  ...['openai/gpt-4.1-mini', 'custom-provider/team/model:release'].map((model) => ({
+    name: `forwards the configured model ${model} unchanged and parses a markdown string`,
+    settings: { config: { model }, output: CANDIDATES, result_type: 'string' },
+    credentials: { OPENAI_API_KEY: 'fixture-key' },
+    response: { output: CANDIDATES },
+    observed: expect.objectContaining({ model }),
+  })),
+  {
+    name: 'surfaces a kickoff failure as a provider error',
+    settings: { error: 'kickoff' },
+    credentials: { OPENAI_API_KEY: 'fixture-key' },
+    response: { error: 'An unexpected error occurred: fixture kickoff failed', raw: '' },
+    observed: expect.any(Object),
+  },
+  ...[undefined, 'fixture-openai-key'].map((openaiKey) => ({
+    name: `uses the configured provider credentials when the OpenAI key is ${openaiKey}`,
+    settings: { config: { model: 'anthropic/claude-sonnet-4-6' }, output: CANDIDATES },
+    credentials: { OPENAI_API_KEY: openaiKey, ANTHROPIC_API_KEY: 'fixture-anthropic-key' },
+    response: { output: CANDIDATES },
+    observed: {
+      model: 'anthropic/claude-sonnet-4-6',
+      api_key: 'fixture-anthropic-key',
+      inputs: { job_requirements: 'Find a Ruby engineer' },
+    },
+  })),
+  {
+    name: 'reports missing credentials for the default OpenAI model',
+    settings: { output: CANDIDATES },
+    credentials: {},
+    response: { error: expect.stringContaining('OPENAI_API_KEY') },
+    observed: {},
+  },
+  {
+    name: 'surfaces LLM initialization failures as provider errors',
+    settings: { error: 'llm' },
+    credentials: { OPENAI_API_KEY: 'fixture-key' },
+    response: { error: 'An error occurred in call_api: fixture LLM initialization failed' },
+    observed: {},
+  },
+];
+
 describe('integration-crewai example', () => {
-  let pythonPath: string;
+  let results: { response: unknown; observed: unknown }[];
 
   beforeAll(async () => {
     const configured = getConfiguredPythonPath();
-    pythonPath = await validatePythonPath(configured ?? 'python', Boolean(configured));
-  });
-
-  function runExample(
-    settings: Record<string, unknown>,
-    credentials: { OPENAI_API_KEY?: string; ANTHROPIC_API_KEY?: string } = {
-      OPENAI_API_KEY: 'fixture-key',
-    },
-  ) {
+    const pythonPath = await validatePythonPath(configured ?? 'python', Boolean(configured));
+    // Import Python's standard library once for the suite. Repeated cold starts can
+    // exceed the process deadline on busy Windows runners. Each case still imports
+    // a fresh example module and resets its credentials and recorded calls.
     const result = spawnSync(
       pythonPath,
-      ['-c', CHECK_EXAMPLE, EXAMPLE_PATH, JSON.stringify(settings)],
-      {
-        encoding: 'utf8',
-        env: {
-          ...process.env,
-          OPENAI_API_KEY: undefined,
-          ANTHROPIC_API_KEY: undefined,
-          ...credentials,
-          PYTHONDONTWRITEBYTECODE: '1',
-        },
-        timeout: 5000,
-      },
+      [
+        // The fixture supplies CrewAI itself; skip site packages and inherited Python settings.
+        '-I',
+        '-S',
+        '-B',
+        '-c',
+        CHECK_EXAMPLE,
+        EXAMPLE_PATH,
+        JSON.stringify(cases.map(({ settings, credentials }) => ({ settings, credentials }))),
+      ],
+      { encoding: 'utf8', timeout: 5000 },
     );
     expect(result.error).toBeUndefined();
     expect(result.status, result.stderr).toBe(0);
     expect(result.stderr).toBe('');
-    return JSON.parse(result.stdout);
-  }
-
-  it('uses the default LLM and parses the crew output', () => {
-    const result = runExample({ output: CANDIDATES });
-    expect(result.response).toEqual({ output: CANDIDATES });
-    expect(result.observed).toEqual({
-      model: 'openai/gpt-4.1',
-      api_key: 'fixture-key',
-      inputs: { job_requirements: 'Find a Ruby engineer' },
-    });
+    results = JSON.parse(result.stdout);
+    expect(results).toHaveLength(cases.length);
   });
 
-  it.each(['openai/gpt-4.1-mini', 'custom-provider/team/model:release'])(
-    'forwards the configured model %s unchanged and parses a markdown string',
-    (model) => {
-      const result = runExample({ config: { model }, output: CANDIDATES, result_type: 'string' });
-      expect(result.response).toEqual({ output: CANDIDATES });
-      expect(result.observed.model).toBe(model);
-    },
-  );
-
-  it('surfaces a kickoff failure as a provider error', () => {
-    const result = runExample({ error: 'kickoff' });
-    expect(result.response).toEqual({
-      error: 'An unexpected error occurred: fixture kickoff failed',
-      raw: '',
+  it.each(cases.map((testCase, index) => ({ ...testCase, index })))('$name', (testCase) => {
+    expect(results[testCase.index]).toEqual({
+      response: testCase.response,
+      observed: testCase.observed,
     });
-  });
-
-  it.each([undefined, 'fixture-openai-key'])(
-    'uses the configured provider credentials when the OpenAI key is %s',
-    (openaiKey) => {
-      const result = runExample(
-        { config: { model: 'anthropic/claude-sonnet-4-6' }, output: CANDIDATES },
-        { OPENAI_API_KEY: openaiKey, ANTHROPIC_API_KEY: 'fixture-anthropic-key' },
-      );
-      expect(result.response).toEqual({ output: CANDIDATES });
-      expect(result.observed).toEqual({
-        model: 'anthropic/claude-sonnet-4-6',
-        api_key: 'fixture-anthropic-key',
-        inputs: { job_requirements: 'Find a Ruby engineer' },
-      });
-    },
-  );
-
-  it('reports missing credentials for the default OpenAI model', () => {
-    const result = runExample({ output: CANDIDATES }, {});
-    expect(result.response.error).toContain('OPENAI_API_KEY');
-    expect(result.response).not.toHaveProperty('output');
-    expect(result.observed).toEqual({});
-  });
-
-  it('surfaces LLM initialization failures as provider errors', () => {
-    const result = runExample({ error: 'llm' });
-    expect(result.response).toEqual({
-      error: 'An error occurred in call_api: fixture LLM initialization failed',
-    });
-    expect(result.observed).toEqual({});
   });
 });
