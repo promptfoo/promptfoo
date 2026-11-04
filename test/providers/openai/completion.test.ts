@@ -4,6 +4,7 @@ import { disableCache, enableCache, fetchWithCache } from '../../../src/cache';
 import logger from '../../../src/logger';
 import { OpenAiCompletionProvider } from '../../../src/providers/openai/completion';
 import { mockProcessEnv } from '../../util/utils';
+import { createMockFetchResponse } from '../mockProviderResponses';
 import { getOpenAiMissingApiKeyMessage, restoreEnvVar } from './shared';
 
 vi.mock('../../../src/cache');
@@ -463,6 +464,24 @@ describe('OpenAI Provider', () => {
       expect(result.error).toContain('Network error');
     });
 
+    it.each([null, {}, { choices: [] }])(
+      'returns a clean error on a missing completion choice: %j',
+      async (data) => {
+        mockFetchWithCache.mockResolvedValue({
+          data,
+          cached: false,
+          status: 200,
+          statusText: 'OK',
+        });
+
+        const provider = new OpenAiCompletionProvider('text-davinci-003');
+        const result = await provider.callApi('Test prompt');
+
+        expect(result.error).toContain('Malformed response data');
+        expect(result.error).not.toContain('TypeError');
+      },
+    );
+
     it('should handle missing API key', async () => {
       // Save the original env var and clear it for this test
       const originalApiKey = process.env.OPENAI_API_KEY;
@@ -537,14 +556,11 @@ describe('OpenAI Provider', () => {
     });
 
     it('should handle responses without usage information', async () => {
-      mockFetchWithCache.mockResolvedValue({
-        data: {
+      mockFetchWithCache.mockResolvedValue(
+        createMockFetchResponse({
           choices: [{ text: 'Test output' }],
-        },
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      });
+        }),
+      );
 
       const provider = new OpenAiCompletionProvider('text-davinci-003');
       const result = await provider.callApi('Test prompt');
@@ -621,7 +637,7 @@ describe('OpenAI Provider', () => {
       const provider = new OpenAiCompletionProvider('text-davinci-003');
       const result = await provider.callApi('Test prompt');
 
-      expect(result.error).toMatch(/API error:/);
+      expect(result.error).toContain('Malformed response data');
     });
 
     it('should handle invalid OPENAI_STOP env var', async () => {
