@@ -350,7 +350,7 @@ For a runnable starting point, see the [`openai-compatible-gateway`](https://git
 
 Promptfoo checks `config.apiHost`, then `config.apiBaseUrl`, then the endpoint environment variables listed [below](#supported-environment-variables). `apiHost` constructs `https://<host>/v1`; use `apiBaseUrl` when you need a protocol, port, or custom path.
 
-Built-in OpenAI API requests include `X-OpenAI-Originator: promptfoo`. Override that value with `config.headers` if your integration needs a different originator. Custom headers also override the configured organization header.
+Built-in OpenAI API requests include `X-OpenAI-Originator: promptfoo`. Override that value with `config.headers` if your integration needs a different originator. Custom headers also override the configured organization header. An ambient `OPENAI_ORGANIZATION` is not forwarded to a gateway selected with `config.apiBaseUrl` or `config.apiHost`; set `config.organization` when that endpoint expects the header.
 
 </details>
 
@@ -370,6 +370,8 @@ Current standard rates in USD per million tokens, for requests with up to 272,00
 Above 272,000 input tokens, input, cached-input, and cache-write rates double; output rates increase by 50%. Batch and Flex cost half the standard rates. Fast mode (`fast` or `priority`) costs twice the standard rates. Regional processing adds 10%. GPT-6 Astra, Sol, and Luna support EU data residency only with Standard processing. Rates verified September 29, 2026; see [OpenAI pricing](https://developers.openai.com/api/docs/pricing).
 
 For Chat Completions and Responses, set `inputCost` and `outputCost` to override rates in **dollars per token**, not per million tokens. For audio, use `audioInputCost` and `audioOutputCost`. The older `cost` and `audioCost` options are shared input/output fallbacks. These settings affect Promptfoo's estimates, not API billing.
+
+These overrides also apply to models that are absent from Promptfoo's pricing catalog, such as a custom or third-party model served through an OpenAI-compatible `apiBaseUrl`. The cost is then derived entirely from the rates you supply, so every token side that was actually used needs one: a request that reports both prompt and completion tokens needs `inputCost` and `outputCost` (or a shared `cost`), while a side that reports zero tokens does not. Promptfoo reports no cost for an uncatalogued model when the response includes audio tokens without the matching `audioInputCost`, `audioOutputCost`, or shared `audioCost`. Image tokens get no cost when both text rates are set; with a single text rate they are counted as text at that rate.
 
 Cost estimates follow the published rates for the selected model, service tier, and region. GPT-5.6 costs remain unset when cache-write usage is missing. GPT-5.5 Pro Batch and Flex costs above 272,000 input tokens also remain unset because OpenAI has not published those rates. Fine-tuned models use their published fine-tuned inference rates; Promptfoo does not infer Flex or Fast discounts for them.
 
@@ -1096,7 +1098,7 @@ Prefer provider configuration when comparing different settings in the same eval
 | Variable                       | Behavior                                                                                                                        |
 | ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------- |
 | `OPENAI_API_KEY`               | Default API key                                                                                                                 |
-| `OPENAI_ORGANIZATION`          | Organization ID                                                                                                                 |
+| `OPENAI_ORGANIZATION`          | Organization ID. Not sent to a `config.apiBaseUrl`/`config.apiHost` endpoint unless `config.organization` is set                |
 | `OPENAI_API_HOST`              | Constructs `https://<host>/v1`; checked before base URL environment variables                                                   |
 | `OPENAI_API_BASE_URL`          | Full base URL; preferred over `OPENAI_BASE_URL` at the same environment level                                                   |
 | `OPENAI_BASE_URL`              | Alternate full base URL                                                                                                         |

@@ -61,6 +61,7 @@ providers:
 | [Databricks](./databricks.md)                           | Databricks Foundation Model APIs                                 | `databricks:databricks-meta-llama-3-3-70b-instruct`                                                                   |
 | [DeepSeek](./deepseek.md)                               | DeepSeek's language models                                       | `deepseek:deepseek-flash`                                                                                             |
 | [Docker Model Runner](./docker.md)                      | Evaluate with local models                                       | `docker:ai/llama3.2:3B-Q4_K_M`                                                                                        |
+| [EmpirioLabs AI](./empiriolabs.md)                      | Specialized AI inference and integration provider                | `openai:chat:qwen3-7-plus` with `apiBaseUrl`                                                                          |
 | [Envoy AI Gateway](./envoy.md)                          | OpenAI-compatible AI Gateway proxy                               | `envoy:my-model`                                                                                                      |
 | [ElevenLabs](./elevenlabs.md)                           | Speech, transcription, agents, and audio utilities               | `elevenlabs:tts`, `elevenlabs:stt`, `elevenlabs:agents`                                                               |
 | [F5](./f5.md)                                           | OpenAI-compatible AI Gateway interface                           | `f5:path-name`                                                                                                        |
@@ -201,8 +202,8 @@ provider `env`, evaluation `env`, `--env-file`, then shell variables. Explicit p
 
 ### Overriding Pricing
 
-For providers with built-in token pricing, you can override promptfoo's cost estimates in
-`config`:
+You can override promptfoo's cost estimates in `config`, including for models that have no
+built-in pricing entry:
 
 ```yaml
 providers:
