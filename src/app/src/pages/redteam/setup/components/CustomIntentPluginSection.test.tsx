@@ -1,7 +1,8 @@
 import { mockBrowserProperty } from '@app/tests/browserMocks';
+import { restoreTestTimers, useTestTimers } from '@app/tests/timers';
 import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import CustomIntentPluginSection from './CustomIntentPluginSection';
 
 // Mock the CSV parser
@@ -21,6 +22,11 @@ vi.mock('../hooks/useRedTeamConfig', () => ({
 const mockReadAsText = vi.fn();
 
 describe('CustomIntentPluginSection', () => {
+  afterEach(() => {
+    restoreTestTimers();
+    vi.restoreAllMocks();
+  });
+
   const defaultConfig = {
     plugins: [],
     updatePlugins: mockUpdatePlugins,
@@ -179,44 +185,56 @@ describe('CustomIntentPluginSection', () => {
       ).toBeInTheDocument();
     });
 
-    it('clears all intents when confirmed', async () => {
-      const user = userEvent.setup();
+    it('clears saved intents when confirmed and preserves other plugins', async () => {
+      const timers = useTestTimers();
+      const user = userEvent.setup({ advanceTimers: timers.advanceBy });
       mockUseRedTeamConfig.mockReturnValue({
-        config: configWithIntents,
+        config: { plugins: [...configWithIntents.plugins, 'harmful:hate'] },
         updatePlugins: mockUpdatePlugins,
       });
-
       render(<CustomIntentPluginSection />);
-
-      const clearAllButton = screen.getByText('Clear All');
-      await user.click(clearAllButton);
-
-      const confirmButton = screen.getByRole('button', { name: 'Clear All' });
-      await user.click(confirmButton);
-
-      await waitFor(() => {
-        expect(screen.queryByText('Clear All Intents')).not.toBeInTheDocument();
+      for (const getButton of [
+        () => screen.getByText('Clear All'),
+        () => screen.getByRole('button', { name: 'Clear All' }),
+      ]) {
+        await act(async () => {
+          const click = user.click(getButton());
+          await timers.advanceByAsync(0);
+          await click;
+        });
+      }
+      expect(screen.queryByText('Clear All Intents')).not.toBeInTheDocument();
+      expect(screen.getAllByRole('textbox')).toHaveLength(1);
+      expect(screen.getByRole('textbox')).toHaveValue('');
+      await act(async () => {
+        await timers.advanceByAsync(1000);
       });
+      expect(mockUpdatePlugins).toHaveBeenCalledExactlyOnceWith(['harmful:hate']);
     });
 
-    it('cancels clear operation when Cancel is clicked', async () => {
-      const user = userEvent.setup();
+    it('preserves all intents without updating plugins when canceled', async () => {
+      const timers = useTestTimers();
+      const user = userEvent.setup({ advanceTimers: timers.advanceBy });
       mockUseRedTeamConfig.mockReturnValue({
         config: configWithIntents,
         updatePlugins: mockUpdatePlugins,
       });
-
       render(<CustomIntentPluginSection />);
-
-      const clearAllButton = screen.getByText('Clear All');
-      await user.click(clearAllButton);
-
-      const cancelButton = screen.getByText('Cancel');
-      await user.click(cancelButton);
-
-      await waitFor(() => {
-        expect(screen.queryByText('Clear All Intents')).not.toBeInTheDocument();
+      for (const label of ['Clear All', 'Cancel']) {
+        await act(async () => {
+          const click = user.click(screen.getByText(label));
+          await timers.advanceByAsync(0);
+          await click;
+        });
+      }
+      await act(async () => {
+        await timers.advanceByAsync(1000);
       });
+      expect(screen.queryByText('Clear All Intents')).not.toBeInTheDocument();
+      expect(
+        screen.getAllByRole('textbox').map((input) => (input as HTMLInputElement).value),
+      ).toEqual(['Intent 1', 'Intent 2', 'Intent 3']);
+      expect(mockUpdatePlugins).not.toHaveBeenCalled();
     });
   });
 
@@ -365,35 +383,6 @@ describe('CustomIntentPluginSection', () => {
       } finally {
         setTimeoutSpy.mockRestore();
       }
-    });
-
-    it('shows clear all confirmation dialog', async () => {
-      const user = userEvent.setup();
-      mockUseRedTeamConfig.mockReturnValue({
-        config: configWithIntents,
-        updatePlugins: mockUpdatePlugins,
-      });
-
-      render(<CustomIntentPluginSection />);
-
-      // Clear all intents
-      const clearAllButton = screen.getByText('Clear All');
-      await user.click(clearAllButton);
-
-      // Should show dialog
-      expect(screen.getByText('Clear All Intents')).toBeInTheDocument();
-      expect(
-        screen.getByText(
-          'Are you sure you want to clear all intents? This action cannot be undone.',
-        ),
-      ).toBeInTheDocument();
-
-      const confirmButton = screen.getByRole('button', { name: 'Clear All' });
-      await user.click(confirmButton);
-
-      await waitFor(() => {
-        expect(screen.queryByText('Clear All Intents')).not.toBeInTheDocument();
-      });
     });
   });
 });
