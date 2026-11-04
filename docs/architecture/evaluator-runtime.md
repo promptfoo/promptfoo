@@ -9,9 +9,9 @@ The evaluator separates row execution, suite orchestration, and runtime composit
 | `src/node/evaluateTestSuite.ts` | Supply the default Node runtime for the existing three-argument evaluator API. |
 | `src/evaluator/index.ts`        | Preserve the established source exports and overloads.                         |
 
-Terminal progress rendering and log coordination live in
-`src/progress/evaluationProgress.ts`. The compatibility facade preserves the existing
-progress manager and variable-formatting exports.
+The Node progress bar lives in `src/node/evaluatorProgress.ts`. Comparison reporting and
+variable formatting live in `src/evaluator/progress.ts`. The evaluator exports the progress
+bar and formatter through `src/progress/evaluationProgress.ts`.
 
 The public `promptfoo.evaluate()` API continues to resolve configuration through
 Node composition and return an `Eval` record, including its summary and persistence
