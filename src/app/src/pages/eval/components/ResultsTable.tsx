@@ -19,13 +19,13 @@ import { callApi } from '@app/utils/api';
 import { formatDuration } from '@app/utils/date';
 import {
   getMediaRefreshKey,
+  isMediaRef,
   markMediaLoadFailed,
   markMediaLoadSucceeded,
   normalizeMediaText,
   resolveAudioSource,
   resolveImageSource,
 } from '@app/utils/media';
-import { getActualPrompt } from '@app/utils/providerResponse';
 import {
   getIncurredTokenAccounting,
   getPrimaryTokenUsageLabel,
@@ -41,8 +41,9 @@ import {
   type ProviderOptions,
   type Vars,
 } from '@promptfoo/types';
-import { EVAL_TABLE_MAX_PAGE_SIZE } from '@promptfoo/types/api/eval';
+import { EVAL_TABLE_MAX_PAGE_SIZE } from '@promptfoo/types/evalConstants';
 import invariant from '@promptfoo/util/invariant';
+import { getActualPrompt } from '@promptfoo/util/providerResponse';
 import {
   createColumnHelper,
   flexRender,
@@ -60,6 +61,7 @@ import { ProviderDisplay } from './ProviderDisplay';
 import { type ProviderDef } from './providerConfig';
 import { useResultsViewSettingsStore, useTableStore } from './store';
 import TruncatedText from './TruncatedText';
+import { useHeaderCollapse } from './useHeaderCollapse';
 import VariableMarkdownCell from './VariableMarkdownCell';
 import type {
   Cell,
@@ -74,7 +76,6 @@ import type { TruncatedTextProps } from './TruncatedText';
 import './ResultsTable.css';
 
 import { NumberInput } from '@app/components/ui/number-input';
-import { isBlobRef, isStorageRef } from '@app/utils/mediaStorage';
 import { isEncodingStrategy } from '@promptfoo/redteam/constants/strategies';
 import { useMetricsGetter, usePassingTestCounts, usePassRates, useTestCounts } from './hooks';
 import {
@@ -329,7 +330,7 @@ function renderMediaVariableCell({
 
   const { type: mediaType, format = '' } = mediaMetadata;
   const normalizedValue = normalizeMediaText(value, evaluationId);
-  const isRefValue = isBlobRef(value) || isStorageRef(value);
+  const isRefValue = isMediaRef(value);
   const audioSource =
     mediaType === 'audio'
       ? resolveAudioSource(
@@ -448,14 +449,10 @@ function renderDecodedVariableCell({
 
   const isAudioContent =
     strategyId === 'audio' ||
-    (typeof value === 'string' &&
-      (isStorageRef(value) || isBlobRef(value)) &&
-      MEDIA_MIME_PATTERNS.audio.test(value));
+    (typeof value === 'string' && isMediaRef(value) && MEDIA_MIME_PATTERNS.audio.test(value));
   const isImageContent =
     strategyId === 'image' ||
-    (typeof value === 'string' &&
-      (isStorageRef(value) || isBlobRef(value)) &&
-      MEDIA_MIME_PATTERNS.image.test(value));
+    (typeof value === 'string' && isMediaRef(value) && MEDIA_MIME_PATTERNS.image.test(value));
 
   return (
     <div className="cell" data-capture="true">
@@ -465,7 +462,7 @@ function renderDecodedVariableCell({
         </div>
       ) : isImageContent ? (
         <div>
-          {typeof value === 'string' && (isStorageRef(value) || isBlobRef(value)) ? (
+          {typeof value === 'string' && isMediaRef(value) ? (
             <span className="text-xs text-muted-foreground">
               Image preview not yet supported for storage refs
             </span>
@@ -1463,7 +1460,7 @@ function renderResultsTableCell({
   lightboxImage: string | null;
   toggleLightbox: (url?: string) => void;
 }): React.ReactNode {
-  const columnId = String(cell.column.id);
+  const columnId = cell.column.id;
   const isMetadataCol = isMetadataColumn(columnId);
   const renderedCellContent = flexRender(cell.column.columnDef.cell, cell.getContext());
   const value = cell.getValue();
@@ -1621,12 +1618,16 @@ function ResultsTableHeader({
   hasMinimalScrollRoom: boolean;
   zoom: number;
 }) {
+  const collapsed = useHeaderCollapse(stickyHeader);
+
   return (
     <div
       data-testid="results-table-header"
+      data-header-collapsed={collapsed}
       className={cn(
-        'relative -mx-4 overflow-hidden px-4',
+        'relative -mx-4 overflow-hidden border-t border-border',
         stickyHeader && 'results-table-sticky',
+        stickyHeader && collapsed !== undefined && 'results-table-scroll-fallback',
         hasMinimalScrollRoom && 'minimal-scroll-room',
       )}
     >
@@ -1635,7 +1636,7 @@ function ResultsTableHeader({
           type="button"
           onClick={() => setStickyHeader(false)}
           aria-label="Dismiss sticky header"
-          className="p-1.5 rounded hover:bg-muted hover:text-foreground transition-colors"
+          className="inline-flex size-7 cursor-pointer items-center justify-center rounded-md bg-muted text-muted-foreground transition-colors hover:bg-foreground/10 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
           <X className="size-4" />
         </button>
@@ -1643,7 +1644,7 @@ function ResultsTableHeader({
       <div
         ref={headerScrollRef}
         data-testid="results-table-header-scroll-container"
-        className="overflow-x-auto overflow-y-hidden overscroll-x-contain"
+        className="overflow-x-auto overflow-y-hidden overscroll-x-contain px-4"
       >
         <table
           className={`results-table results-table-header-table firefox-fix ${

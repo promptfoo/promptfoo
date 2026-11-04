@@ -43,31 +43,34 @@ describe('optional OpenAI Agents modules', () => {
   it('explains co-installation before importing a module when the SDK is absent', async () => {
     const load = vi.fn();
     await expect(loadOpenAiAgentsModule(load)).rejects.toThrow(
-      'npm install promptfoo @openai/agents@^0.11.8',
+      'npm install promptfoo @openai/agents@^0.14.1',
+    );
+    await expect(loadOpenAiAgentsModule(load)).rejects.toThrow(
+      'npm install -g promptfoo @openai/agents@^0.14.1',
     );
     expect(load).not.toHaveBeenCalled();
   });
 
-  it.each(['0.10.0', '0.11.7', '0.12.0', '0.18.0', 'invalid', undefined])(
+  it.each(['0.11.8', '0.14.0', '0.15.0', '0.18.0', 'invalid', undefined])(
     'rejects unsupported SDK metadata %j before importing a module',
     async (version) => {
       installFixture(version);
       const load = vi.fn();
       await expect(loadOpenAiAgentsModule(load)).rejects.toThrow(
-        `require @openai/agents@^0.11.8 (found ${version ?? 'unknown'})`,
+        `require @openai/agents@^0.14.1 (found ${version ?? 'unknown'})`,
       );
       expect(load).not.toHaveBeenCalled();
     },
   );
 
   it('loads the module for a compatible SDK with restricted package metadata exports', async () => {
-    installFixture('0.11.123');
+    installFixture('0.14.123');
     const module = { loadTools: vi.fn() };
     await expect(loadOpenAiAgentsModule(async () => module)).resolves.toBe(module);
   });
 
   it("checks Promptfoo's SDK instead of an unrelated current-directory installation", async () => {
-    installFixture('0.11.123');
+    installFixture('0.14.123');
     const unrelatedDirectory = path.join(directory, 'another-project');
     const unrelatedSdk = path.join(unrelatedDirectory, 'node_modules/@openai/agents');
     fs.mkdirSync(unrelatedSdk, { recursive: true });
@@ -85,13 +88,13 @@ describe('optional OpenAI Agents modules', () => {
   });
 
   it('preserves malformed metadata errors instead of reporting a missing SDK', async () => {
-    const sdkDirectory = installFixture('0.11.123');
+    const sdkDirectory = installFixture('0.14.123');
     fs.writeFileSync(path.join(sdkDirectory, 'dist/package.json'), '{');
     await expect(loadOpenAiAgentsModule(vi.fn())).rejects.toThrow(SyntaxError);
   });
 
   it('explains an SDK that becomes unavailable while loading the feature module', async () => {
-    installFixture('0.11.123');
+    installFixture('0.14.123');
     const error = Object.assign(new Error("Cannot find package '@openai/agents'"), {
       code: 'ERR_MODULE_NOT_FOUND',
     });
@@ -99,7 +102,7 @@ describe('optional OpenAI Agents modules', () => {
       loadOpenAiAgentsModule(async () => {
         throw error;
       }),
-    ).rejects.toThrow('npm install promptfoo @openai/agents@^0.11.8');
+    ).rejects.toThrow('npm install promptfoo @openai/agents@^0.14.1');
   });
 
   it.each([
@@ -108,7 +111,7 @@ describe('optional OpenAI Agents modules', () => {
     ),
     new Error('Invalid agent configuration'),
   ])('preserves other feature loading errors', async (error) => {
-    installFixture('0.11.123');
+    installFixture('0.14.123');
     await expect(
       loadOpenAiAgentsModule(async () => {
         throw error;

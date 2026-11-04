@@ -145,7 +145,7 @@ export type BlobLike =
     };
 
 function normalizePath(path: string): string {
-  return path.replace(/^\//, '');
+  return path.replace(/^\/+/, '');
 }
 
 function withApiBase(apiPath: string): string {
@@ -179,6 +179,15 @@ function resolveMediaUrl(url?: string | null, evaluationId?: string): string | u
   return undefined;
 }
 
+export function isMediaRef(
+  value: unknown,
+): value is `${typeof BLOB_URI_PREFIX}${string}` | `${typeof STORAGE_REF_PREFIX}${string}` {
+  return (
+    typeof value === 'string' &&
+    (value.startsWith(BLOB_URI_PREFIX) || value.startsWith(STORAGE_REF_PREFIX))
+  );
+}
+
 export function resolveBlobUri(uri?: string | null, evaluationId?: string): string | undefined {
   if (!uri) {
     return undefined;
@@ -199,13 +208,16 @@ export function resolveBlobUri(uri?: string | null, evaluationId?: string): stri
       : undefined;
   if (blobPrefix) {
     const hash = blobPath.slice(blobPrefix.length).split(/[?#]/, 1)[0];
+    if (!hash || /^\/+$/u.test(hash)) {
+      return undefined;
+    }
     const query = evaluationId ? `?evalId=${encodeURIComponent(evaluationId)}` : '';
     return withApiBase(`/api/blobs/${encodeURIComponent(hash)}${query}`);
   }
 
   if (uri.startsWith(STORAGE_REF_PREFIX)) {
     const path = normalizePath(uri.slice(STORAGE_REF_PREFIX.length));
-    return withApiBase(`/api/media/${path}`);
+    return path ? withApiBase(`/api/media/${path}`) : undefined;
   }
 
   // Only allow safe internal paths and data URIs
