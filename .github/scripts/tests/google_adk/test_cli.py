@@ -247,6 +247,8 @@ class GoogleAdkCliTest(unittest.TestCase):
                     env[proxy] = env[proxy.lower()] = ""
                 env["NO_PROXY"] = env["no_proxy"] = "*"
                 env.update(
+                    # Preserve the original configs' span names and tool-argument assertions.
+                    ADK_TELEMETRY_SCHEMA_VERSION_OPT_IN="1",
                     GOOGLE_API_KEY="local-test-key",
                     ADK_MODEL=(
                         "gemini-2.5-flash"
@@ -350,7 +352,9 @@ class GoogleAdkCliTest(unittest.TestCase):
                                 )
                             print(f"ADK {backend} {name}: {failure} rejected")
                             continue
-                        self.assertEqual(process.returncode, 0, log)
+                        self.assertEqual(
+                            process.returncode, 0, f"{log}\n{row['gradingResult']}"
+                        )
                         self.assertEqual(data["stats"]["successes"], 1)
                         self.assertEqual(data["stats"]["failures"], 0)
                         self.assertEqual(data["stats"]["errors"], 0)
