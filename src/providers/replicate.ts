@@ -10,24 +10,25 @@ import {
 import { getEnvFloat, getEnvInt, getEnvString } from '../envars';
 import logger from '../logger';
 import { getRequestTimeoutMs } from '../providers/shared';
-import { type GenAISpanContext, type GenAISpanResult, withGenAISpan } from '../tracing/genaiTracer';
-import {
-  type ApiModerationProvider,
-  type ApiProvider,
-  type CallApiContextParams,
-  type CallApiOptionsParams,
-  inheritProviderCapabilities,
-  type ModerationFlag,
-  type ProviderModerationResponse,
-  type ProviderResponse,
-} from '../types/providers';
+import { extractGenAIResponse, type GenAISpanContext, withGenAISpan } from '../tracing/genaiTracer';
+import { inheritProviderCapabilities } from '../types/providers';
 import { safeJsonStringify } from '../util/json';
 import { ellipsize } from '../util/text';
 import { sleep, sleepWithAbort } from '../util/time';
 import { createEmptyTokenUsage } from '../util/tokenUsageUtils';
+import { resolveProviderApiKey } from './credentials';
 import { parseChatPrompt } from './shared';
 
 import type { EnvOverrides } from '../types/env';
+import type {
+  ApiModerationProvider,
+  ApiProvider,
+  CallApiContextParams,
+  CallApiOptionsParams,
+  ModerationFlag,
+  ProviderModerationResponse,
+  ProviderResponse,
+} from '../types/index';
 
 interface ReplicateCompletionOptions {
   apiKey?: string;
@@ -251,12 +252,12 @@ export class ReplicateProvider implements ApiProvider {
     const { config, id, env } = options;
     const { apiKey, ...restConfig } = config ?? {};
     this.modelName = modelName;
-    this.apiKey =
-      apiKey ||
-      env?.REPLICATE_API_KEY ||
-      env?.REPLICATE_API_TOKEN ||
-      getEnvString('REPLICATE_API_TOKEN') ||
-      getEnvString('REPLICATE_API_KEY');
+    this.apiKey = resolveProviderApiKey(
+      { apiKey },
+      env,
+      ['REPLICATE_API_KEY', 'REPLICATE_API_TOKEN'],
+      ['REPLICATE_API_TOKEN', 'REPLICATE_API_KEY'],
+    );
     this.config = restConfig;
     this.id = id ? () => id : this.id;
   }
@@ -298,24 +299,11 @@ export class ReplicateProvider implements ApiProvider {
       traceparent: context?.traceparent,
     };
 
-    // Result extractor to set response attributes on the span
-    const resultExtractor = (response: ProviderResponse): GenAISpanResult => {
-      const result: GenAISpanResult = {};
-      if (response.tokenUsage) {
-        result.tokenUsage = {
-          prompt: response.tokenUsage.prompt,
-          completion: response.tokenUsage.completion,
-          total: response.tokenUsage.total,
-        };
-      }
-      return result;
-    };
-
     return withPredictionLease((retain) =>
       withGenAISpan(
         spanContext,
         () => this.callApiInternal(prompt, options, retain),
-        resultExtractor,
+        extractGenAIResponse,
       ),
     );
   }
@@ -549,7 +537,6 @@ export class ReplicateModerationProvider
   readonly promptfooCapabilities = inheritProviderCapabilities(
     ReplicateModerationProvider.declaredProviderCapabilities,
   );
-
   async callModerationApi(
     prompt: string,
     assistant: string,
@@ -617,14 +604,6 @@ export class ReplicateModerationProvider
     }
   }
 }
-
-// LlamaGuard 4 is the preferred default on Replicate
-// LlamaGuard 4 adds S14: Code Interpreter Abuse category for enhanced safety
-export const LLAMAGUARD_4_MODEL_ID = 'meta/llama-guard-4-12b';
-
-export const DefaultModerationProvider = new ReplicateModerationProvider(
-  LLAMAGUARD_4_MODEL_ID, // Using LlamaGuard 4 as the default
-);
 
 export class ReplicateImageProvider extends ReplicateProvider {
   constructor(

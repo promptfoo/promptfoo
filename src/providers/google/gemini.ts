@@ -1,5 +1,3 @@
-import { maybeLoadFromExternalFile } from '../../util/file';
-import { renderVarsInObject } from '../../util/index';
 import {
   formatCandidateContents,
   geminiFormatAndSystemInstructions,
@@ -9,37 +7,36 @@ import {
   mergeGoogleRequestTools,
   mergeParts,
   normalizeGoogleServiceTier,
-  normalizeSafetySettings,
-  removeDeprecatedGeminiGenerationParams,
   removeGoogleFunctionDeclarations,
   resolveGoogleToolConfig,
 } from './util';
 
 import type { CallApiContextParams, ProviderResponse, TokenUsage } from '../../types/index';
-import type { CompletionOptions, Tool } from './types';
+import type { GoogleProviderConfig, Tool } from './types';
 import type { GeminiApiResponse, GeminiResponseData } from './util';
 
 type GeminiFacade = 'ai-studio' | 'vertex';
 
-/** Build Gemini requests while preserving each provider's wire format. */
+/** Resolve the common inputs before each provider builds its transport-specific request. */
 export async function prepareGeminiRequest(
-  modelName: string,
-  providerConfig: CompletionOptions,
+  providerConfig: GoogleProviderConfig,
   prompt: string,
   context: CallApiContextParams | undefined,
-  facade: GeminiFacade,
   getTools: (options: { skipExecutableToolFiles: boolean }) => Promise<Tool[]>,
 ) {
-  const config = mergeGoogleCompletionOptions(
-    providerConfig,
-    context?.prompt?.config as Partial<CompletionOptions> | undefined,
-  );
+  const promptConfig = context?.prompt?.config as Partial<GoogleProviderConfig> | undefined;
+  const config = mergeGoogleCompletionOptions(providerConfig, promptConfig);
+  const promptBasePath = promptConfig?.basePath ?? providerConfig.basePath;
 
   const { contents, systemInstruction } = geminiFormatAndSystemInstructions(
     prompt,
     context?.vars,
     config.systemInstruction,
-    { useAssistantRole: config.useAssistantRole },
+    {
+      basePath:
+        promptConfig?.systemInstruction === undefined ? providerConfig.basePath : promptBasePath,
+      useAssistantRole: config.useAssistantRole,
+    },
   );
 
   const { toolConfig, toolsDisabled } = resolveGoogleToolConfig(config);
@@ -51,86 +48,34 @@ export async function prepareGeminiRequest(
     service_tier: passthroughServiceTier,
     serviceTier: camelCasePassthroughServiceTier,
     tools: passthroughTools,
+    // resolveGoogleToolConfig already folds these in; keeping them in the raw spread would
+    // let a conflicting passthrough mode overwrite a resolved NONE, so the request would
+    // carry mode ANY with the declarations already stripped.
     toolConfig: _passthroughToolConfig,
     tool_config: _passthroughToolConfigSnakeCase,
     ...passthrough
   } = config.passthrough || {};
-  const vertexMode = facade === 'vertex';
   const serviceTier = normalizeGoogleServiceTier(
     passthroughServiceTier ?? camelCasePassthroughServiceTier ?? config.service_tier,
-    vertexMode,
   );
-  const serviceTierField = vertexMode ? 'serviceTier' : 'service_tier';
   const requestPassthroughTools =
     toolsDisabled && passthroughTools !== undefined
       ? removeGoogleFunctionDeclarations(passthroughTools)
       : passthroughTools;
-
   const mergedTools = mergeGoogleRequestTools(requestTools, requestPassthroughTools);
 
-  const body: Record<string, any> = {
+  return {
+    config,
+    promptConfig,
+    promptBasePath,
     contents,
-    generationConfig: {
-      ...(facade === 'vertex'
-        ? {
-            context: config.context,
-            examples: config.examples,
-            stopSequences: config.stopSequences,
-            temperature: config.temperature,
-            maxOutputTokens: config.maxOutputTokens,
-            topP: config.topP,
-            topK: config.topK,
-          }
-        : {
-            ...(config.temperature !== undefined && { temperature: config.temperature }),
-            ...(config.topP !== undefined && { topP: config.topP }),
-            ...(config.topK !== undefined && { topK: config.topK }),
-            ...(config.stopSequences !== undefined && { stopSequences: config.stopSequences }),
-            ...(config.maxOutputTokens !== undefined && {
-              maxOutputTokens: config.maxOutputTokens,
-            }),
-          }),
-      ...config.generationConfig,
-      ...(modelName.includes('-tts') && {
-        response_modalities: undefined,
-        responseModalities: config.generationConfig?.responseModalities ??
-          config.generationConfig?.response_modalities?.map((modality) =>
-            modality.toUpperCase(),
-          ) ?? ['AUDIO'],
-        speechConfig: config.generationConfig?.speechConfig ?? {
-          voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Kore' } },
-        },
-      }),
-    },
-    ...(facade === 'vertex'
-      ? config.safetySettings !== undefined && {
-          safetySettings: normalizeSafetySettings(config.safetySettings),
-        }
-      : { safetySettings: normalizeSafetySettings(config.safetySettings) }),
-    ...(toolConfig ? { toolConfig } : {}),
-    ...(mergedTools ? { tools: mergedTools } : {}),
-    ...(systemInstruction
-      ? { [vertexMode ? 'systemInstruction' : 'system_instruction']: systemInstruction }
-      : {}),
-    ...(serviceTier ? { [serviceTierField]: serviceTier } : {}),
-    ...passthrough,
-    ...(facade === 'vertex' &&
-      config.modelArmor &&
-      (config.modelArmor.promptTemplate || config.modelArmor.responseTemplate) && {
-        model_armor_config: {
-          ...(config.modelArmor.promptTemplate && {
-            prompt_template_name: config.modelArmor.promptTemplate,
-          }),
-          ...(config.modelArmor.responseTemplate && {
-            response_template_name: config.modelArmor.responseTemplate,
-          }),
-        },
-      }),
+    systemInstruction,
+    toolConfig,
+    toolsDisabled,
+    passthrough,
+    serviceTier,
+    mergedTools,
   };
-  body.generationConfig = removeDeprecatedGeminiGenerationParams(modelName, body.generationConfig);
-
-  applyResponseSchema(body, config, context, facade);
-  return { body, config, toolsDisabled };
 }
 
 type GeminiContent =
@@ -216,7 +161,6 @@ function getBlockedTokenUsage(datum: GeminiResponseData): TokenUsage {
 /** Preserve each provider's token accounting, including missing counts. */
 export function getGeminiTokenUsage(
   usage: GeminiResponseData['usageMetadata'],
-  cached: boolean,
   facade: GeminiFacade,
 ): TokenUsage {
   const reasoning =
@@ -229,14 +173,6 @@ export function getGeminiTokenUsage(
             rejectedPrediction: 0,
           },
         };
-  if (cached) {
-    return {
-      cached: usage?.totalTokenCount,
-      total: usage?.totalTokenCount,
-      numRequests: 1,
-      ...reasoning,
-    };
-  }
   const legacyVertex = facade === 'vertex';
   return {
     prompt:
@@ -306,38 +242,4 @@ function getCandidateFailure(
     return { error: `Finish reason ${current.finishReason}: ${JSON.stringify(data)}` };
   }
   return undefined;
-}
-
-function applyResponseSchema(
-  body: Record<string, any>,
-  config: CompletionOptions,
-  context: CallApiContextParams | undefined,
-  facade: GeminiFacade,
-): void {
-  if (config.responseSchema) {
-    if (body.generationConfig.response_schema) {
-      throw new Error(
-        '`responseSchema` provided but `generationConfig.response_schema` already set.',
-      );
-    }
-
-    let schema = maybeLoadFromExternalFile(
-      renderVarsInObject(config.responseSchema, context?.vars),
-    );
-
-    // Vertex parses JSON strings and renders variables inside loaded schemas.
-    // AI Studio passes loaded schemas through.
-    if (facade !== 'ai-studio') {
-      if (typeof schema === 'string') {
-        try {
-          schema = JSON.parse(schema);
-        } catch (error) {
-          throw new Error(`Invalid JSON in responseSchema: ${error}`);
-        }
-      }
-      schema = renderVarsInObject(schema, context?.vars);
-    }
-    body.generationConfig.response_schema = schema;
-    body.generationConfig.response_mime_type = 'application/json';
-  }
 }

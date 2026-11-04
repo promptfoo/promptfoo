@@ -1,11 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as cache from '../src/cache';
+import cliState from '../src/cliState';
 import { evaluate as doEvaluate } from '../src/evaluator';
 import * as index from '../src/index';
 import { evaluate } from '../src/index';
 import logger from '../src/logger';
 import Eval from '../src/models/eval';
-import { readProviderPromptMap } from '../src/prompts/index';
 import * as providers from '../src/providers/index';
 import { doRedteamRun } from '../src/redteam/shared';
 import * as fileUtils from '../src/util/file';
@@ -63,13 +63,6 @@ vi.mock('../src/globalConfig/accounts', async () => {
   };
 });
 vi.mock('../src/migrate');
-vi.mock('../src/prompts', async () => {
-  const originalModule = await vi.importActual<typeof import('../src/prompts')>('../src/prompts');
-  return {
-    ...originalModule,
-    readProviderPromptMap: vi.fn().mockReturnValue({}),
-  };
-});
 vi.mock('../src/redteam/shared', async () => {
   const originalModule =
     await vi.importActual<typeof import('../src/redteam/shared')>('../src/redteam/shared');
@@ -108,6 +101,7 @@ describe('index.ts exports', () => {
     'generateTable',
     'getInputDescription',
     'getInputType',
+    'getModelPricing',
     'guardrails',
     'hasProviderCapability',
     'isApiProvider',
@@ -150,6 +144,7 @@ describe('index.ts exports', () => {
     'InputTypeSchema',
     'InputTypeValues',
     'InputsSchema',
+    'InputsInputSchema',
     'NotPrefixedAssertionTypesSchema',
     'OutputConfigSchema',
     'OutputFileExtension',
@@ -215,6 +210,7 @@ describe('index.ts exports', () => {
       assertions: index.assertions,
       cache: index.cache,
       evaluate: index.evaluate,
+      getModelPricing: index.getModelPricing,
       guardrails: index.guardrails,
       loadApiProvider: index.loadApiProvider,
       loadApiProviders: index.loadApiProviders,
@@ -266,13 +262,6 @@ describe('evaluate function', () => {
     };
 
     await index.evaluate(testSuite);
-    expect(readProviderPromptMap).toHaveBeenCalledWith(testSuite, [
-      {
-        raw: mockPromptFunction.toString(),
-        label: 'testPrompt',
-        function: mockPromptFunction,
-      },
-    ]);
     expect(doEvaluate).toHaveBeenCalledWith(
       expect.objectContaining({
         prompts: [
@@ -282,7 +271,6 @@ describe('evaluate function', () => {
             function: mockPromptFunction,
           },
         ],
-        providerPromptMap: {},
       }),
       expect.anything(),
       expect.objectContaining({
@@ -339,7 +327,7 @@ describe('evaluate function', () => {
     const testSuite = {
       prompts: ['test prompt'],
       providers: [],
-      tests: [{ options: { provider: 'openai:gpt-3.5-turbo' } }],
+      tests: [{ options: { provider: 'openai:gpt-4.1-mini' } }],
     };
     await evaluate(testSuite);
     expect(doEvaluate).toHaveBeenCalledWith(
@@ -1159,6 +1147,10 @@ describe('evaluate function', () => {
 
       it('preserves suite env for nested test providers', async () => {
         loadApiProvidersSpy.mockResolvedValueOnce([createMockProvider({ id: 'echo' })]);
+        loadApiProviderSpy.mockImplementationOnce(async () => {
+          expect(cliState.env).toEqual({ OPENAI_API_KEY: 'suite-key' });
+          return createMockProvider({ id: 'openai:chat:test-model' });
+        });
 
         await evaluate({
           env: { OPENAI_API_KEY: 'suite-key' },
@@ -1169,7 +1161,6 @@ describe('evaluate function', () => {
 
         expect(loadApiProviderSpy).toHaveBeenCalledWith('openai:chat:test-model', {
           basePath: process.cwd(),
-          env: { OPENAI_API_KEY: 'suite-key' },
         });
       });
 
@@ -1272,7 +1263,7 @@ describe('evaluate with external defaultTest', () => {
     const externalDefaultTest = {
       assert: [{ type: 'equals' as const, value: 'test' }],
       vars: { foo: 'bar' },
-      options: { provider: 'openai:gpt-4' },
+      options: { provider: 'openai:gpt-4.1' },
     };
 
     const mockApiProvider = createMockProvider({

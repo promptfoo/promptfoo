@@ -5,21 +5,21 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getCache, isCacheEnabled } from '../../src/cache';
 import cliState from '../../src/cliState';
 import logger from '../../src/logger';
+import { loadApiProvider } from '../../src/providers';
 import { providerRegistry } from '../../src/providers/providerRegistry';
 import { PythonProvider } from '../../src/providers/pythonCompletion';
-import * as pythonUtils from '../../src/python/pythonUtils';
-import { getConfiguredPythonPath, getEnvInt } from '../../src/python/pythonUtils';
+import { getConfiguredPythonPath } from '../../src/python/pythonUtils';
 import { PythonWorkerPool } from '../../src/python/workerPool';
+import * as fileReference from '../../src/util/fileReference';
+import { createBasePathOptions } from '../factories/literalFixtures';
+import { createDeferred, mockProcessEnv } from '../util/utils';
 import type { Mock } from 'vitest';
 
-vi.mock('../../src/logger', () => ({
-  default: {
-    debug: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-    info: vi.fn(),
-  },
-}));
+const { createFsModuleFactory, createWarningOrderedLoggerFactory } = await vi.hoisted(
+  () => import('../factories/moduleMocks'),
+);
+
+vi.mock('../../src/logger', createWarningOrderedLoggerFactory());
 
 vi.mock('../../src/python/pythonUtils');
 vi.mock('../../src/cache');
@@ -30,17 +30,7 @@ const fsMocks = vi.hoisted(() => ({
   mkdirSync: vi.fn(),
 }));
 
-vi.mock('fs', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('fs')>();
-  return {
-    ...actual,
-    default: {
-      ...actual,
-      ...fsMocks,
-    },
-    ...fsMocks,
-  };
-});
+vi.mock('fs', createFsModuleFactory(fsMocks));
 vi.mock('fs/promises', () => ({
   default: {
     readFile: fsMocks.readFileSync,
@@ -96,12 +86,13 @@ vi.mock('../../src/python/workerPool', async (importOriginal) => {
 });
 
 describe('PythonProvider', () => {
+  let restoreEnv: () => void;
   const mockPythonWorkerPool = vi.mocked(PythonWorkerPool);
   const mockGetCache = vi.mocked(getCache);
   const mockIsCacheEnabled = vi.mocked(isCacheEnabled);
   const mockReadFileSync = vi.mocked(fs.readFileSync);
   const mockResolve = vi.mocked(path.resolve);
-  const mockGetEnvInt = vi.mocked(getEnvInt);
+
   const mockGetConfiguredPythonPath = vi.mocked(getConfiguredPythonPath);
   const mockPoolInstance = workerPoolMocks.mockPoolInstance as {
     initialize: Mock;
@@ -113,7 +104,9 @@ describe('PythonProvider', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    PythonWorkerPoolMock.mockClear();
+    PythonWorkerPoolMock.mockReset().mockImplementation(function () {
+      return mockPoolInstance;
+    });
     mockPoolInstance.initialize.mockReset();
     mockPoolInstance.initialize.mockResolvedValue(undefined);
     mockPoolInstance.execute.mockReset();
@@ -122,17 +115,12 @@ describe('PythonProvider', () => {
     mockPoolInstance.shutdown.mockReset();
     mockPoolInstance.shutdown.mockResolvedValue(undefined);
 
-    // Reset getEnvInt mock implementation (clears mockReturnValueOnce queue)
-    mockGetEnvInt.mockReset();
-    mockGetEnvInt.mockReturnValue(undefined);
+    restoreEnv = mockProcessEnv({ PROMPTFOO_PYTHON_WORKERS: undefined });
 
     // Reset getConfiguredPythonPath mock - default to passthrough behavior
     mockGetConfiguredPythonPath.mockReset();
     mockGetConfiguredPythonPath.mockImplementation((configPath) => configPath);
 
-    // Reset Python state to avoid test interference
-    pythonUtils.state.cachedPythonPath = null;
-    pythonUtils.state.validationPromise = null;
     mockGetCache.mockResolvedValue({
       get: vi.fn(),
       set: vi.fn(),
@@ -146,40 +134,32 @@ describe('PythonProvider', () => {
   });
 
   afterEach(() => {
-    // Ensure cliState is cleaned up after each test
+    restoreEnv();
+    vi.restoreAllMocks();
     cliState.maxConcurrency = undefined;
   });
 
   describe('constructor', () => {
     it('should initialize with correct properties', () => {
-      const provider = new PythonProvider('script.py', {
-        id: 'testId',
-        config: { basePath: '/base' },
-      });
+      const provider = new PythonProvider('script.py', createBasePathOptions());
       expect(provider.id()).toBe('testId');
     });
 
     it('should initialize with python: syntax', () => {
-      const provider = new PythonProvider('python:script.py', {
-        id: 'testId',
-        config: { basePath: '/base' },
-      });
+      const provider = new PythonProvider('python:script.py', createBasePathOptions());
       expect(provider.id()).toBe('testId');
     });
 
     it('should initialize with file:// prefix', () => {
-      const provider = new PythonProvider('file://script.py', {
-        id: 'testId',
-        config: { basePath: '/base' },
-      });
+      const provider = new PythonProvider('file://script.py', createBasePathOptions());
       expect(provider.id()).toBe('testId');
     });
 
     it('should initialize with file:// prefix and function name', () => {
-      const provider = new PythonProvider('file://script.py:function_name', {
-        id: 'testId',
-        config: { basePath: '/base' },
-      });
+      const provider = new PythonProvider(
+        'file://script.py:function_name',
+        createBasePathOptions(),
+      );
       expect(provider.id()).toBe('testId');
     });
   });
@@ -237,7 +217,7 @@ describe('PythonProvider', () => {
         mockPoolInstance.execute.mockResolvedValue({ invalidKey: 'invalid value' });
 
         await expect(provider.callApi('test prompt')).rejects.toThrow(
-          'The Python script `call_api` function must return a dict with an own `output` string/object or `error` string (inherited prototype properties are rejected), instead got: {"invalidKey":"invalid value"}',
+          'The Python script `call_api` function must return a dict with an own `output` or `error` property (inherited prototype properties are rejected), instead got: {"invalidKey":"invalid value"}',
         );
       });
 
@@ -253,7 +233,7 @@ describe('PythonProvider', () => {
         mockPoolInstance.execute.mockResolvedValue(null as never);
 
         await expect(provider.callApi('test prompt')).rejects.toThrow(
-          'The Python script `call_api` function must return a dict with an own `output` string/object or `error` string (inherited prototype properties are rejected), instead got: null',
+          'The Python script `call_api` function must return a dict with an own `output` or `error` property (inherited prototype properties are rejected), instead got: null',
         );
       });
 
@@ -262,7 +242,7 @@ describe('PythonProvider', () => {
         mockPoolInstance.execute.mockResolvedValue('string result');
 
         await expect(provider.callApi('test prompt')).rejects.toThrow(
-          'The Python script `call_api` function must return a dict with an own `output` string/object or `error` string (inherited prototype properties are rejected), instead got: "string result"',
+          'The Python script `call_api` function must return a dict with an own `output` or `error` property (inherited prototype properties are rejected), instead got: "string result"',
         );
       });
 
@@ -272,7 +252,7 @@ describe('PythonProvider', () => {
         mockPoolInstance.execute.mockResolvedValue(inheritedResult);
 
         await expect(provider.callApi('test prompt')).rejects.toThrow(
-          'The Python script `call_api` function must return a dict with an own `output` string/object or `error` string (inherited prototype properties are rejected), instead got: {}',
+          'The Python script `call_api` function must return a dict with an own `output` or `error` property (inherited prototype properties are rejected), instead got: {}',
         );
       });
 
@@ -304,7 +284,7 @@ describe('PythonProvider', () => {
       mockPoolInstance.execute.mockResolvedValue({ invalidKey: 'invalid value' });
 
       await expect(provider.callEmbeddingApi('test prompt')).rejects.toThrow(
-        'The Python script `call_embedding_api` function must return a dict with an own `embedding` array or `error` string (inherited prototype properties are rejected), instead got {"invalidKey":"invalid value"}',
+        'The Python script `call_embedding_api` function must return a dict with an own `embedding` or `error` property (inherited prototype properties are rejected), instead got: {"invalidKey":"invalid value"}',
       );
     });
 
@@ -314,7 +294,7 @@ describe('PythonProvider', () => {
       mockPoolInstance.execute.mockResolvedValue(inheritedResult);
 
       await expect(provider.callEmbeddingApi('test prompt')).rejects.toThrow(
-        'The Python script `call_embedding_api` function must return a dict with an own `embedding` array or `error` string (inherited prototype properties are rejected), instead got {}',
+        'The Python script `call_embedding_api` function must return a dict with an own `embedding` or `error` property (inherited prototype properties are rejected), instead got: {}',
       );
     });
   });
@@ -338,7 +318,7 @@ describe('PythonProvider', () => {
       mockPoolInstance.execute.mockResolvedValue({ invalidKey: 'invalid value' });
 
       await expect(provider.callClassificationApi('test prompt')).rejects.toThrow(
-        'The Python script `call_classification_api` function must return a dict with an own `classification` object or `error` string (inherited prototype properties are rejected), instead of {"invalidKey":"invalid value"}',
+        'The Python script `call_classification_api` function must return a dict with an own `classification` or `error` property (inherited prototype properties are rejected), instead got: {"invalidKey":"invalid value"}',
       );
     });
 
@@ -348,7 +328,7 @@ describe('PythonProvider', () => {
       mockPoolInstance.execute.mockResolvedValue(inheritedResult);
 
       await expect(provider.callClassificationApi('test prompt')).rejects.toThrow(
-        'The Python script `call_classification_api` function must return a dict with an own `classification` object or `error` string (inherited prototype properties are rejected), instead of {}',
+        'The Python script `call_classification_api` function must return a dict with an own `classification` or `error` property (inherited prototype properties are rejected), instead got: {}',
       );
     });
   });
@@ -681,8 +661,8 @@ describe('PythonProvider', () => {
     });
 
     it('should support configurable worker count via environment variable', async () => {
-      // Mock getEnvInt to return 3
-      mockGetEnvInt.mockReturnValueOnce(3);
+      // Configure the worker count through the environment
+      mockProcessEnv({ PROMPTFOO_PYTHON_WORKERS: '3' });
 
       const provider = new PythonProvider('script.py');
       await provider.initialize();
@@ -698,8 +678,8 @@ describe('PythonProvider', () => {
     });
 
     it('should prioritize config.workers over environment variable', async () => {
-      // Mock getEnvInt to return 3
-      mockGetEnvInt.mockReturnValueOnce(3);
+      // Configure the worker count through the environment
+      mockProcessEnv({ PROMPTFOO_PYTHON_WORKERS: '3' });
 
       const provider = new PythonProvider('script.py', {
         config: {
@@ -709,7 +689,7 @@ describe('PythonProvider', () => {
       });
       await provider.initialize();
 
-      // Verify config takes priority (getEnvInt should not even be called)
+      // Verify config takes priority over the environment
       expect(mockPythonWorkerPool).toHaveBeenCalledWith(
         expect.stringContaining('script.py'),
         'call_api',
@@ -720,10 +700,6 @@ describe('PythonProvider', () => {
     });
 
     it('should pass pythonExecutable to worker pool', async () => {
-      // Reset mock completely
-      mockGetEnvInt.mockReset();
-      mockGetEnvInt.mockReturnValue(undefined);
-
       // Mock getConfiguredPythonPath to return the config value
       mockGetConfiguredPythonPath.mockReturnValue('/usr/bin/python3');
 
@@ -735,7 +711,7 @@ describe('PythonProvider', () => {
       });
       await provider.initialize();
 
-      expect(mockGetConfiguredPythonPath).toHaveBeenCalledWith('/usr/bin/python3');
+      expect(mockGetConfiguredPythonPath).toHaveBeenCalledWith('/usr/bin/python3', undefined);
       expect(mockPythonWorkerPool).toHaveBeenCalledWith(
         expect.stringContaining('script.py'),
         'call_api',
@@ -746,10 +722,6 @@ describe('PythonProvider', () => {
     });
 
     it('should use PROMPTFOO_PYTHON when config.pythonExecutable is not set', async () => {
-      // Reset mocks
-      mockGetEnvInt.mockReset();
-      mockGetEnvInt.mockReturnValue(undefined);
-
       // Mock getConfiguredPythonPath to return the env var value when config is undefined
       mockGetConfiguredPythonPath.mockReturnValue('/venv/bin/python3');
 
@@ -762,7 +734,7 @@ describe('PythonProvider', () => {
       await provider.initialize();
 
       // getConfiguredPythonPath should be called with undefined (no config)
-      expect(mockGetConfiguredPythonPath).toHaveBeenCalledWith(undefined);
+      expect(mockGetConfiguredPythonPath).toHaveBeenCalledWith(undefined, undefined);
       // Worker pool should receive the env var value from getConfiguredPythonPath
       expect(mockPythonWorkerPool).toHaveBeenCalledWith(
         expect.stringContaining('script.py'),
@@ -774,10 +746,6 @@ describe('PythonProvider', () => {
     });
 
     it('should prioritize config.pythonExecutable over PROMPTFOO_PYTHON', async () => {
-      // Reset mocks
-      mockGetEnvInt.mockReset();
-      mockGetEnvInt.mockReturnValue(undefined);
-
       // Mock getConfiguredPythonPath to return the config value (simulating priority)
       mockGetConfiguredPythonPath.mockReturnValue('/config/python3');
 
@@ -790,7 +758,7 @@ describe('PythonProvider', () => {
       await provider.initialize();
 
       // getConfiguredPythonPath should be called with the config value
-      expect(mockGetConfiguredPythonPath).toHaveBeenCalledWith('/config/python3');
+      expect(mockGetConfiguredPythonPath).toHaveBeenCalledWith('/config/python3', undefined);
       // Worker pool should receive the config value
       expect(mockPythonWorkerPool).toHaveBeenCalledWith(
         expect.stringContaining('script.py'),
@@ -802,10 +770,6 @@ describe('PythonProvider', () => {
     });
 
     it('should pass undefined to worker pool when neither config nor env var is set', async () => {
-      // Reset mocks
-      mockGetEnvInt.mockReset();
-      mockGetEnvInt.mockReturnValue(undefined);
-
       // Mock getConfiguredPythonPath to return undefined (neither config nor env var set)
       mockGetConfiguredPythonPath.mockReturnValue(undefined);
 
@@ -816,7 +780,7 @@ describe('PythonProvider', () => {
       });
       await provider.initialize();
 
-      expect(mockGetConfiguredPythonPath).toHaveBeenCalledWith(undefined);
+      expect(mockGetConfiguredPythonPath).toHaveBeenCalledWith(undefined, undefined);
       expect(mockPythonWorkerPool).toHaveBeenCalledWith(
         expect.stringContaining('script.py'),
         'call_api',
@@ -827,10 +791,6 @@ describe('PythonProvider', () => {
     });
 
     it('should pass timeout to worker pool', async () => {
-      // Reset mock completely
-      mockGetEnvInt.mockReset();
-      mockGetEnvInt.mockReturnValue(undefined);
-
       const provider = new PythonProvider('script.py', {
         config: {
           basePath: process.cwd(),
@@ -850,9 +810,6 @@ describe('PythonProvider', () => {
 
     describe('cliState.maxConcurrency integration', () => {
       it('should use cliState.maxConcurrency when config and env var are not set', async () => {
-        mockGetEnvInt.mockReset();
-        mockGetEnvInt.mockReturnValue(undefined);
-
         // Set cliState.maxConcurrency (simulating -j flag)
         cliState.maxConcurrency = 8;
 
@@ -869,8 +826,7 @@ describe('PythonProvider', () => {
       });
 
       it('should prioritize PROMPTFOO_PYTHON_WORKERS over cliState.maxConcurrency', async () => {
-        mockGetEnvInt.mockReset();
-        mockGetEnvInt.mockReturnValue(3); // PROMPTFOO_PYTHON_WORKERS=3
+        mockProcessEnv({ PROMPTFOO_PYTHON_WORKERS: '3' }); // PROMPTFOO_PYTHON_WORKERS=3
 
         // Set cliState.maxConcurrency (simulating -j flag)
         cliState.maxConcurrency = 8;
@@ -889,9 +845,6 @@ describe('PythonProvider', () => {
       });
 
       it('should prioritize config.workers over cliState.maxConcurrency', async () => {
-        mockGetEnvInt.mockReset();
-        mockGetEnvInt.mockReturnValue(undefined);
-
         // Set cliState.maxConcurrency (simulating -j flag)
         cliState.maxConcurrency = 8;
 
@@ -914,9 +867,6 @@ describe('PythonProvider', () => {
       });
 
       it('should default to 1 worker when cliState.maxConcurrency is undefined', async () => {
-        mockGetEnvInt.mockReset();
-        mockGetEnvInt.mockReturnValue(undefined);
-
         // Ensure cliState.maxConcurrency is undefined (default state)
         cliState.maxConcurrency = undefined;
 
@@ -933,9 +883,6 @@ describe('PythonProvider', () => {
       });
 
       it('should warn and use 1 when cliState.maxConcurrency is invalid (< 1)', async () => {
-        mockGetEnvInt.mockReset();
-        mockGetEnvInt.mockReturnValue(undefined);
-
         // Set invalid cliState.maxConcurrency
         cliState.maxConcurrency = 0;
 
@@ -955,9 +902,6 @@ describe('PythonProvider', () => {
       });
 
       it('should warn and use 1 when config.workers is invalid (< 1)', async () => {
-        mockGetEnvInt.mockReset();
-        mockGetEnvInt.mockReturnValue(undefined);
-
         const provider = new PythonProvider('script.py', {
           config: {
             basePath: process.cwd(),
@@ -979,8 +923,7 @@ describe('PythonProvider', () => {
       });
 
       it('should warn and use 1 when PROMPTFOO_PYTHON_WORKERS is invalid (< 1)', async () => {
-        mockGetEnvInt.mockReset();
-        mockGetEnvInt.mockReturnValue(0); // Invalid env var value
+        mockProcessEnv({ PROMPTFOO_PYTHON_WORKERS: '0' }); // Invalid env var value
 
         const provider = new PythonProvider('script.py');
         await provider.initialize();
@@ -999,46 +942,201 @@ describe('PythonProvider', () => {
     });
   });
 
-  describe('cleanup', () => {
-    it('should cleanup worker pool on shutdown', async () => {
+  describe('early registration', () => {
+    it('registers an initializing worker pool and does not restore it after forced shutdown', async () => {
+      let poolStarted!: () => void;
+      const started = new Promise<void>((resolve) => {
+        poolStarted = resolve;
+      });
+      let finishInitialization!: () => void;
+      const poolInitialization = new Promise<void>((resolve) => {
+        finishInitialization = resolve;
+      });
+      mockPoolInstance.initialize.mockImplementationOnce(async () => {
+        poolStarted();
+        await poolInitialization;
+      });
       const provider = new PythonProvider('script.py', {
         config: { basePath: process.cwd() },
       });
+      const shutdown = vi.spyOn(provider, 'shutdown');
+      const initialization = provider.initialize();
+      const rejection = expect(initialization).rejects.toThrow(
+        'initialization interrupted by cleanup',
+      );
+      try {
+        await started;
+        const disposal = providerRegistry.shutdownAll();
+        await vi.waitFor(() => expect(mockPoolInstance.shutdown).toHaveBeenCalled());
+        expect(shutdown).toHaveBeenCalledOnce();
+        expect(mockPoolInstance.shutdown).toHaveBeenCalled();
 
-      await provider.initialize();
-      expect((provider as any).pool).not.toBeNull();
-
-      await provider.shutdown();
-      expect((provider as any).pool).toBeNull();
-      expect(mockPoolInstance.shutdown).toHaveBeenCalled();
+        finishInitialization();
+        await rejection;
+        await disposal;
+        await expect(provider.initialize()).resolves.toBeUndefined();
+        expect(mockPoolInstance.initialize).toHaveBeenCalledTimes(2);
+      } finally {
+        finishInitialization();
+        await Promise.allSettled([initialization]);
+        await provider.shutdown();
+        shutdown.mockRestore();
+      }
     });
+  });
 
-    it('should register provider for global cleanup', async () => {
+  describe.each(['cleanup', 'shutdown'] as const)('%s', (method) => {
+    it.each([false, true])(
+      'retains a replacement pool while disposing the old pool (initialized=%s)',
+      async (initialized) => {
+        await providerRegistry.shutdownAll();
+        const initialization = createDeferred<void>();
+        const disposal = createDeferred<void>();
+        const oldPool = {
+          initialize: vi.fn().mockReturnValue(initialization.promise),
+          execute: vi.fn().mockResolvedValue({ output: 'old' }),
+          shutdown: vi.fn().mockReturnValue(disposal.promise),
+        };
+        const replacementPool = {
+          initialize: vi.fn().mockResolvedValue(undefined),
+          execute: vi.fn().mockResolvedValue({ output: 'replacement' }),
+          shutdown: vi.fn().mockResolvedValue(undefined),
+        };
+        PythonWorkerPoolMock.mockImplementationOnce(function () {
+          return oldPool as any;
+        }).mockImplementationOnce(function () {
+          return replacementPool as any;
+        });
+        const provider = (await loadApiProvider('python:script.py')) as PythonProvider;
+        const oldCall = provider.callApi('old').catch((error: Error) => error);
+        let cleanup: Promise<void> | undefined;
+
+        try {
+          await vi.waitFor(() => expect(oldPool.initialize).toHaveBeenCalledTimes(1));
+          if (initialized) {
+            initialization.resolve();
+            await expect(oldCall).resolves.toMatchObject({ output: 'old' });
+          }
+          cleanup = provider[method]();
+          initialization.resolve();
+          if (!initialized) {
+            await expect(oldCall).resolves.toEqual(
+              new Error('Python provider initialization interrupted by cleanup'),
+            );
+          }
+          await vi.waitFor(() => expect(oldPool.shutdown).toHaveBeenCalledTimes(1));
+
+          await expect(provider.callApi('fresh')).resolves.toMatchObject({ output: 'replacement' });
+          expect(providerRegistry.has(provider)).toBe(true);
+          disposal.resolve();
+          await cleanup;
+          expect.soft(providerRegistry.has(provider)).toBe(true);
+          expect(replacementPool.shutdown).not.toHaveBeenCalled();
+
+          await providerRegistry.shutdownAll();
+          expect(replacementPool.shutdown).toHaveBeenCalledTimes(1);
+          expect(providerRegistry.has(provider)).toBe(false);
+        } finally {
+          initialization.resolve();
+          disposal.resolve();
+          await oldCall;
+          await cleanup;
+          await provider.shutdown();
+        }
+      },
+    );
+
+    it.each([
+      { stage: 'configuration', rejectInitialization: false },
+      { stage: 'configuration', rejectInitialization: true },
+      { stage: 'pool', rejectInitialization: false },
+      { stage: 'pool', rejectInitialization: true },
+    ])(
+      'waits for pending initialization before disposal ($stage, reject=$rejectInitialization)',
+      async ({ stage, rejectInitialization }) => {
+        await providerRegistry.shutdownAll();
+        mockPoolInstance.shutdown.mockClear();
+        const initialization = createDeferred<void>();
+        const processConfig = vi.spyOn(fileReference, 'processConfigFileReferences');
+        if (stage === 'configuration') {
+          processConfig.mockImplementationOnce(async () => {
+            await initialization.promise;
+            return {};
+          });
+        } else {
+          mockPoolInstance.initialize.mockReturnValueOnce(initialization.promise);
+        }
+        mockPoolInstance.execute.mockResolvedValue({ output: 'response' });
+        const provider = (await loadApiProvider('python:script.py')) as PythonProvider;
+        const call = provider.callApi('prompt').catch((error: Error) => error);
+        let cleanup: Promise<void> | undefined;
+
+        try {
+          await vi.waitFor(() =>
+            expect(
+              stage === 'configuration' ? processConfig : mockPoolInstance.initialize,
+            ).toHaveBeenCalledTimes(1),
+          );
+          cleanup = provider[method]();
+          expect(mockPoolInstance.shutdown).toHaveBeenCalledTimes(stage === 'pool' ? 1 : 0);
+          if (rejectInitialization) {
+            initialization.reject(new Error('pool init failed'));
+          } else {
+            initialization.resolve();
+          }
+          await expect(call).resolves.toEqual(
+            new Error(
+              rejectInitialization
+                ? 'pool init failed'
+                : 'Python provider initialization interrupted by cleanup',
+            ),
+          );
+          await cleanup;
+          const disposals = stage === 'configuration' ? 0 : 1;
+          expect(mockPoolInstance.shutdown).toHaveBeenCalledTimes(disposals);
+          expect(mockPoolInstance.execute).not.toHaveBeenCalled();
+          expect(providerRegistry.has(provider)).toBe(false);
+
+          await expect(provider.callApi('reuse')).resolves.toMatchObject({ output: 'response' });
+          expect(providerRegistry.has(provider)).toBe(true);
+          await providerRegistry.shutdownAll();
+          expect(providerRegistry.has(provider)).toBe(false);
+          expect(mockPoolInstance.shutdown).toHaveBeenCalledTimes(disposals + 1);
+          await provider[method]();
+          expect(mockPoolInstance.shutdown).toHaveBeenCalledTimes(disposals + 1);
+        } finally {
+          initialization.resolve();
+          await call;
+          await cleanup;
+          await provider.shutdown();
+          processConfig.mockRestore();
+        }
+      },
+    );
+
+    it.each([
+      ['callApi', { output: 'response' }],
+      ['callEmbeddingApi', { embedding: [0.1, 0.2] }],
+      ['callClassificationApi', { classification: { label: 'test' } }],
+    ] as const)('recreates the worker pool for %s after cleanup', async (api, response) => {
       const provider = new PythonProvider('script.py', {
         config: { basePath: process.cwd() },
       });
+      mockPoolInstance.execute.mockResolvedValue(response);
 
-      await provider.initialize();
+      for (const round of [1, 2]) {
+        await expect(provider[api]('prompt')).resolves.toMatchObject(response);
+        expect(mockPythonWorkerPool).toHaveBeenCalledTimes(round);
+        expect(mockPoolInstance.initialize).toHaveBeenCalledTimes(round);
+        expect(mockPoolInstance.execute).toHaveBeenCalledTimes(round);
+        expect(providerRegistry.has(provider)).toBe(true);
 
-      // Provider should be registered
-      expect((providerRegistry as any).providers.has(provider)).toBe(true);
-
-      await provider.shutdown();
-
-      // Should be unregistered
-      expect((providerRegistry as any).providers.has(provider)).toBe(false);
-    });
-
-    it('should set isInitialized to false after shutdown', async () => {
-      const provider = new PythonProvider('script.py', {
-        config: { basePath: process.cwd() },
-      });
-
-      await provider.initialize();
-      expect((provider as any).isInitialized).toBe(true);
-
-      await provider.shutdown();
-      expect((provider as any).isInitialized).toBe(false);
+        await provider[method]();
+        expect(providerRegistry.has(provider)).toBe(false);
+        expect(mockPoolInstance.shutdown).toHaveBeenCalledTimes(round);
+        await provider[method]();
+        expect(mockPoolInstance.shutdown).toHaveBeenCalledTimes(round);
+      }
     });
   });
 });

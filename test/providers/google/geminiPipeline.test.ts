@@ -4,8 +4,9 @@ import {
   parseGeminiContent,
   prepareGeminiRequest,
 } from '../../../src/providers/google/gemini';
+import { withResponseCacheMetadata } from '../../../src/providers/shared';
 
-import type { CompletionOptions } from '../../../src/providers/google/types';
+import type { GoogleProviderConfig } from '../../../src/providers/google/types';
 import type { GeminiApiResponse } from '../../../src/providers/google/util';
 
 const facades = ['ai-studio', 'vertex'] as const;
@@ -105,119 +106,15 @@ describe.each(facades)('%s shared Gemini pipeline', (facade) => {
       expect(parsed.candidate).not.toHaveProperty('extra0');
     }
   });
-
-  it('merges prompt overrides and built-in tools without mutating defaults', async () => {
-    const config = Object.freeze({
-      temperature: 0.5,
-      generationConfig: Object.freeze({ topK: 2 }),
-      passthrough: Object.freeze({ tools: { googleSearch: {} }, service_tier: 'priority' }),
-    }) as CompletionOptions;
-    const getTools = vi.fn().mockResolvedValue([{ functionDeclarations: [{ name: 'fixture' }] }]);
-    const { body } = await prepareGeminiRequest(
-      'gemini-2.5-flash',
-      config,
-      'Hello',
-      {
-        prompt: { raw: 'Hello', label: 'fixture', config: { temperature: 0 } },
-        vars: {},
-      },
-      facade,
-      getTools,
-    );
-    expect(body.generationConfig.temperature).toBe(0);
-    expect(body.generationConfig.topK).toBe(2);
-    expect(body[facade === 'vertex' ? 'serviceTier' : 'service_tier']).toBe(
-      facade === 'vertex' ? 'SERVICE_TIER_PRIORITY' : 'priority',
-    );
-    expect(body.tools).toHaveLength(2);
-    expect(config.temperature).toBe(0.5);
-  });
-
-  it('disables executable tools consistently while retaining built-in tools', async () => {
-    const getTools = vi
-      .fn()
-      .mockResolvedValue([{ functionDeclarations: [{ name: 'fixture' }] }, { googleSearch: {} }]);
-    const { body, toolsDisabled } = await prepareGeminiRequest(
-      'gemini-2.5-flash',
-      {
-        toolConfig: { functionCallingConfig: { mode: 'NONE' } },
-      },
-      'Hello',
-      undefined,
-      facade,
-      getTools,
-    );
-    expect(toolsDisabled).toBe(true);
-    expect(getTools).toHaveBeenCalledWith({ skipExecutableToolFiles: true });
-    expect(body.tools).toEqual([{ googleSearch: {} }]);
-  });
-
-  it('normalizes TTS modalities and default voice', async () => {
-    const { body } = await prepareGeminiRequest(
-      'gemini-2.5-flash-preview-tts',
-      {
-        generationConfig: { response_modalities: ['audio'] },
-      },
-      'Hello',
-      undefined,
-      facade,
-      async () => [],
-    );
-    expect(body.generationConfig.responseModalities).toEqual(['AUDIO']);
-    expect(body.generationConfig.response_modalities).toBeUndefined();
-    expect(body.generationConfig.speechConfig.voiceConfig.prebuiltVoiceConfig.voiceName).toBe(
-      'Kore',
-    );
-  });
-});
-
-it('keeps facade wire names and loaded-schema compatibility explicit', async () => {
-  for (const facade of facades) {
-    const { body } = await prepareGeminiRequest(
-      'gemini-2.5-flash',
-      {
-        systemInstruction: 'Be concise',
-        responseSchema: '{"type":"object"}',
-      },
-      'Hello',
-      undefined,
-      facade,
-      async () => [],
-    );
-    expect(body[facade === 'vertex' ? 'systemInstruction' : 'system_instruction']).toBeDefined();
-    expect(body.generationConfig.response_schema).toEqual(
-      facade === 'ai-studio' ? '{"type":"object"}' : { type: 'object' },
-    );
-  }
-});
-
-it('keeps legacy Vertex generation field order for persistent cache keys', async () => {
-  const { body } = await prepareGeminiRequest(
-    'gemini-2.5-flash',
-    { stopSequences: ['END'], temperature: 0.2, maxOutputTokens: 10, topP: 0.8, topK: 4 },
-    'Hello',
-    undefined,
-    'vertex',
-    async () => [],
-  );
-  expect(Object.keys(body.generationConfig)).toEqual([
-    'context',
-    'examples',
-    'stopSequences',
-    'temperature',
-    'maxOutputTokens',
-    'topP',
-    'topK',
-  ]);
 });
 
 it('preserves unknown usage and vendor prompt-cache accounting', () => {
-  expect(getGeminiTokenUsage(undefined, false, 'ai-studio')).toMatchObject({
+  expect(getGeminiTokenUsage(undefined, 'ai-studio')).toMatchObject({
     total: undefined,
     prompt: undefined,
     completion: undefined,
   });
-  expect(getGeminiTokenUsage(undefined, false, 'vertex')).toMatchObject({
+  expect(getGeminiTokenUsage(undefined, 'vertex')).toMatchObject({
     total: 0,
     prompt: 0,
     completion: 0,
@@ -230,43 +127,58 @@ it('preserves unknown usage and vendor prompt-cache accounting', () => {
         cachedContentTokenCount: 3,
         thoughtsTokenCount: 1,
       },
-      false,
       'ai-studio',
     ),
   ).toMatchObject({ total: 7, cached: 3, completionDetails: { reasoning: 1 } });
-  expect(
-    getGeminiTokenUsage({ cachedContentTokenCount: 3 } as any, true, 'ai-studio'),
-  ).toMatchObject({
-    total: undefined,
-    cached: undefined,
+  const vendorUsage = getGeminiTokenUsage(
+    { totalTokenCount: 7, cachedContentTokenCount: 3 },
+    'ai-studio',
+  );
+  const localHit = withResponseCacheMetadata({ tokenUsage: vendorUsage }, true);
+  expect(localHit.tokenUsage).toMatchObject({
+    total: 7,
+    cached: 7,
+    numRequests: 0,
+    completionDetails: { cacheReadInputTokens: 3 },
   });
-  expect(
-    getGeminiTokenUsage(
-      { totalTokenCount: 7, cachedContentTokenCount: 3 } as any,
-      true,
-      'ai-studio',
-    ),
-  ).toMatchObject({ total: 7, cached: 7 });
 });
 
-it.each([
-  ['ai-studio', false],
-  ['vertex', true],
-] as const)(
-  'keeps %s passthrough safety settings in their original request order',
-  async (facade, afterMarker) => {
-    const { body } = await prepareGeminiRequest(
-      'gemini-2.5-flash',
-      {
-        passthrough: { marker: true, safetySettings: [{ category: 'HARM_CATEGORY_HATE_SPEECH' }] },
-      },
-      'Hello',
-      undefined,
-      facade,
-      vi.fn().mockResolvedValue([]),
-    );
+it('merges prompt overrides and built-in tools without mutating defaults', async () => {
+  const config = Object.freeze({
+    temperature: 0.5,
+    generationConfig: Object.freeze({ topK: 2 }),
+    passthrough: Object.freeze({ tools: { googleSearch: {} }, service_tier: 'priority' }),
+  }) as GoogleProviderConfig;
+  const getTools = vi.fn().mockResolvedValue([{ functionDeclarations: [{ name: 'fixture' }] }]);
+  const prepared = await prepareGeminiRequest(
+    config,
+    'Hello',
+    {
+      prompt: { raw: 'Hello', label: 'fixture', config: { temperature: 0 } },
+      vars: {},
+    },
+    getTools,
+  );
+  expect(prepared.config.temperature).toBe(0);
+  expect(prepared.config.generationConfig?.topK).toBe(2);
+  expect(prepared.serviceTier).toBe('priority');
+  expect(prepared.mergedTools).toHaveLength(2);
+  expect(config.temperature).toBe(0.5);
+});
 
-    const keys = Object.keys(body);
-    expect(keys.indexOf('safetySettings') > keys.indexOf('marker')).toBe(afterMarker);
-  },
-);
+it('disables executable tools consistently while retaining built-in tools', async () => {
+  const getTools = vi
+    .fn()
+    .mockResolvedValue([{ functionDeclarations: [{ name: 'fixture' }] }, { googleSearch: {} }]);
+  const { mergedTools, toolsDisabled } = await prepareGeminiRequest(
+    {
+      toolConfig: { functionCallingConfig: { mode: 'NONE' } },
+    },
+    'Hello',
+    undefined,
+    getTools,
+  );
+  expect(toolsDisabled).toBe(true);
+  expect(getTools).toHaveBeenCalledWith({ skipExecutableToolFiles: true });
+  expect(mergedTools).toEqual([{ googleSearch: {} }]);
+});

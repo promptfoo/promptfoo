@@ -77,14 +77,20 @@ describe.each(['OpenAI', 'xAI'] as const)('%s realtime request configuration', (
           });
     const release = createDeferred<void>();
     const method = name === 'OpenAI' ? 'directWebSocketRequest' : 'webSocketRequest';
-    vi.spyOn(provider as any, method).mockImplementation(async (_prompt, handler) => {
-      await release.promise;
-      return {
-        output: await (handler as (name: string, args: string) => Promise<string>)('fixture', '{}'),
-        metadata: {},
-        cost: 0,
-      };
-    });
+    vi.spyOn(provider as any, method).mockImplementation(
+      async (_prompt, headersOrHandler, openaiHandler) => {
+        const handler = name === 'OpenAI' ? openaiHandler : headersOrHandler;
+        await release.promise;
+        return {
+          output: await (handler as (name: string, args: string) => Promise<string>)(
+            'fixture',
+            '{}',
+          ),
+          metadata: {},
+          cost: 0,
+        };
+      },
+    );
     const overridden = provider.callApi('first', context(overrideHandler));
     const defaulted = provider.callApi('second', context());
     release.resolve();

@@ -2,20 +2,24 @@ import { createHmac } from 'crypto';
 
 import { fetchWithCache, getCache, getScopedCacheKey, isCacheEnabled } from '../../cache';
 import logger from '../../logger';
-import {
-  type ApiModerationProvider,
-  inheritProviderCapabilities,
-  type ModerationFlag,
-  type ProviderModerationResponse,
-} from '../../types/providers';
+import { inheritProviderCapabilities } from '../../types/providers';
 import { getRequestTimeoutMs } from '../shared';
 import { OpenAiGenericProvider } from '.';
-import { appendOpenAiApiPath } from './util';
+import { appendOpenAiApiPath, assertOpenAiApiModel, RETIRED_OPENAI_MODEL_IDS } from './util';
 
-const OPENAI_MODERATION_MODELS = [
+import type {
+  ApiModerationProvider,
+  ModerationFlag,
+  ProviderModerationResponse,
+} from '../../types/index';
+
+const OPENAI_MODERATION_AND_RETIRED_MODELS = [
   { id: 'omni-moderation-latest', maxTokens: 32768, capabilities: ['text', 'image'] },
   { id: 'omni-moderation-2024-09-26', maxTokens: 32768, capabilities: ['text', 'image'] },
 ];
+const OPENAI_MODERATION_MODELS = OPENAI_MODERATION_AND_RETIRED_MODELS.filter(
+  ({ id }) => !RETIRED_OPENAI_MODEL_IDS.has(id),
+);
 
 type OpenAIModerationModelId = string;
 
@@ -224,7 +228,6 @@ export class OpenAiModerationProvider
   readonly promptfooCapabilities = inheritProviderCapabilities(
     OpenAiModerationProvider.declaredProviderCapabilities,
   );
-
   static MODERATION_MODELS = OPENAI_MODERATION_MODELS;
   static MODERATION_MODEL_IDS = OPENAI_MODERATION_MODELS.map((model) => model.id);
 
@@ -233,6 +236,7 @@ export class OpenAiModerationProvider
     options: { config?: OpenAIModerationConfig; id?: string; env?: any } = {},
   ) {
     super(modelName, options);
+    assertOpenAiApiModel(modelName, this.getApiUrl());
     if (!OpenAiModerationProvider.MODERATION_MODEL_IDS.includes(modelName)) {
       logger.warn(`Using unknown OpenAI moderation model: ${modelName}`);
     }
