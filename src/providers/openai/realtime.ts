@@ -1033,11 +1033,7 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
               }
 
               // If there are pending function calls, process them
-              if (
-                !responseError &&
-                pendingFunctionCalls.length > 0 &&
-                functionCallHandler
-              ) {
+              if (!responseError && pendingFunctionCalls.length > 0 && functionCallHandler) {
                 if (toolIterations >= maxToolIterations) {
                   clearTimeout(timeout);
                   ws.close();
@@ -1739,11 +1735,7 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
               }
 
               // If there are pending function calls, process them
-              if (
-                !responseError &&
-                pendingFunctionCalls.length > 0 &&
-                functionCallHandler
-              ) {
+              if (!responseError && pendingFunctionCalls.length > 0 && functionCallHandler) {
                 if (toolIterations >= maxToolIterations) {
                   clearTimeout(timeout);
                   ws.close();
