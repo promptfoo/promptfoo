@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 
 import express from 'express';
 import OpenAI from 'openai';
+import defaultErrorHandler from './defaultErrorHandler.cjs';
 
 const app = express();
 const port = 8080;
@@ -74,6 +75,8 @@ app.post('/inference', async (req, res) => {
     });
   }
 });
+
+app.use(defaultErrorHandler);
 
 app.listen(port, () => {
   console.log(`Server running on http://localhost:${port}`);

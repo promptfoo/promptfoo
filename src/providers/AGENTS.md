@@ -13,13 +13,15 @@ Each provider:
 
 ## Provider Lifecycle & Cleanup
 
-The evaluator (`src/evaluator.ts`) manages provider lifecycle. After evaluation completes, it calls `providerRegistry.shutdownAll()` to clean up resources.
+Evaluations use `providerRegistry.withEvaluation()` (`src/providers/providerRegistry.ts`). Providers and registered resources stay open until their last evaluation and any active calls finish. A new caller waits for cleanup of the same provider; unrelated evaluations continue. Nested entry points share one scope.
 
 **If your provider allocates resources** (Python workers, connections, child processes):
 
-- Implement a `cleanup()` method on your provider
-- Register with `providerRegistry` for automatic cleanup
-- Resources are released in the evaluator's `finally` block
+- Implement `cleanup()` without required arguments. For a provider that registers itself, the registry calls `shutdown()` instead; it can delegate to `cleanup()`. Use `cleanupAfterEvaluation({ reason: 'evaluation-complete' })` when automatic cleanup must differ from explicit shutdown.
+- Register resources before asynchronous initialization creates processes or connections. Registration of a provider instance is restored when an evaluation reuses it. An idle cleanup hook may leave the provider registered for process shutdown.
+- For shared singleton transports, await `useResource()` on every access and call `throwIfResourceUseAborted()` after asynchronous acquisition. Both use the current provider call's signal; direct callers can supply one.
+- Pass the request signal to `withProvider()`. When using a temporary adapter, retain ownership on the provider that performs cleanup. Cancelled calls waiting for cleanup never start; active calls retain resources until they settle.
+- Process shutdown closes registered resources immediately. The CLI also cleans up its own targets, including targets without registered resources. Caller-supplied graders remain borrowed.
 
 **Reference implementations:**
 
@@ -71,6 +73,13 @@ strings persist to disk; if it stores hashed keys, the hash persists.
   `getModerationCacheKey` in `src/providers/azure/moderation.ts`.
 
 ## Caching Best Practices
+
+Use `shouldBustProviderCache(context)` for the shared `bustCache`/legacy `debug`
+precedence, including both reads and writes for manually cached SDK responses.
+Use `withResponseCacheMetadata(response, cached)` after response normalization to
+retain replay provenance and mark cached requests without mutating stored usage.
+The helper preserves reported costs and unknown token counts; the evaluator
+derives incurred usage and cost from the cache marker.
 
 When implementing caching in your provider, **ALWAYS set the `cached: true` flag** when returning a cached response:
 
@@ -145,3 +154,9 @@ ls examples/myprovider/promptfooconfig.yaml
 ```
 
 **Reference existing providers** - 50+ implementations to learn from.
+
+## Creator inputs
+
+The loader normalizes configuration and environment once. Factories receive those `ProviderOptions`; existing public creators accept them as `providerOptions`. `creator.ts` adapts the older nested `config` input at those public boundaries.
+
+`families/compatible.ts` loads the Cerebras, Envoy, LiteLLM, Novita, Nscale, and TogetherAI creators on demand, before the generic file fallback. Preserve each creator's aliases, default subtype, and colon-containing model names.

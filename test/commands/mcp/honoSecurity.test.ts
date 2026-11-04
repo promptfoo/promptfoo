@@ -1,10 +1,33 @@
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { NONCE, secureHeaders } from 'hono/secure-headers';
+import { serveStatic } from 'hono/serve-static';
 import { ssgParams, toSSG } from 'hono/ssg';
 import { describe, expect, it, vi } from 'vitest';
 
 describe('MCP Hono dependency security', () => {
+  it('does not bypass static-path authorization through a second URI decode', async () => {
+    const app = new Hono();
+    const getContent = vi.fn(async () => 'static file contents');
+    app.get('/static/admin/*', (context) => context.text('Unauthorized', 401));
+    app.use('/static/*', serveStatic({ getContent }));
+
+    const publicResponse = await app.request('/static/hello%20world.txt');
+    expect(publicResponse.status).toBe(200);
+    expect(await publicResponse.text()).toBe('static file contents');
+    expect(getContent).toHaveBeenCalledTimes(1);
+    getContent.mockClear();
+
+    const protectedResponse = await app.request('/static/admin/secret.txt');
+    expect(protectedResponse.status).toBe(401);
+
+    // GHSA-5r4p-p66f-jhc7: routing sees an encoded prefix that static serving
+    // previously decoded again to "admin", bypassing the authorization above.
+    const encodedResponse = await app.request('/static/%%36%31dmin/secret.txt');
+    expect(encodedResponse.status).toBe(404);
+    expect(getContent).not.toHaveBeenCalled();
+  });
+
   it('ignores query-looking parameters after a URL fragment', async () => {
     const app = new Hono();
 

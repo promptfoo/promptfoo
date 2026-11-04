@@ -7,8 +7,8 @@
 import { promises as fs } from 'fs';
 import path from 'path';
 
-import { getEnvString } from '../../../envars';
 import logger from '../../../logger';
+import { getElevenLabsApiKey } from '../auth';
 import { ElevenLabsClient } from '../client';
 import { CostTracker } from '../cost-tracker';
 import { encodeAudio } from '../tts/audio';
@@ -157,13 +157,7 @@ export class ElevenLabsIsolationProvider implements ApiProvider {
    * Get API key from config or environment
    */
   private getApiKey(): string | undefined {
-    return (
-      this.config.apiKey ||
-      (this.config.apiKeyEnvar && this.env?.[this.config.apiKeyEnvar as keyof EnvOverrides]) ||
-      (this.config.apiKeyEnvar && getEnvString(this.config.apiKeyEnvar as any)) ||
-      this.env?.ELEVENLABS_API_KEY ||
-      getEnvString('ELEVENLABS_API_KEY')
-    );
+    return getElevenLabsApiKey(this, () => this.env);
   }
 
   /**
