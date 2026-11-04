@@ -1194,8 +1194,8 @@ GPT-5.6 also supports [Runtime Converse and Mantle Chat Completions](https://doc
 Promptfoo routes the bare
 `bedrock:openai.gpt-5.x` IDs to its OpenAI Responses provider, preserves the Bedrock request
 model ID, and returns the clean final answer. When no Region is configured, promptfoo uses
-`us-west-2` for `openai.gpt-6-astra`, `us-east-1` for `openai.gpt-6-sol` and `openai.gpt-6-luna`,
-and `us-east-2` for other frontier models. A configured Region is always used; if Mantle does not
+`us-west-2` for `openai.gpt-6-astra`, `us-east-1` for `openai.gpt-6.1-terra`, `openai.gpt-6-sol`,
+and `openai.gpt-6-luna`, and `us-east-2` for other frontier models. A configured Region is always used; if Mantle does not
 serve the model there, it returns HTTP 404 ("model does not exist") and promptfoo adds the
 Regions that list the model to the error.
 

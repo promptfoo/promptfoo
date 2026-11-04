@@ -41,16 +41,6 @@ providers:
       # output_compression: 80 # 0-100, only set with jpeg/webp
       # moderation: auto # Options: auto, low
 
-  # GPT Image 1 - High-quality image generation model
-  - id: openai:image:gpt-image-1
-    config:
-      size: 1024x1024 # Valid sizes: 1024x1024, 1024x1536, 1536x1024, auto
-      quality: low # Options: low, medium, high, auto
-      # background: transparent # Options: transparent, opaque, auto (only works with png/webp)
-      # output_format: webp # Options: png, jpeg, webp
-      # output_compression: 80 # 0-100, only set with jpeg/webp
-      # moderation: auto # Options: auto, low
-
   # GPT Image 1 Mini - Cost-efficient version of GPT Image 1
   - id: openai:image:gpt-image-1-mini
     config:

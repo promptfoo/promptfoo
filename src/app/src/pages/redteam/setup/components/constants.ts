@@ -14,6 +14,7 @@ export const predefinedTargets: RedteamUITarget[] = [
   { value: 'browser', label: 'Web Browser Automation' },
   { value: 'openai:gpt-6-astra', label: 'OpenAI GPT-6 Astra' },
   { value: 'openai:gpt-6.1-sol', label: 'OpenAI GPT-6.1 Sol' },
+  { value: 'openai:gpt-6.1-terra', label: 'OpenAI GPT-6.1 Terra' },
   { value: DEFAULT_OPENAI_TARGET_ID, label: 'OpenAI GPT-6 Sol' },
   { value: 'openai:gpt-6-luna', label: 'OpenAI GPT-6 Luna' },
   { value: 'openai:gpt-5.6', label: 'OpenAI GPT-5.6 (Sol alias)' },
