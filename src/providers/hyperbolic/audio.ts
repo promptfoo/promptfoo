@@ -1,5 +1,5 @@
 import { fetchWithCache } from '../../cache';
-import { getEnvString } from '../../envars';
+import { getEnvString, getProviderEnvString } from '../../envars';
 import logger from '../../logger';
 import { getRequestTimeoutMs } from '../shared';
 
@@ -45,7 +45,9 @@ export class HyperbolicAudioProvider implements ApiProvider {
     if (this.config?.apiKey) {
       return this.config.apiKey;
     }
-    return this.env?.HYPERBOLIC_API_KEY || getEnvString('HYPERBOLIC_API_KEY');
+    return (
+      getProviderEnvString(this.env, 'HYPERBOLIC_API_KEY') || getEnvString('HYPERBOLIC_API_KEY')
+    );
   }
 
   getApiUrl(): string {

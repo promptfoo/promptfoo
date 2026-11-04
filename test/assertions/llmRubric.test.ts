@@ -1,8 +1,18 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { handleLlmRubric } from '../../src/assertions/llmRubric';
 import { matchesLlmRubric } from '../../src/matchers/llmGrading';
+import { createPassingGrade } from '../factories/literalFixtures';
 
 import type { Assertion, AssertionParams, GradingResult } from '../../src/types/index';
+
+const createRubricPromptOptions = (
+  rubricPrompt: Assertion['rubricPrompt'] = 'rubric from options',
+) => ({
+  vars: {},
+  options: {
+    rubricPrompt,
+  },
+});
 
 vi.mock('../../src/matchers/llmGrading', async () => {
   const actual = await vi.importActual<typeof import('../../src/matchers/llmGrading')>(
@@ -52,11 +62,7 @@ describe('handleLlmRubric', () => {
       renderedValue: 'test rendered value',
     };
 
-    const expectedResult: GradingResult = {
-      pass: true,
-      score: 1,
-      reason: 'test reason',
-    };
+    const expectedResult: GradingResult = createPassingGrade(1);
 
     mockMatchesLlmRubric.mockResolvedValue(expectedResult);
 
@@ -80,11 +86,7 @@ describe('handleLlmRubric', () => {
       renderedValue: { test: 'value' },
     };
 
-    const expectedResult: GradingResult = {
-      pass: true,
-      score: 1,
-      reason: 'test reason',
-    };
+    const expectedResult: GradingResult = createPassingGrade(1);
 
     mockMatchesLlmRubric.mockResolvedValue(expectedResult);
 
@@ -108,11 +110,7 @@ describe('handleLlmRubric', () => {
       renderedValue: undefined,
     };
 
-    const expectedResult: GradingResult = {
-      pass: true,
-      score: 1,
-      reason: 'test reason',
-    };
+    const expectedResult: GradingResult = createPassingGrade(1);
 
     mockMatchesLlmRubric.mockResolvedValue(expectedResult);
 
@@ -140,11 +138,7 @@ describe('handleLlmRubric', () => {
       },
     };
 
-    const expectedResult: GradingResult = {
-      pass: true,
-      score: 1,
-      reason: 'test reason',
-    };
+    const expectedResult: GradingResult = createPassingGrade(1);
 
     mockMatchesLlmRubric.mockResolvedValue(expectedResult);
 
@@ -180,11 +174,7 @@ describe('handleLlmRubric', () => {
       },
     };
 
-    const expectedResult: GradingResult = {
-      pass: true,
-      score: 1,
-      reason: 'test reason',
-    };
+    const expectedResult: GradingResult = createPassingGrade(1);
 
     mockMatchesLlmRubric.mockResolvedValue(expectedResult);
 
@@ -326,20 +316,11 @@ describe('handleLlmRubric', () => {
   it('should stringify object rubricPrompt', async () => {
     const params: AssertionParams = {
       ...defaultParams,
-      test: {
-        vars: {},
-        // Using a valid structure for rubricPrompt as per type definition
-        options: {
-          rubricPrompt: [{ role: 'system', content: 'test prompt' }],
-        },
-      },
+      // Using a valid structure for rubricPrompt as per type definition
+      test: createRubricPromptOptions([{ role: 'system', content: 'test prompt' }]),
     };
 
-    const expectedResult: GradingResult = {
-      pass: true,
-      score: 1,
-      reason: 'test reason',
-    };
+    const expectedResult: GradingResult = createPassingGrade(1);
 
     mockMatchesLlmRubric.mockResolvedValue(expectedResult);
 
@@ -358,12 +339,7 @@ describe('handleLlmRubric', () => {
         type: 'llm-rubric',
         value: undefined,
       } as Assertion,
-      test: {
-        vars: {},
-        options: {
-          rubricPrompt: 'rubric from options',
-        },
-      },
+      test: createRubricPromptOptions(),
       renderedValue: undefined,
     };
 
@@ -388,12 +364,7 @@ describe('handleLlmRubric', () => {
         type: 'llm-rubric',
         value: 'already set',
       } as Assertion,
-      test: {
-        vars: {},
-        options: {
-          rubricPrompt: 'rubric from options',
-        },
-      },
+      test: createRubricPromptOptions(),
       renderedValue: undefined,
     };
 
@@ -427,12 +398,7 @@ describe('handleLlmRubric', () => {
     const rubricPromptObj = [{ role: 'user', content: 'bar' }];
     const params: AssertionParams = {
       ...defaultParams,
-      test: {
-        vars: {},
-        options: {
-          rubricPrompt: rubricPromptObj,
-        },
-      },
+      test: createRubricPromptOptions(rubricPromptObj),
       renderedValue: undefined,
     };
 
@@ -453,12 +419,7 @@ describe('handleLlmRubric', () => {
     const rubricPromptStr = '[{"role":"system","content":"already stringified"}]';
     const params: AssertionParams = {
       ...defaultParams,
-      test: {
-        vars: {},
-        options: {
-          rubricPrompt: rubricPromptStr,
-        },
-      },
+      test: createRubricPromptOptions(rubricPromptStr),
       renderedValue: undefined,
     };
 
@@ -504,12 +465,7 @@ describe('handleLlmRubric', () => {
     const rubricPromptObj: { role: string; content: string }[] = [];
     const params: AssertionParams = {
       ...defaultParams,
-      test: {
-        vars: {},
-        options: {
-          rubricPrompt: rubricPromptObj,
-        },
-      },
+      test: createRubricPromptOptions(rubricPromptObj),
       renderedValue: undefined,
     };
 
@@ -560,12 +516,7 @@ describe('handleLlmRubric', () => {
     const rubricPromptObj: any = { foo: 'bar', baz: 3 };
     const params: AssertionParams = {
       ...defaultParams,
-      test: {
-        vars: {},
-        options: {
-          rubricPrompt: rubricPromptObj,
-        },
-      },
+      test: createRubricPromptOptions(rubricPromptObj),
       renderedValue: undefined,
     };
 

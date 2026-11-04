@@ -10,6 +10,7 @@ import { type AgentWorkspace, createAgentWorkspace } from '../../src/providers/a
 import { ClaudeCodeSDKProvider } from '../../src/providers/claude-agent-sdk';
 import { OpenAICodexSDKProvider } from '../../src/providers/openai/codex-sdk';
 import { OpenCodeSDKProvider } from '../../src/providers/opencode-sdk';
+import { getPackageVersion } from '../../src/util/packageVersion';
 import { mockProcessEnv } from '../util/utils';
 
 import type { CallApiContextParams } from '../../src/types/index';
@@ -28,6 +29,8 @@ vi.mock('../../src/esm', async (importOriginal) => ({
   importModule: vi.fn(),
   resolvePackageEntryPoint: vi.fn((name: string) => name),
 }));
+
+vi.mock('../../src/util/packageVersion', () => ({ getPackageVersion: vi.fn() }));
 
 vi.mock('@opencode-ai/sdk/v2', () => ({
   createOpencode: mocks.createOpencode,
@@ -75,6 +78,9 @@ describe('copy_working_dir in agentic providers', () => {
 
   beforeEach(async () => {
     vi.resetAllMocks();
+    vi.mocked(getPackageVersion).mockImplementation((name) =>
+      name === '@openai/codex-sdk' ? '0.156.1' : '0.3.273',
+    );
     source = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-workspace-provider-'));
     execFileSync('git', ['init', '--quiet', source]);
     fs.writeFileSync(path.join(source, 'file.txt'), 'content\n');
@@ -87,6 +93,7 @@ describe('copy_working_dir in agentic providers', () => {
     restoreEnv?.();
     restoreEnv = undefined;
     vi.restoreAllMocks();
+    vi.resetAllMocks();
     await workspace.remove();
     fs.rmSync(source, { recursive: true, force: true });
     await clearCache();
@@ -152,7 +159,11 @@ describe('copy_working_dir in agentic providers', () => {
           env: { ANTHROPIC_API_KEY: 'test-api-key' },
         });
 
-        await provider.callApi('Inspect the repository', workspaceContext(workspace.dir));
+        const result = await provider.callApi(
+          'Inspect the repository',
+          workspaceContext(workspace.dir),
+        );
+        expect(result.error).toBeUndefined();
 
         const { cwd, env } = mocks.query.mock.calls[0][0].options;
         expect(gitRoot(cwd, env)).toBe(fs.realpathSync.native(workspace.dir));
@@ -230,7 +241,11 @@ describe('copy_working_dir in agentic providers', () => {
           env: { OPENAI_API_KEY: 'test-api-key' },
         });
 
-        await provider.callApi('Inspect the repository', workspaceContext(workspace.dir));
+        const result = await provider.callApi(
+          'Inspect the repository',
+          workspaceContext(workspace.dir),
+        );
+        expect(result.error).toBeUndefined();
 
         const { env } = mocks.codex.mock.calls[0][0];
         const { workingDirectory } = mocks.startThread.mock.calls[0][0];
