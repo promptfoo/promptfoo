@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { compileDerivedMetricFormula } from '../../src/util/eval/derivedMetricFormula';
+import { compileDerivedMetricFormula } from '../../src/evaluator/derivedMetricFormula';
 
 describe('derived metric formulas', () => {
   const scores = { total: 6, __count: 2 };

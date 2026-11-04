@@ -4,7 +4,7 @@ import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import yaml from 'yaml';
 import { runAssertions } from '../../src/assertions';
-import { compileDerivedMetricFormula } from '../../src/util/eval/derivedMetricFormula';
+import { compileDerivedMetricFormula } from '../../src/evaluator/derivedMetricFormula';
 
 import type { ApiProvider, AtomicTestCase, TestSuite } from '../../src/types';
 
