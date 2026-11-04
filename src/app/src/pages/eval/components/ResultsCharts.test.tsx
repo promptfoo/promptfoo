@@ -519,12 +519,14 @@ describe('ResultsCharts', () => {
         fetchEvalData: vi.fn(),
       });
 
-      const { container } = render(<ResultsCharts {...defaultProps} scores={scores} />);
+      render(<ResultsCharts {...defaultProps} scores={scores} />);
 
-      const canvases = container.querySelectorAll('canvas');
-      expect(canvases).toHaveLength(3);
-      for (const canvas of canvases) {
-        expect(canvas.parentElement).toHaveStyle({ width: '33%' });
+      const charts = screen.getByRole('region', { name: 'Evaluation result visualizations' });
+      const columns = Array.from(charts.firstElementChild?.children ?? []);
+      expect(columns).toHaveLength(3);
+      for (const column of columns) {
+        expect(column).toHaveStyle({ width: '33%' });
+        expect(column.querySelectorAll('canvas')).toHaveLength(1);
       }
     });
   });
@@ -708,8 +710,8 @@ describe('ResultsCharts', () => {
         data: {
           labels: ['accuracy', 'precision', 'recall'],
           datasets: [
-            { label: 'test-provider-1', data: [1, 1, 1] },
-            { label: 'test-provider-2', data: [0.8 / 0.9, 0.7 / 0.8, 0.6 / 0.7] },
+            { label: 'Prompt 1 (test-provider-1)', data: [1, 1, 1] },
+            { label: 'Prompt 2 (test-provider-2)', data: [0.8 / 0.9, 0.7 / 0.8, 0.6 / 0.7] },
           ],
         },
       });
@@ -967,10 +969,7 @@ describe('ResultsCharts', () => {
 
     it('counts identical scores in the accessible histogram table', () => {
       const histogram = renderHistogram(buildHistogramTable([1, 1], [1, 1]));
-      expect(histogram.rows[0]).toEqual({ range: '1 to 1.1', counts: ['2', '2'] });
-      expect(
-        histogram.rows.slice(1).every((row) => row.counts.every((count) => count === '0')),
-      ).toBe(true);
+      expect(histogram.rows).toEqual([{ range: '1 and above', counts: ['2', '2'] }]);
     });
 
     const buildScatterTable = (
