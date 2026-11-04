@@ -2,7 +2,8 @@ import os from 'os';
 import path from 'path';
 
 import dedent from 'dedent';
-import { getEnvString } from '../envars';
+import { getEnvString, getProviderEnvString } from '../envars';
+import { getExplicitProviderEnv, setExplicitProviderEnv } from '../envOverrides';
 import { importModule } from '../esm';
 import logger from '../logger';
 import { isJavascriptFile } from '../util/fileExtensions';
@@ -26,7 +27,6 @@ import { AzureResponsesProvider } from './azure/responses';
 import { AzureVideoProvider } from './azure/video';
 import { getBedrockTextRoute } from './bedrock/routing';
 import { BrowserProvider } from './browser';
-import { createCerebrasProvider } from './cerebras';
 import { ClouderaAiChatCompletionProvider } from './cloudera';
 import { CohereChatCompletionProvider, CohereEmbeddingProvider } from './cohere';
 import { DatabricksMosaicAiChatCompletionProvider } from './databricks';
@@ -40,10 +40,10 @@ import {
   ElevenLabsSTTProvider,
   ElevenLabsTTSProvider,
 } from './elevenlabs';
-import { createEnvoyProvider } from './envoy';
 import { FalImageGenerationProvider } from './fal';
 import { createGitHubProvider } from './github/index';
 import { GolangProvider } from './golangCompletion';
+import { determineGoogleVertexMode } from './google/auth';
 import { GroqProvider, GroqResponsesProvider } from './groq/index';
 import { HeliconeGatewayProvider } from './helicone';
 import { HttpProvider } from './http';
@@ -71,8 +71,6 @@ import { MistralChatCompletionProvider, MistralEmbeddingProvider } from './mistr
 import { MlflowGatewayChatCompletionProvider } from './mlflow-gateway';
 import { createMoonshotProvider } from './moonshot';
 import { createN8nProvider } from './n8n';
-import { createNovitaProvider } from './novita';
-import { createNscaleProvider } from './nscale';
 import { OllamaChatProvider, OllamaCompletionProvider, OllamaEmbeddingProvider } from './ollama';
 import { resolveOpenAiApiUrl } from './openai';
 import { loadOpenAiAgentsModule } from './openai/agents-availability';
@@ -113,7 +111,6 @@ import { modelNameFromProviderPath } from './shared';
 import { SimulatedUser } from './simulatedUser';
 import { loadSlackProviderModule } from './slack-availability';
 import { createSnowflakeProvider } from './snowflake';
-import { createTogetherAiProvider } from './togetherai';
 import { TransformersEmbeddingProvider, TransformersTextGenerationProvider } from './transformers';
 import { createTrueFoundryProvider } from './truefoundry';
 import { createVercelProvider } from './vercel';
@@ -128,7 +125,7 @@ import { createXAIVideoProvider } from './xai/video';
 import { createXAIVoiceProvider } from './xai/voice';
 
 import type { LoadApiProviderContext } from '../types/index';
-import type { ProviderOptions } from '../types/providers';
+import type { ApiProvider, ProviderOptions } from '../types/providers';
 import type { ProviderFactory, ProviderFamily } from './registryTypes';
 
 const CODEX_CLI_PROVIDER_PATH = /^openai:(?:codex|codex-sdk|codex-app-server|codex-desktop)(?::|$)/;
@@ -137,17 +134,20 @@ const CODEX_CLI_PROVIDER_PATH = /^openai:(?:codex|codex-sdk|codex-app-server|cod
 function getProviderEnvAliasGroups(
   providerPath: string,
   config?: ProviderOptions['config'],
+  env?: ProviderOptions['env'],
 ): readonly (readonly string[])[] {
+  const isGeminiImage = /^(?:google|palm):(?:image:)?(?:[^:]*-image|gemini-nano-banana-2\.1$)/.test(
+    providerPath,
+  );
   if (
-    config?.vertexai === true &&
-    /^(?:google|palm):(?:(?:interactions:)?gemini-omni-flash-preview$|(?:image:)?[^:]*-image)/.test(
-      providerPath,
-    )
+    (isGeminiImage && determineGoogleVertexMode(config ?? {}, env)) ||
+    (config?.vertexai === true &&
+      /^(?:google|palm):(?:interactions:)?gemini-omni-flash-preview$/.test(providerPath))
   ) {
     return [
       ['VERTEX_API_KEY', 'GOOGLE_API_KEY'],
       ['VERTEX_PROJECT_ID', 'GOOGLE_PROJECT_ID', 'GOOGLE_CLOUD_PROJECT'],
-      providerPath.includes('-image')
+      isGeminiImage
         ? ['VERTEX_REGION', 'GOOGLE_CLOUD_LOCATION', 'GOOGLE_LOCATION']
         : ['VERTEX_REGION', 'GOOGLE_CLOUD_LOCATION'],
     ];
@@ -186,9 +186,14 @@ function getProviderEnvAliasGroups(
   if (/^(?:google|palm):live:/.test(providerPath)) {
     return [['GOOGLE_API_KEY', 'GEMINI_API_KEY']];
   }
-  if (/^(?:google|palm):(?:image:|[^:]*-image)/.test(providerPath)) {
+  if (isGeminiImage || /^(?:google|palm):image:/.test(providerPath)) {
     return [
-      ['GOOGLE_API_KEY', 'GOOGLE_GENERATIVE_AI_API_KEY', 'GEMINI_API_KEY'],
+      [
+        'GOOGLE_API_KEY',
+        'GOOGLE_GENERATIVE_AI_API_KEY',
+        'GEMINI_API_KEY',
+        ...(isGeminiImage ? ['PALM_API_KEY'] : []),
+      ],
       ['VERTEX_PROJECT_ID', 'GOOGLE_PROJECT_ID', 'GOOGLE_CLOUD_PROJECT'],
       ['VERTEX_REGION', 'GOOGLE_CLOUD_LOCATION', 'GOOGLE_LOCATION'],
     ];
@@ -263,12 +268,22 @@ export function mergeProviderEnv(
     typeof provider !== 'string' && provider.preserveAliases
       ? []
       : [
-          ...getProviderEnvAliasGroups(providerPath, config),
+          ...getProviderEnvAliasGroups(
+            providerPath,
+            config,
+            Object.fromEntries(
+              layers
+                .flatMap((layer) => Object.entries(layer ?? {}))
+                .filter(([, value]) => value !== undefined),
+            ),
+          ),
           getProviderEndpointAliases(providerPath),
         ];
   const isWindowsOpenCode = os.platform() === 'win32' && /^opencode(?::|$)/.test(providerPath);
   let merged: NonNullable<ProviderOptions['env']> | undefined;
-  for (const layer of layers) {
+  const explicitLayers = layers.map(getExplicitProviderEnv);
+  const explicit: NonNullable<ProviderOptions['env']> = {};
+  for (const [index, layer] of layers.entries()) {
     if (!layer) {
       continue;
     }
@@ -279,6 +294,7 @@ export function mergeProviderEnv(
       if (aliases.some((key) => layer[key])) {
         for (const key of aliases) {
           delete merged[key];
+          delete explicit[key];
         }
       }
     }
@@ -286,17 +302,23 @@ export function mergeProviderEnv(
       if (value === undefined) {
         continue;
       }
+      const isExplicit = explicitLayers[index]?.[key] !== undefined;
       if (isWindowsOpenCode) {
         for (const existingKey of Object.keys(merged)) {
           if (existingKey !== key && existingKey.toUpperCase() === key.toUpperCase()) {
             // Keep earlier spellings available to case-sensitive provider templates.
             // The server environment later collapses aliases with this same value.
             merged[existingKey] = value;
+            explicit[existingKey] = isExplicit ? value : undefined;
           }
         }
       }
       merged[key] = value;
+      explicit[key] = isExplicit ? value : undefined;
     }
+  }
+  if (merged && layers.some((layer, index) => layer !== explicitLayers[index])) {
+    setExplicitProviderEnv(merged, explicit);
   }
   return merged;
 }
@@ -320,6 +342,20 @@ function shouldDefaultToOpenAiResponses(modelName: string): boolean {
   const major = Number(version[1]);
   const minor = Number(version[2] ?? 0);
   return major > 5 || (major === 5 && minor >= 6);
+}
+
+function configuredProviderFactory(
+  prefix: string,
+  getCreateProvider: () => (
+    providerPath: string,
+    options: { config: ProviderOptions; env: LoadApiProviderContext['env'] },
+  ) => ApiProvider,
+): ProviderFactory {
+  return {
+    test: (providerPath: string) => providerPath.startsWith(prefix),
+    create: async (providerPath, providerOptions, context) =>
+      getCreateProvider()(providerPath, { config: providerOptions, env: context.env }),
+  };
 }
 
 const OPENAI_CONFIG_MODEL_OVERRIDE_ROUTES = new Set(['image', 'video']);
@@ -477,7 +513,7 @@ export const providerMap: ProviderFactory[] = [
         ...providerOptions,
         id: providerOptions.id ?? providerPath,
         config: model ? { ...providerOptions.config, model } : providerOptions.config,
-        env: { ...context.env, ...providerOptions.env },
+        env: mergeProviderEnv(providerPath, context.env, providerOptions.env),
       });
     },
   },
@@ -552,19 +588,7 @@ export const providerMap: ProviderFactory[] = [
       );
     },
   },
-  {
-    test: (providerPath: string) => providerPath.startsWith('atlascloud:'),
-    create: async (
-      providerPath: string,
-      providerOptions: ProviderOptions,
-      context: LoadApiProviderContext,
-    ) => {
-      return createAtlasCloudProvider(providerPath, {
-        config: providerOptions,
-        env: context.env,
-      });
-    },
-  },
+  configuredProviderFactory('atlascloud:', () => createAtlasCloudProvider),
   {
     test: (providerPath: string) =>
       providerPath.startsWith('azure:') || providerPath.startsWith('azureopenai:'),
@@ -688,32 +712,6 @@ export const providerMap: ProviderFactory[] = [
     },
   },
   {
-    test: (providerPath: string) => providerPath.startsWith('cerebras:'),
-    create: async (
-      providerPath: string,
-      providerOptions: ProviderOptions,
-      context: LoadApiProviderContext,
-    ) => {
-      return createCerebrasProvider(providerPath, {
-        config: providerOptions,
-        env: context.env,
-      });
-    },
-  },
-  {
-    test: (providerPath: string) => providerPath.startsWith('novita:'),
-    create: async (
-      providerPath: string,
-      providerOptions: ProviderOptions,
-      context: LoadApiProviderContext,
-    ) => {
-      return createNovitaProvider(providerPath, {
-        config: providerOptions,
-        env: context.env,
-      });
-    },
-  },
-  {
     test: (providerPath: string) => providerPath.startsWith('cloudera:'),
     create: async (
       providerPath: string,
@@ -805,19 +803,7 @@ export const providerMap: ProviderFactory[] = [
       });
     },
   },
-  {
-    test: (providerPath: string) => providerPath.startsWith('deepseek:'),
-    create: async (
-      providerPath: string,
-      providerOptions: ProviderOptions,
-      context: LoadApiProviderContext,
-    ) => {
-      return createDeepSeekProvider(providerPath, {
-        config: providerOptions,
-        env: context.env,
-      });
-    },
-  },
+  configuredProviderFactory('deepseek:', () => createDeepSeekProvider),
   {
     test: (providerPath: string) => providerPath === 'echo',
     create: async (
@@ -879,19 +865,6 @@ export const providerMap: ProviderFactory[] = [
     },
   },
   {
-    test: (providerPath: string) => providerPath.startsWith('envoy:'),
-    create: async (
-      providerPath: string,
-      providerOptions: ProviderOptions,
-      context: LoadApiProviderContext,
-    ) => {
-      return createEnvoyProvider(providerPath, {
-        config: providerOptions,
-        env: context.env,
-      });
-    },
-  },
-  {
     test: (providerPath: string) => providerPath.startsWith('f5:'),
     create: async (
       providerPath: string,
@@ -901,7 +874,7 @@ export const providerMap: ProviderFactory[] = [
       const endpoint = providerPath.slice('f5:'.length).replace(/^\/+/, '');
       const configuredBaseUrl =
         providerOptions.config?.apiBaseUrl ??
-        providerOptions.env?.F5_API_BASE_URL ??
+        getProviderEnvString(providerOptions.env, 'F5_API_BASE_URL') ??
         getEnvString('F5_API_BASE_URL');
       if (!configuredBaseUrl) {
         throw new Error(
@@ -948,7 +921,7 @@ export const providerMap: ProviderFactory[] = [
         // loadApiProvider merges any provider-level `env` block into
         // providerOptions.env, so let those overrides win over the suite-level
         // env from context.
-        env: { ...context.env, ...providerOptions.env },
+        env: mergeProviderEnv(providerPath, context.env, providerOptions.env),
       });
     },
   },
@@ -1043,20 +1016,6 @@ export const providerMap: ProviderFactory[] = [
     },
   },
   {
-    test: (providerPath: string) => providerPath.startsWith('litellm:'),
-    create: async (
-      providerPath: string,
-      providerOptions: ProviderOptions,
-      context: LoadApiProviderContext,
-    ) => {
-      const { createLiteLLMProvider } = await import('./litellm');
-      return createLiteLLMProvider(providerPath, {
-        config: providerOptions,
-        env: context.env,
-      });
-    },
-  },
-  {
     test: (providerPath: string) => providerPath.startsWith('localai:'),
     create: async (
       providerPath: string,
@@ -1091,19 +1050,7 @@ export const providerMap: ProviderFactory[] = [
       });
     },
   },
-  {
-    test: (providerPath: string) => providerPath.startsWith('minimax:'),
-    create: async (
-      providerPath: string,
-      providerOptions: ProviderOptions,
-      context: LoadApiProviderContext,
-    ) => {
-      return createMiniMaxProvider(providerPath, {
-        config: providerOptions,
-        env: context.env,
-      });
-    },
-  },
+  configuredProviderFactory('minimax:', () => createMiniMaxProvider),
   {
     test: (providerPath: string) => providerPath.startsWith('mistral:'),
     create: async (
@@ -1133,15 +1080,6 @@ export const providerMap: ProviderFactory[] = [
       return createMoonshotProvider(providerPath, {
         ...providerOptions,
         env: providerOptions.env ?? context.env,
-      });
-    },
-  },
-  {
-    test: (providerPath: string) => providerPath.startsWith('nscale:'),
-    create: async (providerPath: string, providerOptions: ProviderOptions) => {
-      return createNscaleProvider(providerPath, {
-        config: providerOptions,
-        env: providerOptions.env,
       });
     },
   },
@@ -1206,10 +1144,7 @@ export const providerMap: ProviderFactory[] = [
               model: codexModel,
             }
           : providerOptions.config,
-        env: {
-          ...context.env,
-          ...providerOptions.env,
-        },
+        env: mergeProviderEnv(providerPath, context.env, providerOptions.env),
       });
     },
   },
@@ -1264,7 +1199,7 @@ export const providerMap: ProviderFactory[] = [
         const { OpenAiAgentsApiProvider } = await import('./openai/agents-api');
         return new OpenAiAgentsApiProvider(modelName, {
           ...providerOptions,
-          env: { ...context.env, ...providerOptions.env },
+          env: mergeProviderEnv(providerPath, context.env, providerOptions.env),
         });
       }
 
@@ -1457,32 +1392,8 @@ export const providerMap: ProviderFactory[] = [
       return new OpenAiChatCompletionProvider(modelType, providerOptions);
     },
   },
-  {
-    test: (providerPath: string) => providerPath.startsWith('openrouter:'),
-    create: async (
-      providerPath: string,
-      providerOptions: ProviderOptions,
-      context: LoadApiProviderContext,
-    ) => {
-      return createOpenRouterProvider(providerPath, {
-        config: providerOptions,
-        env: context.env,
-      });
-    },
-  },
-  {
-    test: (providerPath: string) => providerPath.startsWith('orcarouter:'),
-    create: async (
-      providerPath: string,
-      providerOptions: ProviderOptions,
-      context: LoadApiProviderContext,
-    ) => {
-      return createOrcaRouterProvider(providerPath, {
-        config: providerOptions,
-        env: context.env,
-      });
-    },
-  },
+  configuredProviderFactory('openrouter:', () => createOpenRouterProvider),
+  configuredProviderFactory('orcarouter:', () => createOrcaRouterProvider),
   {
     test: (providerPath: string) => providerPath.startsWith('package:'),
     create: async (
@@ -1493,19 +1404,7 @@ export const providerMap: ProviderFactory[] = [
       return parsePackageProvider(providerPath, context.basePath || process.cwd(), providerOptions);
     },
   },
-  {
-    test: (providerPath: string) => providerPath.startsWith('perplexity:'),
-    create: async (
-      providerPath: string,
-      providerOptions: ProviderOptions,
-      context: LoadApiProviderContext,
-    ) => {
-      return createPerplexityProvider(providerPath, {
-        config: providerOptions,
-        env: context.env,
-      });
-    },
-  },
+  configuredProviderFactory('perplexity:', () => createPerplexityProvider),
   {
     test: (providerPath: string) => providerPath.startsWith('portkey:'),
     create: async (
@@ -1579,32 +1478,7 @@ export const providerMap: ProviderFactory[] = [
       );
     },
   },
-  {
-    test: (providerPath: string) => providerPath.startsWith('togetherai:'),
-    create: async (
-      providerPath: string,
-      providerOptions: ProviderOptions,
-      context: LoadApiProviderContext,
-    ) => {
-      return createTogetherAiProvider(providerPath, {
-        config: providerOptions,
-        env: context.env,
-      });
-    },
-  },
-  {
-    test: (providerPath: string) => providerPath.startsWith('truefoundry:'),
-    create: async (
-      providerPath: string,
-      providerOptions: ProviderOptions,
-      context: LoadApiProviderContext,
-    ) => {
-      return createTrueFoundryProvider(providerPath, {
-        config: providerOptions,
-        env: context.env,
-      });
-    },
-  },
+  configuredProviderFactory('truefoundry:', () => createTrueFoundryProvider),
   {
     test: (providerPath: string) => providerPath.startsWith('typesafe:'),
     create: async (
@@ -1625,19 +1499,7 @@ export const providerMap: ProviderFactory[] = [
       });
     },
   },
-  {
-    test: (providerPath: string) => providerPath.startsWith('llamaapi:'),
-    create: async (
-      providerPath: string,
-      providerOptions: ProviderOptions,
-      context: LoadApiProviderContext,
-    ) => {
-      return createLlamaApiProvider(providerPath, {
-        config: providerOptions,
-        env: context.env,
-      });
-    },
-  },
+  configuredProviderFactory('llamaapi:', () => createLlamaApiProvider),
   {
     test: (providerPath: string) => providerPath.startsWith('aimlapi:'),
     create: async (
@@ -2112,6 +1974,19 @@ function isGoogleProviderPath(providerPath: string): boolean {
 }
 
 const providerFamilies: ProviderFamily[] = [
+  {
+    canHandle: (value) => /^(cerebras|envoy|litellm|novita|nscale|togetherai):/.test(value),
+    factories: async () => {
+      const { getCompatibleProviderFactories } = await import('./families/compatible');
+      return getCompatibleProviderFactories((path, providerOptions, context) =>
+        mergeProviderEnv(
+          { id: path, config: providerOptions.config },
+          context.env,
+          providerOptions.env,
+        ),
+      );
+    },
+  },
   {
     canHandle: isAwsProviderPath,
     factories: async () => {
