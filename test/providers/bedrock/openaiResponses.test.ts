@@ -329,21 +329,23 @@ describe('bedrock openaiResponses helper', () => {
     it.each([
       ['openai.gpt-6-astra', 'us-west-2'],
       ['openai.gpt-6.1-sol', 'us-east-1'],
-    ])('defaults %s to %s in the factory and direct constructor', async (model, region) => {
-      const provider = createBedrockOpenAiResponsesProvider(model, {
+      ['openai.gpt-6.1-terra', 'us-east-1'],
+    ])('defaults %s to %s in the factory and direct constructor', async (modelId, region) => {
+      const provider = createBedrockOpenAiResponsesProvider(modelId, {
         config: { apiKey: 'bedrock-key' },
       });
-      const direct = new BedrockOpenAiResponsesProvider(model, {
+      const direct = new BedrockOpenAiResponsesProvider(modelId, {
         config: { apiKey: 'bedrock-key' },
       });
 
-      expect(provider.getApiUrl()).toBe(`https://bedrock-mantle.${region}.api.aws/openai/v1`);
-      expect(direct.getApiUrl()).toBe(`https://bedrock-mantle.${region}.api.aws/openai/v1`);
+      const apiBaseUrl = `https://bedrock-mantle.${region}.api.aws/openai/v1`;
+      expect(provider.getApiUrl()).toBe(apiBaseUrl);
+      expect(direct.getApiUrl()).toBe(apiBaseUrl);
 
       await provider.callApi('hello');
       expect(fetchWithCache).toHaveBeenCalledWith(
-        `https://bedrock-mantle.${region}.api.aws/openai/v1/responses`,
-        expect.objectContaining({ body: expect.stringContaining(`"model":"${model}"`) }),
+        `${apiBaseUrl}/responses`,
+        expect.objectContaining({ body: expect.stringContaining(`"model":"${modelId}"`) }),
         expect.any(Number),
         'json',
         true,
@@ -374,6 +376,7 @@ describe('bedrock openaiResponses helper', () => {
     it.each([
       ['openai.gpt-6-astra', 'us-east-1'],
       ['openai.gpt-6.1-sol', 'us-west-2'],
+      ['openai.gpt-6.1-terra', 'us-west-2'],
       ['openai.gpt-6-sol', 'us-west-2'],
       ['openai.gpt-6-luna', 'us-east-2'],
       ['openai.gpt-5.6-sol', 'us-gov-west-1'],
@@ -947,13 +950,13 @@ describe('bedrock openaiResponses helper', () => {
       );
 
       it.each([
-        [undefined, 'ultrafast', 0.0021384],
-        [undefined, 'default', 0.0003564],
-        ['https://bedrock-proxy.example.test/openai/v1', undefined, 0.0021384],
-        ['https://bedrock-proxy.example.test/openai/v1', 'default', 0.0003564],
+        [undefined, 'ultrafast'],
+        [undefined, 'default'],
+        ['https://bedrock-proxy.example.test/openai/v1', undefined],
+        ['https://bedrock-proxy.example.test/openai/v1', 'default'],
       ] as const)(
-        'uses regional pricing for endpoint %s and returned tier %s',
-        async (apiBaseUrl, serviceTier, expectedCost) => {
+        'leaves unpublished Bedrock costs unknown for endpoint %s and returned tier %s',
+        async (apiBaseUrl, serviceTier) => {
           vi.mocked(fetchWithCache).mockResolvedValueOnce({
             data: {
               model: 'openai.gpt-6.1-sol',
@@ -983,15 +986,15 @@ describe('bedrock openaiResponses helper', () => {
 
           expect(result.error).toBeUndefined();
           expect(result.output).toBe('hello');
-          expect(result.cost).toBeCloseTo(expectedCost, 10);
+          expect(result.cost).toBeUndefined();
           const request = JSON.parse(vi.mocked(fetchWithCache).mock.calls[0][1]!.body as string);
           expect(request.service_tier).toBe('ultrafast');
         },
       );
 
-      it('applies Ultrafast regional long-context rates to cache writes and reads', async () => {
+      it('keeps an explicit zero rate for long-context Sol requests', async () => {
         const provider = createBedrockOpenAiResponsesProvider('openai.gpt-6.1-sol', {
-          config: { apiKey: 'bedrock-key', service_tier: 'ultrafast' },
+          config: { apiKey: 'bedrock-key', service_tier: 'ultrafast', cost: 0 },
         });
         const result = (provider as any).applyBilling(
           {},
@@ -1006,10 +1009,7 @@ describe('bedrock openaiResponses helper', () => {
           false,
         );
 
-        expect(result.cost).toBeCloseTo(
-          (150_000 * 26.4 + 100_000 * 1.32 + 50_000 * 33 + 1000 * 99) / 1e6,
-          10,
-        );
+        expect(result.cost).toBe(0);
       });
     });
 
@@ -1221,7 +1221,7 @@ describe('bedrock openaiResponses helper', () => {
           }),
         }),
       );
-      expect(body.tools[0].function).toBeUndefined();
+      expect(body.tools?.[0].function).toBeUndefined();
       expect(body.temperature).toBeUndefined();
       expect(body.top_p).toBeUndefined();
     });

@@ -1,7 +1,8 @@
 import { createHash, randomUUID } from 'crypto';
 
 import Anthropic from '@anthropic-ai/sdk';
-import { getEnvOverrides, getEnvString } from '../../envars';
+import { getEnvOverrides, getEnvString, getProviderEnvString } from '../../envars';
+import { getExplicitProviderEnv } from '../../envOverrides';
 import logger from '../../logger';
 import { resolveProviderApiKey } from '../credentials';
 import {
@@ -21,6 +22,8 @@ import type { AnthropicBaseOptions } from './types';
 
 function getScopedCustomHeaders(env?: EnvOverrides): string | undefined {
   return (
+    getExplicitProviderEnv(env)?.ANTHROPIC_CUSTOM_HEADERS ??
+    getEnvOverrides('provider')?.ANTHROPIC_CUSTOM_HEADERS ??
     env?.ANTHROPIC_CUSTOM_HEADERS ??
     getEnvOverrides()?.ANTHROPIC_CUSTOM_HEADERS ??
     getEnvOverrides('file')?.ANTHROPIC_CUSTOM_HEADERS
@@ -169,6 +172,27 @@ export function hashAnthropicCacheValue(value: unknown): string {
     .digest('hex');
 }
 
+class PromptfooAnthropicClient extends Anthropic {
+  // Promptfoo resolves credentials itself. Bedrock authenticates only at dispatch.
+  protected override _shouldResolveDefaultCredentials(): boolean {
+    return false;
+  }
+
+  protected override async authHeaders(options: Parameters<Anthropic['authHeaders']>[0]) {
+    const headers = await super.authHeaders(options);
+    if (headers) {
+      // Existing evals and compatible gateways use the original Messages protocol.
+      // SDK default and per-request custom headers can still override this value.
+      headers.values.set('anthropic-version', '2023-06-01');
+      if (this.apiKey) {
+        headers.values.delete('authorization');
+        headers.values.set('x-api-key', this.apiKey);
+      }
+    }
+    return headers;
+  }
+}
+
 /**
  * Generic provider class for Anthropic APIs.
  *
@@ -237,7 +261,7 @@ export class AnthropicGenericProvider implements ApiProvider {
     this.config = config || {};
     this.label = label;
     const customHeaders =
-      this.env?.ANTHROPIC_CUSTOM_HEADERS ?? getEnvString('ANTHROPIC_CUSTOM_HEADERS');
+      getScopedCustomHeaders(this.env) ?? getEnvString('ANTHROPIC_CUSTOM_HEADERS');
     this.clientHasCustomHeaders =
       Object.keys(this.config.headers ?? {}).length > 0 ||
       Object.keys(parseAnthropicCustomHeaders(customHeaders)).length > 0;
@@ -308,11 +332,13 @@ export class AnthropicGenericProvider implements ApiProvider {
       setCaseInsensitiveHeaderValue(clientDefaultHeaders, 'authorization', `Bearer ${authToken}`);
     }
 
-    this.anthropic = new Anthropic(
+    this.anthropic = new PromptfooAnthropicClient(
       this.buildAnthropicClientOptions({
         apiKey: this.apiKey ?? null,
         authToken: authToken ?? null,
         baseURL: this.getApiBaseUrl(),
+        // Promptfoo owns generation spans; SDK spans would duplicate traced requests.
+        openTelemetry: false,
         ...(Object.keys(clientDefaultHeaders).length > 0
           ? { defaultHeaders: clientDefaultHeaders }
           : {}),
@@ -361,7 +387,8 @@ export class AnthropicGenericProvider implements ApiProvider {
   }
 
   getApiBaseUrl(): string | undefined {
-    const envUrl = this.env?.ANTHROPIC_BASE_URL ?? getEnvString('ANTHROPIC_BASE_URL');
+    const envUrl =
+      getProviderEnvString(this.env, 'ANTHROPIC_BASE_URL') ?? getEnvString('ANTHROPIC_BASE_URL');
     return this.config?.apiBaseUrl || (envUrl === '' ? 'https://api.anthropic.com' : envUrl);
   }
 
@@ -373,7 +400,7 @@ export class AnthropicGenericProvider implements ApiProvider {
 
   protected hasCustomHeaders(): boolean {
     const customHeaders =
-      this.env?.ANTHROPIC_CUSTOM_HEADERS ?? getEnvString('ANTHROPIC_CUSTOM_HEADERS');
+      getScopedCustomHeaders(this.env) ?? getEnvString('ANTHROPIC_CUSTOM_HEADERS');
     return (
       this.clientHasCustomHeaders ||
       Object.keys(parseAnthropicCustomHeaders(customHeaders)).length > 0

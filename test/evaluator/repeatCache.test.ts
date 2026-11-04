@@ -167,6 +167,7 @@ describeEvaluator('evaluator repeat cache isolation', () => {
       'result-repeat-1-miss-2',
     ]);
     expect(firstSummary.results.map((result) => result.response?.cached)).toEqual([false, false]);
+    expect(firstSummary.stats).not.toHaveProperty('cacheHits');
 
     const secondEval = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
     await evaluate(testSuite, secondEval, { maxConcurrency: 1 });
@@ -178,6 +179,7 @@ describeEvaluator('evaluator repeat cache isolation', () => {
       'result-repeat-1-miss-2',
     ]);
     expect(secondSummary.results.map((result) => result.response?.cached)).toEqual([true, true]);
+    expect(secondSummary.stats.cacheHits).toBe(2);
     expect(await getCache().get('manual-provider-key')).toEqual(baselineResponse);
   });
 

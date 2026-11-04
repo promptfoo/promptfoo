@@ -51,6 +51,7 @@ export const DEFAULT_BEDROCK_MANTLE_RESPONSES_REGION = 'us-east-1';
  * Region and explains Mantle 404s; configured Regions are always used as given.
  */
 const BEDROCK_OPENAI_MANTLE_REGIONS = new Map<string, readonly string[]>([
+  ['openai.gpt-6.1-terra', ['us-east-1']],
   ['openai.gpt-6-astra', ['us-west-2']],
   // https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-openai-gpt-6-1-sol.html
   ['openai.gpt-6.1-sol', ['us-east-1']],

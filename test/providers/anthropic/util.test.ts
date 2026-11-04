@@ -106,6 +106,7 @@ const createMockMessage = (content: AnthropicTestMessage['content']): AnthropicT
     cache_read_input_tokens: 0,
     server_tool_use: null,
     service_tier: null,
+    speed: null,
     inference_geo: null,
     output_tokens_details: null,
   },
