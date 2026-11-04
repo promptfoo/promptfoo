@@ -31,17 +31,24 @@ This example demonstrates how to use Promptfoo for image classification tasks us
 
 4. Optionally, re-generate or update the dataset:
 
+   A CSV with 10 sample images is included, so you can skip regeneration and its Python dependencies.
+
+   For regeneration, use CPython 3.12 (recommended) or 3.11. Pillow 13 requires Python 3.11 or newer, while the pinned NumPy 1.26.4 wheels limit this setup to Python 3.11–3.12.
+
    ```sh
+   python3.12 -m venv .venv
+   source .venv/bin/activate
+   python -m pip install -r requirements.txt
    python dataset_gen.py
    ```
 
-   Note: You may need to install dependencies with:
+   This script creates a CSV file with 100 random images from the Fashion MNIST dataset and their labels.
+
+   To check dataset encoding and JPEG safety without downloading Fashion MNIST or calling a model, run:
 
    ```sh
-   pip install -r requirements.txt
+   python -m unittest discover -s . -p 'test_dataset_gen.py' -v
    ```
-
-   This script creates a CSV file with 100 random images from the Fashion MNIST dataset and their labels. A CSV with 10 sample images is included so you can skip this step if preferred.
 
 5. Experiment with the configuration:
    - Modify the JSON schema in `promptfooconfig.yaml` to add or adjust required fields

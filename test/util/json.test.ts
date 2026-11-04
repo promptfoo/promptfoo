@@ -1,5 +1,6 @@
 import dedent from 'dedent';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import cliState from '../../src/cliState';
 import { ResultFailureReason } from '../../src/types/index';
 import {
   convertSlashCommentsToHash,
@@ -49,6 +50,33 @@ describe('json utilities', () => {
       const ajv = getAjv();
       expect(ajv.formats).toBeDefined();
       expect(Object.keys(ajv.formats)).not.toHaveLength(0);
+    });
+
+    it('keeps schema strictness and formats isolated across warm concurrent scopes', async () => {
+      const schema = { type: 'string', format: 'email', fixtureKeyword: true };
+      const strict = cliState.withEnv({ PROMPTFOO_DISABLE_AJV_STRICT_MODE: 'false' }, () =>
+        getAjv(),
+      );
+      await Promise.all(
+        ['true', 'false'].map((disabled) =>
+          cliState.withEnv({ PROMPTFOO_DISABLE_AJV_STRICT_MODE: disabled }, async () => {
+            await Promise.resolve();
+            const ajv = getAjv();
+            if (disabled === 'true') {
+              expect(ajv).not.toBe(strict);
+              const validate = ajv.compile(schema);
+              expect(validate('fixture@example.com')).toBe(true);
+              expect(validate('invalid')).toBe(false);
+            } else {
+              expect(ajv).toBe(strict);
+              expect(() => ajv.compile(schema)).toThrow('unknown keyword');
+            }
+          }),
+        ),
+      );
+      expect(cliState.withEnv({ PROMPTFOO_DISABLE_AJV_STRICT_MODE: 'false' }, () => getAjv())).toBe(
+        strict,
+      );
     });
 
     it('should reuse the same instance on subsequent calls', () => {
@@ -677,6 +705,21 @@ describe('json utilities', () => {
       it('should still convert comments after URLs', () => {
         const input = 'url: http://example.com/path // trailing comment';
         const expected = 'url: http://example.com/path # trailing comment';
+        expect(convertSlashCommentsToHash(input)).toBe(expected);
+      });
+
+      it('should convert a trailing comment after multiple even backslash runs', () => {
+        // Value is "C:\\Users\\" — ends with \\, closing " is not escaped.
+        const input = '"C:\\\\Users\\\\" // comment';
+        const expected = '"C:\\\\Users\\\\" # comment';
+        expect(convertSlashCommentsToHash(input)).toBe(expected);
+      });
+
+      it('should not close string on triple-backslash-quote (odd count = escaped)', () => {
+        // "\\\\" is three backslashes + closing quote: two escaped backslashes,
+        // then an escaped quote -> string not closed at that quote.
+        const input = '"text\\\\\\" still inside" // comment';
+        const expected = '"text\\\\\\" still inside" # comment';
         expect(convertSlashCommentsToHash(input)).toBe(expected);
       });
     });
