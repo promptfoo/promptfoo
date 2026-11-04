@@ -1363,7 +1363,7 @@ describe('OpenAI assertions', () => {
     it.each([
       undefined,
       [],
-      [{ type: 'function', name: 'getCurrentTemperature' }],
+      [{ type: 'function', name: 'getCurrentTemperature', parameters: null }],
       [{ type: 'function', function: null }],
       [{ type: 'function', name: 'getCurrentTemperature', parameters: { type: 'not-a-type' } }],
     ])('keeps raw function schema configuration errors as failures: %j', async (tools) => {
@@ -1385,6 +1385,34 @@ describe('OpenAI assertions', () => {
           },
         });
         expect(result).toMatchObject({ pass: false, score: 0 });
+      }
+    });
+
+    it.each([
+      ['{}', true],
+      [createFahrenheitFunctionCall().arguments, false],
+    ] as const)('validates parameterless raw calls with arguments %s', async (args, valid) => {
+      const provider = createMockProvider({
+        config: { tools: [{ type: 'function', name: 'getCurrentTemperature' }] },
+      });
+      for (const inverse of [false, true]) {
+        const pass = inverse ? !valid : valid;
+        const result = await runAssertion({
+          prompt: 'Some prompt',
+          provider,
+          assertion: inverse ? createTypeConfig('not-is-valid-openai-tools-call') : toolsAssertion,
+          test: {},
+          providerResponse: {
+            output: 'Display text',
+            raw: {
+              output: [
+                successfulCall,
+                { type: 'function_call', name: 'getCurrentTemperature', arguments: args },
+              ],
+            },
+          },
+        });
+        expect(result).toMatchObject({ pass, score: Number(pass) });
       }
     });
 
