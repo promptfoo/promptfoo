@@ -33,7 +33,7 @@ When testing a real coding agent, set `providers[0].config.working_dir` to a dis
 
 For meaningful results, point the config at a real agent provider:
 
-- **Codex SDK**: Uncomment the `openai:codex-sdk` provider in `promptfooconfig.yaml` and set `working_dir` to a disposable checkout.
+- **Codex SDK**: Install `npm install promptfoo @openai/codex-sdk@^0.156.1` in this example directory, then uncomment the `openai:codex-sdk` provider in `promptfooconfig.yaml` and set `working_dir` to a disposable checkout.
 - **Custom agent**: Use a `file://` provider or HTTP endpoint that wraps your agent framework.
 
 Real agent providers should return structured output with command executions and trace data so the deterministic verifiers can inspect commands, outputs, and file changes — not just the final response.
