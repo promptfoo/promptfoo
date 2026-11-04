@@ -26,7 +26,9 @@ def assert_remote_trace_result(
     case.assertEqual(row["failureReason"], 1, row)
     case.assertFalse(row["response"].get("error"), row)
     case.assertEqual(row["error"], row["gradingResult"]["reason"], row)
-    case.assertIn(row["error"], {components[i]["reason"] for i in incomplete | failed}, row)
+    case.assertIn(
+        row["error"], {components[i]["reason"] for i in incomplete | failed}, row
+    )
     case.assertLess(row["score"], 1, row)
     for index, item in enumerate(components):
         case.assertEqual(item["pass"], index not in incomplete | failed, item)
