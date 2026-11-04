@@ -170,8 +170,8 @@ describe('ReportIndex', () => {
       );
 
       const dataTable = await screen.findByTestId('data-table');
-      const card = dataTable.parentElement;
-      const contentShell = card?.parentElement;
+      const contentShell = dataTable.parentElement;
+      expect(contentShell?.parentElement).toBe(container.firstElementChild);
 
       expect(container.firstElementChild).toHaveClass(
         'flex',
@@ -181,7 +181,6 @@ describe('ReportIndex', () => {
         'overflow-y-auto',
       );
       expect(contentShell).toHaveClass('flex-1', 'min-h-0', 'flex', 'flex-col');
-      expect(card).toHaveClass('flex-1', 'min-h-0', 'flex', 'flex-col');
     });
 
     it('should configure client virtualization with stable report row ids', async () => {
