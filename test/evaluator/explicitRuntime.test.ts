@@ -14,7 +14,7 @@ it('runs explicit runtimes in a fresh process without Node fallback or migration
       {
         cwd: process.cwd(),
         encoding: 'utf8',
-        timeout: 90_000,
+        timeout: 20_000,
         env: {
           ...process.env,
           PROMPTFOO_CONFIG_DIR: configDir,
@@ -31,4 +31,4 @@ it('runs explicit runtimes in a fresh process without Node fallback or migration
   } finally {
     rmSync(configDir, { recursive: true, force: true });
   }
-}, 95_000);
+});
