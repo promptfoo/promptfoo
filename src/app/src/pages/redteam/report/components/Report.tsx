@@ -163,7 +163,6 @@ const App = ({ evalId: evalIdProp, embedded, onActionsReady }: ReportProps = {})
     const controller = new AbortController();
     setEvalData(null);
     setLoadError(null);
-    setSelectedPromptIndex(0);
 
     const loadReport = async () => {
       let id = requestedEvalId;
