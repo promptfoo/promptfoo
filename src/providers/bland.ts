@@ -12,13 +12,13 @@ import {
   withResponseCacheMetadata,
 } from './shared';
 
-import type { EnvOverrides } from '../types/env';
+import type { EnvOverrides } from '../contracts/env';
+import type { ProviderResponse } from '../contracts/providers';
 import type {
   ApiProvider,
   CallApiContextParams,
   CallApiOptionsParams,
   ProviderOptions,
-  ProviderResponse,
 } from '../types/providers';
 
 const BLAND_API_BASE_URL = 'https://api.bland.ai';
@@ -379,6 +379,72 @@ export class BlandProvider implements ApiProvider {
     return `bland:chat:${createHash('sha256').update(fingerprint).digest('hex')}`;
   }
 
+  /**
+   * Opens a chat if there is none (taking the greeting unless disabled), then sends each
+   * turn until the agent completes. Progress is recorded in `state` and `transcript` as it
+   * happens, so a failure part way through still reports what was said.
+   */
+  private async converse(
+    state: { chatId?: string; last?: BlandTurnData },
+    turns: string[],
+    transcript: BlandTurn[],
+    apiKey: string,
+    context?: CallApiContextParams,
+    callOptions?: CallApiOptionsParams,
+  ): Promise<void> {
+    const record = (user: string | null, data: BlandTurnData) => {
+      state.last = data;
+      transcript.push({
+        user,
+        assistant: data.assistant_responses ?? [],
+        nodeId: data.current_node_id,
+        nodeName: data.current_node_name,
+      });
+    };
+
+    if (!state.chatId) {
+      state.chatId = await this.createChat(apiKey, context, callOptions);
+      if (this.config.includeGreeting !== false) {
+        record(null, await this.sendTurn(state.chatId, null, apiKey, callOptions));
+      }
+    }
+
+    for (const turn of turns) {
+      if (state.last?.completed) {
+        // The agent ended the conversation; later turns would be refused.
+        break;
+      }
+      record(turn, await this.sendTurn(state.chatId, turn, apiKey, callOptions));
+    }
+  }
+
+  private buildResponse(
+    chatId: string | undefined,
+    last: BlandTurnData | undefined,
+    transcript: BlandTurn[],
+  ): ProviderResponse {
+    const lastExchange = transcript[transcript.length - 1];
+    return {
+      output: (lastExchange?.assistant ?? []).join('\n'),
+      sessionId: chatId,
+      metadata: {
+        bland: {
+          chatId,
+          currentNodeId: last?.current_node_id,
+          currentNodeName: last?.current_node_name,
+          variables: last?.variables,
+          variableChanges: last?.variable_changes ?? undefined,
+          completed: last?.completed ?? false,
+          transcript,
+        },
+      },
+      ...(last?.completed && {
+        conversationEnded: true,
+        conversationEndReason: 'agent_completed',
+      }),
+    };
+  }
+
   async callApi(
     prompt: string,
     context?: CallApiContextParams,
@@ -411,70 +477,28 @@ export class BlandProvider implements ApiProvider {
     }
 
     const transcript: BlandTurn[] = [];
-    let last: BlandTurnData | undefined;
-    let chatId = existingSession;
+    const state: { chatId?: string; last?: BlandTurnData } = { chatId: existingSession };
 
     try {
-      if (!chatId) {
-        chatId = await this.createChat(apiKey, context, callOptions);
-        if (this.config.includeGreeting !== false) {
-          last = await this.sendTurn(chatId, null, apiKey, callOptions);
-          transcript.push({
-            user: null,
-            assistant: last.assistant_responses ?? [],
-            nodeId: last.current_node_id,
-            nodeName: last.current_node_name,
-          });
-        }
-      }
-
-      for (const turn of turns) {
-        if (last?.completed) {
-          // The agent ended the conversation; later turns would be refused.
-          break;
-        }
-        last = await this.sendTurn(chatId, turn, apiKey, callOptions);
-        transcript.push({
-          user: turn,
-          assistant: last.assistant_responses ?? [],
-          nodeId: last.current_node_id,
-          nodeName: last.current_node_name,
-        });
-      }
+      await this.converse(state, turns, transcript, apiKey, context, callOptions);
     } catch (err) {
       if (err instanceof Error && err.name === 'AbortError') {
         throw err;
       }
       const message = err instanceof Error ? err.message : String(err);
-      logger.error('[Bland] Chat failed', { target: this.id(), chatId, error: message });
+      logger.error('[Bland] Chat failed', {
+        target: this.id(),
+        chatId: state.chatId,
+        error: message,
+      });
       return {
         error: message,
-        ...(chatId && { sessionId: chatId }),
-        metadata: { bland: { chatId, transcript } },
+        ...(state.chatId && { sessionId: state.chatId }),
+        metadata: { bland: { chatId: state.chatId, transcript } },
       };
     }
 
-    const lastExchange = transcript[transcript.length - 1];
-    const response: ProviderResponse = {
-      output: (lastExchange?.assistant ?? []).join('\n'),
-      sessionId: chatId,
-      metadata: {
-        bland: {
-          chatId,
-          currentNodeId: last?.current_node_id,
-          currentNodeName: last?.current_node_name,
-          variables: last?.variables,
-          variableChanges: last?.variable_changes ?? undefined,
-          completed: last?.completed ?? false,
-          transcript,
-        },
-      },
-      ...(last?.completed && {
-        conversationEnded: true,
-        conversationEndReason: 'agent_completed',
-      }),
-    };
-
+    const response = this.buildResponse(state.chatId, state.last, transcript);
     if (cache && cacheKey) {
       await cache.set(cacheKey, response);
     }
