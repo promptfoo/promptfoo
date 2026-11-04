@@ -19,20 +19,14 @@ import { selectMaxScore } from '../matchers/comparison';
 import { generateIdFromPrompt } from '../prompts/id';
 import { maybeEmitAzureOpenAiWarning } from '../providers/azure/warnings';
 import { providerRegistry } from '../providers/providerRegistry';
-import { isPromptfooSampleTarget } from '../providers/shared';
+import { isPromptfooSampleTarget, waitForPromiseWithAbort } from '../providers/shared';
 import { redteamProviderManager } from '../redteam/providers/shared';
 import { RateLimitRegistry } from '../scheduler';
 import { withProviderCallExecutionContext } from '../scheduler/providerCallExecutionContext';
 import { type ProviderCallQueue, ProviderGroupedCallQueue } from '../scheduler/providerCallQueue';
 import { generatePrompts } from '../suggestions';
 import telemetry from '../telemetry';
-import {
-  isOtlpReceiverStarted,
-  startOtlpReceiverIfNeeded,
-  stopOtlpReceiverIfNeeded,
-} from '../tracing/evaluatorTracing';
-import { getDefaultOtelConfig } from '../tracing/otelConfig';
-import { flushOtel, initializeOtel, shutdownOtel } from '../tracing/otelSdk';
+import { isTracingEnabledForSuite } from '../tracing/evaluatorTracing';
 import {
   type Assertion,
   type AssertionOrSet,
@@ -84,7 +78,6 @@ import {
   sanitizeObject,
   sanitizeUrl,
 } from '../util/sanitizer';
-import { sleep } from '../util/time';
 import {
   accumulateAssertionTokenUsage,
   accumulateGradingRequest,
@@ -138,6 +131,7 @@ import type {
   EvaluationStoreResult,
   EvaluatorResultWriter,
   EvaluatorRuntime,
+  EvaluatorTracingLifecycle,
   EvaluatorProgressBar as ProgressBarManager,
 } from './runtime';
 
@@ -3982,9 +3976,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     ciProgressReporter?.start();
 
     this.options.progressCallback = (completed, total, index, evalStep, metrics) => {
-      if (originalProgressCallback) {
-        originalProgressCallback(completed, total, index, evalStep, metrics);
-      }
+      originalProgressCallback?.(completed, total, index, evalStep, metrics);
 
       if (isWebUI) {
         const provider = evalStep.provider.label || evalStep.provider.id();
@@ -4162,99 +4154,61 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     });
   }
 
-  private async acquireOtlpReceiver(signal?: AbortSignal): Promise<boolean> {
-    signal?.throwIfAborted();
-    const startup = startOtlpReceiverIfNeeded(this.testSuite, this.store.id);
-    if (!signal) {
-      return startup;
-    }
-    return new Promise<boolean>((resolve, reject) => {
-      const onAbort = () => reject(signal.reason);
-      signal.addEventListener('abort', onAbort, { once: true });
-      startup.then(
-        (acquired) => {
-          signal.removeEventListener('abort', onAbort);
-          if (signal.aborted) {
-            // The shared startup can finish after this evaluation has returned. Release only
-            // its reservation without delaying cancellation or closing another evaluation's receiver.
-            void stopOtlpReceiverIfNeeded(acquired, this.store.id).catch((error) => {
-              logger.warn('Failed to release tracing receiver after evaluation cancellation', {
-                error,
-              });
-            });
-            reject(signal.reason);
-          } else {
-            resolve(acquired);
-          }
-        },
-        (error) => {
-          signal.removeEventListener('abort', onAbort);
-          reject(error);
-        },
-      );
-    });
-  }
-
   private async evaluateWithResources(deadline: EvaluationDeadline): Promise<TEvaluation> {
-    // Initialize OTEL SDK if tracing is enabled
-    // Check env flag, test suite level, and default test metadata
-    const tracingEnabled =
-      getEnvBool('PROMPTFOO_TRACING_ENABLED', false) ||
-      this.testSuite.tracing?.enabled === true ||
-      (typeof this.testSuite.defaultTest === 'object' &&
-        this.testSuite.defaultTest?.metadata?.tracingEnabled === true) ||
-      this.testSuite.tests?.some((t) => t.metadata?.tracingEnabled === true);
-    let otelInitialized = false;
-    let otlpReceiverAcquired = false;
-
-    let evaluationError: unknown;
+    let tracingLifecycle: EvaluatorTracingLifecycle | undefined;
+    let tracingStartup: Promise<void> | undefined;
+    let evaluationFailed = false;
     try {
       await Promise.all(
         this.testSuite.providers.map((provider) =>
           providerRegistry.useProvider(provider, deadline.providerAbortSignal),
         ),
       );
-      otlpReceiverAcquired = await this.acquireOtlpReceiver(deadline.providerAbortSignal);
-      deadline.providerAbortSignal?.throwIfAborted();
-      if (tracingEnabled) {
-        logger.debug('[Evaluator] Initializing OTEL SDK for tracing');
-        const otelConfig = getDefaultOtelConfig();
-        initializeOtel(otelConfig);
-        otelInitialized = true;
+      if (isTracingEnabledForSuite(this.testSuite)) {
+        if (!this.runtime.createTracingLifecycle) {
+          throw new Error('Tracing requires an EvaluatorRuntime.createTracingLifecycle adapter');
+        }
+        tracingLifecycle = this.runtime.createTracingLifecycle(this.testSuite, this.store.id);
+        tracingStartup = tracingLifecycle.start(deadline.providerAbortSignal);
+        await waitForPromiseWithAbort(tracingStartup, deadline.providerAbortSignal);
+        tracingStartup = undefined;
       }
+      deadline.providerAbortSignal?.throwIfAborted();
 
       return await this._runEvaluation(deadline);
     } catch (error) {
-      evaluationError = error;
+      evaluationFailed = true;
       throw error;
     } finally {
-      // Close the JSONL writers first, before the (possibly multi-second) OTEL / provider
-      // teardown below, so the streamed file is fully flushed before the post-run rewrite
-      // reads it back and the file handle is released promptly. allSettled so one writer's
-      // close failure neither blocks cleanup nor masks another writer's error.
+      // Flush JSONL before tracing and provider cleanup, then attempt every writer close.
+      // The post-run output rewrite must see complete files and released handles.
       const writerCloseResults = await Promise.allSettled(
-        this.fileWriters.map((writer) => writer.close()),
+        this.fileWriters.map(async (writer) => writer.close()),
       );
       const writerCloseErrors = writerCloseResults.flatMap((result) =>
         result.status === 'rejected' ? [result.reason] : [],
       );
 
-      let cleanupError: unknown;
+      const cleanupErrors: unknown[] = [];
       try {
-        // Flush and shutdown OTEL SDK
-        if (otelInitialized) {
-          logger.debug('[Evaluator] Flushing OTEL spans...');
-          await flushOtel();
-          await shutdownOtel();
+        if (tracingStartup && tracingLifecycle && deadline.providerAbortSignal?.aborted) {
+          // Cancellation must settle before a blocked startup. Release its lease after
+          // startup settles, including a partial startup that failed after acquiring it.
+          const lifecycle = tracingLifecycle;
+          void tracingStartup
+            .catch(() => {})
+            .then(() => lifecycle.close())
+            .catch((error) => {
+              logger.warn('Failed to release tracing after evaluation cancellation', { error });
+            });
+        } else {
+          await tracingLifecycle?.close();
         }
+      } catch (error) {
+        cleanupErrors.push(error);
+      }
 
-        if (otlpReceiverAcquired && isOtlpReceiverStarted()) {
-          // Add a delay to allow providers to finish exporting spans
-          logger.debug('[Evaluator] Waiting for span exports to complete...');
-          await sleep(3000);
-        }
-        await stopOtlpReceiverIfNeeded(otlpReceiverAcquired, this.store.id);
-
+      try {
         // Log rate limit metrics for debugging before cleanup
         if (this.rateLimitRegistry) {
           const metrics = this.rateLimitRegistry.getMetrics();
@@ -4283,19 +4237,18 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
         // Reset cliState.maxConcurrency to prevent stale state between evaluations
         cliState.maxConcurrency = undefined;
       } catch (error) {
-        cleanupError = error;
-        throw error;
+        cleanupErrors.push(error);
       } finally {
+        if (cleanupErrors.length > 0) {
+          logger.error('[Evaluator] Error during evaluation cleanup', { errors: cleanupErrors });
+        }
         if (writerCloseErrors.length > 0) {
           logger.error('[Evaluator] Error closing JSONL output', { errors: writerCloseErrors });
           // Only surface a writer-close failure when nothing else failed, so the original
           // evaluation/cleanup error is never masked by a secondary I/O error.
-          if (evaluationError === undefined && cleanupError === undefined) {
-            // When results persisted to the database, that copy is authoritative and the
-            // post-run rewrite (writeMultipleOutputs) regenerates the JSONL artifact from
-            // it, so a close error (e.g. a delayed fd-close writeback failure) is recoverable
-            // — log it rather than failing an otherwise-successful run. Only when persistence
-            // failed is the streamed JSONL the sole copy whose truncation must be surfaced.
+          if (!evaluationFailed && cleanupErrors.length === 0) {
+            // Persisted results can regenerate JSONL. If persistence failed, the
+            // streamed file is the only copy, so a close failure must surface.
             if (this.store.resultPersistenceFailed) {
               throw writerCloseErrors.length === 1
                 ? writerCloseErrors[0]
@@ -4308,6 +4261,9 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
               `JSONL output writer reported a close error after results persisted; the output file will be regenerated from the database. ${writerCloseErrors.map((error) => (error instanceof Error ? error.message : String(error))).join('; ')}`,
             );
           }
+        }
+        if (!evaluationFailed && cleanupErrors.length > 0) {
+          throw cleanupErrors[0];
         }
       }
     }

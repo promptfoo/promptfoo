@@ -129,6 +129,8 @@ describe('coverage ratchets', () => {
     'src/evaluator/engine.ts',
     'src/evaluator/runEval.ts',
     'src/evaluator/progress.ts',
+    'src/node/tracingLifecycle.ts',
+    'src/tracing/otelSdk.ts',
     'src/node/evaluateForCli.ts',
     'src/node/evaluatorProgress.ts',
     'src/progress/evaluationProgress.ts',
