@@ -127,6 +127,7 @@ describe('coverage ratchets', () => {
   it.each([
     'src/assertions/contains.ts',
     'src/evaluator/engine.ts',
+    'src/evaluator/runEval.ts',
     'src/evaluator/progress.ts',
     'src/node/tracingLifecycle.ts',
     'src/tracing/otelSdk.ts',
