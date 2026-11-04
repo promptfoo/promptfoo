@@ -113,6 +113,7 @@ afterEach(() => {
   fs.rmSync(directory, { recursive: true, force: true });
 });
 
+const trackingFixtureId = 'c1de2656-9e1a-4f64-b6ca-e5551e946327';
 const model = () => new PromptfooModelProvider('test-model').callApi('Hello');
 const grade = () =>
   withCacheEnabled(false, () =>
@@ -223,7 +224,7 @@ describe('Cloud task team recovery', () => {
       ['job', () => sharedTask({ jobId: 'job' })],
       ['config', () => sharedTask({ config: { metadata: { teamId: 'team' } } })],
       ['header', () => sharedTask({}, { 'X-Promptfoo-Team-Id': 'team' })],
-      ['status', () => checkExfilTracking('resource', 'evaluation')],
+      ['status', () => checkExfilTracking(trackingFixtureId, 'evaluation')],
       [
         'custom endpoint',
         () => {
@@ -248,10 +249,11 @@ describe('Cloud task team recovery', () => {
       const before = readGlobalConfig();
       const status =
         reader === 'grader'
-          ? await checkExfilTracking('synthetic-resource', 'synthetic-evaluation')
+          ? await checkExfilTracking(trackingFixtureId, 'synthetic-evaluation')
           : await new IndirectWebPwnProvider({ injectVar: 'prompt' })['checkPageFetched'](
-              'synthetic-resource',
+              trackingFixtureId,
               'synthetic-evaluation',
+              undefined,
             );
 
       expect(status).toMatchObject({ wasExfiltrated: false, exfilCount: 0, exfilRecords: [] });
@@ -260,7 +262,7 @@ describe('Cloud task team recovery', () => {
           path: '/api/v1/task',
           body: expect.objectContaining({
             task: 'get-web-page-tracking',
-            uuid: 'synthetic-resource',
+            uuid: trackingFixtureId,
             evalId: 'synthetic-evaluation',
           }),
         }),
