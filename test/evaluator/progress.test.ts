@@ -1,5 +1,6 @@
 import { afterEach, expect, it, vi } from 'vitest';
 import logger from '../../src/logger';
+import { CIProgressReporter } from '../../src/progress/ciProgressReporter';
 import {
   cleanupProgressAfterError,
   cleanupProgressReporters,
@@ -12,13 +13,11 @@ import {
 afterEach(() => vi.restoreAllMocks());
 
 it('counts comparison rows exactly once in CI progress', () => {
-  const ciProgressReporter = {
-    start: vi.fn(),
-    update: vi.fn(),
-    updateTotalTests: vi.fn(),
-    error: vi.fn(),
-    finish: vi.fn(),
-  };
+  const ciProgressReporter = new CIProgressReporter(2);
+  vi.spyOn(ciProgressReporter, 'update');
+  vi.spyOn(ciProgressReporter, 'updateTotalTests');
+  vi.spyOn(ciProgressReporter, 'error').mockImplementation(() => {});
+  vi.spyOn(ciProgressReporter, 'finish').mockImplementation(() => {});
   const reporters = { ciProgressReporter, progressBarManager: null, runEvalOptions: [{}, {}] };
   updateComparisonReporterTotals({ ...reporters, compareRowsCount: 0 });
   expect(ciProgressReporter.updateTotalTests).not.toHaveBeenCalled();
