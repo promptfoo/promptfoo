@@ -1,7 +1,7 @@
 // Compatibility surface for existing source consumers. Runtime composition lives in node/.
 
 export { evaluate } from '../node/evaluateTestSuite';
-export { ProgressBarManager } from '../node/evaluatorProgress';
+export { formatVarsForDisplay, ProgressBarManager } from '../progress/evaluationProgress';
 export {
   __resetPromptConversationCacheForTests,
   generateVarCombinations,
@@ -11,4 +11,3 @@ export {
   runEval,
 } from './engine';
 export { PromptSuggestionsRejectedError } from './errors';
-export { formatVarsForDisplay } from './progress';
