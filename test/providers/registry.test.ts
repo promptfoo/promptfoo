@@ -1061,6 +1061,30 @@ describe('Provider Registry', () => {
       expect(config.apiKeyEnvar).toBe('MOONSHOT_API_KEY');
     });
 
+    it('should pass Snowflake provider options without nesting the config', async () => {
+      const factory = providerMap.find((factory) => factory.test('snowflake:mistral-large2'));
+      expect(factory).toBeDefined();
+
+      const provider = await factory!.create(
+        'snowflake:mistral-large2',
+        {
+          config: {
+            accountIdentifier: 'myorg-myaccount',
+            apiBaseUrl: 'https://custom.snowflakecomputing.com',
+            apiKey: 'snowflake-test-key',
+          },
+        },
+        mockContext,
+      );
+
+      expect(provider.id()).toBe('snowflake:mistral-large2');
+      expect(provider.config).toMatchObject({
+        accountIdentifier: 'myorg-myaccount',
+        apiBaseUrl: 'https://custom.snowflakecomputing.com',
+        apiKey: 'snowflake-test-key',
+      });
+    });
+
     it('should route Moonshot chat prefixes and Kimi defaults correctly', async () => {
       const factory = providerMap.find((f) => f.test('moonshot:chat:kimi-k2.6'));
       expect(factory).toBeDefined();
@@ -2568,6 +2592,14 @@ describe('Provider Registry', () => {
         async () => (await import('../../src/providers/google/gemini-image')).GeminiImageProvider,
       ],
       // Nano Banana 2 / 2 Lite / Pro GA: bare google:<model> routes dispatch on the '-image' substring.
+      [
+        'google:gemini-nano-banana-2.1',
+        async () => (await import('../../src/providers/google/gemini-image')).GeminiImageProvider,
+      ],
+      [
+        'palm:gemini-nano-banana-2.1',
+        async () => (await import('../../src/providers/google/gemini-image')).GeminiImageProvider,
+      ],
       [
         'google:gemini-3.1-flash-lite-image',
         async () => (await import('../../src/providers/google/gemini-image')).GeminiImageProvider,

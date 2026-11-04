@@ -111,7 +111,7 @@ function incompatibleEnvironment(before: Inventory, after: Inventory): string | 
 export function compareInventory(before: Inventory, after: Inventory) {
   assert.equal(before.surface, after.surface);
   const incompatible = incompatibleEnvironment(before, after);
-  assert(!incompatible, incompatible);
+  assert(!incompatible, incompatible ?? 'Incompatible environment');
   const identities = (inventory: Inventory) =>
     new Set(inventory.components.map(({ name, version }) => `${name}@${version}`));
   const oldComponents = identities(before);

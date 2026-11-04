@@ -1,5 +1,5 @@
 import { TooltipProvider } from '@app/components/ui/tooltip';
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it } from 'vitest';
 import TraceTimeline from './TraceTimeline';
@@ -92,10 +92,12 @@ describe('TraceTimeline', () => {
 
     renderTraceTimeline(mockTrace);
 
-    // Check that the span name and duration are displayed
-    expect(screen.getByText('Test Span')).toBeInTheDocument();
-    // Duration may appear in multiple places (inside the span bar and potentially in tooltip)
-    expect(screen.getAllByText(/1\.50s/).length).toBeGreaterThan(0);
+    const user = userEvent.setup();
+    await user.hover(screen.getByText('1.50s').parentElement!);
+    const tooltip = await screen.findByRole('tooltip');
+    expect(within(tooltip).getByText('Duration: 1.50s')).toBeInTheDocument();
+    expect(within(tooltip).getByText('Start: 2023-03-15T12:00:00.000Z')).toBeInTheDocument();
+    expect(within(tooltip).getByText('End: 2023-03-15T12:00:01.500Z')).toBeInTheDocument();
   });
 
   it('should correctly process and display spans with identical start times', () => {
@@ -210,7 +212,7 @@ describe('TraceTimeline', () => {
 
     renderTraceTimeline(mockTrace);
 
-    // Just verify the span renders correctly with its name and duration
+    expect(screen.getByText('500ms').parentElement).toHaveClass('bg-red-500');
     expect(screen.getByText('Error Span')).toBeInTheDocument();
     expect(screen.getByText('Total Duration: 500ms')).toBeInTheDocument();
   });
@@ -234,7 +236,7 @@ describe('TraceTimeline', () => {
 
     renderTraceTimeline(mockTrace);
 
-    // Just verify the span renders correctly with its name
+    expect(screen.getByText('500ms').parentElement).toHaveClass('bg-emerald-500');
     expect(screen.getByText('Success Span')).toBeInTheDocument();
     expect(screen.getByText('Total Duration: 500ms')).toBeInTheDocument();
   });

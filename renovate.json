@@ -40,7 +40,7 @@
       "enabled": false
     },
     {
-      "description": "Pin the code-scan workflow's Node to 24.15.0: Node >=24.16.0 has a Linux HTTPS slowdown (~10s/request) that drags the scanner's `npm install -g promptfoo` past the job's 15-minute timeout (see the comment in .github/workflows/promptfoo-code-scan.yml; first fixed in PR #9374, regressed by the blanket bump in PR #9859). Renovate must not re-bump this pin. Re-enable when a newer Node resolves the regression.",
+      "description": "Retain the code-scan workflow's PATH Node 24.15.0 pin for npm fallback compatibility. The published action installs and runs the scanner with its own Node 24 runtime. Review the action runtime and npm fallback together when updating this toolchain; the old global-install slowdown workaround no longer controls the scanner's Node executable.",
       "matchManagers": ["github-actions"],
       "matchFileNames": [".github/workflows/promptfoo-code-scan.yml"],
       "matchPackageNames": ["node", "actions/node-versions"],

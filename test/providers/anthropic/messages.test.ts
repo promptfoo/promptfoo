@@ -1854,6 +1854,7 @@ describe('AnthropicMessagesProvider', () => {
           output_tokens_details: null,
           server_tool_use: null,
           service_tier: null,
+          speed: null,
         },
       }));
       if (options.combined) {
@@ -2821,6 +2822,7 @@ describe('AnthropicMessagesProvider', () => {
         output_tokens_details: null,
         server_tool_use: null,
         service_tier: null,
+        speed: null,
       },
     };
     const finishedTurn: Anthropic.Messages.Message = {
@@ -3603,6 +3605,7 @@ describe('AnthropicMessagesProvider', () => {
           cache_read_input_tokens: 0,
           server_tool_use: null,
           service_tier: null,
+          speed: null,
           inference_geo: null,
           output_tokens_details: null,
         },
