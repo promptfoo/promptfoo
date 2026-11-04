@@ -4,29 +4,47 @@ import fs from 'fs';
 import path from 'path';
 
 import { createCache } from 'cache-manager';
-import { Keyv } from 'keyv';
-import { KeyvFile } from 'keyv-file';
+import { createDiskCache } from './cache/storage';
 import { getEnvBool, getEnvInt, getEnvString } from './envars';
 import logger from './logger';
-import { getRequestTimeoutMs } from './providers/shared';
+import { getRequestTimeoutMs, throwIfAborted, waitForPromiseWithAbort } from './providers/shared';
 import { getConfigDirectoryPath } from './util/config/manage';
 import { sha256 } from './util/createHash';
 import { isAbortError, isTransientConnectionError } from './util/fetch/errors';
 import { fetchWithRetries, getFetchWithProxyHeaders } from './util/fetch/index';
 import { getRequestUrlString, prepareCloudRequest } from './util/fetch/monkeyPatchFetch';
+import { getEffectiveRequestSignal } from './util/fetch/requestSignal';
+import { ResponseBodyTimeoutError, readWithResponseDeadline } from './util/fetch/responseDeadline';
+import { getFetchRetryContextMaxRetries } from './util/fetch/retryContext';
 import { isSecretField, looksLikeSecret, sanitizeUrlForLogging } from './util/sanitizer';
 import { sleep } from './util/time';
 import type { Cache } from 'cache-manager';
 
 import type { CacheOptions } from './types/cache';
+import type { FetchRateLimitObservation } from './util/fetch/index';
 import type { FetchOptions } from './util/fetch/types';
 
 let cacheInstance: Cache | undefined;
 const namespacedCacheInstances = new Map<string, Cache>();
 let cacheClearGeneration = 0;
 
-const cacheNamespaceStorage = new AsyncLocalStorage<{ namespace: string }>();
-const cacheEnabledStorage = new AsyncLocalStorage<{ enabled: boolean }>();
+// The CLI and the public ESM/CJS entry points can load separate copies of this
+// module. Share only the async policy, not cache instances or module defaults,
+// so providers loaded by extension hooks observe the evaluation's cache policy.
+const CACHE_ENABLED_CONTEXT = Symbol.for('promptfoo.cache.enabledContext.v1');
+const CACHE_NAMESPACE_CONTEXT = Symbol.for('promptfoo.cache.namespaceContext.v1');
+const cacheContextGlobal = globalThis as typeof globalThis & {
+  [CACHE_ENABLED_CONTEXT]?: AsyncLocalStorage<{ enabled: boolean }>;
+  [CACHE_NAMESPACE_CONTEXT]?: AsyncLocalStorage<{ namespace: string }>;
+};
+const cacheEnabledStorage = (cacheContextGlobal[CACHE_ENABLED_CONTEXT] ??= new AsyncLocalStorage<{
+  enabled: boolean;
+}>());
+
+const cacheNamespaceStorage = (cacheContextGlobal[CACHE_NAMESPACE_CONTEXT] ??=
+  new AsyncLocalStorage<{
+    namespace: string;
+  }>());
 
 let enabled = getEnvBool('PROMPTFOO_CACHE_ENABLED', true);
 
@@ -68,7 +86,7 @@ export function getCache() {
 function getCacheInstance() {
   if (!cacheInstance) {
     let cachePath = '';
-    const stores = [];
+    let diskCache: Cache | undefined;
 
     if (cacheType === 'disk' && enabled) {
       cachePath =
@@ -82,16 +100,7 @@ function getCacheInstance() {
       const newCacheFile = path.join(cachePath, 'cache.json');
 
       try {
-        const store = new KeyvFile({
-          filename: newCacheFile,
-        });
-
-        const keyv = new Keyv({
-          store,
-          ttl: getCacheTtlMs(),
-        });
-
-        stores.push(keyv);
+        diskCache = createDiskCache(newCacheFile, getCacheTtlMs());
       } catch (err) {
         logger.warn(
           `[Cache] Failed to initialize disk cache: ${(err as Error).message}. ` +
@@ -101,12 +110,12 @@ function getCacheInstance() {
       }
     }
 
-    // Initialize cache (disk if stores array has items, memory otherwise)
-    cacheInstance = createCache({
-      stores,
-      ttl: getCacheTtlMs(),
-      refreshThreshold: 0, // Disable background refresh
-    });
+    cacheInstance =
+      diskCache ??
+      createCache({
+        ttl: getCacheTtlMs(),
+        refreshThreshold: 0, // Disable background refresh
+      });
     const clear = cacheInstance.clear.bind(cacheInstance);
     cacheInstance.clear = async () => {
       const result = await clear();
@@ -305,7 +314,16 @@ type PreparedFetchResponse = {
   cacheable: boolean;
 };
 
-const inflightFetchResponses = new Map<string, Promise<SerializedFetchResponse>>();
+type InflightFetchResponse = {
+  response: Promise<PreparedFetchResponse>;
+  publication: Promise<void>;
+  rateLimitBackoff: {
+    observers: Set<(observation: FetchRateLimitObservation) => void>;
+    latest?: FetchRateLimitObservation;
+  };
+};
+
+const inflightFetchResponses = new Map<string, InflightFetchResponse>();
 const claimedCacheKeys = new Set<string>();
 const IGNORED_FETCH_CACHE_OPTION_KEYS = new Set([
   'cloudAuthHeaderName',
@@ -560,18 +578,17 @@ function getFetchCacheKey(
   );
 }
 
-function getAbortSignalId(signal: AbortSignal) {
+/** Key in-flight requests by abort signal so only callers cancelled together share one. */
+export function getAbortSignalScopedKey(key: string, signal?: AbortSignal | null) {
+  if (!signal) {
+    return JSON.stringify([key, null]);
+  }
   let signalId = abortSignalIds.get(signal);
   if (signalId === undefined) {
     signalId = ++nextAbortSignalId;
     abortSignalIds.set(signal, signalId);
   }
-  return signalId;
-}
-
-function getInflightFetchCacheKey(cacheKey: string, url: RequestInfo, options: RequestInit) {
-  const signal = options.signal ?? (url instanceof Request ? url.signal : undefined);
-  return signal ? `${cacheKey}:signal:${getAbortSignalId(signal)}` : cacheKey;
+  return JSON.stringify([key, signalId]);
 }
 
 /**
@@ -691,19 +708,27 @@ async function fetchAndReadBody(
   maxRetries: number | undefined,
   isIdempotent: boolean,
   logEnabled: boolean,
+  onRateLimitBackoff?: (observation: FetchRateLimitObservation) => void,
 ): Promise<{ respText: string; resp: Response; fetchLatencyMs: number }> {
-  const maxBodyRetries = isIdempotent ? 2 : 0;
+  const retryBudget = Math.max(0, maxRetries ?? getFetchRetryContextMaxRetries() ?? 2);
+  const body = options.body ?? (url instanceof Request ? url.body : null);
+  const singleUseBody = body !== null && typeof body === 'object' && Symbol.asyncIterator in body;
+  const maxBodyRetries = isIdempotent && !singleUseBody ? Math.min(2, retryBudget) : 0;
   for (let bodyAttempt = 0; bodyAttempt <= maxBodyRetries; bodyAttempt++) {
     const fetchStart = Date.now();
     // fetchWithRetries errors propagate directly — not caught by body retry
-    const resp = await fetchWithRetries(url, options, timeout, maxRetries);
+    const resp = await fetchWithRetries(url, options, timeout, maxRetries, onRateLimitBackoff);
     const fetchLatencyMs = Date.now() - fetchStart;
 
     try {
-      const respText = await resp.text();
+      const respText = await readWithResponseDeadline(resp, () => resp.text());
       return { respText, resp, fetchLatencyMs };
     } catch (err) {
-      if (isTransientConnectionError(err as Error) && bodyAttempt < maxBodyRetries) {
+      if (
+        !options.signal?.aborted &&
+        (err instanceof ResponseBodyTimeoutError || isTransientConnectionError(err as Error)) &&
+        bodyAttempt < maxBodyRetries
+      ) {
         const backoffMs = Math.pow(2, bodyAttempt) * 1000;
         if (logEnabled) {
           logger.debug('[Cache] Body stream failed with transient error, retrying', {
@@ -713,7 +738,8 @@ async function fetchAndReadBody(
             error: (err as Error)?.message?.slice(0, 200),
           });
         }
-        await sleep(backoffMs);
+        await waitForPromiseWithAbort(sleep(backoffMs), options.signal);
+        throwIfAborted(options.signal);
         continue;
       }
       // Preserve cancellation: an aborted body read rejects with an AbortError, and
@@ -771,6 +797,7 @@ async function prepareFetchResponse(
   format: 'json' | 'text',
   logEnabled: boolean,
   sanitizeResponse?: CacheOptions['sanitizeResponse'],
+  onRateLimitBackoff?: (observation: FetchRateLimitObservation) => void,
 ): Promise<PreparedFetchResponse> {
   const result = await fetchAndReadBody(
     url,
@@ -779,6 +806,7 @@ async function prepareFetchResponse(
     maxRetries,
     isIdempotent,
     logEnabled,
+    onRateLimitBackoff,
   );
   const response = result.resp;
   const responseText = result.respText;
@@ -836,6 +864,8 @@ async function prepareFetchResponse(
  * @param format Response format: 'json' or 'text' (default: 'json')
  * @param bustOrOptions Bypass cache or provide cache options for this request
  * @param maxRetries Maximum number of retries on transient errors
+ * @param onResponsePrepared Observe each caller's fresh, fully read response before waiting for cache publication
+ * @param onRateLimitBackoff Observe this request's selected live fetch backoff before its wait
  *
  * @returns FetchWithCacheResult with data, cache status, and HTTP metadata
  *
@@ -862,12 +892,22 @@ async function prepareFetchResponse(
 export async function fetchWithCache<T = unknown>(
   url: RequestInfo,
   options: FetchOptions = {},
-  timeout: number = getRequestTimeoutMs(),
+  timeout: number | `${number}` = getRequestTimeoutMs(),
   format: 'json' | 'text' = 'json',
   bustOrOptions: boolean | CacheOptions | undefined = false,
   maxRetries?: number,
+  onResponsePrepared?: (response: FetchWithCacheResult<T>) => void,
+  onRateLimitBackoff?: (observation: FetchRateLimitObservation) => void,
 ): Promise<FetchWithCacheResult<T>> {
-  const fetchOptions = prepareCloudRequest(url, options);
+  const timeoutMs = Number(timeout);
+  const signal = getEffectiveRequestSignal(url, options);
+  throwIfAborted(signal);
+  // fetchWithTimeout composes RequestInit.signal with its timeout signal.
+  // Forward a Request-owned signal too, while retaining an explicit override.
+  const fetchOptions = prepareCloudRequest(
+    url,
+    signal === options.signal ? options : { ...options, signal },
+  );
   const cacheOptions: CacheOptions =
     typeof bustOrOptions === 'boolean' ? { bust: bustOrOptions } : (bustOrOptions ?? {});
   const { bust = false, repeatIndex, cacheKey: providedCacheKey, sanitizeResponse } = cacheOptions;
@@ -905,15 +945,39 @@ export async function fetchWithCache<T = unknown>(
         : getFetchCacheKey(url, fetchOptions, method, format, repeatIndex)
       : null;
 
+  let notifyRateLimitBackoff: typeof onRateLimitBackoff;
+  const observerFailure = onRateLimitBackoff
+    ? new Promise<never>((_resolve, reject) => {
+        let failed = false;
+        notifyRateLimitBackoff = (observation) => {
+          if (failed) {
+            return;
+          }
+          try {
+            onRateLimitBackoff(observation);
+          } catch (error) {
+            failed = true;
+            reject(error);
+          }
+        };
+      })
+    : undefined;
+  // An observer belongs to its caller, not the shared transport/retry loop.
+  void observerFailure?.catch(() => undefined);
+
   if (!cacheEnabled || bust || cacheKey == null) {
-    const { respText, resp, fetchLatencyMs } = await fetchAndReadBody(
+    const response = fetchAndReadBody(
       url,
       fetchOptions,
-      timeout,
+      timeoutMs,
       maxRetries,
       isIdempotent,
       logEnabled,
+      notifyRateLimitBackoff,
     );
+    const { respText, resp, fetchLatencyMs } = await (observerFailure
+      ? Promise.race([response, observerFailure])
+      : response);
     const parsedData = parseFetchResponse(url, resp, respText, format, sanitizeResponse);
     const sanitized = getSanitizedResponse(
       parsedData,
@@ -921,22 +985,26 @@ export async function fetchWithCache<T = unknown>(
       Object.fromEntries(resp.headers.entries()),
       sanitizeResponse,
     );
-    return {
+    const result: FetchWithCacheResult<T> = {
       cached: false,
       data: sanitized.data as T,
       status: resp.status,
       statusText: sanitized.statusText,
       headers: sanitized.headers,
       latencyMs: fetchLatencyMs,
-      deleteFromCache: async () => {
-        // No-op when cache is disabled
-      },
+      deleteFromCache: async () => {},
     };
+    onResponsePrepared?.(result);
+    return result;
   }
 
   const cache = getCacheInstance();
 
-  const cachedResponse = await cache.get<SerializedFetchResponse>(cacheKey);
+  const cachedResponse = await waitForPromiseWithAbort(
+    cache.get<SerializedFetchResponse>(cacheKey),
+    signal,
+  );
+  throwIfAborted(signal);
   if (cachedResponse != null) {
     const result = deserializeFetchResponse<T>(
       cachedResponse,
@@ -962,34 +1030,87 @@ export async function fetchWithCache<T = unknown>(
     return result;
   }
 
-  const inflightCacheKey = getInflightFetchCacheKey(cacheKey, url, fetchOptions);
+  // Only share an active transport when its deadline works for both callers.
+  const inflightCacheKey = `${timeoutMs}:${getAbortSignalScopedKey(cacheKey, signal)}`;
   let inflightResponse = inflightFetchResponses.get(inflightCacheKey);
   const coalesced = inflightResponse !== undefined;
   if (!inflightResponse) {
-    inflightResponse = (async () => {
-      const preparedResponse = await prepareFetchResponse(
-        url,
-        fetchOptions,
-        timeout,
-        maxRetries,
-        isIdempotent,
-        format,
-        logEnabled,
-        sanitizeResponse,
-      );
-      if (preparedResponse.cacheable) {
-        await cache.set(cacheKey, preparedResponse.response);
-      }
-      return preparedResponse.response;
-    })().finally(() => {
-      inflightFetchResponses.delete(inflightCacheKey);
-    });
+    const rateLimitBackoff: InflightFetchResponse['rateLimitBackoff'] = { observers: new Set() };
+    const response = prepareFetchResponse(
+      url,
+      fetchOptions,
+      timeoutMs,
+      maxRetries,
+      isIdempotent,
+      format,
+      logEnabled,
+      sanitizeResponse,
+      (observation) => {
+        rateLimitBackoff.latest = observation;
+        for (const observer of rateLimitBackoff.observers) {
+          observer(observation);
+        }
+      },
+    );
+    const publication = response
+      .then(async (preparedResponse) => {
+        if (preparedResponse.cacheable) {
+          await cache.set(cacheKey, preparedResponse.response);
+        }
+      })
+      .finally(() => {
+        inflightFetchResponses.delete(inflightCacheKey);
+      });
+    // Publication may reject after a caller stops waiting or the transport fails.
+    void publication.catch(() => undefined);
+    inflightResponse = { response, publication, rateLimitBackoff };
     inflightFetchResponses.set(inflightCacheKey, inflightResponse);
   }
 
-  const response = await inflightResponse;
-  const result = deserializeFetchResponse<T>(response, false, cache, cacheKey, sanitizeResponse);
-  return coalesced ? { ...result, coalesced: true } : result;
+  if (notifyRateLimitBackoff) {
+    inflightResponse.rateLimitBackoff.observers.add(notifyRateLimitBackoff);
+    const latest = inflightResponse.rateLimitBackoff.latest;
+    // A late joiner learns the original selected deadline. Expired quota and
+    // jitter-only wait remainders must not create a fresh quota window.
+    if (latest && latest.resetAt > Date.now()) {
+      notifyRateLimitBackoff(latest);
+    }
+  }
+
+  try {
+    // Transport and body reading already own the signal. Race only this caller's
+    // observer failure; an abort race here would discard completed diagnostics.
+    const { response, cacheable } = await (observerFailure
+      ? Promise.race([inflightResponse.response, observerFailure])
+      : inflightResponse.response);
+    const result: FetchWithCacheResult<T> = deserializeFetchResponse<T>(
+      response,
+      false,
+      cache,
+      cacheKey,
+      sanitizeResponse,
+    );
+    if (coalesced) {
+      result.coalesced = true;
+    }
+    // Each consumer owns its observation, including callers sharing the transport.
+    // Stored cache hits never represent a fresh completion or a new quota window.
+    onResponsePrepared?.(result);
+    if (cacheable) {
+      // Keep publication alive for other callers while this caller can stop waiting.
+      await waitForPromiseWithAbort(inflightResponse.publication, signal);
+      throwIfAborted(signal);
+    } else {
+      // Noncacheable diagnostics are never published. Finish inflight cleanup
+      // before another caller can join this completed result, without racing abort.
+      await inflightResponse.publication;
+    }
+    return result;
+  } finally {
+    if (notifyRateLimitBackoff) {
+      inflightResponse.rateLimitBackoff.observers.delete(notifyRateLimitBackoff);
+    }
+  }
 }
 
 /**

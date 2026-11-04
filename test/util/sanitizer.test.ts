@@ -16,6 +16,7 @@ import {
   sanitizeUrl,
   sanitizeUrlEncodedString,
   sanitizeUrlForLogging,
+  stripProviderPromptSelectors,
 } from '../../src/util/sanitizer';
 
 let consoleErrorSpy: ReturnType<typeof vi.spyOn>;
@@ -200,6 +201,66 @@ describe('looksLikeSecret', () => {
   });
 });
 
+describe('stripProviderPromptSelectors', () => {
+  it.each([
+    {},
+    {
+      label: 'ordinary map label',
+      config: { prompts: ['ordinary map configuration'] },
+      prompts: ['ordinary map setting'],
+    },
+  ])('projects only known grading slots in mixed type maps: %s', (metadata) => {
+    const provider = {
+      id: 'echo',
+      prompts: ['ordinary selector'],
+      config: { prompts: ['ordinary provider payload'] },
+    };
+    const application = { prompts: ['ordinary application payload'] };
+    const map = {
+      text: provider,
+      embedding: 'echo',
+      classification: provider,
+      moderation: provider,
+      application,
+      ...metadata,
+    };
+    const projected = stripProviderPromptSelectors(map);
+    const expectedProvider = { id: 'echo', config: provider.config };
+    expect(projected).toEqual({
+      ...map,
+      text: expectedProvider,
+      classification: expectedProvider,
+      moderation: expectedProvider,
+    });
+    expect(projected.application).toBe(application);
+    expect(map.text).toBe(provider);
+    expect(provider.prompts).toEqual(['ordinary selector']);
+  });
+
+  it.each([{ value: 'echo' }, { value: null }, { value: ['echo'] }])(
+    'preserves a provider serializer non-record result: $value',
+    ({ value }) => {
+      const provider = { id: () => 'echo', toJSON: () => value };
+      expect(stripProviderPromptSelectors(provider)).toEqual(value);
+    },
+  );
+
+  it('uses canonical failure output for a provider serializer error', () => {
+    const error = new Error('Ordinary serialization failure');
+    const provider = {
+      id: () => 'echo',
+      runtimeOnly: 'ordinary working state',
+      toJSON: () => {
+        throw error;
+      },
+    };
+    expect(stripProviderPromptSelectors(provider)).toBe(
+      '[unable to serialize, circular reference is too complex to analyze]',
+    );
+    expect(provider.runtimeOnly).toBe('ordinary working state');
+  });
+});
+
 describe('sanitizeConfigForOutput', () => {
   it.each([
     { prompts: 'private literal' },
@@ -214,6 +275,155 @@ describe('sanitizeConfigForOutput', () => {
       config.prompts,
     );
     expect(JSON.stringify(config)).toContain('private literal');
+  });
+
+  it.each([
+    { providers: { id: 'echo', prompts: ['ordinary selector'] } },
+    { providers: [{ id: 'echo', prompts: ['ordinary selector'] }] },
+    { providers: [{ echo: { prompts: ['ordinary selector'] } }] },
+    { providers: [{ id: () => 'echo', callApi: vi.fn(), prompts: ['ordinary selector'] }] },
+  ])('omits provider selectors only from prompt-redacted config: $providers', (config) => {
+    // A top-level runtime provider is serialized as a single options object too.
+    const providerPromptMap = { echo: ['ordinary selector'] };
+    const input = {
+      ...(config as Parameters<typeof sanitizeConfigForOutput>[0]),
+      providerPromptMap,
+      metadata: { prompts: ['ordinary metadata'] },
+    };
+    const stripped = sanitizeConfigForOutput(input, { shouldStripPromptText: true });
+    expect(JSON.stringify(stripped)).not.toContain('ordinary selector');
+    expect(stripped.metadata).toEqual(input.metadata);
+    expect(stripped).not.toHaveProperty('providerPromptMap');
+    expect(sanitizeConfigForOutput(input)).toMatchObject({ providerPromptMap });
+    expect(input.providerPromptMap).toEqual(providerPromptMap);
+    expect(JSON.stringify(sanitizeConfigForOutput(input))).toContain('ordinary selector');
+    expect(JSON.stringify(input)).toContain('ordinary selector');
+  });
+
+  it.each([true, false])('projects nested provider selectors in config (strip: %s)', (strip) => {
+    const provider = {
+      id: 'echo',
+      prompts: ['ordinary nested selector'],
+      config: { prompts: ['ordinary provider configuration'] },
+    };
+    const test = {
+      provider,
+      options: {
+        provider: {
+          text: provider,
+          embedding: provider,
+          label: 'ordinary map label',
+          config: { prompts: ['ordinary map configuration'] },
+          application: { prompts: ['ordinary application payload'] },
+        },
+      },
+      assert: [
+        {
+          type: 'assert-set' as const,
+          assert: [{ type: 'equals' as const, value: 'ok', provider }],
+        },
+      ],
+      metadata: { prompts: ['ordinary metadata'] },
+    };
+    const config = {
+      tests: [test],
+      defaultTest: test,
+      scenarios: [{ config: [test], tests: [test] }],
+    };
+    const before = structuredClone(config);
+    const output = sanitizeConfigForOutput(config, { shouldStripPromptText: strip });
+
+    expect(JSON.stringify(output).includes('ordinary nested selector')).toBe(!strip);
+    const projectedTest = {
+      metadata: test.metadata,
+      provider: { config: provider.config },
+      options: {
+        provider: {
+          text: { config: provider.config },
+          label: 'ordinary map label',
+          config: { prompts: ['ordinary map configuration'] },
+          application: { prompts: ['ordinary application payload'] },
+        },
+      },
+    };
+    expect(output).toMatchObject({
+      tests: [projectedTest],
+      defaultTest: projectedTest,
+      scenarios: [{ config: [projectedTest], tests: [projectedTest] }],
+    });
+    expect(config).toEqual(before);
+  });
+
+  it.each([true, false])(
+    'projects live grading maps before output serialization (strip: %s)',
+    (strip) => {
+      const provider = {
+        id: () => 'echo',
+        callApi: vi.fn(),
+        prompts: ['ordinary live selector'],
+        config: { prompts: ['ordinary provider payload'] },
+      };
+      const application = { prompts: ['ordinary application payload'] };
+      const map = {
+        text: provider,
+        embedding: provider,
+        classification: provider,
+        moderation: provider,
+        label: 'ordinary map label',
+        config: { prompts: ['ordinary map configuration'] },
+        prompts: ['ordinary map setting'],
+        application,
+      };
+      const test = {
+        options: { provider: map },
+        assert: [
+          { type: 'assert-set' as const, assert: [{ type: 'equals' as const, provider: map }] },
+        ],
+      };
+      const config = {
+        tests: [test],
+        defaultTest: test,
+        scenarios: [{ config: [test], tests: [test] }],
+      };
+      const before = JSON.stringify(config);
+      const projectedProvider = {
+        config: provider.config,
+        ...(!strip && { prompts: provider.prompts }),
+      };
+      const projectedMap = {
+        ...map,
+        text: projectedProvider,
+        embedding: projectedProvider,
+        classification: projectedProvider,
+        moderation: projectedProvider,
+      };
+      const projectedTest = {
+        options: { provider: projectedMap },
+        assert: [{ type: 'assert-set', assert: [{ type: 'equals', provider: projectedMap }] }],
+      };
+
+      expect(sanitizeConfigForOutput(config, { shouldStripPromptText: strip })).toEqual({
+        tests: [projectedTest],
+        defaultTest: projectedTest,
+        scenarios: [{ config: [projectedTest], tests: [projectedTest] }],
+      });
+      expect(JSON.stringify(config)).toBe(before);
+      expect(map.text).toBe(provider);
+      expect(map.application).toBe(application);
+      expect(provider.id()).toBe('echo');
+      expect(provider.callApi).not.toHaveBeenCalled();
+    },
+  );
+
+  it('preserves application prompts on serialized provider options without selectors', () => {
+    const provider = { label: 'grader', config: { prompts: ['ordinary application payload'] } };
+    // A persisted runtime provider can have no id after its method is serialized away.
+    const config = { defaultTest: { options: { provider } } } as Parameters<
+      typeof sanitizeConfigForOutput
+    >[0];
+    const output = sanitizeConfigForOutput(config, { shouldStripPromptText: true });
+    expect(output.defaultTest).toEqual({ options: { provider } });
+    expect(config.defaultTest).toEqual({ options: { provider } });
   });
 
   it('preserves the local replay directory even when it resembles an opaque token', () => {
@@ -754,6 +964,21 @@ describe('sanitizeObject', () => {
       expect(parsed).toEqual({ password: '[REDACTED]', data: 'public' });
     });
 
+    it('redacts a JSON-encoded secret string', () => {
+      const secret = 'sk-proj-abcdefghijklmnopqrstuvwxyz1234567890';
+      expect(sanitizeObject(JSON.stringify(secret))).toBe('"[REDACTED]"');
+    });
+
+    it('bounds nested JSON-encoded string sanitization', () => {
+      const nested = Array.from({ length: 10 }, () => '"').reduce(
+        (value) => JSON.stringify(value),
+        'sk-proj-abcdefghijklmnopqrstuvwxyz1234567890',
+      );
+      const sanitized = sanitizeObject(nested, { maxDepth: 3 });
+      expect(sanitized).not.toContain('sk-proj-');
+      expect(sanitized).toContain('[REDACTED]');
+    });
+
     it('should return invalid JSON strings unchanged', () => {
       const invalidJson = '{invalid json}';
       expect(sanitizeObject(invalidJson)).toBe(invalidJson);
@@ -825,6 +1050,64 @@ describe('sanitizeObject', () => {
           'inline test case',
           'az://account/container/b.yaml?sp=r&sig=secret-b',
           'az://account/container/a.yaml?sp=r&sig=secret-a',
+        ],
+      });
+    });
+
+    it.each(['strings', 'objects', 'nested'])(
+      'preserves unchanged ambiguous SAS %s arrays',
+      (shape) => {
+        const uris = [
+          'az://account/container/a.yaml?sp=r&sig=secret-a',
+          'az://account/container/a.yaml?sp=r&sig=secret-b',
+        ];
+        const stored = {
+          tests:
+            shape === 'strings'
+              ? uris
+              : uris.map((uri, index) =>
+                  shape === 'objects'
+                    ? { label: String(index), uri }
+                    : { label: String(index), files: [uri] },
+                ),
+        };
+        expect(restoreAzureBlobSasTokens(redactAzureBlobSasTokens(stored), stored)).toEqual(stored);
+      },
+    );
+
+    it('does not restore ambiguous nested SAS tokens after their parent entries change', () => {
+      const stored = {
+        tests: [
+          { label: 'first', files: ['az://account/container/a.yaml?sp=r&sig=secret-a'] },
+          { label: 'second', files: ['az://account/container/a.yaml?sp=r&sig=secret-b'] },
+        ],
+      };
+      const incoming = redactAzureBlobSasTokens({ tests: [...stored.tests].reverse() });
+      expect(restoreAzureBlobSasTokens(incoming, stored)).toEqual(incoming);
+    });
+
+    it('does not restore ambiguous signatures for the same Azure Blob URI', () => {
+      const redacted = 'az://account/container/a.yaml?sp=r&sig=%5BREDACTED%5D';
+      const stored = {
+        tests: [
+          { label: 'first', uri: 'az://account/container/a.yaml?sp=r&sig=secret-a' },
+          { label: 'second', uri: 'az://account/container/a.yaml?sp=r&sig=secret-b' },
+        ],
+      };
+      expect(
+        restoreAzureBlobSasTokens(
+          {
+            tests: [
+              { label: 'second', uri: redacted },
+              { label: 'first', uri: redacted },
+            ],
+          },
+          stored,
+        ),
+      ).toEqual({
+        tests: [
+          { label: 'second', uri: redacted },
+          { label: 'first', uri: redacted },
         ],
       });
     });
@@ -1693,7 +1976,17 @@ describe('sanitizeObject', () => {
       });
 
       const result = sanitizeObject(input, { throwOnError: false });
-      expect(result).toEqual(input);
+      expect(result).toBe('[REDACTED]');
+    });
+
+    it('does not return raw input when an enumerable getter throws', () => {
+      const input = {
+        password: 'secret-value',
+        get broken() {
+          throw new Error('Getter failed');
+        },
+      };
+      expect(sanitizeObject(input)).toBe('[REDACTED]');
     });
 
     it('should throw errors when throwOnError is true', () => {

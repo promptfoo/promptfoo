@@ -18,6 +18,18 @@ vi.mock('../../src/globalConfig/globalConfig', async (importOriginal) => ({
   readGlobalConfig: vi.fn(() => ({ id: 'test-installation' })),
 }));
 
+const createTokenUsage = () => ({
+  total_tokens: 50,
+  prompt_tokens: 25,
+  completion_tokens: 25,
+});
+
+const createTextMessage = () => ({
+  message: {
+    content: 'Test text output',
+  },
+});
+
 vi.mock('proxy-agent', async (importOriginal) => {
   return {
     ...(await importOriginal()),
@@ -73,6 +85,15 @@ const defaultMockResponse = {
 };
 
 describe('CloudflareAi Provider', () => {
+  const createMissingCloudflareTokenCheck = () => () => {
+    expect(
+      () =>
+        new CloudflareAiChatCompletionProvider(testModelName, {
+          config: { accountId: 'test-account' },
+        }),
+    ).toThrow('Cloudflare API token required');
+  };
+
   beforeAll(() => {
     enableCache();
   });
@@ -106,18 +127,8 @@ describe('CloudflareAi Provider', () => {
       });
 
       const responsePayload = {
-        choices: [
-          {
-            message: {
-              content: 'Test text output',
-            },
-          },
-        ],
-        usage: {
-          total_tokens: 50,
-          prompt_tokens: 25,
-          completion_tokens: 25,
-        },
+        choices: [createTextMessage()],
+        usage: createTokenUsage(),
       };
       const mockResponse = {
         ...defaultMockResponse,
@@ -180,18 +191,8 @@ describe('CloudflareAi Provider', () => {
       expect(cfProvider.id()).toBe(`cloudflare-ai:chat:${testModelName}`);
 
       const responsePayload = {
-        choices: [
-          {
-            message: {
-              content: 'Test text output',
-            },
-          },
-        ],
-        usage: {
-          total_tokens: 50,
-          prompt_tokens: 25,
-          completion_tokens: 25,
-        },
+        choices: [createTextMessage()],
+        usage: createTokenUsage(),
       };
       const mockResponse = {
         ...defaultMockResponse,
@@ -250,11 +251,7 @@ describe('CloudflareAi Provider', () => {
             },
           },
         ],
-        usage: {
-          total_tokens: 50,
-          prompt_tokens: 25,
-          completion_tokens: 25,
-        },
+        usage: createTokenUsage(),
       };
       const mockResponse = {
         ...defaultMockResponse,
@@ -307,11 +304,7 @@ describe('CloudflareAi Provider', () => {
             },
           },
         ],
-        usage: {
-          total_tokens: 50,
-          prompt_tokens: 25,
-          completion_tokens: 25,
-        },
+        usage: createTokenUsage(),
       };
       const mockResponse = {
         ...defaultMockResponse,
@@ -432,14 +425,7 @@ describe('CloudflareAi Provider', () => {
       mockProcessEnv({ CUSTOM_CF_KEY: undefined });
     });
 
-    it('requires API key', () => {
-      expect(
-        () =>
-          new CloudflareAiChatCompletionProvider(testModelName, {
-            config: { accountId: 'test-account' },
-          }),
-      ).toThrow('Cloudflare API token required');
-    });
+    it('requires API key', createMissingCloudflareTokenCheck());
 
     it('uses accountIdEnvar when accountId not provided', () => {
       mockProcessEnv({ CUSTOM_ACCOUNT_VAR: 'env-account-from-custom-var' });
@@ -537,11 +523,7 @@ describe('CloudflareAi Provider', () => {
             text: 'Test completion output',
           },
         ],
-        usage: {
-          total_tokens: 50,
-          prompt_tokens: 25,
-          completion_tokens: 25,
-        },
+        usage: createTokenUsage(),
       };
       const mockResponse = {
         ...defaultMockResponse,
@@ -878,13 +860,6 @@ describe('CloudflareAi Provider', () => {
       ).toThrow('Cloudflare account ID required');
     });
 
-    it('requires API key', () => {
-      expect(
-        () =>
-          new CloudflareAiChatCompletionProvider(testModelName, {
-            config: { accountId: 'test-account' },
-          }),
-      ).toThrow('Cloudflare API token required');
-    });
+    it('requires API key', createMissingCloudflareTokenCheck());
   });
 });

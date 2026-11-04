@@ -41,27 +41,13 @@ export function getPluginConfigurationError(plugin: PluginWithConfig): string | 
         return 'Prompt Extraction plugin requires systemPrompt configuration';
       }
       break;
-    case 'bfla': {
-      const targetIdentifiers = config.targetIdentifiers as unknown;
-      if (
-        targetIdentifiers &&
-        (!Array.isArray(targetIdentifiers) || targetIdentifiers.length === 0)
-      ) {
-        return 'BFLA plugin targetIdentifiers must be a non-empty array when provided';
-      }
-      break;
-    }
-    case 'bola': {
-      const targetSystems = config.targetSystems as unknown;
-      if (targetSystems && (!Array.isArray(targetSystems) || targetSystems.length === 0)) {
-        return 'BOLA plugin targetSystems must be a non-empty array when provided';
-      }
-      break;
-    }
+    case 'bfla':
+    case 'bola':
     case 'ssrf': {
-      const targetUrls = config.targetUrls as unknown;
-      if (targetUrls && (!Array.isArray(targetUrls) || targetUrls.length === 0)) {
-        return 'SSRF plugin targetUrls must be a non-empty array when provided';
+      const key = { bfla: 'targetIdentifiers', bola: 'targetSystems', ssrf: 'targetUrls' }[id];
+      const value = config[key];
+      if (value && (!Array.isArray(value) || value.length === 0)) {
+        return `${id.toUpperCase()} plugin ${key} must be a non-empty array when provided`;
       }
       break;
     }
@@ -109,7 +95,6 @@ interface MultiTurnHandlerContext extends MultiTurnPromptParams {
   conversationHistory: ConversationMessage[];
   lastAssistantMessage?: ConversationMessage;
   resolvedMaxTurns: number;
-  email: string;
   effectiveGoal: string;
 }
 
@@ -118,8 +103,18 @@ const MULTI_TURN_HANDLERS: Record<MultiTurnStrategy, MultiTurnHandler> = {
   'mischievous-user': handleMischievousUserStrategy,
   crescendo: handleCrescendoLikeStrategy,
   custom: handleCrescendoLikeStrategy,
-  'jailbreak:hydra': handleHydraStrategy,
-  'jailbreak:goblin': handleGoblinStrategy,
+  'jailbreak:hydra': async (ctx) =>
+    handleHydraLikeStrategy(ctx, {
+      strategyName: 'Hydra',
+      metadataPrefix: 'hydra',
+      taskId: 'hydra-decision',
+    }),
+  'jailbreak:goblin': async (ctx) =>
+    handleHydraLikeStrategy(ctx, {
+      strategyName: 'Goblin',
+      metadataPrefix: 'goblin',
+      taskId: 'goblin-decision',
+    }),
 };
 
 export async function generateMultiTurnPrompt(
@@ -148,7 +143,6 @@ export async function generateMultiTurnPrompt(
     conversationHistory,
     lastAssistantMessage: getLastAssistantMessage(conversationHistory),
     resolvedMaxTurns,
-    email: MULTI_TURN_EMAIL,
     effectiveGoal,
   });
 
@@ -242,6 +236,18 @@ function getStringMetadataValue(
   return typeof value === 'string' ? value : undefined;
 }
 
+async function fetchGenerationRequest(body: Record<string, unknown>) {
+  return fetchWithRetries(
+    await resolveRemoteGenerationUrl(body),
+    {
+      method: 'POST',
+      headers: getRemoteGenerationHeaders(),
+      body: JSON.stringify(body),
+    },
+    getRequestTimeoutMs(),
+  );
+}
+
 async function handleGoatStrategy(
   ctx: MultiTurnHandlerContext,
 ): Promise<{ prompt: string; done: boolean; metadata: Record<string, unknown> }> {
@@ -252,7 +258,7 @@ async function handleGoatStrategy(
     messages: ctx.conversationHistory,
     prompt: ctx.generatedPrompt,
     version: VERSION,
-    email: ctx.email,
+    email: MULTI_TURN_EMAIL,
     excludeTargetOutputFromAgenticAttackGeneration: Boolean(
       ctx.strategyConfigRecord['excludeTargetOutputFromAgenticAttackGeneration'],
     ),
@@ -261,15 +267,7 @@ async function handleGoatStrategy(
     modifiers: ctx.baseMetadata['modifiers'],
   };
 
-  const response = await fetchWithRetries(
-    await resolveRemoteGenerationUrl(goatBody),
-    {
-      method: 'POST',
-      headers: getRemoteGenerationHeaders(),
-      body: JSON.stringify(goatBody),
-    },
-    getRequestTimeoutMs(),
-  );
+  const response = await fetchGenerationRequest(goatBody);
 
   if (!response.ok) {
     throw new Error(`GOAT task failed with status ${response.status}: ${await response.text()}`);
@@ -315,15 +313,7 @@ async function handleMischievousUserStrategy(
     history: ctx.conversationHistory,
   };
 
-  const response = await fetchWithRetries(
-    await resolveRemoteGenerationUrl(mischievousBody),
-    {
-      method: 'POST',
-      headers: getRemoteGenerationHeaders(),
-      body: JSON.stringify(mischievousBody),
-    },
-    getRequestTimeoutMs(),
-  );
+  const response = await fetchGenerationRequest(mischievousBody);
 
   if (!response.ok) {
     throw new Error(
@@ -358,26 +348,6 @@ async function handleMischievousUserStrategy(
       },
     },
   };
-}
-
-async function handleHydraStrategy(
-  ctx: MultiTurnHandlerContext,
-): Promise<{ prompt: string; done: boolean; metadata: Record<string, unknown> }> {
-  return handleHydraLikeStrategy(ctx, {
-    strategyName: 'Hydra',
-    metadataPrefix: 'hydra',
-    taskId: 'hydra-decision',
-  });
-}
-
-async function handleGoblinStrategy(
-  ctx: MultiTurnHandlerContext,
-): Promise<{ prompt: string; done: boolean; metadata: Record<string, unknown> }> {
-  return handleHydraLikeStrategy(ctx, {
-    strategyName: 'Goblin',
-    metadataPrefix: 'goblin',
-    taskId: 'goblin-decision',
-  });
 }
 
 async function handleHydraLikeStrategy(
@@ -452,18 +422,10 @@ async function handleHydraLikeStrategy(
     jsonOnly: true,
     preferSmallModel: false,
     step: `turn-${turnNumber}`,
-    email: ctx.email,
+    email: MULTI_TURN_EMAIL,
   };
 
-  const response = await fetchWithRetries(
-    await resolveRemoteGenerationUrl(requestBody),
-    {
-      method: 'POST',
-      headers: getRemoteGenerationHeaders(),
-      body: JSON.stringify(requestBody),
-    },
-    getRequestTimeoutMs(),
-  );
+  const response = await fetchGenerationRequest(requestBody);
 
   if (!response.ok) {
     throw new Error(
@@ -542,15 +504,7 @@ async function handleCrescendoLikeStrategy(
     step: `round-${roundNumber}`,
   };
 
-  const response = await fetchWithRetries(
-    await resolveRemoteGenerationUrl(providerRequest),
-    {
-      method: 'POST',
-      headers: getRemoteGenerationHeaders(),
-      body: JSON.stringify(providerRequest),
-    },
-    getRequestTimeoutMs(),
-  );
+  const response = await fetchGenerationRequest(providerRequest);
 
   if (!response.ok) {
     throw new Error(

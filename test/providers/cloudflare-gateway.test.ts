@@ -7,9 +7,20 @@ import {
   createCloudflareGatewayProvider,
 } from '../../src/providers/cloudflare-gateway';
 import { loadApiProviders } from '../../src/providers/index';
+import { createChatCompletion } from '../factories/literalFixtures';
 import { mockProcessEnv } from '../util/utils';
 
 import type { ProviderOptionsMap } from '../../src/types/index';
+
+const createAnthropicResponse = () => ({
+  id: 'msg_123',
+  type: 'message',
+  role: 'assistant',
+  content: [{ type: 'text', text: 'Test' }],
+  model: 'claude-sonnet-4-20250514',
+  stop_reason: 'end_turn',
+  usage: { input_tokens: 5, output_tokens: 5 },
+});
 
 vi.mock('../../src/logger', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../src/logger')>();
@@ -226,10 +237,7 @@ describe('CloudflareGateway Provider', () => {
         config: minimumConfig,
       });
 
-      const responsePayload = {
-        choices: [{ message: { content: 'Test' } }],
-        usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
-      };
+      const responsePayload = createChatCompletion('Test');
       const mockResponse = {
         ...defaultMockResponse,
         text: vi.fn().mockResolvedValue(JSON.stringify(responsePayload)),
@@ -250,10 +258,7 @@ describe('CloudflareGateway Provider', () => {
         config: minimumConfig,
       });
 
-      const responsePayload = {
-        choices: [{ message: { content: 'Test' } }],
-        usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
-      };
+      const responsePayload = createChatCompletion('Test');
       const mockResponse = {
         ...defaultMockResponse,
         text: vi.fn().mockResolvedValue(JSON.stringify(responsePayload)),
@@ -277,10 +282,7 @@ describe('CloudflareGateway Provider', () => {
         },
       });
 
-      const responsePayload = {
-        choices: [{ message: { content: 'Test' } }],
-        usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
-      };
+      const responsePayload = createChatCompletion('Test');
       const mockResponse = {
         ...defaultMockResponse,
         text: vi.fn().mockResolvedValue(JSON.stringify(responsePayload)),
@@ -388,15 +390,7 @@ describe('CloudflareGateway Provider', () => {
         config: minimumConfig,
       });
 
-      const responsePayload = {
-        id: 'msg_123',
-        type: 'message',
-        role: 'assistant',
-        content: [{ type: 'text', text: 'Test' }],
-        model: 'claude-sonnet-4-20250514',
-        stop_reason: 'end_turn',
-        usage: { input_tokens: 5, output_tokens: 5 },
-      };
+      const responsePayload = createAnthropicResponse();
       const mockResponse = {
         ...defaultMockResponse,
         text: vi.fn().mockResolvedValue(JSON.stringify(responsePayload)),
@@ -448,15 +442,9 @@ describe('CloudflareGateway Provider', () => {
           config: minimumConfig,
           env: { ANTHROPIC_CUSTOM_HEADERS: 'X-Proxy-Secret: scoped-secret' },
         });
-        const create = vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValue({
-          id: 'msg_123',
-          type: 'message',
-          role: 'assistant',
-          content: [{ type: 'text', text: 'Test' }],
-          model: 'claude-sonnet-4-20250514',
-          stop_reason: 'end_turn',
-          usage: { input_tokens: 5, output_tokens: 5 },
-        } as any);
+        const create = vi
+          .spyOn(provider.anthropic.messages, 'create')
+          .mockResolvedValue(createAnthropicResponse() as any);
 
         await provider.callApi('Same prompt');
         const cached = await provider.callApi('Same prompt');
@@ -546,10 +534,7 @@ describe('CloudflareGateway Provider', () => {
         },
       });
 
-      const responsePayload = {
-        choices: [{ message: { content: 'Test' } }],
-        usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
-      };
+      const responsePayload = createChatCompletion('Test');
       const mockResponse = {
         ...defaultMockResponse,
         text: vi.fn().mockResolvedValue(JSON.stringify(responsePayload)),
@@ -573,10 +558,7 @@ describe('CloudflareGateway Provider', () => {
         },
       });
 
-      const responsePayload = {
-        choices: [{ message: { content: 'Test' } }],
-        usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
-      };
+      const responsePayload = createChatCompletion('Test');
       const mockResponse = {
         ...defaultMockResponse,
         text: vi.fn().mockResolvedValue(JSON.stringify(responsePayload)),
@@ -811,10 +793,7 @@ describe('CloudflareGateway Provider', () => {
         },
       });
 
-      const responsePayload = {
-        choices: [{ message: { content: 'Test' } }],
-        usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
-      };
+      const responsePayload = createChatCompletion('Test');
       const mockResponse = {
         ...defaultMockResponse,
         text: vi.fn().mockResolvedValue(JSON.stringify(responsePayload)),
@@ -842,10 +821,7 @@ describe('CloudflareGateway Provider', () => {
         },
       });
 
-      const responsePayload = {
-        choices: [{ message: { content: 'Test' } }],
-        usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
-      };
+      const responsePayload = createChatCompletion('Test');
       const mockResponse = {
         ...defaultMockResponse,
         text: vi.fn().mockResolvedValue(JSON.stringify(responsePayload)),
@@ -872,10 +848,7 @@ describe('CloudflareGateway Provider', () => {
         },
       );
 
-      const responsePayload = {
-        choices: [{ message: { content: 'Test' } }],
-        usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
-      };
+      const responsePayload = createChatCompletion('Test');
       const mockResponse = {
         ...defaultMockResponse,
         text: vi.fn().mockResolvedValue(JSON.stringify(responsePayload)),

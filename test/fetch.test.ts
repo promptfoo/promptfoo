@@ -722,6 +722,30 @@ describe('fetchWithProxy', () => {
     );
   });
 
+  it.each([
+    { name: 'mixed-case record with an empty value', headers: { aUtHoRiZaTiOn: '' }, expected: '' },
+    {
+      name: 'lowercase tuple',
+      headers: [['authorization', 'Bearer explicit']],
+      expected: 'Bearer explicit',
+    },
+  ])('preserves explicit custom-endpoint auth from $name', async ({ headers, expected }) => {
+    const url = 'https://us%40er:p%40ss@example.com/v1/chat/completions?variant=one#fragment';
+    const originalHeaders = JSON.stringify(headers);
+    const controller = new AbortController();
+
+    await fetchWithProxy(url, { headers: headers as HeadersInit, signal: controller.signal });
+
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+    const [calledUrl, calledOptions] = vi.mocked(global.fetch).mock.calls[0];
+    expect(calledUrl).toBe('https://example.com/v1/chat/completions?variant=one#fragment');
+    const sentHeaders = new Headers(calledOptions?.headers as HeadersInit);
+    expect(sentHeaders.has('authorization')).toBe(true);
+    expect(sentHeaders.get('authorization')).toBe(expected);
+    expect(calledOptions?.signal).toBe(controller.signal);
+    expect(JSON.stringify(headers)).toBe(originalHeaders);
+  });
+
   it('should use custom CA certificate when PROMPTFOO_CA_CERT_PATH is set', async () => {
     const mockCertPath = path.normalize('/path/to/cert.pem');
     const mockCertContent = 'mock-cert-content';
@@ -1230,6 +1254,7 @@ describe('fetchWithProxy', () => {
         };
         expect(interceptors.decompress).toHaveBeenCalledExactlyOnceWith({
           skipErrorResponses: false,
+          maxSize: 64 * 1024 * 1024,
         });
         expect(agent.compose).toHaveBeenCalledWith(decompressionInterceptor);
         expect(emitWarning).not.toHaveBeenCalled();

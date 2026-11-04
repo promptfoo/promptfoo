@@ -2,9 +2,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cloudConfig } from '../../src/globalConfig/cloud';
 import logger from '../../src/logger';
 import { PromptfooModelProvider } from '../../src/providers/promptfooModel';
+import { createChatCompletion } from '../factories/literalFixtures';
 import type { Mock } from 'vitest';
 
 vi.mock('../../src/util/cloud', () => ({ ensureCloudTeamContext: vi.fn() }));
+
+const createRemoteChatResponse = () => ({
+  result: createChatCompletion('test response'),
+});
 
 describe('PromptfooModelProvider', () => {
   let mockFetch: Mock;
@@ -43,17 +48,7 @@ describe('PromptfooModelProvider', () => {
     const provider = new PromptfooModelProvider('test-model');
     const mockResponse = {
       ok: true,
-      json: () =>
-        Promise.resolve({
-          result: {
-            choices: [{ message: { content: 'test response' } }],
-            usage: {
-              total_tokens: 10,
-              prompt_tokens: 5,
-              completion_tokens: 5,
-            },
-          },
-        }),
+      json: () => Promise.resolve(createRemoteChatResponse()),
     };
     mockFetch.mockResolvedValue(mockResponse);
 
@@ -118,13 +113,7 @@ describe('PromptfooModelProvider', () => {
 
     const mockResponse = {
       ok: true,
-      json: () =>
-        Promise.resolve({
-          result: {
-            choices: [{ message: { content: 'test response' } }],
-            usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
-          },
-        }),
+      json: () => Promise.resolve(createRemoteChatResponse()),
     };
     mockFetch.mockResolvedValue(mockResponse);
 
