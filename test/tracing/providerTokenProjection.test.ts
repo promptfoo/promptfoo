@@ -1,9 +1,9 @@
 import { context, propagation, SpanStatusCode, trace } from '@opentelemetry/api';
 import {
   InMemorySpanExporter,
-  NodeTracerProvider,
   SimpleSpanProcessor,
-} from '@opentelemetry/sdk-trace-node';
+  TracerProvider,
+} from '@opentelemetry/sdk-trace';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { CohereChatCompletionProvider } from '../../src/providers/cohere';
 import { VertexChatProvider } from '../../src/providers/google/vertex';
@@ -12,6 +12,7 @@ import { OllamaChatProvider, OllamaCompletionProvider } from '../../src/provider
 import { ReplicateProvider } from '../../src/providers/replicate';
 import { WatsonXProvider } from '../../src/providers/watsonx';
 import { GenAIAttributes, PromptfooAttributes } from '../../src/tracing/genaiTracer';
+import { registerTracerProvider } from '../../src/tracing/tracerProvider';
 
 import type { CallApiContextParams, ProviderResponse } from '../../src/types';
 
@@ -64,11 +65,11 @@ const cases = [
 ];
 
 let exporter: InMemorySpanExporter;
-let tracerProvider: NodeTracerProvider;
+let tracerProvider: TracerProvider;
 beforeAll(() => {
   exporter = new InMemorySpanExporter();
-  tracerProvider = new NodeTracerProvider({ spanProcessors: [new SimpleSpanProcessor(exporter)] });
-  tracerProvider.register();
+  tracerProvider = new TracerProvider({ spanProcessors: [new SimpleSpanProcessor({ exporter })] });
+  registerTracerProvider(tracerProvider);
 });
 beforeEach(() => {
   exporter.reset();
@@ -132,6 +133,12 @@ for (const testCase of cases) {
                   [GenAIAttributes.USAGE_INPUT_TOKENS]: 11,
                   [GenAIAttributes.USAGE_OUTPUT_TOKENS]: 7,
                   [PromptfooAttributes.USAGE_TOTAL_TOKENS]: 18,
+                  [cached
+                    ? PromptfooAttributes.USAGE_CACHED_RESPONSE_TOKENS
+                    : GenAIAttributes.USAGE_CACHE_READ_INPUT_TOKENS]: 4,
+                  [GenAIAttributes.USAGE_REASONING_OUTPUT_TOKENS]: 3,
+                  [PromptfooAttributes.USAGE_ACCEPTED_PREDICTION_TOKENS]: 2,
+                  [PromptfooAttributes.USAGE_REJECTED_PREDICTION_TOKENS]: 1,
                 }
               : {}),
             ...(testCase.finishReason

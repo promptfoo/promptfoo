@@ -1,3 +1,7 @@
+const { createErrorFirstLoggerModule } = await vi.hoisted(
+  async () => import('../factories/logger'),
+);
+
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { clearCache } from '../../src/cache';
 import logger from '../../src/logger';
@@ -10,14 +14,7 @@ import { OpenAiEmbeddingProvider } from '../../src/providers/openai/embedding';
 
 import type { ProviderOptions } from '../../src/types/index';
 
-vi.mock('../../src/logger', () => ({
-  default: {
-    debug: vi.fn(),
-    error: vi.fn(),
-    info: vi.fn(),
-    warn: vi.fn(),
-  },
-}));
+vi.mock('../../src/logger', () => createErrorFirstLoggerModule());
 vi.mock('../../src/providers/openai/chat', async (importOriginal) => {
   return {
     ...(await importOriginal()),

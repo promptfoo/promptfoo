@@ -1,11 +1,7 @@
 import { fetchWithCache } from '../cache';
-import { getEnvString } from '../envars';
+import { getEnvString, getProviderEnvString } from '../envars';
 import logger from '../logger';
-import {
-  extractTokenUsageAttributes,
-  type GenAISpanContext,
-  withGenAISpan,
-} from '../tracing/genaiTracer';
+import { extractGenAIResponse, type GenAISpanContext, withGenAISpan } from '../tracing/genaiTracer';
 import { getRequestTimeoutMs } from './shared';
 
 import type { EnvOverrides } from '../types/env';
@@ -13,6 +9,7 @@ import type {
   ApiEmbeddingProvider,
   ApiProvider,
   CallApiContextParams,
+  CallApiOptionsParams,
   ProviderEmbeddingResponse,
   ProviderResponse,
   TokenUsage,
@@ -518,6 +515,7 @@ function getV2ResponseMetadata(data: any): Record<string, unknown> | undefined {
 }
 
 export class CohereChatCompletionProvider implements ApiProvider {
+  env?: EnvOverrides;
   static COHERE_CHAT_MODELS = [
     'command-a-plus-05-2026',
     'north-mini-code-1-0',
@@ -545,7 +543,6 @@ export class CohereChatCompletionProvider implements ApiProvider {
 
   private apiBaseUrl: string;
   private apiKey: string;
-  private env?: EnvOverrides;
   private modelName: string;
 
   constructor(
@@ -555,11 +552,12 @@ export class CohereChatCompletionProvider implements ApiProvider {
     const { config, id, env } = options;
     this.apiBaseUrl =
       config?.apiBaseUrl ||
-      env?.COHERE_API_BASE_URL ||
-      getEnvString('COHERE_API_BASE_URL') ||
+      (getProviderEnvString(env, 'COHERE_API_BASE_URL') ?? getEnvString('COHERE_API_BASE_URL')) ||
       DEFAULT_COHERE_API_BASE_URL;
-    this.apiKey = config?.apiKey || env?.COHERE_API_KEY || getEnvString('COHERE_API_KEY') || '';
     this.env = env;
+    this.apiKey =
+      config?.apiKey ||
+      (getProviderEnvString(env, 'COHERE_API_KEY') ?? getEnvString('COHERE_API_KEY') ?? '');
     this.modelName = modelName;
     if (!CohereChatCompletionProvider.COHERE_CHAT_MODELS.includes(this.modelName)) {
       logger.warn(`Using unknown Cohere chat model: ${this.modelName}`);
@@ -622,7 +620,7 @@ export class CohereChatCompletionProvider implements ApiProvider {
     return withGenAISpan(
       spanContext,
       () => this.callApiInternal(prompt, config),
-      extractTokenUsageAttributes,
+      extractGenAIResponse,
     );
   }
 
@@ -688,7 +686,9 @@ export class CohereChatCompletionProvider implements ApiProvider {
             'Content-Type': 'application/json',
             Authorization: `Bearer ${this.apiKey}`,
             'X-Client-Name':
-              this.env?.COHERE_CLIENT_NAME || getEnvString('COHERE_CLIENT_NAME') || 'promptfoo',
+              (getProviderEnvString(this.env, 'COHERE_CLIENT_NAME') ??
+                getEnvString('COHERE_CLIENT_NAME')) ||
+              'promptfoo',
           },
           body: JSON.stringify(body),
         },
@@ -819,7 +819,9 @@ export class CohereChatCompletionProvider implements ApiProvider {
             'Content-Type': 'application/json',
             Authorization: `Bearer ${this.apiKey}`,
             'X-Client-Name':
-              this.env?.COHERE_CLIENT_NAME || getEnvString('COHERE_CLIENT_NAME') || 'promptfoo',
+              getProviderEnvString(this.env, 'COHERE_CLIENT_NAME') ||
+              getEnvString('COHERE_CLIENT_NAME') ||
+              'promptfoo',
           },
           body: JSON.stringify({
             ...v2Params,
@@ -894,6 +896,8 @@ export class CohereChatCompletionProvider implements ApiProvider {
 }
 
 export class CohereEmbeddingProvider implements ApiEmbeddingProvider {
+  readonly supportsEmbeddingCancellation = true;
+
   modelName: string;
   config: any;
   env?: any;
@@ -909,22 +913,23 @@ export class CohereEmbeddingProvider implements ApiEmbeddingProvider {
   }
 
   getApiKey(): string | undefined {
+    const namedKey = this.config.apiKeyEnvar
+      ? (getProviderEnvString(this.env, this.config.apiKeyEnvar) ??
+        getEnvString(this.config.apiKeyEnvar))
+      : undefined;
     return (
       this.config.apiKey ||
-      (this.config?.apiKeyEnvar
-        ? this.env?.[this.config.apiKeyEnvar as keyof EnvOverrides] ||
-          getEnvString(this.config.apiKeyEnvar)
-        : undefined) ||
-      this.env?.COHERE_API_KEY ||
-      getEnvString('COHERE_API_KEY')
+      (namedKey ??
+        getProviderEnvString(this.env, 'COHERE_API_KEY') ??
+        getEnvString('COHERE_API_KEY'))
     );
   }
 
   getApiUrl(): string {
     return (
       this.config.apiBaseUrl ||
-      this.env?.COHERE_API_BASE_URL ||
-      getEnvString('COHERE_API_BASE_URL') ||
+      (getProviderEnvString(this.env, 'COHERE_API_BASE_URL') ??
+        getEnvString('COHERE_API_BASE_URL')) ||
       DEFAULT_COHERE_EMBEDDING_API_BASE_URL
     ).replace(/\/+$/, '');
   }
@@ -933,7 +938,11 @@ export class CohereEmbeddingProvider implements ApiEmbeddingProvider {
     throw new Error('Cohere API does not provide text inference.');
   }
 
-  async callEmbeddingApi(input: string): Promise<ProviderEmbeddingResponse> {
+  async callEmbeddingApi(
+    input: string,
+    _context?: CallApiContextParams,
+    options?: CallApiOptionsParams,
+  ): Promise<ProviderEmbeddingResponse> {
     if (!this.getApiKey()) {
       throw new Error('Cohere API key must be set for embedding');
     }
@@ -947,9 +956,11 @@ export class CohereEmbeddingProvider implements ApiEmbeddingProvider {
       ...(isCohereV2EmbeddingApiUrl(apiUrl) && { embedding_types: ['float'] }),
     };
 
-    let data;
+    let data,
+      status: number | undefined,
+      statusText = '';
     try {
-      ({ data } = (await fetchWithCache(
+      ({ data, status, statusText } = (await fetchWithCache(
         apiUrl,
         {
           method: 'POST',
@@ -957,9 +968,12 @@ export class CohereEmbeddingProvider implements ApiEmbeddingProvider {
             'Content-Type': 'application/json',
             Authorization: `Bearer ${this.getApiKey()}`,
             'X-Client-Name':
-              this.env?.COHERE_CLIENT_NAME || getEnvString('COHERE_CLIENT_NAME') || 'promptfoo',
+              (getProviderEnvString(this.env, 'COHERE_CLIENT_NAME') ??
+                getEnvString('COHERE_CLIENT_NAME')) ||
+              'promptfoo',
           },
           body: JSON.stringify(body),
+          ...(options?.abortSignal && { signal: options.abortSignal }),
         },
         getRequestTimeoutMs(),
         'json',
@@ -968,8 +982,19 @@ export class CohereEmbeddingProvider implements ApiEmbeddingProvider {
         true,
       )) as unknown as any);
     } catch (err) {
+      options?.abortSignal?.throwIfAborted();
       logger.error(`API call error: ${err}`);
       throw err;
+    }
+
+    // Same error reporting as the chat methods above, so a rejected request (bad key, quota)
+    // carries Cohere's own message instead of "No embedding found".
+    if (status !== undefined && (status < 200 || status >= 300)) {
+      throw new Error(
+        `API error: ${status} ${statusText}\n${
+          typeof data === 'string' ? data : JSON.stringify(data)
+        }`,
+      );
     }
 
     const embedding = Array.isArray(data?.embeddings)

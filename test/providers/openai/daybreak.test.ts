@@ -3,6 +3,7 @@ import { fetchWithCache } from '../../../src/cache';
 import { loadApiProvider } from '../../../src/providers';
 import { OpenAiChatCompletionProvider } from '../../../src/providers/openai/chat';
 import { OpenAiResponsesProvider } from '../../../src/providers/openai/responses';
+import { createUnsetOpenAiGenerationEnv } from '../../factories/literalFixtures';
 import { mockProcessEnv } from '../../util/utils';
 
 vi.mock('../../../src/cache', async (importOriginal) => ({
@@ -17,12 +18,7 @@ describe.each([
   let restoreEnv: () => void;
 
   beforeEach(() => {
-    restoreEnv = mockProcessEnv({
-      OPENAI_MAX_TOKENS: undefined,
-      OPENAI_MAX_COMPLETION_TOKENS: undefined,
-      OPENAI_TEMPERATURE: undefined,
-      OPENAI_TOP_P: undefined,
-    });
+    restoreEnv = mockProcessEnv(createUnsetOpenAiGenerationEnv());
   });
 
   afterEach(() => {
@@ -81,7 +77,7 @@ describe.each([
   );
 });
 
-describe('Daybreak provider boundary', () => {
+describe('Trusted-access provider boundary', () => {
   let restoreEnv: () => void;
 
   beforeEach(() => {
@@ -127,7 +123,9 @@ describe('Daybreak provider boundary', () => {
   it.each([
     ['gpt-daybreak-blue-latest', (1250 * 4 + 500 * 0.4 + 250 * 5 + 1000 * 20) / 1e6],
     ['gpt-daybreak-red-latest', (1250 * 12.5 + 500 * 1.25 + 250 * 15.625 + 1000 * 75) / 1e6],
-  ] as const)('loads native %s and sends its unchanged alias to Responses', async (model, cost) => {
+    ['gpt-5.6-cyber', (1250 * 12.5 + 500 * 1.25 + 250 * 15.625 + 1000 * 75) / 1e6],
+    ['gpt-rosalind-research', (1500 * 5 + 500 * 0.5 + 1000 * 25) / 1e6],
+  ] as const)('loads native %s and sends its model ID to Responses', async (model, cost) => {
     const provider = await loadApiProvider(`openai:${model}`, {
       options: {
         id: 'daybreak-fixture',
@@ -184,6 +182,7 @@ describe('Daybreak provider boundary', () => {
   );
 
   it.each([
+    ['openai:gpt-rosalind-research', 'chat/completions'],
     ['openai:gpt-daybreak-blue-latest', 'chat/completions'],
     ['openai:responses:gpt-daybreak-blue-latest', 'responses'],
     ['openai:chat:gpt-daybreak-blue-latest', 'chat/completions'],
@@ -200,7 +199,7 @@ describe('Daybreak provider boundary', () => {
     expect(result.cost).toBeUndefined();
     const [url, request] = vi.mocked(fetchWithCache).mock.calls[0];
     expect(url).toBe(`https://gateway.example/v1/${endpoint}`);
-    expect(JSON.parse(String(request?.body)).model).toBe('gpt-daybreak-blue-latest');
+    expect(JSON.parse(String(request?.body)).model).toBe(id.split(':').at(-1));
   });
 
   it('uses the resolved host precedence for native shorthand', async () => {
