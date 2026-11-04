@@ -104,7 +104,7 @@ redteam:
 
 - **Turns have side effects.** Webhook, tool and custom-code steps in the agent run for real, each message is billed, and every chat appears on the agent's Conversations page. Use a synthetic `from` number in `requestData` and point integrations at test systems.
 - **Rate limits.** A `429` is retried on the same turn after `Retry-After`. Other errors are returned as the test's `error`, with the partial transcript in metadata. A `422 ROUTE_NO_MATCH_NO_FALLBACK` names the node that had no matching route.
-- **Caching.** A new conversation is cached by its target, configuration, rendered `requestData` and user turns (never the API key). Continued sessions are not cached. Use `--no-cache` to always talk to the live agent.
+- **No caching.** Each test runs a live conversation, because a response carries a chat ID that stateful callers continue and every turn runs the agent's real tools.
 - **Text, not audio.** The chat API exercises the agent's logic and wording, not speech recognition, voice or interruption handling.
 
 ## See also

@@ -1,16 +1,8 @@
-import { createHash } from 'crypto';
-
-import { getCache, isCacheEnabled } from '../cache';
 import { getEnvString, getProviderEnvString } from '../envars';
 import logger from '../logger';
 import { fetchWithTimeout } from '../util/fetch/index';
 import { getNunjucksEngine } from '../util/templates';
-import {
-  getRequestTimeoutMs,
-  parseChatPrompt,
-  shouldBustProviderCache,
-  withResponseCacheMetadata,
-} from './shared';
+import { getRequestTimeoutMs, parseChatPrompt } from './shared';
 
 import type { EnvOverrides } from '../contracts/env';
 import type { ProviderResponse } from '../contracts/providers';
@@ -102,21 +94,6 @@ class BlandApiError extends Error {
   }
 }
 
-/** JSON with sorted keys at every depth, so equivalent configs hash the same. */
-function stableStringify(value: unknown): string {
-  if (value === null || typeof value !== 'object') {
-    return JSON.stringify(value ?? null);
-  }
-  if (Array.isArray(value)) {
-    return `[${value.map(stableStringify).join(',')}]`;
-  }
-  const obj = value as Record<string, unknown>;
-  return `{${Object.keys(obj)
-    .sort()
-    .map((k) => `${JSON.stringify(k)}:${stableStringify(obj[k])}`)
-    .join(',')}}`;
-}
-
 /**
  * The user turns to send, in order.
  *
@@ -167,6 +144,31 @@ function retryAfterMs(response: Response): number {
     }
   }
   return DEFAULT_RATE_LIMIT_DELAY_MS;
+}
+
+function abortReason(signal: AbortSignal): Error {
+  return signal.reason instanceof Error
+    ? signal.reason
+    : new DOMException('The operation was aborted.', 'AbortError');
+}
+
+/** Waits out a rate-limit backoff, giving up as soon as the caller cancels. */
+function waitForRetry(ms: number, signal?: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(abortReason(signal));
+      return;
+    }
+    const onAbort = () => {
+      clearTimeout(timer);
+      reject(abortReason(signal!));
+    };
+    const timer = setTimeout(() => {
+      signal?.removeEventListener('abort', onAbort);
+      resolve();
+    }, ms);
+    signal?.addEventListener('abort', onAbort, { once: true });
+  });
 }
 
 /**
@@ -290,7 +292,7 @@ export class BlandProvider implements ApiProvider {
       if (response.status === 429 && attempt < MAX_RATE_LIMIT_RETRIES) {
         const delay = retryAfterMs(response);
         logger.debug('[Bland] Rate limited, retrying the same request', { path, delay, attempt });
-        await new Promise((resolve) => setTimeout(resolve, delay));
+        await waitForRetry(delay, callOptions?.abortSignal);
         continue;
       }
 
@@ -361,22 +363,6 @@ export class BlandProvider implements ApiProvider {
       apiKey,
       callOptions,
     );
-  }
-
-  private getCacheKey(turns: string[], context?: CallApiContextParams): string {
-    // No API key here: keys are hashed to disk and must not carry secrets.
-    const fingerprint = stableStringify({
-      target: `${this.targetType}:${this.targetId}`,
-      apiBaseUrl: this.getBaseUrl(),
-      agentVersion: this.config.agentVersion,
-      pathwayVersion: this.config.pathwayVersion,
-      startNodeId: this.config.startNodeId,
-      useCandidateModel: this.config.useCandidateModel,
-      includeGreeting: this.config.includeGreeting !== false,
-      requestData: this.renderRequestData(context),
-      turns,
-    });
-    return `bland:chat:${createHash('sha256').update(fingerprint).digest('hex')}`;
   }
 
   /**
@@ -464,25 +450,16 @@ export class BlandProvider implements ApiProvider {
         : undefined;
     const turns = existingSession ? [prompt] : getUserTurns(prompt);
 
-    // A fresh conversation is a pure function of its inputs, so it can be cached. Continuing
-    // an existing chat depends on server-side state and never is.
-    const cache = !existingSession && isCacheEnabled() ? getCache() : undefined;
-    const cacheKey = cache ? this.getCacheKey(turns, context) : undefined;
-    if (cache && cacheKey && !shouldBustProviderCache(context)) {
-      const cached = await cache.get<ProviderResponse>(cacheKey);
-      if (cached) {
-        logger.debug('[Bland] Returning cached conversation', { target: this.id() });
-        return withResponseCacheMetadata(cached, true);
-      }
-    }
-
     const transcript: BlandTurn[] = [];
     const state: { chatId?: string; last?: BlandTurnData } = { chatId: existingSession };
 
     try {
       await this.converse(state, turns, transcript, apiKey, context, callOptions);
     } catch (err) {
-      if (err instanceof Error && err.name === 'AbortError') {
+      if (
+        callOptions?.abortSignal?.aborted ||
+        (err instanceof Error && err.name === 'AbortError')
+      ) {
         throw err;
       }
       const message = err instanceof Error ? err.message : String(err);
@@ -498,11 +475,9 @@ export class BlandProvider implements ApiProvider {
       };
     }
 
-    const response = this.buildResponse(state.chatId, state.last, transcript);
-    if (cache && cacheKey) {
-      await cache.set(cacheKey, response);
-    }
-    return withResponseCacheMetadata(response, false);
+    // Not cached: a response carries a live chat ID that stateful callers continue, and
+    // every conversation runs the agent's real tools and webhooks.
+    return this.buildResponse(state.chatId, state.last, transcript);
   }
 }
 

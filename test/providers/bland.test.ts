@@ -415,89 +415,40 @@ describe('BlandProvider', () => {
       }
     });
 
+    it('stops waiting out a 429 as soon as the caller cancels', async () => {
+      vi.mocked(fetchWithTimeout).mockImplementation(async (url) =>
+        String(url).endsWith('/create')
+          ? Response.json({ data: { chat_id: 'chat-1' }, errors: null })
+          : new Response('rate limited', { status: 429, headers: { 'Retry-After': '3600' } }),
+      );
+      const controller = new AbortController();
+      const pending = createBlandProvider('bland:agent:a').callApi('hi', undefined, {
+        abortSignal: controller.signal,
+      });
+      setTimeout(() => controller.abort(), 10);
+
+      await expect(pending).rejects.toThrow(/abort/i);
+      expect(fetchWithTimeout).toHaveBeenCalledTimes(2);
+    });
+
     it('never asks the scheduler to replay a call', () => {
       expect(createBlandProvider('bland:agent:a').handlesOwnRetries).toBe(true);
     });
   });
 
   describe('caching', () => {
-    function enableCache() {
-      const store = new Map<string, unknown>();
+    it('never caches, since responses carry a live chat ID', async () => {
       vi.mocked(isCacheEnabled).mockReturnValue(true);
-      vi.mocked(getCache).mockReturnValue({
-        get: vi.fn(async (key: string) => store.get(key)),
-        set: vi.fn(async (key: string, value: unknown) => {
-          store.set(key, value);
-        }),
-      } as any);
-      return store;
-    }
-
-    it('serves a repeated conversation from the cache without calling Bland', async () => {
-      const store = enableCache();
       fakeBland(echo);
       const provider = createBlandProvider('bland:agent:a');
 
       const first = await provider.callApi('hi');
-      const callsAfterFirst = vi.mocked(fetchWithTimeout).mock.calls.length;
       const second = await provider.callApi('hi');
 
-      expect(first.cached).toBe(false);
-      expect(second.cached).toBe(true);
-      expect(second.output).toBe(first.output);
-      expect(vi.mocked(fetchWithTimeout).mock.calls.length).toBe(callsAfterFirst);
-      const [key] = [...store.keys()];
-      expect(key).toMatch(/^bland:chat:[a-f0-9]{64}$/);
-      expect(key).not.toContain('test-bland-key');
-    });
-
-    it('keys the cache on everything that changes the conversation', async () => {
-      const store = enableCache();
-      fakeBland(echo);
-      await createBlandProvider('bland:agent:a').callApi('hi');
-      await createBlandProvider('bland:agent:a', { config: { agentVersion: 'staging' } }).callApi(
-        'hi',
-      );
-      await createBlandProvider('bland:agent:a', {
-        config: { requestData: { n: '{{n}}' } },
-      }).callApi('hi', {
-        vars: { n: 1 },
-        prompt: { raw: 'hi', label: 'hi' },
-      });
-      await createBlandProvider('bland:agent:a', {
-        config: { requestData: { n: '{{n}}' } },
-      }).callApi('hi', {
-        vars: { n: 2 },
-        prompt: { raw: 'hi', label: 'hi' },
-      });
-      expect(store.size).toBe(4);
-    });
-
-    it('does not cache a continued session or a failed conversation', async () => {
-      const store = enableCache();
-      fakeBland(echo);
-      await createBlandProvider('bland:agent:a').callApi('next', {
-        vars: { sessionId: 'chat-1' },
-        prompt: { raw: 'next', label: 'next' },
-      });
-      vi.mocked(fetchWithTimeout).mockResolvedValue(new Response('nope', { status: 500 }));
-      await createBlandProvider('bland:agent:a').callApi('hi');
-      expect(store.size).toBe(0);
-    });
-
-    it('bypasses the cache when bustCache is set', async () => {
-      enableCache();
-      fakeBland(echo);
-      const provider = createBlandProvider('bland:agent:a');
-      await provider.callApi('hi');
-      const calls = vi.mocked(fetchWithTimeout).mock.calls.length;
-      const result = await provider.callApi('hi', {
-        vars: {},
-        prompt: { raw: 'hi', label: 'hi' },
-        bustCache: true,
-      });
-      expect(result.cached).toBe(false);
-      expect(vi.mocked(fetchWithTimeout).mock.calls.length).toBe(calls * 2);
+      expect(getCache).not.toHaveBeenCalled();
+      expect(first.sessionId).toBe('chat-1');
+      expect(second.sessionId).toBe('chat-2');
+      expect(second.cached).toBeUndefined();
     });
   });
 });
