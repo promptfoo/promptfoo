@@ -13,20 +13,37 @@ import { mockProcessEnv } from './test/util/utils';
 
 const TEST_CONFIG_DIR = path.join('.local', 'vitest', 'config', `worker-${process.pid}`);
 
-mockProcessEnv({
-  NODE_ENV: 'test',
-  CODEX_HOME: './.local/vitest/codex-home',
-  PROMPTFOO_CACHE_TYPE: 'memory',
-  IS_TESTING: 'true',
-  PROMPTFOO_CONFIG_DIR: TEST_CONFIG_DIR,
-  ANTHROPIC_API_KEY: 'test-anthropic-api-key',
-  AZURE_OPENAI_API_HOST: 'test.openai.azure.com',
-  AZURE_OPENAI_API_KEY: 'test-azure-api-key',
-  AZURE_API_KEY: 'test-azure-api-key',
-  HF_API_TOKEN: 'test-hf-token',
-  OPENAI_API_KEY: 'test-openai-api-key',
-  PROMPTFOO_REMOTE_GENERATION_URL: undefined,
-});
+// Keep test-runner and executable selections while isolating application defaults
+// from the developer's shell. Unrelated variables (PATH, proxies, CI, etc.) survive.
+const testRuntimeEnv = Object.fromEntries(
+  [
+    'PROMPTFOO_PYTHON',
+    'PROMPTFOO_RUBY',
+    'PROMPTFOO_NODE20_BIN',
+    'PROMPTFOO_MIN_NODE_BIN',
+    'PROMPTFOO_TEST_SHOW_OUTPUT',
+    'PROMPTFOO_IGNORE_UNHANDLED_TEST_ERRORS',
+  ].map((key) => [key, process.env[key]]),
+);
+
+mockProcessEnv(
+  {
+    ...testRuntimeEnv,
+    NODE_ENV: 'test',
+    CODEX_HOME: './.local/vitest/codex-home',
+    PROMPTFOO_CACHE_TYPE: 'memory',
+    IS_TESTING: 'true',
+    PROMPTFOO_CONFIG_DIR: TEST_CONFIG_DIR,
+    ANTHROPIC_API_KEY: 'test-anthropic-api-key',
+    AZURE_OPENAI_API_HOST: 'test.openai.azure.com',
+    AZURE_OPENAI_API_KEY: 'test-azure-api-key',
+    AZURE_API_KEY: 'test-azure-api-key',
+    HF_API_TOKEN: 'test-hf-token',
+    OPENAI_API_KEY: 'test-openai-api-key',
+    ENABLE_ENHANCED_TELEMETRY_BETA: undefined,
+  },
+  { clearPrefixes: ['PROMPTFOO_', 'OPENAI_', 'CLAUDE_CODE_', 'OTEL_'] },
+);
 
 /**
  * Global cleanup after each test to prevent memory leaks.

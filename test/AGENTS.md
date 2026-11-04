@@ -90,6 +90,11 @@ For `vi.hoisted()` mocks or mocks with `mockReturnValue()`, you MUST call `mockR
 
 ## Environment Variables
 
+The shared Vitest setup clears inherited `PROMPTFOO_*`, `OPENAI_*`, `CLAUDE_CODE_*`,
+and `OTEL_*` application settings before applying test defaults. Tests must set the
+settings they exercise explicitly. Runtime settings such as proxies, executable
+paths, and test-runner controls are preserved.
+
 Prefer `mockProcessEnv()` from `test/util/utils.ts` for root tests that need to change environment variables. Use `vi.stubEnv()` only when a test specifically needs Vitest's stub behavior, and pair it with `vi.unstubAllEnvs()`.
 
 Avoid direct `process.env.FOO = ...`, `delete process.env.FOO`, or `process.env = ...` mutations in new tests. The root hygiene suite blocks new files that use direct environment mutation because tests run in random order.
