@@ -1,4 +1,3 @@
-import Anthropic from '@anthropic-ai/sdk';
 import dedent from 'dedent';
 import { getCache, isCacheEnabled } from '../../cache';
 import { getEnvFloat, getEnvInt, getEnvString } from '../../envars';
@@ -7,6 +6,7 @@ import { maybeLoadToolsFromExternalFile } from '../../util/index';
 import { createEmptyTokenUsage } from '../../util/tokenUsageUtils';
 import {
   clampMaxTokensForThinkingBudget,
+  formatLegacyCompletionPrompt,
   getTokenUsage,
   isAlwaysOnAdaptiveThinkingClaudeModel,
   isClaudeThinkingEnabled,
@@ -1514,7 +1514,7 @@ export const BEDROCK_MODEL = {
       _modelName?: string,
     ) => {
       const params: any = {
-        prompt: `${Anthropic.HUMAN_PROMPT} ${prompt} ${Anthropic.AI_PROMPT}`,
+        prompt: formatLegacyCompletionPrompt(prompt),
         stop_sequences: stop,
       };
       addConfigParam(
