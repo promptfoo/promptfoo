@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 
+import input from '@inquirer/input';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createRemoteBlobUploadCache, uploadBlobRefsForShare } from '../src/blobs/shareUpload';
 import * as constants from '../src/constants';
@@ -61,6 +62,8 @@ function buildMockEval(): Partial<Eval> {
 
 const mockFetch = vi.fn();
 const originalIsTTY = process.stdout.isTTY;
+
+vi.mock('@inquirer/input', () => ({ default: vi.fn() }));
 
 vi.mock('../src/globalConfig/cloud', () => {
   const cloudConfig = {
@@ -635,6 +638,51 @@ describe('createShareableUrl', () => {
     expect(mockEval.author).toBe('stored@example.com');
     expect(mockEval.save).toHaveBeenCalled();
   });
+
+  it.each([null, 'stored@example.com'])(
+    'shares noninteractively with saved email %s in a TTY',
+    async (email) => {
+      vi.mocked(cloudConfig.isEnabled).mockReturnValue(false);
+      process.stdout.isTTY = true;
+      vi.mocked(envars.isCI).mockReturnValue(false);
+      vi.mocked(envars.getEnvBool).mockReturnValue(false);
+      vi.mocked(getUserEmail).mockReturnValue(email);
+      vi.mocked(input).mockRejectedValue(new Error('Unexpected interactive prompt'));
+      const mockEval = buildMockEval();
+      mockEval.author = null as any;
+      mockFetch.mockResolvedValueOnce({ ok: true, json: async () => ({ id: mockEval.id }) });
+      mockFetch.mockResolvedValueOnce({ ok: true, json: async () => ({}) });
+
+      await createShareableUrl(mockEval as Eval, { silent: true, interactive: false });
+
+      expect(input).not.toHaveBeenCalled();
+      expect(mockEval.author).toBe(email || null);
+      expect(mockEval.save).toHaveBeenCalledTimes(email ? 1 : 0);
+      expect(mockFetch).toHaveBeenCalled();
+    },
+  );
+
+  it.each([{}, { silent: true }])(
+    'retains interactive email collection by default for %j',
+    async (options) => {
+      vi.mocked(cloudConfig.isEnabled).mockReturnValue(false);
+      process.stdout.isTTY = true;
+      vi.mocked(envars.isCI).mockReturnValue(false);
+      vi.mocked(envars.getEnvBool).mockReturnValue(false);
+      vi.mocked(getUserEmail).mockReturnValue(null);
+      vi.mocked(input).mockResolvedValue('new@example.com');
+      const mockEval = buildMockEval();
+      mockEval.author = null as any;
+      mockFetch.mockResolvedValueOnce({ ok: true, json: async () => ({ id: mockEval.id }) });
+      mockFetch.mockResolvedValueOnce({ ok: true, json: async () => ({}) });
+
+      await createShareableUrl(mockEval as Eval, options);
+
+      expect(input).toHaveBeenCalledOnce();
+      expect(mockEval.author).toBe('new@example.com');
+      expect(mockEval.save).toHaveBeenCalledOnce();
+    },
+  );
 
   describe('chunked sending', () => {
     let mockEval: Partial<Eval>;
