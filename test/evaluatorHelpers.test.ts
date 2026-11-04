@@ -404,7 +404,7 @@ describe('evaluatorHelpers', () => {
       const prompt = toPrompt('before{{ var1 }}after');
       const vars = { var1: 'package:@promptfoo/fake:emptyVariable' };
 
-      const require = createRequire('');
+      const require = nodeModule.createRequire('');
       vi.mocked(require.resolve).mockReturnValueOnce('/node_modules/@promptfoo/fake/index.js');
       mockDynamicModule('/node_modules/@promptfoo/fake/index.js', {
         emptyVariable: () => ({ output: '' }),
