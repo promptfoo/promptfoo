@@ -131,7 +131,7 @@ it('preserves unknown usage and vendor prompt-cache accounting', () => {
     ),
   ).toMatchObject({ total: 7, cached: 3, completionDetails: { reasoning: 1 } });
   const vendorUsage = getGeminiTokenUsage(
-    { totalTokenCount: 7, cachedContentTokenCount: 3 },
+    { promptTokenCount: 5, totalTokenCount: 7, cachedContentTokenCount: 3 },
     'ai-studio',
   );
   const localHit = withResponseCacheMetadata({ tokenUsage: vendorUsage }, true);
