@@ -29,7 +29,7 @@ beforeEach(() => {
     process.removeAllListeners(event);
   }
   kill = vi.spyOn(process, 'kill').mockImplementation(() => true);
-  vi.mocked(flushOtel).mockResolvedValue();
+  vi.mocked(flushOtel).mockResolvedValue(true);
   vi.mocked(shutdownOtel).mockResolvedValue();
 });
 
@@ -51,6 +51,7 @@ describe('CLI SIGTERM handling', () => {
     const shutDown = createDeferred<void>();
     vi.mocked(flushOtel).mockImplementation(async () => {
       order.push('flush');
+      return true;
     });
     vi.spyOn(providerRegistry, 'shutdownForProcess').mockImplementation(async () => {
       order.push('drain');

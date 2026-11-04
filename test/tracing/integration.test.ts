@@ -5,9 +5,11 @@ import { mockProcessEnv } from '../util/utils';
 import type { EvaluateTestSuite } from '../../src/types/index';
 
 // Mock the trace store to avoid database dependency in tests
-vi.mock('../../src/tracing/store', () => ({
+vi.mock('../../src/tracing/store', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../src/tracing/store')>()),
   getTraceStore: vi.fn(() => ({
     createTrace: vi.fn().mockResolvedValue(undefined),
+    setTraceEvidence: vi.fn().mockResolvedValue(undefined),
     addSpans: vi.fn().mockResolvedValue(undefined),
     getTracesByEvaluation: vi.fn().mockResolvedValue([]),
     getTrace: vi.fn().mockResolvedValue(null),
@@ -117,9 +119,11 @@ describe('OpenTelemetry Tracing Integration', () => {
 
     // Check that results contain trace context
     expect(results.results).toBeDefined();
-    expect(results.results.length).toBeGreaterThan(0);
+    expect(results.results).toHaveLength(1);
 
     const firstResult = results.results[0];
+    expect(firstResult.error).toBeUndefined();
+    expect(firstResult.success).toBe(true);
     expect(firstResult.response).toBeDefined();
     expect(firstResult.response?.metadata).toBeDefined();
     expect(firstResult.response?.metadata?.traceparent).toBeDefined();
@@ -152,9 +156,11 @@ describe('OpenTelemetry Tracing Integration', () => {
 
     // Check that results do not contain trace context
     expect(results.results).toBeDefined();
-    expect(results.results.length).toBeGreaterThan(0);
+    expect(results.results).toHaveLength(1);
 
     const firstResult = results.results[0];
+    expect(firstResult.error).toBeUndefined();
+    expect(firstResult.success).toBe(true);
     expect(firstResult.response).toBeDefined();
     expect(firstResult.response?.metadata?.traceparent).toBeUndefined();
     expect(firstResult.response?.output).toContain('Untraced response');
@@ -176,12 +182,20 @@ describe('OpenTelemetry Tracing Integration', () => {
       maxConcurrency: 1,
     });
 
+    expect(results.results).toHaveLength(4);
+    for (const result of results.results) {
+      expect(result.error).toBeUndefined();
+      expect(result.success).toBe(true);
+      expect(result.response?.metadata?.traceparent).toMatch(/^00-[a-f0-9]{32}-[a-f0-9]{16}-01$/);
+    }
+
     // Collect all trace IDs
     const traceIds = results.results
       .map((r: any) => r.response?.metadata?.traceparent)
       .filter(Boolean)
       .map((tp: string) => tp!.split('-')[1]); // Extract trace ID from traceparent
 
+    expect(traceIds).toHaveLength(4);
     // All trace IDs should be unique
     const uniqueTraceIds = new Set(traceIds);
     expect(uniqueTraceIds.size).toBe(traceIds.length);
@@ -204,6 +218,9 @@ describe('OpenTelemetry Tracing Integration', () => {
       });
 
       // Should have trace context from environment variable
+      expect(results.results).toHaveLength(1);
+      expect(results.results[0].error).toBeUndefined();
+      expect(results.results[0].success).toBe(true);
       expect(results.results[0].response).toBeDefined();
       expect(results.results[0].response?.metadata?.traceparent).toBeDefined();
     } finally {

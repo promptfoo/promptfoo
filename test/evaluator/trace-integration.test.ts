@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
+import { runAssertions } from '../../src/assertions/index';
 import { evaluate, runEval } from '../../src/evaluator';
 import logger from '../../src/logger';
 import { nodeEvaluatorRuntime } from '../../src/node/evaluatorRuntime';
@@ -39,14 +40,15 @@ vi.mock('../../src/telemetry', () => ({
 }));
 vi.mock('../../src/tracing/store');
 const mockFlushOtel = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
+const mockTrackLocalTrace = vi.hoisted(() => vi.fn());
 const mockFetchTraceContext = vi.hoisted(() => vi.fn());
-const mockInitializeOtel = vi.hoisted(() => vi.fn());
-const mockShutdownOtel = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
+const mockReleaseOtel = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
+const mockInitializeOtel = vi.hoisted(() => vi.fn(() => mockReleaseOtel));
 
 vi.mock('../../src/tracing/otelSdk', () => ({
   flushOtel: mockFlushOtel,
+  trackLocalTrace: mockTrackLocalTrace,
   initializeOtel: mockInitializeOtel,
-  shutdownOtel: mockShutdownOtel,
 }));
 
 vi.mock('../../src/tracing/otlpReceiver', () => ({
@@ -249,14 +251,232 @@ describe('evaluator trace integration', () => {
     expect(mockTraceStore.getTrace).toHaveBeenCalledWith(testTraceId, {
       sanitizeAttributes: false,
     });
-    expect(mockFlushOtel).toHaveBeenCalled();
-    expect(mockShutdownOtel).toHaveBeenCalledOnce();
+    expect(mockFlushOtel).not.toHaveBeenCalled();
+    expect(mockReleaseOtel).toHaveBeenCalledOnce();
 
     // Verify result was added with passing assertion
     expect(mockEval.addResult).toHaveBeenCalledWith(
       expect.objectContaining({
         success: true,
         score: 1,
+      }),
+    );
+  });
+
+  it.each([
+    {
+      name: 'no assertions',
+      assertions: undefined,
+      flushed: true,
+      sampled: true,
+      evidence: 'complete',
+    },
+    {
+      name: 'only output assertions',
+      assertions: [{ type: 'contains' as const, value: 'Test response' }],
+      flushed: true,
+      sampled: true,
+      evidence: 'complete',
+    },
+    {
+      name: 'failed local export',
+      assertions: undefined,
+      flushed: false,
+      sampled: true,
+      evidence: 'unavailable',
+    },
+    {
+      name: 'active local child',
+      assertions: undefined,
+      flushed: true,
+      sampled: true,
+      complete: false,
+      evidence: 'partial',
+    },
+    {
+      name: 'enabled OTLP receiver',
+      assertions: undefined,
+      flushed: true,
+      sampled: true,
+      receiver: true,
+      evidence: 'partial',
+    },
+    {
+      name: 'potentially truncated attributes',
+      assertions: undefined,
+      flushed: true,
+      sampled: true,
+      reliable: false,
+      evidence: 'unavailable',
+    },
+    {
+      name: 'unsampled local export',
+      assertions: undefined,
+      flushed: true,
+      sampled: false,
+      evidence: 'partial',
+    },
+  ])(
+    'persists $name evidence for later grading by trace ID',
+    async ({
+      assertions,
+      flushed,
+      sampled,
+      evidence,
+      complete = true,
+      reliable = true,
+      receiver = false,
+    }) => {
+      const traceId = 'abcdef1234567890abcdef1234567890';
+      let savedEvidence = 'partial';
+      const setTraceEvidence = vi.fn(async (value: 'complete' | 'partial' | 'unavailable') => {
+        savedEvidence = value;
+      });
+      vi.mocked(evaluatorTracing.generateTraceContextIfNeeded).mockResolvedValue({
+        traceparent: `00-${traceId}-0123456789abcdef-${sampled ? '01' : '00'}`,
+        evaluationId: 'test-eval-id',
+        testCaseId: 'test-case-id',
+        setTraceEvidence,
+      });
+      const flush = vi.fn().mockResolvedValue(flushed);
+      const release = vi.fn();
+      const seal = vi.fn().mockReturnValue(['target-span']);
+      mockTrackLocalTrace.mockReturnValueOnce({
+        flush,
+        release,
+        seal,
+        isComplete: () => complete,
+        isReliable: () => reliable,
+      });
+      mockTraceStore.getTrace.mockImplementation(async () => ({
+        traceId,
+        metadata: {
+          promptfooTraceEvidence: savedEvidence,
+          ...(savedEvidence !== 'unavailable' && { promptfooTraceSpanIds: ['target-span'] }),
+        },
+        spans: [{ spanId: 'target-span', name: 'target.call', startTime: 1000, endTime: 2000 }],
+      }));
+
+      await evaluate(
+        {
+          providers: [createMockProvider(createTraceProviderConfig())],
+          prompts: [{ raw: 'Test prompt', label: 'test' }],
+          tests: [{ metadata: createTracingContext(), assert: assertions }],
+          tracing: { enabled: true, otlp: { http: { enabled: receiver, port: 0 } } },
+        },
+        mockEval,
+        createSerialOptions(),
+      );
+
+      expect(mockEval.addResult).toHaveBeenCalledWith(
+        expect.objectContaining({ success: true, score: 1 }),
+      );
+      expect(mockTrackLocalTrace).toHaveBeenCalledWith(traceId);
+      expect(flush).toHaveBeenCalledOnce();
+      expect(seal).toHaveBeenCalledOnce();
+      expect(setTraceEvidence).toHaveBeenCalledWith(evidence, ['target-span']);
+      expect(release).toHaveBeenCalledOnce();
+      expect(savedEvidence).toBe(evidence);
+      const replay = await runAssertions({
+        traceId,
+        providerResponse: { output: 'Test response' },
+        test: {
+          assert: [{ type: 'trace-span-count', value: { pattern: 'execute_tool *', max: 0 } }],
+        },
+      });
+      expect(replay.pass).toBe(evidence === 'complete');
+    },
+  );
+
+  it.each(['throw', 'error', 'empty'] as const)(
+    'finalizes target evidence when the provider returns %s',
+    async (outcome) => {
+      const traceId = 'abcdef1234567890abcdef1234567890';
+      const setTraceEvidence = vi.fn();
+      vi.mocked(evaluatorTracing.generateTraceContextIfNeeded).mockResolvedValue({
+        traceparent: `00-${traceId}-0123456789abcdef-01`,
+        evaluationId: 'test-eval-id',
+        testCaseId: 'test-case-id',
+        setTraceEvidence,
+      });
+      const flush = vi.fn().mockResolvedValue(true);
+      const seal = vi.fn().mockReturnValue(['target-span']);
+      const release = vi.fn();
+      mockTrackLocalTrace.mockReturnValueOnce({ flush, seal, release, isComplete: () => true });
+      const provider = createMockProvider({
+        callApi: async () => {
+          if (outcome === 'throw') {
+            throw new Error('target failed');
+          }
+          return outcome === 'error' ? { error: 'target failed' } : { output: undefined };
+        },
+      });
+      await evaluate(
+        {
+          providers: [provider],
+          prompts: [{ raw: 'prompt', label: 'test' }],
+          tests: [{ metadata: createTracingContext() }],
+          tracing: { enabled: true },
+        },
+        mockEval,
+        createSerialOptions(),
+      );
+      expect(mockEval.addResult).toHaveBeenCalledWith(expect.objectContaining({ success: false }));
+      expect(seal).toHaveBeenCalledOnce();
+      expect(flush).toHaveBeenCalledOnce();
+      expect(setTraceEvidence).toHaveBeenCalledWith('complete', ['target-span']);
+      expect(release).toHaveBeenCalledOnce();
+    },
+  );
+
+  it('grades ordinary output but withholds incomplete local evidence after a flush timeout', async () => {
+    const traceId = 'abcdef1234567890abcdef1234567890';
+    vi.mocked(evaluatorTracing.generateTraceContextIfNeeded).mockResolvedValue({
+      traceparent: `00-${traceId}-0123456789abcdef-01`,
+      evaluationId: 'test-eval-id',
+      testCaseId: 'test-case-id',
+    });
+    const flush = vi.fn().mockResolvedValue(false);
+    const release = vi.fn();
+    mockTrackLocalTrace.mockReturnValueOnce({ flush, release });
+    mockTraceStore.getTrace.mockResolvedValue({ traceId, spans: [] });
+    await evaluate(
+      {
+        providers: [createMockProvider(createTraceProviderConfig())],
+        prompts: [{ raw: 'Test prompt', label: 'test' }],
+        tests: [
+          {
+            metadata: createTracingContext(),
+            assert: [
+              { type: 'contains', value: 'Test response' },
+              { type: 'trace-span-count', value: { pattern: 'execute_tool *', max: 0 } },
+            ],
+          },
+        ],
+        tracing: { enabled: true },
+      },
+      mockEval,
+      createSerialOptions(),
+    );
+    expect(mockTrackLocalTrace).toHaveBeenCalledWith(traceId);
+    expect(flush).toHaveBeenCalledOnce();
+    expect(release).toHaveBeenCalledOnce();
+    expect(mockTraceStore.getTrace).not.toHaveBeenCalled();
+    expect(mockEval.addResult).toHaveBeenCalledWith(
+      expect.objectContaining({
+        success: false,
+        gradingResult: expect.objectContaining({
+          componentResults: expect.arrayContaining([
+            expect.objectContaining({
+              pass: true,
+              assertion: expect.objectContaining({ type: 'contains' }),
+            }),
+            expect.objectContaining({
+              pass: false,
+              reason: expect.stringContaining('Trace evidence is unavailable'),
+            }),
+          ]),
+        }),
       }),
     );
   });
@@ -290,7 +510,7 @@ describe('evaluator trace integration', () => {
 
     expect(writer.close).toHaveBeenCalledOnce();
     expect(mockFlushOtel).not.toHaveBeenCalled();
-    expect(mockShutdownOtel).not.toHaveBeenCalled();
+    expect(mockReleaseOtel).not.toHaveBeenCalled();
   });
 
   it('flushes and shuts down OTEL after successful tracing initialization', async () => {
@@ -306,8 +526,7 @@ describe('evaluator trace integration', () => {
     );
 
     expect(mockInitializeOtel).toHaveBeenCalledOnce();
-    expect(mockFlushOtel).toHaveBeenCalledOnce();
-    expect(mockShutdownOtel).toHaveBeenCalledOnce();
+    expect(mockReleaseOtel).toHaveBeenCalledOnce();
   });
 
   it('should handle assertions gracefully when tracing is disabled', async () => {
@@ -344,7 +563,7 @@ describe('evaluator trace integration', () => {
     expect(mockTraceStore.createTrace).not.toHaveBeenCalled();
     expect(mockTraceStore.getTrace).not.toHaveBeenCalled();
     expect(mockFlushOtel).not.toHaveBeenCalled();
-    expect(mockShutdownOtel).not.toHaveBeenCalled();
+    expect(mockReleaseOtel).not.toHaveBeenCalled();
 
     // Verify result was added with passing assertion
     expect(mockEval.addResult).toHaveBeenCalledWith(
@@ -442,7 +661,7 @@ describe('evaluator trace integration', () => {
     await expect(evaluate(testSuite, mockEval, {})).rejects.toThrow('receiver failed');
     expect(evaluatorTracing.stopOtlpReceiverIfNeeded).toHaveBeenCalled();
     expect(mockFlushOtel).not.toHaveBeenCalled();
-    expect(mockShutdownOtel).not.toHaveBeenCalled();
+    expect(mockReleaseOtel).not.toHaveBeenCalled();
   });
 
   describe('external trace collection after provider calls', () => {
@@ -769,6 +988,41 @@ describe('evaluator trace integration', () => {
       expect(warning).toHaveBeenCalledWith(
         '[Evaluator] Failed to fetch external traces: Error: Tempo unavailable',
       );
+    });
+
+    it.each([
+      ['untracked local', 'local', false, false],
+      ['unsampled local', 'unsampled', false, false],
+      ['missing external', 'external', false, false],
+      ['collected external', 'external', true, true],
+    ] as const)('uses %s evidence to grade absence', async (_name, source, collected, reliable) => {
+      const options = createRunOptions(createMockProvider({ response: { output: 'ok' } }));
+      options.test = {
+        ...options.test,
+        assert: [
+          { type: 'equals', value: 'ok' },
+          { type: 'trace-span-count', value: { pattern: 'target.call', min: 1 } },
+          { type: 'trace-span-count', value: { pattern: 'forbidden', max: 0 } },
+        ],
+      };
+      if (source === 'external') {
+        mockFetchTraceContext.mockResolvedValue(collected ? externalTrace : null);
+      } else {
+        options.testSuite = { ...tracingSuite, tracing: { enabled: true } };
+        if (source === 'unsampled') {
+          vi.mocked(evaluatorTracing.generateTraceContextIfNeeded).mockResolvedValue({
+            traceparent: `00-${traceId}-0123456789abcdef-00`,
+          });
+          mockTrackLocalTrace.mockReturnValue({ flush: async () => true, release: vi.fn() });
+        }
+      }
+
+      const [result] = await runEval(options);
+      expect(result.gradingResult?.componentResults?.map((grade) => grade.pass)).toEqual([
+        true,
+        true,
+        reliable,
+      ]);
     });
 
     it('distinguishes missing external traces from successful fetches', async () => {

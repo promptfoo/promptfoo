@@ -185,7 +185,8 @@ vi.mock('../../../src/testCase/synthesis', () => ({
   synthesizeFromTestSuite: mocks.synthesizeFromTestSuite,
 }));
 
-vi.mock('../../../src/tracing/store', () => ({
+vi.mock('../../../src/tracing/store', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../../src/tracing/store')>()),
   getTraceStore: mocks.getTraceStore,
 }));
 

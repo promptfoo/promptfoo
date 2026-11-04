@@ -14,6 +14,17 @@ import {
   registerTestDatabaseClient,
   unregisterTestDatabaseClient,
 } from './testing';
+import type { InValue } from '@libsql/client/node';
+import type { Query, SQLWrapper } from 'drizzle-orm';
+
+type GuardedStatement = SQLWrapper & { toSQL(): Query };
+type Database = Drizzle & {
+  runGuardedWrite(
+    statement: GuardedStatement,
+    checkWrite: () => void,
+    deadline?: number,
+  ): Promise<void>;
+};
 
 // Lazy types; the runtime modules below are imported inside getDb() so that a
 // missing libsql platform binding (`@libsql/<target>`) surfaces as a catchable
@@ -30,8 +41,8 @@ export class DrizzleLogWriter implements LogWriter {
   }
 }
 
-let dbInstance: Drizzle | null = null;
-let dbPromise: Promise<Drizzle> | null = null;
+let dbInstance: Database | null = null;
+let dbPromise: Promise<Database> | null = null;
 let sqliteInstance: Client | null = null;
 let sqliteInstanceIsTesting = false;
 let closePromise: Promise<void> | null = null;
@@ -238,11 +249,19 @@ function isTransientDatabaseLockError(error: unknown): boolean {
   return false;
 }
 
+/** Backoff for replaying an atomic operation that SQLite rejected due to lock contention. */
+export function getDatabaseLockRetryDelay(error: unknown, attempt: number): number | undefined {
+  if (attempt >= TRANSIENT_LOCK_RETRY_ATTEMPTS || !isTransientDatabaseLockError(error)) {
+    return undefined;
+  }
+  return Math.min(TRANSIENT_LOCK_RETRY_BASE_MS * 2 ** (attempt - 1), TRANSIENT_LOCK_RETRY_MAX_MS);
+}
+
 function serializeTopLevelOperations(
   client: Client,
   db: Drizzle,
   { reconnectOnLockFailure }: { reconnectOnLockFailure: boolean },
-): Drizzle {
+): Database {
   const rawExecute = client.execute.bind(client);
 
   const withLockRecovery = async <T>(operation: () => Promise<T>, retry: boolean): Promise<T> => {
@@ -278,12 +297,11 @@ function serializeTopLevelOperations(
             }
           }
         }
-        if (!retry || attempt >= TRANSIENT_LOCK_RETRY_ATTEMPTS) {
+        const delay = getDatabaseLockRetryDelay(error, attempt);
+        if (!retry || delay === undefined) {
           throw error;
         }
-        await sleep(
-          Math.min(TRANSIENT_LOCK_RETRY_BASE_MS * 2 ** (attempt - 1), TRANSIENT_LOCK_RETRY_MAX_MS),
-        );
+        await sleep(delay);
       }
     }
   };
@@ -291,7 +309,10 @@ function serializeTopLevelOperations(
   type TransactionCallback = Parameters<typeof transaction>[0];
   type TransactionContext = Parameters<TransactionCallback>[0];
 
-  type TransactionScope = { transaction: TransactionContext | undefined };
+  type TransactionScope = {
+    transaction: TransactionContext | undefined;
+    failedWrite?: { error: unknown };
+  };
   const activeTransaction = new AsyncLocalStorage<TransactionScope>();
   let operationQueue = Promise.resolve();
   let closing = false;
@@ -354,7 +375,11 @@ function serializeTopLevelOperations(
             const scope: TransactionScope = { transaction: tx };
             return activeTransaction.run(scope, async () => {
               try {
-                return await callback(tx);
+                const result = await callback(tx);
+                if (scope.failedWrite) {
+                  throw scope.failedWrite.error;
+                }
+                return result;
               } finally {
                 // Async resources can outlive the callback. Their root operations
                 // must queue normally instead of reusing a completed transaction.
@@ -367,7 +392,78 @@ function serializeTopLevelOperations(
     );
   }) as typeof db.transaction;
 
-  return db;
+  const runGuardedWrite = serializeClientMethod(
+    async (statement: GuardedStatement, checkWrite: () => void, deadline?: number) => {
+      checkWrite();
+      // BEGIN IMMEDIATE can block on a writer before we can limit this connection's wait.
+      const tx = await client.transaction(deadline === undefined ? 'write' : 'deferred');
+      let busyTimeout: number | undefined;
+      let restoreTimeout: string | undefined;
+      const limitLockWait = async () => {
+        if (deadline === undefined) {
+          return;
+        }
+        busyTimeout ??= Number((await tx.execute('PRAGMA busy_timeout')).rows[0].timeout);
+        const remaining = Math.max(0, Math.floor(deadline - Date.now()));
+        if (remaining < busyTimeout) {
+          restoreTimeout ??= `PRAGMA busy_timeout = ${busyTimeout}`;
+          await tx.execute(`PRAGMA busy_timeout = ${remaining}`);
+          busyTimeout = remaining;
+        }
+      };
+      try {
+        checkWrite();
+        const { sql, params } = statement.toSQL();
+        await limitLockWait();
+        await tx.execute({ sql, args: params as InValue[] });
+        // A rollback-journal reader can still block COMMIT after the statement has run.
+        await limitLockWait();
+        checkWrite();
+        // libSQL's prepared commit() releases its connection even on SQLITE_BUSY.
+        // Keep the transaction open so close() can roll it back before recovery.
+        await tx.executeMultiple(restoreTimeout ? `COMMIT; ${restoreTimeout}` : 'COMMIT');
+      } catch (error) {
+        try {
+          tx.close();
+        } catch (rollbackError) {
+          logger.warn('Could not roll back guarded database write', { error: rollbackError });
+        }
+        // COMMIT may have skipped the trailing PRAGMA. Restore the single serialized
+        // connection before lock recovery reads its settings or another writer can use it.
+        if (restoreTimeout) {
+          try {
+            await rawExecute(restoreTimeout);
+          } catch (restoreError) {
+            client.close();
+            throw restoreError;
+          }
+        }
+        throw error;
+      }
+      tx.close();
+    },
+    false,
+  );
+
+  return Object.assign(db, {
+    async runGuardedWrite(statement: GuardedStatement, checkWrite: () => void, deadline?: number) {
+      const scope = activeTransaction.getStore();
+      const current = scope?.transaction;
+      if (!current || !scope) {
+        return runGuardedWrite(statement, checkWrite, deadline);
+      }
+      checkWrite();
+      try {
+        await current.run(statement);
+        checkWrite();
+      } catch (error) {
+        // The write may already be applied. Even if the callback catches this error,
+        // its transaction must roll back; a savepoint could undo concurrent sibling writes.
+        scope.failedWrite ??= { error };
+        throw error;
+      }
+    },
+  });
 }
 
 export async function getDb() {

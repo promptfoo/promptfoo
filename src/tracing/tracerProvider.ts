@@ -18,7 +18,9 @@ import type { TextMapPropagator, TracerProvider } from '@opentelemetry/api';
 import type { SpanExporter, TracerProviderOptions } from '@opentelemetry/sdk-trace';
 
 export function registerTracerProvider(provider: TracerProvider, propagator?: TextMapPropagator) {
-  trace.setGlobalTracerProvider(provider);
+  if (!trace.setGlobalTracerProvider(provider)) {
+    return false;
+  }
   context.setGlobalContextManager(new AsyncLocalStorageContextManager().enable());
   propagation.setGlobalPropagator(
     propagator ??
@@ -26,6 +28,7 @@ export function registerTracerProvider(provider: TracerProvider, propagator?: Te
         propagators: [new W3CTraceContextPropagator(), new W3CBaggagePropagator()],
       }),
   );
+  return true;
 }
 
 function samplerFromEnv() {

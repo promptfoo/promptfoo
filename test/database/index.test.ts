@@ -4,6 +4,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 
+import { sqliteTable, text } from 'drizzle-orm/sqlite-core';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import cliState from '../../src/cliState';
 import {
@@ -110,7 +111,8 @@ async function runDatabaseProbe<T>(
         IS_TESTING: 'false',
         LOG_LEVEL: 'error',
         PROMPTFOO_CONFIG_DIR: tempConfigDir,
-        PROMPTFOO_DISABLE_WAL_MODE: mode === 'wal-disabled' ? 'true' : 'false',
+        PROMPTFOO_DISABLE_WAL_MODE:
+          mode === 'wal-disabled' || mode.startsWith('guarded-commit') ? 'true' : 'false',
         PROMPTFOO_DISABLE_TELEMETRY: 'true',
         PROMPTFOO_DISABLE_UPDATE_CHECK: 'true',
       },
@@ -627,6 +629,105 @@ describe('database', () => {
       ).resolves.toEqual([{ id: 'inner' }, { id: 'outer' }]);
     });
 
+    it.each(['abort', 'deadline'])(
+      'rolls back the caller transaction after a caught post-write %s failure',
+      async (failure) => {
+        const db = await getDb();
+        const table = sqliteTable('guarded_nested_write_test', { id: text('id').primaryKey() });
+        await db.run('CREATE TABLE guarded_nested_write_test (id TEXT PRIMARY KEY)');
+        const controller = new AbortController();
+        const rejection = new Error(`Nested write ${failure}`);
+        const deadline = Date.now() + 1_000;
+        let checks = 0;
+        vi.useFakeTimers({ toFake: ['Date'] });
+        try {
+          await expect(
+            db.transaction(async (tx) => {
+              await tx.insert(table).values({ id: 'before' });
+              await expect(
+                db.runGuardedWrite(
+                  db.insert(table).values({ id: 'cancelled' }),
+                  () => {
+                    if (++checks === 2) {
+                      if (failure === 'abort') {
+                        controller.abort(rejection);
+                      } else {
+                        vi.setSystemTime(deadline);
+                      }
+                    }
+                    controller.signal.throwIfAborted();
+                    if (failure === 'deadline' && Date.now() >= deadline) {
+                      throw rejection;
+                    }
+                  },
+                  failure === 'deadline' ? deadline : undefined,
+                ),
+              ).rejects.toBe(rejection);
+              await tx.insert(table).values({ id: 'after' });
+            }),
+          ).rejects.toBe(rejection);
+        } finally {
+          vi.useRealTimers();
+        }
+
+        expect(checks).toBe(2);
+        await expect(db.select().from(table)).resolves.toEqual([]);
+        await db.insert(table).values({ id: 'after-rollback' });
+        await expect(db.select().from(table)).resolves.toEqual([{ id: 'after-rollback' }]);
+      },
+    );
+
+    it('rejects the outer commit when a guarded write fails alongside ordinary writes', async () => {
+      const db = await getDb();
+      const table = sqliteTable('concurrent_guarded_write_test', { id: text('id').primaryKey() });
+      await db.run('CREATE TABLE concurrent_guarded_write_test (id TEXT PRIMARY KEY)');
+      const rejection = new Error('Post-write cancellation');
+      let checks = 0;
+
+      await expect(
+        db.transaction(async (tx) => {
+          const results = await Promise.allSettled([
+            db.runGuardedWrite(db.insert(table).values({ id: 'cancelled' }), () => {
+              if (++checks === 2) {
+                throw rejection;
+              }
+            }),
+            tx.insert(table).values({ id: 'ordinary-sibling' }),
+            db.runGuardedWrite(db.insert(table).values({ id: 'guarded-sibling' }), () => {}),
+          ]);
+          expect(results.map(({ status }) => status)).toEqual([
+            'rejected',
+            'fulfilled',
+            'fulfilled',
+          ]);
+        }),
+      ).rejects.toBe(rejection);
+
+      await expect(db.select().from(table)).resolves.toEqual([]);
+    });
+
+    it('commits successful guarded writes after a caught pre-write rejection', async () => {
+      const db = await getDb();
+      const table = sqliteTable('guarded_prewrite_test', { id: text('id').primaryKey() });
+      await db.run('CREATE TABLE guarded_prewrite_test (id TEXT PRIMARY KEY)');
+      const rejection = new Error('Already cancelled');
+
+      await db.transaction(async (tx) => {
+        await expect(
+          db.runGuardedWrite(db.insert(table).values({ id: 'not-written' }), () => {
+            throw rejection;
+          }),
+        ).rejects.toBe(rejection);
+        await db.runGuardedWrite(db.insert(table).values({ id: 'guarded' }), () => {});
+        await tx.insert(table).values({ id: 'ordinary' });
+      });
+
+      await expect(db.select().from(table).orderBy(table.id)).resolves.toEqual([
+        { id: 'guarded' },
+        { id: 'ordinary' },
+      ]);
+    });
+
     it('rejects root calls without aborting the active transaction', async () => {
       const db = await getDb();
       await db.run('CREATE TABLE root_call_inside_tx_test (id INTEGER PRIMARY KEY)');
@@ -889,6 +990,53 @@ describe('database', () => {
   });
 
   describe('file-backed lock recovery', () => {
+    it.each(['guarded-commit', 'guarded-commit-rollback-failure'])(
+      'recovers after a rollback-journal reader blocks %s',
+      async (mode) => {
+        const result = await runDatabaseProbe<LockRecoveryProbeResult>(
+          'lockRecoveryProbe',
+          tempConfigDir,
+          mode,
+        );
+
+        expect(result.initialJournalMode).toBe('delete');
+        expect(result.firstError).toMatch(/SQLITE_BUSY/);
+        expect(result.followupError).toBeNull();
+        expect(result.afterCloseIds).toEqual([1, 2, 3]);
+      },
+    );
+
+    it('bounds the native commit lock wait and restores the configured timeout on either outcome', async () => {
+      const result = await runDatabaseProbe<LockRecoveryProbeResult>(
+        'lockRecoveryProbe',
+        tempConfigDir,
+        'guarded-commit-deadline',
+      );
+      expect(result.firstError).toMatch(/SQLITE_BUSY/);
+      expect(result.commitBusyTimeouts).toHaveLength(2);
+      for (const timeout of result.commitBusyTimeouts!) {
+        expect(timeout).toBeGreaterThanOrEqual(0);
+        expect(timeout).toBeLessThanOrEqual(50);
+      }
+      expect(result.busyTimeoutAfterRollback).toBe(400);
+      expect(result.pragmas.busy_timeout).toBe(400);
+      expect(result.afterCloseIds).toEqual([1, 2, 3]);
+    });
+
+    it('tries a best-effort write without waiting on another writer and restores the timeout', async () => {
+      const result = await runDatabaseProbe<LockRecoveryProbeResult>(
+        'lockRecoveryProbe',
+        tempConfigDir,
+        'guarded-commit-nowait-writer',
+      );
+      expect(result.firstError).toMatch(/SQLITE_BUSY|SQLITE_LOCKED/);
+      expect(result.statementBusyTimeouts).toEqual([0, 0]);
+      expect(result.commitBusyTimeouts).toEqual([0]);
+      expect(result.busyTimeoutAfterRollback).toBe(400);
+      expect(result.pragmas.busy_timeout).toBe(400);
+      expect(result.afterCloseIds).toEqual([1, 2, 3]);
+    });
+
     it.each(['wal-failure', 'wal-refused'])(
       'preserves FULL synchronization at startup and after lock recovery when %s',
       async (mode) => {

@@ -25,7 +25,7 @@ import {
   getProviderCallTracingContext,
 } from '../scheduler/providerCallExecutionContext';
 import { generateSpanId, generateTraceparent } from '../tracing/evaluatorTracing';
-import { getTraceStore } from '../tracing/store';
+import { getTraceStore, UNRELIABLE_SPAN_ATTRIBUTE } from '../tracing/store';
 import {
   type ApiProvider,
   type Assertion,
@@ -185,6 +185,50 @@ export function hasTraceAwareAssertions(assertions?: AssertionOrSet[]): boolean 
   return Boolean(assertions?.some(assertionMayNeedTraceContext));
 }
 
+// A local capture records the target spans known before grading begins. The full
+// timeline stays available in storage, including later evaluator and grader spans.
+function getAssertionTraceSpans(traceData: TraceData): {
+  spans: TraceData['spans'];
+  incomplete: boolean;
+} {
+  const spans = traceData.spans || [];
+  const capturedIds = traceData.metadata?.promptfooTraceSpanIds;
+  if (capturedIds === undefined) {
+    return { spans, incomplete: false };
+  }
+  if (!Array.isArray(capturedIds) || !capturedIds.every((id) => typeof id === 'string' && id)) {
+    return { spans: [], incomplete: true };
+  }
+  const captured = new Set(capturedIds);
+  if (traceData.metadata?.promptfooTraceEvidence === 'partial') {
+    // Remote or still-active target children may arrive after grading. Their parent
+    // linkage keeps them in the target capture without admitting later grader roots.
+    const children = new Map<string, string[]>();
+    for (const span of spans) {
+      if (span.parentSpanId) {
+        const siblings = children.get(span.parentSpanId) ?? [];
+        siblings.push(span.spanId);
+        children.set(span.parentSpanId, siblings);
+      }
+    }
+    const pending = [...captured];
+    while (pending.length) {
+      for (const child of children.get(pending.pop()!) ?? []) {
+        if (!captured.has(child)) {
+          captured.add(child);
+          pending.push(child);
+        }
+      }
+    }
+  }
+  const selected = spans.filter((span) => captured.has(span.spanId));
+  const storedIds = new Set(selected.map((span) => span.spanId));
+  return {
+    spans: selected,
+    incomplete: captured.size === 0 || capturedIds.some((id) => !storedIds.has(id)),
+  };
+}
+
 async function loadTraceData(traceId: string): Promise<TraceData | null> {
   const traceStore = getTraceStore();
   const maxAttempts = Math.min(
@@ -210,6 +254,9 @@ async function loadTraceData(traceId: string): Promise<TraceData | null> {
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
     latestTrace = await traceStore.getTrace(traceId, { sanitizeAttributes: false });
 
+    if (latestTrace?.metadata?.promptfooTraceEvidence === 'unavailable') {
+      return latestTrace;
+    }
     const spanCount = latestTrace?.spans?.length ?? 0;
     if (spanCount > 0) {
       stableObservations = spanCount === lastSpanCount ? stableObservations + 1 : 1;
@@ -228,7 +275,81 @@ async function loadTraceData(traceId: string): Promise<TraceData | null> {
     }
   }
 
-  return latestTrace;
+  // An association exists before its spans arrive. Empty evidence cannot establish absence.
+  return null;
+}
+
+/** Missing spans can add matches, so a partial trace only proves positive observations. */
+function canGradePartialTrace({
+  baseType,
+  inverse,
+  assertion,
+  renderedValue,
+}: AssertionParams): boolean {
+  // Raw span handlers read the assertion value. Trajectory handlers use the rendered matcher.
+  const value =
+    baseType === 'trace-span-count' ? assertion.value : (renderedValue ?? assertion.value);
+  if (baseType === 'trajectory:tool-used' && Array.isArray(value) && value.length === 0) {
+    // Let the handler report its configuration error before considering incomplete evidence.
+    return true;
+  }
+  if (inverse) {
+    return false;
+  }
+  if (baseType === 'trajectory:tool-args-match') {
+    return true;
+  }
+  if (baseType === 'trajectory:tool-sequence') {
+    const sequence = Array.isArray(value) ? { steps: value } : value;
+    return (
+      !!sequence &&
+      typeof sequence === 'object' &&
+      'steps' in sequence &&
+      Array.isArray(sequence.steps) &&
+      sequence.steps.length > 0 &&
+      (!('mode' in sequence) || sequence.mode === 'in_order')
+    );
+  }
+  if (baseType === 'trajectory:tool-used' && (typeof value === 'string' || Array.isArray(value))) {
+    return value.length > 0;
+  }
+  if (
+    baseType !== 'trace-span-count' &&
+    baseType !== 'trajectory:step-count' &&
+    baseType !== 'trajectory:tool-used'
+  ) {
+    return false;
+  }
+  if (
+    !value ||
+    typeof value !== 'object' ||
+    Array.isArray(value) ||
+    ('max' in value && value.max !== undefined)
+  ) {
+    return false;
+  }
+  const min = 'min' in value ? value.min : baseType === 'trajectory:tool-used' ? 1 : 0;
+  return typeof min === 'number' && min > 0;
+}
+
+function getTraceEvidenceError(
+  params: AssertionParams,
+  traceId: string | undefined,
+  traceUnavailable?: boolean,
+  traceIncomplete?: boolean,
+): string | undefined {
+  if (!params.baseType.startsWith('trace-') && !params.baseType.startsWith('trajectory:')) {
+    return;
+  }
+  if (traceUnavailable) {
+    return 'Trace evidence is unavailable or unreliable; this assertion cannot be graded.';
+  }
+  if (traceId && !params.assertionValueContext.trace) {
+    return 'No spans were stored for this row before grading. Trace evidence is unavailable.';
+  }
+  if (traceIncomplete && !canGradePartialTrace(params)) {
+    return 'Trace collection is incomplete. This assertion requires a complete trace.';
+  }
 }
 
 const ASSERTION_HANDLERS: Record<
@@ -422,8 +543,10 @@ async function runAssertionInternal({
   vars,
   latencyMs,
   providerResponse,
-  traceId,
   traceData,
+  traceId = traceData?.traceId,
+  traceUnavailable,
+  traceIncomplete,
   claimStoredGradingUsage,
 }: {
   prompt?: string;
@@ -436,6 +559,8 @@ async function runAssertionInternal({
   assertIndex?: number;
   traceId?: string;
   traceData?: TraceData | null;
+  traceUnavailable?: boolean;
+  traceIncomplete?: boolean;
   claimStoredGradingUsage?: () => boolean;
 }): Promise<GradingResult> {
   // Use resolved vars if provided, otherwise fall back to test.vars
@@ -466,17 +591,40 @@ async function runAssertionInternal({
   };
 
   // Add trace data if traceId is available
-  if (traceId && assertionMayNeedTraceContext(assertion)) {
+  if (!traceUnavailable && traceId && assertionMayNeedTraceContext(assertion)) {
     try {
       const resolvedTraceData = traceData === undefined ? await loadTraceData(traceId) : traceData;
-      if (resolvedTraceData) {
-        context.trace = {
-          traceId: resolvedTraceData.traceId,
-          evaluationId: resolvedTraceData.evaluationId,
-          testCaseId: resolvedTraceData.testCaseId,
-          metadata: resolvedTraceData.metadata,
-          spans: resolvedTraceData.spans || [],
-        };
+      const evidence = resolvedTraceData?.metadata?.promptfooTraceEvidence;
+      if (evidence === 'unavailable') {
+        traceUnavailable = true;
+      } else if (
+        evidence === 'partial' &&
+        !(traceIncomplete === false && traceUnavailable === false)
+      ) {
+        // A live grader knows whether its own flush completed. Replays use the saved status.
+        traceIncomplete = true;
+      }
+      if (
+        resolvedTraceData &&
+        !traceUnavailable &&
+        (evidence !== 'partial' || resolvedTraceData.spans?.length)
+      ) {
+        const capture = getAssertionTraceSpans(resolvedTraceData);
+        traceIncomplete ||= capture.incomplete;
+        // Delayed target children can lose attributes after the row was finalized.
+        // Excluded graders cannot make an otherwise intact target capture unavailable.
+        traceUnavailable ||= capture.spans.some(
+          (span) => span.attributes?.[UNRELIABLE_SPAN_ATTRIBUTE] === true,
+        );
+        if (!traceUnavailable) {
+          context.trace = {
+            traceId: resolvedTraceData.traceId,
+            evaluationId: resolvedTraceData.evaluationId,
+            testCaseId: resolvedTraceData.testCaseId,
+            metadata: resolvedTraceData.metadata,
+            spans: capture.spans,
+          };
+        }
       }
     } catch (error) {
       logger.debug(`Failed to fetch trace data for assertion: ${error}`);
@@ -686,7 +834,27 @@ async function runAssertionInternal({
 
   const handler = ASSERTION_HANDLERS[assertionParams.baseType as keyof typeof ASSERTION_HANDLERS];
   if (scriptFailure || handler) {
-    const result = scriptFailure ?? (await handler(assertionParams));
+    const traceError = getTraceEvidenceError(
+      assertionParams,
+      traceId,
+      traceUnavailable,
+      traceIncomplete,
+    );
+    const result: GradingResult =
+      scriptFailure ??
+      (traceError
+        ? { pass: false, score: 0, reason: traceError, assertion }
+        : await handler(assertionParams));
+
+    if (
+      traceIncomplete &&
+      !result.pass &&
+      !traceError &&
+      !scriptFailure &&
+      canGradePartialTrace(assertionParams)
+    ) {
+      result.reason = `The trace is incomplete. Additional spans could satisfy this assertion. ${result.reason}`;
+    }
 
     // Store rendered assertion value in metadata if it differs from the original template
     // This allows the UI to display substituted variable values instead of raw templates
@@ -716,7 +884,7 @@ async function runAssertionInternal({
 export async function runAssertion(
   options: Parameters<typeof runAssertionInternal>[0],
 ): Promise<GradingResult> {
-  if (!options.traceId) {
+  if (!options.traceId && !options.traceData?.traceId) {
     return runAssertionInternal(options);
   }
 
@@ -791,6 +959,8 @@ export async function runAssertions({
   test,
   vars,
   traceId,
+  traceUnavailable,
+  traceIncomplete,
 }: {
   assertScoringFunction?: ScoringFunction;
   latencyMs?: number;
@@ -800,6 +970,8 @@ export async function runAssertions({
   test: AtomicTestCase;
   vars?: Record<string, VarValue>;
   traceId?: string;
+  traceUnavailable?: boolean;
+  traceIncomplete?: boolean;
 }): Promise<GradingResult> {
   if (!test.assert || test.assert.length < 1) {
     return AssertionsResult.noAssertsResult();
@@ -841,8 +1013,8 @@ export async function runAssertions({
 
   const shouldPreloadTrace =
     !!traceId && hasTraceAwareAssertions(asserts.map(({ assertion }) => assertion));
-  let preloadedTraceData: TraceData | null | undefined;
-  if (shouldPreloadTrace && traceId) {
+  let preloadedTraceData: TraceData | null | undefined = traceUnavailable ? null : undefined;
+  if (!traceUnavailable && shouldPreloadTrace && traceId) {
     try {
       preloadedTraceData = await loadTraceData(traceId);
     } catch (error) {
@@ -894,6 +1066,8 @@ export async function runAssertions({
       assertIndex: index,
       traceId,
       traceData: preloadedTraceData,
+      traceUnavailable,
+      traceIncomplete,
       claimStoredGradingUsage,
     });
 

@@ -1,7 +1,8 @@
 import { pathToFileURL } from 'node:url';
 
 import { createClient } from '@libsql/client/node';
-import { Sqlite3Client } from '@libsql/client/sqlite3';
+import { Sqlite3Client, Sqlite3Transaction } from '@libsql/client/sqlite3';
+import { integer, sqliteTable } from 'drizzle-orm/sqlite-core';
 import { closeDb, getDb, getDbPath } from '../../../src/database/index';
 import type { Client } from '@libsql/client/node';
 
@@ -18,6 +19,9 @@ export interface LockRecoveryProbeResult {
   pragmas: Record<string, number>;
   initialJournalMode: string;
   initialSynchronous: number;
+  commitBusyTimeouts?: number[];
+  statementBusyTimeouts?: number[];
+  busyTimeoutAfterRollback?: number;
 }
 
 if (!process.env.PROMPTFOO_CONFIG_DIR) {
@@ -89,7 +93,66 @@ try {
   // Exercise the JS retry/recovery path without blocking this process's lock holder.
   await db.run('PRAGMA busy_timeout = 0');
 
-  if (mode === 'root-in-transaction') {
+  if (mode.startsWith('guarded-commit')) {
+    const table = sqliteTable('lock_recovery_test', { id: integer('id') });
+    const insert = db.insert(table).values({ id: 2 });
+    const noWait = mode === 'guarded-commit-nowait-writer';
+    const lock = await contender.transaction(noWait ? 'write' : 'read');
+    const close = Sqlite3Transaction.prototype.close;
+    const executeMultiple = Sqlite3Transaction.prototype.executeMultiple;
+    const executeStatement = Sqlite3Transaction.prototype.execute;
+    const deadlineMs = noWait ? 0 : mode === 'guarded-commit-deadline' ? 50 : undefined;
+    if (deadlineMs !== undefined) {
+      await db.run('PRAGMA busy_timeout = 400');
+      result.statementBusyTimeouts = [];
+      Sqlite3Transaction.prototype.execute = async function (stmt) {
+        const execute = executeStatement.bind(this);
+        if (typeof stmt !== 'string' && stmt.sql.startsWith('insert into')) {
+          const pragma = await execute('PRAGMA busy_timeout');
+          result.statementBusyTimeouts!.push(Number(pragma.rows[0].timeout));
+        }
+        return execute(stmt);
+      };
+      result.commitBusyTimeouts = [];
+      Sqlite3Transaction.prototype.executeMultiple = async function (sql) {
+        if (sql.startsWith('COMMIT')) {
+          const pragma = await this.execute('PRAGMA busy_timeout');
+          result.commitBusyTimeouts!.push(Number(pragma.rows[0].timeout));
+        }
+        return executeMultiple.call(this, sql);
+      };
+    }
+    const write = () =>
+      db.runGuardedWrite(
+        insert,
+        () => {},
+        deadlineMs === undefined ? undefined : Date.now() + deadlineMs,
+      );
+    if (mode === 'guarded-commit-rollback-failure') {
+      Sqlite3Transaction.prototype.close = function () {
+        close.call(this);
+        throw new Error('Injected transaction cleanup error');
+      };
+    }
+    try {
+      await lock.execute('SELECT id FROM lock_recovery_test');
+      result.firstError = await captureError(write);
+      if (deadlineMs !== undefined) {
+        result.busyTimeoutAfterRollback = Number(
+          (await client.execute('PRAGMA busy_timeout')).rows[0].timeout,
+        );
+      }
+    } finally {
+      Sqlite3Transaction.prototype.close = close;
+      await lock.rollback();
+    }
+    try {
+      await write();
+    } finally {
+      Sqlite3Transaction.prototype.execute = executeStatement;
+      Sqlite3Transaction.prototype.executeMultiple = executeMultiple;
+    }
+  } else if (mode === 'root-in-transaction') {
     await db.transaction(async (tx) => {
       result.callbackCalls++;
       await tx.run('INSERT INTO lock_recovery_test VALUES (2)');

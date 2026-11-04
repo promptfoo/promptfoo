@@ -1127,9 +1127,9 @@ assert:
 The `trace-span-count` assertion counts the number of spans in a trace that match a given pattern and checks if the count is within specified bounds. This is useful for validating that expected operations occurred in your LLM application.
 
 :::note
-Trace assertions require tracing to be enabled in your evaluation. See the [tracing documentation](/docs/tracing/) for setup instructions.
+Trace assertions require tracing to be enabled in your evaluation. See the [tracing documentation](/docs/tracing/) for setup instructions. Completed local captures use the same target-call span set for live and saved-trace grading; the stored timeline retains later evaluator and grading activity.
 
-If trace data is not available, the assertion will throw an error rather than failing, indicating that the assertion could not be evaluated.
+If no spans arrive for a traced row, the assertion fails. A partial trace can prove a positive minimum count. An upper bound, including `max: 0`, requires complete collection. [Trace collection and grading](/docs/tracing/#concurrent-programmatic-evaluations)
 :::
 
 Example:
@@ -1193,7 +1193,7 @@ A span must match both `pattern` and every attribute. Attribute keys are literal
 The `trace-span-duration` assertion checks if span durations in a trace are within acceptable limits. It can check individual spans or percentiles across all matching spans.
 
 :::note
-This assertion requires trace data to be available. If tracing is not enabled or trace data is missing, the assertion will throw an error.
+Enable tracing for this assertion. It fails if collection is incomplete or no spans were saved.
 :::
 
 Example:
@@ -1233,7 +1233,7 @@ The assertion will show the slowest spans when a threshold is exceeded, making i
 The `trace-error-spans` assertion detects error spans in a trace and ensures the error rate is within acceptable limits. It automatically detects errors through status codes, error attributes, and status messages.
 
 :::note
-This assertion requires trace data to be available. If tracing is not enabled or trace data is missing, the assertion will throw an error.
+Enable tracing for this assertion. It fails if collection is incomplete or no spans were saved.
 :::
 
 Example:
