@@ -38,6 +38,8 @@ describe('packed consumer SBOM', () => {
     writeBrowser(path.join(source, 'dist/src/app'));
     writePackage(consumer, { name: 'consumer', version: '0.0.0', private: true });
     const npmExecPath = execSync('npm exec --offline --call "node -p process.env.npm_execpath"', {
+      // Avoid loading the repository's large workspace tree just to locate npm.
+      cwd: source,
       encoding: 'utf8',
     }).trim();
     vi.stubEnv('npm_execpath', npmExecPath);
@@ -100,6 +102,7 @@ describe('packed consumer SBOM', () => {
       version: '1.0.0',
     });
     const npmExecPath = execSync('npm exec --offline --call "node -p process.env.npm_execpath"', {
+      cwd: directory,
       encoding: 'utf8',
     }).trim();
     vi.stubEnv('npm_execpath', npmExecPath);

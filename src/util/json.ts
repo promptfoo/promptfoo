@@ -6,22 +6,24 @@ import { loadYaml } from './yamlLoad';
 
 import type { EvaluateResult, ResultFailureReason } from '../types/index';
 
-let ajvInstance: Ajv | null = null;
+const ajvInstances = new Map<boolean, Ajv>();
 
 export function resetAjv(): void {
   if (getEnvString('NODE_ENV') !== 'test') {
     throw new Error('resetAjv can only be called in test environment');
   }
-  ajvInstance = null;
+  ajvInstances.clear();
 }
 
 export function getAjv(): Ajv {
+  const strictSchema = !getEnvBool('PROMPTFOO_DISABLE_AJV_STRICT_MODE');
+  let ajvInstance = ajvInstances.get(strictSchema);
   if (!ajvInstance) {
-    const ajvOptions: ConstructorParameters<typeof Ajv>[0] = {
-      strictSchema: !getEnvBool('PROMPTFOO_DISABLE_AJV_STRICT_MODE'),
-    };
-    ajvInstance = new Ajv(ajvOptions);
+    ajvInstance = new Ajv({ strictSchema });
     addFormats(ajvInstance);
+    // Gemini schemas can reuse this annotation in tool and JSON assertions.
+    ajvInstance.addKeyword({ keyword: ['property_ordering', 'propertyOrdering'], valid: true });
+    ajvInstances.set(strictSchema, ajvInstance);
   }
   return ajvInstance;
 }
@@ -212,9 +214,126 @@ export function convertSlashCommentsToHash(str: string): string {
     .join('\n');
 }
 
+function findJsonStringEnd(str: string, start: number): number {
+  for (let index = start; index < str.length; index++) {
+    const char = str[index];
+    if (char === '"') {
+      return index + 1;
+    }
+    if (char === '\\') {
+      index++;
+      const escape = str[index];
+      if (escape === 'u') {
+        if (!/^[\da-fA-F]{4}$/.test(str.slice(index + 1, index + 5))) {
+          return -1;
+        }
+        index += 4;
+      } else if (!'"\\/bfnrt'.includes(escape)) {
+        return -1;
+      }
+    } else if (char.charCodeAt(0) < 0x20) {
+      return -1;
+    }
+  }
+  return -1;
+}
+
+type JsonContainer = {
+  start: number;
+  close: '}' | ']';
+  state: 'keyOrEnd' | 'key' | 'colon' | 'valueOrEnd' | 'value' | 'separator';
+};
+
+// Cache syntax outcomes, independently of candidate size, so malformed prefixes
+// cannot repeatedly scan nested objects or hide a later valid object.
+function findJsonObjectEnd(str: string, start: number, objectEnds: Map<number, number>): number {
+  const cachedEnd = objectEnds.get(start);
+  if (cachedEnd !== undefined) {
+    return cachedEnd;
+  }
+
+  const tokens =
+    /[ \t\r\n]*("|-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?|true|false|null|[{}\[\],:])/y;
+  const stack: JsonContainer[] = [{ start, close: '}', state: 'keyOrEnd' }];
+  let index = start + 1;
+
+  while (stack.length > 0) {
+    tokens.lastIndex = index;
+    const match = tokens.exec(str);
+    if (!match) {
+      break;
+    }
+    const token = match[1];
+    index = tokens.lastIndex;
+    if (token === '"') {
+      index = findJsonStringEnd(str, index);
+      if (index === -1) {
+        break;
+      }
+    }
+    const container = stack[stack.length - 1];
+
+    if (
+      token === container.close &&
+      (container.state === 'keyOrEnd' ||
+        container.state === 'valueOrEnd' ||
+        container.state === 'separator')
+    ) {
+      if (container.close === '}') {
+        objectEnds.set(container.start, index);
+      }
+      stack.pop();
+      if (stack.length === 0) {
+        return index;
+      }
+    } else if (container.state === 'keyOrEnd' || container.state === 'key') {
+      if (!token.startsWith('"')) {
+        break;
+      }
+      container.state = 'colon';
+    } else if (container.state === 'colon') {
+      if (token !== ':') {
+        break;
+      }
+      container.state = 'value';
+    } else if (container.state === 'separator') {
+      if (token !== ',') {
+        break;
+      }
+      container.state = container.close === '}' ? 'key' : 'value';
+    } else {
+      if (token === ':' || token === ',' || token === '}' || token === ']') {
+        break;
+      }
+      container.state = 'separator';
+      if (token === '{') {
+        const nestedStart = index - 1;
+        const nestedEnd = objectEnds.get(nestedStart);
+        if (nestedEnd === -1) {
+          break;
+        }
+        if (nestedEnd === undefined) {
+          stack.push({ start: nestedStart, close: '}', state: 'keyOrEnd' });
+        } else {
+          index = nestedEnd;
+        }
+      } else if (token === '[') {
+        stack.push({ start: index - 1, close: ']', state: 'valueOrEnd' });
+      }
+    }
+  }
+
+  for (const container of stack) {
+    if (container.close === '}') {
+      objectEnds.set(container.start, -1);
+    }
+  }
+  return -1;
+}
+
 export function extractJsonObjects(str: string): object[] {
   const jsonObjects: object[] = [];
-  const maxJsonLength = 100000; // Prevent processing extremely large invalid JSON
+  const maxJsonLength = 100000; // Limit the size of parsed candidates
 
   if (str.length <= maxJsonLength) {
     try {
@@ -227,8 +346,30 @@ export function extractJsonObjects(str: string): object[] {
     }
   }
 
+  const objectEnds = new Map<number, number>();
+  let windowStart = -1;
+  let scanWindow = '';
   for (let i = 0; i < str.length; i++) {
     if (str[i] === '{') {
+      const blockStart = Math.floor(i / maxJsonLength) * maxJsonLength;
+      if (blockStart !== windowStart) {
+        windowStart = blockStart;
+        // Every eligible candidate in this block fits within the two-block window.
+        scanWindow = str.slice(windowStart, windowStart + 2 * maxJsonLength);
+        objectEnds.clear();
+      }
+      const localEnd = findJsonObjectEnd(scanWindow, i - windowStart, objectEnds);
+      const end = localEnd === -1 ? -1 : windowStart + localEnd;
+      if (end > i && end - i <= maxJsonLength) {
+        try {
+          jsonObjects.push(JSON.parse(str.slice(i, end)));
+          i = end - 1;
+          continue;
+        } catch {
+          // Preserve tolerant extraction if parsing fails.
+        }
+      }
+
       let openBraces = 1;
       let closeBraces = 0;
       let j = i + 1;
@@ -294,7 +435,8 @@ export function extractFirstJsonObject<T>(str: string): T {
  * // Result: { a: 1, b: 2, c: 3 }
  */
 export function orderKeys<T extends object>(obj: T, order: (keyof T)[]): T {
-  const result: T = {} as T;
+  // Avoid inherited keys and setters while collecting arbitrary source keys.
+  const result: T = Object.create(null);
 
   // Add ordered keys (excluding undefined values)
   for (const key of order) {
@@ -318,7 +460,8 @@ export function orderKeys<T extends object>(obj: T, order: (keyof T)[]): T {
     }
   }
 
-  return result;
+  // Return an ordinary object while preserving __proto__ as an own data property.
+  return { ...result };
 }
 
 /**
