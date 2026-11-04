@@ -1141,62 +1141,38 @@ describe('auth command', () => {
       },
     );
 
-    it('should handle API error', async () => {
-      vi.mocked(getUserEmail).mockReturnValue('test@example.com');
-      vi.mocked(cloudConfig.getApiKey).mockReturnValue('test-api-key');
-      vi.mocked(cloudConfig.getApiHost).mockReturnValue('https://api.example.com');
+    it.each(['should handle API error', 'should handle failed API response with empty body'])(
+      '%s',
+      async () => {
+        vi.mocked(getUserEmail).mockReturnValue('test@example.com');
+        vi.mocked(cloudConfig.getApiKey).mockReturnValue('test-api-key');
+        vi.mocked(cloudConfig.getApiHost).mockReturnValue('https://api.example.com');
 
-      vi.mocked(fetchWithProxy).mockResolvedValueOnce(
-        createMockResponse({
-          ok: false,
-          statusText: 'Internal Server Error',
-        }),
-      );
+        // Mock response with an empty body to exercise error-body fallback handling.
+        vi.mocked(fetchWithProxy).mockResolvedValueOnce(
+          createMockResponse({
+            ok: false,
+            // Providing no body or an empty body
+            statusText: 'Internal Server Error',
+          }),
+        );
 
-      const whoamiCmd = program.commands
-        .find((cmd) => cmd.name() === 'auth')
-        ?.commands.find((cmd) => cmd.name() === 'whoami');
-      await whoamiCmd?.parseAsync(['node', 'test']);
+        const whoamiCmd = program.commands
+          .find((cmd) => cmd.name() === 'auth')
+          ?.commands.find((cmd) => cmd.name() === 'whoami');
+        await whoamiCmd?.parseAsync(['node', 'test']);
 
-      expect(logger.error).toHaveBeenCalledWith(
-        expect.stringContaining(
-          'Failed to get user info: Failed to fetch user info: Internal Server Error',
-        ),
-      );
-      expect(process.exitCode).toBe(1);
+        expect(logger.error).toHaveBeenCalledWith(
+          expect.stringContaining(
+            'Failed to get user info: Failed to fetch user info: Internal Server Error',
+          ),
+        );
+        expect(process.exitCode).toBe(1);
 
-      process.exitCode = 0;
-    });
-
-    it('should handle failed API response with empty body', async () => {
-      vi.mocked(getUserEmail).mockReturnValue('test@example.com');
-      vi.mocked(cloudConfig.getApiKey).mockReturnValue('test-api-key');
-      vi.mocked(cloudConfig.getApiHost).mockReturnValue('https://api.example.com');
-
-      // Mock response with an empty body to exercise error-body fallback handling.
-      vi.mocked(fetchWithProxy).mockResolvedValueOnce(
-        createMockResponse({
-          ok: false,
-          statusText: 'Internal Server Error',
-          // Providing no body or an empty body
-        }),
-      );
-
-      const whoamiCmd = program.commands
-        .find((cmd) => cmd.name() === 'auth')
-        ?.commands.find((cmd) => cmd.name() === 'whoami');
-      await whoamiCmd?.parseAsync(['node', 'test']);
-
-      expect(logger.error).toHaveBeenCalledWith(
-        expect.stringContaining(
-          'Failed to get user info: Failed to fetch user info: Internal Server Error',
-        ),
-      );
-      expect(process.exitCode).toBe(1);
-
-      // Reset exitCode
-      process.exitCode = 0;
-    });
+        // Reset exitCode
+        process.exitCode = 0;
+      },
+    );
 
     it('should handle non-Error object in the catch block', async () => {
       vi.mocked(getUserEmail).mockReturnValue('test@example.com');

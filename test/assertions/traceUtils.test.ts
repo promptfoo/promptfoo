@@ -1,5 +1,98 @@
 import { describe, expect, it } from 'vitest';
-import { matchesPattern } from '../../src/assertions/traceUtils';
+import { filterTraceSpans, matchesPattern } from '../../src/assertions/traceUtils';
+
+import type { TraceSpan } from '../../src/types/tracing';
+
+describe('filterTraceSpans', () => {
+  const spans: TraceSpan[] = [
+    {
+      spanId: 'search',
+      name: 'execute_tool',
+      startTime: 0,
+      attributes: { 'gen_ai.tool.name': 'search', cached: false, retries: 0 },
+    },
+    {
+      spanId: 'fetch',
+      name: 'execute_tool',
+      startTime: 0,
+      attributes: { 'gen_ai.tool.name': 'fetch', cached: false, retries: 0 },
+    },
+    {
+      spanId: 'other-operation',
+      name: 'invoke_agent',
+      startTime: 0,
+      attributes: { 'gen_ai.tool.name': 'search', cached: false, retries: 0 },
+    },
+    { spanId: 'missing', name: 'execute_tool', startTime: 0 },
+  ];
+
+  it('combines the span pattern with all exact attribute conditions', () => {
+    const matching = filterTraceSpans(spans, 'execute_*', {
+      'gen_ai.tool.name': 'search',
+      cached: false,
+      retries: 0,
+    });
+    expect(matching.map((span) => span.spanId)).toEqual(['search']);
+    expect(matching[0]).toBe(spans[0]);
+  });
+
+  it.each([
+    { 'gen_ai.tool.name': 'SEARCH' },
+    { 'gen_ai.tool.name': 'search*' },
+    { 'gen_ai.tool.name': 'search', retries: 1 },
+    { cached: 'false' },
+    { retries: '0' },
+    { missing: false },
+  ])('does not coerce, glob-match, or ignore missing attributes: %j', (attributes) => {
+    expect(filterTraceSpans(spans, 'execute_*', attributes)).toEqual([]);
+  });
+
+  it('preserves name-only matching with omitted or empty filters', () => {
+    const expected = [spans[0], spans[1], spans[3]];
+    expect(filterTraceSpans(spans, 'EXECUTE_*')).toEqual(expected);
+    expect(filterTraceSpans(spans, 'EXECUTE_*', {})).toEqual(expected);
+  });
+
+  it('only reads own literal attribute keys', () => {
+    const inherited = Object.create({ 'gen_ai.tool.name': 'search' });
+    const own = JSON.parse('{"__proto__":"literal","gen_ai.tool.name":"search"}');
+    const candidates = [
+      { ...spans[0], spanId: 'inherited', attributes: inherited },
+      { ...spans[0], spanId: 'nested', attributes: { gen_ai: { tool: { name: 'search' } } } },
+      { ...spans[0], spanId: 'own', attributes: own },
+    ];
+    expect(
+      filterTraceSpans(candidates, '*', { 'gen_ai.tool.name': 'search' }).map(
+        (span) => span.spanId,
+      ),
+    ).toEqual(['own']);
+    expect(
+      filterTraceSpans(candidates, '*', JSON.parse('{"__proto__":"literal"}')).map(
+        (span) => span.spanId,
+      ),
+    ).toEqual(['own']);
+  });
+
+  it.each([
+    null,
+    [],
+    'search',
+    false,
+    0,
+    new Map(),
+    new Date(0),
+    { tool: null },
+    { tool: [] },
+    { tool: {} },
+    { tool: undefined },
+    { retries: Number.NaN },
+    { retries: Number.POSITIVE_INFINITY },
+  ])('rejects malformed filters even with no spans: %j', (attributes) => {
+    expect(() => filterTraceSpans([], '*', attributes)).toThrow(
+      'Trace assertion attributes must be an object with string, boolean, or finite number values',
+    );
+  });
+});
 
 describe('tracing utilities', () => {
   describe('matchesPattern', () => {

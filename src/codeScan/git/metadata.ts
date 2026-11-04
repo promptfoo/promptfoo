@@ -4,7 +4,7 @@
  * Extracts metadata about the current branch and commits.
  */
 
-import simpleGit, { type LogResult } from 'simple-git';
+import { type LogResult, simpleGit } from 'simple-git';
 import { GitMetadataError } from '../../types/codeScan';
 
 import type { GitMetadata } from '../../types/codeScan';
@@ -24,10 +24,6 @@ export async function extractMetadata(
   const git = simpleGit(repoPath);
 
   try {
-    // Store original refs
-    const baseRef = baseBranch;
-    const compareRefValue = compareRef;
-
     // Resolve to exact SHAs
     const baseSha = (await git.revparse([baseBranch])).trim();
     const compareSha = (await git.revparse([compareRef])).trim();
@@ -49,12 +45,13 @@ export async function extractMetadata(
     // Get timestamp from most recent commit
     const timestamp = log.latest?.date || new Date().toISOString();
 
+    // Store original refs
     return {
       branch: compareRef,
       baseBranch,
-      baseRef,
+      baseRef: baseBranch,
       baseSha,
-      compareRef: compareRefValue,
+      compareRef,
       compareSha,
       commitMessages,
       author,
