@@ -109,8 +109,8 @@ export function convertResultsToTable(eval_: ResultsFile): EvaluateTable {
     const resultText = getTableCellText(result);
 
     row.outputs[result.promptIdx] = {
-      id: result.id || `${result.testIdx}-${result.promptIdx}`,
       ...result,
+      id: result.id || `${result.testIdx}-${result.promptIdx}`,
       text: resultText || '',
       prompt: result.prompt.raw,
       provider: result.provider?.label || result.provider?.id || 'unknown provider',
