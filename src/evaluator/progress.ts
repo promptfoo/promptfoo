@@ -1,4 +1,5 @@
 import logger from '../logger';
+
 import type {
   EvaluatorCiProgressReporter as CIProgressReporter,
   EvaluatorProgressBar as ProgressBarManager,

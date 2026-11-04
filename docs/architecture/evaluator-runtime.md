@@ -1,10 +1,11 @@
 # Evaluator runtime composition
 
-The evaluator has three source entry points:
+The evaluator separates row execution, suite orchestration, and runtime composition.
 
 | Entry point                     | Responsibility                                                                 |
 | ------------------------------- | ------------------------------------------------------------------------------ |
 | `src/evaluator/engine.ts`       | Execute a resolved test suite using a required `EvaluatorRuntime`.             |
+| `src/evaluator/runEval.ts`      | Execute and grade one test case, including its provider response and trace.    |
 | `src/node/evaluateTestSuite.ts` | Supply the default Node runtime for the existing three-argument evaluator API. |
 | `src/evaluator/index.ts`        | Preserve the established source exports and overloads.                         |
 

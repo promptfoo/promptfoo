@@ -1,4 +1,3 @@
-export { ProgressBarManager } from '../node/evaluatorProgress';
 export {
   cleanupProgressAfterError,
   cleanupProgressReporters,
@@ -7,3 +6,4 @@ export {
   updateComparisonReporterProgress,
   updateComparisonReporterTotals,
 } from '../evaluator/progress';
+export { ProgressBarManager } from '../node/evaluatorProgress';
