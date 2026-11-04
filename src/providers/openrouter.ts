@@ -222,7 +222,7 @@ export class OpenRouterProvider extends OpenAiChatCompletionProvider {
       statusText,
       headers,
     }: FetchWithCacheResult<OpenRouterChatCompletionResponse>,
-    config: OpenAiCompletionOptions,
+    config: OpenAiBillingConfig,
     jsonSchemaFormat: boolean,
   ): ProviderResponse | undefined {
     const policy = getOpenAiPolicyRefusal(data, true);
