@@ -6,7 +6,7 @@ interface PageHeaderProps {
   children: React.ReactNode;
   /**
    * Visual variant of the header:
-   * - `default`: Semi-transparent white background
+   * - `default`: Standard card surface
    * - `success`: Green gradient (for clean/success states)
    * - `warning`: Amber gradient (for warning states)
    * - `error`: Red gradient (for error/critical states)
@@ -16,7 +16,7 @@ interface PageHeaderProps {
 }
 
 /**
- * PageHeader provides an elevated header section with backdrop blur.
+ * PageHeader separates the page heading from its content.
  * Supports status-aware gradient backgrounds for conveying page state.
  *
  * @example
@@ -36,7 +36,7 @@ interface PageHeaderProps {
  */
 export function PageHeader({ children, variant = 'default', className }: PageHeaderProps) {
   const bgClass = {
-    default: 'bg-white/80 dark:bg-zinc-900/80',
+    default: 'bg-card',
     success:
       'bg-gradient-to-r from-emerald-50/80 to-green-50/80 dark:from-emerald-950/30 dark:to-green-950/30',
     warning:
@@ -46,8 +46,6 @@ export function PageHeader({ children, variant = 'default', className }: PageHea
   }[variant];
 
   return (
-    <div className={cn('border-b border-border backdrop-blur-sm', bgClass, className)}>
-      {children}
-    </div>
+    <div className={cn('shrink-0 border-b border-border', bgClass, className)}>{children}</div>
   );
 }

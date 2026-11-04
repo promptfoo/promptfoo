@@ -1,17 +1,29 @@
+const { createLoggerModule } = await vi.hoisted(async () => import('../../factories/logger'));
+
 import * as fs from 'fs';
 import * as path from 'path';
 
 import * as nunjucks from 'nunjucks';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { createChatMessage } from '../../factories/literalFixtures';
 
-vi.mock('../../../src/logger', () => ({
-  default: {
-    debug: vi.fn(),
-    info: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-  },
-}));
+const createTextParts = (
+  text: string = 'Hello world!\n\n  This is indented text.\n\nAnd this has multiple\n\n\nEmpty lines.',
+) => ({
+  role: 'user',
+  parts: [
+    {
+      text,
+    },
+  ],
+});
+
+const createFunctionCallOutput = () => ({
+  name: 'testFunction',
+  args: '{"param1": "test"}',
+});
+
+vi.mock('../../../src/logger', () => createLoggerModule());
 
 import logger from '../../../src/logger';
 import { GOOGLE_MODELS, getVertexModelDefaultRegion } from '../../../src/providers/google/shared';
@@ -48,6 +60,7 @@ import { setLoadedFileMimeTypes } from '../../../src/util/file';
 
 import type { Tool } from '../../../src/providers/google/types';
 
+const { createEmptyGlobFactory } = await vi.hoisted(() => import('../../factories/moduleMocks'));
 const { readFileSync: readFixture } = await vi.importActual<typeof import('node:fs')>('node:fs');
 
 // Create a comprehensive mock for Google Auth Library
@@ -93,18 +106,7 @@ function resetGoogleAuthMock() {
 // Mock both the module and dynamic imports
 vi.mock('google-auth-library', () => googleAuthMock);
 
-vi.mock('glob', async (importOriginal) => {
-  return {
-    ...(await importOriginal()),
-    globSync: vi.fn().mockReturnValue([]),
-
-    hasMagic: (path: string) => {
-      // Match the real hasMagic behavior: only detect patterns in forward-slash paths
-      // This mimics glob's actual behavior where backslash paths return false
-      return /[*?[\]{}]/.test(path) && !path.includes('\\');
-    },
-  };
-});
+vi.mock('glob', createEmptyGlobFactory());
 
 vi.mock('fs', async (importOriginal) => {
   return {
@@ -441,14 +443,71 @@ describe('util', () => {
       );
     });
 
-    it('preserves nested template text in inline system instructions', () => {
+    it('renders inline system instruction substitutions once', () => {
       expect(
         parseConfigSystemInstruction('Keep {{label}}.', {
           label: '{{name}}',
           name: '{{token}}',
           token: 'end',
         }),
-      ).toEqual({ parts: [{ text: 'Keep {{token}}.' }] });
+      ).toEqual({ parts: [{ text: 'Keep {{name}}.' }] });
+    });
+
+    it.each(
+      ['inline', 'Content', 'text file', 'JSON file'].flatMap((source) =>
+        [
+          '{{name}}',
+          '{{ env.QA_SYSTEM_TEMPLATE_CANARY }}',
+          '{% if true %}CONTROL_FLOW{% endif %}',
+          '{{ range.constructor("return 6 * 7")() }}',
+          '{{ unfinished',
+        ].map((value) => ({ source, value })),
+      ),
+    )('keeps runtime $value literal in a trusted $source instruction', ({ source, value }) => {
+      const template = 'Trusted {{ 6 * 7 }}: {{value}}';
+      const content = { parts: [{ text: template }] };
+      const instruction =
+        source === 'inline'
+          ? template
+          : source === 'Content'
+            ? content
+            : `file://instruction.${source === 'JSON file' ? 'json' : 'txt'}`;
+      if (source.endsWith('file')) {
+        vi.mocked(fs.readFileSync).mockReturnValueOnce(
+          source === 'JSON file' ? JSON.stringify(content) : template,
+        );
+      }
+      const original = structuredClone(instruction);
+      expect(
+        parseConfigSystemInstruction(instruction, {
+          value,
+          name: 'must stay literal',
+          env: { QA_SYSTEM_TEMPLATE_CANARY: 'SYNTHETIC_CANARY' },
+        }),
+      ).toEqual({ parts: [{ text: `Trusted 42: ${value}` }] });
+      expect(instruction).toEqual(original);
+    });
+
+    it('keeps text from a whole inline JSON instruction variable literal', () => {
+      const instruction = { parts: [{ text: '{{name}}' }] };
+      expect(
+        parseConfigSystemInstruction('{{instruction}}', {
+          instruction: JSON.stringify(instruction),
+          name: 'must stay literal',
+        }),
+      ).toEqual(instruction);
+    });
+
+    it('renders file contents after resolving a whole instruction reference variable', () => {
+      const instructionFile = `file://${path.resolve('/provider', 'instruction.txt')}`;
+      vi.mocked(fs.readFileSync).mockReturnValueOnce('Trusted {{ 6 * 7 }}: {{value}}');
+      expect(
+        parseConfigSystemInstruction('{{instructionFile}}', {
+          instructionFile,
+          value: '{{name}}',
+          name: 'must stay literal',
+        }),
+      ).toEqual({ parts: [{ text: 'Trusted 42: {{name}}' }] });
     });
 
     it('rejects invalid inline response schema JSON', () => {
@@ -492,7 +551,7 @@ describe('util', () => {
               properties: {
                 param1: { type: 'STRING' },
               },
-              propertyOrdering: ['param1', 'param2'],
+              propertyOrdering: ['param1'],
             },
           },
           {
@@ -511,10 +570,7 @@ describe('util', () => {
     it('should validate Vertex/AIS format function call', () => {
       const output = [
         {
-          functionCall: {
-            name: 'testFunction',
-            args: '{"param1": "test"}',
-          },
+          functionCall: createFunctionCallOutput(),
         },
       ];
       expect(() => validateFunctionCall(output, mockFunctions)).not.toThrow();
@@ -523,12 +579,7 @@ describe('util', () => {
     it('should validate Live format function call', () => {
       const output = {
         toolCall: {
-          functionCalls: [
-            {
-              name: 'testFunction',
-              args: '{"param1": "test"}',
-            },
-          ],
+          functionCalls: [createFunctionCallOutput()],
         },
       };
       expect(() => validateFunctionCall(output, mockFunctions)).not.toThrow();
@@ -576,29 +627,20 @@ describe('util', () => {
       },
     );
 
-    it('should validate empty function args', () => {
-      const output = [
-        {
-          functionCall: {
-            name: 'emptyFunction',
-            args: '{}',
+    it.each(['should validate empty function args', 'should validate function with no parameters'])(
+      '%s',
+      () => {
+        const output = [
+          {
+            functionCall: {
+              name: 'emptyFunction',
+              args: '{}',
+            },
           },
-        },
-      ];
-      expect(() => validateFunctionCall(output, mockFunctions)).not.toThrow();
-    });
-
-    it('should validate function with no parameters', () => {
-      const output = [
-        {
-          functionCall: {
-            name: 'emptyFunction',
-            args: '{}',
-          },
-        },
-      ];
-      expect(() => validateFunctionCall(output, mockFunctions)).not.toThrow();
-    });
+        ];
+        expect(() => validateFunctionCall(output, mockFunctions)).not.toThrow();
+      },
+    );
 
     it('should throw error for invalid function call format', () => {
       const output = {
@@ -649,7 +691,7 @@ describe('util', () => {
       );
     });
 
-    it('should throw error when propertyOrdering references invalid property', () => {
+    it('accepts propertyOrdering as an annotation while validating argument types', () => {
       const output = [
         {
           functionCall: {
@@ -658,9 +700,9 @@ describe('util', () => {
           },
         },
       ];
-      expect(() => validateFunctionCall(output, mockFunctions)).toThrow(
-        /Tool schema doesn't compile with ajv:.*If this is a valid tool schema you may need to reformulate your assertion without is-valid-function-call/,
-      );
+      expect(() => validateFunctionCall(output, mockFunctions)).not.toThrow();
+      output[0].functionCall.args = '{"param1": 123}';
+      expect(() => validateFunctionCall(output, mockFunctions)).toThrow(/does not match schema/);
     });
   });
 
@@ -999,12 +1041,7 @@ describe('util', () => {
     });
 
     it('should return unmodified content if it matches GeminiFormat', () => {
-      const input = [
-        {
-          role: 'user',
-          parts: [{ text: 'Hello, Gemini!' }],
-        },
-      ];
+      const input = [createTextParts('Hello, Gemini!')];
       const result = maybeCoerceToGeminiFormat(input);
       expect(result).toEqual({
         contents: input,
@@ -1164,10 +1201,7 @@ describe('util', () => {
 
     it('should handle OpenAI chat format with content as an array of objects', () => {
       const input = [
-        {
-          role: 'system',
-          content: 'You are a helpful AI assistant.',
-        },
+        createChatMessage('system', 'You are a helpful AI assistant.'),
         {
           role: 'user',
           content: [
@@ -1201,10 +1235,7 @@ describe('util', () => {
 
     it('should handle string content', () => {
       const input = [
-        {
-          role: 'system',
-          content: 'You are a helpful AI assistant.',
-        },
+        createChatMessage('system', 'You are a helpful AI assistant.'),
         {
           role: 'user',
           content: 'What is {{thing}}?',
@@ -1312,12 +1343,7 @@ describe('util', () => {
     it('should handle valid GeminiFormat array with system_instruction field', () => {
       const input = {
         system_instruction: { parts: [{ text: 'You are a helpful assistant' }] },
-        contents: [
-          {
-            role: 'user',
-            parts: [{ text: 'Hello, Gemini!' }],
-          },
-        ],
+        contents: [createTextParts('Hello, Gemini!')],
       };
 
       const result = maybeCoerceToGeminiFormat(input);
@@ -1667,16 +1693,7 @@ describe('util', () => {
         '/9j/4AAQSkZJRgABAQEAYABgAAD/2wBDAAEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQH/2wBDAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQH/wAARCAABAAEDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAv/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/8QAFQEBAQAAAAAAAAAAAAAAAAAAAAX/xAAUEQEAAAAAAAAAAAAAAAAAAAAA/9oADAMBAAIRAxEAPwA/8A/9k=';
 
       it('should preserve text formatting when no images are present', () => {
-        const prompt = JSON.stringify([
-          {
-            role: 'user',
-            parts: [
-              {
-                text: 'Hello world!\n\n  This is indented text.\n\nAnd this has multiple\n\n\nEmpty lines.',
-              },
-            ],
-          },
-        ]);
+        const prompt = JSON.stringify([createTextParts()]);
 
         const contextVars = {
           someVar: 'not an image',
@@ -1697,16 +1714,7 @@ describe('util', () => {
       });
 
       it('should preserve text formatting when no context variables are provided', () => {
-        const prompt = JSON.stringify([
-          {
-            role: 'user',
-            parts: [
-              {
-                text: 'Hello world!\n\n  This is indented text.\n\nAnd this has multiple\n\n\nEmpty lines.',
-              },
-            ],
-          },
-        ]);
+        const prompt = JSON.stringify([createTextParts()]);
 
         const { contents } = geminiFormatAndSystemInstructions(prompt);
 
@@ -4360,6 +4368,36 @@ describe('util', () => {
       );
     });
 
+    it.each([
+      ['gemini-3.8-flash-tts', 18],
+      ['gemini-3.8-flash-lite-tts', 12],
+    ])('prices %s with scheduled introductory rates and inference tiers', (id, audioRate) => {
+      vi.useFakeTimers();
+      try {
+        for (const [date, discount] of [
+          ['2026-12-31T23:59:59Z', 0.5],
+          ['2027-01-01T00:00:00Z', 1],
+        ] as const) {
+          vi.setSystemTime(new Date(date));
+          for (const [service_tier, multiplier] of [
+            ['standard', 1],
+            ['flex', 0.5],
+            ['priority', 1.8],
+          ] as const) {
+            expect(
+              calculateGoogleCost(String(id), { service_tier }, 1000, 250, false, 0, 250),
+            ).toBeCloseTo(((1000 + 250 * Number(audioRate)) / 1e6) * discount * multiplier, 12);
+          }
+          expect(calculateGoogleCost(String(id), {}, 1000, 250, true, 0, 250)).toBeCloseTo(
+            ((1000 + 250 * Number(audioRate)) / 1e6) * discount,
+            12,
+          );
+        }
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
     it('should forward standard Gemini usage metadata into modality-aware billing', () => {
       const cost = calculateGoogleCostFromUsage(
         'gemini-3.5-flash',
@@ -5778,4 +5816,12 @@ describe('util', () => {
       expect(result.groundingMetadata).toBeUndefined();
     });
   });
+});
+
+it('keeps mutable prices independent across model aliases', () => {
+  const costs = GOOGLE_MODELS.flatMap(({ cost }) => (cost ? [cost] : []));
+  expect(new Set(costs).size).toBe(costs.length);
+  const tiers = GOOGLE_MODELS.flatMap(({ tieredCost }) => (tieredCost ? [tieredCost] : []));
+  expect(new Set(tiers).size).toBe(tiers.length);
+  expect(new Set(tiers.map(({ above }) => above)).size).toBe(tiers.length);
 });
