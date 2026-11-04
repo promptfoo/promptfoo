@@ -787,6 +787,9 @@ export async function fetchWithRetries(
     new Headers(getFetchWithProxyHeaders(url, options)).get('x-promptfoo-silent') !== 'true';
 
   for (let i = 0; i <= maxRetries; i++) {
+    if (signal?.aborted) {
+      throw getAbortError(signal);
+    }
     let response;
     try {
       // Disable transient retries in fetchWithProxy to avoid double-retrying

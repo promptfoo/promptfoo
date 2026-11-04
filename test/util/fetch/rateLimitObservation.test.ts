@@ -60,8 +60,8 @@ describe('explicit selected rate-limit backoff observation', () => {
   it.each<{ name: string; status: number; headers: Record<string, string> }>([
     { name: 'Retry-After-only 429', status: 429, headers: { 'retry-after': '5' } },
     {
-      name: 'soft200 zero/reset',
-      status: 200,
+      name: '403 with exhausted quota headers',
+      status: 403,
       headers: { 'x-ratelimit-remaining-requests': '0', 'x-ratelimit-reset-requests': '5s' },
     },
   ])(
@@ -135,6 +135,13 @@ describe('explicit selected rate-limit backoff observation', () => {
     retries: number;
   }>([
     { name: 'ordinary success', status: 200, body: '{}', headers: {}, retries: 1 },
+    {
+      name: 'success with zero quota remaining',
+      status: 200,
+      body: '{}',
+      headers: { 'x-ratelimit-remaining-requests': '0' },
+      retries: 1,
+    },
     { name: 'exhausted429', status: 429, body: '{}', headers: { 'retry-after': '5' }, retries: 0 },
     {
       name: 'hard quota with short Retry-After',
@@ -180,7 +187,6 @@ describe('explicit selected rate-limit backoff observation', () => {
   });
 
   it('does not emit for an already-aborted effective caller', async () => {
-    transport.mockResolvedValueOnce(rateLimit(200, { 'x-ratelimit-remaining-requests': '0' }));
     const controller = new AbortController();
     const reason = Object.assign(new Error('already cancelled'), { name: 'AbortError' });
     controller.abort(reason);
@@ -189,7 +195,7 @@ describe('explicit selected rate-limit backoff observation', () => {
       fetchWithRetries(url, { signal: controller.signal }, 10_000, 1, observe),
     ).rejects.toBe(reason);
     expect(observe).not.toHaveBeenCalled();
-    expect(transport).toHaveBeenCalledOnce();
+    expect(transport).not.toHaveBeenCalled();
     expect(vi.getTimerCount()).toBe(0);
   });
 
@@ -431,12 +437,12 @@ describe('explicit selected rate-limit backoff observation', () => {
   );
 
   it('does not notify an observer about a concurrent fetch that omitted it', async () => {
-    const softLimit = () =>
-      rateLimit(200, {
+    const headerLimit = () =>
+      rateLimit(403, {
         'x-ratelimit-remaining-requests': '0',
         'x-ratelimit-reset-requests': '5s',
       });
-    transport.mockImplementation(async () => softLimit());
+    transport.mockImplementation(async () => headerLimit());
     const selected = observeSelectedWait(2);
     const observe = vi.fn();
     const targetOwner = new AbortController();
@@ -453,7 +459,7 @@ describe('explicit selected rate-limit backoff observation', () => {
     try {
       await selected;
       expect(observe).toHaveBeenCalledOnce();
-      expect(observe.mock.calls[0][0]).toMatchObject({ status: 200, resetAt: now + 5000 });
+      expect(observe.mock.calls[0][0]).toMatchObject({ status: 403, resetAt: now + 5000 });
     } finally {
       targetOwner.abort();
       auxiliaryOwner.abort();
