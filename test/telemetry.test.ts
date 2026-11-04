@@ -767,7 +767,7 @@ describe('Telemetry', () => {
 
   describe('reporting request lifecycle', () => {
     beforeEach(() => {
-      mockProcessEnv({ PROMPTFOO_DISABLE_TELEMETRY: '1' });
+      mockProcessEnv({ IS_TESTING: undefined, PROMPTFOO_DISABLE_TELEMETRY: '1' });
       fetchWithProxySpy.mockReset();
     });
 
