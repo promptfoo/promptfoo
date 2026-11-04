@@ -8,7 +8,6 @@ import { GolangProvider } from '../../src/providers/golangCompletion';
 import { LlamaApiProvider } from '../../src/providers/llamaApi';
 import { MCPProvider } from '../../src/providers/mcp';
 import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
-import { OpenAiCompletionProvider } from '../../src/providers/openai/completion';
 import { OpenAiResponsesProvider } from '../../src/providers/openai/responses';
 import { OpenAiTtsProvider } from '../../src/providers/openai/tts';
 import { PythonProvider } from '../../src/providers/pythonCompletion';
@@ -70,6 +69,45 @@ vi.mock('../../src/redteam/remoteGeneration', async (importOriginal) => {
 });
 
 describe('Provider Registry', () => {
+  describe('OpenAI model lifecycle', () => {
+    it.each([
+      'openai:completion',
+      'openai:gpt-4.1-nano',
+      'openai:responses:o1-pro',
+      'openai:image:gpt-image-1',
+      'openai:video:sora-2',
+      'openai:chat:ft:gpt-4.1-nano-2025-04-14:example:classifier:abc',
+    ])('rejects %s on the first-party FedRAMP endpoint', async (id) => {
+      await expect(
+        loadApiProvider(id, {
+          options: { config: { apiBaseUrl: 'https://gov.api.openai.com/v1' } },
+        }),
+      ).rejects.toThrow('has been retired');
+    });
+
+    it.each([
+      ['text-embedding-3-small', 'OpenAiEmbeddingProvider'],
+      ['text-embedding-3-large', 'OpenAiEmbeddingProvider'],
+      ['text-embedding-ada-002', 'OpenAiEmbeddingProvider'],
+      ['omni-moderation-latest', 'OpenAiModerationProvider'],
+      ['omni-moderation-2024-09-26', 'OpenAiModerationProvider'],
+    ])('loads the native endpoint for the bare model %s', async (model, expectedProvider) => {
+      const provider = await loadApiProvider(`openai:${model}`);
+      expect(provider.constructor.name).toBe(expectedProvider);
+      expect(provider.id()).toBe(`openai:${model}`);
+    });
+
+    it('uses a current image model for a bare image route', async () => {
+      expect(await loadApiProvider('openai:image')).toMatchObject({
+        modelName: 'gpt-image-2.5-flare',
+      });
+    });
+
+    it('routes bare GPT-6.1 Terra to Responses', async () => {
+      expect(await loadApiProvider('openai:gpt-6.1-terra')).toBeInstanceOf(OpenAiResponsesProvider);
+    });
+  });
+
   describe('OpenAI Decisions', () => {
     it.each([
       ['openai:decisions:gpt-6-luna', undefined, 'gpt-6-luna'],
@@ -531,6 +569,34 @@ describe('Provider Registry', () => {
       vi.clearAllMocks();
     });
 
+    it.each([
+      ['cerebras:model', 'CEREBRAS_API_KEY'],
+      ['deepseek:deepseek-chat', 'DEEPSEEK_API_KEY'],
+      ['perplexity:sonar', 'PERPLEXITY_API_KEY'],
+      ['togetherai:model', 'TOGETHER_API_KEY'],
+      ['truefoundry:model', 'TRUEFOUNDRY_API_KEY'],
+      ['llamaapi:chat:model', 'LLAMA_API_KEY'],
+    ] as const)('forwards %s provider-scoped %s through the loader', async (id, key) => {
+      const provider = await loadApiProvider(id, {
+        options: { env: { [key]: 'scoped-key' } },
+        env: { [key]: 'suite-key' },
+      });
+      expect((provider as unknown as { env?: Record<string, string> }).env?.[key]).toBe(
+        'scoped-key',
+      );
+    });
+
+    it('forwards a provider-scoped Perplexity key through the Cloudflare Gateway loader', async () => {
+      const provider = await loadApiProvider('cloudflare-gateway:perplexity-ai:sonar', {
+        options: {
+          config: { accountId: 'fixture-account', gatewayId: 'fixture-gateway' },
+          env: { PERPLEXITY_API_KEY: 'provider-key' },
+        },
+        env: { PERPLEXITY_API_KEY: 'suite-key' },
+      });
+      expect((provider as OpenAiChatCompletionProvider).getApiKey()).toBe('provider-key');
+    });
+
     it('keeps a provider-scoped Comet API key for image requests', async () => {
       const provider = await registry.create('cometapi:image:test-model', {
         ...mockContext,
@@ -564,6 +630,16 @@ describe('Provider Registry', () => {
     });
 
     describe('getProviderFactories boundary contract', () => {
+      const createDetachedRegistryCheck = () => async (path: string) => {
+        const before = providerMap.length;
+        const factories = await getProviderFactories(path);
+
+        expect(factories).not.toBe(providerMap);
+        expect(providerMap.length).toBe(before);
+        expect(providerMap.some((factory) => factory.test(path))).toBe(false);
+        expect(factories.some((factory) => factory.test(path))).toBe(true);
+      };
+
       it('returns the providerMap reference itself for the no-family fast path', async () => {
         // Pin identity (toBe, not toEqual) so an accidental `return [...providerMap]`
         // on the hot path regresses loudly instead of silently doubling the
@@ -620,15 +696,7 @@ describe('Provider Registry', () => {
         'bedrock:completion:anthropic.claude-v2',
         'bedrock-agent:agent-id',
         'sagemaker:endpoint-name',
-      ])('loads AWS factories without mutating providerMap for %s', async (path) => {
-        const before = providerMap.length;
-        const factories = await getProviderFactories(path);
-
-        expect(factories).not.toBe(providerMap);
-        expect(providerMap.length).toBe(before);
-        expect(providerMap.some((factory) => factory.test(path))).toBe(false);
-        expect(factories.some((factory) => factory.test(path))).toBe(true);
-      });
+      ])('loads AWS factories without mutating providerMap for %s', createDetachedRegistryCheck());
 
       it('resolves the same AWS factory under concurrent lookups', async () => {
         // All lookups should reuse the factory exported by the cached AWS
@@ -651,15 +719,7 @@ describe('Provider Registry', () => {
 
       it.each(['vertex:chat:gemini-2.5-flash', 'google:gemini-2.5-flash', 'palm:chat-bison'])(
         'loads Google factories without mutating providerMap for %s',
-        async (path) => {
-          const before = providerMap.length;
-          const factories = await getProviderFactories(path);
-
-          expect(factories).not.toBe(providerMap);
-          expect(providerMap.length).toBe(before);
-          expect(providerMap.some((factory) => factory.test(path))).toBe(false);
-          expect(factories.some((factory) => factory.test(path))).toBe(true);
-        },
+        createDetachedRegistryCheck(),
       );
 
       it('resolves the same Google factory under concurrent lookups', async () => {
@@ -696,6 +756,36 @@ describe('Provider Registry', () => {
     });
 
     describe('OpenAI endpoint defaults', () => {
+      it.each(['https://api.openai.com/v1', 'https://gov.api.openai.com/v1'])(
+        'requires an explicit Discovery endpoint on %s',
+        async (apiBaseUrl) => {
+          await expect(
+            registry.create('openai:gpt-rosalind-discovery', {
+              options: { config: { apiBaseUrl } },
+            }),
+          ).rejects.toThrow(
+            'Select openai:responses:gpt-rosalind-discovery or openai:chat:gpt-rosalind-discovery',
+          );
+        },
+      );
+
+      it.each([
+        ['chat', OpenAiChatCompletionProvider],
+        ['responses', OpenAiResponsesProvider],
+      ])('preserves explicit Discovery %s routing', async (endpoint, Provider) => {
+        const provider = await registry.create(`openai:${endpoint}:gpt-rosalind-discovery`);
+        expect(provider).toBeInstanceOf(Provider);
+        expect(provider).toHaveProperty('modelName', 'gpt-rosalind-discovery');
+      });
+
+      it('preserves the Discovery shorthand on custom gateways', async () => {
+        const provider = await registry.create('openai:gpt-rosalind-discovery', {
+          options: { env: { OPENAI_API_BASE_URL: 'https://gateway.example/v1' } },
+        });
+        expect(provider).toBeInstanceOf(OpenAiChatCompletionProvider);
+        expect(provider).toHaveProperty('modelName', 'gpt-rosalind-discovery');
+      });
+
       it.each(['gpt-daybreak-blue-latest', 'gpt-daybreak-red-latest'])(
         'selects Responses only for native Daybreak shorthand %s',
         async (model) => {
@@ -1037,6 +1127,30 @@ describe('Provider Registry', () => {
       expect(config.apiKey).toBe('moonshot-test-key');
       expect(config.apiBaseUrl).toBe('https://api.moonshot.ai/v1');
       expect(config.apiKeyEnvar).toBe('MOONSHOT_API_KEY');
+    });
+
+    it('should pass Snowflake provider options without nesting the config', async () => {
+      const factory = providerMap.find((factory) => factory.test('snowflake:mistral-large2'));
+      expect(factory).toBeDefined();
+
+      const provider = await factory!.create(
+        'snowflake:mistral-large2',
+        {
+          config: {
+            accountIdentifier: 'myorg-myaccount',
+            apiBaseUrl: 'https://custom.snowflakecomputing.com',
+            apiKey: 'snowflake-test-key',
+          },
+        },
+        mockContext,
+      );
+
+      expect(provider.id()).toBe('snowflake:mistral-large2');
+      expect(provider.config).toMatchObject({
+        accountIdentifier: 'myorg-myaccount',
+        apiBaseUrl: 'https://custom.snowflakecomputing.com',
+        apiKey: 'snowflake-test-key',
+      });
     });
 
     it('should route Moonshot chat prefixes and Kimi defaults correctly', async () => {
@@ -1458,7 +1572,7 @@ describe('Provider Registry', () => {
 
     it.each([
       ['openai:gpt-4.1', 'OpenAiChatCompletionProvider', 'gpt-4.1'],
-      ['openai:gpt-3.5-turbo-instruct', 'OpenAiCompletionProvider', 'gpt-3.5-turbo-instruct'],
+      ['openai:gpt-5.2-pro', 'OpenAiResponsesProvider', 'gpt-5.2-pro'],
     ])(
       'validates the route model for bare provider %s when config.model is ignored',
       async (providerPath, expectedProvider, expectedModel) => {
@@ -1480,11 +1594,7 @@ describe('Provider Registry', () => {
     );
 
     it.each([
-      [
-        'openai:gpt-3.5-turbo-instruct',
-        'gpt-3.5-turbo-instruct',
-        OpenAiCompletionProvider.OPENAI_COMPLETION_MODEL_NAMES,
-      ],
+      ['openai:gpt-4.1', 'gpt-4.1', OpenAiChatCompletionProvider.OPENAI_CHAT_MODEL_NAMES],
       ['openai:gpt-4o-mini-tts', 'gpt-4o-mini-tts', OpenAiTtsProvider.OPENAI_TTS_MODEL_NAMES],
     ])(
       'validates the passthrough model sent by bare catalog provider %s',
@@ -2403,7 +2513,9 @@ describe('Provider Registry', () => {
     });
 
     it('should route novita sub-types and reject unknown ones', async () => {
-      const factory = providerMap.find((f) => f.test('novita:meta/llama-3.1-8b-instruct'));
+      const factory = (await getProviderFactories('novita:meta/llama-3.1-8b-instruct')).find((f) =>
+        f.test('novita:meta/llama-3.1-8b-instruct'),
+      );
       expect(factory).toBeDefined();
 
       const novitaOptions = { ...mockProviderOptions, id: undefined };
@@ -2474,6 +2586,17 @@ describe('Provider Registry', () => {
   });
 
   describe('google: prefix routing', () => {
+    const createProviderDispatchCheck =
+      () => async (providerPath: string, loadExpectedProvider: () => Promise<Function>) => {
+        const factory = (await getProviderFactories(providerPath)).find((f) =>
+          f.test(providerPath),
+        );
+        expect(factory).toBeDefined();
+        const provider = await factory!.create(providerPath, bareOptions, bareContext);
+        const ExpectedProvider = await loadExpectedProvider();
+        expect(provider).toBeInstanceOf(ExpectedProvider);
+      };
+
     // Empty options so the provider computes its own id() rather than using
     // a caller-supplied override.
     const bareOptions: ProviderOptions = { config: {} };
@@ -2533,6 +2656,14 @@ describe('Provider Registry', () => {
         async () => (await import('../../src/providers/google/gemini-image')).GeminiImageProvider,
       ],
       // Nano Banana 2 / 2 Lite / Pro GA: bare google:<model> routes dispatch on the '-image' substring.
+      [
+        'google:gemini-nano-banana-2.1',
+        async () => (await import('../../src/providers/google/gemini-image')).GeminiImageProvider,
+      ],
+      [
+        'palm:gemini-nano-banana-2.1',
+        async () => (await import('../../src/providers/google/gemini-image')).GeminiImageProvider,
+      ],
       [
         'google:gemini-3.1-flash-lite-image',
         async () => (await import('../../src/providers/google/gemini-image')).GeminiImageProvider,
@@ -2688,18 +2819,7 @@ describe('Provider Registry', () => {
         'vertex:video:veo-3.1-generate-001',
         async () => (await import('../../src/providers/google/video')).GoogleVideoProvider,
       ],
-    ] as const)(
-      'routes %s to the expected provider class',
-      async (providerPath, loadExpectedProvider) => {
-        const factory = (await getProviderFactories(providerPath)).find((f) =>
-          f.test(providerPath),
-        );
-        expect(factory).toBeDefined();
-        const provider = await factory!.create(providerPath, bareOptions, bareContext);
-        const ExpectedProvider = await loadExpectedProvider();
-        expect(provider).toBeInstanceOf(ExpectedProvider);
-      },
-    );
+    ] as const)('routes %s to the expected provider class', createProviderDispatchCheck());
 
     it.each(['google:gemini-omni-1.1-flash', 'palm:gemini-omni-1.1-flash'])(
       'preserves explicit provider options for %s',
@@ -3077,15 +3197,7 @@ describe('Provider Registry', () => {
       ],
     ] as const)(
       'routes script-like id %s to the expected provider class',
-      async (providerPath, loadExpectedProvider) => {
-        const factory = (await getProviderFactories(providerPath)).find((f) =>
-          f.test(providerPath),
-        );
-        expect(factory).toBeDefined();
-        const provider = await factory!.create(providerPath, bareOptions, bareContext);
-        const ExpectedProvider = await loadExpectedProvider();
-        expect(provider).toBeInstanceOf(ExpectedProvider);
-      },
+      createProviderDispatchCheck(),
     );
 
     it.each([

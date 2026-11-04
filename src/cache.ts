@@ -6,9 +6,8 @@ import fs from 'fs';
 import path from 'path';
 
 import { createCache } from 'cache-manager';
-import { Keyv } from 'keyv';
-import { KeyvFile } from 'keyv-file';
 import { LRUCache } from 'lru-cache';
+import { createDiskCache } from './cache/storage';
 import { getEnvBool, getEnvInt, getEnvOverrides, getEnvString } from './envars';
 import logger from './logger';
 import { getRequestTimeoutMs, throwIfAborted, waitForPromiseWithAbort } from './providers/shared';
@@ -25,6 +24,7 @@ import {
   preserveCloudAuthRedirects,
 } from './util/fetch/monkeyPatchFetch';
 import { getEffectiveRequestSignal } from './util/fetch/requestSignal';
+import { ResponseBodyTimeoutError, readWithResponseDeadline } from './util/fetch/responseDeadline';
 import { getFetchRetryContextMaxRetries } from './util/fetch/retryContext';
 import { isSecretField, looksLikeSecret, sanitizeUrlForLogging } from './util/sanitizer';
 import { sleep } from './util/time';
@@ -91,17 +91,23 @@ const cacheBackends = new CacheRegistry<string, CacheBackend>(32);
 const storeOwners = new WeakMap<object, CacheBackend>();
 let nextCacheClearGeneration = 0;
 
-const cacheNamespaceStorage = new AsyncLocalStorage<{ namespace: string }>();
 // The CLI and the public ESM/CJS entry points can load separate copies of this
 // module. Share only the async policy, not cache instances or module defaults,
 // so providers loaded by extension hooks observe the evaluation's cache policy.
 const CACHE_ENABLED_CONTEXT = Symbol.for('promptfoo.cache.enabledContext.v1');
+const CACHE_NAMESPACE_CONTEXT = Symbol.for('promptfoo.cache.namespaceContext.v1');
 const cacheContextGlobal = globalThis as typeof globalThis & {
   [CACHE_ENABLED_CONTEXT]?: AsyncLocalStorage<{ enabled: boolean }>;
+  [CACHE_NAMESPACE_CONTEXT]?: AsyncLocalStorage<{ namespace: string }>;
 };
 const cacheEnabledStorage = (cacheContextGlobal[CACHE_ENABLED_CONTEXT] ??= new AsyncLocalStorage<{
   enabled: boolean;
 }>());
+
+const cacheNamespaceStorage = (cacheContextGlobal[CACHE_NAMESPACE_CONTEXT] ??=
+  new AsyncLocalStorage<{
+    namespace: string;
+  }>());
 
 // Explicit API overrides remain process-wide; environment defaults are invocation-scoped.
 let enabled: boolean | undefined;
@@ -247,7 +253,7 @@ function getCacheInstance(backend = getCacheBackend(), ttl = getCacheTtlMs()) {
     // Different TTL defaults must share one store, especially for disk caches: two
     // KeyvFile instances for the same file can overwrite each other's contents.
     const existingInstance = backend.instances.values().next().value;
-    const stores = existingInstance ? existingInstance.stores : [];
+    let diskCache: Cache | undefined;
 
     if (!existingInstance && backend.filePath) {
       const directory = path.dirname(backend.filePath);
@@ -257,8 +263,7 @@ function getCacheInstance(backend = getCacheBackend(), ttl = getCacheTtlMs()) {
       }
 
       try {
-        const store = new KeyvFile({ filename: backend.filePath });
-        stores.push(new Keyv({ store }));
+        diskCache = createDiskCache(backend.filePath, ttl);
       } catch (err) {
         logger.warn(
           `[Cache] Failed to initialize disk cache: ${(err as Error).message}. ` +
@@ -267,7 +272,8 @@ function getCacheInstance(backend = getCacheBackend(), ttl = getCacheTtlMs()) {
       }
     }
 
-    cacheInstance = createCache({ stores, ttl, refreshThreshold: 0 });
+    cacheInstance =
+      diskCache ?? createCache({ stores: existingInstance?.stores, ttl, refreshThreshold: 0 });
     for (const store of cacheInstance.stores) {
       storeOwners.set(store, backend);
       if (store.opts.store) {
@@ -999,7 +1005,9 @@ async function fetchAndReadBody(
   onRateLimitBackoff?: (observation: FetchRateLimitObservation) => void,
 ): Promise<{ respText: string; resp: Response; fetchLatencyMs: number }> {
   const retryBudget = Math.max(0, maxRetries ?? getFetchRetryContextMaxRetries() ?? 2);
-  const maxBodyRetries = isIdempotent ? Math.min(2, retryBudget) : 0;
+  const body = options.body ?? (url instanceof Request ? url.body : null);
+  const singleUseBody = body !== null && typeof body === 'object' && Symbol.asyncIterator in body;
+  const maxBodyRetries = isIdempotent && !singleUseBody ? Math.min(2, retryBudget) : 0;
   for (let bodyAttempt = 0; bodyAttempt <= maxBodyRetries; bodyAttempt++) {
     const fetchStart = Date.now();
     // fetchWithRetries errors propagate directly — not caught by body retry
@@ -1007,12 +1015,12 @@ async function fetchAndReadBody(
     const fetchLatencyMs = Date.now() - fetchStart;
 
     try {
-      const respText = await resp.text();
+      const respText = await readWithResponseDeadline(resp, () => resp.text());
       return { respText, resp, fetchLatencyMs };
     } catch (err) {
       if (
         !options.signal?.aborted &&
-        isTransientConnectionError(err as Error) &&
+        (err instanceof ResponseBodyTimeoutError || isTransientConnectionError(err as Error)) &&
         bodyAttempt < maxBodyRetries
       ) {
         const backoffMs = Math.pow(2, bodyAttempt) * 1000;
@@ -1178,13 +1186,14 @@ async function prepareFetchResponse(
 export async function fetchWithCache<T = unknown>(
   url: RequestInfo,
   options: FetchOptions = {},
-  timeout: number = getRequestTimeoutMs(),
+  timeout: number | `${number}` = getRequestTimeoutMs(),
   format: 'json' | 'text' = 'json',
   bustOrOptions: boolean | CacheOptions | undefined = false,
   maxRetries?: number,
   onResponsePrepared?: (response: FetchWithCacheResult<T>) => void,
   onRateLimitBackoff?: (observation: FetchRateLimitObservation) => void,
 ): Promise<FetchWithCacheResult<T>> {
+  const timeoutMs = Number(timeout);
   const signal = getEffectiveRequestSignal(url, options);
   throwIfAborted(signal);
   // fetchWithTimeout composes RequestInit.signal with its timeout signal.
@@ -1254,7 +1263,7 @@ export async function fetchWithCache<T = unknown>(
     const response = fetchAndReadBody(
       url,
       fetchOptions,
-      timeout,
+      timeoutMs,
       maxRetries,
       isIdempotent,
       logEnabled,
@@ -1333,7 +1342,8 @@ export async function fetchWithCache<T = unknown>(
     return result;
   }
 
-  const inflightCacheKey = getAbortSignalScopedKey(`${clearGeneration}:${cacheKey}`, signal);
+  // Only share an active transport when its deadline works for both callers.
+  const inflightCacheKey = `${timeoutMs}:${getAbortSignalScopedKey(`${clearGeneration}:${cacheKey}`, signal)}`;
   let inflightResponse = inflightFetchResponses.get(inflightCacheKey);
   const coalesced = inflightResponse !== undefined;
   if (!inflightResponse) {
@@ -1341,7 +1351,7 @@ export async function fetchWithCache<T = unknown>(
     const response = prepareFetchResponse(
       url,
       fetchOptions,
-      timeout,
+      timeoutMs,
       maxRetries,
       isIdempotent,
       format,

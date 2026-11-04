@@ -1,480 +1,356 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { withCacheEnabled } from '../../../../src/cache';
-import { evaluate } from '../../../../src/node';
 import { ElevenLabsAgentsProvider } from '../../../../src/providers/elevenlabs/agents';
+import { ElevenLabsAPIError } from '../../../../src/providers/elevenlabs/errors';
 import { ProviderRegistry, providerRegistry } from '../../../../src/providers/providerRegistry';
 import { createDeferred } from '../../../util/utils';
 
-const { post, deleteAgent } = vi.hoisted(() => ({ post: vi.fn(), deleteAgent: vi.fn() }));
+const client = vi.hoisted(() => ({ post: vi.fn(), delete: vi.fn() }));
 vi.mock('../../../../src/providers/elevenlabs/client', () => ({
-  ElevenLabsClient: vi.fn(function () {
-    return { post, delete: deleteAgent };
-  }),
+  ElevenLabsClient: class {
+    post = client.post;
+    delete = client.delete;
+  },
 }));
+vi.mock('../../../../src/logger');
 
-vi.mock('../../../../src/telemetry', () => ({
-  default: { record: vi.fn(), send: vi.fn() },
-}));
-
-async function runEvaluation(provider: ElevenLabsAgentsProvider) {
-  const result = await evaluate(
-    {
-      prompts: ['fixture'],
-      providers: [provider],
-      tests: [{ assert: [{ type: 'contains', value: 'Agent conversation completed' }] }],
-      writeLatestResults: false,
-      sharing: false,
-    },
-    { cache: false, showProgressBar: false },
-  );
-  const rows = await result.getResults();
-  expect(rows).toHaveLength(1);
-  expect(rows[0].success).toBe(true);
-}
-
-function createProvider(agentId?: string) {
-  return new ElevenLabsAgentsProvider('agent', {
-    config: {
-      apiKey: 'fixture-key',
-      agentId,
-      agentConfig: { prompt: expect.getState().currentTestName },
-    },
-  });
-}
-
-const creations = () =>
-  post.mock.calls.filter(([endpoint]) => endpoint === '/convai/agents/create');
-const simulations = () =>
-  post.mock.calls.filter(([endpoint]) => endpoint.endsWith('/simulate-conversation'));
-
-describe('ElevenLabs ephemeral agent ownership', () => {
-  beforeEach(() => {
-    post.mockReset();
-    deleteAgent.mockReset().mockResolvedValue(undefined);
-    let nextAgent = 0;
-    post.mockImplementation(async (endpoint: string) =>
-      endpoint === '/convai/agents/create'
-        ? { agent_id: `agent-${++nextAgent}` }
+beforeEach(() => {
+  let nextId = 0;
+  client.post
+    .mockReset()
+    .mockImplementation(async (path: string) =>
+      path.endsWith('/create')
+        ? { agent_id: `owned-${++nextId}` }
         : { status: 'completed', simulated_conversation: [] },
     );
+  client.delete.mockReset().mockResolvedValue(undefined);
+});
+afterEach(async () => {
+  await providerRegistry.shutdownAll();
+  vi.restoreAllMocks();
+});
+
+const createProvider = () =>
+  new ElevenLabsAgentsProvider('agent', {
+    config: { apiKey: 'fixture', agentConfig: { prompt: 'hello' } },
   });
 
-  afterEach(async () => {
-    await providerRegistry.shutdownAll();
-    vi.resetAllMocks();
-  });
-
-  it.each([false, true])(
-    'reuses and deletes its own agent when caching is %s',
-    async (cacheEnabled) => {
-      await withCacheEnabled(cacheEnabled, async () => {
-        const provider = createProvider();
-        try {
-          expect((await provider.callApi('First')).error).toBeUndefined();
-          expect((await provider.callApi('Second')).error).toBeUndefined();
-          expect(creations()).toHaveLength(1);
-          expect(simulations().map(([endpoint]) => endpoint)).toEqual([
-            '/convai/agents/agent-1/simulate-conversation',
-            '/convai/agents/agent-1/simulate-conversation',
-          ]);
-        } finally {
-          await provider.cleanup();
-        }
-        expect(deleteAgent.mock.calls).toEqual([['/convai/agents/agent-1']]);
-      });
+describe('ephemeral agent lifecycle', () => {
+  it.each([
+    { recovered: true, terminal: true },
+    { recovered: false, terminal: true },
+    { recovered: false, terminal: false },
+  ])(
+    'retries failed idle deletion once at shutdown ($recovered, terminal=$terminal)',
+    async ({ recovered, terminal }) => {
+      const registry = new ProviderRegistry(false);
+      vi.spyOn(providerRegistry, 'register').mockImplementation(registry.register.bind(registry));
+      vi.spyOn(providerRegistry, 'unregister').mockImplementation(
+        registry.unregister.bind(registry),
+      );
+      vi.spyOn(providerRegistry, 'useResource').mockImplementation(
+        registry.useResource.bind(registry),
+      );
+      vi.spyOn(providerRegistry, 'throwIfResourceUseAborted').mockImplementation(
+        registry.throwIfResourceUseAborted.bind(registry),
+      );
+      vi.spyOn(providerRegistry, 'retainForProcessShutdown').mockImplementation(
+        registry.retainForProcessShutdown.bind(registry),
+      );
+      client.delete.mockRejectedValue(new Error('unavailable'));
+      const provider = createProvider();
+      await registry.withEvaluation(() =>
+        registry.withProvider(provider, () => provider.callApi('hello')),
+      );
+      expect(client.delete).toHaveBeenCalledOnce();
+      if (recovered) {
+        client.delete.mockResolvedValue(undefined);
+      }
+      await (terminal ? registry.shutdownForProcess() : registry.shutdownAll());
+      expect(client.delete.mock.calls.map(([path]) => path)).toEqual([
+        '/convai/agents/owned-1',
+        '/convai/agents/owned-1',
+      ]);
+      await (terminal ? registry.shutdownForProcess() : registry.shutdownAll());
+      expect(client.delete).toHaveBeenCalledTimes(2);
     },
   );
 
-  it('shares one creation across overlapping calls with response caching disabled', async () => {
-    await withCacheEnabled(false, async () => {
-      const provider = createProvider();
-      try {
-        const responses = await Promise.all([
-          provider.callApi('First'),
-          provider.callApi('Second'),
-        ]);
-        expect(responses.every((response) => !response.error)).toBe(true);
-        expect(creations()).toHaveLength(1);
-      } finally {
-        await provider.cleanup();
-      }
-      expect(deleteAgent.mock.calls).toEqual([['/convai/agents/agent-1']]);
+  it('aborts pending creation during cleanup and can create a new agent later', async () => {
+    let creationStarted!: () => void;
+    const started = new Promise<void>((resolve) => {
+      creationStarted = resolve;
     });
+    client.post.mockImplementationOnce(
+      (_path: string, _body: unknown, options: { signal: AbortSignal }) =>
+        new Promise((_resolve, reject) => {
+          creationStarted();
+          options.signal.addEventListener('abort', () => reject(options.signal.reason), {
+            once: true,
+          });
+        }),
+    );
+    const provider = createProvider();
+    const call = provider.callApi('hello');
+    await started;
+    await provider.cleanup();
+    expect((await call).error).toContain('aborted');
+    expect(client.delete).not.toHaveBeenCalled();
+
+    expect(
+      (
+        await providerRegistry.withEvaluation(() =>
+          providerRegistry.withProvider(provider, () => provider.callApi('again')),
+        )
+      ).error,
+    ).toBeUndefined();
+    expect(client.delete).toHaveBeenCalledOnce();
   });
 
-  it('keeps separate provider instances from sharing ownership of an agent', async () => {
-    await withCacheEnabled(true, async () => {
+  it('starts a fresh creation when a direct caller retries immediately after cancellation', async () => {
+    let started!: () => void;
+    const ready = new Promise<void>((resolve) => {
+      started = resolve;
+    });
+    client.post.mockImplementationOnce(
+      (_path, _body, options) =>
+        new Promise((_resolve, reject) => {
+          options.signal.addEventListener('abort', () => reject(options.signal.reason), {
+            once: true,
+          });
+          started();
+        }),
+    );
+    const provider = createProvider();
+    const controller = new AbortController();
+    const first = provider.callApi('first', undefined, { abortSignal: controller.signal });
+    await ready;
+    controller.abort();
+    expect((await first).error).toContain('aborted');
+    expect((await provider.callApi('replacement')).error).toBeUndefined();
+    expect(client.post.mock.calls.filter(([path]) => path.endsWith('/create'))).toHaveLength(2);
+  });
+
+  it('creates a fresh agent after each evaluation, including with a new instance', async () => {
+    const provider = createProvider();
+    for (const current of [provider, provider, createProvider()]) {
+      const result = await providerRegistry.withEvaluation(() =>
+        providerRegistry.withProvider(current, () => current.callApi('hello')),
+      );
+      expect(result.error).toBeUndefined();
+    }
+    expect(client.delete.mock.calls.map(([path]) => path)).toEqual([
+      '/convai/agents/owned-1',
+      '/convai/agents/owned-2',
+      '/convai/agents/owned-3',
+    ]);
+    for (const [, options] of client.delete.mock.calls) {
+      expect(options.signal).toBeInstanceOf(AbortSignal);
+    }
+  });
+
+  it.each([true, false])(
+    'coalesces creation per instance independently of cache enablement (%s)',
+    async (cacheEnabled) => {
       const first = createProvider();
       const second = createProvider();
-      try {
-        expect((await first.callApi('First')).error).toBeUndefined();
-        expect((await second.callApi('Second')).error).toBeUndefined();
-        expect(creations()).toHaveLength(2);
-      } finally {
-        await first.cleanup();
-        await second.cleanup();
-      }
-      expect(deleteAgent.mock.calls).toEqual([
-        ['/convai/agents/agent-1'],
-        ['/convai/agents/agent-2'],
-      ]);
-    });
-  });
-
-  it('waits for pending creation before deleting the owned agent', async () => {
-    const creationStarted = createDeferred<void>();
-    const created = createDeferred<{ agent_id: string }>();
-    post.mockImplementationOnce(() => {
-      creationStarted.resolve();
-      return created.promise;
-    });
-    const provider = createProvider();
-    const call = provider.callApi('First');
-    await creationStarted.promise;
-    const cleanup = provider.cleanup();
-    expect(deleteAgent).not.toHaveBeenCalled();
-    created.resolve({ agent_id: 'pending-agent' });
-    await Promise.all([call, cleanup]);
-    expect(deleteAgent.mock.calls).toEqual([['/convai/agents/pending-agent']]);
-  });
-
-  it('retries failed creation and still cleans up after a failed simulation', async () => {
-    await withCacheEnabled(false, async () => {
-      const provider = createProvider();
-      post.mockRejectedValueOnce(new Error('creation failed'));
-      expect((await provider.callApi('First')).error).toContain('creation failed');
-      post.mockResolvedValueOnce({ agent_id: 'recovered-agent' });
-      post.mockRejectedValueOnce(new Error('simulation failed'));
-      expect((await provider.callApi('Second')).error).toContain('simulation failed');
-      await provider.cleanup();
-      expect(deleteAgent.mock.calls).toEqual([['/convai/agents/recovered-agent']]);
-    });
-  });
-
-  it('retries failed deletion and creates a fresh agent after successful cleanup', async () => {
-    await withCacheEnabled(false, async () => {
-      const provider = createProvider();
-      expect((await provider.callApi('First')).error).toBeUndefined();
-      deleteAgent.mockRejectedValueOnce(new Error('delete failed'));
-      await provider.cleanup();
-      await provider.cleanup();
-      await provider.cleanup();
-      expect(deleteAgent.mock.calls).toEqual([
-        ['/convai/agents/agent-1'],
-        ['/convai/agents/agent-1'],
-      ]);
-      expect((await provider.callApi('Second')).error).toBeUndefined();
-      expect(creations()).toHaveLength(2);
-      await provider.cleanup();
-      expect(deleteAgent).toHaveBeenLastCalledWith('/convai/agents/agent-2');
-    });
-  });
-
-  it.each(['cleanup', 'shutdown'] as const)(
-    'does not delete a caller-supplied agent during %s',
-    async (method) => {
-      const provider = createProvider('caller-owned');
-      expect((await provider.callApi('First')).error).toBeUndefined();
-      await provider[method]();
-      expect(creations()).toHaveLength(0);
-      expect(deleteAgent).not.toHaveBeenCalled();
+      await withCacheEnabled(cacheEnabled, () =>
+        providerRegistry.withEvaluation(async () => {
+          const results = await Promise.all([
+            first.callApi('a'),
+            first.callApi('b'),
+            second.callApi('c'),
+          ]);
+          expect(results.map((result) => result.metadata?.agentId)).toEqual([
+            'owned-1',
+            'owned-1',
+            'owned-2',
+          ]);
+        }),
+      );
+      expect(client.delete).toHaveBeenCalledTimes(2);
+      expect(client.post.mock.calls.filter(([path]) => path.endsWith('/create'))).toHaveLength(2);
     },
   );
-  it('cleans up after public API evaluations and re-registers a reused provider', async () => {
-    const provider = createProvider();
-    await runEvaluation(provider);
-    expect(deleteAgent.mock.calls).toEqual([['/convai/agents/agent-1']]);
-    expect(providerRegistry.has(provider)).toBe(false);
-    await runEvaluation(provider);
-    expect(creations()).toHaveLength(2);
-    expect(deleteAgent.mock.calls).toEqual([
-      ['/convai/agents/agent-1'],
-      ['/convai/agents/agent-2'],
-    ]);
-  });
 
-  it('keeps a direct call alive while a public evaluation retires the shared agent', async () => {
-    const simulationStarted = createDeferred<void>();
-    const releaseSimulation = createDeferred<void>();
-    const teardownStarted = createDeferred<void>();
-    post.mockResolvedValueOnce({ agent_id: 'shared-agent' });
-    post.mockImplementationOnce(async () => {
-      simulationStarted.resolve();
-      await releaseSimulation.promise;
+  it('keeps an agent in use by another evaluation alive during teardown', async () => {
+    const started = createDeferred<void>();
+    const release = createDeferred<void>();
+    client.post.mockResolvedValueOnce({ agent_id: 'shared' }).mockImplementationOnce(async () => {
+      started.resolve();
+      await release.promise;
       return { status: 'completed', simulated_conversation: [] };
     });
-    deleteAgent.mockImplementation(() => {
-      teardownStarted.resolve();
-      return Promise.resolve();
-    });
     const provider = createProvider();
-    const cleanup = provider.cleanupAfterEvaluation.bind(provider);
-    vi.spyOn(provider, 'cleanupAfterEvaluation').mockImplementation(() => {
-      teardownStarted.resolve();
-      return cleanup();
-    });
-    const direct = provider.callApi('Direct');
-    await simulationStarted.promise;
-    const evaluation = runEvaluation(provider);
+    const run = () =>
+      providerRegistry.withEvaluation(() =>
+        providerRegistry.withProvider(provider, () => provider.callApi('hello')),
+      );
+    const slow = run();
     try {
-      await teardownStarted.promise;
-      expect(deleteAgent).not.toHaveBeenCalled();
+      await started.promise;
+      expect((await run()).metadata?.agentId).toBe('shared');
+      expect(client.delete).not.toHaveBeenCalled();
     } finally {
-      releaseSimulation.resolve();
-      await Promise.all([direct, evaluation]);
-    }
-    expect((await direct).error).toBeUndefined();
-    expect((await direct).output).toBe('Agent conversation completed');
-    expect(creations()).toHaveLength(1);
-    expect(deleteAgent.mock.calls).toEqual([['/convai/agents/shared-agent']]);
-  });
-
-  it('keeps an active peer evaluation alive during scoped teardown', async () => {
-    const simulationStarted = createDeferred<void>();
-    const releaseSimulation = createDeferred<void>();
-    let nextAgent = 0;
-    post.mockImplementation(async (endpoint: string) => {
-      if (endpoint === '/convai/agents/create') {
-        return { agent_id: `agent-${++nextAgent}` };
-      }
-      if (endpoint === '/convai/agents/agent-1/simulate-conversation') {
-        simulationStarted.resolve();
-        await releaseSimulation.promise;
-      }
-      return { status: 'completed', simulated_conversation: [] };
-    });
-    const slow = runEvaluation(createProvider());
-    await simulationStarted.promise;
-    try {
-      await runEvaluation(createProvider());
-      expect(deleteAgent.mock.calls).toEqual([['/convai/agents/agent-2']]);
-    } finally {
-      releaseSimulation.resolve();
+      release.resolve();
       await slow;
     }
-    expect(deleteAgent.mock.calls).toEqual([
-      ['/convai/agents/agent-2'],
-      ['/convai/agents/agent-1'],
-    ]);
+    expect(client.delete.mock.calls.map(([path]) => path)).toEqual(['/convai/agents/shared']);
   });
 
-  it('waits for retiring-agent deletion before creating and registering its replacement', async () => {
-    const provider = createProvider();
-    await provider.callApi('First');
-    expect(providerRegistry.has(provider)).toBe(true);
-    const deletionStarted = createDeferred<void>();
-    const finishDeletion = createDeferred<void>();
-    deleteAgent.mockImplementationOnce(() => {
-      deletionStarted.resolve();
-      return finishDeletion.promise;
+  it('does not delete a user supplied agent', async () => {
+    const provider = new ElevenLabsAgentsProvider('agent', {
+      config: { apiKey: 'fixture', agentId: 'user-owned' },
     });
-    const retiring = providerRegistry.shutdownAll();
-    await deletionStarted.promise;
-    const nextCall = provider.callApi('Second');
-    try {
-      expect(creations()).toHaveLength(1);
-    } finally {
-      finishDeletion.resolve();
-      await Promise.all([retiring, nextCall]);
-    }
-    expect(creations()).toHaveLength(2);
-    expect(simulations().map(([endpoint]) => endpoint)).toEqual([
-      '/convai/agents/agent-1/simulate-conversation',
-      '/convai/agents/agent-2/simulate-conversation',
-    ]);
-    expect(providerRegistry.has(provider)).toBe(true);
-    await providerRegistry.shutdownAll();
-    expect(deleteAgent.mock.calls).toEqual([
-      ['/convai/agents/agent-1'],
-      ['/convai/agents/agent-2'],
-    ]);
+    await providerRegistry.withEvaluation(() =>
+      providerRegistry.withProvider(provider, () => provider.callApi('hello')),
+    );
+    expect(client.delete).not.toHaveBeenCalled();
   });
 
-  it.each(['explicit cleanup', 'evaluation cleanup'])(
-    'waits for an active simulation and deletion during %s',
-    async (mode) => {
-      const simulationStarted = createDeferred<void>();
-      const releaseSimulation = createDeferred<void>();
-      const deletionStarted = createDeferred<void>();
-      const finishDeletion = createDeferred<void>();
-      deleteAgent.mockImplementationOnce(() => {
-        deletionStarted.resolve();
-        return finishDeletion.promise;
-      });
-      post.mockResolvedValueOnce({ agent_id: 'active-agent' });
-      post.mockImplementationOnce(async () => {
-        simulationStarted.resolve();
-        await releaseSimulation.promise;
-        return { status: 'completed', simulated_conversation: [] };
-      });
-      const provider = createProvider();
-      const call = provider.callApi('First');
-      await simulationStarted.promise;
-      let finished = false;
-      const cleanup = (
-        mode === 'explicit cleanup' ? provider.cleanup() : provider.cleanupAfterEvaluation()
-      ).then(() => {
-        finished = true;
-      });
-      try {
-        await new Promise<void>((resolve) => setImmediate(resolve));
-        expect(finished).toBe(false);
-        expect(deleteAgent).not.toHaveBeenCalled();
-        releaseSimulation.resolve();
-        await deletionStarted.promise;
-        expect(finished).toBe(false);
-      } finally {
-        releaseSimulation.resolve();
-        finishDeletion.resolve();
-        await Promise.all([call, cleanup]);
-      }
-      expect(deleteAgent.mock.calls).toEqual([['/convai/agents/active-agent']]);
-    },
-  );
-
-  it('forces an already-waiting graceful cleanup and awaits one DELETE', async () => {
-    const entered = createDeferred<void>();
-    const releaseSimulation = createDeferred<void>();
-    const finishDeletion = createDeferred<void>();
-    let nextAgent = 0;
-    let activeSimulations = 0;
-    post.mockImplementation(async (endpoint: string) => {
-      if (endpoint === '/convai/agents/create') {
-        return { agent_id: `agent-${++nextAgent}` };
-      }
-      if (endpoint === '/convai/agents/agent-1/simulate-conversation') {
-        if (++activeSimulations === 2) {
-          entered.resolve();
-        }
-        await releaseSimulation.promise;
-      }
-      return { status: 'completed', simulated_conversation: [] };
-    });
-    deleteAgent.mockImplementationOnce(() => finishDeletion.promise);
+  it('retries creation after a failed request', async () => {
+    client.post.mockRejectedValueOnce(new Error('creation failed'));
     const provider = createProvider();
-    const first = provider.callApi('First');
-    const second = provider.callApi('Second');
-    await entered.promise;
-    const graceful = provider.cleanup();
-    let forced: Promise<void> | undefined;
-    let replacement: Promise<Awaited<ReturnType<typeof provider.callApi>>> | undefined;
-    let finished = false;
-    try {
-      await new Promise<void>((resolve) => setImmediate(resolve));
-      expect(providerRegistry.has(provider)).toBe(true);
-      forced = providerRegistry.shutdownAll().then(() => {
-        finished = true;
-      });
-      await new Promise<void>((resolve) => setImmediate(resolve));
-      expect(deleteAgent.mock.calls).toEqual([['/convai/agents/agent-1']]);
-      expect(finished).toBe(false);
-      replacement = provider.callApi('Replacement');
-      await new Promise<void>((resolve) => setImmediate(resolve));
-      expect(creations()).toHaveLength(1);
-      finishDeletion.resolve();
-      await Promise.all([forced, graceful]);
-      expect((await replacement).metadata?.agentId).toBe('agent-2');
-      expect(providerRegistry.has(provider)).toBe(true);
-    } finally {
-      finishDeletion.resolve();
-      releaseSimulation.resolve();
-      await Promise.all([first, second, graceful, forced, replacement]);
-    }
-    expect((await first).error).toContain('shut down');
-    expect((await second).error).toContain('shut down');
-    await providerRegistry.shutdownAll();
-    expect(deleteAgent.mock.calls).toEqual([
-      ['/convai/agents/agent-1'],
-      ['/convai/agents/agent-2'],
+    expect((await provider.callApi('hello')).error).toContain('creation failed');
+    expect(
+      (
+        await providerRegistry.withEvaluation(() =>
+          providerRegistry.withProvider(provider, () => provider.callApi('again')),
+        )
+      ).error,
+    ).toBeUndefined();
+    expect(client.delete).toHaveBeenCalledOnce();
+  });
+
+  it('creates a fresh agent while retrying an ambiguous deletion', async () => {
+    client.delete.mockRejectedValueOnce(new Error('temporary failure'));
+    const provider = createProvider();
+    await provider.callApi('hello');
+    await provider.cleanup();
+    expect((await provider.callApi('again')).metadata?.agentId).toBe('owned-2');
+    await provider.cleanup();
+    expect(client.post.mock.calls.filter(([path]) => path.endsWith('/create'))).toHaveLength(2);
+    expect(client.delete.mock.calls.map(([path]) => path)).toEqual([
+      '/convai/agents/owned-1',
+      '/convai/agents/owned-1',
+      '/convai/agents/owned-2',
     ]);
   });
 
-  it('waits for creation during forced shutdown without starting simulation', async () => {
-    const entered = createDeferred<void>();
-    const created = createDeferred<{ agent_id: string }>();
-    post.mockImplementationOnce(() => {
-      entered.resolve();
-      return created.promise;
+  it('aborts a pending simulation during cleanup and permits reuse', async () => {
+    let started!: () => void;
+    const ready = new Promise<void>((resolve) => {
+      started = resolve;
     });
+    client.post
+      .mockImplementationOnce(async () => ({ agent_id: 'owned-1' }))
+      .mockImplementationOnce(
+        (_path, _body, options) =>
+          new Promise((_resolve, reject) => {
+            options.signal.addEventListener('abort', () => reject(options.signal.reason), {
+              once: true,
+            });
+            started();
+          }),
+      );
     const provider = createProvider();
-    const call = provider.callApi('First');
-    await entered.promise;
-    const shutdown = providerRegistry.shutdownAll();
-    try {
-      await new Promise<void>((resolve) => setImmediate(resolve));
-      expect(deleteAgent).not.toHaveBeenCalled();
-    } finally {
-      created.resolve({ agent_id: 'late-agent' });
-      await Promise.all([call, shutdown]);
-    }
-    expect((await call).error).toContain('shut down');
-    expect(simulations()).toHaveLength(0);
-    expect(deleteAgent.mock.calls).toEqual([['/convai/agents/late-agent']]);
+    const call = provider.callApi('hello');
+    await ready;
+    await provider.cleanup();
+    expect((await call).error).toContain('aborted');
+    expect(client.delete).toHaveBeenCalledWith('/convai/agents/owned-1', {
+      signal: expect.any(AbortSignal),
+    });
+    expect((await provider.callApi('again')).error).toBeUndefined();
   });
 
-  it('does not create an agent when registration encounters process shutdown', async () => {
-    const closedRegistry = new ProviderRegistry(false);
-    await closedRegistry.shutdownForProcess();
-    const registration = vi
-      .spyOn(providerRegistry, 'register')
-      .mockImplementation((resource) => closedRegistry.register(resource));
-    try {
-      const response = await createProvider().callApi('Too late');
-      expect(response.error).toContain('shut down');
-      expect(post).not.toHaveBeenCalled();
-      expect(deleteAgent).not.toHaveBeenCalled();
-    } finally {
-      await closedRegistry.shutdownForProcess();
-      registration.mockRestore();
-    }
+  it('cancels only the requested simulation when calls share a provider', async () => {
+    let started!: () => void;
+    const ready = new Promise<void>((resolve) => {
+      started = resolve;
+    });
+    client.post
+      .mockImplementationOnce(async () => ({ agent_id: 'shared' }))
+      .mockImplementationOnce(
+        (_path, _body, options) =>
+          new Promise((_resolve, reject) => {
+            options.signal.addEventListener('abort', () => reject(options.signal.reason), {
+              once: true,
+            });
+            started();
+          }),
+      );
+    const provider = createProvider();
+    const controller = new AbortController();
+    const first = provider.callApi('first', undefined, { abortSignal: controller.signal });
+    await ready;
+    const second = provider.callApi('second');
+    controller.abort();
+    expect((await first).error).toContain('aborted');
+    expect((await second).error).toBeUndefined();
+    expect(client.post.mock.calls.filter(([path]) => path.endsWith('/create'))).toHaveLength(1);
   });
 
-  it('does not create a replacement while process shutdown overlaps retirement', async () => {
-    const registry = new ProviderRegistry(false);
-    const registration = vi
-      .spyOn(providerRegistry, 'register')
-      .mockImplementation((resource) => registry.register(resource));
-    const unregister = vi
-      .spyOn(providerRegistry, 'unregister')
-      .mockImplementation((resource) => registry.unregister(resource));
-    const aborted = vi
-      .spyOn(providerRegistry, 'throwIfResourceUseAborted')
-      .mockImplementation((signal) => registry.throwIfResourceUseAborted(signal));
-    const deletionStarted = createDeferred<void>();
-    const finishDeletion = createDeferred<void>();
-    let retiring: Promise<void> | undefined;
-    let shutdown: Promise<void> | undefined;
-    let nextCall: Promise<Awaited<ReturnType<ElevenLabsAgentsProvider['callApi']>>> | undefined;
-    try {
-      const provider = createProvider();
-      await provider.callApi('First');
-      deleteAgent.mockImplementationOnce(() => {
-        deletionStarted.resolve();
-        return finishDeletion.promise;
-      });
-      retiring = registry.shutdownAll();
-      await deletionStarted.promise;
-      nextCall = provider.callApi('After retirement');
-      shutdown = registry.shutdownForProcess();
-      finishDeletion.resolve();
-      await Promise.all([retiring, shutdown, nextCall]);
-      expect((await nextCall).error).toMatch(/shut(?:ting)? down/);
-      expect(creations()).toHaveLength(1);
-      expect(deleteAgent.mock.calls).toEqual([['/convai/agents/agent-1']]);
-    } finally {
-      finishDeletion.resolve();
-      await Promise.all([retiring, shutdown, nextCall]);
-      registration.mockRestore();
-      unregister.mockRestore();
-      aborted.mockRestore();
-    }
+  it('uses one aggregate deadline for retained deletion retries', async () => {
+    const provider = createProvider();
+    client.delete.mockRejectedValueOnce(new Error('temporary'));
+    await provider.callApi('first');
+    await provider.cleanup();
+    await provider.callApi('second');
+    const controller = new AbortController();
+    const timeout = vi.spyOn(AbortSignal, 'timeout').mockReturnValue(controller.signal);
+    client.delete.mockClear().mockImplementation(
+      (_path, options) =>
+        new Promise((_resolve, reject) =>
+          options.signal.addEventListener('abort', () => reject(options.signal.reason), {
+            once: true,
+          }),
+        ),
+    );
+    const cleanup = provider.cleanup();
+    await vi.waitFor(() => expect(client.delete).toHaveBeenCalledTimes(2));
+    expect(timeout).toHaveBeenCalledOnce();
+    expect(client.delete.mock.calls.map(([, options]) => options.signal)).toEqual([
+      controller.signal,
+      controller.signal,
+    ]);
+    controller.abort();
+    await cleanup;
+    client.delete.mockResolvedValue(undefined);
   });
 
-  it('leaves caller-owned agents unregistered during public API evaluations', async () => {
-    const provider = createProvider('caller-owned');
-    await runEvaluation(provider);
-    expect(providerRegistry.has(provider)).toBe(false);
-    expect(creations()).toHaveLength(0);
-    expect(deleteAgent).not.toHaveBeenCalled();
+  it('forgets a retained deletion once the remote agent is already absent', async () => {
+    const provider = createProvider();
+    await provider.callApi('hello');
+    client.delete.mockRejectedValueOnce(new ElevenLabsAPIError('Not found', 404));
+    await provider.cleanup();
+    await provider.cleanup();
+    expect(client.delete).toHaveBeenCalledOnce();
+  });
+
+  it('bounds deletion and retains an agent whose deletion timed out', async () => {
+    const controller = new AbortController();
+    vi.spyOn(AbortSignal, 'timeout').mockReturnValueOnce(controller.signal);
+    client.delete.mockImplementationOnce(
+      (_path: string, options: { signal: AbortSignal }) =>
+        new Promise((_resolve, reject) => {
+          options.signal.addEventListener('abort', () => reject(options.signal.reason), {
+            once: true,
+          });
+        }),
+    );
+    const provider = createProvider();
+    await provider.callApi('hello');
+    const cleanup = provider.cleanup();
+    await vi.waitFor(() => expect(client.delete).toHaveBeenCalledOnce());
+    controller.abort();
+    await cleanup;
+    expect(AbortSignal.timeout).toHaveBeenCalledWith(5000);
+    await provider.cleanup();
+    expect(client.delete).toHaveBeenCalledTimes(2);
+    expect(client.delete.mock.calls.map(([path]) => path)).toEqual([
+      '/convai/agents/owned-1',
+      '/convai/agents/owned-1',
+    ]);
   });
 });

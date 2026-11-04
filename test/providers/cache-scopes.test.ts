@@ -320,7 +320,7 @@ it.each(['messages', 'completion'] as const)(
                 .mockResolvedValueOnce({ content: [{ type: 'text', text: 'old' }] } as any)
                 .mockResolvedValueOnce({ content: [{ type: 'text', text: 'fresh' }] } as any)
             : vi
-                .spyOn(provider.anthropic.completions, 'create')
+                .spyOn(provider.anthropic, 'post')
                 .mockResolvedValueOnce({ completion: 'old' } as any)
                 .mockResolvedValueOnce({ completion: 'fresh' } as any);
         expect(await provider.callApi('fixture')).toMatchObject({ output: 'old' });

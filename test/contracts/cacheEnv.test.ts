@@ -78,7 +78,8 @@ it.each(parsers.filter(([name]) => name !== 'runtime suite'))(
 );
 
 it('exposes evaluation settings through the portable contracts entry', () => {
-  expect(EnvOverridesSchema.parse(cacheSettings)).toEqual(cacheSettings);
+  const settings = { ...cacheSettings, GOOGLE_CLOUD_PROJECT: 'fixture-project' };
+  expect(EnvOverridesSchema.parse(settings)).toEqual(settings);
 });
 
 it('keeps cache settings out of provider overrides', () => {

@@ -4,11 +4,13 @@
  * Test and evaluate voice AI agents with LLM backends
  */
 
-import { getEnvString } from '../../../envars';
 import logger from '../../../logger';
 import { providerRegistry } from '../../providerRegistry';
+import { waitForPromiseWithAbort } from '../../shared';
+import { getElevenLabsApiKey } from '../auth';
 import { ElevenLabsClient } from '../client';
 import { CostTracker } from '../cost-tracker';
+import { ElevenLabsAPIError } from '../errors';
 import { buildSimulationRequest, parseConversation } from './conversation';
 import {
   calculateOverallScore,
@@ -18,7 +20,12 @@ import {
 import { analyzeToolUsage, extractToolCalls, generateToolUsageSummary } from './tools';
 
 import type { EnvOverrides } from '../../../types/env';
-import type { ApiProvider, CallApiContextParams, ProviderResponse } from '../../../types/providers';
+import type {
+  ApiProvider,
+  CallApiContextParams,
+  CallApiOptionsParams,
+  ProviderResponse,
+} from '../../../types/providers';
 import type { AgentSimulationResponse, ElevenLabsAgentsConfig } from './types';
 
 /**
@@ -31,10 +38,12 @@ export class ElevenLabsAgentsProvider implements ApiProvider {
   private env?: EnvOverrides;
   private ephemeralAgentId: string | null = null;
   private agentCreationPromise: Promise<string> | null = null;
-  private cleanupPromise: Promise<void> | null = null;
-  private activeCalls = 0;
-  private onIdle: (() => void) | null = null;
-  private shutdownController = new AbortController();
+  private pendingAgentDeletions = new Set<string>();
+  private agentCreationController = new AbortController();
+  private operationController = new AbortController();
+  private cleanupPromise?: Promise<void>;
+  private readonly resource = { shutdown: () => this.cleanup() };
+  private creationWaiters = 0;
   private initPromise: Promise<void> | null = null;
 
   constructor(
@@ -71,8 +80,8 @@ export class ElevenLabsAgentsProvider implements ApiProvider {
       this.id = () => id;
     }
 
-    // Initialize advanced features asynchronously
-    this.initPromise = this.initializeAdvancedFeatures();
+    // Preserve the initial asynchronous readiness boundary.
+    this.initPromise = Promise.resolve();
   }
 
   id(): string {
@@ -83,58 +92,39 @@ export class ElevenLabsAgentsProvider implements ApiProvider {
     return `[ElevenLabs Agents Provider] ${this.config.agentId || 'Ephemeral Agent'}`;
   }
 
-  /**
-   * Initialize advanced features
-   */
-  private async initializeAdvancedFeatures(): Promise<void> {
-    try {
-      // Validate configurations
-      this.validateConfigurations();
-
-      // No initialization needed yet - will be done per-agent during callApi
-    } catch (error) {
-      logger.error('[ElevenLabs Agents] Advanced features initialization failed', {
-        error: error instanceof Error ? error.message : String(error),
-      });
-      // Don't throw - fall back to basic agent functionality
+  async callApi(
+    prompt: string,
+    context?: CallApiContextParams,
+    options?: CallApiOptionsParams,
+  ): Promise<ProviderResponse> {
+    options?.abortSignal?.throwIfAborted();
+    await providerRegistry.useResource(this.resource, options?.abortSignal);
+    if (this.cleanupPromise) {
+      await waitForPromiseWithAbort(this.cleanupPromise, options?.abortSignal);
     }
-  }
+    providerRegistry.throwIfResourceUseAborted(options?.abortSignal);
+    if (!providerRegistry.has(this.resource)) {
+      providerRegistry.register(this.resource);
+    }
+    if (this.operationController.signal.aborted) {
+      this.operationController = new AbortController();
+    }
+    const signal = options?.abortSignal
+      ? AbortSignal.any([this.operationController.signal, options.abortSignal])
+      : this.operationController.signal;
 
-  /**
-   * Validate all advanced feature configurations
-   */
-  private validateConfigurations(): void {
-    // No advanced feature validations needed currently
-    // Future advanced features will be validated here
-  }
-
-  async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
     // Wait for initialization
     if (this.initPromise != null) {
       await this.initPromise;
       this.initPromise = null;
     }
 
-    // Finish retiring the previous agent before a new call can register or reuse it.
-    while (this.cleanupPromise) {
-      await this.cleanupPromise;
-    }
-    const shutdownSignal = this.shutdownController.signal;
-    this.activeCalls++;
-    if (!this.config.agentId) {
-      providerRegistry.register(this);
-    }
     const startTime = Date.now();
 
     try {
-      if (!this.config.agentId) {
-        // Evaluations must use graceful cleanup even for caller-supplied provider instances.
-        await providerRegistry.cleanupWhenIdle([this]);
-      }
-      // Registration or the awaited cleanup reservation can initiate process shutdown.
-      providerRegistry.throwIfResourceUseAborted(shutdownSignal);
-      const agentId = await this.getOrCreateAgent();
-      providerRegistry.throwIfResourceUseAborted(shutdownSignal);
+      // Get or create agent
+      const agentId = await this.getOrCreateAgent(signal);
+      signal.throwIfAborted();
 
       logger.debug('[ElevenLabs Agents] Running simulation', {
         agentId,
@@ -165,8 +155,8 @@ export class ElevenLabsAgentsProvider implements ApiProvider {
       const response = await this.client.post<AgentSimulationResponse>(
         `/convai/agents/${agentId}/simulate-conversation`,
         simulationRequest,
+        { signal },
       );
-      shutdownSignal.throwIfAborted();
 
       // Check for failed simulation
       if (response.status === 'failed') {
@@ -190,32 +180,51 @@ export class ElevenLabsAgentsProvider implements ApiProvider {
           latency: Date.now() - startTime,
         },
       };
-    } finally {
-      this.activeCalls--;
-      if (this.activeCalls === 0) {
-        this.onIdle?.();
-        this.onIdle = null;
-      }
     }
   }
 
   /**
    * Get or create agent
    */
-  private async getOrCreateAgent(): Promise<string> {
+  private async getOrCreateAgent(signal: AbortSignal): Promise<string> {
+    signal.throwIfAborted();
     // Use existing agent if provided
     if (this.config.agentId) {
       return this.config.agentId;
     }
 
-    // Reuse the agent owned by this provider, independently of response-cache settings.
+    // Ephemeral agents belong to this provider's lifecycle, not the shared
+    // response cache. Sharing a remote ID would let one evaluation delete
+    // another evaluation's agent, or reuse an ID after it was deleted.
     if (this.ephemeralAgentId) {
       return this.ephemeralAgentId;
     }
-    this.agentCreationPromise ??= this.createEphemeralAgent().finally(() => {
+    if (this.agentCreationController.signal.aborted) {
+      // A cancelled caller can be followed by a new call before the old fetch's
+      // rejection handler runs. Retire that promise before admitting a replacement.
+      if (this.agentCreationPromise) {
+        await waitForPromiseWithAbort(
+          this.agentCreationPromise.catch(() => undefined),
+          signal,
+        );
+      }
+      if (this.agentCreationController.signal.aborted) {
+        this.agentCreationController = new AbortController();
+      }
+    }
+    this.agentCreationPromise ??= this.createEphemeralAgent().catch((error) => {
       this.agentCreationPromise = null;
+      throw error;
     });
-    return this.agentCreationPromise;
+    this.creationWaiters++;
+    try {
+      return await waitForPromiseWithAbort(this.agentCreationPromise, signal);
+    } finally {
+      this.creationWaiters--;
+      if (signal.aborted && this.creationWaiters === 0) {
+        this.agentCreationController.abort();
+      }
+    }
   }
 
   private async createEphemeralAgent(): Promise<string> {
@@ -245,6 +254,7 @@ export class ElevenLabsAgentsProvider implements ApiProvider {
     const response = await this.client.post<{ agent_id: string }>(
       '/convai/agents/create',
       agentCreationRequest,
+      { signal: this.agentCreationController.signal },
     );
 
     this.ephemeralAgentId = response.agent_id;
@@ -379,65 +389,60 @@ export class ElevenLabsAgentsProvider implements ApiProvider {
    * Get API key from config or environment
    */
   private getApiKey(): string | undefined {
-    return (
-      this.config.apiKey ||
-      (this.config.apiKeyEnvar && this.env?.[this.config.apiKeyEnvar as keyof EnvOverrides]) ||
-      (this.config.apiKeyEnvar && getEnvString(this.config.apiKeyEnvar as any)) ||
-      this.env?.ELEVENLABS_API_KEY ||
-      getEnvString('ELEVENLABS_API_KEY')
-    );
+    return getElevenLabsApiKey(this, () => this.env);
   }
 
   /**
    * Clean up resources
    */
   cleanup(): Promise<void> {
-    this.cleanupPromise ??= Promise.resolve()
-      .then(() => this.cleanupOwnedAgent())
-      .finally(() => {
-        // Stay discoverable while graceful cleanup waits, so process shutdown can force it.
-        providerRegistry.unregister(this);
-        this.cleanupPromise = null;
-        this.shutdownController = new AbortController();
-      });
-    return this.cleanupPromise;
-  }
-
-  cleanupAfterEvaluation(): Promise<void> {
-    return this.cleanup();
-  }
-
-  shutdown(): Promise<void> {
-    this.shutdownController.abort(
-      new DOMException('ElevenLabs provider was shut down', 'AbortError'),
-    );
-    this.onIdle?.();
-    this.onIdle = null;
-    return this.cleanup();
-  }
-
-  private async cleanupOwnedAgent(): Promise<void> {
-    if (this.activeCalls > 0 && !this.shutdownController.signal.aborted) {
-      await new Promise<void>((resolve) => {
-        this.onIdle = resolve;
-      });
+    if (this.cleanupPromise) {
+      return this.cleanupPromise;
     }
-    // An already-started creation must yield its owned ID before it can be deleted.
-    // A failed creation has no resource to release.
-    await this.agentCreationPromise?.catch(() => {});
-    if (this.ephemeralAgentId) {
-      const agentId = this.ephemeralAgentId;
-      try {
-        await this.client.delete(`/convai/agents/${agentId}`);
-        this.ephemeralAgentId = null;
-        logger.debug('[ElevenLabs Agents] Ephemeral agent deleted', {
-          agentId,
-        });
-      } catch (error) {
-        logger.warn('[ElevenLabs Agents] Failed to delete ephemeral agent', {
-          error: error instanceof Error ? error.message : String(error),
-        });
+    this.operationController.abort();
+    this.agentCreationController.abort();
+    const cleanup = this.cleanupAgents().finally(() => {
+      if (this.pendingAgentDeletions.size > 0) {
+        providerRegistry.retainForProcessShutdown(this.resource);
+      } else {
+        providerRegistry.unregister(this.resource);
       }
+      if (this.cleanupPromise === cleanup) {
+        this.cleanupPromise = undefined;
+      }
+    });
+    this.cleanupPromise = cleanup;
+    return cleanup;
+  }
+
+  private async cleanupAgents(): Promise<void> {
+    await this.agentCreationPromise?.catch(() => undefined);
+    if (this.ephemeralAgentId) {
+      this.pendingAgentDeletions.add(this.ephemeralAgentId);
+      this.ephemeralAgentId = null;
     }
+    this.agentCreationPromise = null;
+    if (this.pendingAgentDeletions.size === 0) {
+      return;
+    }
+    // All retries share one deadline, so an outage cannot multiply teardown time.
+    const signal = AbortSignal.timeout(5000);
+    await Promise.all(
+      [...this.pendingAgentDeletions].map(async (agentId) => {
+        try {
+          await this.client.delete(`/convai/agents/${agentId}`, { signal });
+          this.pendingAgentDeletions.delete(agentId);
+          logger.debug('[ElevenLabs Agents] Ephemeral agent deleted', { agentId });
+        } catch (error) {
+          if (error instanceof ElevenLabsAPIError && error.statusCode === 404) {
+            this.pendingAgentDeletions.delete(agentId);
+            return;
+          }
+          logger.warn('[ElevenLabs Agents] Failed to delete ephemeral agent', {
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+      }),
+    );
   }
 }

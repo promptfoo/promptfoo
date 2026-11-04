@@ -19,6 +19,7 @@ import { getCache, isCacheEnabled, withCacheEnabled, withCacheNamespace } from '
 import cliState from './cliState';
 import { DEFAULT_MAX_CONCURRENCY, FILE_METADATA_KEY } from './constants';
 import { getEnvBool, getEnvInt, getEvalTimeoutMs, getMaxEvalTimeMs, isCI } from './envars';
+import { compileDerivedMetricFormula } from './evaluator/derivedMetricFormula';
 import { collectFileMetadata, renderPrompt, runExtensionHook } from './evaluatorHelpers';
 import logger, { globalLogCallback, isDebugEnabled, setLogCallback } from './logger';
 import { selectMaxScore } from './matchers/comparison';
@@ -38,12 +39,7 @@ import { maybeWrapMcpProviderForRedteam } from './redteam/mcpTargetProvider';
 import { redteamProviderManager } from './redteam/providers/shared';
 import { throwIfTargetPromptExceedsMaxChars } from './redteam/shared/promptLength';
 import { getSessionId } from './redteam/util';
-import {
-  createProviderRateLimitOptions,
-  createRateLimitRegistry,
-  type RateLimitRegistry,
-  sleepWithAbort,
-} from './scheduler';
+import { createProviderRateLimitOptions, RateLimitRegistry, sleepWithAbort } from './scheduler';
 import {
   withProviderCallExecutionContext,
   withProviderCallTracingContext,
@@ -84,6 +80,7 @@ import {
   TestSuiteConfigSchema,
 } from './types/index';
 import { type ApiProvider, isApiProvider } from './types/providers';
+import { createDefaultPromptMetrics, updatePromptResultCounts } from './util/eval/promptMetrics';
 import { isAbortError, isNonTransientHttpStatus } from './util/fetch/errors';
 import { isCallerAbortError } from './util/fetch/requestSignal';
 import { filterByRange } from './util/filterRange';
@@ -1314,7 +1311,7 @@ function updateConversationHistory({
   renderedPrompt: string;
   response: ProviderResponse;
 }) {
-  if (!conversations) {
+  if (!conversations || response.error) {
     return;
   }
 
@@ -1323,7 +1320,7 @@ function updateConversationHistory({
   conversations[conversationKey].push({
     prompt: renderedJson || renderedPrompt,
     input: conversationLastInput || renderedJson || renderedPrompt,
-    output: response.output || '',
+    output: response.conversationOutput ?? (response.output || ''),
     metadata: response.metadata,
   });
 }
@@ -1364,6 +1361,8 @@ function createEvaluateResult({
   latencyMs,
   prompt,
   promptIdx,
+  repeatGroupId,
+  repeatIndex,
   rendered,
   response,
   setup,
@@ -1377,6 +1376,8 @@ function createEvaluateResult({
   latencyMs: number;
   prompt: Prompt;
   promptIdx: number;
+  repeatGroupId?: string;
+  repeatIndex: number;
   rendered: RenderedRunEvalPrompt;
   response: ProviderResponse;
   setup: RunEvalSetup;
@@ -1406,6 +1407,7 @@ function createEvaluateResult({
       [FILE_METADATA_KEY]: fileMetadata,
     },
     promptIdx,
+    ...(repeatGroupId !== undefined && { repeatGroupId, repeatIndex }),
     testIdx,
     testCase: test,
     promptId: prompt.id || '',
@@ -1775,6 +1777,7 @@ async function runEvalInternal(
     // TODO(ian): Rename these public `Idx` fields to `Index` with compatibility handling.
     testIdx: testIndex,
     promptIdx: promptIndex,
+    repeatGroupId,
     repeatIndex,
     conversations,
     registers,
@@ -1917,6 +1920,8 @@ async function runEvalInternal(
             latencyMs,
             prompt,
             promptIdx: promptIndex,
+            repeatGroupId,
+            repeatIndex,
             rendered,
             response,
             setup,
@@ -2017,6 +2022,7 @@ async function runEvalInternal(
         namedScores: {},
         latencyMs,
         promptIdx: promptIndex,
+        ...(repeatGroupId !== undefined && { repeatGroupId, repeatIndex }),
         testIdx: testIndex,
         testCase: test,
         promptId: prompt.id || '',
@@ -2184,23 +2190,20 @@ export function generateVarCombinations(
   return combinations;
 }
 
-function updatePromptResultCounts(metrics: PromptMetrics, row: EvaluateResult) {
-  metrics.testPassCount += row.success ? 1 : 0;
-  if (!row.success) {
-    if (row.failureReason === ResultFailureReason.ERROR) {
-      metrics.testErrorCount += 1;
-    } else {
-      metrics.testFailCount += 1;
-    }
-  }
+function prepareDerivedMetrics(metrics: TestSuite['derivedMetrics']) {
+  return metrics?.map(({ name, value }) => ({
+    name,
+    value: typeof value === 'function' ? value : compileDerivedMetricFormula(name, value),
+  }));
 }
+
+type PreparedDerivedMetrics = ReturnType<typeof prepareDerivedMetrics>;
 
 function updateDerivedMetrics(
   metrics: PromptMetrics,
-  derivedMetrics: NonNullable<TestSuite['derivedMetrics']>,
+  derivedMetrics: NonNullable<PreparedDerivedMetrics>,
   evalStep: RunEvalOptions,
   promptEvalCount: number,
-  math: typeof import('mathjs'),
 ) {
   if (Object.prototype.hasOwnProperty.call(metrics.namedScores, '__count')) {
     logger.warn("Metric name '__count' is reserved for derived metrics and will be overridden.");
@@ -2213,10 +2216,7 @@ function updateDerivedMetrics(
   for (const metric of derivedMetrics) {
     metrics.namedScores[metric.name] ??= 0;
     try {
-      metrics.namedScores[metric.name] =
-        typeof metric.value === 'function'
-          ? metric.value(evalContext, evalStep)
-          : math.evaluate(metric.value, evalContext);
+      metrics.namedScores[metric.name] = metric.value(evalContext, evalStep);
       evalContext[metric.name] = metrics.namedScores[metric.name];
     } catch (error) {
       logger.debug(
@@ -2498,23 +2498,6 @@ async function maybeAddGeneratedPrompts(
     return false;
   }
   throw new PromptSuggestionsRejectedError();
-}
-
-function createDefaultPromptMetrics(): PromptMetrics {
-  return {
-    score: 0,
-    testPassCount: 0,
-    testFailCount: 0,
-    testErrorCount: 0,
-    assertPassCount: 0,
-    assertFailCount: 0,
-    totalLatencyMs: 0,
-    tokenUsage: createEmptyTokenUsage(),
-    namedScores: {},
-    namedScoresCount: {},
-    namedScoreWeights: {},
-    cost: 0,
-  };
 }
 
 /**
@@ -3056,6 +3039,7 @@ async function buildRunEvalOptions({
       registers,
       runEvalOptions,
       testCase,
+      testCaseIndex: index,
       testSuite,
     });
   }
@@ -3142,6 +3126,7 @@ function appendRunEvalOptionsForTestCase({
   registers,
   runEvalOptions,
   testCase,
+  testCaseIndex,
   testSuite,
 }: {
   concurrency: number;
@@ -3155,6 +3140,7 @@ function appendRunEvalOptionsForTestCase({
   registers: EvalRegisters;
   runEvalOptions: RunEvalOptions[];
   testCase: AtomicTestCase;
+  testCaseIndex: number;
   testSuite: TestSuite;
 }) {
   const promptPrefix = testCase.options?.prefix || getDefaultTest(testSuite)?.options?.prefix || '';
@@ -3171,7 +3157,7 @@ function appendRunEvalOptionsForTestCase({
     repeat: testRepeat,
   };
   for (let repeatIndex = 0; repeatIndex < testRepeat; repeatIndex++) {
-    for (const vars of varCombinations) {
+    for (const [varCombinationIndex, vars] of varCombinations.entries()) {
       appendRunEvalOptionsForVars({
         concurrency,
         conversations,
@@ -3183,6 +3169,8 @@ function appendRunEvalOptionsForTestCase({
         providerAbortSignal,
         rateLimitRegistry,
         registers,
+        repeatGroupId:
+          testRepeat > 1 ? `test-${testCaseIndex}-vars-${varCombinationIndex}` : undefined,
         repeatIndex,
         runEvalOptions,
         testCase,
@@ -3208,6 +3196,7 @@ function appendRunEvalOptionsForVars({
   providerAbortSignal,
   rateLimitRegistry,
   registers,
+  repeatGroupId,
   repeatIndex,
   runEvalOptions,
   testCase,
@@ -3225,6 +3214,7 @@ function appendRunEvalOptionsForVars({
   providerAbortSignal?: AbortSignal;
   rateLimitRegistry?: RateLimitRegistryRef;
   registers: EvalRegisters;
+  repeatGroupId?: string;
   repeatIndex: number;
   runEvalOptions: RunEvalOptions[];
   testCase: AtomicTestCase;
@@ -3248,6 +3238,7 @@ function appendRunEvalOptionsForVars({
       providerAbortSignal,
       rateLimitRegistry,
       registers,
+      repeatGroupId,
       repeatIndex,
       runEvalOptions,
       testCase,
@@ -3270,6 +3261,7 @@ function appendRunEvalOptionsForProvider({
   providerAbortSignal,
   rateLimitRegistry,
   registers,
+  repeatGroupId,
   repeatIndex,
   runEvalOptions,
   testCase,
@@ -3288,6 +3280,7 @@ function appendRunEvalOptionsForProvider({
   providerAbortSignal?: AbortSignal;
   rateLimitRegistry?: RateLimitRegistryRef;
   registers: EvalRegisters;
+  repeatGroupId?: string;
   repeatIndex: number;
   runEvalOptions: RunEvalOptions[];
   testCase: AtomicTestCase;
@@ -3314,6 +3307,7 @@ function appendRunEvalOptionsForProvider({
         providerAbortSignal,
         rateLimitRegistry,
         registers,
+        repeatGroupId,
         repeatIndex,
         testCase,
         testIdx,
@@ -3337,6 +3331,7 @@ function createRunEvalOption({
   providerAbortSignal,
   rateLimitRegistry,
   registers,
+  repeatGroupId,
   repeatIndex,
   testCase,
   testIdx,
@@ -3355,6 +3350,7 @@ function createRunEvalOption({
   providerAbortSignal?: AbortSignal;
   rateLimitRegistry?: RateLimitRegistryRef;
   registers: EvalRegisters;
+  repeatGroupId?: string;
   repeatIndex: number;
   testCase: AtomicTestCase;
   testIdx: number;
@@ -3374,6 +3370,7 @@ function createRunEvalOption({
     nunjucksFilters: testSuite.nunjucksFilters,
     testIdx,
     promptIdx,
+    repeatGroupId,
     repeatIndex,
     evaluateOptions: options,
     conversations,
@@ -3757,7 +3754,7 @@ interface EvalProcessingContext {
   assertionTypes: Set<string>;
   concurrency: number;
   deferredGradingAbortSignal?: AbortSignal;
-  mathjsModule: typeof import('mathjs') | null;
+  derivedMetrics: PreparedDerivedMetrics;
   numComplete: number;
   options: InternalEvaluateOptions;
   promptEvalCounts: number[];
@@ -3777,13 +3774,16 @@ async function runGroupedGradingForRows(
   providerCallQueue: ProviderGroupedCallQueue,
   onRowsGraded: (entry: GroupedRows) => Promise<void>,
 ) {
-  const rowsWithDeferredGrading = getRowsWithDeferredGrading(entries);
+  const rowsWithDeferredGrading = entries
+    .flatMap((entry) => entry.rows)
+    .flatMap((row) => {
+      const gradingPromise = deferredGradingPromises.get(row);
+      return gradingPromise === undefined ? [] : [{ row, gradingPromise }];
+    });
   if (rowsWithDeferredGrading.length === 0) {
     return;
   }
 
-  const deferredRows = new Set(rowsWithDeferredGrading.map(({ row }) => row));
-  const completedRows = new Set<EvaluateResult>();
   const processedEntries = new Set<GroupedRows>();
   let pendingCount = rowsWithDeferredGrading.length;
   let resolveAllDone: () => void = () => {};
@@ -3794,7 +3794,6 @@ async function runGroupedGradingForRows(
   const gradingPromises = rowsWithDeferredGrading.map(({ row, gradingPromise }) =>
     gradingPromise.finally(() => {
       deferredGradingPromises.delete(row);
-      completedRows.add(row);
       pendingCount--;
       if (pendingCount === 0) {
         resolveAllDone();
@@ -3807,7 +3806,7 @@ async function runGroupedGradingForRows(
       if (processedEntries.has(entry)) {
         continue;
       }
-      if (!entry.rows.every((row) => !deferredRows.has(row) || completedRows.has(row))) {
+      if (!entry.rows.every((row) => !deferredGradingPromises.has(row))) {
         break;
       }
       processedEntries.add(entry);
@@ -3837,21 +3836,6 @@ async function runGroupedGradingForRows(
 
   await Promise.all(gradingPromises);
   await processReadyEntries();
-}
-
-function getRowsWithDeferredGrading(entries: GroupedRows[]) {
-  return entries
-    .flatMap((entry) => entry.rows.map((row) => ({ entry, row })))
-    .map(({ entry, row }) => ({ entry, row, gradingPromise: deferredGradingPromises.get(row) }))
-    .filter(
-      (
-        item,
-      ): item is {
-        entry: GroupedRows;
-        row: EvaluateResult;
-        gradingPromise: Promise<void>;
-      } => item.gradingPromise !== undefined,
-    );
 }
 
 function trackComparisonRowsForEvalStep(
@@ -3905,6 +3889,10 @@ function createEvalStepTimeoutResult(
     namedScores: {},
     latencyMs: timeoutMs,
     promptIdx: evalStep.promptIdx,
+    ...(evalStep.repeatGroupId !== undefined && {
+      repeatGroupId: evalStep.repeatGroupId,
+      repeatIndex: evalStep.repeatIndex,
+    }),
     testIdx: evalStep.testIdx,
     testCase: sanitizedTestCase,
     promptId: evalStep.prompt.id || '',
@@ -4000,6 +3988,10 @@ function createMaxDurationTimeoutResult(
     namedScores: {},
     latencyMs: Date.now() - startTime,
     promptIdx: evalStep.promptIdx,
+    ...(evalStep.repeatGroupId !== undefined && {
+      repeatGroupId: evalStep.repeatGroupId,
+      repeatIndex: evalStep.repeatIndex,
+    }),
     testIdx: evalStep.testIdx,
     testCase: evalStep.test,
     promptId: evalStep.prompt.id || '',
@@ -4101,7 +4093,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     });
 
     // Create rate limit registry for adaptive concurrency control
-    this.rateLimitRegistry = createRateLimitRegistry({
+    this.rateLimitRegistry = new RateLimitRegistry({
       maxConcurrency: options.maxConcurrency || DEFAULT_MAX_CONCURRENCY,
     });
 
@@ -4278,14 +4270,12 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
   private updatePromptMetricsForRow({
     derivedMetrics,
     evalStep,
-    mathjsModule,
     metrics,
     promptEvalCount,
     row,
   }: {
-    derivedMetrics: TestSuite['derivedMetrics'];
+    derivedMetrics: PreparedDerivedMetrics;
     evalStep: RunEvalOptions;
-    mathjsModule: typeof import('mathjs') | null;
     metrics: PromptMetrics;
     promptEvalCount: number;
     row: EvaluateResult;
@@ -4301,8 +4291,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     }
 
     if (derivedMetrics) {
-      invariant(mathjsModule, 'Expected mathjs to be loaded for derived metrics');
-      updateDerivedMetrics(metrics, derivedMetrics, evalStep, promptEvalCount, mathjsModule);
+      updateDerivedMetrics(metrics, derivedMetrics, evalStep, promptEvalCount);
     }
 
     updatePromptResultCounts(metrics, row);
@@ -4457,9 +4446,8 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       const metrics = context.prompts[row.promptIdx].metrics;
       invariant(metrics, 'Expected prompt.metrics to be set');
       this.updatePromptMetricsForRow({
-        derivedMetrics: context.testSuite.derivedMetrics,
+        derivedMetrics: context.derivedMetrics,
         evalStep,
-        mathjsModule: context.mathjsModule,
         metrics,
         promptEvalCount: reservePromptEvalCount(context, row.promptIdx),
         row,
@@ -5806,6 +5794,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       testSuite = { ...testSuite, prompts: recovery.hookPrompts };
     }
     testSuite = await runBeforeAllExtensions(testSuite);
+    const derivedMetrics = prepareDerivedMetrics(testSuite.derivedMetrics);
     if (
       !restorePromptColumns &&
       !(await maybeAddGeneratedPrompts(testSuite, options, providerAbortSignal))
@@ -5864,15 +5853,11 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     concurrency = concurrencySettings.concurrency;
     const { usesConversationVar } = concurrencySettings;
 
-    // Awaiting after accumulating scores lets other rows change the total
-    // before derived metrics use this row's __count.
-    const mathjsModule = testSuite.derivedMetrics ? await import('mathjs') : null;
-
     const processingContext: EvalProcessingContext = {
       assertionTypes,
       concurrency,
       deferredGradingAbortSignal,
-      mathjsModule,
+      derivedMetrics,
       numComplete: 0,
       options,
       promptEvalCounts: createPromptEvalCounts(prompts),

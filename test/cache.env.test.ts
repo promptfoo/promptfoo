@@ -2,9 +2,8 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-import { Keyv } from 'keyv';
-import { KeyvFile } from 'keyv-file';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { createDiskCache } from '../src/cache/storage';
 import { createDeferred } from './util/utils';
 
 vi.mock('../src/logger', () => ({
@@ -14,6 +13,16 @@ vi.mock('../src/util/fetch/index', () => ({
   fetchWithRetries: vi.fn(),
   getFetchWithProxyHeaders: (_url: unknown, options: RequestInit) => options.headers,
 }));
+
+async function expectPersistedPair(filename: string) {
+  const persisted = createDiskCache(filename, 60_000);
+  try {
+    expect(await persisted.get('first')).toBe('one');
+    expect(await persisted.get('second')).toBe('two');
+  } finally {
+    await persisted.disconnect();
+  }
+}
 
 // Exercise the real cache-manager, Keyv and disk store implementations.
 describe('invocation-scoped cache settings', () => {
@@ -583,11 +592,7 @@ describe('invocation-scoped cache settings', () => {
       const second = cliState.withEnv(disk(secondPath), () => cache.getCache());
       expect(second.stores[0]).toBe(first.stores[0]);
       await Promise.all([first.set('first', 'one'), second.set('second', 'two')]);
-      const persisted = new Keyv({
-        store: new KeyvFile({ filename: path.join(firstPath, 'cache.json') }),
-      });
-      expect(await persisted.get('first')).toBe('one');
-      expect(await persisted.get('second')).toBe('two');
+      await expectPersistedPair(path.join(firstPath, 'cache.json'));
       expect(cliState.withEnv(disk(firstPath), () => cache.claimCacheKeyOnce('usage'))).toBe(true);
       expect(cliState.withEnv(disk(secondPath), () => cache.claimCacheKeyOnce('usage'))).toBe(
         false,
@@ -605,11 +610,7 @@ describe('invocation-scoped cache settings', () => {
     const second = cliState.withEnv(disk(secondPath), () => cache.getCache());
     expect(second.stores[0]).toBe(first.stores[0]);
     await Promise.all([first.set('first', 'one'), second.set('second', 'two')]);
-    const persisted = new Keyv({
-      store: new KeyvFile({ filename: path.join(secondPath, 'cache.json') }),
-    });
-    expect(await persisted.get('first')).toBe('one');
-    expect(await persisted.get('second')).toBe('two');
+    await expectPersistedPair(path.join(secondPath, 'cache.json'));
     expect(cliState.withEnv(disk(firstPath), () => cache.claimCacheKeyOnce('usage'))).toBe(true);
     expect(cliState.withEnv(disk(secondPath), () => cache.claimCacheKeyOnce('usage'))).toBe(false);
     await cache.clearCache(secondPath);
@@ -783,11 +784,7 @@ describe('invocation-scoped cache settings', () => {
       expect(first.stores[0]).toBe(second.stores[0]);
       expect(await first.get('second')).toBe('two');
       expect(await second.get('first')).toBe('one');
-      const persisted = new Keyv({
-        store: new KeyvFile({ filename: path.join(realPath, 'cache.json') }),
-      });
-      expect(await persisted.get('first')).toBe('one');
-      expect(await persisted.get('second')).toBe('two');
+      await expectPersistedPair(path.join(realPath, 'cache.json'));
     },
   );
 
@@ -836,9 +833,7 @@ describe('invocation-scoped cache settings', () => {
       const second = cliState.withEnv(disk(secondPath), () => cache.getCache());
       await Promise.all([first.set('first', 'one'), second.set('second', 'two')]);
       expect(first.stores[0]).toBe(second.stores[0]);
-      const persisted = new Keyv({ store: new KeyvFile({ filename: sharedFile }) });
-      expect(await persisted.get('first')).toBe('one');
-      expect(await persisted.get('second')).toBe('two');
+      await expectPersistedPair(sharedFile);
       expect(cliState.withEnv(disk(firstPath), () => cache.claimCacheKeyOnce('usage'))).toBe(true);
       expect(cliState.withEnv(disk(secondPath), () => cache.claimCacheKeyOnce('usage'))).toBe(
         false,
@@ -1245,11 +1240,7 @@ describe('invocation-scoped cache settings', () => {
     const returned = cliState.withEnv(selected, () => cache.getCache());
     expect(returned.stores[0]).toBe(retained.stores[0]);
     await Promise.all([retained.set('first', 'one'), returned.set('second', 'two')]);
-    const persisted = new Keyv({
-      store: new KeyvFile({ filename: path.join(selected.PROMPTFOO_CACHE_PATH, 'cache.json') }),
-    });
-    expect(await persisted.get('first')).toBe('one');
-    expect(await persisted.get('second')).toBe('two');
+    await expectPersistedPair(path.join(selected.PROMPTFOO_CACHE_PATH, 'cache.json'));
   });
 
   it('clears every TTL wrapper of the selected backend while preserving other stores', async () => {
