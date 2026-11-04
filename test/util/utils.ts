@@ -238,3 +238,16 @@ export function spoofedNodeVersionEnv(version: string): NodeJS.ProcessEnv {
       .join(' '),
   };
 }
+
+export const createGoogleImageEnvCleanup = () => () => {
+  mockProcessEnv({ GOOGLE_API_KEY: undefined });
+  mockProcessEnv({ GOOGLE_PROJECT_ID: undefined });
+  mockProcessEnv({ GOOGLE_CLOUD_PROJECT: undefined });
+  mockProcessEnv({ GOOGLE_GENERATIVE_AI_API_KEY: undefined });
+  mockProcessEnv({ GEMINI_API_KEY: undefined });
+  mockProcessEnv({ VERTEX_PROJECT_ID: undefined });
+  mockProcessEnv({ VERTEX_API_KEY: undefined });
+  mockProcessEnv({ VERTEX_REGION: undefined });
+  mockProcessEnv({ GOOGLE_CLOUD_LOCATION: undefined });
+  mockProcessEnv({ GOOGLE_LOCATION: undefined });
+};

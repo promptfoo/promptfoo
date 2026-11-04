@@ -1,10 +1,13 @@
 import { createHash, randomUUID } from 'node:crypto';
 
+import { z } from 'zod';
 import { getUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
 import { fetchWithRetries } from '../../util/fetch/index';
 import { getRemoteGenerationHeaders, getRemoteGenerationUrl } from '../remoteGeneration';
 import { remoteGenerationContextPayload } from '../remoteGenerationContext';
+import { WebPageTrackingIdsSchema } from '../types/webPage';
+import { appendMetricSuffix } from './assertions';
 
 import type { TestCase, TestCaseWithPlugin } from '../../types/index';
 import type {
@@ -51,16 +54,13 @@ const MAX_PAGE_STATE_ENTRIES = 1000;
  */
 function cleanupExpiredPageState(): void {
   const now = Date.now();
-  const expiredKeys: string[] = [];
+  let expiredCount = 0;
 
   for (const [key, state] of pageStateMap.entries()) {
     if (now - state.createdAt > PAGE_STATE_TTL_MS) {
-      expiredKeys.push(key);
+      pageStateMap.delete(key);
+      expiredCount++;
     }
-  }
-
-  for (const key of expiredKeys) {
-    pageStateMap.delete(key);
   }
 
   // If still over limit after TTL cleanup, remove oldest entries
@@ -74,12 +74,46 @@ function cleanupExpiredPageState(): void {
     }
   }
 
-  if (expiredKeys.length > 0) {
+  if (expiredCount > 0) {
     logger.debug('[IndirectWebPwn] Cleaned up expired page state entries', {
-      removedCount: expiredKeys.length,
+      removedCount: expiredCount,
       remainingCount: pageStateMap.size,
     });
   }
+}
+
+// Keep outgoing identifiers aligned with the Cloud tracking request contract.
+const webPageTrackingIdsSchema = WebPageTrackingIdsSchema.extend({
+  evalId: z
+    .string()
+    .transform((value) => value.replace(/^eval-/, ''))
+    .pipe(WebPageTrackingIdsSchema.shape.evalId),
+});
+
+/**
+ * Resolve a page's tracking identifiers from runtime metadata. Metadata can come
+ * from a custom provider or a saved test, so TypeScript assertions do not validate
+ * it. A page URL supplies the evaluation ID when it is absent from the context.
+ */
+export function getWebPageTrackingIds(
+  metadata: Record<string, unknown> | undefined,
+  evaluationId: unknown,
+  fallbackWebPageUrl?: unknown,
+): { uuid: string; evalId: string } | null {
+  if (!metadata) {
+    return null;
+  }
+  const urlEvalIds = [metadata.webPageUrl, fallbackWebPageUrl].map((url) =>
+    typeof url === 'string' ? url.match(/\/dynamic-pages\/([^/]+)\//)?.[1] : undefined,
+  );
+  for (const evalId of [evaluationId, ...urlEvalIds]) {
+    const result = webPageTrackingIdsSchema.safeParse({ uuid: metadata.webPageUuid, evalId });
+    if (result.success && typeof evalId === 'string') {
+      // The request boundary strips the local eval- prefix exactly once.
+      return { uuid: result.data.uuid, evalId };
+    }
+  }
+  return null;
 }
 
 /**
@@ -90,17 +124,22 @@ function cleanupExpiredPageState(): void {
  * @param evalId - The evaluation ID (required by server)
  */
 export async function checkExfilTracking(
-  uuid: string,
-  evalId?: string,
+  uuid: unknown,
+  evalId?: unknown,
 ): Promise<{
   wasExfiltrated: boolean;
   exfilCount: number;
   exfilRecords: WebPageTrackingResponse['exfilRecords'];
 } | null> {
+  const trackingIds = webPageTrackingIdsSchema.safeParse({ uuid, evalId });
+  if (!trackingIds.success) {
+    logger.debug('[IndirectWebPwn] Tracking unavailable: invalid page or evaluation ID', {
+      fields: trackingIds.error.issues.map((issue) => issue.path.join('.')),
+    });
+    return null;
+  }
   try {
     const url = getRemoteGenerationUrl();
-    // Strip "eval-" prefix from evalId for consistency with page creation
-    const normalizedEvalId = evalId?.replace(/^eval-/, '');
     const response = await fetchWithRetries(
       url,
       {
@@ -108,8 +147,7 @@ export async function checkExfilTracking(
         headers: getRemoteGenerationHeaders(),
         body: JSON.stringify({
           task: 'get-web-page-tracking',
-          uuid,
-          evalId: normalizedEvalId,
+          ...trackingIds.data,
         }),
       },
       10000,
@@ -376,10 +414,7 @@ function transformForStandaloneMode(
           ...config,
         },
       },
-      assert: testCase.assert?.map((assertion) => ({
-        ...assertion,
-        metric: assertion.metric ? `${assertion.metric}/${metricSuffix}` : assertion.metric,
-      })),
+      assert: appendMetricSuffix(testCase, metricSuffix),
       metadata: {
         ...testCase.metadata,
         strategyId,
