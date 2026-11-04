@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { isBlobStorageEnabled } from '../../src/blobs/extractor';
+import cliState from '../../src/cliState';
 import {
   getMediaStorage,
   isMediaStorageEnabled,
@@ -17,6 +18,55 @@ describe('media storage provider injection', () => {
   afterEach(() => {
     resetMediaStorage();
     vi.restoreAllMocks();
+  });
+
+  it.each([
+    ['', true],
+    ['0', true],
+    ['false', true],
+    ['FALSE', true],
+    ['no', true],
+    ['unsupported', true],
+    [' true ', true],
+    ['1', false],
+    ['true', false],
+    ['TRUE', false],
+    ['TrUe', false],
+    ['yes', false],
+    ['YES', false],
+    ['yup', false],
+    ['YePpErS', false],
+  ] as const)('agrees with extraction for PROMPTFOO_INLINE_MEDIA=%s', (value, enabled) => {
+    cliState.withEnv({ PROMPTFOO_INLINE_MEDIA: value }, () => {
+      expect(isMediaStorageEnabled()).toBe(enabled);
+      expect(isBlobStorageEnabled()).toBe(enabled);
+    });
+  });
+
+  it('enables storage when the inline toggle is unset', () => {
+    vi.stubEnv('PROMPTFOO_INLINE_MEDIA', undefined);
+    try {
+      expect(isMediaStorageEnabled()).toBe(true);
+      expect(isBlobStorageEnabled()).toBe(true);
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it('keeps the first local provider when later scopes use a different media path', () => {
+    const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-media-lifetime-'));
+    try {
+      const first = cliState.withEnv({ PROMPTFOO_MEDIA_PATH: path.join(directory, 'first') }, () =>
+        getMediaStorage(),
+      );
+      const later = cliState.withEnv({ PROMPTFOO_MEDIA_PATH: path.join(directory, 'second') }, () =>
+        getMediaStorage(),
+      );
+      expect(later).toBe(first);
+    } finally {
+      resetMediaStorage();
+      fs.rmSync(directory, { recursive: true, force: true });
+    }
   });
 
   it('routes media operations through a custom provider', async () => {
@@ -58,31 +108,6 @@ describe('media storage provider injection', () => {
   });
 });
 
-describe('inline media storage toggle', () => {
-  afterEach(() => {
-    vi.unstubAllEnvs();
-  });
-
-  it.each([
-    [undefined, true],
-    ['', true],
-    ['0', true],
-    ['false', true],
-    ['FALSE', true],
-    ['no', true],
-    ['unsupported', true],
-    [' true ', true],
-    ['1', false],
-    ['true', false],
-    ['TRUE', false],
-    ['TrUe', false],
-    ['yes', false],
-    ['YES', false],
-    ['yup', false],
-    ['YePpErS', false],
-  ] as const)('uses one boolean policy for %s', (value, enabled) => {
-    vi.stubEnv('PROMPTFOO_INLINE_MEDIA', value);
-    expect(isMediaStorageEnabled()).toBe(enabled);
-    expect(isBlobStorageEnabled()).toBe(enabled);
-  });
-});
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';

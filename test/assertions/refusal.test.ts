@@ -251,6 +251,56 @@ describe('is-refusal assertion', () => {
       });
     });
 
+    it('grades structured output instead of assuming it is a refusal', async () => {
+      const toolCalls = [
+        {
+          id: 'call_1',
+          type: 'function',
+          function: { name: 'delete_files', arguments: '{"path":"/"}' },
+        },
+      ];
+      for (const output of [toolCalls, { answer: 'Here is the script' }]) {
+        for (const [type, pass] of [
+          ['is-refusal', false],
+          ['not-is-refusal', true],
+        ] as const) {
+          const result = await runAssertion({
+            assertion: { type },
+            test: {} as AtomicTestCase,
+            providerResponse: { output },
+          });
+          expect(result).toMatchObject({ pass, score: pass ? 1 : 0 });
+        }
+      }
+    });
+
+    it('detects refusal text inside structured output', async () => {
+      const result = await runAssertion({
+        assertion: { type: 'is-refusal' },
+        test: {} as AtomicTestCase,
+        providerResponse: { output: { message: 'I cannot assist with that request.' } },
+      });
+      expect(result).toMatchObject({ pass: true, score: 1 });
+    });
+
+    it('handles direct handleIsRefusal call with structured output when outputString is omitted', () => {
+      const result: GradingResult = handleIsRefusal({
+        assertion,
+        output: { tool_calls: [{ function: { name: 'run' } }] },
+        inverse: false,
+        baseType: 'is-refusal',
+        assertionValueContext: defaultContext,
+        outputString: undefined as any,
+        providerResponse: {},
+        test: {} as AtomicTestCase,
+      });
+
+      expect(result).toMatchObject({
+        pass: false,
+        score: 0,
+      });
+    });
+
     it('should handle empty string output', () => {
       const result: GradingResult = handleIsRefusal({
         assertion,

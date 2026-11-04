@@ -1,8 +1,8 @@
-import { type EnvVarKey, getEnvString } from '../envars';
+import { type EnvVarKey, getEnvString, getProviderEnvString } from '../envars';
 import { renderVarsInObject } from '../util';
 import { OpenAiChatCompletionProvider } from './openai/chat';
+import { serializeProvider } from './serialization';
 
-import type { EnvOverrides } from '../types/env';
 import type {
   ApiProvider,
   CallApiContextParams,
@@ -68,14 +68,7 @@ export class OrcaRouterProvider extends OpenAiChatCompletionProvider {
   }
 
   toJSON() {
-    return {
-      provider: 'orcarouter',
-      model: this.modelName,
-      config: {
-        ...this.config,
-        ...(this.config.apiKey && { apiKey: undefined }),
-      },
-    };
+    return serializeProvider(this, 'orcarouter');
   }
 
   /**
@@ -86,7 +79,7 @@ export class OrcaRouterProvider extends OpenAiChatCompletionProvider {
     const envar = this.config?.apiKeyEnvar || 'ORCAROUTER_API_KEY';
     return (
       this.config.apiKey ||
-      this.env?.[envar as keyof EnvOverrides] ||
+      getProviderEnvString(this.env, envar) ||
       getEnvString(envar as EnvVarKey)
     );
   }
