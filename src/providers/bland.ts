@@ -2,6 +2,7 @@ import { getEnvString, getProviderEnvString } from '../envars';
 import logger from '../logger';
 import { fetchWithTimeout } from '../util/fetch/index';
 import { readWithResponseDeadline } from '../util/fetch/responseDeadline';
+import { preserveResponseHeadersObserverError } from '../util/fetch/responseHeadersObserver';
 import { getNunjucksEngine } from '../util/templates';
 import { getRequestTimeoutMs, parseChatPrompt } from './shared';
 
@@ -297,10 +298,11 @@ export class BlandProvider implements ApiProvider {
         timeout,
       );
 
-      if (response.status === 429 && attempt < MAX_RATE_LIMIT_RETRIES) {
+      if (response.status === 429) {
         const delay = retryAfterMs(response);
         // Let the scheduler mark the shared queue rate limited, so other queued Bland
         // calls wait for the same window instead of each burning their own retries.
+        // The final 429 is published too, so the queue keeps the real Retry-After.
         if (callOptions?.onResponseHeaders) {
           const headers = Object.fromEntries(response.headers.entries());
           callOptions.onResponseHeaders(headers, {
@@ -309,6 +311,11 @@ export class BlandProvider implements ApiProvider {
             resetAt: Date.now() + delay,
           });
         }
+      }
+      if (response.status === 429 && attempt < MAX_RATE_LIMIT_RETRIES) {
+        const delay = retryAfterMs(response);
+        // Release the connection instead of leaving an unread body behind.
+        await response.body?.cancel().catch(() => undefined);
         logger.debug('[Bland] Rate limited, retrying the same request', { path, delay, attempt });
         await waitForRetry(delay, callOptions?.abortSignal);
         continue;
@@ -500,11 +507,12 @@ export class BlandProvider implements ApiProvider {
         chatId: state.chatId,
         error: message,
       });
-      return {
+      // A throwing onResponseHeaders callback is the caller's error, not a Bland rate limit.
+      return preserveResponseHeadersObserverError(callOptions?.onResponseHeaders, err, {
         error: message,
         ...(state.chatId && { sessionId: state.chatId }),
         metadata: { bland: { chatId: state.chatId, transcript } },
-      };
+      });
     }
 
     if (state.chatId) {

@@ -6,6 +6,11 @@ import { BlandProvider, createBlandProvider, getUserTurns } from '../../src/prov
 import { loadApiProvider } from '../../src/providers/index';
 import { fetchWithTimeout } from '../../src/util/fetch/index';
 import { trackResponseDeadline } from '../../src/util/fetch/responseDeadline';
+import {
+  composeResponseHeadersObservers,
+  createResponseHeadersObserver,
+  isResponseHeadersObserverErrorResponse,
+} from '../../src/util/fetch/responseHeadersObserver';
 
 import type { BlandTurnData } from '../../src/providers/bland';
 
@@ -474,6 +479,69 @@ describe('BlandProvider', () => {
       } finally {
         vi.useRealTimers();
       }
+    });
+
+    it('releases each retried 429 body and publishes the final 429 too', async () => {
+      vi.useFakeTimers();
+      try {
+        const cancels: number[] = [];
+        let limited = 0;
+        vi.mocked(fetchWithTimeout).mockImplementation(async (url) => {
+          if (String(url).endsWith('/create')) {
+            return Response.json({ data: { chat_id: 'chat-1' }, errors: null });
+          }
+          const n = ++limited;
+          // highWaterMark 0: nothing is read until a consumer asks, so cancel() is observable.
+          const body = new ReadableStream(
+            {
+              pull(controller) {
+                controller.enqueue(new TextEncoder().encode('rate limited'));
+                controller.close();
+              },
+              cancel() {
+                cancels.push(n);
+              },
+            },
+            { highWaterMark: 0 },
+          );
+          return new Response(body, { status: 429, headers: { 'Retry-After': '1' } });
+        });
+        const onResponseHeaders = vi.fn();
+        const pending = createBlandProvider('bland:agent:a', {
+          config: { includeGreeting: false },
+        }).callApi('hi', undefined, { onResponseHeaders });
+        await vi.advanceTimersByTimeAsync(10_000);
+        const result = await pending;
+
+        expect(result.error).toMatch(/Bland API 429/);
+        // Every 429, including the last one, reaches the scheduler.
+        expect(onResponseHeaders).toHaveBeenCalledTimes(limited);
+        // Retried responses are cancelled; the last one is read for the error message.
+        expect(cancels).toEqual(Array.from({ length: limited - 1 }, (_, i) => i + 1));
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it("marks a throwing onResponseHeaders callback as the caller's error", async () => {
+      vi.mocked(fetchWithTimeout).mockImplementation(async (url) =>
+        String(url).endsWith('/create')
+          ? Response.json({ data: { chat_id: 'chat-1' }, errors: null })
+          : new Response('rate limited', { status: 429, headers: { 'Retry-After': '1' } }),
+      );
+      const failure = new Error('rate limit exceeded');
+      const observer = composeResponseHeadersObservers(
+        createResponseHeadersObserver({}, () => true),
+        () => {
+          throw failure;
+        },
+      );
+      const result = await createBlandProvider('bland:agent:a', {
+        config: { includeGreeting: false },
+      }).callApi('hi', undefined, { onResponseHeaders: observer });
+
+      expect(result.error).toBe('rate limit exceeded');
+      expect(isResponseHeadersObserverErrorResponse(result)).toBe(true);
     });
 
     it('stops waiting out a 429 as soon as the caller cancels', async () => {
