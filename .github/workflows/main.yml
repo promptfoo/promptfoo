@@ -793,7 +793,8 @@ jobs:
 
   webui:
     name: webui tests
-    timeout-minutes: 10
+    # Allow slow browser system dependency downloads before browser and coverage tests.
+    timeout-minutes: 20
     runs-on: ubuntu-latest
     permissions: *test-reporting-permissions # Required for OIDC authentication with Codecov
     steps:
