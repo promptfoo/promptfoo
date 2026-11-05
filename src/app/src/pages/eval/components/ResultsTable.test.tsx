@@ -213,7 +213,6 @@ vi.mock('@app/hooks/useShiftKey', () => {
 vi.mock('@app/utils/api', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@app/utils/api')>()),
   callApi: vi.fn(() => Promise.resolve({ ok: true })),
-  getApiBaseUrl: vi.fn(() => ''),
 }));
 
 const mockNavigate = vi.fn();
