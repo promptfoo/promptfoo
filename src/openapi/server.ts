@@ -94,7 +94,7 @@ const OpenApiEvalTableJsonResponseSchema = z.union([
   EvalSchemas.Table.JsonExportResponse,
 ]);
 
-export const SERVER_OPENAPI_ROUTE_COUNT = 67;
+export const SERVER_OPENAPI_ROUTE_COUNT = 69;
 
 type OpenApiSchema = NonNullable<ZodMediaTypeObject['schema']>;
 type OpenApiResponse = ResponseConfig & { description: string };
@@ -558,6 +558,25 @@ export function createServerOpenApiRegistry() {
       204: noContent('Results added'),
       400: jsonResponse(ErrorResponseSchema, 'Validation error'),
       404: jsonResponse(ErrorResponseSchema, 'Evaluation not found'),
+      500: jsonResponse(ErrorResponseSchema, 'Server error'),
+    },
+  });
+
+  register({
+    method: 'post',
+    path: '/api/eval/{id}/traces',
+    operationId: 'addEvalTraces',
+    tags: ['Eval', 'Traces'],
+    summary: 'Append traces to an evaluation',
+    request: {
+      params: EvalSchemas.AddTraces.Params,
+      body: jsonBody(EvalSchemas.AddTraces.Request),
+    },
+    responses: {
+      204: noContent('Traces added'),
+      400: jsonResponse(ErrorResponseSchema, 'Validation error'),
+      404: jsonResponse(ErrorResponseSchema, 'Evaluation not found'),
+      409: jsonResponse(ErrorResponseSchema, 'Trace ID already belongs to another evaluation'),
       500: jsonResponse(ErrorResponseSchema, 'Server error'),
     },
   });
@@ -1160,6 +1179,27 @@ export function createServerOpenApiRegistry() {
   });
 
   register({
+    method: 'post',
+    path: '/api/blobs',
+    operationId: 'uploadBlob',
+    tags: ['Blobs'],
+    summary: 'Upload blob bytes to local storage',
+    request: {
+      body: jsonBody(BlobsSchemas.Upload.Request),
+    },
+    responses: {
+      200: jsonResponse(BlobsSchemas.Upload.Response),
+      400: jsonResponse(ErrorResponseSchema, 'Validation error'),
+      404: jsonResponse(
+        ErrorResponseSchema,
+        'Blob storage is disabled or evaluation was not found',
+      ),
+      413: jsonResponse(ErrorResponseSchema, 'Blob exceeds maximum size'),
+      500: jsonResponse(ErrorResponseSchema, 'Server error'),
+    },
+  });
+
+  register({
     method: 'get',
     path: '/api/blobs/library',
     operationId: 'listMediaLibrary',
@@ -1199,6 +1239,7 @@ export function createServerOpenApiRegistry() {
     summary: 'Fetch blob bytes or redirect to blob storage',
     request: {
       params: BlobsSchemas.Get.Params,
+      query: BlobsSchemas.Get.Query,
     },
     responses: {
       200: binaryResponse('Blob bytes'),

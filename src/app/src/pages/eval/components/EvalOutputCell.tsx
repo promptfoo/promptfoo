@@ -6,8 +6,12 @@ import { useShiftKey } from '@app/hooks/useShiftKey';
 import { formatDuration } from '@app/utils/date';
 import { fetchTraces, replayEvaluation } from '@app/utils/evalOperations';
 import {
+  getMediaRefreshKey,
+  markMediaLoadFailed,
+  markMediaLoadSucceeded,
   normalizeMediaText,
   resolveAudioSource,
+  resolveBlobUri,
   resolveImageSource,
   resolveVideoSource,
 } from '@app/utils/media';
@@ -190,12 +194,15 @@ export function extractMarkdownImageSources(markdown: string): string[] {
   return [...sources];
 }
 
-export function resolveEvalImageOutputSource(image: ImageOutput): string | undefined {
+export function resolveEvalImageOutputSource(
+  image: ImageOutput,
+  evaluationId?: string,
+): string | undefined {
   if (typeof image.data === 'string' && /^https?:\/\//.test(image.data)) {
-    return image.data;
+    return resolveBlobUri(image.data, evaluationId) || image.data;
   }
 
-  return resolveImageSource(image);
+  return resolveImageSource(image, evaluationId);
 }
 
 function isImageLikeDataUri(text: string): boolean {
@@ -329,11 +336,13 @@ function renderHighlightedTextNode(text: string, searchText: string): React.Reac
 }
 
 function renderMediaNode({
+  evaluationId,
   output,
   outputAudioSource,
   primaryRenderedImageSrc,
   toggleLightbox,
 }: {
+  evaluationId?: string;
   output: EvaluateTableOutput;
   outputAudioSource: ReturnType<typeof resolveAudioSource>;
   primaryRenderedImageSrc?: string;
@@ -342,9 +351,13 @@ function renderMediaNode({
   if (primaryRenderedImageSrc) {
     return (
       <img
+        key={`primary-image-${getMediaRefreshKey(primaryRenderedImageSrc)}`}
         src={primaryRenderedImageSrc}
         alt={output.prompt}
         style={{ width: '100%' }}
+        data-media-refresh-key={getMediaRefreshKey(primaryRenderedImageSrc)}
+        onError={(event) => markMediaLoadFailed(primaryRenderedImageSrc, event.currentTarget)}
+        onLoad={(event) => markMediaLoadSucceeded(primaryRenderedImageSrc, event.currentTarget)}
         onClick={() => toggleLightbox(primaryRenderedImageSrc)}
       />
     );
@@ -354,8 +367,21 @@ function renderMediaNode({
     if (outputAudioSource) {
       return (
         <div className="audio-output">
-          <audio controls style={{ width: '100%' }} data-testid="audio-player">
-            <source src={outputAudioSource.src} type={outputAudioSource.type || 'audio/mpeg'} />
+          <audio
+            key={`audio-${getMediaRefreshKey(outputAudioSource.src)}`}
+            controls
+            style={{ width: '100%' }}
+            data-testid="audio-player"
+            onLoadedData={(event) =>
+              markMediaLoadSucceeded(outputAudioSource.src, event.currentTarget)
+            }
+          >
+            <source
+              src={outputAudioSource.src}
+              type={outputAudioSource.type || 'audio/mpeg'}
+              data-media-refresh-key={getMediaRefreshKey(outputAudioSource.src)}
+              onError={(event) => markMediaLoadFailed(outputAudioSource.src, event.currentTarget)}
+            />
             Your browser does not support the audio element.
           </audio>
           {output.audio.transcript && (
@@ -378,17 +404,24 @@ function renderMediaNode({
 
   if (output.video || output.response?.video) {
     const videoData = output.video || output.response?.video;
-    const videoSource = resolveVideoSource(videoData);
+    const videoSource = resolveVideoSource(videoData, evaluationId);
     if (videoSource) {
       return (
         <div className="video-output">
           <video
+            key={`video-${getMediaRefreshKey(videoSource.src)}`}
             controls
             style={{ width: '100%', maxWidth: '640px', borderRadius: '4px' }}
             poster={videoSource.poster}
             data-testid="video-player"
+            onLoadedData={(event) => markMediaLoadSucceeded(videoSource.src, event.currentTarget)}
           >
-            <source src={videoSource.src} type={videoSource.type || 'video/mp4'} />
+            <source
+              src={videoSource.src}
+              type={videoSource.type || 'video/mp4'}
+              data-media-refresh-key={getMediaRefreshKey(videoSource.src)}
+              onError={(event) => markMediaLoadFailed(videoSource.src, event.currentTarget)}
+            />
             Your browser does not support the video element.
           </video>
           <div
@@ -459,6 +492,7 @@ function renderMarkdownOrJsonNode({
 }
 
 function renderStructuredImages({
+  evaluationId,
   node,
   output,
   normalizedText,
@@ -466,6 +500,7 @@ function renderStructuredImages({
   renderedMarkdownOutput,
   toggleLightbox,
 }: {
+  evaluationId?: string;
   node?: React.ReactNode;
   output: EvaluateTableOutput;
   normalizedText: string;
@@ -489,18 +524,21 @@ function renderStructuredImages({
 
   const imageElements = output.images
     .map((img: ImageOutput, idx: number) => {
-      const src = resolveEvalImageOutputSource(img);
+      const src = resolveEvalImageOutputSource(img, evaluationId);
       if (!src || hasImageSrcComparisonKey(renderedImageSrcs, src)) {
         return null;
       }
       addImageSrcComparisonKeys(renderedImageSrcs, src);
       return (
         <img
-          key={`img-${idx}`}
+          key={`img-${getMediaRefreshKey(src)}-${idx}`}
           src={src}
           alt={output.prompt || 'Generated image'}
           loading="lazy"
           style={{ display: 'block', width: '100%', cursor: 'pointer' }}
+          data-media-refresh-key={getMediaRefreshKey(src)}
+          onError={(event) => markMediaLoadFailed(src, event.currentTarget)}
+          onLoad={(event) => markMediaLoadSucceeded(src, event.currentTarget)}
           onClick={() => toggleLightbox(src)}
         />
       );
@@ -522,6 +560,7 @@ function renderStructuredImages({
 }
 
 function renderOutputNode({
+  evaluationId,
   output,
   firstOutput,
   showDiffs,
@@ -536,6 +575,7 @@ function renderOutputNode({
   outputAudioSource,
   primaryRenderedImageSrc,
 }: {
+  evaluationId?: string;
   output: EvaluateTableOutput;
   firstOutput?: EvaluateTableOutput | null;
   showDiffs: boolean;
@@ -561,6 +601,7 @@ function renderOutputNode({
   if (!node) {
     node =
       renderMediaNode({
+        evaluationId,
         output,
         outputAudioSource,
         primaryRenderedImageSrc,
@@ -588,6 +629,7 @@ function renderOutputNode({
   }
 
   return renderStructuredImages({
+    evaluationId,
     node,
     output,
     normalizedText,
@@ -1015,8 +1057,21 @@ function renderResponseAudioPlayer(
 
   return (
     <div className="response-audio" style={{ marginBottom: '8px' }}>
-      <audio controls style={{ width: '100%', height: '32px' }} data-testid="response-audio-player">
-        <source src={responseAudioSource.src} type={responseAudioSource.type || 'audio/mpeg'} />
+      <audio
+        key={`response-audio-${getMediaRefreshKey(responseAudioSource.src)}`}
+        controls
+        style={{ width: '100%', height: '32px' }}
+        data-testid="response-audio-player"
+        onLoadedData={(event) =>
+          markMediaLoadSucceeded(responseAudioSource.src, event.currentTarget)
+        }
+      >
+        <source
+          src={responseAudioSource.src}
+          type={responseAudioSource.type || 'audio/mpeg'}
+          data-media-refresh-key={getMediaRefreshKey(responseAudioSource.src)}
+          onError={(event) => markMediaLoadFailed(responseAudioSource.src, event.currentTarget)}
+        />
         Your browser does not support the audio element.
       </audio>
     </div>
@@ -1034,7 +1089,7 @@ function renderOutputActions({
   output,
   text,
   rowIndex,
-  promptIndex,
+  tracePromptIndex,
   evaluationId,
   testCaseId,
   cloudConfig,
@@ -1060,7 +1115,7 @@ function renderOutputActions({
   output: EvaluateTableOutput;
   text: string;
   rowIndex: number;
-  promptIndex: number;
+  tracePromptIndex: number;
   evaluationId?: string;
   testCaseId?: string;
   cloudConfig: ReturnType<typeof useCloudConfig>['data'];
@@ -1230,12 +1285,13 @@ function renderOutputActions({
               evaluationId={evaluationId}
               testCaseId={testCaseId || output.id}
               testIndex={rowIndex}
-              promptIndex={promptIndex}
+              promptIndex={tracePromptIndex}
               variables={output.metadata?.inputVars || output.testCase?.vars}
               onAddFilter={addFilter}
               onResetFilters={resetFilters}
               onReplay={replayEvaluation}
               fetchTraces={fetchTraces}
+              traceRefreshToken={output}
               cloudConfig={cloudConfig}
             />
           )}
@@ -1251,6 +1307,7 @@ export interface EvalOutputCellProps {
   rowIndex: number;
   rowPositionIndex?: number;
   promptIndex: number;
+  tracePromptIndex?: number;
   showStats: boolean;
   isRedteam?: boolean;
   onRating: (isPass?: boolean | null, score?: number, comment?: string) => void;
@@ -1282,6 +1339,7 @@ function EvalOutputCell({
   rowIndex,
   rowPositionIndex = rowIndex,
   promptIndex,
+  tracePromptIndex = promptIndex,
   onRating,
   firstOutput,
   showDiffs,
@@ -1363,17 +1421,24 @@ function EvalOutputCell({
   // @see https://github.com/promptfoo/promptfoo/issues/969
   const markdownComponents = useMemo(
     () => ({
-      img: ({ src, alt }: { src?: string; alt?: string }) => (
-        <img
-          loading="lazy"
-          src={src}
-          alt={alt}
-          onClick={() => toggleLightbox(src)}
-          style={{ cursor: 'pointer' }}
-        />
-      ),
+      img: ({ src: rawSrc, alt }: { src?: string; alt?: string }) => {
+        const src = resolveBlobUri(rawSrc, evaluationId) || rawSrc;
+        return (
+          <img
+            key={`markdown-image-${getMediaRefreshKey(src)}-${src}`}
+            loading="lazy"
+            src={src}
+            alt={alt}
+            data-media-refresh-key={getMediaRefreshKey(src)}
+            onError={(event) => markMediaLoadFailed(src, event.currentTarget)}
+            onLoad={(event) => markMediaLoadSucceeded(src, event.currentTarget)}
+            onClick={() => toggleLightbox(src)}
+            style={{ cursor: 'pointer' }}
+          />
+        );
+      },
     }),
-    [toggleLightbox],
+    [toggleLightbox, evaluationId],
   );
 
   const [commentDialogOpen, setCommentDialogOpen] = React.useState(false);
@@ -1419,10 +1484,10 @@ function EvalOutputCell({
   };
 
   const text = stringifyOutputText(output.text);
-  const normalizedText = normalizeMediaText(text);
-  const inlineImageSrc = resolveImageSource(text);
+  const normalizedText = normalizeMediaText(text, evaluationId);
+  const inlineImageSrc = resolveImageSource(text, evaluationId);
   const primaryRenderedImageSrc = getPrimaryRenderedImageSrc(text, inlineImageSrc);
-  const outputAudioSource = resolveAudioSource(output.audio);
+  const outputAudioSource = resolveAudioSource(output.audio, undefined, evaluationId);
   const { failReasons, passReasons } = getFailAndPassReasons(output);
 
   // Extract response audio from the last turn of redteamHistory for display in the cell
@@ -1431,9 +1496,10 @@ function EvalOutputCell({
   const responseAudio = lastTurn?.outputAudio as
     | { data?: string; format?: string; blobRef?: { uri?: string; hash?: string } }
     | undefined;
-  const responseAudioSource = resolveAudioSource(responseAudio);
+  const responseAudioSource = resolveAudioSource(responseAudio, undefined, evaluationId);
 
   const node = renderOutputNode({
+    evaluationId,
     output,
     firstOutput,
     showDiffs,
@@ -1644,7 +1710,7 @@ function EvalOutputCell({
         output,
         text,
         rowIndex,
-        promptIndex,
+        tracePromptIndex,
         evaluationId,
         testCaseId,
         cloudConfig,
@@ -1661,8 +1727,18 @@ function EvalOutputCell({
         setActionsHovered,
       })}
       {lightboxOpen && lightboxImage && (
-        <div className="lightbox" onClick={() => toggleLightbox()}>
-          <img src={lightboxImage} alt="Lightbox" />
+        <div
+          key={`lightbox-${getMediaRefreshKey(lightboxImage)}`}
+          className="lightbox"
+          onClick={() => toggleLightbox()}
+        >
+          <img
+            src={lightboxImage}
+            alt="Lightbox"
+            data-media-refresh-key={getMediaRefreshKey(lightboxImage)}
+            onError={(event) => markMediaLoadFailed(lightboxImage, event.currentTarget)}
+            onLoad={(event) => markMediaLoadSucceeded(lightboxImage, event.currentTarget)}
+          />
         </div>
       )}
       {commentDialogOpen && (

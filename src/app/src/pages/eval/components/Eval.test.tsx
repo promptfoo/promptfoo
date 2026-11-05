@@ -116,6 +116,7 @@ const baseMockTableStore = {
 
 // Stable mock for useResultsViewSettingsStore to prevent infinite loops
 const baseMockResultsViewSettings = {
+  comparisonEvalIds: [] as string[],
   setInComparisonMode: vi.fn(),
   setComparisonEvalIds: vi.fn(),
 };
@@ -144,6 +145,7 @@ describe('Eval', () => {
     baseMockTableStore.setIsStreaming.mockClear();
     baseMockResultsViewSettings.setInComparisonMode.mockClear();
     baseMockResultsViewSettings.setComparisonEvalIds.mockClear();
+    baseMockResultsViewSettings.comparisonEvalIds = [];
     mockNavigate.mockClear();
     mockShowToast.mockClear();
     mockSocketDisconnect.mockClear();
@@ -443,6 +445,47 @@ describe('Eval', () => {
     );
     expect(baseMockTableStore.setEvalId).toHaveBeenCalledWith('retried-eval');
   });
+
+  it.each([
+    { fetchId: 'selected-eval', recentsOk: true },
+    { fetchId: 'selected-eval', recentsOk: false },
+    { fetchId: null, recentsOk: true },
+  ])(
+    'refreshes selected comparisons without changing the primary eval: %j',
+    async ({ fetchId, recentsOk }) => {
+      vi.mocked(useTableStore).mockReturnValue({
+        ...baseMockTableStore,
+        evalId: 'selected-eval',
+      });
+      baseMockResultsViewSettings.comparisonEvalIds = ['comparison-eval'];
+      vi.mocked(callApi).mockResolvedValue({
+        ok: recentsOk,
+        json: async () => ({ data: [{ evalId: 'latest-eval' }] }),
+      } as Response);
+
+      render(
+        <MemoryRouter>
+          <Eval fetchId={fetchId} />
+        </MemoryRouter>,
+      );
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(0);
+      });
+      baseMockTableStore.fetchEvalData.mockClear();
+      baseMockTableStore.setEvalId.mockClear();
+
+      await act(async () => {
+        await mockSocketHandlers.get('update')?.({ evalId: 'comparison-eval' });
+      });
+
+      expect(baseMockTableStore.fetchEvalData).toHaveBeenCalledExactlyOnceWith(
+        'selected-eval',
+        expect.objectContaining({ skipLoadingState: true }),
+      );
+      expect(baseMockTableStore.setEvalId).toHaveBeenCalledExactlyOnceWith('selected-eval');
+      expect(mockNavigate).not.toHaveBeenCalled();
+    },
+  );
 
   it('does not navigate away for a scoped background socket update', async () => {
     vi.mocked(useTableStore).mockReturnValue({
