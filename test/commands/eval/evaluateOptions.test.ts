@@ -1934,6 +1934,92 @@ describe('evaluateOptions behavior', () => {
       expect(await selection.select([topCandidate], topSuite)).toEqual([]);
     });
 
+    it('keeps the current variant target for a synthetic scenario without authored tests', async () => {
+      const targetPath = path.join(tmpDir, 'exact-synthetic-variant-target.cjs');
+      fs.writeFileSync(
+        targetPath,
+        "module.exports = class { id() { return 'qa-current-variant-target'; } async callApi() { return { output: 'current' }; } };",
+      );
+      const configFile = writeTempConfig(tmpDir, 'exact-synthetic-variant-target.yaml', {
+        providers: ['echo'],
+        prompts: ['Hello {{caseId}}'],
+        scenarios: [
+          {
+            config: [
+              {
+                metadata: { role: 'keep' },
+                provider: { id: `file://${targetPath}`, label: 'current-variant' },
+              },
+            ],
+            tests: [],
+          },
+        ],
+      });
+      const resultsPath = path.join(tmpDir, 'exact-synthetic-variant-target.json');
+      const stored = {
+        results: {
+          results: [
+            {
+              success: false,
+              failureReason: ResultFailureReason.ASSERT,
+              vars: { caseId: 'generated' },
+              provider: { id: 'echo' },
+              metadata: { __promptfoo: { evalOrigin: 'scenario' } },
+              testCase: {
+                vars: { caseId: 'generated' },
+                metadata: {
+                  role: 'keep',
+                  pluginId: 'runtime',
+                  conversationId: '__scenario_0__',
+                },
+                provider: { id: 'qa-current-variant-target', label: 'current-variant' },
+              },
+            },
+          ],
+        },
+      };
+      fs.writeFileSync(resultsPath, JSON.stringify(stored));
+
+      await doEval(
+        {
+          table: false,
+          write: false,
+          config: [configFile],
+          filterMetadataExact: 'role=keep',
+          filterFailing: resultsPath,
+        },
+        {},
+        undefined,
+        {},
+      );
+      const suite = evaluateMock.mock.calls.at(-1)?.[0] as TestSuite;
+      const selection = (evaluateMock.mock.calls.at(-1)?.[2] as InternalEvaluateOptions)
+        .exactHistoricalSelection!;
+      const selected = await selection.select([], suite);
+      expect(selected).toHaveLength(1);
+      expect(selected[0].source).toEqual({
+        kind: 'scenario',
+        scenarioIndex: 0,
+        variantIndex: 0,
+        testIndex: -1,
+      });
+      expect(selected[0].test.provider).toEqual(
+        expect.objectContaining({ id: expect.any(Function), label: 'current-variant' }),
+      );
+      expect((selected[0].test.provider as { id: () => string }).id()).toBe(
+        'qa-current-variant-target',
+      );
+
+      stored.results.results[0].testCase.provider.id = 'qa-unrelated-target';
+      fs.writeFileSync(resultsPath, JSON.stringify(stored));
+      expect(await selection.select([], suite)).toEqual([]);
+
+      stored.results.results[0].testCase.provider.id = 'qa-current-variant-target';
+      stored.results.results[0].testCase.provider.label = 'unrelated-variant';
+      fs.writeFileSync(resultsPath, JSON.stringify(stored));
+      expect(await selection.select([], suite)).toEqual([]);
+    });
+
     it('binds a synthetic scenario row to one current singular target and source', async () => {
       const targetPath = path.join(tmpDir, 'exact-synthetic-current-target.cjs');
       fs.writeFileSync(

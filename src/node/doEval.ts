@@ -77,7 +77,7 @@ import { isPromptAllowed } from '../util/promptMatching';
 import { checkProviderApiKeys, isProviderAllowed } from '../util/provider';
 import { mapTestProviderRefs } from '../util/sanitizer';
 import { shouldShareResults } from '../util/sharing';
-import { resolveTestsWatchPaths } from '../util/testCaseReader';
+import { readTest, resolveTestsWatchPaths } from '../util/testCaseReader';
 import { TokenUsageTracker } from '../util/tokenUsage';
 import { isUuid } from '../util/uuid';
 import { deleteErrorResults, getErrorResultIds, recalculatePromptMetrics } from './retry';
@@ -294,6 +294,23 @@ function bindCurrentSyntheticTarget(
   return matching[0];
 }
 
+function matchesCurrentSyntheticProvider(
+  result: EvaluateResult | undefined,
+  provider: TestCase['provider'],
+): boolean {
+  if (!isApiProvider(provider)) {
+    return false;
+  }
+  const stored = historicalTargetIdentity(result?.testCase?.provider);
+  const current = historicalTargetIdentity(provider);
+  return Boolean(
+    stored &&
+      current &&
+      stored.id === current.id &&
+      (!stored.label || !current.label || stored.label === current.label),
+  );
+}
+
 function createExactHistoricalSelector({
   filters,
   scenarioSourceIndices,
@@ -349,6 +366,21 @@ function createExactHistoricalSelector({
           variantIndex,
           globalOffset: globalOffset++,
         });
+      }
+    }
+    // A scenario whose authored tests were all filtered out has no candidate from
+    // which to bind its singular provider. Resolve only the current variant provider
+    // through the normal test-provider loader before classifying historical rows.
+    for (const group of groups) {
+      const variant = group.scenario.config[0];
+      if (group.candidates.length === 0 && variant.provider && !isApiProvider(variant.provider)) {
+        const loaded = await readTest(
+          { provider: variant.provider },
+          basePath ?? suite.basePath,
+          false,
+          suite.env,
+        );
+        group.scenario.config[0] = { ...variant, provider: loaded.provider };
       }
     }
     const preparedSuite: TestSuite = {
@@ -415,6 +447,7 @@ function createExactHistoricalSelector({
       groupFilters: FilterOptions,
       extractedSource: PreparedHistoricalCandidate['source'],
       currentSelectors: Pick<TestCase, 'providers' | 'prompts'>,
+      currentSyntheticProvider?: TestCase['provider'],
     ): Promise<PreparedHistoricalCandidate[]> => {
       const byTest = new Map(groupCandidates.map((candidate) => [candidate.test, candidate]));
       const originalByCopy = new WeakMap<object, PreparedHistoricalCandidate>();
@@ -463,6 +496,13 @@ function createExactHistoricalSelector({
             return false;
           }
           const currentTarget = bindCurrentSyntheticTarget(result, groupCandidates, suite);
+          if (
+            !currentTarget &&
+            currentSyntheticProvider &&
+            !matchesCurrentSyntheticProvider(result, currentSyntheticProvider)
+          ) {
+            return false;
+          }
           return (
             !currentTarget ||
             (isStoredProviderAllowed(
@@ -507,12 +547,25 @@ function createExactHistoricalSelector({
           groupCandidates,
           suite,
         );
+        if (
+          currentSyntheticProvider &&
+          !matchesCurrentSyntheticProvider(
+            resultByExtractedTest.get(test),
+            currentSyntheticProvider,
+          )
+        ) {
+          throw new Error(
+            'Could not safely bind an extracted historical case to the current scenario provider.',
+          );
+        }
         return {
           source: currentTarget?.source ?? extractedSource,
           test: {
             ...test,
             options,
-            ...(currentTarget && { provider: currentTarget.test.provider }),
+            ...((currentTarget || currentSyntheticProvider) && {
+              provider: currentTarget?.test.provider ?? currentSyntheticProvider,
+            }),
             providers: intersectHistoricalSelectors(
               suite.providers,
               test.providers,
@@ -583,6 +636,7 @@ function createExactHistoricalSelector({
               group.scenario.config[0].prompts ??
               (typeof suite.defaultTest === 'object' ? suite.defaultTest.prompts : undefined),
           },
+          group.candidates.length === 0 ? group.scenario.config[0].provider : undefined,
         )),
       );
     }

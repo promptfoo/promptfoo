@@ -4211,6 +4211,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
   store: EvaluationStore<TEvaluation, TResult>;
   testSuite: TestSuite;
   options: InternalEvaluateOptions;
+  private readonly runtime: EvaluatorRuntime<TEvaluation, TResult>;
   stats: EvaluateStats;
   conversations: EvalConversations;
   registers: EvalRegisters;
@@ -4230,6 +4231,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     this.testSuite = testSuite;
     this.store = store;
     this.options = options;
+    this.runtime = runtime;
     this.stats = {
       successes: 0,
       failures: 0,
@@ -6036,9 +6038,40 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
         }
       }
     }
-    const syntheticProvider = replayPlan?.cases.some((item) => item.source.testIndex === -1)
+    const needsDefaultSyntheticProvider = replayPlan?.cases.some(
+      ({ source }) =>
+        source.testIndex === -1 &&
+        (source.kind === 'top-level' ||
+          !testSuite.scenarios?.[source.scenarioIndex]?.config[source.variantIndex]?.provider),
+    );
+    const syntheticProvider = needsDefaultSyntheticProvider
       ? await resolveDefaultTestProvider(getDefaultTest(testSuite), {} as AtomicTestCase)
       : undefined;
+    const syntheticScenarioProviders = new Map<string, AtomicTestCase['provider']>();
+    for (const { source } of replayPlan?.cases ?? []) {
+      if (source.kind !== 'scenario' || source.testIndex !== -1) {
+        continue;
+      }
+      const key = `${source.scenarioIndex}:${source.variantIndex}`;
+      if (syntheticScenarioProviders.has(key)) {
+        continue;
+      }
+      const provider =
+        testSuite.scenarios?.[source.scenarioIndex]?.config[source.variantIndex]?.provider;
+      if (provider) {
+        const currentProvider = isApiProvider(provider)
+          ? provider
+          : await this.runtime.resolveHistoricalReplayProvider?.(
+              provider,
+              testSuite.basePath,
+              testSuite.env,
+            );
+        if (!currentProvider || !isApiProvider(currentProvider)) {
+          throw new Error('Could not resolve a prepared historical provider for replay');
+        }
+        syntheticScenarioProviders.set(key, currentProvider);
+      }
+    }
     let tests =
       replayPlan && currentCandidates
         ? restoreExactHistoricalReplayCases(
@@ -6046,6 +6079,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
             currentCandidates,
             testSuite,
             syntheticProvider,
+            syntheticScenarioProviders,
           ).map((candidate) => {
             if (candidate.source.kind === 'scenario') {
               return { ...candidate.test, [SCENARIO_RESULT_SOURCE]: true } as AtomicTestCase;

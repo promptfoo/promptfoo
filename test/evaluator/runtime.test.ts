@@ -141,6 +141,108 @@ describeEvaluator('evaluator runtime ports', () => {
     expect(resumed.results[0].testCase.vars).toEqual({ input: 'generated' });
   });
 
+  it('restores a synthetic scenario variant provider on resume without authored tests', async () => {
+    const target: ApiProvider = {
+      id: () => 'qa-current-variant-provider',
+      callApi: vi.fn().mockResolvedValue({ output: 'current-variant' }),
+    };
+    const suite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [toPrompt('Test {{input}}')],
+      defaultTest: { provider: { id: 'file:///nonexistent/qa-irrelevant-default.cjs' } },
+      tests: [],
+      scenarios: [{ config: [{ provider: target }], tests: [] }],
+    };
+    const initial = createInMemoryEvaluation();
+    await evaluate(
+      suite,
+      initial,
+      {
+        exactHistoricalSelection: {
+          writeEnabled: true,
+          eligible: async (candidates) => candidates,
+          select: async () => [
+            {
+              source: { kind: 'scenario', scenarioIndex: 0, variantIndex: 0, testIndex: -1 },
+              test: { vars: { input: 'generated' }, provider: target },
+            },
+          ],
+        },
+      },
+      createInMemoryRuntime(new InMemoryEvaluationStore(initial)),
+    );
+    const plan = initial.runtimeOptions?.exactHistoricalReplay;
+    expect(plan?.cases[0].providerIdentity).toMatchObject({ id: 'qa-current-variant-provider' });
+    expect(target.callApi).toHaveBeenCalledOnce();
+
+    vi.mocked(target.callApi).mockClear();
+    vi.mocked(mockApiProvider.callApi).mockClear();
+    const resumed = createInMemoryEvaluation({ runtimeOptions: { exactHistoricalReplay: plan } });
+    await evaluate(suite, resumed, {}, createInMemoryRuntime(new InMemoryEvaluationStore(resumed)));
+    expect(target.callApi).toHaveBeenCalledOnce();
+    expect(mockApiProvider.callApi).not.toHaveBeenCalled();
+
+    vi.mocked(target.callApi).mockClear();
+    const changed: ApiProvider = {
+      id: () => 'qa-changed-variant-provider',
+      callApi: vi.fn().mockResolvedValue({ output: 'changed' }),
+    };
+    const changedSuite: TestSuite = {
+      ...suite,
+      scenarios: [{ config: [{ provider: changed }], tests: [] }],
+    };
+    const rejected = createInMemoryEvaluation({ runtimeOptions: { exactHistoricalReplay: plan } });
+    await expect(
+      evaluate(
+        changedSuite,
+        rejected,
+        {},
+        createInMemoryRuntime(new InMemoryEvaluationStore(rejected)),
+      ),
+    ).rejects.toThrow('Could not resolve a prepared historical provider');
+    expect(target.callApi).not.toHaveBeenCalled();
+    expect(changed.callApi).not.toHaveBeenCalled();
+  });
+
+  it('retains the default provider for a synthetic scenario without a variant override', async () => {
+    const target: ApiProvider = {
+      id: () => 'qa-default-synthetic-provider',
+      callApi: vi.fn().mockResolvedValue({ output: 'default-target' }),
+    };
+    const suite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [toPrompt('Test {{input}}')],
+      defaultTest: { provider: target },
+      tests: [],
+      scenarios: [{ config: [{}], tests: [] }],
+    };
+    const initial = createInMemoryEvaluation();
+    await evaluate(
+      suite,
+      initial,
+      {
+        exactHistoricalSelection: {
+          writeEnabled: true,
+          eligible: async (candidates) => candidates,
+          select: async () => [
+            {
+              source: { kind: 'scenario', scenarioIndex: 0, variantIndex: 0, testIndex: -1 },
+              test: { vars: { input: 'generated' }, provider: target },
+            },
+          ],
+        },
+      },
+      createInMemoryRuntime(new InMemoryEvaluationStore(initial)),
+    );
+    const plan = initial.runtimeOptions?.exactHistoricalReplay;
+    expect(target.callApi).toHaveBeenCalledOnce();
+
+    vi.mocked(target.callApi).mockClear();
+    const resumed = createInMemoryEvaluation({ runtimeOptions: { exactHistoricalReplay: plan } });
+    await evaluate(suite, resumed, {}, createInMemoryRuntime(new InMemoryEvaluationStore(resumed)));
+    expect(target.callApi).toHaveBeenCalledOnce();
+  });
+
   it('saves effective defaults in a prepared plan and does not remerge changed defaults on replay', async () => {
     const initial = createInMemoryEvaluation();
     const suite: TestSuite = {

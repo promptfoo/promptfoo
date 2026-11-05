@@ -1647,6 +1647,7 @@ export function restoreExactHistoricalReplayCases(
   current: PreparedHistoricalCandidate[],
   suite: TestSuite,
   syntheticProvider?: AtomicTestCase['provider'],
+  syntheticScenarioProviders?: Map<string, AtomicTestCase['provider']>,
 ): PreparedHistoricalCandidate[] {
   const bySource = new Map(
     current.map((candidate) => [JSON.stringify(candidate.source), candidate]),
@@ -1660,7 +1661,14 @@ export function restoreExactHistoricalReplayCases(
     }
     const currentCase = bySource.get(JSON.stringify(source));
     const currentProvider =
-      currentCase?.test.provider ?? (source.testIndex === -1 ? syntheticProvider : undefined);
+      currentCase?.test.provider ??
+      (source.testIndex === -1
+        ? source.kind === 'scenario'
+          ? syntheticScenarioProviders?.has(`${source.scenarioIndex}:${source.variantIndex}`)
+            ? syntheticScenarioProviders.get(`${source.scenarioIndex}:${source.variantIndex}`)
+            : syntheticProvider
+          : syntheticProvider
+        : undefined);
     if (savedProvider) {
       if (
         !currentProvider ||

@@ -1,4 +1,5 @@
 import type {
+  AtomicTestCase,
   CompletedPrompt,
   EvaluateResult,
   ExactHistoricalReplayPlan,
@@ -80,6 +81,11 @@ export interface EvaluatorRuntime<
   TResult extends EvaluationStoreResult = EvaluationStoreResult,
 > {
   resolveRuntimeTestSuite?(testSuite: TestSuite): TestSuite;
+  resolveHistoricalReplayProvider?(
+    provider: NonNullable<AtomicTestCase['provider']>,
+    basePath: string | undefined,
+    env: TestSuite['env'],
+  ): Promise<AtomicTestCase['provider']>;
   createEvaluationStore(evaluation: TEvaluation): EvaluationStore<TEvaluation, TResult>;
   createResultWriters(
     outputPath: string | string[] | undefined,
