@@ -185,6 +185,115 @@ describe('OpenAI billing helpers', () => {
     });
   });
 
+  describe('Bedrock GPT-5.6 Cyber', () => {
+    const model = 'bedrock:gpt-5.6-cyber';
+    const usage = createCachedResponsesUsage();
+    const govCloudUrl = 'https://bedrock-mantle.us-gov-east-1.api.aws/openai/v1';
+
+    it.each([
+      ['us-east-2', 13.75, 1.375, 17.1875, 82.5],
+      ['us-gov-east-1', 16.875, 1.6875, 21.09375, 101.25],
+    ] as const)(
+      'prices Standard short-context usage in %s',
+      (region, input, read, write, output) => {
+        const apiUrl = `https://bedrock-mantle.${region}.api.aws/openai/v1`;
+        const inputs = 272_000;
+        const expected = ((inputs - 750) * input + 500 * read + 250 * write + 1000 * output) / 1e6;
+        for (const options of [
+          { apiUrl, region: 'us-gov-west-1', regionalProcessing: true },
+          {
+            apiUrl: `https://bedrock-mantle-fips.${region}.amazonaws.com/openai/v1`,
+            region: 'us-east-2',
+          },
+          {
+            apiUrl: `https://vpce-example.bedrock-mantle.${region}.vpce.amazonaws.com./openai/v1`,
+            region: 'us-east-2',
+          },
+          { apiUrl: 'https://proxy.example/v1', region, serviceTier: 'default' },
+        ]) {
+          expect(
+            calculateOpenAIUsageCost(model, {}, { ...usage, input_tokens: inputs }, options),
+          ).toBeCloseTo(expected, 10);
+        }
+        expect(
+          calculateOpenAIUsageCost(
+            model,
+            {},
+            { prompt_tokens: 2000, completion_tokens: 1000 },
+            { apiUrl },
+          ),
+        ).toBeCloseTo((2000 * input + 1000 * output) / 1e6, 10);
+        expect(
+          calculateOpenAIUsageCost(
+            model,
+            {},
+            { input_tokens: 2000, output_tokens: 1000 },
+            { apiUrl },
+          ),
+        ).toBeUndefined();
+        expect(calculateOpenAIUsageCost(model, { inputCost: 0 }, usage, { apiUrl })).toBeCloseTo(
+          (1000 * output) / 1e6,
+          10,
+        );
+        expect(calculateOpenAIUsageCost(model, {}, usage, { apiUrl, cachedResponse: true })).toBe(
+          0,
+        );
+      },
+    );
+
+    it('requires a supported region, tier, and context to estimate charges', () => {
+      for (const options of [
+        {},
+        {
+          apiUrl: 'https://bedrock-mantle.us-gov-west-1.api.aws/openai/v1',
+          region: 'us-gov-east-1',
+        },
+        {
+          apiUrl: 'https://bedrock-runtime.us-gov-east-1.amazonaws.com/openai/v1',
+          region: 'us-gov-east-1',
+        },
+        {
+          apiUrl:
+            'https://vpce-example.bedrock-runtime-fips.us-gov-east-1.vpce.amazonaws.com/openai/v1',
+          region: 'us-east-2',
+        },
+        { apiUrl: 'https://proxy.example/v1' },
+        ...['flex', 'priority', 'auto', 'future-tier'].map((serviceTier) => ({
+          apiUrl: govCloudUrl,
+          serviceTier,
+        })),
+      ]) {
+        expect(calculateOpenAIUsageCost(model, {}, usage, options)).toBeUndefined();
+        expect(calculateOpenAIUsageCost(model, { cost: 2 / 1e6 }, usage, options)).toBeCloseTo(
+          0.006,
+          10,
+        );
+      }
+      expect(
+        calculateOpenAIUsageCost(
+          model,
+          {},
+          { ...usage, input_tokens: 272_001 },
+          { apiUrl: govCloudUrl },
+        ),
+      ).toBeUndefined();
+      expect(
+        calculateOpenAIUsageCost(
+          model,
+          {},
+          {
+            ...usage,
+            input_tokens_details: {
+              ...usage.input_tokens_details,
+              cache_write_tokens_details: { ttl_12h_tokens: 250 },
+            },
+          },
+          { apiUrl: govCloudUrl },
+        ),
+      ).toBeUndefined();
+    });
+  });
+
   describe('GPT-6.1 Sol', () => {
     it.each([
       { inputTokens: 272_000, input: 2, cached: 0.1, write: 2.5, output: 10 },

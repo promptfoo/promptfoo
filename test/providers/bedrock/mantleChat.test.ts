@@ -8,7 +8,7 @@ import {
 import { OpenAiChatCompletionProvider } from '../../../src/providers/openai/chat';
 import { HttpRateLimitError } from '../../../src/util/fetch/errors';
 import { mockProcessEnv } from '../../util/utils';
-import { createMockFetchResponse } from '../mockProviderResponses';
+import { createMockChatResponse, createMockFetchResponse } from '../mockProviderResponses';
 
 const createBedrockKeyConfig = () => ({
   config: { apiKey: 'bedrock-key' },
@@ -233,6 +233,34 @@ describe('bedrock mantle Chat Completions provider', () => {
         expect(body.max_completion_tokens).toBe(100);
         expect(body).not.toHaveProperty('max_tokens');
         expect(body).not.toHaveProperty('temperature');
+      },
+    );
+
+    it.each([
+      [undefined, 'us-east-2', (5 * 13.75 + 5 * 82.5) / 1e6],
+      ['us-gov-east-1', 'us-gov-east-1', (5 * 16.875 + 5 * 101.25) / 1e6],
+    ] as const)(
+      'sends GPT-5.6 Cyber Chat to its regional endpoint (%s)',
+      async (region, expectedRegion, cost) => {
+        restoreEnv = mockProcessEnv({
+          AWS_BEDROCK_REGION: undefined,
+          AWS_REGION: undefined,
+          AWS_DEFAULT_REGION: undefined,
+        });
+        vi.mocked(fetchWithCache).mockResolvedValue(createMockChatResponse('hello'));
+        const provider = createBedrockMantleChatProvider('openai.gpt-5.6-cyber', {
+          config: { apiKey: 'bedrock-key', region },
+        });
+
+        const result = await provider.callApi('hello');
+
+        const [[url, request]] = vi.mocked(fetchWithCache).mock.calls;
+        expect(url).toBe(
+          `https://bedrock-mantle.${expectedRegion}.api.aws/openai/v1/chat/completions`,
+        );
+        expect(JSON.parse(request?.body as string).model).toBe('openai.gpt-5.6-cyber');
+        expect(result.output).toBe('hello');
+        expect(result.cost).toBeCloseTo(cost, 10);
       },
     );
 

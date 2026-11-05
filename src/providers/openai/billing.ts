@@ -621,6 +621,28 @@ const BEDROCK_MANTLE_TEXT_RATES = buildRateTable<OpenAITextRates>([
     },
   },
 ]);
+// Standard In-Region rates, including the 30-minute cache write.
+// https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-openai-gpt-56-cyber.html
+const BEDROCK_CYBER_RATES = new Map<string, OpenAITextRates>([
+  [
+    'us-east-2',
+    {
+      input: perMillion(13.75),
+      cachedInput: perMillion(1.375),
+      cacheWriteInput: perMillion(17.1875),
+      output: perMillion(82.5),
+    },
+  ],
+  [
+    'us-gov-east-1',
+    {
+      input: perMillion(16.875),
+      cachedInput: perMillion(1.6875),
+      cacheWriteInput: perMillion(21.09375),
+      output: perMillion(101.25),
+    },
+  ],
+]);
 const CACHE_WRITE_MODELS = new Set([
   'gpt-6-astra',
   'gpt-6-sol',
@@ -653,29 +675,13 @@ type OpenAIBillingConfig = ProviderConfig & {
   region?: string;
 };
 
-function usesBedrockGovCloudPricing(
-  modelName: string,
-  config: OpenAIBillingConfig,
-  apiUrl: string | undefined,
-  provider: string | undefined,
-  region: string | undefined,
-): boolean {
-  if (!BEDROCK_GOVCLOUD_MODELS.has(modelName)) {
-    return false;
-  }
-  try {
-    const hostname = new URL(apiUrl || config.apiBaseUrl || '').hostname;
-    const endpoint =
-      /^bedrock-(mantle|runtime(?:-fips)?)\.([a-z0-9-]+)\.(?:amazonaws\.com|api\.aws)$/.exec(
-        hostname,
-      );
-    if (endpoint) {
-      return endpoint[1] === 'mantle' && BEDROCK_GOVCLOUD_REGION.test(endpoint[2]);
-    }
-  } catch {
-    // The resolved region still identifies the target behind a custom proxy.
-  }
-  return provider === 'bedrock' && BEDROCK_GOVCLOUD_REGION.test(region ?? config.region ?? '');
+function getBedrockBillingEndpoint(hostname: string | undefined) {
+  // Public, FIPS, and PrivateLink service hostnames all identify the actual request region.
+  const match =
+    /^(?:[a-z0-9-]+\.)?bedrock-(mantle|runtime)(?:-fips)?\.([a-z0-9-]+)(?:\.vpce)?\.(?:api\.aws|amazonaws\.com(?:\.cn)?)$/.exec(
+      hostname?.replace(/\.+$/, '') ?? '',
+    );
+  return match && { service: match[1], region: match[2] };
 }
 
 function applyRegionalProcessingRates(
@@ -690,11 +696,20 @@ function applyRegionalProcessingRates(
   ) {
     return modelRates;
   }
+  const endpoint = getBedrockBillingEndpoint(
+    URL.parse(options.apiUrl || config.apiBaseUrl || '')?.hostname,
+  );
+  const region = endpoint
+    ? endpoint.region
+    : options.provider === 'bedrock'
+      ? (options.region ?? config.region)
+      : undefined;
+  const usesGovCloudRates =
+    endpoint?.service !== 'runtime' &&
+    BEDROCK_GOVCLOUD_MODELS.has(modelName) &&
+    BEDROCK_GOVCLOUD_REGION.test(region ?? '');
   const multiplier =
-    OPENAI_REGIONAL_PROCESSING_MULTIPLIER *
-    (usesBedrockGovCloudPricing(modelName, config, options.apiUrl, options.provider, options.region)
-      ? BEDROCK_GOVCLOUD_MULTIPLIER
-      : 1);
+    OPENAI_REGIONAL_PROCESSING_MULTIPLIER * (usesGovCloudRates ? BEDROCK_GOVCLOUD_MULTIPLIER : 1);
   return { ...modelRates, text: applyRateMultiplier(modelRates.text, multiplier) };
 }
 
@@ -740,7 +755,7 @@ function usesOpenAIRegionalProcessing(
     const hostname = new URL(url).hostname.toLowerCase();
     return (
       OPENAI_REGIONAL_PROCESSING_HOSTNAMES.has(hostname) ||
-      /^bedrock-mantle\.[a-z0-9-]+\.api\.aws$/.test(hostname)
+      getBedrockBillingEndpoint(hostname)?.service === 'mantle'
     );
   } catch {
     return false;
@@ -750,9 +765,9 @@ function usesOpenAIRegionalProcessing(
 function getBedrockMantleTextRates(
   modelName: string,
   config: OpenAIBillingConfig,
-  options: { apiUrl?: string; provider?: string; region?: string },
+  options: { apiUrl?: string; provider?: string; region?: string; serviceTier?: string | null },
   tier: OpenAIProcessingTier,
-  totalInputTokens: number,
+  usage: OpenAIBillingUsage,
 ): OpenAITextRates | undefined {
   const hasBedrockBillingMarker = modelName.startsWith('bedrock:');
   const billingModelName = modelName.replace(/^bedrock:/, '');
@@ -760,30 +775,37 @@ function getBedrockMantleTextRates(
     // The Mantle rates in this table cover Standard processing only.
     return undefined;
   }
-  let hostname: string | undefined;
-  try {
-    const endpoint = options.apiUrl ?? config.apiBaseUrl;
-    hostname = endpoint ? new URL(endpoint).hostname.toLowerCase() : undefined;
-  } catch {
-    // The explicit billing marker still establishes the platform for custom endpoints.
-  }
-  if (!hasBedrockBillingMarker && !/^bedrock-mantle\.[a-z0-9-]+\.api\.aws$/.test(hostname ?? '')) {
+  const endpoint = getBedrockBillingEndpoint(
+    URL.parse(options.apiUrl ?? config.apiBaseUrl ?? '')?.hostname,
+  );
+  if (endpoint ? endpoint.service !== 'mantle' : !hasBedrockBillingMarker) {
     return undefined;
   }
-
+  // Custom Mantle proxies use the region resolved by the Bedrock provider.
+  const region = endpoint?.region ?? options.region ?? config.region;
+  if (billingModelName === 'gpt-5.6-cyber') {
+    if (
+      !region ||
+      ![undefined, null, 'default', 'standard'].includes(options.serviceTier) ||
+      usage.totalInputTokens > GPT_LONG_CONTEXT_THRESHOLD ||
+      (usage.cacheWrite12hInputTokens > 0 &&
+        config.inputCost === undefined &&
+        config.cost === undefined)
+    ) {
+      return undefined;
+    }
+    return BEDROCK_CYBER_RATES.get(region);
+  }
   const catalogRates = BEDROCK_MANTLE_TEXT_RATES[billingModelName];
   const baseRates =
     catalogRates &&
-    usesBedrockGovCloudPricing(
-      billingModelName,
-      config,
-      options.apiUrl,
-      hasBedrockBillingMarker ? 'bedrock' : options.provider,
-      options.region,
-    )
+    BEDROCK_GOVCLOUD_MODELS.has(billingModelName) &&
+    BEDROCK_GOVCLOUD_REGION.test(region ?? '')
       ? applyRateMultiplier(catalogRates, BEDROCK_GOVCLOUD_MULTIPLIER)
       : catalogRates;
-  return baseRates && GPT_5_6_MODELS.has(billingModelName) && totalInputTokens > 272_000
+  return baseRates &&
+    GPT_5_6_MODELS.has(billingModelName) &&
+    usage.totalInputTokens > GPT_LONG_CONTEXT_THRESHOLD
     ? { ...applyRateMultiplier(baseRates, 2), output: (baseRates.output ?? 0) * 1.5 }
     : baseRates;
 }
@@ -1379,13 +1401,7 @@ export function calculateOpenAIUsageCost(
       : usage.totalInputTokens * (inputRate ?? 0) + usage.totalOutputTokens * (outputRate ?? 0);
   }
   const tier = normalizeServiceTier(options.serviceTier);
-  const bedrockMantleTextRates = getBedrockMantleTextRates(
-    modelName,
-    config,
-    options,
-    tier,
-    usage.totalInputTokens,
-  );
+  const bedrockMantleTextRates = getBedrockMantleTextRates(modelName, config, options, tier, usage);
   const catalogRates = bedrockMantleTextRates
     ? { text: bedrockMantleTextRates }
     : TRUSTED_ACCESS_MODELS.has(modelName)
@@ -1426,8 +1442,15 @@ export function calculateOpenAIUsageCost(
   const textInputCost = config.inputCost ?? config.cost ?? rates.text.input;
   const cacheWriteInputCost =
     config.inputCost ?? config.cost ?? rates.text.cacheWriteInput ?? textInputCost;
+  // Bedrock Cyber supports prompt caching only on Responses. Chat Completions
+  // reports prompt_tokens and can omit cache-write counts entirely.
+  const isBedrockCyberChat =
+    bedrockMantleTextRates &&
+    modelName.replace(/^bedrock:/, '') === 'gpt-5.6-cyber' &&
+    typeof usageParts.usage.prompt_tokens === 'number';
   if (
     cacheWriteInputCost !== textInputCost &&
+    !isBedrockCyberChat &&
     getOpenAICacheWriteInputTokens(usageParts.usage) === undefined
   ) {
     return undefined;

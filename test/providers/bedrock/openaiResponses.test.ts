@@ -328,6 +328,7 @@ describe('bedrock openaiResponses helper', () => {
     it.each([
       ['openai.gpt-6-astra', 'us-west-2'],
       ['openai.gpt-6.1-terra', 'us-east-1'],
+      ['openai.gpt-5.6-cyber', 'us-east-2'],
     ])('defaults %s to %s in the factory and direct constructor', async (modelId, region) => {
       const provider = createBedrockOpenAiResponsesProvider(modelId, {
         config: { apiKey: 'bedrock-key' },
@@ -395,6 +396,19 @@ describe('bedrock openaiResponses helper', () => {
       );
     });
 
+    it('calls the configured GovCloud East Responses endpoint and applies its Cyber rates', async () => {
+      const model = 'openai.gpt-5.6-cyber';
+      const provider = createBedrockOpenAiResponsesProvider(model, {
+        config: { apiKey: 'bedrock-key', region: 'us-gov-east-1' },
+      });
+      const result = await provider.callApi('hello');
+      const [url, request] = vi.mocked(fetchWithCache).mock.calls[0];
+      expect(url).toBe('https://bedrock-mantle.us-gov-east-1.api.aws/openai/v1/responses');
+      expect(JSON.parse(request?.body as string).model).toBe(model);
+      expect(result.output).toBe('hello');
+      expect(result.cost).toBeCloseTo((10 * 16.875 + 5 * 101.25) / 1e6, 10);
+    });
+
     describe('Mantle region hints', () => {
       let errorSpy: ReturnType<typeof vi.spyOn>;
 
@@ -428,6 +442,7 @@ describe('bedrock openaiResponses helper', () => {
         ['openai.gpt-6-astra', 'us-east-1', 'us-west-2'],
         ['openai.gpt-6-sol', 'us-east-2', 'us-east-1'],
         ['openai.gpt-5.6-sol', 'us-west-2', 'us-east-1, us-east-2'],
+        ['openai.gpt-5.6-cyber', 'us-gov-west-1', 'us-east-2, us-gov-east-1'],
         ['openai.gpt-5.5', 'us-west-2', 'us-east-1, us-east-2'],
         [
           'openai.gpt-5.6-luna',

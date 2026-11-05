@@ -1185,12 +1185,13 @@ for regional pricing and AWS billing terms.
 - **`openai.gpt-5.6-sol`**: Flagship reasoning tier (`us-east-1`, `us-east-2`)
 - **`openai.gpt-5.6-terra`**: Balanced tier (`us-east-1`, `us-east-2`, `us-west-2`, `us-gov-west-1`, `us-gov-east-1`)
 - **`openai.gpt-5.6-luna`**: Fast, cost-efficient tier (`us-east-1`, `us-east-2`, `us-west-2`, `us-gov-west-1`, `us-gov-east-1`)
+- **`openai.gpt-5.6-cyber`**: Available to organizations approved for [Daybreak Red](#daybreak-red-on-aws-govcloud)
 - **`openai.gpt-5.5`**: Earlier flagship frontier model (`us-east-1`, `us-east-2`)
 - **`openai.gpt-5.4`**: Earlier frontier model (`us-east-1`, `us-east-2`, `us-west-2`)
 
 Promptfoo uses Bedrock's **OpenAI-compatible Responses API** on the regional Mantle
 endpoint (`https://bedrock-mantle.<region>.api.aws/openai/v1/responses`) for bare frontier IDs.
-GPT-5.6 also supports [Runtime Converse and Mantle Chat Completions](https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-openai-gpt-56-sol.html).
+GPT-5.6 Sol, Terra, and Luna also support [Runtime Converse and Mantle Chat Completions](https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-openai-gpt-56-sol.html).
 Promptfoo routes the bare
 `bedrock:openai.gpt-5.x` IDs to its OpenAI Responses provider, preserves the Bedrock request
 model ID, and returns the clean final answer. When no Region is configured, promptfoo uses
@@ -1266,7 +1267,7 @@ The Responses API stores conversation state by default. Set `store: false` on ev
 when inputs or outputs must not be retained; Bedrock otherwise keeps stored responses for 30
 days in the source Region and allows follow-up requests with `previous_response_id`.
 
-GPT-5.6 pricing on Bedrock includes a 10% regional-processing uplift: [Sol](https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-openai-gpt-56-sol.html) is $4.40 input /
+Bedrock pricing for GPT-5.6 Sol, Terra, and Luna includes a 10% regional-processing uplift: [Sol](https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-openai-gpt-56-sol.html) is $4.40 input /
 $22 output, Terra $2.20 / $13.20, and Luna $0.22 / $1.32 per million tokens. In AWS GovCloud
 (US), Terra is $2.64 / $15.84 and Luna $0.264 / $1.584 per million tokens. Cache reads
 receive a 90% discount, cache writes cost 1.25x the uncached input rate, and cached prefixes
@@ -1278,6 +1279,20 @@ cache-write usage; when cache-write usage is missing, its estimate includes the 
 token counts only. Requests above 272,000 input tokens use 2x input and 1.5x output
 pricing for the full request. Do not assume first-party Flex, Priority, or regional-processing
 options are available on Bedrock; use the service behavior documented for the selected model.
+
+#### Daybreak Red on AWS GovCloud
+
+To use GPT-5.6 Cyber in AWS GovCloud (US-East), set `region: us-gov-east-1`. Your organization needs OpenAI Daybreak Red approval and AWS must provision access for your account. [Access requirements](https://openai.com/index/daybreak-red-aws-govcloud/)
+
+```yaml
+providers:
+  - id: bedrock:openai.gpt-5.6-cyber
+    config:
+      region: us-gov-east-1
+      store: false
+```
+
+This selector calls the regional Mantle Responses API. For Chat Completions, use `bedrock:mantle:openai.gpt-5.6-cyber` with the same region. Both use in-region inference and default to Ohio (`us-east-2`) if you omit the region from your configuration and environment. See the [AWS model card](https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-openai-gpt-56-cyber.html) for availability and pricing.
 
 #### Open-weight models (GPT OSS)
 
@@ -1449,7 +1464,7 @@ providers:
 
 The Bedrock **Mantle** endpoint also exposes an OpenAI-compatible **Chat Completions** API. Most
 Mantle chat models use `https://bedrock-mantle.<region>.api.aws/v1/chat/completions`; GPT-5.6
-Sol/Terra/Luna, xAI, and Gemma 4 use the `/openai/v1/chat/completions` variant. Use the
+Sol/Terra/Luna/Cyber, xAI, and Gemma 4 use the `/openai/v1/chat/completions` variant. Use the
 **`bedrock:mantle:<id>`** prefix to select this API. Mantle has its own catalog and model
 namespace, including Qwen `*-instruct` IDs; a Runtime model ID or inference profile is not
 interchangeable with a Mantle ID.
@@ -1470,7 +1485,7 @@ providers:
 
 - **The mantle catalog is regional.** List the models available in a Region with
   `GET https://bedrock-mantle.<region>.api.aws/v1/models`, and set `region` accordingly —
-  the default is `us-east-1`.
+  most Chat models default to `us-east-1`.
 - `bedrock:mantle:openai.gpt-5.6-sol` (also Terra/Luna) selects **Chat Completions**;
   `bedrock:openai.gpt-5.6-sol` selects **Responses**. Use bare model IDs on Mantle, without
   `us.` or `global.` prefixes. Sol supports Mantle in `us-east-1` and `us-east-2`; choose a
