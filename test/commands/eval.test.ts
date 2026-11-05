@@ -1020,10 +1020,10 @@ describe('evalCommand', () => {
     };
 
     /** The listeners watch mode installed, without disturbing anyone else's. */
-    const installedSince = (before: NodeJS.SignalsListener[]) =>
+    const installedSince = (before: Array<(signal: 'SIGINT') => void>) =>
       process.listeners('SIGINT').filter((listener) => !before.includes(listener));
 
-    let before: NodeJS.SignalsListener[];
+    let before: Array<(signal: 'SIGINT') => void>;
 
     beforeEach(() => {
       before = process.listeners('SIGINT');
