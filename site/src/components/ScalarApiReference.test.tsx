@@ -9,7 +9,6 @@ const props = {
   heading: 'Server API',
   specUrl: '/api/openapi.json',
   summary: 'Routes exposed by the local server.',
-  title: 'API reference',
 };
 
 function getScript() {
@@ -25,7 +24,7 @@ function expectFallback() {
   expect(
     within(screen.getByRole('alert')).getByRole('link', { name: 'OpenAPI JSON' }),
   ).toHaveAttribute('href', props.specUrl);
-  expect(document.getElementById('api-reference')).toHaveAttribute('aria-busy', 'false');
+  expect(document.getElementById('promptfoo-api-reference')).toHaveAttribute('aria-busy', 'false');
 }
 
 afterEach(() => {
@@ -44,17 +43,21 @@ describe('ScalarApiReference', () => {
     const createApiReference = vi.fn().mockReturnValue({ destroy });
     const { unmount } = render(<ScalarApiReference {...props} />);
 
-    expect(document.getElementById('api-reference')).toHaveAttribute('aria-busy', 'true');
+    expect(document.getElementById('promptfoo-api-reference')).toHaveAttribute('aria-busy', 'true');
     expect(getScript().crossOrigin).toBe('anonymous');
     expect(getScript().integrity).toMatch(/^sha384-/);
     loadScript(createApiReference);
 
-    expect(createApiReference).toHaveBeenCalledWith('#api-reference', {
+    expect(createApiReference).toHaveBeenCalledWith('#promptfoo-api-reference', {
       hideTestRequestButton: false,
-      theme: 'dark',
+      theme: 'alternate',
+      forceDarkModeState: 'dark',
       url: props.specUrl,
     });
-    expect(document.getElementById('api-reference')).toHaveAttribute('aria-busy', 'false');
+    expect(document.getElementById('promptfoo-api-reference')).toHaveAttribute(
+      'aria-busy',
+      'false',
+    );
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
     unmount();
     expect(destroy).toHaveBeenCalledTimes(1);
@@ -65,8 +68,9 @@ describe('ScalarApiReference', () => {
     const createApiReference = vi.fn().mockReturnValue({ destroy });
     const { rerender } = render(<ScalarApiReference {...props} showTestRequestButton={false} />);
     loadScript(createApiReference);
-    expect(createApiReference).toHaveBeenLastCalledWith('#api-reference', {
+    expect(createApiReference).toHaveBeenLastCalledWith('#promptfoo-api-reference', {
       hideTestRequestButton: true,
+      forceDarkModeState: 'light',
       theme: 'alternate',
       url: props.specUrl,
     });
@@ -74,10 +78,10 @@ describe('ScalarApiReference', () => {
     rerender(<ScalarApiReference {...props} specUrl="/other.json" showTestRequestButton={false} />);
     expect(destroy).toHaveBeenCalledTimes(1);
     expect(createApiReference).toHaveBeenLastCalledWith(
-      '#api-reference',
+      '#promptfoo-api-reference',
       expect.objectContaining({ url: '/other.json', hideTestRequestButton: true }),
     );
-    expect(document.querySelectorAll('#scalar-api-reference-script')).toHaveLength(1);
+    expect(getScript()).toBeNull();
   });
 
   it('retains the raw spec link when the script fails', () => {
@@ -100,7 +104,10 @@ describe('ScalarApiReference', () => {
 
     expect(createApiReference).toHaveBeenCalledTimes(1);
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
-    expect(document.getElementById('api-reference')).toHaveAttribute('aria-busy', 'false');
+    expect(document.getElementById('promptfoo-api-reference')).toHaveAttribute(
+      'aria-busy',
+      'false',
+    );
   });
 
   it.each(['throws', 'returns nothing', 'is missing'])(
@@ -162,12 +169,13 @@ describe('ScalarApiReference', () => {
   it('tracks theme changes and disconnects its observer on unmount', async () => {
     const disconnect = vi.spyOn(MutationObserver.prototype, 'disconnect');
     const { unmount } = render(<ScalarApiReference {...props} />);
-    expect(document.getElementById('api-reference')).toHaveAttribute('data-theme', 'alternate');
+    loadScript(vi.fn().mockReturnValue({}));
     await act(async () => {
       document.documentElement.setAttribute('data-theme', 'dark');
     });
-    expect(document.getElementById('api-reference')).toHaveAttribute('data-theme', 'dark');
+    expect(document.body).toHaveClass('dark-mode');
     unmount();
     expect(disconnect).toHaveBeenCalledTimes(1);
+    expect(document.body).not.toHaveClass('dark-mode');
   });
 });

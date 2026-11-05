@@ -1,8 +1,9 @@
-import React, { type ReactNode, useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 
 import Layout from '@theme/Layout';
 
-const SCALAR_CONTAINER_ID = 'api-reference';
+// Scalar auto-mounts a second instance if the page contains its legacy #api-reference ID.
+const SCALAR_CONTAINER_ID = 'promptfoo-api-reference';
 const SCALAR_SCRIPT_ID = 'scalar-api-reference-script';
 const SCALAR_SCRIPT_SRC =
   'https://cdn.jsdelivr.net/npm/@scalar/api-reference@1.53.0/dist/browser/standalone.js';
@@ -27,16 +28,8 @@ type ScalarApiReferenceProps = {
   heading: string;
   showTestRequestButton?: boolean;
   specUrl: string;
-  summary: ReactNode;
-  title: string;
+  summary: string;
 };
-
-function getScalarTheme() {
-  if (typeof document === 'undefined') {
-    return 'alternate';
-  }
-  return document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'alternate';
-}
 
 export default function ScalarApiReference({
   description,
@@ -44,108 +37,74 @@ export default function ScalarApiReference({
   showTestRequestButton = true,
   specUrl,
   summary,
-  title,
 }: ScalarApiReferenceProps) {
   const [loadState, setLoadState] = useState<'loading' | 'loaded' | 'error'>('loading');
 
   useEffect(() => {
-    let scalarReference: ScalarReference | undefined;
-    setLoadState('loading');
+    let reference: ScalarReference | undefined;
+    let observer: MutationObserver | undefined;
+    let script: HTMLScriptElement | undefined;
+    const bodyClasses = document.body.classList;
+    const hadDarkMode = bodyClasses.contains('dark-mode');
+    const hadLightMode = bodyClasses.contains('light-mode');
+    const getMode = () => (document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light');
 
-    const destroyReference = () => {
-      scalarReference?.destroy?.();
-      scalarReference = undefined;
-    };
-
-    const renderReference = () => {
-      const scalar = (window as ScalarWindow).Scalar;
-      if (!scalar?.createApiReference) {
-        setLoadState('error');
-        return;
-      }
-
+    function mount() {
       try {
-        destroyReference();
-        scalarReference = scalar.createApiReference(`#${SCALAR_CONTAINER_ID}`, {
-          hideTestRequestButton: !showTestRequestButton,
-          theme: getScalarTheme(),
-          url: specUrl,
-        });
-        setLoadState(scalarReference ? 'loaded' : 'error');
+        reference = (window as ScalarWindow).Scalar?.createApiReference?.(
+          `#${SCALAR_CONTAINER_ID}`,
+          {
+            url: specUrl,
+            theme: 'alternate',
+            forceDarkModeState: getMode(),
+            hideTestRequestButton: !showTestRequestButton,
+          },
+        );
+        if (reference) {
+          // Scalar 1.x sets these body classes at mount. Follow later site theme changes
+          // without remounting the viewer and losing the reader's place.
+          observer = new MutationObserver(() => {
+            const dark = getMode() === 'dark';
+            bodyClasses.toggle('dark-mode', dark);
+            bodyClasses.toggle('light-mode', !dark);
+          });
+          observer.observe(document.documentElement, { attributeFilter: ['data-theme'] });
+        }
+        setLoadState(reference ? 'loaded' : 'error');
       } catch {
         setLoadState('error');
       }
-    };
+    }
 
-    const existingScript = document.getElementById(SCALAR_SCRIPT_ID) as HTMLScriptElement | null;
-    const script = existingScript ?? document.createElement('script');
-
-    const handleLoad = () => {
-      script.dataset.status = 'loaded';
-      renderReference();
-    };
-
-    const handleError = () => {
-      script.remove();
-      setLoadState('error');
-    };
-
-    if (!existingScript) {
+    if ((window as ScalarWindow).Scalar?.createApiReference) {
+      mount();
+    } else {
+      setLoadState('loading');
+      script = document.createElement('script');
       script.id = SCALAR_SCRIPT_ID;
       script.src = SCALAR_SCRIPT_SRC;
-      script.async = true;
       script.crossOrigin = 'anonymous';
       script.integrity = SCALAR_SCRIPT_INTEGRITY;
-      script.dataset.status = 'loading';
-      script.addEventListener('load', handleLoad);
-      script.addEventListener('error', handleError);
+      script.onload = mount;
+      script.onerror = () => setLoadState('error');
       document.head.appendChild(script);
-    } else if (
-      script.dataset.status === 'loaded' ||
-      (window as ScalarWindow).Scalar?.createApiReference
-    ) {
-      renderReference();
-    } else {
-      script.addEventListener('load', handleLoad);
-      script.addEventListener('error', handleError);
     }
 
     return () => {
-      script.removeEventListener('load', handleLoad);
-      script.removeEventListener('error', handleError);
-      if (script.dataset.status === 'loading') {
+      if (script) {
+        script.onload = null;
+        script.onerror = null;
         script.remove();
       }
-      destroyReference();
+      observer?.disconnect();
+      reference?.destroy?.();
+      bodyClasses.toggle('dark-mode', hadDarkMode);
+      bodyClasses.toggle('light-mode', hadLightMode);
     };
   }, [showTestRequestButton, specUrl]);
 
-  // Scalar's light theme does not match the site palette, so use alternate for light mode.
-  useEffect(() => {
-    const apiReference = document.getElementById(SCALAR_CONTAINER_ID);
-    if (!apiReference) {
-      return;
-    }
-
-    const applyTheme = () => {
-      apiReference.dataset.theme = getScalarTheme();
-    };
-
-    applyTheme();
-
-    const observer = new MutationObserver(applyTheme);
-    observer.observe(document.documentElement, {
-      attributes: true,
-      attributeFilter: ['data-theme'],
-    });
-
-    return () => {
-      observer.disconnect();
-    };
-  }, []);
-
   return (
-    <Layout title={title} description={description}>
+    <Layout title={heading} description={description}>
       <main>
         <section
           style={{
@@ -164,9 +123,6 @@ export default function ScalarApiReference({
               <a href={specUrl}>OpenAPI JSON</a> is still available.
             </p>
           ) : null}
-          <noscript>
-            The generated <a href={specUrl}>OpenAPI JSON</a> is available without JavaScript.
-          </noscript>
         </section>
         <div aria-busy={loadState === 'loading'} id={SCALAR_CONTAINER_ID}></div>
       </main>

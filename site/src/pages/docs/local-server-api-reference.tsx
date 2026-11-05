@@ -7,7 +7,6 @@ const LOCAL_SERVER_OPENAPI_SPEC_URL = '/openapi.json';
 export default function LocalServerApiReference() {
   return (
     <ScalarApiReference
-      title="Local Server API Reference | Promptfoo"
       description="OpenAPI reference for Promptfoo local server routes"
       heading="Local Server API Reference"
       showTestRequestButton={false}

@@ -146,7 +146,7 @@ describe('server OpenAPI generation', () => {
     expect(acceptsJob({ ...job, tests: {} })).toBe(false);
     expect(jobSchema.required).toEqual(expect.arrayContaining(['prompts', 'providers']));
     expect(createEvalJobOperation.responses['500']).toBeDefined();
-    expect(paths['/api/eval/job/{id}']?.get?.responses['500']).toBeDefined();
+    expect(paths['/api/eval/job/{id}']?.get?.responses?.['500']).toBeDefined();
     expect(
       getMediaOperation?.responses['200']?.content?.['application/octet-stream']?.schema,
     ).toEqual(expect.objectContaining({ format: 'binary', type: 'string' }));
