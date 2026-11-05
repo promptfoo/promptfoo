@@ -88,7 +88,7 @@ import type {
 } from '../../../types/index';
 import type { RedteamGradingContext } from '../../grading/types';
 import type { BaseRedteamMetadata } from '../../types';
-import type { FlaggedTurn, Message } from '../shared';
+import type { FlaggedTurn, Message, SuccessfulAttack } from '../shared';
 
 const DEFAULT_MAX_TURNS = 10;
 const DEFAULT_MAX_BACKTRACKS = 10;
@@ -102,11 +102,7 @@ interface CrescendoMetadata extends BaseRedteamMetadata {
   crescendoResult: boolean;
   crescendoConfidence: number | null;
   stopReason: RoundBacktrackingStopReason;
-  successfulAttacks?: Array<{
-    turn: number;
-    prompt: string;
-    response: string;
-  }>;
+  successfulAttacks?: SuccessfulAttack[];
   totalSuccessfulAttacks?: number;
   storedGraderResult?: GradingResult;
   traceSnapshots?: Record<string, unknown>[];
@@ -167,11 +163,7 @@ export class CrescendoProvider implements ApiProvider {
   private stateful: boolean;
   private excludeTargetOutputFromAgenticAttackGeneration: boolean;
   private readonly perTurnLayers: LayerConfig[];
-  private successfulAttacks: Array<{
-    turn: number;
-    prompt: string;
-    response: string;
-  }> = [];
+  private successfulAttacks: SuccessfulAttack[] = [];
 
   constructor(config: CrescendoConfig) {
     // Create a copy of config to avoid mutating the original

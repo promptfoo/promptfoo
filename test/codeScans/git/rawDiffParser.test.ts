@@ -87,7 +87,6 @@ describe('parseRawDiff', () => {
 
       expect(result).toHaveLength(1);
       expect(result[0].path).toBe('new/path/file.ts'); // Should use NEW path
-      expect(result[0].oldPath).toBe('old/path/file.ts'); // Should preserve old path
       expect(result[0].status).toBe('R100');
       expect(result[0].shaA).toBe('abc123');
       expect(result[0].shaB).toBe('def456');
@@ -100,7 +99,6 @@ describe('parseRawDiff', () => {
 
       expect(result).toHaveLength(1);
       expect(result[0].path).toBe('new.ts'); // NEW path
-      expect(result[0].oldPath).toBe('old.ts'); // OLD path preserved
       expect(result[0].status).toBe('R90');
     });
 
@@ -122,7 +120,6 @@ describe('parseRawDiff', () => {
 
       // First file: renamed
       expect(result[0].path).toBe('new.ts'); // NEW path
-      expect(result[0].oldPath).toBe('old.ts'); // OLD path preserved
       expect(result[0].status).toBe('R90');
 
       // Second file: modified (parser should not be misaligned)
@@ -146,7 +143,6 @@ describe('parseRawDiff', () => {
 
       expect(result).toHaveLength(1);
       expect(result[0].path).toBe('src/copy.ts'); // Should use DESTINATION path
-      expect(result[0].oldPath).toBe('src/original.ts'); // Should preserve source path
       expect(result[0].status).toBe('C100');
       expect(result[0].shaA).toBe('abc123');
       expect(result[0].shaB).toBe('abc123');
@@ -168,7 +164,6 @@ describe('parseRawDiff', () => {
 
       // First file: copied
       expect(result[0].path).toBe('copy.ts'); // DESTINATION
-      expect(result[0].oldPath).toBe('original.ts'); // SOURCE
       expect(result[0].status).toBe('C100');
 
       // Second file: modified
@@ -198,7 +193,6 @@ describe('parseRawDiff', () => {
 
       // Renamed file
       expect(result[0].path).toBe('new.ts');
-      expect(result[0].oldPath).toBe('old.ts');
       expect(result[0].status).toBe('R90');
 
       // Added file

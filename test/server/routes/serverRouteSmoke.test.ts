@@ -2,6 +2,7 @@ import { IncomingMessage, ServerResponse } from 'node:http';
 import { Duplex } from 'node:stream';
 
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { globalLogCallback, setLogCallback } from '../../../src/logger';
 import {
   createServerOpenApiDocument,
   SERVER_OPENAPI_ROUTE_COUNT,
@@ -872,6 +873,41 @@ describe('server route end-to-end smoke coverage', { concurrent: false }, () => 
 
     if (response.status !== 204) {
       expect(response.headers['content-type']).toContain('application/json');
+    }
+  });
+
+  it('handles malformed JSON before route dispatch and keeps the app healthy', async () => {
+    const canary = 'malformed-request-body-canary';
+    const environment = app.get('env');
+    const previousLogCallback = globalLogCallback;
+    const messages: string[] = [];
+    setLogCallback((message) => messages.push(message));
+    app.set('env', 'production');
+    try {
+      const response = await sendRequest(app, {
+        method: 'post',
+        openApiPath: '/api/telemetry',
+        path: '/api/telemetry',
+        rawJsonBody: `{"payloadNote":"${canary}","padding":"${'x'.repeat(512)}","broken":}`,
+        expectedStatus: 400,
+      });
+      expect(response.status).toBe(400);
+      expect(response.headers['content-type']).toContain('application/json');
+      expect(response.body).toEqual({ error: 'Bad Request' });
+      expect(response.text).not.toContain(canary);
+      expect(mocks.telemetry.record).not.toHaveBeenCalled();
+      const healthy = await sendRequest(app, {
+        method: 'get',
+        openApiPath: '/health',
+        path: '/health',
+        expectedStatus: 200,
+      });
+      expect(healthy.status).toBe(200);
+      expect(messages.join('\n')).toContain('SyntaxError');
+      expect(messages.join('\n')).not.toContain(canary);
+    } finally {
+      app.set('env', environment);
+      setLogCallback(previousLogCallback);
     }
   });
 });
