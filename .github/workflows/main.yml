@@ -572,6 +572,9 @@ jobs:
           npm run jsonSchema:generate
           npm run modelAuditSchema:generate
 
+      - name: Check local server OpenAPI spec
+        run: npm run openapi:check
+
       - name: Check for changes
         run: |
           if [[ -n $(git status --porcelain) ]]; then
