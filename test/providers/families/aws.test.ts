@@ -516,7 +516,6 @@ describe('aws bedrock provider factory routing', () => {
     ['bedrock:amazon.nova-reel-v1:0', 'amazon.nova-reel-v1:0'],
     ['bedrock:amazon.nova-reel-v1:1', 'amazon.nova-reel-v1:1'],
     ['bedrock:video:amazon.nova-reel-v1:1', 'amazon.nova-reel-v1:1'],
-    ['bedrock:video', 'amazon.nova-reel-v1:1'],
   ])('preserves the selected Reel ID for %s', async (selector, model) => {
     const { NovaReelVideoProvider } = await import('../../../src/providers/bedrock/nova-reel');
     const provider = await bedrockFactory.create(selector, {}, ctx);

@@ -689,7 +689,7 @@ Nova 2 models require cross-region inference profiles for on-demand access:
 
 - `us.amazon.nova-2-lite-v1:0` - US region (recommended)
 - `eu.amazon.nova-2-lite-v1:0` - EU region
-- `apac.amazon.nova-2-lite-v1:0` - Asia Pacific region
+- `jp.amazon.nova-2-lite-v1:0` - Japan region
 - `global.amazon.nova-2-lite-v1:0` - Global cross-region inference
 
 **Using Nova 2 with Converse API:**
@@ -769,10 +769,7 @@ Amazon Nova Reel (`amazon.nova-reel-v1:1`) generates studio-quality videos from 
 
 :::warning
 
-AWS schedules Nova Reel 1.0 and 1.1 to reach end of life on **September 30, 2026**.
-These configurations support existing Reel workloads during the remaining legacy period;
-new customers cannot enable legacy models. Check the [AWS lifecycle table](https://docs.aws.amazon.com/bedrock/latest/userguide/model-lifecycle.html)
-before using them. Promptfoo has no established same-API successor for the default `bedrock:video` route.
+[AWS retired Nova Reel](https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-amazon-nova-reel.html) on September 30, 2026. The bare `bedrock:video` selector now asks for a model ID. For a new evaluation with [Luma Ray 2](#luma-ray-2), select `bedrock:video:luma.ray-v2:0`, set `region: us-west-2`, and use the Ray 2 options. The explicit Nova Reel IDs below are for privately extended deployments.
 
 :::
 
