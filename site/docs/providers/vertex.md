@@ -190,6 +190,10 @@ providers:
 
 To send an image, use a chat message with an `image_url` content part. See the [runnable Llama image example](https://github.com/promptfoo/promptfoo/blob/main/examples/google-vertex/promptfooconfig.llama.yaml).
 
+### Other hosted open models
+
+For publishers that Google serves through Chat Completions, use `openai:chat:<publisher>/<model-id>`. Set `config.apiBaseUrl` to the endpoint for your project and location (ending in `/endpoints/openapi`) and `config.apiKeyEnvar` to an environment variable containing a Google Cloud access token. Obtain a fresh token with `gcloud auth print-access-token` before running an eval. Refresh the variable and start a new run when the token expires. See [Google's endpoint and authentication examples](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/maas/call-open-model-apis) and [Promptfoo's connection settings](/docs/providers/openai/#connection-settings).
+
 ### Gemma Models (Open Models)
 
 Model Garden availability does not make `vertex:gemma`, `vertex:codegemma`, or `vertex:paligemma` valid hosted inference IDs. These names fall through to the legacy PaLM request format in the current adapter.

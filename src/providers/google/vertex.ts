@@ -33,7 +33,7 @@ import {
 } from '../shared';
 import { GoogleAuthManager } from './auth';
 import { GoogleGenericProvider, type GoogleProviderOptions } from './base';
-import { getVertexApiHostForRegion, getVertexLlamaWireId, isVertexLlama4Model } from './shared';
+import { getVertexApiHostForRegion } from './shared';
 import {
   calculateGoogleCost,
   calculateGoogleCostFromUsage,
@@ -60,6 +60,7 @@ import {
   resolveGoogleToolConfig,
   resolveProjectId,
 } from './util';
+import { getVertexLlamaWireId, isVertexLlama4Model } from './vertexLlama';
 import type { gaxios } from 'google-auth-library';
 
 import type { EnvOverrides } from '../../types/env';

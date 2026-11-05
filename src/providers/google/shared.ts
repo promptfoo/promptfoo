@@ -1,3 +1,5 @@
+import { isVertexLlama4Model } from './vertexLlama';
+
 /**
  * Interface for Google model cost with optional tiered pricing.
  * Tiered pricing applies when prompt tokens exceed a threshold.
@@ -59,20 +61,6 @@ const VERTEX_GLOBAL_DEFAULT_MODELS = new Set([
   'gemini-flash-lite-latest',
   'gemini-3-flash-preview',
 ]);
-
-// Vertex's managed Llama 4 MaaS endpoints are currently available in us-east5.
-const VERTEX_LLAMA_4_MODELS = new Set([
-  'meta/llama-4-maverick-17b-128e-instruct-maas',
-  'meta/llama-4-scout-17b-16e-instruct-maas',
-]);
-
-export function getVertexLlamaWireId(modelName: string): string {
-  return modelName.startsWith('meta/') ? modelName : `meta/${modelName}`;
-}
-
-export function isVertexLlama4Model(modelName: string): boolean {
-  return VERTEX_LLAMA_4_MODELS.has(getVertexLlamaWireId(modelName));
-}
 
 export function getVertexModelDefaultRegion(modelName: string): string | undefined {
   if (VERTEX_GLOBAL_DEFAULT_MODELS.has(modelName)) {
