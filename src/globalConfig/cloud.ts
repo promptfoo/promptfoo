@@ -294,7 +294,7 @@ export class CloudConfig {
 
   /** Pick up a second terminal's login only when it targets the same deployment and team. */
   async reloadCredentialForCurrentTeam(userId: string): Promise<boolean> {
-    const saved = readGlobalConfig();
+    const saved = readGlobalConfig({ initialize: false });
     if (!userId || !saved?.completedShareLogin || !saved.cloud?.apiKey) {
       return false;
     }
