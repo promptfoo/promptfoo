@@ -267,8 +267,8 @@ describe('Google example provider contracts', () => {
         expect(requests[0]).toMatchObject({
           auth: vertex ? 'oauth' : 'native',
           url: vertex
-            ? 'https://aiplatform.googleapis.com/v1/projects/example-project/locations/global/publishers/google/models/gemini-3.1-flash-image:generateContent'
-            : 'https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-image:generateContent',
+            ? 'https://aiplatform.eu.rep.googleapis.com/v1/projects/example-project/locations/eu/publishers/google/models/gemini-3.1-flash-image:generateContent'
+            : `https://generativelanguage.googleapis.com/v1beta/models/${grounded ? 'gemini-3.1-flash-image' : 'gemini-nano-banana-2.1'}:generateContent`,
           body: {
             generationConfig: {
               responseModalities: ['TEXT', 'IMAGE'],

@@ -421,115 +421,37 @@ See Google's [embedding guide](https://ai.google.dev/gemini-api/docs/embeddings)
 
 ### Image Generation Models
 
-The `google:image:` prefix selects the Imagen adapter. Native Gemini API Imagen access reached its [announced shutdown date](https://ai.google.dev/gemini-api/docs/imagen) on August 17, 2026. For native image generation, use a [Gemini image model](#gemini-native-image-generation-models) instead. The Imagen IDs and prices below are historical. Google also lists June 30, 2026 as the [Vertex AI discontinuation date](https://docs.cloud.google.com/vertex-ai/generative-ai/docs/models/imagen/4-0-generate) for the three Imagen 4 models.
+The `google:image:` prefix selects the legacy Imagen prediction API. For a new image eval, use a [Gemini native image generation model](#gemini-native-image-generation-models).
 
 #### Imagen 4 Models {#imagen-4-models-available-in-both-google-ai-studio-and-vertex-ai}
 
-- `google:image:imagen-4.0-ultra-generate-001` - Ultra quality ($0.06/image)
-- `google:image:imagen-4.0-generate-001` - Standard quality ($0.04/image)
-- `google:image:imagen-4.0-fast-generate-001` - Fast generation ($0.02/image)
-
-:::warning
-The [native Imagen migration](https://ai.google.dev/gemini-api/docs/imagen#migration-to-nano-banana) changes both the request and response format. Use the `google:gemini-3.1-flash-image` route, not `google:image:gemini-3.1-flash-image`: Gemini image generation uses `generateContent` and content parts, while the Imagen adapter uses `predict` and `predictions`. The native shutdown date does not establish Vertex model availability.
-:::
+Google retired Imagen 4. To migrate an existing config, replace the entire Imagen provider ID with `google:gemini-nano-banana-2.1`. Gemini uses `generateContent`, returns image content parts and accepts different generation controls. [Google's Imagen migration guide](https://ai.google.dev/gemini-api/docs/imagen)
 
 #### Imagen 3 Models (Vertex AI only)
 
-These are historical Vertex IDs. Google lists the [Imagen 3 generate, fast and capability models as discontinued on June 30, 2026](https://docs.cloud.google.com/vertex-ai/generative-ai/docs/release-notes).
-
-- `google:image:imagen-3.0-generate-002` - Imagen 3.0 ($0.04/image)
-- `google:image:imagen-3.0-generate-001` - Imagen 3.0 ($0.04/image)
-- `google:image:imagen-3.0-fast-generate-001` - Imagen 3.0 fast ($0.02/image)
+Google discontinued the Vertex Imagen 3 generation models. Choose an image model and location from the [Vertex model catalog](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models).
 
 #### Authentication Options
 
-**Option 1: Google AI Studio** (Legacy Imagen configuration)
-
-```bash
-export GOOGLE_API_KEY=your-api-key
-```
-
-- ✅ Simpler setup with API key
-- ❌ Native Imagen models reached their announced shutdown date; use the Gemini image route above
-- ❌ No support for Imagen 3 models
-- ❌ No support for `seed` or `addWatermark` parameters
-
-**Option 2: Vertex AI** (Legacy Imagen configuration)
-
-```bash
-gcloud auth application-default login
-export GOOGLE_PROJECT_ID=your-project-id
-```
-
-- Historical configuration for the discontinued Vertex Imagen models listed above
-- Vertex authentication does not restore access to those retired models
-- ❌ Requires Google Cloud project with billing
-
-The provider automatically selects the appropriate API based on available credentials.
-
-Configuration options:
-
-```yaml
-providers:
-  - id: google:image:imagen-3.0-generate-002
-    config:
-      projectId: 'your-project-id' # Or set GOOGLE_PROJECT_ID
-      region: 'us-central1' # Optional, defaults to us-central1
-      aspectRatio: '16:9'
-      seed: 42
-      addWatermark: false # Must be false when using seed
-```
-
-See the [Google Imagen example](https://github.com/promptfoo/promptfoo/tree/main/examples/google-imagen).
+For the Gemini Developer API, set `GOOGLE_API_KEY` and `config.vertexai: false`. For Vertex, use a Google Cloud project and [Vertex authentication](/docs/providers/vertex#setup-and-authentication).
 
 ### Gemini Native Image Generation Models
 
-Gemini models can generate images natively using the `generateContent` API. Models with `-image` in the name automatically enable image generation. The model IDs and prices below describe the native Gemini API:
-
-- `google:gemini-nano-banana-2.1` - Nano Banana 2.1 for image generation and editing at `1K`, `2K`, or `4K`, including panoramic aspect ratios and Search grounding
-- `google:gemini-3.1-flash-lite-image` - Gemini 3.1 Flash-Lite (Nano Banana 2 Lite) for the fastest, lowest-cost image generation (~$0.034/image at 1K; 1K only; no Google Search grounding)
-- `google:gemini-3.1-flash-image` - Gemini 3.1 Flash (Nano Banana 2) with native image generation (~$0.067/image at 1K, more at higher resolutions)
-- `google:gemini-3-pro-image` - Gemini 3 Pro (Nano Banana Pro) for advanced image generation (~$0.134/image at 1K/2K, ~$0.24 at 4K)
-- `google:gemini-2.5-flash-image` - Gemini 2.5 Flash (Nano Banana) with image generation (~$0.039/image)
-
-[Nano Banana 2.1](https://ai.google.dev/gemini-api/docs/models/gemini-nano-banana-2.1) replaces the deprecated `gemini-3.1-flash-image`. Use `google:gemini-nano-banana-2.1` (without `:image:`). It accepts `imageSize: 1K`, `2K`, or `4K`; `512px`, sampling parameters, and `seed` are unsupported. Set `config.projectId` and authenticate with ADC to use its global Vertex endpoint. Token and resolution charges follow [Google's pricing](https://ai.google.dev/gemini-api/docs/pricing#gemini-nano-banana-2.1).
-
-Use the GA ids above; Google shut down the `gemini-3.1-flash-image-preview` and `gemini-3-pro-image-preview` aliases on June 25, 2026. Nano Banana 2 Lite never had a `-preview` alias.
-
-This adapter also supports Vertex AI. Set `config.projectId` (or `GOOGLE_CLOUD_PROJECT` / `GOOGLE_PROJECT_ID`) and use [Google Cloud authentication](/docs/providers/vertex#setup-and-authentication) to route `google:<model>` through Vertex. For example, use `google:gemini-3.1-flash-image` with `config.projectId`. The adapter uses the global endpoint for this model; see the [Vertex model documentation](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/gemini/3-1-flash-image) for model details.
-
-Configuration options:
+Use the model's ID directly after `google:`. A response can contain both text and images, so inspect `providerResponse.images` to grade generated images. The [image generation guide](https://ai.google.dev/gemini-api/docs/image-generation) lists model IDs, input formats, resolutions and supported tools.
 
 ```yaml
 providers:
-  - id: google:gemini-3.1-flash-image
-    config:
-      imageAspectRatio: '16:9' # 1:1, 1:4, 1:8, 2:3, 3:2, 3:4, 4:1, 4:3, 4:5, 5:4, 8:1, 9:16, 16:9, 21:9
-      imageSize: '2K' # 512px, 1K, 2K, 4K on this model; flash-lite is 1K only, pro is 1K/2K/4K
-      temperature: 0.7
-```
-
-Key differences from Imagen:
-
-- Uses same namespace as Gemini chat (`google:model-name`)
-- More aspect ratio options (includes 1:4, 1:8, 2:3, 3:2, 4:1, 4:5, 5:4, 8:1, 21:9)
-- Resolution control via `imageSize`: `512px`/`1K`/`2K`/`4K` on `gemini-3.1-flash-image`, `1K`/`2K`/`4K` on `gemini-3-pro-image`; `gemini-3.1-flash-lite-image` is `1K` only
-- Can return both text and images in the same response
-- Supports API key authentication for the native Gemini API and Google Cloud authentication for Vertex AI
-- Supports Google Search grounding via `tools` (on `gemini-3.1-flash-image` and `gemini-3-pro-image`; **not** `gemini-3.1-flash-lite-image`)
-
-Google Search grounding lets the model use real-time search results to inform image generation. It is supported by `gemini-3.1-flash-image` and `gemini-3-pro-image`, but not by Nano Banana 2 Lite (`gemini-3.1-flash-lite-image`):
-
-```yaml
-providers:
-  - id: google:gemini-3.1-flash-image
+  - id: google:gemini-nano-banana-2.1
     config:
       imageAspectRatio: '16:9'
-      tools:
-        - googleSearch: {}
+      imageSize: '2K'
 ```
 
-See the [Google Imagen example](https://github.com/promptfoo/promptfoo/tree/main/examples/google-imagen) for Gemini image generation configurations.
+For `google:gemini-3.1-flash-image` on Vertex with project-based OAuth, choose `region: eu` or `region: us` for a multi-region endpoint, or omit the location to use the global default. Promptfoo estimates image, text and cache costs at the selected location's rates. See the [Vertex model card](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/gemini/3-1-flash-image) and [Vertex pricing](https://cloud.google.com/vertex-ai/generative-ai/pricing).
+
+Nano Banana 2.1, Pro Image and Flash-Lite Image support only the global Vertex endpoint. With project-based OAuth, they use it even when the project has a regional environment default. Setting a different `config.region` on one of these providers returns an error before the request.
+
+The [runnable image examples](https://github.com/promptfoo/promptfoo/tree/main/examples/google-imagen) include a Gemini API configuration, a Search-grounded generation and a Vertex multi-region call.
 
 ### File transcription
 
