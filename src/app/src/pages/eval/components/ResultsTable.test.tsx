@@ -957,7 +957,7 @@ describe('ResultsTable Metrics Display', () => {
       ['storageRef:', null],
       ['promptfoo://blob/', null],
       ['storageRef:audio/test.mp3', '/api/media/audio/test.mp3'],
-      ['promptfoo://blob/abc', '/api/blobs/abc'],
+      ['promptfoo://blob/abc', '/api/blobs/abc?evalId=123'],
     ])('renders encoded audio input %s through the real player', async (value, expected) => {
       vi.spyOn(useApiConfig, 'getState').mockReturnValue({
         ...useApiConfig.getState(),
@@ -1107,7 +1107,7 @@ describe('ResultsTable Metrics Display', () => {
       });
 
       it.each([
-        ['blob', 'promptfoo://blob/audio-hash', '/api/blobs/audio-hash'],
+        ['blob', 'promptfoo://blob/audio-hash', '/api/blobs/audio-hash?evalId=123'],
         ['storage', 'storageRef:audio/sample.mp3', '/api/media/audio/sample.mp3'],
         ['raw base64', 'YWJj', 'data:audio/mp3;base64,YWJj'],
         ['audio data URL', 'data:audio/wav;base64,YWJj', 'data:audio/wav;base64,YWJj'],
@@ -1160,7 +1160,7 @@ describe('ResultsTable Metrics Display', () => {
         [
           'trailing API slash',
           'promptfoo://blob/audio-hash',
-          'https://api.example.test/promptfoo/api/blobs/audio-hash',
+          'https://api.example.test/promptfoo/api/blobs/audio-hash?evalId=123',
           'https://api.example.test/promptfoo/',
         ],
       ])(
