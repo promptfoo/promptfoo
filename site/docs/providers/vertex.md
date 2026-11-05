@@ -180,43 +180,26 @@ have a 1M-token context window.
 
 ### Llama Models
 
-Meta's Llama models are available through Vertex AI with the following versions:
+Llama 4 Scout and Maverick accept text and images in `us-east5`. See [Google's model guide](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/partner-models/llama/use-llama) for quotas and access requirements.
 
-**Llama 4:**
+- `vertex:llama-4-scout-17b-16e-instruct-maas` — 1,310,720-token context window
+- `vertex:llama-4-maverick-17b-128e-instruct-maas` — 524,288-token context window
 
-- `vertex:llama-4-scout-17b-16e-instruct-maas` - Llama 4 Scout with a 1,310,720-token context window
-- `vertex:llama-4-maverick-17b-128e-instruct-maas` - Llama 4 Maverick with a 524,288-token context window
-
-**Llama 3.3:**
-
-- `vertex:llama-3.3-70b-instruct-maas` - Llama 3.3 70B for text applications
-
-Llama 3 models support built-in safety features through Llama Guard. Llama 4 models are natively multimodal but do not support Llama Guard.
-
-See [Google's Llama model documentation](https://docs.cloud.google.com/vertex-ai/generative-ai/docs/partner-models/llama/use-llama) for current model IDs, regions, and quotas.
+Google [retired the managed Llama 3.3 endpoint](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/deprecations/open-models) on October 21, 2026.
 
 #### Llama Configuration Example
 
+Set sampling options at the top level or in `generationConfig`. A nested setting takes precedence over the same top-level setting.
+
 ```yaml
 providers:
-  - id: vertex:llama-3.3-70b-instruct-maas
-    config:
-      region: us-central1 # Llama 3 models use this region
-      temperature: 0.7
-      maxOutputTokens: 1024
-      llamaConfig:
-        safetySettings:
-          enabled: true # Llama Guard is enabled by default
-          llama_guard_settings: {} # Optional custom settings
-
   - id: vertex:llama-4-scout-17b-16e-instruct-maas
     config:
-      region: us-east5 # Llama 4 models use this region
-      temperature: 0.7
-      maxOutputTokens: 2048
+      region: us-east5
+      generationConfig:
+        temperature: 0.7
+        maxOutputTokens: 2048
 ```
-
-By default, supported Llama 3 models use Llama Guard for content safety. You can disable it by setting `enabled: false`, but this is not recommended for production use.
 
 ### Gemma Models (Open Models)
 
@@ -693,18 +676,6 @@ providers:
       generationConfig:
         maxOutputTokens: 1024
 
-  # For Llama models
-  - id: vertex:llama-3.3-70b-instruct-maas
-    config:
-      generationConfig:
-        temperature: 0.7
-        maxOutputTokens: 1024
-        extra_body:
-          google:
-            model_safety_settings:
-              enabled: true
-              llama_guard_settings: {}
-
   # For Claude models (set an enabled region, or `global` for Claude 5)
   - id: vertex:claude-sonnet-5
     config:
@@ -735,20 +706,11 @@ See [Google's SafetySetting API documentation](https://ai.google.dev/api/generat
 
 ### Llama Model Features
 
-- Support for text tasks with Llama 3.3 and text and vision tasks with all Llama 4 models
-- Built-in safety with Llama Guard for supported Llama 3 models (enabled by default)
-- Llama 4 models are available in `us-east5`; Llama 3 models are available in `us-central1`
-- Quota limits vary by model version
-- Requires specific endpoint format for API calls
-- Only supports unary (non-streaming) responses in promptfoo
+Llama 4 accepts text and image input and returns text. Promptfoo sends non-streaming requests to the OpenAI-compatible chat completions endpoint.
 
 #### Llama Model Considerations
 
-- **Regional Availability**: Llama 4 models use `us-east5`; Llama 3 models use `us-central1`
-- **Guard Integration**: Supported Llama 3 models use Llama Guard for content safety by default; Llama 4 models do not support it
-- **Specific Endpoint**: Uses a different API endpoint than other Vertex models
-- **Model Status**: Llama 4 Scout and Maverick are Generally Available (GA). Google [deprecated `llama-3.3-70b-instruct-maas`](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/deprecations/open-models) on July 21, 2026 and schedules its retirement for October 21, 2026
-- **Vision Support**: All current Llama 4 models support image input
+Llama 4 models reject Llama Guard settings. Omit `llamaConfig.safetySettings` when using Scout or Maverick.
 
 ### Claude Model Features
 
