@@ -526,15 +526,11 @@ providers:
       temperature: 0.7
       max_tokens: 256
 
-  # Using regular model IDs
-  - id: bedrock:meta.llama3-1-405b-instruct-v1:0
+  # Using a foundation model ID
+  - id: bedrock:converse:qwen.qwen3-vl-235b-a22b
     config:
-      region: 'us-east-1'
-      temperature: 0.7
-      max_tokens: 256
-  - id: bedrock:us.meta.llama3-3-70b-instruct-v1:0
-    config:
-      max_gen_len: 256
+      region: us-east-1
+      maxTokens: 256
   - id: bedrock:amazon.nova-lite-v1:0
     config:
       region: 'us-east-1'
@@ -1047,7 +1043,7 @@ config:
 
 ### Llama
 
-For Llama models (e.g., `meta.llama3-1-70b-instruct-v1:0`, `meta.llama3-2-90b-instruct-v1:0`, `meta.llama3-3-70b-instruct-v1:0`, `meta.llama4-scout-17b-instruct-v1:0`, `meta.llama4-maverick-17b-instruct-v1:0`), you can use the following configuration options:
+For Llama models that your account can invoke, configure generation settings on the `bedrock:<model-id>` provider. Check your model card for its inference profile and lifecycle. [Meta models on Bedrock](https://docs.aws.amazon.com/bedrock/latest/userguide/model-cards-meta.html)
 
 ```yaml
 config:
@@ -1058,71 +1054,11 @@ config:
 
 #### Llama 3.2 Vision
 
-Llama 3.2 Vision models (`us.meta.llama3-2-11b-instruct-v1:0`, `us.meta.llama3-2-90b-instruct-v1:0`) support image inputs. You can use them with either the legacy InvokeModel API or the Converse API:
-
-**Using InvokeModel API (legacy):**
-
-```yaml title="promptfooconfig.yaml"
-providers:
-  - id: bedrock:us.meta.llama3-2-11b-instruct-v1:0
-    config:
-      region: us-east-1
-      max_gen_len: 256
-
-prompts:
-  - file://llama_vision_prompt.json
-
-tests:
-  - vars:
-      image: file://path/to/image.jpg
-```
-
-```json title="llama_vision_prompt.json"
-[
-  {
-    "role": "user",
-    "content": [
-      {
-        "type": "image",
-        "source": {
-          "type": "base64",
-          "media_type": "image/jpeg",
-          "data": "{{image}}"
-        }
-      },
-      {
-        "type": "text",
-        "text": "What is in this image?"
-      }
-    ]
-  }
-]
-```
-
-**Using Converse API:**
-
-```yaml title="promptfooconfig.yaml"
-providers:
-  - id: bedrock:converse:us.meta.llama3-2-11b-instruct-v1:0
-    config:
-      region: us-east-1
-      maxTokens: 256
-```
-
-The Converse API uses the same prompt format shown above for [Nova Vision](#nova-vision-capabilities).
+AWS retired Llama 3.2 Vision. For an image eval on Bedrock, see the [Converse image example](https://github.com/promptfoo/promptfoo/blob/main/examples/amazon-bedrock/models/promptfooconfig.converse-images.yaml).
 
 ### Cohere Models
 
-For Cohere models (e.g., `cohere.command-r-v1:0`), you can use the following configuration options:
-
-```yaml
-config:
-  max_tokens: 256
-  temperature: 0.7
-  p: 0.9
-  k: 0
-  stop_sequences: ['END']
-```
+For embedding evaluations, select a supported Cohere model using `bedrock:embeddings:<model-id>`. AWS lists embedding model IDs, supported input types, and regional availability in its [Cohere catalog](https://docs.aws.amazon.com/bedrock/latest/userguide/model-cards-cohere.html).
 
 ### Mistral Models
 
@@ -1136,8 +1072,7 @@ config:
   top_k: 50
 ```
 
-Mistral chat-completion models such as `mistral.mistral-large-2407-v1:0`,
-`mistral.devstral-2-123b`, `mistral.mistral-large-3-675b-instruct`, and
+Mistral chat-completion models such as `mistral.devstral-2-123b`, `mistral.mistral-large-3-675b-instruct`, and
 `mistral.pixtral-large-2502-v1:0` use `messages` requests and support the same
 options except `top_k`.
 
@@ -1474,7 +1409,7 @@ tokens from AWS credentials. For example, use a shared-config/SSO profile:
 
 ```yaml
 providers:
-  - id: bedrock:mantle:zai.glm-4.6
+  - id: bedrock:mantle:zai.glm-5
     config:
       region: us-west-2
       profile: bedrock-prod # or set AWS_PROFILE; omit to use the default credential chain
@@ -1713,7 +1648,7 @@ tests:
 Several Bedrock models support multimodal inputs including images and text:
 
 - **Amazon Nova** - Supports images and videos
-- **Llama 3.2 Vision** - Supports images (11B and 90B variants)
+- **Qwen3 VL** - Accepts images through Converse. See the [runnable image example](https://github.com/promptfoo/promptfoo/blob/main/examples/amazon-bedrock/models/promptfooconfig.converse-images.yaml).
 - **Claude** - Supports images (via Converse API); Claude 3 and later
 - **Pixtral Large** - Supports images (via Converse API)
 
@@ -2049,7 +1984,7 @@ Configuration options include:
 
 For Claude models that no longer support sampling parameters — [Opus 4.7](https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-anthropic-claude-opus-4-7.html), Opus 4.8, Opus 5, Opus 5.5, Sonnet 5, and the Fable/Mythos 5 models — the provider omits `temperature`, `top_p`, and `top_k` while preserving `max_tokens`. This check uses `config.modelArn` when supplied.
 
-[Claude Sonnet 4.5 and Haiku 4.5](https://docs.aws.amazon.com/bedrock/latest/userguide/model-parameters-anthropic-claude-messages-request-response.html) accept either `temperature` or `top_p`. When both are configured, `top_p` takes precedence. The provider applies the same precedence to Sonnet 4.6. For Amazon Nova, `top_k` is mapped to its native `inferenceConfig.topK` request field; for [Cohere Command R and R+](https://docs.aws.amazon.com/bedrock/latest/userguide/model-parameters-cohere-command-r-plus.html), it is mapped to `k`.
+[Claude Sonnet 4.5 and Haiku 4.5](https://docs.aws.amazon.com/bedrock/latest/userguide/model-parameters-anthropic-claude-messages-request-response.html) accept either `temperature` or `top_p`. When both are configured, `top_p` takes precedence. The provider applies the same precedence to Sonnet 4.6. For Amazon Nova, `top_k` maps to `inferenceConfig.topK`.
 
 ### Knowledge Base Example
 
