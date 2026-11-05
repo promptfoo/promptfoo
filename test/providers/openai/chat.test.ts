@@ -3346,6 +3346,45 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
       expect('temperature' in body).toBe(true);
     });
 
+    it('omits default temperature for Claude Haiku 5.5 over an OpenAI-compatible endpoint', async () => {
+      // Regression for #12163: openai:chat:claude-haiku-5-5 with Anthropic apiBaseUrl
+      // was still sending temperature:0 and getting HTTP 400.
+      const provider = new OpenAiChatCompletionProvider('claude-haiku-5-5', {
+        config: { apiBaseUrl: 'https://api.anthropic.com/v1', apiKey: 'test-key' },
+      });
+      const { body } = await provider.getOpenAiBody('States the capital of France');
+      expect(body).not.toHaveProperty('temperature');
+      expect(body).not.toHaveProperty('top_p');
+      expect(provider['supportsTemperature']()).toBe(false);
+    });
+
+    it.each(['claude-haiku-5-5', 'claude-opus-5-5', 'claude-sonnet-5-5'])(
+      'omits explicit temperature and top_p for %s on the OpenAI chat path',
+      async (model) => {
+        const provider = new OpenAiChatCompletionProvider(model, {
+          config: {
+            apiBaseUrl: 'https://api.anthropic.com/v1',
+            apiKey: 'test-key',
+            temperature: 0,
+            top_p: 0.9,
+            max_tokens: 512,
+          },
+        });
+        const { body } = await provider.getOpenAiBody('hi');
+        expect(body).toHaveProperty('max_tokens', 512);
+        expect(body).not.toHaveProperty('temperature');
+        expect(body).not.toHaveProperty('top_p');
+      },
+    );
+
+    it('still sends temperature for non-Claude chat models', async () => {
+      const provider = new OpenAiChatCompletionProvider('gpt-4.1', {
+        config: { temperature: 0 },
+      });
+      const { body } = await provider.getOpenAiBody('hi');
+      expect(body.temperature).toBe(0);
+    });
+
     it('should correctly send max_tokens: 0 in the request body when explicitly set', async () => {
       const mockResponse = createMockChatResponse();
       mockFetchWithCache.mockResolvedValue(mockResponse);

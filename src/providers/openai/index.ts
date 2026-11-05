@@ -1,4 +1,5 @@
 import { getEnvString } from '../../envars';
+import { isSamplingParamsDeprecatedClaudeModel } from '../anthropic/util';
 import { resolveProviderApiKey } from '../credentials';
 import { resolveProviderEnv } from '../env';
 import { isGpt6Model } from './gpt6';
@@ -193,7 +194,11 @@ export class OpenAiGenericProvider implements ApiProvider {
   }
 
   protected supportsTemperature(modelName = this.getCapabilityModelName()): boolean {
-    return !this.isReasoningModel(modelName);
+    // Claude Opus 4.7+ / Claude 5+ reject temperature (and top_p / top_k) with HTTP 400,
+    // including promptfoo's built-in temperature:0 default. Match Azure chat's gate so
+    // openai:chat:<claude-*> against Anthropic's OpenAI-compatible endpoint (and other
+    // OpenAI-shaped Claude proxies) omit sampling params the same way.
+    return !this.isReasoningModel(modelName) && !isSamplingParamsDeprecatedClaudeModel(modelName);
   }
 
   protected getBillingModelName(_config: OpenAiSharedOptions): string {

@@ -13,6 +13,7 @@ import {
 } from '../../util/fetch/responseHeadersObserver';
 import { FINISH_REASON_MAP, normalizeFinishReason } from '../../util/finishReason';
 import { renderVarsInObject } from '../../util/index';
+import { isSamplingParamsDeprecatedClaudeModel } from '../anthropic/util';
 import {
   executeProviderFunctionCallback,
   loadProviderCallbackFromFileUrl,
@@ -419,7 +420,10 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
   }
 
   protected supportsTemperatureForCapabilityModel(modelName: string): boolean {
-    return !this.isReasoningCapabilityModel(modelName);
+    return (
+      !this.isReasoningCapabilityModel(modelName) &&
+      !isSamplingParamsDeprecatedClaudeModel(modelName)
+    );
   }
 
   /**
@@ -506,6 +510,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         ? undefined
         : getEnvFloat('OPENAI_TEMPERATURE')
       : getEnvFloat('OPENAI_TEMPERATURE', 0);
+    const samplingParamsDeprecated = isSamplingParamsDeprecatedClaudeModel(capabilityModelName);
     const supportsTemperature =
       isGPT6Model ||
       (usesConfiguredCapabilities
@@ -538,7 +543,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       ...(maxCompletionTokens === undefined ? {} : { max_completion_tokens: maxCompletionTokens }),
       ...(reasoningEffort ? { reasoning_effort: reasoningEffort } : {}),
       ...(temperature === undefined ? {} : { temperature }),
-      ...(config.top_p !== undefined || getEnvString('OPENAI_TOP_P')
+      ...((config.top_p !== undefined || getEnvString('OPENAI_TOP_P')) && !samplingParamsDeprecated
         ? { top_p: config.top_p ?? getEnvFloat('OPENAI_TOP_P', 1) }
         : {}),
       ...(config.presence_penalty !== undefined || getEnvString('OPENAI_PRESENCE_PENALTY')

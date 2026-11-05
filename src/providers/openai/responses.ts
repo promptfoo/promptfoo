@@ -18,6 +18,7 @@ import { fetchWithRetries } from '../../util/fetch/index';
 import { renderVarsInObject } from '../../util/index';
 import { isSecretField, sanitizeUrl } from '../../util/sanitizer';
 import { sleep } from '../../util/time';
+import { isSamplingParamsDeprecatedClaudeModel } from '../anthropic/util';
 import { FunctionCallbackHandler } from '../functionCallbackUtils';
 import {
   calculateOpenRouterResponseCost,
@@ -841,6 +842,9 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
 
   protected supportsTemperatureForCapabilityModel(modelName: string): boolean {
     const configuredModelName = this.getCapabilityModelName().replace(/(^|\/)ft:/, '$1');
+    if (isSamplingParamsDeprecatedClaudeModel(modelName)) {
+      return false;
+    }
     return modelName === configuredModelName
       ? this.supportsTemperature()
       : !this.isReasoningCapabilityModel(modelName);
@@ -1121,7 +1125,10 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
         ? (config.temperature ?? temperatureDefault)
         : undefined;
     const reasoningEffort = isReasoningModel ? effectiveReasoningEffort : undefined;
-    const topP = this.getConfiguredTopP(config);
+    const samplingParamsDeprecated = isSamplingParamsDeprecatedClaudeModel(
+      this.getEffectiveModelName(config),
+    );
+    const topP = samplingParamsDeprecated ? undefined : this.getConfiguredTopP(config);
 
     const instructions = config.instructions;
 

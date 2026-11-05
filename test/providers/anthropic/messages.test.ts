@@ -4721,6 +4721,62 @@ describe('AnthropicMessagesProvider', () => {
     });
   });
 
+  describe('Haiku 5.5 temperature handling', () => {
+    const mockResp = {
+      content: [{ type: 'text', text: 'ok' }],
+      model: 'claude-haiku-5-5',
+      id: 'test-id',
+      role: 'assistant',
+      stop_reason: 'end_turn',
+      stop_details: null,
+      stop_sequence: null,
+      type: 'message',
+      usage: { input_tokens: 10, output_tokens: 5 },
+    } as Anthropic.Messages.Message;
+
+    it('omits the built-in temperature default for Haiku 5.5 (no explicit config)', async () => {
+      // Regression for #12163: llm-rubric with claude-haiku-5-5 as grader sent
+      // temperature:0 and Anthropic returned 400 "temperature is deprecated".
+      const provider = createProvider('claude-haiku-5-5', { config: {} });
+      const createSpy = vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValue(mockResp);
+
+      await provider.callApi('Hello');
+
+      const params = createSpy.mock.calls[0][0] as unknown as Record<string, unknown>;
+      expect(params).not.toHaveProperty('temperature');
+      expect(params).not.toHaveProperty('top_p');
+      expect(params).not.toHaveProperty('top_k');
+    });
+
+    it('omits temperature/top_p/top_k and warns when explicitly set on Haiku 5.5', async () => {
+      const provider = createProvider('claude-haiku-5-5', {
+        config: { temperature: 0, top_p: 0.9, top_k: 40 },
+      });
+      const createSpy = vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValue(mockResp);
+      const warnSpy = vi.spyOn(logger, 'warn');
+
+      await provider.callApi('Hello');
+
+      const params = createSpy.mock.calls[0][0] as unknown as Record<string, unknown>;
+      expect(params).not.toHaveProperty('temperature');
+      expect(params).not.toHaveProperty('top_p');
+      expect(params).not.toHaveProperty('top_k');
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining('temperature is deprecated on Claude Haiku 5.5'),
+      );
+    });
+
+    it('sizes the default max_tokens for thinking on Haiku 5.5 when thinking is unset', async () => {
+      const provider = createProvider('claude-haiku-5-5', { config: {} });
+      const createSpy = vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValue(mockResp);
+
+      await provider.callApi('Hello');
+
+      const params = createSpy.mock.calls[0][0] as unknown as { max_tokens?: number };
+      expect(params.max_tokens).toBe(2048);
+    });
+  });
+
   describe('refusal stop_details handling', () => {
     it.each([
       ['bio', 0, 0.004],
