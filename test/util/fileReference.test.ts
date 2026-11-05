@@ -137,6 +137,23 @@ describe('fileReference utility functions', () => {
       expect(result).toEqual(moduleOutput);
     });
 
+    it('releases an interrupted JavaScript import without invoking its late factory', async () => {
+      const controller = new AbortController();
+      let finish!: (factory: () => string) => void;
+      const factory = vi.fn(() => 'late');
+      importModule.mockReturnValueOnce(
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+      );
+      const pending = loadFileReference('file:///slow.js', '', controller.signal);
+      controller.abort(new Error('Stopped'));
+      await expect(pending).rejects.toThrow('Stopped');
+      finish(factory);
+      await Promise.resolve();
+      expect(factory).not.toHaveBeenCalled();
+    });
+
     it('should load JavaScript files with function name correctly', async () => {
       const fileRef = 'file:///path/to/config.js:getConfig';
       const moduleOutput = { getConfig: 'success' };
@@ -158,8 +175,24 @@ describe('fileReference utility functions', () => {
 
       const result = await loadFileReference(fileRef);
 
-      expect(runPython).toHaveBeenCalledWith('/path/to/config.py', 'get_config', []);
+      expect(runPython).toHaveBeenCalledWith('/path/to/config.py', 'get_config', [], {
+        abortSignal: undefined,
+      });
       expect(result).toEqual(pythonOutput);
+    });
+
+    it('passes cancellation through nested Python references and skips later files', async () => {
+      const controller = new AbortController();
+      runPython.mockImplementationOnce(async (_path, _method, _args, options) => {
+        expect(options?.abortSignal).toBe(controller.signal);
+        controller.abort(new Error('Stopped'));
+        return {};
+      });
+      const config = { scripts: ['file:///first.py', 'file:///second.py'] };
+      await expect(processConfigFileReferences(config, '', controller.signal)).rejects.toThrow(
+        'Stopped',
+      );
+      expect(runPython).toHaveBeenCalledTimes(1);
     });
 
     it('should load Python files with function name correctly', async () => {
@@ -170,7 +203,9 @@ describe('fileReference utility functions', () => {
 
       const result = await loadFileReference(fileRef);
 
-      expect(runPython).toHaveBeenCalledWith('/path/to/config.py', 'custom_func', []);
+      expect(runPython).toHaveBeenCalledWith('/path/to/config.py', 'custom_func', [], {
+        abortSignal: undefined,
+      });
       expect(result).toEqual(pythonOutput);
     });
 

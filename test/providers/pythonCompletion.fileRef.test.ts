@@ -150,6 +150,7 @@ describe('PythonProvider with file references', () => {
     expect(processConfigFileReferences).toHaveBeenCalledWith(
       expect.objectContaining(mockConfig),
       '/base/path',
+      expect.any(AbortSignal),
     );
     expect(provider.config).toEqual(mockProcessedConfig);
   });
@@ -174,6 +175,7 @@ describe('PythonProvider with file references', () => {
     expect(processConfigFileReferences).toHaveBeenCalledWith(
       expect.objectContaining(mockConfig),
       expect.any(String),
+      expect.any(AbortSignal),
     );
     expect(provider['isInitialized']).toBeFalsy();
   });
@@ -203,6 +205,7 @@ describe('PythonProvider with file references', () => {
     expect(processConfigFileReferences).toHaveBeenCalledWith(
       expect.objectContaining(mockConfig),
       '/base/path',
+      expect.any(AbortSignal),
     );
     expect(provider.config).toEqual(mockProcessedConfig);
   });
@@ -237,7 +240,11 @@ describe('PythonProvider with file references', () => {
     const replacement = { settings: 'file://replacement.json' };
     provider.config = replacement;
     await provider.initialize();
-    expect(processConfigFileReferences).toHaveBeenLastCalledWith(replacement, '/base/path');
+    expect(processConfigFileReferences).toHaveBeenLastCalledWith(
+      replacement,
+      '/base/path',
+      expect.any(AbortSignal),
+    );
     expect(processConfigFileReferences).toHaveBeenCalledTimes(2);
   });
 
@@ -269,6 +276,7 @@ describe('PythonProvider with file references', () => {
     expect(processConfigFileReferences).toHaveBeenCalledWith(
       expect.objectContaining(mockConfig),
       '/base/path',
+      expect.any(AbortSignal),
     );
     expect(provider.config).toEqual(mockProcessedConfig);
   });
@@ -338,6 +346,7 @@ describe('PythonProvider with file references', () => {
     expect(processConfigFileReferences).toHaveBeenCalledWith(
       expect.objectContaining(mockOriginalConfig),
       '/base/path',
+      expect.any(AbortSignal),
     );
 
     // Verify the processed config is stored on the provider
