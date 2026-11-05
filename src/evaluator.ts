@@ -19,6 +19,7 @@ import { getCache, isCacheEnabled, withCacheEnabled, withCacheNamespace } from '
 import cliState from './cliState';
 import { DEFAULT_MAX_CONCURRENCY, FILE_METADATA_KEY } from './constants';
 import { getEnvBool, getEnvInt, getEvalTimeoutMs, getMaxEvalTimeMs, isCI } from './envars';
+import { compileDerivedMetricFormula } from './evaluator/derivedMetricFormula';
 import { collectFileMetadata, renderPrompt, runExtensionHook } from './evaluatorHelpers';
 import logger, { globalLogCallback, isDebugEnabled, setLogCallback } from './logger';
 import { selectMaxScore } from './matchers/comparison';
@@ -2217,12 +2218,20 @@ export function generateVarCombinations(
   return combinations;
 }
 
+function prepareDerivedMetrics(metrics: TestSuite['derivedMetrics']) {
+  return metrics?.map(({ name, value }) => ({
+    name,
+    value: typeof value === 'function' ? value : compileDerivedMetricFormula(name, value),
+  }));
+}
+
+type PreparedDerivedMetrics = ReturnType<typeof prepareDerivedMetrics>;
+
 function updateDerivedMetrics(
   metrics: PromptMetrics,
-  derivedMetrics: NonNullable<TestSuite['derivedMetrics']>,
+  derivedMetrics: NonNullable<PreparedDerivedMetrics>,
   evalStep: RunEvalOptions,
   promptEvalCount: number,
-  math: typeof import('mathjs'),
 ) {
   if (Object.prototype.hasOwnProperty.call(metrics.namedScores, '__count')) {
     logger.warn("Metric name '__count' is reserved for derived metrics and will be overridden.");
@@ -2235,10 +2244,7 @@ function updateDerivedMetrics(
   for (const metric of derivedMetrics) {
     metrics.namedScores[metric.name] ??= 0;
     try {
-      metrics.namedScores[metric.name] =
-        typeof metric.value === 'function'
-          ? metric.value(evalContext, evalStep)
-          : math.evaluate(metric.value, evalContext);
+      metrics.namedScores[metric.name] = metric.value(evalContext, evalStep);
       evalContext[metric.name] = metrics.namedScores[metric.name];
     } catch (error) {
       logger.debug(
@@ -3776,7 +3782,7 @@ interface EvalProcessingContext {
   assertionTypes: Set<string>;
   concurrency: number;
   deferredGradingAbortSignal?: AbortSignal;
-  mathjsModule: typeof import('mathjs') | null;
+  derivedMetrics: PreparedDerivedMetrics;
   numComplete: number;
   options: InternalEvaluateOptions;
   promptEvalCounts: number[];
@@ -4292,14 +4298,12 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
   private updatePromptMetricsForRow({
     derivedMetrics,
     evalStep,
-    mathjsModule,
     metrics,
     promptEvalCount,
     row,
   }: {
-    derivedMetrics: TestSuite['derivedMetrics'];
+    derivedMetrics: PreparedDerivedMetrics;
     evalStep: RunEvalOptions;
-    mathjsModule: typeof import('mathjs') | null;
     metrics: PromptMetrics;
     promptEvalCount: number;
     row: EvaluateResult;
@@ -4315,8 +4319,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     }
 
     if (derivedMetrics) {
-      invariant(mathjsModule, 'Expected mathjs to be loaded for derived metrics');
-      updateDerivedMetrics(metrics, derivedMetrics, evalStep, promptEvalCount, mathjsModule);
+      updateDerivedMetrics(metrics, derivedMetrics, evalStep, promptEvalCount);
     }
 
     updatePromptResultCounts(metrics, row);
@@ -4471,9 +4474,8 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       const metrics = context.prompts[row.promptIdx].metrics;
       invariant(metrics, 'Expected prompt.metrics to be set');
       this.updatePromptMetricsForRow({
-        derivedMetrics: context.testSuite.derivedMetrics,
+        derivedMetrics: context.derivedMetrics,
         evalStep,
-        mathjsModule: context.mathjsModule,
         metrics,
         promptEvalCount: reservePromptEvalCount(context, row.promptIdx),
         row,
@@ -5820,6 +5822,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       testSuite = { ...testSuite, prompts: recovery.hookPrompts };
     }
     testSuite = await runBeforeAllExtensions(testSuite);
+    const derivedMetrics = prepareDerivedMetrics(testSuite.derivedMetrics);
     if (
       !restorePromptColumns &&
       !(await maybeAddGeneratedPrompts(testSuite, options, providerAbortSignal))
@@ -5878,15 +5881,11 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     concurrency = concurrencySettings.concurrency;
     const { usesConversationVar } = concurrencySettings;
 
-    // Awaiting after accumulating scores lets other rows change the total
-    // before derived metrics use this row's __count.
-    const mathjsModule = testSuite.derivedMetrics ? await import('mathjs') : null;
-
     const processingContext: EvalProcessingContext = {
       assertionTypes,
       concurrency,
       deferredGradingAbortSignal,
-      mathjsModule,
+      derivedMetrics,
       numComplete: 0,
       options,
       promptEvalCounts: createPromptEvalCounts(prompts),

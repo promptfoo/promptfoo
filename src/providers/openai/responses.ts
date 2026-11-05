@@ -34,6 +34,7 @@ import { OpenAiGenericProvider } from '.';
 import {
   calculateObservableOpenAIToolCost,
   calculateOpenAIUsageCost,
+  getBedrockBillingEndpoint,
   usesAzureOpenAiBilling,
 } from './billing';
 import {
@@ -766,7 +767,9 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     'gpt-6-sol',
     'gpt-6-luna',
     'gpt-6.1-sol',
+    'gpt-6.1-terra',
     // GPT-5.6 models
+    'gpt-5.6-cyber',
     'gpt-5.6',
     'gpt-5.6-sol',
     'gpt-5.6-terra',
@@ -785,8 +788,6 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     'gpt-5.4-nano-2026-03-17',
     'gpt-5.4-pro',
     'gpt-5.4-pro-2026-03-05',
-    // NOTE: gpt-image-1, gpt-image-1-mini, and gpt-image-1.5 are NOT supported with the Responses API.
-    // Use openai:image:gpt-image-1, openai:image:gpt-image-1-mini, or openai:image:gpt-image-1.5 instead (which uses /images/generations endpoint)
     // Reasoning models
     'o1',
     'o1-2024-12-17',
@@ -888,7 +889,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     const isBedrock = this.getGenAISystem() === 'bedrock' || bedrockEndpoint !== undefined;
     const runtimeProfile =
       bedrockEndpoint === 'runtime'
-        ? /^(global|us)\.openai\.(.+)$/.exec(unprefixedModelName)
+        ? /^(global|us|us-gov|in)\.openai\.(.+)$/.exec(unprefixedModelName)
         : null;
     const billingModelName =
       runtimeProfile?.[2] ??
@@ -909,13 +910,15 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
         cachedResponse: cached,
         provider: isBedrock ? 'bedrock' : this.getGenAISystem(),
         region: this.getBillingRegion(),
+        bedrockProfile: runtimeProfile?.[1],
         regionalProcessing,
         serviceTier,
       },
     );
     const variant = getGpt6Variant(billingModelName);
     if (
-      (variant === 'sol' || variant === 'luna' || variant === '6.1-sol') &&
+      variant !== undefined &&
+      variant !== 'astra' &&
       usesAzureOpenAiBilling(config, this.getApiUrl(), this.getGenAISystem())
     ) {
       const { cost: _existingCost, ...unbilled } = result;
@@ -934,18 +937,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
   }
 
   private getBedrockEndpoint(): 'mantle' | 'runtime' | undefined {
-    try {
-      const hostname = new URL(this.getApiUrl()).hostname;
-      if (/^bedrock-mantle\.[a-z0-9-]+\.api\.aws$/.test(hostname)) {
-        return 'mantle';
-      }
-      if (/^bedrock-runtime(?:-fips)?\.[a-z0-9-]+\.(?:amazonaws\.com|api\.aws)$/.test(hostname)) {
-        return 'runtime';
-      }
-    } catch {
-      // Invalid custom URLs are reported when the request is made.
-    }
-    return undefined;
+    return getBedrockBillingEndpoint(URL.parse(this.getApiUrl())?.hostname)?.service;
   }
 
   private supportsPersistedGpt6EffortUpdates(): boolean {

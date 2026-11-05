@@ -172,6 +172,27 @@ export function hashAnthropicCacheValue(value: unknown): string {
     .digest('hex');
 }
 
+class PromptfooAnthropicClient extends Anthropic {
+  // Promptfoo resolves credentials itself. Bedrock authenticates only at dispatch.
+  protected override _shouldResolveDefaultCredentials(): boolean {
+    return false;
+  }
+
+  protected override async authHeaders(options: Parameters<Anthropic['authHeaders']>[0]) {
+    const headers = await super.authHeaders(options);
+    if (headers) {
+      // Existing evals and compatible gateways use the original Messages protocol.
+      // SDK default and per-request custom headers can still override this value.
+      headers.values.set('anthropic-version', '2023-06-01');
+      if (this.apiKey) {
+        headers.values.delete('authorization');
+        headers.values.set('x-api-key', this.apiKey);
+      }
+    }
+    return headers;
+  }
+}
+
 /**
  * Generic provider class for Anthropic APIs.
  *
@@ -311,11 +332,13 @@ export class AnthropicGenericProvider implements ApiProvider {
       setCaseInsensitiveHeaderValue(clientDefaultHeaders, 'authorization', `Bearer ${authToken}`);
     }
 
-    this.anthropic = new Anthropic(
+    this.anthropic = new PromptfooAnthropicClient(
       this.buildAnthropicClientOptions({
         apiKey: this.apiKey ?? null,
         authToken: authToken ?? null,
         baseURL: this.getApiBaseUrl(),
+        // Promptfoo owns generation spans; SDK spans would duplicate traced requests.
+        openTelemetry: false,
         ...(Object.keys(clientDefaultHeaders).length > 0
           ? { defaultHeaders: clientDefaultHeaders }
           : {}),
