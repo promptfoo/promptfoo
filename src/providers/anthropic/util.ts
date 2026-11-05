@@ -504,7 +504,14 @@ export function clampMaxTokensForThinkingBudget(
 }
 
 export function normalizeAnthropicModelName(modelName: string): string {
-  return modelName.replace(/^(?:(?:global|us|eu|jp|au)\.)?anthropic\./, '');
+  const normalized = modelName.replace(
+    /^(?:(?:global|us|us-gov|eu|jp|au|in|ca)\.)?anthropic\./,
+    '',
+  );
+  // Haiku 4.5 has a versioned ID on Bedrock Runtime and a short ID on Mantle.
+  return normalized !== modelName && normalized === 'claude-haiku-4-5-20251001-v1:0'
+    ? 'claude-haiku-4-5-20251001'
+    : normalized;
 }
 
 /**
@@ -890,9 +897,7 @@ export function calculateAnthropicCost(
     registeredModel?.cost.longContext &&
     totalInputTokens > registeredModel.cost.longContext.threshold
       ? { ...registeredModel, cost: registeredModel.cost.longContext }
-      : pricingModelName !== modelName && pricingModelName === 'claude-sonnet-5'
-        ? { id: pricingModelName, cost: { input: 3 / 1e6, output: 15 / 1e6 } }
-        : registeredModel;
+      : registeredModel;
   // A model name that normalizeAnthropicModelName rewrote carries a Bedrock
   // prefix. Bare and geo-prefixed Bedrock IDs bill at the regional premium;
   // only the `global.` endpoint bills at base rate.

@@ -499,10 +499,10 @@ describe('Anthropic utilities', () => {
       ['anthropic.claude-sonnet-5', 1.1],
       ['us.anthropic.claude-sonnet-5', 1.1],
       ['global.anthropic.claude-sonnet-5', 1],
-    ])('preserves independent Bedrock Sonnet 5 estimates for %s', (model, premium) => {
-      expect(calculateAnthropicCost(model, {}, 1000, 100)).toBeCloseTo(0.0045 * premium, 10);
+    ])('calculates Bedrock Sonnet 5 estimates for %s', (model, premium) => {
+      expect(calculateAnthropicCost(model, {}, 1000, 100)).toBeCloseTo(0.003 * premium, 10);
       expect(calculateAnthropicCost(model, {}, 1000, 100, 2000, 400)).toBeCloseTo(
-        0.0066 * premium,
+        0.0044 * premium,
         10,
       );
       // Explicit rates are final and suppress the regional premium.

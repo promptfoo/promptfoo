@@ -28,22 +28,35 @@ export function isRejectedPrefixedGrokId(
   );
 }
 
-const RUNTIME_MESSAGES_MODELS = new Set([
-  'us-gov.anthropic.claude-haiku-5-5',
-  'us-gov.anthropic.claude-opus-5-5',
-  'us-gov.anthropic.claude-sonnet-5-5',
-  'us.anthropic.claude-fable-5-1',
-  'global.anthropic.claude-fable-5-1',
-  'us.anthropic.claude-mythos-5-1',
-  'global.anthropic.claude-mythos-5-1',
-  ...['haiku', 'opus'].flatMap((family) =>
-    ['us', 'eu', 'au', 'jp', 'global'].map((geo) => `${geo}.anthropic.claude-${family}-5-5`),
-  ),
-  ...['us', 'eu', 'au', 'global'].map((geo) => `${geo}.anthropic.claude-sonnet-5-5`),
+// Runtime Messages uses the inference profile IDs in each AWS model card. Mantle
+// takes a bare model ID, which can differ from the Runtime ID (for example Haiku 4.5).
+const RUNTIME_MESSAGES_PROFILES = new Map<string, readonly string[]>([
+  ['anthropic.claude-fable-5', ['us', 'global']],
+  ['anthropic.claude-fable-5-1', ['us', 'global']],
+  ['anthropic.claude-mythos-5-1', ['us', 'global']],
+  ['anthropic.claude-haiku-4-5-20251001-v1:0', ['us', 'eu', 'au', 'jp', 'in', 'global']],
+  ['anthropic.claude-haiku-5-5', ['us', 'ca', 'eu', 'au', 'jp', 'us-gov', 'global']],
+  ['anthropic.claude-opus-4-7', ['us', 'eu', 'jp', 'au', 'global']],
+  ['anthropic.claude-opus-4-8', ['us', 'eu', 'jp', 'au', 'us-gov', 'global']],
+  ['anthropic.claude-opus-5', ['us', 'eu', 'au', 'in', 'global']],
+  ['anthropic.claude-opus-5-5', ['us', 'eu', 'au', 'jp', 'us-gov', 'global']],
+  ['anthropic.claude-sonnet-5', ['us', 'eu', 'au', 'in', 'global']],
+  ['anthropic.claude-sonnet-5-5', ['us', 'eu', 'au', 'us-gov', 'global']],
 ]);
 
-export function isBedrockRuntimeMessagesModel(modelName: string): boolean {
-  return RUNTIME_MESSAGES_MODELS.has(modelName);
+const IN_REGION_RUNTIME_MESSAGES_MODELS = new Map<string, readonly string[]>([
+  ['anthropic.claude-opus-5', ['ap-northeast-2']],
+  ['anthropic.claude-opus-5-5', ['eu-west-2']],
+  ['anthropic.claude-sonnet-5', ['eu-west-2', 'ap-northeast-2', 'ap-southeast-1']],
+]);
+
+export function isBedrockRuntimeMessagesModel(modelName: string, region?: string): boolean {
+  if (region && IN_REGION_RUNTIME_MESSAGES_MODELS.get(modelName)?.includes(region)) {
+    return true;
+  }
+  const separator = modelName.indexOf('.');
+  const profiles = RUNTIME_MESSAGES_PROFILES.get(modelName.slice(separator + 1));
+  return profiles?.includes(modelName.slice(0, separator)) ?? false;
 }
 
 export function isBedrockAnthropicMessagesModel(modelName: string): boolean {
@@ -53,12 +66,13 @@ export function isBedrockAnthropicMessagesModel(modelName: string): boolean {
       'anthropic.claude-mythos-5',
       'anthropic.claude-fable-5-1',
       'anthropic.claude-mythos-preview',
+      'anthropic.claude-haiku-4-5',
+      'anthropic.claude-haiku-5-5',
+      'anthropic.claude-opus-5-5',
+      'anthropic.claude-sonnet-5-5',
       'anthropic.claude-opus-4-7',
       'anthropic.claude-opus-4-8',
       'anthropic.claude-opus-5',
-      'anthropic.claude-haiku-5-5',
-      'anthropic.claude-sonnet-5-5',
-      'anthropic.claude-opus-5-5',
       'anthropic.claude-sonnet-5',
     ].includes(modelName) || isBedrockRuntimeMessagesModel(modelName)
   );

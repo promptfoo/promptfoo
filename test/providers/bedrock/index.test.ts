@@ -132,6 +132,7 @@ const createThinkingRegionConfig = () => ({
 });
 
 const RETIRED_BEDROCK_MODEL_IDS = [
+  'anthropic.claude-sonnet-4-20250514-v1:0',
   'amazon.titan-text-express-v1',
   'amazon.titan-text-lite-v1',
   'amazon.titan-text-premier-v1:0',
@@ -3770,9 +3771,6 @@ describe('AWS_BEDROCK_MODELS mapping', () => {
     expect(AWS_BEDROCK_MODELS['apac.anthropic.claude-opus-4-1-20250805-v1:0']).toBe(
       BEDROCK_MODEL.CLAUDE_MESSAGES,
     );
-    expect(AWS_BEDROCK_MODELS['apac.anthropic.claude-sonnet-4-20250514-v1:0']).toBe(
-      BEDROCK_MODEL.CLAUDE_MESSAGES,
-    );
     expect(AWS_BEDROCK_MODELS['apac.meta.llama4-scout-17b-instruct-v1:0']).toBe(
       BEDROCK_MODEL.LLAMA4,
     );
@@ -3796,9 +3794,6 @@ describe('AWS_BEDROCK_MODELS mapping', () => {
       BEDROCK_MODEL.CLAUDE_MESSAGES,
     );
     expect(AWS_BEDROCK_MODELS['eu.anthropic.claude-opus-4-1-20250805-v1:0']).toBe(
-      BEDROCK_MODEL.CLAUDE_MESSAGES,
-    );
-    expect(AWS_BEDROCK_MODELS['eu.anthropic.claude-sonnet-4-20250514-v1:0']).toBe(
       BEDROCK_MODEL.CLAUDE_MESSAGES,
     );
     expect(AWS_BEDROCK_MODELS['eu.meta.llama3-2-1b-instruct-v1:0']).toBe(BEDROCK_MODEL.LLAMA3_2);
@@ -3830,9 +3825,6 @@ describe('AWS_BEDROCK_MODELS mapping', () => {
       BEDROCK_MODEL.CLAUDE_MESSAGES,
     );
     expect(AWS_BEDROCK_MODELS['us.anthropic.claude-opus-4-1-20250805-v1:0']).toBe(
-      BEDROCK_MODEL.CLAUDE_MESSAGES,
-    );
-    expect(AWS_BEDROCK_MODELS['us.anthropic.claude-sonnet-4-20250514-v1:0']).toBe(
       BEDROCK_MODEL.CLAUDE_MESSAGES,
     );
     expect(AWS_BEDROCK_MODELS['us.deepseek.r1-v1:0']).toBe(BEDROCK_MODEL.DEEPSEEK);
