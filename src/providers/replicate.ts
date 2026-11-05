@@ -15,6 +15,7 @@ import { safeJsonStringify } from '../util/json';
 import { ellipsize } from '../util/text';
 import { sleep, sleepWithAbort } from '../util/time';
 import { createEmptyTokenUsage } from '../util/tokenUsageUtils';
+import { fingerprintCacheIdentity } from './cacheFingerprint';
 import { resolveProviderApiKey } from './credentials';
 import { parseChatPrompt } from './shared';
 
@@ -147,7 +148,7 @@ function getReplicateAuthCacheNamespace(apiKey: string | undefined) {
     return 'no-api-key';
   }
 
-  return createHmac('sha256', apiKey).update(REPLICATE_CACHE_KEY_HMAC_KEY).digest('hex');
+  return fingerprintCacheIdentity(apiKey, REPLICATE_CACHE_KEY_HMAC_KEY);
 }
 
 async function createPrediction(

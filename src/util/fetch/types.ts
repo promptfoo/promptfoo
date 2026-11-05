@@ -1,7 +1,12 @@
+import type { Dispatcher } from 'undici';
+
 /**
  * Extended RequestInit options with additional features
  */
 export interface FetchOptions extends RequestInit {
+  /** FIPS mode accepts only dispatchers created by Promptfoo's TLS helpers. */
+  dispatcher?: Pick<Dispatcher, 'dispatch'>;
+
   /**
    * Resolve default authentication headers immediately before each HTTP attempt, including
    * retries. Explicit request headers take precedence (case-insensitively). The signal includes

@@ -97,7 +97,8 @@ vi.mock('undici', () => {
   };
 });
 
-vi.mock('../src/envars', () => {
+vi.mock('../src/envars', async (importOriginal) => {
+  const { parseEnvBool } = await importOriginal<typeof import('../src/envars')>();
   return {
     getEnvString: vi.fn().mockImplementation((key: string, defaultValue: string = '') => {
       if (key === 'HTTPS_PROXY' && process.env.HTTPS_PROXY) {
@@ -131,7 +132,7 @@ vi.mock('../src/envars', () => {
         return (process.env as NodeJS.ProcessEnv).PROMPTFOO_RETRY_5XX_ENABLED === 'true';
       }
       if (key === 'PROMPTFOO_INSECURE_SSL') {
-        return (process.env as NodeJS.ProcessEnv).PROMPTFOO_INSECURE_SSL === 'true';
+        return parseEnvBool(process.env.PROMPTFOO_INSECURE_SSL, defaultValue);
       }
       if (key === 'PROMPTFOO_RETRY_5XX') {
         return (process.env as NodeJS.ProcessEnv).PROMPTFOO_RETRY_5XX === 'true';
