@@ -7,7 +7,11 @@ import { BedrockChatStreamError, collectBedrockChatStream } from './chatStream';
 import { resolveBedrockMantleRegion } from './mantle';
 import { BedrockMantleChatProvider } from './mantleChat';
 import { BedrockOpenAiResponsesProvider } from './openaiResponses';
-import { calculateBedrockCost, calculateBedrockInvokeModelCost } from './pricing';
+import {
+  calculateBedrockCost,
+  calculateBedrockInvokeModelCost,
+  getBedrockRuntimeBillingRegion,
+} from './pricing';
 import { getBedrockRuntimeModelError } from './routing';
 
 import type { ProviderResponse } from '../../types/providers';
@@ -124,12 +128,9 @@ function runtimeCost(
   ) {
     return undefined;
   }
-  // These Runtime HTTP adapters apply published US/global tier multipliers over Standard rates.
-  // Kimi's India non-default tiers retain unknown pricing until their rates are established.
+  // Grok 4.6's native calculator covers Standard; its HTTP APIs also support Priority/Flex.
   const httpTier =
-    /(?:^|:inference-profile\/)(?:us|global)\.(?:moonshotai\.kimi-k3|xai\.grok-4\.6)$/i.test(
-      modelName,
-    ) &&
+    /(?:^|:inference-profile\/)(?:us|global)\.xai\.grok-4\.6$/i.test(modelName) &&
     (serviceTier === 'priority' || serviceTier === 'flex');
   const tierMultiplier = httpTier ? (serviceTier === 'priority' ? 1.75 : 0.5) : 1;
   const catalogCost = (completionTokens?: number) => {
@@ -275,7 +276,7 @@ export class BedrockRuntimeChatProvider extends BedrockMantleChatProvider {
       data.usage,
       config,
       data.service_tier ?? config.service_tier,
-      this.getBillingRegion(),
+      getBedrockRuntimeBillingRegion(this.getBillingRegion(), this.getApiUrl()),
       cached,
     );
   }
@@ -366,7 +367,7 @@ export class BedrockRuntimeResponsesProvider extends BedrockOpenAiResponsesProvi
       data.usage,
       config,
       data.service_tier ?? config.service_tier,
-      this.getBillingRegion(),
+      getBedrockRuntimeBillingRegion(this.getBillingRegion(), this.getApiUrl()),
       cached,
     );
     const { cost: _previousCost, ...unbilled } = result;

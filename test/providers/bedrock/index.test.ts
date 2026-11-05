@@ -4036,6 +4036,83 @@ describe('AwsBedrockCompletionProvider', () => {
     expect(response.cost).toBeCloseTo((800 * input + 200 * cacheRead + 500 * output) / 1e6, 12);
   });
 
+  it.each([
+    ['priority', 'flex', 0.5],
+    ['flex', 'priority', 1.75],
+    ['priority', undefined, 1.75],
+  ] as const)(
+    'sends Grok 4.7 InvokeModel tier %s and bills the returned tier %s',
+    async (requested, served, multiplier) => {
+      const config = { region: 'us-gov-west-1', service_tier: requested };
+      const provider = new AwsBedrockCompletionProvider('us.xai.grok-4.7', { config });
+      const responseJson = JSON.stringify({
+        choices: [{ message: { content: 'ok' } }],
+        service_tier: served,
+        usage: {
+          prompt_tokens: 1000,
+          completion_tokens: 500,
+          prompt_tokens_details: { cached_tokens: 200 },
+        },
+      });
+      mockInvokeModel.mockResolvedValueOnce({
+        body: Object.assign(new TextEncoder().encode(responseJson), {
+          transformToString: () => responseJson,
+        }),
+      });
+      const response = await provider.callApi('hello');
+      const request = mockInvokeModel.mock.calls[0][0];
+      expect(request.modelId).toBe('us.xai.grok-4.7');
+      expect(JSON.parse(request.body)).toMatchObject({
+        service_tier: requested,
+        messages: [{ role: 'user', content: 'hello' }],
+      });
+      expect(response.output).toBe('ok');
+      expect(response.cost).toBeCloseTo(
+        ((800 * 2.64 + 200 * 0.66 + 500 * 7.92) / 1e6) * multiplier,
+        12,
+      );
+    },
+  );
+
+  it('rejects an unsupported Grok 4.7 InvokeModel tier before sending the request', async () => {
+    const config = { region: 'us-gov-east-1', service_tier: 'reserved' };
+    const provider = new AwsBedrockCompletionProvider('us.xai.grok-4.7', { config });
+    await expect(provider.callApi('hello')).rejects.toThrow(
+      'Grok 4.7 InvokeModel supports default, priority, and flex',
+    );
+    expect(mockInvokeModel).not.toHaveBeenCalled();
+  });
+
+  it('rejects Reserved on Kimi K3 before invoking Bedrock', async () => {
+    const config = { region: 'ap-south-1', service_tier: 'reserved' };
+    const provider = new AwsBedrockCompletionProvider('in.moonshotai.kimi-k3', { config });
+    await expect(provider.callApi('hello')).rejects.toThrow(
+      new Error('Kimi K3 supports default, priority, and flex service_tier values.'),
+    );
+    expect(mockInvokeModel).not.toHaveBeenCalled();
+  });
+
+  it.each(['default', 'priority', 'flex'])(
+    'sends the %s tier in the Kimi K3 InvokeModel body',
+    async (service_tier) => {
+      const config = { region: 'us-east-1', service_tier };
+      const provider = new AwsBedrockCompletionProvider('us.moonshotai.kimi-k3', { config });
+      const json = JSON.stringify({
+        choices: [{ message: { content: 'ok' } }],
+        usage: { prompt_tokens: 2, completion_tokens: 1 },
+      });
+      mockInvokeModel.mockResolvedValueOnce({
+        body: Object.assign(new TextEncoder().encode(json), { transformToString: () => json }),
+      });
+      const result = await provider.callApi('hello');
+      const request = mockInvokeModel.mock.calls[0][0];
+      expect(request.modelId).toBe('us.moonshotai.kimi-k3');
+      expect(JSON.parse(request.body).service_tier).toBe(service_tier);
+      expect(result.output).toBe('ok');
+      expect(result.cost).toBeUndefined();
+    },
+  );
+
   it.each(['us.xai.grok-4.7', 'global.zai.glm-5.3', 'us.moonshotai.kimi-k3'])(
     'preserves reported cache and reasoning usage for %s',
     async (modelId) => {

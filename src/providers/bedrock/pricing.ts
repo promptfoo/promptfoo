@@ -9,6 +9,19 @@ import {
   isClaudeSonnet55Model,
 } from '../anthropic/util';
 
+/** A first-party Runtime endpoint determines the billing region, including FIPS and PrivateLink. */
+export function getBedrockRuntimeBillingRegion(region: string, endpoint?: string): string {
+  if (!endpoint) {
+    return region;
+  }
+  const hostname = URL.parse(endpoint)?.hostname.replace(/\.+$/, '');
+  return (
+    /^(?:[a-z0-9-]+\.)?bedrock-runtime(?:-fips)?\.([a-z0-9-]+)(?:\.vpce)?\.(?:api\.aws|amazonaws\.com(?:\.cn)?)$/.exec(
+      hostname ?? '',
+    )?.[1] ?? region
+  );
+}
+
 export type BedrockServiceTier = {
   type: 'priority' | 'default' | 'flex' | 'reserved';
 };
@@ -489,22 +502,30 @@ export function calculateBedrockCost(
   );
   const glm53 = /(?:^|:inference-profile\/)(us|global)\.zai\.glm-5\.3$/.exec(normalizedModelId);
   if (grok47 || kimi3 || glm53) {
-    // Kimi Priority/Flex are supported only on Responses and Chat Completions,
-    // not the native Converse/Invoke paths priced here.
+    // AWS specifies Kimi's non-default tier multipliers for the US and global profiles.
     if (
-      (kimi3 && serviceTier?.type && serviceTier.type !== 'default') ||
+      (kimi3?.[1] === 'in' && serviceTier && serviceTier.type !== 'default') ||
       (grok47 && cacheWriteTokens > 0)
     ) {
       return undefined;
     }
     const globalProfile = (grok47 ?? kimi3 ?? glm53)?.[1] === 'global';
+    const govCloudGrok =
+      grok47 && (region?.startsWith('us-gov-') || normalizedModelId.startsWith('arn:aws-us-gov:'));
+    // The geographic ID is shared by the commercial and GovCloud partitions.
+    if (grok47 && !globalProfile && !region && !normalizedModelId.startsWith('arn:')) {
+      return undefined;
+    }
+    if (govCloudGrok && globalProfile) {
+      return undefined;
+    }
     const rates = grok47
       ? { input: 2, output: 6, read: 0.5, write: 0 }
       : kimi3
         ? { input: 3, output: 15, read: 0.3, write: 3.75 }
         : { input: 1.68, output: 5.28, read: 0.312, write: 2.1 };
     const multiplier =
-      (globalProfile ? 1 : 1.1) *
+      (globalProfile ? 1 : govCloudGrok ? 1.32 : 1.1) *
       (serviceTier?.type === 'priority' ? 1.75 : serviceTier?.type === 'flex' ? 0.5 : 1);
     return (
       ((promptTokens * rates.input +
@@ -591,8 +612,12 @@ export function calculateBedrockInvokeModelCost(
   cacheWriteTokens = 0,
   region?: string,
   cacheWrite1hTokens = 0,
+  serviceTier?: BedrockServiceTier,
 ): number | undefined {
   const normalizedModelId = modelId.toLowerCase();
+  if (serviceTier && !['default', 'priority', 'flex'].includes(serviceTier.type)) {
+    return undefined;
+  }
   // These new models expose OpenAI cache counters on InvokeModel. Until those
   // counters are normalized here, do not reuse the Converse cost calculation.
   if (
@@ -620,7 +645,7 @@ export function calculateBedrockInvokeModelCost(
     cacheReadTokens,
     cacheWriteTokens,
     region,
-    undefined,
+    serviceTier,
     cacheWrite1hTokens,
   );
 }
