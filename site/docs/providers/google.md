@@ -596,199 +596,47 @@ for capability details and safety guidance.
 
 ### Video Generation Models (Veo)
 
-Google's Veo models enable AI-powered video generation from text prompts. Use the `google:video:` prefix with `GOOGLE_API_KEY` / `GEMINI_API_KEY` for Google AI Studio. For explicit Vertex AI routing, use the `vertex:video:` prefix instead.
-
-:::warning Gemini API video previews
-Google lists October 22, 2026 as the earliest shutdown date for the native Veo 3.1 previews and `gemini-omni-flash-preview`, with `gemini-omni-1.1-flash` as the replacement. Omni uses the Interactions route rather than the `google:video:` Veo protocol. Check the [Gemini API lifecycle](https://ai.google.dev/gemini-api/docs/deprecations) before running these previews. Vertex video IDs follow a separate lifecycle.
-:::
+The Gemini Developer API retired the Veo preview models. Use `google:gemini-omni-1.1-flash` for video generation through the Interactions API, or use Veo on Vertex AI. [Google’s video migration guide](https://ai.google.dev/gemini-api/docs/video)
 
 #### Available Models
 
-| Model                                        | Description                                                                                               |
-| -------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
-| `google:video:veo-3.1-generate-preview`      | Veo 3.1 model ($0.40/second at 720p or 1080p; $0.60/second at 4k)                                         |
-| `google:video:veo-3.1-fast-generate-preview` | Fast Veo 3.1 model ($0.10/second at 720p, $0.12/second at 1080p, or $0.30/second at 4k)                   |
-| `google:video:veo-3.1-lite-generate-preview` | Lite Veo 3.1 model ($0.05/second at 720p or $0.08/second at 1080p; no 4k, reference images, or extension) |
-
-Promptfoo reports Veo 3.1 cost using Google's default video-with-audio rate for the generated
-duration and resolution. Google charges only when video generation succeeds.
-
-:::warning Retired Veo IDs
-
-Google shut down `veo-3.0-generate-001`, `veo-3.0-fast-generate-001`, and
-`veo-2.0-generate-001` on June 30, 2026. Migrate the standard and Veo 2 IDs to
-`veo-3.1-generate-preview`, and the Fast ID to `veo-3.1-fast-generate-preview`. Promptfoo still
-recognizes the retired IDs for configuration compatibility, but Google no longer serves them.
-
-:::
+Choose a Veo model ID from the [Vertex model card](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/veo/3-1-generate). Use the model's supported region and check [Vertex pricing](https://cloud.google.com/vertex-ai/generative-ai/pricing) for the resolution you select.
 
 #### Basic Usage
-
-```yaml title="promptfooconfig.yaml"
-# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-providers:
-  - id: google:video:veo-3.1-generate-preview
-    config:
-      # Uses GOOGLE_API_KEY / GEMINI_API_KEY by default
-      aspectRatio: '16:9' # or '9:16'
-      resolution: '720p' # 1080p/4k require 8 seconds
-      durationSeconds: 6 # 4, 6, or 8 seconds
-
-prompts:
-  - 'Generate a video of {{subject}}'
-
-tests:
-  - vars:
-      subject: 'a cat playing with a ball of yarn'
-```
-
-:::note
-`google:video:*` uses Google AI Studio by default and can auto-detect Vertex AI when project-based auth is configured. Existing project-based `google:video:*` configs remain compatible; use `vertex:video:*` when you want explicit Vertex AI routing.
-:::
-
-#### Configuration Options
-
-| Option             | Type   | Description                                                                                                                                                                                                                                                                                                                                                                                                     |
-| ------------------ | ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `aspectRatio`      | string | Video aspect ratio: `16:9` (default) or `9:16`                                                                                                                                                                                                                                                                                                                                                                  |
-| `resolution`       | string | `720p` (default), `1080p`, or `4k`; 4k support is model-specific. Google AI Studio extension is 720p-only. On Vertex, Veo 3.1 extension supports 1080p and, for 4k-capable models, 4k                                                                                                                                                                                                                           |
-| `durationSeconds`  | number | Veo 3.x: 4, 6, or 8 seconds; Veo 2: 5, 6, or 8. Reference images require 8 seconds. Google AI Studio extension requests use 8 seconds; Vertex extension requests omit this parameter. Google AI Studio also requires 8 seconds for 1080p/4k; Vertex permits 4 or 6 seconds at 1080p                                                                                                                             |
-| `personGeneration` | string | Model-, mode-, and region-specific person generation control. For Gemini API Veo 3.1, use `allow_all` for text-to-video and extension, or `allow_adult` for image-to-video, interpolation, and reference images. In the EU, UK, Switzerland, and MENA, Veo 3 and 3.1 support only `allow_adult`. Veo 2 also supports `dont_allow`                                                                               |
-| `negativePrompt`   | string | Concepts to avoid in the generated video                                                                                                                                                                                                                                                                                                                                                                        |
-| `referenceImages`  | array  | Up to 3 reference images (file paths or objects; Veo 3.1 and 3.1 Fast, not Lite)                                                                                                                                                                                                                                                                                                                                |
-| `image`            | string | Source image for image-to-video generation                                                                                                                                                                                                                                                                                                                                                                      |
-| `lastImage`        | string | End frame for interpolation (requires `image`)                                                                                                                                                                                                                                                                                                                                                                  |
-| `extendVideoId`    | string | Deprecated alias for `sourceVideo`; accepts the same video inputs, not an operation ID                                                                                                                                                                                                                                                                                                                          |
-| `sourceVideo`      | string | Source video input for Veo 3.1 extension. The Google AI Studio preview Lite model (`google:video:veo-3.1-lite-generate-preview`) does not support extension; the Preview Vertex model ID `vertex:video:veo-3.1-lite-generate-001` does. On AI Studio, use a prior Veo video's Gemini URI, `file://` MP4 path, or raw base64 bytes. On Vertex AI, use its `gs://` URI, a `file://` MP4 path, or raw base64 bytes |
-| `storageUri`       | string | Vertex AI only. Cloud Storage destination for generated videos, in the form `gs://bucket/prefix/`. Promptfoo downloads the returned video into its blob store and exposes the exact returned `gcsUri` as `metadata.sourceVideoUri` for extension                                                                                                                                                                |
-
-#### Image-to-Video Generation
-
-Generate videos from a starting image:
-
-```yaml
-providers:
-  - id: google:video:veo-3.1-generate-preview
-    config:
-      image: file://assets/start-frame.jpg
-      aspectRatio: '16:9'
-      durationSeconds: 6
-
-prompts:
-  - 'Animate this image: {{animation_description}}'
-
-tests:
-  - vars:
-      animation_description: 'the character slowly turns to face the camera'
-```
-
-#### Video Interpolation (First and Last Frame)
-
-Generate video that transitions between two images:
-
-```yaml
-providers:
-  - id: google:video:veo-3.1-generate-preview
-    config:
-      image: file://assets/start.jpg # First frame
-      lastImage: file://assets/end.jpg # Last frame
-      durationSeconds: 6
-
-prompts:
-  - 'Create a smooth transition between these frames'
-```
-
-#### Video Extension (Veo 3.1 Only)
-
-Extend a previously generated Veo video using its original Gemini API URI. Export the first eval
-with `-o results.json` and copy `response.metadata.sourceVideoUri` into `sourceVideo`:
-
-```yaml
-providers:
-  - id: google:video:veo-3.1-generate-preview
-    config:
-      vertexai: false
-      sourceVideo: https://generativelanguage.googleapis.com/v1beta/files/previous-veo-video
-      resolution: '720p'
-      durationSeconds: 8
-
-prompts:
-  - 'Continue this video with {{continuation}}'
-
-tests:
-  - vars:
-      continuation: 'the camera panning to reveal a sunset'
-```
-
-:::note
-This example requires `GOOGLE_API_KEY` or `GEMINI_API_KEY` and explicitly uses the Google AI
-Studio route. The [Gemini API extends videos generated by Veo](https://ai.google.dev/gemini-api/docs/veo#extending_veo_videos).
-Set `sourceVideo` to the prior video's `metadata.sourceVideoUri`, a `file://` MP4 path relative to
-your config directory, or raw base64 video bytes. Operation IDs are not accepted.
-Promptfoo includes `metadata.sourceVideoUri` only when the completed generation exposes a
-reusable Gemini Files URI. Inline bytes and signed downloads are still saved to blob storage;
-you can supply the saved video bytes for extension. Gemini retains generated video URIs for
-two days, and referencing one for extension resets that retention window. Native extension
-requires a 720p Veo source no longer than 141 seconds. For extension outputs,
-`metadata.extensionSeconds` is 7 and `video.duration` is omitted because the total clip duration
-is unknown. `metadata.videoUri` is a compatibility alias for the same sanitized reusable URI.
-:::
-
-For extension, promptfoo sends `durationSeconds: 8` to Google AI Studio whether the setting is omitted or configured. Vertex extension requests omit `durationSeconds`, including when configured. Both APIs add a fixed 7 seconds to the source video.
-
-For Vertex AI, set `storageUri` when generating the source video so Veo writes it to Cloud
-Storage:
 
 ```yaml
 providers:
   - id: vertex:video:veo-3.1-generate-001
     config:
-      projectId: my-gcp-project
       region: us-central1
-      storageUri: gs://my-video-bucket/veo-output/
-      durationSeconds: 8
+      durationSeconds: 4
 ```
 
-Promptfoo downloads the generated video into its blob store as usual and returns the raw
-`gs://` object URI in `metadata.sourceVideoUri`. Use that value as `sourceVideo` in a subsequent
-`vertex:video:*` generation to extend the video. The configured Google Cloud identity must be
-able to access the destination bucket.
+Use Application Default Credentials and set `GOOGLE_CLOUD_PROJECT` to your project. See the [runnable Veo examples](https://github.com/promptfoo/promptfoo/tree/main/examples/google-video) for complete configs.
+
+#### Configuration Options
+
+Set `durationSeconds`, `resolution`, and `aspectRatio` in the provider's `config`. Supported combinations vary by model and generation mode.
+
+#### Image-to-Video Generation
+
+Use `image: file://start.jpg` to animate a starting frame. The [image-to-video example](https://github.com/promptfoo/promptfoo/blob/main/examples/google-video/promptfooconfig-image.yaml) includes an image.
+
+#### Video Interpolation (First and Last Frame)
+
+Set `image` and `lastImage` to the first and last frame, and use the prompt to describe the transition.
+
+#### Video Extension (Veo 3.1 Only)
+
+Set `sourceVideo` to an MP4 previously generated by Veo. Vertex accepts a local `file://` path, base64 video bytes, or a `gs://` URI. Promptfoo reports the extension length in `metadata.extensionSeconds`. See the [Vertex extension example](/docs/providers/vertex#video-extension).
 
 #### Reference Images
 
-Use up to 3 reference images to guide video style (Veo 3.1 and 3.1 Fast, not Lite):
-
-```yaml
-providers:
-  - id: google:video:veo-3.1-generate-preview
-    config:
-      referenceImages:
-        # Simple format: file paths (uses 'asset' reference type)
-        - file://assets/style-ref-1.jpg
-        - file://assets/style-ref-2.jpg
-      aspectRatio: '16:9'
-      durationSeconds: 8
-```
-
-You can also use the object format to specify the reference type:
-
-```yaml
-referenceImages:
-  - image: file://assets/character.jpg
-    referenceType: asset
-  - image: file://assets/background.jpg
-    referenceType: asset
-```
+For models that support asset references, set `referenceImages` to a list of image file paths and use an eight-second duration. The model card lists supported counts and reference types.
 
 #### Storage
 
-Generated videos are stored in promptfoo's blob storage system, which uses content-addressable hashing for deduplication. Videos with identical content share the same storage reference. Use `--no-cache` to force regeneration:
-
-```bash
-promptfoo eval --no-cache
-```
-
-See the [Google Video example](https://github.com/promptfoo/promptfoo/tree/main/examples/google-video) for complete configurations.
+Generated videos are available in the eval viewer. To write the original to Cloud Storage, set `storageUri` to a writable `gs://bucket/prefix/` and use the response's `metadata.sourceVideoUri` to extend it later.
 
 <a id="gemini-20-flash"></a>
 
