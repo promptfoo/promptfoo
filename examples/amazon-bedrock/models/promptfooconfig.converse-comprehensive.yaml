@@ -2,17 +2,13 @@
 description: 'Bedrock Converse API - Comprehensive Test Suite'
 
 # ============================================================================
-# This example demonstrates all Converse API capabilities across model families:
-# - Text generation (all models)
-# - System prompts
-# - Multi-turn conversations
-# - Tool/function calling
-# - Extended thinking (Claude)
-# - Performance configuration
+# This example compares text generation across model families.
+# Selected Claude providers also demonstrate adaptive thinking and output effort.
+# Every provider answers the same capital-city questions.
 #
 # Model families covered:
-# - Anthropic Claude (4.x, 4.5, 4.6, 5)
-# - Amazon Nova (Micro, Lite, Pro, Premier)
+# - Anthropic Claude (4.x, 5, 5.5)
+# - Amazon Nova (Micro, Lite, Pro, Nova 2 Lite)
 # - Meta Llama (3.x, 4.x)
 # - Mistral AI (Small, Large, Pixtral)
 # - DeepSeek R1
@@ -56,21 +52,19 @@ providers:
           effort: high
       showThinking: true
 
-  # Claude Opus 4.1
-  - id: bedrock:converse:us.anthropic.claude-opus-4-1-20250805-v1:0
-    label: Claude Opus 4.1
+  # Claude Opus 5.5
+  - id: bedrock:converse:us.anthropic.claude-opus-5-5
+    label: Claude Opus 5.5
     config:
       region: us-west-2
       maxTokens: 4096
-      temperature: 0.7
 
-  # Claude Sonnet 4
-  - id: bedrock:converse:us.anthropic.claude-sonnet-4-20250514-v1:0
-    label: Claude Sonnet 4
+  # Claude Sonnet 5.5
+  - id: bedrock:converse:us.anthropic.claude-sonnet-5-5
+    label: Claude Sonnet 5.5
     config:
       region: us-east-1
       maxTokens: 4096
-      temperature: 0.7
 
   # Claude Opus 4.6
   - id: bedrock:converse:us.anthropic.claude-opus-4-6-v1
@@ -92,10 +86,9 @@ providers:
   # Amazon Nova Models
   # ============================================================================
 
-  # Legacy Nova Premier: Bedrock end of life is September 14, 2026.
-  # https://docs.aws.amazon.com/bedrock/latest/userguide/model-lifecycle.html
-  - id: bedrock:converse:us.amazon.nova-premier-v1:0
-    label: Nova Premier
+  # Nova 2 Lite
+  - id: bedrock:converse:us.amazon.nova-2-lite-v1:0
+    label: Nova 2 Lite
     config:
       region: us-east-1
       maxTokens: 4096
@@ -265,8 +258,5 @@ tests:
   - vars:
       country: Australia
     assert:
-      - type: contains-any
-        value:
-          - Canberra
-          - Sydney
-          - Melbourne
+      - type: contains
+        value: Canberra
