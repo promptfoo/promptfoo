@@ -2,6 +2,8 @@
 
 Evaluate a Python coding prompt with Codex and GPT-6.1 Terra on Amazon Bedrock in US East (N. Virginia).
 
+## Run the evaluation
+
 ```bash
 npx promptfoo@latest init --example openai-codex-sdk/bedrock
 ```

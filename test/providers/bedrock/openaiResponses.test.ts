@@ -254,6 +254,20 @@ describe('bedrock openaiResponses helper', () => {
       expect(body.top_p).toBe(0.8);
     });
 
+    it('prices GPT OSS Standard using the region of the actual AWS endpoint', async () => {
+      const provider = createBedrockOpenAiResponsesProvider('openai.gpt-oss-120b', {
+        config: {
+          apiKey: 'bedrock-key',
+          region: 'us-east-1',
+          apiBaseUrl: 'https://bedrock-mantle.eu-central-1.api.aws/v1',
+        },
+      });
+
+      const result = await provider.callApi('hello');
+
+      expect(result.cost).toBeCloseTo((10 * 0.2 + 5 * 0.79) / 1e6, 10);
+    });
+
     it('posts GPT OSS calls to /v1/responses with the Bedrock API key', async () => {
       restoreEnv = mockProcessEnv({ AWS_BEARER_TOKEN_BEDROCK: 'env-bedrock-key' });
       const provider = createBedrockOpenAiResponsesProvider('openai.gpt-oss-120b', {

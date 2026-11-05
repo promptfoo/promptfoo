@@ -377,10 +377,8 @@ export class BedrockGptOssResponsesProvider extends BedrockOpenAiResponsesProvid
     if (tier && tier !== 'default' && tier !== 'standard') {
       return super.applyBilling(result, data, config, cached);
     }
-    const rates = getBedrockPricing(
-      model,
-      resolveBedrockMantleRegion(config, this.env, DEFAULT_BEDROCK_MANTLE_RESPONSES_REGION),
-    );
+    const region = getMantleEndpointRegion(new URL(this.getApiUrl())) ?? this.getBillingRegion();
+    const rates = getBedrockPricing(model, region);
     const inputTokens = data.usage?.input_tokens;
     const outputTokens = data.usage?.output_tokens;
     if (
