@@ -11,6 +11,11 @@ export const decisionLevelSchema = z
   .object({ label: z.string(), description: z.string().optional() })
   .strict();
 
+export const decisionGradingLevelsSchema = z
+  .array(z.union([z.string().transform((label) => ({ label })), decisionLevelSchema]))
+  .min(2)
+  .max(10);
+
 export const decisionQuestionSchema = z.discriminatedUnion('type', [
   z.object({ ...decisionQuestionFields, type: z.literal('predicate') }).strict(),
   z
@@ -161,6 +166,7 @@ export const decisionResponseSchema = z.object({
 
 export type DecisionQuestion = z.infer<typeof decisionQuestionSchema>;
 export type DecisionRequest = z.infer<typeof decisionRequestSchema>;
+export type DecisionGradingLevel = string | z.infer<typeof decisionLevelSchema>;
 
 export function parseDecisionsInput(prompt: string): unknown {
   if (prompt.trimStart().startsWith('[')) {

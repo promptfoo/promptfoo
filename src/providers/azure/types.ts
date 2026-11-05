@@ -1,6 +1,6 @@
 import type { EnvOverrides } from '../../types/env';
 import type { MCPConfig } from '../mcp/types';
-import type { DecisionQuestion } from '../openai/decisionsProtocol';
+import type { DecisionGradingLevel, DecisionQuestion } from '../openai/decisionsProtocol';
 import type { AssistantFunctionCallback, GPT5ReasoningEffort } from '../openai/types';
 
 /**
@@ -171,6 +171,13 @@ export interface AzureDecisionsOptions
   > {
   questions?: DecisionQuestion[];
   safety_identifier?: string | null;
+  /** llm-rubric: minimum normalized score to pass. */
+  threshold?: number;
+  /** llm-rubric: ordered score levels, low to high. Omit for a predicate. */
+  levels?: DecisionGradingLevel[];
+  /** classifier: what to decide and the possible string labels. */
+  instructions?: string;
+  labels?: string[] | Record<string, string | null>;
   maxRetries?: number;
   cost?: number;
   inputCost?: number;

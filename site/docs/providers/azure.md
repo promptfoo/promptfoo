@@ -244,14 +244,41 @@ The rendered prompt becomes `input`. Question types, input validation, JSON outp
 (`JSON.parse(output).answers`), refusal handling, and explicit per-token cost
 configuration follow the [OpenAI Decisions provider](./openai-decisions.md).
 `questions` and `safety_identifier` support template variables. `maxRetries`
-controls HTTP retries, and `--no-cache` bypasses response reuse.
+controls HTTP retries, and `--no-cache` bypasses response reuse. No default
+Decisions price is inferred from the deployment name.
 
-This provider supports direct evals only. It does not yet support `llm-rubric`,
-`classifier`, or other grading assertions. Use JavaScript assertions to inspect
-the typed answers. No default Decisions price is inferred from the deployment name.
+Azure Decisions can also grade text with `llm-rubric` and `classifier`. Set
+`threshold` and optional ordered `levels` for rubric grading, or set
+`instructions` and `labels` for classification. Other model-graded assertions are
+rejected because they require generated text rather than Decisions answers.
+
+```yaml
+assert:
+  - type: llm-rubric
+    value: The reply resolves the customer's problem
+    provider:
+      id: azure:decisions:my-decisions-deployment
+      config:
+        threshold: 0.7
+  - type: classifier
+    value: resolution
+    threshold: 0.8
+    provider:
+      id: azure:decisions:my-decisions-deployment
+      config:
+        instructions: What is this support reply doing?
+        labels:
+          resolution: Resolves the issue or offers a concrete fix
+          deflection: Redirects the customer without helping
+```
+
+Rubric grading supports text or serialized output only; media attachments are
+rejected. A refusal or malformed answer fails grading, including negated
+assertions. See [Grade and classify outputs](./openai-decisions.md#grade-and-classify-outputs)
+for score normalization, thresholds, and label behavior shared by both providers.
 
 Try the [Azure Decisions example](https://github.com/promptfoo/promptfoo/tree/main/examples/azure-openai-decisions)
-for a complete config covering all three question types.
+for direct questions plus grading and classification configs.
 
 ## Azure Responses API
 

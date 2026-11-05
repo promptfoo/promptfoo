@@ -28,7 +28,7 @@ import { decodeUrlComponent } from '../urlEncoding';
 import { calculateOpenAIUsageCost } from './billing';
 import {
   answersMatchDecisionQuestions,
-  decisionLevelSchema,
+  decisionGradingLevelsSchema,
   decisionProbabilitySchema,
   decisionRequestSchema,
   decisionResponseSchema,
@@ -44,7 +44,7 @@ import type {
   ProviderClassificationResponse,
   ProviderResponse,
 } from '../../types/index';
-import type { DecisionQuestion, DecisionRequest } from './decisionsProtocol';
+import type { DecisionGradingLevel, DecisionQuestion, DecisionRequest } from './decisionsProtocol';
 import type { OpenAiSharedOptions } from './types';
 
 // Equivalent grader instances share random namespaces within this process. Credentials stay
@@ -56,11 +56,6 @@ const cacheScopes = new LRUCache<string, string>({
   updateAgeOnGet: true,
 });
 
-const gradingLevelsSchema = z
-  .array(z.union([z.string().transform((label) => ({ label })), decisionLevelSchema]))
-  .min(2)
-  .max(10);
-
 interface DecisionsOptions extends OpenAiSharedOptions {
   model?: string;
   questions?: DecisionQuestion[];
@@ -68,7 +63,7 @@ interface DecisionsOptions extends OpenAiSharedOptions {
   /** llm-rubric: minimum normalized score to pass. */
   threshold?: number;
   /** llm-rubric: ordered score levels, low to high. Omit for a predicate. */
-  levels?: Array<string | z.infer<typeof decisionLevelSchema>>;
+  levels?: DecisionGradingLevel[];
   /** classifier: what to decide and the possible string labels. */
   instructions?: string;
   labels?: string[] | Record<string, string | null>;
@@ -288,7 +283,9 @@ export class OpenAiDecisionsProvider extends OpenAiGenericProvider {
       return { error: 'OpenAI Decisions `llm-rubric` requires rubric and output variables.' };
     }
     const levels =
-      config.levels === undefined ? undefined : gradingLevelsSchema.safeParse(config.levels);
+      config.levels === undefined
+        ? undefined
+        : decisionGradingLevelsSchema.safeParse(config.levels);
     if (levels && !levels.success) {
       return {
         error:

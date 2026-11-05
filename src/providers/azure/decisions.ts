@@ -21,6 +21,8 @@ import {
 import { escapeRegExp } from '../../util/text';
 import {
   answersMatchDecisionQuestions,
+  decisionGradingLevelsSchema,
+  decisionProbabilitySchema,
   decisionRequestSchema,
   decisionResponseSchema,
   parseDecisionsInput,
@@ -33,9 +35,10 @@ import { AzureGenericProvider } from './generic';
 import type {
   CallApiContextParams,
   CallApiOptionsParams,
+  ProviderClassificationResponse,
   ProviderResponse,
 } from '../../types/index';
-import type { DecisionRequest } from '../openai/decisionsProtocol';
+import type { DecisionQuestion, DecisionRequest } from '../openai/decisionsProtocol';
 import type { AzureDecisionsOptions, AzureProviderOptions } from './types';
 
 const cacheScopes = new LRUCache<string, string>({
@@ -136,17 +139,149 @@ export class AzureDecisionsProvider extends AzureGenericProvider<AzureDecisionsO
     options?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
     options?.abortSignal?.throwIfAborted();
-    if (context?.isGrading) {
-      return {
-        error:
-          'Azure Decisions currently supports direct evaluation only; grading assertions are not supported.',
-      };
-    }
     const config: AzureDecisionsOptions = {
       ...this.config,
       ...(context?.prompt?.config as Partial<AzureDecisionsOptions>),
     };
+    if (context?.isGrading) {
+      const label = context.prompt.label;
+      if (label === 'llm-rubric') {
+        return this.grade(prompt, config, context, options);
+      }
+      return {
+        error: `Azure Decisions cannot grade \`${label}\` assertions. Use \`llm-rubric\` or \`classifier\`.`,
+      };
+    }
     return this.ask(parseDecisionsInput(prompt), config, context, options);
+  }
+
+  async callClassificationApi(
+    prompt: string,
+    options?: CallApiOptionsParams,
+  ): Promise<ProviderClassificationResponse> {
+    options?.abortSignal?.throwIfAborted();
+    const parsed = z
+      .object({
+        instructions: z.string().min(1),
+        labels: z.union([z.array(z.string()).min(1), z.record(z.string(), z.string().nullable())]),
+      })
+      .safeParse(this.config);
+    if (!parsed.success) {
+      return {
+        error:
+          'Azure Decisions classifier needs `instructions` and `labels` (strings or a label-to-description map).',
+      };
+    }
+    const { instructions, labels } = parsed.data;
+    const choices = Array.isArray(labels)
+      ? labels.map((value) => ({ value }))
+      : Object.entries(labels).map(([value, description]) => ({
+          value,
+          ...(description === null ? {} : { description }),
+        }));
+    const result = await this.ask(
+      prompt,
+      {
+        ...this.config,
+        questions: [{ name: 'classification', type: 'choice', instructions, choices }],
+      },
+      undefined,
+      options,
+    );
+    if (result.error) {
+      return result;
+    }
+    const answer = decisionResponseSchema.parse(result.raw).answers[0];
+    const { output: _output, ...response } = result;
+    if (answer.type !== 'choice') {
+      return { ...response, error: 'Azure Decisions refused to classify the input.' };
+    }
+    return {
+      ...response,
+      classification: Object.fromEntries(
+        answer.probabilities.map(({ value, probability }) => [value, probability]),
+      ),
+    };
+  }
+
+  private async grade(
+    prompt: string,
+    config: AzureDecisionsOptions,
+    context: CallApiContextParams,
+    options?: CallApiOptionsParams,
+  ): Promise<ProviderResponse> {
+    try {
+      const messages = z
+        .array(z.object({ content: z.unknown().optional() }))
+        .safeParse(JSON.parse(prompt));
+      const textPart = z.object({
+        type: z.enum(['text', 'input_text', 'output_text']),
+        text: z.string(),
+      });
+      if (
+        messages.success &&
+        messages.data.some(
+          ({ content }) =>
+            Array.isArray(content) && content.some((part) => !textPart.safeParse(part).success),
+        )
+      ) {
+        return {
+          error:
+            'Azure Decisions `llm-rubric` supports text output only; media attachments are not supported.',
+        };
+      }
+    } catch {
+      // Plain-text grading prompts have no structured attachments.
+    }
+    const threshold = decisionProbabilitySchema.safeParse(config.threshold ?? 0.5);
+    if (!threshold.success) {
+      return { error: 'Azure Decisions `threshold` must be a number from 0 to 1.' };
+    }
+    const { rubric, output } = context.vars;
+    if (rubric === undefined || output === undefined) {
+      return { error: 'Azure Decisions `llm-rubric` requires rubric and output variables.' };
+    }
+    const levels =
+      config.levels === undefined
+        ? undefined
+        : decisionGradingLevelsSchema.safeParse(config.levels);
+    if (levels && !levels.success) {
+      return {
+        error:
+          'Azure Decisions `levels` must list 2 to 10 strings or {label, description?} objects, ordered low to high.',
+      };
+    }
+    const instructions = typeof rubric === 'string' ? rubric : JSON.stringify(rubric);
+    const question: DecisionQuestion = levels?.success
+      ? { name: 'grade', type: 'score', instructions, levels: levels.data }
+      : { name: 'grade', type: 'predicate', instructions };
+    const result = await this.ask(
+      typeof output === 'string' ? output : JSON.stringify(output),
+      { ...config, questions: [question] },
+      context,
+      options,
+    );
+    if (result.error) {
+      return result;
+    }
+    const answer = decisionResponseSchema.parse(result.raw).answers[0];
+    if (answer.type !== 'predicate' && answer.type !== 'score') {
+      return {
+        ...result,
+        output: undefined,
+        error: 'Azure Decisions refused to grade the output.',
+      };
+    }
+    const raw = answer.type === 'predicate' ? answer.probability : answer.score;
+    const top = question.type === 'score' ? question.levels.length - 1 : 1;
+    const score = raw / top;
+    const pass = score >= threshold.data;
+    const comparison = `< threshold ${threshold.data}`;
+    const reason =
+      answer.type === 'predicate'
+        ? `Decisions predicate probability ${raw} ${comparison}`
+        : `Decisions score ${raw} on levels 0–${top} (${score} normalized) ${comparison}`;
+    return { ...result, output: { pass, score, ...(!pass && { reason }) } };
   }
 
   private async ask(
@@ -171,7 +306,10 @@ export class AzureDecisionsProvider extends AzureGenericProvider<AzureDecisionsO
       body = decisionRequestSchema.parse({
         model: this.deploymentName,
         input,
-        questions: renderVarsInObject(config.questions, context?.vars),
+        questions:
+          context?.isGrading && context.prompt.label === 'llm-rubric'
+            ? config.questions
+            : renderVarsInObject(config.questions, context?.vars),
         safety_identifier: renderVarsInObject(config.safety_identifier, context?.vars),
       });
     } catch (error) {
