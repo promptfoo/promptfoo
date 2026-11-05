@@ -448,27 +448,28 @@ Promptfoo can use Codex sign-in for default text grading and synthesis when no h
 <details>
 <summary>Run Codex on Amazon Bedrock</summary>
 
-Set `model_provider: amazon-bedrock`, use the Bedrock model ID, and pass AWS credentials and a supported Region:
+Set `model_provider: amazon-bedrock` to run Codex through Bedrock's Mantle Responses API. Choose a Bedrock model ID from your Codex CLI's catalog and enable access in the AWS Region where you plan to run it. This example uses GPT-6.1 Terra in US East (N. Virginia). [Codex 0.165.0 Bedrock catalog](https://github.com/openai/codex/blob/rust-v0.165.0/codex-rs/model-provider/src/amazon_bedrock/catalog.rs) · [AWS model card](https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-openai-gpt-6-1-terra.html)
 
 ```yaml
 providers:
   - id: openai:codex-sdk
     config:
       model_provider: amazon-bedrock
-      model: openai.gpt-5.6-sol
+      model: openai.gpt-6.1-terra
       sandbox_mode: read-only
       approval_policy: never
       cli_env:
-        AWS_REGION: '{{env.AWS_REGION}}'
-        AWS_ACCESS_KEY_ID: '{{env.AWS_ACCESS_KEY_ID}}'
-        AWS_SECRET_ACCESS_KEY: '{{env.AWS_SECRET_ACCESS_KEY}}'
+        AWS_REGION: us-east-1
+        AWS_BEARER_TOKEN_BEDROCK: '{{env.AWS_BEARER_TOKEN_BEDROCK}}'
 ```
 
-For temporary credentials, also pass `AWS_SESSION_TOKEN`. For profile-based authentication, forward the required AWS profile and configuration variables instead. Check [Bedrock model access and Regions](/docs/providers/aws-bedrock#openai-models) before running the eval.
+Export a Bedrock API key as `AWS_BEARER_TOKEN_BEDROCK` before running the example. To use AWS credentials instead, replace that entry in `cli_env` with `AWS_PROFILE` or with `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY`. Temporary key pairs also require `AWS_SESSION_TOKEN`.
+
+For Bedrock Runtime, Codex 0.165.0 supports `model_provider: amazon-bedrock-runtime` with an inference profile ID such as `us.openai.gpt-6.1-terra`. Check the catalog for your CLI version and AWS partition when choosing a different model. [Codex Runtime catalog](https://github.com/openai/codex/blob/rust-v0.165.0/codex-rs/model-provider/src/amazon_bedrock/runtime_catalog.rs) · [OpenAI models on Amazon Bedrock](/docs/providers/aws-bedrock/#openai-models)
+
+Scope IAM permissions to Bedrock inference and prefer short-lived credentials. Variables passed through `cli_env` are available to the agent shell.
 
 Promptfoo does not inject ambient OpenAI keys for a custom `model_provider` unless you explicitly supply `config.apiKey` or the keys in `cli_env`. Top-level `model_provider` takes precedence over `cli_config.model_provider`.
-
-Codex 0.156.1 does not list GPT-6 Sol or Luna in its [Bedrock catalog](https://github.com/openai/codex/blob/rust-v0.156.1/codex-rs/model-provider/src/amazon_bedrock/catalog.rs). For those models, use the [direct Bedrock provider](/docs/providers/aws-bedrock#openai-models) instead of the Codex runtime.
 
 The [Bedrock example](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-codex-sdk/bedrock) has complete setup instructions.
 
@@ -591,7 +592,7 @@ Retryable Codex rate limits are passed to Promptfoo's scheduler with the SDK's r
 - [Skill assertions and tracing](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-codex-sdk/skills)
 - [Persistent conversations](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-codex-sdk/thread-persistence)
 - [Read-only sandbox checks](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-codex-sdk/sandbox)
-- [Amazon Bedrock setup](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-codex-sdk/bedrock)
+- [Amazon Bedrock setup with a regional Bedrock API key](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-codex-sdk/bedrock)
 - [Compare agent SDKs](https://github.com/promptfoo/promptfoo/tree/main/examples/compare-agentic-sdks)
 - [Codex App Server provider](/docs/providers/openai-codex-app-server) for evals using the app-server protocol
 - [Claude Agent SDK provider](/docs/providers/claude-agent-sdk)

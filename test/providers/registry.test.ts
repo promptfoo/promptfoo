@@ -2217,15 +2217,12 @@ describe('Provider Registry', () => {
       expect(provider.id()).toContain('nova-reel');
     });
 
-    it('defaults the Nova Reel model for a bare bedrock:video path', async () => {
+    it('requires an explicit video model after Nova Reel retirement', async () => {
       const factories = await getProviderFactories('bedrock:video');
-      const factory = factories.find((f) => f.test('bedrock:video'));
-      expect(factory).toBeDefined();
-
-      // Empty model segment falls back to the default Nova Reel model id.
-      const provider = await factory!.create('bedrock:video', { config: {} }, mockContext);
-      expect(provider.constructor.name).toBe('NovaReelVideoProvider');
-      expect(provider.id()).toContain('amazon.nova-reel-v1:1');
+      const factory = factories.find((f) => f.test('bedrock:video'))!;
+      await expect(factory.create('bedrock:video', { config: {} }, mockContext)).rejects.toThrow(
+        'bedrock:video:luma.ray-v2:0',
+      );
     });
 
     // Regression guard for the AWS-before-script routing precedence (PR #9537).
@@ -2709,6 +2706,18 @@ describe('Provider Registry', () => {
         async () =>
           (await import('../../src/providers/google/interactions')).GoogleInteractionsProvider,
       ],
+      ...[
+        'google:gemini-3.5-transcribe',
+        'palm:gemini-3.5-transcribe',
+        'google:interactions:gemini-3.5-transcribe',
+      ].map(
+        (path) =>
+          [
+            path,
+            async () =>
+              (await import('../../src/providers/google/interactions')).GoogleInteractionsProvider,
+          ] as const,
+      ),
       // Bare google:<model> default chat route (no service-type segment).
       [
         'google:gemini-omni-flash-preview',
@@ -2925,6 +2934,17 @@ describe('Provider Registry', () => {
       );
     });
 
+    it.each(['chat', 'video', 'live', 'embedding'])(
+      'rejects a native file Transcribe ID on the %s API',
+      async (serviceType) => {
+        const path = `google:${serviceType}:gemini-3.5-transcribe`;
+        const factory = (await getProviderFactories(path)).find((f) => f.test(path));
+        await expect(factory!.create(path, bareOptions, bareContext)).rejects.toThrow(
+          'For file transcription, use google:gemini-3.5-transcribe.',
+        );
+      },
+    );
+
     it('rejects unsupported Vertex image generation with Google AI Studio guidance', async () => {
       const providerPath = 'vertex:image:imagen-4.0-generate-001';
       const factory = (await getProviderFactories(providerPath)).find((f) => f.test(providerPath));
@@ -3065,6 +3085,21 @@ describe('Provider Registry', () => {
         await expect(factory!.create(providerPath, bareOptions, bareContext)).rejects.toThrow(
           'requires the Gemini Live API',
         );
+      },
+    );
+
+    it.each(['google', 'palm', 'vertex'])(
+      'requires the Live route for %s transcription',
+      async (prefix) => {
+        const model = 'gemini-3.5-transcribe-live';
+        const factory = (await getProviderFactories(`${prefix}:${model}`)).find((f) =>
+          f.test(`${prefix}:${model}`),
+        );
+        await expect(
+          factory!.create(`${prefix}:${model}`, bareOptions, bareContext),
+        ).rejects.toThrow(`requires google:live:${model} or vertex:live:${model}`);
+        const provider = await factory!.create(`${prefix}:live:${model}`, bareOptions, bareContext);
+        expect(provider.id()).toBe(`${prefix === 'palm' ? 'google' : prefix}:live:${model}`);
       },
     );
 

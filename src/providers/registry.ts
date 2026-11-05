@@ -215,7 +215,7 @@ function getProviderEnvAliasGroups(
     ];
   }
   if (
-    /^(?:google|palm):(?:interactions:)?(?:gemini-omni-flash-preview|gemini-omni-1\.1-flash|gemini-robotics-er-2-preview)$/.test(
+    /^(?:google|palm):(?:interactions:)?(?:gemini-omni-flash-preview|gemini-omni-1\.1-flash|gemini-3\.5-transcribe|gemini-robotics-er-2-preview)$/.test(
       providerPath,
     )
   ) {
