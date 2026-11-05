@@ -19,12 +19,11 @@ Contact: srinivas AT testAIng.com
 
 ## Full eval
 
-`promptfoo_tests_from_hf.py` uses only the Python standard library. It writes a generated tests file (gitignored) with `llm-rubric` assertions. Pass a limit to keep the file small.
+`promptfoo_tests_from_hf.py` uses only the Python standard library. A starter `tests.json` is committed (offline-safe `contains` asserts for the echo provider). Re-run the script to regenerate with `llm-rubric` assertions; pass a limit to keep the file small.
 
 ```bash
 python promptfoo_tests_from_hf.py
 python promptfoo_tests_from_hf.py 10
-# writes tests.json (gitignored); promptfooconfig.yaml points at it
 npx promptfoo@latest eval
 ```
 
