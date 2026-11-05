@@ -1,10 +1,16 @@
 import logger from '../../logger';
+import { getBedrockBillingEndpoint } from '../openai/billing';
 import { OpenAiResponsesProvider } from '../openai/responses';
 import {
   getBedrockMantleOrigin,
   resolveBedrockMantleApiKey,
   resolveBedrockMantleRegion,
 } from './mantle';
+import {
+  BEDROCK_OPENAI_MANTLE_REGIONS,
+  getBedrockCapabilityModelName,
+  getBedrockMantleBillingModelName,
+} from './openaiModels';
 import { getBedrockPricing } from './pricing';
 import {
   isBedrockGptOssResponsesModel,
@@ -44,31 +50,6 @@ export const DEFAULT_BEDROCK_OPENAI_REGION = 'us-east-2';
 /** Default region for standard mantle Responses models such as GPT OSS. */
 export const DEFAULT_BEDROCK_MANTLE_RESPONSES_REGION = 'us-east-1';
 
-/**
- * Mantle Regions that serve each OpenAI frontier model: the regional Mantle catalogs
- * (`GET /v1/models`, verified 2026-09-24) plus the GovCloud Regions from the AWS model cards.
- * AWS changes availability independently of promptfoo, so this table only picks the default
- * Region and explains Mantle 404s; configured Regions are always used as given.
- */
-const BEDROCK_OPENAI_MANTLE_REGIONS = new Map<string, readonly string[]>([
-  ['openai.gpt-6.1-terra', ['us-east-1']],
-  ['openai.gpt-6-astra', ['us-west-2']],
-  ['openai.gpt-6-sol', ['us-east-1']],
-  ['openai.gpt-6-luna', ['us-east-1']],
-  ['openai.gpt-5.6-sol', ['us-east-1', 'us-east-2']],
-  ['openai.gpt-5.6-cyber', ['us-east-2', 'us-gov-east-1']],
-  [
-    'openai.gpt-5.6-terra',
-    ['us-east-1', 'us-east-2', 'us-west-2', 'us-gov-west-1', 'us-gov-east-1'],
-  ],
-  [
-    'openai.gpt-5.6-luna',
-    ['us-east-1', 'us-east-2', 'us-west-2', 'us-gov-west-1', 'us-gov-east-1'],
-  ],
-  ['openai.gpt-5.5', ['us-east-1', 'us-east-2']],
-  ['openai.gpt-5.4', ['us-east-1', 'us-east-2', 'us-west-2']],
-]);
-
 function getDefaultBedrockOpenAiRegion(modelName: string): string {
   const regions = BEDROCK_OPENAI_MANTLE_REGIONS.get(modelName);
   return !regions || regions.includes(DEFAULT_BEDROCK_OPENAI_REGION)
@@ -77,7 +58,8 @@ function getDefaultBedrockOpenAiRegion(modelName: string): string {
 }
 
 function getMantleEndpointRegion(url: URL): string | undefined {
-  return /^bedrock-mantle\.([a-z0-9-]+)\.api\.aws$/.exec(url.hostname)?.[1];
+  const endpoint = getBedrockBillingEndpoint(url.hostname);
+  return endpoint?.service === 'mantle' ? endpoint.region : undefined;
 }
 
 function getMantleRegionHint(
@@ -180,7 +162,7 @@ export class BedrockOpenAiResponsesProvider extends OpenAiResponsesProvider {
   }
 
   protected normalizeCapabilityModelName(modelName: string): string {
-    return modelName.replace(/^openai\./, '');
+    return getBedrockCapabilityModelName(modelName);
   }
 
   protected override getGenAISystem(): string {
@@ -207,13 +189,9 @@ export class BedrockOpenAiResponsesProvider extends OpenAiResponsesProvider {
    */
   protected getBillingModelName(config: OpenAiCompletionOptions): string {
     const passthroughModel = (config.passthrough as { model?: unknown } | undefined)?.model;
-    const modelName =
-      typeof passthroughModel === 'string'
-        ? this.normalizeCapabilityModelName(passthroughModel)
-        : this.getCapabilityModelName();
-    return /^gpt-5\.6(?:-|$)/.test(modelName) || modelName === 'grok-4.3'
-      ? `bedrock:${modelName}`
-      : modelName;
+    return getBedrockMantleBillingModelName(
+      typeof passthroughModel === 'string' ? passthroughModel : this.modelName,
+    );
   }
 
   /**
@@ -265,9 +243,24 @@ export class BedrockOpenAiResponsesProvider extends OpenAiResponsesProvider {
       delete (result.body as Record<string, unknown>).service_tier;
       return result;
     }
+    if (serviceTier === 'ultrafast' && model === 'openai.gpt-6-astra') {
+      const region = getMantleEndpointRegion(new URL(this.getApiUrl())) ?? this.bedrockRegion;
+      if (region !== 'us-east-1') {
+        throw new Error(
+          `Amazon Bedrock Mantle serves ${model} Ultrafast in us-east-1. Select the us-east-1 endpoint or use the default service tier.`,
+        );
+      }
+      return result;
+    }
+    if (
+      isBedrockGptOssResponsesModel(model) &&
+      (serviceTier === 'flex' || serviceTier === 'priority')
+    ) {
+      return result;
+    }
     if (serviceTier !== undefined && serviceTier !== 'default') {
       throw new Error(
-        `Amazon Bedrock model "${model}" supports only the standard inference tier; ` +
+        `Amazon Bedrock model "${model}" does not support the requested service tier through this adapter; ` +
           `received "${serviceTier}". Remove service_tier/serviceTier or set service_tier to "default".`,
       );
     }
@@ -379,10 +372,13 @@ export class BedrockGptOssResponsesProvider extends BedrockOpenAiResponsesProvid
   ): ProviderResponse {
     const passthroughModel = (config.passthrough as { model?: unknown } | undefined)?.model;
     const model = typeof passthroughModel === 'string' ? passthroughModel : this.modelName;
-    const rates = getBedrockPricing(
-      model,
-      resolveBedrockMantleRegion(config, this.env, DEFAULT_BEDROCK_MANTLE_RESPONSES_REGION),
-    );
+    // The regional GPT OSS catalog rates cover Standard inference.
+    const tier = data.service_tier ?? config.service_tier;
+    if (tier && tier !== 'default' && tier !== 'standard') {
+      return super.applyBilling(result, data, config, cached);
+    }
+    const region = getMantleEndpointRegion(new URL(this.getApiUrl())) ?? this.getBillingRegion();
+    const rates = getBedrockPricing(model, region);
     const inputTokens = data.usage?.input_tokens;
     const outputTokens = data.usage?.output_tokens;
     if (
@@ -391,7 +387,7 @@ export class BedrockGptOssResponsesProvider extends BedrockOpenAiResponsesProvid
       inputTokens === undefined ||
       outputTokens === undefined
     ) {
-      return result;
+      return super.applyBilling(result, data, config, cached);
     }
     const cost = cached
       ? 0

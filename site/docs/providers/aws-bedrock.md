@@ -1101,39 +1101,19 @@ requests and return the final assistant message directly.
 
 ### OpenAI Models
 
-Amazon Bedrock hosts two families of OpenAI models, and they are served by **different
-APIs**. promptfoo routes each `bedrock:openai.*` id to the correct one automatically.
+Use the model ID from the [AWS OpenAI model cards](https://docs.aws.amazon.com/bedrock/latest/userguide/model-cards-openai.html). Each card lists the supported APIs, inference profiles, Regions, and prices.
 
-GPT-6 Sol (`openai.gpt-6-sol`) and Luna (`openai.gpt-6-luna`) use the
-[OpenAI-compatible Responses API on Mantle](https://developers.openai.com/api/docs/guides/amazon-bedrock)
-in `us-east-1`, which promptfoo selects by default for those two IDs. AWS also offers the
-models through Bedrock Runtime with United States and global routing; the bare promptfoo
-selectors use Mantle. Bedrock does not support Responses reasoning updates; use the request-level effort.
+#### Frontier models {#frontier-models-gpt-5x}
 
-For region-specific Standard processing, promptfoo estimates
-$2.20 input / $11 output for Sol and $0.11 input / $0.55 output per million tokens. Bedrock Runtime global profiles use the global Standard rates: $2 / $10 for Sol and $0.10 / $0.50 for Luna per million tokens.
-See [OpenAI's Bedrock pricing guidance](https://developers.openai.com/api/docs/guides/amazon-bedrock#pricing)
-for regional pricing and AWS billing terms.
+| API                     | Example provider ID                      |
+| ----------------------- | ---------------------------------------- |
+| Mantle Responses        | `bedrock:openai.gpt-6.1-sol`             |
+| Mantle Chat Completions | `bedrock:mantle:openai.gpt-6.1-sol`      |
+| Runtime Converse        | `bedrock:converse:us.openai.gpt-6.1-sol` |
 
-#### Frontier models (GPT-5.x)
+Mantle uses bare AWS model IDs such as `openai.gpt-6.1-sol`. Promptfoo preserves that ID on the request and sends it to the regional `/openai/v1` endpoint. Set `config.region` to choose a supported Region. When you omit the Region, promptfoo selects a default for the model and API. The GPT-6.1 Sol and Terra defaults are `us-east-1`.
 
-- **`openai.gpt-5.6-sol`**: Flagship reasoning tier (`us-east-1`, `us-east-2`)
-- **`openai.gpt-5.6-terra`**: Balanced tier (`us-east-1`, `us-east-2`, `us-west-2`, `us-gov-west-1`, `us-gov-east-1`)
-- **`openai.gpt-5.6-luna`**: Fast, cost-efficient tier (`us-east-1`, `us-east-2`, `us-west-2`, `us-gov-west-1`, `us-gov-east-1`)
-- **`openai.gpt-5.6-cyber`**: Available to organizations approved for [Daybreak Red](#daybreak-red-on-aws-govcloud)
-- **`openai.gpt-5.5`**: Earlier flagship frontier model (`us-east-1`, `us-east-2`)
-- **`openai.gpt-5.4`**: Earlier frontier model (`us-east-1`, `us-east-2`, `us-west-2`)
-
-Promptfoo uses Bedrock's **OpenAI-compatible Responses API** on the regional Mantle
-endpoint (`https://bedrock-mantle.<region>.api.aws/openai/v1/responses`) for bare frontier IDs.
-GPT-5.6 Sol, Terra, and Luna also support [Runtime Converse and Mantle Chat Completions](https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-openai-gpt-56-sol.html).
-Promptfoo routes the bare
-`bedrock:openai.gpt-5.x` IDs to its OpenAI Responses provider, preserves the Bedrock request
-model ID, and returns the clean final answer. When no Region is configured, promptfoo uses
-`us-west-2` for `openai.gpt-6-astra`, `us-east-1` for `openai.gpt-6.1-terra`, `openai.gpt-6-sol`,
-and `openai.gpt-6-luna`, and `us-east-2` for other frontier models. A configured Region is always used; if Mantle does not
-serve the model there, it returns HTTP 404 ("model does not exist") and promptfoo adds the
-Regions that list the model to the error.
+For a Responses request to GPT-6 Astra using `service_tier: ultrafast`, select `us-east-1`. For eligible Daybreak Blue accounts, use `openai.gpt-daybreak-blue-5.6-sol` on Mantle in `us-east-2`. For Daybreak Red, see [GovCloud access](#daybreak-red-on-aws-govcloud).
 
 Authentication accepts either a pre-generated **Amazon Bedrock API key** or AWS credentials:
 
@@ -1164,56 +1144,21 @@ An explicit `config.apiKey` or authentication header is still sent.
 
 ```yaml
 providers:
-  - id: bedrock:openai.gpt-5.6-sol
-    config:
-      region: us-east-2
-      reasoning_effort: max
-      verbosity: low
-      max_output_tokens: 2048
-      store: false
-
-  - id: bedrock:openai.gpt-5.6-terra
-    config:
-      region: us-west-2
-      reasoning_effort: medium
-      store: false
-      prompt_cache_key: support-v1
-      prompt_cache_options:
-        mode: explicit
-        ttl: 30m
-
-  - id: bedrock:openai.gpt-5.6-luna
+  - id: bedrock:openai.gpt-6.1-sol
     config:
       region: us-east-1
-      reasoning_effort: low
       store: false
 ```
 
-Prefer the `bedrock:openai.gpt-5.6-sol` form above. It wraps the OpenAI Responses provider,
-points it at the mantle endpoint, and normalizes the `openai.`-prefixed id for GPT-5
-capability detection (reasoning effort, verbosity) and billing. Using
-`openai:responses:openai.gpt-5.6-sol` directly is **not** equivalent — the base provider does
-not recognize the `openai.` prefix as a GPT-5 model, so reasoning/verbosity controls would
-be dropped. An explicit `config.apiBaseUrl` can target a proxy or local Responses fixture;
-it takes precedence over ambient `OPENAI_API_HOST`/`OPENAI_BASE_URL`, preventing an unrelated
-OpenAI endpoint from receiving a Bedrock bearer token.
+Use the `bedrock:` prefix for Bedrock authentication and model-specific request parameters. An explicit `config.apiBaseUrl` can point at a customer proxy or a local fixture.
 
 The Responses API stores conversation state by default. Set `store: false` on every request
 when inputs or outputs must not be retained; Bedrock otherwise keeps stored responses for 30
 days in the source Region and allows follow-up requests with `previous_response_id`.
 
-Bedrock pricing for GPT-5.6 Sol, Terra, and Luna includes a 10% regional-processing uplift: [Sol](https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-openai-gpt-56-sol.html) is $4.40 input /
-$22 output, Terra $2.20 / $13.20, and Luna $0.22 / $1.32 per million tokens. In AWS GovCloud
-(US), Terra is $2.64 / $15.84 and Luna $0.264 / $1.584 per million tokens. Cache reads
-receive a 90% discount, cache writes cost 1.25x the uncached input rate, and cached prefixes
-remain available for at least 30 minutes. Place
-`prompt_cache_breakpoint: { mode: explicit }` on a stable
-`input_text`, `input_image`, or `input_file` content block and set a stable
-`prompt_cache_key` when using explicit caching. Promptfoo records returned cache-read and
-cache-write usage; when cache-write usage is missing, its estimate includes the available
-token counts only. Requests above 272,000 input tokens use 2x input and 1.5x output
-pricing for the full request. Do not assume first-party Flex, Priority, or regional-processing
-options are available on Bedrock; use the service behavior documented for the selected model.
+Where the model supports explicit caching, set a stable `prompt_cache_key` and place
+`prompt_cache_breakpoint: { mode: explicit }` on a stable `input_text`, `input_image`, or
+`input_file` block. Returned usage can include both cache reads and cache writes. See the model card for the prices in your Region and service tier.
 
 #### Daybreak Red on AWS GovCloud
 
@@ -1254,7 +1199,7 @@ providers:
       showThinking: false # strip the <reasoning> block from output (see below)
 ```
 
-Amazon also exposes the base GPT OSS models through the OpenAI-compatible Responses API on the
+AWS also exposes the base and Safeguard GPT OSS models through the OpenAI-compatible Responses API on the
 mantle endpoint. Select that API explicitly with `bedrock:responses:`; the mantle ids omit the
 `-1:0` suffix and use the bearer-token or AWS credential flow described above:
 
@@ -1269,22 +1214,13 @@ providers:
       store: false
 ```
 
-Use `bedrock:responses:openai.gpt-oss-20b` for the 20B model. The explicit prefix keeps
-existing `bedrock:openai.gpt-oss-*-1:0` configs on InvokeModel while targeting
-`https://bedrock-mantle.<region>.api.aws/v1/responses` for the Responses API.
+For Safeguard, use `bedrock:responses:openai.gpt-oss-safeguard-20b` or `bedrock:responses:openai.gpt-oss-safeguard-120b`. The same bare model IDs work with `bedrock:mantle:` for Chat Completions. Mantle uses `/v1` for all four GPT OSS models.
 
 #### Reasoning Effort
 
-Both families accept the `reasoning_effort` provider option. Promptfoo forwards it as the
-native request field for GPT OSS and as `reasoning.effort` for the Responses API, allowing the
-selected model to validate the value:
+Set `config.reasoning_effort` to control reasoning. Promptfoo sends `reasoning.effort` on Mantle Responses and `reasoning_effort` on Mantle Chat Completions and GPT OSS InvokeModel.
 
-- **GPT OSS** (`openai.gpt-oss-*`, InvokeModel or Responses): `low`, `medium`, `high`
-- **GPT-5.6 frontier**: `none`, `low`, `medium`, `high`, `xhigh`, `max`
-- **GPT-5.5 / GPT-5.4 frontier**: `none`, `low`, `medium`, `high`, `xhigh`
-
-Note that `minimal` is **not** a valid value for these Bedrock models (the API rejects it).
-Higher effort produces more thorough reasoning at the cost of latency and output tokens.
+GPT OSS accepts `low`, `medium`, and `high`. Frontier models vary in the efforts they support. Check the [OpenAI model catalog](https://developers.openai.com/api/docs/models) for the model you select.
 
 #### Reasoning Output and `showThinking` (GPT OSS only)
 
@@ -1305,13 +1241,7 @@ The frontier models return clean output already, so this option does not apply t
 
 :::note Codex on Bedrock
 
-OpenAI's [Codex](https://developers.openai.com/codex/) coding agent uses these same
-frontier model IDs (`openai.gpt-5.6-sol`, `openai.gpt-5.6-terra`, `openai.gpt-5.6-luna`,
-`openai.gpt-5.5`, `openai.gpt-5.4`). To run the full coding agent
-against Bedrock, use `openai:codex-sdk` with `model_provider: amazon-bedrock` — see
-[Run on Amazon Bedrock](/docs/providers/openai-codex-sdk/#option-3-run-on-amazon-bedrock)
-in the Codex SDK docs. For direct (non-agentic) inference, use `bedrock:openai.gpt-5.6-sol`
-as shown above.
+To run the Codex coding agent with Bedrock, set `model_provider: amazon-bedrock` in the Codex SDK provider. Its catalog depends on the installed CLI and the AWS partition. [Run Codex on Amazon Bedrock](/docs/providers/openai-codex-sdk/#option-3-run-on-amazon-bedrock)
 
 :::
 
@@ -1398,8 +1328,7 @@ providers:
 ### Mantle Chat Completions (`bedrock:mantle:`) {#mantle-chat-completions}
 
 The Bedrock **Mantle** endpoint also exposes an OpenAI-compatible **Chat Completions** API. Most
-Mantle chat models use `https://bedrock-mantle.<region>.api.aws/v1/chat/completions`; GPT-5.6
-Sol/Terra/Luna/Cyber, xAI, and Gemma 4 use the `/openai/v1/chat/completions` variant. Use the
+Mantle chat models use `https://bedrock-mantle.<region>.api.aws/v1/chat/completions`; OpenAI frontier models, xAI, and Gemma 4 use the `/openai/v1/chat/completions` variant. Use the
 **`bedrock:mantle:<id>`** prefix to select this API. Mantle has its own catalog and model
 namespace, including Qwen `*-instruct` IDs; a Runtime model ID or inference profile is not
 interchangeable with a Mantle ID.
@@ -1421,10 +1350,7 @@ providers:
 - **The mantle catalog is regional.** List the models available in a Region with
   `GET https://bedrock-mantle.<region>.api.aws/v1/models`, and set `region` accordingly —
   most Chat models default to `us-east-1`.
-- `bedrock:mantle:openai.gpt-5.6-sol` (also Terra/Luna) selects **Chat Completions**;
-  `bedrock:openai.gpt-5.6-sol` selects **Responses**. Use bare model IDs on Mantle, without
-  `us.` or `global.` prefixes. Sol supports Mantle in `us-east-1` and `us-east-2`; choose a
-  supported Region for each tier from its AWS model card.
+- OpenAI frontier models use the same bare model ID for Mantle Chat Completions and Responses. Use the [frontier model selectors](#frontier-models-gpt-5x) to choose the API.
 - Models that the native APIs do serve (Claude, Nova, Llama, Qwen, the
   [OpenAI-compatible families](#openai-compatible-models) above, etc.) are usually better
   reached via `bedrock:<id>` or `bedrock:converse:<id>`.

@@ -205,12 +205,38 @@ describe('bedrock mantle Chat Completions provider', () => {
       ).not.toThrow();
     });
 
-    it('rejects frontier OpenAI models on the mantle chat route', () => {
+    it('does not guess Chat support for an unlisted frontier model', () => {
       expect(() =>
-        createBedrockMantleChatProvider('openai.gpt-5.5', {
+        createBedrockMantleChatProvider('openai.gpt-future', {
           config: { apiKey: 'bedrock-key' },
         }),
-      ).toThrow(/Use the bare "bedrock:openai\.gpt-5\.5" id/);
+      ).toThrow(/Use the bare "bedrock:openai\.gpt-future" id/);
+    });
+
+    it.each([
+      ['openai.gpt-6-astra', 'us-west-2'],
+      ['openai.gpt-6.1-sol', 'us-east-1'],
+      ['openai.gpt-6.1-terra', 'us-east-1'],
+      ['openai.gpt-6-sol', 'us-east-1'],
+      ['openai.gpt-6-luna', 'us-east-1'],
+      ['openai.gpt-5.5', 'us-east-1'],
+      ['openai.gpt-5.4', 'us-east-1'],
+      ['openai.gpt-daybreak-blue-5.6-sol', 'us-east-2'],
+    ])('sends %s through its published Chat endpoint', async (model, region) => {
+      restoreEnv = mockProcessEnv({
+        AWS_BEDROCK_REGION: undefined,
+        AWS_REGION: undefined,
+        AWS_DEFAULT_REGION: undefined,
+      });
+      vi.mocked(fetchWithCache).mockResolvedValue(createMockChatResponse('hello'));
+      const provider = createBedrockMantleChatProvider(model, {
+        config: { apiKey: 'test', reasoning_effort: 'high' },
+      });
+      const result = await provider.callApi('hello');
+      expect(result.output).toBe('hello');
+      const [url, req] = vi.mocked(fetchWithCache).mock.calls[0];
+      expect(url).toBe(`https://bedrock-mantle.${region}.api.aws/openai/v1/chat/completions`);
+      expect(JSON.parse(req?.body as string)).toMatchObject({ model, reasoning_effort: 'high' });
     });
 
     it.each(['sol', 'terra', 'luna'])(
@@ -275,7 +301,7 @@ describe('bedrock mantle Chat Completions provider', () => {
         createBedrockMantleChatProvider('us.openai.gpt-5.6-sol', {
           config: { apiKey: 'bedrock-key', apiBaseUrl },
         }),
-      ).toThrow('bedrock:converse:us.openai.gpt-5.6-sol');
+      ).toThrow('bedrock:mantle:openai.gpt-5.6-sol');
     });
 
     it.each([
@@ -429,7 +455,7 @@ describe('bedrock mantle Chat Completions provider', () => {
         const result = await provider.callApi('hello');
         expect(result.error).toBeUndefined();
         expect(result.cost).toBeCloseTo(
-          ((700 * 2.64 + 200 * 0.264 + 100 * 3.3 + 500 * 15.84) * scale) / 1e6,
+          ((700 * 2.7 + 200 * 0.27 + 100 * 3.375 + 500 * 16.2) * scale) / 1e6,
           12,
         );
       },
