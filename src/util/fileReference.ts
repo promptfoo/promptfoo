@@ -4,6 +4,7 @@ import path from 'path';
 import { importModule } from '../esm';
 import logger from '../logger';
 import { runPython } from '../python/pythonUtils';
+import { waitForPromiseWithAbort } from './fetch/requestSignal';
 import { isJavascriptFile } from './fileExtensions';
 import { parseFileUrl } from './functions/loadFunction';
 import { loadYaml } from './yamlLoad';
@@ -14,13 +15,19 @@ import { loadYaml } from './yamlLoad';
  * @param basePath Base path for resolving relative paths
  * @returns The loaded content from the file
  */
-export async function loadFileReference(fileRef: string, basePath: string = ''): Promise<any> {
+export async function loadFileReference(
+  fileRef: string,
+  basePath: string = '',
+  abortSignal?: AbortSignal,
+): Promise<any> {
+  abortSignal?.throwIfAborted();
   // Parse file:// URL with Windows-aware path handling
   const { filePath, functionName } = parseFileUrl(fileRef);
 
   // Resolve the absolute path
   const resolvedPath = path.resolve(basePath, filePath);
   const extension = path.extname(resolvedPath).toLowerCase();
+  const readOptions = abortSignal ? { encoding: 'utf8' as const, signal: abortSignal } : 'utf8';
 
   logger.debug(
     `Loading file reference: ${fileRef}, resolvedPath: ${resolvedPath}, extension: ${extension}`,
@@ -29,27 +36,29 @@ export async function loadFileReference(fileRef: string, basePath: string = ''):
   try {
     if (extension === '.json') {
       logger.debug(`Loading JSON file: ${resolvedPath}`);
-      const content = await fs.promises.readFile(resolvedPath, 'utf8');
+      const content = await fs.promises.readFile(resolvedPath, readOptions);
       return JSON.parse(content);
     } else if (extension === '.yaml' || extension === '.yml') {
       logger.debug(`Loading YAML file: ${resolvedPath}`);
-      const content = await fs.promises.readFile(resolvedPath, 'utf8');
+      const content = await fs.promises.readFile(resolvedPath, readOptions);
       return loadYaml(content);
     } else if (isJavascriptFile(resolvedPath)) {
       logger.debug(`Loading JavaScript file: ${resolvedPath}`);
-      const mod = await importModule(resolvedPath, functionName);
-      return typeof mod === 'function' ? await mod() : mod;
+      const loading = importModule(resolvedPath, functionName).then((mod) => {
+        abortSignal?.throwIfAborted();
+        return typeof mod === 'function' ? mod() : mod;
+      });
+      return await waitForPromiseWithAbort(loading, abortSignal);
     } else if (extension === '.py') {
       logger.debug(
         `Loading Python file: ${resolvedPath}, function: ${functionName || 'get_config'}`,
       );
       const fnName = functionName || 'get_config';
-      const result = await runPython(resolvedPath, fnName, []);
-      return result;
+      return await runPython(resolvedPath, fnName, [], { abortSignal });
     } else if (extension === '.txt' || extension === '.md' || extension === '') {
       // For text files, just return the content as a string
       logger.debug(`Loading text file: ${resolvedPath}`);
-      return await fs.promises.readFile(resolvedPath, 'utf8');
+      return await fs.promises.readFile(resolvedPath, readOptions);
     } else {
       logger.debug(`Unsupported file extension: ${extension}`);
       throw new Error(`Unsupported file extension: ${extension}`);
@@ -70,21 +79,23 @@ export async function loadFileReference(fileRef: string, basePath: string = ''):
 export async function processConfigFileReferences(
   config: any,
   basePath: string = '',
+  abortSignal?: AbortSignal,
 ): Promise<any> {
+  abortSignal?.throwIfAborted();
   if (config === null || config === undefined) {
     return config;
   }
 
   // Handle string values with file:// protocol
   if (typeof config === 'string' && config.startsWith('file://')) {
-    return await loadFileReference(config, basePath);
+    return await loadFileReference(config, basePath, abortSignal);
   }
 
   // Handle arrays
   if (Array.isArray(config)) {
     const result = [];
     for (const item of config) {
-      result.push(await processConfigFileReferences(item, basePath));
+      result.push(await processConfigFileReferences(item, basePath, abortSignal));
     }
     return result;
   }
@@ -93,7 +104,7 @@ export async function processConfigFileReferences(
   if (typeof config === 'object') {
     const result: Record<string, any> = {};
     for (const [key, value] of Object.entries(config)) {
-      result[key] = await processConfigFileReferences(value, basePath);
+      result[key] = await processConfigFileReferences(value, basePath, abortSignal);
     }
     return result;
   }

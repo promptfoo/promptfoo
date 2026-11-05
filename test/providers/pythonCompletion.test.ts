@@ -943,6 +943,44 @@ describe('PythonProvider', () => {
   });
 
   describe('early registration', () => {
+    it('cancels an owned config read before a pool exists and joins its cleanup', async () => {
+      const close = createDeferred<void>();
+      const entered = createDeferred<AbortSignal | undefined>();
+      const read = vi
+        .spyOn(fileReference, 'processConfigFileReferences')
+        .mockImplementationOnce(async (_config, _basePath, signal) => {
+          entered.resolve(signal);
+          await close.promise;
+          signal?.throwIfAborted();
+          return {};
+        });
+      const provider = new PythonProvider('script.py');
+      const initialization = provider.initialize();
+      const rejected = expect(initialization).rejects.toThrow('interrupted by cleanup');
+      try {
+        const signal = await entered.promise;
+        expect(providerRegistry.has(provider)).toBe(true);
+        const cleanup = providerRegistry.shutdownAll();
+        expect(signal?.aborted).toBe(true);
+        let finished = false;
+        void cleanup.then(() => {
+          finished = true;
+        });
+        await Promise.resolve();
+        expect(finished).toBe(false);
+        close.resolve();
+        await Promise.all([rejected, cleanup]);
+        expect(mockPoolInstance.initialize).not.toHaveBeenCalled();
+        expect(providerRegistry.has(provider)).toBe(false);
+        await provider.initialize();
+        expect(mockPoolInstance.initialize).toHaveBeenCalledOnce();
+      } finally {
+        close.resolve();
+        await provider.shutdown();
+        read.mockRestore();
+      }
+    });
+
     it('registers an initializing worker pool and does not restore it after forced shutdown', async () => {
       let poolStarted!: () => void;
       const started = new Promise<void>((resolve) => {

@@ -64,7 +64,7 @@ export class PythonProvider implements ApiProvider {
   private isInitialized: boolean = false;
   private resolvedConfig?: PythonProviderConfig;
   private initializationPromise: Promise<void> | null = null;
-  private initializationGeneration = 0;
+  private initializationController?: AbortController;
   public label: string | undefined;
   private pool: PythonWorkerPool | null = null;
 
@@ -103,69 +103,61 @@ export class PythonProvider implements ApiProvider {
       return this.initializationPromise;
     }
 
-    const generation = ++this.initializationGeneration;
-    this.initializationPromise = (async () => {
-      let pool: PythonWorkerPool | undefined;
-      try {
-        // Values returned by a config file are application data and may themselves be file URLs.
-        if (this.config !== this.resolvedConfig) {
-          const config = await processConfigFileReferences(
-            this.config,
-            this.options?.config.basePath || '',
-          );
-          if (generation !== this.initializationGeneration) {
-            throw new Error('Python provider initialization interrupted by cleanup');
-          }
-          this.config = config;
-          this.resolvedConfig = config;
-        }
-
-        // Initialize worker pool
-        const workerCount = this.getWorkerCount();
-        const absPath = path.resolve(
-          path.join(this.options?.config.basePath || '', this.scriptPath),
+    const controller = new AbortController();
+    this.initializationController = controller;
+    let pool: PythonWorkerPool | undefined;
+    const initialization = (async () => {
+      // Values returned by a config file are application data and may themselves be file URLs.
+      if (this.config !== this.resolvedConfig) {
+        const config = await processConfigFileReferences(
+          this.config,
+          this.options?.config.basePath || '',
+          controller.signal,
         );
-
-        pool = new PythonWorkerPool(
-          absPath,
-          this.functionName || 'call_api',
-          workerCount,
-          getConfiguredPythonPath(
-            this.config.pythonExecutable,
-            this.options?.env?.PROMPTFOO_PYTHON,
-          ),
-          this.config.timeout,
-        );
-        this.pool = pool;
-        providerRegistry.register(this);
-
-        await pool.initialize();
-        if (generation !== this.initializationGeneration) {
-          throw new Error('Python provider initialization interrupted by cleanup');
-        }
-
-        this.isInitialized = true;
-        logger.debug(`Initialized Python provider ${this.id()} with ${workerCount} workers`);
-      } catch (error) {
-        if (generation === this.initializationGeneration) {
-          this.initializationPromise = null;
-          if (pool && this.pool === pool) {
-            this.pool = null;
-            providerRegistry.unregister(this);
-            try {
-              await pool.shutdown();
-            } catch (shutdownError) {
-              logger.warn('Failed to shut down a Python provider after initialization failed', {
-                error: shutdownError,
-              });
-            }
-          }
-        }
-        throw error;
+        controller.signal.throwIfAborted();
+        this.config = config;
+        this.resolvedConfig = config;
       }
-    })();
 
-    return this.initializationPromise;
+      // Initialize worker pool
+      const workerCount = this.getWorkerCount();
+      const absPath = path.resolve(path.join(this.options?.config.basePath || '', this.scriptPath));
+
+      pool = new PythonWorkerPool(
+        absPath,
+        this.functionName || 'call_api',
+        workerCount,
+        getConfiguredPythonPath(this.config.pythonExecutable, this.options?.env?.PROMPTFOO_PYTHON),
+        this.config.timeout,
+      );
+      this.pool = pool;
+
+      await pool.initialize();
+      controller.signal.throwIfAborted();
+
+      this.isInitialized = true;
+      logger.debug(`Initialized Python provider ${this.id()} with ${workerCount} workers`);
+    })().catch(async (error) => {
+      if (!controller.signal.aborted) {
+        this.initializationPromise = null;
+        providerRegistry.unregister(this);
+        if (pool && this.pool === pool) {
+          this.pool = null;
+          try {
+            await pool.shutdown();
+          } catch (shutdownError) {
+            logger.warn('Failed to shut down a Python provider after initialization failed', {
+              error: shutdownError,
+            });
+          }
+        }
+      }
+      throw error;
+    });
+    // Registration can synchronously trigger shutdown for a process that is already stopping.
+    this.initializationPromise = initialization;
+    providerRegistry.register(this);
+    return initialization;
   }
 
   /**
@@ -336,7 +328,10 @@ export class PythonProvider implements ApiProvider {
   }
 
   async shutdown(): Promise<void> {
-    this.initializationGeneration++;
+    this.initializationController?.abort(
+      new Error('Python provider initialization interrupted by cleanup'),
+    );
+    this.initializationController = undefined;
     const initialization = this.initializationPromise;
     this.initializationPromise = null;
     this.isInitialized = false;
