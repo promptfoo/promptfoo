@@ -1,4 +1,3 @@
-import { realpath } from 'node:fs/promises';
 import readline from 'readline';
 import { isDeepStrictEqual } from 'util';
 
@@ -37,8 +36,8 @@ import { type AgentWorkspace, createAgentWorkspaceForConfig } from './providers/
 import { maybeEmitAzureOpenAiWarning } from './providers/azure/warnings';
 import { providerRegistry } from './providers/providerRegistry';
 import { isPromptfooSampleTarget } from './providers/shared';
-import { hasCodingAgentAssertion } from './redteam/constants/codingAgents';
 import { maybeWrapMcpProviderForRedteam } from './redteam/mcpTargetProvider';
+import { hasCodingAgentAssertion } from './redteam/plugins/codingAgent/assertions';
 import {
   type CodingAgentHostEvidence,
   withCodingAgentHostEvidence,
@@ -1870,11 +1869,7 @@ async function runEvalInternal(
             cliState.basePath,
           ) ??
           process.cwd();
-        const workingDir = await realpath(directory).catch(() => directory);
-        hostEvidence = {
-          workingDir,
-          baseline: await snapshotCodingAgentArtifacts({ ...test, vars: state.vars }, workingDir),
-        };
+        hostEvidence = await snapshotCodingAgentArtifacts({ ...test, vars: state.vars }, directory);
       }
     }
     const stepWorkspace = workspace;

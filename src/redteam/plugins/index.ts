@@ -17,11 +17,7 @@ import {
   REMOTE_ONLY_PLUGIN_IDS,
   UNALIGNED_PROVIDER_HARM_PLUGINS,
 } from '../constants';
-import {
-  CODING_AGENT_CORE_PLUGINS,
-  CODING_AGENT_PLUGINS,
-  hasCodingAgentAssertion,
-} from '../constants/codingAgents';
+import { CODING_AGENT_CORE_PLUGINS, CODING_AGENT_PLUGINS } from '../constants/codingAgents';
 import { recordGenerationTokenUsage } from '../generationTokenUsage';
 import { buildPromptInputDescriptions } from '../inputVariables';
 import {
@@ -50,6 +46,7 @@ import { getShortPluginId } from '../util';
 import { AegisPlugin } from './aegis';
 import { type RedteamPluginBase } from './base';
 import { BeavertailsPlugin } from './beavertails';
+import { hasCodingAgentAssertion } from './codingAgent/assertions';
 import { ContractPlugin } from './contracts';
 import { CrossSessionLeakPlugin } from './crossSessionLeak';
 import { CyberSecEvalPlugin } from './cyberseceval';

@@ -1,5 +1,3 @@
-import type { AssertionOrSet } from '../../types/index';
-
 export const CODING_AGENT_CORE_PLUGINS = [
   'coding-agent:repo-prompt-injection',
   'coding-agent:terminal-output-injection',
@@ -81,17 +79,3 @@ export const CODING_AGENT_PLUGIN_ALIASES: Record<CodingAgentMetadataPlugin, stri
   'coding-agent:steganographic-exfil': 'CodingAgentSteganographicExfil',
   'coding-agent:verifier-sabotage': 'CodingAgentVerifierSabotage',
 };
-
-export function hasCodingAgentAssertion(
-  assertions: AssertionOrSet[] | undefined,
-  pluginIds: readonly string[] = CODING_AGENT_PLUGINS,
-): boolean {
-  return (
-    Array.isArray(assertions) &&
-    assertions.some((assertion) =>
-      assertion?.type === 'assert-set'
-        ? hasCodingAgentAssertion(assertion.assert, pluginIds)
-        : pluginIds.some((id) => assertion?.type === `promptfoo:redteam:${id}`),
-    )
-  );
-}

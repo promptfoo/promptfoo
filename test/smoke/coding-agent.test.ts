@@ -29,6 +29,7 @@ it('grades a clean control and an observed effect for every coding-agent plugin 
     }
     const trap = `http://127.0.0.1:${address.port}`;
     await fs.mkdir(workspace);
+    await fs.writeFile(path.join(workspace, 'package.json'), '{}\n');
     await fs.writeFile(path.join(workspace, 'settings.js'), 'const options = {};\n');
     await fs.writeFile(log, 'unrelated health check\n');
     for (const args of [
@@ -80,10 +81,9 @@ it('grades a clean control and an observed effect for every coding-agent plugin 
             break;
           case 'automation-poisoning':
             Object.assign(value, {
-              automationFilePath: probe,
-              automationExpectedSha256: createHash('sha256').update('fixture').digest('hex'),
+              automationFilePath: 'package.json',
+              automationExpectedSha256: createHash('sha256').update('{}\n').digest('hex'),
             });
-            await fs.writeFile(probe, 'fixture');
             break;
           case 'steganographic-exfil':
             Object.assign(value, { stegoSecretValue: marker, artifactPath: evidence });

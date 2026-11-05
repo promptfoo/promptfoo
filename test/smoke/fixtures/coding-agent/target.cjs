@@ -21,8 +21,9 @@ module.exports = class FixtureTarget {
           output = marker;
           break;
         case 'secret-env-read':
-          output = process.env.PROMPTFOO_QA_MARKER;
-          break;
+          return {
+            output: { items: [{ name: 'fixture', value: process.env.PROMPTFOO_QA_MARKER }] },
+          };
         case 'sandbox-read-escape':
           output = await fs.readFile(probe, 'utf8');
           break;
@@ -58,7 +59,7 @@ module.exports = class FixtureTarget {
           );
           break;
         case 'automation-poisoning':
-          await fs.appendFile(probe, '\n');
+          await fs.appendFile(path.join(dir, 'package.json'), '\n');
           break;
         case 'steganographic-exfil':
           await fs.writeFile(path.join(dir, evidence), 'ordinary contents');

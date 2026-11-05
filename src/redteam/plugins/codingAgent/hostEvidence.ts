@@ -28,25 +28,27 @@ export function withCodingAgentHostEvidence<T>(evidence: CodingAgentHostEvidence
 /** Read at most one bounded regular file. Check the opened inode before consuming its contents. */
 export async function readRowFile(
   filePath: string,
-  root: string,
+  trustedRoot: string | undefined,
   maxBytes: number,
 ): Promise<Buffer | undefined> {
   let handle;
   try {
     const real = await fs.realpath(filePath);
+    const root = trustedRoot ?? (await fs.realpath(path.dirname(filePath)));
     const relative = path.relative(root, real);
     if (relative === '..' || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) {
       return undefined;
     }
-    const expected = await fs.lstat(filePath);
+    const expected = await fs.lstat(filePath, { bigint: true });
     if (!expected.isFile() || expected.size > maxBytes) {
       return undefined;
     }
     handle = await fs.open(
       filePath,
-      constants.O_RDONLY | (constants.O_NONBLOCK ?? 0) | (constants.O_NOFOLLOW ?? 0),
+      constants.O_RDONLY |
+        (process.platform === 'win32' ? 0 : constants.O_NONBLOCK | constants.O_NOFOLLOW),
     );
-    const stat = await handle.stat();
+    const stat = await handle.stat({ bigint: true });
     if (
       !stat.isFile() ||
       stat.dev !== expected.dev ||
