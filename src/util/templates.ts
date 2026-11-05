@@ -211,6 +211,9 @@ function forLikeNodeReferencesVariable(
   boundSymbols: ReadonlySet<string>,
 ): boolean {
   const loopScope = addBindingNames(boundSymbols, node.name);
+  // Nunjucks exposes the frame-local `loop` object alongside the explicit loop
+  // variable. It is neither an external dependency nor an engine global.
+  loopScope.add('loop');
   return (
     astChildReferencesVariable(node, 'arr', variableName, boundSymbols) ||
     astChildReferencesVariable(node, 'body', variableName, loopScope) ||

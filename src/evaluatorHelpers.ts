@@ -175,6 +175,35 @@ function advanceBraceDepth(ch: string, two: string, depth: number): number | nul
   return null;
 }
 
+type ExpressionDelimiterState = {
+  inExpression: boolean;
+  braceDepth: number;
+  handled: boolean;
+  skipNext: boolean;
+};
+
+function advanceExpressionDelimiterState(
+  ch: string,
+  two: string,
+  inExpression: boolean,
+  braceDepth: number,
+): ExpressionDelimiterState {
+  if (inExpression) {
+    const nextBraceDepth = advanceBraceDepth(ch, two, braceDepth);
+    if (nextBraceDepth !== null) {
+      return { inExpression, braceDepth: nextBraceDepth, handled: true, skipNext: false };
+    }
+    if (braceDepth === 0 && (two === '}}' || two === '%}')) {
+      return { inExpression: false, braceDepth, handled: true, skipNext: true };
+    }
+    return { inExpression, braceDepth, handled: false, skipNext: false };
+  }
+  if (two === '{{' || two === '{%') {
+    return { inExpression: true, braceDepth: 0, handled: true, skipNext: true };
+  }
+  return { inExpression, braceDepth, handled: false, skipNext: false };
+}
+
 // Precompute nesting depth at every position in one forward scan.
 // Depth is the number of unclosed {{ or {% delimiters before each character.
 // A placeholder is nested (and must be left for the real render) when its
@@ -285,34 +314,28 @@ function collectRawSpans(value: string): Array<[number, number]> {
   let depth = 0;
   let spanStart = 0;
   let lastTokenEnd = 0;
+  let braceDepth = 0;
   let quote: string | null = null;
   let inExpression = false;
   let inComment = false;
   for (let i = 0; i < value.length; i++) {
     const ch = value[i];
     const two = value.slice(i, i + 2);
-    if (inComment) {
-      if (two === '#}') {
-        inComment = false;
+    if (depth === 0 && !inExpression) {
+      const comment = advanceCommentState(value, i, inComment);
+      if (comment.inComment || inComment) {
+        i = comment.index;
+        inComment = comment.inComment;
+        continue;
+      }
+      inComment = false;
+    }
+    if (depth === 0 && (quote || (inExpression && QUOTE_CHARACTERS.has(ch)))) {
+      const next = advanceQuoteState(ch, quote);
+      quote = next.quote;
+      if (next.escaped) {
         i++;
       }
-      continue;
-    }
-    if (depth === 0 && !inExpression && two === '{#') {
-      inComment = true;
-      i++;
-      continue;
-    }
-    if (depth === 0 && quote) {
-      if (ch === '\\') {
-        i++;
-      } else if (ch === quote) {
-        quote = null;
-      }
-      continue;
-    }
-    if (depth === 0 && inExpression && (ch === '"' || ch === "'")) {
-      quote = ch;
       continue;
     }
     // Raw bodies are always literal. Quotes and comment delimiters only have
@@ -336,12 +359,16 @@ function collectRawSpans(value: string): Array<[number, number]> {
       i = tokenEnd - 1; // loop will i++
       continue;
     }
-    if (depth === 0 && inExpression && (two === '}}' || two === '%}')) {
-      inExpression = false;
-      i++;
-    } else if (depth === 0 && !inExpression && (two === '{{' || two === '{%')) {
-      inExpression = true;
-      i++;
+    if (depth === 0 && !quote) {
+      const expression = advanceExpressionDelimiterState(ch, two, inExpression, braceDepth);
+      if (expression.handled) {
+        inExpression = expression.inExpression;
+        braceDepth = expression.braceDepth;
+        if (expression.skipNext) {
+          i++;
+        }
+        continue;
+      }
     }
   }
   if (depth > 0) {
@@ -358,6 +385,7 @@ function collectCommentSpans(value: string): Array<[number, number]> {
   let rawIdx = 0;
   let commentStart: number | null = null;
   let inExpression = false;
+  let braceDepth = 0;
   let quote: string | null = null;
   for (let i = 0; i < value.length; i++) {
     const rawEnd = rawSpanEndAt(i, rawSpans, rawIdx);
@@ -384,19 +412,21 @@ function collectCommentSpans(value: string): Array<[number, number]> {
       }
       continue;
     }
-    if (inExpression && (two === '}}' || two === '%}')) {
-      inExpression = false;
-      i++;
-      continue;
+    if (!quote) {
+      const expression = advanceExpressionDelimiterState(ch, two, inExpression, braceDepth);
+      if (expression.handled) {
+        inExpression = expression.inExpression;
+        braceDepth = expression.braceDepth;
+        if (expression.skipNext) {
+          i++;
+        }
+        continue;
+      }
     }
     if (!inExpression && two === '{#') {
       commentStart = i;
       i++;
       continue;
-    }
-    if (!inExpression && (two === '{{' || two === '{%')) {
-      inExpression = true;
-      i++;
     }
   }
   return spans;

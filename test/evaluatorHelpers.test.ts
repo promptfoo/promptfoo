@@ -948,6 +948,26 @@ describe('evaluatorHelpers', () => {
       expect(renderedPrompt).toBe(expected);
     });
 
+    it('should bind the implicit loop object in for-body dependencies', async () => {
+      const template = '{% for item in items %}{{ loop.index ~ ":" ~ item }}{% endfor %}';
+      const renderedPrompt = await renderPrompt(
+        toPrompt('{{v}}'),
+        { v: template, items: ['a', 'b'] },
+        {},
+      );
+
+      expect(renderedPrompt).toBe('1:a2:b');
+    });
+
+    it.each([
+      "{{ {'a': {'b': 1}} ~ '{% raw %}x{% endraw %}' }}",
+      "{{ {'a': {'b': 1}} ~ '{# note #}' }}",
+    ])('should track dictionary braces in protected-span scanners: %s', async (value) => {
+      const renderedPrompt = await renderPrompt(toPrompt('{"text":"{{v}}"}'), { v: value }, {});
+
+      expect(renderedPrompt).toBe(JSON.stringify({ text: value }, null, 2));
+    });
+
     it('should collect distinct prompt references without reparsing once per symbol', async () => {
       const parser = (nunjucks as unknown as { parser: { parse: (template: string) => unknown } })
         .parser;
