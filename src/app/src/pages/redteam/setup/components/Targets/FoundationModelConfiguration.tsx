@@ -6,6 +6,7 @@ import { Label } from '@app/components/ui/label';
 import { NumberInput } from '@app/components/ui/number-input';
 import {
   type BedrockApiMode,
+  getBedrockRuntimeModelError,
   getBedrockTextRoute,
   isBedrockAnthropicMessagesModel,
   isBedrockGptOssResponsesModel,
@@ -39,7 +40,44 @@ const BEDROCK_API_OPTIONS: { value: BedrockApiMode; label: string }[] = [
   { value: 'converse', label: 'Converse' },
   { value: 'chat', label: 'Chat Completions' },
   { value: 'messages', label: 'Anthropic Messages' },
+  { value: 'runtime-chat', label: 'Chat Completions (Bedrock Runtime)' },
+  { value: 'runtime-responses', label: 'Responses (Bedrock Runtime)' },
 ];
+
+/** APIs that run client-side tools configured under config.mcp. */
+function supportsBedrockMcp(apiMode?: BedrockApiMode): boolean {
+  return (
+    apiMode === 'converse' ||
+    apiMode === 'chat' ||
+    apiMode === 'runtime-chat' ||
+    apiMode === 'messages'
+  );
+}
+
+function resolveBedrockTokenLimit(
+  mode?: BedrockApiMode,
+  modelId = '',
+  config?: ProviderOptions['config'],
+) {
+  const key =
+    mode === 'responses' || mode === 'runtime-responses'
+      ? 'max_output_tokens'
+      : mode === 'runtime-chat' || (mode === 'invoke' && modelId.includes('openai.gpt-oss'))
+        ? 'max_completion_tokens'
+        : 'max_tokens';
+  // Converse prefers its native camelCase field; the UI continues to write its supported alias.
+  const fields =
+    mode === 'converse'
+      ? ['maxTokens', 'max_tokens']
+      : key === 'max_completion_tokens'
+        ? [key, 'max_tokens']
+        : [key];
+  // Match Converse's nullish fallback without changing explicit null on the other APIs.
+  const source = fields.find((field) =>
+    mode === 'converse' ? config?.[field] != null : config?.[field] !== undefined,
+  );
+  return { key, fields, value: source === undefined ? undefined : config?.[source] };
+}
 
 const BEDROCK_API_HELP: Record<BedrockApiMode, string> = {
   invoke: 'Uses the model-specific InvokeModel API on Bedrock Runtime.',
@@ -48,6 +86,10 @@ const BEDROCK_API_HELP: Record<BedrockApiMode, string> = {
   responses: 'Uses the OpenAI-compatible Responses API.',
   chat: 'Uses the OpenAI-compatible Chat Completions API.',
   messages: 'Uses the Anthropic Messages API.',
+  'runtime-chat':
+    'Uses OpenAI-compatible Chat Completions on Bedrock Runtime with Runtime model IDs.',
+  'runtime-responses':
+    'Uses OpenAI-compatible Responses on Bedrock Runtime. Background inference and server-side tools are unavailable.',
 };
 
 interface MCPServerConfig {
@@ -70,6 +112,10 @@ const buildBedrockProviderId = (apiMode: BedrockApiMode, modelId: string): strin
   if (BEDROCK_GPT_SHORTHAND.test(modelId)) {
     modelId = `openai.${modelId}`;
   }
+  if (apiMode === 'runtime-chat' || apiMode === 'runtime-responses') {
+    modelId = modelId.replace(/^(openai\.gpt-oss-(?:20b|120b))$/, '$1-1:0');
+    return `bedrock:runtime:${apiMode === 'runtime-chat' ? 'chat' : 'responses'}:${modelId}`;
+  }
   if (apiMode === 'responses' || apiMode === 'chat') {
     const prefix = apiMode === 'chat' ? 'mantle' : 'responses';
     return `bedrock:${prefix}:${modelId.replace(/^(openai\.gpt-oss-(?:20b|120b))-1:0$/, '$1')}`;
@@ -85,6 +131,12 @@ const buildBedrockProviderId = (apiMode: BedrockApiMode, modelId: string): strin
 const getBedrockApiError = (apiMode: BedrockApiMode, modelId: string): string | undefined => {
   if (!modelId) {
     return 'Enter a model ID.';
+  }
+  if (apiMode === 'runtime-chat' || apiMode === 'runtime-responses') {
+    const error = getBedrockRuntimeModelError(apiMode, modelId);
+    if (error) {
+      return error;
+    }
   }
   if (apiMode !== 'chat' && isRejectedPrefixedMythosId(modelId)) {
     return 'Mythos 5 requires the bare anthropic.claude-mythos-5 ID and Anthropic Messages API.';
@@ -135,9 +187,25 @@ const FoundationModelConfiguration = ({
   const isBedrock = providerType === 'bedrock';
   const bedrockRoute = isBedrock ? getBedrockTextRoute(selectedTarget.id || 'bedrock:') : undefined;
   const [bedrockApiMode, setBedrockApiMode] = useState(bedrockRoute?.apiMode);
+  const {
+    key: tokenLimitKey,
+    fields: tokenLimitFields,
+    value: tokenLimit,
+  } = resolveBedrockTokenLimit(
+    bedrockApiMode,
+    getBedrockModelFromId(selectedTarget.id),
+    selectedTarget.config,
+  );
+  const hasAlternateTokenLimit = tokenLimitFields.some(
+    (field) => field !== tokenLimitKey && selectedTarget.config?.[field] !== undefined,
+  );
   const lastEditedTarget = useRef<{ id: string; providerType: string } | undefined>(undefined);
   const isBedrockHttpApi =
-    bedrockApiMode === 'responses' || bedrockApiMode === 'chat' || bedrockApiMode === 'messages';
+    bedrockApiMode === 'responses' ||
+    bedrockApiMode === 'runtime-responses' ||
+    bedrockApiMode === 'chat' ||
+    bedrockApiMode === 'messages' ||
+    bedrockApiMode === 'runtime-chat';
   const isBedrockNativeApi = bedrockApiMode === 'invoke' || bedrockApiMode === 'converse';
   const [modelDraft, setModelDraft] = useState({
     modelId: isBedrock ? getBedrockModelFromId(selectedTarget.id) : selectedTarget.id || '',
@@ -193,12 +261,21 @@ const FoundationModelConfiguration = ({
     updateProviderId(providerId);
   };
 
+  const updateTokenLimit = (key: string, value: unknown, fields = tokenLimitFields) => {
+    const config = { ...selectedTarget.config };
+    for (const field of [...tokenLimitFields, ...fields]) {
+      delete config[field];
+    }
+    updateCustomTarget('config', { ...config, [key]: value });
+  };
+
   const updateProviderId = (id: string, apiMode = bedrockApiMode) => {
-    const source = bedrockApiMode === 'responses' ? 'max_output_tokens' : 'max_tokens';
-    const destination = apiMode === 'responses' ? 'max_output_tokens' : 'max_tokens';
-    if (source !== destination && selectedTarget.config?.[source] !== undefined) {
-      const { [source]: limit, ...config } = selectedTarget.config;
-      updateCustomTarget('config', { ...config, [destination]: limit });
+    const destination = resolveBedrockTokenLimit(apiMode, getBedrockModelFromId(id));
+    const hasCompetingLimit = [...tokenLimitFields, ...destination.fields].some(
+      (field) => field !== destination.key && selectedTarget.config?.[field] !== undefined,
+    );
+    if (tokenLimitKey !== destination.key || hasCompetingLimit) {
+      updateTokenLimit(destination.key, tokenLimit, destination.fields);
     }
     lastEditedTarget.current = { id, providerType };
     updateCustomTarget('id', id);
@@ -215,6 +292,15 @@ const FoundationModelConfiguration = ({
       providerId: id,
     });
     updateProviderId(id, apiMode);
+    // Only an explicit API switch removes MCP. Partially typed model IDs can
+    // resolve to another API while the user's selected API is still unchanged.
+    if (
+      selectedTarget.config?.mcp !== undefined &&
+      supportsBedrockMcp(bedrockApiMode) &&
+      !supportsBedrockMcp(apiMode)
+    ) {
+      updateCustomTarget('mcp', undefined);
+    }
   };
 
   const updateMCPServers = (servers: MCPServerConfig[]) => {
@@ -399,9 +485,11 @@ const FoundationModelConfiguration = ({
                 {isBedrockHttpApi &&
                   (selectedTarget.config?.apiBaseUrl
                     ? 'Uses your custom endpoint from Advanced Configuration.'
-                    : bedrockApiMode === 'messages'
-                      ? 'Promptfoo selects Bedrock Mantle or Runtime based on the model ID. You can configure a custom endpoint under Advanced Configuration.'
-                      : 'Promptfoo defaults to the Bedrock Mantle endpoint. You can configure a custom endpoint under Advanced Configuration.')}
+                    : bedrockApiMode?.startsWith('runtime-')
+                      ? 'Promptfoo uses the Bedrock Runtime endpoint. You can configure a custom endpoint under Advanced Configuration.'
+                      : bedrockApiMode === 'messages'
+                        ? 'Promptfoo selects Bedrock Mantle or Runtime based on the model ID. You can configure a custom endpoint under Advanced Configuration.'
+                        : 'Promptfoo defaults to the Bedrock Mantle endpoint. You can configure a custom endpoint under Advanced Configuration.')}
               </p>
             </div>
           )}
@@ -413,7 +501,12 @@ const FoundationModelConfiguration = ({
             id="model-id"
             value={modelId}
             onChange={handleModelIdChange}
-            placeholder={providerInfo.placeholder}
+            placeholder={
+              isBedrock &&
+              (bedrockApiMode === 'runtime-responses' || bedrockApiMode === 'runtime-chat')
+                ? 'us.openai.gpt-5.6-sol'
+                : providerInfo.placeholder
+            }
             aria-invalid={Boolean(bedrockApiError)}
             aria-describedby={
               isBedrock
@@ -425,9 +518,19 @@ const FoundationModelConfiguration = ({
           />
           {isBedrock && (
             <p id="bedrock-model-help" className="text-sm text-muted-foreground">
-              Choose an API, then enter its model ID. GPT names such as <code>gpt-5.6-sol</code> are
-              saved with Bedrock's <code>openai.</code> prefix. Full Bedrock model IDs are also
-              accepted.
+              {bedrockApiMode === 'runtime-responses' || bedrockApiMode === 'runtime-chat' ? (
+                <>
+                  Closed OpenAI GPT models require a system inference profile, such as{' '}
+                  <code>us.openai.gpt-5.6-sol</code> or <code>global.openai.gpt-5.6-sol</code>.
+                  Other models use their Runtime model IDs.
+                </>
+              ) : (
+                <>
+                  Choose an API, then enter its model ID. GPT names such as <code>gpt-5.6-sol</code>{' '}
+                  are saved with Bedrock's <code>openai.</code> prefix. Full Bedrock model IDs are
+                  also accepted.
+                </>
+              )}
             </p>
           )}
           {bedrockApiError && (
@@ -452,10 +555,10 @@ const FoundationModelConfiguration = ({
           </p>
         </div>
 
-        {isBedrock && bedrockApiMode === 'converse' && (
+        {isBedrock && supportsBedrockMcp(bedrockApiMode) && (
           <SetupSection
             title="MCP Servers"
-            description="Configure Model Context Protocol servers for Bedrock Converse tool calling"
+            description="Configure Model Context Protocol servers for Bedrock tool calling"
             isExpanded={isMcpOpen}
             onExpandedChange={setIsMcpOpen}
             className="mt-4"
@@ -641,23 +744,23 @@ const FoundationModelConfiguration = ({
 
             <div className="space-y-2">
               <Label htmlFor="max-tokens">
-                {bedrockApiMode === 'responses' ? 'Max Output Tokens' : 'Max Tokens'}
+                {bedrockApiMode === 'responses' || bedrockApiMode === 'runtime-responses'
+                  ? 'Max Output Tokens'
+                  : 'Max Tokens'}
               </Label>
               <Input
                 id="max-tokens"
                 type="number"
-                min={1}
-                value={
-                  bedrockApiMode === 'responses'
-                    ? (selectedTarget.config?.max_output_tokens ?? '')
-                    : (selectedTarget.config?.max_tokens ?? '')
-                }
-                onChange={(e) =>
-                  updateCustomTarget(
-                    bedrockApiMode === 'responses' ? 'max_output_tokens' : 'max_tokens',
-                    parseInt(e.target.value) || undefined,
-                  )
-                }
+                min={isBedrock ? 0 : 1}
+                value={tokenLimit ?? ''}
+                onChange={(e) => {
+                  const value = e.target.value === '' ? undefined : parseInt(e.target.value, 10);
+                  if (hasAlternateTokenLimit) {
+                    updateTokenLimit(tokenLimitKey, value);
+                  } else {
+                    updateCustomTarget(tokenLimitKey, value);
+                  }
+                }}
               />
               <p className="text-sm text-muted-foreground">Maximum number of tokens to generate</p>
             </div>
