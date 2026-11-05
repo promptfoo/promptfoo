@@ -239,11 +239,17 @@ export function evalCommand(
           `Unsupported output file format: ${maybeFilePath}. Please use one of: ${SUPPORTED_OUTPUT_FILE_FORMATS.join(', ')}.`,
         );
       }
+      const ordinaryEval = !program.parent;
+      const cmdOpts = { ...validatedOpts } as Partial<CommandLineOptions & Command>;
+      if (ordinaryEval && command.getOptionValueSource('delay') !== 'cli') {
+        delete cmdOpts.delay;
+      }
       await doEval(
-        validatedOpts as Partial<CommandLineOptions & Command>,
+        cmdOpts,
         defaultConfig,
         defaultConfigPath,
         { ...evaluateOptions, eventSource: 'cli' },
+        ordinaryEval,
       );
     });
 

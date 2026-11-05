@@ -2,8 +2,10 @@ import fs from 'fs';
 import os from 'os';
 import path from 'path';
 
+import { Command } from 'commander';
 import * as yaml from 'js-yaml';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { evalCommand } from '../../../src/commands/eval';
 import * as evaluatorModule from '../../../src/evaluator';
 import logger from '../../../src/logger';
 import Eval from '../../../src/models/eval';
@@ -11,7 +13,6 @@ import { doEval } from '../../../src/node/doEval';
 import * as retryModule from '../../../src/node/retry';
 import { isSafeMode } from '../../../src/util/safeMode';
 import { mockProcessEnv } from '../../util/utils';
-import type { Command } from 'commander';
 
 import type { CommandLineOptions, EvaluateOptions, TestSuite } from '../../../src/types/index';
 
@@ -147,6 +148,37 @@ describe('evaluateOptions behavior', () => {
     repeatSummarySpy.mockRestore();
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
+
+  it.each([
+    { cli: [], configured: undefined, expected: 41 },
+    { cli: ['--delay', '0'], configured: 23, expected: undefined },
+    { cli: [], configured: 23, expected: 23 },
+    { cli: [], configured: 0, expected: undefined },
+  ])(
+    'resolves the ordinary eval delay after loading config env files ($cli, $configured)',
+    async ({ cli, configured, expected }) => {
+      const restore = mockProcessEnv({ PROMPTFOO_DELAY_MS: undefined });
+      try {
+        const envPath = path.join(tmpDir, 'delay.env');
+        fs.writeFileSync(envPath, 'PROMPTFOO_DELAY_MS=41\n');
+        const config = writeTempConfig(tmpDir, 'delay.yaml', {
+          commandLineOptions: { envPath },
+          evaluateOptions: { delay: configured },
+          providers: ['echo'],
+          prompts: ['test'],
+        });
+        const program = new Command();
+        evalCommand(program, {}, undefined);
+        await program.parseAsync(['eval', '-c', config, '--no-table', '--no-write', ...cli], {
+          from: 'user',
+        });
+        expect(evaluateMock).toHaveBeenCalled();
+        expect(evaluateMock.mock.calls.at(-1)?.[2]?.delay).toBe(expected);
+      } finally {
+        restore();
+      }
+    },
+  );
 
   it('restores saved repeat options when retrying errors despite conflicting CLI overrides', async () => {
     const saved = new Eval(
