@@ -218,6 +218,11 @@ export const GOOGLE_MODELS: GoogleModel[] = [
     vertexCost: GEMINI_3_5_FLASH_LITE_COST,
     vertexRegionalPremium: 1.1,
   })),
+  ...modelsWithCost(['gemini-3.5-transcribe'], {
+    input: 2 / 1e6,
+    audioInput: 2 / 1e6,
+    output: 12 / 1e6,
+  }),
   ...modelsWithCost(
     ['gemini-omni-flash-preview', 'gemini-omni-1.1-flash', 'gemini-omni-1.1-flash-preview'],
     {

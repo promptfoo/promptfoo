@@ -1,6 +1,12 @@
 import type { ProviderFactory } from '../registryTypes';
 
 const GEMINI_ROBOTICS_STANDARD_MODEL = 'gemini-robotics-er-2-preview';
+const NATIVE_INTERACTIONS_MODELS = new Set([
+  'gemini-omni-flash-preview',
+  'gemini-omni-1.1-flash',
+  'gemini-3.5-transcribe',
+  GEMINI_ROBOTICS_STANDARD_MODEL,
+]);
 
 function isLiveOnlyModel(modelName: string): boolean {
   return (
@@ -152,16 +158,13 @@ export const googleProviderFactories: ProviderFactory[] = [
             `Model "${modelName}" uses the standard Gemini Interactions API and does not support ${providerPrefix}:chat:. Use ${providerPrefix}:${modelName}.`,
           );
         }
+        if (modelName === 'gemini-3.5-transcribe' && serviceType !== 'interactions') {
+          throw new Error(`For file transcription, use ${splits[0]}:${modelName}.`);
+        }
         validateGoogleModelRoute(modelName, serviceType, true);
 
         if (serviceType === 'interactions') {
-          if (
-            ![
-              'gemini-omni-flash-preview',
-              'gemini-omni-1.1-flash',
-              GEMINI_ROBOTICS_STANDARD_MODEL,
-            ].includes(modelName)
-          ) {
+          if (!NATIVE_INTERACTIONS_MODELS.has(modelName)) {
             throw new Error(
               `The Gemini Interactions provider does not support model "${modelName}".`,
             );
@@ -211,11 +214,7 @@ export const googleProviderFactories: ProviderFactory[] = [
       const modelName = splits[1];
       validateGoogleModelRoute(modelName);
 
-      if (
-        modelName === 'gemini-omni-flash-preview' ||
-        modelName === 'gemini-omni-1.1-flash' ||
-        modelName === 'gemini-robotics-er-2-preview'
-      ) {
+      if (NATIVE_INTERACTIONS_MODELS.has(modelName)) {
         const { GoogleInteractionsProvider } = await import('../google/interactions');
         return new GoogleInteractionsProvider(modelName, {
           ...providerOptions,
