@@ -19,17 +19,16 @@ Contact: srinivas AT testAIng.com
 
 ## Full eval
 
-`promptfoo_tests_from_hf.py` uses only the Python standard library. It writes `tests.json` with `llm-rubric` assertions. Pass a limit to keep the file small.
+`promptfoo_tests_from_hf.py` uses only the Python standard library. It writes a generated tests file (gitignored) with `llm-rubric` assertions. Pass a limit to keep the file small.
 
 ```bash
 python promptfoo_tests_from_hf.py
 python promptfoo_tests_from_hf.py 10
+# writes tests.json (gitignored); promptfooconfig.yaml points at it
 npx promptfoo@latest eval
 ```
 
 `llm-rubric` needs a grader model and your own API key. The provider in `promptfooconfig.yaml` is `echo`, which is free and offline. Swap in your agent or provider before you read the scores as an evaluation of agent behavior.
-
-`tests.json` is generated output and is gitignored.
 
 ## Offline smoke
 
