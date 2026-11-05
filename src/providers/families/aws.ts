@@ -106,13 +106,7 @@ export const awsProviderFactories: ProviderFactory[] = [
             `Use "bedrock:anthropic.claude-mythos-5"; Mythos does not support geo or global inference IDs.`,
         );
       }
-      if (
-        anthropicModel &&
-        /^(?:(?:us|us-gov|eu|au|jp|global)\.)?anthropic\.claude-/.test(anthropicModel)
-      ) {
-        const { createBedrockAnthropicMessagesProvider } = await import(
-          '../bedrock/anthropicMessages'
-        );
+      if (anthropicModel) {
         if (requiresBedrockAnthropicMessagesModel(anthropicModel) && isLegacyType) {
           throw new Error(
             `Amazon Bedrock model "${anthropicModel}" uses the Anthropic Messages API, not ` +
@@ -121,6 +115,9 @@ export const awsProviderFactories: ProviderFactory[] = [
           );
         }
         if (isBedrockAnthropicMessagesModel(anthropicModel) && textRoute?.apiMode === 'messages') {
+          const { createBedrockAnthropicMessagesProvider } = await import(
+            '../bedrock/anthropicMessages'
+          );
           return createBedrockAnthropicMessagesProvider(anthropicModel, {
             ...providerOptions,
             id: providerOptions.id ?? providerPath,
@@ -130,9 +127,7 @@ export const awsProviderFactories: ProviderFactory[] = [
       if (modelType === 'messages') {
         throw new Error(
           `Amazon Bedrock model "${modelName}" is not supported by the Anthropic Messages ` +
-            `provider. Use a us. or global. inference profile for Fable/Mythos 5.1. ` +
-            `Mantle supports anthropic.claude-fable-5, anthropic.claude-mythos-5, and ` +
-            `anthropic.claude-fable-5-1 (GovCloud West).`,
+            `provider. Check the AWS model card for the Runtime inference profile ID or the bare Mantle ID.`,
         );
       }
 

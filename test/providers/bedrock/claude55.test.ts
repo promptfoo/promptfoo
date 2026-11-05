@@ -283,31 +283,40 @@ describe('Claude 5.5 on Bedrock', () => {
 });
 
 describe('Claude 5.5 cost accounting', () => {
-  it.each(['haiku', 'sonnet', 'opus'])(
-    'does not infer %s5.5 GovCloud rates from commercial prices',
-    (family) => {
-      const model = `anthropic.claude-${family}-5-5`;
-      for (const [selector, region] of [
-        [`us-gov.${model}`, undefined],
-        [`us-gov.${model}`, 'us-east-1'],
-        [
-          `arn:aws-us-gov:bedrock:us-gov-west-1:123456789012:inference-profile/us-gov.${model}`,
-          undefined,
-        ],
-        [`arn:aws-us-gov:bedrock:us-gov-east-1::foundation-model/${model}`, undefined],
-        [model, 'us-gov-west-1'],
-        [model, 'us-gov-east-1'],
-      ]) {
-        expect(calculateBedrockCost(selector!, 100, 10, 20, 30, region)).toBeUndefined();
-        expect(calculateBedrockInvokeModelCost(selector!, 100, 10, 20, 30, region)).toBeUndefined();
-      }
-      expect(calculateBedrockCost(model, 100, 10, 20, 30, 'us-east-1')).toBeGreaterThan(0);
-    },
-  );
+  it.each([
+    ['haiku', 0.12, 0.6, 0.1],
+    ['sonnet', 2.4, 12, 0.05],
+    ['opus', 4.8, 24, 0.05],
+  ] as const)('uses published GovCloud rates for %s 5.5', (family, input, output, cacheRead) => {
+    const model = `anthropic.claude-${family}-5-5`;
+    for (const [selector, region] of [
+      [`us-gov.${model}`, undefined],
+      [`us-gov.${model}`, 'us-east-1'],
+      [
+        `arn:aws-us-gov:bedrock:us-gov-west-1:123456789012:inference-profile/us-gov.${model}`,
+        undefined,
+      ],
+      [`arn:aws-us-gov:bedrock:us-gov-east-1::foundation-model/${model}`, undefined],
+      [model, 'us-gov-west-1'],
+      [model, 'us-gov-east-1'],
+    ]) {
+      const expected = ((100 + 20 * cacheRead + 30 * 1.25) * input + 10 * output) / 1e6;
+      expect(calculateBedrockCost(selector!, 100, 10, 20, 30, region)).toBeCloseTo(expected, 12);
+      expect(calculateBedrockInvokeModelCost(selector!, 100, 10, 20, 30, region)).toBeCloseTo(
+        expected,
+        12,
+      );
+    }
+    expect(calculateBedrockCost(model, 100, 10, 20, 30, 'us-east-1')).toBeGreaterThan(0);
+  });
 
-  it.each(['opus', 'sonnet'])(
-    'keeps GovCloud %s5.5 Messages pricing unknown unless explicitly configured',
-    async (family) => {
+  it.each([
+    ['haiku', 0.12, 0.6],
+    ['sonnet', 2.4, 12],
+    ['opus', 4.8, 24],
+  ] as const)(
+    'uses GovCloud %s 5.5 rates in Messages and honors overrides',
+    async (family, input, output) => {
       for (const model of [
         `anthropic.claude-${family}-5-5`,
         `us-gov.anthropic.claude-${family}-5-5`,
@@ -326,9 +335,9 @@ describe('Claude 5.5 cost accounting', () => {
           usage: { input_tokens: 100, output_tokens: 10 },
         } as never);
         for (const [pricing, expected] of [
-          [{}, undefined],
-          [{ inputCost: 1 }, undefined],
-          [{ outputCost: 2 }, undefined],
+          [{}, (100 * input + 10 * output) / 1e6],
+          [{ inputCost: 1 }, 100 + (10 * output) / 1e6],
+          [{ outputCost: 2 }, 20 + (100 * input) / 1e6],
           [{ cost: 0 }, 0],
           [{ cost: 0.1 }, 11],
           [{ inputCost: 0, outputCost: 0 }, 0],
@@ -339,16 +348,30 @@ describe('Claude 5.5 cost accounting', () => {
             prompt: { raw: 'pricing', label: 'pricing', config: pricing },
           });
           expect(response.error).toBeUndefined();
-          expect(response.cost).toBe(expected);
+          expect(response.cost).toBeCloseTo(expected, 12);
         }
       }
     },
   );
 
-  it('preserves published GovCloud Opus4.8 pricing', () => {
-    expect(calculateBedrockCost('anthropic.claude-opus-4-8', 1e6, 1e6, 0, 0, 'us-gov-west-1')).toBe(
-      36,
-    );
+  it.each([
+    [99_900, 0.12, 0.6],
+    [99_901, 0.6, 3],
+  ])(
+    'selects the GovCloud Haiku long-context tier at %s uncached tokens',
+    (prompt, input, output) => {
+      expect(
+        calculateBedrockCost('us-gov.anthropic.claude-haiku-5-5', prompt, 10, 100),
+      ).toBeCloseTo(((prompt + 100 * 0.1) * input + 10 * output) / 1e6, 12);
+    },
+  );
+
+  it.each([
+    ['anthropic.claude-opus-4-8', 36],
+    ['anthropic.claude-opus-5', 36],
+    ['anthropic.claude-sonnet-5', 14.4],
+  ] as const)('uses the published GovCloud rate for %s', (model, expected) => {
+    expect(calculateBedrockCost(model, 1e6, 1e6, 0, 0, 'us-gov-west-1')).toBeCloseTo(expected);
   });
 
   it.each(['global', 'us'])(
@@ -381,6 +404,6 @@ describe('Claude 5.5 cost accounting', () => {
     expect(calculateAnthropicCost('global.anthropic.claude-sonnet-5-5', {}, 0, 0, 1e6)).toBeCloseTo(
       0.1,
     );
-    expect(calculateAnthropicCost('claude-sonnet-5', {}, 0, 0, 1e6)).toBeCloseTo(0.2);
+    expect(calculateBedrockCost('global.anthropic.claude-sonnet-5', 0, 0, 1e6)).toBeCloseTo(0.2);
   });
 });

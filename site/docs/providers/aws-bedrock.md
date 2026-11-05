@@ -894,26 +894,15 @@ config:
 
 ### Claude Models
 
-For Claude models (e.g., `anthropic.claude-fable-5`, `anthropic.claude-sonnet-5`, `anthropic.claude-sonnet-4-6`, `anthropic.claude-sonnet-4-5-20250929-v1:0`, `anthropic.claude-haiku-4-5-20251001-v1:0`, `anthropic.claude-sonnet-4-20250514-v1:0`, `us.anthropic.claude-3-5-sonnet-20241022-v2:0`), you can use the following configuration options:
+Use the model ID or inference profile from the AWS model card for the selected API and Region.
 
-**Note**: Claude Opus 4.8 (`anthropic.claude-opus-4-8`) and Claude Opus 4.7 (`anthropic.claude-opus-4-7`) are available via cross-region inference profiles (`us.`, `eu.`, `jp.`, `global.`) and, in select regions, through the base foundation model ID. Claude Opus 4.6 (`anthropic.claude-opus-4-6-v1`) and Claude Opus 4.5 (`anthropic.claude-opus-4-5-20251101-v1:0`) require an inference profile ARN and cannot be used as a direct model ID. See the [Application Inference Profiles](#application-inference-profiles) section for setup. promptfoo automatically omits unsupported sampling parameters (`temperature`, `topP`, and `topK` — including raw `top_k` in `additionalModelRequestFields`) and converts configured manual thinking to adaptive thinking for Opus 4.7, Opus 4.8, Opus 5, Opus 5.5, Sonnet 5, Sonnet 5.5, and Haiku 5.5.
+**Note**: Claude Opus 4.8 (`anthropic.claude-opus-4-8`) and Claude Opus 4.7 (`anthropic.claude-opus-4-7`) are available via cross-region inference profiles (`us.`, `eu.`, `jp.`, `global.`) and, in select regions, through the base foundation model ID. Claude Opus 4.6 (`anthropic.claude-opus-4-6-v1`) and Claude Opus 4.5 (`anthropic.claude-opus-4-5-20251101-v1:0`) require an inference profile ID or ARN for on-demand calls. See the [Application Inference Profiles](#application-inference-profiles) section for setup. promptfoo automatically omits unsupported sampling parameters (`temperature`, `topP`, and `topK` — including raw `top_k` in `additionalModelRequestFields`) and converts configured manual thinking to adaptive thinking for Opus 4.7, Opus 4.8, Opus 5, Opus 5.5, Sonnet 5, Sonnet 5.5, and Haiku 5.5.
 
-**Note**: [Claude Opus 5](https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-anthropic-claude-opus-5.html)
-uses `us.anthropic.claude-opus-5`,
-`eu.anthropic.claude-opus-5`, `au.anthropic.claude-opus-5`, or
-`global.anthropic.claude-opus-5` with Bedrock Runtime. The bare
-`anthropic.claude-opus-5` ID is also IAM-native: `bedrock:anthropic.claude-opus-5` uses
-InvokeModel, while `bedrock:converse:anthropic.claude-opus-5` uses Converse. Select
-`bedrock:messages:anthropic.claude-opus-5` explicitly only for the bearer-authenticated
-Anthropic-compatible Messages endpoint. There is no `jp.` profile. The
-global profile bills at $5/$25 per million input/output tokens; regional endpoints, including
-geo profiles, add the 10% regional premium.
+For Claude Opus 5 and Sonnet 5, use a geographic or global inference profile with Runtime. For the bare `bedrock:messages:` ID, promptfoo selects Runtime in Seoul for Opus 5 and in London, Seoul, or Singapore for Sonnet 5. In the other supported Regions the bare Messages ID uses Mantle. Check the [Opus 5](https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-anthropic-claude-opus-5.html) and [Sonnet 5](https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-anthropic-claude-sonnet-5.html) model cards for availability.
 
-**Note**: Use Claude Opus 5.5 (`anthropic.claude-opus-5-5`) through a cross-region inference profile — `global.`, `us.`, `eu.`, `jp.`, or `au.` (for example, `bedrock:global.anthropic.claude-opus-5-5`). On-demand calls to the base model ID return a `ValidationException`. Cost is reported on both the `bedrock:` and `bedrock:converse:` paths: `global.` bills $4 / $20 per million input / output tokens, and geo profiles add the 10% regional premium.
+**Note**: Use Claude Opus 5.5 (`anthropic.claude-opus-5-5`) through a cross-region inference profile — `global.`, `us.`, `eu.`, `jp.`, or `au.` (for example, `bedrock:global.anthropic.claude-opus-5-5`). London (`eu-west-2`) also supports in-region Runtime requests with the bare model ID. Cost is reported on both the `bedrock:` and `bedrock:converse:` paths: `global.` bills $4 / $20 per million input / output tokens, and geo profiles add the 10% regional premium.
 
 **Note**: Use Claude Sonnet 5.5 through the `global.` cross-region inference profile (`bedrock:global.anthropic.claude-sonnet-5-5`). On-demand calls to the base model ID (`anthropic.claude-sonnet-5-5`) return a `ValidationException`. Cost is reported on both the `bedrock:` and `bedrock:converse:` paths at $2 / $10 per million input / output tokens on the global profile. Sonnet 5.5 rejects `thinking: { type: 'disabled' }` and forced tool use, so promptfoo sends `thinking: { type: 'between_tools' }` instead (at effort `high` or below) and omits `any`/`tool` tool choices.
-
-**Note**: Claude Sonnet 5 (`anthropic.claude-sonnet-5`) is available through the base foundation model ID and the `us.`/`eu.`/`global.` cross-region inference profiles (e.g. `bedrock:global.anthropic.claude-sonnet-5`); use the `global.` profile for dynamic routing. Cost is reported on both the default `bedrock:` (InvokeModel) and `bedrock:converse:` paths — the `global.` endpoint bills at the standard $3/$15 rate and regional/geo profiles (`us.`/`eu.`) add the 10% Claude 4.5+ regional premium.
 
 #### Claude 5.5 routes and pricing
 
@@ -921,7 +910,7 @@ geo profiles, add the 10% regional premium.
 [Sonnet 5.5](https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-anthropic-claude-sonnet-5-5.html),
 and [Opus 5.5](https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-anthropic-claude-opus-5-5.html)
 support InvokeModel, Converse, and the Anthropic-compatible Messages API on Bedrock Runtime.
-Use `global.`, `us.`, `eu.`, or `au.` inference profiles; Haiku and Opus also support `jp.`.
+Use `global.`, `us.`, `eu.`, or `au.` inference profiles; Haiku and Opus also support `jp.`, and Haiku supports `ca.`.
 All three also accept `us-gov.` profiles in `us-gov-east-1` and
 `us-gov-west-1`. Check the model card for source-region availability before selecting a profile.
 
@@ -940,7 +929,7 @@ The `messages:` profile route uses `bedrock-runtime.<region>.amazonaws.com/anthr
 and accepts a Bedrock API key or generates a temporary token from AWS credentials.
 Bare `bedrock:messages:anthropic.claude-haiku-5-5` and
 `bedrock:messages:anthropic.claude-sonnet-5-5` use Mantle and require `us-gov-west-1`.
-Bare Opus 5.5 Messages also supports commercial regions listed in its model card.
+Bare Opus 5.5 Messages selects Runtime in London and Mantle in the other regions listed in its model card. For Haiku 4.5, use the short `anthropic.claude-haiku-4-5` ID on Mantle or a versioned Runtime profile such as `global.anthropic.claude-haiku-4-5-20251001-v1:0`.
 
 Haiku 5.5 has adaptive thinking on by default. It accepts disabled thinking at effort
 `high` or below; promptfoo omits unsupported sampling parameters. Global pricing is
@@ -948,9 +937,7 @@ $0.10/$0.50 per million input/output tokens through 100,000 total input tokens,
 and $0.50/$2.50 above that threshold. Cached input counts toward the threshold.
 Commercial geo profiles add 10%; cache reads cost 0.1 times the applicable input rate.
 Sonnet 5.5 global cache reads cost $0.10 per million tokens (0.05 times its input rate).
-Cost accounting covers InvokeModel, Converse, and Messages. GovCloud 5.5 costs remain
-unknown because its rates are not registered; Messages supports explicit `cost` or
-both `inputCost` and `outputCost` overrides. Consult
+InvokeModel, Converse, and Messages use AWS's published rates for each partition. In GovCloud, Haiku 5.5 starts at $0.12/$0.60 per million input/output tokens and uses $0.60/$3.00 above 100,000 input tokens. See
 [AWS pricing](https://aws.amazon.com/bedrock/pricing/) for current rates and service tiers.
 
 For InvokeModel with an opaque application inference profile ARN, promptfoo omits the
