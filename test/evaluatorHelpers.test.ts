@@ -1516,6 +1516,48 @@ describe('evaluatorHelpers', () => {
       }
     });
 
+    it('should append fallback set RHS identifiers without argument spreading', async () => {
+      const rhs = Array.from({ length: 128000 }, (_, index) => `identifier${index}`).join(' ');
+      const value = `{% raw %}x{% endraw %}{% set local = ${rhs} %}`;
+      const renderedPrompt = await renderPrompt(
+        toPrompt('{"text":"{{other}}"}'),
+        { unused: value, other: 'ok' },
+        {},
+      );
+
+      expect(renderedPrompt).toBe(JSON.stringify({ text: 'ok' }, null, 2));
+    });
+
+    it('should avoid rescanning failed regex literal suffixes', async () => {
+      const entries = 'r/['.repeat(16000);
+      const value = `{{ [${entries} }} {{x}}`;
+      const startedAt = performance.now();
+      const renderedPrompt = await renderPrompt(
+        toPrompt('{"text":"{{v}}"}'),
+        { v: value, x: 'yes' },
+        {},
+      );
+      const elapsed = performance.now() - startedAt;
+
+      expect(renderedPrompt).toBe(JSON.stringify({ text: `{{ [${entries} }} yes` }, null, 2));
+      expect(elapsed).toBeLessThan(1000);
+    });
+
+    it('should stop dependency expansion after falling back to all variables', async () => {
+      const vars: Record<string, string> = Object.fromEntries(
+        Array.from({ length: 4000 }, (_, index) => [`v${index}`, '{% unknown %}']),
+      );
+      const keysSpy = vi.spyOn(Object, 'keys');
+      try {
+        const renderedPrompt = await renderPrompt(toPrompt('{"text":"{{v0}}"}'), vars, {});
+        expect(renderedPrompt).toBe(JSON.stringify({ text: '{% unknown %}' }, null, 2));
+        const varsKeyReads = keysSpy.mock.calls.filter(([target]) => target === vars).length;
+        expect(varsKeyReads).toBeLessThan(20);
+      } finally {
+        keysSpy.mockRestore();
+      }
+    }, 30_000);
+
     it('should honor escaped quotes in protected literal expressions', async () => {
       const template = "{{ 'it\\'s' }} {{x}}";
       const renderedPrompt = await renderPrompt(

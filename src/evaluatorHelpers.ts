@@ -144,7 +144,16 @@ function advanceQuoteState(
   return { quote: ch, escaped: false };
 }
 
-function regexLiteralEndAt(value: string, index: number, inExpression: boolean): number | null {
+type RegexScanState = {
+  failedStart: number | null;
+};
+
+function regexLiteralEndAt(
+  value: string,
+  index: number,
+  inExpression: boolean,
+  scanState: RegexScanState,
+): number | null {
   if (!inExpression || value[index] !== 'r' || value[index + 1] !== '/') {
     return null;
   }
@@ -171,6 +180,12 @@ function regexLiteralEndAt(value: string, index: number, inExpression: boolean):
   ) {
     return null;
   }
+  // A failed candidate has no closing slash through the end of the value. Any
+  // delimiter that could close a later candidate would also close this one, so
+  // later candidates in the same scan cannot succeed either.
+  if (scanState.failedStart !== null && index >= scanState.failedStart) {
+    return null;
+  }
   let inCharacterClass = false;
   for (let end = index + 2; end < value.length; end++) {
     const ch = value[end];
@@ -186,6 +201,7 @@ function regexLiteralEndAt(value: string, index: number, inExpression: boolean):
       return end + 1;
     }
   }
+  scanState.failedStart = index;
   return null;
 }
 
@@ -201,6 +217,7 @@ function advanceExpressionLiteralState(
   active: boolean,
   inExpression: boolean,
   quote: string | null,
+  regexScanState: RegexScanState,
   depths?: Int32Array,
   depth = 0,
 ): ExpressionLiteralState {
@@ -208,7 +225,7 @@ function advanceExpressionLiteralState(
     return { quote, handled: false, index };
   }
   if (inExpression && !quote) {
-    const regexEnd = regexLiteralEndAt(value, index, true);
+    const regexEnd = regexLiteralEndAt(value, index, true, regexScanState);
     if (regexEnd !== null) {
       if (depths) {
         for (let cursor = index + 1; cursor < regexEnd; cursor++) {
@@ -320,6 +337,7 @@ function computeNestingDepths(
   let quote: string | null = null;
   let rawIdx = 0;
   let inComment = false;
+  const regexScanState: RegexScanState = { failedStart: null };
   for (let i = 0; i < value.length; i++) {
     depths[i] = depth;
     const rawEnd = rawSpanEndAt(i, rawSpans, rawIdx);
@@ -345,6 +363,7 @@ function computeNestingDepths(
       depth > 0,
       depth > 0,
       quote,
+      regexScanState,
       depths,
       depth,
     );
@@ -424,6 +443,7 @@ function collectRawSpans(value: string): Array<[number, number]> {
   let quote: string | null = null;
   let inExpression = false;
   let inComment = false;
+  const regexScanState: RegexScanState = { failedStart: null };
   for (let i = 0; i < value.length; i++) {
     const ch = value[i];
     const two = value.slice(i, i + 2);
@@ -436,7 +456,14 @@ function collectRawSpans(value: string): Array<[number, number]> {
       }
       inComment = false;
     }
-    const literal = advanceExpressionLiteralState(value, i, depth === 0, inExpression, quote);
+    const literal = advanceExpressionLiteralState(
+      value,
+      i,
+      depth === 0,
+      inExpression,
+      quote,
+      regexScanState,
+    );
     if (literal.handled) {
       quote = literal.quote;
       i = literal.index;
@@ -491,6 +518,7 @@ function collectCommentSpans(value: string): Array<[number, number]> {
   let inExpression = false;
   let braceDepth = 0;
   let quote: string | null = null;
+  const regexScanState: RegexScanState = { failedStart: null };
   for (let i = 0; i < value.length; i++) {
     const rawEnd = rawSpanEndAt(i, rawSpans, rawIdx);
     if (rawEnd !== null) {
@@ -508,7 +536,14 @@ function collectCommentSpans(value: string): Array<[number, number]> {
       }
       continue;
     }
-    const literal = advanceExpressionLiteralState(value, i, true, inExpression, quote);
+    const literal = advanceExpressionLiteralState(
+      value,
+      i,
+      true,
+      inExpression,
+      quote,
+      regexScanState,
+    );
     if (literal.handled) {
       quote = literal.quote;
       i = literal.index;
@@ -664,9 +699,10 @@ function collectPromptReferencedVars(
   // Includes/imports can read variables that never appear in the outer AST.
   // Conservatively treat every supplied value as used rather than suppressing
   // a render error in an unseen dependency.
-  const pending = templateLoadsExternalContext(basePrompt)
-    ? Object.keys(vars)
-    : extractUnboundVariables(basePrompt);
+  if (templateLoadsExternalContext(basePrompt)) {
+    return new Set(Object.keys(vars));
+  }
+  const pending = extractUnboundVariables(basePrompt);
   while (pending.length > 0) {
     const reference = pending.pop()!;
     const key = /^([A-Za-z_]\w*)/.exec(reference)?.[1];
@@ -682,10 +718,10 @@ function collectPromptReferencedVars(
     if (typeof value !== 'string') {
       continue;
     }
-    const dependencies = templateLoadsExternalContext(value)
-      ? Object.keys(vars)
-      : extractUnboundVariables(value);
-    for (const dependency of dependencies) {
+    if (templateLoadsExternalContext(value)) {
+      return new Set(Object.keys(vars));
+    }
+    for (const dependency of extractUnboundVariables(value)) {
       pending.push(dependency);
     }
   }
@@ -767,7 +803,9 @@ function referencesUndefinedVariables(template: string, vars: Record<string, Var
     const rhsSource = (match[2] || '').trimEnd();
     const rhs = (rhsSource.endsWith('-') ? rhsSource.slice(0, -1) : rhsSource).trimEnd();
     const references = extractVariablesFromExpression(`{{ ${rhs} }}`);
-    setRhsVars.push(...(references ?? rhs.match(/[A-Za-z_]\w*/g) ?? []));
+    for (const reference of references ?? rhs.match(/[A-Za-z_]\w*/g) ?? []) {
+      setRhsVars.push(reference);
+    }
   }
   // Also handle set without explicit RHS extraction (e.g. {% set local %}).
   for (const match of scrubbed.matchAll(/\{%\s*-?\s*set\s+([A-Za-z_]\w*)\s*-?%\}/g)) {
