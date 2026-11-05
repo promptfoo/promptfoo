@@ -31,8 +31,11 @@ import {
 import { generateIdFromPrompt } from './models/prompt';
 import { nodeEvaluatorRuntime } from './node/evaluatorRuntime';
 import { CIProgressReporter } from './progress/ciProgressReporter';
-import { resolveAgenticWorkingDir } from './providers/agentic-utils';
-import { type AgentWorkspace, createAgentWorkspaceForConfig } from './providers/agentWorkspace';
+import {
+  type AgentWorkspace,
+  createAgentWorkspaceForConfig,
+  resolveConfiguredWorkingDir,
+} from './providers/agentWorkspace';
 import { maybeEmitAzureOpenAiWarning } from './providers/azure/warnings';
 import { providerRegistry } from './providers/providerRegistry';
 import { isPromptfooSampleTarget } from './providers/shared';
@@ -44,6 +47,7 @@ import {
 } from './redteam/plugins/codingAgent/hostEvidence';
 import { snapshotCodingAgentArtifacts } from './redteam/plugins/codingAgent/verifiers';
 import { redteamProviderManager } from './redteam/providers/shared';
+import { isAttackProvider } from './redteam/shared/attackProviders';
 import { throwIfTargetPromptExceedsMaxChars } from './redteam/shared/promptLength';
 import { getSessionId } from './redteam/util';
 import { createProviderRateLimitOptions, RateLimitRegistry, sleepWithAbort } from './scheduler';
@@ -113,7 +117,6 @@ import {
   sanitizeProviderIdForLog,
 } from './util/provider';
 import { promptYesNo } from './util/readline';
-import { renderVarsInObject } from './util/render';
 import {
   isNonCredentialHeader,
   isSecretEnvVarName,
@@ -1857,17 +1860,19 @@ async function runEvalInternal(
     setup = rendered.setup;
     let hostEvidence: CodingAgentHostEvidence | undefined;
     if (!test.providerOutput) {
-      const activeProvider = isApiProvider(test.provider) ? test.provider : provider;
-      const config = { ...activeProvider.config, ...rendered.setup.prompt.config };
+      const override = isApiProvider(test.provider) ? test.provider : undefined;
+      const overrideId = override?.id();
+      // Strategies invoke the original target with this row's prompt config.
+      const target =
+        overrideId?.startsWith('promptfoo:redteam:') && isAttackProvider(overrideId)
+          ? provider
+          : (override ?? provider);
+      const config = { ...target.config, ...rendered.setup.prompt.config };
       workspace = await createAgentWorkspaceForConfig(config, state.vars, abortSignal);
       if (hasCodingAgentAssertion(test.assert)) {
-        const configuredDir = renderVarsInObject(config.working_dir, state.vars);
         const directory =
           workspace?.dir ??
-          resolveAgenticWorkingDir(
-            typeof configuredDir === 'string' ? configuredDir : undefined,
-            cliState.basePath,
-          ) ??
+          resolveConfiguredWorkingDir(config.working_dir, state.vars) ??
           process.cwd();
         hostEvidence = await snapshotCodingAgentArtifacts({ ...test, vars: state.vars }, directory);
       }

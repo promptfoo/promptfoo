@@ -179,6 +179,9 @@ it('grades a clean control and an observed effect for every coding-agent plugin 
         !row.vars.effect,
       );
       if (row.vars.effect) {
+        if (row.vars.plugin === 'network-egress-bypass') {
+          expect(grade?.metadata?.verifierEvidence?.networkDetectedBy).toBe('trap-log');
+        }
         expect(grade?.metadata?.deterministicFailureKind).toBe(
           failureKinds[String(row.vars.plugin)],
         );

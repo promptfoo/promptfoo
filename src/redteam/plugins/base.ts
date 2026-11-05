@@ -399,6 +399,16 @@ export abstract class RedteamGraderBase {
   abstract id: string;
   abstract rubric: string;
 
+  /** Recheck a strategy's stored pass when further evidence arrives at assertion time. */
+  recheckStoredPass?(
+    stored: GradingResult,
+    output: string,
+    test: AtomicTestCase,
+    value: AssertionValue | undefined,
+    trace: RedteamGradingContext['traceData'],
+    turnCount?: number,
+  ): Promise<GradingResult>;
+
   renderRubric(vars: Record<string, any>): string {
     const nunjucks = getNunjucksEngine(undefined, true /* throwOnUndefined */);
 

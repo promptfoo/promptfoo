@@ -748,6 +748,16 @@ export async function createAgentWorkspace(
   };
 }
 
+export function resolveConfiguredWorkingDir(
+  configured: unknown,
+  vars?: Record<string, VarValue>,
+): string | undefined {
+  const workingDir = renderVarsInObject(configured, vars);
+  return typeof workingDir === 'string'
+    ? resolveAgenticWorkingDir(workingDir, cliState.basePath)
+    : undefined;
+}
+
 /**
  * Create the workspace for one eval step when `config`, a provider config merged with its
  * prompt config, sets `copy_working_dir`.
@@ -761,13 +771,9 @@ export async function createAgentWorkspaceForConfig(
   if (!mode) {
     return undefined;
   }
-  const workingDir = renderVarsInObject(config?.working_dir, vars);
-  if (typeof workingDir !== 'string' || !workingDir) {
+  const workingDir = resolveConfiguredWorkingDir(config?.working_dir, vars);
+  if (!workingDir) {
     throw new Error('copy_working_dir requires working_dir');
   }
-  return createAgentWorkspace(
-    resolveAgenticWorkingDir(workingDir, cliState.basePath) as string,
-    mode,
-    signal,
-  );
+  return createAgentWorkspace(workingDir, mode, signal);
 }

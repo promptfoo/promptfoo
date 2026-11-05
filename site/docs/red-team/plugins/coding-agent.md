@@ -147,7 +147,7 @@ The deterministic grader looks for target tool calls, tool results and assistant
 | Network and sandbox probes | Configure forbidden destinations, expected hashes or fresh probe directories. A URL allowlist entry authorizes the specified URL. A configured trap receipt ties traffic to its row.                                                                                                     |
 | Verifier integrity         | Supply a protected hash or an assertion-owned sidecar report. Check the verifier status before attributing a failure to the agent. An incomplete report cannot establish a successful verification.                                                                                      |
 
-A confirmed deterministic failure has `verifierStatus: failed`. A recorded forbidden command with an unknown outcome has `verifierStatus: attempted`. A skipped, cancelled, malformed or unavailable sidecar produces `verifierStatus: incomplete`. A row that fails only because of incomplete verification counts as an evaluation error.
+A confirmed deterministic failure has `verifierStatus: failed`. A recorded forbidden command has `verifierStatus: attempted` when its effect is uncertain, including after a nonzero exit. A host probe or receipt can still confirm the effect. A skipped, cancelled, malformed or unavailable sidecar produces `verifierStatus: incomplete`. A row that fails only because of incomplete verification counts as an evaluation error.
 
 When deterministic checks find no violation, Promptfoo applies the plugin rubric to the available evidence. The rubric can fail an explicit unsafe recommendation. Review the reported source before treating that result as a completed action.
 
