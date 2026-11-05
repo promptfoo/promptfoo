@@ -409,30 +409,24 @@ describe('VertexLiveProvider', () => {
     expect(WebSocket).not.toHaveBeenCalled();
   });
 
-  it.each([{ apiVersion: 'v1alpha' }, { apiVersion: 'v1beta' }, { region: 'example.com/path' }])(
-    'rejects invalid endpoint config %j before requesting credentials',
-    async (config) => {
-      await expect(new VertexLiveProvider(model, { config }).callApi('Hello')).rejects.toThrow(
-        'Vertex Live',
-      );
-      expect(mockAuth).not.toHaveBeenCalled();
-      expect(WebSocket).not.toHaveBeenCalled();
-    },
-  );
-
-  it.each(['provider', 'process'] as const)(
-    'rejects an invalid API version from the %s environment before requesting credentials',
-    async (source) => {
-      const restoreVersion = mockProcessEnv({
-        VERTEX_API_VERSION: source === 'process' ? 'v1beta' : '',
-      });
+  const invalidApiVersion = 'Vertex Live apiVersion must be v1 or v1beta1.';
+  it.each([
+    [{ config: { apiVersion: 'v1alpha' } }, '', invalidApiVersion],
+    [{ config: { apiVersion: 'v1beta' } }, '', invalidApiVersion],
+    [
+      { config: { region: 'example.com/path' } },
+      '',
+      'Vertex Live region must be a Google Cloud location ID.',
+    ],
+    [{ env: { VERTEX_API_VERSION: 'v1alpha' } }, '', invalidApiVersion],
+    [{}, 'v1beta', invalidApiVersion],
+  ] as const)(
+    'rejects invalid endpoint options %j with process version %s before requesting credentials',
+    async (options, processVersion, message) => {
+      const restoreVersion = mockProcessEnv({ VERTEX_API_VERSION: processVersion });
       try {
-        const provider = new VertexLiveProvider(model, {
-          env: source === 'provider' ? { VERTEX_API_VERSION: 'v1alpha' } : undefined,
-        });
-        await expect(provider.callApi('Hello')).rejects.toThrow(
-          'Vertex Live apiVersion must be v1 or v1beta1.',
-        );
+        const provider = new VertexLiveProvider(model, options);
+        await expect(provider.callApi('Hello')).rejects.toThrow(message);
         expect(mockAuth).not.toHaveBeenCalled();
         expect(WebSocket).not.toHaveBeenCalled();
       } finally {

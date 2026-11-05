@@ -55,6 +55,29 @@ describe('GoogleInteractionsProvider', () => {
     ),
   );
 
+  function mockVertexTextInteraction() {
+    const getRequestHeaders = vi
+      .fn()
+      .mockResolvedValue(new Headers({ Authorization: 'Bearer vertex-token' }));
+    vi.spyOn(GoogleAuthManager, 'getOAuthClient').mockResolvedValueOnce({
+      client: {
+        getAccessToken: vi.fn().mockResolvedValue({ token: 'vertex-token' }),
+        getRequestHeaders,
+      },
+      projectId: 'detected-project',
+    });
+    mockFetchWithCache.mockResolvedValue({
+      data: {
+        status: 'completed',
+        steps: [{ type: 'model_output', content: [{ type: 'text', text: 'Move forward.' }] }],
+      },
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+    });
+    return getRequestHeaders;
+  }
+
   beforeEach(() => {
     // resetAllMocks (not clearAllMocks) so per-test persistent setters like
     // mockFetchWithCache.mockResolvedValue cannot leak across randomized test order.
@@ -3658,22 +3681,7 @@ describe('GoogleInteractionsProvider', () => {
       for (const [name, value] of Object.entries(processEnv)) {
         vi.stubEnv(name, value);
       }
-      const oauthHeaders = new Headers({ Authorization: 'Bearer vertex-token' });
-      const getRequestHeaders = vi.fn().mockResolvedValue(oauthHeaders);
-      const getOAuthClient = vi.spyOn(GoogleAuthManager, 'getOAuthClient').mockResolvedValueOnce({
-        client: {
-          getAccessToken: vi.fn().mockResolvedValue({ token: 'vertex-token' }),
-          getRequestHeaders,
-        },
-        projectId: 'detected-project',
-      });
-      mockFetchWithCache.mockResolvedValue({
-        data: {
-          status: 'completed',
-          steps: [{ type: 'model_output', content: [{ type: 'text', text: 'Move forward.' }] }],
-        },
-        cached: false,
-      } as any);
+      const getRequestHeaders = mockVertexTextInteraction();
       const provider = new GoogleInteractionsProvider('gemini-robotics-er-2-preview', {
         id: 'vertex:gemini-robotics-er-2-preview',
         config: { vertexai: true },
@@ -3683,7 +3691,7 @@ describe('GoogleInteractionsProvider', () => {
       const result = await provider.callApi('Move the block.');
 
       expect(result.error).toBeUndefined();
-      expect(getOAuthClient).toHaveBeenCalledTimes(1);
+      expect(GoogleAuthManager.getOAuthClient).toHaveBeenCalledTimes(1);
       expect(getRequestHeaders).toHaveBeenCalledWith(endpoint);
       expect(mockFetchWithCache).toHaveBeenCalledWith(
         endpoint,
@@ -3828,27 +3836,7 @@ describe('GoogleInteractionsProvider', () => {
     'resolves the Vertex Interactions endpoint using $name',
     async ({ config, env, region, host }) => {
       vi.stubEnv('VERTEX_REGION', 'europe-west1');
-      const oauthHeaders = new Headers({ Authorization: 'Bearer vertex-token' });
-      const getRequestHeaders = vi.fn().mockResolvedValue(oauthHeaders);
-      vi.spyOn(GoogleAuthManager, 'getOAuthClient').mockResolvedValueOnce({
-        client: {
-          getAccessToken: vi.fn().mockResolvedValue({ token: 'vertex-token' }),
-          getRequestHeaders,
-        },
-        projectId: 'detected-project',
-      });
-      mockFetchWithCache.mockResolvedValue({
-        data: {
-          status: 'completed',
-          steps: [
-            {
-              type: 'model_output',
-              content: [{ type: 'text', text: 'Move forward.' }],
-            },
-          ],
-        },
-        cached: false,
-      } as any);
+      const getRequestHeaders = mockVertexTextInteraction();
       const provider = new GoogleInteractionsProvider('gemini-robotics-er-2-preview', {
         config: { vertexai: true, projectId: 'configured-project', ...config },
         env,
