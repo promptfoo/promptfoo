@@ -2706,6 +2706,18 @@ describe('Provider Registry', () => {
         async () =>
           (await import('../../src/providers/google/interactions')).GoogleInteractionsProvider,
       ],
+      ...[
+        'google:gemini-3.5-transcribe',
+        'palm:gemini-3.5-transcribe',
+        'google:interactions:gemini-3.5-transcribe',
+      ].map(
+        (path) =>
+          [
+            path,
+            async () =>
+              (await import('../../src/providers/google/interactions')).GoogleInteractionsProvider,
+          ] as const,
+      ),
       // Bare google:<model> default chat route (no service-type segment).
       [
         'google:gemini-omni-flash-preview',
@@ -2921,6 +2933,17 @@ describe('Provider Registry', () => {
         'Use google:gemini-robotics-er-2-preview',
       );
     });
+
+    it.each(['chat', 'video', 'live', 'embedding'])(
+      'rejects a native file Transcribe ID on the %s API',
+      async (serviceType) => {
+        const path = `google:${serviceType}:gemini-3.5-transcribe`;
+        const factory = (await getProviderFactories(path)).find((f) => f.test(path));
+        await expect(factory!.create(path, bareOptions, bareContext)).rejects.toThrow(
+          'For file transcription, use google:gemini-3.5-transcribe.',
+        );
+      },
+    );
 
     it('rejects unsupported Vertex image generation with Google AI Studio guidance', async () => {
       const providerPath = 'vertex:image:imagen-4.0-generate-001';
