@@ -2,6 +2,72 @@ import { describe, expect, it } from 'vitest';
 import { EvalJobService } from '../../../src/server/services/evalJobService';
 
 describe('EvalJobService', () => {
+  it('keeps concurrent repeat progress distinct through completion', () => {
+    const service = new EvalJobService();
+    service.create('repeats');
+    const base = { provider: 'scanner', phase: 'discovery', testIdx: 0, promptIdx: 0 };
+    service.setProviderProgress('repeats', { ...base, repeatIndex: 0 });
+    service.setProviderProgress('repeats', { ...base, repeatIndex: 1 });
+    expect(service.get('repeats')?.providerProgress).toHaveLength(2);
+    service.setProviderProgress('repeats', { ...base, repeatIndex: 0 }, true);
+    expect(service.get('repeats')?.providerProgress).toEqual([
+      expect.objectContaining({ repeatIndex: 1 }),
+    ]);
+  });
+
+  it('keeps bounded independent active progress snapshots and clears them on termination', () => {
+    const service = new EvalJobService();
+    service.create('progress-job');
+    for (let testIdx = 0; testIdx < 101; testIdx++) {
+      service.setProviderProgress('progress-job', {
+        provider: 'scanner',
+        phase: 'discovery',
+        testIdx,
+        promptIdx: 0,
+      });
+    }
+    expect(service.get('progress-job')?.providerProgress).toHaveLength(100);
+    service.setProviderProgress('progress-job', {
+      provider: 'scanner',
+      phase: 'reporting',
+      testIdx: 100,
+      promptIdx: 0,
+    });
+    const snapshot = service.get('progress-job')!;
+    expect(snapshot.providerProgress?.at(-1)?.phase).toBe('reporting');
+    snapshot.providerProgress!.at(-1)!.phase = 'mutated';
+    expect(service.get('progress-job')?.providerProgress?.at(-1)?.phase).toBe('reporting');
+    service.setProviderProgress(
+      'progress-job',
+      { provider: 'scanner', phase: 'reporting', testIdx: 100, promptIdx: 0 },
+      true,
+    );
+    expect(service.get('progress-job')?.providerProgress).toHaveLength(99);
+    service.fail('progress-job', ['stopped']);
+    service.setProviderProgress('progress-job', {
+      provider: 'scanner',
+      phase: 'late',
+      testIdx: 100,
+      promptIdx: 0,
+    });
+    expect(service.get('progress-job')?.providerProgress).toBeUndefined();
+  });
+
+  it('rejects nonfinite operational telemetry', () => {
+    const service = new EvalJobService();
+    service.create('progress-job');
+    expect(
+      service.setProviderProgress('progress-job', {
+        provider: 'scanner',
+        phase: 'scan',
+        testIdx: 0,
+        promptIdx: 0,
+        estimatedCostUsd: Number.NaN,
+      }),
+    ).toBe(false);
+    expect(service.get('progress-job')?.providerProgress).toBeUndefined();
+  });
+
   it('creates an in-progress job', () => {
     const service = new EvalJobService();
 

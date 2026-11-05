@@ -283,7 +283,7 @@ const EvaluateTestSuiteCreator = () => {
                   <p className="text-sm font-medium text-muted-foreground">Evaluation setup</p>
                   <h2 className="text-xl font-semibold">
                     {isReadyToRun
-                      ? 'Ready to run'
+                      ? 'Configuration ready'
                       : `${completedRequiredStepCount} of ${requiredSteps.length} required steps complete`}
                   </h2>
                   <p className="text-sm text-muted-foreground">

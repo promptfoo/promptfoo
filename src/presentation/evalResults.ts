@@ -3,7 +3,7 @@ import invariant from '../util/invariant';
 import { getActualPrompt } from '../util/providerResponse';
 import { getTableCellMedia, getTableCellText } from './evalTableCells';
 
-import type { EvaluateTable, EvaluateTableRow, ResultsFile } from '../types/index';
+import type { CompletedPrompt, EvaluateTable, EvaluateTableRow, ResultsFile } from '../types/index';
 
 /** Convert version 4+ results to display rows and ordered variable columns. */
 export function convertResultsToTable(eval_: ResultsFile): EvaluateTable {
@@ -12,6 +12,11 @@ export function convertResultsToTable(eval_: ResultsFile): EvaluateTable {
     `Prompts are required in this version of the results file, this needs to be results file version >= 4, version: ${eval_.version}`,
   );
   const results = eval_.results;
+  const prompts: CompletedPrompt[] = eval_.prompts.map(
+    ({ hasSavedReportImports: _previous, onlySavedReportImports: _onlyPrevious, ...prompt }) => ({
+      ...prompt,
+    }),
+  );
   // Guard against malformed payloads where `vars` is present but not an array
   // (corrupt store, schema skew across server versions). Warn so the bad
   // writer is visible instead of silently rendering an alphabetized fallback.
@@ -29,8 +34,25 @@ export function convertResultsToTable(eval_: ResultsFile): EvaluateTable {
   const varsForHeader = new Set<string>(persistedVars);
   const varValuesForRow = new Map<number, Record<string, string>>();
 
+  const nativePromptIndices = new Set(
+    results.results
+      .filter((result) => {
+        const security = result.metadata?.codexSecurity;
+        return security?.version !== 1 || security.source?.kind !== 'saved-report';
+      })
+      .map((result) => result.promptIdx),
+  );
   const rowMap: Record<number, EvaluateTableRow> = {};
   for (const result of results.results) {
+    const securityResult = result.metadata?.codexSecurity;
+    if (
+      securityResult?.version === 1 &&
+      securityResult.source?.kind === 'saved-report' &&
+      prompts[result.promptIdx]
+    ) {
+      prompts[result.promptIdx].hasSavedReportImports = true;
+      prompts[result.promptIdx].onlySavedReportImports = !nativePromptIndices.has(result.promptIdx);
+    }
     // vars
     for (const varName of Object.keys(result.vars || {})) {
       varsForHeader.add(varName);
@@ -145,7 +167,7 @@ export function convertResultsToTable(eval_: ResultsFile): EvaluateTable {
 
   return {
     head: {
-      prompts: eval_.prompts,
+      prompts,
       vars: orderedVars,
     },
     body: rows,

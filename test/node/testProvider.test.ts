@@ -135,6 +135,8 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.clearAllMocks();
+  vi.restoreAllMocks();
+  vi.useRealTimers();
 });
 
 function createMockProvider(overrides?: Record<string, unknown>): ApiProvider {
@@ -151,6 +153,126 @@ function createMockProvider(overrides?: Record<string, unknown>): ApiProvider {
 }
 
 describe('testProviderConnectivity', () => {
+  it.each([true, false])(
+    'uses local setup capability without inference or remote analysis (success=%s)',
+    async (success) => {
+      const checkSetup = vi.fn().mockResolvedValue({
+        success,
+        message: 'Local preflight',
+        details: { check: 'local-preflight' },
+      });
+      const provider = createMockProvider({ checkSetup });
+      const result = await testProviderConnectivity({ provider });
+      expect(result).toEqual({
+        success,
+        message: 'Local preflight',
+        providerResponse: { metadata: { check: 'local-preflight' } },
+      });
+      expect(checkSetup).toHaveBeenCalledOnce();
+      expect(checkSetup).toHaveBeenCalledWith(undefined, { abortSignal: expect.any(AbortSignal) });
+      expect(provider.callApi).not.toHaveBeenCalled();
+      expect(mockEvaluate).not.toHaveBeenCalled();
+      expect(mockFetchWithProxy).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([undefined, 0, -1, Number.NaN, Number.POSITIVE_INFINITY])(
+    'keeps a finite default setup deadline when setupTimeoutMs is %s',
+    async (setupTimeoutMs) => {
+      vi.useFakeTimers();
+      const checkSetup = vi.fn<NonNullable<ApiProvider['checkSetup']>>(() => new Promise(() => {}));
+      const provider = createMockProvider({ checkSetup });
+      const settled = vi.fn();
+      const pending = testProviderConnectivity({ provider, setupTimeoutMs }).then((result) => {
+        settled();
+        return result;
+      });
+
+      await vi.advanceTimersByTimeAsync(29_999);
+      expect(settled).not.toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(1);
+
+      expect(await pending).toEqual({
+        success: false,
+        message: 'Provider local setup check timed out after 30000ms. No workload was started.',
+        error: 'Provider local setup check timed out after 30000ms. No workload was started.',
+      });
+      expect(checkSetup.mock.calls[0][1]?.abortSignal?.aborted).toBe(true);
+      expect(provider.callApi).not.toHaveBeenCalled();
+      expect(mockEvaluate).not.toHaveBeenCalled();
+      expect(mockFetchWithProxy).not.toHaveBeenCalled();
+      expect(vi.getTimerCount()).toBe(0);
+    },
+  );
+
+  it('does not start local setup when its request was already canceled', async () => {
+    vi.useFakeTimers();
+    const controller = new AbortController();
+    controller.abort();
+    const checkSetup = vi.fn();
+    const provider = createMockProvider({ checkSetup });
+
+    await expect(
+      testProviderConnectivity({ provider, abortSignal: controller.signal }),
+    ).rejects.toThrow('Operation cancelled');
+
+    expect(checkSetup).not.toHaveBeenCalled();
+    expect(provider.callApi).not.toHaveBeenCalled();
+    expect(mockEvaluate).not.toHaveBeenCalled();
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('cancels a noncooperative setup and consumes its late rejection', async () => {
+    vi.useFakeTimers();
+    const controller = new AbortController();
+    const removeListener = vi.spyOn(controller.signal, 'removeEventListener');
+    let rejectSetup!: (error: Error) => void;
+    const checkSetup = vi.fn<NonNullable<ApiProvider['checkSetup']>>(
+      () =>
+        new Promise((_, reject) => {
+          rejectSetup = reject;
+        }),
+    );
+    const provider = createMockProvider({ checkSetup });
+    const pending = testProviderConnectivity({ provider, abortSignal: controller.signal });
+    const rejected = expect(pending).rejects.toThrow('Operation cancelled');
+    await Promise.resolve();
+    const signal = checkSetup.mock.calls[0][1]?.abortSignal;
+
+    controller.abort();
+    await rejected;
+    rejectSetup(new Error('Late local setup failure'));
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(signal?.aborted).toBe(true);
+    expect(removeListener).toHaveBeenCalledWith('abort', expect.any(Function));
+    expect(provider.callApi).not.toHaveBeenCalled();
+    expect(mockEvaluate).not.toHaveBeenCalled();
+    expect(mockFetchWithProxy).not.toHaveBeenCalled();
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('cleans up setup deadline and cancellation listeners after success', async () => {
+    vi.useFakeTimers();
+    const controller = new AbortController();
+    const removeListener = vi.spyOn(controller.signal, 'removeEventListener');
+    const checkSetup = vi.fn<NonNullable<ApiProvider['checkSetup']>>().mockResolvedValue({
+      success: true,
+      message: 'Ready locally',
+    });
+
+    await testProviderConnectivity({
+      provider: createMockProvider({ checkSetup }),
+      abortSignal: controller.signal,
+      setupTimeoutMs: 1000,
+    });
+    controller.abort();
+
+    expect(checkSetup.mock.calls[0][1]?.abortSignal?.aborted).toBe(false);
+    expect(removeListener).toHaveBeenCalledWith('abort', expect.any(Function));
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
   it('should return success when provider evaluation succeeds', async () => {
     const provider = createMockProvider();
     const result = await testProviderConnectivity({ provider });

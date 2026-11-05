@@ -242,7 +242,9 @@ export class ProviderRateLimitState extends EventEmitter {
             } catch (finalizerError) {
               throw new ResultFinalizationError(finalizerError);
             }
-            this.applyConcurrencyChange(this.adaptiveConcurrency.recordSuccess());
+            if (options.shouldRecoverConcurrency?.(result) !== false) {
+              this.applyConcurrencyChange(this.adaptiveConcurrency.recordSuccess());
+            }
             this.completedRequests++;
             return finalizedResult;
           }

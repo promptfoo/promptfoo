@@ -5,7 +5,11 @@ import { afterAll, beforeAll } from 'vitest';
 import type { Express } from 'express';
 
 /** Keep one loopback server and cookie-preserving agent for the entire suite. */
-export function setupTestServer(createApp: () => Express, beforeStart?: () => Promise<unknown>) {
+export function setupTestServer(
+  createApp: () => Express,
+  beforeStart?: () => Promise<unknown>,
+  onListening?: (server: Server) => void,
+) {
   let server: Server;
   let api: ReturnType<typeof request.agent>;
 
@@ -18,6 +22,7 @@ export function setupTestServer(createApp: () => Express, beforeStart?: () => Pr
         error ? reject(error) : resolve(),
       );
     });
+    onListening?.(server);
     api = request.agent(server);
   });
 

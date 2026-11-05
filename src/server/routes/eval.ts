@@ -1,12 +1,20 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { HUMAN_ASSERTION_TYPE } from '../../constants';
+import { getEnvBool } from '../../envars';
 import { getUserEmail, setUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
 import Eval, { EvalQueries } from '../../models/eval';
 import EvalResult from '../../models/evalResult';
 import { evaluateWithSource } from '../../node';
+import { resolveProviderConfigs } from '../../providers/index';
 import { EvalSchemas } from '../../types/api/eval';
+import {
+  getCloudDatabaseId,
+  getProviderFromCloud,
+  isCloudProvider,
+  withCloudProviderResolver,
+} from '../../util/cloud';
 import { deleteEval, deleteEvals, updateResult, writeResultsToDatabase } from '../../util/database';
 import {
   ComparisonEvalNotFoundError,
@@ -17,13 +25,14 @@ import {
   mergeComparisonTables,
 } from '../../util/eval/evalTableUtils';
 import invariant from '../../util/invariant';
-import { loadProviderConfigsFromFile, normalizeProviderRef } from '../../util/providerRef';
+import { isProviderConfigFileReference, normalizeProviderRef } from '../../util/providerRef';
 import {
   redactAzureBlobSasTokens,
   restoreAzureBlobSasTokens,
   sanitizeObject,
 } from '../../util/sanitizer';
 import { shouldShareResults } from '../../util/sharing';
+import { getTemplateEnvValue } from '../../util/templates';
 import { evalJobService } from '../services/evalJobService';
 import { setDownloadHeaders } from '../utils/downloadHelpers';
 import { replyValidationError, sendError } from '../utils/errors';
@@ -181,6 +190,9 @@ evalRouter.post('/job', async (req: Request, res: Response): Promise<void> => {
     {
       ...evaluateOptions,
       eventSource: 'web',
+      providerProgressCallback: (progress, completed) => {
+        evalJobService.setProviderProgress(id, progress, completed);
+      },
       progressCallback: (progress: number, total: number) => {
         invariant(evalJobService.setProgress(id, progress, total), 'Job not found');
         console.log(`[${id}] ${progress}/${total}`);
@@ -584,6 +596,27 @@ evalRouter.post('/:id/results', async (req: Request, res: Response) => {
   res.status(204).send();
 });
 
+function getReplayProviderError(provider: unknown): string | undefined {
+  const reference = normalizeProviderRef(provider);
+  const providerPath = 'loadProviderPath' in reference ? reference.loadProviderPath : undefined;
+  if (
+    providerPath === 'openai:codex-security' ||
+    providerPath?.startsWith('openai:codex-security:')
+  ) {
+    return 'Codex Security does not support prompt-only replay. Rerun using the eval configuration to preserve operation and report settings.';
+  }
+  if (
+    reference.kind === 'unknown' ||
+    (providerPath &&
+      (isProviderConfigFileReference(providerPath) ||
+        isCloudProvider(providerPath) ||
+        /\{[{%]/.test(providerPath)))
+  ) {
+    return 'Cannot identify the replay provider safely. Rerun using the eval configuration.';
+  }
+  return undefined;
+}
+
 evalRouter.post('/replay', async (req: Request, res: Response): Promise<void> => {
   const bodyResult = EvalSchemas.Replay.Request.safeParse(req.body);
   if (!bodyResult.success) {
@@ -591,7 +624,7 @@ evalRouter.post('/replay', async (req: Request, res: Response): Promise<void> =>
     return;
   }
 
-  const { evaluationId, testIndex, prompt, variables } = bodyResult.data;
+  const { evaluationId, promptIndex, prompt, variables } = bodyResult.data;
 
   try {
     // Load the evaluation to get the provider configuration
@@ -608,67 +641,159 @@ evalRouter.post('/replay', async (req: Request, res: Response): Promise<void> =>
       return;
     }
 
-    // Handle different provider config formats
-    // biome-ignore lint/suspicious/noExplicitAny: FIXME
-    let providerConfig: any;
-    if (Array.isArray(providers)) {
-      if (providers.length === 0) {
-        res.status(400).json({ error: 'No providers found in evaluation' });
+    // Resolve declarative files and cloud targets once, before any provider operation.
+    const cloudProviders = new Map<string, Awaited<ReturnType<typeof getProviderFromCloud>>>();
+    const cloudKey = (id: string, options?: object) => JSON.stringify([id, options ?? {}]);
+    const inspectedProvider = (provider: unknown) => {
+      const ref = normalizeProviderRef(provider);
+      if ('loadProviderPath' in ref && isCloudProvider(ref.loadProviderPath)) {
+        return cloudProviders.get(
+          cloudKey(
+            getCloudDatabaseId(ref.loadProviderPath),
+            'loadOptions' in ref ? ref.loadOptions : {},
+          ),
+        );
+      }
+      return provider;
+    };
+    let replayProviders;
+    try {
+      const resolved = resolveProviderConfigs(providers, { basePath: eval_.config.basePath });
+      // Replay replaces saved prompt-routing filters, while retaining local options.
+      const candidates = (Array.isArray(resolved) ? resolved : [resolved]).map((provider) => {
+        const ref = normalizeProviderRef(provider);
+        if (ref.kind !== 'options' && ref.kind !== 'map' && ref.kind !== 'named') {
+          return provider;
+        }
+        let options = 'loadOptions' in ref ? ref.loadOptions : undefined;
+        let providerPath = ref.loadProviderPath;
+        if (/\{[{%]/.test(providerPath)) {
+          // Permit one direct environment lookup for the built-in local echo.
+          // Never evaluate expressions or pass operational options to the generic loader.
+          const lookup = /^\{\{\s*env\.([A-Za-z_][A-Za-z0-9_]*)\s*\}\}$/.exec(providerPath);
+          const hasExtraOptions = Object.keys(options ?? {}).some(
+            (key) => !['id', 'label', 'env', 'prompts'].includes(key),
+          );
+          const alias = options?.id === providerPath ? undefined : options?.id;
+          const dynamicMetadata = [alias, options?.label].some(
+            (value) => value !== undefined && (typeof value !== 'string' || /\{[{%#]/.test(value)),
+          );
+          if (
+            !lookup ||
+            lookup[0] !== providerPath ||
+            hasExtraOptions ||
+            dynamicMetadata ||
+            getEnvBool('PROMPTFOO_DISABLE_TEMPLATING')
+          ) {
+            throw new Error('Cannot identify the replay provider safely');
+          }
+          const key = lookup[1];
+          const value =
+            options?.env && Object.hasOwn(options.env, key)
+              ? options.env[key]
+              : getTemplateEnvValue(key);
+          if (value !== 'echo') {
+            throw new Error('Cannot identify the replay provider safely');
+          }
+          providerPath = 'echo';
+          if (options) {
+            options = {
+              id: alias ?? providerPath,
+              ...(options.label ? { label: options.label } : {}),
+            };
+          }
+        }
+        if (ref.kind === 'map') {
+          return {
+            [providerPath]: {
+              ...options,
+              id: options?.id === ref.loadProviderPath ? providerPath : options?.id,
+              prompts: ['Replay'],
+            },
+          };
+        }
+        return { ...options, id: providerPath, prompts: ['Replay'] };
+      });
+      for (const candidate of candidates) {
+        const ref = normalizeProviderRef(candidate);
+        if ('loadProviderPath' in ref && isCloudProvider(ref.loadProviderPath)) {
+          const id = getCloudDatabaseId(ref.loadProviderPath);
+          const options = 'loadOptions' in ref ? ref.loadOptions : {};
+          cloudProviders.set(cloudKey(id, options), await getProviderFromCloud(id, options));
+        }
+      }
+      if (promptIndex === undefined) {
+        // Older callers replayed all configured providers and returned the first result.
+        replayProviders = candidates;
+      } else {
+        const column = eval_.getPrompts()[promptIndex];
+        replayProviders = column
+          ? candidates.filter((candidate) => {
+              const ref = normalizeProviderRef(candidate);
+              const resolvedRef = normalizeProviderRef(inspectedProvider(candidate));
+              return (ref.label || resolvedRef.label || resolvedRef.id) === column.provider;
+            })
+          : [];
+      }
+    } catch (error) {
+      sendError(
+        res,
+        400,
+        'Cannot resolve the replay provider. Rerun using the eval configuration.',
+        error,
+      );
+      return;
+    }
+    if (
+      !Array.isArray(replayProviders) ||
+      replayProviders.length === 0 ||
+      (promptIndex !== undefined && replayProviders.length !== 1)
+    ) {
+      res
+        .status(400)
+        .json({ error: 'Cannot resolve the replay provider. Rerun using the eval configuration.' });
+      return;
+    }
+    for (const provider of replayProviders) {
+      const replayError = getReplayProviderError(inspectedProvider(provider));
+      if (replayError) {
+        res.status(400).json({ error: replayError });
         return;
       }
-      // Use the first provider or the one at the specified test index
-      providerConfig = providers[(testIndex ?? 0) % providers.length];
-    } else if (typeof providers === 'string' || typeof providers === 'function') {
-      providerConfig = providers;
-    } else {
-      // providers might be a single provider object
-      providerConfig = providers;
     }
 
-    // Replay is a one-prompt diagnostic. Keep the saved selection and local options,
-    // but replace evaluation routing filters after expanding provider config files.
-    const selectedRef = normalizeProviderRef(providerConfig);
-    const replayProviders = (
-      selectedRef.kind === 'file'
-        ? loadProviderConfigsFromFile(selectedRef.loadProviderPath, eval_.config.basePath)
-        : [providerConfig]
-    ).map((provider) => {
-      const ref = normalizeProviderRef(provider);
-      if (ref.kind === 'options' || ref.kind === 'map') {
-        const options = { ...ref.loadOptions, prompts: ['Replay'] };
-        return ref.kind === 'map' ? { [ref.loadProviderPath]: options } : options;
-      }
-      if (ref.kind === 'named') {
-        return { id: ref.loadProviderPath, prompts: ['Replay'] };
-      }
-      // Persisted refs are declarative; leave other forms for normal loader validation.
-      return provider;
-    });
-
-    // Run the prompt through the provider
-    const result = await evaluateWithSource(
-      {
-        prompts: [
-          {
-            raw: prompt,
-            label: 'Replay', // Add required label field
-          },
-        ],
-        providers: replayProviders,
-        basePath: eval_.config.basePath,
-        tests: [
-          {
-            vars: (variables || {}) as Vars,
-          },
-        ],
-      },
-      {
-        maxConcurrency: 1,
-        showProgressBar: false,
-        eventSource: 'web',
-        cache: false, // Always disable cache for replays to get fresh results
-      },
-    );
+    const evaluateReplay = () =>
+      evaluateWithSource(
+        {
+          prompts: [
+            {
+              raw: prompt,
+              label: 'Replay', // Add required label field
+            },
+          ],
+          providers: replayProviders,
+          basePath: eval_.config.basePath,
+          tests: [
+            {
+              vars: (variables || {}) as Vars,
+            },
+          ],
+        },
+        {
+          maxConcurrency: 1,
+          showProgressBar: false,
+          eventSource: 'web',
+          cache: false, // Always disable cache for replays to get fresh results
+        },
+      );
+    // Keep native cloud/local merge semantics without rereading a different target.
+    const result = await (cloudProviders.size > 0
+      ? withCloudProviderResolver((id, options) => {
+          const provider = cloudProviders.get(cloudKey(id, options));
+          invariant(provider, 'Replay requested a provider outside the inspected selection');
+          return provider;
+        }, evaluateReplay)
+      : evaluateReplay());
 
     const summary = await result.toEvaluateSummary();
 

@@ -9,6 +9,10 @@ import { setupTestServer } from '../../util/testServer';
 vi.mock('../../../src/models/eval');
 vi.mock('../../../src/globalConfig/accounts');
 vi.mock('../../../src/node', () => ({ evaluateWithSource: vi.fn() }));
+vi.mock('../../../src/util/cloud', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../../src/util/cloud')>()),
+  getProviderFromCloud: vi.fn(),
+}));
 
 import Eval, { EvalQueries } from '../../../src/models/eval';
 import { evaluateWithSource } from '../../../src/node';
@@ -16,6 +20,7 @@ import { loadApiProviders } from '../../../src/providers/index';
 // Import after mocking
 import { createApp } from '../../../src/server/server';
 import { EVAL_TABLE_MAX_PAGE_SIZE } from '../../../src/types/api/eval';
+import { getProviderFromCloud } from '../../../src/util/cloud';
 
 const mockedEval = vi.mocked(Eval);
 const mockedEvalQueries = vi.mocked(EvalQueries);
@@ -318,6 +323,7 @@ describe('Eval Routes - Zod Validation', () => {
       'replays the requested prompt with saved provider selection $providers',
       async ({ providers, expected }) => {
         const before = structuredClone(providers);
+        vi.mocked(getProviderFromCloud).mockResolvedValue({ id: 'echo' });
         mockFindById.mockResolvedValue({ config: { providers } });
         vi.mocked(evaluateWithSource).mockResolvedValue({
           toEvaluateSummary: async () => ({ results: [{ response: { output: 'Hello World' } }] }),

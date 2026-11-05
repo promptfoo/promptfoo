@@ -8,6 +8,7 @@ import {
   generateEvalCsv,
   getEvalTableOutputPromptLocationsBySize,
   getEvalTablePromptStrippedPayload,
+  mergeComparisonTables,
   STRIPPED_TABLE_CELL_PROMPT,
   streamEvalCsv,
 } from '../../../src/util/eval/evalTableUtils';
@@ -31,6 +32,30 @@ const parseCsvRow = (line: string): string[] => {
 };
 
 describe('evalTableUtils', () => {
+  it('preserves full-eval import markers in comparison headers even when tables have no rows', () => {
+    const merged = mergeComparisonTables(
+      'base',
+      { head: { prompts: [createCompletedPrompt('Review')], vars: [] }, body: [] },
+      [
+        {
+          evalId: 'comparison',
+          table: {
+            head: {
+              prompts: [createCompletedPrompt('Review', { hasSavedReportImports: true })],
+              vars: [],
+            },
+            body: [],
+          },
+        },
+      ],
+    );
+    expect(merged.head.prompts).toMatchObject([
+      { label: '[base] Review' },
+      { label: '[comparison] Review', hasSavedReportImports: true },
+    ]);
+    expect(merged.body).toEqual([]);
+  });
+
   let mockTable: {
     head: { prompts: CompletedPrompt[]; vars: string[] };
     body: EvaluateTableRow[];

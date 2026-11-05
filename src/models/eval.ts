@@ -60,6 +60,7 @@ import {
 } from './evalMutation';
 import {
   getCachedResultsCount,
+  getCachedResultsSummary,
   getTotalResultRowCount,
   queryTestIndicesOptimized,
 } from './evalPerformance';
@@ -1312,7 +1313,27 @@ export default class Eval {
     id: string;
   }> {
     // Get total count of tests for this eval
-    const totalCount = await this.getResultsCount();
+    const {
+      count: totalCount,
+      savedReportPromptIndices,
+      onlySavedReportPromptIndices,
+    } = await getCachedResultsSummary(this.id);
+    const savedReportColumns = new Set(savedReportPromptIndices);
+    const onlySavedReportColumns = new Set(onlySavedReportPromptIndices);
+    const prompts = this.prompts.map(
+      (
+        { hasSavedReportImports: _previous, onlySavedReportImports: _onlyPrevious, ...prompt },
+        index,
+      ) => ({
+        ...prompt,
+        ...(savedReportColumns.has(index)
+          ? {
+              hasSavedReportImports: true,
+              onlySavedReportImports: onlySavedReportColumns.has(index),
+            }
+          : {}),
+      }),
+    );
 
     // Determine test indices to use
     let testIndices: number[];
@@ -1368,7 +1389,7 @@ export default class Eval {
       const bodyEnd = Date.now();
       logger.debug(`Body query took ${bodyEnd - bodyStart}ms`);
       return {
-        head: { prompts: this.prompts, vars },
+        head: { prompts, vars },
         body,
         totalCount,
         filteredCount,
@@ -1415,7 +1436,7 @@ export default class Eval {
     const bodyEnd = Date.now();
     logger.debug(`Body query took ${bodyEnd - bodyStart}ms`);
 
-    return { head: { prompts: this.prompts, vars }, body, totalCount, filteredCount, id: this.id };
+    return { head: { prompts, vars }, body, totalCount, filteredCount, id: this.id };
   }
 
   async addPrompts(prompts: CompletedPrompt[]) {

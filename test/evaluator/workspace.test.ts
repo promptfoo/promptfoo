@@ -164,42 +164,100 @@ describeEvaluator('evaluator copy_working_dir workspaces', () => {
     expect((await result)[0].error).toContain('first failure');
   });
 
-  it('merges copy_working_dir from the prompt config', async () => {
-    const target = createTarget({ working_dir: fixture });
-    const testSuite: TestSuite = {
-      providers: [target],
-      prompts: [{ ...toPrompt('Change the fixture'), config: { copy_working_dir: 'copy' } }],
-      tests: [{}],
-    };
-    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+  it.each(['provider', 'prompt', 'test'] as const)(
+    'replays saved output from %s config without preparing a dormant native workspace',
+    async (source) => {
+      const savedOutput = 'Previously recorded fixture output';
+      const reportFile = path.join(fixture, 'recorded.txt');
+      fs.writeFileSync(reportFile, savedOutput);
+      const replayConfig = { report_file: '{{report}}' };
+      const target: ApiProvider = {
+        id: () => 'local-replay-fixture',
+        config: {
+          working_dir: path.join(fixture, 'missing'),
+          copy_working_dir: true,
+          ...(source === 'provider' ? replayConfig : {}),
+        },
+        isHistoricalReplay: (context) =>
+          ({ ...target.config, ...context?.prompt.config }).report_file !== undefined,
+        callApi: vi.fn<ApiProvider['callApi']>(async (_prompt, context) => ({
+          output: fs.readFileSync(String(context?.vars.report), 'utf8'),
+          incurredCost: 0,
+          retryable: false,
+        })),
+      };
+      const testSuite: TestSuite = {
+        providers: [target],
+        prompts: [
+          {
+            ...toPrompt('Read the local fixture'),
+            ...(source === 'prompt' ? { config: replayConfig } : {}),
+          },
+        ],
+        tests: [
+          {
+            vars: { report: reportFile },
+            ...(source === 'test' ? { options: replayConfig } : {}),
+            assert: [{ type: 'equals', value: savedOutput }],
+          },
+        ],
+      };
+      const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
 
-    await evaluate(testSuite, evalRecord, {});
+      await evaluate(testSuite, evalRecord, {});
+      const summary = await evalRecord.toEvaluateSummary();
 
-    expect(workspaces).toHaveLength(1);
-    expect(workspaces[0]).not.toBe(fixture);
-    expect(fs.existsSync(workspaces[0])).toBe(false);
-    expect(fs.readdirSync(fixture)).toEqual(['README.md']);
-  });
+      expect(summary.stats.successes).toBe(1);
+      expect(target.callApi).toHaveBeenCalledOnce();
+      expect(summary.results[0].response?.metadata?.workingDir).toBeUndefined();
+      expect(fs.readdirSync(fixture).sort()).toEqual(['README.md', 'recorded.txt']);
+    },
+  );
 
-  it('reports a workspace that cannot be created without calling the provider', async () => {
-    const target = createTarget({
-      working_dir: path.join(fixture, 'missing'),
-      copy_working_dir: true,
-    });
-    const testSuite: TestSuite = {
-      providers: [target],
-      prompts: [toPrompt('Change the fixture')],
-      tests: [{}],
-    };
-    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+  it.each([undefined, false])(
+    'creates a workspace when replay classification is %s',
+    async (replay) => {
+      const target = createTarget({ working_dir: fixture });
+      target.isHistoricalReplay = replay === undefined ? undefined : () => replay;
+      const testSuite: TestSuite = {
+        providers: [target],
+        prompts: [{ ...toPrompt('Change the fixture'), config: { copy_working_dir: 'copy' } }],
+        tests: [{}],
+      };
+      const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
 
-    await evaluate(testSuite, evalRecord, {});
-    const summary = await evalRecord.toEvaluateSummary();
+      await evaluate(testSuite, evalRecord, {});
 
-    expect(target.callApi).not.toHaveBeenCalled();
-    expect(summary.stats.errors).toBe(1);
-    expect(summary.results[0].error).toContain('copy_working_dir: working_dir does not exist');
-  });
+      expect(workspaces).toHaveLength(1);
+      expect(workspaces[0]).not.toBe(fixture);
+      expect(fs.existsSync(workspaces[0])).toBe(false);
+      expect(fs.readdirSync(fixture)).toEqual(['README.md']);
+    },
+  );
+
+  it.each([undefined, false])(
+    'reports a missing workspace when replay classification is %s',
+    async (replay) => {
+      const target = createTarget({
+        working_dir: path.join(fixture, 'missing'),
+        copy_working_dir: true,
+      });
+      target.isHistoricalReplay = replay === undefined ? undefined : () => replay;
+      const testSuite: TestSuite = {
+        providers: [target],
+        prompts: [toPrompt('Change the fixture')],
+        tests: [{}],
+      };
+      const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+
+      await evaluate(testSuite, evalRecord, {});
+      const summary = await evalRecord.toEvaluateSummary();
+
+      expect(target.callApi).not.toHaveBeenCalled();
+      expect(summary.stats.errors).toBe(1);
+      expect(summary.results[0].error).toContain('copy_working_dir: working_dir does not exist');
+    },
+  );
 
   it('removes the workspace of a timed-out step once its call stops', async () => {
     let signalStarted!: () => void;

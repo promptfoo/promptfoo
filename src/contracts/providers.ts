@@ -1,5 +1,27 @@
+import { z } from 'zod';
+
 import type { BlobRef } from './blobs.js';
+import type { CodexSecurityResult } from './codexSecurity.js';
 import type { TokenUsage, VarValue } from './shared.js';
+
+/** Bounded operational updates; never include prompts, tool output, or credentials. */
+export const ProviderProgressSchema = z.object({
+  phase: z.string().trim().min(1).max(80),
+  elapsedMs: z.number().finite().nonnegative().optional(),
+  estimatedCostUsd: z.number().finite().nonnegative().optional(),
+  warningCount: z.number().int().nonnegative().optional(),
+});
+
+export type ProviderProgress = z.infer<typeof ProviderProgressSchema>;
+
+export const EvalProviderProgressSchema = ProviderProgressSchema.extend({
+  provider: z.string().max(200),
+  testIdx: z.number().int().nonnegative(),
+  promptIdx: z.number().int().nonnegative(),
+  repeatIndex: z.number().int().nonnegative().optional(),
+});
+
+export type EvalProviderProgress = z.infer<typeof EvalProviderProgressSchema>;
 
 /**
  * Chat message type for provider-reported prompts and other multi-turn interactions.
@@ -42,6 +64,11 @@ export interface ProviderResponse {
   incurredCost?: number;
   error?: string;
   /**
+   * False prevents scheduler retries and rate-limit state updates for this returned response
+   * (for example, a replayed historical failure). True or absent retains normal detection.
+   */
+  retryable?: boolean;
+  /**
    * Indicates that a remote Promptfoo server already materialized multi-input vars
    * for this response. When true, callers must not re-materialize locally.
    */
@@ -62,6 +89,7 @@ export interface ProviderResponse {
   logProbs?: number[];
   latencyMs?: number;
   metadata?: {
+    codexSecurity?: CodexSecurityResult;
     redteamFinalPrompt?: string;
     http?: {
       status: number;
