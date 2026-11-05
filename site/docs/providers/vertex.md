@@ -86,7 +86,7 @@ Use Gemini 3.8 Flash or a supported Flash-Lite model for new configurations. Mig
 
 ### Claude Models
 
-Anthropic's Claude models are available with the following versions:
+Use `vertex:<model-id>` with the ID published for Google-managed Claude. Copy dated IDs with the `@` separator, such as `claude-haiku-4-5@20251001`. See the [Google-managed Claude model IDs](https://platform.claude.com/docs/en/build-with-claude/claude-models-on-google-cloud/google-managed#api-model-ids) and [Google's partner model shutdown schedule](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/deprecations/partner-models).
 
 **Claude 5:**
 
@@ -105,9 +105,7 @@ over the global endpoint for Claude 4.5 and later models (Sonnet 4.5+, Haiku 4.5
 Opus 4.5+, and the Claude 5 models including Sonnet 5); promptfoo includes that
 premium in cost calculations unless `config.region` is `global`.
 
-Claude 5 models also require provider data sharing on Vertex — without it requests
-fail with a 403 asking you to set `PublisherModelConfig.data_sharing_enabled_provider`.
-Enable it once per project (in addition to Model Garden access):
+Some Claude models require provider data sharing in addition to Model Garden access. If a request returns a 403 asking for `PublisherModelConfig.data_sharing_enabled_provider`, review the terms on the model card and enable sharing for that model in your project. For example, for Fable 5:
 
 ```bash
 curl -X POST \
@@ -117,8 +115,7 @@ curl -X POST \
   -d '{"publisherModelConfig":{"dataSharingEnabledProvider":"anthropic"}}'
 ```
 
-Mythos 5 is limited availability; contact your Google Cloud account team for access
-and the model ID because Google does not publish one in its public model catalog.
+The `claude-mythos-5` and `claude-mythos-5-1` IDs require approval from the provider.
 
 **Claude 4.8:**
 
@@ -180,43 +177,18 @@ have a 1M-token context window.
 
 ### Llama Models
 
-Meta's Llama models are available through Vertex AI with the following versions:
-
-**Llama 4:**
-
-- `vertex:llama-4-scout-17b-16e-instruct-maas` - Llama 4 Scout with a 1,310,720-token context window
-- `vertex:llama-4-maverick-17b-128e-instruct-maas` - Llama 4 Maverick with a 524,288-token context window
-
-**Llama 3.3:**
-
-- `vertex:llama-3.3-70b-instruct-maas` - Llama 3.3 70B for text applications
-
-Llama 3 models support built-in safety features through Llama Guard. Llama 4 models are natively multimodal but do not support Llama Guard.
-
-See [Google's Llama model documentation](https://docs.cloud.google.com/vertex-ai/generative-ai/docs/partner-models/llama/use-llama) for current model IDs, regions, and quotas.
+Use `vertex:<model-id>` with a hosted Llama model. You can include the `meta/` publisher prefix used by Google's Chat Completions API. Check [Google's Llama model guide](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/partner-models/llama/use-llama) for model IDs, regions, and quotas.
 
 #### Llama Configuration Example
 
 ```yaml
 providers:
-  - id: vertex:llama-3.3-70b-instruct-maas
+  - id: vertex:meta/llama-4-scout-17b-16e-instruct-maas
     config:
-      region: us-central1 # Llama 3 models use this region
-      temperature: 0.7
-      maxOutputTokens: 1024
-      llamaConfig:
-        safetySettings:
-          enabled: true # Llama Guard is enabled by default
-          llama_guard_settings: {} # Optional custom settings
-
-  - id: vertex:llama-4-scout-17b-16e-instruct-maas
-    config:
-      region: us-east5 # Llama 4 models use this region
-      temperature: 0.7
-      maxOutputTokens: 2048
+      region: us-east5
 ```
 
-By default, supported Llama 3 models use Llama Guard for content safety. You can disable it by setting `enabled: false`, but this is not recommended for production use.
+To send an image, use a chat message with an `image_url` content part. See the [runnable Llama image example](https://github.com/promptfoo/promptfoo/blob/main/examples/google-vertex/promptfooconfig.llama.yaml).
 
 ### Gemma Models (Open Models)
 
@@ -694,16 +666,10 @@ providers:
         maxOutputTokens: 1024
 
   # For Llama models
-  - id: vertex:llama-3.3-70b-instruct-maas
+  - id: vertex:llama-4-scout-17b-16e-instruct-maas
     config:
-      generationConfig:
-        temperature: 0.7
-        maxOutputTokens: 1024
-        extra_body:
-          google:
-            model_safety_settings:
-              enabled: true
-              llama_guard_settings: {}
+      region: us-east5
+      maxOutputTokens: 1024
 
   # For Claude models (set an enabled region, or `global` for Claude 5)
   - id: vertex:claude-sonnet-5
@@ -735,28 +701,15 @@ See [Google's SafetySetting API documentation](https://ai.google.dev/api/generat
 
 ### Llama Model Features
 
-- Support for text tasks with Llama 3.3 and text and vision tasks with all Llama 4 models
-- Built-in safety with Llama Guard for supported Llama 3 models (enabled by default)
-- Llama 4 models are available in `us-east5`; Llama 3 models are available in `us-central1`
-- Quota limits vary by model version
-- Requires specific endpoint format for API calls
-- Only supports unary (non-streaming) responses in promptfoo
+Promptfoo sends non-streaming chat requests to the Vertex OpenAI-compatible endpoint. Llama 4 Scout and Maverick support text and image input. Both use `us-east5` by default.
 
 #### Llama Model Considerations
 
-- **Regional Availability**: Llama 4 models use `us-east5`; Llama 3 models use `us-central1`
-- **Guard Integration**: Supported Llama 3 models use Llama Guard for content safety by default; Llama 4 models do not support it
-- **Specific Endpoint**: Uses a different API endpoint than other Vertex models
-- **Model Status**: Llama 4 Scout and Maverick are Generally Available (GA). Google [deprecated `llama-3.3-70b-instruct-maas`](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/deprecations/open-models) on July 21, 2026 and schedules its retirement for October 21, 2026
-- **Vision Support**: All current Llama 4 models support image input
+Llama Guard settings apply only to older Llama models. Omit them for Llama 4. Google retired the hosted Llama 3.3 70B model. For self-deployment and migration details, see [Google's open-model lifecycle guide](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/deprecations/open-models).
 
 ### Claude Model Features
 
-- Support for text, code, and analysis tasks
-- Tool use (function calling) capabilities
-- Available in multiple regions (us-east5, europe-west1, asia-southeast1) plus the `global` endpoint for the Claude 5 models and Opus 4.7/4.8
-- Fable/Mythos 5, Opus 5.5, Opus 5, Sonnet 5, and Opus 4.7/4.8: promptfoo automatically omits deprecated sampling parameters (`temperature`, `top_p`, `top_k`) and converts configured manual thinking (`type: enabled`) to adaptive thinking before forwarding the request to Vertex's `rawPredict` endpoint
-- Quota limits vary by model version (20-245 QPM)
+The Claude adapter sends non-streaming Messages requests to Vertex `rawPredict`. Use `systemInstruction` for a system message and `thinking` or `effort` where supported. The [Google-managed Claude model guide](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/partner-models/claude) lists features, endpoints, and quotas for each model.
 
 ## Advanced Usage
 
@@ -855,27 +808,7 @@ You need to:
    - Search for "Claude"
    - Click "Enable" on the specific Claude models you want to use
 
-2. Pick a supported region. Common choices:
-   - `us-east5` and `europe-west1` for Claude 3.x / 4.x models
-   - `global` for the global endpoint (the Claude 5 models, Opus 4.7/4.8, and other newer models with dynamic routing)
-   - US and EU multi-region endpoints where enabled
-
-Example configuration with correct region:
-
-```yaml
-providers:
-  - id: vertex:claude-opus-5
-    config:
-      region: global
-      anthropic_version: 'vertex-2023-10-16'
-      max_tokens: 1024
-
-  - id: vertex:claude-sonnet-4-5@20250929
-    config:
-      region: us-east5 # or europe-west1
-      anthropic_version: 'vertex-2023-10-16'
-      max_tokens: 1024
-```
+2. Check the model card for supported endpoints. Set `region: global` to use the global endpoint, `us` or `eu` for a supported multi-region endpoint, or the name of a supported single region. [Google-managed Claude endpoint types](https://platform.claude.com/docs/en/build-with-claude/claude-models-on-google-cloud/google-managed#global-multi-region-and-regional-endpoints)
 
 ## Model Features and Capabilities
 
