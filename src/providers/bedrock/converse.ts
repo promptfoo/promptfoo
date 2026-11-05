@@ -1456,7 +1456,7 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
       cacheReadTokens,
       cacheWriteTokens,
       getBedrockRuntimeBillingRegion(this.getRegion(), this.config.endpoint),
-      this.config.serviceTier,
+      response.serviceTier?.type ? { type: response.serviceTier.type } : this.config.serviceTier,
       cacheWrite1hTokens,
     );
 
@@ -1712,6 +1712,7 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
       let output = '';
       let reasoning = '';
       let stopReason: string | undefined;
+      let billedTier = this.config.serviceTier;
       let usage: {
         inputTokens?: number;
         outputTokens?: number;
@@ -1769,8 +1770,11 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
           if ('messageStop' in event && event.messageStop) {
             stopReason = event.messageStop.stopReason;
           }
-          if ('metadata' in event && event.metadata?.usage) {
-            usage = event.metadata.usage;
+          if ('metadata' in event && event.metadata) {
+            usage = event.metadata.usage ?? usage;
+            if (event.metadata.serviceTier?.type) {
+              billedTier = { type: event.metadata.serviceTier.type };
+            }
           }
         }
       }
@@ -1825,7 +1829,7 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
         usage.cacheReadInputTokens,
         usage.cacheWriteInputTokens,
         getBedrockRuntimeBillingRegion(this.getRegion(), this.config.endpoint),
-        this.config.serviceTier,
+        billedTier,
         getOneHourCacheWriteTokens(usage.cacheDetails),
       );
 
