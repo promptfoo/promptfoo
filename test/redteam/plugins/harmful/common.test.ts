@@ -66,9 +66,7 @@ describe('harmful plugin', () => {
         }
         return false;
       });
-      vi.mocked(getEnvString).mockImplementation(function () {
-        return 'test-key';
-      });
+      vi.mocked(getEnvString).mockReturnValue('test-key');
 
       const assertions = getHarmfulAssertions('harmful:privacy');
       expect(assertions).toHaveLength(1);

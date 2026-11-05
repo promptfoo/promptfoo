@@ -2,7 +2,7 @@
 # runs the Docker container, performs a health check to ensure the application
 # is running correctly, and then publishes the image to GitHub Container Registry
 # if all checks pass. This action is triggered by the release-please workflow,
-# published human-created releases, workflow dispatch, pull requests to main that
+# published human-created releases, workflow dispatch, pull requests that
 # modify the Docker/runtime update contract, and matching pushes to main.
 
 name: Test and Publish Multi-arch Docker Image
@@ -29,7 +29,12 @@ on:
         required: false
         type: string
       legacy_backfill:
-        description: 'Use release-era smoke checks for historical Docker images'
+        description: 'Build and validate a historical Docker image from its tag'
+        required: false
+        default: false
+        type: boolean
+      publish_legacy_image:
+        description: 'Also publish the missing version tag after the current final-image checks pass'
         required: false
         default: false
         type: boolean
@@ -45,18 +50,24 @@ on:
   release:
     types:
       - published
-  pull_request: &release-triggers
-    branches:
-      - main
-    paths:
+  pull_request:
+    # Include stacked PRs so their final images receive the same runtime checks.
+    paths: &runtime-paths
       - '.github/workflows/docker.yml'
+      - '.github/scripts/prepareLegacyDockerBuild.cjs'
       - 'Dockerfile'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'scripts/testDockerImage.js'
       - 'src/envars.ts'
       - 'src/server/routes/version*.ts'
       - 'src/types/api/version.ts'
       - 'src/updates.ts'
       - 'src/updates/**'
-  push: *release-triggers
+  push:
+    branches:
+      - main
+    paths: *runtime-paths
 
 concurrency:
   # Reusable workflow calls inherit the caller's github.workflow value. Keep this
@@ -78,82 +89,6 @@ env:
   EXCLUDE_LEGACY_FRONTEND_TESTS: ${{ github.event_name == 'workflow_dispatch' && inputs.exclude_legacy_frontend_tests && 'true' || 'false' }}
   # Fallback release paths build a specific tag outside release-please.yml.
   IS_RELEASE_FALLBACK: ${{ (github.event_name == 'workflow_dispatch' && inputs.tag_name != '') || github.event_name == 'release' }}
-  # Keep the patch available after checkout replaces the workspace with an old tag.
-  # Both build jobs run this script from RUNNER_TEMP, outside the image context.
-  PREPARE_LEGACY_BUILD_JS: |
-    const fs = require('node:fs');
-
-    // Repair the pre-#9790 CLI links. Tags with the fix already applied must use
-    // a normal tag_name dispatch, which retains all container-contract checks.
-    const dockerfilePath = 'Dockerfile';
-    let dockerfile = fs.readFileSync(dockerfilePath, 'utf8');
-    const oldCliLinks =
-      'RUN npm link promptfoo && \\\n    chown promptfoo:promptfoo /app/node_modules/promptfoo && \\';
-    if (!dockerfile.includes(oldCliLinks)) {
-      throw new Error(
-        'Dockerfile has no legacy `npm link promptfoo` stage, so this tag does not need ' +
-          'legacy_backfill. Republish it with a plain tag_name dispatch instead.',
-      );
-    }
-
-    const packageJson = JSON.parse(fs.readFileSync('package.json', 'utf8'));
-    if (!packageJson.bin?.promptfoo || !packageJson.bin?.pf) {
-      throw new Error('Historical package does not declare promptfoo and pf binaries');
-    }
-
-    const nodeModulesCopy =
-      'COPY --from=builder --chown=promptfoo:promptfoo /app/node_modules ./node_modules';
-    const packageJsonCopy =
-      'COPY --from=builder --chown=promptfoo:promptfoo /app/package.json ./package.json';
-    if (!dockerfile.includes(nodeModulesCopy)) {
-      throw new Error('Could not locate the historical runtime dependency copy');
-    }
-    if (!dockerfile.includes(packageJsonCopy)) {
-      dockerfile = dockerfile.replace(nodeModulesCopy, nodeModulesCopy + '\n' + packageJsonCopy);
-    }
-
-    dockerfile = dockerfile.replace(
-      oldCliLinks,
-      [
-        'RUN ln -s /app /app/node_modules/promptfoo && \\',
-        '    chown -h promptfoo:promptfoo /app/node_modules/promptfoo && \\',
-        '    ln -s /app/' + packageJson.bin.promptfoo + ' /usr/local/bin/promptfoo && \\',
-        '    ln -s /app/' + packageJson.bin.pf + ' /usr/local/bin/pf && \\',
-      ].join('\n'),
-    );
-
-    if (process.env.PYTHON_VERSION) {
-      const pythonPackage = /python3~=\d+\.\d+/;
-      if (!dockerfile.includes('python3~=${PYTHON_VERSION}')) {
-        if (!pythonPackage.test(dockerfile)) {
-          throw new Error('Could not locate the historical Python minor pin');
-        }
-        dockerfile = dockerfile
-          .replace(/^(\s*RUN apk add)/m, 'ARG PYTHON_VERSION\n$1')
-          .replace(pythonPackage, 'python3~=${PYTHON_VERSION}');
-      }
-    }
-
-    fs.writeFileSync(dockerfilePath, dockerfile);
-    console.log('Linked the historical release CLI from local build artifacts');
-
-    if (process.env.EXCLUDE_LEGACY_FRONTEND_TESTS === 'true') {
-      // Insert exclude without rewriting historical JSONC comments or include entries.
-      const file = 'src/app/tsconfig.app.json';
-      const original = fs.readFileSync(file, 'utf8');
-      if (/^\s*"exclude"\s*:/m.test(original)) {
-        throw new Error(file + ' already declares "exclude"; reconcile the overlap by hand');
-      }
-      const updated = original.replace(
-        /^(\uFEFF?\s*\{)/,
-        '$1\n  "exclude": ["**/*.test.ts", "**/*.test.tsx"],',
-      );
-      if (updated === original) {
-        throw new Error('Could not locate the root object in ' + file);
-      }
-      fs.writeFileSync(file, updated);
-      console.log('Excluded historical test-only frontend dependencies');
-    }
 
 permissions: &read-only-permissions
   contents: read
@@ -166,6 +101,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 60
     permissions: *read-only-permissions
+    outputs:
+      source_sha: ${{ steps.source.outputs.sha }}
 
     steps:
       - &validate-release-tag
@@ -179,7 +116,18 @@ jobs:
 
       - name: Validate manual backfill options
         if: github.event_name == 'workflow_dispatch'
+        env:
+          PUBLISH_LEGACY_IMAGE: ${{ inputs.publish_legacy_image }}
+          FROM_DEFAULT_BRANCH: ${{ github.ref == format('refs/heads/{0}', github.event.repository.default_branch) }}
         run: |
+          if [[ "$PUBLISH_LEGACY_IMAGE" == 'true' && "$LEGACY_BACKFILL" != 'true' ]]; then
+            echo '::error::Historical publication requires legacy backfill mode'
+            exit 1
+          fi
+          if [[ "$PUBLISH_LEGACY_IMAGE" == 'true' && "$FROM_DEFAULT_BRANCH" != 'true' ]]; then
+            echo '::error::Start historical publication from the default branch to run the current checks'
+            exit 1
+          fi
           if [[ "$LEGACY_BACKFILL" == 'true' && -z "$RELEASE_TAG" ]]; then
             echo '::error::Legacy backfills require a release tag'
             exit 1
@@ -203,7 +151,7 @@ jobs:
 
       # Backfills must not replace images already published under a version tag.
       - name: Ensure the legacy tag is not already published
-        if: env.LEGACY_BACKFILL == 'true'
+        if: env.LEGACY_BACKFILL == 'true' && inputs.publish_legacy_image
         run: |
           token="$(curl -fsS "https://${REGISTRY}/token?scope=repository:${IMAGE_NAME}:pull&service=${REGISTRY}" | jq -r '.token // empty')"
           if [[ -z "$token" ]]; then
@@ -240,7 +188,25 @@ jobs:
           sudo apt-get clean
           df -h
 
-      - name: Checkout repository
+      - &checkout-backfill-tools
+        name: Check out the tools from the workflow revision
+        if: env.LEGACY_BACKFILL == 'true'
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ github.workflow_sha }}
+          persist-credentials: false
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            /.github/scripts/prepareLegacyDockerBuild.cjs
+            /scripts/testDockerImage.js
+
+      - &stage-backfill-tools
+        name: Preserve the backfill tools before checking out the historical tag
+        if: env.LEGACY_BACKFILL == 'true'
+        run: cp -- .github/scripts/prepareLegacyDockerBuild.cjs scripts/testDockerImage.js "$RUNNER_TEMP/"
+
+      - &checkout-source
+        name: Checkout repository
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           ref: ${{ env.SOURCE_REF }}
@@ -252,18 +218,17 @@ jobs:
         id: source
         run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
-      - name: Prepare historical Docker image build
+      - &prepare-backfill
+        name: Prepare historical Docker image build
         if: env.LEGACY_BACKFILL == 'true'
-        run: |
-          printf '%s' "$PREPARE_LEGACY_BUILD_JS" > "$RUNNER_TEMP/prepare-legacy-build.cjs"
-          node "$RUNNER_TEMP/prepare-legacy-build.cjs"
+        run: node "$RUNNER_TEMP/prepareLegacyDockerBuild.cjs"
 
       - name: Set up QEMU
-        uses: docker/setup-qemu-action@ce360397dd3f832beb865e1373c09c0e9f86d70a # v4
+        uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4
 
       - &set-up-docker-buildx
         name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # v4
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4
 
       - name: Build official Docker image for testing
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7
@@ -280,6 +245,7 @@ jobs:
             GIT_SHA=${{ steps.source.outputs.sha }}
             PROMPTFOO_OFFICIAL_DOCKER_IMAGE=1
             ${{ env.PYTHON_VERSION && format('PYTHON_VERSION={0}', env.PYTHON_VERSION) || '' }}
+            OS_PACKAGE_REFRESH=${{ github.run_id }}-${{ github.run_attempt }}
 
       - name: Build custom Docker image for contract testing
         if: env.LEGACY_BACKFILL != 'true'
@@ -297,6 +263,27 @@ jobs:
             GIT_SHA=${{ steps.source.outputs.sha }}
             PROMPTFOO_OFFICIAL_DOCKER_IMAGE=0
             ${{ env.PYTHON_VERSION && format('PYTHON_VERSION={0}', env.PYTHON_VERSION) || '' }}
+            OS_PACKAGE_REFRESH=${{ github.run_id }}-${{ github.run_attempt }}
+
+      - name: Test final-image runtime dependencies
+        if: env.LEGACY_BACKFILL != 'true' || inputs.publish_legacy_image
+        run: |
+          probe=scripts/testDockerImage.js
+          if [[ "$LEGACY_BACKFILL" == true ]]; then probe="$RUNNER_TEMP/testDockerImage.js"; fi
+          docker run --rm --network none -i \
+            -e PROMPTFOO_TEST_PRODUCTION_DEPS=1 \
+            local-test-image:official node --input-type=module < "$probe"
+
+      # The registry cache replays the base stage, so only the final-stage upgrade is fresh.
+      - name: Verify OS packages are current
+        run: |
+          # Fetch the indexes first: a simulated upgrade does not refresh them itself.
+          plan="$(docker run --rm --user 0 local-test-image:official sh -c 'apk update --quiet && apk upgrade --simulate')"
+          echo "$plan"
+          if grep -q Upgrading <<< "$plan"; then
+            echo "::error::The image is missing Alpine package upgrades"
+            exit 1
+          fi
 
       - name: Run Docker containers for testing
         run: |
@@ -428,7 +415,7 @@ jobs:
           df -h
 
   build-docker-and-push-digests:
-    if: (github.event_name != 'pull_request')
+    if: github.event_name != 'pull_request' && (!inputs.legacy_backfill || inputs.publish_legacy_image)
     strategy:
       matrix:
         platforms:
@@ -439,35 +426,32 @@ jobs:
     runs-on: ${{ matrix.platforms.runner }}
     timeout-minutes: 60
     needs: [test]
+    # A tag can move while the test job runs. Build every digest from the commit it tested.
+    env:
+      SOURCE_REF: ${{ needs.test.outputs.source_sha }}
     permissions:
       contents: read
       packages: write
     steps:
       - *validate-release-tag
 
-      - name: Checkout repository
-        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
-        with:
-          ref: ${{ env.SOURCE_REF }}
-          persist-credentials: false
+      - *checkout-backfill-tools
+      - *stage-backfill-tools
+      - *checkout-source
 
       # github.sha is the trigger SHA; SOURCE_REF can point checkout at a different tag.
       - *resolve-source-commit
 
-      - name: Prepare historical Docker image build
-        if: env.LEGACY_BACKFILL == 'true'
-        run: |
-          printf '%s' "$PREPARE_LEGACY_BUILD_JS" > "$RUNNER_TEMP/prepare-legacy-build.cjs"
-          node "$RUNNER_TEMP/prepare-legacy-build.cjs"
+      - *prepare-backfill
 
       - name: Set up QEMU
-        uses: docker/setup-qemu-action@ce360397dd3f832beb865e1373c09c0e9f86d70a # v4
+        uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4
 
       - *set-up-docker-buildx
 
       - name: Docker meta
         id: meta
-        uses: docker/metadata-action@80c7e94dd9b9319bd5eb7a0e0fe9291e23a2a2e9 # v6
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           labels: |
@@ -475,7 +459,7 @@ jobs:
 
       - &log-in-to-the-container-registry
         name: Log in to the Container registry
-        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4
+        uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
@@ -502,6 +486,7 @@ jobs:
             GIT_SHA=${{ steps.source.outputs.sha }}
             PROMPTFOO_OFFICIAL_DOCKER_IMAGE=${{ github.repository == 'promptfoo/promptfoo' && '1' || '0' }}
             ${{ env.PYTHON_VERSION && format('PYTHON_VERSION={0}', env.PYTHON_VERSION) || '' }}
+            OS_PACKAGE_REFRESH=${{ github.run_id }}-${{ github.run_attempt }}
           outputs: |
             type=image,push-by-digest=true,name-canonical=true,push=true,annotation-index.org.opencontainers.image.description=promptfoo is a tool for testing evaluating and red-teaming LLM apps.
 
@@ -512,7 +497,7 @@ jobs:
           touch "${{ runner.temp }}/digests/${digest#sha256:}"
 
       - name: Upload digest
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: digests-${{ matrix.platforms.digest-suffix }}
           path: ${{ runner.temp }}/digests/*
@@ -529,7 +514,7 @@ jobs:
       manifest_digest: ${{ steps.inspect.outputs.digest }}
     steps:
       - name: Download digests
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           path: ${{ runner.temp }}/digests
           pattern: digests-*
@@ -541,7 +526,7 @@ jobs:
 
       - name: Docker meta
         id: meta
-        uses: docker/metadata-action@80c7e94dd9b9319bd5eb7a0e0fe9291e23a2a2e9 # v6
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           # Fallback release builds publish immutable version tags only so moving aliases stay on normal release paths.

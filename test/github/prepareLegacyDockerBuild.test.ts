@@ -71,16 +71,10 @@ function tsconfig(include: string[]): string {
   ].join('\n');
 }
 
-let scriptPath: string;
+const scriptPath = path.resolve('.github/scripts/prepareLegacyDockerBuild.cjs');
 let tmpRoot: string;
-
 beforeAll(() => {
-  const script = workflow?.env?.PREPARE_LEGACY_BUILD_JS;
-  expect(typeof script, 'docker.yml must define env.PREPARE_LEGACY_BUILD_JS').toBe('string');
-
   tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'prepare-legacy-'));
-  scriptPath = path.join(tmpRoot, 'prepare-legacy-build.cjs');
-  fs.writeFileSync(scriptPath, script);
 });
 
 afterAll(() => {
@@ -137,6 +131,9 @@ describe('legacy Docker backfill patch (embedded in docker.yml)', () => {
 
     expect(result.ok).toBe(true);
     expect(result.dockerfile).not.toContain('npm link promptfoo');
+    expect(result.dockerfile.split('FROM base AS server')[1]).toContain(
+      'ARG OS_PACKAGE_REFRESH=\nRUN apk upgrade --no-cache',
+    );
     expect(result.dockerfile).toContain('ln -s /app/dist/src/main.js /usr/local/bin/promptfoo');
     expect(result.dockerfile).toContain('ln -s /app/dist/src/main.js /usr/local/bin/pf');
     expect(result.dockerfile).toContain(
@@ -277,6 +274,21 @@ describe.runIf(process.platform !== 'win32')('legacy backfill publication guards
   it.each([
     { name: 'missing release tag', env: { LEGACY_BACKFILL: 'true', RELEASE_TAG: '' }, ok: false },
     {
+      name: 'historical publication from another branch',
+      env: { LEGACY_BACKFILL: 'true', PUBLISH_LEGACY_IMAGE: 'true', FROM_DEFAULT_BRANCH: 'false' },
+      ok: false,
+    },
+    {
+      name: 'historical publication from the default branch',
+      env: { LEGACY_BACKFILL: 'true', PUBLISH_LEGACY_IMAGE: 'true' },
+      ok: true,
+    },
+    {
+      name: 'historical publication without backfill',
+      env: { PUBLISH_LEGACY_IMAGE: 'true' },
+      ok: false,
+    },
+    {
       name: 'frontend override without backfill',
       env: { EXCLUDE_LEGACY_FRONTEND_TESTS: 'true' },
       ok: false,
@@ -306,6 +318,8 @@ describe.runIf(process.platform !== 'win32')('legacy backfill publication guards
       env: {
         PATH: process.env.PATH,
         LEGACY_BACKFILL: 'false',
+        PUBLISH_LEGACY_IMAGE: 'false',
+        FROM_DEFAULT_BRANCH: 'true',
         RELEASE_TAG: '0.120.0',
         PYTHON_VERSION: '',
         EXCLUDE_LEGACY_FRONTEND_TESTS: 'false',
@@ -314,6 +328,27 @@ describe.runIf(process.platform !== 'win32')('legacy backfill publication guards
     });
     expect(result.error).toBeUndefined();
     expect(result.status === 0, result.stdout + result.stderr).toBe(ok);
+  });
+
+  it('keeps registry writes behind the current final-image checks', () => {
+    const jobs = workflow.jobs;
+    const publish = jobs['build-docker-and-push-digests'];
+    expect(workflow.on.workflow_dispatch.inputs.publish_legacy_image.default).toBe(false);
+    expect(publish.if).toBe(
+      "github.event_name != 'pull_request' && (!inputs.legacy_backfill || inputs.publish_legacy_image)",
+    );
+    expect(publish.needs).toEqual(['test']);
+    expect(jobs.test.outputs.source_sha).toBe('${{ steps.source.outputs.sha }}');
+    expect(publish.env.SOURCE_REF).toBe('${{ needs.test.outputs.source_sha }}');
+    expect(
+      publish.steps.find((item: { name: string }) => item.name === 'Checkout repository').with.ref,
+    ).toBe('${{ env.SOURCE_REF }}');
+    const step = (name: string) =>
+      jobs.test.steps.find((item: { name: string }) => item.name === name);
+    expect(step('Test final-image runtime dependencies').if).toBe(
+      "env.LEGACY_BACKFILL != 'true' || inputs.publish_legacy_image",
+    );
+    expect(step('Verify OS packages are current').if).toBeUndefined();
   });
 
   it.each(['404', '200', '401', '500'])(
