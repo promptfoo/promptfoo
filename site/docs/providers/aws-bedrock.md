@@ -1283,16 +1283,9 @@ For Safeguard, use `bedrock:responses:openai.gpt-oss-safeguard-20b` or `bedrock:
 
 #### Reasoning Effort
 
-Both families accept the `reasoning_effort` provider option. Promptfoo forwards it as the
-native request field for GPT OSS and as `reasoning.effort` for the Responses API, allowing the
-selected model to validate the value:
+Set `config.reasoning_effort` to control reasoning. Promptfoo sends `reasoning.effort` on Mantle Responses and `reasoning_effort` on Mantle Chat Completions and GPT OSS InvokeModel.
 
-- **GPT OSS** (`openai.gpt-oss-*`, InvokeModel or Responses): `low`, `medium`, `high`
-- **GPT-5.6 frontier**: `none`, `low`, `medium`, `high`, `xhigh`, `max`
-- **GPT-5.5 / GPT-5.4 frontier**: `none`, `low`, `medium`, `high`, `xhigh`
-
-Note that `minimal` is **not** a valid value for these Bedrock models (the API rejects it).
-Higher effort produces more thorough reasoning at the cost of latency and output tokens.
+GPT OSS accepts `low`, `medium`, and `high`. Frontier models vary in the efforts they support. Check the [OpenAI model catalog](https://developers.openai.com/api/docs/models) for the model you select.
 
 #### Reasoning Output and `showThinking` (GPT OSS only)
 
