@@ -31,7 +31,6 @@ import {
   extractVariablesFromExpression,
   extractVariablesFromTemplate,
   getNunjucksEngine,
-  templateReferencesVariable,
 } from './util/templates';
 import { transform } from './util/transform';
 import { loadYaml } from './util/yamlLoad';
@@ -498,10 +497,10 @@ function extractUnboundVariables(template: string): string[] {
   if (references) {
     return references;
   }
-  return extractVariablesFromTemplate(template).filter((reference) => {
-    const key = /^([A-Za-z_]\w*)/.exec(reference)?.[1];
-    return key !== undefined && templateReferencesVariable(template, key);
-  });
+  // Every candidate came from this same template. If parsing failed, the old
+  // conservative per-candidate check necessarily returned true for all of them;
+  // return the textual extraction directly instead of reparsing each candidate.
+  return extractVariablesFromTemplate(template);
 }
 
 function collectPromptReferencedVars(

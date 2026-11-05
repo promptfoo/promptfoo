@@ -953,6 +953,22 @@ describe('evaluatorHelpers', () => {
       }
     });
 
+    it('should keep the textual fallback linear after a parse failure', async () => {
+      const parser = (nunjucks as unknown as { parser: { parse: (template: string) => unknown } })
+        .parser;
+      const parseSpy = vi.spyOn(parser, 'parse');
+      try {
+        const references = Array.from({ length: 32 }, (_, index) => `{{ external${index} }}`).join(
+          ' ',
+        );
+        await renderPrompt(toPrompt('{"text":"{{v}}"}'), { v: `{{ broken ${references}` }, {});
+
+        expect(parseSpy.mock.calls.length).toBeLessThan(12);
+      } finally {
+        parseSpy.mockRestore();
+      }
+    });
+
     it('should not decode a literal nested inside another expression string', async () => {
       const value = `{{ name ~ "{{ 'x' }}" }}`;
       const renderedPrompt = await renderPrompt(
