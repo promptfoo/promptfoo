@@ -65,6 +65,9 @@ export function collectBedrockChatStream(body: string): Record<string, any> {
           message: { role: 'assistant', content: '' },
           finish_reason: null,
         };
+        if (choice.finish_reason != null) {
+          throw new Error(`Bedrock chat stream received data after choice ${part.index} finished`);
+        }
         if (part.logprobs) {
           choice.logprobs ??= {};
           for (const key of ['content', 'refusal']) {

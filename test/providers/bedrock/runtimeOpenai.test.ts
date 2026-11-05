@@ -1144,11 +1144,12 @@ describe('Runtime Chat streaming', () => {
     'preserves reported accounting before rejecting %s without executing tools or publishing to cache',
     async (failure) => {
       const callback = vi.fn(async () => 'TOOL_OK');
+      const index = failure === 'missing-choice-zero' ? 1 : failure === 'large-choice' ? 10000 : 0;
       const chunks: unknown[] = [
         {
           choices: [
             {
-              index: failure === 'missing-choice-zero' ? 1 : failure === 'large-choice' ? 10000 : 0,
+              index,
               delta: {
                 tool_calls: [
                   {
@@ -1159,7 +1160,6 @@ describe('Runtime Chat streaming', () => {
                   },
                 ],
               },
-              finish_reason: failure === 'missing-finish' ? null : 'tool_calls',
             },
           ],
         },
@@ -1193,6 +1193,9 @@ describe('Runtime Chat streaming', () => {
         });
       } else if (failure === 'service-error') {
         chunks.push({ error: { message: 'Service failed' } });
+      }
+      if (failure !== 'missing-finish') {
+        chunks.push({ choices: [{ index, delta: {}, finish_reason: 'tool_calls' }] });
       }
       const data =
         sse(
@@ -1321,6 +1324,33 @@ describe('Runtime Chat streaming', () => {
       expect(JSON.parse(callback.mock.calls[0][0]).index).toBe(0);
     },
   );
+
+  it('rejects a tool call received after the choice has finished', async () => {
+    const callback = vi.fn().mockResolvedValue('TOOL_OK');
+    const tool = {
+      index: 0,
+      id: 'call-1',
+      type: 'function',
+      function: { name: 'lookup', arguments: '{}' },
+    };
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      data: sse([
+        { choices: [{ index: 0, delta: { content: 'done' }, finish_reason: 'stop' }] },
+        { choices: [{ index: 0, delta: { tool_calls: [tool] } }] },
+      ]),
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+    });
+    const provider = new BedrockRuntimeChatProvider('us.xai.grok-4.6', {
+      config: { apiKey: 'fixture', stream: true, functionToolCallbacks: { lookup: callback } },
+    });
+
+    const result = await provider.callApi('hello');
+    expect(callback).not.toHaveBeenCalled();
+    expect(result.error).toContain('received data after choice 0 finished');
+    expect(result.output).toBeUndefined();
+  });
 
   it('joins fragmented client tool arguments', async () => {
     vi.mocked(fetchWithCache).mockResolvedValue({
