@@ -27,9 +27,10 @@ providers:
 defaultTest:
   assert:
     - type: is-valid-function-call
-    - type: equals
-      transform: output.find?.((part) => part.functionCall)?.functionCall.args?.airport
-      value: '{{airport}}'
+    - type: javascript
+      value: |
+        const calls = Array.isArray(output) ? output.filter((part) => part.functionCall) : [];
+        return calls.length === 1 && calls[0].functionCall.args?.airport === context.vars.airport;
 
 tests:
   - vars:
