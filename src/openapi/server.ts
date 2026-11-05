@@ -55,6 +55,7 @@ const OpenApiCreateJobRequestSchema = z
       ])
       .optional(),
     sourceEvalId: EvalSchemas.CreateJob.Request.shape.sourceEvalId,
+    sharing: EvalSchemas.CreateJob.Request.shape.sharing,
     evaluateOptions: OpenApiLooseObjectSchema.optional(),
   })
   .passthrough();
@@ -114,13 +115,14 @@ export function createServerOpenApiRegistry() {
   // keeps @asteasolutions/zod-to-openapi isolated to docs generation instead of
   // importing it from runtime validation modules just to attach `.openapi()`.
 
-  function jsonBody(zodSchema: z.ZodType, description = 'JSON request body') {
+  function jsonBody(zodSchema: z.ZodType, description = 'JSON request body', example?: unknown) {
     return {
       description,
       required: true,
       content: {
         [APPLICATION_JSON]: {
           schema: zodSchema,
+          example,
         },
       },
     };
@@ -449,7 +451,16 @@ export function createServerOpenApiRegistry() {
     summary: 'Start an evaluation job',
     description: 'Poll GET /api/eval/job/{id} with the returned ID for progress and results.',
     request: {
-      body: jsonBody(OpenApiCreateJobRequestSchema),
+      body: jsonBody(
+        OpenApiCreateJobRequestSchema,
+        'Run the local echo example without an API key.',
+        {
+          prompts: ['ping'],
+          providers: ['echo'],
+          tests: [{ assert: [{ type: 'equals', value: 'ping' }] }],
+          sharing: false,
+        },
+      ),
     },
     responses: {
       200: jsonResponse(EvalSchemas.CreateJob.Response),

@@ -4,6 +4,7 @@ import path from 'node:path';
 import Ajv2020 from 'ajv/dist/2020';
 import { describe, expect, it } from 'vitest';
 import { createServerOpenApiDocument, createServerOpenApiRegistry } from '../../src/openapi/server';
+import { EvalSchemas } from '../../src/types/api/eval';
 import { TestCaseGenerationSchema } from '../../src/types/api/redteam';
 
 const HTTP_METHODS = ['get', 'post', 'put', 'patch', 'delete', 'head', 'options', 'trace'] as const;
@@ -129,8 +130,12 @@ describe('server OpenAPI generation', () => {
     expect(addEvalResultsOperation?.responses['204']).toEqual(
       expect.objectContaining({ description: 'Results added' }),
     );
-    const jobSchema = createEvalJobOperation.requestBody.content['application/json'].schema;
+    const { schema: jobSchema, example } =
+      createEvalJobOperation.requestBody.content['application/json'];
     const acceptsJob = new Ajv2020({ strict: false }).compile(jobSchema);
+    expect(example).toMatchObject({ providers: ['echo'], sharing: false });
+    expect(acceptsJob(example)).toBe(true);
+    expect(EvalSchemas.CreateJob.Request.safeParse(example).success).toBe(true);
     const job = { prompts: ['hello'], providers: ['echo'] };
     expect(acceptsJob({ ...job, tests: 'tests.yaml' })).toBe(true);
     expect(acceptsJob({ ...job, tests: { path: 'file://tests.js' } })).toBe(true);

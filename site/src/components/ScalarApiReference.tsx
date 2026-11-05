@@ -5,9 +5,9 @@ import Layout from '@theme/Layout';
 // Scalar auto-mounts a second instance if the page contains its legacy #api-reference ID.
 const SCALAR_CONTAINER_ID = 'promptfoo-api-reference';
 const SCALAR_SCRIPT_SRC =
-  'https://cdn.jsdelivr.net/npm/@scalar/api-reference@1.53.0/dist/browser/standalone.js';
+  'https://cdn.jsdelivr.net/npm/@scalar/api-reference@1.76.2/dist/browser/standalone.js';
 const SCALAR_SCRIPT_INTEGRITY =
-  'sha384-Jk7jdVoWEv+zbslst2LBkEeZMM1J/QyvsponRKeOwZI6+fosZhElkDmYsFFVVfoF';
+  'sha384-mCh2A/B6vkfhiHyzwBZm7lbFmEK5fE/96Kbtk+RH1zei1P/XEt0I2MCiG6WfZdor';
 
 type ScalarReference = {
   destroy?: () => void;

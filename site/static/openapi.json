@@ -1009,10 +1009,16 @@
         "summary": "Start an evaluation job",
         "description": "Poll GET /api/eval/job/{id} with the returned ID for progress and results.",
         "requestBody": {
-          "description": "JSON request body",
+          "description": "Run the local echo example without an API key.",
           "required": true,
           "content": {
             "application/json": {
+              "example": {
+                "prompts": ["ping"],
+                "providers": ["echo"],
+                "tests": [{ "assert": [{ "type": "equals", "value": "ping" }] }],
+                "sharing": false
+              },
               "schema": {
                 "type": "object",
                 "properties": {
@@ -1047,6 +1053,18 @@
                     ]
                   },
                   "sourceEvalId": { "type": "string", "minLength": 1 },
+                  "sharing": {
+                    "oneOf": [
+                      { "type": "boolean" },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "apiBaseUrl": { "type": "string" },
+                          "appBaseUrl": { "type": "string" }
+                        }
+                      }
+                    ]
+                  },
                   "evaluateOptions": { "type": "object", "additionalProperties": {} }
                 },
                 "required": ["prompts", "providers"],
