@@ -464,9 +464,11 @@ describe('FoundationModelConfiguration', () => {
     expect(screen.getByLabelText(/Model ID/i)).toHaveAttribute('aria-invalid', 'true');
     expect(screen.getByRole('alert')).toHaveTextContent(/Responses requires a bare OpenAI/);
     await user.selectOptions(screen.getByLabelText(/Bedrock API/i), 'messages');
-    expect(
-      screen.getByText(/not supported by the Bedrock Anthropic Messages adapter/),
-    ).toBeVisible();
+    expect(screen.getByLabelText(/Model ID/i)).toHaveAttribute('aria-invalid', 'false');
+    expect(mockUpdateCustomTarget).toHaveBeenCalledWith(
+      'id',
+      'bedrock:messages:global.anthropic.claude-sonnet-5',
+    );
   });
 
   it('keeps all API choices available for native Grok profiles', () => {
