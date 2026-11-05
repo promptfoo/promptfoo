@@ -765,11 +765,14 @@ Audio input must be base64-encoded. You can use either the exact Bedrock model I
 
 ### Amazon Nova Reel (Video Generation)
 
-Amazon Nova Reel (`amazon.nova-reel-v1:1`) generates studio-quality videos from text prompts. Videos are generated in 6-second increments up to 2 minutes.
+Nova Reel accepts text prompts and produces videos in six-second increments, up to two minutes.
 
 :::warning
 
-[AWS retired Nova Reel](https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-amazon-nova-reel.html) on September 30, 2026. The bare `bedrock:video` selector now asks for a model ID. For a new evaluation with [Luma Ray 2](#luma-ray-2), select `bedrock:video:luma.ray-v2:0`, set `region: us-west-2`, and use the Ray 2 options. The explicit Nova Reel IDs below are for privately extended deployments.
+Nova Reel 1.0 and 1.1 reached end of life on **September 30, 2026**.
+These configurations are retained for reference and private extended-access workloads.
+For new video evaluations, check [Luma Ray 2](#luma-ray-2) and the [AWS lifecycle table](https://docs.aws.amazon.com/bedrock/latest/userguide/model-lifecycle-legacy.html)
+before using them. Promptfoo does not migrate Nova Reel configurations automatically.
 
 :::
 
@@ -2135,12 +2138,7 @@ AWS Bedrock supports video generation through asynchronous invoke APIs. Videos a
 
 ### Luma Ray 2
 
-Generate videos using Luma Ray 2, which produces high-quality videos from text prompts or images.
-
-**Provider ID:** `bedrock:video:luma.ray-v2:0`
-
-Check the [AWS supported models documentation](https://docs.aws.amazon.com/bedrock/latest/userguide/models-supported.html)
-for current Luma Ray regional availability.
+Set an explicit video model ID. The bare `bedrock:video` selector raises a configuration error. The example below generates video from text or an image using Ray 2 in Oregon. [AWS model card and regions](https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-luma-ai-ray2.html)
 
 #### Basic Configuration
 
