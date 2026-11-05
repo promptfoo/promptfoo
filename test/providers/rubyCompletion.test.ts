@@ -586,6 +586,105 @@ describe('RubyProvider', () => {
       expect(result).toEqual({ classification: { label: 'test', score: 0.9 } });
       expect(result).not.toHaveProperty('cached');
     });
+
+    function useMemoryCache() {
+      const store = new Map<string, string>();
+      const cache = {
+        get: vi.fn(async (key: string) => store.get(key) ?? null),
+        set: vi.fn(async (key: string, value: string) => {
+          store.set(key, value);
+        }),
+      };
+      mockIsCacheEnabled.mockReturnValue(true);
+      mockGetCache.mockResolvedValue(cache as never);
+      return cache;
+    }
+
+    function evalVars(overrides: Record<string, unknown> = {}) {
+      return {
+        name: 'world',
+        __evalId: 'eval-FYA-2026-11-05T00:08:12',
+        __evalStepId: 'test-0-prompt-0-repeat-0',
+        __repeatIndex: 0,
+        ...overrides,
+      };
+    }
+
+    it('hits the cache when only __evalId changes and keeps stable step vars', async () => {
+      const provider = new RubyProvider('script.rb');
+      const cache = useMemoryCache();
+      mockRunRuby.mockResolvedValue({ output: 'fresh result' });
+
+      const firstVars = evalVars();
+      const secondVars = evalVars({ __evalId: 'eval-TYC-2026-11-05T00:08:13' });
+
+      const first = await provider.callApi('Hello world', { vars: firstVars } as any);
+      const second = await provider.callApi('Hello world', { vars: secondVars } as any);
+
+      const firstKey = cache.get.mock.calls[0][0] as string;
+      const secondKey = cache.get.mock.calls[1][0] as string;
+      expect(secondKey).toBe(firstKey);
+      expect(firstKey).not.toContain('__evalId');
+      expect(firstKey).not.toContain('eval-FYA-2026-11-05T00:08:12');
+      expect(firstKey).not.toContain('eval-TYC-2026-11-05T00:08:13');
+      expect(firstKey).toContain('"name":"world"');
+      expect(firstKey).toContain('"__evalStepId":"test-0-prompt-0-repeat-0"');
+      expect(firstKey).toContain('"__repeatIndex":0');
+      expect(mockRunRuby).toHaveBeenCalledTimes(1);
+      const executedContext = mockRunRuby.mock.calls[0]?.[2]?.[2] as { vars: typeof firstVars };
+      expect(executedContext.vars).toBe(firstVars);
+      expect(firstVars).toMatchObject({
+        __evalId: 'eval-FYA-2026-11-05T00:08:12',
+        __evalStepId: 'test-0-prompt-0-repeat-0',
+        __repeatIndex: 0,
+      });
+      expect(first).toEqual({ output: 'fresh result', cached: false });
+      expect(second).toEqual({ output: 'fresh result', cached: true });
+    });
+
+    it('uses a different cache key when user vars differ', async () => {
+      const provider = new RubyProvider('script.rb');
+      const cache = useMemoryCache();
+      mockRunRuby.mockResolvedValue({ output: 'fresh result' });
+
+      await provider.callApi('Hello world', { vars: evalVars({ name: 'world' }) } as any);
+      await provider.callApi('Hello world', { vars: evalVars({ name: 'mars' }) } as any);
+
+      const worldKey = cache.get.mock.calls[0][0] as string;
+      const marsKey = cache.get.mock.calls[1][0] as string;
+      expect(marsKey).not.toBe(worldKey);
+      expect(worldKey).toContain('"name":"world"');
+      expect(marsKey).toContain('"name":"mars"');
+      expect(worldKey).not.toContain('__evalId');
+      expect(marsKey).not.toContain('__evalId');
+      expect(worldKey).toContain('"__evalStepId":"test-0-prompt-0-repeat-0"');
+      expect(marsKey).toContain('"__repeatIndex":0');
+      expect(mockRunRuby).toHaveBeenCalledTimes(2);
+    });
+
+    it('uses a different cache key when the stable repeat id differs', async () => {
+      const provider = new RubyProvider('script.rb');
+      const cache = useMemoryCache();
+      mockRunRuby.mockResolvedValue({ output: 'fresh result' });
+
+      await provider.callApi('Hello world', { vars: evalVars() } as any);
+      await provider.callApi('Hello world', {
+        vars: evalVars({
+          __evalStepId: 'test-0-prompt-0-repeat-1',
+          __repeatIndex: 1,
+        }),
+      } as any);
+
+      const firstKey = cache.get.mock.calls[0][0] as string;
+      const repeatKey = cache.get.mock.calls[1][0] as string;
+      expect(repeatKey).not.toBe(firstKey);
+      expect(firstKey).toContain('"__repeatIndex":0');
+      expect(repeatKey).toContain('"__evalStepId":"test-0-prompt-0-repeat-1"');
+      expect(repeatKey).toContain('"__repeatIndex":1');
+      expect(firstKey).not.toContain('__evalId');
+      expect(repeatKey).not.toContain('__evalId');
+      expect(mockRunRuby).toHaveBeenCalledTimes(2);
+    });
   });
 
   describe('initialize', () => {

@@ -69,6 +69,12 @@ strings persist to disk; if it stores hashed keys, the hash persists.
   produce different strings but represent the same config, so naïve stringification
   causes cache misses for semantically identical requests. Sort keys (or use a
   canonical-JSON helper) before hashing.
+- **Omit the per-run eval id from script-provider cache keys.** `context.vars`
+  includes `__evalId`, which is new on every eval run. Build the key with
+  `omitEvalRuntimeVars(vars, PER_RUN_EVAL_RUNTIME_VAR_KEYS)` from
+  `src/util/evalRuntimeVars.ts`. Keep `__evalStepId` and `__repeatIndex`: they are
+  stable across runs for the same step and still separate steps and repeats. See
+  `pythonCompletion.ts` and `rubyCompletion.ts`.
 - Reference pattern for stable key structure and canonicalized hashing:
   `getModerationCacheKey` in `src/providers/azure/moderation.ts`.
 

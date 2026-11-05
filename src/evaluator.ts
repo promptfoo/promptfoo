@@ -81,6 +81,7 @@ import {
 } from './types/index';
 import { type ApiProvider, isApiProvider } from './types/providers';
 import { createDefaultPromptMetrics, updatePromptResultCounts } from './util/eval/promptMetrics';
+import { getEvalRuntimeVars, omitEvalRuntimeVars } from './util/evalRuntimeVars';
 import { isAbortError, isNonTransientHttpStatus } from './util/fetch/errors';
 import { isCallerAbortError } from './util/fetch/requestSignal';
 import { filterByRange } from './util/filterRange';
@@ -759,51 +760,6 @@ function createRunEvalState({
     setup,
     vars,
   };
-}
-
-/**
- * Reserved keys for eval-step runtime vars. `EvalRuntimeVars` below is keyed by
- * this tuple, so adding a new key to {@link getEvalRuntimeVars} fails to
- * type-check until the key is added here too — keeping the omit list and the
- * producer in lockstep.
- */
-const EVAL_RUNTIME_VAR_KEYS = ['__evalId', '__evalStepId', '__repeatIndex'] as const;
-type EvalRuntimeVars = Partial<Record<(typeof EVAL_RUNTIME_VAR_KEYS)[number], Vars[string]>>;
-
-function getEvalRuntimeVars({
-  evalId,
-  promptIndex,
-  repeatIndex,
-  testIndex,
-}: {
-  evalId?: string;
-  promptIndex: number;
-  repeatIndex: number;
-  testIndex: number;
-}): EvalRuntimeVars {
-  return {
-    ...(evalId ? { __evalId: evalId } : {}),
-    __evalStepId: `test-${testIndex}-prompt-${promptIndex}-repeat-${repeatIndex}`,
-    __repeatIndex: repeatIndex,
-  };
-}
-
-/**
- * Returns a copy of `vars` without the reserved `__eval*` runtime vars. They are
- * merged into an eval step's vars so prompts and providers can reference them,
- * but must not reach the persisted `EvaluateResult.vars` or assertion/grader
- * inputs: they are positional per-step identifiers that would pollute stored
- * results and — being `_`-prefixed — get restored onto re-run `test.vars` by
- * `--filter-*` re-runs. The input is not mutated; it is shared by reference
- * with the provider call context.
- */
-function omitEvalRuntimeVars(vars: Vars): Vars {
-  // Keep non-serialized metadata needed by assertion and grader providers.
-  const result: Vars = { ...vars };
-  for (const key of EVAL_RUNTIME_VAR_KEYS) {
-    delete result[key];
-  }
-  return result;
 }
 
 function attachConversationVar({
