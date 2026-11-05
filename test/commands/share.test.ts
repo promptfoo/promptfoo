@@ -76,7 +76,10 @@ describe('Share Command', () => {
 
       const result = await createAndDisplayShareableUrl(mockEval, false);
 
-      expect(createShareableUrl).toHaveBeenCalledWith(mockEval, { showAuth: false });
+      expect(createShareableUrl).toHaveBeenCalledWith(mockEval, {
+        promptForLogin: true,
+        showAuth: false,
+      });
       expect(logger.info).toHaveBeenCalledWith(expect.stringContaining(mockUrl));
       expect(result).toBe(mockUrl);
     });
@@ -89,7 +92,10 @@ describe('Share Command', () => {
 
       await createAndDisplayShareableUrl(mockEval, true);
 
-      expect(createShareableUrl).toHaveBeenCalledWith(mockEval, { showAuth: true });
+      expect(createShareableUrl).toHaveBeenCalledWith(mockEval, {
+        promptForLogin: true,
+        showAuth: true,
+      });
     });
 
     it('should return null when createShareableUrl returns null', async () => {
@@ -100,7 +106,10 @@ describe('Share Command', () => {
 
       const result = await createAndDisplayShareableUrl(mockEval, false);
 
-      expect(createShareableUrl).toHaveBeenCalledWith(mockEval, { showAuth: false });
+      expect(createShareableUrl).toHaveBeenCalledWith(mockEval, {
+        promptForLogin: true,
+        showAuth: false,
+      });
       expect(result).toBeNull();
       expect(logger.error).toHaveBeenCalledWith(
         'Failed to create shareable URL for eval test-eval-id',
@@ -223,7 +232,10 @@ describe('Share Command', () => {
       await shareCmd?.parseAsync(['node', 'test', 'eval-test-123']);
 
       expect(Eval.findById).toHaveBeenCalledWith('eval-test-123');
-      expect(createShareableUrl).toHaveBeenCalledWith(mockEval, { showAuth: false });
+      expect(createShareableUrl).toHaveBeenCalledWith(mockEval, {
+        promptForLogin: true,
+        showAuth: false,
+      });
       expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('View results:'));
     });
 
@@ -283,7 +295,10 @@ describe('Share Command', () => {
 
       expect(Eval.latest).toHaveBeenCalledWith();
       expect(ModelAudit.latest).toHaveBeenCalledWith();
-      expect(createShareableUrl).toHaveBeenCalledWith(mockEval, { showAuth: false });
+      expect(createShareableUrl).toHaveBeenCalledWith(mockEval, {
+        promptForLogin: true,
+        showAuth: false,
+      });
       expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('Sharing eval'));
     });
 
@@ -371,7 +386,10 @@ describe('Share Command', () => {
 
       expect(Eval.latest).toHaveBeenCalledWith();
       expect(ModelAudit.latest).toHaveBeenCalledWith();
-      expect(createShareableUrl).toHaveBeenCalledWith(mockEval, { showAuth: false });
+      expect(createShareableUrl).toHaveBeenCalledWith(mockEval, {
+        promptForLogin: true,
+        showAuth: false,
+      });
       expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('View results:'));
     });
 
@@ -479,7 +497,10 @@ describe('Share Command', () => {
       expect(loadDefaultConfig).toHaveBeenCalledTimes(1);
       expect(mockEval.config.sharing).toEqual(mockSharing);
       expect(isSharingEnabled).toHaveBeenCalledWith(mockEval);
-      expect(createShareableUrl).toHaveBeenCalledWith(mockEval, { showAuth: false });
+      expect(createShareableUrl).toHaveBeenCalledWith(mockEval, {
+        promptForLogin: true,
+        showAuth: false,
+      });
     });
 
     it('should show cloud instructions and return null when sharing is not enabled', async () => {
@@ -533,7 +554,10 @@ describe('Share Command', () => {
       const shareCmd = program.commands.find((c) => c.name() === 'share');
       await shareCmd?.parseAsync(['node', 'test']);
 
-      expect(createShareableUrl).toHaveBeenCalledWith(mockEval, { showAuth: false });
+      expect(createShareableUrl).toHaveBeenCalledWith(mockEval, {
+        promptForLogin: true,
+        showAuth: false,
+      });
       expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('View results:'));
       expect(process.exitCode).toBe(0);
     });
@@ -555,7 +579,10 @@ describe('Share Command', () => {
       await shareCmd?.parseAsync(['node', 'test', 'specific-eval-id']);
 
       expect(Eval.findById).toHaveBeenCalledWith('specific-eval-id');
-      expect(createShareableUrl).toHaveBeenCalledWith(mockEval, { showAuth: false });
+      expect(createShareableUrl).toHaveBeenCalledWith(mockEval, {
+        promptForLogin: true,
+        showAuth: false,
+      });
       expect(process.exitCode).toBe(0);
     });
 

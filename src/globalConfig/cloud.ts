@@ -109,8 +109,7 @@ export class CloudConfig {
     this.configState = config;
   }
 
-  private readConfig(): CloudConfigState {
-    const savedConfig = readGlobalConfig()?.cloud || {};
+  private readConfig(savedConfig = readGlobalConfig()?.cloud || {}): CloudConfigState {
     return {
       appUrl: savedConfig.appUrl || 'https://www.promptfoo.app',
       apiHost: savedConfig.apiHost,
@@ -257,6 +256,33 @@ export class CloudConfig {
 
   private reload(): void {
     this.config = this.readConfig();
+  }
+
+  /** Pick up a second terminal's login only when it targets the same deployment and team. */
+  reloadCredentialForCurrentTeam(email: string): boolean {
+    const saved = readGlobalConfig();
+    if (saved?.account?.email !== email || !saved.cloud?.apiKey) {
+      return false;
+    }
+    const next = new CloudConfig(false);
+    next.config = this.readConfig(saved.cloud);
+    const org = this.getCurrentOrganizationId();
+    const team = this.getCurrentTeamId(org);
+    if (
+      !org ||
+      !team ||
+      org !== next.getCurrentOrganizationId() ||
+      team !== next.getCurrentTeamId(org) ||
+      this.getApiHost() !== next.getApiHost() ||
+      this.getAppUrl() !== next.getAppUrl() ||
+      this.getAuthHeaderName() !== next.getAuthHeaderName() ||
+      !next.getApiKey() ||
+      this.getApiKey() === next.getApiKey()
+    ) {
+      return false;
+    }
+    this.config = next.config;
+    return true;
   }
 
   saveValidatedApiToken(

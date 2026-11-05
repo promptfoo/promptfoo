@@ -31,6 +31,39 @@ describe('CloudConfig', () => {
     vi.resetAllMocks();
   });
 
+  describe('reloadCredentialForCurrentTeam', () => {
+    const cloud = {
+      apiHost: 'https://test.api',
+      apiKey: 'original',
+      currentOrganizationId: 'org',
+      teams: { org: { currentTeamId: 'team' } },
+    };
+    it.each([
+      [{ apiKey: 'renewed' }, true],
+      [{}, false],
+      [{ apiKey: 'renewed', apiHost: 'https://other.test' }, false],
+      [{ apiKey: 'renewed', currentOrganizationId: 'other' }, false],
+      [{ apiKey: 'renewed', teams: { org: { currentTeamId: 'other' } } }, false],
+    ] as const)(
+      'reloads only a replacement credential for the same destination: %j',
+      (change, allowed) => {
+        vi.mocked(readGlobalConfig).mockReturnValue({
+          id: 'test',
+          account: { email: 'user@example.test' },
+          cloud,
+        });
+        const original = new CloudConfig();
+        vi.mocked(readGlobalConfig).mockReturnValue({
+          id: 'test',
+          account: { email: 'user@example.test' },
+          cloud: { ...cloud, ...change },
+        });
+        expect(original.reloadCredentialForCurrentTeam('user@example.test')).toBe(allowed);
+        expect(original.getApiKey()).toBe(allowed ? 'renewed' : 'original');
+      },
+    );
+  });
+
   describe('constructor', () => {
     it('should support deferred singleton-style initialization', () => {
       vi.mocked(readGlobalConfig).mockClear();

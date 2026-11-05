@@ -1,12 +1,13 @@
 import { URL } from 'url';
 
+import confirm from '@inquirer/confirm';
 import input from '@inquirer/input';
 import chalk from 'chalk';
 import cliProgress from 'cli-progress';
 import { isBlobStorageEnabled } from './blobs/extractor';
 import { createRemoteBlobUploadCache, uploadBlobRefsForShare } from './blobs/shareUpload';
 import { getDefaultShareViewBaseUrl, getShareApiBaseUrl, getShareViewBaseUrl } from './constants';
-import { getEnvBool, getEnvInt, getEnvString, isCI } from './envars';
+import { getEnvBool, getEnvInt, getEnvString, isCI, isNonInteractive } from './envars';
 import { getUserEmail, setUserEmail } from './globalConfig/accounts';
 import { cloudConfig } from './globalConfig/cloud';
 import logger, { isDebugEnabled } from './logger';
@@ -35,6 +36,7 @@ interface ShareDomainResult {
 }
 
 export interface ShareOptions {
+  promptForLogin?: boolean;
   /** Suppress progress bar and "Sharing to:" messages for async background sharing */
   silent?: boolean;
   /** Show authentication info in the URL */
@@ -55,6 +57,7 @@ interface ChunkSendResult {
 interface AdaptiveChunkConfig {
   minResultsPerChunk: number;
   maxResultsPerChunk: number;
+  renewCredential?: () => Promise<boolean>;
 }
 
 export function isSharingEnabled(evalRecord: Eval): boolean {
@@ -345,6 +348,14 @@ async function sendEvalRecord(
   return responseJson.id;
 }
 
+class UploadAccessError extends Error {
+  constructor(readonly status: 401 | 403) {
+    super(
+      status === 401 ? 'The server rejected the upload credential.' : 'Project access was denied.',
+    );
+  }
+}
+
 async function sendChunkOfResults(
   chunk: EvalResult[],
   url: string,
@@ -367,6 +378,12 @@ async function sendChunkOfResults(
       compress: true,
     });
 
+    if (response.status === 401 || response.status === 403) {
+      return {
+        success: false,
+        originalError: new UploadAccessError(response.status),
+      };
+    }
     if (!response.ok) {
       const responseBody = await response.text();
       const debugInfo = {
@@ -447,7 +464,15 @@ async function sendChunkWithRetry(
     return 0;
   }
 
-  const result = await sendChunkOfResults(chunk, url, evalId, headers);
+  let result = await sendChunkOfResults(chunk, url, evalId, headers);
+  if (
+    result.originalError instanceof UploadAccessError &&
+    result.originalError.status === 401 &&
+    (await config.renewCredential?.().catch(() => false))
+  ) {
+    Object.assign(headers, cloudConfig.getAuthHeaders());
+    result = await sendChunkOfResults(chunk, url, evalId, headers);
+  }
 
   if (result.success) {
     onProgress(chunk.length);
@@ -604,10 +629,22 @@ async function sendChunkedResults(
   const resultsPerChunk =
     typeof envChunkSize === 'number' && envChunkSize > 0 ? envChunkSize : calculatedChunkSize;
 
+  const loginEmail =
+    options.promptForLogin && !silent && cloudConfig.isEnabled() && !isNonInteractive()
+      ? getUserEmail()
+      : null;
   // Adaptive chunk configuration for retry logic
   const chunkConfig: AdaptiveChunkConfig = {
     minResultsPerChunk: 1,
     maxResultsPerChunk: resultsPerChunk,
+    ...(loginEmail && {
+      renewCredential: async () =>
+        (await confirm({
+          message:
+            'Upload paused. Sign in to the same account and project in another terminal. Resume this upload?',
+          default: false,
+        })) && cloudConfig.reloadCredentialForCurrentTeam(loginEmail),
+    }),
   };
 
   logger.debug(`Chunk config: ${JSON.stringify(chunkConfig)}`);
@@ -719,7 +756,11 @@ async function sendChunkedResults(
 
     logger.error(`Upload failed: ${e instanceof Error ? e.message : String(e)}`);
 
-    if (evalId) {
+    if (e instanceof UploadAccessError) {
+      logger.info(
+        `Once you have access to the same project, run \`promptfoo share ${evalRecord.id}\` to retry. Already uploaded results were left in place.`,
+      );
+    } else if (evalId) {
       logger.info(`Upload failed, rolling back...`);
       await rollbackEval(url, evalId, headers);
     }
@@ -867,7 +908,7 @@ export async function createShareableUrl(
     `Sharing with ${url} canUseNewResults: ${canUseNewResults} Use old results: ${evalRecord.useOldResults()}`,
   );
 
-  const evalId = await sendChunkedResults(evalRecord, url, { silent });
+  const evalId = await sendChunkedResults(evalRecord, url, options);
 
   if (!evalId) {
     return null;
