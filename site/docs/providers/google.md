@@ -412,21 +412,18 @@ The older 2.5 and 3.1 TTS previews have an earliest announced shutdown date of N
 
 ### Embedding Models
 
-Use the `google:embedding:` prefix (or the plural `google:embeddings:` alias) to call the Gemini API `embedContent` endpoint:
+Use `google:embedding:<model-id>` (or `google:embeddings:<model-id>`) to embed text with the Gemini API. For a similarity assertion:
 
-- `google:embedding:gemini-embedding-2` - Recommended current Gemini API model. Multimodal upstream, with up to 8,192 text tokens and 3,072 output dimensions
-- `google:embedding:gemini-embedding-001` - Supported text-only model, with up to 2,048 input tokens and 3,072 output dimensions; scheduled to shut down May 14, 2028
-- `google:embedding:embedding-2-preview` - Retired preview; use `gemini-embedding-2` for new work
+```yaml
+assert:
+  - type: similar
+    value: The package has shipped.
+    provider: google:embedding:gemini-embedding-2
+```
 
-Embedding options depend on the model (see Google's [embedding guide](https://ai.google.dev/gemini-api/docs/embeddings)):
+Set `config.outputDimensionality` to request a shorter vector. For Gemini Embedding 2, put task instructions and document titles in the input text. For `gemini-embedding-001`, set `taskType` in the provider config and use `title` with `RETRIEVAL_DOCUMENT`. Re-embed stored vectors when switching between these models because they use different embedding spaces.
 
-- `taskType` - for `gemini-embedding-001`: one of `SEMANTIC_SIMILARITY`, `CLASSIFICATION`, `CLUSTERING`, `RETRIEVAL_DOCUMENT`, `RETRIEVAL_QUERY`, `QUESTION_ANSWERING`, `FACT_VERIFICATION`, `CODE_RETRIEVAL_QUERY`
-- `outputDimensionality` - requests a smaller vector; Embedding 2 accepts integers from 128 to 3,072
-- `title` - for `gemini-embedding-001`, with `taskType: RETRIEVAL_DOCUMENT`
-
-For Embedding 2, omit `taskType` and `title`; the Gemini API expects instructions in the input instead, such as `task: search result | query: your query` or `title: document title | text: document content`. Embedding 1 and Embedding 2 use different vector spaces: re-embed existing content when switching models. Shortened Embedding 1 vectors require normalization; shortened Embedding 2 vectors are normalized by the API.
-
-If you need Vertex authentication or additional embedding models, see the [Vertex provider](/docs/providers/vertex#embedding-models) instead.
+See Google's [embedding guide](https://ai.google.dev/gemini-api/docs/embeddings) for supported dimensions, task instructions, and normalization, and the [model lifecycle](https://ai.google.dev/gemini-api/docs/deprecations#embedding-models) for model availability. For Google Cloud credentials, see [Vertex embedding models](/docs/providers/vertex#embedding-models).
 
 ### Image Generation Models
 
@@ -1152,53 +1149,17 @@ providers:
 
 ### Overriding Providers
 
-You can override both the text generation and embedding providers in your configuration. Because of how model-graded evals are implemented, **the text generation model must support chat-formatted prompts**.
-
-You can override providers in several ways:
-
-1. For all test cases using `defaultTest`:
+Set the text grader and similarity embedding provider under `defaultTest.options.provider`. Choose a text model that supports chat-formatted prompts.
 
 ```yaml
 defaultTest:
   options:
     provider:
-      # Override text generation provider
-      text:
-        id: google:gemini-3.8-flash
-        config: {}
-      # Override embedding provider for similarity comparisons
-      embedding:
-        id: google:embedding:gemini-embedding-2
+      text: google:gemini-3.8-flash
+      embedding: google:embedding:gemini-embedding-2
 ```
 
-2. For individual assertions:
-
-```yaml
-assert:
-  - type: similar
-    value: Expected response
-    threshold: 0.8
-    provider:
-      id: google:embedding:gemini-embedding-2
-```
-
-3. For specific tests:
-
-```yaml
-tests:
-  - vars:
-      puzzle: What is 2 + 2?
-    options:
-      provider:
-        text:
-          id: google:gemini-3.8-flash
-          config: {}
-        embedding:
-          id: google:embedding:gemini-embedding-2
-    assert:
-      - type: similar
-        value: The answer is 4
-```
+For a single test, use the same `options.provider` structure on that test. To choose a different model for one assertion, see the [embedding example](#embedding-models).
 
 ### Tool Calling
 

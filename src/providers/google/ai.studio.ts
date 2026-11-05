@@ -9,6 +9,7 @@ import {
   withResponseCacheMetadata,
 } from '../shared';
 import { GoogleGenericProvider, type GoogleProviderOptions } from './base';
+import { getEmbedding2OptionError, isEmbeddingVector, isGeminiEmbedding2 } from './embedding';
 import { CHAT_MODELS } from './shared';
 import {
   calculateGoogleCost,
@@ -585,11 +586,13 @@ export class AIStudioEmbeddingProvider
       };
     }
 
-    const config = this.config as CompletionOptions & {
-      taskType?: string;
-      outputDimensionality?: number;
-      title?: string;
-    };
+    const config = this.config;
+    if (isGeminiEmbedding2(this.modelName)) {
+      const error = getEmbedding2OptionError(config, this.modelName);
+      if (error) {
+        return { error };
+      }
+    }
 
     const body: Record<string, any> = {
       content: { parts: [{ text }] },
@@ -627,10 +630,13 @@ export class AIStudioEmbeddingProvider
       };
     }
 
-    const values: number[] | undefined = data?.embedding?.values;
-    if (!values) {
+    const values = data?.embedding?.values;
+    if (!isEmbeddingVector(values)) {
       return {
-        error: `No embedding found in Google AI Studio response: ${JSON.stringify(data)}`,
+        error:
+          typeof data?.error?.message === 'string'
+            ? `Google AI Studio embedding API error: ${data.error.message}`
+            : 'No valid embedding vector in Google AI Studio response.',
       };
     }
 

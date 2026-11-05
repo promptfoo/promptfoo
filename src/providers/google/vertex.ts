@@ -33,6 +33,7 @@ import {
 } from '../shared';
 import { GoogleAuthManager } from './auth';
 import { GoogleGenericProvider, type GoogleProviderOptions } from './base';
+import { getEmbedding2OptionError, isEmbeddingVector, isGeminiEmbedding2 } from './embedding';
 import { getVertexApiHostForRegion } from './shared';
 import {
   calculateGoogleCost,
@@ -1394,14 +1395,10 @@ export class VertexEmbeddingProvider implements ApiEmbeddingProvider {
   }
 
   getRegion(): string {
-    if (this.usesEmbedContent()) {
+    if (isGeminiEmbedding2(this.modelName)) {
       return GoogleAuthManager.resolveRegion(this.config, this.env, undefined, 'global');
     }
     return GoogleAuthManager.resolveRegion(this.config, this.env);
-  }
-
-  private usesEmbedContent(): boolean {
-    return /^gemini-embedding-2(?:$|-)/.test(this.modelName);
   }
 
   getApiVersion(): string {
@@ -1427,14 +1424,11 @@ export class VertexEmbeddingProvider implements ApiEmbeddingProvider {
   ): Promise<ProviderEmbeddingResponse> {
     const abortSignal = options?.abortSignal;
     abortSignal?.throwIfAborted();
-    const embedContent = this.usesEmbedContent();
+    const embedContent = isGeminiEmbedding2(this.modelName);
     if (embedContent) {
-      for (const key of ['taskType', 'title', 'autoTruncate'] as const) {
-        if (this.config[key] !== undefined) {
-          throw new Error(
-            `${this.modelName} does not support ${key}. Use instructions in the input text for embedding tasks.`,
-          );
-        }
+      const error = getEmbedding2OptionError(this.config, this.modelName);
+      if (error) {
+        throw new Error(error);
       }
     }
     const dimensions = this.config.outputDimensionality;
@@ -1496,15 +1490,11 @@ export class VertexEmbeddingProvider implements ApiEmbeddingProvider {
       throw err;
     }
 
-    logger.debug(`Vertex embeddings API response: ${JSON.stringify(data)}`);
-
     const prediction = data.predictions?.[0];
     const embeddingData = prediction?.embeddings;
     const values = embedContent ? data.embedding?.values : embeddingData?.values;
-    if (!values?.length) {
-      const errorMsg = `No valid embeddings returned from API: ${JSON.stringify(data)}`;
-      logger.error(errorMsg);
-      throw new Error(errorMsg);
+    if (!isEmbeddingVector(values)) {
+      throw new Error('No valid embeddings returned from Vertex API.');
     }
 
     const promptTokens = embedContent ? data.usageMetadata?.promptTokenCount : undefined;
