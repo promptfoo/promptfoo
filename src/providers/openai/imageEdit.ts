@@ -1,5 +1,3 @@
-import { parseDataUrl } from '../../util/dataUrl';
-
 type ImageReference =
   | { image_url: string; file_id?: never }
   | { file_id: string; image_url?: never };
@@ -23,13 +21,8 @@ function isImageReference(value: unknown, pngOnly = false): value is ImageRefere
   }
   const url = value.image_url;
   if (url.startsWith('data:')) {
-    const parsed = parseDataUrl(url);
-    return (
-      parsed !== null &&
-      (pngOnly
-        ? parsed.mimeType === 'image/png'
-        : ['image/png', 'image/jpeg', 'image/webp'].includes(parsed.mimeType))
-    );
+    const format = /^data:\s*image\/(png|jpeg|webp)\s*(?:;[^,]*)?;base64,.+$/.exec(url)?.[1];
+    return format !== undefined && (!pngOnly || format === 'png');
   }
   return URL.canParse(url) && new URL(url).protocol === 'https:';
 }
