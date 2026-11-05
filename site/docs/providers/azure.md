@@ -217,11 +217,7 @@ Realtime prompts can include `input_image` parts in the user message. The previe
 
 ## Azure Decisions API
 
-Use `azure:decisions:<deployment name>` (or `azureopenai:decisions:<deployment name>`)
-to evaluate predicate, choice, and score questions through Azure's
-[`/openai/v1/decisions` endpoint](https://learn.microsoft.com/azure/foundry/openai/how-to/decisions).
-The provider ID takes your deployment name, which can differ from the model name.
-Check Azure's guide for supported models and regions.
+Use `azure:decisions:<deployment name>` (or `azureopenai:decisions:<deployment name>`) to evaluate predicate, choice, and score questions through Azure's [`/openai/v1/decisions` endpoint](https://learn.microsoft.com/azure/foundry/openai/how-to/decisions). The provider ID takes your deployment name, which can differ from the model name. Check Azure's guide for supported models and regions.
 
 ```yaml
 providers:
@@ -233,25 +229,11 @@ providers:
           instructions: The customer asks for a refund.
 ```
 
-Set `AZURE_OPENAI_API_BASE_URL` to your resource endpoint and
-`AZURE_OPENAI_API_KEY` to its API key, or use the [Azure authentication](#setup)
-options described on this page, including Microsoft Entra ID. `apiBaseUrl`,
-`apiHost`, `apiKey`, `apiKeyEnvar`, and `headers` are also supported. Base URLs may
-end at the resource root, `/openai`, or `/openai/v1`. This endpoint does not require
-`apiVersion`.
+Set `AZURE_OPENAI_API_BASE_URL` to your resource endpoint and `AZURE_OPENAI_API_KEY` to its API key, or use the [Azure authentication](#setup) options described on this page, including Microsoft Entra ID. `apiBaseUrl`, `apiHost`, `apiKey`, `apiKeyEnvar`, and `headers` are also supported. Base URLs may end at the resource root, `/openai`, or `/openai/v1`. This endpoint does not require `apiVersion`.
 
-The rendered prompt becomes `input`. Question types, input validation, JSON output
-(`JSON.parse(output).answers`), refusal handling, and explicit per-token cost
-configuration follow the [OpenAI Decisions provider](./openai-decisions.md).
-`questions` and `safety_identifier` support template variables. `maxRetries`
-controls HTTP retries, and `--no-cache` bypasses response reuse. No default
-Decisions price is inferred from the deployment name. Azure image inputs must use
-inline base64 data URLs; hosted image URLs are not supported.
+The rendered prompt becomes `input`. Question types, input validation, JSON output (`JSON.parse(output).answers`), refusal handling, and explicit per-token cost configuration follow the [OpenAI Decisions provider](./openai-decisions.md). `questions` and `safety_identifier` support template variables. `maxRetries` controls HTTP retries, and `--no-cache` bypasses response reuse. No default Decisions price is inferred from the deployment name. Azure image inputs must use inline base64 data URLs; hosted image URLs are not supported.
 
-Azure Decisions can also grade text with `llm-rubric` and `classifier`. Set
-`threshold` and optional ordered `levels` for rubric grading, or set
-`instructions` and `labels` for classification. Other model-graded assertions are
-rejected because they require generated text rather than Decisions answers.
+Azure Decisions can also grade text with `llm-rubric` and `classifier`. Set `threshold` and optional ordered `levels` for rubric grading, or set `instructions` and `labels` for classification. Other model-graded assertions are rejected because they require generated text rather than Decisions answers.
 
 ```yaml
 assert:
@@ -273,13 +255,9 @@ assert:
           deflection: Redirects the customer without helping
 ```
 
-Rubric grading supports text or serialized output only; media attachments are
-rejected. A refusal or malformed answer fails grading, including negated
-assertions. See [Grade and classify outputs](./openai-decisions.md#grade-and-classify-outputs)
-for score normalization, thresholds, and label behavior shared by both providers.
+Rubric grading supports text or serialized output only; media attachments are rejected. A refusal or malformed answer fails grading, including negated assertions. See [Grade and classify outputs](./openai-decisions.md#grade-and-classify-outputs) for score normalization, thresholds, and label behavior shared by both providers.
 
-Try the [Azure Decisions example](https://github.com/promptfoo/promptfoo/tree/main/examples/azure-openai-decisions)
-for direct questions plus grading and classification configs.
+Try the [Azure Decisions example](https://github.com/promptfoo/promptfoo/tree/main/examples/azure-openai-decisions) for direct questions plus grading and classification configs.
 
 ## Azure Responses API
 
