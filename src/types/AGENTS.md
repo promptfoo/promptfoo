@@ -1,10 +1,10 @@
 # Types and Schemas
 
-Public configuration types, provider types, and server/API Zod schemas. `src/types/env.ts` only re-exports `src/contracts/env.ts`; the published `promptfoo/contracts` subpath is the real public boundary, so edit env/contract schemas in `src/contracts/` and let `src/types/` re-export them.
+Public configuration types, provider types, and server/API Zod schemas. `src/types/env.ts` only re-exports `src/contracts/env.ts`; the published `promptfoo/contracts` subpath is the real public boundary, so edit env/contract schemas in `packages/contracts/src/` and preserve the `src/contracts/` and `src/types/` re-exports. Read `packages/contracts/AGENTS.md`.
 
 ## Public Surface
 
-- Treat changes in `src/contracts/`, `src/types/index.ts`, `src/types/providers.ts`, and `src/types/api/` as public-contract changes.
+- Treat changes in `packages/contracts/src/`, `src/contracts/`, `src/types/index.ts`, `src/types/providers.ts`, and `src/types/api/` as public-contract changes.
 - Preserve backwards compatibility unless the user explicitly asks for a break. Prefer optional fields, nullable transforms, and permissive response schemas — older saved evals and clients still send older shapes.
 - Don't use `any` to hide schema drift. To preserve unknown provider output, use `z.unknown()` or a bounded passthrough, not `any`.
 
@@ -31,6 +31,6 @@ Shared with `src/server/` and the web UI:
 
 When adding a provider env var:
 
-- Add it to `ProviderEnvOverridesSchema` in `src/contracts/env.ts` (re-exported via `src/types/env.ts`).
+- Add it to `ProviderEnvOverridesSchema` in `packages/contracts/src/env.ts` (re-exported via `src/contracts/env.ts` and `src/types/env.ts`).
 - Regenerate the JSON schema and update CLI/env docs.
 - Add tests covering explicit config vs env-fallback precedence.

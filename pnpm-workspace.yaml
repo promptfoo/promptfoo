@@ -1,6 +1,7 @@
 packages:
   - 'src/app'
   - 'site'
+  - 'packages/contracts'
 
 # This server imports Zod directly but omits it from its published dependencies.
 packageExtensions:

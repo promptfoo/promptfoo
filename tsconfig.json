@@ -24,6 +24,7 @@
     "src/",
     "test/",
     "scripts/",
+    "packages/contracts/",
     "./package.json",
     "src/**/*.json",
     "test/**/*.json",
