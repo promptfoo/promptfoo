@@ -144,9 +144,47 @@ function advanceQuoteState(
   return { quote: ch, escaped: false };
 }
 
-type RegexScanState = {
-  failedStart: number | null;
+type RegexLiteralEndTable = {
+  normal: Int32Array;
+  characterClass: Int32Array;
 };
+
+type RegexScanState = {
+  table?: RegexLiteralEndTable;
+  failed?: boolean;
+};
+
+// For each suffix and initial lexical state, record where the first unescaped
+// slash outside a character class occurs. This is the same two-state scan as
+// the original forward loop, evaluated once rather than restarted per `r/`.
+function buildRegexLiteralEndTable(value: string): RegexLiteralEndTable {
+  const normal = new Int32Array(value.length + 1);
+  const characterClass = new Int32Array(value.length + 1);
+  normal[value.length] = -1;
+  characterClass[value.length] = -1;
+  for (let pos = value.length - 1; pos >= 0; pos--) {
+    const next = pos + 1;
+    const ch = value[pos];
+    if (ch === '\\') {
+      const afterEscape = pos + 2;
+      normal[pos] = afterEscape > value.length ? -1 : normal[afterEscape];
+      characterClass[pos] = afterEscape > value.length ? -1 : characterClass[afterEscape];
+    } else if (ch === '[') {
+      normal[pos] = characterClass[next];
+      characterClass[pos] = characterClass[next];
+    } else if (ch === ']') {
+      normal[pos] = normal[next];
+      characterClass[pos] = normal[next];
+    } else if (ch === '/') {
+      normal[pos] = next;
+      characterClass[pos] = characterClass[next];
+    } else {
+      normal[pos] = normal[next];
+      characterClass[pos] = characterClass[next];
+    }
+  }
+  return { normal, characterClass };
+}
 
 function regexLiteralEndAt(
   value: string,
@@ -180,11 +218,10 @@ function regexLiteralEndAt(
   ) {
     return null;
   }
-  // A failed candidate has no closing slash through the end of the value. Any
-  // delimiter that could close a later candidate would also close this one, so
-  // later candidates in the same scan cannot succeed either.
-  if (scanState.failedStart !== null && index >= scanState.failedStart) {
-    return null;
+  if (scanState.failed) {
+    const table = (scanState.table ??= buildRegexLiteralEndTable(value));
+    const end = table.normal[index + 2];
+    return end === -1 ? null : end;
   }
   let inCharacterClass = false;
   for (let end = index + 2; end < value.length; end++) {
@@ -201,7 +238,7 @@ function regexLiteralEndAt(
       return end + 1;
     }
   }
-  scanState.failedStart = index;
+  scanState.failed = true;
   return null;
 }
 
@@ -337,7 +374,7 @@ function computeNestingDepths(
   let quote: string | null = null;
   let rawIdx = 0;
   let inComment = false;
-  const regexScanState: RegexScanState = { failedStart: null };
+  const regexScanState: RegexScanState = {};
   for (let i = 0; i < value.length; i++) {
     depths[i] = depth;
     const rawEnd = rawSpanEndAt(i, rawSpans, rawIdx);
@@ -443,7 +480,7 @@ function collectRawSpans(value: string): Array<[number, number]> {
   let quote: string | null = null;
   let inExpression = false;
   let inComment = false;
-  const regexScanState: RegexScanState = { failedStart: null };
+  const regexScanState: RegexScanState = {};
   for (let i = 0; i < value.length; i++) {
     const ch = value[i];
     const two = value.slice(i, i + 2);
@@ -518,7 +555,7 @@ function collectCommentSpans(value: string): Array<[number, number]> {
   let inExpression = false;
   let braceDepth = 0;
   let quote: string | null = null;
-  const regexScanState: RegexScanState = { failedStart: null };
+  const regexScanState: RegexScanState = {};
   for (let i = 0; i < value.length; i++) {
     const rawEnd = rawSpanEndAt(i, rawSpans, rawIdx);
     if (rawEnd !== null) {
@@ -787,14 +824,14 @@ function referencesUndefinedVariables(template: string, vars: Record<string, Var
   // of a set can reference external variables, so those still count.
   const defined = new Set<string>();
   for (const match of scrubbed.matchAll(
-    /\{%\s*-?\s*for\s+([A-Za-z_]\w*(?:\s*,\s*[A-Za-z_]\w*)*)\s+in\s+/g,
+    /\{%\s*(?:-\s*)?for\s+([A-Za-z_]\w*(?:\s*,\s*[A-Za-z_]\w*)*)\s+in\s+/g,
   )) {
     for (const name of match[1]!.split(/\s*,\s*/)) {
       defined.add(name);
     }
   }
   const setRhsVars: string[] = [];
-  for (const match of scrubbed.matchAll(/\{%\s*-?\s*set\s+([A-Za-z_]\w*)\s*=\s*([^%]+)%\}/g)) {
+  for (const match of scrubbed.matchAll(/\{%\s*(?:-\s*)?set\s+([A-Za-z_]\w*)\s*=\s*([^%]+)%\}/g)) {
     defined.add(match[1]!);
     // Parse the RHS once and collect real expression references from its AST.
     // A parse failure keeps the previous conservative identifier fallback.
@@ -808,7 +845,7 @@ function referencesUndefinedVariables(template: string, vars: Record<string, Var
     }
   }
   // Also handle set without explicit RHS extraction (e.g. {% set local %}).
-  for (const match of scrubbed.matchAll(/\{%\s*-?\s*set\s+([A-Za-z_]\w*)\s*-?%\}/g)) {
+  for (const match of scrubbed.matchAll(/\{%\s*(?:-\s*)?set\s+([A-Za-z_]\w*)\s*-?%\}/g)) {
     defined.add(match[1]!);
   }
   return [...extractVariablesFromTemplate(scrubbed), ...setRhsVars].some((variableName) => {

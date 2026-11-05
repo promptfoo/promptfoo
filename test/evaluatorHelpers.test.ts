@@ -1558,6 +1558,33 @@ describe('evaluatorHelpers', () => {
       }
     }, 30_000);
 
+    it('should keep fallback tag prefix scanning deterministic', async () => {
+      const value = `{% raw %}x{% endraw %}{%${' '.repeat(32000)}`;
+      const startedAt = performance.now();
+      const renderedPrompt = await renderPrompt(
+        toPrompt('{"text":"{{other}}"}'),
+        { unused: value, other: 'ok' },
+        {},
+      );
+      const elapsed = performance.now() - startedAt;
+
+      expect(renderedPrompt).toBe(JSON.stringify({ text: 'ok' }, null, 2));
+      expect(elapsed).toBeLessThan(1000);
+    });
+
+    it.each([
+      ['{{ r/[ }} {{ r/"/ }} {{x}}', '{{ r/[ }} {{ r/"/ }} yes'],
+      ['{{ [r/[ , r/"/] }} {{x}}', '{{ [r/[ , r/"/] }} yes'],
+    ])('should preserve a valid regex after a failed probe: %s', async (value, expected) => {
+      const renderedPrompt = await renderPrompt(
+        toPrompt('{"text":"{{v}}"}'),
+        { v: value, x: 'yes' },
+        {},
+      );
+
+      expect(renderedPrompt).toBe(JSON.stringify({ text: expected }, null, 2));
+    });
+
     it('should honor escaped quotes in protected literal expressions', async () => {
       const template = "{{ 'it\\'s' }} {{x}}";
       const renderedPrompt = await renderPrompt(
