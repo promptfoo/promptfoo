@@ -95,6 +95,20 @@ describe('Bedrock Runtime model compatibility', () => {
     },
   );
 
+  it.each(['flex', 'priority', 'reserved'])(
+    'rejects the %s tier for Grok 4.7 Converse',
+    async (type) => {
+      const provider = await factory.create(
+        'bedrock:converse:us.xai.grok-4.7',
+        { config: { serviceTier: { type } } },
+        {} as never,
+      );
+      await expect(provider.callApi('Hello')).rejects.toThrow(
+        'Grok 4.7 Converse supports the default service tier only',
+      );
+    },
+  );
+
   it.each(['us.xai.grok-4.7', 'global.xai.grok-4.7'])(
     'loads %s through Converse without selecting Mantle',
     async (model) => {
@@ -268,4 +282,32 @@ describe('Bedrock Runtime pricing', () => {
   it('does not invent cache-write pricing for Grok 4.7', () => {
     expect(calculateBedrockCost('global.xai.grok-4.7', 800, 500, 200, 100)).toBeUndefined();
   });
+
+  it('requires a known partition for Grok 4.7 geographic pricing', () => {
+    expect(calculateBedrockCost('us.xai.grok-4.7', 1, 0)).toBeUndefined();
+    expect(
+      calculateBedrockCost(
+        'arn:aws-us-gov:bedrock:us-gov-west-1:123456789012:inference-profile/us.xai.grok-4.7',
+        1,
+        0,
+      ),
+    ).toBeCloseTo(2.64 / 1e6, 12);
+  });
+
+  it.each(['us-gov-east-1', 'us-gov-west-1'])(
+    'prices only the supported Grok 4.7 profile in %s',
+    (region) => {
+      const cost = (800 * 2.64 + 500 * 7.92 + 200 * 0.66) / 1e6;
+      expect(calculateBedrockCost('us.xai.grok-4.7', 800, 500, 200, 0, region)).toBeCloseTo(
+        cost,
+        12,
+      );
+      expect(
+        calculateBedrockInvokeModelCost('us.xai.grok-4.7', 800, 500, 200, 0, region, 0, {
+          type: 'flex',
+        }),
+      ).toBeCloseTo(cost * 0.5, 12);
+      expect(calculateBedrockCost('global.xai.grok-4.7', 800, 500, 200, 0, region)).toBeUndefined();
+    },
+  );
 });

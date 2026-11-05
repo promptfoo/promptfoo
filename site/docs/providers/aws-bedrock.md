@@ -1415,9 +1415,9 @@ Grok reaches Bedrock two different ways, depending on the model.
 **Grok 4.7** requires a Runtime inference profile: use
 `bedrock:us.xai.grok-4.7` or `bedrock:global.xai.grok-4.7` for InvokeModel, or add
 `converse:` after `bedrock:` for Converse. Set `config.region` to a supported source region. The bare `xai.grok-4.7` ID is not a
-Mantle model. On Converse, promptfoo estimates Standard, Priority (1.75×), and Flex (0.5×) costs,
-including cache reads, using the [AWS model card](https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-xai-grok-4-7.html).
-InvokeModel uses and estimates Standard only; its provider does not forward `serviceTier`. Cache-write and Reserved-capacity costs remain unavailable.
+Mantle model. Converse supports Standard only. Set `service_tier: priority` or `flex` on InvokeModel, Runtime Chat, or Runtime Responses.
+Promptfoo uses the published geographic rates for `us.xai.grok-4.7` in AWS GovCloud, including cache reads.
+[AWS model card and pricing](https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-xai-grok-4-7.html)
 
 **Grok 4.6** (`xai.grok-4.6`) supports Runtime **InvokeModel and Converse** through the
 `us.xai.grok-4.6` and `global.xai.grok-4.6` inference profiles. The current

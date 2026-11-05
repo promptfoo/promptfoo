@@ -7,7 +7,11 @@ import { BedrockChatStreamError, collectBedrockChatStream } from './chatStream';
 import { resolveBedrockMantleRegion } from './mantle';
 import { BedrockMantleChatProvider } from './mantleChat';
 import { BedrockOpenAiResponsesProvider } from './openaiResponses';
-import { calculateBedrockCost, calculateBedrockInvokeModelCost } from './pricing';
+import {
+  calculateBedrockCost,
+  calculateBedrockInvokeModelCost,
+  getBedrockRuntimeBillingRegion,
+} from './pricing';
 import { getBedrockRuntimeModelError } from './routing';
 
 import type { ProviderResponse } from '../../types/providers';
@@ -275,7 +279,7 @@ export class BedrockRuntimeChatProvider extends BedrockMantleChatProvider {
       data.usage,
       config,
       data.service_tier ?? config.service_tier,
-      this.getBillingRegion(),
+      getBedrockRuntimeBillingRegion(this.getBillingRegion(), this.getApiUrl()),
       cached,
     );
   }
@@ -366,7 +370,7 @@ export class BedrockRuntimeResponsesProvider extends BedrockOpenAiResponsesProvi
       data.usage,
       config,
       data.service_tier ?? config.service_tier,
-      this.getBillingRegion(),
+      getBedrockRuntimeBillingRegion(this.getBillingRegion(), this.getApiUrl()),
       cached,
     );
     const { cost: _previousCost, ...unbilled } = result;

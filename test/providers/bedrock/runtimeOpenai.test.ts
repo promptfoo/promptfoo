@@ -696,6 +696,29 @@ describe.each([
     expect(JSON.parse(String(request?.body)).service_tier).toBe('priority');
   });
 
+  it.each([
+    ['default', 1],
+    ['priority', 1.75],
+    ['flex', 0.5],
+  ] as const)(
+    'prices GovCloud Grok 4.7 on the reported %s tier',
+    async (serviceTier, multiplier) => {
+      mockPricingResponse(200, 0, serviceTier);
+      const result = await new Provider('us.xai.grok-4.7', {
+        config: {
+          apiKey: 'fixture',
+          region: 'us-east-1',
+          apiBaseUrl: 'https://bedrock-runtime-fips.us-gov-east-1.amazonaws.com/openai/v1',
+        },
+      }).callApi('hello');
+      expect(result.error).toBeUndefined();
+      expect(result.cost).toBeCloseTo(
+        ((800 * 2.64 + 200 * 0.66 + 1000 * 7.92) / 1e6) * multiplier,
+        12,
+      );
+    },
+  );
+
   it('does not invent a price for a reported Kimi Reserved tier', async () => {
     mockPricingResponse(200, 100, 'reserved');
     const result = await new Provider('global.moonshotai.kimi-k3', {

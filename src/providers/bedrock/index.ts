@@ -20,7 +20,11 @@ import {
 } from '../anthropic/util';
 import { parseChatPrompt } from '../shared';
 import { AwsBedrockGenericProvider, type BedrockOptions, createBedrockCacheKeyHash } from './base';
-import { calculateBedrockInvokeModelCost, isBedrockGrokRuntimeProfile } from './pricing';
+import {
+  calculateBedrockInvokeModelCost,
+  getBedrockRuntimeBillingRegion,
+  isBedrockGrokRuntimeProfile,
+} from './pricing';
 import { requiresBedrockAnthropicMessagesModel } from './routing';
 import { INFERENCE_PROFILE_PREFIX, novaOutputFromMessage, novaParseMessages } from './util';
 
@@ -533,6 +537,7 @@ interface BedrockQwenGenerationOptions extends BedrockOptions {
  * — so this handler always sends `max_tokens`.
  */
 interface BedrockOpenAICompatGenerationOptions extends BedrockQwenGenerationOptions {
+  service_tier?: 'default' | 'priority' | 'flex';
   /**
    * Reasoning depth for reasoning-capable models in this group (e.g. MiniMax M2, NVIDIA
    * Nemotron). Forwarded as-is so Bedrock validates it; omitted unless explicitly set.
@@ -2830,6 +2835,20 @@ export class AwsBedrockCompletionProvider extends AwsBedrockGenericProvider impl
     }
     const params = await model.params(mergedConfig, prompt, stop, this.modelName, context?.vars);
 
+    const grok47 =
+      isBedrockGrokRuntimeProfile(this.modelName) && this.modelName.endsWith('grok-4.7');
+    const grokTier = grok47
+      ? (mergedConfig as BedrockOpenAICompatGenerationOptions).service_tier
+      : undefined;
+    if (grokTier !== undefined) {
+      if (grokTier !== 'default' && grokTier !== 'priority' && grokTier !== 'flex') {
+        throw new Error(
+          'Grok 4.7 InvokeModel supports default, priority, and flex service_tier values.',
+        );
+      }
+      params.service_tier = grokTier;
+    }
+
     logger.debug('Calling Amazon Bedrock API', { params });
 
     const cache = await getCache();
@@ -2981,8 +3000,11 @@ export class AwsBedrockCompletionProvider extends AwsBedrockGenericProvider impl
               ? output.usage?.prompt_tokens_details?.cache_write_tokens
               : output.usage?.cache_creation_input_tokens,
           ),
-        region,
+        getBedrockRuntimeBillingRegion(region, this.config.endpoint),
         coerceStrToNum(output.usage?.cache_creation?.ephemeral_1h_input_tokens),
+        grok47 && (output.service_tier ?? grokTier)
+          ? { type: output.service_tier ?? grokTier }
+          : undefined,
       );
 
       return {
