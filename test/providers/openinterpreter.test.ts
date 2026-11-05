@@ -107,7 +107,12 @@ async function startTurn(
   );
   server.send({
     id: threadStart.id,
-    result: { thread: { id: options.threadId ?? 'thr_interpreter' } },
+    result: {
+      thread: {
+        id: options.threadId ?? 'thr_interpreter',
+        environments: threadStart.params.environments,
+      },
+    },
   });
 
   const turnStart = await waitForMessage(server, (message) => message.method === 'turn/start');
@@ -586,6 +591,42 @@ describe('OpenInterpreterProvider', () => {
     expect(turnStart.params.sandboxPolicy).toMatchObject({ type: 'readOnly' });
     completeTurn(server, 'reviewed');
     await expect(resultPromise).resolves.toMatchObject({ output: 'reviewed' });
+  });
+
+  it.each([false, true])('renders environment_access as %s for each row', async (allowEnv) => {
+    mockProcessEnv({ OPENAI_API_KEY: undefined });
+    const server = createMockAppServer();
+    mocks.spawn.mockReturnValue(server.proc);
+    const provider = new OpenInterpreterProvider({
+      config: {
+        environment_access: '{{allowEnv}}',
+        sandbox_policy: {
+          type: 'readOnly',
+          access: { type: 'restricted', readableRoots: ['/workspace/{{dir}}'] },
+        },
+        skip_git_repo_check: true,
+      } as any,
+    });
+
+    const pending = provider.callApi('Read the receipt', {
+      vars: { allowEnv, dir: 'receipts' },
+      prompt: {
+        raw: 'Read the receipt',
+        label: 'templated environment',
+        config: { environment_access: undefined, sandbox_policy: undefined },
+      },
+    });
+    const { threadStart, turnStart } = await startTurn(server);
+    expect(turnStart.params.sandboxPolicy.access.readableRoots).toEqual(['/workspace/receipts']);
+    for (const request of [threadStart, turnStart]) {
+      if (allowEnv) {
+        expect(request.params).not.toHaveProperty('environments');
+      } else {
+        expect(request.params.environments).toEqual([]);
+      }
+    }
+    completeTurn(server, 'reviewed');
+    await expect(pending).resolves.toMatchObject({ output: 'reviewed' });
   });
 
   it('renders Nunjucks statement templates in typed base-provider options', async () => {
