@@ -27,7 +27,7 @@ promptfoo view
 
 ## What's in this Example
 
-- Compares GPT Image 2.5 Flare and Sunburst with GPT Image 2, 1.5, 1, and 1 Mini
+- Compares GPT Image 2.5 Flare and Sunburst with GPT Image 2, 1.5, and 1 Mini
 - Uses text-to-image generation through the Image API generations endpoint
 - Tests artistic style prompts across different models
 - Configures different image sizes and quality settings
@@ -89,22 +89,6 @@ providers:
       moderation: auto # auto, low
 ```
 
-### GPT Image 1
-
-High-quality image generation model with superior instruction following and text rendering.
-
-```yaml
-providers:
-  - id: openai:image:gpt-image-1
-    config:
-      size: 1024x1024 # 1024x1024, 1024x1536, 1536x1024, auto
-      quality: low # low, medium, high, auto
-      background: transparent # transparent, opaque, auto
-      output_format: webp # png, jpeg, webp
-      output_compression: 80 # 0-100, only set with jpeg/webp
-      moderation: auto # auto, low
-```
-
 ### GPT Image 1 Mini
 
 Cost-efficient version of GPT Image 1 with the same capabilities at lower cost.
@@ -121,7 +105,9 @@ providers:
       moderation: auto # auto, low
 ```
 
-### DALL-E 3 and DALL-E 2
+### Retired image models
+
+OpenAI shut down `gpt-image-1` on October 23, 2026. GPT Image 1.5 and 1 Mini remain available until December 1, 2026. [OpenAI deprecations](https://developers.openai.com/api/docs/deprecations)
 
 `dall-e-3` and `dall-e-2` were [retired from the OpenAI API](https://developers.openai.com/api/docs/deprecations) on May 12, 2026. The provider retains compatibility for gateways that still expose them. Use `gpt-image-2.5-flare` or `gpt-image-2.5-sunburst` for new evals.
 
@@ -148,9 +134,6 @@ Output-only estimates for earlier models:
 | GPT Image 1.5    | Low     | 1024x1024 | $0.009          |
 | GPT Image 1.5    | Medium  | 1024x1024 | $0.034          |
 | GPT Image 1.5    | High    | 1024x1024 | $0.133          |
-| GPT Image 1      | Low     | 1024x1024 | $0.011          |
-| GPT Image 1      | Medium  | 1024x1024 | $0.042          |
-| GPT Image 1      | High    | 1024x1024 | $0.167          |
 | GPT Image 1 Mini | Low     | 1024x1024 | $0.005          |
 | GPT Image 1 Mini | Medium  | 1024x1024 | $0.011          |
 | GPT Image 1 Mini | High    | 1024x1024 | $0.036          |
