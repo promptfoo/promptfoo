@@ -34,6 +34,7 @@ import { OpenAiGenericProvider } from '.';
 import {
   calculateObservableOpenAIToolCost,
   calculateOpenAIUsageCost,
+  getBedrockBillingEndpoint,
   usesAzureOpenAiBilling,
 } from './billing';
 import {
@@ -888,7 +889,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     const isBedrock = this.getGenAISystem() === 'bedrock' || bedrockEndpoint !== undefined;
     const runtimeProfile =
       bedrockEndpoint === 'runtime'
-        ? /^(global|us)\.openai\.(.+)$/.exec(unprefixedModelName)
+        ? /^(global|us|us-gov|in)\.openai\.(.+)$/.exec(unprefixedModelName)
         : null;
     const billingModelName =
       runtimeProfile?.[2] ??
@@ -909,6 +910,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
         cachedResponse: cached,
         provider: isBedrock ? 'bedrock' : this.getGenAISystem(),
         region: this.getBillingRegion(),
+        bedrockProfile: runtimeProfile?.[1],
         regionalProcessing,
         serviceTier,
       },
@@ -935,18 +937,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
   }
 
   private getBedrockEndpoint(): 'mantle' | 'runtime' | undefined {
-    try {
-      const hostname = new URL(this.getApiUrl()).hostname;
-      if (/^bedrock-mantle\.[a-z0-9-]+\.api\.aws$/.test(hostname)) {
-        return 'mantle';
-      }
-      if (/^bedrock-runtime(?:-fips)?\.[a-z0-9-]+\.(?:amazonaws\.com|api\.aws)$/.test(hostname)) {
-        return 'runtime';
-      }
-    } catch {
-      // Invalid custom URLs are reported when the request is made.
-    }
-    return undefined;
+    return getBedrockBillingEndpoint(URL.parse(this.getApiUrl())?.hostname)?.service;
   }
 
   private supportsPersistedGpt6EffortUpdates(): boolean {

@@ -185,6 +185,80 @@ describe('OpenAI billing helpers', () => {
     });
   });
 
+  describe('Bedrock OpenAI model card rates', () => {
+    it.each([
+      ['bedrock:gpt-daybreak-blue-5.6-sol', 'us-east-2', 'default', 4.4, 0.44, 5.5, 22],
+      ['gpt-6.1-sol', 'us-east-1', 'default', 2.2, 0.11, 2.75, 11],
+      ['gpt-6-astra', 'us-west-2', 'default', 11, 1.1, 13.75, 55],
+      ['gpt-6-astra', 'us-east-1', 'ultrafast', 66, 6.6, 82.5, 330],
+    ] as const)(
+      'prices %s on Mantle in %s (%s)',
+      (model, region, serviceTier, input, read, write, output) => {
+        const usage = createCachedResponsesUsage();
+        const options = {
+          apiUrl: `https://bedrock-mantle.${region}.api.aws/openai/v1`,
+          serviceTier,
+        };
+        for (const tokens of [272_000, 272_001]) {
+          const inputCost = (tokens - 750) * input + 500 * read + 250 * write;
+          const expected =
+            tokens === 272_000 ? inputCost + 1000 * output : 2 * inputCost + 1500 * output;
+          expect(
+            calculateOpenAIUsageCost(model, {}, { ...usage, input_tokens: tokens }, options),
+          ).toBeCloseTo(expected / 1e6, 10);
+        }
+        expect(
+          calculateOpenAIUsageCost(model, {}, usage, { ...options, serviceTier: 'flex' }),
+        ).toBeUndefined();
+      },
+    );
+    it.each([
+      ['bedrock:gpt-daybreak-blue-5.6-sol', 'us-east-1', 'default'],
+      ['gpt-6.1-sol', 'us-east-2', 'default'],
+      ['gpt-6-astra', 'us-west-2', 'ultrafast'],
+    ])('leaves unsupported %s %s %s rates unknown', (model, region, serviceTier) => {
+      const options = { provider: 'bedrock', region, serviceTier };
+      expect(
+        calculateOpenAIUsageCost(model, {}, createCachedResponsesUsage(), options),
+      ).toBeUndefined();
+      expect(
+        calculateOpenAIUsageCost(model, { cost: 0 }, createCachedResponsesUsage(), options),
+      ).toBe(0);
+    });
+    it('prices GPT-5.4 short-context input in GovCloud West including cache reads', () => {
+      const options = { apiUrl: 'https://bedrock-mantle.us-gov-west-1.api.aws/openai/v1' };
+      const usage = {
+        input_tokens: 272_000,
+        input_tokens_details: { cached_tokens: 500 },
+        output_tokens: 1000,
+      };
+      expect(calculateOpenAIUsageCost('gpt-5.4', {}, usage, options)).toBeCloseTo(
+        (271_500 * 3.375 + 500 * 0.3375 + 1000 * 20.25) / 1e6,
+        10,
+      );
+      expect(
+        calculateOpenAIUsageCost('gpt-5.4', {}, { ...usage, input_tokens: 272_001 }, options),
+      ).toBeUndefined();
+    });
+    it.each([
+      ['gpt-6.1-sol', 'us', 'default', 2.2, 0.11, 2.75, 11],
+      ['gpt-6.1-sol', 'global', 'default', 2, 0.1, 2.5, 10],
+      ['gpt-6-astra', 'us', 'ultrafast', 66, 6.6, 82.5, 330],
+      ['gpt-6-astra', 'global', 'ultrafast', 60, 6, 75, 300],
+    ] as const)(
+      'prices %s Runtime %s profile, %s tier',
+      (model, bedrockProfile, serviceTier, input, read, write, output) => {
+        expect(
+          calculateOpenAIUsageCost(model, {}, createCachedResponsesUsage(), {
+            apiUrl: 'https://bedrock-runtime.us-east-1.amazonaws.com/openai/v1',
+            bedrockProfile,
+            serviceTier,
+          }),
+        ).toBeCloseTo((1250 * input + 500 * read + 250 * write + 1000 * output) / 1e6, 10);
+      },
+    );
+  });
+
   describe('Bedrock GPT-5.6 Cyber', () => {
     const model = 'bedrock:gpt-5.6-cyber';
     const usage = createCachedResponsesUsage();
@@ -638,7 +712,7 @@ describe('OpenAI billing helpers', () => {
       ).toBeCloseTo(0.007, 10);
     });
 
-    it('does not infer unannounced Bedrock Astra prices from OpenAI prices', () => {
+    it('requires a Bedrock route and tier to estimate Astra pricing', () => {
       expect(
         calculateOpenAIUsageCostFromTokenUsage('openai.gpt-6-astra', {
           prompt: 2000,
@@ -1226,14 +1300,14 @@ describe('OpenAI billing helpers', () => {
       for (const region of ['us-gov-east-1', 'us-gov-west-1']) {
         const apiUrl = `https://bedrock-mantle.${region}.api.aws/openai/v1`;
         expect(calculateOpenAIUsageCost(model, {}, shortUsage, { apiUrl })).toBeCloseTo(
-          shortBaseCost * 1.1 * 1.2,
+          shortBaseCost * 1.35,
           10,
         );
         expect(calculateOpenAIUsageCost(model, {}, longUsage, { apiUrl })).toBeCloseTo(
-          longBaseCost * 1.1 * 1.2,
+          longBaseCost * 1.35,
           10,
         );
-        // GovCloud rates are In-Region Mantle rates; Runtime has only commercial CRIS profiles.
+        // Runtime uses the explicit GovCloud inference profile.
         for (const runtimeHost of [
           `bedrock-runtime.${region}.amazonaws.com`,
           `bedrock-runtime.${region}.api.aws`,
@@ -1246,7 +1320,7 @@ describe('OpenAI billing helpers', () => {
               region,
               regionalProcessing: true,
             }),
-          ).toBeCloseTo(shortBaseCost * 1.1, 10);
+          ).toBeUndefined();
         }
       }
 
@@ -1256,7 +1330,7 @@ describe('OpenAI billing helpers', () => {
           regionalProcessing: true,
           apiUrl: 'https://proxy.example.test/openai/v1',
         }),
-      ).toBeCloseTo(shortBaseCost * 1.1 * 1.2, 10);
+      ).toBeCloseTo(shortBaseCost * 1.35, 10);
       expect(
         calculateOpenAIUsageCost(model, {}, shortUsage, {
           provider: 'bedrock',
@@ -1264,7 +1338,7 @@ describe('OpenAI billing helpers', () => {
           regionalProcessing: true,
           apiUrl: 'https://proxy.example.test/openai/v1',
         }),
-      ).toBeCloseTo(shortBaseCost * 1.1 * 1.2, 10);
+      ).toBeCloseTo(shortBaseCost * 1.35, 10);
       expect(
         calculateOpenAIUsageCost(model, { region: 'us-gov-east-1' }, shortUsage, {
           provider: 'bedrock',
@@ -1277,12 +1351,12 @@ describe('OpenAI billing helpers', () => {
           provider: 'bedrock',
           regionalProcessing: false,
         }),
-      ).toBeCloseTo(shortBaseCost, 10);
+      ).toBeUndefined();
       expect(
         calculateOpenAIUsageCost(model, { inputCost: 7 / 1e6 }, shortUsage, {
           apiUrl: 'https://bedrock-mantle.us-gov-east-1.api.aws/openai/v1',
         }),
-      ).toBeCloseTo((2_000 * 7 + 1_000 * output * 1.1 * 1.2) / 1e6, 10);
+      ).toBeCloseTo((2_000 * 7 + 1_000 * output * 1.35) / 1e6, 10);
     },
   );
 
@@ -1663,9 +1737,9 @@ describe('OpenAI billing helpers', () => {
   );
 
   it.each([
-    ['us-gov-west-1', 272_000, 2.64, 0.264, 3.3, 15.84],
-    ['us-gov-west-1', 272_001, 5.28, 0.528, 6.6, 23.76],
-    ['us-gov-east-1', 272_000, 2.64, 0.264, 3.3, 15.84],
+    ['us-gov-west-1', 272_000, 2.7, 0.27, 3.375, 16.2],
+    ['us-gov-west-1', 272_001, 5.4, 0.54, 6.75, 24.3],
+    ['us-gov-east-1', 272_000, 2.7, 0.27, 3.375, 16.2],
   ])(
     'uses published Terra GovCloud rates for explicit %s at %s input tokens',
     (region, inputTokens, input, cached, write, output) => {

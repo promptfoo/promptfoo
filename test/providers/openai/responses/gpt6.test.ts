@@ -1015,36 +1015,80 @@ describe('GPT-6 Sol and Luna Responses billing', () => {
   it.each([
     ['gpt-5.6-terra', 0.014],
     ['gpt-5.6-luna', 0.0014],
-  ] as const)('applies GovCloud rates for %s only on In-Region Mantle', async (model, baseCost) => {
-    const usage = {
-      input_tokens: 1_000,
-      output_tokens: 1_000,
-      total_tokens: 2_000,
-      cache_write_input_tokens: 0,
-    };
-    const runtimeUrl = 'https://bedrock-runtime.us-gov-west-1.amazonaws.com/openai/v1';
-    const callApi = async (wireModel: string, apiBaseUrl: string) => {
-      vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-        data: { ...responseData, model: wireModel, usage },
-      });
-      const result = await new OpenAiResponsesProvider(wireModel, {
-        config: { apiKey: 'test-key', apiBaseUrl },
-      }).callApi('Say ready.');
-      expect(result.error).toBeUndefined();
-      return result.cost;
-    };
+  ] as const)(
+    'applies GovCloud rates for %s on Mantle and regional Runtime profiles',
+    async (model, baseCost) => {
+      const usage = {
+        input_tokens: 1_000,
+        output_tokens: 1_000,
+        total_tokens: 2_000,
+        cache_write_input_tokens: 0,
+      };
+      const runtimeUrl = 'https://bedrock-runtime.us-gov-west-1.amazonaws.com/openai/v1';
+      const callApi = async (wireModel: string, apiBaseUrl: string) => {
+        vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
+          cached: false,
+          status: 200,
+          statusText: 'OK',
+          data: { ...responseData, model: wireModel, usage },
+        });
+        const result = await new OpenAiResponsesProvider(wireModel, {
+          config: { apiKey: 'test-key', apiBaseUrl },
+        }).callApi('Say ready.');
+        expect(result.error).toBeUndefined();
+        return result.cost;
+      };
 
-    // AWS lists GovCloud for these models only on Mantle; Runtime has no GovCloud profile.
-    expect(
-      await callApi(`openai.${model}`, 'https://bedrock-mantle.us-gov-west-1.api.aws/openai/v1'),
-    ).toBeCloseTo(baseCost * 1.1 * 1.2, 10);
-    expect(await callApi(`us.openai.${model}`, runtimeUrl)).toBeCloseTo(baseCost * 1.1, 10);
-    expect(await callApi(`global.openai.${model}`, runtimeUrl)).toBeCloseTo(baseCost, 10);
-    expect(await callApi(`us-gov.openai.${model}`, runtimeUrl)).toBeUndefined();
-  });
+      expect(
+        await callApi(`openai.${model}`, 'https://bedrock-mantle.us-gov-west-1.api.aws/openai/v1'),
+      ).toBeCloseTo(baseCost * 1.35, 10);
+      expect(await callApi(`us.openai.${model}`, runtimeUrl)).toBeUndefined();
+      expect(await callApi(`global.openai.${model}`, runtimeUrl)).toBeUndefined();
+      expect(await callApi(`us-gov.openai.${model}`, runtimeUrl)).toBeCloseTo(baseCost * 1.35, 10);
+    },
+  );
+
+  it.each([
+    ['in.openai.gpt-5.6-terra', 'bedrock-runtime.ap-south-1.amazonaws.com', 0.0154],
+    ['in.openai.gpt-5.6-luna', 'bedrock-runtime.ap-south-2.amazonaws.com', 0.00154],
+    [
+      'us-gov.openai.gpt-5.6-luna',
+      'vpce-abcd.bedrock-runtime-fips.us-gov-east-1.vpce.amazonaws.com',
+      0.00189,
+    ],
+    ['in.openai.gpt-5.6-terra', 'bedrock-runtime.us-east-1.amazonaws.com', undefined],
+    ['in.openai.gpt-6.1-terra', 'bedrock-runtime.ap-south-1.amazonaws.com', undefined],
+    ['us-gov.openai.gpt-5.6-terra', 'bedrock-runtime.us-east-1.amazonaws.com', undefined],
+    ['us-gov.openai.gpt-5.4', 'bedrock-runtime.us-gov-west-1.amazonaws.com', undefined],
+  ] as const)(
+    'uses exact Geo CRIS prices for passthrough model %s on %s',
+    async (model, host, expected) => {
+      const usage = { input_tokens: 1000, output_tokens: 1000, cache_write_input_tokens: 0 };
+      for (const explicitCost of [undefined, 0.0001]) {
+        vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
+          cached: false,
+          status: 200,
+          statusText: 'OK',
+          data: { ...responseData, model, usage },
+        });
+        const result = await new OpenAiResponsesProvider('gpt-4.1', {
+          config: {
+            apiKey: 'test-key',
+            apiBaseUrl: `https://${host}/openai/v1`,
+            cost: explicitCost,
+            passthrough: { model },
+          },
+        }).callApi('Say ready.');
+        expect(result.error).toBeUndefined();
+        const expectedCost = explicitCost === undefined ? expected : 0.2;
+        if (expectedCost === undefined) {
+          expect(result.cost).toBeUndefined();
+        } else {
+          expect(result.cost).toBeCloseTo(expectedCost, 10);
+        }
+      }
+    },
+  );
 
   it.each([
     ['gpt-6-sol', 0.012, 0.0132],

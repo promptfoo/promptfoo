@@ -2734,7 +2734,7 @@ export function getHandlerForModel(
   if (modelName.startsWith('qwen.')) {
     return BEDROCK_MODEL.QWEN;
   }
-  // Open-weight gpt-oss models are the only OpenAI models served via InvokeModel. The
+  // This adapter implements the GPT OSS InvokeModel contract. The
   // frontier gpt-5.x models use the OpenAI-compatible Responses API and are routed to the
   // OpenAI Responses provider in src/providers/families/aws.ts before reaching this handler.
   if (modelName.includes('openai.gpt-oss')) {
@@ -2755,22 +2755,15 @@ export function getHandlerForModel(
     );
   }
   if (modelName.includes('openai.')) {
-    // GPT-5.6 Runtime profiles support Converse, but not InvokeModel. Older frontier
-    // models retain their established Mantle Responses guidance.
-    const bareFrontierId = modelName.replace(/^[a-z]+\.(?=openai\.)/, '');
-    if (/^[a-z]+\.openai\.gpt-5\.6-(?:sol|terra|luna)$/.test(modelName)) {
-      throw new Error(
-        `OpenAI model "${modelName}" is not served by Bedrock's InvokeModel API. ` +
-          `For a supported Runtime inference profile, use "bedrock:converse:${modelName}" ` +
-          `with AWS credentials, ` +
-          `or "bedrock:${bareFrontierId}" with AWS_BEARER_TOKEN_BEDROCK for Mantle Responses.`,
-      );
-    }
+    const bareId = modelName.replace(/^[a-z-]+\.(?=openai\.)/, '');
+    const converse =
+      modelName === bareId
+        ? ''
+        : `If AWS lists this Runtime inference profile, use "bedrock:converse:${modelName}" for Converse. `;
     throw new Error(
-      `OpenAI model "${modelName}" is not served by Bedrock's InvokeModel API. Frontier ` +
-        `models (gpt-5.x) use the OpenAI-compatible Responses API — use ` +
-        `"bedrock:${bareFrontierId}" and set AWS_BEARER_TOKEN_BEDROCK. See ` +
-        `https://www.promptfoo.dev/docs/providers/aws-bedrock/#openai-models`,
+      `Promptfoo's Bedrock InvokeModel adapter does not support "${modelName}". ` +
+        converse +
+        `For the Mantle Responses API, use "bedrock:${bareId}".`,
     );
   }
   if (modelName.includes('xai.') || modelName.includes('grok')) {

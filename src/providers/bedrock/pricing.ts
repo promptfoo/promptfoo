@@ -8,6 +8,7 @@ import {
   isClaudeSonnet5Model,
   isClaudeSonnet55Model,
 } from '../anthropic/util';
+import { getBedrockGovCloudTextRates } from './openaiGovCloudPricing';
 
 export type BedrockServiceTier = {
   type: 'priority' | 'default' | 'flex' | 'reserved';
@@ -476,6 +477,29 @@ export function calculateBedrockCost(
   }
 
   const normalizedModelId = modelId.toLowerCase();
+  const govCloudProfile =
+    /^(?:arn:aws-us-gov:bedrock:us-gov-(?:east|west)-1:\d{12}:inference-profile\/)?us-gov\.openai\.(gpt-5\.6-(?:terra|luna))$/.exec(
+      normalizedModelId,
+    );
+  if (govCloudProfile) {
+    if (
+      (region && !/^us-gov-(?:east|west)-1$/.test(region)) ||
+      (serviceTier?.type && serviceTier.type !== 'default') ||
+      cacheWrite1hTokens > 0
+    ) {
+      return undefined;
+    }
+    const rates = getBedrockGovCloudTextRates(
+      govCloudProfile[1],
+      promptTokens + cacheReadTokens + cacheWriteTokens,
+    )!;
+    return (
+      promptTokens * rates.input +
+      cacheReadTokens * rates.cachedInput +
+      cacheWriteTokens * rates.cacheWriteInput +
+      completionTokens * rates.output
+    );
+  }
   if (isBedrockGrok46Profile(normalizedModelId)) {
     // AWS publishes Standard rates for these profiles, with a separate cached-input rate.
     // No other service tier or cache-write price is established by the model card.
