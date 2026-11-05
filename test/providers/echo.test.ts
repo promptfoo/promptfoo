@@ -111,6 +111,7 @@ describe('EchoProvider', () => {
       expect(result.metadata).toEqual({
         test: 'value',
       });
+      expect((await provider.callApi(input, context)).metadata).toEqual(context.metadata);
     });
 
     it('should respect the configured delay', async () => {
@@ -125,6 +126,29 @@ describe('EchoProvider', () => {
       await responsePromise;
 
       expect(Date.now() - startTime).toBe(100);
+    });
+
+    it('rejects an already cancelled call even without a delay', async () => {
+      const reason = new Error('stop echo');
+      await expect(
+        new EchoProvider().callApi('input', undefined, {
+          abortSignal: AbortSignal.abort(reason),
+        }),
+      ).rejects.toBe(reason);
+    });
+
+    it('releases the pending delay when the caller aborts', async () => {
+      vi.useFakeTimers();
+      const controller = new AbortController();
+      const pending = new EchoProvider({ delay: 60000 }).callApi('input', undefined, {
+        abortSignal: controller.signal,
+      });
+      const rejected = expect(pending).rejects.toThrow('cancelled by user');
+      controller.abort();
+      const pendingTimers = vi.getTimerCount();
+      await vi.runAllTimersAsync();
+      await rejected;
+      expect(pendingTimers).toBe(0);
     });
 
     it('should handle empty input', async () => {
