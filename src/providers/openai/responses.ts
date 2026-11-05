@@ -27,13 +27,18 @@ import {
 import { ResponsesProcessor } from '../responses/index';
 import { normalizeResponsesInput } from '../responses/input';
 import { getResponsesTokenUsage } from '../responses/processor';
-import { getResponsesOutputText, readResponsesStream } from '../responses/stream';
+import {
+  getResponsesOutputText,
+  IncompleteResponsesStreamError,
+  readResponsesStream,
+} from '../responses/stream';
 import { getRequestTimeoutMs, LONG_RUNNING_MODEL_TIMEOUT_MS } from '../shared';
 import { buildChatSpanContext, extractProviderResponseAttributes, withGenAISpan } from '../tracing';
 import { OpenAiGenericProvider } from '.';
 import {
   calculateObservableOpenAIToolCost,
   calculateOpenAIUsageCost,
+  getBedrockBillingEndpoint,
   usesAzureOpenAiBilling,
 } from './billing';
 import {
@@ -841,6 +846,12 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       : !this.isReasoningCapabilityModel(modelName);
   }
 
+  protected getConfiguredTopP(config: Pick<OpenAiResponsesConfig, 'top_p'>): number | undefined {
+    return config.top_p !== undefined || getEnvString('OPENAI_TOP_P')
+      ? (config.top_p ?? getEnvFloat('OPENAI_TOP_P', 1))
+      : undefined;
+  }
+
   private getEffectiveModelName(config: OpenAiBillingConfig): string {
     const passthroughModel = (config.passthrough as { model?: unknown } | undefined)?.model;
     return typeof passthroughModel === 'string'
@@ -854,6 +865,10 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
 
   private usesGatewayErrorFormat(): boolean {
     return this.getGenAISystem() === 'openai' && isCustomOpenAiEndpoint(this.getApiUrl());
+  }
+
+  protected requiresResponsesStreamTerminalEvent(): boolean {
+    return false;
   }
 
   protected getBillingUsage(data: any, _config: OpenAiBillingConfig): any {
@@ -888,7 +903,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     const isBedrock = this.getGenAISystem() === 'bedrock' || bedrockEndpoint !== undefined;
     const runtimeProfile =
       bedrockEndpoint === 'runtime'
-        ? /^(global|us)\.openai\.(.+)$/.exec(unprefixedModelName)
+        ? /^(global|us|us-gov|in)\.openai\.(.+)$/.exec(unprefixedModelName)
         : null;
     const billingModelName =
       runtimeProfile?.[2] ??
@@ -909,6 +924,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
         cachedResponse: cached,
         provider: isBedrock ? 'bedrock' : this.getGenAISystem(),
         region: this.getBillingRegion(),
+        bedrockProfile: runtimeProfile?.[1],
         regionalProcessing,
         serviceTier,
       },
@@ -935,18 +951,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
   }
 
   private getBedrockEndpoint(): 'mantle' | 'runtime' | undefined {
-    try {
-      const hostname = new URL(this.getApiUrl()).hostname;
-      if (/^bedrock-mantle\.[a-z0-9-]+\.api\.aws$/.test(hostname)) {
-        return 'mantle';
-      }
-      if (/^bedrock-runtime(?:-fips)?\.[a-z0-9-]+\.(?:amazonaws\.com|api\.aws)$/.test(hostname)) {
-        return 'runtime';
-      }
-    } catch {
-      // Invalid custom URLs are reported when the request is made.
-    }
-    return undefined;
+    return getBedrockBillingEndpoint(URL.parse(this.getApiUrl())?.hostname)?.service;
   }
 
   private supportsPersistedGpt6EffortUpdates(): boolean {
@@ -1116,6 +1121,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
         ? (config.temperature ?? temperatureDefault)
         : undefined;
     const reasoningEffort = isReasoningModel ? effectiveReasoningEffort : undefined;
+    const topP = this.getConfiguredTopP(config);
 
     const instructions = config.instructions;
 
@@ -1178,9 +1184,8 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       ...(reasoningEffort ? { reasoning: { effort: reasoningEffort } } : {}),
       ...(temperature === undefined ? {} : { temperature }),
       ...(instructions ? { instructions } : {}),
-      ...((isGPT6Model || !reasoningEffort || reasoningEffort === 'none') &&
-      (config.top_p !== undefined || getEnvString('OPENAI_TOP_P'))
-        ? { top_p: config.top_p ?? getEnvFloat('OPENAI_TOP_P', 1) }
+      ...((isGPT6Model || !reasoningEffort || reasoningEffort === 'none') && topP !== undefined
+        ? { top_p: topP }
         : {}),
       ...(responsesTools ? { tools: responsesTools } : {}),
       ...(toolChoice ? { tool_choice: toolChoice } : {}),
@@ -1374,8 +1379,8 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     }
 
     let data: OpenAIResponsesResponse;
-    let status: number;
-    let statusText: string;
+    let status = 0;
+    let statusText = 'Error';
     let cached = false;
     let deleteFromCache: (() => Promise<void>) | undefined;
     let updateCache:
@@ -1503,6 +1508,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
                 },
                 {
                   preserveFailedOutput: this.usesGatewayErrorFormat(),
+                  requireTerminalEvent: this.requiresResponsesStreamTerminalEvent(),
                   classifyError: classifyOpenAiGatewayStreamError,
                 },
               );
@@ -1566,6 +1572,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
               undefined,
               {
                 preserveFailedOutput: this.usesGatewayErrorFormat(),
+                requireTerminalEvent: this.requiresResponsesStreamTerminalEvent(),
                 classifyError: classifyOpenAiGatewayStreamError,
               },
             );
@@ -1757,21 +1764,32 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       if (!pollingBackground) {
         await deleteFromCache?.();
       }
-      return {
+      // A failed background poll must not reuse the creation response's status.
+      const foregroundStream = body.stream && !body.background;
+      const result = {
         error: `API call error: ${String(err)}`,
         metadata: {
           http: {
-            status: 0,
-            statusText: 'Error',
+            status: foregroundStream ? status : 0,
+            statusText: foregroundStream ? statusText : 'Error',
             headers: responseHeaders ?? {},
           },
         },
       };
+      if (err instanceof IncompleteResponsesStreamError && err.response?.usage) {
+        return this.applyBilling(
+          { ...result, tokenUsage: getResponsesTokenUsage(err.response, false), cached: false },
+          err.response,
+          config,
+          false,
+        );
+      }
+      return result;
     }
 
     if (data.error?.message) {
       await deleteFromCache?.();
-      return {
+      const result = {
         error: formatOpenAiError(data as OpenAIErrorResponse),
         metadata: {
           http: {
@@ -1781,6 +1799,14 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
           },
         },
       };
+      return data.usage
+        ? this.applyBilling(
+            { ...result, tokenUsage: getResponsesTokenUsage(data, cached), cached },
+            data,
+            config,
+            cached,
+          )
+        : result;
     }
 
     // Use shared processor for consistent behavior with Azure

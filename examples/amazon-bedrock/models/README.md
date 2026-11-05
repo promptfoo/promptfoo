@@ -43,8 +43,9 @@ This directory contains several example configurations for different Bedrock mod
 - [`promptfooconfig.openai-responses.yaml`](promptfooconfig.openai-responses.yaml) - OpenAI GPT-OSS 120B through the Bedrock Responses API (AWS credentials or `AWS_BEARER_TOKEN_BEDROCK`)
 - [`promptfooconfig.openai-frontier.yaml`](promptfooconfig.openai-frontier.yaml) - OpenAI GPT-6 Sol, GPT-5.6 Terra, and GPT-6 Luna with reasoning, explicit prompt caching, and streaming
 - [`promptfooconfig.grok.yaml`](promptfooconfig.grok.yaml) - xAI Grok 4.3 on the Bedrock Mantle endpoint (AWS credentials or `AWS_BEARER_TOKEN_BEDROCK`)
-- [`promptfooconfig.mantle.yaml`](promptfooconfig.mantle.yaml) - `bedrock:mantle:` Chat Completions endpoint for mantle-only models like GLM 4.6 and DeepSeek V3.1 (AWS credentials or `AWS_BEARER_TOKEN_BEDROCK`)
-- [`promptfooconfig.llama.yaml`](promptfooconfig.llama.yaml) - Llama3
+- [`promptfooconfig.mantle.yaml`](promptfooconfig.mantle.yaml) - `bedrock:mantle:` Chat Completions with GLM 5 and DeepSeek V3.2 (AWS credentials or `AWS_BEARER_TOKEN_BEDROCK`)
+- [`promptfooconfig.llama.yaml`](promptfooconfig.llama.yaml) - Llama 4 text models for accounts with access to the Legacy profiles
+- [`promptfooconfig.converse-images.yaml`](promptfooconfig.converse-images.yaml) - Image evaluation with Qwen3 VL through Converse
 - [`promptfooconfig.mistral.yaml`](promptfooconfig.mistral.yaml) - Mistral
 - [`promptfooconfig.openai-compatible.yaml`](promptfooconfig.openai-compatible.yaml) - OpenAI-compatible families: Z.AI GLM, MiniMax, Moonshot Kimi, NVIDIA Nemotron, Google Gemma, Writer Palmyra
 - [`promptfooconfig.nova.yaml`](promptfooconfig.nova.yaml) - Amazon's Nova models
