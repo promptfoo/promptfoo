@@ -11,26 +11,37 @@ import { DownloadIcon } from '@app/components/ui/icons';
 import { Spinner } from '@app/components/ui/spinner';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
 import { useCustomPoliciesMap } from '@app/hooks/useCustomPoliciesMap';
+import { downloadBlob } from '@app/hooks/useDownloadEval';
 import { useTelemetry } from '@app/hooks/useTelemetry';
+import { useToast } from '@app/hooks/useToast';
+import { callApi } from '@app/utils/api';
 import { displayNameOverrides } from '@promptfoo/redteam/constants';
+import { escapeCsvFormula } from '@promptfoo/util/text';
 import { stringify } from 'csv-stringify/browser/esm/sync';
-import { getPluginIdFromResult, getStrategyIdFromTest } from '../components/shared';
-import type { EvaluateResult, ResultsFile } from '@promptfoo/types';
+import {
+  getPluginIdFromResult,
+  getReportPrompt,
+  getStrategyIdFromTest,
+} from '../components/shared';
+import type { EvaluateResult, ResultsFile, SharedResults } from '@promptfoo/types';
 
 interface ReportDownloadButtonProps {
+  evalId: string;
   evalDescription: string;
   evalData: ResultsFile;
 }
 
-const ReportDownloadButton = ({ evalDescription, evalData }: ReportDownloadButtonProps) => {
+const ReportDownloadButton = ({ evalId, evalDescription, evalData }: ReportDownloadButtonProps) => {
   const [isDownloading, setIsDownloading] = useState(false);
   const [isHovering, setIsHovering] = useState(false);
 
   const { recordEvent } = useTelemetry();
+  const { showToast } = useToast();
 
   const customPoliciesById = useCustomPoliciesMap(evalData.config?.redteam?.plugins ?? []);
 
   function convertEvalDataToCsv(evalData: ResultsFile): string {
+    const injectVar = evalData.config.redteam?.injectVar ?? 'prompt';
     const rows = evalData.results.results.map((result: EvaluateResult, index: number) => {
       let pluginDisplayName = null;
 
@@ -45,6 +56,9 @@ const ReportDownloadButton = ({ evalDescription, evalData }: ReportDownloadButto
         }
       }
 
+      const pass = result.success ?? result.gradingResult?.pass;
+      const score = result.score ?? result.gradingResult?.score;
+
       return {
         'Test ID': index + 1,
         Plugin: pluginDisplayName,
@@ -53,23 +67,25 @@ const ReportDownloadButton = ({ evalDescription, evalData }: ReportDownloadButto
         // biome-ignore lint/suspicious/noExplicitAny: Type mismatch between AtomicTestCase and TestWithMetadata
         Strategy: getStrategyIdFromTest(result.testCase as any),
         Target: result.provider.label || result.provider.id || '',
-        Prompt:
-          result.vars.query?.toString() ||
-          result.vars.prompt?.toString() ||
-          result.prompt.raw ||
-          '',
-        Response: result.response?.output || '',
-        Pass:
-          result.gradingResult?.pass === true
-            ? `Pass${result.gradingResult?.score === undefined ? '' : ` (${result.gradingResult.score})`}`
-            : `Fail${result.gradingResult?.score === undefined ? '' : ` (${result.gradingResult.score})`}`,
-        Score: result.gradingResult?.score || '',
+        Prompt: getReportPrompt(result, injectVar),
+        Response: result.response?.output ?? '',
+        Pass: `${pass ? 'Pass' : 'Fail'}${score === undefined ? '' : ` (${score})`}`,
+        Score: score ?? '',
         Reason: result.gradingResult?.reason || '',
         Timestamp: new Date(evalData.createdAt).toISOString(),
       };
     });
 
-    return stringify(rows, {
+    const escapedRows = rows.map((row) =>
+      Object.fromEntries(
+        Object.entries(row).map(([key, value]) => [
+          key,
+          typeof value === 'string' ? escapeCsvFormula(value) : value,
+        ]),
+      ),
+    );
+
+    return stringify(escapedRows, {
       header: true,
       quoted: true,
       quoted_string: true,
@@ -86,32 +102,38 @@ const ReportDownloadButton = ({ evalDescription, evalData }: ReportDownloadButto
       : `report.${extension}`;
   };
 
-  const handleDownload = (format: 'csv' | 'json') => {
-    setIsDownloading(true);
+  const showDownloadError = (format: 'CSV' | 'JSON', error: unknown) => {
+    const message = error instanceof Error && error.message ? error.message : 'Unexpected error';
+    showToast(`Failed to download ${format}: ${message}`, 'error', 5000);
+  };
 
-    // Track report export
+  const handleDownload = async (format: 'CSV' | 'JSON') => {
+    setIsDownloading(true);
+    const extension = format.toLowerCase();
     recordEvent('webui_action', {
       action: 'redteam_report_export',
-      format,
+      format: extension,
     });
 
     try {
-      const content =
-        format === 'csv' ? convertEvalDataToCsv(evalData) : JSON.stringify(evalData, null, 2);
-      const blob = new Blob([content], {
-        type: format === 'csv' ? 'text/csv;charset=utf-8;' : 'application/json;charset=utf-8;',
+      const query = format === 'CSV' ? '?includeTraces=false' : '';
+      const response = await callApi(`/results/${encodeURIComponent(evalId)}${query}`, {
+        cache: 'no-store',
       });
-      const link = document.createElement('a');
-      if (link.download !== undefined) {
-        const url = URL.createObjectURL(blob);
-        link.setAttribute('href', url);
-        link.setAttribute('download', getFilename(format));
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
+      if (!response.ok) {
+        throw new Error(`Failed to load full evaluation data (${response.status})`);
       }
+      const body = (await response.json()) as SharedResults;
+      const content =
+        format === 'CSV' ? convertEvalDataToCsv(body.data) : JSON.stringify(body.data, null, 2);
+      const mimeType = format === 'CSV' ? 'text/csv' : 'application/json';
+      downloadBlob(
+        new Blob([content], { type: `${mimeType};charset=utf-8;` }),
+        getFilename(extension),
+      );
     } catch (error) {
-      console.error(format === 'csv' ? 'Error generating CSV:' : 'Error generating JSON:', error);
+      console.error(`Error generating ${format}:`, error);
+      showDownloadError(format, error);
     } finally {
       setIsDownloading(false);
     }
@@ -148,8 +170,8 @@ const ReportDownloadButton = ({ evalDescription, evalData }: ReportDownloadButto
       </Tooltip>
       <DropdownMenuContent align="end">
         <DropdownMenuItem onClick={handlePdfDownload}>PDF</DropdownMenuItem>
-        <DropdownMenuItem onClick={() => handleDownload('csv')}>CSV</DropdownMenuItem>
-        <DropdownMenuItem onClick={() => handleDownload('json')}>JSON</DropdownMenuItem>
+        <DropdownMenuItem onClick={() => handleDownload('CSV')}>CSV</DropdownMenuItem>
+        <DropdownMenuItem onClick={() => handleDownload('JSON')}>JSON</DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
   );

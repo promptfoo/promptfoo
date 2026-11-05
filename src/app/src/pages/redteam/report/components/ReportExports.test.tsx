@@ -1,6 +1,8 @@
 import type { ComponentProps } from 'react';
 
 import { TooltipProvider } from '@app/components/ui/tooltip';
+import { ToastProvider } from '@app/contexts/ToastContext';
+import { mockCallApiResponse } from '@app/tests/apiMocks';
 import { mockBrowserProperty, restoreBrowserMocks } from '@app/tests/browserMocks';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -12,6 +14,7 @@ import ReportDownloadButton from './ReportDownloadButton';
 type ResultsFile = ComponentProps<typeof ReportDownloadButton>['evalData'];
 
 const { recordEvent } = vi.hoisted(() => ({ recordEvent: vi.fn() }));
+vi.mock('@app/utils/api', () => ({ callApi: vi.fn() }));
 vi.mock('@app/hooks/useTelemetry', () => ({ useTelemetry: () => ({ recordEvent }) }));
 vi.mock('@app/hooks/useCustomPoliciesMap', () => ({ useCustomPoliciesMap: () => ({}) }));
 
@@ -30,6 +33,7 @@ describe('report exports', () => {
 
   beforeEach(() => {
     recordEvent.mockClear();
+    mockCallApiResponse({ data: evalData });
     mockBrowserProperty(
       URL,
       'createObjectURL',
@@ -74,8 +78,13 @@ describe('report exports', () => {
       const user = userEvent.setup();
       render(
         <TooltipProvider>
-          <ReportDownloadButton evalDescription="Example Report!" evalData={evalData} />
+          <ReportDownloadButton
+            evalId="test-eval"
+            evalDescription="Example Report!"
+            evalData={evalData}
+          />
         </TooltipProvider>,
+        { wrapper: ToastProvider },
       );
       await user.click(screen.getByRole('button', { name: 'download report' }));
       await user.click(screen.getByRole('menuitem', { name: format }));
@@ -113,8 +122,9 @@ describe('report exports', () => {
       const user = userEvent.setup();
       render(
         <TooltipProvider>
-          <ReportDownloadButton evalDescription="Example" evalData={evalData} />
+          <ReportDownloadButton evalId="test-eval" evalDescription="Example" evalData={evalData} />
         </TooltipProvider>,
+        { wrapper: ToastProvider },
       );
       await user.click(screen.getByRole('button', { name: 'download report' }));
       await user.click(screen.getByRole('menuitem', { name: format }));

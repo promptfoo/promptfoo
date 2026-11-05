@@ -43,6 +43,24 @@ const ResultParamsSchema = z.object({
   id: z.string().min(1),
 });
 
+const ResultRowParamsSchema = ResultParamsSchema.extend({
+  testIdx: z.coerce.number().int().nonnegative(),
+  promptIdx: z.coerce.number().int().nonnegative(),
+});
+
+const ResultRowQuerySchema = z.object({
+  resultId: z.string().min(1).optional(),
+  legacyResultIndex: z.coerce.number().int().nonnegative().optional(),
+});
+
+const ResultQuerySchema = z.object({
+  includeTraces: z
+    .union([z.boolean(), z.enum(['true', 'false'])])
+    .optional()
+    .transform((value) => value !== false && value !== 'false'),
+  resultProjection: z.enum(['full', 'redteamReport']).optional().default('full'),
+});
+
 const ResultResponseSchema = DataResponseSchema;
 
 const PromptsResponseSchema = z.object({
@@ -119,7 +137,17 @@ export const ServerSchemas = {
   },
   Result: {
     Params: ResultParamsSchema,
+    Query: ResultQuerySchema,
     Response: ResultResponseSchema,
+  },
+  ResultTools: {
+    Params: ResultParamsSchema,
+    Response: z.object({ data: UnknownArraySchema }),
+  },
+  ResultRow: {
+    Params: ResultRowParamsSchema,
+    Query: ResultRowQuerySchema,
+    Response: DataResponseSchema,
   },
   Prompts: {
     Response: PromptsResponseSchema,
