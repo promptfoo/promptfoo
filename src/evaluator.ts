@@ -20,7 +20,13 @@ import cliState from './cliState';
 import { DEFAULT_MAX_CONCURRENCY, FILE_METADATA_KEY } from './constants';
 import { getEnvBool, getEnvInt, getEvalTimeoutMs, getMaxEvalTimeMs, isCI } from './envars';
 import { compileDerivedMetricFormula } from './evaluator/derivedMetricFormula';
-import { collectFileMetadata, renderPrompt, runExtensionHook } from './evaluatorHelpers';
+import {
+  collectFileMetadata,
+  markStoredOutput,
+  renderPrompt,
+  runExtensionHook,
+  tagOutputRegisters,
+} from './evaluatorHelpers';
 import logger, { globalLogCallback, isDebugEnabled, setLogCallback } from './logger';
 import { selectMaxScore } from './matchers/comparison';
 import {
@@ -91,7 +97,6 @@ import {
   isProviderTypeMap,
   resolveConfiguredProviderReference,
 } from './util/gradingProvider';
-import { markOutputValue, setOutputVars } from './util/index';
 import invariant from './util/invariant';
 import { safeJsonStringify, summarizeEvaluateResultForLogging } from './util/json';
 import { accumulateNamedMetric, backfillNamedScoreWeights } from './util/namedMetrics';
@@ -1826,12 +1831,7 @@ async function runEvalInternal(
     vars: state.vars,
   });
   Object.assign(state.vars, registers);
-  if (registers) {
-    setOutputVars(state.vars, Object.keys(registers));
-    for (const val of Object.values(registers)) {
-      markOutputValue(val);
-    }
-  }
+  tagOutputRegisters(state.vars, registers);
   Object.assign(
     state.vars,
     getEvalRuntimeVars({
@@ -1991,7 +1991,7 @@ async function runEvalInternal(
           if (test.options?.storeOutputAs && ret.response?.output && registers) {
             // Save the output in a register for later use
             registers[test.options.storeOutputAs] = ret.response.output;
-            markOutputValue(ret.response.output);
+            markStoredOutput(ret.response.output);
           }
 
           return [ret];

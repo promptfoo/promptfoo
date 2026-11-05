@@ -27,6 +27,7 @@ import {
   getOutputVars,
   isOutputValue,
   isRuntimeVar,
+  markOutputValue,
   renderVarsInObject,
   setLoadedFileMimeTypes,
   setOutputVars,
@@ -36,6 +37,27 @@ import { filterFiniteScores } from './util/numeric';
 import { extractVariablesFromTemplate, getNunjucksEngine } from './util/templates';
 import { transform } from './util/transform';
 import { loadYaml } from './util/yamlLoad';
+
+/**
+ * Marks provider-output registers on a vars object.
+ * Lives here so evaluator.ts does not add another legacy-runtime -> node import.
+ */
+export function tagOutputRegisters(
+  vars: Record<string, VarValue>,
+  registers: Record<string, VarValue> | undefined,
+): void {
+  if (!registers) {
+    return;
+  }
+  setOutputVars(vars, Object.keys(registers));
+  for (const val of Object.values(registers)) {
+    markOutputValue(val);
+  }
+}
+
+export function markStoredOutput(output: unknown): void {
+  markOutputValue(output);
+}
 
 type FileMetadata = Record<string, { path: string; type: string; format?: string }>;
 
