@@ -3536,6 +3536,24 @@ describe('util', () => {
       vi.restoreAllMocks();
     });
 
+    it.each([
+      { model: 'gemini-2.5-pro', target: 'gemini-3.8-flash' },
+      { model: 'gemini-2.5-flash', target: 'gemini-3.5-flash-lite' },
+    ])(
+      'uses the Gemini API replacement tariff for $model from the cutover',
+      ({ model, target }) => {
+        // Use audio input so the old Flash tariff differs from the replacement.
+        const cost = (id: string, vertex = false) =>
+          calculateGoogleCost(id, {}, 1000, 500, vertex, 1000);
+        vi.spyOn(Date, 'now').mockReturnValue(Date.UTC(2026, 11, 1) - 1);
+        const originalVertexCost = cost(model, true);
+        expect(cost(model)).not.toBeCloseTo(cost(target)!, 10);
+        vi.spyOn(Date, 'now').mockReturnValue(Date.UTC(2026, 11, 1));
+        expect(cost(model)).toBeCloseTo(cost(target)!, 10);
+        expect(cost(model, true)).toBe(originalVertexCost);
+      },
+    );
+
     it('should return undefined for missing token counts', () => {
       expect(calculateGoogleCost('gemini-pro', {}, undefined, 100)).toBeUndefined();
       expect(calculateGoogleCost('gemini-pro', {}, 100, undefined)).toBeUndefined();
