@@ -403,6 +403,8 @@ const IMAGE_MODEL_RATES = buildRateTable<OpenAIModelRates>([
       'gpt-image-2.5-sunburst-2026-09-08',
       'gpt-image-2.5-flare',
       'gpt-image-2.5-flare-2026-09-08',
+      'gpt-image-2.6-sunburst',
+      'gpt-image-2.6-flare',
     ],
     rates: {
       text: { input: perMillion(5), cachedInput: perMillion(1.25) },
