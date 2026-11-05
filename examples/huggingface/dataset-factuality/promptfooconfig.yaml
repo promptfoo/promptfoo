@@ -14,7 +14,7 @@ providers:
   # Uncomment to add more providers
   # - bedrock:converse:amazon.nova-lite-v1:0
   # - openai:gpt-4.1-mini
-  # - google:gemini-2.5-flash
+  # - google:gemini-3.5-flash-lite
 
 defaultTest:
   options:
@@ -22,7 +22,7 @@ defaultTest:
     # provider: anthropic:messages:claude-sonnet-5
     # provider: bedrock:converse:amazon.nova-lite-v1:0
     # provider: openai:gpt-4.1-mini
-    # provider: google:gemini-2.5-flash
+    # provider: google:gemini-3.5-flash-lite
 
     # Optional: Custom scoring weights for different factuality categories
     factuality:
