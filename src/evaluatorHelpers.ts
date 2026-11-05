@@ -154,7 +154,16 @@ function regexLiteralEndAt(value: string, index: number, inExpression: boolean):
   }
   // A regex prefix can begin an expression, follow an operator, or follow a
   // keyword such as `not` or `if`, but not an identifier, literal, or closer.
-  const previousKeyword = /\b([A-Za-z_]\w*)$/.exec(value.slice(0, previous + 1))?.[1];
+  // Only the adjacent identifier token can affect that decision. Copying and
+  // scanning the whole prefix here makes a regex-heavy array quadratic.
+  let previousKeyword: string | undefined;
+  if (previous >= 0 && /[A-Za-z]/.test(value[previous]!)) {
+    let keywordStart = previous;
+    while (keywordStart > 0 && /[A-Za-z0-9_]/.test(value[keywordStart - 1]!)) {
+      keywordStart--;
+    }
+    previousKeyword = value.slice(keywordStart, previous + 1);
+  }
   if (
     previous >= 0 &&
     !'{[(=~|:,!&?<>+-*/%'.includes(value[previous]!) &&
@@ -673,7 +682,9 @@ function collectPromptReferencedVars(
     if (typeof value !== 'string') {
       continue;
     }
-    const dependencies = extractUnboundVariables(value);
+    const dependencies = templateLoadsExternalContext(value)
+      ? Object.keys(vars)
+      : extractUnboundVariables(value);
     for (const dependency of dependencies) {
       pending.push(dependency);
     }

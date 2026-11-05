@@ -1413,6 +1413,14 @@ describe('evaluatorHelpers', () => {
       ).rejects.toThrow('unknown block tag: unknown');
     });
 
+    it('should bind the implicit caller in macro-body dependencies', async () => {
+      const template =
+        '{% macro m() %}{{ caller() ~ "!" }}{% endmacro %}{% call m() %}x{% endcall %}';
+      const renderedPrompt = await renderPrompt(toPrompt('{{v}}'), { v: template }, {});
+
+      expect(renderedPrompt).toBe('x!');
+    });
+
     it.each([
       ['include', '{% include "body.njk" %}'],
       ['import', '{% import "body.njk" as body %}'],
@@ -1432,6 +1440,22 @@ describe('evaluatorHelpers', () => {
         }
       },
     );
+
+    it('should preserve render errors for external templates reached through a variable', async () => {
+      const previousCwd = process.cwd();
+      try {
+        process.chdir(path.resolve('test/fixtures/nunjucks-include'));
+        await expect(
+          renderPrompt(
+            toPrompt('{{alias}}'),
+            { alias: '{% include "body.njk" %}', v: '{% unknown %}' },
+            {},
+          ),
+        ).rejects.toThrow('unknown block tag: unknown');
+      } finally {
+        process.chdir(previousCwd);
+      }
+    });
 
     it('should append dependency names without hitting the argument-count limit', async () => {
       const placeholders = Array.from({ length: 128000 }, (_, index) => `{{x${index}}}`);
@@ -1461,6 +1485,36 @@ describe('evaluatorHelpers', () => {
         expect(renderedPrompt).toBe(JSON.stringify({ text: expected }, null, 2));
       },
     );
+
+    it('should bound regex keyword lookup to the adjacent token', async () => {
+      const entries = Array.from({ length: 8000 }, () => 'r/x/').join(', ');
+      const value = `{{ [${entries}] }} {{x}}`;
+      const originalSlice = String.prototype.slice;
+      let slicedCharacters = 0;
+      const sliceSpy = vi.spyOn(String.prototype, 'slice').mockImplementation(function (
+        this: string,
+        start?: number,
+        end?: number,
+      ) {
+        const result = originalSlice.call(this, start, end);
+        if (this.valueOf() === value && start === 0) {
+          slicedCharacters += result.length;
+        }
+        return result;
+      });
+      try {
+        const renderedPrompt = await renderPrompt(
+          toPrompt('{"text":"{{v}}"}'),
+          { v: value, x: 'yes' },
+          {},
+        );
+
+        expect(renderedPrompt).toBe(JSON.stringify({ text: `{{ [${entries}] }} yes` }, null, 2));
+        expect(slicedCharacters).toBeLessThan(100000);
+      } finally {
+        sliceSpy.mockRestore();
+      }
+    });
 
     it('should honor escaped quotes in protected literal expressions', async () => {
       const template = "{{ 'it\\'s' }} {{x}}";

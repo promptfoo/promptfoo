@@ -294,12 +294,14 @@ function macroNodeReferencesVariable(
     return true;
   }
 
-  // Walk the body with the full macro scope (outer + param names + macro name).
+  // Walk the body with the full macro scope (outer + param names + macro name
+  // + the implicit caller supplied by a call block).
   const macroScope = addNamesToScope(boundSymbols, paramNames);
   const macroName = getSymbolName(node.name);
   if (macroName) {
     macroScope.add(macroName);
   }
+  macroScope.add('caller');
   return astChildReferencesVariable(node, 'body', variableName, macroScope);
 }
 
