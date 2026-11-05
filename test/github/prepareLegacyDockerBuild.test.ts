@@ -337,6 +337,9 @@ describe.runIf(process.platform !== 'win32')('legacy backfill publication guards
     expect(publish.if).toBe(
       "github.event_name != 'pull_request' && (!inputs.legacy_backfill || inputs.publish_legacy_image)",
     );
+    expect(workflow.concurrency.group).toContain(
+      "github.event_name == 'workflow_dispatch' && inputs.legacy_backfill && !inputs.publish_legacy_image && format('docker-validate-{0}', github.run_id)",
+    );
     expect(publish.needs).toEqual(['test']);
     expect(jobs.test.outputs.source_sha).toBe('${{ steps.source.outputs.sha }}');
     expect(publish.env.SOURCE_REF).toBe('${{ needs.test.outputs.source_sha }}');
@@ -345,11 +348,51 @@ describe.runIf(process.platform !== 'win32')('legacy backfill publication guards
     ).toBe('${{ env.SOURCE_REF }}');
     const step = (name: string) =>
       jobs.test.steps.find((item: { name: string }) => item.name === name);
-    expect(step('Test final-image runtime dependencies').if).toBe(
-      "env.LEGACY_BACKFILL != 'true' || inputs.publish_legacy_image",
+    expect(workflow.env.RUN_CURRENT_IMAGE_CHECKS).toBe(
+      "${{ (github.event_name != 'workflow_dispatch' || !inputs.legacy_backfill || inputs.publish_legacy_image) && 'true' || 'false' }}",
     );
+    for (const name of [
+      'Build custom Docker image for contract testing',
+      'Test final-image runtime dependencies',
+    ]) {
+      expect(step(name).if).toBe("env.RUN_CURRENT_IMAGE_CHECKS == 'true'");
+    }
+    for (const name of ['Run Docker containers for testing', 'Run health check']) {
+      expect(step(name).run).toContain(`if [[ "$RUN_CURRENT_IMAGE_CHECKS" == 'true' ]]; then`);
+    }
     expect(step('Verify OS packages are current').if).toBeUndefined();
   });
+
+  it.each([
+    { fullChecks: 'false', expected: 0 },
+    { fullChecks: 'true', expected: 1 },
+  ])(
+    'requires current update markers for historical publication ($fullChecks)',
+    ({ fullChecks, expected }) => {
+      const step = workflow.jobs.test.steps.find(
+        (candidate: { name: string }) => candidate.name === 'Verify Python and promptfoo',
+      );
+      // A release-era CLI works, but this fixture image lacks the current Docker marker.
+      const bash = `docker() {
+      case "$*" in
+        "exec promptfoo-container python --version") echo "Python 3" ;;
+        "exec promptfoo-container promptfoo --version"|"exec promptfoo-container pf --version") echo "0.120.0" ;;
+        *) return 1 ;;
+      esac
+    }
+    ${step.run}`;
+      const result = spawnSync('bash', ['-e', '-c', bash], {
+        encoding: 'utf8',
+        env: {
+          LEGACY_BACKFILL: 'true',
+          RUN_CURRENT_IMAGE_CHECKS: fullChecks,
+          RELEASE_TAG: '0.120.0',
+        },
+      });
+      expect(result.error).toBeUndefined();
+      expect(result.status, result.stdout + result.stderr).toBe(expected);
+    },
+  );
 
   it.each(['404', '200', '401', '500'])(
     'rechecks registry status %s before creating a manifest',

@@ -72,8 +72,11 @@ on:
 concurrency:
   # Reusable workflow calls inherit the caller's github.workflow value. Keep this
   # group Docker-specific so release-please callers are not cancelled mid-release.
-  # Backfills share the publishing group so a normal release cannot race their tag check.
-  group: ${{ github.event_name == 'pull_request' && format('docker-pr-{0}', github.ref) || format('docker-publish-{0}', github.repository) }}
+  # Read-only historical validation must not displace a queued release. Writers share the publishing group.
+  group: >-
+    ${{ github.event_name == 'pull_request' && format('docker-pr-{0}', github.ref) ||
+        github.event_name == 'workflow_dispatch' && inputs.legacy_backfill && !inputs.publish_legacy_image && format('docker-validate-{0}', github.run_id) ||
+        format('docker-publish-{0}', github.repository) }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
@@ -85,6 +88,8 @@ env:
   BUILD_VERSION: ${{ inputs.tag_name || github.event.release.tag_name || github.ref_name }}
   BUILD_DATE: ${{ github.event_name == 'pull_request' && github.event.pull_request.updated_at || github.event_name == 'release' && github.event.release.published_at || github.event.head_commit.timestamp || github.event.repository.updated_at }}
   LEGACY_BACKFILL: ${{ github.event_name == 'workflow_dispatch' && inputs.legacy_backfill && 'true' || 'false' }}
+  # Only validation-only historical runs may skip the current container contract.
+  RUN_CURRENT_IMAGE_CHECKS: ${{ (github.event_name != 'workflow_dispatch' || !inputs.legacy_backfill || inputs.publish_legacy_image) && 'true' || 'false' }}
   PYTHON_VERSION: ${{ github.event_name == 'workflow_dispatch' && inputs.python_version || '' }}
   EXCLUDE_LEGACY_FRONTEND_TESTS: ${{ github.event_name == 'workflow_dispatch' && inputs.exclude_legacy_frontend_tests && 'true' || 'false' }}
   # Fallback release paths build a specific tag outside release-please.yml.
@@ -248,7 +253,7 @@ jobs:
             OS_PACKAGE_REFRESH=${{ github.run_id }}-${{ github.run_attempt }}
 
       - name: Build custom Docker image for contract testing
-        if: env.LEGACY_BACKFILL != 'true'
+        if: env.RUN_CURRENT_IMAGE_CHECKS == 'true'
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7
         with:
           cache-from: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:buildcache-linux-amd64
@@ -266,7 +271,7 @@ jobs:
             OS_PACKAGE_REFRESH=${{ github.run_id }}-${{ github.run_attempt }}
 
       - name: Test final-image runtime dependencies
-        if: env.LEGACY_BACKFILL != 'true' || inputs.publish_legacy_image
+        if: env.RUN_CURRENT_IMAGE_CHECKS == 'true'
         run: |
           probe=scripts/testDockerImage.js
           if [[ "$LEGACY_BACKFILL" == true ]]; then probe="$RUNNER_TEMP/testDockerImage.js"; fi
@@ -288,7 +293,7 @@ jobs:
       - name: Run Docker containers for testing
         run: |
           docker run -d --name promptfoo-container -p 3000:3000 local-test-image:official
-          if [[ "$LEGACY_BACKFILL" != 'true' ]]; then
+          if [[ "$RUN_CURRENT_IMAGE_CHECKS" == 'true' ]]; then
             docker run -d --name promptfoo-custom-container -p 3001:3000 local-test-image:custom
           fi
 
@@ -297,7 +302,7 @@ jobs:
           # Wait for both servers to be fully ready (including database migrations)
           # before running any CLI commands that also trigger migrations.
           ports=(3000)
-          if [[ "$LEGACY_BACKFILL" != 'true' ]]; then
+          if [[ "$RUN_CURRENT_IMAGE_CHECKS" == 'true' ]]; then
             ports+=(3001)
           fi
 
@@ -341,15 +346,15 @@ jobs:
             exit 1
           fi
 
-          # Verify both patched CLI links before skipping the modern contract.
+          # Verify both CLI links on every image.
           echo "Checking pf alias:"
           if ! docker exec promptfoo-container pf --version; then
             echo "pf alias check failed"
             exit 1
           fi
 
-          if [[ "$LEGACY_BACKFILL" == 'true' ]]; then
-            echo 'Historical releases predate the container update contract; skipping contract checks'
+          if [[ "$RUN_CURRENT_IMAGE_CHECKS" != 'true' ]]; then
+            echo 'Validation-only historical build completed its release-era checks'
             exit 0
           fi
 
