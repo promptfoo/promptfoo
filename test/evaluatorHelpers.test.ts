@@ -1,5 +1,6 @@
 import { createRequire } from 'node:module';
 import * as fs from 'fs';
+import * as path from 'path';
 
 import nunjucks from 'nunjucks';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -1023,6 +1024,27 @@ describe('evaluatorHelpers', () => {
       }
     });
 
+    it('should skip structural scans for template-free values in the full-render guard', async () => {
+      const OriginalInt32Array = globalThis.Int32Array;
+      let allocations = 0;
+      const CountingInt32Array = new Proxy(OriginalInt32Array, {
+        construct(target, args, newTarget) {
+          allocations++;
+          return Reflect.construct(target, args, newTarget);
+        },
+      });
+      vi.stubGlobal('Int32Array', CountingInt32Array);
+      try {
+        const value = 'a'.repeat(16 * 1024 * 1024);
+        const renderedPrompt = await renderPrompt(toPrompt('{{payload}}'), { payload: value }, {});
+
+        expect(renderedPrompt).toBe(value);
+        expect(allocations).toBe(0);
+      } finally {
+        vi.unstubAllGlobals();
+      }
+    });
+
     it('should not decode a literal nested inside another expression string', async () => {
       const value = `{{ name ~ "{{ 'x' }}" }}`;
       const renderedPrompt = await renderPrompt(
@@ -1390,6 +1412,55 @@ describe('evaluatorHelpers', () => {
         renderPrompt(toPrompt('{{alias}}'), { alias: '{{v | safe}}', v: '{% unknown %}' }, {}),
       ).rejects.toThrow('unknown block tag: unknown');
     });
+
+    it.each([
+      ['include', '{% include "body.njk" %}'],
+      ['import', '{% import "body.njk" as body %}'],
+      ['from-import', '{% from "body.njk" import body %}'],
+      ['extends', '{% extends "body.njk" %}'],
+    ])(
+      'should preserve render errors for variables consumed by an external template %s',
+      async (_label, template) => {
+        const previousCwd = process.cwd();
+        try {
+          process.chdir(path.resolve('test/fixtures/nunjucks-include'));
+          await expect(
+            renderPrompt(toPrompt(template), { v: '{% unknown %}' }, {}),
+          ).rejects.toThrow('unknown block tag: unknown');
+        } finally {
+          process.chdir(previousCwd);
+        }
+      },
+    );
+
+    it('should append dependency names without hitting the argument-count limit', async () => {
+      const placeholders = Array.from({ length: 128000 }, (_, index) => `{{x${index}}}`);
+      const renderedPrompt = await renderPrompt(
+        toPrompt('{"text":"{{v}}"}'),
+        { v: `{% unknown %} ${placeholders.join(' ')}` },
+        {},
+      );
+
+      expect(renderedPrompt).toContain('{% unknown %}');
+      expect(renderedPrompt).toContain('{{x127999}}');
+    });
+
+    it.each([
+      ['{{ r/"/ }} {{x}}', '{{ r/"/ }} yes'],
+      ['{{ not r/"/ }} {{x}}', '{{ not r/"/ }} yes'],
+      ['{% if r/"/ %}ok{% endif %} {{x}}', '{% if r/"/ %}ok{% endif %} yes'],
+    ])(
+      'should handle regex literals before starting quote tracking: %s',
+      async (value, expected) => {
+        const renderedPrompt = await renderPrompt(
+          toPrompt('{"text":"{{v}}"}'),
+          { v: value, x: 'yes' },
+          {},
+        );
+
+        expect(renderedPrompt).toBe(JSON.stringify({ text: expected }, null, 2));
+      },
+    );
 
     it('should honor escaped quotes in protected literal expressions', async () => {
       const template = "{{ 'it\\'s' }} {{x}}";

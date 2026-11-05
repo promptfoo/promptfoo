@@ -830,6 +830,31 @@ export function extractVariablesFromExpression(template: string): string[] | und
   return Array.from(references);
 }
 
+function astLoadsExternalContext(node: unknown): boolean {
+  if (!isNunjucksAstNode(node)) {
+    return false;
+  }
+  if (['Include', 'Import', 'FromImport', 'Extends'].includes(node.typename!)) {
+    return true;
+  }
+  return (node.fields ?? []).some((field) => {
+    const child = node[field];
+    return Array.isArray(child)
+      ? child.some(astLoadsExternalContext)
+      : astLoadsExternalContext(child);
+  });
+}
+
+/**
+ * Return whether a template loads another template whose references are not
+ * visible in this AST. Parse failure is indeterminate and uses the same
+ * conservative answer, so callers do not suppress errors on unseen variables.
+ */
+export function templateLoadsExternalContext(template: string): boolean {
+  const parseResult = parseNunjucksTemplate(template);
+  return !parseResult.ok || astLoadsExternalContext(parseResult.ast);
+}
+
 /**
  * Collect all unbound expression symbols with one parse and one scope-aware
  * AST walk. Returns undefined on parse failure so callers can retain their

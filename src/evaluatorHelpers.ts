@@ -32,6 +32,7 @@ import {
   extractVariablesFromTemplate,
   getNunjucksEngine,
   isNunjucksGlobal,
+  templateLoadsExternalContext,
 } from './util/templates';
 import { transform } from './util/transform';
 import { loadYaml } from './util/yamlLoad';
@@ -116,6 +117,19 @@ const PATH_PLACEHOLDER_REGEX = /\{\{\s*([\w.]+)\s*\}\}/g;
 const PROTECTED_LITERAL_EXPRESSION_REGEX =
   /\{\{\s*(?:'(?:\\.|[^'\\])*'|"(?:\\.|[^"\\])*")(?:\s*~\s*(?:'(?:\\.|[^'\\])*'|"(?:\\.|[^"\\])*"))*\s*\}\}/;
 const QUOTE_CHARACTERS = new Set(['"', "'"]);
+const REGEX_PREFIX_KEYWORDS = new Set([
+  'if',
+  'elif',
+  'not',
+  'and',
+  'or',
+  'in',
+  'is',
+  'else',
+  'with',
+  'as',
+  'return',
+]);
 
 function advanceQuoteState(
   ch: string,
@@ -128,6 +142,84 @@ function advanceQuoteState(
     return { quote: ch === quote ? null : quote, escaped: false };
   }
   return { quote: ch, escaped: false };
+}
+
+function regexLiteralEndAt(value: string, index: number, inExpression: boolean): number | null {
+  if (!inExpression || value[index] !== 'r' || value[index + 1] !== '/') {
+    return null;
+  }
+  let previous = index - 1;
+  while (previous >= 0 && /\s/.test(value[previous]!)) {
+    previous--;
+  }
+  // A regex prefix can begin an expression, follow an operator, or follow a
+  // keyword such as `not` or `if`, but not an identifier, literal, or closer.
+  const previousKeyword = /\b([A-Za-z_]\w*)$/.exec(value.slice(0, previous + 1))?.[1];
+  if (
+    previous >= 0 &&
+    !'{[(=~|:,!&?<>+-*/%'.includes(value[previous]!) &&
+    !REGEX_PREFIX_KEYWORDS.has(previousKeyword ?? '')
+  ) {
+    return null;
+  }
+  let inCharacterClass = false;
+  for (let end = index + 2; end < value.length; end++) {
+    const ch = value[end];
+    if (ch === '\\') {
+      end++;
+      continue;
+    }
+    if (ch === '[') {
+      inCharacterClass = true;
+    } else if (ch === ']') {
+      inCharacterClass = false;
+    } else if (ch === '/' && !inCharacterClass) {
+      return end + 1;
+    }
+  }
+  return null;
+}
+
+type ExpressionLiteralState = {
+  quote: string | null;
+  handled: boolean;
+  index: number;
+};
+
+function advanceExpressionLiteralState(
+  value: string,
+  index: number,
+  active: boolean,
+  inExpression: boolean,
+  quote: string | null,
+  depths?: Int32Array,
+  depth = 0,
+): ExpressionLiteralState {
+  if (!active) {
+    return { quote, handled: false, index };
+  }
+  if (inExpression && !quote) {
+    const regexEnd = regexLiteralEndAt(value, index, true);
+    if (regexEnd !== null) {
+      if (depths) {
+        for (let cursor = index + 1; cursor < regexEnd; cursor++) {
+          depths[cursor] = depth;
+        }
+      }
+      return { quote: null, handled: true, index: regexEnd - 1 };
+    }
+  }
+  if (quote || (inExpression && QUOTE_CHARACTERS.has(value[index]!))) {
+    const next = advanceQuoteState(value[index]!, quote);
+    if (next.escaped) {
+      if (depths) {
+        depths[index + 1] = depth;
+      }
+      return { quote: next.quote, handled: true, index: index + 1 };
+    }
+    return { quote: next.quote, handled: true, index };
+  }
+  return { quote, handled: false, index };
 }
 
 function advanceCommentState(
@@ -238,13 +330,18 @@ function computeNestingDepths(
       }
       inComment = false;
     }
-    if (depth > 0 && (quote || QUOTE_CHARACTERS.has(ch))) {
-      const next = advanceQuoteState(ch, quote);
-      quote = next.quote;
-      if (next.escaped) {
-        depths[i + 1] = depth;
-        i++;
-      }
+    const literal = advanceExpressionLiteralState(
+      value,
+      i,
+      depth > 0,
+      depth > 0,
+      quote,
+      depths,
+      depth,
+    );
+    if (literal.handled) {
+      quote = literal.quote;
+      i = literal.index;
       continue;
     }
     if (depth > 0 && !quote) {
@@ -330,12 +427,10 @@ function collectRawSpans(value: string): Array<[number, number]> {
       }
       inComment = false;
     }
-    if (depth === 0 && (quote || (inExpression && QUOTE_CHARACTERS.has(ch)))) {
-      const next = advanceQuoteState(ch, quote);
-      quote = next.quote;
-      if (next.escaped) {
-        i++;
-      }
+    const literal = advanceExpressionLiteralState(value, i, depth === 0, inExpression, quote);
+    if (literal.handled) {
+      quote = literal.quote;
+      i = literal.index;
       continue;
     }
     // Raw bodies are always literal. Quotes and comment delimiters only have
@@ -404,12 +499,10 @@ function collectCommentSpans(value: string): Array<[number, number]> {
       }
       continue;
     }
-    if (inExpression && (quote || ch === '"' || ch === "'")) {
-      const next = advanceQuoteState(ch, quote);
-      quote = next.quote;
-      if (next.escaped) {
-        i++;
-      }
+    const literal = advanceExpressionLiteralState(value, i, true, inExpression, quote);
+    if (literal.handled) {
+      quote = literal.quote;
+      i = literal.index;
       continue;
     }
     if (!quote) {
@@ -559,7 +652,12 @@ function collectPromptReferencedVars(
   vars: Record<string, VarValue>,
 ): Set<string> {
   const referenced = new Set<string>();
-  const pending = extractUnboundVariables(basePrompt);
+  // Includes/imports can read variables that never appear in the outer AST.
+  // Conservatively treat every supplied value as used rather than suppressing
+  // a render error in an unseen dependency.
+  const pending = templateLoadsExternalContext(basePrompt)
+    ? Object.keys(vars)
+    : extractUnboundVariables(basePrompt);
   while (pending.length > 0) {
     const reference = pending.pop()!;
     const key = /^([A-Za-z_]\w*)/.exec(reference)?.[1];
@@ -576,7 +674,9 @@ function collectPromptReferencedVars(
       continue;
     }
     const dependencies = extractUnboundVariables(value);
-    pending.push(...dependencies);
+    for (const dependency of dependencies) {
+      pending.push(dependency);
+    }
   }
   return referenced;
 }
@@ -595,6 +695,12 @@ function autoWrapRawIfPartialNunjucks(prompt: string): string {
 }
 
 function referencesUndefinedVariables(template: string, vars: Record<string, VarValue>): boolean {
+  // Plain data needs no structural scan at all. This fast path is important for
+  // large file-backed values on the full-render path: allocating a depth entry
+  // per character would otherwise dominate both time and memory.
+  if (!template.includes('{{') && !template.includes('{%') && !template.includes('{#')) {
+    return false;
+  }
   // Raw spans are literal text, not references: {% raw %}{{x}}{% endraw %}
   // cannot count x as a dependency, or this guard would skip the very render
   // pass that resolves the raw block.
