@@ -237,6 +237,9 @@ describe('aws bedrock provider factory routing', () => {
     'bedrock:messages:us.anthropic.claude-mythos-5-1',
     'bedrock:messages:global.anthropic.claude-fable-5-1',
     'bedrock:messages:us.anthropic.claude-fable-5-1',
+    'bedrock:messages:ca.anthropic.claude-haiku-5-5',
+    'bedrock:messages:eu.anthropic.claude-opus-4-8',
+    'bedrock:messages:in.anthropic.claude-haiku-4-5-20251001-v1:0',
   ])('routes %s through Anthropic Messages', async (providerPath) => {
     const provider = await bedrockFactory.create(
       providerPath,
@@ -259,10 +262,46 @@ describe('aws bedrock provider factory routing', () => {
     expect(provider).toBeInstanceOf(AwsBedrockConverseProvider);
   });
 
+  it.each([
+    [
+      'anthropic.claude-opus-5',
+      'ap-northeast-2',
+      'https://bedrock-runtime.ap-northeast-2.amazonaws.com/anthropic',
+    ],
+    [
+      'anthropic.claude-sonnet-5',
+      'ap-southeast-1',
+      'https://bedrock-runtime.ap-southeast-1.amazonaws.com/anthropic',
+    ],
+    [
+      'anthropic.claude-opus-5-5',
+      'eu-west-2',
+      'https://bedrock-runtime.eu-west-2.amazonaws.com/anthropic',
+    ],
+    [
+      'anthropic.claude-haiku-4-5',
+      'us-east-1',
+      'https://bedrock-mantle.us-east-1.api.aws/anthropic',
+    ],
+  ])('routes the bare Messages model %s in %s', async (model, region, expectedUrl) => {
+    const provider = await bedrockFactory.create(
+      `bedrock:messages:${model}`,
+      { config: { region, apiKey: 'bedrock-key' } },
+      ctx,
+    );
+    expect((provider as BedrockAnthropicMessagesProvider).getApiBaseUrl()).toBe(expectedUrl);
+  });
+
+  it('rejects a Messages profile that AWS does not publish for the model', async () => {
+    await expect(
+      bedrockFactory.create('bedrock:messages:ca.anthropic.claude-opus-5', {}, ctx),
+    ).rejects.toThrow(/not supported by the Anthropic Messages provider/);
+  });
+
   it('requires an inference profile for Mythos 5.1 Messages', async () => {
     await expect(
       bedrockFactory.create('bedrock:messages:anthropic.claude-mythos-5-1', {}, ctx),
-    ).rejects.toThrow(/Use a us. or global. inference profile/);
+    ).rejects.toThrow(/Check the AWS model card/);
   });
 
   it('supports the explicit messages form for Bedrock Fable', async () => {
@@ -413,7 +452,7 @@ describe('aws bedrock provider factory routing', () => {
 
   it('still allows a Converse model AWS continues to serve', async () => {
     const provider = await bedrockFactory.create(
-      'bedrock:converse:anthropic.claude-sonnet-4-20250514-v1:0',
+      'bedrock:converse:us.anthropic.claude-sonnet-4-6',
       { config: { region: 'us-east-1' } },
       ctx,
     );

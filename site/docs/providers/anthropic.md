@@ -60,6 +60,7 @@ These models currently resolve on the Anthropic Messages API:
 | `anthropic:messages:claude-mythos-5-1`                              | Claude Mythos 5.1 |
 | `anthropic:messages:claude-fable-5`                                 | Claude Fable 5    |
 | `anthropic:messages:claude-mythos-5`                                | Claude Mythos 5   |
+| `anthropic:messages:claude-haiku-5-5`                               | Claude Haiku 5.5  |
 | `anthropic:messages:claude-opus-5-5`                                | Claude Opus 5.5   |
 | `anthropic:messages:claude-sonnet-5-5`                              | Claude Sonnet 5.5 |
 | `anthropic:messages:claude-opus-5`                                  | Claude Opus 5     |
@@ -701,6 +702,27 @@ providers:
       max_tokens: 8192
 ```
 
+### Claude Haiku 5.5 notes
+
+[Haiku 5.5](https://platform.claude.com/docs/en/models/haiku-5-5/overview) uses adaptive
+thinking by default. Promptfoo omits sampling parameters and converts manual thinking
+budgets to adaptive thinking. Set `thinking: { type: disabled }` with `effort: high`
+or lower to disable thinking; at `xhigh` or `max`, promptfoo omits that setting.
+
+Pricing depends on total input, including cache reads and writes: up to **100,000**
+input tokens costs **$0.10/$0.50 per million input/output tokens**; above that threshold,
+the entire request uses **$0.50/$2.50**. Cache reads cost 0.1 times the applicable input
+rate, and 5-minute/1-hour cache writes cost 1.25/2 times that rate. Promptfoo selects
+the tier from usage counters; explicit pricing overrides still take precedence.
+
+```yaml
+providers:
+  - id: anthropic:messages:claude-haiku-5-5
+    config:
+      effort: medium
+      max_tokens: 4096
+```
+
 ### Claude Sonnet 5.5 notes
 
 [Sonnet 5.5](https://platform.claude.com/docs/en/models/sonnet-5-5/whats-new-sonnet-5-5)
@@ -723,7 +745,7 @@ to its API requirements:
   or use `between_tools` to keep that text in the output.
 
 Sonnet 5.5 costs **$2 per million input tokens and $10 per million output tokens** across its
-1M-token context window, with cache reads at $0.20 per million tokens.
+1M-token context window, with cache reads at $0.10 per million tokens.
 
 ```yaml title="promptfooconfig.yaml"
 providers:

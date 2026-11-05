@@ -2,6 +2,7 @@ import {
   CLAUDE_REGIONAL_ENDPOINT_PREMIUM,
   calculateCacheInputCost,
   isClaudeFableOrMythos5Model,
+  isClaudeHaiku55Model,
   isClaudeOpus5Model,
   isClaudeOpus55Model,
   isClaudeRegionalPremiumModel,
@@ -86,7 +87,7 @@ const BEDROCK_PRICING: Record<string, BedrockPricing> = {
   // contains `anthropic.claude-sonnet-5`.
   'anthropic.claude-sonnet-5-5': { input: 2, output: 10 },
   // Claude Sonnet 5 (standard list pricing; full 1M context bills at the standard rate)
-  'anthropic.claude-sonnet-5': { input: 3, output: 15 },
+  'anthropic.claude-sonnet-5': { input: 2, output: 10 },
   // Claude Sonnet 4.x — the point releases must precede the bare `-4` prefix: lookup is first-match-wins
   // on `includes()`, and AWS publishes long-context meters only for Sonnet 4 itself. 4.5 and
   // 4.6 bill their full context flat, so they must not inherit Sonnet 4's surcharge — add an
@@ -102,6 +103,12 @@ const BEDROCK_PRICING: Record<string, BedrockPricing> = {
     input: 3,
     output: 15,
     longContext: { threshold: 200_000, input: 6, output: 22.5 },
+  },
+  // AWS Haiku 5.5 pricing: higher rates apply strictly above 100K total input tokens.
+  'anthropic.claude-haiku-5-5': {
+    input: 0.1,
+    output: 0.5,
+    longContext: { threshold: 100_000, input: 0.5, output: 2.5 },
   },
   // Claude Haiku 4.5
   'anthropic.claude-haiku-4': { input: 1, output: 5 },
@@ -321,6 +328,15 @@ const EU_SOUTH_1_AND_EU_WEST_1_PRICING: Record<string, BedrockPricing> = {
 const US_GOV_PRICING: Record<string, BedrockPricing> = {
   // AWS publishes GovCloud rates directly; do not apply the commercial regional premium again.
   'anthropic.claude-opus-4-8': { input: 6, output: 30 },
+  'anthropic.claude-opus-5-5': { input: 4.8, output: 24 },
+  'anthropic.claude-opus-5': { input: 6, output: 30 },
+  'anthropic.claude-sonnet-5-5': { input: 2.4, output: 12 },
+  'anthropic.claude-sonnet-5': { input: 2.4, output: 12 },
+  'anthropic.claude-haiku-5-5': {
+    input: 0.12,
+    output: 0.6,
+    longContext: { threshold: 100_000, input: 0.6, output: 3 },
+  },
   'nemotron-nano-12b-v2': { input: 0.24, output: 0.72 },
   'nemotron-nano-3-30b': { input: 0.072, output: 0.288 },
   'nemotron-nano': { input: 0.072, output: 0.276 },
@@ -396,11 +412,22 @@ function getBedrockRegionPricing(
   normalizedModelId: string,
   region?: string,
 ): Record<string, BedrockPricing> | undefined {
-  if (region) {
-    return BEDROCK_REGION_PRICING[region.toLowerCase()];
-  }
-  if (normalizedModelId.startsWith('us-gov.') || normalizedModelId.includes('/us-gov.')) {
+  if (normalizedModelId.startsWith('us-gov.') || normalizedModelId.startsWith('arn:aws-us-gov:')) {
     return US_GOV_PRICING;
+  }
+  return region ? BEDROCK_REGION_PRICING[region.toLowerCase()] : undefined;
+}
+
+/** An explicit profile overrides the configured region when a proxy routes a Messages request. */
+export function getGovCloudClaudePricing(
+  modelId: string,
+  region?: string,
+): BedrockPricing | undefined {
+  if (modelId.startsWith('us-gov.anthropic.claude-')) {
+    return US_GOV_PRICING[modelId.slice('us-gov.'.length)];
+  }
+  if (modelId.startsWith('anthropic.claude-') && region?.startsWith('us-gov-')) {
+    return US_GOV_PRICING[modelId];
   }
   return undefined;
 }
@@ -447,6 +474,19 @@ export function getBedrockPricing(
     }
   }
   return undefined;
+}
+
+export function selectBedrockTokenRates(
+  normalizedModelId: string,
+  pricing: BedrockPricing,
+  totalInputTokens: number,
+) {
+  return pricing.longContext &&
+    (isClaudeHaiku55Model(normalizedModelId)
+      ? totalInputTokens > pricing.longContext.threshold
+      : totalInputTokens >= pricing.longContext.threshold)
+    ? pricing.longContext
+    : pricing;
 }
 
 function hasPublishedRegionalPricing(normalizedModelId: string, region?: string): boolean {
@@ -570,10 +610,7 @@ export function calculateBedrockCost(
   // Long-context tiers are billed on total input size, which for Anthropic means the uncached
   // prompt plus any cache reads and writes (`input_tokens` excludes cached tokens).
   const totalInputTokens = promptTokens + cacheReadTokens + cacheWriteTokens;
-  const tier =
-    pricing.longContext && totalInputTokens >= pricing.longContext.threshold
-      ? pricing.longContext
-      : pricing;
+  const tier = selectBedrockTokenRates(normalizedModelId, pricing, totalInputTokens);
 
   const inputRate = (tier.input / 1_000_000) * pricingMultiplier;
   const inputCost = normalizedModelId.includes('anthropic.claude')
@@ -629,6 +666,7 @@ export function calculateBedrockInvokeModelCost(
   if (
     !isBedrockGrokRuntimeProfile(normalizedModelId) &&
     !isClaudeFableOrMythos5Model(normalizedModelId) &&
+    !isClaudeHaiku55Model(normalizedModelId) &&
     !isClaudeOpus5Model(normalizedModelId) &&
     !isClaudeOpus55Model(normalizedModelId) &&
     !isClaudeSonnet55Model(normalizedModelId) &&
