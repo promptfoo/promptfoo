@@ -6,9 +6,9 @@ description: Evaluate Codex app-server with streamed agent events, approvals, sa
 
 # OpenAI Codex App Server
 
-This provider starts `codex app-server` as a local child process and drives the Codex app-server JSON-RPC protocol from promptfoo. Use it when you need to eval the rich client surface of Codex: streamed agent items, approvals, skills, plugins, app connector events, command/file trajectories, and thread lifecycle metadata.
+This provider starts `codex app-server` as a local child process and drives the Codex app-server JSON-RPC protocol from promptfoo. Use it when you need to eval the client surface of Codex: streamed agent items, approvals, skills, plugins, app connector events, command/file trajectories, and thread lifecycle metadata.
 
-For CI and straightforward automation, prefer the [OpenAI Codex SDK provider](./openai-codex-sdk.md). The app-server protocol is experimental, broader than the SDK, and designed for rich product integrations.
+For CI and straightforward automation, prefer the [OpenAI Codex SDK provider](./openai-codex-sdk.md). The app-server protocol is experimental, broader than the SDK, and designed for product integrations.
 
 ## Provider IDs
 
@@ -76,30 +76,25 @@ Promptfoo also accepts `CODEX_API_KEY` or `config.apiKey`. For reproducible eval
 
 ### Run on Amazon Bedrock
 
-Set `model_provider: amazon-bedrock` with a Bedrock model id to run OpenAI's frontier models on [Amazon Bedrock](/docs/providers/aws-bedrock/#openai-models). Provide AWS credentials and a Region to the Codex CLI through `cli_env`:
+The app server uses the same Bedrock model IDs and AWS credentials as the Codex SDK. Enable model access in your AWS Region and export a Bedrock API key as `AWS_BEARER_TOKEN_BEDROCK`.
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: openai:codex-app-server
     config:
-      model: openai.gpt-5.6-sol # Bedrock model id (note the openai. prefix)
       model_provider: amazon-bedrock
-      model_reasoning_effort: max
-      sandbox_mode: read-only
-      approval_policy: never
+      model: openai.gpt-6.1-terra
       cli_env:
-        AWS_REGION: us-east-2
-        AWS_ACCESS_KEY_ID: '{{env.AWS_ACCESS_KEY_ID}}'
-        AWS_SECRET_ACCESS_KEY: '{{env.AWS_SECRET_ACCESS_KEY}}'
+        AWS_REGION: us-east-1
+        AWS_BEARER_TOKEN_BEDROCK: '{{env.AWS_BEARER_TOKEN_BEDROCK}}'
 ```
 
-The same notes as the [Codex SDK Bedrock setup](/docs/providers/openai-codex-sdk/#option-3-run-on-amazon-bedrock) apply: use the `openai.`-prefixed model IDs, request model access in a supported Region (GPT-5.6 Sol: `us-east-1`/`us-east-2`; GPT-5.6 Terra and Luna also support `us-west-2`), forward `AWS_SESSION_TOKEN` as well when using temporary/SSO credentials, and remember that credentials in `cli_env` are exposed to the agent's shell environment.
-
-The Codex 0.156.1 Bedrock catalog does not list GPT-6 Sol or Luna. The [direct Promptfoo Bedrock provider](/docs/providers/aws-bedrock/#openai-models) can evaluate them on AWS, but does not run Codex or its coding tools.
+The Codex SDK guide covers model selection for Mantle and Runtime, AWS profiles, and temporary credentials. [Codex SDK Bedrock setup](/docs/providers/openai-codex-sdk/#option-3-run-on-amazon-bedrock)
 
 ## Basic Usage
 
 ```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
   - id: openai:codex-app-server:gpt-6-sol
     config:
@@ -111,6 +106,8 @@ prompts:
 ```
 
 The provider returns Codex's final assistant text as `output`. It also records thread ids, turn ids, item counts, command/file/tool metadata, approval decisions, and token usage under `metadata.codexAppServer`.
+
+When the server reports reasoning output tokens, Promptfoo includes the count in `tokenUsage.completionDetails.reasoning`.
 
 For downstream coding-agent checks, `raw` also includes SDK-compatible `items` and `usage` fields alongside the protocol-shaped thread and turn payloads. That keeps trajectory-style assertions aligned between `openai:codex-app-server` and `openai:codex-sdk` without losing the richer app-server metadata.
 
@@ -186,9 +183,13 @@ The provider validates top-level provider config strictly. Prompt-level config i
 | `turn_timeout_ms`          | number        | Overall turn timeout.                                                                                                                                               | None                 |
 | `server_request_policy`    | object        | Deterministic responses for approvals, user input, MCP elicitations, and dynamic tools.                                                                             | Safe declines        |
 
+The app-server provider does not use the SDK provider's exact-version preflight. If you point both providers at a floating global or custom Codex binary, review the SDK provider's [custom binary compatibility requirements](./openai-codex-sdk.md#custom-binary-path).
+
 :::note GPT-5.6 requires Codex 0.144.0 or later
 The app-server provider starts the `codex` binary on your PATH, or `codex_path_override`. Use version 0.144.0 or later so its model catalog recognizes GPT-5.6 and the corresponding reasoning levels. Confirm the effective reasoning with `deep_tracing` when using a custom binary.
 :::
+
+On Windows, the default command supports npm-installed Codex on `PATH`. An explicit `codex_path_override` is launched unchanged and must point to a native executable, not an npm `.cmd` shim.
 
 ### Granular Approval Policy
 
@@ -235,7 +236,7 @@ providers:
           multi_agent: true
 ```
 
-`features.goals` enables Codex's experimental goals capability; its lifecycle stage and default shift between Codex versions, so run `codex features list` to confirm them for the build you target. `features.multi_agent` toggles subagent collaboration tools; it is stable and enabled by default in current Codex releases, so set it explicitly only to pin that default or disable it with `false`.
+`features.goals` enables Codex's experimental goals capability; its lifecycle stage and default shift between Codex versions, so run `codex features list` to confirm them for the build you target. `features.multi_agent` toggles subagent collaboration tools; it is stable and enabled by default, so set it explicitly only to pin that default or disable it with `false` (run `codex features list` to confirm the default for the build you target).
 
 ## Server Request Policy
 
@@ -292,6 +293,7 @@ Legacy `execCommandApproval` and `applyPatchApproval` callbacks are also handled
 ## Structured Output
 
 ```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
   - id: openai:codex-app-server:gpt-6-sol
     config:

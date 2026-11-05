@@ -1,4 +1,3 @@
-import Anthropic from '@anthropic-ai/sdk';
 import dedent from 'dedent';
 import { getCache, isCacheEnabled } from '../../cache';
 import { getEnvFloat, getEnvInt, getEnvString } from '../../envars';
@@ -7,6 +6,7 @@ import { maybeLoadToolsFromExternalFile } from '../../util/index';
 import { createEmptyTokenUsage } from '../../util/tokenUsageUtils';
 import {
   clampMaxTokensForThinkingBudget,
+  formatLegacyCompletionPrompt,
   getTokenUsage,
   isAlwaysOnAdaptiveThinkingClaudeModel,
   isClaudeThinkingEnabled,
@@ -20,22 +20,68 @@ import {
 } from '../anthropic/util';
 import { parseChatPrompt } from '../shared';
 import { AwsBedrockGenericProvider, type BedrockOptions, createBedrockCacheKeyHash } from './base';
-import { calculateBedrockInvokeModelCost } from './pricing';
+import {
+  calculateBedrockInvokeModelCost,
+  getBedrockRuntimeBillingRegion,
+  isBedrockGrokRuntimeProfile,
+} from './pricing';
+import { requiresBedrockAnthropicMessagesModel } from './routing';
 import { INFERENCE_PROFILE_PREFIX, novaOutputFromMessage, novaParseMessages } from './util';
 
 import type {
   ApiEmbeddingProvider,
   ApiProvider,
   CallApiContextParams,
+  CallApiOptionsParams,
   ProviderEmbeddingResponse,
   ProviderResponse,
 } from '../../types/providers';
 import type { TokenUsage, VarValue } from '../../types/shared';
-import type { ClaudeThinkingConfig } from '../anthropic/types';
+import type { ClaudeEffort, ClaudeThinkingConfig } from '../anthropic/types';
 
 // Utility function to coerce string values to numbers
 export const coerceStrToNum = (value: string | number | undefined): number | undefined =>
   value === undefined ? undefined : typeof value === 'string' ? Number(value) : value;
+
+function getNovaTokenUsage(responseJson: any): TokenUsage {
+  const usage = responseJson?.usage;
+  if (!usage) {
+    return missingBedrockTokenUsage();
+  }
+
+  return {
+    prompt: coerceStrToNum(usage.inputTokens),
+    completion: coerceStrToNum(usage.outputTokens),
+    total: coerceStrToNum(usage.totalTokens),
+    numRequests: 1,
+  };
+}
+
+function getCohereTokenUsage(responseJson: any): TokenUsage {
+  if (responseJson?.meta?.billed_units) {
+    const inputTokens = coerceStrToNum(responseJson.meta.billed_units.input_tokens);
+    const outputTokens = coerceStrToNum(responseJson.meta.billed_units.output_tokens);
+
+    return {
+      prompt: inputTokens,
+      completion: outputTokens,
+      total: (inputTokens ?? 0) + (outputTokens ?? 0),
+      numRequests: 1,
+    };
+  }
+
+  // Return undefined values when token counts aren't provided by the API
+  return missingBedrockTokenUsage();
+}
+
+function missingBedrockTokenUsage(): TokenUsage {
+  return {
+    prompt: undefined,
+    completion: undefined,
+    total: undefined,
+    numRequests: 1,
+  };
+}
 
 export type BedrockModelFamily =
   | 'claude'
@@ -58,6 +104,7 @@ export type BedrockModelFamily =
   | 'deepseek'
   | 'openai'
   | 'qwen'
+  | 'xai'
   | 'zai'
   | 'minimax'
   | 'moonshot'
@@ -93,8 +140,10 @@ interface BedrockClaudeLegacyCompletionOptions extends BedrockOptions {
 
 export interface BedrockClaudeMessagesCompletionOptions extends BedrockOptions {
   max_tokens?: number;
+  effort?: ClaudeEffort;
   temperature?: number;
   anthropic_version?: string;
+  anthropic_beta?: string[];
   tools?: {
     name: string;
     description: string;
@@ -240,9 +289,12 @@ export interface BedrockAI21GenerationOptions extends BedrockOptions {
 
 interface BedrockAmazonNovaGenerationOptions extends BedrockOptions {
   interfaceConfig?: {
+    maxTokens?: number;
     max_new_tokens?: number;
     temperature?: number;
+    topP?: number;
     top_p?: number;
+    topK?: number;
     top_k?: number;
     stopSequences?: string[];
   };
@@ -275,10 +327,7 @@ interface BedrockAmazonNovaGenerationOptions extends BedrockOptions {
   };
 }
 
-type ContentType = 'AUDIO' | 'TEXT' | 'TOOL';
-
 type AudioMediaType = 'audio/wav' | 'audio/lpcm' | 'audio/mulaw' | 'audio/mpeg';
-type TextMediaType = 'text/plain' | 'application/json';
 
 interface AudioConfiguration {
   readonly mediaType: AudioMediaType;
@@ -290,8 +339,7 @@ interface AudioConfiguration {
 }
 
 interface TextConfiguration {
-  readonly contentType: ContentType;
-  readonly mediaType: TextMediaType;
+  readonly mediaType: 'text/plain';
 }
 
 export interface BedrockAmazonNovaSonicGenerationOptions extends BedrockOptions {
@@ -307,14 +355,34 @@ export interface BedrockAmazonNovaSonicGenerationOptions extends BedrockOptions 
     top_k?: number;
     stopSequences?: string[];
   };
+  turnDetectionConfiguration?: {
+    endpointingSensitivity?: 'HIGH' | 'MEDIUM' | 'LOW';
+  };
   audioInputConfiguration?: Omit<AudioConfiguration, 'voiceId'>;
   audioOutputConfiguration?: Omit<AudioConfiguration, 'mediaType'> & {
     mediaType: 'audio/lpcm';
-    voiceId?: 'matthew' | 'tiffany' | 'amy';
+    voiceId?:
+      | 'matthew'
+      | 'tiffany'
+      | 'amy'
+      | 'olivia'
+      | 'lupe'
+      | 'carlos'
+      | 'ambre'
+      | 'florian'
+      | 'lennart'
+      | 'beatrice'
+      | 'lorenzo'
+      | 'tina'
+      | 'carolina'
+      | 'leo'
+      | 'kiara'
+      | 'arjun';
   };
   textInputConfiguration?: TextConfiguration;
-  textOutputConfiguration?: Omit<TextConfiguration, 'mediaType'> & {
-    mediaType: 'text/plain';
+  textOutputConfiguration?: TextConfiguration;
+  toolUseOutputConfiguration?: {
+    mediaType: 'application/json';
   };
   toolConfig?: {
     tools?: {
@@ -324,18 +392,19 @@ export interface BedrockAmazonNovaSonicGenerationOptions extends BedrockOptions 
         inputSchema: {
           json: {
             type: 'object';
-            properties: {
-              [propertyName: string]: {
-                description: string;
-                type: string;
-              };
-            };
+            properties: Record<string, unknown>;
             required: string[];
           };
         };
       };
     }[];
-    toolChoice?: 'any' | 'auto' | string; // Tool name
+    toolChoice?: {
+      any?: Record<string, never>;
+      auto?: Record<string, never>;
+      tool?: {
+        name: string;
+      };
+    };
   };
   /** Session timeout in milliseconds (default: 300000 = 5 minutes) */
   sessionTimeout?: number;
@@ -473,11 +542,12 @@ interface BedrockQwenGenerationOptions extends BedrockOptions {
  * — so this handler always sends `max_tokens`.
  */
 interface BedrockOpenAICompatGenerationOptions extends BedrockQwenGenerationOptions {
+  service_tier?: 'default' | 'priority' | 'flex';
   /**
    * Reasoning depth for reasoning-capable models in this group (e.g. MiniMax M2, NVIDIA
    * Nemotron). Forwarded as-is so Bedrock validates it; omitted unless explicitly set.
    */
-  reasoning_effort?: 'low' | 'medium' | 'high';
+  reasoning_effort?: 'low' | 'medium' | 'high' | 'xhigh' | 'max';
 }
 
 // =============================================================================
@@ -654,11 +724,25 @@ export function addConfigParam(
 
 function getOpenAiCompatibleTokenUsage(responseJson: any, _promptText: string): TokenUsage {
   const usage = responseJson?.usage;
+  const reasoning = coerceStrToNum(usage?.completion_tokens_details?.reasoning_tokens);
+  const cacheReadInputTokens = coerceStrToNum(usage?.prompt_tokens_details?.cached_tokens);
+  const cacheCreationInputTokens = coerceStrToNum(usage?.prompt_tokens_details?.cache_write_tokens);
+  const completionDetails: NonNullable<TokenUsage['completionDetails']> = {};
+  if (reasoning !== undefined) {
+    completionDetails.reasoning = reasoning;
+  }
+  if ((cacheReadInputTokens ?? 0) > 0) {
+    completionDetails.cacheReadInputTokens = cacheReadInputTokens;
+  }
+  if ((cacheCreationInputTokens ?? 0) > 0) {
+    completionDetails.cacheCreationInputTokens = cacheCreationInputTokens;
+  }
   return {
     prompt: coerceStrToNum(usage?.prompt_tokens),
     completion: coerceStrToNum(usage?.completion_tokens),
     total: coerceStrToNum(usage?.total_tokens),
     numRequests: 1,
+    ...(Object.keys(completionDetails).length > 0 ? { completionDetails } : {}),
   };
 }
 
@@ -728,12 +812,7 @@ const BEDROCK_MISTRAL_CHAT_MODEL = {
       };
     }
 
-    return {
-      prompt: undefined,
-      completion: undefined,
-      total: undefined,
-      numRequests: 1,
-    };
+    return missingBedrockTokenUsage();
   },
 } satisfies IBedrockModel;
 
@@ -1193,12 +1272,7 @@ export const getLlamaModelHandler = (version: LlamaVersion) => {
       }
 
       // Return undefined values when token counts aren't provided by the API
-      return {
-        prompt: undefined,
-        completion: undefined,
-        total: undefined,
-        numRequests: 1,
-      };
+      return missingBedrockTokenUsage();
     },
   };
 };
@@ -1295,11 +1369,11 @@ export const BEDROCK_MODEL = {
         addConfigParam(params, 'system', systemPrompt, undefined, undefined);
       }
 
-      const inferenceConfig: any = config.interfaceConfig ? { ...config.interfaceConfig } : {};
+      const { max_new_tokens, top_p, top_k, ...inferenceConfig } = config.interfaceConfig ?? {};
       addConfigParam(
         inferenceConfig,
-        'max_new_tokens',
-        config?.interfaceConfig?.max_new_tokens,
+        'maxTokens',
+        config.interfaceConfig?.maxTokens ?? max_new_tokens,
         getEnvInt('AWS_BEDROCK_MAX_TOKENS'),
         undefined,
       );
@@ -1311,30 +1385,17 @@ export const BEDROCK_MODEL = {
         0,
       );
 
+      addConfigParam(inferenceConfig, 'topP', config.interfaceConfig?.topP ?? top_p);
+      addConfigParam(inferenceConfig, 'topK', config.interfaceConfig?.topK ?? top_k);
+
       addConfigParam(params, 'inferenceConfig', inferenceConfig, undefined, undefined);
       addConfigParam(params, 'toolConfig', config.toolConfig, undefined, undefined);
 
       return params;
     },
     output: (_config: BedrockOptions, responseJson: any) => novaOutputFromMessage(responseJson),
-    tokenUsage: (responseJson: any, _promptText: string): TokenUsage => {
-      const usage = responseJson?.usage;
-      if (!usage) {
-        return {
-          prompt: undefined,
-          completion: undefined,
-          total: undefined,
-          numRequests: 1,
-        };
-      }
-
-      return {
-        prompt: coerceStrToNum(usage.inputTokens),
-        completion: coerceStrToNum(usage.outputTokens),
-        total: coerceStrToNum(usage.totalTokens),
-        numRequests: 1,
-      };
-    },
+    tokenUsage: (responseJson: any, _promptText: string): TokenUsage =>
+      getNovaTokenUsage(responseJson),
   },
   /**
    * Amazon Nova 2 model handler with extended thinking (reasoning) support.
@@ -1470,24 +1531,8 @@ export const BEDROCK_MODEL = {
 
       return parts.join('\n\n');
     },
-    tokenUsage: (responseJson: any, _promptText: string): TokenUsage => {
-      const usage = responseJson?.usage;
-      if (!usage) {
-        return {
-          prompt: undefined,
-          completion: undefined,
-          total: undefined,
-          numRequests: 1,
-        };
-      }
-
-      return {
-        prompt: coerceStrToNum(usage.inputTokens),
-        completion: coerceStrToNum(usage.outputTokens),
-        total: coerceStrToNum(usage.totalTokens),
-        numRequests: 1,
-      };
-    },
+    tokenUsage: (responseJson: any, _promptText: string): TokenUsage =>
+      getNovaTokenUsage(responseJson),
   },
   CLAUDE_COMPLETION: {
     params: async (
@@ -1497,7 +1542,7 @@ export const BEDROCK_MODEL = {
       _modelName?: string,
     ) => {
       const params: any = {
-        prompt: `${Anthropic.HUMAN_PROMPT} ${prompt} ${Anthropic.AI_PROMPT}`,
+        prompt: formatLegacyCompletionPrompt(prompt),
         stop_sequences: stop,
       };
       addConfigParam(
@@ -1519,12 +1564,7 @@ export const BEDROCK_MODEL = {
     output: (_config: BedrockOptions, responseJson: any) => responseJson?.completion,
     tokenUsage: (responseJson: any, _promptText: string): TokenUsage => {
       if (!responseJson?.usage) {
-        return {
-          prompt: undefined,
-          completion: undefined,
-          total: undefined,
-          numRequests: 1,
-        };
+        return missingBedrockTokenUsage();
       }
 
       const usage = responseJson.usage;
@@ -1622,14 +1662,21 @@ export const BEDROCK_MODEL = {
       // path's default from 1024 to 2048 for every Claude model, not just the thinks-by-
       // default ones. That may well be the right default here too, but it is a behavior
       // change for existing configs and belongs in its own change.
-      const alwaysOnAdaptiveThinking =
-        !!modelName && isAlwaysOnAdaptiveThinkingClaudeModel(modelName);
+      // Application profile names do not identify their backing model.
+      const isApplicationProfile =
+        modelName?.startsWith('arn:') && modelName.includes(':application-inference-profile/');
+      const capabilityModelName = isApplicationProfile ? '' : (modelName ?? '');
+      const thinking = normalizeClaudeThinkingConfig(
+        capabilityModelName,
+        config?.thinking,
+        config?.effort,
+      );
+      const alwaysOnAdaptiveThinking = isAlwaysOnAdaptiveThinkingClaudeModel(capabilityModelName);
       const thinksByDefault =
         alwaysOnAdaptiveThinking ||
-        (!!modelName &&
-          isThinkingOnByDefaultClaudeModel(modelName) &&
-          config?.thinking?.type !== 'disabled' &&
-          config?.thinking?.type !== 'between_tools');
+        (isThinkingOnByDefaultClaudeModel(capabilityModelName) &&
+          thinking?.type !== 'disabled' &&
+          thinking?.type !== 'between_tools');
       addConfigParam(
         params,
         'max_tokens',
@@ -1637,10 +1684,24 @@ export const BEDROCK_MODEL = {
         getEnvInt('AWS_BEDROCK_MAX_TOKENS'),
         thinksByDefault ? 2048 : 1024,
       );
-      const thinking = modelName
-        ? // InvokeModel exposes no effort field, so the effort-capped rules cannot apply here.
-          normalizeClaudeThinkingConfig(modelName, config?.thinking, undefined)
-        : config?.thinking;
+      addConfigParam(
+        params,
+        'output_config',
+        config?.effort == null ? undefined : { effort: config.effort },
+        undefined,
+        undefined,
+      );
+      const betaFeatures = new Set(config?.anthropic_beta);
+      // Bedrock still gates Opus 4.5 effort behind a beta opt-in.
+      if (
+        config?.effort != null &&
+        /(?:^|[./])anthropic\.claude-opus-4-5(?:-|:|$)/.test(capabilityModelName)
+      ) {
+        betaFeatures.add('effort-2025-11-24');
+      }
+      if (betaFeatures.size > 0) {
+        params.anthropic_beta = [...betaFeatures];
+      }
       // Bedrock relays Claude's 400s as ValidationExceptions, so apply the same sampling rules
       // as the Anthropic API: models that deprecate sampling take no temperature, and extended
       // thinking rejects anything but the default, including this handler's 0 default. (This
@@ -1649,10 +1710,10 @@ export const BEDROCK_MODEL = {
         { temperature: config?.temperature },
         {
           thinkingEnabled: alwaysOnAdaptiveThinking || isClaudeThinkingEnabled(thinking),
-          samplingParamsDeprecated: modelName
-            ? isSamplingParamsDeprecatedClaudeModel(modelName)
-            : false,
-          defaultTemperature: 0,
+          samplingParamsDeprecated: isSamplingParamsDeprecatedClaudeModel(capabilityModelName),
+          // An application profile hides the backing model, which may reject sampling.
+          // Preserve explicit values but leave the default to AWS.
+          defaultTemperature: isApplicationProfile ? undefined : 0,
         },
       );
       for (const warning of samplingWarnings) {
@@ -1670,14 +1731,14 @@ export const BEDROCK_MODEL = {
       // the Converse and Anthropic Messages providers surface the one-time warnings.
       const toolChoice =
         (alwaysOnAdaptiveThinking ||
-          (!!modelName && isForcedToolChoiceUnsupportedClaudeModel(modelName))) &&
+          isForcedToolChoiceUnsupportedClaudeModel(capabilityModelName)) &&
         (config?.tool_choice?.type === 'any' || config?.tool_choice?.type === 'tool')
           ? undefined
           : config?.tool_choice;
       addConfigParam(params, 'tool_choice', toolChoice, undefined, undefined);
       addConfigParam(params, 'thinking', thinking, undefined, undefined);
-      // max_tokens was resolved above, before the thinking config was known. Anthropic
-      // rejects a budget at or above the cap, so raise the floor now that both are settled.
+      // Anthropic rejects a thinking budget at or above max_tokens; raise that floor
+      // after both values are resolved.
       if (typeof params.max_tokens === 'number') {
         params.max_tokens = clampMaxTokensForThinkingBudget(params.max_tokens, thinking);
       }
@@ -1692,12 +1753,7 @@ export const BEDROCK_MODEL = {
     },
     tokenUsage: (responseJson: any, _promptText: string): TokenUsage => {
       if (!responseJson?.usage) {
-        return {
-          prompt: undefined,
-          completion: undefined,
-          total: undefined,
-          numRequests: 1,
-        };
+        return missingBedrockTokenUsage();
       }
 
       // Bedrock relays the Anthropic Messages `usage` object, so read it with the shared
@@ -1802,27 +1858,8 @@ export const BEDROCK_MODEL = {
       return params;
     },
     output: (_config: BedrockOptions, responseJson: any) => responseJson?.generations?.[0]?.text,
-    tokenUsage: (responseJson: any, _promptText: string): TokenUsage => {
-      if (responseJson?.meta?.billed_units) {
-        const inputTokens = coerceStrToNum(responseJson.meta.billed_units.input_tokens);
-        const outputTokens = coerceStrToNum(responseJson.meta.billed_units.output_tokens);
-
-        return {
-          prompt: inputTokens,
-          completion: outputTokens,
-          total: (inputTokens ?? 0) + (outputTokens ?? 0),
-          numRequests: 1,
-        };
-      }
-
-      // Return undefined values when token counts aren't provided by the API
-      return {
-        prompt: undefined,
-        completion: undefined,
-        total: undefined,
-        numRequests: 1,
-      };
-    },
+    tokenUsage: (responseJson: any, _promptText: string): TokenUsage =>
+      getCohereTokenUsage(responseJson),
   },
   COHERE_COMMAND_R: {
     params: async (
@@ -1863,27 +1900,8 @@ export const BEDROCK_MODEL = {
       return params;
     },
     output: (_config: BedrockOptions, responseJson: any) => responseJson?.text,
-    tokenUsage: (responseJson: any, _promptText: string): TokenUsage => {
-      if (responseJson?.meta?.billed_units) {
-        const inputTokens = coerceStrToNum(responseJson.meta.billed_units.input_tokens);
-        const outputTokens = coerceStrToNum(responseJson.meta.billed_units.output_tokens);
-
-        return {
-          prompt: inputTokens,
-          completion: outputTokens,
-          total: (inputTokens ?? 0) + (outputTokens ?? 0),
-          numRequests: 1,
-        };
-      }
-
-      // Return undefined values when token counts aren't provided by the API
-      return {
-        prompt: undefined,
-        completion: undefined,
-        total: undefined,
-        numRequests: 1,
-      };
-    },
+    tokenUsage: (responseJson: any, _promptText: string): TokenUsage =>
+      getCohereTokenUsage(responseJson),
   },
   DEEPSEEK: {
     params: async (
@@ -2012,12 +2030,7 @@ ${prompt}
       }
 
       // Return undefined values when token counts aren't provided by the API
-      return {
-        prompt: undefined,
-        completion: undefined,
-        total: undefined,
-        numRequests: 1,
-      };
+      return missingBedrockTokenUsage();
     },
   },
   MISTRAL_CHAT: BEDROCK_MISTRAL_CHAT_MODEL,
@@ -2102,38 +2115,7 @@ ${prompt}
       // block, fall back to the original content so the whole response is never silently dropped.
       return answer.trim() === '' ? content : answer;
     },
-    tokenUsage: (responseJson: any, _promptText: string): TokenUsage => {
-      if (responseJson?.usage) {
-        const usage = responseJson.usage;
-        // gpt-oss reports usage the same way OpenAI's Chat Completions API does; surface
-        // reasoning and cached-input token counts (when present) under completionDetails for
-        // parity with the openai: provider.
-        const reasoningTokens = coerceStrToNum(usage.completion_tokens_details?.reasoning_tokens);
-        const cachedInputTokens = coerceStrToNum(usage.prompt_tokens_details?.cached_tokens);
-        const completionDetails: { reasoning?: number; cacheReadInputTokens?: number } = {};
-        if (reasoningTokens !== undefined) {
-          completionDetails.reasoning = reasoningTokens;
-        }
-        if ((cachedInputTokens ?? 0) > 0) {
-          completionDetails.cacheReadInputTokens = cachedInputTokens;
-        }
-        return {
-          prompt: coerceStrToNum(usage.prompt_tokens),
-          completion: coerceStrToNum(usage.completion_tokens),
-          total: coerceStrToNum(usage.total_tokens),
-          numRequests: 1,
-          ...(Object.keys(completionDetails).length > 0 ? { completionDetails } : {}),
-        };
-      }
-
-      // Return undefined values when token counts aren't provided by the API
-      return {
-        prompt: undefined,
-        completion: undefined,
-        total: undefined,
-        numRequests: 1,
-      };
-    },
+    tokenUsage: getOpenAiCompatibleTokenUsage,
   },
   QWEN: {
     params: async (
@@ -2250,11 +2232,20 @@ ${prompt}
       config: BedrockOpenAICompatGenerationOptions,
       prompt: string,
       stop?: string[],
-      _modelName?: string,
+      modelName?: string,
       vars?: Record<string, VarValue>,
     ) => {
       const messages = parseChatPrompt(prompt, [{ role: 'user', content: prompt }]);
       const params: any = { messages };
+      if (
+        config?.service_tier !== undefined &&
+        /(?:^|:inference-profile\/)(?:us|in|global)\.moonshotai\.kimi-k3$/.test(modelName ?? '')
+      ) {
+        if (!['default', 'priority', 'flex'].includes(config.service_tier)) {
+          throw new Error('Kimi K3 supports default, priority, and flex service_tier values.');
+        }
+        params.service_tier = config.service_tier;
+      }
 
       addConfigParam(params, 'max_tokens', config?.max_tokens, getEnvInt('AWS_BEDROCK_MAX_TOKENS'));
       // No forced temperature/top_p default: reasoning-oriented models in this group (e.g.
@@ -2301,25 +2292,34 @@ ${prompt}
       }
 
       const choice = responseJson.choices?.[0];
+      let content = choice?.message?.content;
+      const reasoning = choice?.message?.reasoning_content;
+      if (
+        config.showThinking !== false &&
+        typeof reasoning === 'string' &&
+        reasoning &&
+        (typeof content === 'string' || content == null)
+      ) {
+        content = `Thinking: ${reasoning}${content ? `\n\n${content}` : ''}`;
+      }
 
       // Surface tool calls (OpenAI format) the same way the Qwen handler does. Use optional
       // chaining so a malformed tool_call entry (missing `.function`) degrades gracefully
       // instead of throwing inside output().
       if (Array.isArray(choice?.message?.tool_calls) && choice.message.tool_calls.length > 0) {
-        const content =
-          typeof choice.message.content === 'string' && config?.showThinking === false
-            ? choice.message.content.replace(/^\s*<(think|reasoning)>[\s\S]*?<\/\1>\s*/i, '')
-            : choice.message.content;
+        const visibleContent =
+          typeof content === 'string' && config?.showThinking === false
+            ? content.replace(/^\s*<(think|reasoning)>[\s\S]*?<\/\1>\s*/i, '')
+            : content;
         const toolCalls = choice.message.tool_calls
           .map(
             (toolCall: any) =>
               `Called function ${toolCall.function?.name} with arguments: ${toolCall.function?.arguments}`,
           )
           .join('\n');
-        return content ? `${content}\n\n${toolCalls}` : toolCalls;
+        return visibleContent ? `${visibleContent}\n\n${toolCalls}` : toolCalls;
       }
 
-      const content = choice?.message?.content;
       if (typeof content !== 'string') {
         return content;
       }
@@ -2356,7 +2356,6 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   'amazon.nova-premier-v1:0': BEDROCK_MODEL.AMAZON_NOVA,
   // Nova 2 models with extended thinking support
   'amazon.nova-2-lite-v1:0': BEDROCK_MODEL.AMAZON_NOVA_2,
-  'amazon.nova-2-sonic-v1:0': BEDROCK_MODEL.AMAZON_NOVA, // Sonic uses bidirectional streaming API
   'anthropic.claude-3-5-sonnet-20240620-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'anthropic.claude-3-5-sonnet-20241022-v2:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'anthropic.claude-3-7-sonnet-20250219-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
@@ -2376,7 +2375,6 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   'anthropic.claude-sonnet-4-6': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'anthropic.claude-sonnet-4-5-20250929-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'anthropic.claude-haiku-4-5-20251001-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
-  'anthropic.claude-sonnet-4-20250514-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'cohere.command-r-plus-v1:0': BEDROCK_MODEL.COHERE_COMMAND_R,
   'cohere.command-r-v1:0': BEDROCK_MODEL.COHERE_COMMAND_R,
   'deepseek.r1-v1:0': BEDROCK_MODEL.DEEPSEEK,
@@ -2406,12 +2404,12 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   'mistral.voxtral-mini-3b-2507': BEDROCK_MODEL.MISTRAL_CHAT,
   'mistral.voxtral-small-24b-2507': BEDROCK_MODEL.MISTRAL_CHAT,
 
+  // Canada cross-region inference
+  'ca.amazon.nova-lite-v1:0': BEDROCK_MODEL.AMAZON_NOVA,
+
   // APAC Models
   'apac.amazon.nova-lite-v1:0': BEDROCK_MODEL.AMAZON_NOVA,
-  'apac.amazon.nova-micro-v1:0': BEDROCK_MODEL.AMAZON_NOVA,
   'apac.amazon.nova-pro-v1:0': BEDROCK_MODEL.AMAZON_NOVA,
-  'apac.amazon.nova-premier-v1:0': BEDROCK_MODEL.AMAZON_NOVA,
-  'apac.amazon.nova-2-lite-v1:0': BEDROCK_MODEL.AMAZON_NOVA_2,
   'apac.anthropic.claude-3-5-sonnet-20240620-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'apac.anthropic.claude-3-haiku-20240307-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'apac.anthropic.claude-opus-4-1-20250805-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
@@ -2420,20 +2418,23 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   'apac.anthropic.claude-sonnet-4-6': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'apac.anthropic.claude-sonnet-4-5-20250929-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'apac.anthropic.claude-haiku-4-5-20251001-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
-  'apac.anthropic.claude-sonnet-4-20250514-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'apac.meta.llama4-scout-17b-instruct-v1:0': BEDROCK_MODEL.LLAMA4,
   'apac.meta.llama4-maverick-17b-instruct-v1:0': BEDROCK_MODEL.LLAMA4,
+
+  // AU geo inference profiles
+  'au.anthropic.claude-opus-4-7': BEDROCK_MODEL.CLAUDE_MESSAGES,
+  'au.anthropic.claude-opus-4-8': BEDROCK_MODEL.CLAUDE_MESSAGES,
+  'au.anthropic.claude-opus-5': BEDROCK_MODEL.CLAUDE_MESSAGES,
+  'au.anthropic.claude-sonnet-5': BEDROCK_MODEL.CLAUDE_MESSAGES,
 
   // EU Models
   'eu.amazon.nova-lite-v1:0': BEDROCK_MODEL.AMAZON_NOVA,
   'eu.amazon.nova-micro-v1:0': BEDROCK_MODEL.AMAZON_NOVA,
   'eu.amazon.nova-pro-v1:0': BEDROCK_MODEL.AMAZON_NOVA,
-  'eu.amazon.nova-premier-v1:0': BEDROCK_MODEL.AMAZON_NOVA,
   'eu.amazon.nova-2-lite-v1:0': BEDROCK_MODEL.AMAZON_NOVA_2,
   'eu.anthropic.claude-3-5-sonnet-20240620-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'eu.anthropic.claude-3-7-sonnet-20250219-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'eu.anthropic.claude-3-haiku-20240307-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
-  'eu.anthropic.claude-fable-5': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'eu.anthropic.claude-opus-4-1-20250805-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'eu.anthropic.claude-opus-4-6-v1': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'eu.anthropic.claude-opus-4-7': BEDROCK_MODEL.CLAUDE_MESSAGES,
@@ -2445,7 +2446,6 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   'eu.anthropic.claude-sonnet-4-6': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'eu.anthropic.claude-sonnet-4-5-20250929-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'eu.anthropic.claude-haiku-4-5-20251001-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
-  'eu.anthropic.claude-sonnet-4-20250514-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'eu.meta.llama3-2-1b-instruct-v1:0': BEDROCK_MODEL.LLAMA3_2,
   'eu.meta.llama3-2-3b-instruct-v1:0': BEDROCK_MODEL.LLAMA3_2,
   'eu.meta.llama4-scout-17b-instruct-v1:0': BEDROCK_MODEL.LLAMA4,
@@ -2462,7 +2462,6 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   'us.amazon.nova-pro-v1:0': BEDROCK_MODEL.AMAZON_NOVA,
   'us.amazon.nova-premier-v1:0': BEDROCK_MODEL.AMAZON_NOVA,
   'us.amazon.nova-2-lite-v1:0': BEDROCK_MODEL.AMAZON_NOVA_2,
-  'us.amazon.nova-2-sonic-v1:0': BEDROCK_MODEL.AMAZON_NOVA,
   'us.anthropic.claude-3-5-sonnet-20240620-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'us.anthropic.claude-3-5-sonnet-20241022-v2:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'us.anthropic.claude-3-7-sonnet-20250219-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
@@ -2481,7 +2480,6 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   'us.anthropic.claude-sonnet-4-6': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'us.anthropic.claude-sonnet-4-5-20250929-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'us.anthropic.claude-haiku-4-5-20251001-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
-  'us.anthropic.claude-sonnet-4-20250514-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'us.deepseek.r1-v1:0': BEDROCK_MODEL.DEEPSEEK,
   'us.meta.llama3-1-405b-instruct-v1:0': BEDROCK_MODEL.LLAMA3_1,
   'us.meta.llama3-1-70b-instruct-v1:0': BEDROCK_MODEL.LLAMA3_1,
@@ -2525,7 +2523,13 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   // use `{ messages, max_tokens, ... }` -> `{ choices: [{ message: { content } }] }`, so they
   // share BEDROCK_MODEL.OPENAI_COMPAT. Verified available via `aws bedrock list-foundation-models`.
 
+  // Grok 4.7, GLM 5.3, and Kimi K3 require Runtime cross-region inference profiles.
+  'us.xai.grok-4.7': BEDROCK_MODEL.OPENAI_COMPAT,
+  'global.xai.grok-4.7': BEDROCK_MODEL.OPENAI_COMPAT,
+
   // Z.AI GLM
+  'us.zai.glm-5.3': BEDROCK_MODEL.OPENAI_COMPAT,
+  'global.zai.glm-5.3': BEDROCK_MODEL.OPENAI_COMPAT,
   'zai.glm-5': BEDROCK_MODEL.OPENAI_COMPAT,
   'zai.glm-4.7': BEDROCK_MODEL.OPENAI_COMPAT,
   'zai.glm-4.7-flash': BEDROCK_MODEL.OPENAI_COMPAT,
@@ -2536,6 +2540,9 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   'minimax.minimax-m2.5': BEDROCK_MODEL.OPENAI_COMPAT,
 
   // Moonshot AI (Kimi) — note the two provider prefixes Bedrock uses (`moonshot.`/`moonshotai.`)
+  'us.moonshotai.kimi-k3': BEDROCK_MODEL.OPENAI_COMPAT,
+  'global.moonshotai.kimi-k3': BEDROCK_MODEL.OPENAI_COMPAT,
+  'in.moonshotai.kimi-k3': BEDROCK_MODEL.OPENAI_COMPAT,
   'moonshotai.kimi-k2.5': BEDROCK_MODEL.OPENAI_COMPAT,
   'moonshot.kimi-k2-thinking': BEDROCK_MODEL.OPENAI_COMPAT,
 
@@ -2560,7 +2567,8 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   'us.writer.palmyra-x4-v1:0': BEDROCK_MODEL.OPENAI_COMPAT,
   'writer.palmyra-vision-7b': BEDROCK_MODEL.OPENAI_COMPAT,
 
-  // Global cross-region inference models (Nova 2)
+  // Japan and global cross-region inference models (Nova 2)
+  'jp.amazon.nova-2-lite-v1:0': BEDROCK_MODEL.AMAZON_NOVA_2,
   'global.amazon.nova-2-lite-v1:0': BEDROCK_MODEL.AMAZON_NOVA_2,
 
   // Global / Japan cross-region inference profiles for Claude Opus 4.7
@@ -2574,10 +2582,8 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   'global.anthropic.claude-opus-4-8': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'jp.anthropic.claude-opus-4-8': BEDROCK_MODEL.CLAUDE_MESSAGES,
 
-  // Claude Opus 5 global cross-region inference profile. Verified via
-  // `aws bedrock list-inference-profiles`: Opus 5 exposes base + `us.`/`eu.`/`global.`
-  // only — unlike Opus 4.7/4.8 there is no `jp.` profile (the JP regions surface just
-  // `global.`), and no older `apac.` prefix.
+  // Claude Opus 5 global cross-region inference profile. Runtime exposes the bare ID plus
+  // `us.`/`eu.`/`au.`/`global.` profiles.
   'global.anthropic.claude-opus-5': BEDROCK_MODEL.CLAUDE_MESSAGES,
 
   // Claude Opus 5.5 geo and global cross-region inference profiles. Verified via
@@ -2596,21 +2602,32 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   'global.anthropic.claude-sonnet-5-5': BEDROCK_MODEL.CLAUDE_MESSAGES,
 };
 
+function getCanonicalMessagesOnlyModel(modelName: string): string | undefined {
+  const mythosMatch = /^(?:[^.]+\.)?(anthropic\.claude-mythos-(?:5|preview))$/.exec(modelName);
+  if (mythosMatch) {
+    return mythosMatch[1];
+  }
+  if (requiresBedrockAnthropicMessagesModel(modelName)) {
+    return modelName;
+  }
+  return undefined;
+}
+
 // See https://docs.aws.amazon.com/bedrock/latest/userguide/model-ids.html
 /**
  * Model IDs AWS no longer serves. Kept so a config pinned to one fails with a clear local
  * error instead of reaching the `anthropic.claude` catch-all below (or, on the Converse
  * route, the remote API) and failing with something less obvious.
  *
- * The Claude entries were verified absent from `list-foundation-models` in all 17 commercial
- * regions on 2026-09-04. Note this is Bedrock's lifecycle, not Anthropic's: several models
- * retired on the Anthropic API are still served here and must NOT be listed.
+ * Use the Bedrock model card to verify end of life in all regions. Anthropic's
+ * first-party retirement dates can differ from Bedrock's regional lifecycle.
  *
  * Use bare IDs; the availability check removes inference-profile prefixes.
  */
 export const RETIRED_BEDROCK_MODELS = new Set([
   'anthropic.claude-3-opus-20240229-v1:0',
   'anthropic.claude-opus-4-20250514-v1:0',
+  'anthropic.claude-sonnet-4-20250514-v1:0',
   'anthropic.claude-3-5-haiku-20241022-v1:0',
   'anthropic.claude-instant-v1',
   'anthropic.claude-v1',
@@ -2622,7 +2639,7 @@ export const RETIRED_BEDROCK_MODELS = new Set([
   'meta.llama2-70b-chat-v1',
 ]);
 
-/** Reject withdrawn models before InvokeModel, Converse, or Knowledge Base requests. */
+/** Reject withdrawn models and IDs that require a cross-region inference profile. */
 export function assertBedrockModelIsAvailable(modelName: string): void {
   // A system inference profile or foundation model ARN ends in the ID it resolves to.
   // Application inference profile ARNs hide the model, so they cannot be checked here.
@@ -2632,6 +2649,14 @@ export function assertBedrockModelIsAvailable(modelName: string): void {
   if (RETIRED_BEDROCK_MODELS.has(modelId.replace(INFERENCE_PROFILE_PREFIX, ''))) {
     throw new Error(`Unknown Amazon Bedrock model: ${modelName}`);
   }
+  if (modelId === 'xai.grok-4.7' || modelId === 'zai.glm-5.3' || modelId === 'moonshotai.kimi-k3') {
+    throw new Error(
+      `Amazon Bedrock model "${modelId}" requires a cross-region inference profile. ` +
+        `Use "bedrock:us.${modelId}" or "bedrock:global.${modelId}"` +
+        (modelId === 'moonshotai.kimi-k3' ? ` or "bedrock:in.${modelId}"` : '') +
+        ' in a supported region.',
+    );
+  }
 }
 
 export function getHandlerForModel(
@@ -2639,14 +2664,13 @@ export function getHandlerForModel(
   config?: BedrockInvokeModelOptions,
 ): IBedrockModel {
   assertBedrockModelIsAvailable(modelName);
-  const messagesOnlyModel = modelName.match(/^(?:[^.]+\.)?(anthropic\.claude-mythos-5)$/);
+  const messagesOnlyModel = getCanonicalMessagesOnlyModel(modelName);
   if (messagesOnlyModel) {
-    // Mythos has no geo/global inference profiles, so always point at the bare
-    // canonical ID — suggesting a prefixed `bedrock:${modelName}` would only
-    // bounce the user into the factory's prefixed-Mythos rejection.
+    // Mythos has no geo/global inference profiles. Point at the canonical Anthropic Messages
+    // provider rather than suggesting a direct InvokeModel ID.
     throw new Error(
       `Amazon Bedrock model "${modelName}" uses Bedrock's Anthropic Messages API, not ` +
-        `InvokeModel. Load it as "bedrock:${messagesOnlyModel[1]}" instead.`,
+        `InvokeModel. Load it as "bedrock:${messagesOnlyModel}" instead.`,
     );
   }
 
@@ -2658,7 +2682,7 @@ export function getHandlerForModel(
     if (!inferenceModelType) {
       throw new Error(
         'Inference profile requires inferenceModelType to be specified in config. ' +
-          'Options: claude, nova, nova2, llama (defaults to v4), llama2, llama3, llama3.1, llama3.2, llama3.3, llama4, mistral, cohere, ai21, titan, deepseek, openai, qwen, zai, minimax, moonshot, nvidia, writer, gemma',
+          'Options: claude, nova, nova2, llama (defaults to v4), llama2, llama3, llama3.1, llama3.2, llama3.3, llama4, mistral, cohere, ai21, titan, deepseek, openai, qwen, xai, zai, minimax, moonshot, nvidia, writer, gemma',
       );
     }
 
@@ -2702,6 +2726,7 @@ export function getHandlerForModel(
         return BEDROCK_MODEL.QWEN;
       case 'nova2':
         return BEDROCK_MODEL.AMAZON_NOVA_2;
+      case 'xai':
       case 'zai':
       case 'minimax':
       case 'moonshot':
@@ -2764,7 +2789,7 @@ export function getHandlerForModel(
   if (modelName.startsWith('qwen.')) {
     return BEDROCK_MODEL.QWEN;
   }
-  // Open-weight gpt-oss models are the only OpenAI models served via InvokeModel. The
+  // This adapter implements the GPT OSS InvokeModel contract. The
   // frontier gpt-5.x models use the OpenAI-compatible Responses API and are routed to the
   // OpenAI Responses provider in src/providers/families/aws.ts before reaching this handler.
   if (modelName.includes('openai.gpt-oss')) {
@@ -2785,33 +2810,26 @@ export function getHandlerForModel(
     );
   }
   if (modelName.includes('openai.')) {
-    // GPT-5.6 Runtime profiles support Converse, but not InvokeModel. Older frontier
-    // models retain their established Mantle Responses guidance.
-    const bareFrontierId = modelName.replace(/^[a-z]+\.(?=openai\.)/, '');
-    if (/^[a-z]+\.openai\.gpt-5\.6-(?:sol|terra|luna)$/.test(modelName)) {
-      throw new Error(
-        `OpenAI model "${modelName}" is not served by Bedrock's InvokeModel API. ` +
-          `For a supported Runtime inference profile, use "bedrock:converse:${modelName}" ` +
-          `with AWS credentials, ` +
-          `or "bedrock:${bareFrontierId}" with AWS_BEARER_TOKEN_BEDROCK for Mantle Responses.`,
-      );
-    }
+    const bareId = modelName.replace(/^[a-z-]+\.(?=openai\.)/, '');
+    const converse =
+      modelName === bareId
+        ? ''
+        : `If AWS lists this Runtime inference profile, use "bedrock:converse:${modelName}" for Converse. `;
     throw new Error(
-      `OpenAI model "${modelName}" is not served by Bedrock's InvokeModel API. Frontier ` +
-        `models (gpt-5.x) use the OpenAI-compatible Responses API — use ` +
-        `"bedrock:${bareFrontierId}" and set AWS_BEARER_TOKEN_BEDROCK. See ` +
-        `https://www.promptfoo.dev/docs/providers/aws-bedrock/#openai-models`,
+      `Promptfoo's Bedrock InvokeModel adapter does not support "${modelName}". ` +
+        converse +
+        `For the Mantle Responses API, use "bedrock:${bareId}".`,
     );
   }
   if (modelName.includes('xai.') || modelName.includes('grok')) {
-    // Grok runs on Mantle (OpenAI-compatible Responses API), not InvokeModel. The bare id is
-    // normally intercepted in src/providers/families/aws.ts before reaching here; this guards
-    // direct or prefixed ids that bypass the factory's supported bare-id route.
+    // Supported Grok Runtime profiles are handled above. Bare Mantle IDs are normally
+    // intercepted by the factory; other direct or prefixed IDs need route guidance.
     throw new Error(
       `xAI model "${modelName}" is not served by Bedrock's InvokeModel API under that id. ` +
-        `Grok 4.6 supports Runtime Converse through an inference profile — use ` +
-        `"bedrock:converse:us.xai.grok-4.6" or "bedrock:converse:global.xai.grok-4.6" ` +
-        `with ordinary AWS credentials. Other Grok models run on ` +
+        `Grok 4.6 and 4.7 support Runtime InvokeModel and Converse through an inference profile — use ` +
+        `"bedrock:converse:us.xai.grok-4.6", "bedrock:converse:global.xai.grok-4.6", ` +
+        `or "bedrock:converse:us.xai.grok-4.7" ` +
+        `with AWS credentials. Mantle-served Grok models use ` +
         `the OpenAI-compatible Responses API (mantle endpoint) — use the bare id such as ` +
         `"bedrock:xai.grok-4.3" and set AWS_BEARER_TOKEN_BEDROCK. See ` +
         `https://www.promptfoo.dev/docs/providers/aws-bedrock/#xai-grok-models`,
@@ -2843,6 +2861,20 @@ export class AwsBedrockCompletionProvider extends AwsBedrockGenericProvider impl
       model = BEDROCK_MODEL.CLAUDE_MESSAGES;
     }
     const params = await model.params(mergedConfig, prompt, stop, this.modelName, context?.vars);
+
+    const grok47 =
+      isBedrockGrokRuntimeProfile(this.modelName) && this.modelName.endsWith('grok-4.7');
+    const grokTier = grok47
+      ? (mergedConfig as BedrockOpenAICompatGenerationOptions).service_tier
+      : undefined;
+    if (grokTier !== undefined) {
+      if (grokTier !== 'default' && grokTier !== 'priority' && grokTier !== 'flex') {
+        throw new Error(
+          'Grok 4.7 InvokeModel supports default, priority, and flex service_tier values.',
+        );
+      }
+      params.service_tier = grokTier;
+    }
 
     logger.debug('Calling Amazon Bedrock API', { params });
 
@@ -2973,19 +3005,33 @@ export class AwsBedrockCompletionProvider extends AwsBedrockGenericProvider impl
 
       // Claude's displayed prompt count includes cache reads and writes. Billing
       // needs the API's uncached input count because cache tokens are priced separately.
+      const cacheReadInputTokens =
+        tokenUsage.completionDetails?.cacheReadInputTokens ??
+        (isBedrockGrokRuntimeProfile(this.modelName)
+          ? coerceStrToNum(output.usage?.prompt_tokens_details?.cached_tokens)
+          : coerceStrToNum(output.usage?.cache_read_input_tokens));
       const billablePromptTokens =
         model === BEDROCK_MODEL.CLAUDE_MESSAGES
           ? coerceStrToNum(output.usage?.input_tokens ?? output.usage?.prompt_tokens)
-          : tokenUsage.prompt;
+          : isBedrockGrokRuntimeProfile(this.modelName) && tokenUsage.prompt !== undefined
+            ? Math.max(tokenUsage.prompt - (cacheReadInputTokens ?? 0), 0)
+            : tokenUsage.prompt;
       const cost = calculateBedrockInvokeModelCost(
         this.modelName,
         billablePromptTokens,
         tokenUsage.completion,
-        tokenUsage.completionDetails?.cacheReadInputTokens ??
-          coerceStrToNum(output.usage?.cache_read_input_tokens),
+        cacheReadInputTokens,
         tokenUsage.completionDetails?.cacheCreationInputTokens ??
-          coerceStrToNum(output.usage?.cache_creation_input_tokens),
-        region,
+          coerceStrToNum(
+            isBedrockGrokRuntimeProfile(this.modelName)
+              ? output.usage?.prompt_tokens_details?.cache_write_tokens
+              : output.usage?.cache_creation_input_tokens,
+          ),
+        getBedrockRuntimeBillingRegion(region, this.config.endpoint),
+        coerceStrToNum(output.usage?.cache_creation?.ephemeral_1h_input_tokens),
+        grok47 && (output.service_tier ?? grokTier)
+          ? { type: output.service_tier ?? grokTier }
+          : undefined,
       );
 
       return {
@@ -3017,6 +3063,8 @@ export class AwsBedrockEmbeddingProvider
   extends AwsBedrockGenericProvider
   implements ApiEmbeddingProvider
 {
+  readonly supportsEmbeddingCancellation = true;
+
   declare config: BedrockEmbeddingOptions;
 
   constructor(
@@ -3034,7 +3082,11 @@ export class AwsBedrockEmbeddingProvider
     throw new Error('callApi is not implemented for embedding provider');
   }
 
-  async callEmbeddingApi(text: string): Promise<ProviderEmbeddingResponse> {
+  async callEmbeddingApi(
+    text: string,
+    _context?: CallApiContextParams,
+    options?: CallApiOptionsParams,
+  ): Promise<ProviderEmbeddingResponse> {
     const params = this.modelName.includes('cohere.embed')
       ? {
           texts: [text],
@@ -3048,13 +3100,17 @@ export class AwsBedrockEmbeddingProvider
     let response;
     try {
       const bedrockInstance = await this.getBedrockInstance();
-      response = await bedrockInstance.invokeModel({
+      const command = {
         modelId: this.modelName,
         accept: 'application/json',
         contentType: 'application/json',
         body: JSON.stringify(params),
-      });
+      };
+      response = options?.abortSignal
+        ? await bedrockInstance.invokeModel(command, { abortSignal: options.abortSignal })
+        : await bedrockInstance.invokeModel(command);
     } catch (err) {
+      options?.abortSignal?.throwIfAborted();
       return {
         error: `API call error: ${String(err)}`,
       };

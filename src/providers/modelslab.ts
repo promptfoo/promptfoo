@@ -13,7 +13,7 @@
 import { isBlobStorageEnabled } from '../blobs/extractor';
 import { type BlobRef, storeBlob } from '../blobs/index';
 import { fetchWithCache } from '../cache';
-import { getEnvString } from '../envars';
+import { getEnvString, getProviderEnvString } from '../envars';
 import logger from '../logger';
 import { fetchWithProxy } from '../util/fetch/index';
 import { ellipsize } from '../util/text';
@@ -84,7 +84,10 @@ export class ModelsLabImageProvider implements ApiProvider {
   ) {
     const { config, id, env } = options;
     this.modelName = modelName;
-    this.apiKey = config?.apiKey || env?.MODELSLAB_API_KEY || getEnvString('MODELSLAB_API_KEY');
+    this.apiKey =
+      config?.apiKey ||
+      getProviderEnvString(env, 'MODELSLAB_API_KEY') ||
+      getEnvString('MODELSLAB_API_KEY');
     const { apiKey: _apiKey, ...restConfig } = config ?? {};
     this.config = restConfig;
     this.id = id ? () => id : this.id;

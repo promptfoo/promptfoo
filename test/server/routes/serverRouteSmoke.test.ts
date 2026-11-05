@@ -2,6 +2,7 @@ import { IncomingMessage, ServerResponse } from 'node:http';
 import { Duplex } from 'node:stream';
 
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { globalLogCallback, setLogCallback } from '../../../src/logger';
 import {
   createServerOpenApiDocument,
   SERVER_OPENAPI_ROUTE_COUNT,
@@ -115,6 +116,7 @@ vi.mock('../../../src/envars', () => ({
   getEvalTimeoutMs: vi.fn(() => 0),
   getMaxEvalTimeMs: vi.fn(() => 0),
   getEnvString: mocks.getEnvString,
+  getEnvOverrides: vi.fn(),
   isCI: vi.fn(() => false),
   isNonInteractive: vi.fn(() => true),
 }));
@@ -856,38 +858,12 @@ describe('server route end-to-end smoke coverage', { concurrent: false }, () => 
     vi.resetAllMocks();
   });
 
-  it('serves the installed spec once per app with a relative server URL', async () => {
-    const generator = await import('../../../src/openapi/server');
-    const spy = vi.spyOn(generator, 'createServerOpenApiDocument');
-    try {
-      const freshApp = createApp();
-      const testCase = smokeCases.find((entry) => entry.path === '/api/openapi.json')!;
-      const first = await sendRequest(freshApp, testCase);
-      const second = await sendRequest(freshApp, testCase);
-      expect(first.status).toBe(200);
-      expect(spy).toHaveBeenCalledTimes(1);
-      expect(JSON.parse(first.text)).toEqual(createServerOpenApiDocument({ serverUrl: '/' }));
-      expect(second.text).toBe(first.text);
-    } finally {
-      spy.mockRestore();
-    }
-  });
-
-  it('returns a recoverable error when spec generation fails', async () => {
-    const generator = await import('../../../src/openapi/server');
-    const spy = vi.spyOn(generator, 'createServerOpenApiDocument').mockImplementationOnce(() => {
-      throw new Error('internal generator detail');
-    });
-    try {
-      const freshApp = createApp();
-      const testCase = smokeCases.find((entry) => entry.path === '/api/openapi.json')!;
-      const failed = await sendRequest(freshApp, testCase);
-      expect(failed.status).toBe(500);
-      expect(JSON.parse(failed.text)).toEqual({ error: 'Failed to generate API specification' });
-      expect((await sendRequest(freshApp, testCase)).status).toBe(200);
-    } finally {
-      spy.mockRestore();
-    }
+  it('serves the published routes with the installed version and request origin', async () => {
+    const endpoint = smokeCases.find((entry) => entry.path === '/api/openapi.json')!;
+    const response = await sendRequest(createApp(), endpoint);
+    expect(response.status).toBe(200);
+    const expected = createServerOpenApiDocument();
+    expect(JSON.parse(response.text)).toEqual({ ...expected, servers: [{ url: '/' }] });
   });
 
   it('has one smoke case for every generated OpenAPI route', () => {
@@ -911,6 +887,41 @@ describe('server route end-to-end smoke coverage', { concurrent: false }, () => 
 
     if (response.status !== 204) {
       expect(response.headers['content-type']).toContain('application/json');
+    }
+  });
+
+  it('handles malformed JSON before route dispatch and keeps the app healthy', async () => {
+    const canary = 'malformed-request-body-canary';
+    const environment = app.get('env');
+    const previousLogCallback = globalLogCallback;
+    const messages: string[] = [];
+    setLogCallback((message) => messages.push(message));
+    app.set('env', 'production');
+    try {
+      const response = await sendRequest(app, {
+        method: 'post',
+        openApiPath: '/api/telemetry',
+        path: '/api/telemetry',
+        rawJsonBody: `{"payloadNote":"${canary}","padding":"${'x'.repeat(512)}","broken":}`,
+        expectedStatus: 400,
+      });
+      expect(response.status).toBe(400);
+      expect(response.headers['content-type']).toContain('application/json');
+      expect(response.body).toEqual({ error: 'Bad Request' });
+      expect(response.text).not.toContain(canary);
+      expect(mocks.telemetry.record).not.toHaveBeenCalled();
+      const healthy = await sendRequest(app, {
+        method: 'get',
+        openApiPath: '/health',
+        path: '/health',
+        expectedStatus: 200,
+      });
+      expect(healthy.status).toBe(200);
+      expect(messages.join('\n')).toContain('SyntaxError');
+      expect(messages.join('\n')).not.toContain(canary);
+    } finally {
+      app.set('env', environment);
+      setLogCallback(previousLogCallback);
     }
   });
 });

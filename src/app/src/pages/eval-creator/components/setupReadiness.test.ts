@@ -597,6 +597,27 @@ describe('setupReadiness', () => {
       ).toBe(true);
     });
 
+    it('blocks trace attribute filters that the runtime would reject', () => {
+      for (const [attributes, expected] of [
+        [[], false],
+        [{}, true],
+      ] as const) {
+        expect(
+          getSetupReadiness({
+            providers: ['openai:gpt-4.1'],
+            prompts: ['Use tracing'],
+            tests: [
+              {
+                assert: [
+                  { type: 'trace-span-count' as const, value: { pattern: '*', attributes } },
+                ],
+              },
+            ],
+          }).isReadyToRun,
+        ).toBe(expected);
+      }
+    });
+
     it('validates trajectory goal content and normalized score thresholds', () => {
       const baseConfig = {
         providers: ['openai:gpt-4.1'],

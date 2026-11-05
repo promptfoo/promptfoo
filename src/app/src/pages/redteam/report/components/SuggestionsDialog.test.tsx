@@ -1,7 +1,7 @@
 import { mockClipboard } from '@app/tests/browserMocks';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import SuggestionsDialog from './SuggestionsDialog';
 import type { GradingResult } from '@promptfoo/types';
 
@@ -22,6 +22,7 @@ function renderSuggestionsDialog(props: {
 }
 
 describe('SuggestionsDialog', () => {
+  afterEach(() => vi.restoreAllMocks());
   it("should render the dialog with the title 'Suggestions' and a close button when 'open' is true", () => {
     const handleClose = vi.fn();
     renderSuggestionsDialog({ onClose: handleClose });
@@ -158,7 +159,10 @@ describe('SuggestionsDialog', () => {
   });
 
   it('should handle navigator.clipboard.writeText failure gracefully', async () => {
-    const mockWriteText = vi.fn().mockRejectedValue(new Error('Clipboard write failed'));
+    const user = userEvent.setup();
+    const failure = new Error('Clipboard write failed');
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const mockWriteText = vi.fn().mockRejectedValue(failure);
 
     mockClipboard({ writeText: mockWriteText as Clipboard['writeText'] });
 
@@ -171,8 +175,10 @@ describe('SuggestionsDialog', () => {
 
     renderSuggestionsDialog({ gradingResult });
 
-    await screen.findByText('View suggested prompt');
-
-    expect(screen.getByText('View suggested prompt')).toBeInTheDocument();
+    await user.click(screen.getByText('View suggested prompt'));
+    await user.click(screen.getByRole('button', { name: 'Copy' }));
+    expect(mockWriteText).toHaveBeenCalledWith('Suggested prompt');
+    expect(consoleError).toHaveBeenCalledWith('Failed to copy to clipboard:', failure);
+    expect(screen.queryByRole('button', { name: 'Copied' })).not.toBeInTheDocument();
   });
 });

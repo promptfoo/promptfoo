@@ -6,18 +6,16 @@ import path from 'node:path';
 import { createServerOpenApiDocument } from '../src/openapi/server';
 
 const DEFAULT_OUTPUT_PATH = 'site/static/openapi.json';
-const SITE_OPENAPI_VERSION = 'latest';
 const require = createRequire(import.meta.url);
 const args = process.argv.slice(2);
 const checkOnly = args.includes('--check');
 const outputPath = args.find((arg) => arg !== '--check') ?? DEFAULT_OUTPUT_PATH;
 const absoluteOutputPath = path.resolve(outputPath);
 const biomePath = require.resolve('@biomejs/biome/bin/biome');
-const unformattedSpec = `${JSON.stringify(
-  createServerOpenApiDocument({ version: SITE_OPENAPI_VERSION }),
-  null,
-  2,
-)}\n`;
+const document = createServerOpenApiDocument();
+// Keep the website snapshot stable across package releases.
+document.info.version = 'latest';
+const unformattedSpec = JSON.stringify(document);
 const renderedSpec = execFileSync(
   process.execPath,
   [biomePath, 'format', '--stdin-file-path', absoluteOutputPath],

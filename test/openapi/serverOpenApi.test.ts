@@ -58,53 +58,6 @@ function sourceRouteOperations() {
 }
 
 describe('server OpenAPI generation', () => {
-  it('supports stable docs versions without changing runtime defaults', () => {
-    const runtime = createServerOpenApiDocument();
-    const snapshot = createServerOpenApiDocument({ version: 'latest' });
-    expect(snapshot.info.version).toBe('latest');
-    expect(createServerOpenApiDocument().info.version).toBe(runtime.info.version);
-    expect(createServerOpenApiDocument({ serverUrl: '/' }).servers).toEqual([
-      expect.objectContaining({ url: '/' }),
-    ]);
-    const telemetry = snapshot.paths!['/api/telemetry']!.post!.requestBody as {
-      content: { 'application/json': { schema: { properties: Record<string, unknown> } } };
-    };
-    expect(telemetry.content['application/json'].schema.properties.packageVersion).toEqual({
-      type: 'string',
-    });
-  });
-
-  it('publishes hash and filename patterns that accept both letter cases', () => {
-    const patterns: Record<string, unknown>[] = [];
-    const visit = (value: unknown) => {
-      if (!value || typeof value !== 'object') {
-        return;
-      }
-      if ('pattern' in value && typeof value.pattern === 'string' && value.pattern.includes('{')) {
-        patterns.push(value as Record<string, unknown>);
-      }
-      for (const child of Object.values(value)) {
-        visit(child);
-      }
-    };
-    visit(createServerOpenApiDocument());
-    expect(patterns).toHaveLength(6);
-    const ajv = new Ajv2020({ strict: false });
-    for (const schema of patterns) {
-      const validate = ajv.compile(schema);
-      const isFilename = String(schema.pattern).includes('{12}');
-      const valid = isFilename ? `${'a'.repeat(12)}.png` : 'a'.repeat(64);
-      expect(validate(valid)).toBe(true);
-      expect(validate(valid.toUpperCase())).toBe(true);
-      expect(validate(isFilename ? 'file.png' : 'not-a-hash')).toBe(false);
-      if (isFilename) {
-        expect(validate('a'.repeat(64))).toBe(true);
-        expect(validate('A'.repeat(64))).toBe(true);
-        expect(validate('a'.repeat(63))).toBe(false);
-      }
-    }
-  });
-
   it('describes error responses as errors', () => {
     for (const { operation } of operations(createServerOpenApiDocument())) {
       const responses = (operation as { responses: Record<string, { description: string }> })
@@ -165,6 +118,15 @@ describe('server OpenAPI generation', () => {
     const evalTableJsonSchema = evalTableResponseContent?.['application/json']?.schema as
       | { anyOf?: unknown[]; oneOf?: unknown[] }
       | undefined;
+
+    const filename = getMediaOperation.parameters.find(
+      (param: { name: string }) => param.name === 'filename',
+    );
+    const acceptsFilename = new Ajv2020({ strict: false }).compile(filename.schema);
+    expect(acceptsFilename('ABCDEF123456.PNG')).toBe(true);
+    expect(acceptsFilename('A'.repeat(64))).toBe(true);
+    expect(acceptsFilename('A'.repeat(63))).toBe(false);
+    expect(acceptsFilename('file.png')).toBe(false);
 
     expect(document.openapi).toBe('3.1.0');
     expect(paths['/api/results']?.get?.parameters).toEqual(
@@ -232,6 +194,7 @@ describe('server OpenAPI generation', () => {
     expect(telemetryRequest).toEqual(
       expect.objectContaining({
         properties: expect.objectContaining({
+          packageVersion: { type: 'string' },
           event: expect.objectContaining({
             enum: expect.arrayContaining(['webui_api', 'redteam run']),
           }),

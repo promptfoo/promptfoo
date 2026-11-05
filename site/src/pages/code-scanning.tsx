@@ -2,15 +2,17 @@ import React from 'react';
 
 import Head from '@docusaurus/Head';
 import Link from '@docusaurus/Link';
-import ArticleIcon from '@mui/icons-material/Article';
 import CodeIcon from '@mui/icons-material/Code';
 import GitHubIcon from '@mui/icons-material/GitHub';
 import IntegrationInstructionsIcon from '@mui/icons-material/IntegrationInstructions';
 import SearchIcon from '@mui/icons-material/Search';
 import SecurityIcon from '@mui/icons-material/Security';
 import TerminalIcon from '@mui/icons-material/Terminal';
+import { BenefitItem } from '@site/src/components/BenefitItem';
 import Layout from '@theme/Layout';
 import clsx from 'clsx';
+import ProofBannerSection from '../components/CodeScanProofBanner';
+import VulnerabilityTypesSection from '../components/CodeScanVulnerabilities';
 import LogoContainer from '../components/LogoContainer';
 import styles from './landing-page.module.css';
 
@@ -187,88 +189,6 @@ function SeeItInActionSection() {
   );
 }
 
-function VulnerabilityTypesSection() {
-  const vulnerabilities = [
-    {
-      severity: 'critical',
-      name: 'Prompt Injection',
-      description: 'Untrusted input reaches LLM prompts without proper sanitization or boundaries.',
-    },
-    {
-      severity: 'critical',
-      name: 'Data Exfiltration',
-      description: 'Indirect prompt injection vectors that could extract data through agent tools.',
-    },
-    {
-      severity: 'high',
-      name: 'PII Exposure',
-      description:
-        'Code that may leak sensitive user data to LLMs or log confidential information.',
-    },
-    {
-      severity: 'high',
-      name: 'Improper Output Handling',
-      description: 'LLM outputs used in dangerous contexts like SQL queries or shell commands.',
-    },
-    {
-      severity: 'medium',
-      name: 'Excessive Agency',
-      description: 'LLMs with overly broad tool access or missing approval gates for actions.',
-    },
-    {
-      severity: 'medium',
-      name: 'Jailbreak Risks',
-      description: 'Weak system prompts and guardrail bypasses that could allow harmful outputs.',
-    },
-  ];
-
-  return (
-    <section className={styles.vulnerabilitySection}>
-      <div className="container">
-        <div className={styles.vulnEyebrow}>LLM-SPECIFIC DETECTION</div>
-        <h2 className={styles.vulnTitle}>Find what other scanners miss</h2>
-        <p className={styles.vulnSubtitle}>
-          Purpose-built for AI security risks that general SAST tools overlook
-        </p>
-        <div className={styles.vulnGrid}>
-          {vulnerabilities.map((vuln) => (
-            <div key={vuln.name} className={styles.vulnCard}>
-              <div className={`${styles.vulnSeverity} ${styles[vuln.severity]}`}>
-                {vuln.severity}
-              </div>
-              <h3 className={styles.vulnName}>{vuln.name}</h3>
-              <p className={styles.vulnDescription}>{vuln.description}</p>
-            </div>
-          ))}
-        </div>
-      </div>
-    </section>
-  );
-}
-
-function ProofBannerSection() {
-  return (
-    <section className={styles.proofBanner}>
-      <div className={clsx('container', styles.proofBannerContainer)}>
-        <ArticleIcon className={styles.proofBannerIcon} />
-        <div className={styles.proofBannerContent}>
-          <h3 className={styles.proofBannerTitle}>See it in action</h3>
-          <p className={styles.proofBannerText}>
-            We tested the scanner against real CVEs in LangChain, Vanna.AI, and LlamaIndex. Read the
-            technical deep dive to see how it catches vulnerabilities that other tools miss.
-          </p>
-        </div>
-        <Link
-          className={clsx('button button--secondary', styles.proofBannerButton)}
-          to="/blog/building-a-security-scanner-for-llm-apps"
-        >
-          Read the technical breakdown
-        </Link>
-      </div>
-    </section>
-  );
-}
-
 function BenefitsSection() {
   return (
     <section className={styles.benefitsSection}>
@@ -280,47 +200,39 @@ function BenefitsSection() {
           development
         </p>
         <div className={styles.benefitsList}>
-          <div className={styles.benefitItem}>
-            <SearchIcon className={styles.benefitIcon} />
-            <div className={styles.benefitContent}>
-              <h3>Deep data flow analysis</h3>
-              <p>
-                AI agents trace how user inputs flow through your code to LLM prompts, catching
-                subtle vulnerabilities that span multiple files and modules—not just surface-level
-                pattern matching.
-              </p>
-            </div>
-          </div>
-          <div className={styles.benefitItem}>
-            <SecurityIcon className={styles.benefitIcon} />
-            <div className={styles.benefitContent}>
-              <h3>LLM-specific detection</h3>
-              <p>
-                Purpose-built for AI security risks that general SAST tools miss. High signal, low
-                noise—no alert fatigue from irrelevant findings.
-              </p>
-            </div>
-          </div>
-          <div className={styles.benefitItem}>
-            <IntegrationInstructionsIcon className={styles.benefitIcon} />
-            <div className={styles.benefitContent}>
-              <h3>Embedded in developer workflow</h3>
-              <p>
-                Security feedback in the IDE and PR comments with actionable remediation. Developers
-                fix issues without context switching or separate dashboards.
-              </p>
-            </div>
-          </div>
-          <div className={styles.benefitItem}>
-            <CodeIcon className={styles.benefitIcon} />
-            <div className={styles.benefitContent}>
-              <h3>Complete development coverage</h3>
-              <p>
-                From the first line of code to deployment. IDE catches issues immediately, PR review
-                prevents merges, CI/CD ensures nothing slips through.
-              </p>
-            </div>
-          </div>
+          <BenefitItem
+            styles={styles}
+            icon={<SearchIcon className={styles.benefitIcon} />}
+            title="Deep data flow analysis"
+          >
+            AI agents trace how user inputs flow through your code to LLM prompts, catching subtle
+            vulnerabilities that span multiple files and modules—not just surface-level pattern
+            matching.
+          </BenefitItem>
+          <BenefitItem
+            styles={styles}
+            icon={<SecurityIcon className={styles.benefitIcon} />}
+            title="LLM-specific detection"
+          >
+            Purpose-built for AI security risks that general SAST tools miss. High signal, low
+            noise—no alert fatigue from irrelevant findings.
+          </BenefitItem>
+          <BenefitItem
+            styles={styles}
+            icon={<IntegrationInstructionsIcon className={styles.benefitIcon} />}
+            title="Embedded in developer workflow"
+          >
+            Security feedback in the IDE and PR comments with actionable remediation. Developers fix
+            issues without context switching or separate dashboards.
+          </BenefitItem>
+          <BenefitItem
+            styles={styles}
+            icon={<CodeIcon className={styles.benefitIcon} />}
+            title="Complete development coverage"
+          >
+            From the first line of code to deployment. IDE catches issues immediately, PR review
+            prevents merges, CI/CD ensures nothing slips through.
+          </BenefitItem>
         </div>
       </div>
     </section>
@@ -360,7 +272,12 @@ export default function CodeScanning(): React.ReactElement {
         <main className={styles.mainContent}>
           <IntegrationOptionsSection />
           <SeeItInActionSection />
-          <VulnerabilityTypesSection />
+          <VulnerabilityTypesSection
+            eyebrow="LLM-SPECIFIC DETECTION"
+            title="Find what other scanners miss"
+          >
+            Purpose-built for AI security risks that general SAST tools overlook
+          </VulnerabilityTypesSection>
           <ProofBannerSection />
           <BenefitsSection />
           <CallToActionSection />
