@@ -1040,29 +1040,7 @@
                         "type": "object",
                         "properties": {
                           "path": { "type": "string" },
-                          "config": {
-                            "type": "object",
-                            "additionalProperties": {
-                              "oneOf": [
-                                { "type": "string" },
-                                { "type": "number" },
-                                { "type": "boolean" },
-                                {
-                                  "type": "array",
-                                  "items": {
-                                    "oneOf": [
-                                      { "type": "string" },
-                                      { "type": "number" },
-                                      { "type": "boolean" }
-                                    ]
-                                  }
-                                },
-                                { "type": "object", "additionalProperties": {} },
-                                {},
-                                { "type": "null" }
-                              ]
-                            }
-                          }
+                          "config": { "type": "object", "additionalProperties": {} }
                         },
                         "required": ["path"]
                       }

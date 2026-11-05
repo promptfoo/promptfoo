@@ -138,9 +138,15 @@ describe('server OpenAPI generation', () => {
     expect(addEvalResultsOperation?.responses['204']).toEqual(
       expect.objectContaining({ description: 'Results added' }),
     );
-    expect(
-      createEvalJobOperation?.requestBody?.content?.['application/json']?.schema?.required,
-    ).toEqual(expect.arrayContaining(['prompts', 'providers']));
+    const jobSchema = createEvalJobOperation.requestBody.content['application/json'].schema;
+    const acceptsJob = new Ajv2020({ strict: false }).compile(jobSchema);
+    const job = { prompts: ['hello'], providers: ['echo'] };
+    expect(acceptsJob({ ...job, tests: 'tests.yaml' })).toBe(true);
+    expect(acceptsJob({ ...job, tests: { path: 'file://tests.js' } })).toBe(true);
+    expect(acceptsJob({ ...job, tests: {} })).toBe(false);
+    expect(jobSchema.required).toEqual(expect.arrayContaining(['prompts', 'providers']));
+    expect(createEvalJobOperation.responses['500']).toBeDefined();
+    expect(paths['/api/eval/job/{id}']?.get?.responses['500']).toBeDefined();
     expect(
       getMediaOperation?.responses['200']?.content?.['application/octet-stream']?.schema,
     ).toEqual(expect.objectContaining({ format: 'binary', type: 'string' }));
