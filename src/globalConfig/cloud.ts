@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { createHmac } from 'node:crypto';
 
 import logger from '../logger';
 import { readGlobalConfig, writeGlobalConfigPartial } from './globalConfig';
@@ -106,10 +106,9 @@ interface CompletedLogin {
 
 // A different CLI version can write these fields one by one. Bind them before using its token.
 function loginFingerprint(login: CompletedLogin): string {
-  return createHash('sha256')
+  return createHmac('sha256', login.token)
     .update(
       JSON.stringify([
-        login.token,
         login.apiHost.replace(/\/+$/, ''),
         login.appUrl,
         login.authHeaderName,
