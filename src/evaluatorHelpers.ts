@@ -31,6 +31,7 @@ import {
   extractVariablesFromExpression,
   extractVariablesFromTemplate,
   getNunjucksEngine,
+  isNunjucksGlobal,
 } from './util/templates';
 import { transform } from './util/transform';
 import { loadYaml } from './util/yamlLoad';
@@ -162,6 +163,18 @@ function advanceNestingDepth(two: string, depth: number): { depth: number; skipN
   return { depth, skipNext: false };
 }
 
+function advanceBraceDepth(ch: string, two: string, depth: number): number | null {
+  // Dictionary/object braces are expression structure, not an output-tag
+  // closer. Quoted braces are handled before this helper is called.
+  if (ch === '{' && two !== '{{' && two !== '{%') {
+    return depth + 1;
+  }
+  if (ch === '}' && depth > 0) {
+    return depth - 1;
+  }
+  return null;
+}
+
 // Precompute nesting depth at every position in one forward scan.
 // Depth is the number of unclosed {{ or {% delimiters before each character.
 // A placeholder is nested (and must be left for the real render) when its
@@ -173,6 +186,7 @@ function computeNestingDepths(
 ): Int32Array {
   const depths = new Int32Array(value.length + 1);
   let depth = 0;
+  let braceDepth = 0;
   let quote: string | null = null;
   let rawIdx = 0;
   let inComment = false;
@@ -203,6 +217,13 @@ function computeNestingDepths(
         i++;
       }
       continue;
+    }
+    if (depth > 0 && !quote) {
+      const nextBraceDepth = advanceBraceDepth(ch, two, braceDepth);
+      if (nextBraceDepth !== null) {
+        braceDepth = nextBraceDepth;
+        continue;
+      }
     }
     if (i + 1 < value.length) {
       const next = advanceNestingDepth(two, depth);
@@ -570,7 +591,7 @@ function referencesUndefinedVariables(template: string, vars: Record<string, Var
       const rootVariableName = /^([A-Za-z_]\w*)/.exec(variableName)?.[1];
       return Boolean(
         rootVariableName &&
-          !['env', 'range'].includes(rootVariableName) &&
+          !isNunjucksGlobal(rootVariableName) &&
           vars[rootVariableName] === undefined,
       );
     });
@@ -609,7 +630,7 @@ function referencesUndefinedVariables(template: string, vars: Record<string, Var
     const rootVariableName = /^([A-Za-z_]\w*)/.exec(variableName)?.[1];
     return Boolean(
       rootVariableName &&
-        !['env', 'range'].includes(rootVariableName) &&
+        !isNunjucksGlobal(rootVariableName) &&
         !defined.has(rootVariableName) &&
         vars[rootVariableName] === undefined,
     );

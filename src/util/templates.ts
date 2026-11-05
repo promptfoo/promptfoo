@@ -537,6 +537,17 @@ export function getNunjucksEngine(
   return env;
 }
 
+let globalsEngine: nunjucks.Environment | undefined;
+
+/** Check both Nunjucks built-ins and globals installed on the configured engine. */
+export function isNunjucksGlobal(name: string): boolean {
+  globalsEngine ??= getNunjucksEngine();
+  // getGlobal throws for an unknown name. Read the same table directly so
+  // ordinary undefined variables stay on the non-exceptional path.
+  const { globals } = globalsEngine as unknown as { globals: Record<string, unknown> };
+  return globals[name] !== undefined;
+}
+
 function isTemplateWhitespace(char: string | undefined): boolean {
   return char !== undefined && /\s/.test(char);
 }
@@ -566,7 +577,14 @@ function stripClosedComments(template: string): string {
   return chunks.join('');
 }
 
-function readOutputVariable(template: string, start: number, end: number): string | undefined {
+type OutputRejectionCache = { end: number; at: number };
+
+function readOutputVariable(
+  template: string,
+  start: number,
+  end: number,
+  rejectionCache: OutputRejectionCache,
+): string | undefined {
   let index = skipTemplateWhitespace(template, start + 2, end);
   const tokenStart = index;
   while (index < end && !/[{}\s|]/.test(template[index]!)) {
@@ -582,9 +600,14 @@ function readOutputVariable(template: string, start: number, end: number): strin
   }
 
   index++;
+  if (rejectionCache.end === end && rejectionCache.at >= index) {
+    return undefined;
+  }
   let hasFilterContent = false;
   for (; index < end; index++) {
     if (template[index] === '}') {
+      rejectionCache.end = end;
+      rejectionCache.at = index;
       return undefined;
     }
     hasFilterContent = true;
@@ -629,6 +652,7 @@ export function extractVariablesFromTemplate(template: string): string[] {
   const openerPattern = /\{\{|\{%/g;
   let outputEnd: number | undefined;
   let blockEnd: number | undefined;
+  const rejectionCache: OutputRejectionCache = { end: -1, at: -1 };
   while (cursor < template.length) {
     openerPattern.lastIndex = cursor;
     const opener = openerPattern.exec(template);
@@ -654,7 +678,7 @@ export function extractVariablesFromTemplate(template: string): string[] {
     }
 
     const variable = isOutput
-      ? readOutputVariable(template, start, end)
+      ? readOutputVariable(template, start, end, rejectionCache)
       : readBlockVariable(template, start, end);
     if (variable) {
       variableSet.add(variable);

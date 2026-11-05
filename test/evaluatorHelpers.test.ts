@@ -939,6 +939,15 @@ describe('evaluatorHelpers', () => {
       },
     );
 
+    it.each([
+      ["{{ cycler('odd', 'even').next() }}", 'odd'],
+      ["{{ joiner(',')('a','b') }}", ''],
+    ])('should render the built-in global in %s as defined', async (template, expected) => {
+      const renderedPrompt = await renderPrompt(toPrompt('{{v}}'), { v: template }, {});
+
+      expect(renderedPrompt).toBe(expected);
+    });
+
     it('should collect distinct prompt references without reparsing once per symbol', async () => {
       const parser = (nunjucks as unknown as { parser: { parse: (template: string) => unknown } })
         .parser;
@@ -1013,6 +1022,19 @@ describe('evaluatorHelpers', () => {
       );
 
       expect(renderedPrompt).toBe(JSON.stringify({ text: "don't {{ yes" }, null, 2));
+    });
+
+    it('should account for dictionary braces before consuming an expression closer', async () => {
+      const value = "{{ {'outer': {'inner': 1}} ~ '{{' }} {{x}}";
+      const renderedPrompt = await renderPrompt(
+        toPrompt('{"text":"{{v}}"}'),
+        { v: value, x: 'yes' },
+        {},
+      );
+
+      expect(renderedPrompt).toBe(
+        JSON.stringify({ text: "{{ {'outer': {'inner': 1}} ~ '{{' }} yes" }, null, 2),
+      );
     });
 
     it('should render a raw-carrying var to literal text when JSON autoescape is disabled', async () => {

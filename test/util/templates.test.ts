@@ -91,6 +91,15 @@ describe('extractVariablesFromTemplate', () => {
 
     expect(elapsed).toBeLessThan(250);
   });
+
+  it('should not rescan rejected filter bodies for every nested opener', () => {
+    const template = '{{x|'.repeat(16000) + '}end}}';
+    const started = performance.now();
+    extractVariablesFromTemplate(template);
+    const elapsed = performance.now() - started;
+
+    expect(elapsed).toBeLessThan(250);
+  });
 });
 
 describe('extractVariablesFromTemplates', () => {
