@@ -1592,7 +1592,7 @@ type OpenAiFunctionDefinition = Pick<
 export interface OpenAiFunction {
   name: string;
   description?: string;
-  parameters: {
+  parameters?: {
     type: 'object';
     properties: Record<string, any>;
     required?: string[];

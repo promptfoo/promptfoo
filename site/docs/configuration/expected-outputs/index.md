@@ -170,6 +170,8 @@ These metrics are programmatic tests that are run on LLM output. [See all detail
 
 Single-line [JavaScript assertions](/docs/configuration/expected-outputs/javascript) return the final expression after variable declarations and ignore semicolons inside comments. The final expression can use optional chaining and division, call an async function, consume a generator's yielded result, or return a grading result object. Multiline JavaScript assertions require an explicit `return`.
 
+OpenAI function-call assertions accept definitions with omitted `parameters`; calls to those functions must have empty arguments (`{}`).
+
 :::tip
 Every test type can be negated by prepending `not-`. For example, `not-equals` or `not-regex`.
 

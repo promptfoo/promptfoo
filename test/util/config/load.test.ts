@@ -1412,6 +1412,23 @@ describe('dereferenceConfig', () => {
     expect(dereferencedConfig).toEqual(rawConfig);
   });
 
+  it.each([null, false, 0, ''])('preserves explicit function parameters %j', async (parameters) => {
+    const rawConfig = {
+      prompts: [],
+      providers: [
+        {
+          id: 'openai:chat:gpt-4o-mini',
+          config: { functions: [{ name: 'ping', parameters }, { name: 'omitted' }] },
+        },
+      ],
+    };
+
+    const config = (await dereferenceConfig(rawConfig)) as typeof rawConfig;
+    const functions = config.providers[0].config.functions;
+    expect(functions[0]).toEqual({ name: 'ping', parameters });
+    expect(functions[1]).not.toHaveProperty('parameters');
+  });
+
   it('should preserve tools with references and definitions when dereferencing', async () => {
     const rawConfig = {
       prompts: [{ $ref: '#/definitions/prompt' }],
