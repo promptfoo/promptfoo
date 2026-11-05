@@ -131,6 +131,8 @@ assert.deepEqual(contracts.normalizeInputs({ text: 'prompt', image: { type: 'ima
 assert.equal(contracts.hasFunctionToolCallValidator({ validateFunctionToolCall() {} }), true);
 assert.equal(contracts.hasFunctionToolCallValidator({ validateFunctionToolCall: false }), false);
 assert.equal(contracts.UserSchemas.Login.Request, contracts.LoginRequestSchema);
+assert.equal(contracts.GeminiProviderOptionsInputSchema.safeParse({ id: 'google:gemini-2.5-flash', config: { temperature: 0 } }).success, true);
+assert.equal(contracts.GeminiProviderOptionsInputSchema.safeParse({ id: 'google:gemini-2.5-flash', config: { projectId: 'vertex-only' } }).success, false);
 assert.equal(contracts.OpenAiProviderOptionsInputSchema.safeParse({ id: 'openai:responses:test', config: { max_output_tokens: 20 } }).success, true);
 assert.equal(contracts.OpenAiProviderOptionsInputSchema.safeParse({ id: 'openai:chat:test', config: { temperature: 'warm' } }).success, false);
 assert.deepEqual(contracts.McpClientConfigInputSchema.parse({server: {command: 'fixture'}}), {server: {command: 'fixture'}});
