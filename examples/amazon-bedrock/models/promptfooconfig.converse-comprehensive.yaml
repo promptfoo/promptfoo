@@ -163,9 +163,9 @@ providers:
       maxTokens: 4096
       temperature: 0.7
 
-  # Mistral Large 2 (24.07)
-  - id: bedrock:converse:mistral.mistral-large-2407-v1:0
-    label: Mistral Large 2
+  # Mistral Large 3
+  - id: bedrock:converse:mistral.mistral-large-3-675b-instruct
+    label: Mistral Large 3
     config:
       region: us-west-2
       maxTokens: 4096
