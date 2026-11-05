@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto';
+
 import logger from '../logger';
 import { readGlobalConfig, writeGlobalConfigPartial } from './globalConfig';
 
@@ -90,6 +92,37 @@ interface CloudConfigState {
       }>;
     };
   };
+}
+
+interface CompletedLogin {
+  token: string;
+  apiHost: string;
+  appUrl: string;
+  authHeaderName: string;
+  userId: string;
+  organizationId: string;
+  teamId: string;
+}
+
+// A different CLI version can write these fields one by one. Bind them before using its token.
+function loginFingerprint(login: CompletedLogin): string {
+  return createHash('sha256')
+    .update(
+      JSON.stringify([
+        login.token,
+        login.apiHost.replace(/\/+$/, ''),
+        login.appUrl,
+        login.authHeaderName,
+        login.userId,
+        login.organizationId,
+        login.teamId,
+      ]),
+    )
+    .digest('hex');
+}
+
+export function recordCompletedShareLogin(login: CompletedLogin): void {
+  writeGlobalConfigPartial({ completedShareLogin: loginFingerprint(login) });
 }
 
 export class CloudConfig {
@@ -262,7 +295,7 @@ export class CloudConfig {
   /** Pick up a second terminal's login only when it targets the same deployment and team. */
   async reloadCredentialForCurrentTeam(userId: string): Promise<boolean> {
     const saved = readGlobalConfig();
-    if (!userId || !saved?.cloud?.apiKey) {
+    if (!userId || !saved?.completedShareLogin || !saved.cloud?.apiKey) {
       return false;
     }
     const next = new CloudConfig(false);
@@ -280,6 +313,18 @@ export class CloudConfig {
       !next.getApiKey() ||
       this.getApiKey() === next.getApiKey()
     ) {
+      return false;
+    }
+    const fingerprint = loginFingerprint({
+      token: saved.cloud.apiKey,
+      apiHost: next.getApiHost(),
+      appUrl: next.getAppUrl(),
+      authHeaderName: next.getAuthHeaderName(),
+      userId,
+      organizationId: org,
+      teamId: team,
+    });
+    if (saved.completedShareLogin !== fingerprint) {
       return false;
     }
     const identity = await this.validateApiToken(
@@ -306,11 +351,11 @@ export class CloudConfig {
     hasActiveLicense?: boolean,
     authHeaderName?: string,
   ): void {
-    this.setApiKey(token);
-    this.setApiHost(apiHost);
-    this.setAppUrl(app.url);
+    this.config.apiKey = token;
+    this.config.apiHost = apiHost.replace(/\/+$/, '');
+    this.config.appUrl = app.url;
     if (authHeaderName) {
-      this.setAuthHeaderName(authHeaderName);
+      this.config.authHeaderName = authHeaderName;
     }
     // On-prem installations are always enterprise deployments. Applying the
     // public-cloud hasActiveLicense gate to on-prem hosts incorrectly disables
@@ -319,12 +364,13 @@ export class CloudConfig {
     // URL keeps hosted Cloud behind an API proxy on the public-cloud license gate.
     const isPublicCloud = isPromptfooCloudHost(apiHost) || isPromptfooCloudHost(app.url);
     if (!isPublicCloud) {
-      this.setSharing(true);
+      this.config.sharing = true;
     } else if (typeof hasActiveLicense === 'boolean') {
       const createdAt = user?.createdAt ? new Date(user.createdAt) : null;
       const isGrandfathered = createdAt != null && createdAt < SHARING_CUTOFF_DATE;
-      this.setSharing(hasActiveLicense || isGrandfathered);
+      this.config.sharing = hasActiveLicense || isGrandfathered;
     }
+    this.saveConfig();
   }
 
   async validateApiToken(

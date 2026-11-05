@@ -1,7 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import cliState from '../../src/cliState';
 import { getEnvString } from '../../src/envars';
-import { CLOUD_API_HOST, CloudConfig, cloudConfig } from '../../src/globalConfig/cloud';
+import {
+  CLOUD_API_HOST,
+  CloudConfig,
+  cloudConfig,
+  recordCompletedShareLogin,
+} from '../../src/globalConfig/cloud';
 import { readGlobalConfig, writeGlobalConfigPartial } from '../../src/globalConfig/globalConfig';
 import logger from '../../src/logger';
 import { fetchWithProxy } from '../../src/util/fetch/index';
@@ -38,6 +43,32 @@ describe('CloudConfig', () => {
       currentOrganizationId: 'org',
       teams: { org: { currentTeamId: 'team' } },
     };
+    function completedLogin(token: string, apiHost = cloud.apiHost) {
+      recordCompletedShareLogin({
+        token,
+        apiHost,
+        appUrl: 'https://www.promptfoo.app',
+        authHeaderName: 'Authorization',
+        userId: 'original-user',
+        organizationId: 'org',
+        teamId: 'team',
+      });
+      return vi.mocked(writeGlobalConfigPartial).mock.lastCall![0];
+    }
+    it('never sends a partially saved replacement token to the old host', async () => {
+      vi.mocked(readGlobalConfig).mockReturnValue({ cloud });
+      const original = new CloudConfig();
+      const incomplete = { cloud: { ...cloud, apiKey: 'new-host-token' } };
+      for (const proof of [
+        {},
+        completedLogin('original'),
+        completedLogin('new-host-token', 'https://new.test'),
+      ]) {
+        vi.mocked(readGlobalConfig).mockReturnValue({ ...incomplete, ...proof });
+        await expect(original.reloadCredentialForCurrentTeam('original-user')).resolves.toBe(false);
+      }
+      expect(fetchWithProxy).not.toHaveBeenCalled();
+    });
     it.each([
       [{ apiKey: 'renewed' }, true],
       [{}, false],
@@ -56,6 +87,7 @@ describe('CloudConfig', () => {
         vi.mocked(readGlobalConfig).mockReturnValue({
           id: 'test',
           account: { email: 'user@example.test' },
+          ...completedLogin('renewed'),
           cloud: { ...cloud, ...change },
         });
         vi.mocked(fetchWithProxy).mockResolvedValue(
@@ -79,6 +111,7 @@ describe('CloudConfig', () => {
       const original = new CloudConfig();
       vi.mocked(readGlobalConfig).mockReturnValue({
         id: 'test',
+        ...completedLogin('replacement'),
         cloud: { ...cloud, apiKey: 'replacement' },
       });
       vi.mocked(fetchWithProxy).mockResolvedValue(
@@ -90,6 +123,7 @@ describe('CloudConfig', () => {
       );
       await expect(original.reloadCredentialForCurrentTeam('original-user')).resolves.toBe(false);
       expect(original.getApiKey()).toBe('original');
+      expect(fetchWithProxy).toHaveBeenCalledOnce();
     });
   });
 

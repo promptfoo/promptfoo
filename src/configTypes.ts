@@ -1,4 +1,5 @@
 export interface GlobalConfig {
+  completedShareLogin?: string;
   id?: string;
   hasHarmfulRedteamConsent?: boolean;
   account?: {
