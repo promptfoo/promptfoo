@@ -28,7 +28,7 @@ defaultTest:
   assert:
     - type: is-valid-function-call
     - type: equals
-      transform: output[0]?.functionCall?.args?.airport
+      transform: output.find?.((part) => part.functionCall)?.functionCall.args?.airport
       value: '{{airport}}'
 
 tests:
