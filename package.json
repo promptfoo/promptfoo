@@ -214,6 +214,7 @@
     "@types/supertest": "^7.0.0",
     "@types/ws": "^8.18.1",
     "@vitest/coverage-v8": "^5.0.2",
+    "ai": "^6.0.286",
     "block-no-verify": "^1.2.0",
     "concurrently": "^10.0.0",
     "drizzle-kit": "^0.31.11",
@@ -233,6 +234,7 @@
     "tsdown": "0.23.3",
     "typescript": "^7.0.0",
     "vitest": "^5.0.2",
+    "webpack": "5.112.2",
     "yaml": "^2.9.0"
   },
   "optionalDependencies": {
@@ -281,7 +283,6 @@
     "@opentelemetry/sdk-trace": "^3.0.0",
     "@opentelemetry/semantic-conventions": "^1.40.0",
     "acorn": "^8.19.0",
-    "ai": "^6.0.286",
     "ajv": "^8.18.0",
     "ajv-formats": "^3.0.1",
     "async": "^3.2.6",
@@ -370,6 +371,7 @@
     "@openai/codex-sdk": "*",
     "@openai/codex-security": ">=0.2.0 <0.9.0",
     "@slack/web-api": "*",
+    "ai": "*",
     "ibm-cloud-sdk-core": "*",
     "jks-js": "^1.1.5",
     "playwright": "*",
@@ -399,6 +401,9 @@
       "optional": true
     },
     "@slack/web-api": {
+      "optional": true
+    },
+    "ai": {
       "optional": true
     },
     "ibm-cloud-sdk-core": {
