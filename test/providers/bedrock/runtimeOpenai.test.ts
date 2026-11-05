@@ -295,8 +295,13 @@ describe.each([
     },
   );
 
-  it.each(['us', 'global', 'in'])('preserves Kimi K3 %s profile IDs and ARNs', async (prefix) => {
+  it.each(['us', 'global', 'in'])('forwards Kimi K3 %s IDs and reasoning', async (prefix) => {
     const region = prefix === 'in' ? 'ap-south-1' : 'us-east-1';
+    const controls = mode === 'chat' ? { max_tokens: 64 } : {};
+    const expected =
+      mode === 'chat'
+        ? { reasoning_effort: 'none', max_completion_tokens: 64 }
+        : { reasoning: { effort: 'none' } };
     vi.mocked(fetchWithCache).mockResolvedValue({
       data: reply,
       status: 200,
@@ -309,11 +314,13 @@ describe.each([
     ]) {
       for (const scope of ['selector', 'provider', 'prompt']) {
         const provider = await bedrockFactory.create(
-          `bedrock:runtime:${mode}:${scope === 'selector' ? model : 'us.moonshotai.kimi-k3'}`,
+          `bedrock:runtime:${mode}:${scope === 'selector' ? model : 'qwen.qwen3-coder-next'}`,
           {
             config: {
               apiKey: 'fixture',
               region,
+              reasoning_effort: 'none',
+              ...controls,
               ...(scope === 'provider' ? { passthrough: { model } } : {}),
             },
           },
@@ -331,7 +338,7 @@ describe.each([
         expect(result.output).toBe('READY');
         const [url, request] = vi.mocked(fetchWithCache).mock.lastCall!;
         expect(url).toBe(`https://bedrock-runtime.${region}.amazonaws.com/openai/v1/${path}`);
-        expect(JSON.parse(String(request?.body)).model).toBe(model);
+        expect(JSON.parse(String(request?.body))).toMatchObject({ model, ...expected });
       }
     }
   });
@@ -2185,6 +2192,18 @@ it.each([
     expect(body).not.toHaveProperty('max_tokens');
     expect(body.reasoning_effort).toBe('low');
   }
+});
+
+it('forwards structured reasoning for an effective Kimi Responses model', async () => {
+  const provider = new BedrockRuntimeResponsesProvider('qwen.qwen3-coder-next', {
+    config: {
+      apiKey: 'fixture',
+      reasoning: { effort: 'low' },
+      passthrough: { model: 'global.moonshotai.kimi-k3' },
+    },
+  });
+  const { body } = await provider.getOpenAiBody('hello');
+  expect(body.reasoning).toEqual({ effort: 'low' });
 });
 
 it('preserves full GLM Responses reasoning settings and output cap', async () => {

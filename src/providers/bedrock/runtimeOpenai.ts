@@ -45,9 +45,11 @@ function capabilityName(model: string): string {
     .replace(/^(?:openai|xai)\./, '');
 }
 
+const REASONING_PROFILES_WITH_LEGACY_TOKEN_CAP = new Set(['zai.glm-5.3', 'moonshotai.kimi-k3']);
+
 function flexibleReasoningModel(model: string): boolean {
   const name = capabilityName(model);
-  return name === 'zai.glm-5.3' || /^(?:grok-|gpt-oss-)/.test(name);
+  return REASONING_PROFILES_WITH_LEGACY_TOKEN_CAP.has(name) || /^(?:grok-|gpt-oss-)/.test(name);
 }
 
 function runtimeCost(
@@ -208,7 +210,7 @@ export class BedrockRuntimeChatProvider extends BedrockMantleChatProvider {
       delete result.body.frequency_penalty;
       delete result.body.stop;
     }
-    if (capabilityName(result.body.model) === 'zai.glm-5.3') {
+    if (REASONING_PROFILES_WITH_LEGACY_TOKEN_CAP.has(capabilityName(result.body.model))) {
       // Reasoning-model normalization removes max_tokens. Retain explicit legacy caps
       // using the Runtime completion field, with passthrough overrides first.
       const passthrough = result.config.passthrough as
