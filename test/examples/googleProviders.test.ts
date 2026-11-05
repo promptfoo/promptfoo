@@ -193,6 +193,7 @@ describe('Google example provider contracts', () => {
       'grades a %s response with a supported assertion',
       async (outcome) => {
         const { test, provider, prompt } = await loadExample('google-video', filename);
+        expect(provider.id()).toBe('vertex:video:veo-3.1-generate-001');
         const grading = await runAssertions({
           test,
           provider,

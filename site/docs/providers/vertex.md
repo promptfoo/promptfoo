@@ -263,7 +263,7 @@ Use the `vertex:video:` prefix for Veo on Vertex AI:
 - `vertex:video:veo-3.1-lite-generate-001` (Preview)
 
 Promptfoo reports successful Veo 3.1 generations using Google's video-with-audio price for the
-generated duration and resolution. See the [Veo pricing table](/docs/providers/google#video-generation-models-veo)
+generated duration and resolution. See [Vertex pricing](https://cloud.google.com/vertex-ai/generative-ai/pricing)
 for the current per-second rates.
 
 ```yaml
