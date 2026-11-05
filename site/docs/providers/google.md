@@ -291,7 +291,7 @@ A model ID selects a provider route; it does not enable every operation offered 
 | Native Gemini images                                          | Model-specific image provider; the legacy `google:image:` prefix instead selects Imagen's prediction format                                               |
 | Cached content                                                | Reference an existing cache with `passthrough.cachedContent`; cache creation and deletion are not provided                                                |
 | File management, Batch jobs, token counting, voice management | No dedicated provider operations; supplying an existing file URI or voice does not upload a file or create a voice                                        |
-| Lyria music and dedicated Transcribe Live events              | No dedicated adapters                                                                                                                                     |
+| Lyria music                                                   | No dedicated adapters                                                                                                                                     |
 
 Use a [custom provider](/docs/providers/custom-api) when you need an operation or response format outside these routes. `passthrough` adds request fields to an existing route; it does not change the API protocol. Consult the [Gemini API reference](https://ai.google.dev/api) for upstream capabilities.
 
@@ -313,16 +313,14 @@ For reproducible comparisons, use the replacement model IDs directly. Since [Oct
 - `google:gemini-3.1-pro-preview` - Gemini 3.1 Pro preview with improved reasoning and performance ($2/1M input, $12/1M output; $4/$18 above 200K)
 - `google:gemini-3.1-pro-preview-customtools` - Gemini 3.1 Pro preview variant for custom tools with the same pricing as Gemini 3.1 Pro
 - `google:gemini-3.1-flash-lite` - Gemini 3.1 Flash-Lite GA model optimized for high-volume, low-latency tasks ($0.25/1M text/image/video input, $1.50/1M output)
-- `google:live:gemini-3.1-flash-live-preview` - Gemini 3.1 Flash Live preview for real-time multimodal interactions ($0.75/1M text input, $1/1M image input, $0.002/minute video input, $4.50/1M text output, $3/1M audio input, $12/1M audio output)
-- `google:live:gemini-3.8-live` - Gemini 3.8 Live for low-latency voice dialogue, with the same Live API pricing as 3.1 Flash Live
-- `google:live:gemini-3.8-live-extended-thinking` - Gemini 3.8 Live with background reasoning and asynchronous tools, with the same Live API pricing as 3.1 Flash Live
+- `google:live:gemini-3.5-transcribe-live` - Speech-to-text transcription for streamed audio
+- `google:live:gemini-3.8-live` - Gemini 3.8 Live for low-latency voice dialogue
+- `google:live:gemini-3.8-live-extended-thinking` - Gemini 3.8 Live with background reasoning and asynchronous tools
 - `google:gemini-3-flash-preview` - Gemini 3.0 Flash preview with frontier intelligence, Pro-grade reasoning at Flash-level speed, thinking, and grounding ($0.50/1M input, $3/1M output)
 - `google:gemini-2.5-pro` - Gemini 2.5 Pro model with enhanced reasoning, coding, and multimodal understanding
 - `google:gemini-2.5-flash` - Gemini 2.5 Flash model with enhanced reasoning and thinking capabilities
 - `google:gemini-2.5-flash-lite` - Cost-efficient Gemini 2.5 model optimized for high-volume, latency-sensitive tasks
-- `google:gemini-3.1-flash-tts-preview` - Gemini text-to-speech preview ($1/1M text input, $20/1M audio output)
-- `google:gemini-2.5-pro-preview-tts` - Gemini 2.5 Pro text-to-speech model for high-fidelity audio generation
-- `google:gemini-2.5-flash-preview-tts` - Gemini 2.5 Flash text-to-speech model for low-latency audio generation
+- `google:gemini-3.8-flash-tts` and `google:gemini-3.8-flash-lite-tts` - [Text-to-speech generation](#text-to-speech)
 - `google:gemini-pro-latest` - Google-maintained alias for the latest Gemini Pro release (currently Gemini 3.1 Pro pricing)
 - `google:gemini-flash-latest` - Google-maintained alias for the current Gemini Flash release ($0.75/1M input, $3.75/1M output through December 31, 2026)
 - `google:gemini-flash-lite-latest` - Google-maintained alias for the latest Gemini Flash-Lite release (currently Gemini 3.5 Flash-Lite pricing)
@@ -1465,6 +1463,8 @@ Promptfoo supports voice and video conversations through Google's WebSocket-base
 
 Live authentication prefers `config.apiKey`, then explicit `config.credentials`, then `GOOGLE_API_KEY` / `GEMINI_API_KEY`, and finally ADC. A Cloud-only ADC login does not override a Gemini API key; ADC used without a key must have the required Gemini API scopes.
 
+Use `google:live:gemini-3.5-transcribe-live` for speech-to-text evals. Supply a Gemini user message with an `inlineData` part containing base64-encoded, raw 16-bit mono PCM and `mimeType: audio/pcm;rate=16000`. The provider sends text response modality and input transcription settings, then exposes finalized speech segments in `output.text`. Set `config.generationConfig.inputAudioTranscription.languageCodes` to supply language hints. [Google Live transcription guide](https://ai.google.dev/gemini-api/docs/live-api/live-transcribe)
+
 Use `google:live:gemini-3.8-live` for low-latency dialogue or `google:live:gemini-3.8-live-extended-thinking` for background reasoning. Both default to the `v1alpha` endpoint, audio output, and output transcription (`output.text`), and accept `GOOGLE_API_KEY` or `GEMINI_API_KEY`. Text response modality requests are converted to audio with transcription and billed at audio rates.
 
 Extended Thinking accepts `generationConfig.thinkingConfig.thinkingLevel: LOW` (default), `MEDIUM`, or `HIGH`. Promptfoo sets function declarations to `behavior: NON_BLOCKING` and waits for `interactionStatus: IDLE` before advancing the conversation or returning a result; intermediate spoken updates are included in the transcript. Blocking tools are rejected. The standard 3.8 Live model does not accept `thinkingConfig`; neither model accepts `enableAffectiveDialog` or disabled proactive audio. Finite PCM audio inputs use explicit activity boundaries instead of automatic voice activity detection. See [Google's migration guide](https://ai.google.dev/gemini-api/docs/live-api/thinking) and the [Gemini 3.8 example](https://github.com/promptfoo/promptfoo/blob/main/examples/google-live/promptfooconfig.yaml).
@@ -1475,15 +1475,10 @@ Access the Google Live API by specifying the model with the 'live' service type:
 
 ```yaml
 providers:
-  - id: 'google:live:gemini-3.8-live'
-    config:
-      generationConfig:
-        response_modalities: ['audio']
-        outputAudioTranscription: {}
-      timeoutMs: 30000
+  - google:live:gemini-3.8-live
 ```
 
-For legacy configurations, Gemini 3.1 Flash Live uses the `v1beta` WebSocket endpoint by default and produces native audio. If `response_modalities: ['text']` is configured, Promptfoo requests audio with output transcription so text-based assertions continue to work. Video must be supplied as individual `image/jpeg` or `image/png` frames, not as an inline video container such as `video/mp4`; Promptfoo paces multiple frames at one frame per second, bills those frames using the per-second video-input rate, and automatically terminates finite audio inputs. Promptfoo prices returned `IMAGE` and `DOCUMENT` input-token usage at the image rate and honors Gemini context-cache rates when the API reports cached-content usage.
+Supply video as individual `image/jpeg` or `image/png` frames. Promptfoo paces them at one frame per second. For model replacements and shutdown dates, see [Gemini API deprecations](https://ai.google.dev/gemini-api/docs/deprecations).
 
 ### Gemini Robotics ER 2 Streaming
 
@@ -1547,13 +1542,9 @@ The Google Live API supports function calling, allowing you to define tools that
 
 ```yaml
 providers:
-  - id: 'google:live:gemini-3.1-flash-live-preview'
+  - id: google:live:gemini-3.8-live
     config:
       tools: file://tools.json
-      generationConfig:
-        response_modalities: ['audio']
-        outputAudioTranscription: {}
-      timeoutMs: 10000
 ```
 
 Where `tools.json` contains function declarations and built-in tools:
@@ -1599,37 +1590,19 @@ The Google Live API model supports built-in Google Search:
 
 ### Audio Generation
 
-Evaluate audio generation with the Google Live provider:
-
-1. Basic audio generation:
+The voice dialogue model returns audio and a transcript. Set `voiceName` to select a voice:
 
 ```yaml
 providers:
-  - id: 'google:live:gemini-3.1-flash-live-preview'
+  - id: google:live:gemini-3.8-live
     config:
-      generationConfig:
-        response_modalities: ['audio']
-        outputAudioTranscription: {} # Enable transcription
       speechConfig:
         voiceConfig:
           prebuiltVoiceConfig:
-            voiceName: 'Charon'
-      timeoutMs: 30000
+            voiceName: Charon
 ```
 
-2. Specifying additional options, such as enabling affective dialog on the older 2.5 Live model:
-
-```yaml
-providers:
-  - id: 'google:live:gemini-2.5-flash-native-audio-preview-12-2025'
-    config:
-      apiVersion: 'v1alpha' # Required for affective dialog
-      generationConfig:
-        response_modalities: ['audio']
-        enableAffectiveDialog: true
-```
-
-Other configuration options are available, such as setting proactive audio, setting the language code, and more. Read more about sending and receiving audio for Gemini in the [Google Live API documentation](https://ai.google.dev/gemini-api/docs/live-guide#send-receive-audio).
+See [Google's Live API capabilities](https://ai.google.dev/gemini-api/docs/live-api/capabilities) for supported voices and audio settings.
 
 ### Getting Started
 
@@ -1650,12 +1623,7 @@ promptfoo init --example google-live-audio
 
 ### Limitations
 
-- Sessions are limited to 15 minutes for audio or 2 minutes of audio and video
-- Token usage and cost are reported when the API returns `usageMetadata`
-- Rate limits of 3 concurrent sessions per API key apply
-- Maximum of 4M tokens per minute
-
-For more details, see the [Google Live API documentation](https://ai.google.dev/gemini-api/docs/live).
+Promptfoo reports token usage and cost when the API returns `usageMetadata`. Session duration and quotas depend on the model and billing tier. [Session management](https://ai.google.dev/gemini-api/docs/live-session) · [Gemini API rate limits](https://ai.google.dev/gemini-api/docs/rate-limits)
 
 ## See Also
 
