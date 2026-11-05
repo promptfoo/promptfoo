@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 
+import confirm from '@inquirer/confirm';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createRemoteBlobUploadCache, uploadBlobRefsForShare } from '../src/blobs/shareUpload';
 import * as constants from '../src/constants';
@@ -15,7 +16,7 @@ import {
   isSharingEnabled,
   stripAuthFromUrl,
 } from '../src/share';
-import { makeRequest } from '../src/util/cloud';
+import { getOrgContext, makeRequest } from '../src/util/cloud';
 import { inlineBlobRefsForShare } from '../src/util/inlineBlobsForShare';
 
 import type Eval from '../src/models/eval';
@@ -59,6 +60,7 @@ function buildMockEval(): Partial<Eval> {
   };
 }
 
+vi.mock('@inquirer/confirm', () => ({ default: vi.fn() }));
 const mockFetch = vi.fn();
 const originalIsTTY = process.stdout.isTTY;
 
@@ -70,6 +72,7 @@ vi.mock('../src/globalConfig/cloud', () => {
     getCurrentTeamId: vi.fn(),
     getCurrentOrganizationId: vi.fn(),
     getAppUrl: vi.fn(),
+    reloadCredentialForCurrentTeam: vi.fn(),
     getAuthHeaders: vi.fn(() => {
       const apiKey = cloudConfig.getApiKey();
       return apiKey ? { Authorization: `Bearer ${apiKey}` } : undefined;
@@ -1555,6 +1558,58 @@ describe('adaptive chunk retry', () => {
 
   afterEach(() => {
     vi.clearAllMocks();
+  });
+
+  it.each([401, 403])(
+    'preserves an accepted batch when the next batch gets HTTP %s',
+    async (status) => {
+      const evaluation = buildMockEval() as Eval;
+      vi.mocked(envars.getEnvInt).mockReturnValueOnce(1);
+      mockFetch
+        .mockResolvedValueOnce(Response.json({ id: evaluation.id }))
+        .mockResolvedValueOnce(new Response(null, { status: 204 }))
+        .mockResolvedValueOnce(new Response(null, { status }));
+
+      expect(await createShareableUrl(evaluation)).toBeNull();
+      expect(mockFetch.mock.calls.map(([, options]) => options.method)).toEqual([
+        'POST',
+        'POST',
+        'POST',
+      ]);
+      expect(mockFetch.mock.calls[2][0]).toBe(mockFetch.mock.calls[1][0]);
+    },
+  );
+
+  it('resumes at the rejected batch after an interactive login', async () => {
+    const evaluation = buildMockEval() as Eval;
+    const tty = vi.spyOn(envars, 'isNonInteractive').mockReturnValue(false);
+    vi.mocked(envars.getEnvInt).mockReturnValueOnce(1);
+    vi.mocked(confirm).mockResolvedValueOnce(true);
+    vi.mocked(getOrgContext).mockResolvedValueOnce({
+      organizationName: 'org',
+      userId: 'original-user',
+    });
+    vi.mocked(cloudConfig.reloadCredentialForCurrentTeam).mockImplementationOnce(async () => {
+      vi.mocked(cloudConfig.getApiKey).mockReturnValue('new-key');
+      return true;
+    });
+    mockFetch
+      .mockResolvedValueOnce(Response.json({ id: evaluation.id }))
+      .mockResolvedValueOnce(new Response(null, { status: 204 }))
+      .mockResolvedValueOnce(new Response(null, { status: 401 }))
+      .mockResolvedValueOnce(new Response(null, { status: 204 }));
+    try {
+      expect(await createShareableUrl(evaluation, { promptForLogin: true })).toBe(
+        `https://app.example.com/eval/${evaluation.id}`,
+      );
+      const chunks = mockFetch.mock.calls
+        .slice(1)
+        .map(([, options]) => JSON.parse(options.body)[0].id);
+      expect(chunks).toEqual(['1', '2', '2']);
+      expect(mockFetch.mock.calls[3][1].headers.Authorization).toBe('Bearer new-key');
+    } finally {
+      tty.mockRestore();
+    }
   });
 
   it('splits chunk on 413 Payload Too Large and retries', async () => {

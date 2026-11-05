@@ -1321,7 +1321,8 @@ async function assertOptionalBrowserDependencies(
         'install incompatible browser SDK',
         ['playwright@1.62.0'],
         consumerDir,
-        npmEnv,
+        // Later SDK installs reuse this fixture. Keep its intentionally incompatible version.
+        { ...npmEnv, npm_config_save_exact: 'true' },
       );
     }
     for (const format of ['mjs', 'cjs']) {

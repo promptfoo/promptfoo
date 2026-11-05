@@ -18,17 +18,17 @@ export function writeGlobalConfig(config: GlobalConfig): void {
   );
 }
 
-export function readGlobalConfig(): GlobalConfig {
+export function readGlobalConfig({ initialize = true } = {}): GlobalConfig {
   const configDir = getConfigDirectoryPath();
   const configFilePath = path.join(configDir, 'promptfoo.yaml');
   let globalConfig: GlobalConfig = { id: crypto.randomUUID() };
   if (fs.existsSync(configFilePath)) {
     globalConfig = (loadYaml(fs.readFileSync(configFilePath, 'utf-8')) as GlobalConfig) || {};
-    if (!globalConfig?.id) {
+    if (initialize && !globalConfig?.id) {
       globalConfig = { ...globalConfig, id: crypto.randomUUID() };
       writeGlobalConfig(globalConfig);
     }
-  } else {
+  } else if (initialize) {
     if (!fs.existsSync(configDir)) {
       fs.mkdirSync(configDir, { recursive: true });
     }

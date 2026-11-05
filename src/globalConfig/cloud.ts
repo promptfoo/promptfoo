@@ -1,3 +1,5 @@
+import { randomBytes, scryptSync } from 'node:crypto';
+
 import logger from '../logger';
 import { readGlobalConfig, writeGlobalConfigPartial } from './globalConfig';
 
@@ -64,6 +66,7 @@ interface CloudApp {
 }
 
 interface CloudTokenValidation {
+  tokenScope?: { teamId?: string };
   user: CloudUser;
   organization: CloudOrganization;
   app: CloudApp;
@@ -91,6 +94,39 @@ interface CloudConfigState {
   };
 }
 
+interface CompletedLogin {
+  token: string;
+  apiHost: string;
+  appUrl: string;
+  authHeaderName: string;
+  userId: string;
+  organizationId: string;
+  teamId: string;
+}
+
+// A different CLI version can write these fields one by one. Bind them before using its token.
+function loginFingerprint(login: CompletedLogin, salt: string): string {
+  const fields = JSON.stringify([
+    login.token,
+    login.apiHost.replace(/\/+$/, ''),
+    login.appUrl,
+    login.authHeaderName,
+    login.userId,
+    login.organizationId,
+    login.teamId,
+  ]);
+  return scryptSync(fields, salt, 32, { N: 32768, r: 8, p: 3, maxmem: 64 * 1024 * 1024 }).toString(
+    'hex',
+  );
+}
+
+export function recordCompletedShareLogin(login: CompletedLogin): void {
+  const salt = randomBytes(16).toString('hex');
+  writeGlobalConfigPartial({
+    completedShareLogin: { salt, fingerprint: loginFingerprint(login, salt) },
+  });
+}
+
 export class CloudConfig {
   private configState: CloudConfigState | null = null;
 
@@ -109,8 +145,7 @@ export class CloudConfig {
     this.configState = config;
   }
 
-  private readConfig(): CloudConfigState {
-    const savedConfig = readGlobalConfig()?.cloud || {};
+  private readConfig(savedConfig = readGlobalConfig()?.cloud || {}): CloudConfigState {
     return {
       appUrl: savedConfig.appUrl || 'https://www.promptfoo.app',
       apiHost: savedConfig.apiHost,
@@ -259,6 +294,60 @@ export class CloudConfig {
     this.config = this.readConfig();
   }
 
+  /** Pick up a second terminal's login only when it targets the same deployment and team. */
+  async reloadCredentialForCurrentTeam(userId: string): Promise<boolean> {
+    const saved = readGlobalConfig({ initialize: false });
+    if (!userId || !saved?.completedShareLogin?.salt || !saved.cloud?.apiKey) {
+      return false;
+    }
+    const next = new CloudConfig(false);
+    next.config = this.readConfig(saved.cloud);
+    const org = this.getCurrentOrganizationId();
+    const team = this.getCurrentTeamId(org);
+    if (
+      !org ||
+      !team ||
+      org !== next.getCurrentOrganizationId() ||
+      team !== next.getCurrentTeamId(org) ||
+      this.getApiHost() !== next.getApiHost() ||
+      this.getAppUrl() !== next.getAppUrl() ||
+      this.getAuthHeaderName() !== next.getAuthHeaderName() ||
+      !next.getApiKey() ||
+      this.getApiKey() === next.getApiKey()
+    ) {
+      return false;
+    }
+    const fingerprint = loginFingerprint(
+      {
+        token: saved.cloud.apiKey,
+        apiHost: next.getApiHost(),
+        appUrl: next.getAppUrl(),
+        authHeaderName: next.getAuthHeaderName(),
+        userId,
+        organizationId: org,
+        teamId: team,
+      },
+      saved.completedShareLogin.salt,
+    );
+    if (saved.completedShareLogin.fingerprint !== fingerprint) {
+      return false;
+    }
+    const identity = await this.validateApiToken(
+      saved.cloud.apiKey,
+      next.getApiHost(),
+      next.getAuthHeaderName(),
+    );
+    if (
+      identity.user?.id !== userId ||
+      identity.organization?.id !== org ||
+      (identity.tokenScope?.teamId && identity.tokenScope.teamId !== team)
+    ) {
+      return false;
+    }
+    this.config = next.config;
+    return true;
+  }
+
   saveValidatedApiToken(
     token: string,
     apiHost: string,
@@ -267,11 +356,11 @@ export class CloudConfig {
     hasActiveLicense?: boolean,
     authHeaderName?: string,
   ): void {
-    this.setApiKey(token);
-    this.setApiHost(apiHost);
-    this.setAppUrl(app.url);
+    this.config.apiKey = token;
+    this.config.apiHost = apiHost.replace(/\/+$/, '');
+    this.config.appUrl = app.url;
     if (authHeaderName) {
-      this.setAuthHeaderName(authHeaderName);
+      this.config.authHeaderName = authHeaderName;
     }
     // On-prem installations are always enterprise deployments. Applying the
     // public-cloud hasActiveLicense gate to on-prem hosts incorrectly disables
@@ -280,12 +369,13 @@ export class CloudConfig {
     // URL keeps hosted Cloud behind an API proxy on the public-cloud license gate.
     const isPublicCloud = isPromptfooCloudHost(apiHost) || isPromptfooCloudHost(app.url);
     if (!isPublicCloud) {
-      this.setSharing(true);
+      this.config.sharing = true;
     } else if (typeof hasActiveLicense === 'boolean') {
       const createdAt = user?.createdAt ? new Date(user.createdAt) : null;
       const isGrandfathered = createdAt != null && createdAt < SHARING_CUTOFF_DATE;
-      this.setSharing(hasActiveLicense || isGrandfathered);
+      this.config.sharing = hasActiveLicense || isGrandfathered;
     }
+    this.saveConfig();
   }
 
   async validateApiToken(
@@ -310,12 +400,13 @@ export class CloudConfig {
         throw new Error('Failed to validate API token: ' + response.statusText);
       }
 
-      const { user, organization, app, hasActiveLicense } = await response.json();
+      const { user, organization, app, hasActiveLicense, tokenScope } = await response.json();
 
       return {
         user,
         organization,
         app,
+        ...(tokenScope && { tokenScope }),
         ...(typeof hasActiveLicense === 'boolean' ? { hasActiveLicense } : {}),
       };
     } catch (err) {

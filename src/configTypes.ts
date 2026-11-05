@@ -1,4 +1,5 @@
 export interface GlobalConfig {
+  completedShareLogin?: { salt: string; fingerprint: string };
   id?: string;
   hasHarmfulRedteamConsent?: boolean;
   account?: {

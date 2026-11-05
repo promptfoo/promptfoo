@@ -3,7 +3,7 @@ import chalk from 'chalk';
 import dedent from 'dedent';
 import { isNonInteractive } from '../envars';
 import { getUserEmail, setUserEmail } from '../globalConfig/accounts';
-import { cloudConfig } from '../globalConfig/cloud';
+import { cloudConfig, recordCompletedShareLogin } from '../globalConfig/cloud';
 import logger from '../logger';
 import {
   canCreateTargets,
@@ -67,7 +67,7 @@ async function setupTeamContext(
   cmdObj: LoginCommandOptions,
   organizationId: string,
   teams?: UserTeam[],
-): Promise<void> {
+): Promise<string | undefined> {
   try {
     let organizationTeams = teams;
 
@@ -143,6 +143,7 @@ async function setupTeamContext(
     if (selectedTeam) {
       cloudConfig.setCurrentTeamId(selectedTeam.id, organizationId);
       logger.info(`Team: ${chalk.cyan(selectedTeam.name)}${teamLabelSuffix}`);
+      return selectedTeam.id;
     }
   } catch (teamError) {
     if (cmdObj.org || cmdObj.team) {
@@ -204,7 +205,18 @@ async function loginWithApiKey(cmdObj: LoginCommandOptions, apiHost: string): Pr
   setUserEmail(user.email);
   cloudConfig.setCurrentOrganization(organizationId);
 
-  await setupTeamContext(cmdObj, organizationId, organizationTeams);
+  const teamId = await setupTeamContext(cmdObj, organizationId, organizationTeams);
+  if (teamId) {
+    recordCompletedShareLogin({
+      token: cmdObj.apiKey!,
+      apiHost,
+      appUrl: app.url,
+      authHeaderName,
+      userId: user.id,
+      organizationId,
+      teamId,
+    });
+  }
 
   logger.info(chalk.green.bold('Successfully logged in'));
   logger.info(`User: ${chalk.cyan(user.email)}`);

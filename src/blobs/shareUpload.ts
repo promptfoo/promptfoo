@@ -91,10 +91,25 @@ export async function uploadBlobRefsForShare(
   value: unknown,
   cache: RemoteBlobUploadCache,
   context: ShareBlobUploadContext,
+  retryFailed = false,
 ): Promise<void> {
   const hashes = collectBlobHashes(value, {
     maxDepth: BLOB_SCAN_MAX_DEPTH,
     maxStringLength: BLOB_SCAN_MAX_STRING_LENGTH,
   });
-  await Promise.all(Array.from(hashes, (hash) => uploadBlobForShare(hash, cache, context)));
+  await Promise.all(
+    Array.from(hashes, async (hash) => {
+      if (retryFailed) {
+        const key = getUploadCacheKey(hash, context);
+        const previous = cache.get(key);
+        if (previous && !(await previous) && cache.get(key) === previous) {
+          cache.delete(key);
+        }
+      }
+      const uploaded = await uploadBlobForShare(hash, cache, context);
+      if (retryFailed && !uploaded) {
+        throw new Error('Unable to resume upload of referenced media.');
+      }
+    }),
+  );
 }
