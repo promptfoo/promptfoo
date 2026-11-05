@@ -1,3 +1,5 @@
+import { BEDROCK_OPENAI_MANTLE_REGIONS } from './openaiModels';
+
 // Pure routing helpers shared by the provider factory and browser configuration UI.
 // Keep this module free of SDK, environment, and other server-only imports.
 export type BedrockApiMode =
@@ -150,6 +152,10 @@ export function isBedrockAnthropicMessagesModel(modelName: string): boolean {
 
 export function isBedrockOpenAiResponsesModel(modelName: string): boolean {
   return modelName.startsWith('openai.') && !modelName.includes('gpt-oss');
+}
+
+export function isBedrockOpenAiChatModel(modelName: string): boolean {
+  return BEDROCK_OPENAI_MANTLE_REGIONS.has(modelName);
 }
 
 export function isBedrockGptOssResponsesModel(modelName: string): boolean {

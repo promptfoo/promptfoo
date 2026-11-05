@@ -254,15 +254,22 @@ export const awsProviderFactories: ProviderFactory[] = [
         return new LumaRayVideoProvider(videoModelName, providerOptions);
       }
 
-      // Preserve the full versioned ID for both bare and explicit Nova Reel video selectors.
+      if (modelType === 'video' && !modelName) {
+        throw new Error(
+          'The bedrock:video default, Amazon Nova Reel, has reached end of life. ' +
+            'To evaluate Luma Ray 2, select bedrock:video:luma.ray-v2:0 and set region to us-west-2.',
+        );
+      }
+      // Keep explicit Reel configurations available for privately extended deployments.
       if (
         modelType.includes('amazon.nova-reel') ||
-        (modelType === 'video' && (modelName.includes('amazon.nova-reel') || modelName === ''))
+        (modelType === 'video' && modelName.includes('amazon.nova-reel'))
       ) {
         const { NovaReelVideoProvider } = await import('../bedrock/nova-reel');
-        const videoModelName =
-          modelType === 'video' ? modelName || 'amazon.nova-reel-v1:1' : splits.slice(1).join(':');
-        return new NovaReelVideoProvider(videoModelName, providerOptions);
+        return new NovaReelVideoProvider(
+          modelType === 'video' ? modelName : bareModelName,
+          providerOptions,
+        );
       }
 
       // Handle Bedrock Agents

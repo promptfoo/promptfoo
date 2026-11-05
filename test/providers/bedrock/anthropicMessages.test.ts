@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
+import Anthropic from '@anthropic-ai/sdk';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { clearCache, disableCache, enableCache } from '../../../src/cache';
 import { setEnvOverridesProvider } from '../../../src/envOverrides';
@@ -12,7 +13,6 @@ import {
 } from '../../../src/providers/bedrock/anthropicMessages';
 import { isBedrockAnthropicMessagesModel } from '../../../src/providers/bedrock/routing';
 import { mockProcessEnv } from '../../util/utils';
-import type Anthropic from '@anthropic-ai/sdk';
 
 const createMessagesRequest = () => ({
   method: 'post',
@@ -303,6 +303,12 @@ describe('Bedrock Anthropic Messages provider', () => {
   });
 
   it('uses promptfoo env overrides for the key and region', async () => {
+    using resolveProfile = vi
+      .spyOn(
+        Anthropic.prototype as unknown as { _resolveDefaultCredentials(): Promise<void> },
+        '_resolveDefaultCredentials',
+      )
+      .mockResolvedValue(undefined);
     restoreEnv = mockProcessEnv({
       AWS_BEARER_TOKEN_BEDROCK: undefined,
       AWS_BEDROCK_REGION: undefined,
@@ -315,6 +321,7 @@ describe('Bedrock Anthropic Messages provider', () => {
 
     expect(provider).toBeInstanceOf(BedrockAnthropicMessagesProvider);
     expect(provider['getGenAISystem']()).toBe('bedrock');
+    expect(resolveProfile).not.toHaveBeenCalled();
     expect(provider.apiKey).toBe('override-key');
     expect(provider.anthropic.apiKey).toBeNull();
     expect(provider.anthropic.authToken).toBeNull();

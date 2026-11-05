@@ -18,6 +18,8 @@ For agentic evaluations that need built-in file access and skill plugins on top 
 
 To use Anthropic, you need to set the `ANTHROPIC_API_KEY` environment variable or specify the `apiKey` in the provider configuration.
 
+Promptfoo sends `anthropic-version: 2023-06-01` by default so existing evals can replay message histories and use sampling settings on models that support them. When using an Anthropic-compatible gateway, Promptfoo sends the configured API key in the `x-api-key` header.
+
 Create Anthropic API keys [here](https://console.anthropic.com/settings/keys).
 
 Example of setting the environment variable:

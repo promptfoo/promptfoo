@@ -9,6 +9,34 @@ const OUTPUT_TOKENS = 5_000;
 const costAtRates = (input: number, output: number) =>
   (INPUT_TOKENS / 1e6) * input + (OUTPUT_TOKENS / 1e6) * output;
 
+describe('Bedrock GovCloud OpenAI inference profiles', () => {
+  it.each([
+    ['us-gov.openai.gpt-5.6-terra', 2.7, 16.2],
+    [
+      'arn:aws-us-gov:bedrock:us-gov-east-1:123456789012:inference-profile/us-gov.openai.gpt-5.6-luna',
+      0.27,
+      1.62,
+    ],
+  ] as const)(
+    'prices the exact %s profile at the inclusive short-context boundary',
+    (model, input, output) => {
+      const expectedInput = (271_500 * input + 200 * input * 0.1 + 300 * input * 1.25) / 1e6;
+      expect(calculateBedrockCost(model, 271_500, 1000, 200, 300, 'us-gov-east-1')).toBeCloseTo(
+        expectedInput + (1000 * output) / 1e6,
+        10,
+      );
+      expect(calculateBedrockCost(model, 271_501, 1000, 200, 300, 'us-gov-west-1')).toBeCloseTo(
+        2 * (expectedInput + input / 1e6) + (1500 * output) / 1e6,
+        10,
+      );
+      expect(calculateBedrockCost(model, 1000, 100, 0, 0, 'us-east-1')).toBeUndefined();
+      expect(
+        calculateBedrockCost(model, 1000, 100, 0, 0, 'us-gov-east-1', { type: 'flex' }),
+      ).toBeUndefined();
+    },
+  );
+});
+
 describe('Grok 4.6 AWS profile pricing', () => {
   it.each([
     ['us.xai.grok-4.6', 2.2, 6.6, 0.55],

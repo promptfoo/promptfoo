@@ -23,6 +23,7 @@ describe('aws bedrock provider factory routing', () => {
     ['bedrock:openai.gpt-5.6-sol', 'us-east-2'],
     ['bedrock:openai.gpt-5.6-terra', 'us-west-2'],
     ['bedrock:openai.gpt-5.6-luna', 'us-east-1'],
+    ['bedrock:openai.gpt-5.6-cyber', 'us-gov-east-1'],
     ['bedrock:openai.gpt-5.5', 'us-east-2'],
     ['bedrock:openai.gpt-5.4', 'us-west-2'],
   ])('routes frontier id %s to the OpenAI Responses provider', async (id, region) => {
@@ -515,15 +516,23 @@ describe('aws bedrock provider factory routing', () => {
     ).rejects.toThrow(/Use the bare "bedrock:xai.grok-4.3" id/);
   });
 
-  it.each(['sol', 'terra', 'luna'])('routes explicit GPT-5.6 %s to Mantle Chat', async (tier) => {
+  it.each([
+    ['sol', 'us-east-1'],
+    ['terra', 'us-east-1'],
+    ['luna', 'us-east-1'],
+    ['cyber', 'us-gov-east-1'],
+  ])('routes explicit GPT-5.6 %s to Mantle Chat', async (tier, region) => {
     const { BedrockMantleChatProvider } = await import('../../../src/providers/bedrock/mantleChat');
     const provider = await bedrockFactory.create(
       `bedrock:mantle:openai.gpt-5.6-${tier}`,
-      { config: { apiKey: 'bedrock-key', region: 'us-east-1' } },
+      { config: { apiKey: 'bedrock-key', region } },
       ctx,
     );
     expect(provider).toBeInstanceOf(BedrockMantleChatProvider);
     expect(provider.id()).toBe(`bedrock:mantle:openai.gpt-5.6-${tier}`);
+    expect(provider).toMatchObject({
+      config: { apiBaseUrl: `https://bedrock-mantle.${region}.api.aws/openai/v1` },
+    });
   });
 
   it('routes bare Mythos Preview to the Bedrock Anthropic Messages endpoint', async () => {
@@ -555,7 +564,6 @@ describe('aws bedrock provider factory routing', () => {
     ['bedrock:amazon.nova-reel-v1:0', 'amazon.nova-reel-v1:0'],
     ['bedrock:amazon.nova-reel-v1:1', 'amazon.nova-reel-v1:1'],
     ['bedrock:video:amazon.nova-reel-v1:1', 'amazon.nova-reel-v1:1'],
-    ['bedrock:video', 'amazon.nova-reel-v1:1'],
   ])('preserves the selected Reel ID for %s', async (selector, model) => {
     const { NovaReelVideoProvider } = await import('../../../src/providers/bedrock/nova-reel');
     const provider = await bedrockFactory.create(selector, {}, ctx);

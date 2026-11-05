@@ -14,13 +14,21 @@ import {
 } from './pricing';
 import { getBedrockRuntimeModelError } from './routing';
 
-import type { ProviderResponse } from '../../types/providers';
+import type { ProviderOptions, ProviderResponse } from '../../types/providers';
 import type { OpenAiChatCompletionCostData } from '../openai/chat';
-import type { OpenAiCompletionOptions } from '../openai/types';
+import type {
+  OpenAiBillingConfig,
+  OpenAiChatConfig,
+  OpenAiResponsesConfig,
+} from '../openai/config';
+import type { BedrockTokenProviderConfig } from './tokenProvider';
 
-type RuntimeOptions = NonNullable<ConstructorParameters<typeof BedrockMantleChatProvider>[1]>;
+type RuntimeOptions<Config> = Pick<
+  ProviderOptions<Config & BedrockTokenProviderConfig & { region?: string }>,
+  'config' | 'env' | 'id'
+>;
 
-function runtimeOptions(options: RuntimeOptions): RuntimeOptions {
+function runtimeOptions<Config extends { apiBaseUrl?: string }>(options: RuntimeOptions<Config>) {
   const region = resolveBedrockMantleRegion(options.config ?? {}, options.env, 'us-east-1');
   if (!/^[a-z]{2}(?:-[a-z]+)+-\d+$/.test(region)) {
     throw new Error(`Invalid AWS region "${region}" for Bedrock Runtime`);
@@ -55,9 +63,10 @@ function flexibleReasoningModel(model: string): boolean {
 function runtimeCost(
   modelName: string,
   usage: any,
-  config: OpenAiCompletionOptions,
+  config: OpenAiBillingConfig,
   serviceTier: string | null | undefined,
-  region: string,
+  configuredRegion: string,
+  apiUrl: string,
   cached: boolean,
 ): number | undefined {
   // Complete manual rates remain authoritative. Do not fall back to first-party vendor prices.
@@ -73,6 +82,21 @@ function runtimeCost(
       return manualCost;
     }
   }
+  const region = getBedrockRuntimeBillingRegion(configuredRegion, apiUrl);
+  const gptProfile = /(?:^|\/)(us|global|us-gov|in)\.openai\.(gpt-\d[^/]+)$/.exec(modelName);
+  if (gptProfile) {
+    return calculateOpenAIUsageCost(gptProfile[2], config, usage, {
+      cachedResponse: cached,
+      apiUrl,
+      provider: 'bedrock',
+      region,
+      bedrockProfile: gptProfile[1],
+      serviceTier,
+    });
+  }
+  if (!['default', 'priority', 'flex', 'reserved'].includes(serviceTier ?? 'default')) {
+    return undefined;
+  }
   const input = usage?.input_tokens ?? usage?.prompt_tokens;
   const output = usage?.output_tokens ?? usage?.completion_tokens;
   const cacheRead =
@@ -81,26 +105,6 @@ function runtimeCost(
   const uncachedInput =
     typeof input === 'number' ? Math.max(0, input - cacheRead - cacheWrite) : undefined;
   const model = capabilityName(modelName);
-  const gpt61Ultrafast = model === 'gpt-6.1-sol' && serviceTier === 'ultrafast';
-  if (
-    !gpt61Ultrafast &&
-    !['default', 'priority', 'flex', 'reserved'].includes(serviceTier ?? 'default')
-  ) {
-    return undefined;
-  }
-  const gpt56 = /^gpt-5\.6-(?:sol|terra|luna)$/.test(model);
-  if (gpt56 || /^(?:gpt-6-(?:sol|luna)|gpt-6\.1-sol)$/.test(model)) {
-    if (serviceTier && serviceTier !== 'default' && !gpt61Ultrafast) {
-      return undefined;
-    }
-    return calculateOpenAIUsageCost(gpt56 ? `bedrock:${model}` : model, config, usage, {
-      cachedResponse: cached,
-      provider: 'bedrock',
-      region,
-      regionalProcessing: !/(^|\/)global\.openai\./.test(modelName),
-      serviceTier: serviceTier ?? 'default',
-    });
-  }
   // GPT OSS has no verified cache rates in the Bedrock catalog.
   if (
     model.startsWith('gpt-oss-') &&
@@ -168,7 +172,10 @@ function runtimeCost(
 
 /** OpenAI-compatible Chat Completions on Bedrock Runtime, with Runtime model IDs. */
 export class BedrockRuntimeChatProvider extends BedrockMantleChatProvider {
-  constructor(modelName: string, options: RuntimeOptions = {}) {
+  constructor(
+    modelName: string,
+    options: RuntimeOptions<OpenAiChatConfig & { stream?: boolean }> = {},
+  ) {
     super(modelName, runtimeOptions(options));
   }
 
@@ -239,9 +246,13 @@ export class BedrockRuntimeChatProvider extends BedrockMantleChatProvider {
       result.body.max_completion_tokens = result.config.max_completion_tokens;
       delete result.body.max_tokens;
     }
-    if (result.body.stream === undefined ? result.config.stream : result.body.stream) {
+    if (result.body.stream === undefined ? config.stream : result.body.stream) {
       result.body.stream = true;
-      result.body.stream_options = { include_usage: true, ...result.body.stream_options };
+      const options = result.body.stream_options;
+      result.body.stream_options = {
+        include_usage: true,
+        ...(typeof options === 'object' && options),
+      };
     }
     return result;
   }
@@ -254,7 +265,7 @@ export class BedrockRuntimeChatProvider extends BedrockMantleChatProvider {
     return body.stream && typeof data === 'string' ? collectBedrockChatStream(data) : data;
   }
 
-  protected getChatResponseErrorAccounting(error: unknown, config: OpenAiCompletionOptions) {
+  protected getChatResponseErrorAccounting(error: unknown, config: OpenAiBillingConfig) {
     if (!(error instanceof BedrockChatStreamError) || !error.response.usage) {
       return undefined;
     }
@@ -268,7 +279,7 @@ export class BedrockRuntimeChatProvider extends BedrockMantleChatProvider {
 
   protected calculateResponseCost(
     data: OpenAiChatCompletionCostData,
-    config: OpenAiCompletionOptions,
+    config: OpenAiBillingConfig,
     cached: boolean,
   ): number | undefined {
     const override = (config.passthrough as { model?: unknown } | undefined)?.model;
@@ -278,7 +289,8 @@ export class BedrockRuntimeChatProvider extends BedrockMantleChatProvider {
       data.usage,
       config,
       data.service_tier ?? config.service_tier,
-      getBedrockRuntimeBillingRegion(this.getBillingRegion(), this.getApiUrl()),
+      this.getBillingRegion(),
+      this.getApiUrl(),
       cached,
     );
   }
@@ -286,7 +298,7 @@ export class BedrockRuntimeChatProvider extends BedrockMantleChatProvider {
 
 /** OpenAI-compatible Responses on Runtime; Mantle routing and tier restrictions do not apply. */
 export class BedrockRuntimeResponsesProvider extends BedrockOpenAiResponsesProvider {
-  constructor(modelName: string, options: RuntimeOptions = {}) {
+  constructor(modelName: string, options: RuntimeOptions<OpenAiResponsesConfig> = {}) {
     super(modelName, runtimeOptions(options));
   }
 
@@ -359,7 +371,7 @@ export class BedrockRuntimeResponsesProvider extends BedrockOpenAiResponsesProvi
   protected applyBilling(
     result: ProviderResponse,
     data: any,
-    config: OpenAiCompletionOptions,
+    config: OpenAiBillingConfig,
     cached: boolean,
   ): ProviderResponse {
     const override = (config.passthrough as { model?: unknown } | undefined)?.model;
@@ -369,7 +381,8 @@ export class BedrockRuntimeResponsesProvider extends BedrockOpenAiResponsesProvi
       data.usage,
       config,
       data.service_tier ?? config.service_tier,
-      getBedrockRuntimeBillingRegion(this.getBillingRegion(), this.getApiUrl()),
+      this.getBillingRegion(),
+      this.getApiUrl(),
       cached,
     );
     const { cost: _previousCost, ...unbilled } = result;

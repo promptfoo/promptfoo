@@ -184,7 +184,7 @@ describe.each([
       ['us.openai.gpt-6-sol', 'ultrafast'],
       ['us.openai.gpt-6-luna', 'ultrafast'],
       ['us.openai.gpt-5.6-terra', 'ultrafast'],
-      ['us.openai.gpt-6-astra', 'ultrafast'],
+      ['us.openai.gpt-6-astra', 'priority'],
       ['us.zai.glm-5.3', 'ultrafast'],
       ['us.moonshotai.kimi-k3', 'ultrafast'],
     ])('does not invent rates for unsupported %s tier %s', async (model, tier) => {
@@ -483,7 +483,28 @@ describe.each([
     },
   );
 
-  it.each(['us.openai.gpt-6-astra', 'future.unpriced-model'])(
+  it.each([
+    ['global.openai.gpt-6-astra', 'us-east-1', 'ultrafast', 60, 6, 75, 300],
+    ['us.openai.gpt-6-astra', 'us-east-1', 'ultrafast', 66, 6.6, 82.5, 330],
+    ['global.openai.gpt-6.1-terra', 'us-east-1', 'default', 1, 0.05, 1.25, 5],
+    ['us-gov.openai.gpt-5.6-terra', 'us-gov-east-1', 'default', 2.7, 0.27, 3.375, 16.2],
+    ['in.openai.gpt-5.6-luna', 'ap-south-1', 'default', 0.22, 0.022, 0.275, 1.32],
+  ] as const)(
+    'prices the Runtime profile %s in %s through a custom endpoint',
+    async (model, region, tier, input, read, write, output) => {
+      mockPricingResponse(200, 100, tier);
+      const result = await new Provider(model, {
+        config: { apiKey: 'fixture', apiBaseUrl: 'https://proxy.example/openai/v1', region },
+      }).callApi('hello');
+      expect(result.error).toBeUndefined();
+      expect(result.cost).toBeCloseTo(
+        (700 * input + 200 * read + 100 * write + 1000 * output) / 1e6,
+        10,
+      );
+    },
+  );
+
+  it.each(['us.openai.gpt-5.4', 'global.openai.gpt-5.5', 'future.unpriced-model'])(
     'keeps unpublished Bedrock rates unknown for %s',
     async (model) => {
       vi.mocked(fetchWithCache).mockResolvedValue({
@@ -785,8 +806,7 @@ describe.each([
         apiKey: 'bedrock-fixture',
         region: 'us-east-1',
         reasoning_effort: 'low',
-        max_completion_tokens: 64,
-        max_output_tokens: 64,
+        ...(mode === 'chat' ? { max_completion_tokens: 64 } : { max_output_tokens: 64 }),
       },
     });
     const result = await provider.callApi('hello');
@@ -827,9 +847,10 @@ describe.each([
     const { body } = await provider.getOpenAiBody('hello');
     expect(body).toMatchObject({ metadata: { suite: 'fixture' } });
     expect(body.tools).toHaveLength(1);
-    expect(mode === 'chat' ? body.response_format : body.text?.format).toEqual({
-      type: 'json_object',
-    });
+    const format = { type: 'json_object' };
+    expect(body).toMatchObject(
+      mode === 'chat' ? { response_format: format } : { text: { format } },
+    );
   });
 
   it('distinguishes Runtime global and geographic GPT pricing', async () => {

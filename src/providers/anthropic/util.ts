@@ -13,6 +13,10 @@ import type {
   WebSearchToolConfig20260318,
 } from './types';
 
+export function formatLegacyCompletionPrompt(prompt: string): string {
+  return `\n\nHuman: ${prompt} \n\nAssistant:`;
+}
+
 // Model definitions with cost information
 export const ANTHROPIC_MODELS = [
   // Claude 5 models. These are pinned IDs, not `-latest` aliases.

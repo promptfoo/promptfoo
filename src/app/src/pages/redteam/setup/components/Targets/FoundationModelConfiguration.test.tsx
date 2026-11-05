@@ -492,7 +492,7 @@ describe('FoundationModelConfiguration', () => {
     ['bedrock:responses:global.anthropic.claude-sonnet-5', 'responses'],
     ['bedrock:responses:openai.gpt-oss-120b-1:0', 'responses'],
     ['bedrock:messages:openai.gpt-oss-120b', 'messages'],
-    ['bedrock:mantle:openai.gpt-5.5', 'chat'],
+    ['bedrock:mantle:openai.gpt-future', 'chat'],
     ['bedrock:converse:anthropic.claude-mythos-5', 'converse'],
     ['bedrock:converse:us.anthropic.claude-mythos-5', 'converse'],
     ['bedrock:mantle:us.xai.grok-4.6', 'chat'],
@@ -786,6 +786,7 @@ describe('FoundationModelConfiguration', () => {
     ['bedrock:converse:openai.gpt-5.5', 'responses', 'openai.gpt-5.5'],
     ['bedrock:completion:xai.grok-4.3', 'responses', 'xai.grok-4.3'],
     ['bedrock:mantle:openai.gpt-oss-120b', 'chat', 'openai.gpt-oss-120b'],
+    ['bedrock:mantle:openai.gpt-6.1-sol', 'chat', 'openai.gpt-6.1-sol'],
     ['bedrock:messages:us.anthropic.claude-fable-5-1', 'messages', 'us.anthropic.claude-fable-5-1'],
     ['bedrock:anthropic.claude-mythos-5', 'messages', 'anthropic.claude-mythos-5'],
   ])(
@@ -817,6 +818,9 @@ describe('FoundationModelConfiguration', () => {
         expect(screen.queryByText('MCP Servers')).not.toBeInTheDocument();
       }
       expect(screen.queryByLabelText('Inference Model Type')).not.toBeInTheDocument();
+      expect(
+        screen.queryByText('This OpenAI model requires the Responses API.'),
+      ).not.toBeInTheDocument();
       expect(screen.getByText(/Configure the AWS region and authentication/)).toBeInTheDocument();
       expect(screen.getByText(/model-specific default/)).toBeInTheDocument();
       expect(screen.getByText(/generate refreshable Bedrock tokens/)).toBeInTheDocument();

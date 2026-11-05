@@ -11,6 +11,7 @@ import {
   isBedrockAnthropicMessagesModel,
   isBedrockGptOssResponsesModel,
   isBedrockMantleResponsesModel,
+  isBedrockOpenAiChatModel,
   isBedrockOpenAiResponsesModel,
   isRejectedPrefixedGrokId,
   isRejectedPrefixedMythosId,
@@ -165,7 +166,11 @@ const getBedrockApiError = (apiMode: BedrockApiMode, modelId: string): string | 
       return 'This model requires the Anthropic Messages API.';
     }
   }
-  if (apiMode === 'chat' && isBedrockOpenAiResponsesModel(modelId)) {
+  if (
+    apiMode === 'chat' &&
+    isBedrockOpenAiResponsesModel(modelId) &&
+    !isBedrockOpenAiChatModel(modelId)
+  ) {
     return 'This OpenAI model requires the Responses API.';
   }
   return undefined;

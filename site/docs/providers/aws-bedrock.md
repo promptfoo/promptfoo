@@ -530,15 +530,11 @@ providers:
       temperature: 0.7
       max_tokens: 256
 
-  # Using regular model IDs
-  - id: bedrock:meta.llama3-1-405b-instruct-v1:0
+  # Using a foundation model ID
+  - id: bedrock:converse:qwen.qwen3-vl-235b-a22b
     config:
-      region: 'us-east-1'
-      temperature: 0.7
-      max_tokens: 256
-  - id: bedrock:us.meta.llama3-3-70b-instruct-v1:0
-    config:
-      max_gen_len: 256
+      region: us-east-1
+      maxTokens: 256
   - id: bedrock:amazon.nova-lite-v1:0
     config:
       region: 'us-east-1'
@@ -693,7 +689,7 @@ Nova 2 models require cross-region inference profiles for on-demand access:
 
 - `us.amazon.nova-2-lite-v1:0` - US region (recommended)
 - `eu.amazon.nova-2-lite-v1:0` - EU region
-- `apac.amazon.nova-2-lite-v1:0` - Asia Pacific region
+- `jp.amazon.nova-2-lite-v1:0` - Japan region
 - `global.amazon.nova-2-lite-v1:0` - Global cross-region inference
 
 **Using Nova 2 with Converse API:**
@@ -769,14 +765,14 @@ Audio input must be base64-encoded. You can use either the exact Bedrock model I
 
 ### Amazon Nova Reel (Video Generation)
 
-Amazon Nova Reel (`amazon.nova-reel-v1:1`) generates studio-quality videos from text prompts. Videos are generated in 6-second increments up to 2 minutes.
+Nova Reel accepts text prompts and produces videos in six-second increments, up to two minutes.
 
 :::warning
 
-AWS schedules Nova Reel 1.0 and 1.1 to reach end of life on **September 30, 2026**.
-These configurations support existing Reel workloads during the remaining legacy period;
-new customers cannot enable legacy models. Check the [AWS lifecycle table](https://docs.aws.amazon.com/bedrock/latest/userguide/model-lifecycle.html)
-before using them. Promptfoo has no established same-API successor for the default `bedrock:video` route.
+Nova Reel 1.0 and 1.1 reached end of life on **September 30, 2026**.
+These configurations are retained for reference and private extended-access workloads.
+For new video evaluations, check [Luma Ray 2](#luma-ray-2) and the [AWS lifecycle table](https://docs.aws.amazon.com/bedrock/latest/userguide/model-lifecycle-legacy.html)
+before using them. Promptfoo does not migrate Nova Reel configurations automatically.
 
 :::
 
@@ -1084,7 +1080,7 @@ config:
 
 ### Llama
 
-For Llama models (e.g., `meta.llama3-1-70b-instruct-v1:0`, `meta.llama3-2-90b-instruct-v1:0`, `meta.llama3-3-70b-instruct-v1:0`, `meta.llama4-scout-17b-instruct-v1:0`, `meta.llama4-maverick-17b-instruct-v1:0`), you can use the following configuration options:
+For Llama models that your account can invoke, configure generation settings on the `bedrock:<model-id>` provider. Check your model card for its inference profile and lifecycle. [Meta models on Bedrock](https://docs.aws.amazon.com/bedrock/latest/userguide/model-cards-meta.html)
 
 ```yaml
 config:
@@ -1095,71 +1091,11 @@ config:
 
 #### Llama 3.2 Vision
 
-Llama 3.2 Vision models (`us.meta.llama3-2-11b-instruct-v1:0`, `us.meta.llama3-2-90b-instruct-v1:0`) support image inputs. You can use them with either the legacy InvokeModel API or the Converse API:
-
-**Using InvokeModel API (legacy):**
-
-```yaml title="promptfooconfig.yaml"
-providers:
-  - id: bedrock:us.meta.llama3-2-11b-instruct-v1:0
-    config:
-      region: us-east-1
-      max_gen_len: 256
-
-prompts:
-  - file://llama_vision_prompt.json
-
-tests:
-  - vars:
-      image: file://path/to/image.jpg
-```
-
-```json title="llama_vision_prompt.json"
-[
-  {
-    "role": "user",
-    "content": [
-      {
-        "type": "image",
-        "source": {
-          "type": "base64",
-          "media_type": "image/jpeg",
-          "data": "{{image}}"
-        }
-      },
-      {
-        "type": "text",
-        "text": "What is in this image?"
-      }
-    ]
-  }
-]
-```
-
-**Using Converse API:**
-
-```yaml title="promptfooconfig.yaml"
-providers:
-  - id: bedrock:converse:us.meta.llama3-2-11b-instruct-v1:0
-    config:
-      region: us-east-1
-      maxTokens: 256
-```
-
-The Converse API uses the same prompt format shown above for [Nova Vision](#nova-vision-capabilities).
+AWS retired Llama 3.2 Vision. For an image eval on Bedrock, see the [Converse image example](https://github.com/promptfoo/promptfoo/blob/main/examples/amazon-bedrock/models/promptfooconfig.converse-images.yaml).
 
 ### Cohere Models
 
-For Cohere models (e.g., `cohere.command-r-v1:0`), you can use the following configuration options:
-
-```yaml
-config:
-  max_tokens: 256
-  temperature: 0.7
-  p: 0.9
-  k: 0
-  stop_sequences: ['END']
-```
+For embedding evaluations, select a supported Cohere model using `bedrock:embeddings:<model-id>`. AWS lists embedding model IDs, supported input types, and regional availability in its [Cohere catalog](https://docs.aws.amazon.com/bedrock/latest/userguide/model-cards-cohere.html).
 
 ### Mistral Models
 
@@ -1173,8 +1109,7 @@ config:
   top_k: 50
 ```
 
-Mistral chat-completion models such as `mistral.mistral-large-2407-v1:0`,
-`mistral.devstral-2-123b`, `mistral.mistral-large-3-675b-instruct`, and
+Mistral chat-completion models such as `mistral.devstral-2-123b`, `mistral.mistral-large-3-675b-instruct`, and
 `mistral.pixtral-large-2502-v1:0` use `messages` requests and support the same
 options except `top_k`.
 
@@ -1203,62 +1138,19 @@ requests and return the final assistant message directly.
 
 ### OpenAI Models
 
-Amazon Bedrock hosts two families of OpenAI models, and they are served by **different
-APIs**. promptfoo routes each `bedrock:openai.*` id to the correct one automatically.
+Use the model ID from the [AWS OpenAI model cards](https://docs.aws.amazon.com/bedrock/latest/userguide/model-cards-openai.html). Each card lists the supported APIs, inference profiles, Regions, and prices.
 
-GPT-6 Sol (`openai.gpt-6-sol`) and Luna (`openai.gpt-6-luna`) use the
-[OpenAI-compatible Responses API on Mantle](https://developers.openai.com/api/docs/guides/amazon-bedrock)
-in `us-east-1`, which promptfoo selects by default for those two IDs. AWS also offers the
-models through Bedrock Runtime with United States and global routing; the bare promptfoo
-selectors use Mantle. Bedrock does not support Responses reasoning updates; use the request-level effort.
+#### Frontier models {#frontier-models-gpt-5x}
 
-For region-specific Standard processing, promptfoo estimates
-$2.20 input / $11 output for Sol and $0.11 input / $0.55 output per million tokens. Bedrock Runtime global profiles use the global Standard rates: $2 / $10 for Sol and $0.10 / $0.50 for Luna per million tokens.
-See [OpenAI's Bedrock pricing guidance](https://developers.openai.com/api/docs/guides/amazon-bedrock#pricing)
-for regional pricing and AWS billing terms.
+| API                     | Example provider ID                      |
+| ----------------------- | ---------------------------------------- |
+| Mantle Responses        | `bedrock:openai.gpt-6.1-sol`             |
+| Mantle Chat Completions | `bedrock:mantle:openai.gpt-6.1-sol`      |
+| Runtime Converse        | `bedrock:converse:us.openai.gpt-6.1-sol` |
 
-GPT-6.1 Sol uses `bedrock:openai.gpt-6.1-sol` on Mantle in `us-east-1`. Set
-`service_tier: ultrafast` for faster interactive responses, or `default` for Standard:
+Mantle uses bare AWS model IDs such as `openai.gpt-6.1-sol`. Promptfoo preserves that ID on the request and sends it to the regional `/openai/v1` endpoint. Set `config.region` to choose a supported Region. When you omit the Region, promptfoo selects a default for the model and API. The GPT-6.1 Sol and Terra defaults are `us-east-1`.
 
-```yaml
-providers:
-  - id: bedrock:openai.gpt-6.1-sol
-    config:
-      region: us-east-1
-      service_tier: ultrafast
-      reasoning:
-        effort: low
-      max_output_tokens: 2048
-      store: false
-```
-
-Responses providers require `service_tier`; the Converse-style `serviceTier` field is rejected.
-
-Ultrafast costs six times Standard. On Mantle, its short-context rates are $13.20 input,
-$0.66 cache read, $16.50 cache write, and $66 output per million tokens, including the
-regional premium. Priority and Flex are unsupported. See the
-[AWS model card](https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-openai-gpt-6-1-sol.html)
-for availability and long-context rates. Bedrock authentication follows the instructions below.
-
-#### Frontier models (GPT-5.x)
-
-- **`openai.gpt-5.6-sol`**: Flagship reasoning tier (`us-east-1`, `us-east-2`)
-- **`openai.gpt-5.6-terra`**: Balanced tier (`us-east-1`, `us-east-2`, `us-west-2`, `us-gov-west-1`, `us-gov-east-1`)
-- **`openai.gpt-5.6-luna`**: Fast, cost-efficient tier (`us-east-1`, `us-east-2`, `us-west-2`, `us-gov-west-1`, `us-gov-east-1`)
-- **`openai.gpt-5.5`**: Earlier flagship frontier model (`us-east-1`, `us-east-2`)
-- **`openai.gpt-5.4`**: Earlier frontier model (`us-east-1`, `us-east-2`, `us-west-2`)
-
-Promptfoo uses Bedrock's **OpenAI-compatible Responses API** on the regional Mantle
-endpoint (`https://bedrock-mantle.<region>.api.aws/openai/v1/responses`) for bare frontier IDs.
-GPT-5.6 also supports [Runtime Converse and Mantle Chat Completions](https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-openai-gpt-56-sol.html).
-Promptfoo routes the bare
-`bedrock:openai.gpt-5.x` IDs to its OpenAI Responses provider, preserves the Bedrock request
-model ID, and returns the clean final answer. When no Region is configured, promptfoo uses
-`us-west-2` for `openai.gpt-6-astra`, `us-east-1` for `openai.gpt-6-sol`, `openai.gpt-6.1-sol`, and `openai.gpt-6-luna`,
-and `us-east-2` for other frontier models. A configured Region is always used; if Mantle does not
-serve the model there, it returns HTTP 404 ("model does not exist") and promptfoo adds the
-Regions that list the model to the error. Mantle can also reject `service_tier` with HTTP 400
-before checking model availability; promptfoo adds the same Region guidance to that error.
+For a Responses request to GPT-6 Astra or GPT-6.1 Sol using `service_tier: ultrafast`, select `us-east-1`. For eligible Daybreak Blue accounts, use `openai.gpt-daybreak-blue-5.6-sol` on Mantle in `us-east-2`. For Daybreak Red, see [GovCloud access](#daybreak-red-on-aws-govcloud).
 
 Authentication accepts either a pre-generated **Amazon Bedrock API key** or AWS credentials:
 
@@ -1289,56 +1181,35 @@ An explicit `config.apiKey` or authentication header is still sent.
 
 ```yaml
 providers:
-  - id: bedrock:openai.gpt-5.6-sol
-    config:
-      region: us-east-2
-      reasoning_effort: max
-      verbosity: low
-      max_output_tokens: 2048
-      store: false
-
-  - id: bedrock:openai.gpt-5.6-terra
-    config:
-      region: us-west-2
-      reasoning_effort: medium
-      store: false
-      prompt_cache_key: support-v1
-      prompt_cache_options:
-        mode: explicit
-        ttl: 30m
-
-  - id: bedrock:openai.gpt-5.6-luna
+  - id: bedrock:openai.gpt-6.1-sol
     config:
       region: us-east-1
-      reasoning_effort: low
       store: false
 ```
 
-Prefer the `bedrock:openai.gpt-5.6-sol` form above. It wraps the OpenAI Responses provider,
-points it at the mantle endpoint, and normalizes the `openai.`-prefixed id for GPT-5
-capability detection (reasoning effort, verbosity) and billing. Using
-`openai:responses:openai.gpt-5.6-sol` directly is **not** equivalent — the base provider does
-not recognize the `openai.` prefix as a GPT-5 model, so reasoning/verbosity controls would
-be dropped. An explicit `config.apiBaseUrl` can target a proxy or local Responses fixture;
-it takes precedence over ambient `OPENAI_API_HOST`/`OPENAI_BASE_URL`, preventing an unrelated
-OpenAI endpoint from receiving a Bedrock bearer token.
+Use the `bedrock:` prefix for Bedrock authentication and model-specific request parameters. An explicit `config.apiBaseUrl` can point at a customer proxy or a local fixture.
 
 The Responses API stores conversation state by default. Set `store: false` on every request
 when inputs or outputs must not be retained; Bedrock otherwise keeps stored responses for 30
 days in the source Region and allows follow-up requests with `previous_response_id`.
 
-GPT-5.6 pricing on Bedrock includes a 10% regional-processing uplift: [Sol](https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-openai-gpt-56-sol.html) is $4.40 input /
-$22 output, Terra $2.20 / $13.20, and Luna $0.22 / $1.32 per million tokens. In AWS GovCloud
-(US), Terra is $2.64 / $15.84 and Luna $0.264 / $1.584 per million tokens. Cache reads
-receive a 90% discount, cache writes cost 1.25x the uncached input rate, and cached prefixes
-remain available for at least 30 minutes. Place
-`prompt_cache_breakpoint: { mode: explicit }` on a stable
-`input_text`, `input_image`, or `input_file` content block and set a stable
-`prompt_cache_key` when using explicit caching. Promptfoo records returned cache-read and
-cache-write usage; when cache-write usage is missing, its estimate includes the available
-token counts only. Requests above 272,000 input tokens use 2x input and 1.5x output
-pricing for the full request. Do not assume first-party Flex, Priority, or regional-processing
-options are available on Bedrock; use the service behavior documented for the selected model.
+Where the model supports explicit caching, set a stable `prompt_cache_key` and place
+`prompt_cache_breakpoint: { mode: explicit }` on a stable `input_text`, `input_image`, or
+`input_file` block. Returned usage can include both cache reads and cache writes. See the model card for the prices in your Region and service tier.
+
+#### Daybreak Red on AWS GovCloud
+
+To use GPT-5.6 Cyber in AWS GovCloud (US-East), set `region: us-gov-east-1`. Your organization needs OpenAI Daybreak Red approval and AWS must provision access for your account. [Access requirements](https://openai.com/index/daybreak-red-aws-govcloud/)
+
+```yaml
+providers:
+  - id: bedrock:openai.gpt-5.6-cyber
+    config:
+      region: us-gov-east-1
+      store: false
+```
+
+This selector calls the regional Mantle Responses API. For Chat Completions, use `bedrock:mantle:openai.gpt-5.6-cyber` with the same region. Both use in-region inference and default to Ohio (`us-east-2`) if you omit the region from your configuration and environment. See the [AWS model card](https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-openai-gpt-56-cyber.html) for availability and pricing.
 
 #### Open-weight models (GPT OSS)
 
@@ -1365,7 +1236,7 @@ providers:
       showThinking: false # strip the <reasoning> block from output (see below)
 ```
 
-Amazon also exposes the base GPT OSS models through the OpenAI-compatible Responses API on the
+AWS also exposes the base and Safeguard GPT OSS models through the OpenAI-compatible Responses API on the
 mantle endpoint. Select that API explicitly with `bedrock:responses:`; the mantle ids omit the
 `-1:0` suffix and use the bearer-token or AWS credential flow described above:
 
@@ -1380,22 +1251,13 @@ providers:
       store: false
 ```
 
-Use `bedrock:responses:openai.gpt-oss-20b` for the 20B model. The explicit prefix keeps
-existing `bedrock:openai.gpt-oss-*-1:0` configs on InvokeModel while targeting
-`https://bedrock-mantle.<region>.api.aws/v1/responses` for the Responses API.
+For Safeguard, use `bedrock:responses:openai.gpt-oss-safeguard-20b` or `bedrock:responses:openai.gpt-oss-safeguard-120b`. The same bare model IDs work with `bedrock:mantle:` for Chat Completions. Mantle uses `/v1` for all four GPT OSS models.
 
 #### Reasoning Effort
 
-Both families accept the `reasoning_effort` provider option. Promptfoo forwards it as the
-native request field for GPT OSS and as `reasoning.effort` for the Responses API, allowing the
-selected model to validate the value:
+Set `config.reasoning_effort` to control reasoning. Promptfoo sends `reasoning.effort` on Mantle Responses and `reasoning_effort` on Mantle Chat Completions and GPT OSS InvokeModel.
 
-- **GPT OSS** (`openai.gpt-oss-*`, InvokeModel or Responses): `low`, `medium`, `high`
-- **GPT-5.6 frontier**: `none`, `low`, `medium`, `high`, `xhigh`, `max`
-- **GPT-5.5 / GPT-5.4 frontier**: `none`, `low`, `medium`, `high`, `xhigh`
-
-Note that `minimal` is **not** a valid value for these Bedrock models (the API rejects it).
-Higher effort produces more thorough reasoning at the cost of latency and output tokens.
+GPT OSS accepts `low`, `medium`, and `high`. Frontier models vary in the efforts they support. Check the [OpenAI model catalog](https://developers.openai.com/api/docs/models) for the model you select.
 
 #### Reasoning Output and `showThinking` (GPT OSS only)
 
@@ -1416,13 +1278,7 @@ The frontier models return clean output already, so this option does not apply t
 
 :::note Codex on Bedrock
 
-OpenAI's [Codex](https://developers.openai.com/codex/) coding agent uses these same
-frontier model IDs (`openai.gpt-5.6-sol`, `openai.gpt-5.6-terra`, `openai.gpt-5.6-luna`,
-`openai.gpt-5.5`, `openai.gpt-5.4`). To run the full coding agent
-against Bedrock, use `openai:codex-sdk` with `model_provider: amazon-bedrock` — see
-[Run on Amazon Bedrock](/docs/providers/openai-codex-sdk/#option-3-run-on-amazon-bedrock)
-in the Codex SDK docs. For direct (non-agentic) inference, use `bedrock:openai.gpt-5.6-sol`
-as shown above.
+To run the Codex coding agent with Bedrock, set `model_provider: amazon-bedrock` in the Codex SDK provider. Its catalog depends on the installed CLI and the AWS partition. [Run Codex on Amazon Bedrock](/docs/providers/openai-codex-sdk/#option-3-run-on-amazon-bedrock)
 
 :::
 
@@ -1611,8 +1467,7 @@ Existing `bedrock:mantle:<id>` and bare frontier-model selectors continue to use
 ### Mantle Chat Completions (`bedrock:mantle:`) {#mantle-chat-completions}
 
 The Bedrock **Mantle** endpoint also exposes an OpenAI-compatible **Chat Completions** API. Most
-Mantle chat models use `https://bedrock-mantle.<region>.api.aws/v1/chat/completions`; GPT-5.6
-Sol/Terra/Luna, xAI, and Gemma 4 use the `/openai/v1/chat/completions` variant. Use the
+Mantle chat models use `https://bedrock-mantle.<region>.api.aws/v1/chat/completions`; OpenAI frontier models, xAI, and Gemma 4 use the `/openai/v1/chat/completions` variant. Use the
 **`bedrock:mantle:<id>`** prefix to select this API. Mantle has its own catalog and model
 namespace, including Qwen `*-instruct` IDs; a Runtime model ID or inference profile is not
 interchangeable with a Mantle ID.
@@ -1622,7 +1477,7 @@ tokens from AWS credentials. For example, use a shared-config/SSO profile:
 
 ```yaml
 providers:
-  - id: bedrock:mantle:zai.glm-4.6
+  - id: bedrock:mantle:zai.glm-5
     config:
       region: us-west-2
       profile: bedrock-prod # or set AWS_PROFILE; omit to use the default credential chain
@@ -1633,11 +1488,8 @@ providers:
 
 - **The mantle catalog is regional.** List the models available in a Region with
   `GET https://bedrock-mantle.<region>.api.aws/v1/models`, and set `region` accordingly —
-  the default is `us-east-1`.
-- `bedrock:mantle:openai.gpt-5.6-sol` (also Terra/Luna) selects **Chat Completions**;
-  `bedrock:openai.gpt-5.6-sol` selects **Responses**. Use bare model IDs on Mantle, without
-  `us.` or `global.` prefixes. Sol supports Mantle in `us-east-1` and `us-east-2`; choose a
-  supported Region for each tier from its AWS model card.
+  most Chat models default to `us-east-1`.
+- OpenAI frontier models use the same bare model ID for Mantle Chat Completions and Responses. Use the [frontier model selectors](#frontier-models-gpt-5x) to choose the API.
 - Models that the native APIs do serve (Claude, Nova, Llama, Qwen, the
   [OpenAI-compatible families](#openai-compatible-models) above, etc.) are usually better
   reached via `bedrock:<id>` or `bedrock:converse:<id>`.
@@ -1892,7 +1744,7 @@ tests:
 Several Bedrock models support multimodal inputs including images and text:
 
 - **Amazon Nova** - Supports images and videos
-- **Llama 3.2 Vision** - Supports images (11B and 90B variants)
+- **Qwen3 VL** - Accepts images through Converse. See the [runnable image example](https://github.com/promptfoo/promptfoo/blob/main/examples/amazon-bedrock/models/promptfooconfig.converse-images.yaml).
 - **Claude** - Supports images (via Converse API); Claude 3 and later
 - **Pixtral Large** - Supports images (via Converse API)
 
@@ -2029,7 +1881,7 @@ The following environment variables can be used to configure the Bedrock provide
 
 **Configuration:**
 
-- `AWS_BEDROCK_REGION`: Default region for Bedrock API calls
+- `AWS_BEDROCK_REGION`, `AWS_REGION`, or `AWS_DEFAULT_REGION`: Region for Bedrock API calls, in that order within each environment scope. An explicit `config.region` takes precedence.
 - `AWS_BEDROCK_MAX_TOKENS`: Default maximum number of tokens to generate
 - `AWS_BEDROCK_TEMPERATURE`: Default temperature for generation
 - `AWS_BEDROCK_TOP_P`: Default top_p value for generation
@@ -2228,7 +2080,7 @@ Configuration options include:
 
 For Claude models that no longer support sampling parameters — [Opus 4.7](https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-anthropic-claude-opus-4-7.html), Opus 4.8, Opus 5, Opus 5.5, Sonnet 5, and the Fable/Mythos 5 models — the provider omits `temperature`, `top_p`, and `top_k` while preserving `max_tokens`. This check uses `config.modelArn` when supplied.
 
-[Claude Sonnet 4.5 and Haiku 4.5](https://docs.aws.amazon.com/bedrock/latest/userguide/model-parameters-anthropic-claude-messages-request-response.html) accept either `temperature` or `top_p`. When both are configured, `top_p` takes precedence. The provider applies the same precedence to Sonnet 4.6. For Amazon Nova, `top_k` is mapped to its native `inferenceConfig.topK` request field; for [Cohere Command R and R+](https://docs.aws.amazon.com/bedrock/latest/userguide/model-parameters-cohere-command-r-plus.html), it is mapped to `k`.
+[Claude Sonnet 4.5 and Haiku 4.5](https://docs.aws.amazon.com/bedrock/latest/userguide/model-parameters-anthropic-claude-messages-request-response.html) accept either `temperature` or `top_p`. When both are configured, `top_p` takes precedence. The provider applies the same precedence to Sonnet 4.6. For Amazon Nova, `top_k` maps to `inferenceConfig.topK`.
 
 ### Knowledge Base Example
 
@@ -2332,12 +2184,7 @@ AWS Bedrock supports video generation through asynchronous invoke APIs. Videos a
 
 ### Luma Ray 2
 
-Generate videos using Luma Ray 2, which produces high-quality videos from text prompts or images.
-
-**Provider ID:** `bedrock:video:luma.ray-v2:0`
-
-Check the [AWS supported models documentation](https://docs.aws.amazon.com/bedrock/latest/userguide/models-supported.html)
-for current Luma Ray regional availability.
+Set an explicit video model ID. The bare `bedrock:video` selector raises a configuration error. The example below generates video from text or an image using Ray 2 in Oregon. [AWS model card and regions](https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-luma-ai-ray2.html)
 
 #### Basic Configuration
 

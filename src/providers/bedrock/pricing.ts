@@ -9,6 +9,7 @@ import {
   isClaudeSonnet5Model,
   isClaudeSonnet55Model,
 } from '../anthropic/util';
+import { getBedrockGovCloudTextRates } from './openaiGovCloudPricing';
 
 /** A first-party Runtime endpoint determines the billing region, including FIPS and PrivateLink. */
 export function getBedrockRuntimeBillingRegion(region: string, endpoint?: string): string {
@@ -534,6 +535,29 @@ export function calculateBedrockCost(
   }
 
   const normalizedModelId = modelId.toLowerCase();
+  const govCloudProfile =
+    /^(?:arn:aws-us-gov:bedrock:us-gov-(?:east|west)-1:\d{12}:inference-profile\/)?us-gov\.openai\.(gpt-5\.6-(?:terra|luna))$/.exec(
+      normalizedModelId,
+    );
+  if (govCloudProfile) {
+    if (
+      (region && !/^us-gov-(?:east|west)-1$/.test(region)) ||
+      (serviceTier?.type && serviceTier.type !== 'default') ||
+      cacheWrite1hTokens > 0
+    ) {
+      return undefined;
+    }
+    const rates = getBedrockGovCloudTextRates(
+      govCloudProfile[1],
+      promptTokens + cacheReadTokens + cacheWriteTokens,
+    )!;
+    return (
+      promptTokens * rates.input +
+      cacheReadTokens * rates.cachedInput +
+      cacheWriteTokens * rates.cacheWriteInput +
+      completionTokens * rates.output
+    );
+  }
   // AWS model cards publish separate geo/global cache rates for these Runtime
   // profiles. Converse inputTokens excludes the separately reported cache tokens.
   const grok47 = /(?:^|:inference-profile\/)(us|global)\.xai\.grok-4\.7$/.exec(normalizedModelId);
