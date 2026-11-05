@@ -6,6 +6,9 @@ import type { ApiProvider, ProviderOptions } from '../types/providers';
 
 const POPNOW_API_BASE = 'https://api.popnow.ai/v1';
 
+// PopNow model ids end with a task suffix, e.g. `openai/gpt-6.1-terra/chat`.
+const POPNOW_TASK_SUFFIX = /\/chat$/;
+
 export class PopNowProvider extends OpenAiChatCompletionProvider {
   constructor(modelName: string, providerOptions: ProviderOptions = {}) {
     super(modelName, {
@@ -16,6 +19,15 @@ export class PopNowProvider extends OpenAiChatCompletionProvider {
         apiKeyEnvar: providerOptions.config?.apiKeyEnvar || 'POPNOW_API_KEY',
       },
     });
+  }
+
+  /** Strip the task suffix for capability checks while keeping the wire model id. */
+  protected normalizeCapabilityModelName(modelName: string): string {
+    return modelName.replace(POPNOW_TASK_SUFFIX, '');
+  }
+
+  protected getCapabilityModelName(): string {
+    return this.normalizeCapabilityModelName(this.modelName);
   }
 
   id(): string {

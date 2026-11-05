@@ -122,6 +122,18 @@ describe('PopNow', () => {
       }
     });
 
+    it('should apply GPT-6 request rules to task-suffixed model ids', async () => {
+      const provider = new PopNowProvider('openai/gpt-6.1-terra/chat', {
+        config: { reasoning_effort: 'high' },
+      });
+
+      const { body } = await provider.getOpenAiBody('Test prompt');
+
+      expect(body.model).toBe('openai/gpt-6.1-terra/chat');
+      expect(body.reasoning_effort).toBe('high');
+      expect(body.max_tokens).toBeUndefined();
+    });
+
     it('should call the PopNow API and return output', async () => {
       const provider = new PopNowProvider('google/gemini-3.7-flash/chat', {});
       mockedFetchWithRetries.mockResolvedValueOnce(

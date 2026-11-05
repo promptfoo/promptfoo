@@ -1,5 +1,7 @@
 ---
+title: PopNow Provider
 sidebar_label: PopNow
+sidebar_position: 42
 description: "Evaluate Claude, GPT, Gemini, DeepSeek and Kimi chat models through PopNow's OpenAI-compatible API in promptfoo, with one API key and pay-as-you-go USD billing"
 ---
 
