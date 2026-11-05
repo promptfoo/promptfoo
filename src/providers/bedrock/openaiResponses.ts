@@ -30,8 +30,8 @@ type BedrockOpenAiResponsesCallApiOptions = Parameters<OpenAiResponsesProvider['
  *
  *   https://bedrock-mantle.<region>.api.aws/openai/v1/responses
  *
- * GPT-5.6 also supports Runtime Converse with inference profile IDs and Mantle Chat
- * Completions through their explicit selectors; those use separate adapters.
+ * GPT-5.6 Sol, Terra, and Luna also support Runtime Converse with inference profiles.
+ * Models that support Mantle Chat Completions use a separate adapter for that API.
  * Open-weight `gpt-oss` models can use the standard InvokeModel path.
  */
 
@@ -56,6 +56,7 @@ const BEDROCK_OPENAI_MANTLE_REGIONS = new Map<string, readonly string[]>([
   ['openai.gpt-6-sol', ['us-east-1']],
   ['openai.gpt-6-luna', ['us-east-1']],
   ['openai.gpt-5.6-sol', ['us-east-1', 'us-east-2']],
+  ['openai.gpt-5.6-cyber', ['us-east-2', 'us-gov-east-1']],
   [
     'openai.gpt-5.6-terra',
     ['us-east-1', 'us-east-2', 'us-west-2', 'us-gov-west-1', 'us-gov-east-1'],
@@ -127,8 +128,7 @@ export function getBedrockMantleResponsesBaseUrl(region: string): string {
  * Without this, GPT-5 controls (reasoning effort, verbosity) would be dropped and a
  * `temperature` default wrongly applied. We strip the prefix for those capability/billing
  * checks while still sending the real `openai.gpt-5.6-sol` id as the request `model` — Bedrock
- * uses OpenAI regional-processing rates in commercial regions, with a further GovCloud
- * adjustment for GPT-5.6 Terra/Luna.
+ * publishes its own regional pricing for GPT-5.6 models.
  */
 export class BedrockOpenAiResponsesProvider extends OpenAiResponsesProvider {
   private readonly bedrockTokenProvider: BedrockTokenProvider;

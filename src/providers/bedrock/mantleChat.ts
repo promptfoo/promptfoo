@@ -41,10 +41,11 @@ export const DEFAULT_BEDROCK_MANTLE_GROK_CHAT_REGION = 'us-west-2';
 
 // These exact AWS model cards document Mantle Chat Completions support. Older frontier
 // models retain their Responses-only restriction until their Chat contract is established.
-const BEDROCK_OPENAI_CHAT_MODELS = new Set([
-  'openai.gpt-5.6-sol',
-  'openai.gpt-5.6-terra',
-  'openai.gpt-5.6-luna',
+const BEDROCK_OPENAI_CHAT_DEFAULT_REGIONS = new Map([
+  ['openai.gpt-5.6-sol', DEFAULT_BEDROCK_MANTLE_CHAT_REGION],
+  ['openai.gpt-5.6-terra', DEFAULT_BEDROCK_MANTLE_CHAT_REGION],
+  ['openai.gpt-5.6-luna', DEFAULT_BEDROCK_MANTLE_CHAT_REGION],
+  ['openai.gpt-5.6-cyber', 'us-east-2'],
 ]);
 
 /**
@@ -54,7 +55,7 @@ const BEDROCK_OPENAI_CHAT_MODELS = new Set([
 export function getBedrockMantleChatBaseUrl(region: string, modelName?: string): string {
   const path =
     (modelName !== undefined && isBedrockGrokModel(modelName)) ||
-    (modelName !== undefined && BEDROCK_OPENAI_CHAT_MODELS.has(modelName)) ||
+    (modelName !== undefined && BEDROCK_OPENAI_CHAT_DEFAULT_REGIONS.has(modelName)) ||
     modelName?.startsWith('google.gemma-4')
       ? 'openai/v1'
       : 'v1';
@@ -83,13 +84,10 @@ export class BedrockMantleChatProvider extends OpenAiChatCompletionProvider {
 
   constructor(modelName: string, options: BedrockMantleChatProviderOptions = {}) {
     super(modelName, options);
-    const region = resolveBedrockMantleRegion(
-      options.config ?? {},
-      options.env,
-      isBedrockGrokModel(modelName)
-        ? DEFAULT_BEDROCK_MANTLE_GROK_CHAT_REGION
-        : DEFAULT_BEDROCK_MANTLE_CHAT_REGION,
-    );
+    const defaultRegion = isBedrockGrokModel(modelName)
+      ? DEFAULT_BEDROCK_MANTLE_GROK_CHAT_REGION
+      : (BEDROCK_OPENAI_CHAT_DEFAULT_REGIONS.get(modelName) ?? DEFAULT_BEDROCK_MANTLE_CHAT_REGION);
+    const region = resolveBedrockMantleRegion(options.config ?? {}, options.env, defaultRegion);
     this.bedrockRegion = region;
     // Pin direct construction too, before any AWS credential can be resolved.
     this.config = {
@@ -213,7 +211,10 @@ export function createBedrockMantleChatProvider(
   modelName: string,
   providerOptions: BedrockMantleChatProviderOptions = {},
 ): BedrockMantleChatProvider {
-  if (isBedrockOpenAiResponsesModel(modelName) && !BEDROCK_OPENAI_CHAT_MODELS.has(modelName)) {
+  if (
+    isBedrockOpenAiResponsesModel(modelName) &&
+    !BEDROCK_OPENAI_CHAT_DEFAULT_REGIONS.has(modelName)
+  ) {
     throw new Error(
       `Amazon Bedrock model "bedrock:mantle:${modelName}" is not supported by promptfoo's ` +
         `Mantle Chat Completions adapter. ` +
@@ -222,16 +223,8 @@ export function createBedrockMantleChatProvider(
     );
   }
   const config: Record<string, any> = providerOptions.config ?? {};
-  const region = resolveBedrockMantleRegion(
-    config,
-    providerOptions.env,
-    isBedrockGrokModel(modelName)
-      ? DEFAULT_BEDROCK_MANTLE_GROK_CHAT_REGION
-      : DEFAULT_BEDROCK_MANTLE_CHAT_REGION,
-  );
-  const apiBaseUrl = config.apiBaseUrl || getBedrockMantleChatBaseUrl(region, modelName);
   const profile = modelName.match(/^[a-z]+\.(openai\.gpt-5\.6-(?:sol|terra|luna))$/);
-  if (profile && isBedrockMantleEndpoint(apiBaseUrl)) {
+  if (profile && (!config.apiBaseUrl || isBedrockMantleEndpoint(config.apiBaseUrl))) {
     throw new Error(
       `Amazon Bedrock inference profile "${modelName}" cannot be used on Mantle. Use ` +
         `"bedrock:mantle:${profile[1]}" for Mantle Chat Completions or ` +
@@ -242,6 +235,6 @@ export function createBedrockMantleChatProvider(
 
   return new BedrockMantleChatProvider(modelName, {
     ...providerOptions,
-    config: { ...config, apiBaseUrl, ...(isGrok ? { omitDefaults: true } : {}) },
+    config: { ...config, ...(isGrok ? { omitDefaults: true } : {}) },
   });
 }
