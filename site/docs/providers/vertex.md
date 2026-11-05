@@ -251,7 +251,7 @@ See Google's [text embedding guide](https://docs.cloud.google.com/gemini-enterpr
 ### Image Generation Models
 
 :::note
-The legacy [Imagen adapter](/docs/providers/google#image-generation-models) uses `google:image:<model>` and `config.projectId`. The Imagen 3 and Imagen 4 IDs documented there are discontinued; configuring a Vertex project or region does not restore their availability. Gemini image generation on Vertex uses the [Gemini image adapter](/docs/providers/google#gemini-native-image-generation-models) with `google:gemini-3.1-flash-image` and `config.projectId`. The adapter uses the global endpoint for this model; see the [Vertex model documentation](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/gemini/3-1-flash-image) for model details.
+The legacy [Imagen adapter](/docs/providers/google#image-generation-models) uses `google:image:<model>` and `config.projectId`. The Imagen 3 and Imagen 4 IDs documented there are discontinued; configuring a Vertex project or region does not restore their availability. Gemini image generation on Vertex uses the [Gemini image adapter](/docs/providers/google#gemini-native-image-generation-models) with `google:gemini-3.1-flash-image` and `config.projectId`. This model defaults to the global endpoint. Set `region: us` or `region: eu` with project-based OAuth to select a multi-region endpoint. Cost estimates use the selected location’s rates. See the [Vertex model card](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/gemini/3-1-flash-image) and [Vertex pricing](https://cloud.google.com/vertex-ai/generative-ai/pricing).
 :::
 
 ### Video Generation Models
