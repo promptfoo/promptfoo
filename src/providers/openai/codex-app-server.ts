@@ -3456,7 +3456,7 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
         output: number;
         cached: number;
         cacheWrite?: number;
-        reasoning: number;
+        reasoning?: number;
       }
     | undefined {
     const usage = rawTokenUsage?.last ?? rawTokenUsage?.total ?? rawTokenUsage;
@@ -3476,7 +3476,7 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
         typeof (usage.cacheWriteInputTokens ?? usage.cache_write_input_tokens) === 'number'
           ? (usage.cacheWriteInputTokens ?? usage.cache_write_input_tokens)
           : undefined,
-      reasoning: usage.reasoningOutputTokens ?? usage.reasoning_output_tokens ?? 0,
+      reasoning: usage.reasoningOutputTokens ?? usage.reasoning_output_tokens,
     };
   }
 
@@ -3490,7 +3490,7 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
       cached_input_tokens: usage.cached,
       cache_write_input_tokens: usage.cacheWrite ?? 0,
       output_tokens: usage.output,
-      reasoning_output_tokens: usage.reasoning,
+      reasoning_output_tokens: usage.reasoning ?? 0,
     };
   }
 
@@ -3504,8 +3504,15 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
       completion: usage.output,
       total: usage.input + usage.output,
       cached: usage.cached,
-      ...(typeof usage.cacheWrite === 'number'
-        ? { completionDetails: { cacheCreationInputTokens: usage.cacheWrite } }
+      ...(typeof usage.reasoning === 'number' || typeof usage.cacheWrite === 'number'
+        ? {
+            completionDetails: {
+              ...(typeof usage.reasoning === 'number' ? { reasoning: usage.reasoning } : {}),
+              ...(typeof usage.cacheWrite === 'number'
+                ? { cacheCreationInputTokens: usage.cacheWrite }
+                : {}),
+            },
+          }
         : {}),
     };
   }
