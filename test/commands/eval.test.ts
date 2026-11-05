@@ -1065,7 +1065,8 @@ describe('evalCommand', () => {
 
     it('removes its signal handlers so a second Ctrl-C terminates', async () => {
       const { pending } = await startWatching({ eventSource: 'cli' });
-      expect(installedSince(before)).toHaveLength(1);
+      // Wait for the initial run's cleanup to hand SIGINT over to the idle watcher.
+      await vi.waitFor(() => expect(installedSince(before)).toHaveLength(1));
 
       const [onSignal] = installedSince(before);
       onSignal('SIGINT');
