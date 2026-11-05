@@ -326,7 +326,7 @@ describe('GeminiImageProvider', () => {
         projectId: 'test-project',
       });
       const provider = new GeminiImageProvider('gemini-nano-banana-2.1', {
-        config: { projectId: 'test-project', region: 'us-central1', imageSize: '2K' },
+        config: { projectId: 'test-project', region: 'global', imageSize: '2K' },
       });
       expect((await provider.callApi('Draw a panorama')).error).toBeUndefined();
       expect(client.request).toHaveBeenCalledWith(
@@ -1257,12 +1257,24 @@ describe('GeminiImageProvider', () => {
       );
     });
 
-    it('should use global endpoint with v1 for gemini-3.1-flash-lite-image', async () => {
+    it.each(['gemini-nano-banana-2.1', 'gemini-3-pro-image', 'gemini-3.1-flash-lite-image'])(
+      'rejects an explicit EU location for global-only %s before requesting credentials',
+      async (model) => {
+        const provider = new GeminiImageProvider(model, {
+          config: { projectId: 'test-project', region: 'eu' },
+        });
+        await expect(provider.callApi('Draw a sunrise')).resolves.toEqual({
+          error: `Unsupported Vertex location "eu" for ${model}. Use global.`,
+        });
+        expect(mockGetGoogleClient).not.toHaveBeenCalled();
+        expect(mockFetchWithCache).not.toHaveBeenCalled();
+      },
+    );
+
+    it('uses global for Flash-Lite Image with a regional environment default', async () => {
       const provider = new GeminiImageProvider('gemini-3.1-flash-lite-image', {
-        config: {
-          projectId: 'test-project',
-          region: 'us-central1',
-        },
+        config: { projectId: 'test-project' },
+        env: { GOOGLE_CLOUD_LOCATION: 'us-central1' },
       });
 
       const mockClient = createMockVertexClient();

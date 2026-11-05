@@ -458,6 +458,8 @@ providers:
 
 For `google:gemini-3.1-flash-image` on Vertex with project-based OAuth, choose `region: eu` or `region: us` for a multi-region endpoint, or omit the location to use the global default. Promptfoo estimates image, text and cache costs at the selected location's rates. See the [Vertex model card](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/gemini/3-1-flash-image) and [Vertex pricing](https://cloud.google.com/vertex-ai/generative-ai/pricing).
 
+Nano Banana 2.1, Pro Image and Flash-Lite Image support only the global Vertex endpoint. With project-based OAuth, they use it even when the project has a regional environment default. Setting a different `config.region` on one of these providers returns an error before the request.
+
 The [runnable image examples](https://github.com/promptfoo/promptfoo/tree/main/examples/google-imagen) include a Gemini API configuration, a Search-grounded generation and a Vertex multi-region call.
 
 ### Video Generation Models (Gemini Omni Flash)

@@ -70,6 +70,12 @@ const GEMINI_IMAGE_PRICING: Record<string, Record<string, number>> = {
 };
 const DEFAULT_IMAGE_COST = 0.04;
 
+const VERTEX_GLOBAL_ONLY_IMAGE_MODELS = new Set([
+  'gemini-nano-banana-2.1',
+  'gemini-3-pro-image',
+  'gemini-3.1-flash-lite-image',
+]);
+
 /**
  * Token rates (USD per token) billed in addition to the per-image price.
  * The per-image prices above cover only image-output tokens; Google bills
@@ -429,6 +435,15 @@ export class GeminiImageProvider implements ApiProvider {
     config: GoogleProviderConfig,
     requestedRegion: string | undefined,
   ): Promise<ProviderResponse> {
+    if (
+      this.config.region &&
+      this.config.region !== 'global' &&
+      VERTEX_GLOBAL_ONLY_IMAGE_MODELS.has(this.modelName)
+    ) {
+      return {
+        error: `Unsupported Vertex location "${this.config.region}" for ${this.modelName}. Use global.`,
+      };
+    }
     let location = this.usesGlobalVertexEndpoint() ? 'global' : requestedRegion || 'us-central1';
     if (this.modelName === 'gemini-3.1-flash-image' && requestedRegion) {
       if (!['global', 'us', 'eu'].includes(requestedRegion)) {
