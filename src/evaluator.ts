@@ -1,3 +1,4 @@
+import { realpath } from 'node:fs/promises';
 import readline from 'readline';
 import { isDeepStrictEqual } from 'util';
 
@@ -30,11 +31,18 @@ import {
 import { generateIdFromPrompt } from './models/prompt';
 import { nodeEvaluatorRuntime } from './node/evaluatorRuntime';
 import { CIProgressReporter } from './progress/ciProgressReporter';
+import { resolveAgenticWorkingDir } from './providers/agentic-utils';
 import { type AgentWorkspace, createAgentWorkspaceForConfig } from './providers/agentWorkspace';
 import { maybeEmitAzureOpenAiWarning } from './providers/azure/warnings';
 import { providerRegistry } from './providers/providerRegistry';
 import { isPromptfooSampleTarget } from './providers/shared';
+import { hasCodingAgentAssertion } from './redteam/constants/codingAgents';
 import { maybeWrapMcpProviderForRedteam } from './redteam/mcpTargetProvider';
+import {
+  type CodingAgentHostEvidence,
+  withCodingAgentHostEvidence,
+} from './redteam/plugins/codingAgent/hostEvidence';
+import { snapshotCodingAgentArtifacts } from './redteam/plugins/codingAgent/verifiers';
 import { redteamProviderManager } from './redteam/providers/shared';
 import { throwIfTargetPromptExceedsMaxChars } from './redteam/shared/promptLength';
 import { getSessionId } from './redteam/util';
@@ -105,6 +113,7 @@ import {
   sanitizeProviderIdForLog,
 } from './util/provider';
 import { promptYesNo } from './util/readline';
+import { renderVarsInObject } from './util/render';
 import {
   isNonCredentialHeader,
   isSecretEnvVarName,
@@ -624,7 +633,19 @@ function synchronizeLegacyTransportHeaders(
 function applyGradingResult(row: EvaluateResult, checkResult: GradingResult) {
   if (!checkResult.pass) {
     row.error = checkResult.reason;
-    row.failureReason = ResultFailureReason.ASSERT;
+    const failedChecks = (checkResult.componentResults ?? [checkResult]).filter(
+      (check) => !check.pass && !check.componentResults?.length,
+    );
+    row.failureReason =
+      failedChecks.length > 0 &&
+      failedChecks.every(
+        (check) =>
+          check.assertion?.type.startsWith('promptfoo:redteam:coding-agent:') &&
+          check.metadata?.verifierStatus === 'incomplete' &&
+          check.metadata?.graderError === true,
+      )
+        ? ResultFailureReason.ERROR
+        : ResultFailureReason.ASSERT;
   }
   row.success = checkResult.pass;
   row.score = checkResult.score;
@@ -1834,13 +1855,26 @@ async function runEvalInternal(
       vars: state.vars,
     });
     setup = rendered.setup;
+    let hostEvidence: CodingAgentHostEvidence | undefined;
     if (!test.providerOutput) {
       const activeProvider = isApiProvider(test.provider) ? test.provider : provider;
-      workspace = await createAgentWorkspaceForConfig(
-        { ...activeProvider.config, ...rendered.setup.prompt.config },
-        state.vars,
-        abortSignal,
-      );
+      const config = { ...activeProvider.config, ...rendered.setup.prompt.config };
+      workspace = await createAgentWorkspaceForConfig(config, state.vars, abortSignal);
+      if (hasCodingAgentAssertion(test.assert)) {
+        const configuredDir = renderVarsInObject(config.working_dir, state.vars);
+        const directory =
+          workspace?.dir ??
+          resolveAgenticWorkingDir(
+            typeof configuredDir === 'string' ? configuredDir : undefined,
+            cliState.basePath,
+          ) ??
+          process.cwd();
+        const workingDir = await realpath(directory).catch(() => directory);
+        hostEvidence = {
+          workingDir,
+          baseline: await snapshotCodingAgentArtifacts({ ...test, vars: state.vars }, workingDir),
+        };
+      }
     }
     const stepWorkspace = workspace;
 
@@ -1888,7 +1922,13 @@ async function runEvalInternal(
           const response = normalizeCachedTargetResponse(providerCall.response);
           latencyMs = providerCall.latencyMs;
           if (stepWorkspace) {
-            response.metadata = { ...response.metadata, ...(await stepWorkspace.metadata()) };
+            const observed = await stepWorkspace.metadata();
+            // Both keys belong to the evaluator when it creates the workspace.
+            const { workspaceDiff: _providerDiff, ...providerMetadata } = response.metadata ?? {};
+            response.metadata = { ...providerMetadata, ...observed };
+            if (hostEvidence) {
+              hostEvidence.workspaceDiff = observed.workspaceDiff;
+            }
           }
 
           updateConversationHistory({
@@ -1969,6 +2009,9 @@ async function runEvalInternal(
         },
         (rows) => deferredGradingPromises.get(rows[0]),
       );
+    const runRow = hostEvidence
+      ? () => withCodingAgentHostEvidence(hostEvidence, runExecution)
+      : runExecution;
     const rows = executionTraceContext
       ? await withProviderCallTracingContext(
           {
@@ -1977,9 +2020,9 @@ async function runEvalInternal(
             withGraderSpan,
             withProviderSpan: withTracedProviderCall,
           },
-          runExecution,
+          runRow,
         )
-      : await runExecution();
+      : await runRow();
     // Deferred assertions still need the workspace, so they remove it when they finish.
     const deferredGrading = deferredGradingPromises.get(rows[0]);
     if (workspace && deferredGrading) {

@@ -51,6 +51,7 @@ import {
   getGradingInputHash,
   withGradingUsage,
 } from '../grading/storedResult';
+import { getCodingAgentHostEvidence } from '../plugins/codingAgent/hostEvidence';
 import { remoteGenerationContextPayload } from '../remoteGenerationContext';
 import { throwIfTargetPromptExceedsMaxChars } from '../shared/promptLength';
 import { ATTACKER_MODEL, ATTACKER_MODEL_SMALL, TEMPERATURE } from './constants';
@@ -541,6 +542,15 @@ export function callTargetProvider(
     const call = async (callContext?: CallApiContextParams) => {
       const response = await targetProvider.callApi(targetPrompt, callContext, targetOptions);
       executionContext?.onTargetResponse?.(targetPrompt, response);
+      const row = getCodingAgentHostEvidence();
+      if (row) {
+        const turnId = randomUUID();
+        (row.turns ??= new Map()).set(turnId, {
+          response,
+          spanId: tracingContext ? callContext?.traceparent?.split('-')[2] : undefined,
+        });
+        return { ...response, metadata: { ...response.metadata, codingAgentTurnId: turnId } };
+      }
       return response;
     };
     return tracingContext

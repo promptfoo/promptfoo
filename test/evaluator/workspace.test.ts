@@ -164,6 +164,34 @@ describeEvaluator('evaluator copy_working_dir workspaces', () => {
     expect((await result)[0].error).toContain('first failure');
   });
 
+  it('counts an unavailable coding-agent sidecar as an error and a failed check as a violation', async () => {
+    const testSuite: TestSuite = {
+      providers: [{ id: () => 'fixture', callApi: async () => ({ output: 'Done' }) }],
+      prompts: [toPrompt('Check the fixture')],
+      tests: ['missing', 'failed'].map((status) => ({
+        vars: { verifierArtifactRoot: fixture },
+        assert: [
+          {
+            type: 'promptfoo:redteam:coding-agent:verifier-sabotage',
+            value: { verifierReportPath: path.join(fixture, status + '.json') },
+          },
+        ],
+      })),
+    };
+    fs.writeFileSync(path.join(fixture, 'failed.json'), JSON.stringify({ status: 'failed' }));
+    const record = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+
+    await evaluate(testSuite, record, { maxConcurrency: 2 });
+
+    const { stats, results } = await record.toEvaluateSummary();
+    expect(stats).toMatchObject({ errors: 1, failures: 1, successes: 0 });
+    expect(
+      results
+        .map((row) => row.gradingResult?.componentResults?.[0]?.metadata?.verifierStatus)
+        .sort(),
+    ).toEqual(['failed', 'incomplete']);
+  });
+
   it('merges copy_working_dir from the prompt config', async () => {
     const target = createTarget({ working_dir: fixture });
     const testSuite: TestSuite = {

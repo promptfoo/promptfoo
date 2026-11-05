@@ -7,6 +7,7 @@ import {
   getTargetConversation,
   withGradingUsage,
 } from '../redteam/grading/storedResult';
+import { CodingAgentGrader } from '../redteam/plugins/codingAgent/graders';
 import { isAttackProvider } from '../redteam/shared/attackProviders';
 import { checkExfilTracking, getWebPageTrackingIds } from '../redteam/strategies/indirectWebPwn';
 import { isApiProvider, isProviderOptions } from '../types/providers';
@@ -251,8 +252,24 @@ export const handleRedteam = async (
       | undefined;
     const { hasAnyErrors } = analyzeGraderErrors(redteamHistory);
 
+    const codingGrader =
+      storedResult.pass && assertion.type.startsWith('promptfoo:redteam:coding-agent:')
+        ? getGraderById(assertion.type)
+        : undefined;
+    const finalGrade =
+      codingGrader instanceof CodingAgentGrader
+        ? await codingGrader.recheckStoredPass(
+            storedResult,
+            outputString,
+            test,
+            renderedValue,
+            assertionValueContext.trace,
+            redteamHistory?.length,
+          )
+        : storedResult;
+
     return {
-      ...storedResult,
+      ...finalGrade,
       tokensUsed: getStoredTokens(),
       assertion: {
         ...(storedResult.assertion ?? assertion),
@@ -260,7 +277,7 @@ export const handleRedteam = async (
       },
       metadata: {
         ...test.metadata,
-        ...storedResult.metadata,
+        ...finalGrade.metadata,
         // Propagate gradingIncomplete if any turns had grader errors
         ...(hasAnyErrors ? { gradingIncomplete: true } : {}),
       },
