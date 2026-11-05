@@ -873,16 +873,17 @@ See the [OpenAI vision example](https://github.com/promptfoo/promptfoo/tree/main
 <Link id="gpt-image-1-mini" />
 <Link id="example" />
 
-`openai:image` defaults to `gpt-image-2.5-flare` and calls `/v1/images/generations` for text-to-image evals. Use `gpt-image-2.5-sunburst` to compare Sunburst on the same prompts; both aliases and their `2026-09-08` snapshots are supported.
+Choose `openai:image:gpt-image-2.6-flare` for fast iteration or `openai:image:gpt-image-2.6-sunburst` for detailed compositions and precise edits. The default operation generates an image from a text prompt. The unqualified `openai:image` provider defaults to `gpt-image-2.5-flare`.
 
 ```yaml title="promptfooconfig.yaml"
 prompts:
   - 'A product photo of {{product}} on a plain white background.'
 
 providers:
-  - id: openai:image:gpt-image-2.5-flare
+  - id: openai:image:gpt-image-2.6-flare
     config:
       size: 1024x1024
+      complexity: medium
       quality: low
       output_format: webp
 
@@ -891,9 +892,31 @@ tests:
       product: a blue ceramic mug
 ```
 
-GPT Image 2.5 also accepts `quality: xhigh` and `quality: max`. For transparent output, use `background: transparent` with PNG or WebP. Cost comes from the response's token usage; it is left unset when usage is missing because older models' per-image estimates do not apply. See the [Image API guide](https://developers.openai.com/api/docs/guides/image-generation).
+Both 2.6 models accept `quality` values from `low` through `max` (`low`, `medium`, `high`, `xhigh`, `max`, or `auto`). Set `complexity` to `low`, `medium`, or `high` to control how much the model plans before rendering. The API defaults to `high`.
 
-This provider supports generation only. Image editing, masks, reference images, variations, and streaming are not implemented.
+- For an editable vector image, use `output_format: svg` and `n: 1`. Use `background: transparent` for a transparent SVG, PNG, or WebP.
+- For an animation, use `output_format: gif` and describe the motion in your prompt. Set `frame_count` (2–64, default 9) and `frame_duration_ms` (20–2000, default 200). The API rounds the duration to 10 ms. For GIFs, `size` is the size of each frame and defaults to `auto`.
+- Raster image costs use the response's token usage. Promptfoo leaves cost unset if usage is missing or the output is SVG, which also incurs charges from a separate authoring model.
+
+To edit an image, use `operation: edit`. Supply up to 16 references in `images`, each with a `file_id` or an `image_url` containing an HTTPS URL or base64 image data URL. To guide an edit with markup, supply a transparent PNG overlay matching the first image's dimensions. This example uses the source photo and overlay from OpenAI's image guide.
+
+```yaml
+prompts:
+  - 'Recolor the circled vase blue and remove the circle.'
+providers:
+  - id: openai:image:gpt-image-2.6-sunburst
+    config:
+      operation: edit
+      images:
+        - image_url: https://developers.openai.com/images/platform/guides/image-prompting/kitchen.webp
+      markup:
+        image_url: https://developers.openai.com/images/platform/guides/image-prompting/markup-vase-overlay-gpt-image-2-6.png
+      complexity: low
+```
+
+For a masked edit, supply `mask` in place of `markup`. Edits return PNG, JPEG, or WebP. The provider supports non-streaming generation and edits. [OpenAI image guide](https://developers.openai.com/api/docs/guides/image-generation#gpt-image-26)
+
+GPT Image 2.5 Flare and Sunburst and their `2026-09-08` snapshots remain available for generation.
 
 <details>
 <summary>GPT Image 2 options</summary>

@@ -5,19 +5,21 @@ prompts:
   - 'In the style of {{artist}}: {{subject}}'
 
 providers:
-  # GPT Image 2.5 Flare - everyday image generation
-  - id: openai:image:gpt-image-2.5-flare
+  # GPT Image 2.6 Flare - everyday image generation
+  - id: openai:image:gpt-image-2.6-flare
     config:
       size: 1024x1024
+      complexity: low
       quality: low # low, medium, high, xhigh, max, auto
       # background: transparent # transparent, opaque, auto; use png/webp for transparency
       # output_format: webp # png, jpeg, webp
 
-  # GPT Image 2.5 Sunburst - compare on the same prompts
-  - id: openai:image:gpt-image-2.5-sunburst
+  # GPT Image 2.6 Sunburst - compare on the same prompts
+  - id: openai:image:gpt-image-2.6-sunburst
     config:
       size: 1024x1024
       quality: low
+      complexity: low
 
   # Earlier models for comparison
   - id: openai:image:gpt-image-2

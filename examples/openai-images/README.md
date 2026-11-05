@@ -7,7 +7,7 @@ npx promptfoo@latest init --example openai-images
 cd openai-images
 ```
 
-Compare GPT Image 2.5 Flare and Sunburst with earlier OpenAI image models in promptfoo.
+Compare GPT Image 2.6 Flare and Sunburst with earlier OpenAI image models in promptfoo.
 
 ## Quick Start
 
@@ -27,7 +27,7 @@ promptfoo view
 
 ## What's in this Example
 
-- Compares GPT Image 2.5 Flare and Sunburst with GPT Image 2, 1.5, and 1 Mini
+- Compares GPT Image 2.6 Flare and Sunburst with GPT Image 2, 1.5, and 1 Mini
 - Uses text-to-image generation through the Image API generations endpoint
 - Tests artistic style prompts across different models
 - Configures different image sizes and quality settings
@@ -35,19 +35,19 @@ promptfoo view
 
 ## Supported Models
 
-### GPT Image 2.5 Flare and Sunburst (Recommended)
+### GPT Image 2.6 Flare and Sunburst (Recommended)
 
-Use Flare for everyday image generation. Sunburst is designed for precise editing; this example compares its text-to-image output. Both support custom sizes, transparent backgrounds, and quality settings through `max`.
+The example runs Flare and Sunburst with the same size, quality, and complexity so you can compare their outputs and latency. Use `complexity` to control planning and `quality` to control rendering detail.
 
 ```yaml
 providers:
-  - id: openai:image:gpt-image-2.5-flare
+  - id: openai:image:gpt-image-2.6-flare
     config:
       size: 1536x1024
       quality: high # low, medium, high, xhigh, max, auto
       background: transparent
       output_format: png # png or webp for transparent backgrounds
-  - id: openai:image:gpt-image-2.5-sunburst
+  - id: openai:image:gpt-image-2.6-sunburst
     config:
       size: 1536x1024
       quality: high
@@ -109,9 +109,9 @@ providers:
 
 OpenAI shut down `gpt-image-1` on October 23, 2026. GPT Image 1.5 and 1 Mini remain available until December 1, 2026. [OpenAI deprecations](https://developers.openai.com/api/docs/deprecations)
 
-`dall-e-3` and `dall-e-2` were [retired from the OpenAI API](https://developers.openai.com/api/docs/deprecations) on May 12, 2026. The provider retains compatibility for gateways that still expose them. Use `gpt-image-2.5-flare` or `gpt-image-2.5-sunburst` for new evals.
+`dall-e-3` and `dall-e-2` were [retired from the OpenAI API](https://developers.openai.com/api/docs/deprecations) on May 12, 2026. The provider retains compatibility for gateways that still expose them. Use `gpt-image-2.6-flare` or `gpt-image-2.6-sunburst` for new evals.
 
-Promptfoo's `openai:image` provider currently supports text-to-image generation. Image edits/reference inputs, variations, and streaming partial images are not part of this example and are rejected if configured.
+The example generates raster images from text. For SVG output, animated GIFs, or a markup-guided edit with GPT Image 2.6, see the [OpenAI provider guide](https://www.promptfoo.dev/docs/providers/openai/#generating-images).
 
 ## Pricing
 
@@ -122,7 +122,7 @@ Flare and Sunburst share these [standard rates](https://developers.openai.com/ap
 | Text       | $5    | $1.25        | —      |
 | Image      | $8    | $2           | $30    |
 
-Promptfoo calculates GPT Image 2.5 costs from returned usage. If usage is missing, cost stays unset. Equal token rates do not mean equal cost per image: each model and quality setting can use different token counts.
+Promptfoo calculates raster image costs from returned token usage. Cost stays unset when usage is missing or when SVG output incurs separate authoring charges.
 
 Output-only estimates for earlier models:
 
