@@ -1835,7 +1835,7 @@ The following environment variables can be used to configure the Bedrock provide
 
 **Configuration:**
 
-- `AWS_BEDROCK_REGION`: Default region for Bedrock API calls
+- `AWS_BEDROCK_REGION`, `AWS_REGION`, or `AWS_DEFAULT_REGION`: Region for Bedrock API calls, in that order within each environment scope. An explicit `config.region` takes precedence.
 - `AWS_BEDROCK_MAX_TOKENS`: Default maximum number of tokens to generate
 - `AWS_BEDROCK_TEMPERATURE`: Default temperature for generation
 - `AWS_BEDROCK_TOP_P`: Default top_p value for generation
