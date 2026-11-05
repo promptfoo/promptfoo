@@ -24,6 +24,7 @@ import {
   markMediaLoadSucceeded,
   normalizeMediaText,
   resolveAudioSource,
+  resolveBlobUri,
   resolveImageSource,
 } from '@app/utils/media';
 import {
@@ -98,7 +99,11 @@ function StorageRefAudioPlayer({
   format?: string;
   evaluationId?: string;
 }) {
-  const audioUrl = resolveAudioSource({ format }, data, evaluationId)?.src;
+  const audioUrl = isMediaRef(data)
+    ? resolveBlobUri(data, evaluationId)
+    : data.startsWith('data:')
+      ? data
+      : `data:audio/${format};base64,${data}`;
 
   if (!audioUrl) {
     return <span className="text-xs text-destructive">Failed to load audio</span>;
