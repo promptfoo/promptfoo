@@ -49,12 +49,21 @@ describe('ElevenLabsClient', () => {
       expect(defaultClient).toBeDefined();
     });
 
-    it('should use custom base URL if provided', () => {
+    it('should use custom base URL if provided', async () => {
       const customClient = new ElevenLabsClient({
         apiKey: 'test-key',
         baseUrl: 'https://custom.api.com/v1',
       });
-      expect(customClient).toBeDefined();
+      mockFetch.mockResolvedValueOnce(
+        new Response(JSON.stringify({ voices: [] }), {
+          headers: { 'content-type': 'application/json' },
+        }),
+      );
+      await expect(customClient.get('/voices')).resolves.toEqual({ voices: [] });
+      expect(mockFetch).toHaveBeenCalledExactlyOnceWith(
+        'https://custom.api.com/v1/voices',
+        expect.objectContaining({ method: 'GET' }),
+      );
     });
 
     it('should preserve explicit zero retries', () => {

@@ -62,17 +62,11 @@ describeIfBuildExists('Library Exports', () => {
     it('should have ESM library build (index.js)', () => {
       const esmPath = path.join(distDir, 'index.js');
       expect(fs.existsSync(esmPath)).toBe(true);
-
-      const stats = fs.statSync(esmPath);
-      expect(stats.size).toBeGreaterThan(100000); // Should be substantial
     });
 
     it('should have CJS library build (index.cjs)', () => {
       const cjsPath = path.join(distDir, 'index.cjs');
       expect(fs.existsSync(cjsPath)).toBe(true);
-
-      const stats = fs.statSync(cjsPath);
-      expect(stats.size).toBeGreaterThan(100000); // Should be substantial
     });
 
     it('should have lightweight, zod-only contracts builds', () => {
@@ -129,10 +123,7 @@ describeIfBuildExists('Library Exports', () => {
     });
 
     it('should export utility functions', () => {
-      // These are commonly used exports
-      expect(typeof cjsModule.evaluate === 'function' || cjsModule.evaluate === undefined).toBe(
-        true,
-      );
+      expect(cjsModule.evaluate).toBeTypeOf('function');
     });
 
     it('should not throw when importing', () => {

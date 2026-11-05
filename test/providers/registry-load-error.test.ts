@@ -1,5 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+vi.mock('../../src/telemetry');
+
 // Keep the failing dynamic import in its own module graph: randomized test order
 // must not expose the cached failure to successful provider registry tests.
 describe('getProviderFactories family load error wrapping', () => {

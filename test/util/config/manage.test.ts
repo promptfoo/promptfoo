@@ -103,7 +103,8 @@ describe('config management', () => {
       expect(configPath).toBe(customPath);
     });
 
-    it('should handle undefined path', () => {
+    it('should reset a custom path to the default', () => {
+      setConfigDirectoryPath('/custom/path');
       setConfigDirectoryPath(undefined);
       const configPath = getConfigDirectoryPath();
       expect(configPath).toBe(path.join('/home/user', '.promptfoo'));

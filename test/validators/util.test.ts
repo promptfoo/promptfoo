@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import logger from '../../src/logger';
 
 vi.mock('../../src/logger', () => ({
   default: {
@@ -18,6 +19,7 @@ import {
 import type { ApiProvider } from '../../src/types/providers';
 
 afterEach(() => {
+  vi.resetAllMocks();
   vi.restoreAllMocks();
 });
 
@@ -99,89 +101,69 @@ describe('formatConfigHeaders', () => {
 });
 
 describe('validateSessionConfig', () => {
-  it('should warn when sessionId template is missing from config', () => {
-    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
-
-    // The function uses the logger module, so we just verify it doesn't throw
+  it.each([
+    ['client', 'client-generated session ID'],
+    ['server', 'subsequent requests'],
+  ])('warns when the %s session template is missing', (sessionSource, guidance) => {
     const provider = {
       id: () => 'test-provider',
       config: { url: 'https://example.com/api' },
       callApi: vi.fn(),
-    } as unknown as ApiProvider;
-
-    // The function uses the logger module, so we just verify it doesn't throw
+    };
     validateSessionConfig({
       provider,
-      sessionSource: 'client',
+      sessionSource,
+      sessionConfig: { sessionParser: 'response.headers.x-session-id' },
     });
 
-    warnSpy.mockRestore();
+    expect(logger.warn).toHaveBeenCalledExactlyOnceWith(
+      expect.stringContaining(guidance),
+      expect.objectContaining({ sessionSource }),
+    );
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.stringContaining('{{sessionId}} not found'),
+      expect.any(Object),
+    );
   });
 
-  it('should not warn when sessionId template is present in config', () => {
+  it('warns when the server session parser is missing', () => {
     const provider = {
       id: () => 'test-provider',
-      config: {
-        url: 'https://example.com/api',
-        headers: { 'X-Session': '{{sessionId}}' },
-      },
+      config: { body: '{{sessionId}}' },
       callApi: vi.fn(),
-    } as unknown as ApiProvider;
+    };
+    validateSessionConfig({ provider, sessionSource: 'server' });
 
-    // Should not throw
-    expect(() =>
-      validateSessionConfig({
-        provider,
-        sessionSource: 'client',
-      }),
-    ).not.toThrow();
+    expect(logger.warn).toHaveBeenCalledExactlyOnceWith(
+      expect.stringContaining('no session parser configured'),
+      expect.any(Object),
+    );
   });
 
-  it('should handle server session source without session parser', () => {
+  it.each(['client', 'server'])('does not warn for complete %s configuration', (sessionSource) => {
     const provider = {
       id: () => 'test-provider',
-      config: { url: 'https://example.com/api', body: '{{sessionId}}' },
+      config: { headers: { 'X-Session': '{{sessionId}}' } },
       callApi: vi.fn(),
-    } as unknown as ApiProvider;
+    };
+    validateSessionConfig({
+      provider,
+      sessionSource,
+      sessionConfig: { sessionParser: 'response.headers.x-session-id' },
+    });
 
-    // Should not throw even with missing session parser
-    expect(() =>
-      validateSessionConfig({
-        provider,
-        sessionSource: 'server',
-      }),
-    ).not.toThrow();
+    expect(logger.warn).not.toHaveBeenCalled();
   });
 
-  it('should handle server session source with session parser', () => {
-    const provider = {
-      id: () => 'test-provider',
-      config: { url: 'https://example.com/api', body: '{{sessionId}}' },
-      callApi: vi.fn(),
-    } as unknown as ApiProvider;
-
-    expect(() =>
-      validateSessionConfig({
-        provider,
-        sessionSource: 'server',
-        sessionConfig: { sessionParser: 'response.headers.x-session-id' },
-      }),
-    ).not.toThrow();
-  });
-
-  it('should handle provider with no config', () => {
-    const provider = {
-      id: () => 'test-provider',
-      config: {},
-      callApi: vi.fn(),
-    } as unknown as ApiProvider;
-
-    expect(() =>
-      validateSessionConfig({
-        provider,
-        sessionSource: 'client',
-      }),
-    ).not.toThrow();
+  it('warns when the provider has no config', () => {
+    validateSessionConfig({
+      provider: { id: () => 'test-provider', callApi: vi.fn<ApiProvider['callApi']>() },
+      sessionSource: 'client',
+    });
+    expect(logger.warn).toHaveBeenCalledExactlyOnceWith(
+      expect.stringContaining('{{sessionId}} not found'),
+      expect.any(Object),
+    );
   });
 });
 

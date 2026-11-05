@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { ElevenLabsClient } from '../../../../src/providers/elevenlabs/client';
 import { ElevenLabsIsolationProvider } from '../../../../src/providers/elevenlabs/isolation';
 import { mockProcessEnv } from '../../../util/utils';
 
@@ -87,27 +88,33 @@ describe('ElevenLabsIsolationProvider', () => {
 
   describe('API key resolution', () => {
     it('should use config API key over environment variable', () => {
-      const provider = new ElevenLabsIsolationProvider('elevenlabs:isolation', {
+      new ElevenLabsIsolationProvider('elevenlabs:isolation', {
         config: { apiKey: 'config-key' },
       });
 
-      expect(provider).toBeDefined();
+      expect(ElevenLabsClient).toHaveBeenCalledExactlyOnceWith(
+        expect.objectContaining({ apiKey: 'config-key' }),
+      );
     });
 
     it('should use environment variable when config key not provided', () => {
-      const provider = new ElevenLabsIsolationProvider('elevenlabs:isolation');
+      new ElevenLabsIsolationProvider('elevenlabs:isolation');
 
-      expect(provider).toBeDefined();
+      expect(ElevenLabsClient).toHaveBeenCalledExactlyOnceWith(
+        expect.objectContaining({ apiKey: 'test-api-key' }),
+      );
     });
 
     it('should support custom API key environment variable', () => {
       mockProcessEnv({ CUSTOM_ELEVENLABS_KEY: 'custom-key' });
 
-      const provider = new ElevenLabsIsolationProvider('elevenlabs:isolation', {
+      new ElevenLabsIsolationProvider('elevenlabs:isolation', {
         config: { apiKeyEnvar: 'CUSTOM_ELEVENLABS_KEY' },
       });
 
-      expect(provider).toBeDefined();
+      expect(ElevenLabsClient).toHaveBeenCalledExactlyOnceWith(
+        expect.objectContaining({ apiKey: 'custom-key' }),
+      );
 
       mockProcessEnv({ CUSTOM_ELEVENLABS_KEY: undefined });
     });

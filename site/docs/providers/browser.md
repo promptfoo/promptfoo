@@ -1,11 +1,11 @@
 ---
 sidebar_label: Web Browser
-description: 'Execute LLM evaluations directly in browsers using WebGPU acceleration and local models for privacy-preserving testing'
+description: 'Evaluate web applications in Chromium with automated page interactions, scoped cookies, reusable browser sessions, and cleanup after evals and diagnostics.'
 ---
 
 # Browser Provider
 
-The Browser Provider uses [Playwright](https://playwright.dev/) to navigate pages, interact with elements, and extract data from web applications. It supports Chromium (Chrome and Edge), Firefox, and WebKit (the Safari engine).
+The Browser Provider uses [Playwright](https://playwright.dev/) to navigate pages, interact with elements, and extract data from web applications. It supports Chromium-based browsers, including Chrome and Edge.
 
 ## When to Use the Browser Provider
 
@@ -152,9 +152,9 @@ providers:
 **Key options:**
 
 - `persistSession: true` - Keep the browser page open between `callApi()` invocations. Because this is a stateful workflow, Promptfoo runs it with concurrency `1`.
-- `runOnce: true` on steps - Execute only on the first turn (skip on subsequent turns)
+- `runOnce: true` on steps - Execute only on the first turn (skip on subsequent turns). If the page closes or a turn fails, the next call starts a new session and reruns these steps.
 
-This is essential for testing multi-turn jailbreak strategies against chat interfaces where you need to maintain conversation context.
+Promptfoo closes the pages, contexts, and launched browsers it owns when the eval ends. It disconnects its own client connection while leaving connected user-owned browsers and existing contexts open. When calling a provider directly, call `await provider.cleanup()` after the final turn.
 
 ## Supported Actions
 
@@ -327,17 +327,19 @@ If you are using promptfoo as a [node library](/docs/usage/node-package/), you c
 
 Supported config options:
 
-| Option            | Type                                                                             | Description                                                                                                                  |
-| ----------------- | -------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
-| headless          | `boolean`                                                                        | Whether to run the browser in headless mode. Defaults to `true`.                                                             |
-| cookies           | `string` \| `{ name: string; value: string; domain?: string; path?: string; }[]` | A string or array of cookies to set on the browser                                                                           |
-| transformResponse | `string` \| `Function`                                                           | A function receiving `(extracted, finalHtml)`, or a string expression using those variables, to parse the response.          |
-| steps             | `BrowserAction[]`                                                                | An array of actions to perform in the browser                                                                                |
-| timeoutMs         | `number`                                                                         | The maximum time in milliseconds to wait for the browser operations to complete                                              |
-| persistSession    | `boolean`                                                                        | Keep the browser page open across multiple `callApi()` invocations. Required for multi-turn strategies. Defaults to `false`. |
-| connectOptions    | `object`                                                                         | Options for connecting to an existing browser (`debuggingPort`, `mode`, `wsEndpoint`)                                        |
+| Option            | Type                                                                                           | Description                                                                                                                  |
+| ----------------- | ---------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| headless          | `boolean`                                                                                      | Whether to run the browser in headless mode. Defaults to `true`.                                                             |
+| cookies           | `string` \| `{ name: string; value: string; url?: string; domain?: string; path?: string; }[]` | A string or array of cookies to set on the browser                                                                           |
+| transformResponse | `string` \| `Function`                                                                         | A function receiving `(extracted, finalHtml)`, or a string expression using those variables, to parse the response.          |
+| steps             | `BrowserAction[]`                                                                              | An array of actions to perform in the browser                                                                                |
+| timeoutMs         | `number`                                                                                       | The maximum time in milliseconds to wait for the browser operations to complete                                              |
+| persistSession    | `boolean`                                                                                      | Keep the browser page open across multiple `callApi()` invocations. Required for multi-turn strategies. Defaults to `false`. |
+| connectOptions    | `object`                                                                                       | Options for connecting to an existing browser (`debuggingPort`, `mode`, `wsEndpoint`)                                        |
 
-Note: All string values in the config support Nunjucks templating. This means you can use the `{{prompt}}` variable or any other variables passed in the test context.
+String-valued step arguments support Nunjucks templating with `{{prompt}}` and variables passed in the test context. Cookie values and connection options are not templated.
+
+String cookies (for example, `session=abc==; preference=compact`) use the host and directory of the first `navigate` step's rendered HTTP(S) URL. Without such a navigation URL, use cookie objects with an explicit `url` or `domain`/`path` scope; those scopes are preserved.
 
 ### Browser Support
 

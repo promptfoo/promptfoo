@@ -321,7 +321,11 @@ MIIDXTCCAkWgAwIBAgIJAKL0UG+mRkSdMA0GCSqGSIb3DQEBCwUA
       );
 
       const result = await fetchCsvFromSharepoint(urlWithSpecialChars);
-      expect(result).toBeDefined();
+      expect(fetchWithProxy).toHaveBeenCalledWith(
+        "https://yourcompany.sharepoint.com/_api/web/GetFileByServerRelativeUrl('/sites/yoursite/Files/test-data_v1.0.csv')/$value",
+        expect.any(Object),
+      );
+      expect(result).toEqual([{ header1: 'value1', header2: 'value2' }]);
     });
   });
 });

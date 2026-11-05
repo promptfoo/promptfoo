@@ -4,7 +4,9 @@ import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
 import { OpenAiCompletionProvider } from '../../src/providers/openai/completion';
 import { OpenAiEmbeddingProvider } from '../../src/providers/openai/embedding';
 
-vi.mock('../../src/providers/openai');
+vi.mock('../../src/providers/openai/chat');
+vi.mock('../../src/providers/openai/completion');
+vi.mock('../../src/providers/openai/embedding');
 
 afterEach(() => {
   vi.resetAllMocks();

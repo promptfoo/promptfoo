@@ -4,6 +4,8 @@ import logger from '../logger';
 
 interface CleanupProvider {
   shutdown(): Promise<void>;
+  /** Keep direct-call sessions alive between calls until an evaluation claims ownership. */
+  retainOutsideEvaluation?: boolean;
 }
 
 interface IdleCleanupProvider {
@@ -37,6 +39,7 @@ interface ResourceState {
   providers: Set<ProviderState>;
   registered: boolean;
   registration: number;
+  evaluationOwned: boolean;
   release?: { promise: Promise<void>; start: (force?: boolean) => Promise<void> };
 }
 
@@ -230,11 +233,13 @@ export class ProviderRegistry {
         providers: new Set(),
         registered: false,
         registration: 0,
+        evaluationOwned: false,
       };
       this.resources.set(resource, state);
     }
     if (!state.registered) {
       state.registration++;
+      state.evaluationOwned = false;
     }
     state.registered = true;
     if ('id' in resource && typeof resource.id === 'function') {
@@ -267,6 +272,38 @@ export class ProviderRegistry {
     // Forced cleanup (including beforeExit) must not re-register a permanent failure.
     if (!this.processShuttingDown && !this.releasingResource.getStore()?.forced) {
       this.register(resource);
+    }
+  }
+
+  /** Track an already-started cleanup of the whole resource without making later scopes own it. */
+  trackResourceCleanup(resource: CleanupProvider, cleanup: Promise<void>): void {
+    // A manual retry may follow a forced teardown that already removed the registration.
+    if (!this.resources.has(resource)) {
+      this.register(resource);
+    }
+    const state = this.resources.get(resource);
+    // shutdown() may call this while a registry-owned release already observes its result.
+    if (!state || state.release) {
+      return;
+    }
+    const complete = () => {
+      if (state.release?.promise === promise) {
+        state.release = undefined;
+      }
+      this.forgetResource(state);
+      if (this.processShuttingDown && state.registered) {
+        void this.forceResource(state);
+      }
+    };
+    // Settle bookkeeping in the first reaction, before the owner can retry a rejected cleanup.
+    const promise = cleanup.then(complete, (error) => {
+      logger.warn('Provider resource cleanup failed.', { error });
+      complete();
+    });
+    // Explicit cleanup already releases every owned handle, including pending initialization.
+    state.release = { promise, start: () => promise };
+    if (this.processShuttingDown) {
+      this.trackProcessRelease(promise);
     }
   }
 
@@ -480,6 +517,7 @@ export class ProviderRegistry {
   }
 
   private claimResource(scope: EvaluationScope, resource: ResourceState): void {
+    resource.evaluationOwned = true;
     if (!scope.resources.has(resource)) {
       scope.resources.add(resource);
       resource.users.add(scope);
@@ -561,7 +599,9 @@ export class ProviderRegistry {
     if (
       !state.registered ||
       (!force &&
-        (state.users.size || [...state.providers].some((provider) => provider.activeCalls > 0)))
+        ((state.resource.retainOutsideEvaluation && !state.evaluationOwned) ||
+          state.users.size ||
+          [...state.providers].some((provider) => provider.activeCalls > 0)))
     ) {
       return undefined;
     }
@@ -605,11 +645,10 @@ export class ProviderRegistry {
           } catch (error) {
             shutdown = Promise.reject(error);
           }
-          void Promise.resolve(shutdown)
-            .catch((error) => {
-              logger.warn('Error shutting down provider: ' + String(error));
-            })
-            .then(complete);
+          void Promise.resolve(shutdown).then(complete, (error) => {
+            logger.warn('Error shutting down provider: ' + String(error));
+            complete();
+          });
         }
       }
       return actual;
