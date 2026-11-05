@@ -469,8 +469,8 @@ describe('Context Propagation in Model-Graded Assertions', () => {
 
     it('should preserve literal Nunjucks delimiters wrapped in a raw block', async () => {
       const mockResult = [
-        { pass: true, score: 1, reason: 'best' },
-        { pass: false, score: 0, reason: 'not best' },
+        { pass: true, score: 1, reason: 'best', metadata: { cachedResponse: true } },
+        { pass: false, score: 0, reason: 'not best', metadata: { cachedResponse: true } },
       ];
       vi.mocked(matchesSelectBest).mockResolvedValue(mockResult);
 
@@ -494,7 +494,10 @@ describe('Context Propagation in Model-Graded Assertions', () => {
         undefined,
       );
       for (const result of results) {
-        expect(result.metadata?.renderedAssertionValue).toBe('Prefer {{ preference }}');
+        expect(result.metadata).toEqual({
+          cachedResponse: true,
+          renderedAssertionValue: 'Prefer {{ preference }}',
+        });
         expect(result.assertion?.value).toBe('{% raw %}Prefer {{ preference }}{% endraw %}');
       }
     });
