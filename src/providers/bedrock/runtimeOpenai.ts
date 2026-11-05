@@ -24,7 +24,7 @@ import type {
 import type { BedrockTokenProviderConfig } from './tokenProvider';
 
 type RuntimeOptions<Config> = Pick<
-  ProviderOptions<Config & BedrockTokenProviderConfig & { region?: string }>,
+  ProviderOptions<Config & BedrockTokenProviderConfig & { apiKey?: string; region?: string }>,
   'config' | 'env' | 'id'
 >;
 
