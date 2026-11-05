@@ -502,10 +502,9 @@ export function calculateBedrockCost(
   );
   const glm53 = /(?:^|:inference-profile\/)(us|global)\.zai\.glm-5\.3$/.exec(normalizedModelId);
   if (grok47 || kimi3 || glm53) {
-    // Kimi Priority/Flex are supported only on Responses and Chat Completions,
-    // not the native Converse/Invoke paths priced here.
+    // AWS specifies Kimi's non-default tier multipliers for the US and global profiles.
     if (
-      (kimi3 && serviceTier?.type && serviceTier.type !== 'default') ||
+      (kimi3?.[1] === 'in' && serviceTier && serviceTier.type !== 'default') ||
       (grok47 && cacheWriteTokens > 0)
     ) {
       return undefined;

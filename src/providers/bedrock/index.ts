@@ -2203,11 +2203,20 @@ ${prompt}
       config: BedrockOpenAICompatGenerationOptions,
       prompt: string,
       stop?: string[],
-      _modelName?: string,
+      modelName?: string,
       vars?: Record<string, VarValue>,
     ) => {
       const messages = parseChatPrompt(prompt, [{ role: 'user', content: prompt }]);
       const params: any = { messages };
+      if (
+        config?.service_tier !== undefined &&
+        /(?:^|:inference-profile\/)(?:us|in|global)\.moonshotai\.kimi-k3$/.test(modelName ?? '')
+      ) {
+        if (!['default', 'priority', 'flex'].includes(config.service_tier)) {
+          throw new Error('Kimi K3 supports default, priority, and flex service_tier values.');
+        }
+        params.service_tier = config.service_tier;
+      }
 
       addConfigParam(params, 'max_tokens', config?.max_tokens, getEnvInt('AWS_BEDROCK_MAX_TOKENS'));
       // No forced temperature/top_p default: reasoning-oriented models in this group (e.g.

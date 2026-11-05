@@ -128,12 +128,9 @@ function runtimeCost(
   ) {
     return undefined;
   }
-  // These Runtime HTTP adapters apply published US/global tier multipliers over Standard rates.
-  // Kimi's India non-default tiers retain unknown pricing until their rates are established.
+  // Grok 4.6's native calculator covers Standard; its HTTP APIs also support Priority/Flex.
   const httpTier =
-    /(?:^|:inference-profile\/)(?:us|global)\.(?:moonshotai\.kimi-k3|xai\.grok-4\.6)$/i.test(
-      modelName,
-    ) &&
+    /(?:^|:inference-profile\/)(?:us|global)\.xai\.grok-4\.6$/i.test(modelName) &&
     (serviceTier === 'priority' || serviceTier === 'flex');
   const tierMultiplier = httpTier ? (serviceTier === 'priority' ? 1.75 : 0.5) : 1;
   const catalogCost = (completionTokens?: number) => {
