@@ -59,6 +59,7 @@ describe('isProviderResponseRateLimited', () => {
       'API error 429: Please try again later.',
       'PromptfooModel task API error: HTTP 429 upstream busy',
       'OpenClaw tool invoke failed (429): upstream busy',
+      'API call error: 429 status code (no body)',
     ])('should detect a standalone 429 in returned and thrown errors: %s', (error) => {
       expect(isProviderResponseRateLimited({ error }, undefined)).toBe(true);
       expect(isProviderResponseRateLimited(undefined, new Error(error))).toBe(true);

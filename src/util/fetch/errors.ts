@@ -233,7 +233,8 @@ export function hasHttp429Status(message = ''): boolean {
     /"(?:code|status(?:Code)?)"\s*:\s*(?:429|"429")\s*[,}]/i.test(message) ||
     /\berror(?:\s*\(429\)|:\s*429(?:[.!]?\s*$|\s*[:({\[]))/i.test(message) ||
     /^\s*(?:429|\(429\))\s*$/.test(message) ||
-    /\b429\s+too many requests\b|\breturned\s+429[.!]?\s*$/i.test(message)
+    /\b429\s+too many requests\b|\breturned\s+429[.!]?\s*$/i.test(message) ||
+    /\b429 status code \(no body\)$/i.test(message)
   );
 }
 
