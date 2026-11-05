@@ -64,12 +64,13 @@ providers:
       maxTokens: 4096
       temperature: 0.7
 
-  # Claude Haiku 5.5
-  - id: bedrock:converse:us.anthropic.claude-haiku-5-5
-    label: Claude Haiku 5.5
+  # Claude Sonnet 4
+  - id: bedrock:converse:us.anthropic.claude-sonnet-4-20250514-v1:0
+    label: Claude Sonnet 4
     config:
       region: us-east-1
       maxTokens: 4096
+      temperature: 0.7
 
   # Claude Opus 4.6
   - id: bedrock:converse:us.anthropic.claude-opus-4-6-v1
