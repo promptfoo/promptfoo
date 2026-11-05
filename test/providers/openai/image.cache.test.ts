@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { getCache, withCacheNamespace } from '../../../src/cache';
 import { OpenAiImageProvider } from '../../../src/providers/openai/image';
 import { fetchWithRetries } from '../../../src/util/fetch/index';
@@ -11,9 +11,8 @@ vi.mock('../../../src/util/fetch/index', async (importOriginal) => ({
 const namespace = 'openai-image-malformed-response';
 
 describe.each(['url', 'b64_json'] as const)('image response recovery (%s)', (responseFormat) => {
-  beforeEach(() => {
-    vi.resetAllMocks();
-  });
+  const missingImageError =
+    responseFormat === 'url' ? 'No image URL found' : 'No base64 image data found';
 
   afterEach(async () => {
     // The shared test setup uses memory storage; clear only this suite's namespace.
@@ -31,8 +30,13 @@ describe.each(['url', 'b64_json'] as const)('image response recovery (%s)', (res
     { name: 'empty image', body: { data: [{ url: '', b64_json: '' }] } },
     { name: 'API error envelope', body: { error: { message: 'Image generation failed' } } },
   ])('evicts $name so the next call can recover', async ({ body }) => {
-    const provider = new OpenAiImageProvider('dall-e-3', {
-      config: { apiKey: 'test-key', response_format: responseFormat },
+    const provider = new OpenAiImageProvider('compatible-image-model', {
+      config: {
+        apiBaseUrl: 'https://images.example/v1',
+        useDefaultApiKey: false,
+        apiKeyRequired: false,
+        response_format: responseFormat,
+      },
     });
     const valid = {
       data: [{ url: 'https://example.com/image.png', b64_json: 'aW1hZ2U=' }],
@@ -43,8 +47,9 @@ describe.each(['url', 'b64_json'] as const)('image response recovery (%s)', (res
 
     await withCacheNamespace(namespace, async () => {
       const first = await provider.callApi('draw a capybara');
-      expect(first.error).toBeTruthy();
-      expect(first.error).not.toContain('TypeError');
+      expect(first.error).toContain(
+        body && 'error' in body ? body.error.message : missingImageError,
+      );
       expect(first.output).toBeUndefined();
 
       const recovered = await provider.callApi('draw a capybara');

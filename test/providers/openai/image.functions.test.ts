@@ -417,27 +417,12 @@ describe('OpenAI Image Provider Functions', () => {
 
   describe('processApiResponse', () => {
     it('should handle error in data', async () => {
-      const mockDeleteFromCache = vi.fn();
       const data = {
         error: { message: 'Some API error' },
       };
 
-      const result = await processApiResponse(
-        data,
-        'prompt',
-        'url',
-        false,
-        'dall-e-2',
-        '512x512',
-        undefined,
-        undefined,
-        1,
-        undefined,
-        {},
-        mockDeleteFromCache,
-      );
+      const result = await processApiResponse(data, 'prompt', 'url', false, 'dall-e-2', '512x512');
 
-      expect(mockDeleteFromCache).toHaveBeenCalledWith();
       expect(result).toHaveProperty('error');
       expect(result.error).toContain('Some API error');
     });
@@ -556,7 +541,6 @@ describe('OpenAI Image Provider Functions', () => {
     });
 
     it('should handle errors during output formatting', async () => {
-      const mockDeleteFromCache = vi.fn();
       const data = {
         data: undefined,
       };
@@ -568,22 +552,14 @@ describe('OpenAI Image Provider Functions', () => {
         false,
         'dall-e-2',
         '512x512',
-        undefined,
-        undefined,
-        1,
-        undefined,
-        {},
-        mockDeleteFromCache,
       );
 
       expect(result).toHaveProperty('error');
       expect(result.error).toContain('No image URL found in response');
       expect(result.error).not.toContain('TypeError');
-      expect(mockDeleteFromCache).toHaveBeenCalledWith();
     });
 
     it('should handle a specific error case with malformed response', async () => {
-      const mockDeleteFromCache = vi.fn();
       const data = {
         data: { data: 'not-an-array' },
       };
@@ -595,18 +571,11 @@ describe('OpenAI Image Provider Functions', () => {
         false,
         'dall-e-2',
         '512x512',
-        undefined,
-        undefined,
-        1,
-        undefined,
-        {},
-        mockDeleteFromCache,
       );
 
       expect(result).toHaveProperty('error');
       expect(result.error).toContain('No image URL found in response');
       expect(result.error).not.toContain('TypeError');
-      expect(mockDeleteFromCache).toHaveBeenCalledWith();
     });
   });
 

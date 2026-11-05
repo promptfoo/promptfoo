@@ -915,10 +915,8 @@ export async function processApiResponse(
   n: number = 1,
   outputFormat?: string,
   billingConfig: OpenAiImageOptions = {},
-  deleteFromCache?: FetchWithCacheResult<unknown>['deleteFromCache'],
 ): Promise<ProviderResponse> {
   if (data?.error) {
-    await deleteFromCache?.();
     return {
       error: formatOpenAiError(data),
     };
@@ -927,7 +925,6 @@ export async function processApiResponse(
   try {
     const formattedOutput = formatOutput(data, prompt, responseFormat, outputFormat);
     if (typeof formattedOutput === 'object') {
-      await deleteFromCache?.();
       return formattedOutput;
     }
 
@@ -951,7 +948,6 @@ export async function processApiResponse(
       ...(responseFormat === 'b64_json' ? { isBase64: true, format: 'json' } : {}),
     };
   } catch (err) {
-    await deleteFromCache?.();
     return {
       error: `API error: ${String(err)}: ${JSON.stringify(data)}`,
     };
@@ -1020,32 +1016,29 @@ export class OpenAiImageProvider extends OpenAiGenericProvider {
       ...this.getOpenAiRequestHeaders(config.headers),
     };
 
-    let data, status, statusText;
-    let cached = false;
-    let latencyMs: number | undefined;
-    let deleteFromCache: FetchWithCacheResult<unknown>['deleteFromCache'];
+    let response: FetchWithCacheResult<any>;
     try {
-      ({ data, cached, status, statusText, latencyMs, deleteFromCache } = await callOpenAiImageApi(
+      response = await callOpenAiImageApi(
         appendOpenAiApiPath(this.getApiUrl(), endpoint),
         body,
         headers,
         getRequestTimeoutMs(),
-      ));
-
-      if (status < 200 || status >= 300) {
-        return {
-          error: `API error: ${status} ${statusText}\n${typeof data === 'string' ? data : JSON.stringify(data)}`,
-        };
-      }
+      );
     } catch (err) {
       logger.error(`API call error: ${String(err)}`);
-      await deleteFromCache?.();
       return {
         error: `API call error: ${String(err)}`,
       };
     }
 
-    return processApiResponse(
+    const { data, cached, status, statusText, latencyMs } = response;
+    if (status < 200 || status >= 300) {
+      return {
+        error: `API error: ${status} ${statusText}\n${typeof data === 'string' ? data : JSON.stringify(data)}`,
+      };
+    }
+
+    const result = await processApiResponse(
       data,
       prompt,
       responseFormat,
@@ -1057,7 +1050,10 @@ export class OpenAiImageProvider extends OpenAiGenericProvider {
       config.n ?? 1,
       outputFormat,
       config,
-      deleteFromCache,
     );
+    if (result.error) {
+      await response.deleteFromCache?.();
+    }
+    return result;
   }
 }
