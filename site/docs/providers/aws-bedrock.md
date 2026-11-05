@@ -929,7 +929,7 @@ The `messages:` profile route uses `bedrock-runtime.<region>.amazonaws.com/anthr
 and accepts a Bedrock API key or generates a temporary token from AWS credentials.
 Bare `bedrock:messages:anthropic.claude-haiku-5-5` and
 `bedrock:messages:anthropic.claude-sonnet-5-5` use Mantle and require `us-gov-west-1`.
-Bare Opus 5.5 Messages selects Runtime in London and Mantle in the other regions listed in its model card. For Haiku 4.5, use the short `anthropic.claude-haiku-4-5` ID on Mantle or a versioned Runtime profile such as `global.anthropic.claude-haiku-4-5-20251001-v1:0`.
+Bare Opus 5.5 Messages selects Runtime in London and Mantle in the other regions listed in its model card. For Haiku 4.5, use the short `anthropic.claude-haiku-4-5` ID on Mantle or a versioned Runtime profile such as `global.anthropic.claude-haiku-4-5-20251001-v1:0`. To estimate Haiku 4.5 costs on GovCloud Mantle, configure `cost` or both `inputCost` and `outputCost`.
 
 Haiku 5.5 has adaptive thinking on by default. It accepts disabled thinking at effort
 `high` or below; promptfoo omits unsupported sampling parameters. Global pricing is

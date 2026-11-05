@@ -66,6 +66,16 @@ export class BedrockAnthropicMessagesProvider extends AnthropicMessagesProvider 
     const region =
       endpointRegion ??
       resolveBedrockMantleRegion(this.config, this.env, DEFAULT_BEDROCK_ANTHROPIC_REGION);
+    // The Haiku 4.5 model card lists Mantle in GovCloud West, but the AWS pricing table
+    // does not publish a corresponding Standard rate. Accept a complete explicit estimate.
+    if (
+      modelName === 'anthropic.claude-haiku-4-5' &&
+      region.startsWith('us-gov-') &&
+      config.cost == null &&
+      (config.inputCost == null || config.outputCost == null)
+    ) {
+      return undefined;
+    }
     const regionalPricing = getGovCloudClaudePricing(modelName, region);
     if (!regionalPricing || config.cost != null) {
       return super.calculateMessageCost(config, message, modelName);
