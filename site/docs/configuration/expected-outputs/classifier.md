@@ -98,6 +98,8 @@ The `not-classifier` type inverts the result of the classifier. In this case, th
 
 Provider errors and empty classification results fail both `classifier` and `not-classifier` with a score of `0`. They are grader failures, so negation does not turn them into passes, even when `value` specifies a label.
 
+A token classifier that finds no entities is different. `huggingface:token-classification` reports that it ran and detected no labels, so every label scores `0` and the assertion is graded on that score: the `not-classifier` check above passes. A custom provider can report the same by returning `noLabelsDetected: true` with an empty `classification`.
+
 ## Prompt injection example
 
 This assertion uses a [fine-tuned deberta-v3-base model](https://huggingface.co/protectai/deberta-v3-base-prompt-injection) to detect prompt injections.

@@ -3,6 +3,7 @@ import { fetchWithCache } from '../../src/cache';
 import {
   HuggingfaceFeatureExtractionProvider,
   HuggingfaceTextClassificationProvider,
+  HuggingfaceTokenExtractionProvider,
 } from '../../src/providers/huggingface';
 
 vi.mock('../../src/cache', async (importOriginal) => ({
@@ -38,6 +39,29 @@ describe('Hugging Face task response compatibility', () => {
       });
     },
   );
+
+  it('reports no detected labels only when a token classifier returns an empty list', async () => {
+    const tokens = new HuggingfaceTokenExtractionProvider('fixture/ner');
+    reply([]);
+    expect(await tokens.callClassificationApi('A pleasant day')).toEqual({
+      classification: {},
+      noLabelsDetected: true,
+    });
+    reply([{ entity_group: 'PER', score: 0.9 }]);
+    expect(await tokens.callClassificationApi('Alice')).toEqual({ classification: { PER: 0.9 } });
+  });
+
+  it('does not report an empty list from a failed request as no detected labels', async () => {
+    const tokens = new HuggingfaceTokenExtractionProvider('fixture/ner');
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      data: [],
+      cached: false,
+      status: 503,
+      statusText: 'Service Unavailable',
+      headers: {},
+    });
+    expect(await tokens.callClassificationApi('A pleasant day')).toEqual({ classification: {} });
+  });
 
   it.each([[0.1, 0.2], [[0.1, 0.2]]].map((data) => [data]))(
     'normalizes a single embedding vector: %j',

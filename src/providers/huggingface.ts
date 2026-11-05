@@ -698,7 +698,11 @@ export class HuggingfaceTokenExtractionProvider implements ApiProvider {
           classification[item.entity_group] = item.score;
         }
       }
-      return { classification };
+      // An empty list in a successful response means the model found no entities, which is a
+      // result and not a failed call.
+      return response.data.length === 0 && response.status >= 200 && response.status < 300
+        ? { classification, noLabelsDetected: true }
+        : { classification };
     } catch (err) {
       return {
         error: `API call error: ${String(err)}. Output:\n${response?.data}`,
