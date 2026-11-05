@@ -500,10 +500,10 @@ describe('Anthropic utilities', () => {
       ['anthropic.claude-sonnet-5', 1.1],
       ['us.anthropic.claude-sonnet-5', 1.1],
       ['global.anthropic.claude-sonnet-5', 1],
-    ])('preserves independent Bedrock Sonnet 5 estimates for %s', (model, premium) => {
-      expect(calculateAnthropicCost(model, {}, 1000, 100)).toBeCloseTo(0.0045 * premium, 10);
+    ])('calculates Bedrock Sonnet 5 estimates for %s', (model, premium) => {
+      expect(calculateAnthropicCost(model, {}, 1000, 100)).toBeCloseTo(0.003 * premium, 10);
       expect(calculateAnthropicCost(model, {}, 1000, 100, 2000, 400)).toBeCloseTo(
-        0.0066 * premium,
+        0.0044 * premium,
         10,
       );
       // Explicit rates are final and suppress the regional premium.
@@ -2835,12 +2835,12 @@ describe('Anthropic utilities', () => {
       ).toEqual({ type: 'adaptive' });
     });
 
-    it('bills $2/$10 with 0.1x cache reads and a flat 1M context', () => {
+    it('bills $2/$10 with 0.05x cache reads and a flat 1M context', () => {
       // 1000 * 2e-6 + 500 * 10e-6 = 0.007
       expect(calculateAnthropicCost('claude-sonnet-5-5', {}, 1000, 500)).toBeCloseTo(0.007, 10);
-      // + 200 cache reads * 0.2e-6 + 100 cache writes * 2.5e-6 = 0.00004 + 0.00025
+      // + 200 cache reads * 0.1e-6 + 100 cache writes * 2.5e-6 = 0.00002 + 0.00025
       expect(calculateAnthropicCost('claude-sonnet-5-5', {}, 1000, 500, 200, 100)).toBeCloseTo(
-        0.00729,
+        0.00727,
         10,
       );
       // No >200K surcharge: 300,000 * 2e-6 + 20,000 * 10e-6 = 0.8
