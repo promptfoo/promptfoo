@@ -1,6 +1,7 @@
 import { createRequire } from 'node:module';
 import * as fs from 'fs';
 
+import nunjucks from 'nunjucks';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   type AfterEachExtensionHookContext,
@@ -927,6 +928,29 @@ describe('evaluatorHelpers', () => {
       );
 
       expect(renderedPrompt).toBe('ok');
+    });
+
+    it.each(['env', 'range'])(
+      'should propagate errors from an explicit %s variable that shadows a global',
+      async (globalName) => {
+        await expect(
+          renderPrompt(toPrompt(`{{${globalName}}}`), { [globalName]: '{% unknown %}' }, {}),
+        ).rejects.toThrow('unknown block tag');
+      },
+    );
+
+    it('should collect distinct prompt references without reparsing once per symbol', async () => {
+      const parser = (nunjucks as unknown as { parser: { parse: (template: string) => unknown } })
+        .parser;
+      const parseSpy = vi.spyOn(parser, 'parse');
+      try {
+        const value = Array.from({ length: 32 }, (_, index) => `{{ external${index} }}`).join(' ');
+        await renderPrompt(toPrompt('{"text":"{{v}}"}'), { v: value }, {});
+
+        expect(parseSpy.mock.calls.length).toBeLessThan(12);
+      } finally {
+        parseSpy.mockRestore();
+      }
     });
 
     it('should not decode a literal nested inside another expression string', async () => {

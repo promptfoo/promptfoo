@@ -24,6 +24,10 @@ type NunjucksParentContext = {
   node: NunjucksAstNode;
 };
 
+// The scope walker can either stop at one requested name or collect every
+// unbound name into a Set during the same traversal.
+type ReferenceTarget = string | Set<string>;
+
 type ParseResult = { ok: true; ast: NunjucksAstNode } | { ok: false };
 
 function isNunjucksAstNode(value: unknown): value is NunjucksAstNode {
@@ -140,7 +144,7 @@ function collectFromImportBindingNames(namesNode: unknown): string[] {
 
 function astNodeListReferencesVariable(
   nodes: readonly unknown[],
-  variableName: string,
+  variableName: ReferenceTarget,
   parent: NunjucksParentContext,
   boundSymbols: ReadonlySet<string>,
 ): boolean {
@@ -168,7 +172,7 @@ function astNodeListReferencesVariable(
 function astChildReferencesVariable(
   node: NunjucksAstNode,
   field: string,
-  variableName: string,
+  variableName: ReferenceTarget,
   boundSymbols: ReadonlySet<string>,
 ): boolean {
   const child = node[field];
@@ -191,7 +195,7 @@ function isForLikeNode(node: NunjucksAstNode): boolean {
 
 function forLikeNodeReferencesVariable(
   node: NunjucksAstNode,
-  variableName: string,
+  variableName: ReferenceTarget,
   boundSymbols: ReadonlySet<string>,
 ): boolean {
   const loopScope = addBindingNames(boundSymbols, node.name);
@@ -209,7 +213,7 @@ function forLikeNodeReferencesVariable(
  */
 function analyzeSignatureArgs(
   argsNode: unknown,
-  variableName: string,
+  variableName: ReferenceTarget,
   boundSymbols: ReadonlySet<string>,
 ): { paramNames: string[]; referencesVariable: boolean } {
   const paramNames: string[] = [];
@@ -263,7 +267,7 @@ function analyzeSignatureArgs(
 
 function macroNodeReferencesVariable(
   node: NunjucksAstNode,
-  variableName: string,
+  variableName: ReferenceTarget,
   boundSymbols: ReadonlySet<string>,
 ): boolean {
   const { paramNames, referencesVariable } = analyzeSignatureArgs(
@@ -286,7 +290,7 @@ function macroNodeReferencesVariable(
 
 function isNodeReferencesVariable(
   node: NunjucksAstNode,
-  variableName: string,
+  variableName: ReferenceTarget,
   boundSymbols: ReadonlySet<string>,
 ): boolean {
   if (astChildReferencesVariable(node, 'left', variableName, boundSymbols)) {
@@ -310,7 +314,7 @@ function isNodeReferencesVariable(
 
 function setNodeReferencesVariable(
   node: NunjucksAstNode,
-  variableName: string,
+  variableName: ReferenceTarget,
   boundSymbols: ReadonlySet<string>,
 ): boolean {
   return (
@@ -321,7 +325,7 @@ function setNodeReferencesVariable(
 
 function fromImportNodeReferencesVariable(
   node: NunjucksAstNode,
-  variableName: string,
+  variableName: ReferenceTarget,
   boundSymbols: ReadonlySet<string>,
 ): boolean {
   // `{% from template import a, b as c %}` — the template expression may
@@ -332,7 +336,7 @@ function fromImportNodeReferencesVariable(
 
 function blockNodeReferencesVariable(
   node: NunjucksAstNode,
-  variableName: string,
+  variableName: ReferenceTarget,
   boundSymbols: ReadonlySet<string>,
 ): boolean {
   // `{% block name %}...{% endblock %}` — `name` is a template-inheritance
@@ -342,7 +346,7 @@ function blockNodeReferencesVariable(
 
 function callerNodeReferencesVariable(
   node: NunjucksAstNode,
-  variableName: string,
+  variableName: ReferenceTarget,
   boundSymbols: ReadonlySet<string>,
 ): boolean {
   const { paramNames, referencesVariable } = analyzeSignatureArgs(
@@ -360,7 +364,7 @@ function callerNodeReferencesVariable(
 
 function astFieldsReferenceVariable(
   node: NunjucksAstNode,
-  variableName: string,
+  variableName: ReferenceTarget,
   boundSymbols: ReadonlySet<string>,
 ): boolean {
   return (node.fields ?? []).some((field) =>
@@ -370,12 +374,19 @@ function astFieldsReferenceVariable(
 
 function astReferencesVariable(
   node: NunjucksAstNode,
-  variableName: string,
+  variableName: ReferenceTarget,
   parent?: NunjucksParentContext,
   boundSymbols: ReadonlySet<string> = new Set(),
 ): boolean {
-  if (node.typename === 'Symbol' && node.value === variableName) {
-    return !boundSymbols.has(variableName) && !isNonReferenceSymbol(parent);
+  if (node.typename === 'Symbol' && typeof node.value === 'string') {
+    const isReference = !boundSymbols.has(node.value) && !isNonReferenceSymbol(parent);
+    if (typeof variableName === 'string') {
+      if (node.value === variableName) {
+        return isReference;
+      }
+    } else if (isReference) {
+      variableName.add(node.value);
+    }
   }
 
   if ((node.typename === 'Root' || node.typename === 'NodeList') && Array.isArray(node.children)) {
@@ -669,5 +680,20 @@ export function extractVariablesFromExpression(template: string): string[] | und
   }
   const references = new Set<string>();
   collectExpressionReferences(parseResult.ast, undefined, references);
+  return Array.from(references);
+}
+
+/**
+ * Collect all unbound expression symbols with one parse and one scope-aware
+ * AST walk. Returns undefined on parse failure so callers can retain their
+ * conservative textual fallback.
+ */
+export function extractUnboundVariablesFromTemplate(template: string): string[] | undefined {
+  const parseResult = parseNunjucksTemplate(template);
+  if (!parseResult.ok) {
+    return undefined;
+  }
+  const references = new Set<string>();
+  astReferencesVariable(parseResult.ast, references);
   return Array.from(references);
 }

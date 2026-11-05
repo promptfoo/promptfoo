@@ -27,6 +27,7 @@ import { renderVarsInObject, setLoadedFileMimeTypes } from './util/index';
 import invariant from './util/invariant';
 import { filterFiniteScores } from './util/numeric';
 import {
+  extractUnboundVariablesFromTemplate,
   extractVariablesFromExpression,
   extractVariablesFromTemplate,
   getNunjucksEngine,
@@ -493,9 +494,11 @@ function shouldRenderAllVarTemplates(
 }
 
 function extractUnboundVariables(template: string): string[] {
-  const candidates =
-    extractVariablesFromExpression(template) ?? extractVariablesFromTemplate(template);
-  return candidates.filter((reference) => {
+  const references = extractUnboundVariablesFromTemplate(template);
+  if (references) {
+    return references;
+  }
+  return extractVariablesFromTemplate(template).filter((reference) => {
     const key = /^([A-Za-z_]\w*)/.exec(reference)?.[1];
     return key !== undefined && templateReferencesVariable(template, key);
   });
@@ -510,7 +513,11 @@ function collectPromptReferencedVars(
   while (pending.length > 0) {
     const reference = pending.pop()!;
     const key = /^([A-Za-z_]\w*)/.exec(reference)?.[1];
-    if (!key || ['env', 'range'].includes(key) || referenced.has(key)) {
+    if (
+      !key ||
+      referenced.has(key) ||
+      (['env', 'range'].includes(key) && vars[key] === undefined)
+    ) {
       continue;
     }
     referenced.add(key);
