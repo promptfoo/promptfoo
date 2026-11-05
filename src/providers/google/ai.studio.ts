@@ -19,6 +19,7 @@ import {
   formatCandidateContents,
   geminiFormatAndSystemInstructions,
   getCandidate,
+  getEffectiveGeminiApiModel,
   getGoogleApiBaseUrl,
   getGoogleGuardrails,
   getGoogleResponseServiceTier,
@@ -344,8 +345,9 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
       ...passthrough,
     };
     body.generationConfig = removeDeprecatedGeminiGenerationParams(
-      this.modelName,
+      getEffectiveGeminiApiModel(this.modelName),
       body.generationConfig,
+      this.modelName,
     );
 
     if (config.responseSchema) {

@@ -299,7 +299,7 @@ Use a [custom provider](/docs/providers/custom-api) when you need an operation o
 
 Lyria music generation is not currently supported by promptfoo's Google providers.
 
-For reproducible comparisons, use the replacement model IDs directly. Since [October 8, 2026](https://ai.google.dev/gemini-api/docs/changelog#october-8-2026), the Gemini API redirects `gemini-3.7-flash` to `gemini-3.8-flash` and `gemini-3.5-flash` to `gemini-3.6-flash`. Comparing an old ID with its replacement no longer compares distinct models. These redirects do not describe Vertex availability.
+Use distinct serving models when comparing results. Google can redirect a Gemini API model ID to its replacement. Check the [Gemini API lifecycle](https://ai.google.dev/gemini-api/docs/deprecations) before choosing an older ID.
 
 ### Chat and Multimodal Models
 
@@ -327,10 +327,7 @@ For reproducible comparisons, use the replacement model IDs directly. Since [Oct
 - `google:gemini-flash-latest` - Google-maintained alias for the current Gemini Flash release ($0.75/1M input, $3.75/1M output through December 31, 2026)
 - `google:gemini-flash-lite-latest` - Google-maintained alias for the latest Gemini Flash-Lite release (currently Gemini 3.5 Flash-Lite pricing)
 
-Gemini 3.8 Flash and 3.6 Flash share [introductory pricing](https://ai.google.dev/gemini-api/docs/pricing#gemini-3.8-flash) through December 31, 2026.
-Beginning January 1, 2027, their published rates increase to $1.50 per million input
-tokens and $7.50 per million output tokens. These models support a 1,048,576-token
-input context and up to 65,536 output tokens.
+For current token prices, cache charges, and introductory offers, see [Gemini API pricing](https://ai.google.dev/gemini-api/docs/pricing).
 
 Gemini 3.8 Flash, 3.7 Flash, 3.6 Flash, and 3.5 Flash-Lite ignore the deprecated `temperature`,
 `topP`, and `topK` sampling controls. Promptfoo removes these parameters automatically.
@@ -364,10 +361,7 @@ Google documents [`gemini-3.8-flash-cyber` on Vertex](https://docs.cloud.google.
 
 :::note Gemini 2.5 lifecycle
 
-Google has not announced shutdown dates for `gemini-2.5-pro`, `gemini-2.5-flash`, or
-`gemini-2.5-flash-lite`, but access is limited to existing users. Check the [Gemini API lifecycle](https://ai.google.dev/gemini-api/docs/deprecations)
-for updates and the separate [Vertex AI model lifecycle](https://docs.cloud.google.com/vertex-ai/generative-ai/docs/learn/model-versions)
-for Vertex deployments.
+On December 1, 2026, the Gemini API redirects `gemini-2.5-pro` to `gemini-3.8-flash` and `gemini-2.5-flash` to `gemini-3.5-flash-lite`. Use the replacement ID directly for new evaluations. Promptfoo applies the serving model’s generation controls and pricing when an ID redirects. `gemini-2.5-flash-lite` has a separate lifecycle. [Gemini API release notes](https://ai.google.dev/gemini-api/docs/changelog#11-02-2026) · [Vertex AI model lifecycle](https://docs.cloud.google.com/vertex-ai/generative-ai/docs/learn/model-versions)
 
 :::
 
@@ -841,37 +835,7 @@ Defaults vary by model: Gemini 3.8 Flash, 3.7 Flash, 3.6 Flash, and 3.5 Flash de
 
 #### Gemini 2.5 Models (thinkingBudget)
 
-Gemini 2.5 models use `thinkingBudget`:
-
-```yaml
-providers:
-  - id: google:gemini-2.5-flash
-    config:
-      generationConfig:
-        temperature: 0.7
-        maxOutputTokens: 2048
-        thinkingConfig:
-          thinkingBudget: 1024 # Controls tokens allocated for thinking process
-```
-
-The thinking configuration allows the model to show its reasoning process before providing the final answer, which can be helpful for complex tasks that require step-by-step thinking.
-
-**Note:** You cannot use both `thinkingLevel` and `thinkingBudget` in the same request.
-
-You can also specify a response schema for structured output:
-
-```yaml
-providers:
-  - id: google:gemini-2.5-pro
-    config:
-      generationConfig:
-        response_mime_type: application/json
-        response_schema:
-          type: object
-          properties:
-            foo:
-              type: string
-```
+For Gemini 2.5 models that still serve natively, use `generationConfig.thinkingConfig.thinkingBudget`. When migrating to a Gemini 3 replacement, use its supported `thinkingLevel` instead. See [Gemini thinking](https://ai.google.dev/gemini-api/docs/thinking). To return JSON with a specific shape, see [Structured Output](#structured-output).
 
 For multimodal inputs, the provider supports:
 
@@ -1099,37 +1063,11 @@ Thinking levels for Gemini 3.1 Pro: LOW (faster, simpler tasks), MEDIUM (balance
 
 ### Gemini 2.5 Pro
 
-Gemini 2.5 Pro model for complex reasoning, coding, and multimodal understanding:
-
-```yaml
-providers:
-  - id: google:gemini-2.5-pro
-    config:
-      temperature: 0.7
-      maxOutputTokens: 4096
-      topP: 0.9
-      topK: 40
-      generationConfig:
-        thinkingConfig:
-          thinkingBudget: 2048 # Enhanced thinking for complex tasks
-```
+For the Gemini API replacement, see [Gemini 3.8 Flash](#gemini-38-flash).
 
 ### Gemini 2.5 Flash
 
-Gemini 2.5 Flash model with enhanced reasoning and thinking capabilities:
-
-```yaml
-providers:
-  - id: google:gemini-2.5-flash
-    config:
-      temperature: 0.7
-      maxOutputTokens: 2048
-      topP: 0.9
-      topK: 40
-      generationConfig:
-        thinkingConfig:
-          thinkingBudget: 1024 # Fast model with thinking capabilities
-```
+For the Gemini API replacement, see [Gemini 3.5 Flash-Lite](#gemini-35-flash-lite).
 
 ### Gemini 2.5 Flash-Lite
 

@@ -837,6 +837,8 @@ describe('AIStudioChatProvider', () => {
 
   describe('callGemini', () => {
     beforeEach(() => {
+      // Baseline fixtures exercise the original Gemini 2.5 request format and tariffs.
+      vi.spyOn(Date, 'now').mockReturnValue(Date.UTC(2026, 10, 5));
       provider = new AIStudioChatProvider('gemini-pro', {
         config: {
           apiKey: 'test-key',
@@ -925,6 +927,45 @@ describe('AIStudioChatProvider', () => {
         expect(result.cost).toBeCloseTo(expectedCost, 10);
       },
     );
+
+    it.each([
+      { model: 'gemini-3.5-flash', from: Date.UTC(2026, 9, 8) },
+      { model: 'gemini-2.5-pro', from: Date.UTC(2026, 11, 1) },
+      { model: 'gemini-2.5-flash', from: Date.UTC(2026, 11, 1) },
+    ])(
+      'uses the serving model controls at the $model cutover without rewriting the URL',
+      async ({ model, from }) => {
+        const provider = new AIStudioChatProvider(model, {
+          config: {
+            apiKey: 'test-key',
+            passthrough: {
+              generationConfig: { temperature: 0.7, candidateCount: 2, maxOutputTokens: 200 },
+            },
+          },
+        });
+        vi.mocked(cache.fetchWithCache).mockResolvedValue(createOkGeminiFetchResponse());
+        for (const now of [from - 1, from]) {
+          vi.spyOn(Date, 'now').mockReturnValue(now);
+          await provider.callGemini('test');
+          const [url, request] = vi.mocked(cache.fetchWithCache).mock.lastCall!;
+          expect(url).toContain(`/models/${model}:generateContent`);
+          expect(JSON.parse(request?.body as string).generationConfig).toEqual(
+            now < from
+              ? { temperature: 0.7, candidateCount: 2, maxOutputTokens: 200 }
+              : { maxOutputTokens: 200 },
+          );
+        }
+      },
+    );
+
+    it('rejects a legacy thinking budget on the redirected Gemini 2.5 Pro ID before transport', async () => {
+      vi.spyOn(Date, 'now').mockReturnValue(Date.UTC(2026, 11, 1));
+      const provider = new AIStudioChatProvider('gemini-2.5-pro', createBudgetedThinkingOptions());
+      await expect(provider.callGemini('test')).rejects.toThrow(
+        'gemini-2.5-pro does not support thinkingBudget',
+      );
+      expect(cache.fetchWithCache).not.toHaveBeenCalled();
+    });
 
     it.each(['gemini-3.8-flash', 'gemini-3.7-flash'])(
       'rejects unsupported MINIMAL thinking before requesting %s',
