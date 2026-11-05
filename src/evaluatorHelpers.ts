@@ -20,6 +20,7 @@ import {
   type TestCase,
   type TestSuite,
   type UnifiedConfig,
+  type Vars,
   type VarValue,
 } from './types/index';
 import { isAudioFile, isImageFile, isJavascriptFile, isVideoFile } from './util/fileExtensions';
@@ -31,6 +32,51 @@ import { transform } from './util/transform';
 import { loadYaml } from './util/yamlLoad';
 
 type FileMetadata = Record<string, { path: string; type: string; format?: string }>;
+
+/**
+ * Reserved keys for eval-step runtime vars. `EvalRuntimeVars` below is keyed by
+ * this tuple, so adding a new key to {@link getEvalRuntimeVars} fails to
+ * type-check until the key is added here too — keeping the omit list and the
+ * producer in lockstep.
+ */
+const EVAL_RUNTIME_VAR_KEYS = ['__evalId', '__evalStepId', '__repeatIndex'] as const;
+type EvalRuntimeVars = Partial<Record<(typeof EVAL_RUNTIME_VAR_KEYS)[number], Vars[string]>>;
+
+export function getEvalRuntimeVars({
+  evalId,
+  promptIndex,
+  repeatIndex,
+  testIndex,
+}: {
+  evalId?: string;
+  promptIndex: number;
+  repeatIndex: number;
+  testIndex: number;
+}): EvalRuntimeVars {
+  return {
+    ...(evalId ? { __evalId: evalId } : {}),
+    __evalStepId: `test-${testIndex}-prompt-${promptIndex}-repeat-${repeatIndex}`,
+    __repeatIndex: repeatIndex,
+  };
+}
+
+/**
+ * Returns a copy of `vars` without the reserved `__eval*` runtime vars. They are
+ * merged into an eval step's vars so prompts and providers can reference them,
+ * but must not reach the persisted `EvaluateResult.vars`, assertion/grader
+ * inputs, or provider cache keys: they are positional per-step identifiers that
+ * would pollute stored results, change on every run, and — being `_`-prefixed —
+ * get restored onto re-run `test.vars` by `--filter-*` re-runs. The input is
+ * not mutated; it is shared by reference with the provider call context.
+ */
+export function omitEvalRuntimeVars(vars: Vars): Vars {
+  // Keep non-serialized metadata needed by assertion and grader providers.
+  const result: Vars = { ...vars };
+  for (const key of EVAL_RUNTIME_VAR_KEYS) {
+    delete result[key];
+  }
+  return result;
+}
 
 export async function extractTextFromPDF(pdfPath: string): Promise<string> {
   logger.debug(`Extracting text from PDF: ${pdfPath}`);

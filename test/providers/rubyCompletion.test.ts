@@ -372,6 +372,37 @@ describe('RubyProvider', () => {
       );
     });
 
+    it('keeps the cache key stable across eval runs so a rerun hits the cache', async () => {
+      const provider = new RubyProvider('script.rb');
+      mockIsCacheEnabled.mockReturnValue(true);
+      const store = new Map<string, string>();
+      const mockCache = {
+        get: vi.fn((key: string) => Promise.resolve(store.get(key) ?? null)),
+        set: vi.fn((key: string, value: string) => {
+          store.set(key, value);
+          return Promise.resolve();
+        }),
+      };
+      mockGetCache.mockResolvedValue(mockCache as never);
+      mockRunRuby.mockResolvedValue({ output: 'fresh result' });
+
+      // The evaluator merges reserved __eval* runtime vars into context.vars;
+      // only __evalId differs between two runs of the same test.
+      const first = await provider.callApi('test prompt', {
+        vars: { name: 'world', __evalId: 'eval-first' },
+      } as any);
+      const second = await provider.callApi('test prompt', {
+        vars: { name: 'world', __evalId: 'eval-second' },
+      } as any);
+
+      expect(first).toEqual({ output: 'fresh result', cached: false });
+      expect(second).toEqual({ output: 'fresh result', cached: true });
+      expect(mockRunRuby).toHaveBeenCalledTimes(1);
+      for (const [key] of mockCache.get.mock.calls) {
+        expect(key).not.toContain('__evalId');
+      }
+    });
+
     it('should properly transform token usage in cached results', async () => {
       const provider = new RubyProvider('script.rb');
       mockIsCacheEnabled.mockReturnValue(true);
