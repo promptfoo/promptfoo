@@ -1052,7 +1052,11 @@ export class OpenAiImageProvider extends OpenAiGenericProvider {
       config,
     );
     if (result.error) {
-      await response.deleteFromCache?.();
+      try {
+        await response.deleteFromCache?.();
+      } catch (error) {
+        logger.warn('[OpenAI Image] Failed to evict invalid response from cache', { error });
+      }
     }
     return result;
   }
