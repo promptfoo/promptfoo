@@ -3296,6 +3296,69 @@ describe('OpenAiResponsesProvider request building', () => {
     expect('temperature' in body).toBe(true);
   });
 
+  it('omits default temperature and top_p for Claude Haiku 5.5 on the Responses path', async () => {
+    // Regression for #12163 / PR review: Responses has its own temperature + top_p gates.
+    const provider = new OpenAiResponsesProvider('claude-haiku-5-5', {
+      config: { apiBaseUrl: 'https://api.anthropic.com/v1', apiKey: 'test-key' },
+    });
+    const { body } = await provider.getOpenAiBody('States the capital of France');
+    expect(body).not.toHaveProperty('temperature');
+    expect(body).not.toHaveProperty('top_p');
+  });
+
+  it.each(['claude-haiku-5-5', 'claude-opus-5-5', 'claude-sonnet-5-5'])(
+    'omits explicit temperature and top_p for %s on the Responses path',
+    async (model) => {
+      const provider = new OpenAiResponsesProvider(model, {
+        config: {
+          apiBaseUrl: 'https://api.anthropic.com/v1',
+          apiKey: 'test-key',
+          temperature: 0,
+          top_p: 0.9,
+          max_output_tokens: 512,
+        },
+      });
+      const { body } = await provider.getOpenAiBody('hi');
+      expect(body).toHaveProperty('max_output_tokens', 512);
+      expect(body).not.toHaveProperty('temperature');
+      expect(body).not.toHaveProperty('top_p');
+    },
+  );
+
+  it('omits sampling params when passthrough.model overrides to a Claude id', async () => {
+    const provider = new OpenAiResponsesProvider('gpt-4.1', {
+      config: {
+        apiKey: 'test-key',
+        temperature: 0.4,
+        top_p: 0.8,
+        passthrough: { model: 'claude-haiku-5-5' },
+      },
+    });
+    const { body } = await provider.getOpenAiBody('hi');
+    expect(body.model).toBe('claude-haiku-5-5');
+    expect(body).not.toHaveProperty('temperature');
+    expect(body).not.toHaveProperty('top_p');
+  });
+
+  it('still sends temperature and top_p for non-Claude Responses models', async () => {
+    const provider = new OpenAiResponsesProvider('gpt-4.1', {
+      config: { apiKey: 'test-key', temperature: 0.4, top_p: 0.8 },
+    });
+    const { body } = await provider.getOpenAiBody('hi');
+    expect(body.temperature).toBe(0.4);
+    expect(body.top_p).toBe(0.8);
+  });
+
+  it('keeps sampling params when a fine-tune suffix looks Claude-shaped', async () => {
+    // Fine-tune suffixes are user labels; only the ft:<base> confers capabilities.
+    const model = 'ft:gpt-4.1:org:claude-test-5:id';
+    const provider = new OpenAiResponsesProvider(model, {
+      config: { apiKey: 'test-key', temperature: 0.4, top_p: 0.8 },
+    });
+    const { body } = await provider.getOpenAiBody('hi');
+    expect(body).toMatchObject({ model, temperature: 0.4, top_p: 0.8 });
+  });
+
   it('should omit default temperature and max_output_tokens when omitDefaults is true', async () => {
     const provider = new OpenAiResponsesProvider('gpt-4o', createOmitDefaultsOptions());
 

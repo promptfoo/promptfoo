@@ -3385,6 +3385,17 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
       expect(body.temperature).toBe(0);
     });
 
+    it('keeps sampling params when a fine-tune suffix looks Claude-shaped', async () => {
+      // Fine-tune suffixes are user labels; only the ft:<base> confers Claude capabilities.
+      const model = 'ft:gpt-4.1:org:claude-test-5:id';
+      const provider = new OpenAiChatCompletionProvider(model, {
+        config: { temperature: 0.4, top_p: 0.8 },
+      });
+      const { body } = await provider.getOpenAiBody('hi');
+      expect(body).toMatchObject({ model, temperature: 0.4, top_p: 0.8 });
+      expect(provider['supportsTemperature']()).toBe(true);
+    });
+
     it('should correctly send max_tokens: 0 in the request body when explicitly set', async () => {
       const mockResponse = createMockChatResponse();
       mockFetchWithCache.mockResolvedValue(mockResponse);

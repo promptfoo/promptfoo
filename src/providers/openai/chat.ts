@@ -422,7 +422,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
   protected supportsTemperatureForCapabilityModel(modelName: string): boolean {
     return (
       !this.isReasoningCapabilityModel(modelName) &&
-      !isSamplingParamsDeprecatedClaudeModel(modelName)
+      !isSamplingParamsDeprecatedClaudeModel(this.getClaudeCapabilityModelName(modelName))
     );
   }
 
@@ -510,7 +510,9 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         ? undefined
         : getEnvFloat('OPENAI_TEMPERATURE')
       : getEnvFloat('OPENAI_TEMPERATURE', 0);
-    const samplingParamsDeprecated = isSamplingParamsDeprecatedClaudeModel(capabilityModelName);
+    const samplingParamsDeprecated = isSamplingParamsDeprecatedClaudeModel(
+      this.getClaudeCapabilityModelName(capabilityModelName),
+    );
     const supportsTemperature =
       isGPT6Model ||
       (usesConfiguredCapabilities

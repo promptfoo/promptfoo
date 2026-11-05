@@ -842,7 +842,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
 
   protected supportsTemperatureForCapabilityModel(modelName: string): boolean {
     const configuredModelName = this.getCapabilityModelName().replace(/(^|\/)ft:/, '$1');
-    if (isSamplingParamsDeprecatedClaudeModel(modelName)) {
+    if (isSamplingParamsDeprecatedClaudeModel(this.getClaudeCapabilityModelName(modelName))) {
       return false;
     }
     return modelName === configuredModelName
@@ -1126,7 +1126,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
         : undefined;
     const reasoningEffort = isReasoningModel ? effectiveReasoningEffort : undefined;
     const samplingParamsDeprecated = isSamplingParamsDeprecatedClaudeModel(
-      this.getEffectiveModelName(config),
+      this.getClaudeCapabilityModelName(this.getEffectiveModelName(config)),
     );
     const topP = samplingParamsDeprecated ? undefined : this.getConfiguredTopP(config);
 
