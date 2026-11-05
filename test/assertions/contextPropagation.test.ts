@@ -463,5 +463,37 @@ describe('Context Propagation in Model-Graded Assertions', () => {
         expect(result.assertion?.value).toBe('Prefer {{ preference }}');
       }
     });
+
+    it('should preserve literal Nunjucks delimiters wrapped in a raw block', async () => {
+      const mockResult = [
+        { pass: true, score: 1, reason: 'best' },
+        { pass: false, score: 0, reason: 'not best' },
+      ];
+      vi.mocked(matchesSelectBest).mockResolvedValue(mockResult);
+
+      const test = {
+        vars: { preference: 'detailed explanations' },
+        options: { provider: 'test-provider' },
+      };
+      const assertion = {
+        type: 'select-best' as const,
+        value: '{% raw %}Prefer {{ preference }}{% endraw %}',
+      };
+      const outputs = ['output1', 'output2'];
+
+      const results = await runCompareAssertion(test, assertion, outputs, undefined);
+
+      expect(matchesSelectBest).toHaveBeenCalledWith(
+        'Prefer {{ preference }}',
+        outputs,
+        { provider: 'test-provider' },
+        { preference: 'detailed explanations' },
+        undefined,
+      );
+      for (const result of results) {
+        expect(result.metadata?.renderedAssertionValue).toBe('Prefer {{ preference }}');
+        expect(result.assertion?.value).toBe('{% raw %}Prefer {{ preference }}{% endraw %}');
+      }
+    });
   });
 });
