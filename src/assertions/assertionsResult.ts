@@ -49,7 +49,9 @@ function mergeMetadata(
   };
 }
 
-function normalizeAssertionTokenUsage(result: GradingResult) {
+export function normalizeAssertionTokenUsage(
+  result: Pick<GradingResult, 'tokensUsed' | 'metadata'>,
+) {
   const tokensUsed = result.tokensUsed;
   if (!tokensUsed) {
     return undefined;
