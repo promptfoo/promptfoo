@@ -121,18 +121,13 @@ export class PythonProvider implements ApiProvider {
 
       // Initialize worker pool
       const workerCount = this.getWorkerCount();
-      const absPath = path.resolve(
-        path.join(this.options?.config.basePath || '', this.scriptPath),
-      );
+      const absPath = path.resolve(path.join(this.options?.config.basePath || '', this.scriptPath));
 
       pool = new PythonWorkerPool(
         absPath,
         this.functionName || 'call_api',
         workerCount,
-        getConfiguredPythonPath(
-          this.config.pythonExecutable,
-          this.options?.env?.PROMPTFOO_PYTHON,
-        ),
+        getConfiguredPythonPath(this.config.pythonExecutable, this.options?.env?.PROMPTFOO_PYTHON),
         this.config.timeout,
       );
       this.pool = pool;

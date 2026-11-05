@@ -1,5 +1,5 @@
 import { getEnvBool, getEnvInt } from '../envars';
-import { getCallerAbortError } from '../util/fetch/requestSignal';
+import { getCallerAbortError, waitForPromiseWithAbort } from '../util/fetch/requestSignal';
 import { loadYaml } from '../util/yamlLoad';
 
 import type {
@@ -53,7 +53,7 @@ export function throwIfAborted(signal?: AbortSignal | null): void {
   }
 }
 
-export { waitForPromiseWithAbort } from '../util/fetch/requestSignal';
+export { waitForPromiseWithAbort };
 
 /** Returns the complete model suffix after the given number of provider/type segments. */
 export function modelNameFromProviderPath(providerPath: string, segments: number): string {
