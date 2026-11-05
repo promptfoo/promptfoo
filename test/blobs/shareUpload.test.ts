@@ -47,6 +47,17 @@ describe('share-time blob upload', () => {
     });
   });
 
+  it('retries only failed media when a chunk resumes after login', async () => {
+    const cache = createRemoteBlobUploadCache();
+    const context = { localEvalId: 'local', remoteEvalId: 'remote' };
+    const media = ['a', 'b'].map((c) => 'promptfoo://blob/' + c.repeat(64));
+    vi.mocked(uploadBlobRemote).mockResolvedValueOnce(null);
+    await uploadBlobRefsForShare(media, cache, context);
+    await uploadBlobRefsForShare(media, cache, context, true);
+    expect(uploadBlobRemote).toHaveBeenCalledTimes(3);
+    expect(await Promise.all(cache.values())).toEqual([true, true]);
+  });
+
   it('uploads each referenced blob only once when the share context is unchanged', async () => {
     const hash = 'a'.repeat(64);
     const cache = createRemoteBlobUploadCache();

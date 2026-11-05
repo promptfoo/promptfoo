@@ -16,7 +16,7 @@ import {
   isSharingEnabled,
   stripAuthFromUrl,
 } from '../src/share';
-import { makeRequest } from '../src/util/cloud';
+import { getOrgContext, makeRequest } from '../src/util/cloud';
 import { inlineBlobRefsForShare } from '../src/util/inlineBlobsForShare';
 
 import type Eval from '../src/models/eval';
@@ -1585,7 +1585,11 @@ describe('adaptive chunk retry', () => {
     const tty = vi.spyOn(envars, 'isNonInteractive').mockReturnValue(false);
     vi.mocked(envars.getEnvInt).mockReturnValueOnce(1);
     vi.mocked(confirm).mockResolvedValueOnce(true);
-    vi.mocked(cloudConfig.reloadCredentialForCurrentTeam).mockImplementationOnce(() => {
+    vi.mocked(getOrgContext).mockResolvedValueOnce({
+      organizationName: 'org',
+      userId: 'original-user',
+    });
+    vi.mocked(cloudConfig.reloadCredentialForCurrentTeam).mockImplementationOnce(async () => {
       vi.mocked(cloudConfig.getApiKey).mockReturnValue('new-key');
       return true;
     });

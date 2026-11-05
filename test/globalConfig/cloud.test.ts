@@ -46,7 +46,7 @@ describe('CloudConfig', () => {
       [{ apiKey: 'renewed', teams: { org: { currentTeamId: 'other' } } }, false],
     ] as const)(
       'reloads only a replacement credential for the same destination: %j',
-      (change, allowed) => {
+      async (change, allowed) => {
         vi.mocked(readGlobalConfig).mockReturnValue({
           id: 'test',
           account: { email: 'user@example.test' },
@@ -58,10 +58,39 @@ describe('CloudConfig', () => {
           account: { email: 'user@example.test' },
           cloud: { ...cloud, ...change },
         });
-        expect(original.reloadCredentialForCurrentTeam('user@example.test')).toBe(allowed);
+        vi.mocked(fetchWithProxy).mockResolvedValue(
+          Response.json({
+            user: { id: 'original-user' },
+            organization: { id: 'org' },
+            tokenScope: { teamId: 'team' },
+          }),
+        );
+        await expect(original.reloadCredentialForCurrentTeam('original-user')).resolves.toBe(
+          allowed,
+        );
         expect(original.getApiKey()).toBe(allowed ? 'renewed' : 'original');
       },
     );
+    it.each([
+      ['other-user', 'team'],
+      ['original-user', 'other-team'],
+    ])('keeps the original credential when the server returns %s and %s', async (id, teamId) => {
+      vi.mocked(readGlobalConfig).mockReturnValue({ id: 'test', cloud });
+      const original = new CloudConfig();
+      vi.mocked(readGlobalConfig).mockReturnValue({
+        id: 'test',
+        cloud: { ...cloud, apiKey: 'replacement' },
+      });
+      vi.mocked(fetchWithProxy).mockResolvedValue(
+        Response.json({
+          user: { id },
+          organization: { id: 'org' },
+          tokenScope: { teamId },
+        }),
+      );
+      await expect(original.reloadCredentialForCurrentTeam('original-user')).resolves.toBe(false);
+      expect(original.getApiKey()).toBe('original');
+    });
   });
 
   describe('constructor', () => {

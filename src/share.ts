@@ -57,7 +57,7 @@ interface ChunkSendResult {
 interface AdaptiveChunkConfig {
   minResultsPerChunk: number;
   maxResultsPerChunk: number;
-  renewCredential?: () => Promise<boolean>;
+  renewCredential?: (chunk: EvalResult[], remoteEvalId: string) => Promise<boolean>;
 }
 
 export function isSharingEnabled(evalRecord: Eval): boolean {
@@ -468,7 +468,7 @@ async function sendChunkWithRetry(
   if (
     result.originalError instanceof UploadAccessError &&
     result.originalError.status === 401 &&
-    (await config.renewCredential?.().catch(() => false))
+    (await config.renewCredential?.(chunk, evalId).catch(() => false))
   ) {
     Object.assign(headers, cloudConfig.getAuthHeaders());
     result = await sendChunkOfResults(chunk, url, evalId, headers);
@@ -590,6 +590,7 @@ async function sendChunkedResults(
   evalRecord: Eval,
   url: string,
   options: ShareOptions = {},
+  userId?: string,
 ): Promise<string | null> {
   const isVerbose = isDebugEnabled();
   const { silent = false } = options;
@@ -629,23 +630,40 @@ async function sendChunkedResults(
   const resultsPerChunk =
     typeof envChunkSize === 'number' && envChunkSize > 0 ? envChunkSize : calculatedChunkSize;
 
-  const loginEmail =
-    options.promptForLogin && !silent && cloudConfig.isEnabled() && !isNonInteractive()
-      ? getUserEmail()
-      : null;
-  // Adaptive chunk configuration for retry logic
   const chunkConfig: AdaptiveChunkConfig = {
     minResultsPerChunk: 1,
     maxResultsPerChunk: resultsPerChunk,
-    ...(loginEmail && {
-      renewCredential: async () =>
-        (await confirm({
-          message:
-            'Upload paused. Sign in to the same account and project in another terminal. Resume this upload?',
-          default: false,
-        })) && cloudConfig.reloadCredentialForCurrentTeam(loginEmail),
-    }),
   };
+  if (userId && options.promptForLogin && !silent && !isNonInteractive()) {
+    chunkConfig.renewCredential = async (chunk, remoteEvalId) => {
+      const resume = await confirm({
+        message:
+          'Upload paused. Sign in to the same account and project in another terminal. Resume this upload?',
+        default: false,
+      });
+      if (!resume || !(await cloudConfig.reloadCredentialForCurrentTeam(userId))) {
+        return false;
+      }
+      if (remoteBlobUploadCache) {
+        await Promise.all(
+          chunk.map((row) =>
+            uploadBlobRefsForShare(
+              row,
+              remoteBlobUploadCache,
+              {
+                localEvalId: evalRecord.id,
+                remoteEvalId,
+                promptIdx: row.promptIdx,
+                testIdx: row.testIdx,
+              },
+              true,
+            ),
+          ),
+        );
+      }
+      return true;
+    };
+  }
 
   logger.debug(`Chunk config: ${JSON.stringify(chunkConfig)}`);
 
@@ -885,10 +903,12 @@ export async function createShareableUrl(
     return null;
   }
 
+  let userId: string | undefined;
   // Show org/team context before uploading (only when cloud is enabled and not silent)
   if (!silent) {
     const orgContext = await getOrgContext();
     if (orgContext) {
+      userId = orgContext.userId;
       const teamSuffix = orgContext.teamName ? ` > ${orgContext.teamName}` : '';
       logger.info(
         `${chalk.dim('Sharing to:')} ${chalk.cyan(orgContext.organizationName)}${teamSuffix}`,
@@ -908,7 +928,7 @@ export async function createShareableUrl(
     `Sharing with ${url} canUseNewResults: ${canUseNewResults} Use old results: ${evalRecord.useOldResults()}`,
   );
 
-  const evalId = await sendChunkedResults(evalRecord, url, options);
+  const evalId = await sendChunkedResults(evalRecord, url, options, userId);
 
   if (!evalId) {
     return null;

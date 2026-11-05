@@ -961,6 +961,7 @@ export async function validateLinkedTargetId(linkedTargetId: string): Promise<vo
  * @returns Promise resolving to organization name and optional team name, or null
  */
 export async function getOrgContext(): Promise<{
+  userId?: string;
   organizationName: string;
   teamName?: string;
 } | null> {
@@ -978,7 +979,7 @@ export async function getOrgContext(): Promise<{
       return null;
     }
 
-    const { organization } = await response.json();
+    const { user, organization, tokenScope } = await response.json();
     const organizationId = cloudConfig.getCurrentOrganizationId() ?? organization.id;
     const organizationName = getCloudOrganizationLabel(organization, organizationId);
     const currentTeamId = cloudConfig.getCurrentTeamId(organizationId);
@@ -997,6 +998,11 @@ export async function getOrgContext(): Promise<{
     }
 
     return {
+      userId:
+        organizationId === organization.id &&
+        (!tokenScope?.teamId || tokenScope.teamId === currentTeamId)
+          ? user?.id
+          : undefined,
       organizationName,
       teamName,
     };

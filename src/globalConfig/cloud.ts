@@ -64,6 +64,7 @@ interface CloudApp {
 }
 
 interface CloudTokenValidation {
+  tokenScope?: { teamId?: string };
   user: CloudUser;
   organization: CloudOrganization;
   app: CloudApp;
@@ -259,9 +260,9 @@ export class CloudConfig {
   }
 
   /** Pick up a second terminal's login only when it targets the same deployment and team. */
-  reloadCredentialForCurrentTeam(email: string): boolean {
+  async reloadCredentialForCurrentTeam(userId: string): Promise<boolean> {
     const saved = readGlobalConfig();
-    if (saved?.account?.email !== email || !saved.cloud?.apiKey) {
+    if (!userId || !saved?.cloud?.apiKey) {
       return false;
     }
     const next = new CloudConfig(false);
@@ -278,6 +279,18 @@ export class CloudConfig {
       this.getAuthHeaderName() !== next.getAuthHeaderName() ||
       !next.getApiKey() ||
       this.getApiKey() === next.getApiKey()
+    ) {
+      return false;
+    }
+    const identity = await this.validateApiToken(
+      saved.cloud.apiKey,
+      next.getApiHost(),
+      next.getAuthHeaderName(),
+    );
+    if (
+      identity.user?.id !== userId ||
+      identity.organization?.id !== org ||
+      (identity.tokenScope?.teamId && identity.tokenScope.teamId !== team)
     ) {
       return false;
     }
@@ -336,12 +349,13 @@ export class CloudConfig {
         throw new Error('Failed to validate API token: ' + response.statusText);
       }
 
-      const { user, organization, app, hasActiveLicense } = await response.json();
+      const { user, organization, app, hasActiveLicense, tokenScope } = await response.json();
 
       return {
         user,
         organization,
         app,
+        ...(tokenScope && { tokenScope }),
         ...(typeof hasActiveLicense === 'boolean' ? { hasActiveLicense } : {}),
       };
     } catch (err) {
