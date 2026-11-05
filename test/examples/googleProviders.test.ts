@@ -344,30 +344,29 @@ describe('Google example provider contracts', () => {
         GOOGLE_APPLICATION_CREDENTIALS: credentialsFile,
         GOOGLE_PROJECT_ID: 'example-project',
       });
-      const { testSuite, provider, test, prompt } = await loadExample('google-vertex');
-      for (const target of testSuite.providers) {
-        await target.callApi(prompt, {
-          vars: test.vars ?? {},
-          prompt: { raw: prompt, label: prompt },
-        });
-      }
-      // Exercise the declared optional text grader; the existing example assertions use embeddings.
+      const { provider, test, prompt } = await loadExample('google-vertex');
+      await provider.callApi(prompt, {
+        vars: test.vars ?? {},
+        prompt: { raw: prompt, label: prompt },
+      });
+      // A model-graded assertion added to the example should use its own instructions and ADC.
       const grading = await runAssertion({
         test,
         provider,
         prompt,
-        providerResponse: { output: 'Here is an answer to the question.' },
-        assertion: { type: 'llm-rubric', value: 'The output answers the question.' },
+        providerResponse: { output: 'billing' },
+        assertion: {
+          type: 'llm-rubric',
+          value: 'The output routes a duplicate charge to billing.',
+        },
       });
       expect(grading.pass).toBe(true);
-      expect(requests).toHaveLength(3);
-      expect(JSON.stringify(requests[0].body.systemInstruction)).toContain('Mooo!');
-      expect(JSON.stringify(requests[1].body.systemInstruction)).toContain('Baaaah!');
-      const graderInstructions = JSON.stringify(requests[2].body.systemInstruction);
+      expect(requests).toHaveLength(2);
+      expect(JSON.stringify(requests[0].body.systemInstruction)).toContain('Classify each message');
+      const graderInstructions = JSON.stringify(requests[1].body.systemInstruction);
       expect(graderInstructions).toContain('You are grading output');
-      expect(graderInstructions).not.toContain('Always talk like a cow. Mooo!');
-      expect(graderInstructions).not.toContain('Always talk like a sheep. Baaaah!');
-      expect(requests[2].url).toBe(
+      expect(graderInstructions).not.toContain('Classify each message');
+      expect(requests[1].url).toBe(
         'https://aiplatform.googleapis.com/v1/projects/example-project/locations/global/publishers/google/models/gemini-3.8-flash:generateContent',
       );
       expect(requests.every(({ auth }) => auth === 'oauth')).toBe(true);
