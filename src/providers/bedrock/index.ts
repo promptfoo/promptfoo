@@ -2364,12 +2364,12 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   'mistral.voxtral-mini-3b-2507': BEDROCK_MODEL.MISTRAL_CHAT,
   'mistral.voxtral-small-24b-2507': BEDROCK_MODEL.MISTRAL_CHAT,
 
+  // Canada cross-region inference
+  'ca.amazon.nova-lite-v1:0': BEDROCK_MODEL.AMAZON_NOVA,
+
   // APAC Models
   'apac.amazon.nova-lite-v1:0': BEDROCK_MODEL.AMAZON_NOVA,
-  'apac.amazon.nova-micro-v1:0': BEDROCK_MODEL.AMAZON_NOVA,
   'apac.amazon.nova-pro-v1:0': BEDROCK_MODEL.AMAZON_NOVA,
-  'apac.amazon.nova-premier-v1:0': BEDROCK_MODEL.AMAZON_NOVA,
-  'apac.amazon.nova-2-lite-v1:0': BEDROCK_MODEL.AMAZON_NOVA_2,
   'apac.anthropic.claude-3-5-sonnet-20240620-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'apac.anthropic.claude-3-haiku-20240307-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'apac.anthropic.claude-opus-4-1-20250805-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
@@ -2392,7 +2392,6 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   'eu.amazon.nova-lite-v1:0': BEDROCK_MODEL.AMAZON_NOVA,
   'eu.amazon.nova-micro-v1:0': BEDROCK_MODEL.AMAZON_NOVA,
   'eu.amazon.nova-pro-v1:0': BEDROCK_MODEL.AMAZON_NOVA,
-  'eu.amazon.nova-premier-v1:0': BEDROCK_MODEL.AMAZON_NOVA,
   'eu.amazon.nova-2-lite-v1:0': BEDROCK_MODEL.AMAZON_NOVA_2,
   'eu.anthropic.claude-3-5-sonnet-20240620-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'eu.anthropic.claude-3-7-sonnet-20250219-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
@@ -2522,7 +2521,8 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   'us.writer.palmyra-x4-v1:0': BEDROCK_MODEL.OPENAI_COMPAT,
   'writer.palmyra-vision-7b': BEDROCK_MODEL.OPENAI_COMPAT,
 
-  // Global cross-region inference models (Nova 2)
+  // Japan and global cross-region inference models (Nova 2)
+  'jp.amazon.nova-2-lite-v1:0': BEDROCK_MODEL.AMAZON_NOVA_2,
   'global.amazon.nova-2-lite-v1:0': BEDROCK_MODEL.AMAZON_NOVA_2,
 
   // Global / Japan cross-region inference profiles for Claude Opus 4.7

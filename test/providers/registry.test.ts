@@ -2217,15 +2217,12 @@ describe('Provider Registry', () => {
       expect(provider.id()).toContain('nova-reel');
     });
 
-    it('defaults the Nova Reel model for a bare bedrock:video path', async () => {
+    it('requires an explicit video model after Nova Reel retirement', async () => {
       const factories = await getProviderFactories('bedrock:video');
-      const factory = factories.find((f) => f.test('bedrock:video'));
-      expect(factory).toBeDefined();
-
-      // Empty model segment falls back to the default Nova Reel model id.
-      const provider = await factory!.create('bedrock:video', { config: {} }, mockContext);
-      expect(provider.constructor.name).toBe('NovaReelVideoProvider');
-      expect(provider.id()).toContain('amazon.nova-reel-v1:1');
+      const factory = factories.find((f) => f.test('bedrock:video'))!;
+      await expect(factory.create('bedrock:video', { config: {} }, mockContext)).rejects.toThrow(
+        'bedrock:video:luma.ray-v2:0',
+      );
     });
 
     // Regression guard for the AWS-before-script routing precedence (PR #9537).
