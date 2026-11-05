@@ -11,12 +11,17 @@ import { createDeferred, mockProcessEnv } from '../util/utils';
 
 import type { ApiProvider, ProviderResponse } from '../../src/types/providers';
 
-const variants = ['429 Retry-After', '200 exhausted requests'] as const;
+const variants = ['429 Retry-After', '403 exhausted requests'] as const;
 const headers = { 'content-type': 'application/json' };
+const exhaustedHeaders = {
+  ...headers,
+  'x-ratelimit-remaining-requests': '0',
+  'x-ratelimit-reset-requests': '2s',
+};
 const usage = { prompt_tokens: 2, completion_tokens: 3, total_tokens: 5 };
 const nextTurn = () => new Promise<void>((resolve) => setImmediate(resolve));
 
-function success(caller: string) {
+function success(caller: string, responseHeaders = headers) {
   return new Response(
     JSON.stringify({
       choices: [
@@ -24,7 +29,7 @@ function success(caller: string) {
       ],
       usage,
     }),
-    { status: 200, statusText: 'OK', headers },
+    { status: 200, statusText: 'OK', headers: responseHeaders },
   );
 }
 
@@ -36,23 +41,11 @@ function limited(variant: (typeof variants)[number], code = 'rate_limit_exceeded
       headers: { ...headers, 'retry-after': '2' },
     });
   }
-  return new Response(
-    JSON.stringify({
-      choices: [
-        { message: { role: 'assistant', content: 'soft limited output' }, finish_reason: 'stop' },
-      ],
-      usage,
-    }),
-    {
-      status: 200,
-      statusText: 'OK',
-      headers: {
-        ...headers,
-        'x-ratelimit-remaining-requests': '0',
-        'x-ratelimit-reset-requests': '2s',
-      },
-    },
-  );
+  return new Response(JSON.stringify({ error: { code, message: 'fixture quota diagnostic' } }), {
+    status: 403,
+    statusText: 'Forbidden',
+    headers: exhaustedHeaders,
+  });
 }
 
 describe('loaded Chat selected fetch backoff and same-key quota', () => {
@@ -168,6 +161,15 @@ describe('loaded Chat selected fetch backoff and same-key quota', () => {
     vi.restoreAllMocks();
     restoreEnvironment();
     vi.useRealTimers();
+  });
+
+  it('returns successful output without retrying a completed request when quota is exhausted', async () => {
+    const { wrapped } = await createTarget();
+    const dispatches = staticTransport(success('A', exhaustedHeaders));
+    const first = start(wrapped, 'A', caller());
+    await first.done;
+    expect(first.state.value).toMatchObject({ output: 'A output' });
+    expect(dispatches.map(({ caller }) => caller)).toEqual(['A']);
   });
 
   it.each(variants)(
