@@ -5,28 +5,34 @@ prompts:
   - 'Answer concisely: {{question}}'
 
 providers:
-  # The sentinel is load-bearing. `getApiKey()` resolves
-  # `config.apiKey || ... || OPENAI_API_KEY`, so an unset *or empty*
-  # THEGRID_API_KEY would fall through and send your OpenAI credential to
-  # api.thegrid.ai. `default(..., true)` substitutes on any falsy value, so a
-  # blank key fails closed with a 401 from The Grid AI instead.
+  # `apiKeyEnvar` names the only variable this provider reads, so a missing
+  # THEGRID_API_KEY fails locally instead of falling back to OPENAI_API_KEY.
+  # The empty OpenAI-Organization header keeps an ambient OPENAI_ORGANIZATION
+  # from being sent to api.thegrid.ai.
   - id: openai:chat:text-standard
     label: The Grid AI text-standard
     config:
       apiBaseUrl: https://api.thegrid.ai/v1
-      apiKey: '{{ env.THEGRID_API_KEY | default("THEGRID_API_KEY_NOT_SET", true) }}'
+      apiKeyEnvar: THEGRID_API_KEY
+      headers:
+        OpenAI-Organization: ''
       temperature: 0
       # Use max_tokens: promptfoo only forwards max_completion_tokens for models
       # it classifies as reasoning models, which Grid instrument names are not.
       max_tokens: 1024
+      # Grade the final answer, not the reasoning trace.
+      showThinking: false
 
   - id: openai:chat:text-prime
     label: The Grid AI text-prime
     config:
       apiBaseUrl: https://api.thegrid.ai/v1
-      apiKey: '{{ env.THEGRID_API_KEY | default("THEGRID_API_KEY_NOT_SET", true) }}'
+      apiKeyEnvar: THEGRID_API_KEY
+      headers:
+        OpenAI-Organization: ''
       temperature: 0
       max_tokens: 1024
+      showThinking: false
 
 tests:
   # The point of this example is comparing capability tiers, so each case is a
@@ -42,11 +48,12 @@ tests:
         Tuesday receives a return of 45 units, and Wednesday ships 2 pallets of
         96. How many units remain? Reply with the number only.
     assert:
-      - type: contains
-        value: '813'
+      - type: javascript
+        value: output.trim().replace(/,/g, '') === '813'
 
   # Instruction following under a constraint that is easy to state and easy to
-  # violate. Graded structurally rather than by a judge model.
+  # violate. Graded structurally rather than by a judge model: two sentences,
+  # no banned words, both codes named, and each code's meaning present.
   - vars:
       question: >-
         Summarise why HTTP 429 differs from HTTP 503, in exactly two sentences.
@@ -57,7 +64,10 @@ tests:
           const text = output.trim();
           const sentences = text.split(/(?<=[.!?])\s+/).filter(Boolean);
           const banned = /\b(rate|limit)/i.test(text);
-          return sentences.length === 2 && !banned;
+          const codes = /\b429\b/.test(text) && /\b503\b/.test(text);
+          const tooMany = /too many|requests? from (the|a|one) client|throttl/i.test(text);
+          const unavailable = /unavailable|overload|maintenance|down\b|cannot handle|can't handle/i.test(text);
+          return sentences.length === 2 && !banned && codes && tooMany && unavailable;
 
   # Structured output: the tiers differ most visibly on whether the shape holds
   # without commentary wrapped around it.
@@ -71,4 +81,10 @@ tests:
       - type: javascript
         value: |
           const parsed = JSON.parse(output);
-          return parsed.id === 'A-4471' && Number(parsed.total_usd) === 128.4;
+          const keys = Object.keys(parsed).sort().join(',');
+          return (
+            keys === 'id,status,total_usd' &&
+            parsed.id === 'A-4471' &&
+            Number(parsed.total_usd) === 128.4 &&
+            String(parsed.status).toLowerCase() === 'settled'
+          );

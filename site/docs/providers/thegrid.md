@@ -2,7 +2,7 @@
 title: The Grid AI
 sidebar_label: The Grid AI
 sidebar_position: 42
-description: "Evaluate The Grid AI's capability-tier instruments with promptfoo through the OpenAI-compatible provider, including token budgets, credentials, and cost caveats."
+description: "Evaluate The Grid AI's capability-tier instruments with promptfoo through the OpenAI-compatible provider, with token budgets, credentials, and cost caveats."
 ---
 
 # The Grid AI
@@ -22,7 +22,9 @@ providers:
     label: The Grid AI text-standard
     config:
       apiBaseUrl: https://api.thegrid.ai/v1
-      apiKey: '{{ env.THEGRID_API_KEY | default("THEGRID_API_KEY_NOT_SET", true) }}'
+      apiKeyEnvar: THEGRID_API_KEY
+      headers:
+        OpenAI-Organization: ''
       max_tokens: 1024
 
 tests:
@@ -33,11 +35,11 @@ tests:
         value: Paris
 ```
 
-:::warning Keep the `default(..., true)` sentinel on `apiKey`
+:::tip Name the credential with `apiKeyEnvar`
 
-`OpenAiGenericProvider.getApiKey()` resolves `config.apiKey || apiKeyEnvar || OPENAI_API_KEY`. A plain `'{{env.THEGRID_API_KEY}}'` renders to an empty string when the variable is unset or blank, which is falsy, so the provider falls through and sends your OpenAI credential to `api.thegrid.ai`.
+With `apiKeyEnvar: THEGRID_API_KEY`, that is the only variable the provider reads for its key, so a missing key fails locally before any request instead of falling back to `OPENAI_API_KEY`.
 
-The second argument to `default` makes it substitute on any falsy value, not just an undefined one. A missing or blank key then reaches The Grid AI as `THEGRID_API_KEY_NOT_SET` and comes back as a 401 naming the variable, rather than silently authenticating as you against OpenAI.
+The empty `OpenAI-Organization` header stops an `OPENAI_ORGANIZATION` set in your environment from being sent to `api.thegrid.ai`.
 
 :::
 
@@ -87,7 +89,9 @@ defaultTest:
       id: openai:chat:text-prime
       config:
         apiBaseUrl: https://api.thegrid.ai/v1
-        apiKey: '{{ env.THEGRID_API_KEY | default("THEGRID_API_KEY_NOT_SET", true) }}'
+        apiKeyEnvar: THEGRID_API_KEY
+        headers:
+          OpenAI-Organization: ''
         temperature: 0
         max_tokens: 4096
         showThinking: false
@@ -95,19 +99,25 @@ defaultTest:
 
 ## Cost reporting
 
-Promptfoo cannot report cost for Grid instruments. `calculateOpenAIUsageCost` looks up built-in rates by model name and returns `undefined` when there are none, before `inputCost` and `outputCost` overrides are consulted, so those options have no effect for these ids.
+Promptfoo has no built-in rates for Grid instruments, so cost shows as unknown by default. Setting both `inputCost` and `outputCost` (per token) on the provider makes promptfoo report a cost:
 
-The Grid AI is market-priced, so a per-token rate moves and `/v1/models` can serve `"pricing": null` when the rate cache is cold. A static table would be wrong either way. Use The Grid AI's own `GET /v1/usage` and `GET /v1/usage/summary` endpoints for actual spend.
+```yaml
+config:
+  inputCost: 0.0000005
+  outputCost: 0.000002
+```
+
+Treat that number as an estimate. The Grid AI is market-priced, so per-token rates move, and `/v1/models` can serve `"pricing": null` when the rate cache is cold. Use The Grid AI's own `GET /v1/usage` and `GET /v1/usage/summary` endpoints for actual spend.
 
 ## Troubleshooting
 
 | Symptom                                       | Fix                                                                                                                      |
 | --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
 | Promptfoo calls OpenAI instead of The Grid AI | Set `apiBaseUrl` on the provider. `OPENAI_API_HOST` and `OPENAI_API_BASE_URL` both take priority over `OPENAI_BASE_URL`. |
-| `401` mentioning `THEGRID_API_KEY_NOT_SET`    | `THEGRID_API_KEY` is unset or blank. The sentinel did its job; export a real key.                                        |
+| Error that the API key is not set             | `THEGRID_API_KEY` is unset or blank. Export a real key.                                                                  |
 | Empty or truncated output                     | Reasoning tokens consumed the budget. Raise `max_tokens`.                                                                |
 | Judge returns `Could not extract JSON`        | Set `showThinking: false` on the judge provider.                                                                         |
-| Cost shows as unknown                         | Expected; see Cost reporting above.                                                                                      |
+| Cost shows as unknown                         | Expected without overrides; see Cost reporting above.                                                                    |
 
 ## See also
 

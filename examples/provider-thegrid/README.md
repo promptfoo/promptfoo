@@ -33,4 +33,4 @@ Instruments reason before answering, and reasoning tokens count toward the outpu
 
 Use `max_tokens` rather than `max_completion_tokens`: promptfoo only forwards the latter for models it classifies as reasoning models, and Grid instrument names are not on that list.
 
-`THEGRID_API_KEY` must be set. Both providers pass it through a `default("THEGRID_API_KEY_NOT_SET", true)` sentinel, so an unset or empty key fails closed with a 401 from The Grid AI rather than falling through to `OPENAI_API_KEY`. That fallback is what `getApiKey()` would otherwise do, and it would send your OpenAI credential to `api.thegrid.ai`. If you see a 401 here, set `THEGRID_API_KEY`; do not remove the sentinel.
+`THEGRID_API_KEY` must be set. Both providers name it with `apiKeyEnvar`, so a missing key fails locally rather than falling back to `OPENAI_API_KEY`, and both send an empty `OpenAI-Organization` header so an ambient `OPENAI_ORGANIZATION` is not forwarded to `api.thegrid.ai`. `showThinking: false` keeps reasoning out of the graded output.
