@@ -511,7 +511,7 @@ export async function createDummyFiles(
           'anthropic:messages:claude-sonnet-5-5',
           'anthropic:messages:claude-sonnet-4-6',
           'anthropic:messages:claude-opus-4-6',
-          'anthropic:messages:claude-haiku-4-5',
+          'anthropic:messages:claude-haiku-5-5',
         ],
       },
       {

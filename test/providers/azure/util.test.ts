@@ -551,6 +551,16 @@ describe('calculateAzureCost', () => {
     expect(calculateAzureCost('claude-sonnet-5-5', {}, 1000, 500, 500)).toBeCloseTo(0.0061, 8);
   });
 
+  it('prices claude-haiku-5-5 on both rate cards, switching above 100K prompt tokens', () => {
+    // 500 uncached * $0.10 + 500 cached * $0.01 + 500 output * $0.50, per 1e6
+    expect(calculateAzureCost('claude-haiku-5-5', {}, 1000, 500, 500)).toBeCloseTo(0.000305, 10);
+    // 100,001 prompt tokens, 50K cached: 50,001 * $0.50 + 50,000 * $0.05 + 500 * $2.50, per 1e6
+    expect(calculateAzureCost('claude-haiku-5-5', {}, 100_001, 500, 50_000)).toBeCloseTo(
+      0.0287505,
+      10,
+    );
+  });
+
   it('returns undefined for unknown model', () => {
     const cost = calculateAzureCost('unknown-model', {}, 100, 50);
     expect(cost).toBeUndefined();

@@ -3591,6 +3591,21 @@ describe('AWS_BEDROCK_MODELS mapping', () => {
     );
   });
 
+  it('maps Claude Haiku 5.5 across its geo and global inference profiles', () => {
+    // Verified via `aws bedrock list-inference-profiles` (2026-10-28).
+    for (const id of [
+      'anthropic.claude-haiku-5-5',
+      'us.anthropic.claude-haiku-5-5',
+      'eu.anthropic.claude-haiku-5-5',
+      'jp.anthropic.claude-haiku-5-5',
+      'au.anthropic.claude-haiku-5-5',
+      'global.anthropic.claude-haiku-5-5',
+    ]) {
+      expect(AWS_BEDROCK_MODELS[id]).toBe(BEDROCK_MODEL.CLAUDE_MESSAGES);
+      expect(getHandlerForModel(id)).toBe(BEDROCK_MODEL.CLAUDE_MESSAGES);
+    }
+  });
+
   it('maps Claude Sonnet 5 across the base and regional inference profiles', () => {
     // Sonnet 5 exposes base + us./eu./au./global.
     expect(AWS_BEDROCK_MODELS['anthropic.claude-sonnet-5']).toBe(BEDROCK_MODEL.CLAUDE_MESSAGES);
