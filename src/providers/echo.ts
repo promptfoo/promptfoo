@@ -1,4 +1,6 @@
-import { sleep, sleepWithAbort } from '../util/time';
+import { setTimeout as delayWithSignal } from 'node:timers/promises';
+
+import { sleep } from '../util/time';
 
 import type {
   ApiProvider,
@@ -40,7 +42,7 @@ export class EchoProvider implements ApiProvider {
     const signal = options?.abortSignal;
     signal?.throwIfAborted();
     if (this.delay && this.delay > 0) {
-      await (signal ? sleepWithAbort(this.delay, signal) : sleep(this.delay));
+      await (signal ? delayWithSignal(this.delay, undefined, { signal }) : sleep(this.delay));
     }
 
     // Create a complete ProviderResponse object

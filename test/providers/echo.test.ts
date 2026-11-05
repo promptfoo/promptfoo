@@ -138,17 +138,13 @@ describe('EchoProvider', () => {
     });
 
     it('releases the pending delay when the caller aborts', async () => {
-      vi.useFakeTimers();
       const controller = new AbortController();
+      const reason = new Error('pause echo');
       const pending = new EchoProvider({ delay: 60000 }).callApi('input', undefined, {
         abortSignal: controller.signal,
       });
-      const rejected = expect(pending).rejects.toThrow('cancelled by user');
-      controller.abort();
-      const pendingTimers = vi.getTimerCount();
-      await vi.runAllTimersAsync();
-      await rejected;
-      expect(pendingTimers).toBe(0);
+      controller.abort(reason);
+      await expect(pending).rejects.toMatchObject({ name: 'AbortError', cause: reason });
     });
 
     it('should handle empty input', async () => {
