@@ -3068,6 +3068,21 @@ describe('Provider Registry', () => {
       },
     );
 
+    it.each(['google', 'palm', 'vertex'])(
+      'requires the Live route for %s transcription',
+      async (prefix) => {
+        const model = 'gemini-3.5-transcribe-live';
+        const factory = (await getProviderFactories(`${prefix}:${model}`)).find((f) =>
+          f.test(`${prefix}:${model}`),
+        );
+        await expect(
+          factory!.create(`${prefix}:${model}`, bareOptions, bareContext),
+        ).rejects.toThrow(`requires google:live:${model} or vertex:live:${model}`);
+        const provider = await factory!.create(`${prefix}:live:${model}`, bareOptions, bareContext);
+        expect(provider.id()).toBe(`${prefix === 'palm' ? 'google' : prefix}:live:${model}`);
+      },
+    );
+
     it('applies vertexai config and provider id for vertex:video routes', async () => {
       const providerPath = 'vertex:video:veo-3.1-generate-001';
       const factory = (await getProviderFactories(providerPath)).find((f) => f.test(providerPath));

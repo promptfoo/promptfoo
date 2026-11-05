@@ -1008,6 +1008,22 @@ export class VertexChatProvider extends GoogleGenericProvider {
           };
         }
 
+        // Vertex may return the text and timing/speaker data in an audioTranscription part.
+        const transcriptionParts =
+          this.modelName === 'gemini-3.5-transcribe'
+            ? dataWithResponse.flatMap((datum) => datum.candidates?.[0]?.content?.parts ?? [])
+            : [];
+        const audioTranscriptions = transcriptionParts.flatMap(
+          (part) => part.audioTranscription ?? [],
+        );
+        if (audioTranscriptions.length) {
+          const transcript = transcriptionParts
+            .map((part) => part.text || part.audioTranscription?.text || '')
+            .filter(Boolean);
+          if (transcript.length) {
+            output = transcript.join('\n');
+          }
+        }
         const lastData = dataWithResponse[dataWithResponse.length - 1];
         const promptTokenCount = lastData.usageMetadata?.promptTokenCount;
         const completionTokenCount = lastData.usageMetadata?.candidatesTokenCount;
@@ -1060,6 +1076,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
           metadata: {
             ...(thoughtSignatures.length > 0 && { thoughtSignatures }),
             ...(actualServiceTier && { serviceTier: actualServiceTier }),
+            ...(audioTranscriptions.length > 0 && { audioTranscriptions }),
             ...(typeof lastData.usageMetadata?.trafficType === 'string' && {
               trafficType: lastData.usageMetadata.trafficType,
             }),
