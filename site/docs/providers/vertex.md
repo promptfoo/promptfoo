@@ -86,7 +86,7 @@ Use Gemini 3.8 Flash or a supported Flash-Lite model for new configurations. Mig
 
 ### Claude Models
 
-Anthropic's Claude models are available with the following versions:
+Use `vertex:<model-id>` with the ID published for Google-managed Claude. Copy dated IDs with the `@` separator, such as `claude-haiku-4-5@20251001`. See the [Google-managed Claude model IDs](https://platform.claude.com/docs/en/build-with-claude/claude-models-on-google-cloud/google-managed#api-model-ids) and [Google's partner model shutdown schedule](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/deprecations/partner-models).
 
 **Claude 5:**
 
@@ -105,9 +105,7 @@ over the global endpoint for Claude 4.5 and later models (Sonnet 4.5+, Haiku 4.5
 Opus 4.5+, and the Claude 5 models including Sonnet 5); promptfoo includes that
 premium in cost calculations unless `config.region` is `global`.
 
-Claude 5 models also require provider data sharing on Vertex — without it requests
-fail with a 403 asking you to set `PublisherModelConfig.data_sharing_enabled_provider`.
-Enable it once per project (in addition to Model Garden access):
+Some Claude models require provider data sharing in addition to Model Garden access. If a request returns a 403 asking for `PublisherModelConfig.data_sharing_enabled_provider`, review the terms on the model card and enable sharing for that model in your project. For example, for Fable 5:
 
 ```bash
 curl -X POST \
@@ -117,8 +115,7 @@ curl -X POST \
   -d '{"publisherModelConfig":{"dataSharingEnabledProvider":"anthropic"}}'
 ```
 
-Mythos 5 is limited availability; contact your Google Cloud account team for access
-and the model ID because Google does not publish one in its public model catalog.
+The `claude-mythos-5` and `claude-mythos-5-1` IDs require approval from the provider.
 
 **Claude 4.8:**
 
@@ -180,43 +177,22 @@ have a 1M-token context window.
 
 ### Llama Models
 
-Meta's Llama models are available through Vertex AI with the following versions:
-
-**Llama 4:**
-
-- `vertex:llama-4-scout-17b-16e-instruct-maas` - Llama 4 Scout with a 1,310,720-token context window
-- `vertex:llama-4-maverick-17b-128e-instruct-maas` - Llama 4 Maverick with a 524,288-token context window
-
-**Llama 3.3:**
-
-- `vertex:llama-3.3-70b-instruct-maas` - Llama 3.3 70B for text applications
-
-Llama 3 models support built-in safety features through Llama Guard. Llama 4 models are natively multimodal but do not support Llama Guard.
-
-See [Google's Llama model documentation](https://docs.cloud.google.com/vertex-ai/generative-ai/docs/partner-models/llama/use-llama) for current model IDs, regions, and quotas.
+Use `vertex:<model-id>` with a hosted Llama model. You can include the `meta/` publisher prefix used by Google's Chat Completions API. Check [Google's Llama model guide](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/partner-models/llama/use-llama) for model IDs, regions, and quotas.
 
 #### Llama Configuration Example
 
 ```yaml
 providers:
-  - id: vertex:llama-3.3-70b-instruct-maas
+  - id: vertex:meta/llama-4-scout-17b-16e-instruct-maas
     config:
-      region: us-central1 # Llama 3 models use this region
-      temperature: 0.7
-      maxOutputTokens: 1024
-      llamaConfig:
-        safetySettings:
-          enabled: true # Llama Guard is enabled by default
-          llama_guard_settings: {} # Optional custom settings
-
-  - id: vertex:llama-4-scout-17b-16e-instruct-maas
-    config:
-      region: us-east5 # Llama 4 models use this region
-      temperature: 0.7
-      maxOutputTokens: 2048
+      region: us-east5
 ```
 
-By default, supported Llama 3 models use Llama Guard for content safety. You can disable it by setting `enabled: false`, but this is not recommended for production use.
+To send an image, use a chat message with an `image_url` content part. See the [runnable Llama image example](https://github.com/promptfoo/promptfoo/blob/main/examples/google-vertex/promptfooconfig.llama.yaml).
+
+### Other hosted open models
+
+For publishers that Google serves through Chat Completions, use `openai:chat:<publisher>/<model-id>`. Set `config.apiBaseUrl` to the endpoint for your project and location (ending in `/endpoints/openapi`) and `config.apiKeyEnvar` to an environment variable containing a Google Cloud access token. Obtain a fresh token with `gcloud auth print-access-token` before running an eval. Refresh the variable and start a new run when the token expires. See [Google's endpoint and authentication examples](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/maas/call-open-model-apis) and [Promptfoo's connection settings](/docs/providers/openai/#connection-settings).
 
 ### Gemma Models (Open Models)
 
@@ -251,7 +227,7 @@ See Google's [text embedding guide](https://docs.cloud.google.com/gemini-enterpr
 ### Image Generation Models
 
 :::note
-The legacy [Imagen adapter](/docs/providers/google#image-generation-models) uses `google:image:<model>` and `config.projectId`. The Imagen 3 and Imagen 4 IDs documented there are discontinued; configuring a Vertex project or region does not restore their availability. Gemini image generation on Vertex uses the [Gemini image adapter](/docs/providers/google#gemini-native-image-generation-models) with `google:gemini-3.1-flash-image` and `config.projectId`. The adapter uses the global endpoint for this model; see the [Vertex model documentation](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/gemini/3-1-flash-image) for model details.
+The legacy [Imagen adapter](/docs/providers/google#image-generation-models) uses `google:image:<model>` and `config.projectId`. The Imagen 3 and Imagen 4 IDs documented there are discontinued; configuring a Vertex project or region does not restore their availability. Gemini image generation on Vertex uses the [Gemini image adapter](/docs/providers/google#gemini-native-image-generation-models) with `google:gemini-3.1-flash-image` and `config.projectId`. This model defaults to the global endpoint. Set `region: us` or `region: eu` with project-based OAuth to select a multi-region endpoint. Cost estimates use the selected location’s rates. See the [Vertex model card](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/gemini/3-1-flash-image) and [Vertex pricing](https://cloud.google.com/vertex-ai/generative-ai/pricing).
 :::
 
 ### Video Generation Models
@@ -263,7 +239,7 @@ Use the `vertex:video:` prefix for Veo on Vertex AI:
 - `vertex:video:veo-3.1-lite-generate-001` (Preview)
 
 Promptfoo reports successful Veo 3.1 generations using Google's video-with-audio price for the
-generated duration and resolution. See the [Veo pricing table](/docs/providers/google#video-generation-models-veo)
+generated duration and resolution. See [Vertex pricing](https://cloud.google.com/vertex-ai/generative-ai/pricing)
 for the current per-second rates.
 
 ```yaml
@@ -537,8 +513,7 @@ The following environment variables can be used to configure the Vertex AI provi
 
 †The Vertex chat provider applies model-specific defaults before authentication defaults.
 Gemini 3 chat models default to `global` with either OAuth or an API key. Choose a
-region supported by your model. Prediction-based text embeddings and Vertex Live
-default to `us-central1`. Gemini Embedding 2 defaults to `global`.
+region supported by your model. Voice dialogue on Vertex Live and prediction-based text embeddings default to `us-central1`. Speech transcription defaults to `global`. Gemini Embedding 2 defaults to `global`.
 
 ### Region Selection
 
@@ -546,7 +521,7 @@ Different models are available in different regions. Common regions include:
 
 - `global` - Default for Gemini 3 chat models with either OAuth or API-key authentication. Supported by Gemini 3.8 Flash, 3.7 Flash, 3.6 Flash, and 3.5 Flash-Lite
 - `us`, `eu` - Multi-region endpoints supported by Gemini 3.8 Flash, 3.7 Flash, 3.6 Flash, and 3.5 Flash-Lite (10% pricing premium)
-- `us-central1` - Default for prediction-based text embeddings and Vertex Live; model availability varies
+- `us-central1` - Default for prediction-based text embeddings and Vertex Live voice dialogue; model availability varies
 - `us-east4` - Additional capacity
 - `us-east5` - Claude models available
 - `europe-west1` - EU region, Claude models available
@@ -694,16 +669,10 @@ providers:
         maxOutputTokens: 1024
 
   # For Llama models
-  - id: vertex:llama-3.3-70b-instruct-maas
+  - id: vertex:llama-4-scout-17b-16e-instruct-maas
     config:
-      generationConfig:
-        temperature: 0.7
-        maxOutputTokens: 1024
-        extra_body:
-          google:
-            model_safety_settings:
-              enabled: true
-              llama_guard_settings: {}
+      region: us-east5
+      maxOutputTokens: 1024
 
   # For Claude models (set an enabled region, or `global` for Claude 5)
   - id: vertex:claude-sonnet-5
@@ -735,28 +704,15 @@ See [Google's SafetySetting API documentation](https://ai.google.dev/api/generat
 
 ### Llama Model Features
 
-- Support for text tasks with Llama 3.3 and text and vision tasks with all Llama 4 models
-- Built-in safety with Llama Guard for supported Llama 3 models (enabled by default)
-- Llama 4 models are available in `us-east5`; Llama 3 models are available in `us-central1`
-- Quota limits vary by model version
-- Requires specific endpoint format for API calls
-- Only supports unary (non-streaming) responses in promptfoo
+Promptfoo sends non-streaming chat requests to the Vertex OpenAI-compatible endpoint. Llama 4 Scout and Maverick support text and image input. Both use `us-east5` by default.
 
 #### Llama Model Considerations
 
-- **Regional Availability**: Llama 4 models use `us-east5`; Llama 3 models use `us-central1`
-- **Guard Integration**: Supported Llama 3 models use Llama Guard for content safety by default; Llama 4 models do not support it
-- **Specific Endpoint**: Uses a different API endpoint than other Vertex models
-- **Model Status**: Llama 4 Scout and Maverick are Generally Available (GA). Google [deprecated `llama-3.3-70b-instruct-maas`](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/deprecations/open-models) on July 21, 2026 and schedules its retirement for October 21, 2026
-- **Vision Support**: All current Llama 4 models support image input
+Llama Guard settings apply only to older Llama models. Omit them for Llama 4. Google retired the hosted Llama 3.3 70B model. For self-deployment and migration details, see [Google's open-model lifecycle guide](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/deprecations/open-models).
 
 ### Claude Model Features
 
-- Support for text, code, and analysis tasks
-- Tool use (function calling) capabilities
-- Available in multiple regions (us-east5, europe-west1, asia-southeast1) plus the `global` endpoint for the Claude 5 models and Opus 4.7/4.8
-- Fable/Mythos 5, Opus 5.5, Opus 5, Sonnet 5, and Opus 4.7/4.8: promptfoo automatically omits deprecated sampling parameters (`temperature`, `top_p`, `top_k`) and converts configured manual thinking (`type: enabled`) to adaptive thinking before forwarding the request to Vertex's `rawPredict` endpoint
-- Quota limits vary by model version (20-245 QPM)
+The Claude adapter sends non-streaming Messages requests to Vertex `rawPredict`. Use `systemInstruction` for a system message and `thinking` or `effort` where supported. The [Google-managed Claude model guide](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/partner-models/claude) lists features, endpoints, and quotas for each model.
 
 ## Advanced Usage
 
@@ -812,7 +768,7 @@ defaultTest:
 | `expressMode`                      | Set to `false` to force OAuth/ADC even with API key                | auto (API key → `true`)        |
 | `streaming`                        | Use streaming API (`streamGenerateContent`)                        | `false`                        |
 
-‡The chat provider uses model-specific region defaults; Gemini 3 chat models use `global` with either authentication method. The `global` host is `aiplatform.googleapis.com`, including for Express mode. Regional overrides use `{region}-aiplatform.googleapis.com`; see [Region Selection](#region-selection) for multi-region hosts. Prediction-based text embeddings and Vertex Live default to `us-central1`. Gemini Embedding 2 defaults to `global`.
+‡The chat provider uses model-specific region defaults; Gemini 3 chat models use `global` with either authentication method. The `global` host is `aiplatform.googleapis.com`, including for Express mode. Regional overrides use `{region}-aiplatform.googleapis.com`; see [Region Selection](#region-selection) for multi-region hosts. Prediction-based text embeddings and Vertex Live voice dialogue default to `us-central1`. Speech transcription defaults to `global`. Gemini Embedding 2 defaults to `global`.
 
 :::note
 Not all models support all parameters. See [Google's documentation](https://cloud.google.com/vertex-ai/generative-ai/docs/multimodal/overview) for model-specific details.
@@ -855,27 +811,7 @@ You need to:
    - Search for "Claude"
    - Click "Enable" on the specific Claude models you want to use
 
-2. Pick a supported region. Common choices:
-   - `us-east5` and `europe-west1` for Claude 3.x / 4.x models
-   - `global` for the global endpoint (the Claude 5 models, Opus 4.7/4.8, and other newer models with dynamic routing)
-   - US and EU multi-region endpoints where enabled
-
-Example configuration with correct region:
-
-```yaml
-providers:
-  - id: vertex:claude-opus-5
-    config:
-      region: global
-      anthropic_version: 'vertex-2023-10-16'
-      max_tokens: 1024
-
-  - id: vertex:claude-sonnet-4-5@20250929
-    config:
-      region: us-east5 # or europe-west1
-      anthropic_version: 'vertex-2023-10-16'
-      max_tokens: 1024
-```
+2. Check the model card for supported endpoints. Set `region: global` to use the global endpoint, `us` or `eu` for a supported multi-region endpoint, or the name of a supported single region. [Google-managed Claude endpoint types](https://platform.claude.com/docs/en/build-with-claude/claude-models-on-google-cloud/google-managed#global-multi-region-and-regional-endpoints)
 
 ## Model Features and Capabilities
 
@@ -1406,17 +1342,17 @@ Use `vertex:live:<model>` for Vertex's WebSocket-based Live API. This is separat
 
 ```yaml
 providers:
-  - id: vertex:live:gemini-live-2.5-flash-native-audio
+  - id: vertex:live:gemini-3.8-live
     config:
       projectId: my-project # Or set GOOGLE_CLOUD_PROJECT / VERTEX_PROJECT_ID
       region: us-central1 # Or set GOOGLE_CLOUD_LOCATION / VERTEX_REGION
 ```
 
-Authenticate with `gcloud auth application-default login`, `GOOGLE_APPLICATION_CREDENTIALS`, or `config.credentials`. Live uses Google Cloud OAuth, not Gemini API keys or Vertex express-mode API keys. The project must have the Vertex AI API enabled and permission to use the selected model. The default location is `us-central1`; `apiVersion` accepts `v1` (default) or `v1beta1`.
+Authenticate with `gcloud auth application-default login`, `GOOGLE_APPLICATION_CREDENTIALS`, or `config.credentials`. Live uses Google Cloud OAuth, not Gemini API keys or Vertex express-mode API keys. The project must have the Vertex AI API enabled and permission to use the selected model. For voice dialogue, the default location is `us-central1`. Use the [Gemini Live model card](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/gemini/3-8-live) to choose a supported region. The `apiVersion` option accepts `v1` (default) or `v1beta1`.
 
-The provider returns audio in `response.audio` and a transcript in `output.text`. It requests audio and output transcription by default; requesting `TEXT` also uses audio plus transcription and is billed at audio rates. Use `transform: output.text` on text assertions. It shares the [Google Live configuration options](/docs/providers/google#google-live-api) for speech, system instructions, function callbacks, and finite PCM audio input. Consecutive user messages in a JSON prompt run in the same Live session.
+For voice dialogue, the provider returns audio in `response.audio` and a transcript in `output.text`. It requests audio and output transcription by default; requesting `TEXT` also uses audio plus transcription and is billed at audio rates. Use `transform: output.text` on text assertions. It shares the [Google Live configuration options](/docs/providers/google#google-live-api) for speech, system instructions, function callbacks, and finite PCM audio input. Consecutive user messages in a JSON prompt run in the same Live session.
 
-The adapter also accepts `vertex:live:gemini-3.8-live` and `vertex:live:gemini-3.8-live-extended-thinking`, including the latter's `NON_BLOCKING` tools and `IDLE` completion handling. Google names Vertex in the [model card](https://deepmind.google/models/model-cards/gemini-3-8-audio/), but these models are not yet listed in the [Cloud Live model catalog](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/live-api#supported-models). Availability must be confirmed for your project and location; use `google:live:` for Gemini API access. A model-not-found or access-denied response is an error, not a fallback to another model or API.
+For speech-to-text evals, use `vertex:gemini-3.5-transcribe` for complete recordings or `vertex:live:gemini-3.5-transcribe-live` for raw 16-bit mono PCM at 16 kHz. Both default to the global endpoint. The Live provider grades the final transcription in `output.text`. The file provider accepts `generationConfig.audioTranscriptionConfig` and retains returned word timing and speaker information in `metadata.audioTranscriptions`. [Vertex transcription model and API examples](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/gemini/3-5-transcribe)
 
 See the [Vertex Live example](https://github.com/promptfoo/promptfoo/tree/main/examples/vertex-live) for a runnable transcript eval.
 

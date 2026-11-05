@@ -13,6 +13,7 @@ import { getEnvInt, getEnvString } from '../../envars';
 import logger from '../../logger';
 import telemetry from '../../telemetry';
 import { fingerprintCacheIdentity } from '../cacheFingerprint';
+import { resolveBedrockMantleRegion } from './mantle';
 import { createBedrockRequestHandler } from './util';
 import type { BedrockRuntime, Trace } from '@aws-sdk/client-bedrock-runtime';
 import type { AwsCredentialIdentity, AwsCredentialIdentityProvider } from '@smithy/types';
@@ -222,12 +223,7 @@ export abstract class AwsBedrockGenericProvider {
   }
 
   getRegion(): string {
-    return (
-      this.config?.region ||
-      this.env?.AWS_BEDROCK_REGION ||
-      getEnvString('AWS_BEDROCK_REGION') ||
-      'us-east-1'
-    );
+    return resolveBedrockMantleRegion(this.config, this.env, 'us-east-1');
   }
 }
 
