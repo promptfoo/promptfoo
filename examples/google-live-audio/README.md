@@ -2,6 +2,8 @@
 
 Grade a spoken answer and its transcript with one Gemini Live request.
 
+## Run the eval
+
 Set `GOOGLE_API_KEY` to your [Google AI Studio API key](https://aistudio.google.com/apikey), then run:
 
 ```bash
