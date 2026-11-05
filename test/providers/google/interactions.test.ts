@@ -92,10 +92,103 @@ describe('GoogleInteractionsProvider', () => {
   });
 
   afterEach(() => {
+    vi.restoreAllMocks();
     vi.unstubAllEnvs();
     restoreGoogleEnv();
     vi.useRealTimers();
   });
+
+  it('transcribes an uploaded audio file and retains word annotations and paid-tier usage', async () => {
+    const input = [
+      { type: 'file', file_uri: 'https://generativelanguage.googleapis.com/v1beta/files/sample' },
+    ];
+    const annotations = [
+      { type: 'word_info', text: 'Hello', speaker: 'spk_1', start_offset: '0.1s' },
+    ];
+    mockFetchWithCache.mockResolvedValue({
+      data: {
+        id: 'transcript-1',
+        status: 'completed',
+        steps: [{ type: 'model_output', content: [{ type: 'text', text: 'Hello', annotations }] }],
+        usage: { total_input_tokens: 100, total_output_tokens: 10 },
+      },
+      cached: false,
+    } as any);
+    const provider = new GoogleInteractionsProvider('gemini-3.5-transcribe', {
+      config: {
+        apiKey: 'test-key',
+        passthrough: {
+          generation_config: { transcription_config: { language_codes: ['en-US'] } },
+        },
+      },
+    });
+    const response = await provider.callApi(JSON.stringify(input));
+    const [url, request] = mockFetchWithCache.mock.calls[0];
+    expect(url).toBe('https://generativelanguage.googleapis.com/v1beta/interactions');
+    expect(JSON.parse(request?.body as string)).toEqual({
+      model: 'models/gemini-3.5-transcribe',
+      input,
+      generation_config: { transcription_config: { language_codes: ['en-US'] } },
+      background: false,
+      stream: false,
+    });
+    expect(response).toMatchObject({
+      output: 'Hello',
+      tokenUsage: { prompt: 100, completion: 10, total: 110, numRequests: 1 },
+      metadata: { interactionId: 'transcript-1', status: 'completed', annotations },
+    });
+    expect(response.cost).toBeCloseTo((100 * 2 + 10 * 12) / 1e6, 10);
+  });
+
+  it.each([undefined, {}, { total_output_tokens: 10 }])(
+    'preserves a REST model resource override and leaves incomplete pricing unknown: %j',
+    async (usage) => {
+      mockFetchWithCache.mockResolvedValue({
+        data: {
+          status: 'completed',
+          usage,
+          steps: [{ type: 'model_output', content: [{ type: 'text', text: 'Hello' }] }],
+        },
+        cached: false,
+      } as any);
+      const provider = new GoogleInteractionsProvider('gemini-omni-1.1-flash', {
+        config: { apiKey: 'test-key', passthrough: { model: 'models/gemini-3.5-transcribe' } },
+      });
+      const result = await provider.callApi('[{"type":"file","file_uri":"files/sample"}]');
+      expect(result.output).toBe('Hello');
+      expect(result.cost).toBeUndefined();
+      const body = JSON.parse(mockFetchWithCache.mock.calls[0][1]?.body as string);
+      expect(body.model).toBe('models/gemini-3.5-transcribe');
+      expect(body).not.toHaveProperty('response_format');
+    },
+  );
+
+  it.each([
+    [
+      { passthrough: { model: 'models/gemini-3.5-transcribe-live' } },
+      'Model "gemini-3.5-transcribe-live" requires the Gemini Live API. Use google:live:gemini-3.5-transcribe-live.',
+    ],
+    [{ vertexai: true }, 'For file transcription on Vertex AI, use vertex:gemini-3.5-transcribe.'],
+    [
+      { passthrough: { tools: [{ type: 'google_search' }] } },
+      'Gemini Transcribe does not support tools.',
+    ],
+    [
+      { service_tier: 'flex' as const },
+      'Gemini Transcribe supports only the Standard service tier.',
+    ],
+  ] as const)(
+    'rejects unsupported Transcribe options before transport: %j',
+    async (config, error) => {
+      const provider = new GoogleInteractionsProvider('gemini-3.5-transcribe', {
+        config: { apiKey: 'test-key', ...config },
+      });
+      await expect(
+        provider.callApi('[{"type":"file","file_uri":"files/sample"}]'),
+      ).resolves.toEqual({ error });
+      expect(mockFetchWithCache).not.toHaveBeenCalled();
+    },
+  );
 
   it.each(['gemini-omni-flash-preview', 'gemini-omni-1.1-flash'])(
     'routes %s through the Interactions API and prices video output tokens',
@@ -2111,6 +2204,8 @@ describe('GoogleInteractionsProvider', () => {
   });
 
   it('lets prompt service_tier override a provider passthrough default', async () => {
+    // Exercise the original 3.5 rates before the Gemini API redirected this ID.
+    vi.spyOn(Date, 'now').mockReturnValue(Date.UTC(2026, 8, 1));
     mockFetchWithCache.mockResolvedValue({
       data: {
         status: 'completed',

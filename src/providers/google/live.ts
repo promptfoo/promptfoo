@@ -4,12 +4,9 @@ import { getEnvString, getProcessEnv } from '../../envars';
 import logger from '../../logger';
 import { validatePythonPath } from '../../python/pythonUtils';
 import { fetchWithProxy } from '../../util/fetch/index';
-import {
-  CallbackPathTraversalError,
-  loadCallbackFromFileUrl,
-  wrapError,
-} from '../../util/functions/loadFunction';
 import { maybeLoadToolsFromExternalFile } from '../../util/index';
+import { resolveProviderApiKey } from '../credentials';
+import { loadProviderCallbackFromFileUrl } from '../functionCallbackUtils';
 import { withGenAIToolSpan } from '../tracing';
 import { GOOGLE_MODELS } from './shared';
 import {
@@ -41,6 +38,7 @@ import type {
 } from './types';
 import type { GeminiFormat } from './util';
 
+const GEMINI_LIVE_TRANSCRIBE_MODEL = 'gemini-3.5-transcribe-live';
 const GEMINI_LIVE_TRANSLATE_MODEL = 'gemini-3.5-live-translate-preview';
 const ROBOTICS_TEXT_MODALITY_ERROR =
   'Gemini Robotics ER 2 Streaming only supports TEXT response modality. Omit generationConfig.response_modalities/responseModalities to use the TEXT default, or set it to ["TEXT"].';
@@ -160,7 +158,7 @@ function getRoboticsConfigError(
   return hasUnsupportedRoboticsTool(tools) ? ROBOTICS_UNSUPPORTED_TOOL_ERROR : undefined;
 }
 
-function hasUnsupportedLiveTranslateToolsOrInstructions(
+function hasUnsupportedSpeechToolsOrInstructions(
   config: CompletionOptions,
   systemInstruction: unknown,
 ): boolean {
@@ -186,7 +184,7 @@ function hasUnsupportedLiveTranslateThinkingConfig(config: CompletionOptions): b
   );
 }
 
-function getEffectiveLiveTranslateServiceTier(
+function getLiveServiceTier(
   mergedConfig: CompletionOptions,
   promptConfig?: Partial<CompletionOptions>,
 ): unknown {
@@ -229,7 +227,7 @@ function getUnsupportedLiveTranslateConfigurationError(
     return LIVE_TRANSLATE_AUDIO_MODALITY_ERROR;
   }
   return (
-    (hasUnsupportedLiveTranslateToolsOrInstructions(config, systemInstruction)
+    (hasUnsupportedSpeechToolsOrInstructions(config, systemInstruction)
       ? 'Gemini 3.5 Live Translate does not support tools or instructions.'
       : undefined) ??
     (hasStructuredOutputConfiguration(config)
@@ -448,8 +446,8 @@ export const tryGetThenPost = async <T = unknown>(url: string, data?: unknown): 
 
 export class GoogleLiveProvider implements ApiProvider {
   config: GoogleProviderConfig;
-  env?: ProviderOptions['env'];
   modelName: string;
+  readonly env?: ProviderOptions['env'];
   protected readonly isVertex: boolean = false;
   private loadedFunctionCallbacks: Record<string, Function> = {};
 
@@ -501,13 +499,11 @@ export class GoogleLiveProvider implements ApiProvider {
   }
 
   getApiKey(): string | undefined {
-    return (
-      this.config.apiKey ||
-      this.env?.GOOGLE_API_KEY ||
-      this.env?.GEMINI_API_KEY ||
-      getEnvString('GOOGLE_API_KEY') ||
-      getEnvString('GEMINI_API_KEY')
-    );
+    // Priority aligned with Python SDK: GOOGLE_API_KEY > GEMINI_API_KEY
+    return resolveProviderApiKey({ apiKey: this.config.apiKey }, this.env, [
+      'GOOGLE_API_KEY',
+      'GEMINI_API_KEY',
+    ]);
   }
 
   private async getAccessToken(config: CompletionOptions): Promise<string | undefined> {
@@ -534,6 +530,7 @@ export class GoogleLiveProvider implements ApiProvider {
       );
     }
     const prefersV1beta =
+      this.modelName === GEMINI_LIVE_TRANSCRIBE_MODEL ||
       this.modelName === GEMINI_LIVE_TRANSLATE_MODEL ||
       this.modelName.startsWith('gemini-robotics-er-2-streaming-') ||
       this.modelName.startsWith('gemini-3.1-flash-live') ||
@@ -556,7 +553,10 @@ export class GoogleLiveProvider implements ApiProvider {
     const promptConfig = context?.prompt?.config as Partial<GoogleProviderConfig> | undefined;
     const config = mergeGoogleCompletionOptions(this.config, promptConfig);
     const promptBasePath = promptConfig?.basePath ?? this.config.basePath;
-    const supportsTextResponse = this.modelName.startsWith('gemini-robotics-er-2-streaming-');
+    const isLiveTranscribe = this.modelName === GEMINI_LIVE_TRANSCRIBE_MODEL;
+    const isRoboticsStreaming = this.modelName.startsWith('gemini-robotics-er-2-streaming-');
+    const supportsTextResponse = isLiveTranscribe || isRoboticsStreaming;
+    const isSpeechStream = isLiveTranscribe || this.modelName === GEMINI_LIVE_TRANSLATE_MODEL;
     const configuredResponseModalities = (
       config.generationConfig?.response_modalities ?? config.generationConfig?.responseModalities
     )?.map((modality) => modality.toUpperCase());
@@ -587,7 +587,7 @@ export class GoogleLiveProvider implements ApiProvider {
     // Eval audio inputs are finite recordings, so mark their boundaries explicitly
     // instead of relying on voice activity detection to find trailing silence.
     const useManualAudioActivity =
-      (isGemini38Live || this.isVertex) &&
+      (isGemini38Live || (this.isVertex && !isLiveTranscribe)) &&
       contents.some((content) =>
         content.parts.some((part) => {
           const audioPart = part as {
@@ -644,11 +644,45 @@ export class GoogleLiveProvider implements ApiProvider {
         config,
         systemInstruction,
         configuredResponseModalities,
-        getEffectiveLiveTranslateServiceTier(config, promptConfig),
+        getLiveServiceTier(config, promptConfig),
       );
       if (unsupportedConfigurationError) {
         return { error: unsupportedConfigurationError };
       }
+    }
+
+    if (isLiveTranscribe) {
+      if (
+        configuredResponseModalities &&
+        (configuredResponseModalities.length !== 1 || configuredResponseModalities[0] !== 'TEXT')
+      ) {
+        return { error: 'Gemini Live transcription requires the TEXT response modality.' };
+      }
+      if (
+        config.generationConfig?.outputAudioTranscription ||
+        config.speechConfig ||
+        config.generationConfig?.speechConfig
+      ) {
+        return {
+          error:
+            'Gemini Live transcription produces text. Remove output audio transcription and speech settings.',
+        };
+      }
+      if (
+        hasUnsupportedSpeechToolsOrInstructions(config, systemInstruction) ||
+        config.functionToolCallbacks ||
+        config.functionToolStatefulApi
+      ) {
+        return {
+          error: 'Gemini Live transcription accepts audio without tools or system instructions.',
+        };
+      }
+      const serviceTier = getLiveServiceTier(config, promptConfig);
+      if (serviceTier !== undefined && serviceTier !== 'standard') {
+        return { error: 'Gemini Live transcription supports only the Standard service tier.' };
+      }
+    }
+    if (isSpeechStream) {
       const hasOnlySupportedPcmAudio =
         contents.length > 0 &&
         contents.every(
@@ -671,8 +705,9 @@ export class GoogleLiveProvider implements ApiProvider {
         );
       if (!hasOnlySupportedPcmAudio) {
         return {
-          error:
-            'Gemini 3.5 Live Translate only supports raw PCM audio input with MIME type audio/pcm;rate=16000 (16-bit mono) and non-empty base64 data; text, image, video, missing sample rates, and other sample rates are not supported.',
+          error: isLiveTranscribe
+            ? 'Gemini Live transcription requires raw 16-bit mono PCM audio at audio/pcm;rate=16000.'
+            : 'Gemini 3.5 Live Translate only supports raw PCM audio input with MIME type audio/pcm;rate=16000 (16-bit mono) and non-empty base64 data; text, image, video, missing sample rates, and other sample rates are not supported.',
         };
       }
     }
@@ -698,10 +733,14 @@ export class GoogleLiveProvider implements ApiProvider {
       config.apiVersion &&
       config.apiVersion !== 'v1beta'
     ) {
-      return { error: ROBOTICS_API_VERSION_ERROR };
+      return {
+        error: isLiveTranscribe
+          ? 'Gemini Live transcription requires apiVersion v1beta.'
+          : ROBOTICS_API_VERSION_ERROR,
+      };
     }
     const roboticsConfigError = getRoboticsConfigError(
-      supportsTextResponse,
+      isRoboticsStreaming,
       config,
       configuredResponseModalities,
       requestTools,
@@ -772,19 +811,19 @@ export class GoogleLiveProvider implements ApiProvider {
     return new Promise<ProviderResponse>((resolve) => {
       const isNativeAudioModel = this.modelName.includes('native-audio');
       let isResolved = false;
-      let liveTranslateCompletionTimeout: ReturnType<typeof setTimeout> | undefined;
+      let speechCompletionTimeout: ReturnType<typeof setTimeout> | undefined;
       let liveTranslateHardTimeout: ReturnType<typeof setTimeout> | undefined;
       let timeout: ReturnType<typeof setTimeout> | undefined;
       let cancelFinalStateRetrieval: ((reason: Error) => void) | undefined;
       let statefulApiCleanupStarted = false;
-      let armLiveTranslateCompletion = () => {};
+      let armSpeechCompletion = () => {};
       let armLiveTranslateHardTimeout = () => {};
 
       const safeResolve = (response: ProviderResponse) => {
         if (!isResolved) {
           isResolved = true;
           clearTimeout(timeout);
-          clearTimeout(liveTranslateCompletionTimeout);
+          clearTimeout(speechCompletionTimeout);
           clearTimeout(liveTranslateHardTimeout);
           cancelFinalStateRetrieval?.(new Error('Final state retrieval cancelled'));
           if (statefulApi && !statefulApiCleanupStarted) {
@@ -818,7 +857,7 @@ export class GoogleLiveProvider implements ApiProvider {
       let lastToolResponseMessageIndex = 0;
       let lastVideoFrameSentAt = 0;
       let hasFinalized = false;
-      let liveTranslateInputEnded = false;
+      let speechInputEnded = false;
 
       const requestedText = configuredResponseModalities?.includes('TEXT') ?? false;
       const responseModalities =
@@ -843,8 +882,8 @@ export class GoogleLiveProvider implements ApiProvider {
       let hasAudioStreamEnded = !isAudioExpected;
 
       const sendContentMessages = async (contentMessages: any[]) => {
-        if (this.modelName === GEMINI_LIVE_TRANSLATE_MODEL) {
-          liveTranslateInputEnded = false;
+        if (isSpeechStream) {
+          speechInputEnded = false;
           clearTimeout(liveTranslateHardTimeout);
           liveTranslateHardTimeout = undefined;
         }
@@ -860,12 +899,11 @@ export class GoogleLiveProvider implements ApiProvider {
             lastVideoFrameSentAt = Date.now();
           }
           ws.send(JSON.stringify(contentMessage));
-          if (
-            this.modelName === GEMINI_LIVE_TRANSLATE_MODEL &&
-            contentMessage.realtimeInput?.audioStreamEnd
-          ) {
-            liveTranslateInputEnded = true;
-            armLiveTranslateHardTimeout();
+          if (isSpeechStream && contentMessage.realtimeInput?.audioStreamEnd) {
+            speechInputEnded = true;
+            if (!isLiveTranscribe) {
+              armLiveTranslateHardTimeout();
+            }
           }
         }
       };
@@ -898,14 +936,14 @@ export class GoogleLiveProvider implements ApiProvider {
       const effectiveTimeoutMs = (config.timeoutMs || 30000) + framePacingAllowanceMs;
       // Google's finite-input Live Translate sample allows four seconds for trailing output.
       // Keep that grace below the caller's idle timeout so a partial translation can still win.
-      const liveTranslateCompletionGraceMs = Math.min(
+      const speechCompletionGraceMs = Math.min(
         4_000,
         Math.max(1, Math.floor(effectiveTimeoutMs / 2)),
       );
       // The idle timeout can be extended indefinitely by incoming silent audio. Bound the whole
       // finite-input translation while still leaving enough room for a response that begins near
       // the idle limit to finish its trailing-output grace period.
-      const liveTranslateHardDeadlineMs = effectiveTimeoutMs + liveTranslateCompletionGraceMs;
+      const liveTranslateHardDeadlineMs = effectiveTimeoutMs + speechCompletionGraceMs;
       const armIdleTimeout = () => {
         clearTimeout(timeout);
         if (isResolved || hasFinalized) {
@@ -941,8 +979,8 @@ export class GoogleLiveProvider implements ApiProvider {
         if (contentIndex >= contents.length) {
           return;
         }
-        clearTimeout(liveTranslateCompletionTimeout);
-        liveTranslateCompletionTimeout = undefined;
+        clearTimeout(speechCompletionTimeout);
+        speechCompletionTimeout = undefined;
         const contentMessages = formatContentMessages(
           contents,
           contentIndex,
@@ -965,7 +1003,7 @@ export class GoogleLiveProvider implements ApiProvider {
           return;
         }
         hasFinalized = true;
-        clearTimeout(liveTranslateCompletionTimeout);
+        clearTimeout(speechCompletionTimeout);
         clearTimeout(liveTranslateHardTimeout);
 
         if (pendingUsageMetadata) {
@@ -1286,13 +1324,8 @@ export class GoogleLiveProvider implements ApiProvider {
         safeResolve(result);
       };
 
-      armLiveTranslateCompletion = () => {
-        if (
-          this.modelName !== GEMINI_LIVE_TRANSLATE_MODEL ||
-          !liveTranslateInputEnded ||
-          hasFinalized ||
-          isResolved
-        ) {
+      armSpeechCompletion = () => {
+        if (!isSpeechStream || !speechInputEnded || hasFinalized || isResolved) {
           return;
         }
         // Once output has started, the inactivity timeout and trailing-output grace timer
@@ -1300,20 +1333,27 @@ export class GoogleLiveProvider implements ApiProvider {
         // translation that streams longer than the initial response window.
         clearTimeout(liveTranslateHardTimeout);
         liveTranslateHardTimeout = undefined;
-        clearTimeout(liveTranslateCompletionTimeout);
-        liveTranslateCompletionTimeout = setTimeout(() => {
-          liveTranslateCompletionTimeout = undefined;
+        clearTimeout(speechCompletionTimeout);
+        speechCompletionTimeout = setTimeout(() => {
+          speechCompletionTimeout = undefined;
           void (async () => {
             if (contentIndex < contents.length) {
+              if (isLiveTranscribe) {
+                completedTurns += 1;
+                if (pendingUsageMetadata) {
+                  usageMetadata.push(pendingUsageMetadata);
+                  pendingUsageMetadata = undefined;
+                }
+              }
               await sendNextContentMessages(true);
               return;
             }
             await finalizeResponse();
           })().catch((err) => {
-            logger.error(`Error advancing Live Translate response: ${err}`);
-            safeResolve({ error: `Error advancing Live Translate response: ${err}` });
+            logger.error(`Error advancing speech response: ${err}`);
+            safeResolve({ error: `Error advancing speech response: ${err}` });
           });
-        }, liveTranslateCompletionGraceMs);
+        }, speechCompletionGraceMs);
       };
 
       ws.onopen = () => {
@@ -1323,7 +1363,7 @@ export class GoogleLiveProvider implements ApiProvider {
           response_modalities: _responseModalities,
           responseModalities: _camelResponseModalities,
           outputAudioTranscription: configuredOutputAudioTranscription,
-          inputAudioTranscription,
+          inputAudioTranscription = isLiveTranscribe ? {} : undefined,
           enableAffectiveDialog,
           proactivity,
           ...restGenerationConfig
@@ -1332,7 +1372,7 @@ export class GoogleLiveProvider implements ApiProvider {
         const outputAudioTranscription =
           configuredOutputAudioTranscription ??
           (isGemini38Live ||
-          this.isVertex ||
+          (this.isVertex && !isLiveTranscribe) ||
           (usesRealtimeTextInput && !supportsTextResponse && requestedText)
             ? {}
             : undefined);
@@ -1457,8 +1497,8 @@ export class GoogleLiveProvider implements ApiProvider {
             if (isAudioExpected) {
               hasAudioStreamEnded = false;
             }
-            if (hasMeaningfulPcm(audioBuffer)) {
-              armLiveTranslateCompletion();
+            if (!isLiveTranscribe && hasMeaningfulPcm(audioBuffer)) {
+              armSpeechCompletion();
             }
             return;
           }
@@ -1553,6 +1593,18 @@ export class GoogleLiveProvider implements ApiProvider {
               return;
             }
 
+            if (isLiveTranscribe && serverContent.interimInputTranscription?.text) {
+              // A new utterance is in progress. Wait for its finalized transcript.
+              clearTimeout(speechCompletionTimeout);
+            }
+            if (isLiveTranscribe && serverContent.inputTranscription?.text) {
+              // Only finalized segments belong in eval output. Interim hypotheses can be revised.
+              if (response_text_total) {
+                response_text_total += '\n';
+              }
+              response_text_total += serverContent.inputTranscription.text;
+              armSpeechCompletion();
+            }
             if (serverContent.modelTurn?.parts) {
               for (const part of serverContent.modelTurn.parts) {
                 if (part.text) {
@@ -1600,8 +1652,8 @@ export class GoogleLiveProvider implements ApiProvider {
               }
             }
 
-            if (hasMeaningfulLiveTranslateOutput) {
-              armLiveTranslateCompletion();
+            if (!isLiveTranscribe && hasMeaningfulLiveTranslateOutput) {
+              armSpeechCompletion();
             }
 
             if (inputComplete && contentIndex < contents.length) {
@@ -1815,7 +1867,7 @@ export class GoogleLiveProvider implements ApiProvider {
           return;
         }
         const messageIndex = ++receivedMessageIndex;
-        if (!isGemini38Live && !this.isVertex) {
+        if (!isGemini38Live && !isLiveTranscribe && !this.isVertex) {
           return processMessage(event, messageIndex);
         }
         armIdleTimeout();
@@ -1866,15 +1918,8 @@ export class GoogleLiveProvider implements ApiProvider {
    * @param fileRef The file reference in the format 'file://path/to/file:functionName'
    * @returns The loaded function
    */
-  private async loadExternalFunction(fileRef: string): Promise<Function> {
-    try {
-      return await loadCallbackFromFileUrl(fileRef);
-    } catch (error) {
-      if (error instanceof CallbackPathTraversalError) {
-        throw error;
-      }
-      throw wrapError(`Error loading function from ${fileRef}: ${(error as Error).message}`, error);
-    }
+  private loadExternalFunction(fileRef: string): Promise<Function> {
+    return loadProviderCallbackFromFileUrl(fileRef);
   }
 
   /**

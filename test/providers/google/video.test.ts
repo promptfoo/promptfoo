@@ -1,3 +1,5 @@
+const { createLoggerModule } = await vi.hoisted(async () => import('../../factories/logger'));
+
 import * as fs from 'fs';
 import path from 'path';
 
@@ -52,14 +54,7 @@ vi.mock('../../../src/util/fetch/index', () => ({
   fetchWithTimeout: (...args: unknown[]) => mockFetchWithTimeout(...args),
 }));
 
-vi.mock('../../../src/logger', () => ({
-  default: {
-    debug: vi.fn(),
-    info: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-  },
-}));
+vi.mock('../../../src/logger', () => createLoggerModule());
 
 const durationConstrainedConfigs = [
   ['reference images', { referenceImages: ['file://reference.png'] }],
@@ -406,7 +401,10 @@ describe('GoogleVideoProvider', () => {
       });
 
       expect((provider as any).loadImageData(fileRef)).toEqual({
-        data: Buffer.from('media-data').toString('base64'),
+        image: {
+          bytesBase64Encoded: Buffer.from('media-data').toString('base64'),
+          mimeType: 'image/png',
+        },
       });
       expect(fs.existsSync).toHaveBeenCalledWith(expectedPath);
     });
@@ -1497,133 +1495,146 @@ describe('GoogleVideoProvider', () => {
       );
     });
 
-    it('should create and poll Veo jobs through Google AI Studio with an API key', async () => {
-      mockProcessEnv({ GOOGLE_PROJECT_ID: undefined });
-      mockProcessEnv({ GOOGLE_API_KEY: 'test-api-key' });
+    it.each([
+      { apiKey: 'provider-api-key', optOutAt: undefined },
+      { apiKey: undefined, optOutAt: 'provider' },
+      { apiKey: undefined, optOutAt: 'prompt' },
+      { apiKey: 'provider-api-key', optOutAt: 'provider' },
+    ])(
+      'creates, polls and downloads AI Studio video with key=$apiKey and opt-out=$optOutAt',
+      async ({ apiKey, optOutAt }) => {
+        mockProcessEnv({ GOOGLE_PROJECT_ID: undefined });
+        mockProcessEnv({ GOOGLE_API_KEY: undefined });
 
-      const operationName = 'models/veo-3.1-generate-preview/operations/test-op';
-      const inputVideoUri =
-        'https://generativelanguage.googleapis.com/v1beta/files/previous-veo-video';
-      const videoUri = 'https://generativelanguage.googleapis.com/v1beta/files/test-video';
-      const videoBytes = Buffer.from('fake ai studio video data');
+        const operationName = 'models/veo-3.1-generate-preview/operations/test-op';
+        const inputVideoUri =
+          'https://generativelanguage.googleapis.com/v1beta/files/previous-veo-video';
+        const videoUri = 'https://generativelanguage.googleapis.com/v1beta/files/test-video';
+        const videoBytes = Buffer.from('fake ai studio video data');
 
-      mockFetchWithTimeout
-        .mockResolvedValueOnce(
-          new Response(JSON.stringify({ name: operationName, done: false }), {
-            status: 200,
-            headers: { 'Content-Type': 'application/json' },
-          }),
-        )
-        .mockResolvedValueOnce(
-          new Response(
-            JSON.stringify({
-              name: operationName,
-              done: true,
-              response: {
-                generateVideoResponse: {
-                  generatedSamples: [{ video: { uri: videoUri } }],
-                },
-              },
-            }),
-            {
+        mockFetchWithTimeout
+          .mockResolvedValueOnce(
+            new Response(JSON.stringify({ name: operationName, done: false }), {
               status: 200,
               headers: { 'Content-Type': 'application/json' },
-            },
-          ),
-        )
-        .mockResolvedValueOnce(
-          new Response(videoBytes, {
-            status: 200,
-            headers: { 'Content-Type': 'video/mp4' },
-          }),
-        );
+            }),
+          )
+          .mockResolvedValueOnce(
+            new Response(
+              JSON.stringify({
+                name: operationName,
+                done: true,
+                response: {
+                  generateVideoResponse: {
+                    generatedSamples: [{ video: { uri: videoUri } }],
+                  },
+                },
+              }),
+              {
+                status: 200,
+                headers: { 'Content-Type': 'application/json' },
+              },
+            ),
+          )
+          .mockResolvedValueOnce(
+            new Response(videoBytes, {
+              status: 200,
+              headers: { 'Content-Type': 'video/mp4' },
+            }),
+          );
 
-      const provider = new GoogleVideoProvider('veo-3.1-generate-preview', {
-        config: {
-          vertexai: false,
-          apiKey: 'provider-api-key',
-          pollIntervalMs: 10,
-          maxPollTimeMs: 5000,
-          sourceVideo: inputVideoUri,
-        },
-      });
-
-      const result = await provider.callApi('A cinematic shot of a lighthouse in a storm', {
-        prompt: {
+        const provider = new GoogleVideoProvider('veo-3.1-generate-preview', {
           config: {
-            vertexai: true,
-            apiKey: 'ignored-prompt-api-key',
-            projectId: 'ignored-prompt-project',
-            region: 'ignored-prompt-region',
-            credentials: '/ignored-prompt-credentials.json',
+            vertexai: false,
+            apiKey,
+            apiKeyRequired: optOutAt !== 'provider',
+            pollIntervalMs: 10,
+            maxPollTimeMs: 5000,
+            sourceVideo: inputVideoUri,
           },
-        },
-        evaluationId: 'eval-google-video-download',
-        promptIdx: 9,
-        testIdx: 10,
-      } as unknown as CallApiContextParams);
+        });
 
-      expect(result.error).toBeUndefined();
-      expect(result.metadata?.videoUri).toBe(videoUri);
-      expect(result.video?.model).toBe('veo-3.1-generate-preview');
-      expect(result.video?.blobRef?.uri).toContain('promptfoo://blob/');
-      expect(result.metadata?.sourceVideoUri).toBe(videoUri);
-      expect(result.metadata?.videoUri).toBe(videoUri);
-      expect(mockStoreBlob).toHaveBeenCalledWith(
-        expect.any(Buffer),
-        'video/mp4',
-        expect.objectContaining({
-          evalId: 'eval-google-video-download',
-          kind: 'video',
+        const result = await provider.callApi('A cinematic shot of a lighthouse in a storm', {
+          prompt: {
+            config: {
+              vertexai: true,
+              ...(optOutAt === 'prompt' ? { apiKeyRequired: false } : {}),
+              apiKey: 'ignored-prompt-api-key',
+              projectId: 'ignored-prompt-project',
+              region: 'ignored-prompt-region',
+              credentials: '/ignored-prompt-credentials.json',
+            },
+          },
+          evaluationId: 'eval-google-video-download',
           promptIdx: 9,
           testIdx: 10,
-        }),
-      );
-      expect(mockResolveProjectId).not.toHaveBeenCalled();
-      expect(mockFetchWithTimeout).toHaveBeenCalledTimes(3);
-      expect(mockFetchWithTimeout).toHaveBeenNthCalledWith(
-        1,
-        'https://generativelanguage.googleapis.com/v1beta/models/veo-3.1-generate-preview:predictLongRunning',
-        expect.objectContaining({
-          method: 'POST',
-          headers: expect.objectContaining({
-            'Content-Type': 'application/json',
-            'x-goog-api-key': 'provider-api-key',
+        } as unknown as CallApiContextParams);
+
+        expect(result.error).toBeUndefined();
+        expect(result.metadata?.videoUri).toBe(videoUri);
+        expect(result.video?.model).toBe('veo-3.1-generate-preview');
+        expect(result.video?.blobRef?.uri).toContain('promptfoo://blob/');
+        expect(result.metadata?.sourceVideoUri).toBe(videoUri);
+        expect(result.metadata?.videoUri).toBe(videoUri);
+        expect(mockStoreBlob).toHaveBeenCalledWith(
+          expect.any(Buffer),
+          'video/mp4',
+          expect.objectContaining({
+            evalId: 'eval-google-video-download',
+            kind: 'video',
+            promptIdx: 9,
+            testIdx: 10,
           }),
-        }),
-        expect.any(Number),
-      );
-      expect(mockFetchWithTimeout.mock.calls[0]?.[1]?.body).toContain(
-        '"prompt":"A cinematic shot of a lighthouse in a storm"',
-      );
-      expect(mockFetchWithTimeout.mock.calls[0]?.[1]?.body).toContain('"durationSeconds":8');
-      const requestBody = JSON.parse(mockFetchWithTimeout.mock.calls[0]?.[1]?.body as string);
-      expect(requestBody.instances[0].video).toEqual({
-        uri: inputVideoUri,
-      });
-      expect(mockFetchWithTimeout).toHaveBeenNthCalledWith(
-        2,
-        'https://generativelanguage.googleapis.com/v1beta/models/veo-3.1-generate-preview/operations/test-op',
-        expect.objectContaining({
-          method: 'GET',
-          headers: expect.objectContaining({
-            'x-goog-api-key': 'provider-api-key',
+        );
+        expect(mockResolveProjectId).not.toHaveBeenCalled();
+        expect(mockFetchWithTimeout).toHaveBeenCalledTimes(3);
+        expect(mockFetchWithTimeout).toHaveBeenNthCalledWith(
+          1,
+          'https://generativelanguage.googleapis.com/v1beta/models/veo-3.1-generate-preview:predictLongRunning',
+          expect.objectContaining({
+            method: 'POST',
+            headers: expect.objectContaining({
+              'Content-Type': 'application/json',
+              ...(apiKey ? { 'x-goog-api-key': apiKey } : {}),
+            }),
           }),
-        }),
-        expect.any(Number),
-      );
-      expect(mockFetchWithTimeout).toHaveBeenNthCalledWith(
-        3,
-        videoUri,
-        expect.objectContaining({
-          method: 'GET',
-          headers: expect.objectContaining({
-            'x-goog-api-key': 'provider-api-key',
+          expect.any(Number),
+        );
+        expect(mockFetchWithTimeout.mock.calls[0]?.[1]?.body).toContain(
+          '"prompt":"A cinematic shot of a lighthouse in a storm"',
+        );
+        expect(mockFetchWithTimeout.mock.calls[0]?.[1]?.body).toContain('"durationSeconds":8');
+        const requestBody = JSON.parse(mockFetchWithTimeout.mock.calls[0]?.[1]?.body as string);
+        expect(requestBody.instances[0].video).toEqual({
+          uri: inputVideoUri,
+        });
+        for (const [, init] of mockFetchWithTimeout.mock.calls) {
+          expect(new Headers(init?.headers).get('x-goog-api-key')).toBe(apiKey ?? null);
+        }
+        expect(mockFetchWithTimeout).toHaveBeenNthCalledWith(
+          2,
+          'https://generativelanguage.googleapis.com/v1beta/models/veo-3.1-generate-preview/operations/test-op',
+          expect.objectContaining({
+            method: 'GET',
+            headers: expect.objectContaining({
+              ...(apiKey ? { 'x-goog-api-key': apiKey } : {}),
+            }),
           }),
-        }),
-        expect.any(Number),
-      );
-    });
+          expect.any(Number),
+        );
+        expect(mockFetchWithTimeout).toHaveBeenNthCalledWith(
+          3,
+          videoUri,
+          expect.objectContaining({
+            method: 'GET',
+            headers: expect.objectContaining({
+              ...(apiKey ? { 'x-goog-api-key': apiKey } : {}),
+            }),
+          }),
+          expect.any(Number),
+        );
+      },
+    );
 
     it('omits a signed download-only URL from reusable video metadata', async () => {
       mockProcessEnv({ GOOGLE_PROJECT_ID: undefined });
@@ -2409,7 +2420,7 @@ describe('GoogleVideoProvider', () => {
     it.each([true, false])(
       'encodes first, last, and reference images for vertexai=%s',
       async (vertexai) => {
-        const imageData = Buffer.from('image data').toString('base64');
+        const imageData = Buffer.from([0xff, 0xd8, 0xff, 0xe0]).toString('base64');
         const operationName = 'models/veo-3.1-generate-preview/operations/image';
         const operation = {
           name: operationName,
@@ -2434,7 +2445,7 @@ describe('GoogleVideoProvider', () => {
         const body = JSON.parse(
           vertexai ? mockRequest.mock.calls[0][0].body : mockFetchWithTimeout.mock.calls[0][1].body,
         );
-        const image = { bytesBase64Encoded: imageData, mimeType: 'image/png' };
+        const image = { bytesBase64Encoded: imageData, mimeType: 'image/jpeg' };
 
         expect(result.error).toBeUndefined();
         expect(body.instances).toEqual([

@@ -3,11 +3,11 @@ import fs from 'fs';
 import path from 'path';
 
 import { storeBlob } from '../../blobs';
-import { getEnvString } from '../../envars';
 import logger from '../../logger';
 import { fetchWithTimeout } from '../../util/fetch/index';
 import { ellipsize } from '../../util/text';
 import { sleep } from '../../util/time';
+import { resolveProviderEnv } from '../env';
 import { sanitizeVideoSourceUri } from '../video/utils';
 import {
   determineGoogleVertexMode,
@@ -369,12 +369,8 @@ export class GoogleVideoProvider implements ApiProvider {
   private getLocation(config: GoogleVideoOptions = this.config): string {
     return (
       config.region ||
-      this.env?.VERTEX_REGION ||
-      this.env?.GOOGLE_CLOUD_LOCATION ||
-      this.env?.GOOGLE_LOCATION ||
-      getEnvString('VERTEX_REGION') ||
-      getEnvString('GOOGLE_CLOUD_LOCATION') ||
-      getEnvString('GOOGLE_LOCATION') ||
+      resolveProviderEnv(this.env, ['VERTEX_REGION', 'GOOGLE_CLOUD_LOCATION', 'GOOGLE_LOCATION'])
+        ?.value ||
       DEFAULT_LOCATION
     );
   }
@@ -427,7 +423,7 @@ export class GoogleVideoProvider implements ApiProvider {
 
   private async getAiStudioHeaders(config: GoogleVideoOptions): Promise<Record<string, string>> {
     const apiKey = this.getApiKey(config);
-    if (!apiKey) {
+    if (!apiKey && config.apiKeyRequired !== false) {
       throw new Error(
         'Google API key is not set. Set GOOGLE_API_KEY or GEMINI_API_KEY, or add `apiKey` to the provider config.',
       );
@@ -435,7 +431,7 @@ export class GoogleVideoProvider implements ApiProvider {
 
     return {
       'Content-Type': 'application/json',
-      'x-goog-api-key': apiKey,
+      ...(apiKey ? { 'x-goog-api-key': apiKey } : {}),
     };
   }
 
@@ -445,7 +441,8 @@ export class GoogleVideoProvider implements ApiProvider {
   private loadImageData(
     imagePath: string,
     config: Pick<GoogleVideoOptions, 'basePath'> = this.config,
-  ): { data?: string; error?: string } {
+  ): { image: { bytesBase64Encoded: string; mimeType: string } } | { error: string } {
+    let bytesBase64Encoded = imagePath;
     if (imagePath.startsWith('file://')) {
       const filePath = path.resolve(
         config.basePath || process.cwd(),
@@ -454,9 +451,11 @@ export class GoogleVideoProvider implements ApiProvider {
       if (!fs.existsSync(filePath)) {
         return { error: `Image file not found: ${filePath}` };
       }
-      return { data: fs.readFileSync(filePath).toString('base64') };
+      bytesBase64Encoded = fs.readFileSync(filePath).toString('base64');
     }
-    return { data: imagePath };
+    // Veo accepts JPEG and PNG input. Preserve the existing PNG default.
+    const mimeType = bytesBase64Encoded.startsWith('/9j/') ? 'image/jpeg' : 'image/png';
+    return { image: { bytesBase64Encoded, mimeType } };
   }
 
   private loadVideoData(
@@ -560,30 +559,24 @@ export class GoogleVideoProvider implements ApiProvider {
     addOptionalVideoParameter(parameters, 'storageUri', config.storageUri);
 
     if (config.image) {
-      const { data: imageData, error } = this.loadImageData(config.image, {
+      const result = this.loadImageData(config.image, {
         basePath: mediaBasePaths.image,
       });
-      if (error) {
-        return { error };
+      if ('error' in result) {
+        return result;
       }
-      instance.image = {
-        bytesBase64Encoded: imageData,
-        mimeType: 'image/png',
-      };
+      instance.image = result.image;
     }
 
     const lastFrame = config.lastFrame || config.lastImage;
     if (lastFrame) {
-      const { data: lastFrameData, error } = this.loadImageData(lastFrame, {
+      const result = this.loadImageData(lastFrame, {
         basePath: mediaBasePaths.lastFrame,
       });
-      if (error) {
-        return { error };
+      if ('error' in result) {
+        return result;
       }
-      instance.lastFrame = {
-        bytesBase64Encoded: lastFrameData,
-        mimeType: 'image/png',
-      };
+      instance.lastFrame = result.image;
     }
 
     if (config.referenceImages && config.referenceImages.length > 0) {
@@ -592,16 +585,13 @@ export class GoogleVideoProvider implements ApiProvider {
         const imagePath = typeof ref === 'string' ? ref : ref.image;
         const referenceType = typeof ref === 'string' ? 'asset' : ref.referenceType || 'asset';
 
-        const { data: imageData, error } = this.loadImageData(imagePath, {
+        const result = this.loadImageData(imagePath, {
           basePath: mediaBasePaths.referenceImages,
         });
-        if (error) {
-          return { error };
+        if ('error' in result) {
+          return result;
         }
-        refs.push({
-          image: { bytesBase64Encoded: imageData, mimeType: 'image/png' },
-          referenceType,
-        });
+        refs.push({ image: result.image, referenceType });
       }
       instance.referenceImages = refs;
     }
@@ -656,30 +646,24 @@ export class GoogleVideoProvider implements ApiProvider {
     }
 
     if (config.image) {
-      const { data: imageData, error } = this.loadImageData(config.image, {
+      const result = this.loadImageData(config.image, {
         basePath: mediaBasePaths.image,
       });
-      if (error) {
-        return { error };
+      if ('error' in result) {
+        return result;
       }
-      instance.image = {
-        mimeType: 'image/png',
-        bytesBase64Encoded: imageData,
-      };
+      instance.image = result.image;
     }
 
     const lastFrame = config.lastFrame || config.lastImage;
     if (lastFrame) {
-      const { data: lastFrameData, error } = this.loadImageData(lastFrame, {
+      const result = this.loadImageData(lastFrame, {
         basePath: mediaBasePaths.lastFrame,
       });
-      if (error) {
-        return { error };
+      if ('error' in result) {
+        return result;
       }
-      instance.lastFrame = {
-        mimeType: 'image/png',
-        bytesBase64Encoded: lastFrameData,
-      };
+      instance.lastFrame = result.image;
     }
 
     if (config.referenceImages && config.referenceImages.length > 0) {
@@ -687,19 +671,13 @@ export class GoogleVideoProvider implements ApiProvider {
       for (const ref of config.referenceImages.slice(0, 3)) {
         const imagePath = typeof ref === 'string' ? ref : ref.image;
         const referenceType = typeof ref === 'string' ? 'asset' : ref.referenceType || 'asset';
-        const { data: imageData, error } = this.loadImageData(imagePath, {
+        const result = this.loadImageData(imagePath, {
           basePath: mediaBasePaths.referenceImages,
         });
-        if (error) {
-          return { error };
+        if ('error' in result) {
+          return result;
         }
-        refs.push({
-          image: {
-            mimeType: 'image/png',
-            bytesBase64Encoded: imageData,
-          },
-          referenceType,
-        });
+        refs.push({ image: result.image, referenceType });
       }
       instance.referenceImages = refs;
     }
@@ -1142,11 +1120,12 @@ export class GoogleVideoProvider implements ApiProvider {
         vertexai: true,
         projectId,
       };
-    } else if (!this.getApiKey(effectiveConfig)) {
+    } else if (!this.getApiKey(effectiveConfig) && effectiveConfig.apiKeyRequired !== false) {
       const missingApiKeyError =
         'Google Veo video generation via Google AI Studio requires an API key. Set GOOGLE_API_KEY or GEMINI_API_KEY, or add `apiKey` to the provider config.';
 
-      if (effectiveConfig.vertexai === false) {
+      const useVertexEnv = resolveProviderEnv(this.env, ['GOOGLE_GENAI_USE_VERTEXAI'])?.value;
+      if (effectiveConfig.vertexai === false || useVertexEnv === 'false' || useVertexEnv === '0') {
         return { error: missingApiKeyError };
       }
 
