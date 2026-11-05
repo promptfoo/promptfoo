@@ -1052,6 +1052,10 @@ config:
   top_p: 0.9
 ```
 
+#### Llama 3.2 Vision
+
+AWS retired Llama 3.2 Vision. For an image eval on Bedrock, see the [Converse image example](https://github.com/promptfoo/promptfoo/blob/main/examples/amazon-bedrock/models/promptfooconfig.converse-images.yaml).
+
 ### Cohere Models
 
 For embedding evaluations, select a supported Cohere model using `bedrock:embeddings:<model-id>`. AWS lists embedding model IDs, supported input types, and regional availability in its [Cohere catalog](https://docs.aws.amazon.com/bedrock/latest/userguide/model-cards-cohere.html).

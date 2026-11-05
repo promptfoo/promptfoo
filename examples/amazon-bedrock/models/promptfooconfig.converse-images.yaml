@@ -15,9 +15,5 @@ tests:
   - vars:
       image: file://cat.jpg
     assert:
-      - type: contains-any
-        value:
-          - cat
-          - feline
-          - animal
-          - kitten
+      - type: javascript
+        value: /\b(cats?|kittens?|felines?)\b/i.test(output)
