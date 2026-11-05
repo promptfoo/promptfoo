@@ -118,6 +118,7 @@ The `inferenceModelType` config option supports the following values:
 - `deepseek` - For DeepSeek models
 - `openai` - For OpenAI open-weight (gpt-oss) models
 - `qwen` - For Alibaba Qwen models
+- `xai` - For xAI Grok Runtime profiles
 - `zai` - For Z.AI GLM models
 - `minimax` - For MiniMax models
 - `moonshot` - For Moonshot Kimi models
@@ -278,6 +279,9 @@ Because AWS changes that compatibility matrix over time, use the
 as the source of truth for current support.
 
 ### Model Context Protocol (MCP) Servers
+
+Client-side [`config.mcp`](/docs/integrations/mcp) is supported by Converse, Messages,
+Mantle Chat, and Runtime Chat. InvokeModel and both Responses modes do not support it.
 
 The Converse provider can attach [Model Context Protocol](https://modelcontextprotocol.io)
 servers and surface their tools to the model alongside any `tools` you configure
@@ -889,26 +893,51 @@ config:
 
 ### Claude Models
 
-For Claude models (e.g., `anthropic.claude-fable-5`, `anthropic.claude-sonnet-5`, `anthropic.claude-sonnet-4-6`, `anthropic.claude-sonnet-4-5-20250929-v1:0`, `anthropic.claude-haiku-4-5-20251001-v1:0`, `anthropic.claude-sonnet-4-20250514-v1:0`, `us.anthropic.claude-3-5-sonnet-20241022-v2:0`), you can use the following configuration options:
+Select the model card for your API and source Region. Its **Programmatic Access** section lists
+the IDs for Bedrock Runtime and Mantle, including geographic and global inference
+profiles. See [AWS's Claude model cards](https://docs.aws.amazon.com/bedrock/latest/userguide/model-cards-anthropic.html)
+and [Application Inference Profiles](#application-inference-profiles).
 
-**Note**: Claude Opus 4.8 (`anthropic.claude-opus-4-8`) and Claude Opus 4.7 (`anthropic.claude-opus-4-7`) are available via cross-region inference profiles (`us.`, `eu.`, `jp.`, `global.`) and, in select regions, through the base foundation model ID. Claude Opus 4.6 (`anthropic.claude-opus-4-6-v1`) and Claude Opus 4.5 (`anthropic.claude-opus-4-5-20251101-v1:0`) require an inference profile ARN and cannot be used as a direct model ID. See the [Application Inference Profiles](#application-inference-profiles) section for setup. promptfoo automatically omits unsupported sampling parameters (`temperature`, `topP`, and `topK` — including raw `top_k` in `additionalModelRequestFields`) and converts configured manual thinking to adaptive thinking for Opus 4.7, Opus 4.8, Opus 5, Opus 5.5, Sonnet 5, and Sonnet 5.5.
+Use `bedrock:<id>` for InvokeModel, `bedrock:converse:<id>` for Converse, or
+`bedrock:messages:<id>` for the Anthropic-compatible Messages API. For example, this
+configuration calls Haiku through a global Runtime inference profile:
 
-**Note**: [Claude Opus 5](https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-anthropic-claude-opus-5.html)
-uses `us.anthropic.claude-opus-5`,
-`eu.anthropic.claude-opus-5`, `au.anthropic.claude-opus-5`, or
-`global.anthropic.claude-opus-5` with Bedrock Runtime. The bare
-`anthropic.claude-opus-5` ID is also IAM-native: `bedrock:anthropic.claude-opus-5` uses
-InvokeModel, while `bedrock:converse:anthropic.claude-opus-5` uses Converse. Select
-`bedrock:messages:anthropic.claude-opus-5` explicitly only for the bearer-authenticated
-Anthropic-compatible Messages endpoint. There is no `jp.` profile. The
-global profile bills at $5/$25 per million input/output tokens; regional endpoints, including
-geo profiles, add the 10% regional premium.
+```yaml
+providers:
+  - id: bedrock:messages:global.anthropic.claude-haiku-5-5
+    config:
+      region: us-east-1
+```
 
-**Note**: Use Claude Opus 5.5 (`anthropic.claude-opus-5-5`) through a cross-region inference profile — `global.`, `us.`, `eu.`, `jp.`, or `au.` (for example, `bedrock:global.anthropic.claude-opus-5-5`). On-demand calls to the base model ID return a `ValidationException`. Cost is reported on both the `bedrock:` and `bedrock:converse:` paths: `global.` bills $4 / $20 per million input / output tokens, and geo profiles add the 10% regional premium.
+Messages uses Runtime for supported inference profiles. With a bare ID, promptfoo
+selects an in-region endpoint for the model, which can be Runtime or Mantle. Both accept a Bedrock API key or a temporary token
+generated from AWS credentials. Some models have different IDs on the two endpoints.
+For example, Haiku 4.5 uses the short `anthropic.claude-haiku-4-5` on Mantle and
+versioned profiles such as `global.anthropic.claude-haiku-4-5-20251001-v1:0` on Runtime.
 
-**Note**: Use Claude Sonnet 5.5 through the `global.` cross-region inference profile (`bedrock:global.anthropic.claude-sonnet-5-5`). On-demand calls to the base model ID (`anthropic.claude-sonnet-5-5`) return a `ValidationException`. Cost is reported on both the `bedrock:` and `bedrock:converse:` paths at $2 / $10 per million input / output tokens on the global profile. Sonnet 5.5 rejects `thinking: { type: 'disabled' }` and forced tool use, so promptfoo sends `thinking: { type: 'between_tools' }` instead (at effort `high` or below) and omits `any`/`tool` tool choices.
+#### Claude 5.5 routes and pricing
 
-**Note**: Claude Sonnet 5 (`anthropic.claude-sonnet-5`) is available through the base foundation model ID and the `us.`/`eu.`/`global.` cross-region inference profiles (e.g. `bedrock:global.anthropic.claude-sonnet-5`); use the `global.` profile for dynamic routing. Cost is reported on both the default `bedrock:` (InvokeModel) and `bedrock:converse:` paths — the `global.` endpoint bills at the standard $3/$15 rate and regional/geo profiles (`us.`/`eu.`) add the 10% Claude 4.5+ regional premium.
+Haiku, Sonnet, and Opus 5.5 support InvokeModel, Converse, and Messages through
+Runtime inference profiles. Select a `us-gov.` profile for GovCloud. Bare Haiku
+and Sonnet 5.5 Messages IDs also work on Mantle in GovCloud West. The [Haiku](https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-anthropic-claude-haiku-5-5.html),
+[Sonnet](https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-anthropic-claude-sonnet-5-5.html),
+and [Opus](https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-anthropic-claude-opus-5-5.html)
+model cards list available profiles and in-region endpoints.
+
+Promptfoo omits unsupported sampling parameters and converts manual thinking
+budgets to adaptive thinking for these models. Haiku accepts disabled thinking at
+effort `high` or below. For Sonnet, promptfoo converts disabled thinking to
+`between_tools` at those effort levels and omits forced tool choices.
+
+Promptfoo estimates token costs using the model, endpoint, and Region. For Haiku 5.5,
+the long-context tier applies above 100,000 total input tokens, including cache
+reads and writes. To estimate Haiku 4.5 on GovCloud Mantle, supply `cost` or both
+`inputCost` and `outputCost`. See [AWS pricing](https://aws.amazon.com/bedrock/pricing/)
+for current token, cache, and service-tier rates.
+
+For InvokeModel with an opaque application inference profile ARN, promptfoo omits the
+default temperature because it cannot identify the backing Claude model. Explicit
+temperatures are preserved; set `temperature: 0` only if that model supports sampling.
 
 #### Claude Fable and Mythos models
 
@@ -1001,9 +1030,17 @@ config:
   showThinking: true # Whether to include thinking content in the output (default: true)
 ```
 
-The InvokeModel path exposes no reasoning-effort field. To set the depth, use
-`bedrock:converse:` with `additionalModelRequestFields.output_config.effort`, or the
-[Anthropic provider](/docs/providers/anthropic), which takes a top-level `effort`.
+Set `config.effort` on InvokeModel providers to send `output_config.effort`.
+Converse accepts `additionalModelRequestFields.output_config.effort`, and the
+[Anthropic provider](/docs/providers/anthropic) also takes a top-level `effort`.
+Opus 4.5 supports `low`, `medium`, and `high`; InvokeModel automatically includes
+its required `effort-2025-11-24` beta for identifiable model IDs. For an opaque
+application inference profile backed by Opus 4.5, set
+`anthropic_beta: ['effort-2025-11-24']` explicitly. Configured beta flags are preserved.
+
+Haiku 5.5 supports `low`, `medium`, `high`, `xhigh`, and `max`; its default is `medium`.
+At `xhigh` or `max`, promptfoo omits unsupported disabled thinking while retaining
+the requested effort. Manual Haiku thinking budgets become adaptive thinking.
 
 Claude 4.5 models use manual budgets. Opus 4.6 and Sonnet 4.6 still accept them,
 but also support adaptive thinking:
@@ -1256,18 +1293,25 @@ providers:
 ```
 
 This route uses the AWS credential chain. A bare `bedrock:us.openai.gpt-5.6-sol` selects
-InvokeModel, which does not support GPT-5.6. The Bedrock provider does not implement Runtime's
-HTTP Chat Completions or Responses endpoints; use the explicit Converse route above or the
-Mantle selectors documented here.
+InvokeModel, which does not support GPT-5.6. For Runtime's HTTP endpoints, use
+`bedrock:runtime:chat:us.openai.gpt-5.6-sol` or
+`bedrock:runtime:responses:us.openai.gpt-5.6-sol`, as described below.
 
 ### xAI Grok Models
 
 Grok reaches Bedrock two different ways, depending on the model.
 
-**Grok 4.6** (`xai.grok-4.6`) supports Runtime **Converse** through the
+**Grok 4.7** requires a Runtime inference profile: use
+`bedrock:us.xai.grok-4.7` or `bedrock:global.xai.grok-4.7` for InvokeModel, or add
+`converse:` after `bedrock:` for Converse. Set `config.region` to a supported source region. The bare `xai.grok-4.7` ID is not a
+Mantle model. Converse supports Standard only. Set `service_tier: priority` or `flex` on InvokeModel, Runtime Chat, or Runtime Responses.
+Promptfoo uses the published geographic rates for `us.xai.grok-4.7` in AWS GovCloud, including cache reads.
+[AWS model card and pricing](https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-xai-grok-4-7.html)
+
+**Grok 4.6** (`xai.grok-4.6`) supports Runtime **InvokeModel and Converse** through the
 `us.xai.grok-4.6` and `global.xai.grok-4.6` inference profiles. The current
 [AWS model card](https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-xai-grok-4-6.html)
-does not list InvokeModel support. Use the explicit Converse selector with **ordinary AWS
+lists both native APIs. Use `bedrock:us.xai.grok-4.6` for InvokeModel or the explicit Converse selector with **ordinary AWS
 credentials** (no Bedrock API key required):
 
 ```yaml
@@ -1324,6 +1368,101 @@ providers:
   publish those rates.
 
 :::
+
+### Runtime Chat Completions and Responses
+
+Use `bedrock:runtime:chat:<model-id>` or `bedrock:runtime:responses:<model-id>` to
+select the OpenAI-compatible APIs on `bedrock-runtime`. These routes preserve Runtime
+model IDs, including supported geographic/global inference profiles and model ARNs.
+They use `https://bedrock-runtime.<region>.amazonaws.com/openai/v1` and accept the
+same Bedrock API key or AWS credential configuration as the Mantle adapters.
+
+The endpoint region is not inferred from a model ARN. Select the intended source region
+with `config.region` or the AWS region environment settings; without either, these routes
+use `us-east-1`.
+
+Closed OpenAI GPT models on Runtime Chat and Responses require a system inference profile,
+such as `us.openai.gpt-5.6-sol` or `global.openai.gpt-5.6-sol`, instead of a bare
+model ID or foundation-model ARN.
+[Grok 4.6](https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-xai-grok-4-6.html)
+and [Grok 4.7](https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-xai-grok-4-7.html)
+also require a `us.` or `global.` system profile on these Runtime APIs, such as
+`us.xai.grok-4.6` or `global.xai.grok-4.7`.
+
+[Runtime Responses permissions](https://docs.aws.amazon.com/bedrock/latest/userguide/inference-responses-api.html#bedrock-mantle-responses-runtime)
+require `bedrock:InvokeModel` on the account's default project
+(`arn:aws:bedrock:<region>:<account-id>:project/default`) as well as invocation
+permission on the inference target. That target requires `bedrock:InvokeModel`
+for non-streaming requests or `bedrock:InvokeModelWithResponseStream` for streaming;
+the project requires `bedrock:InvokeModel` in both cases.
+
+```yaml
+providers:
+  - id: bedrock:runtime:chat:openai.gpt-oss-120b-1:0
+    config:
+      region: us-east-1
+      max_completion_tokens: 256
+  - id: bedrock:runtime:responses:us.openai.gpt-5.6-sol
+    config:
+      region: us-east-1
+      max_output_tokens: 256
+      reasoning_effort: low
+      passthrough:
+        store: false
+```
+
+For models that support HTTP service tiers, set `service_tier` in the provider config.
+Both Runtime APIs reject the Converse-style `serviceTier` field.
+For example, use `bedrock:runtime:chat:us.moonshotai.kimi-k3` or
+`bedrock:runtime:responses:us.moonshotai.kimi-k3` with `service_tier: flex`.
+[Kimi K3](https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-moonshot-ai-kimi-k3.html)
+requires a supported US, India, or global inference profile on both Runtime APIs; bare
+model IDs and foundation-model ARNs are rejected before transport. Kimi supports Priority
+and Flex on the US, India, and global profiles, including Converse and InvokeModel.
+For US/global Kimi K3 and [Grok 4.6](https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-xai-grok-4-6.html)
+inference profiles, Runtime Chat and Responses cost estimates use Priority at 1.75× Standard
+and Flex at 0.5× Standard. Unpublished Grok cache-write rates remain unknown.
+
+Runtime cost estimates for GPT-6.1 Sol US/global inference profiles include its published
+Ultrafast rates. To request Ultrafast through Responses, set `service_tier: ultrafast`; see
+the [AWS model card](https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-openai-gpt-6-1-sol.html)
+for current API and regional availability.
+
+Runtime Chat supports client-side [`config.mcp`](#model-context-protocol-mcp-servers);
+Runtime Responses does not. Chat routes return the MCP tool result directly, without
+another model turn.
+
+The adapters inherit [OpenAI provider options](./openai.md), including streaming,
+client-side functions, structured output, multimodal input, and request fields through
+`passthrough`. Support depends on the chosen model and API. Configure Bedrock Guardrails
+for [Runtime Chat](https://docs.aws.amazon.com/bedrock/latest/userguide/inference-chat-completions.html)
+and [Runtime Responses](https://docs.aws.amazon.com/bedrock/latest/userguide/inference-responses-api.html#bedrock-mantle-responses-runtime)
+through request headers:
+
+```yaml
+config:
+  headers:
+    X-Amzn-Bedrock-GuardrailIdentifier: your-guardrail-id
+    X-Amzn-Bedrock-GuardrailVersion: '1'
+```
+
+Use `passthrough` for additional body fields. Do not put SDK `extra_headers` or
+`extra_body` wrappers inside the request body.
+
+Runtime Responses supports stored conversations (`previous_response_id`) and streaming,
+but does not support `background: true`, server-side tools, or GPT OSS models. Use
+Mantle Responses for GPT OSS. Neither Runtime Chat nor Responses supports application
+inference profiles. Only the account's default project is supported. Set `passthrough.store: false`
+when conversation storage is unnecessary. Keep a model ID on continuation requests.
+Automatic cost reporting requires verified Bedrock rates for the selected model/API/tier
+and sufficient token usage details; otherwise cost remains unset. Use `inputCost` and
+`outputCost` to supply explicit rates.
+
+Check AWS's [Chat Completions](https://docs.aws.amazon.com/bedrock/latest/userguide/inference-chat-completions.html)
+and [Responses](https://docs.aws.amazon.com/bedrock/latest/userguide/inference-responses-api.html)
+references for current endpoint and model support. Runtime does not expose `GET /models`;
+use `aws bedrock list-foundation-models` and `aws bedrock list-inference-profiles`.
+Existing `bedrock:mantle:<id>` and bare frontier-model selectors continue to use Mantle.
 
 ### Mantle Chat Completions (`bedrock:mantle:`) {#mantle-chat-completions}
 
@@ -1455,6 +1594,33 @@ Several Bedrock families speak the OpenAI Chat Completions schema over `InvokeMo
 one handler and the same configuration options. They also work through the [Converse API](#converse-api)
 (`bedrock:converse:<id>`).
 
+[GLM 5.3](https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-zai-glm-5-3.html)
+and [Kimi K3](https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-moonshot-ai-kimi-k3.html)
+require cross-region inference profiles. Use `bedrock:us.zai.glm-5.3` or
+`bedrock:us.moonshotai.kimi-k3`; both also accept `global.` profiles, and Kimi K3 accepts
+`in.moonshotai.kimi-k3` from supported India regions. GLM 5.3 InvokeModel accepts `reasoning_effort: max`; on Converse, set `additionalModelRequestFields: { reasoning_effort: max }`.
+For Converse, add `converse:` after `bedrock:`. Kimi K3 and GLM 5.3 Converse cost estimates
+include cache reads/writes for the published US/global rates and the India Kimi rate.
+For Kimi K3, set `serviceTier: { type: priority }` on Converse or `service_tier: priority`
+on InvokeModel for Priority processing. Use `flex` for Flex processing. India estimates cover Standard. GLM 5.3 Converse supports
+Standard, Priority, and Flex. InvokeModel cost remains unavailable for both models. Rates follow the model card and [AWS pricing](https://aws.amazon.com/bedrock/pricing/). AWS documents Kimi K3 Converse limitations for document inputs
+and multi-turn history containing reasoning blocks; remove earlier reasoning blocks
+before sending a subsequent Converse turn.
+
+For Kimi K3 Priority or Flex, use Runtime Chat Completions through the generic OpenAI provider:
+
+```yaml
+providers:
+  - id: openai:chat:global.moonshotai.kimi-k3
+    config:
+      apiBaseUrl: https://bedrock-runtime.us-east-1.amazonaws.com/openai/v1
+      apiKeyEnvar: AWS_BEARER_TOKEN_BEDROCK
+      omitDefaults: true
+      service_tier: priority # Or flex
+```
+
+Kimi K3 is available on Bedrock Runtime, not Mantle.
+
 | Family          | Example model IDs                                                                                                         |
 | --------------- | ------------------------------------------------------------------------------------------------------------------------- |
 | Z.AI GLM        | `zai.glm-5`, `zai.glm-4.7`, `zai.glm-4.7-flash`                                                                           |
@@ -1473,8 +1639,8 @@ providers:
       temperature: 0.7 # Optional — omit to use the model's own default
       top_p: 0.9 # Optional nucleus sampling
       stop: ['END'] # Optional stop sequences
-      reasoning_effort: high # Optional, reasoning models only ('low' | 'medium' | 'high')
-      showThinking: false # Strip <think>/<reasoning> blocks from the output (default: keep)
+      reasoning_effort: high # Optional; supported values depend on the model
+      showThinking: false # Hide supported reasoning output (default: keep)
       tools: [...] # Optional OpenAI-format tool definitions
       tool_choice: 'auto' # Optional tool selection strategy
 ```
@@ -1488,6 +1654,10 @@ providers:
   block. By default it is returned verbatim; set `showThinking: false` to return only the
   final answer. Give reasoning models a larger `max_tokens` budget so the answer is not
   truncated by the reasoning.
+- If the response supplies a separate `message.reasoning_content` string, promptfoo
+  includes it as `Thinking: ...` before the answer or tool calls unless `showThinking: false`.
+  The [Kimi API schema](https://platform.kimi.ai/docs/api/chat.md) documents this field;
+  its availability in Bedrock responses depends on the model and API.
 - **NVIDIA Nemotron** reasons in-line without tags, so `showThinking` cannot strip it.
   Disable its reasoning with NVIDIA's `/no_think` system directive instead (add a
   `system` message of `/no_think` to your prompt) for a direct answer.
@@ -1790,7 +1960,7 @@ This will show detailed AWS SDK logs including credential resolution.
 If you see this error when using an inference profile ARN:
 
 ```text
-Error: Inference profile requires inferenceModelType to be specified in config. Options: claude, nova, nova2, llama (defaults to v4), llama2, llama3, llama3.1, llama3.2, llama3.3, llama4, mistral, cohere, ai21, titan, deepseek, openai, qwen, zai, minimax, moonshot, nvidia, writer, gemma
+Error: Inference profile requires inferenceModelType to be specified in config. Options: claude, nova, nova2, llama (defaults to v4), llama2, llama3, llama3.1, llama3.2, llama3.3, llama4, mistral, cohere, ai21, titan, deepseek, openai, qwen, xai, zai, minimax, moonshot, nvidia, writer, gemma
 ```
 
 This means you're using an application inference profile ARN but haven't specified which model family it's configured for. Add the `inferenceModelType` to your configuration:

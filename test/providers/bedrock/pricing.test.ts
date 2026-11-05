@@ -321,11 +321,11 @@ describe('calculateBedrockCost', () => {
   it.each(['global.anthropic.claude-sonnet-5-5', 'anthropic.claude-sonnet-5-5'])(
     'prices Sonnet 5.5 at $2/$10 for %s, with the regional premium off global',
     (model) => {
-      // AWS price list (us-east-1, 2026-09-29): global $2 in / $10 out / $0.20 cache read /
+      // AWS price list (us-east-1, 2026-10-08): global $2 in / $10 out / $0.10 cache read /
       // $2.50 cache write; regional 1.1x. Also guards the first-match `includes()` lookup:
       // Sonnet 5's row must not win for `anthropic.claude-sonnet-5-5`.
-      // 1000*2 + 200*0.2 + 100*2.5 + 500*10 = 7,290 per 1e6
-      const expected = 0.00729 * (model.startsWith('global.') ? 1 : 1.1);
+      // 1000*2 + 200*0.1 + 100*2.5 + 500*10 = 7,270 per 1e6
+      const expected = 0.00727 * (model.startsWith('global.') ? 1 : 1.1);
       expect(calculateBedrockCost(model, 1000, 500, 200, 100)).toBeCloseTo(expected, 8);
       expect(calculateBedrockInvokeModelCost(model, 1000, 500, 200, 100)).toBeCloseTo(expected, 8);
     },
@@ -342,17 +342,17 @@ describe('calculateBedrockCost', () => {
     expect(calculateBedrockInvokeModelCost(model, 1000, 500, 200, 100)).toBeCloseTo(expected, 8);
   });
 
-  it('prices Claude Sonnet 5 at $3/$15 on the global endpoint (base rate)', () => {
+  it('prices Claude Sonnet 5 at $2/$10 on the global endpoint (base rate)', () => {
     // The global endpoint bills at the base rate; regional profiles add a premium (below).
     expect(calculateBedrockCost('global.anthropic.claude-sonnet-5', 100_000, 1_000)).toBeCloseTo(
-      (100_000 / 1e6) * 3 + (1_000 / 1e6) * 15,
+      (100_000 / 1e6) * 2 + (1_000 / 1e6) * 10,
       6,
     );
   });
 
   it('bills one-hour Claude cache writes at 2x the input rate', () => {
     const expectedCost =
-      (100 / 1e6) * 3 + (500 / 1e6) * 0.3 + (60 / 1e6) * 3.75 + (40 / 1e6) * 6 + (50 / 1e6) * 15;
+      (100 / 1e6) * 2 + (500 / 1e6) * 0.2 + (60 / 1e6) * 2.5 + (40 / 1e6) * 4 + (50 / 1e6) * 10;
 
     expect(
       calculateBedrockCost(
@@ -383,7 +383,7 @@ describe('calculateBedrockCost', () => {
     // Sonnet 5 bills its full 1M context at the same rate. Use the global endpoint to
     // isolate this from the regional premium.
     expect(calculateBedrockCost('global.anthropic.claude-sonnet-5', 300_000, 20_000)).toBeCloseTo(
-      (300_000 / 1e6) * 3 + (20_000 / 1e6) * 15,
+      (300_000 / 1e6) * 2 + (20_000 / 1e6) * 10,
       6,
     );
   });
@@ -391,7 +391,7 @@ describe('calculateBedrockCost', () => {
   it('applies the 10% regional premium to non-global Claude 4.5+ profiles (Sonnet 5, Opus 4.8, Sonnet 4.6)', () => {
     // Per Anthropic pricing, Claude 4.5+ models carry a 10% premium on regional/geo endpoints;
     // only the `global.` endpoint bills at the base rate.
-    const sonnet5Base = (100_000 / 1e6) * 3 + (1_000 / 1e6) * 15;
+    const sonnet5Base = (100_000 / 1e6) * 2 + (1_000 / 1e6) * 10;
     expect(calculateBedrockCost('us.anthropic.claude-sonnet-5', 100_000, 1_000)).toBeCloseTo(
       sonnet5Base * 1.1,
       6,
@@ -463,7 +463,7 @@ describe('calculateBedrockCost', () => {
     // because the allowlist only covered Fable/Mythos. Sonnet 5 is a Claude 5 model with a
     // verified rate, so it reports cost — the global endpoint at base and regional/geo profiles
     // with the 10% premium. Sonnet 4.6 (legacy Claude 4.x) stays fail-closed.
-    const base = (100 / 1e6) * 3 + (200 / 1e6) * 15;
+    const base = (100 / 1e6) * 2 + (200 / 1e6) * 10;
     expect(
       calculateBedrockInvokeModelCost(
         'global.anthropic.claude-sonnet-5',

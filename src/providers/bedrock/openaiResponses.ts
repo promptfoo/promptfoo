@@ -23,9 +23,9 @@ import { BedrockTokenProvider } from './tokenProvider';
 import type {
   CallApiContextParams,
   CallApiOptionsParams,
+  ProviderOptions,
   ProviderResponse,
-} from '../../types/index';
-import type { ProviderOptions } from '../../types/providers';
+} from '../../types/providers';
 import type { OpenAiCompletionOptions } from '../openai/types';
 
 type BedrockOpenAiResponsesBodyContext = Parameters<OpenAiResponsesProvider['getOpenAiBody']>[1];
@@ -210,6 +210,10 @@ export class BedrockOpenAiResponsesProvider extends OpenAiResponsesProvider {
     return typeof model === 'string' ? model : this.modelName;
   }
 
+  protected usesRuntimeApi(): boolean {
+    return false;
+  }
+
   async getOpenAiBody(
     prompt: string,
     context?: BedrockOpenAiResponsesBodyContext,
@@ -217,13 +221,13 @@ export class BedrockOpenAiResponsesProvider extends OpenAiResponsesProvider {
   ) {
     const model = this.getRequestModelName(context);
     const config = { ...this.config, ...context?.prompt?.config };
-    if (
-      isBedrockOpenAiResponsesModel(model) &&
-      (config.serviceTier !== undefined || config.passthrough?.serviceTier !== undefined)
-    ) {
+    if (config.serviceTier !== undefined || config.passthrough?.serviceTier !== undefined) {
       throw new Error(
         'Amazon Bedrock Responses uses service_tier. Replace serviceTier with service_tier to select an inference tier.',
       );
+    }
+    if (this.usesRuntimeApi()) {
+      return super.getOpenAiBody(prompt, context, callApiOptions);
     }
     if (
       isBedrockOpenAiResponsesModel(model) !== isBedrockOpenAiResponsesModel(this.modelName) ||
@@ -389,20 +393,21 @@ export class BedrockGptOssResponsesProvider extends BedrockOpenAiResponsesProvid
     }
     const region = getMantleEndpointRegion(new URL(this.getApiUrl())) ?? this.getBillingRegion();
     const rates = getBedrockPricing(model, region);
+    const inputRate = config.inputCost ?? config.cost ?? (rates && rates.input / 1_000_000);
+    const outputRate = config.outputCost ?? config.cost ?? (rates && rates.output / 1_000_000);
     const inputTokens = data.usage?.input_tokens;
     const outputTokens = data.usage?.output_tokens;
     if (
       !isBedrockGptOssResponsesModel(model) ||
-      !rates ||
+      inputRate === undefined ||
+      outputRate === undefined ||
       inputTokens === undefined ||
       outputTokens === undefined
     ) {
-      return super.applyBilling(result, data, config, cached);
+      // Estimates for uncatalogued models need both token counts and both manual rates.
+      return rates ? super.applyBilling(result, data, config, cached) : result;
     }
-    const cost = cached
-      ? 0
-      : inputTokens * (config.inputCost ?? config.cost ?? rates.input / 1_000_000) +
-        outputTokens * (config.outputCost ?? config.cost ?? rates.output / 1_000_000);
+    const cost = cached ? 0 : inputTokens * inputRate + outputTokens * outputRate;
     return { ...result, cost };
   }
 
