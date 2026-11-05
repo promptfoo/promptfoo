@@ -38,7 +38,7 @@ assert:
 
 The negated `not-similar` assertion is the logical inverse: with an array of values it passes only when the output is dissimilar to **every** value (and fails as soon as it is too similar to any one of them). This is the natural way to assert that an output does not resemble any item in a list of forbidden or canned answers.
 
-Token usage includes every reference compared before the assertion returns, including unsuccessful comparisons. References after an early return do not contribute usage.
+Token usage includes every reference compared before the assertion returns, including unsuccessful comparisons. Each comparison follows the same usage accounting rules as a standalone similarity assertion. References after an early return do not contribute usage.
 
 ## Similarity Metrics
 

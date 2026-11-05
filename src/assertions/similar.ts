@@ -1,7 +1,9 @@
 import { matchesSimilarity } from '../matchers/similarity';
 import invariant from '../util/invariant';
-import { accumulateTokenUsage } from '../util/tokenUsageUtils';
-import { normalizeAssertionTokenUsage } from './assertionsResult';
+import {
+  accumulateNormalizedAssertionTokenUsage,
+  normalizeAssertionTokenUsage,
+} from './assertionsResult';
 
 import type { AssertionParams, GradingResult, TokenUsage } from '../types/index';
 
@@ -84,7 +86,10 @@ export const handleSimilar = async ({
         metric,
         providerCallContext,
       );
-      accumulateTokenUsage(tokensUsed, normalizeAssertionTokenUsage(result));
+      const normalizedUsage = normalizeAssertionTokenUsage(result);
+      if (normalizedUsage) {
+        accumulateNormalizedAssertionTokenUsage(tokensUsed, normalizedUsage);
+      }
       allCached &&= result.metadata?.cachedResponse === true;
       if (inverse ? !result.pass : result.pass) {
         return withAccumulatedUsage({ assertion, ...result }, tokensUsed, allCached);

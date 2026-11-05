@@ -79,7 +79,7 @@ export function normalizeAssertionTokenUsage(
   };
 }
 
-function accumulateNormalizedAssertionTokenUsage(
+export function accumulateNormalizedAssertionTokenUsage(
   target: NonNullable<GradingResult['tokensUsed']>,
   update: NonNullable<GradingResult['tokensUsed']>,
 ): void {

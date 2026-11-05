@@ -1,9 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { runAssertions } from '../../src/assertions/index';
+import * as cache from '../../src/cache';
 import cliState from '../../src/cliState';
 import * as remoteGeneration from '../../src/redteam/remoteGeneration';
 import * as remoteGrading from '../../src/remoteGrading';
 import { createMockProvider } from '../factories/provider';
+import { createMockFetchResponse } from '../providers/mockProviderResponses';
+
+import type { TokenUsage } from '../../src/types/index';
 
 beforeEach(() => {
   cliState.config = {};
@@ -26,7 +30,11 @@ describe('similarity array token usage', () => {
       const tokens = index === 0 ? 7 : 11;
       return {
         similarity: testCase.scores[index],
-        tokenUsage: { total: tokens, prompt: tokens, numRequests: 1 },
+        tokenUsage: {
+          prompt: tokens,
+          numRequests: 1,
+          completionDetails: { reasoning: index + 1 },
+        },
       };
     });
     const provider = Object.assign(createMockProvider(), { callSimilarityApi });
@@ -47,7 +55,12 @@ describe('similarity array token usage', () => {
     expect(result.pass).toBe(testCase.pass);
     expect(result.score).toBeCloseTo(testCase.score);
     expect(callSimilarityApi).toHaveBeenCalledTimes(2);
-    expect(result.tokensUsed).toMatchObject({ total: 18, prompt: 18, numRequests: 2 });
+    expect(result.tokensUsed).toMatchObject({
+      total: 18,
+      prompt: 18,
+      numRequests: 2,
+      completionDetails: { reasoning: 3 },
+    });
     expect(result.componentResults?.[0].tokensUsed).toMatchObject({ total: 18, numRequests: 2 });
   });
 
@@ -88,4 +101,57 @@ describe('similarity array token usage', () => {
     });
     expect(result.metadata?.cachedResponse === true).toBe(allCached);
   });
+
+  it.each([
+    { name: 'absent usage', usage: undefined, cached: false },
+    {
+      name: 'partial usage',
+      usage: { prompt: 3, completion: 2, completionDetails: { reasoning: 1 } },
+      cached: false,
+    },
+    {
+      name: 'partial incurred usage',
+      usage: {
+        prompt: 3,
+        completion: 2,
+        incurredTokenUsage: { prompt: 1, completion: 1, numRequests: 1 },
+      },
+      cached: false,
+    },
+    { name: 'cached partial usage', usage: { prompt: 3, completion: 2 }, cached: true },
+  ] satisfies Array<{ name: string; usage: TokenUsage | undefined; cached: boolean }>)(
+    'uses scalar assertion accounting for remote $name',
+    async ({ usage, cached }) => {
+      cliState.config = { redteam: {} };
+      vi.spyOn(remoteGeneration, 'shouldGenerateRemote').mockReturnValue(true);
+      const fetch = vi.spyOn(cache, 'fetchWithCache').mockResolvedValue(
+        createMockFetchResponse(
+          {
+            result: {
+              pass: false,
+              score: 0.1,
+              reason: 'Below threshold',
+              tokensUsed: usage,
+            },
+          },
+          { cached },
+        ),
+      );
+      const values = ['first', 'second'];
+      const arrayResult = await runAssertions({
+        test: { assert: [{ type: 'similar', value: values, threshold: 0.8 }] },
+        providerResponse: { output: 'output' },
+      });
+      const scalarResults = await runAssertions({
+        test: {
+          assert: values.map((value) => ({ type: 'similar', value, threshold: 0.8 })),
+        },
+        providerResponse: { output: 'output' },
+      });
+
+      expect(fetch).toHaveBeenCalledTimes(4);
+      expect(arrayResult.pass).toBe(false);
+      expect(arrayResult.tokensUsed).toEqual(scalarResults.tokensUsed);
+    },
+  );
 });
