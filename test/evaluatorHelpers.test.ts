@@ -919,6 +919,37 @@ describe('evaluatorHelpers', () => {
       expect(renderedPrompt).toBe(JSON.stringify({ text: '{{x}}{{y}}' }, null, 2));
     });
 
+    it('should ignore render failures in a value shadowed by a local set binding', async () => {
+      const renderedPrompt = await renderPrompt(
+        toPrompt("{% set v = 'ok' %}{{v}}"),
+        { v: "{% set local = 'x' %}{{local | missing_filter}}" },
+        {},
+      );
+
+      expect(renderedPrompt).toBe('ok');
+    });
+
+    it('should not decode a literal nested inside another expression string', async () => {
+      const value = `{{ name ~ "{{ 'x' }}" }}`;
+      const renderedPrompt = await renderPrompt(
+        toPrompt('{"text": "{{v}}"}'),
+        { v: value, name: 'defined' },
+        {},
+      );
+
+      expect(renderedPrompt).toBe(JSON.stringify({ text: value }, null, 2));
+    });
+
+    it('should not start quote tracking on an apostrophe in plain text', async () => {
+      const renderedPrompt = await renderPrompt(
+        toPrompt('{"text": "{{v}}"}'),
+        { v: `don't {{ '{{' }} {{x}}`, x: 'yes' },
+        {},
+      );
+
+      expect(renderedPrompt).toBe(JSON.stringify({ text: "don't {{ yes" }, null, 2));
+    });
+
     it('should render a raw-carrying var to literal text when JSON autoescape is disabled', async () => {
       mockProcessEnv({ PROMPTFOO_DISABLE_JSON_AUTOESCAPE: 'true' });
       const renderedPrompt = await renderPrompt(

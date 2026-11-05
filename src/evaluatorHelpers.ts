@@ -30,6 +30,7 @@ import {
   extractVariablesFromExpression,
   extractVariablesFromTemplate,
   getNunjucksEngine,
+  templateReferencesVariable,
 } from './util/templates';
 import { transform } from './util/transform';
 import { loadYaml } from './util/yamlLoad';
@@ -194,7 +195,7 @@ function computeNestingDepths(
       }
       inComment = false;
     }
-    if (quote || QUOTE_CHARACTERS.has(ch)) {
+    if (depth > 0 && (quote || QUOTE_CHARACTERS.has(ch))) {
       const next = advanceQuoteState(ch, quote);
       quote = next.quote;
       if (next.escaped) {
@@ -449,8 +450,12 @@ function decodeProtectedLiteralFragments(
   const commentSpans = collectCommentSpans(value);
   const commentStarts = new Set(commentSpans.map(([start]) => start));
   const protectedSpans: Array<[number, number]> = [...rawSpans, ...commentSpans];
+  const nestingDepths = computeNestingDepths(value, rawSpans);
   let rawIdx = 0;
   for (const match of value.matchAll(new RegExp(PROTECTED_LITERAL_EXPRESSION_REGEX, 'g'))) {
+    if (nestingDepths[match.index] > 0) {
+      continue;
+    }
     while (rawIdx < rawSpans.length && match.index >= rawSpans[rawIdx][1]) {
       rawIdx++;
     }
@@ -487,13 +492,21 @@ function shouldRenderAllVarTemplates(
   }
 }
 
+function extractUnboundVariables(template: string): string[] {
+  const candidates =
+    extractVariablesFromExpression(template) ?? extractVariablesFromTemplate(template);
+  return candidates.filter((reference) => {
+    const key = /^([A-Za-z_]\w*)/.exec(reference)?.[1];
+    return key !== undefined && templateReferencesVariable(template, key);
+  });
+}
+
 function collectPromptReferencedVars(
   basePrompt: string,
   vars: Record<string, VarValue>,
 ): Set<string> {
   const referenced = new Set<string>();
-  const pending =
-    extractVariablesFromExpression(basePrompt) ?? extractVariablesFromTemplate(basePrompt);
+  const pending = extractUnboundVariables(basePrompt);
   while (pending.length > 0) {
     const reference = pending.pop()!;
     const key = /^([A-Za-z_]\w*)/.exec(reference)?.[1];
@@ -505,8 +518,7 @@ function collectPromptReferencedVars(
     if (typeof value !== 'string') {
       continue;
     }
-    const dependencies =
-      extractVariablesFromExpression(value) ?? extractVariablesFromTemplate(value);
+    const dependencies = extractUnboundVariables(value);
     pending.push(...dependencies);
   }
   return referenced;
