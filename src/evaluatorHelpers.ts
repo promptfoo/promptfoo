@@ -564,6 +564,20 @@ function referencesUndefinedVariables(template: string, vars: Record<string, Var
     }
   }
   scrubbed = mapSpans(scrubbed, nested, () => '');
+  const unboundReferences = extractUnboundVariablesFromTemplate(scrubbed);
+  if (unboundReferences) {
+    return unboundReferences.some((variableName) => {
+      const rootVariableName = /^([A-Za-z_]\w*)/.exec(variableName)?.[1];
+      return Boolean(
+        rootVariableName &&
+          !['env', 'range'].includes(rootVariableName) &&
+          vars[rootVariableName] === undefined,
+      );
+    });
+  }
+  // Parse-failure fallback. Keep the conservative regex/RHS analysis below for
+  // malformed templates; valid templates use the same scope walker as reference
+  // collection so a set target is bound only after its initializer is read.
   // Names bound by {% set ... %} inside the template are local bindings, not
   // external dependencies; the extractor has no notion of them. But the RHS
   // of a set can reference external variables, so those still count.

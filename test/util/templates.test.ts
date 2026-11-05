@@ -73,6 +73,24 @@ describe('extractVariablesFromTemplate', () => {
     const template = 'This is a static template without variables.';
     expect(extractVariablesFromTemplate(template)).toEqual([]);
   });
+
+  it('should handle an unterminated if tag without quadratic backtracking', () => {
+    const template = `{% if ${'a'.repeat(64000)}`;
+    const started = performance.now();
+    expect(extractVariablesFromTemplate(template)).toEqual([]);
+    const elapsed = performance.now() - started;
+
+    expect(elapsed).toBeLessThan(250);
+  });
+
+  it('should handle many unterminated tags in one pass', () => {
+    const template = '{% if bad '.repeat(20000);
+    const started = performance.now();
+    expect(extractVariablesFromTemplate(template)).toEqual([]);
+    const elapsed = performance.now() - started;
+
+    expect(elapsed).toBeLessThan(250);
+  });
 });
 
 describe('extractVariablesFromTemplates', () => {

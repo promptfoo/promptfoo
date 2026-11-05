@@ -969,6 +969,31 @@ describe('evaluatorHelpers', () => {
       }
     });
 
+    it('should not clone the accumulated scope for every local assignment', async () => {
+      const OriginalSet = globalThis.Set;
+      let copiedElements = 0;
+      const CountingSet = class extends OriginalSet {
+        constructor(values?: any) {
+          super(values);
+          if (values) {
+            copiedElements += values.size ?? values.length ?? 0;
+          }
+        }
+      };
+      vi.stubGlobal('Set', CountingSet);
+      try {
+        const value = Array.from(
+          { length: 1000 },
+          (_, index) => `{% set local${index} = 'x' %}`,
+        ).join('');
+        await renderPrompt(toPrompt('{"text":"{{v}}"}'), { v: value }, {});
+
+        expect(copiedElements).toBeLessThan(5000);
+      } finally {
+        vi.unstubAllGlobals();
+      }
+    });
+
     it('should not decode a literal nested inside another expression string', async () => {
       const value = `{{ name ~ "{{ 'x' }}" }}`;
       const renderedPrompt = await renderPrompt(
@@ -1012,6 +1037,13 @@ describe('evaluatorHelpers', () => {
       expect(renderedPrompt).toBe(
         JSON.stringify({ text: '{% raw %}{{x}}{% endraw %} {{y}}' }, null, 2),
       );
+    });
+
+    it('should preserve a set target referenced by its own initializer when undefined', async () => {
+      const value = '{% set x = x %}{{x}}';
+      const renderedPrompt = await renderPrompt(toPrompt('{{v}}'), { v: value }, {});
+
+      expect(renderedPrompt).toBe(value);
     });
 
     it('should render a quoted literal to text even when its inner variable is undefined', async () => {

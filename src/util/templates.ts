@@ -111,12 +111,24 @@ function addBindingNames(scope: ReadonlySet<string>, node: unknown): Set<string>
   return nextScope;
 }
 
+function addBindingNamesInPlace(scope: Set<string>, node: unknown): void {
+  for (const name of collectBindingNames(node)) {
+    scope.add(name);
+  }
+}
+
 function addNamesToScope(scope: ReadonlySet<string>, names: readonly string[]): Set<string> {
   const nextScope = new Set(scope);
   for (const name of names) {
     nextScope.add(name);
   }
   return nextScope;
+}
+
+function addNamesToScopeInPlace(scope: Set<string>, names: readonly string[]): void {
+  for (const name of names) {
+    scope.add(name);
+  }
 }
 
 function collectFromImportBindingNames(namesNode: unknown): string[] {
@@ -148,7 +160,7 @@ function astNodeListReferencesVariable(
   parent: NunjucksParentContext,
   boundSymbols: ReadonlySet<string>,
 ): boolean {
-  let scope = new Set(boundSymbols);
+  const scope = new Set(boundSymbols);
   for (const item of nodes) {
     if (!isNunjucksAstNode(item)) {
       continue;
@@ -157,13 +169,13 @@ function astNodeListReferencesVariable(
       return true;
     }
     if (item.typename === 'Set') {
-      scope = addBindingNames(scope, item.targets);
+      addBindingNamesInPlace(scope, item.targets);
     } else if (item.typename === 'Macro') {
-      scope = addBindingNames(scope, item.name);
+      addBindingNamesInPlace(scope, item.name);
     } else if (item.typename === 'Import') {
-      scope = addBindingNames(scope, item.target);
+      addBindingNamesInPlace(scope, item.target);
     } else if (item.typename === 'FromImport') {
-      scope = addNamesToScope(scope, collectFromImportBindingNames(item.names));
+      addNamesToScopeInPlace(scope, collectFromImportBindingNames(item.names));
     }
   }
   return false;
@@ -525,6 +537,80 @@ export function getNunjucksEngine(
   return env;
 }
 
+function isTemplateWhitespace(char: string | undefined): boolean {
+  return char !== undefined && /\s/.test(char);
+}
+
+function skipTemplateWhitespace(template: string, start: number, end: number): number {
+  let index = start;
+  while (index < end && isTemplateWhitespace(template[index])) {
+    index++;
+  }
+  return index;
+}
+
+function stripClosedComments(template: string): string {
+  const chunks: string[] = [];
+  let cursor = 0;
+  let start = template.indexOf('{#');
+  while (start !== -1) {
+    const end = template.indexOf('#}', start + 2);
+    if (end === -1) {
+      break;
+    }
+    chunks.push(template.slice(cursor, start));
+    cursor = end + 2;
+    start = template.indexOf('{#', cursor);
+  }
+  chunks.push(template.slice(cursor));
+  return chunks.join('');
+}
+
+function readOutputVariable(template: string, start: number, end: number): string | undefined {
+  let index = skipTemplateWhitespace(template, start + 2, end);
+  const tokenStart = index;
+  while (index < end && !/[{}\s|]/.test(template[index]!)) {
+    index++;
+  }
+  const variable = template.slice(tokenStart, index);
+  index = skipTemplateWhitespace(template, index, end);
+  if (variable && index === end) {
+    return variable;
+  }
+  if (!variable || template[index] !== '|') {
+    return undefined;
+  }
+
+  index++;
+  let hasFilterContent = false;
+  for (; index < end; index++) {
+    if (template[index] === '}') {
+      return undefined;
+    }
+    hasFilterContent = true;
+  }
+  return hasFilterContent ? variable : undefined;
+}
+
+function readBlockVariable(template: string, start: number, end: number): string | undefined {
+  let index = skipTemplateWhitespace(template, start + 2, end);
+  const keyword = template.startsWith('if', index)
+    ? 'if'
+    : template.startsWith('for', index)
+      ? 'for'
+      : '';
+  if (!keyword || !isTemplateWhitespace(template[index + keyword.length])) {
+    return undefined;
+  }
+
+  index = skipTemplateWhitespace(template, index + keyword.length, end);
+  const tokenStart = index;
+  while (index < end && !/[{}\s]/.test(template[index]!)) {
+    index++;
+  }
+  return index > tokenStart ? template.slice(tokenStart, index) : undefined;
+}
+
 /**
  * Parse Nunjucks template to extract variables.
  * @param template - The Nunjucks template string.
@@ -532,23 +618,57 @@ export function getNunjucksEngine(
  */
 export function extractVariablesFromTemplate(template: string): string[] {
   const variableSet = new Set<string>();
-  const regex =
-    /\{\{[\s]*([^{}\s|]+)[\s]*(?:\|[^}]+)?\}\}|\{%[\s]*(?:if|for)[\s]+([^{}\s]+)[\s]*.*?%\}/g;
-  const commentRegex = /\{#[\s\S]*?#\}/g;
+  // Remove only closed comments, matching the old non-greedy regex without
+  // backtracking through an unterminated comment.
+  template = stripClosedComments(template);
 
-  // Remove comments
-  template = template.replace(commentRegex, '');
+  // Scan tags directly instead of using a body-wide `.*?`. Close positions are
+  // cached across malformed nested openers, so an unterminated long tag is one
+  // linear pass rather than quadratic regex backtracking.
+  let cursor = 0;
+  const openerPattern = /\{\{|\{%/g;
+  let outputEnd: number | undefined;
+  let blockEnd: number | undefined;
+  while (cursor < template.length) {
+    openerPattern.lastIndex = cursor;
+    const opener = openerPattern.exec(template);
+    if (!opener) {
+      break;
+    }
+    const start = opener.index;
+    const isOutput = opener[0] === '{{';
+    let end = isOutput ? outputEnd : blockEnd;
+    if (end === undefined || (end >= 0 && end < start + 2)) {
+      end = template.indexOf(isOutput ? '}}' : '%}', start + 2);
+      if (isOutput) {
+        outputEnd = end;
+      } else {
+        blockEnd = end;
+      }
+    }
+    if (end === -1) {
+      // The suffix has no close for this tag kind. Keep -1 cached so later
+      // malformed openers do not each rescan the same suffix.
+      cursor = start + 2;
+      continue;
+    }
 
-  let match;
-  while ((match = regex.exec(template)) !== null) {
-    const variable = match[1] || match[2];
+    const variable = isOutput
+      ? readOutputVariable(template, start, end)
+      : readBlockVariable(template, start, end);
     if (variable) {
-      // Split by dot and add only the full path
       variableSet.add(variable);
+      cursor = end + 2;
+    } else {
+      // A malformed outer tag can contain a complete inner tag. Resume after
+      // this opener instead of skipping the first close, preserving the old
+      // conservative behavior for nested placeholders.
+      cursor = start + 2;
     }
   }
 
   // Handle for loops separately
+  let match;
   const forLoopRegex = /\{%[\s]*for[\s]+(\w+)[\s]+in[\s]+(\w+)[\s]*%\}/g;
   while ((match = forLoopRegex.exec(template)) !== null) {
     variableSet.delete(match[1]); // Remove loop variable
