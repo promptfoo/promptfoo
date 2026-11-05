@@ -286,6 +286,39 @@ describe('VertexChatProvider.callGeminiApi', () => {
     mockIsCacheEnabled.mockReturnValue(true);
   });
 
+  it('returns the file transcript with its timestamp and speaker metadata', async () => {
+    const words = [{ word: 'Hello', startOffset: '0s', endOffset: '0.5s' }];
+    const audioTranscription = { text: 'Hello', speakerLabel: 'speaker-1', words };
+    const provider = new VertexChatProvider('gemini-3.5-transcribe', {
+      config: {
+        region: 'global',
+        generationConfig: { audioTranscriptionConfig: { wordTimestamp: true } },
+      },
+    });
+    const request = mockVertexRequest({
+      candidates: [{ content: { parts: [{ audioTranscription }] }, finishReason: 'STOP' }],
+    });
+    const parts = [{ inlineData: { mimeType: 'audio/wav', data: 'UklGRg==' } }];
+    const result = await provider.callApi(JSON.stringify([{ role: 'user', parts }]));
+    expect(request).toHaveBeenCalledWith(
+      expect.objectContaining({
+        url: expect.stringContaining(
+          '/locations/global/publishers/google/models/gemini-3.5-transcribe:generateContent',
+        ),
+        data: expect.objectContaining({
+          contents: [{ role: 'user', parts }],
+          generationConfig: expect.objectContaining({
+            audioTranscriptionConfig: { wordTimestamp: true },
+          }),
+        }),
+      }),
+    );
+    expect(result).toMatchObject({
+      output: 'Hello',
+      metadata: { audioTranscriptions: [audioTranscription] },
+    });
+  });
+
   it.each(['gemini-3.6-flash', 'gemini-3.5-flash-lite'])(
     'omits unsupported sampling controls for %s',
     async (modelName) => {
@@ -3293,9 +3326,9 @@ describe('VertexChatProvider.callLlamaApi', () => {
               choices: [{ message: { content: 'Llama 4 response content' } }],
               usage: { total_tokens: 30, prompt_tokens: 10, completion_tokens: 20 },
             });
-            provider = new VertexChatProvider('llama-4-scout-17b-16e-instruct-maas');
+            provider = new VertexChatProvider('meta/llama-4-scout-17b-16e-instruct-maas');
 
-            const response = await provider.callLlamaApi('test prompt');
+            const response = await provider.callApi('test prompt');
 
             expect(response.error).toBeUndefined();
             expect(GoogleAuthManager.resolveRegion).toHaveBeenCalledWith(
@@ -3306,6 +3339,9 @@ describe('VertexChatProvider.callLlamaApi', () => {
             );
             expect(mockRequest).toHaveBeenCalledWith(
               expect.objectContaining({
+                data: expect.objectContaining({
+                  model: 'meta/llama-4-scout-17b-16e-instruct-maas',
+                }),
                 url: expect.stringContaining(
                   'us-east5-aiplatform.googleapis.com/v1beta1/projects/test-project-id/locations/us-east5/endpoints/openapi/chat/completions',
                 ),
