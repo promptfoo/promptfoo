@@ -946,14 +946,14 @@ describe('PythonProvider', () => {
     it('cancels an owned config read before a pool exists and joins its cleanup', async () => {
       const close = createDeferred<void>();
       const entered = createDeferred<AbortSignal | undefined>();
-      const read = vi.spyOn(fileReference, 'processConfigFileReferences').mockImplementationOnce(
-        async (_config, _basePath, signal) => {
+      const read = vi
+        .spyOn(fileReference, 'processConfigFileReferences')
+        .mockImplementationOnce(async (_config, _basePath, signal) => {
           entered.resolve(signal);
           await close.promise;
           signal?.throwIfAborted();
           return {};
-        },
-      );
+        });
       const provider = new PythonProvider('script.py');
       const initialization = provider.initialize();
       const rejected = expect(initialization).rejects.toThrow('interrupted by cleanup');
