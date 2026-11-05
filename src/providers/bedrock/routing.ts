@@ -49,7 +49,24 @@ export function getBedrockRuntimeModelError(
   ) {
     return 'Grok 4.6 and 4.7 on Bedrock Runtime require a system inference profile, such as us.xai.grok-4.6 or global.xai.grok-4.7.';
   }
-  if (/^(?:openai\.)?gpt-\d/.test(foundationModel)) {
+  const mantleOnlyGpt =
+    /^(?:[^:/]+\.)?(?:openai\.)?(gpt-5\.6-cyber|gpt-daybreak-blue-5\.6-sol)$/.exec(profileModel);
+  if (mantleOnlyGpt) {
+    return `Use the Mantle provider bedrock:responses:openai.${mantleOnlyGpt[1]} for this model.`;
+  }
+  // Validate published GPT profiles while allowing future profile IDs to reach Bedrock.
+  const knownGpt =
+    /^(?:[^:/]+\.)?(?:openai\.)?(gpt-(?:5\.[45]|5\.6-(?:luna|sol|terra)|6-(?:astra|luna|sol)|6\.1-(?:sol|terra)))$/.exec(
+      profileModel,
+    )?.[1];
+  const supportedGptProfile =
+    profileModel === `us.openai.${knownGpt}` ||
+    profileModel === `global.openai.${knownGpt}` ||
+    /^(?:in|us-gov)\.openai\.gpt-5\.6-(?:luna|terra)$/.test(profileModel);
+  if (
+    /^(?:openai\.)?gpt-\d/.test(profileModel) ||
+    (knownGpt && (isFoundationModelArn || !supportedGptProfile))
+  ) {
     return 'Closed OpenAI GPT models on Bedrock Runtime require a system inference profile, such as us.openai.gpt-5.6-sol or global.openai.gpt-5.6-sol.';
   }
   return undefined;

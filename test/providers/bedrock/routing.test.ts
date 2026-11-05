@@ -32,29 +32,51 @@ describe('Bedrock inference-profile compatibility', () => {
 });
 
 describe.each(['runtime-chat', 'runtime-responses'] as const)('%s profile validation', (mode) => {
-  it.each(['zai.glm-5.3', 'moonshotai.kimi-k3', 'xai.grok-4.6', 'xai.grok-4.7'])(
-    'rejects unsupported profiles for the known model %s',
-    (model) => {
-      for (const prefix of ['eu.', 'fabricated.', 'us.eu.', '']) {
-        const id = `${prefix}${model}`;
-        for (const selector of [
-          id,
-          `arn:aws:bedrock:us-east-1:123456789012:inference-profile/${id}`,
-        ]) {
-          expect(getBedrockRuntimeModelError(mode, selector)).toContain(
-            'a system inference profile',
-          );
-        }
+  it.each([
+    'zai.glm-5.3',
+    'moonshotai.kimi-k3',
+    'xai.grok-4.6',
+    'xai.grok-4.7',
+    'openai.gpt-5.6-sol',
+  ])('rejects unsupported profiles for the known model %s', (model) => {
+    for (const prefix of ['eu.', 'fabricated.', 'us.eu.', '']) {
+      const id = `${prefix}${model}`;
+      for (const selector of [
+        id,
+        `arn:aws:bedrock:us-east-1:123456789012:inference-profile/${id}`,
+      ]) {
+        expect(getBedrockRuntimeModelError(mode, selector)).toContain('a system inference profile');
       }
-      for (const id of [model, `us.${model}`]) {
-        expect(
-          getBedrockRuntimeModelError(mode, `arn:aws:bedrock:us-east-1::foundation-model/${id}`),
-        ).toContain('a system inference profile');
-      }
-    },
-  );
+    }
+    for (const id of [model, `us.${model}`]) {
+      expect(
+        getBedrockRuntimeModelError(mode, `arn:aws:bedrock:us-east-1::foundation-model/${id}`),
+      ).toContain('a system inference profile');
+    }
+  });
 
   it.each([
+    'openai.gpt-5.6-cyber',
+    'us.openai.gpt-5.6-cyber',
+    'openai.gpt-daybreak-blue-5.6-sol',
+    'arn:aws:bedrock:us-east-1:123456789012:inference-profile/global.openai.gpt-daybreak-blue-5.6-sol',
+  ])('redirects the Mantle-only ID %s', (model) => {
+    expect(getBedrockRuntimeModelError(mode, model)).toContain('Mantle provider');
+  });
+
+  it.each(['us-gov', 'in'])('rejects the %s profile for a model without one', (prefix) => {
+    expect(getBedrockRuntimeModelError(mode, prefix + '.openai.gpt-5.6-sol')).toContain(
+      'a system inference profile',
+    );
+  });
+
+  it.each([
+    'us.openai.gpt-5.4',
+    'global.openai.gpt-5.5',
+    'in.openai.gpt-5.6-luna',
+    'in.openai.gpt-5.6-terra',
+    'us-gov.openai.gpt-5.6-terra',
+    'us-gov.openai.gpt-5.6-luna',
     'us.zai.glm-5.3',
     'global.zai.glm-5.3',
     'us.moonshotai.kimi-k3',
@@ -76,6 +98,8 @@ describe.each(['runtime-chat', 'runtime-responses'] as const)('%s profile valida
   });
 
   it.each([
+    'eu.openai.gpt-7-future',
+    'arn:aws:bedrock:us-east-1:123456789012:custom-model/my.eu.openai.gpt-5.6-sol',
     'eu.zai.glm-5.4',
     'eu.moonshotai.kimi-k4',
     'eu.xai.grok-4.8',

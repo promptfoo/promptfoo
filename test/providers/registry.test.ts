@@ -35,6 +35,9 @@ describe('Bedrock Runtime OpenAI API routing', () => {
   it.each([
     'openai.gpt-5.6-sol',
     'gpt-6.1-sol',
+    'eu.openai.gpt-5.6-sol',
+    'us.gpt-5.6-sol',
+    'arn:aws:bedrock:us-east-1:123456789012:inference-profile/fabricated.openai.gpt-5.6-sol',
     'arn:aws:bedrock:us-east-1::foundation-model/openai.gpt-5.6-sol',
   ])('requires a system profile for closed GPT Runtime model %s', async (model) => {
     for (const api of ['chat', 'responses']) {
