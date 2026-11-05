@@ -10,6 +10,11 @@ import type {
   ProviderEmbeddingResponse,
 } from '../../types/index';
 
+interface AzureEmbeddingData {
+  data?: { embedding?: number[] }[];
+  usage?: { total_tokens?: number; prompt_tokens?: number; completion_tokens?: number };
+}
+
 export class AzureEmbeddingProvider extends AzureGenericProvider {
   readonly supportsEmbeddingCancellation = true;
 
@@ -29,13 +34,10 @@ export class AzureEmbeddingProvider extends AzureGenericProvider {
       model: this.deploymentName,
       ...(this.config.dimensions === undefined ? {} : { dimensions: this.config.dimensions }),
     };
-    let data,
-      cached = false,
-      status: number | undefined,
-      statusText = '',
-      deleteFromCache: (() => Promise<void>) | undefined;
+    const failedRequestUsage = { total: 0, prompt: 0, completion: 0, numRequests: 1 };
+    let response;
     try {
-      ({ data, cached, status, statusText, deleteFromCache } = (await fetchWithCache(
+      response = await fetchWithCache<AzureEmbeddingData>(
         `${this.getApiBaseUrl()}/openai/deployments/${this.deploymentName}/embeddings?api-version=${
           this.config.apiVersion || DEFAULT_AZURE_API_VERSION
         }`,
@@ -52,70 +54,39 @@ export class AzureEmbeddingProvider extends AzureGenericProvider {
         getRequestTimeoutMs(),
         'json',
         shouldBustProviderCache(context),
-      )) as unknown as any);
+      );
     } catch (err) {
       options?.abortSignal?.throwIfAborted();
+      return { error: `API call error: ${String(err)}`, tokenUsage: failedRequestUsage };
+    }
+
+    const { cached, data, status, statusText } = response;
+    if (status < 200 || status >= 300) {
+      const detail = typeof data === 'string' ? data : JSON.stringify(data);
       return {
-        error: `API call error: ${String(err)}`,
-        tokenUsage: {
-          total: 0,
-          prompt: 0,
-          completion: 0,
-          numRequests: 1,
-        },
+        error: `API error: ${status} ${statusText}\n${detail}`,
+        tokenUsage: failedRequestUsage,
       };
     }
 
-    if (status && (status < 200 || status >= 300)) {
-      return {
-        error: `API error: ${status} ${statusText}\n${
-          typeof data === 'string' ? data : JSON.stringify(data)
-        }`,
-        tokenUsage: {
-          total: 0,
-          prompt: 0,
-          completion: 0,
+    const usage = data?.usage;
+    const tokenUsage = cached
+      ? { cached: usage?.total_tokens, total: usage?.total_tokens, numRequests: 1 }
+      : {
+          total: usage?.total_tokens,
+          prompt: usage?.prompt_tokens,
+          completion: usage?.completion_tokens,
           numRequests: 1,
-        },
-      };
-    }
-
+        };
     try {
       const embedding = data?.data?.[0]?.embedding;
       if (!embedding) {
-        // Evict 2xx responses with missing embeddings so they aren't replayed from cache.
-        await deleteFromCache?.();
+        await response.deleteFromCache?.();
         throw new Error('No embedding returned');
       }
-      const ret: ProviderEmbeddingResponse = {
-        embedding,
-        cached, // surface the cache hit so downstream skips rate-limit delays / metrics are accurate
-        tokenUsage: cached
-          ? { cached: data?.usage?.total_tokens, total: data?.usage?.total_tokens, numRequests: 1 }
-          : {
-              total: data?.usage?.total_tokens,
-              prompt: data?.usage?.prompt_tokens,
-              completion: data?.usage?.completion_tokens,
-              numRequests: 1,
-            },
-      };
-      return ret;
+      return { embedding, cached, tokenUsage };
     } catch (err) {
-      return {
-        error: `API response error: ${String(err)}: ${JSON.stringify(data)}`,
-        tokenUsage: cached
-          ? {
-              cached: data?.usage?.total_tokens,
-              total: data?.usage?.total_tokens,
-              numRequests: 1,
-            }
-          : {
-              total: data?.usage?.total_tokens,
-              prompt: data?.usage?.prompt_tokens,
-              completion: data?.usage?.completion_tokens,
-              numRequests: 1,
-            },
-      };
+      return { error: `API response error: ${String(err)}: ${JSON.stringify(data)}`, tokenUsage };
     }
   }
 }
