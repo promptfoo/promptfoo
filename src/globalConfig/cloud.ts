@@ -1,4 +1,4 @@
-import { createHmac } from 'node:crypto';
+import { randomBytes, scryptSync } from 'node:crypto';
 
 import logger from '../logger';
 import { readGlobalConfig, writeGlobalConfigPartial } from './globalConfig';
@@ -105,23 +105,26 @@ interface CompletedLogin {
 }
 
 // A different CLI version can write these fields one by one. Bind them before using its token.
-function loginFingerprint(login: CompletedLogin): string {
-  return createHmac('sha256', login.token)
-    .update(
-      JSON.stringify([
-        login.apiHost.replace(/\/+$/, ''),
-        login.appUrl,
-        login.authHeaderName,
-        login.userId,
-        login.organizationId,
-        login.teamId,
-      ]),
-    )
-    .digest('hex');
+function loginFingerprint(login: CompletedLogin, salt: string): string {
+  const fields = JSON.stringify([
+    login.token,
+    login.apiHost.replace(/\/+$/, ''),
+    login.appUrl,
+    login.authHeaderName,
+    login.userId,
+    login.organizationId,
+    login.teamId,
+  ]);
+  return scryptSync(fields, salt, 32, { N: 32768, r: 8, p: 3, maxmem: 64 * 1024 * 1024 }).toString(
+    'hex',
+  );
 }
 
 export function recordCompletedShareLogin(login: CompletedLogin): void {
-  writeGlobalConfigPartial({ completedShareLogin: loginFingerprint(login) });
+  const salt = randomBytes(16).toString('hex');
+  writeGlobalConfigPartial({
+    completedShareLogin: { salt, fingerprint: loginFingerprint(login, salt) },
+  });
 }
 
 export class CloudConfig {
@@ -294,7 +297,7 @@ export class CloudConfig {
   /** Pick up a second terminal's login only when it targets the same deployment and team. */
   async reloadCredentialForCurrentTeam(userId: string): Promise<boolean> {
     const saved = readGlobalConfig({ initialize: false });
-    if (!userId || !saved?.completedShareLogin || !saved.cloud?.apiKey) {
+    if (!userId || !saved?.completedShareLogin?.salt || !saved.cloud?.apiKey) {
       return false;
     }
     const next = new CloudConfig(false);
@@ -314,16 +317,19 @@ export class CloudConfig {
     ) {
       return false;
     }
-    const fingerprint = loginFingerprint({
-      token: saved.cloud.apiKey,
-      apiHost: next.getApiHost(),
-      appUrl: next.getAppUrl(),
-      authHeaderName: next.getAuthHeaderName(),
-      userId,
-      organizationId: org,
-      teamId: team,
-    });
-    if (saved.completedShareLogin !== fingerprint) {
+    const fingerprint = loginFingerprint(
+      {
+        token: saved.cloud.apiKey,
+        apiHost: next.getApiHost(),
+        appUrl: next.getAppUrl(),
+        authHeaderName: next.getAuthHeaderName(),
+        userId,
+        organizationId: org,
+        teamId: team,
+      },
+      saved.completedShareLogin.salt,
+    );
+    if (saved.completedShareLogin.fingerprint !== fingerprint) {
       return false;
     }
     const identity = await this.validateApiToken(
