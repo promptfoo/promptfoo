@@ -189,10 +189,21 @@ describe('Provider Registry', () => {
       await expect(loadApiProvider('openai:decisions')).rejects.toThrow(/model/i);
     });
 
-    it.each(['azure:decisions:gpt-6-luna', 'azureopenai:decisions:gpt-6-luna'])(
-      'rejects unsupported endpoint %s',
+    it.each(['azure:decisions:decision-deployment', 'azureopenai:decisions:decision-deployment'])(
+      'loads Azure Decisions endpoint %s',
       async (providerPath) => {
-        await expect(loadApiProvider(providerPath)).rejects.toThrow('openai:decisions:');
+        const provider = await loadApiProvider(providerPath, {
+          options: { config: { apiKey: 'azure-test-key', apiHost: 'example.openai.azure.com' } },
+        });
+        expect(provider.constructor.name).toBe('AzureDecisionsProvider');
+        expect(provider.id()).toBe('azure:decisions:decision-deployment');
+      },
+    );
+
+    it.each(['azure:decisions', 'azure:decisions:', 'azureopenai:decisions'])(
+      'requires a deployment for %s',
+      async (providerPath) => {
+        await expect(loadApiProvider(providerPath)).rejects.toThrow('requires a deployment name');
       },
     );
   });

@@ -1,5 +1,6 @@
 import type { EnvOverrides } from '../../types/env';
 import type { MCPConfig } from '../mcp/types';
+import type { DecisionQuestion } from '../openai/decisionsProtocol';
 import type { AssistantFunctionCallback, GPT5ReasoningEffort } from '../openai/types';
 
 /**
@@ -151,6 +152,31 @@ export interface AzureResponsesOptions extends Omit<AzureChatResponsesOptions, '
   service_tier?: 'auto' | 'default' | 'flex' | 'priority' | null;
 }
 
+/**
+ * Options specific to the Azure Decisions provider.
+ */
+export interface AzureDecisionsOptions
+  extends Pick<
+    AzureCompletionOptions,
+    | 'apiHost'
+    | 'apiBaseUrl'
+    | 'apiKey'
+    | 'apiKeyEnvar'
+    | 'headers'
+    | 'azureClientId'
+    | 'azureClientSecret'
+    | 'azureTenantId'
+    | 'azureAuthorityHost'
+    | 'azureTokenScope'
+  > {
+  questions?: DecisionQuestion[];
+  safety_identifier?: string | null;
+  maxRetries?: number;
+  cost?: number;
+  inputCost?: number;
+  outputCost?: number;
+}
+
 export interface AzureModelCost {
   id: string;
   cost: {
@@ -227,7 +253,10 @@ export type AzureAssistantOptions = AzureCompletionOptions & {
 };
 
 export interface AzureProviderOptions<
-  TConfig extends AzureCompletionOptions | AzureResponsesOptions = AzureCompletionOptions,
+  TConfig extends
+    | AzureCompletionOptions
+    | AzureResponsesOptions
+    | AzureDecisionsOptions = AzureCompletionOptions,
 > {
   config?: TConfig;
   id?: string;

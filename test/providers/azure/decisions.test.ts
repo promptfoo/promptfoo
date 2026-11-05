@@ -1,0 +1,343 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { fetchWithCache } from '../../../src/cache';
+import { AzureDecisionsProvider } from '../../../src/providers/azure/decisions';
+import { HttpRateLimitError } from '../../../src/util/fetch/errors';
+import { mockProcessEnv } from '../../util/utils';
+
+import type { CallApiContextParams } from '../../../src/types/index';
+
+vi.mock('../../../src/cache', async (importOriginal) => ({
+  ...(await importOriginal()),
+  fetchWithCache: vi.fn(),
+}));
+
+const question = {
+  type: 'predicate' as const,
+  name: 'refund',
+  instructions: 'Does this request a refund?',
+};
+const answer = { type: 'predicate', name: 'refund', probability: 0.95 };
+const usage = { input_tokens: 20, output_tokens: 0, total_tokens: 20 };
+const config = {
+  apiKey: 'azure-fixture-secret',
+  apiHost: 'example.openai.azure.com',
+  questions: [question],
+};
+const context = (extra: Partial<CallApiContextParams> = {}): CallApiContextParams => ({
+  prompt: { raw: 'Refund me', label: 'ticket' },
+  vars: {},
+  ...extra,
+});
+
+function mockResponse(answers: unknown[] = [answer]) {
+  vi.mocked(fetchWithCache).mockResolvedValue({
+    data: { model: 'resolved-model', answers, usage },
+    cached: false,
+    status: 200,
+    statusText: 'OK',
+    headers: { 'x-request-id': 'request-1' },
+  });
+}
+
+describe('AzureDecisionsProvider', () => {
+  mockProcessEnv({
+    OPENAI_API_KEY: 'ambient-openai-secret',
+    AZURE_API_KEY: '',
+    AZURE_OPENAI_API_KEY: '',
+    AZURE_API_BASE_URL: '',
+    AZURE_OPENAI_API_BASE_URL: '',
+    AZURE_OPENAI_BASE_URL: '',
+    AZURE_API_HOST: '',
+    AZURE_OPENAI_API_HOST: '',
+  });
+
+  beforeEach(() => {
+    vi.mocked(fetchWithCache).mockReset();
+    mockResponse();
+  });
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it.each([
+    { apiHost: 'example.openai.azure.com' },
+    { apiBaseUrl: 'https://example.openai.azure.com/' },
+    { apiBaseUrl: 'https://example.openai.azure.com/openai' },
+    { apiBaseUrl: 'https://example.openai.azure.com/openai/v1/' },
+  ])('uses the v1 endpoint with %j', async (endpoint) => {
+    const provider = new AzureDecisionsProvider('custom-deployment', {
+      config: { ...config, apiHost: undefined, ...endpoint },
+    });
+    const result = await provider.callApi('Refund me');
+    const [url, request] = vi.mocked(fetchWithCache).mock.calls[0]!;
+    expect(request).toBeDefined();
+    expect(url).toBe('https://example.openai.azure.com/openai/v1/decisions');
+    expect(JSON.parse(request!.body as string)).toEqual({
+      model: 'custom-deployment',
+      input: 'Refund me',
+      questions: [question],
+    });
+    expect(request!.headers).toMatchObject({ 'api-key': config.apiKey });
+    expect(JSON.stringify(request)).not.toContain('ambient-openai-secret');
+    expect(JSON.parse(result.output as string)).toEqual({ answers: [answer] });
+    expect(result.tokenUsage).toMatchObject({ prompt: 20, completion: 0, total: 20 });
+    expect(result.metadata).toMatchObject({ model: 'resolved-model', requestId: 'request-1' });
+    expect(result.cost).toBeUndefined();
+  });
+
+  it('requires an Azure endpoint before transport', async () => {
+    const provider = new AzureDecisionsProvider('deployment', {
+      config: { apiKey: config.apiKey, questions: [question] },
+    });
+
+    await expect(provider.callApi('Refund me')).rejects.toThrow('Azure API configuration missing');
+    expect(fetchWithCache).not.toHaveBeenCalled();
+  });
+
+  it('resolves Azure environment overrides without OpenAI credential fallback', async () => {
+    const provider = new AzureDecisionsProvider('deployment', {
+      config: { questions: [question] },
+      env: {
+        AZURE_OPENAI_API_KEY: 'scoped-azure-secret',
+        AZURE_OPENAI_API_BASE_URL: 'https://scoped.openai.azure.com',
+      },
+    });
+    await provider.callApi('Refund me');
+    expect(vi.mocked(fetchWithCache).mock.calls[0]![0]).toBe(
+      'https://scoped.openai.azure.com/openai/v1/decisions',
+    );
+    expect(vi.mocked(fetchWithCache).mock.calls[0]![1]!.headers).toMatchObject({
+      'api-key': 'scoped-azure-secret',
+    });
+  });
+
+  it('uses Entra authentication and refreshes expiring tokens', async () => {
+    const getToken = vi
+      .fn()
+      .mockResolvedValueOnce({ token: 'entra-token-one', expiresOnTimestamp: Date.now() + 1000 })
+      .mockResolvedValue({ token: 'entra-token-two', expiresOnTimestamp: Date.now() + 3600000 });
+    const credential = vi
+      .spyOn(AzureDecisionsProvider.prototype, 'getAzureTokenCredential')
+      .mockResolvedValue({ getToken });
+    const provider = new AzureDecisionsProvider('deployment', {
+      config: { ...config, apiKey: undefined },
+    });
+    await provider.callApi('Refund me');
+    expect(credential).toHaveBeenCalled();
+    expect(getToken).toHaveBeenCalledWith('https://cognitiveservices.azure.com/.default');
+    expect(vi.mocked(fetchWithCache).mock.calls[0]![1]!.headers).toMatchObject({
+      Authorization: 'Bearer entra-token-two',
+    });
+    expect(JSON.stringify(vi.mocked(fetchWithCache).mock.calls[0][1])).not.toContain(
+      'ambient-openai-secret',
+    );
+  });
+
+  it('fails when Azure authentication fails instead of using the OpenAI key', async () => {
+    vi.spyOn(AzureDecisionsProvider.prototype, 'getAzureTokenCredential').mockRejectedValue(
+      new Error('No Azure identity'),
+    );
+    const provider = new AzureDecisionsProvider('deployment', {
+      config: { ...config, apiKey: undefined },
+    });
+    await expect(provider.callApi('Refund me')).rejects.toThrow('Azure Authentication failed');
+    expect(fetchWithCache).not.toHaveBeenCalled();
+  });
+
+  it('supports choice and score questions with validated distributions', async () => {
+    const questions = [
+      {
+        type: 'choice' as const,
+        name: 'team',
+        instructions: 'Choose a team',
+        choices: [{ value: 'billing' }, { value: 'other' }],
+      },
+      {
+        type: 'score' as const,
+        name: 'urgency',
+        instructions: 'Assess urgency',
+        levels: [{ label: 'low' }, { label: 'high' }],
+      },
+    ];
+    const answers = [
+      {
+        type: 'choice',
+        name: 'team',
+        choice: 'billing',
+        confidence: 0.9,
+        probabilities: [
+          { value: 'billing', probability: 0.9 },
+          { value: 'other', probability: 0.1 },
+        ],
+      },
+      {
+        type: 'score',
+        name: 'urgency',
+        score: 0.8,
+        confidence: 0.8,
+        probabilities: [
+          { value: 0, label: 'low', probability: 0.2 },
+          { value: 1, label: 'high', probability: 0.8 },
+        ],
+      },
+    ];
+    mockResponse(answers);
+    const provider = new AzureDecisionsProvider('deployment', { config: { ...config, questions } });
+    expect(JSON.parse((await provider.callApi('Refund me')).output as string)).toEqual({ answers });
+    mockResponse([{ ...answers[0], probabilities: [] }, answers[1]]);
+    expect((await provider.callApi('Refund me')).error).toMatch(
+      /Invalid Azure Decisions API response/,
+    );
+  });
+
+  it('normalizes inline image input and renders questions', async () => {
+    const provider = new AzureDecisionsProvider('deployment', {
+      config: {
+        ...config,
+        questions: [{ ...question, instructions: 'Is this {{category}}?' }],
+      },
+    });
+    await provider.callApi(
+      JSON.stringify([
+        {
+          role: 'user',
+          content: [{ type: 'image_url', image_url: { url: 'data:image/png;base64,aW1hZ2U=' } }],
+        },
+      ]),
+      context({ vars: { category: 'damaged' } }),
+    );
+    const body = JSON.parse(vi.mocked(fetchWithCache).mock.calls[0]![1]!.body as string);
+    expect(body.input[0].content[0]).toMatchObject({
+      type: 'input_image',
+      image_url: 'data:image/png;base64,aW1hZ2U=',
+    });
+    expect(body.questions[0].instructions).toBe('Is this damaged?');
+  });
+
+  it.each([{ questions: [] }, { questions: [question, question] }])(
+    'rejects invalid questions before transport: %j',
+    async (invalid) => {
+      const provider = new AzureDecisionsProvider('deployment', {
+        config: { ...config, ...invalid },
+      });
+      expect((await provider.callApi('Refund me')).error).toMatch(
+        /Invalid Azure Decisions request/,
+      );
+      expect(fetchWithCache).not.toHaveBeenCalled();
+    },
+  );
+
+  it('rejects hosted image URLs before transport', async () => {
+    const provider = new AzureDecisionsProvider('deployment', { config });
+    expect(
+      (
+        await provider.callApi(
+          JSON.stringify([
+            {
+              role: 'user',
+              content: [{ type: 'input_image', image_url: 'https://example.com/image.png' }],
+            },
+          ]),
+        )
+      ).error,
+    ).toMatch(/inline base64/);
+    expect(fetchWithCache).not.toHaveBeenCalled();
+  });
+
+  it('preserves refusals as typed answers', async () => {
+    mockResponse([{ name: 'refund', type: 'refusal' }]);
+    const provider = new AzureDecisionsProvider('deployment', { config });
+    expect(await provider.callApi('Refund me')).toMatchObject({
+      isRefusal: true,
+      output: JSON.stringify({ answers: [{ name: 'refund', type: 'refusal' }] }),
+    });
+  });
+
+  it('redacts credentials from API errors and raw diagnostics', async () => {
+    vi.mocked(fetchWithCache).mockImplementation(
+      async (_url, _request, _timeout, _format, cacheOptions) => {
+        const data = { error: { message: `Bad key ${config.apiKey}` } };
+        const sanitized =
+          typeof cacheOptions === 'object'
+            ? cacheOptions.sanitizeResponse?.({
+                data,
+                statusText: config.apiKey,
+                headers: { 'x-request-id': config.apiKey },
+              })
+            : undefined;
+        return {
+          ...sanitized,
+          data: sanitized?.data ?? data,
+          cached: false,
+          status: 401,
+          statusText: config.apiKey,
+        };
+      },
+    );
+    const provider = new AzureDecisionsProvider('deployment', { config });
+    const result = await provider.callApi('Refund me');
+    expect(result.error).toContain('Azure Decisions API error (401)');
+    expect(JSON.stringify(result)).not.toContain(config.apiKey);
+  });
+
+  it('reports rate limits without owning a second retry loop', async () => {
+    const error = new HttpRateLimitError({
+      status: 429,
+      statusText: 'Too Many Requests',
+      headers: { 'retry-after': '2' },
+    });
+    vi.mocked(fetchWithCache).mockRejectedValue(error);
+    const provider = new AzureDecisionsProvider('deployment', { config });
+    const result = await provider.callApi('Refund me');
+    expect(provider.handlesOwnRetries).toBe(true);
+    expect(result.metadata).toMatchObject({ http: { status: 429 } });
+    expect(fetchWithCache).toHaveBeenCalledTimes(1);
+  });
+
+  it('forwards cancellation and cache bypass', async () => {
+    const provider = new AzureDecisionsProvider('deployment', {
+      config: { ...config, maxRetries: 0 },
+    });
+    const controller = new AbortController();
+    await provider.callApi('Refund me', context({ bustCache: true }), {
+      abortSignal: controller.signal,
+    });
+    expect(vi.mocked(fetchWithCache).mock.calls[0]![1]!.signal).toBe(controller.signal);
+    expect(vi.mocked(fetchWithCache).mock.calls[0]![4]).toMatchObject({
+      bust: true,
+      cacheKey: undefined,
+    });
+    expect(vi.mocked(fetchWithCache).mock.calls[0]![5]).toBe(0);
+    controller.abort();
+    await expect(
+      provider.callApi('Refund me', undefined, { abortSignal: controller.signal }),
+    ).rejects.toThrow();
+    expect(fetchWithCache).toHaveBeenCalledTimes(1);
+  });
+
+  it('marks cached responses without replaying rate-limit metadata', async () => {
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      data: { model: 'resolved-model', answers: [answer], usage },
+      cached: true,
+      status: 200,
+      statusText: 'OK',
+    });
+    const provider = new AzureDecisionsProvider('deployment', { config });
+    expect(await provider.callApi('Refund me')).toMatchObject({
+      cached: true,
+      tokenUsage: { total: 20, cached: 20 },
+      metadata: { model: 'resolved-model' },
+    });
+  });
+
+  it('rejects grading and does not expose a classification adapter', async () => {
+    const provider = new AzureDecisionsProvider('deployment', { config });
+    const result = await provider.callApi(
+      'rubric',
+      context({ isGrading: true, prompt: { raw: 'rubric', label: 'llm-rubric' } }),
+    );
+    expect(result.error).toMatch(/direct evaluation only/);
+    expect(provider).not.toHaveProperty('callClassificationApi');
+    expect(fetchWithCache).not.toHaveBeenCalled();
+  });
+});
