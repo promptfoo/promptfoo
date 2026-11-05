@@ -1068,8 +1068,7 @@ config:
   top_k: 50
 ```
 
-Mistral chat-completion models such as `mistral.mistral-large-2407-v1:0`,
-`mistral.devstral-2-123b`, `mistral.mistral-large-3-675b-instruct`, and
+Mistral chat-completion models such as `mistral.devstral-2-123b`, `mistral.mistral-large-3-675b-instruct`, and
 `mistral.pixtral-large-2502-v1:0` use `messages` requests and support the same
 options except `top_k`.
 
@@ -1391,7 +1390,7 @@ tokens from AWS credentials. For example, use a shared-config/SSO profile:
 
 ```yaml
 providers:
-  - id: bedrock:mantle:zai.glm-4.6
+  - id: bedrock:mantle:zai.glm-5
     config:
       region: us-west-2
       profile: bedrock-prod # or set AWS_PROFILE; omit to use the default credential chain
