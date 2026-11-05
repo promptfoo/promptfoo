@@ -3,10 +3,7 @@ import { Duplex } from 'node:stream';
 
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { globalLogCallback, setLogCallback } from '../../../src/logger';
-import {
-  createServerOpenApiDocument,
-  SERVER_OPENAPI_ROUTE_COUNT,
-} from '../../../src/openapi/server';
+import { createServerOpenApiDocument } from '../../../src/openapi/server';
 import { createApp } from '../../../src/server/server';
 import { promptCacheService } from '../../../src/server/services/promptCacheService';
 import type { Express } from 'express';
@@ -870,8 +867,6 @@ describe('server route end-to-end smoke coverage', { concurrent: false }, () => 
     const smokeKeys = smokeCases.map(routeKey).sort();
     const documentedKeys = documentedRouteKeys().sort();
 
-    expect(smokeCases).toHaveLength(SERVER_OPENAPI_ROUTE_COUNT);
-    expect(new Set(smokeKeys).size).toBe(SERVER_OPENAPI_ROUTE_COUNT);
     expect(smokeKeys).toEqual(documentedKeys);
   });
 

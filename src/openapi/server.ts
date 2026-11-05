@@ -100,8 +100,6 @@ const OpenApiEvalTableJsonResponseSchema = z.union([
   EvalSchemas.Table.JsonExportResponse,
 ]);
 
-export const SERVER_OPENAPI_ROUTE_COUNT = 68;
-
 type OpenApiSchema = NonNullable<ZodMediaTypeObject['schema']>;
 type OpenApiResponse = ResponseConfig & { description: string };
 type RegisteredRouteConfig = RouteConfig & {
@@ -111,7 +109,6 @@ type RegisteredRouteConfig = RouteConfig & {
 
 export function createServerOpenApiRegistry() {
   const registry = new OpenAPIRegistry();
-  const routes: RegisteredRouteConfig[] = [];
 
   // The DTO schemas are created before this generator runs. Passing them directly
   // keeps @asteasolutions/zod-to-openapi isolated to docs generation instead of
@@ -191,7 +188,6 @@ export function createServerOpenApiRegistry() {
   }
 
   function register(route: RegisteredRouteConfig) {
-    routes.push(route);
     registry.registerPath(route);
   }
 
@@ -1237,11 +1233,11 @@ export function createServerOpenApiRegistry() {
     },
   });
 
-  return { registry, routes };
+  return registry;
 }
 
 export function createServerOpenApiDocument() {
-  const { registry } = createServerOpenApiRegistry();
+  const registry = createServerOpenApiRegistry();
   const generator = new OpenApiGeneratorV31(registry.definitions, {
     sortComponents: 'alphabetically',
     unionPreferredType: 'oneOf',

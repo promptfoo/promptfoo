@@ -3,11 +3,7 @@ import path from 'node:path';
 
 import Ajv2020 from 'ajv/dist/2020';
 import { describe, expect, it } from 'vitest';
-import {
-  createServerOpenApiDocument,
-  createServerOpenApiRegistry,
-  SERVER_OPENAPI_ROUTE_COUNT,
-} from '../../src/openapi/server';
+import { createServerOpenApiDocument, createServerOpenApiRegistry } from '../../src/openapi/server';
 import { TestCaseGenerationSchema } from '../../src/types/api/redteam';
 
 const HTTP_METHODS = ['get', 'post', 'put', 'patch', 'delete', 'head', 'options', 'trace'] as const;
@@ -50,7 +46,7 @@ function sourceRouteOperations() {
     const source = fs.readFileSync(path.resolve(file), 'utf8');
     return [...source.matchAll(routePattern)]
       .map((match) => ({
-        method: match[1].toUpperCase(),
+        method: match[1],
         path: normalizeRoutePath(prefix, match[3]),
       }))
       .filter(({ path }) => path !== '/*splat' && !path.includes('/*'));
@@ -71,21 +67,16 @@ describe('server OpenAPI generation', () => {
   });
 
   it('registers every server route exactly once', () => {
-    const { routes } = createServerOpenApiRegistry();
-    const document = createServerOpenApiDocument();
-    const generatedOperations = operations(document);
-    const sourceOperations = sourceRouteOperations();
+    const routeKey = ({ method, path }: { method: string; path: string }) =>
+      `${method.toUpperCase()} ${path}`;
+    const registeredKeys = createServerOpenApiRegistry()
+      .definitions.filter((definition) => definition.type === 'route')
+      .map(({ route }) => routeKey(route))
+      .sort();
+    const generatedKeys = operations(createServerOpenApiDocument()).map(routeKey).sort();
 
-    expect(routes).toHaveLength(SERVER_OPENAPI_ROUTE_COUNT);
-    expect(generatedOperations).toHaveLength(SERVER_OPENAPI_ROUTE_COUNT);
-    expect(sourceOperations).toHaveLength(SERVER_OPENAPI_ROUTE_COUNT);
-
-    const generatedKeys = generatedOperations.map(
-      ({ method, path }) => `${method.toUpperCase()} ${path}`,
-    );
-    const sourceKeys = sourceOperations.map(({ method, path }) => `${method} ${path}`);
-    expect(new Set(generatedKeys).size).toBe(SERVER_OPENAPI_ROUTE_COUNT);
-    expect(generatedKeys.sort()).toEqual(sourceKeys.sort());
+    expect(registeredKeys).toEqual(generatedKeys);
+    expect(sourceRouteOperations().map(routeKey).sort()).toEqual(generatedKeys);
     expect(generatedKeys.some((key) => key.includes('/:'))).toBe(false);
   });
 

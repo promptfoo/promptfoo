@@ -2,16 +2,13 @@ import React from 'react';
 
 import ScalarApiReference from '../../components/ScalarApiReference';
 
-const LOCAL_SERVER_OPENAPI_SPEC_URL = '/openapi.json';
-
 export default function LocalServerApiReference() {
   return (
     <ScalarApiReference
-      description="OpenAPI reference for Promptfoo local server routes"
+      description="Browse the latest local server API. For your installed version, fetch /api/openapi.json from your server."
       heading="Local Server API Reference"
-      showTestRequestButton={false}
-      specUrl={LOCAL_SERVER_OPENAPI_SPEC_URL}
-      summary="Browse the latest local server API. For your installed version, fetch /api/openapi.json from your server."
+      hideTestRequestButton
+      specUrl="/openapi.json"
     />
   );
 }

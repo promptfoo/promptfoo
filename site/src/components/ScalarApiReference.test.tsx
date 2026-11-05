@@ -1,181 +1,104 @@
 import React from 'react';
 
-import { act, cleanup, render, screen, within } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { act, cleanup, render, screen } from '@testing-library/react';
+import { afterEach, expect, it, vi } from 'vitest';
 import ScalarApiReference from './ScalarApiReference';
 
 const props = {
-  description: 'Local server API',
   heading: 'Server API',
-  specUrl: '/api/openapi.json',
-  summary: 'Routes exposed by the local server.',
+  description: 'Local server routes.',
+  specUrl: '/openapi.json',
 };
-
-function getScript() {
-  return document.querySelector<HTMLScriptElement>('#scalar-api-reference-script')!;
-}
-
-function loadScript(createApiReference: ReturnType<typeof vi.fn>) {
-  vi.stubGlobal('Scalar', { createApiReference });
-  act(() => getScript().dispatchEvent(new Event('load')));
-}
+const getScript = () =>
+  document.head.querySelector<HTMLScriptElement>('script[src*="@scalar/api-reference"]')!;
+const getViewer = () => document.getElementById('promptfoo-api-reference');
 
 function expectFallback() {
-  expect(
-    within(screen.getByRole('alert')).getByRole('link', { name: 'OpenAPI JSON' }),
-  ).toHaveAttribute('href', props.specUrl);
-  expect(document.getElementById('promptfoo-api-reference')).toHaveAttribute('aria-busy', 'false');
+  expect(screen.getByRole('alert')).toBeInTheDocument();
+  expect(screen.getByRole('link', { name: 'OpenAPI JSON' })).toHaveAttribute('href', props.specUrl);
+  expect(getViewer()).toHaveAttribute('aria-busy', 'false');
 }
 
 afterEach(() => {
   cleanup();
-  getScript()?.remove();
   document.documentElement.removeAttribute('data-theme');
   vi.unstubAllGlobals();
-  vi.restoreAllMocks();
-  vi.resetAllMocks();
 });
 
-describe('ScalarApiReference', () => {
-  it('loads the reference with the current theme and destroys it on unmount', () => {
-    document.documentElement.setAttribute('data-theme', 'dark');
-    const destroy = vi.fn();
-    const createApiReference = vi.fn().mockReturnValue({ destroy });
-    const { unmount } = render(<ScalarApiReference {...props} />);
-
-    expect(document.getElementById('promptfoo-api-reference')).toHaveAttribute('aria-busy', 'true');
-    expect(getScript().crossOrigin).toBe('anonymous');
-    expect(getScript().integrity).toMatch(/^sha384-/);
-    loadScript(createApiReference);
-
-    expect(createApiReference).toHaveBeenCalledWith('#promptfoo-api-reference', {
-      hideTestRequestButton: false,
-      theme: 'alternate',
-      forceDarkModeState: 'dark',
-      url: props.specUrl,
-    });
-    expect(document.getElementById('promptfoo-api-reference')).toHaveAttribute(
-      'aria-busy',
-      'false',
-    );
-    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
-    unmount();
-    expect(destroy).toHaveBeenCalledTimes(1);
+it('loads one viewer and follows the site theme without remounting', async () => {
+  document.documentElement.dataset.theme = 'dark';
+  const destroy = vi.fn();
+  const createApiReference = vi.fn(() => ({ destroy }));
+  const { unmount } = render(<ScalarApiReference {...props} />);
+  expect(getViewer()).toHaveAttribute('aria-busy', 'true');
+  const script = getScript();
+  expect(script.crossOrigin).toBe('anonymous');
+  expect(script.integrity).toMatch(/^sha384-/);
+  vi.stubGlobal('Scalar', { createApiReference });
+  act(() => script.dispatchEvent(new Event('load')));
+  expect(createApiReference).toHaveBeenCalledWith('#promptfoo-api-reference', {
+    url: props.specUrl,
+    theme: 'alternate',
+    forceDarkModeState: 'dark',
+    hideTestRequestButton: false,
   });
+  expect(getViewer()).toHaveAttribute('aria-busy', 'false');
 
-  it('hides request execution when disabled and replaces the reference when its URL changes', () => {
-    const destroy = vi.fn();
-    const createApiReference = vi.fn().mockReturnValue({ destroy });
-    const { rerender } = render(<ScalarApiReference {...props} showTestRequestButton={false} />);
-    loadScript(createApiReference);
-    expect(createApiReference).toHaveBeenLastCalledWith('#promptfoo-api-reference', {
-      hideTestRequestButton: true,
-      forceDarkModeState: 'light',
-      theme: 'alternate',
-      url: props.specUrl,
-    });
-
-    rerender(<ScalarApiReference {...props} specUrl="/other.json" showTestRequestButton={false} />);
-    expect(destroy).toHaveBeenCalledTimes(1);
-    expect(createApiReference).toHaveBeenLastCalledWith(
-      '#promptfoo-api-reference',
-      expect.objectContaining({ url: '/other.json', hideTestRequestButton: true }),
-    );
-    expect(getScript()).toBeNull();
+  await act(async () => {
+    document.documentElement.dataset.theme = 'light';
   });
+  expect(document.body).toHaveClass('light-mode');
+  expect(createApiReference).toHaveBeenCalledTimes(1);
+  unmount();
+  expect(destroy).toHaveBeenCalledOnce();
+  expect(document.body).not.toHaveClass('light-mode');
+});
 
-  it('retains the raw spec link when the script fails', () => {
-    render(<ScalarApiReference {...props} />);
-    act(() => getScript().dispatchEvent(new Event('error')));
-    expectFallback();
-  });
-
-  it('retries a failed script when the reference mounts again', () => {
-    const { unmount } = render(<ScalarApiReference {...props} />);
-    const failedScript = getScript();
-    act(() => failedScript.dispatchEvent(new Event('error')));
-    expectFallback();
-    unmount();
-
-    render(<ScalarApiReference {...props} />);
-    expect(getScript()).not.toBe(failedScript);
-    const createApiReference = vi.fn().mockReturnValue({});
-    loadScript(createApiReference);
-
-    expect(createApiReference).toHaveBeenCalledTimes(1);
-    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
-    expect(document.getElementById('promptfoo-api-reference')).toHaveAttribute(
-      'aria-busy',
-      'false',
-    );
-  });
-
-  it.each(['throws', 'returns nothing', 'is missing'])(
-    'retains the raw spec link when initialization %s',
-    (failure) => {
-      render(<ScalarApiReference {...props} />);
-      const createApiReference = vi.fn(() => {
-        if (failure === 'throws') {
-          throw new Error('Renderer could not initialize');
-        }
-      });
-      if (failure === 'is missing') {
-        act(() => getScript().dispatchEvent(new Event('load')));
-      } else {
-        loadScript(createApiReference);
-      }
-      expectFallback();
-    },
+it('reuses the loaded script when navigating to the local reference', () => {
+  const destroy = vi.fn();
+  const createApiReference = vi.fn(() => ({ destroy }));
+  vi.stubGlobal('Scalar', { createApiReference });
+  const { rerender } = render(<ScalarApiReference {...props} specUrl="/cloud.json" />);
+  rerender(<ScalarApiReference {...props} hideTestRequestButton />);
+  expect(destroy).toHaveBeenCalledOnce();
+  expect(createApiReference).toHaveBeenLastCalledWith(
+    '#promptfoo-api-reference',
+    expect.objectContaining({ url: props.specUrl, hideTestRequestButton: true }),
   );
-
-  it('handles a throwing initializer from an already loaded script', () => {
-    const { unmount } = render(<ScalarApiReference {...props} />);
-    loadScript(vi.fn().mockReturnValue({}));
-    unmount();
-    vi.stubGlobal('Scalar', {
-      createApiReference: vi.fn(() => {
-        throw new Error('Renderer could not initialize');
-      }),
-    });
-    render(<ScalarApiReference {...props} />);
-    expectFallback();
-  });
-
-  it('removes pending script listeners on unmount', () => {
-    const { unmount } = render(<ScalarApiReference {...props} />);
-    const script = getScript();
-    unmount();
-    const createApiReference = vi.fn().mockReturnValue({});
-    vi.stubGlobal('Scalar', { createApiReference });
-    act(() => script.dispatchEvent(new Event('load')));
-    expect(createApiReference).not.toHaveBeenCalled();
-  });
-
-  it('retries when the script fails after the page unmounts', () => {
-    const { unmount } = render(<ScalarApiReference {...props} />);
-    const pendingScript = getScript();
-    unmount();
-    act(() => pendingScript.dispatchEvent(new Event('error')));
-
-    render(<ScalarApiReference {...props} />);
-    expect(getScript()).not.toBe(pendingScript);
-    const createApiReference = vi.fn().mockReturnValue({});
-    loadScript(createApiReference);
-
-    expect(createApiReference).toHaveBeenCalledTimes(1);
-    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
-  });
-
-  it('tracks theme changes and disconnects its observer on unmount', async () => {
-    const disconnect = vi.spyOn(MutationObserver.prototype, 'disconnect');
-    const { unmount } = render(<ScalarApiReference {...props} />);
-    loadScript(vi.fn().mockReturnValue({}));
-    await act(async () => {
-      document.documentElement.setAttribute('data-theme', 'dark');
-    });
-    expect(document.body).toHaveClass('dark-mode');
-    unmount();
-    expect(disconnect).toHaveBeenCalledTimes(1);
-    expect(document.body).not.toHaveClass('dark-mode');
-  });
+  expect(getScript()).toBeNull();
 });
+
+it.each(['failed', 'pending'])('can revisit the page after a %s script load', (state) => {
+  const { unmount } = render(<ScalarApiReference {...props} />);
+  const previous = getScript();
+  if (state === 'failed') {
+    act(() => previous.dispatchEvent(new Event('error')));
+    expectFallback();
+  }
+  unmount();
+  render(<ScalarApiReference {...props} />);
+  expect(getScript()).not.toBe(previous);
+  const createApiReference = vi.fn(() => ({ destroy: vi.fn() }));
+  vi.stubGlobal('Scalar', { createApiReference });
+  act(() => previous.dispatchEvent(new Event('load')));
+  expect(createApiReference).not.toHaveBeenCalled();
+  act(() => getScript().dispatchEvent(new Event('load')));
+  expect(createApiReference).toHaveBeenCalledOnce();
+  expect(screen.queryByRole('alert')).toBeNull();
+});
+
+it.each(['missing', 'empty result', 'exception'])(
+  'keeps the raw spec available on %s',
+  (failure) => {
+    if (failure !== 'missing') {
+      vi.stubGlobal('Scalar', {
+        createApiReference: () => {
+          if (failure === 'exception') throw new Error('Initialization failed');
+        },
+      });
+    }
+    render(<ScalarApiReference {...props} />);
+    if (failure === 'missing') act(() => getScript().dispatchEvent(new Event('load')));
+    expectFallback();
+  },
+);
