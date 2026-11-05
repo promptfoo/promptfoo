@@ -3359,6 +3359,31 @@ describe('OpenAiResponsesProvider request building', () => {
     expect(body).toMatchObject({ model, temperature: 0.4, top_p: 0.8 });
   });
 
+  it('strips passthrough sampling params for Claude capability models', async () => {
+    // Passthrough spreads after the Claude omit gates; without a final strip,
+    // temperature/top_p/top_k reappear and Anthropic still returns HTTP 400.
+    const provider = new OpenAiResponsesProvider('claude-haiku-5-5', {
+      config: {
+        apiBaseUrl: 'https://api.anthropic.com/v1',
+        apiKey: 'test-key',
+        passthrough: { temperature: 0.7, top_p: 0.5, top_k: 40 },
+      },
+    });
+    const { body } = await provider.getOpenAiBody('hi');
+    expect(body).not.toHaveProperty('temperature');
+    expect(body).not.toHaveProperty('top_p');
+    expect(body).not.toHaveProperty('top_k');
+  });
+
+  it('keeps passthrough sampling params for non-Claude Responses models', async () => {
+    const provider = new OpenAiResponsesProvider('gpt-4.1', {
+      config: { apiKey: 'test-key', passthrough: { temperature: 0.7, top_p: 0.5 } },
+    });
+    const { body } = await provider.getOpenAiBody('hi');
+    expect(body.temperature).toBe(0.7);
+    expect(body.top_p).toBe(0.5);
+  });
+
   it('should omit default temperature and max_output_tokens when omitDefaults is true', async () => {
     const provider = new OpenAiResponsesProvider('gpt-4o', createOmitDefaultsOptions());
 

@@ -684,6 +684,15 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       isOpenRouter: isOpenRouterGpt6,
     });
 
+    // Claude Opus 4.7+ / Claude 5+ reject sampling params. Passthrough spreads after
+    // the omit gates above and can put temperature/top_p/top_k back — strip them
+    // from the final body so Anthropic OpenAI-compat endpoints still get a clean request.
+    if (samplingParamsDeprecated) {
+      delete body.temperature;
+      delete body.top_p;
+      delete (body as { top_k?: unknown }).top_k;
+    }
+
     return {
       body,
       config: {

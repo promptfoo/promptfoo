@@ -3396,6 +3396,31 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
       expect(provider['supportsTemperature']()).toBe(true);
     });
 
+    it('strips passthrough sampling params for Claude capability models', async () => {
+      // Passthrough spreads after the Claude omit gates; without a final strip,
+      // temperature/top_p/top_k reappear and Anthropic still returns HTTP 400.
+      const provider = new OpenAiChatCompletionProvider('claude-haiku-5-5', {
+        config: {
+          apiBaseUrl: 'https://api.anthropic.com/v1',
+          apiKey: 'test-key',
+          passthrough: { temperature: 0.7, top_p: 0.5, top_k: 40 },
+        },
+      });
+      const { body } = await provider.getOpenAiBody('hi');
+      expect(body).not.toHaveProperty('temperature');
+      expect(body).not.toHaveProperty('top_p');
+      expect(body).not.toHaveProperty('top_k');
+    });
+
+    it('keeps passthrough sampling params for non-Claude chat models', async () => {
+      const provider = new OpenAiChatCompletionProvider('gpt-4.1', {
+        config: { passthrough: { temperature: 0.7, top_p: 0.5 } },
+      });
+      const { body } = await provider.getOpenAiBody('hi');
+      expect(body.temperature).toBe(0.7);
+      expect(body.top_p).toBe(0.5);
+    });
+
     it('should correctly send max_tokens: 0 in the request body when explicitly set', async () => {
       const mockResponse = createMockChatResponse();
       mockFetchWithCache.mockResolvedValue(mockResponse);
