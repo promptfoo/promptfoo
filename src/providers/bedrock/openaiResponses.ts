@@ -216,6 +216,15 @@ export class BedrockOpenAiResponsesProvider extends OpenAiResponsesProvider {
     callApiOptions?: BedrockOpenAiResponsesCallApiOptions,
   ) {
     const model = this.getRequestModelName(context);
+    const config = { ...this.config, ...context?.prompt?.config };
+    if (
+      isBedrockOpenAiResponsesModel(model) &&
+      (config.serviceTier !== undefined || config.passthrough?.serviceTier !== undefined)
+    ) {
+      throw new Error(
+        'Amazon Bedrock Responses uses service_tier. Replace serviceTier with service_tier to select an inference tier.',
+      );
+    }
     if (
       isBedrockOpenAiResponsesModel(model) !== isBedrockOpenAiResponsesModel(this.modelName) ||
       isBedrockGrokModel(model) !== isBedrockGrokModel(this.modelName) ||
@@ -243,7 +252,8 @@ export class BedrockOpenAiResponsesProvider extends OpenAiResponsesProvider {
       delete (result.body as Record<string, unknown>).service_tier;
       return result;
     }
-    if (serviceTier === 'ultrafast' && model === 'openai.gpt-6-astra') {
+    const supportsUltrafast = model === 'openai.gpt-6-astra' || model === 'openai.gpt-6.1-sol';
+    if (serviceTier === 'ultrafast' && supportsUltrafast) {
       const region = getMantleEndpointRegion(new URL(this.getApiUrl())) ?? this.bedrockRegion;
       if (region !== 'us-east-1') {
         throw new Error(
@@ -261,7 +271,7 @@ export class BedrockOpenAiResponsesProvider extends OpenAiResponsesProvider {
     if (serviceTier !== undefined && serviceTier !== 'default') {
       throw new Error(
         `Amazon Bedrock model "${model}" does not support the requested service tier through this adapter; ` +
-          `received "${serviceTier}". Remove service_tier/serviceTier or set service_tier to "default".`,
+          `received "${serviceTier}". Remove service_tier or set service_tier to ${supportsUltrafast ? '"default" or "ultrafast"' : '"default"'}.`,
       );
     }
     return result;

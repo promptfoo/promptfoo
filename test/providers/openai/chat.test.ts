@@ -311,6 +311,7 @@ describe('OpenAI Provider', () => {
       { reported: 'ultrafast', cost: 0.018 },
       { reported: undefined, cost: 0.018 },
       { reported: 'default', cost: 0.003 },
+      { reported: 'fast', cost: 0.006 },
     ])(
       'forwards Ultrafast and bills the actual tier $reported for GPT-6.1 Sol',
       async ({ reported, cost }) => {
