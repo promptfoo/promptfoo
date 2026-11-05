@@ -513,8 +513,7 @@ The following environment variables can be used to configure the Vertex AI provi
 
 †The Vertex chat provider applies model-specific defaults before authentication defaults.
 Gemini 3 chat models default to `global` with either OAuth or an API key. Choose a
-region supported by your model. Prediction-based text embeddings and Vertex Live
-default to `us-central1`. Gemini Embedding 2 defaults to `global`.
+region supported by your model. Voice dialogue on Vertex Live and prediction-based text embeddings default to `us-central1`. Speech transcription defaults to `global`. Gemini Embedding 2 defaults to `global`.
 
 ### Region Selection
 
@@ -522,7 +521,7 @@ Different models are available in different regions. Common regions include:
 
 - `global` - Default for Gemini 3 chat models with either OAuth or API-key authentication. Supported by Gemini 3.8 Flash, 3.7 Flash, 3.6 Flash, and 3.5 Flash-Lite
 - `us`, `eu` - Multi-region endpoints supported by Gemini 3.8 Flash, 3.7 Flash, 3.6 Flash, and 3.5 Flash-Lite (10% pricing premium)
-- `us-central1` - Default for prediction-based text embeddings and Vertex Live; model availability varies
+- `us-central1` - Default for prediction-based text embeddings and Vertex Live voice dialogue; model availability varies
 - `us-east4` - Additional capacity
 - `us-east5` - Claude models available
 - `europe-west1` - EU region, Claude models available
@@ -769,7 +768,7 @@ defaultTest:
 | `expressMode`                      | Set to `false` to force OAuth/ADC even with API key                | auto (API key → `true`)        |
 | `streaming`                        | Use streaming API (`streamGenerateContent`)                        | `false`                        |
 
-‡The chat provider uses model-specific region defaults; Gemini 3 chat models use `global` with either authentication method. The `global` host is `aiplatform.googleapis.com`, including for Express mode. Regional overrides use `{region}-aiplatform.googleapis.com`; see [Region Selection](#region-selection) for multi-region hosts. Prediction-based text embeddings and Vertex Live default to `us-central1`. Gemini Embedding 2 defaults to `global`.
+‡The chat provider uses model-specific region defaults; Gemini 3 chat models use `global` with either authentication method. The `global` host is `aiplatform.googleapis.com`, including for Express mode. Regional overrides use `{region}-aiplatform.googleapis.com`; see [Region Selection](#region-selection) for multi-region hosts. Prediction-based text embeddings and Vertex Live voice dialogue default to `us-central1`. Speech transcription defaults to `global`. Gemini Embedding 2 defaults to `global`.
 
 :::note
 Not all models support all parameters. See [Google's documentation](https://cloud.google.com/vertex-ai/generative-ai/docs/multimodal/overview) for model-specific details.
@@ -1343,17 +1342,17 @@ Use `vertex:live:<model>` for Vertex's WebSocket-based Live API. This is separat
 
 ```yaml
 providers:
-  - id: vertex:live:gemini-live-2.5-flash-native-audio
+  - id: vertex:live:gemini-3.8-live
     config:
       projectId: my-project # Or set GOOGLE_CLOUD_PROJECT / VERTEX_PROJECT_ID
       region: us-central1 # Or set GOOGLE_CLOUD_LOCATION / VERTEX_REGION
 ```
 
-Authenticate with `gcloud auth application-default login`, `GOOGLE_APPLICATION_CREDENTIALS`, or `config.credentials`. Live uses Google Cloud OAuth, not Gemini API keys or Vertex express-mode API keys. The project must have the Vertex AI API enabled and permission to use the selected model. The default location is `us-central1`; `apiVersion` accepts `v1` (default) or `v1beta1`.
+Authenticate with `gcloud auth application-default login`, `GOOGLE_APPLICATION_CREDENTIALS`, or `config.credentials`. Live uses Google Cloud OAuth, not Gemini API keys or Vertex express-mode API keys. The project must have the Vertex AI API enabled and permission to use the selected model. For voice dialogue, the default location is `us-central1`. Use the [Gemini Live model card](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/gemini/3-8-live) to choose a supported region. The `apiVersion` option accepts `v1` (default) or `v1beta1`.
 
-The provider returns audio in `response.audio` and a transcript in `output.text`. It requests audio and output transcription by default; requesting `TEXT` also uses audio plus transcription and is billed at audio rates. Use `transform: output.text` on text assertions. It shares the [Google Live configuration options](/docs/providers/google#google-live-api) for speech, system instructions, function callbacks, and finite PCM audio input. Consecutive user messages in a JSON prompt run in the same Live session.
+For voice dialogue, the provider returns audio in `response.audio` and a transcript in `output.text`. It requests audio and output transcription by default; requesting `TEXT` also uses audio plus transcription and is billed at audio rates. Use `transform: output.text` on text assertions. It shares the [Google Live configuration options](/docs/providers/google#google-live-api) for speech, system instructions, function callbacks, and finite PCM audio input. Consecutive user messages in a JSON prompt run in the same Live session.
 
-The adapter also accepts `vertex:live:gemini-3.8-live` and `vertex:live:gemini-3.8-live-extended-thinking`, including the latter's `NON_BLOCKING` tools and `IDLE` completion handling. Google names Vertex in the [model card](https://deepmind.google/models/model-cards/gemini-3-8-audio/), but these models are not yet listed in the [Cloud Live model catalog](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/live-api#supported-models). Availability must be confirmed for your project and location; use `google:live:` for Gemini API access. A model-not-found or access-denied response is an error, not a fallback to another model or API.
+For speech-to-text evals, use `vertex:gemini-3.5-transcribe` for complete recordings or `vertex:live:gemini-3.5-transcribe-live` for raw 16-bit mono PCM at 16 kHz. Both default to the global endpoint. The Live provider grades the final transcription in `output.text`. The file provider accepts `generationConfig.audioTranscriptionConfig` and retains returned word timing and speaker information in `metadata.audioTranscriptions`. [Vertex transcription model and API examples](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/gemini/3-5-transcribe)
 
 See the [Vertex Live example](https://github.com/promptfoo/promptfoo/tree/main/examples/vertex-live) for a runnable transcript eval.
 

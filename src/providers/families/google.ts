@@ -11,6 +11,7 @@ const NATIVE_INTERACTIONS_MODELS = new Set([
 function isLiveOnlyModel(modelName: string): boolean {
   return (
     modelName === 'gemini-3.5-live-translate-preview' ||
+    modelName === 'gemini-3.5-transcribe-live' ||
     modelName.startsWith('gemini-robotics-er-2-streaming-')
   );
 }
@@ -21,6 +22,11 @@ function validateGoogleModelRoute(
   allowNativeInteractions = false,
 ): void {
   if (isLiveOnlyModel(modelName) && serviceType !== 'live') {
+    if (modelName === 'gemini-3.5-transcribe-live') {
+      throw new Error(
+        `Model "${modelName}" requires google:live:${modelName} or vertex:live:${modelName}.`,
+      );
+    }
     throw new Error(
       `Model "${modelName}" requires the Gemini Live API. Use google:live:${modelName}.`,
     );

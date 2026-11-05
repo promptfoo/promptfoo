@@ -46,6 +46,8 @@ export interface GoogleModel {
 // global-only availability or global as the broadly available endpoint:
 // https://docs.cloud.google.com/vertex-ai/generative-ai/docs/learn/locations#generative_ai_models
 const VERTEX_GLOBAL_DEFAULT_MODELS = new Set([
+  'gemini-3.5-transcribe',
+  'gemini-3.5-transcribe-live',
   'gemini-3.8-flash-tts',
   'gemini-3.8-flash-lite-tts',
   'gemini-3.8-flash',
@@ -288,6 +290,10 @@ export const GOOGLE_MODELS: GoogleModel[] = [
       videoInputPerSecond: 0.000033333333333333335,
     },
   ),
+  ...modelsWithCost(['gemini-3.5-transcribe-live'], {
+    input: 3.5 / 1e6,
+    output: 21 / 1e6,
+  }),
   ...modelsWithCost(['gemini-live-2.5-flash-native-audio'], {
     input: 0.5 / 1e6,
     output: 2.0 / 1e6,
