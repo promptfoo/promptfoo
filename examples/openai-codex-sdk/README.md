@@ -131,7 +131,7 @@ If you run this config from the repo root, set `CODEX_SANDBOX_WORKING_DIR="$PWD/
 
 ### Run on Amazon Bedrock
 
-This example runs Codex against GPT-5.6 Sol, Terra, and Luna hosted on Amazon Bedrock by setting `model_provider: amazon-bedrock` with a Bedrock model ID (for example, `openai.gpt-5.6-sol`). It requires AWS credentials and Bedrock model access in a supported Region: `us-east-1`/`us-east-2` for Sol, plus `us-west-2` for Terra and Luna.
+Run Codex through Amazon Bedrock's Mantle Responses API. The example uses GPT-6.1 Terra in `us-east-1` and reads a Bedrock API key from `AWS_BEARER_TOKEN_BEDROCK`. [Setup and model access](./bedrock/README.md)
 
 **Location**: `./bedrock/`
 

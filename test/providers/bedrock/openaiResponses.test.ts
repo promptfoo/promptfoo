@@ -170,8 +170,22 @@ describe('bedrock openaiResponses helper', () => {
       expect(isBedrockGptOssResponsesModel('openai.gpt-oss-120b')).toBe(true);
       expect(isBedrockGptOssResponsesModel('openai.gpt-oss-20b')).toBe(true);
       expect(isBedrockGptOssResponsesModel('openai.gpt-oss-120b-1:0')).toBe(false);
-      expect(isBedrockGptOssResponsesModel('openai.gpt-oss-safeguard-120b')).toBe(false);
+      expect(isBedrockGptOssResponsesModel('openai.gpt-oss-safeguard-120b')).toBe(true);
+      expect(isBedrockGptOssResponsesModel('openai.gpt-oss-safeguard-20b')).toBe(true);
     });
+
+    it.each(['openai.gpt-oss-safeguard-20b', 'openai.gpt-oss-safeguard-120b'])(
+      'calls %s on the Mantle Responses API with the requested service tier',
+      async (model) => {
+        const provider = createBedrockOpenAiResponsesProvider(model, {
+          config: { apiKey: 'test', service_tier: 'flex' },
+        });
+        await provider.callApi('hello');
+        const [url, request] = vi.mocked(fetchWithCache).mock.calls[0];
+        expect(url).toBe('https://bedrock-mantle.us-east-1.api.aws/v1/responses');
+        expect(JSON.parse(request?.body as string)).toMatchObject({ model, service_tier: 'flex' });
+      },
+    );
 
     it('builds the standard /v1 mantle base URL', () => {
       expect(getBedrockMantleResponsesBaseUrl('us-east-1')).toBe(
@@ -239,6 +253,20 @@ describe('bedrock openaiResponses helper', () => {
       expect(body.reasoning).toEqual({ effort: 'high' });
       expect(body.temperature).toBe(0.3);
       expect(body.top_p).toBe(0.8);
+    });
+
+    it('prices GPT OSS Standard using the region of the actual AWS endpoint', async () => {
+      const provider = createBedrockOpenAiResponsesProvider('openai.gpt-oss-120b', {
+        config: {
+          apiKey: 'bedrock-key',
+          region: 'us-east-1',
+          apiBaseUrl: 'https://bedrock-mantle.eu-central-1.api.aws/v1',
+        },
+      });
+
+      const result = await provider.callApi('hello');
+
+      expect(result.cost).toBeCloseTo((10 * 0.2 + 5 * 0.79) / 1e6, 10);
     });
 
     it('posts GPT OSS calls to /v1/responses with the Bedrock API key', async () => {
@@ -311,6 +339,43 @@ describe('bedrock openaiResponses helper', () => {
       expect(provider.getApiKey()).toBe('env-bedrock-key');
     });
 
+    it.each([false, true])(
+      'preserves Daybreak Blue capabilities and billing (override: %s)',
+      async (override) => {
+        const model = 'openai.gpt-daybreak-blue-5.6-sol';
+        const provider = createBedrockOpenAiResponsesProvider(
+          override ? 'openai.gpt-5.6-sol' : model,
+          {
+            config: {
+              apiKey: 'test',
+              reasoning_effort: 'high',
+              ...(override && { passthrough: { model } }),
+            },
+          },
+        );
+        const { body, config } = await provider.getOpenAiBody('hello');
+        expect(body).toMatchObject({ model, reasoning: { effort: 'high' } });
+        expect(body).not.toHaveProperty('temperature');
+        expect(provider.getApiUrl()).toBe('https://bedrock-mantle.us-east-2.api.aws/openai/v1');
+        expect(provider['getBillingModelName'](config)).toBe('bedrock:gpt-daybreak-blue-5.6-sol');
+      },
+    );
+
+    it.each(['us-east-1', 'us-west-2'])(
+      'honors the regional Ultrafast contract for GPT-6 Astra in %s',
+      async (region) => {
+        const provider = createBedrockOpenAiResponsesProvider('openai.gpt-6-astra', {
+          config: { region, apiKey: 'test', service_tier: 'ultrafast' },
+        });
+        const request = provider.getOpenAiBody('hello');
+        if (region === 'us-west-2') {
+          await expect(request).rejects.toThrow(/Ultrafast in us-east-1/);
+        } else {
+          expect((await request).body.service_tier).toBe('ultrafast');
+        }
+      },
+    );
+
     it.each(GPT_5_6_MODELS)('uses the shared GA default region for %s', (modelId) => {
       restoreEnv = mockProcessEnv({
         AWS_BEARER_TOKEN_BEDROCK: 'env-bedrock-key',
@@ -330,6 +395,7 @@ describe('bedrock openaiResponses helper', () => {
       ['openai.gpt-6-astra', 'us-west-2'],
       ['openai.gpt-6.1-sol', 'us-east-1'],
       ['openai.gpt-6.1-terra', 'us-east-1'],
+      ['openai.gpt-5.6-cyber', 'us-east-2'],
     ])('defaults %s to %s in the factory and direct constructor', async (modelId, region) => {
       const provider = createBedrockOpenAiResponsesProvider(modelId, {
         config: { apiKey: 'bedrock-key' },
@@ -398,6 +464,19 @@ describe('bedrock openaiResponses helper', () => {
       );
     });
 
+    it('calls the configured GovCloud East Responses endpoint and applies its Cyber rates', async () => {
+      const model = 'openai.gpt-5.6-cyber';
+      const provider = createBedrockOpenAiResponsesProvider(model, {
+        config: { apiKey: 'bedrock-key', region: 'us-gov-east-1' },
+      });
+      const result = await provider.callApi('hello');
+      const [url, request] = vi.mocked(fetchWithCache).mock.calls[0];
+      expect(url).toBe('https://bedrock-mantle.us-gov-east-1.api.aws/openai/v1/responses');
+      expect(JSON.parse(request?.body as string).model).toBe(model);
+      expect(result.output).toBe('hello');
+      expect(result.cost).toBeCloseTo((10 * 16.875 + 5 * 101.25) / 1e6, 10);
+    });
+
     describe('Mantle region hints', () => {
       let errorSpy: ReturnType<typeof vi.spyOn>;
 
@@ -428,10 +507,11 @@ describe('bedrock openaiResponses helper', () => {
       });
 
       it.each([
-        ['openai.gpt-6-astra', 'us-east-1', 'us-west-2'],
+        ['openai.gpt-6-astra', 'us-east-2', 'us-west-2, us-east-1'],
         ['openai.gpt-6.1-sol', 'us-east-2', 'us-east-1'],
         ['openai.gpt-6-sol', 'us-east-2', 'us-east-1'],
         ['openai.gpt-5.6-sol', 'us-west-2', 'us-east-1, us-east-2'],
+        ['openai.gpt-5.6-cyber', 'us-gov-west-1', 'us-east-2, us-gov-east-1'],
         ['openai.gpt-5.5', 'us-west-2', 'us-east-1, us-east-2'],
         [
           'openai.gpt-5.6-luna',
@@ -472,7 +552,7 @@ describe('bedrock openaiResponses helper', () => {
             config: {
               apiKey: 'bedrock-key',
               region,
-              apiBaseUrl: 'https://bedrock-mantle.us-east-1.api.aws/openai/v1',
+              apiBaseUrl: 'https://bedrock-mantle.us-east-2.api.aws/openai/v1',
             },
           };
           const provider =
@@ -485,58 +565,22 @@ describe('bedrock openaiResponses helper', () => {
           expect(provider.getApiUrl()).toBe(options.config.apiBaseUrl);
           expect(result.metadata?.http?.status).toBe(404);
           expect(result.error).toContain(
-            'Amazon Bedrock does not list openai.gpt-6-astra on the Mantle endpoint in us-east-1. ' +
-              'Point config.apiBaseUrl at a listed Region: us-west-2.',
+            'Amazon Bedrock does not list openai.gpt-6-astra on the Mantle endpoint in us-east-2. ' +
+              'Point config.apiBaseUrl at a listed Region: us-west-2, us-east-1.',
           );
           expect(result.error).not.toContain('Set config.region');
         },
       );
 
       it.each([
-        ['configured region', { region: 'us-west-2' }, true],
-        [
-          'explicit Mantle endpoint',
-          { apiBaseUrl: 'https://bedrock-mantle.us-west-2.api.aws/openai/v1' },
-          true,
-        ],
-        ['listed region', { region: 'us-east-1' }, false],
-        ['custom proxy', { apiBaseUrl: 'https://proxy.example.test/openai/v1' }, false],
-      ] as const)('handles service-tier rejection for a %s', async (_case, config, hasHint) => {
-        const data = {
-          error: {
-            code: 'invalid_value',
-            message:
-              "Invalid value: 'ultrafast'. Supported values are: 'auto', 'default', 'flex', and 'priority'.",
-            param: 'service_tier',
-            type: 'invalid_request_error',
-          },
-        };
-        vi.mocked(fetchWithCache).mockResolvedValue({
-          data,
-          cached: false,
-          status: 400,
-          statusText: 'Bad Request',
-        });
+        { region: 'us-west-2' },
+        { region: 'us-east-1', apiBaseUrl: 'https://bedrock-mantle.us-west-2.api.aws/openai/v1' },
+      ])('rejects Sol Ultrafast outside us-east-1 before fetching (%o)', async (config) => {
         const provider = createBedrockOpenAiResponsesProvider('openai.gpt-6.1-sol', {
           config: { apiKey: 'bedrock-key', service_tier: 'ultrafast', ...config },
         });
-
-        const result = await provider.callApi('hello');
-        const repeated = await provider.callApi('hello');
-
-        expect(result.metadata?.http?.status).toBe(400);
-        expect(result.error).toContain(`API error: 400 Bad Request\n${JSON.stringify(data)}`);
-        expect(repeated.error).toBe(result.error);
-        if (hasHint) {
-          expect(result.error).toContain('a listed Region: us-east-1.');
-          expect(result.error).toContain(
-            'apiBaseUrl' in config ? 'Point config.apiBaseUrl' : 'Set config.region',
-          );
-          expect(errorSpy).toHaveBeenCalledTimes(1);
-        } else {
-          expect(result.error).toBe(`API error: 400 Bad Request\n${JSON.stringify(data)}`);
-          expect(errorSpy).not.toHaveBeenCalled();
-        }
+        await expect(provider.callApi('hello')).rejects.toThrow(/Ultrafast in us-east-1/);
+        expect(fetchWithCache).not.toHaveBeenCalled();
       });
 
       it.each(['factory', 'direct'])(
@@ -544,7 +588,7 @@ describe('bedrock openaiResponses helper', () => {
         async (mode) => {
           mockMantleResponse('openai.gpt-6-astra');
           const options = {
-            config: { apiKey: 'bedrock-key', region: 'us-east-1', apiBaseUrl: '' },
+            config: { apiKey: 'bedrock-key', region: 'us-east-2', apiBaseUrl: '' },
           };
           const provider =
             mode === 'factory'
@@ -553,9 +597,9 @@ describe('bedrock openaiResponses helper', () => {
 
           const result = await provider.callApi('hello');
 
-          expect(provider.getApiUrl()).toBe('https://bedrock-mantle.us-east-1.api.aws/openai/v1');
+          expect(provider.getApiUrl()).toBe('https://bedrock-mantle.us-east-2.api.aws/openai/v1');
           expect(result.error).toContain(
-            'Set config.region or AWS_BEDROCK_REGION to a listed Region: us-west-2.',
+            'Set config.region or AWS_BEDROCK_REGION to a listed Region: us-west-2, us-east-1.',
           );
           expect(result.error).not.toContain('Point config.apiBaseUrl');
         },
@@ -759,7 +803,7 @@ describe('bedrock openaiResponses helper', () => {
         provider.config,
         false,
       );
-      expect(result.cost).toBeCloseTo(0.001848, 10);
+      expect(result.cost).toBeCloseTo(0.00189, 10);
     });
 
     it('uses the effective passthrough model for Bedrock token billing', async () => {
@@ -820,7 +864,7 @@ describe('bedrock openaiResponses helper', () => {
         });
 
         await expect(provider.getOpenAiBody('hello', context as any)).rejects.toThrow(
-          `supports only the standard inference tier; received "${tier}"`,
+          `does not support the requested service tier through this adapter; received "${tier}"`,
         );
       },
     );
@@ -893,7 +937,7 @@ describe('bedrock openaiResponses helper', () => {
           });
 
           await expect(provider.getOpenAiBody('hello')).rejects.toThrow(
-            `supports only the standard and ultrafast inference tiers; received "${serviceTier}"`,
+            `received "${serviceTier}". Remove service_tier or set service_tier to "default" or "ultrafast"`,
           );
           expect(fetchWithCache).not.toHaveBeenCalled();
         },
@@ -945,7 +989,7 @@ describe('bedrock openaiResponses helper', () => {
               },
               vars: {},
             }),
-          ).rejects.toThrow('supports only the standard inference tier');
+          ).rejects.toThrow('does not support the requested service tier');
         },
       );
 
@@ -955,7 +999,7 @@ describe('bedrock openaiResponses helper', () => {
         ['https://bedrock-proxy.example.test/openai/v1', undefined],
         ['https://bedrock-proxy.example.test/openai/v1', 'default'],
       ] as const)(
-        'leaves unpublished Bedrock costs unknown for endpoint %s and returned tier %s',
+        'uses the returned Bedrock tier for billing on endpoint %s (returned tier %s)',
         async (apiBaseUrl, serviceTier) => {
           vi.mocked(fetchWithCache).mockResolvedValueOnce({
             data: {
@@ -986,7 +1030,12 @@ describe('bedrock openaiResponses helper', () => {
 
           expect(result.error).toBeUndefined();
           expect(result.output).toBe('hello');
-          expect(result.cost).toBeUndefined();
+          if (serviceTier === 'default') {
+            // Standard Mantle rates include the regional fee. Ultrafast has no published rate.
+            expect(result.cost).toBeCloseTo(((60 * 2 + 40 * 0.1 + 20 * 10) * 1.1) / 1e6, 10);
+          } else {
+            expect(result.cost).toBeUndefined();
+          }
           const request = JSON.parse(vi.mocked(fetchWithCache).mock.calls[0][1]!.body as string);
           expect(request.service_tier).toBe('ultrafast');
         },
@@ -1049,10 +1098,10 @@ describe('bedrock openaiResponses helper', () => {
     });
 
     it.each([
-      ['openai.gpt-5.6-terra', 'us-gov-east-1', 2.64, 15.84],
-      ['openai.gpt-5.6-terra', 'us-gov-west-1', 2.64, 15.84],
-      ['openai.gpt-5.6-luna', 'us-gov-east-1', 0.264, 1.584],
-      ['openai.gpt-5.6-luna', 'us-gov-west-1', 0.264, 1.584],
+      ['openai.gpt-5.6-terra', 'us-gov-east-1', 2.7, 16.2],
+      ['openai.gpt-5.6-terra', 'us-gov-west-1', 2.7, 16.2],
+      ['openai.gpt-5.6-luna', 'us-gov-east-1', 0.27, 1.62],
+      ['openai.gpt-5.6-luna', 'us-gov-west-1', 0.27, 1.62],
     ])('prices %s in %s through the Responses provider', async (modelId, region, input, output) => {
       const provider = createBedrockOpenAiResponsesProvider(modelId, {
         config: { apiKey: 'bedrock-key', region },
@@ -1088,7 +1137,7 @@ describe('bedrock openaiResponses helper', () => {
 
         const result = await provider.callApi('hello');
 
-        expect(result.cost).toBeCloseTo((10 * 2.64 + 5 * 15.84) / 1e6, 10);
+        expect(result.cost).toBeCloseTo((10 * 2.7 + 5 * 16.2) / 1e6, 10);
       },
     );
 
@@ -1100,7 +1149,7 @@ describe('bedrock openaiResponses helper', () => {
 
       const result = await provider.callApi('hello');
 
-      expect(result.cost).toBeCloseTo((10 * 0.264 + 5 * 1.584) / 1e6, 10);
+      expect(result.cost).toBeCloseTo((10 * 0.27 + 5 * 1.62) / 1e6, 10);
     });
 
     it.each([

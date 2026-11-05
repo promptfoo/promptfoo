@@ -1,10 +1,16 @@
 import logger from '../../logger';
+import { getBedrockBillingEndpoint } from '../openai/billing';
 import { OpenAiResponsesProvider } from '../openai/responses';
 import {
   getBedrockMantleOrigin,
   resolveBedrockMantleApiKey,
   resolveBedrockMantleRegion,
 } from './mantle';
+import {
+  BEDROCK_OPENAI_MANTLE_REGIONS,
+  getBedrockCapabilityModelName,
+  getBedrockMantleBillingModelName,
+} from './openaiModels';
 import { getBedrockPricing } from './pricing';
 import {
   isBedrockGptOssResponsesModel,
@@ -30,8 +36,8 @@ type BedrockOpenAiResponsesCallApiOptions = Parameters<OpenAiResponsesProvider['
  *
  *   https://bedrock-mantle.<region>.api.aws/openai/v1/responses
  *
- * GPT-5.6 also supports Runtime Converse with inference profile IDs and Mantle Chat
- * Completions through their explicit selectors; those use separate adapters.
+ * GPT-5.6 Sol, Terra, and Luna also support Runtime Converse with inference profiles.
+ * Models that support Mantle Chat Completions use a separate adapter for that API.
  * Open-weight `gpt-oss` models can use the standard InvokeModel path.
  */
 
@@ -44,32 +50,6 @@ export const DEFAULT_BEDROCK_OPENAI_REGION = 'us-east-2';
 /** Default region for standard mantle Responses models such as GPT OSS. */
 export const DEFAULT_BEDROCK_MANTLE_RESPONSES_REGION = 'us-east-1';
 
-/**
- * Mantle Regions that serve each OpenAI frontier model: the regional Mantle catalogs
- * (`GET /v1/models`, verified 2026-09-24) and the AWS model cards.
- * AWS changes availability independently of promptfoo, so this table only picks the default
- * Region and explains Mantle 404s; configured Regions are always used as given.
- */
-const BEDROCK_OPENAI_MANTLE_REGIONS = new Map<string, readonly string[]>([
-  ['openai.gpt-6.1-terra', ['us-east-1']],
-  ['openai.gpt-6-astra', ['us-west-2']],
-  // https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-openai-gpt-6-1-sol.html
-  ['openai.gpt-6.1-sol', ['us-east-1']],
-  ['openai.gpt-6-sol', ['us-east-1']],
-  ['openai.gpt-6-luna', ['us-east-1']],
-  ['openai.gpt-5.6-sol', ['us-east-1', 'us-east-2']],
-  [
-    'openai.gpt-5.6-terra',
-    ['us-east-1', 'us-east-2', 'us-west-2', 'us-gov-west-1', 'us-gov-east-1'],
-  ],
-  [
-    'openai.gpt-5.6-luna',
-    ['us-east-1', 'us-east-2', 'us-west-2', 'us-gov-west-1', 'us-gov-east-1'],
-  ],
-  ['openai.gpt-5.5', ['us-east-1', 'us-east-2']],
-  ['openai.gpt-5.4', ['us-east-1', 'us-east-2', 'us-west-2']],
-]);
-
 function getDefaultBedrockOpenAiRegion(modelName: string): string {
   const regions = BEDROCK_OPENAI_MANTLE_REGIONS.get(modelName);
   return !regions || regions.includes(DEFAULT_BEDROCK_OPENAI_REGION)
@@ -78,7 +58,8 @@ function getDefaultBedrockOpenAiRegion(modelName: string): string {
 }
 
 function getMantleEndpointRegion(url: URL): string | undefined {
-  return /^bedrock-mantle\.([a-z0-9-]+)\.api\.aws$/.exec(url.hostname)?.[1];
+  const endpoint = getBedrockBillingEndpoint(url.hostname);
+  return endpoint?.service === 'mantle' ? endpoint.region : undefined;
 }
 
 function getMantleRegionHint(
@@ -129,8 +110,7 @@ export function getBedrockMantleResponsesBaseUrl(region: string): string {
  * Without this, GPT-5 controls (reasoning effort, verbosity) would be dropped and a
  * `temperature` default wrongly applied. We strip the prefix for those capability/billing
  * checks while still sending the real `openai.gpt-5.6-sol` id as the request `model` — Bedrock
- * uses OpenAI regional-processing rates in commercial regions, with a further GovCloud
- * adjustment for GPT-5.6 Terra/Luna.
+ * publishes its own regional pricing for GPT-5.6 models.
  */
 export class BedrockOpenAiResponsesProvider extends OpenAiResponsesProvider {
   private readonly bedrockTokenProvider: BedrockTokenProvider;
@@ -182,7 +162,7 @@ export class BedrockOpenAiResponsesProvider extends OpenAiResponsesProvider {
   }
 
   protected normalizeCapabilityModelName(modelName: string): string {
-    return modelName.replace(/^openai\./, '');
+    return getBedrockCapabilityModelName(modelName);
   }
 
   protected override getGenAISystem(): string {
@@ -209,13 +189,9 @@ export class BedrockOpenAiResponsesProvider extends OpenAiResponsesProvider {
    */
   protected getBillingModelName(config: OpenAiCompletionOptions): string {
     const passthroughModel = (config.passthrough as { model?: unknown } | undefined)?.model;
-    const modelName =
-      typeof passthroughModel === 'string'
-        ? this.normalizeCapabilityModelName(passthroughModel)
-        : this.getCapabilityModelName();
-    return /^gpt-5\.6(?:-|$)/.test(modelName) || modelName === 'grok-4.3'
-      ? `bedrock:${modelName}`
-      : modelName;
+    return getBedrockMantleBillingModelName(
+      typeof passthroughModel === 'string' ? passthroughModel : this.modelName,
+    );
   }
 
   /**
@@ -239,14 +215,16 @@ export class BedrockOpenAiResponsesProvider extends OpenAiResponsesProvider {
     context?: BedrockOpenAiResponsesBodyContext,
     callApiOptions?: BedrockOpenAiResponsesCallApiOptions,
   ) {
+    const model = this.getRequestModelName(context);
     const config = { ...this.config, ...context?.prompt?.config };
-    if (config.serviceTier !== undefined || config.passthrough?.serviceTier !== undefined) {
+    if (
+      isBedrockOpenAiResponsesModel(model) &&
+      (config.serviceTier !== undefined || config.passthrough?.serviceTier !== undefined)
+    ) {
       throw new Error(
-        'Amazon Bedrock Responses uses service_tier. Replace serviceTier with service_tier ' +
-          'to select an inference tier.',
+        'Amazon Bedrock Responses uses service_tier. Replace serviceTier with service_tier to select an inference tier.',
       );
     }
-    const model = this.getRequestModelName(context);
     if (
       isBedrockOpenAiResponsesModel(model) !== isBedrockOpenAiResponsesModel(this.modelName) ||
       isBedrockGrokModel(model) !== isBedrockGrokModel(this.modelName) ||
@@ -274,19 +252,26 @@ export class BedrockOpenAiResponsesProvider extends OpenAiResponsesProvider {
       delete (result.body as Record<string, unknown>).service_tier;
       return result;
     }
-    const supportsUltrafast = model === 'openai.gpt-6.1-sol';
+    const supportsUltrafast = model === 'openai.gpt-6-astra' || model === 'openai.gpt-6.1-sol';
+    if (serviceTier === 'ultrafast' && supportsUltrafast) {
+      const region = getMantleEndpointRegion(new URL(this.getApiUrl())) ?? this.bedrockRegion;
+      if (region !== 'us-east-1') {
+        throw new Error(
+          `Amazon Bedrock Mantle serves ${model} Ultrafast in us-east-1. Select the us-east-1 endpoint or use the default service tier.`,
+        );
+      }
+      return result;
+    }
     if (
-      serviceTier !== undefined &&
-      serviceTier !== 'default' &&
-      !(supportsUltrafast && serviceTier === 'ultrafast')
+      isBedrockGptOssResponsesModel(model) &&
+      (serviceTier === 'flex' || serviceTier === 'priority')
     ) {
-      const supportedTiers = supportsUltrafast
-        ? 'the standard and ultrafast inference tiers'
-        : 'the standard inference tier';
-      const supportedValues = supportsUltrafast ? '"default" or "ultrafast"' : '"default"';
+      return result;
+    }
+    if (serviceTier !== undefined && serviceTier !== 'default') {
       throw new Error(
-        `Amazon Bedrock model "${model}" supports only ${supportedTiers}; ` +
-          `received "${serviceTier}". Remove service_tier or set service_tier to ${supportedValues}.`,
+        `Amazon Bedrock model "${model}" does not support the requested service tier through this adapter; ` +
+          `received "${serviceTier}". Remove service_tier or set service_tier to ${supportsUltrafast ? '"default" or "ultrafast"' : '"default"'}.`,
       );
     }
     return result;
@@ -298,13 +283,8 @@ export class BedrockOpenAiResponsesProvider extends OpenAiResponsesProvider {
     callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
     const result = await super.callApi(prompt, context, callApiOptions);
-    if (typeof result.error !== 'string') {
-      return result;
-    }
-    const status = result.metadata?.http?.status;
-    // Mantle can reject Ultrafast before checking model availability in an unlisted Region.
-    const isServiceTierError = status === 400 && /"param"\s*:\s*"service_tier"/.test(result.error);
-    if (status !== 404 && !isServiceTierError) {
+    // Mantle reports an unavailable Region as "model does not exist" (HTTP 404).
+    if (result.metadata?.http?.status !== 404 || typeof result.error !== 'string') {
       return result;
     }
     const region = getMantleEndpointRegion(new URL(this.getApiUrl()));
@@ -402,10 +382,13 @@ export class BedrockGptOssResponsesProvider extends BedrockOpenAiResponsesProvid
   ): ProviderResponse {
     const passthroughModel = (config.passthrough as { model?: unknown } | undefined)?.model;
     const model = typeof passthroughModel === 'string' ? passthroughModel : this.modelName;
-    const rates = getBedrockPricing(
-      model,
-      resolveBedrockMantleRegion(config, this.env, DEFAULT_BEDROCK_MANTLE_RESPONSES_REGION),
-    );
+    // The regional GPT OSS catalog rates cover Standard inference.
+    const tier = data.service_tier ?? config.service_tier;
+    if (tier && tier !== 'default' && tier !== 'standard') {
+      return super.applyBilling(result, data, config, cached);
+    }
+    const region = getMantleEndpointRegion(new URL(this.getApiUrl())) ?? this.getBillingRegion();
+    const rates = getBedrockPricing(model, region);
     const inputTokens = data.usage?.input_tokens;
     const outputTokens = data.usage?.output_tokens;
     if (
@@ -414,7 +397,7 @@ export class BedrockGptOssResponsesProvider extends BedrockOpenAiResponsesProvid
       inputTokens === undefined ||
       outputTokens === undefined
     ) {
-      return result;
+      return super.applyBilling(result, data, config, cached);
     }
     const cost = cached
       ? 0
