@@ -33,7 +33,7 @@ import type {
   ProviderResponse,
 } from '../../types/providers';
 import type { TokenUsage, VarValue } from '../../types/shared';
-import type { ClaudeThinkingConfig } from '../anthropic/types';
+import type { ClaudeEffort, ClaudeThinkingConfig } from '../anthropic/types';
 
 // Utility function to coerce string values to numbers
 export const coerceStrToNum = (value: string | number | undefined): number | undefined =>
@@ -136,8 +136,10 @@ interface BedrockClaudeLegacyCompletionOptions extends BedrockOptions {
 
 export interface BedrockClaudeMessagesCompletionOptions extends BedrockOptions {
   max_tokens?: number;
+  effort?: ClaudeEffort;
   temperature?: number;
   anthropic_version?: string;
+  anthropic_beta?: string[];
   tools?: {
     name: string;
     description: string;
@@ -1649,14 +1651,21 @@ export const BEDROCK_MODEL = {
       // path's default from 1024 to 2048 for every Claude model, not just the thinks-by-
       // default ones. That may well be the right default here too, but it is a behavior
       // change for existing configs and belongs in its own change.
-      const alwaysOnAdaptiveThinking =
-        !!modelName && isAlwaysOnAdaptiveThinkingClaudeModel(modelName);
+      // Application profile names do not identify their backing model.
+      const isApplicationProfile =
+        modelName?.startsWith('arn:') && modelName.includes(':application-inference-profile/');
+      const capabilityModelName = isApplicationProfile ? '' : (modelName ?? '');
+      const thinking = normalizeClaudeThinkingConfig(
+        capabilityModelName,
+        config?.thinking,
+        config?.effort,
+      );
+      const alwaysOnAdaptiveThinking = isAlwaysOnAdaptiveThinkingClaudeModel(capabilityModelName);
       const thinksByDefault =
         alwaysOnAdaptiveThinking ||
-        (!!modelName &&
-          isThinkingOnByDefaultClaudeModel(modelName) &&
-          config?.thinking?.type !== 'disabled' &&
-          config?.thinking?.type !== 'between_tools');
+        (isThinkingOnByDefaultClaudeModel(capabilityModelName) &&
+          thinking?.type !== 'disabled' &&
+          thinking?.type !== 'between_tools');
       addConfigParam(
         params,
         'max_tokens',
@@ -1664,10 +1673,24 @@ export const BEDROCK_MODEL = {
         getEnvInt('AWS_BEDROCK_MAX_TOKENS'),
         thinksByDefault ? 2048 : 1024,
       );
-      const thinking = modelName
-        ? // InvokeModel exposes no effort field, so the effort-capped rules cannot apply here.
-          normalizeClaudeThinkingConfig(modelName, config?.thinking, undefined)
-        : config?.thinking;
+      addConfigParam(
+        params,
+        'output_config',
+        config?.effort == null ? undefined : { effort: config.effort },
+        undefined,
+        undefined,
+      );
+      const betaFeatures = new Set(config?.anthropic_beta);
+      // Bedrock still gates Opus 4.5 effort behind a beta opt-in.
+      if (
+        config?.effort != null &&
+        /(?:^|[./])anthropic\.claude-opus-4-5(?:-|:|$)/.test(capabilityModelName)
+      ) {
+        betaFeatures.add('effort-2025-11-24');
+      }
+      if (betaFeatures.size > 0) {
+        params.anthropic_beta = [...betaFeatures];
+      }
       // Bedrock relays Claude's 400s as ValidationExceptions, so apply the same sampling rules
       // as the Anthropic API: models that deprecate sampling take no temperature, and extended
       // thinking rejects anything but the default, including this handler's 0 default. (This
@@ -1676,10 +1699,10 @@ export const BEDROCK_MODEL = {
         { temperature: config?.temperature },
         {
           thinkingEnabled: alwaysOnAdaptiveThinking || isClaudeThinkingEnabled(thinking),
-          samplingParamsDeprecated: modelName
-            ? isSamplingParamsDeprecatedClaudeModel(modelName)
-            : false,
-          defaultTemperature: 0,
+          samplingParamsDeprecated: isSamplingParamsDeprecatedClaudeModel(capabilityModelName),
+          // An application profile hides the backing model, which may reject sampling.
+          // Preserve explicit values but leave the default to AWS.
+          defaultTemperature: isApplicationProfile ? undefined : 0,
         },
       );
       for (const warning of samplingWarnings) {
@@ -1697,14 +1720,14 @@ export const BEDROCK_MODEL = {
       // the Converse and Anthropic Messages providers surface the one-time warnings.
       const toolChoice =
         (alwaysOnAdaptiveThinking ||
-          (!!modelName && isForcedToolChoiceUnsupportedClaudeModel(modelName))) &&
+          isForcedToolChoiceUnsupportedClaudeModel(capabilityModelName)) &&
         (config?.tool_choice?.type === 'any' || config?.tool_choice?.type === 'tool')
           ? undefined
           : config?.tool_choice;
       addConfigParam(params, 'tool_choice', toolChoice, undefined, undefined);
       addConfigParam(params, 'thinking', thinking, undefined, undefined);
-      // max_tokens was resolved above, before the thinking config was known. Anthropic
-      // rejects a budget at or above the cap, so raise the floor now that both are settled.
+      // Anthropic rejects a thinking budget at or above max_tokens; raise that floor
+      // after both values are resolved.
       if (typeof params.max_tokens === 'number') {
         params.max_tokens = clampMaxTokensForThinkingBudget(params.max_tokens, thinking);
       }
@@ -2332,7 +2355,6 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   'anthropic.claude-sonnet-4-6': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'anthropic.claude-sonnet-4-5-20250929-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'anthropic.claude-haiku-4-5-20251001-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
-  'anthropic.claude-sonnet-4-20250514-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'cohere.command-r-plus-v1:0': BEDROCK_MODEL.COHERE_COMMAND_R,
   'cohere.command-r-v1:0': BEDROCK_MODEL.COHERE_COMMAND_R,
   'deepseek.r1-v1:0': BEDROCK_MODEL.DEEPSEEK,
@@ -2376,7 +2398,6 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   'apac.anthropic.claude-sonnet-4-6': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'apac.anthropic.claude-sonnet-4-5-20250929-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'apac.anthropic.claude-haiku-4-5-20251001-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
-  'apac.anthropic.claude-sonnet-4-20250514-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'apac.meta.llama4-scout-17b-instruct-v1:0': BEDROCK_MODEL.LLAMA4,
   'apac.meta.llama4-maverick-17b-instruct-v1:0': BEDROCK_MODEL.LLAMA4,
 
@@ -2406,7 +2427,6 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   'eu.anthropic.claude-sonnet-4-6': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'eu.anthropic.claude-sonnet-4-5-20250929-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'eu.anthropic.claude-haiku-4-5-20251001-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
-  'eu.anthropic.claude-sonnet-4-20250514-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'eu.meta.llama3-2-1b-instruct-v1:0': BEDROCK_MODEL.LLAMA3_2,
   'eu.meta.llama3-2-3b-instruct-v1:0': BEDROCK_MODEL.LLAMA3_2,
   'eu.meta.llama4-scout-17b-instruct-v1:0': BEDROCK_MODEL.LLAMA4,
@@ -2441,7 +2461,6 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   'us.anthropic.claude-sonnet-4-6': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'us.anthropic.claude-sonnet-4-5-20250929-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'us.anthropic.claude-haiku-4-5-20251001-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
-  'us.anthropic.claude-sonnet-4-20250514-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'us.deepseek.r1-v1:0': BEDROCK_MODEL.DEEPSEEK,
   'us.meta.llama3-1-405b-instruct-v1:0': BEDROCK_MODEL.LLAMA3_1,
   'us.meta.llama3-1-70b-instruct-v1:0': BEDROCK_MODEL.LLAMA3_1,
@@ -2580,15 +2599,15 @@ function getCanonicalMessagesOnlyModel(modelName: string): string | undefined {
  * error instead of reaching the `anthropic.claude` catch-all below (or, on the Converse
  * route, the remote API) and failing with something less obvious.
  *
- * The Claude entries were verified absent from `list-foundation-models` in all 17 commercial
- * regions on 2026-09-04. Note this is Bedrock's lifecycle, not Anthropic's: several models
- * retired on the Anthropic API are still served here and must NOT be listed.
+ * Use the Bedrock model card to verify end of life in all regions. Anthropic's
+ * first-party retirement dates can differ from Bedrock's regional lifecycle.
  *
  * Use bare IDs; the availability check removes inference-profile prefixes.
  */
 export const RETIRED_BEDROCK_MODELS = new Set([
   'anthropic.claude-3-opus-20240229-v1:0',
   'anthropic.claude-opus-4-20250514-v1:0',
+  'anthropic.claude-sonnet-4-20250514-v1:0',
   'anthropic.claude-3-5-haiku-20241022-v1:0',
   'anthropic.claude-instant-v1',
   'anthropic.claude-v1',
