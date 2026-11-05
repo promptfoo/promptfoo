@@ -1,6 +1,7 @@
 import { resolveProviderEnv } from '../env';
 import { GoogleAuthManager } from './auth';
 import { GoogleLiveProvider } from './live';
+import { getVertexApiHostForRegion, getVertexModelDefaultRegion } from './shared';
 
 import type { CompletionOptions } from './types';
 
@@ -19,6 +20,7 @@ export class VertexLiveProvider extends GoogleLiveProvider {
     const region =
       config.region ||
       resolveProviderEnv(this.env, ['VERTEX_REGION', 'GOOGLE_CLOUD_LOCATION'])?.value ||
+      getVertexModelDefaultRegion(this.modelName) ||
       'us-central1';
     // Live uses the Cloud API versions, not Gemini API v1alpha/v1beta.
     const apiVersion = config.apiVersion || 'v1';
@@ -56,8 +58,7 @@ export class VertexLiveProvider extends GoogleLiveProvider {
         'Vertex Live requires a project ID. Set GOOGLE_CLOUD_PROJECT or config.projectId.',
       );
     }
-    const host =
-      region === 'global' ? 'aiplatform.googleapis.com' : `${region}-aiplatform.googleapis.com`;
+    const host = getVertexApiHostForRegion(region);
     const url = `wss://${host}/ws/google.cloud.aiplatform.${apiVersion}.LlmBidiService/BidiGenerateContent`;
     let headers: Record<string, string>;
     try {

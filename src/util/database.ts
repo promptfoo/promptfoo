@@ -18,6 +18,7 @@ import { getAuthor } from '../globalConfig/accounts';
 import logger from '../logger';
 import Eval, { createEvalId } from '../models/eval';
 import { notifyEvaluationChanged, notifyEvaluationsDeleted } from '../models/evalMutation';
+import { getStripFlags } from '../models/evalResult';
 import { generateIdFromPrompt } from '../models/prompt';
 import {
   type EvaluateSummaryV2,
@@ -31,7 +32,11 @@ import {
 } from '../types/index';
 import invariant from '../util/invariant';
 import { sha256 } from './createHash';
-import { restoreAzureBlobSasTokens, sanitizeTracingConfigForPersistence } from './sanitizer';
+import {
+  restoreAzureBlobSasTokens,
+  sanitizeConfigForOutput,
+  sanitizeTracingConfigForPersistence,
+} from './sanitizer';
 import {
   getCachedStandaloneEvals,
   getStandaloneEvalCacheKey,
@@ -281,8 +286,9 @@ async function readTestCases(limit: number): Promise<TestCasesWithMetadata[]> {
 
   for (const eval_ of evals_) {
     const createdAt = new Date(eval_.createdAt).toISOString();
-    const resultWrapper: ResultsFile = await eval_.toResultsFile();
-    const testCases = resultWrapper.config.tests;
+    // Same config projection as toResultsFile, without loading result rows.
+    const config = sanitizeConfigForOutput(eval_.config, getStripFlags(eval_.config.env));
+    const testCases = config.tests;
     if (testCases) {
       const evalId = eval_.id;
       // For database storage, we need to handle the union type properly

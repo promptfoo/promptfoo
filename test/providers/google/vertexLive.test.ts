@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import WebSocket from 'ws';
 import logger from '../../../src/logger';
 import { GoogleAuthManager } from '../../../src/providers/google/auth';
+import { GoogleLiveProvider } from '../../../src/providers/google/live';
 import { VertexLiveProvider } from '../../../src/providers/google/vertexLive';
 import { loadApiProvider } from '../../../src/providers/index';
 import { TestProviderRequestSchema } from '../../../src/types/api/providers';
@@ -62,7 +63,7 @@ describe('VertexLiveProvider', () => {
   };
   const sent = () => vi.mocked(ws.send).mock.calls.map(([message]) => JSON.parse(String(message)));
   const start = async (
-    provider: VertexLiveProvider,
+    provider: GoogleLiveProvider,
     prompt = 'Say hello.',
     context?: CallApiContextParams,
   ) => {
@@ -188,6 +189,112 @@ describe('VertexLiveProvider', () => {
     await complete();
     await result;
   });
+
+  it('uses the Vertex multi-region endpoint for Gemini Live in the EU', async () => {
+    const { result } = await start(
+      new VertexLiveProvider('gemini-3.8-live', { config: { region: 'eu' } }),
+    );
+    expect(vi.mocked(WebSocket).mock.calls[0][0]).toContain(
+      'wss://aiplatform.eu.rep.googleapis.com/',
+    );
+    expect(sent()[0].setup.model).toContain('/locations/eu/');
+    await complete();
+    await result;
+  });
+
+  const liveTranscribe = 'gemini-3.5-transcribe-live';
+  const recording = JSON.stringify([
+    {
+      role: 'user',
+      parts: [{ inlineData: { mimeType: 'audio/pcm;rate=16000', data: 'AAAAAA==' } }],
+    },
+  ]);
+
+  it.each([
+    [
+      'google',
+      'generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.',
+      `models/${liveTranscribe}`,
+    ],
+    [
+      'vertex',
+      'aiplatform.googleapis.com/ws/google.cloud.aiplatform.v1.',
+      `projects/adc-project/locations/global/publishers/google/models/${liveTranscribe}`,
+    ],
+  ] as const)('grades only committed speech on %s', async (prefix, endpoint, modelId) => {
+    const config = {
+      generationConfig: { inputAudioTranscription: { languageCodes: ['en-US'] } },
+    };
+    const provider =
+      prefix === 'vertex'
+        ? new VertexLiveProvider(liveTranscribe, { config })
+        : new GoogleLiveProvider(liveTranscribe, { config: { ...config, apiKey: 'test-key' } });
+    const { result } = await start(provider, recording);
+    expect(vi.mocked(WebSocket).mock.calls[0][0]).toContain(endpoint);
+    expect(sent()).toEqual([
+      {
+        setup: {
+          model: modelId,
+          generationConfig: { responseModalities: ['TEXT'] },
+          inputAudioTranscription: { languageCodes: ['en-US'] },
+        },
+      },
+      { realtimeInput: { audio: { mimeType: 'audio/pcm;rate=16000', data: 'AAAAAA==' } } },
+      { realtimeInput: { audioStreamEnd: true } },
+    ]);
+    await emit({ serverContent: { interimInputTranscription: { text: 'draft' } } });
+    await emit({ serverContent: { inputTranscription: { text: 'First segment.' } } });
+    await emit({
+      serverContent: {
+        inputTranscription: { text: 'Second segment.' },
+        turnComplete: prefix === 'vertex',
+      },
+      usageMetadata: { promptTokenCount: 100, responseTokenCount: 10, totalTokenCount: 110 },
+    });
+    await vi.advanceTimersByTimeAsync(4_000);
+    await expect(result).resolves.toMatchObject({
+      output: { text: 'First segment.\nSecond segment.' },
+      cost: expect.closeTo((3.5 * 100 + 21 * 10) / 1e6, 10),
+    });
+  });
+
+  it.each([
+    [
+      {},
+      'hello',
+      'Gemini Live transcription requires raw 16-bit mono PCM audio at audio/pcm;rate=16000.',
+    ],
+    [
+      { generationConfig: { responseModalities: ['AUDIO'] } },
+      recording,
+      'Gemini Live transcription requires the TEXT response modality.',
+    ],
+    [
+      { generationConfig: { outputAudioTranscription: {} } },
+      recording,
+      'Gemini Live transcription produces text. Remove output audio transcription and speech settings.',
+    ],
+    [
+      { systemInstruction: 'translate' },
+      recording,
+      'Gemini Live transcription accepts audio without tools or system instructions.',
+    ],
+    [
+      { passthrough: { service_tier: 'flex' } },
+      recording,
+      'Gemini Live transcription supports only the Standard service tier.',
+    ],
+    [{ apiVersion: 'v1alpha' }, recording, 'Gemini Live transcription requires apiVersion v1beta.'],
+  ])(
+    'rejects unsupported transcription settings before opening a socket',
+    async (config, prompt, error) => {
+      const provider = new GoogleLiveProvider(liveTranscribe, {
+        config: { apiKey: 'test-key', ...(config as ProviderOptions['config']) },
+      });
+      await expect(provider.callApi(prompt as string)).resolves.toEqual({ error });
+      expect(WebSocket).not.toHaveBeenCalled();
+    },
+  );
 
   it('uses effective prompt config and forwards service-account auth options', async () => {
     const provider = new VertexLiveProvider(model, { config: { projectId: 'base-project' } });
