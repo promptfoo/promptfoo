@@ -193,18 +193,27 @@ describe.skipIf(process.platform === 'win32')('CLI signals during an eval', () =
     expect(traces.received('sigterm-smoke-before-hang')).toBe(true);
   });
 
-  it('exports a span that ends when an in-flight call settles during the drain', async () => {
+  it.each([
+    { signal: 'SIGTERM', options: [] },
+    { signal: 'SIGINT', options: ['--no-write'] },
+  ] as const)('exports a span that ends during the $signal drain', async ({ signal, options }) => {
     const traces = await startTraceReceiver();
     const { proc, exited } = await startUntilProviderCalled(
-      [CLI_PATH, 'eval', '-c', 'promptfooconfig.tracing.yaml', '--no-cache', '--no-table'],
-      { ...traces.env, SIGTERM_SMOKE_SETTLE_AFTER_MS: '500' },
+      [
+        CLI_PATH,
+        'eval',
+        '-c',
+        'promptfooconfig.tracing.yaml',
+        '--no-cache',
+        '--no-table',
+        ...options,
+      ],
+      { ...traces.env, SIGTERM_SMOKE_SETTLE_AFTER_MS: '500', SIGTERM_SMOKE_SETTLE_SIGNAL: signal },
     );
 
-    // Once the call settles the eval may finish on its own, so how it exits is not the point.
-    const { elapsedMs } = await signalAndWait(proc, exited);
+    const { elapsedMs } = await signalAndWait(proc, exited, signal);
 
     expect(elapsedMs).toBeLessThan(SIGTERM_CLEANUP_TIMEOUT_MS + 2_000);
-    // The call ends this span half a second after SIGTERM, while the drain still waits for it.
     expect(traces.received('sigterm-smoke-settled-after-signal')).toBe(true);
   });
 });

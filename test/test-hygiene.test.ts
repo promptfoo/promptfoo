@@ -138,7 +138,7 @@ const allowedSkippedTests: AllowedSkip[] = [
   {
     file: 'smoke/sigterm-eval.test.ts',
     kind: 'skipIf',
-    linePattern: /^describe\.skipIf\(process\.platform === 'win32'\)\('SIGTERM during an eval'/,
+    linePattern: /^describe\.skipIf\(process\.platform === 'win32'\)\('CLI signals during an eval'/,
     reason: 'Windows has no POSIX signals, so SIGTERM ends the child without running handlers',
   },
   {

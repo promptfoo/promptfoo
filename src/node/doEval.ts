@@ -27,7 +27,7 @@ import { neverGenerateRemote } from '../redteam/remoteGeneration';
 import { createShareableUrl, isSharingEnabled } from '../share';
 import { generateTable } from '../table';
 import telemetry from '../telemetry';
-import { flushOtel, shutdownOtel } from '../tracing/otelSdk';
+import { deferOtelSigintShutdown, flushOtel, shutdownOtel } from '../tracing/otelSdk';
 import { EMAIL_OK_STATUS } from '../types/email';
 import { isCliEventSource } from '../types/eventSource';
 import { CommandLineOptionsSchema, MAX_SUGGESTIONS_COUNT, TestSuiteSchema } from '../types/index';
@@ -1358,6 +1358,7 @@ async function doEvalWithEnv(
     const removeSigtermHandler = isCliInvocation ? terminateOnSigterm() : undefined;
     // Saved runs own resumable pause; an idle watcher owns its own Ctrl-C.
     const interruptUnsaved = isCliInvocation && runCommand.write === false;
+    const restoreOtelSigint = interruptUnsaved ? deferOtelSigintShutdown() : undefined;
     if (interruptUnsaved) {
       process.once('SIGINT', interruptUnsavedRun);
     }
@@ -1388,6 +1389,7 @@ async function doEvalWithEnv(
       removeSigtermHandler?.();
       if (interruptUnsaved) {
         process.removeListener('SIGINT', interruptUnsavedRun);
+        restoreOtelSigint?.();
       }
     }
   };
