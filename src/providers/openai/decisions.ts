@@ -59,6 +59,8 @@ const cacheScopes = new LRUCache<string, string>({
 interface DecisionsOptions extends OpenAiSharedOptions {
   model?: string;
   questions?: DecisionQuestion[];
+  prompt_cache_key?: string | null;
+  prompt_cache_options?: DecisionRequest['prompt_cache_options'];
   safety_identifier?: string | null;
   /** llm-rubric: minimum normalized score to pass. */
   threshold?: number;
@@ -347,6 +349,8 @@ export class OpenAiDecisionsProvider extends OpenAiGenericProvider {
           context?.isGrading && context.prompt.label === 'llm-rubric'
             ? config.questions
             : renderVarsInObject(config.questions, context?.vars),
+        prompt_cache_key: renderVarsInObject(config.prompt_cache_key, context?.vars),
+        prompt_cache_options: config.prompt_cache_options,
         safety_identifier: renderVarsInObject(config.safety_identifier, context?.vars),
       });
       assertOpenAiApiModel(body.model, this.getApiUrl(config));

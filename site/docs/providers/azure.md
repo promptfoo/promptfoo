@@ -245,7 +245,8 @@ The rendered prompt becomes `input`. Question types, input validation, JSON outp
 configuration follow the [OpenAI Decisions provider](./openai-decisions.md).
 `questions` and `safety_identifier` support template variables. `maxRetries`
 controls HTTP retries, and `--no-cache` bypasses response reuse. No default
-Decisions price is inferred from the deployment name.
+Decisions price is inferred from the deployment name. Azure image inputs must use
+inline base64 data URLs; hosted image URLs are not supported.
 
 Azure Decisions can also grade text with `llm-rubric` and `classifier`. Set
 `threshold` and optional ordered `levels` for rubric grading, or set

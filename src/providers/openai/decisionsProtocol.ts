@@ -5,7 +5,33 @@ const decisionChoiceValueSchema = z.union([z.string(), z.boolean()]);
 export const decisionProbabilitySchema = z.number().min(0).max(1);
 // Promptfoo allows one percentage point of rounding error, plus floating-point slack.
 const DISTRIBUTION_TOLERANCE = 0.01 + 1e-12;
-const decisionQuestionFields = { name: z.string().optional(), instructions: z.string() };
+const decisionTextPartSchema = z.object({ type: z.literal('input_text'), text: z.string() });
+const decisionImagePartSchema = z.object({
+  type: z.literal('input_image'),
+  image_url: z.union([
+    z.string().regex(/^data:image\/[^;,]+;base64,/i),
+    z.url({ protocol: /^https?$/ }),
+  ]),
+  detail: z.enum(['auto', 'low', 'high', 'original']).nullish(),
+});
+const decisionJsonObjectSchema = z.record(z.string(), z.json());
+const decisionJsonPartSchema = z.object({
+  type: z.literal('input_json'),
+  data: z.union([decisionJsonObjectSchema, z.array(decisionJsonObjectSchema)]),
+});
+const decisionQuestionFields = {
+  name: z.string().optional(),
+  instructions: z.union([
+    z.string(),
+    z.array(
+      z.discriminatedUnion('type', [
+        decisionTextPartSchema.strict(),
+        decisionImagePartSchema.strict(),
+        decisionJsonPartSchema.strict(),
+      ]),
+    ),
+  ]),
+};
 
 export const decisionLevelSchema = z
   .object({ label: z.string(), description: z.string().optional() })
@@ -48,6 +74,7 @@ export const decisionQuestionSchema = z.discriminatedUnion('type', [
 export const decisionQuestionsSchema = z
   .array(decisionQuestionSchema)
   .min(1)
+  .max(400)
   .refine(
     (questions) => {
       const names = questions.map(({ name }) => name).filter((name) => name !== undefined);
@@ -56,52 +83,132 @@ export const decisionQuestionsSchema = z
     { message: 'Question names must be unique within the request' },
   );
 
-export const decisionInputSchema = z.union([
-  z.string(),
-  z.array(
+const decisionCacheBreakpoint = {
+  prompt_cache_breakpoint: z.object({ mode: z.literal('explicit') }).nullish(),
+};
+const decisionInputTextSchema = decisionTextPartSchema.extend(decisionCacheBreakpoint);
+const decisionInputImageSchema = decisionImagePartSchema.extend(decisionCacheBreakpoint);
+const decisionMessageFields = { type: z.literal('message').optional() };
+const decisionToolFields = {
+  call_id: z.string().min(1).max(64),
+  id: z.string().nullish(),
+  status: z.enum(['in_progress', 'completed', 'incomplete']).nullish(),
+};
+const decisionToolCallFields = {
+  ...decisionToolFields,
+  namespace: z.string().min(1).max(64).nullish(),
+};
+const decisionInputItemSchema = z.union([
+  z.discriminatedUnion('role', [
     z.object({
-      type: z.literal('message').optional(),
+      ...decisionMessageFields,
       role: z.literal('user'),
       content: z.union([
         z.string(),
         z.array(
           z.discriminatedUnion('type', [
-            z.object({ type: z.literal('input_text'), text: z.string() }),
-            z.object({
-              type: z.literal('input_image'),
-              image_url: z
-                .string()
-                .regex(
-                  /^data:image\/[^;,]+;base64,/i,
-                  'Decisions images must be inline base64 data URLs',
-                ),
-              detail: z.enum(['auto', 'low', 'high', 'original']).nullable().optional(),
-            }),
+            decisionInputTextSchema,
+            decisionInputImageSchema,
+            decisionJsonPartSchema,
           ]),
         ),
       ]),
     }),
-  ),
+    z.object({
+      ...decisionMessageFields,
+      role: z.enum(['developer', 'system']),
+      content: z.union([z.string(), z.array(decisionInputTextSchema)]),
+    }),
+    z.object({
+      ...decisionMessageFields,
+      role: z.literal('assistant'),
+      phase: z.enum(['commentary', 'final_answer']).nullish(),
+      content: z.union([
+        z.string(),
+        z.array(
+          z.discriminatedUnion('type', [
+            z.object({ type: z.literal('output_text'), text: z.string() }),
+            z.object({ type: z.literal('refusal'), refusal: z.string() }),
+          ]),
+        ),
+      ]),
+    }),
+  ]),
+  z.discriminatedUnion('type', [
+    z.object({
+      ...decisionToolCallFields,
+      type: z.literal('function_call'),
+      name: z.string().min(1).max(128),
+      arguments: z.string(),
+    }),
+    z.object({
+      ...decisionToolCallFields,
+      type: z.literal('custom_tool_call'),
+      name: z.string().min(1).max(64),
+      input: z.string(),
+    }),
+    z.object({
+      ...decisionToolFields,
+      type: z.enum(['function_call_output', 'custom_tool_call_output']),
+      output: z.union([
+        z.string(),
+        z.array(z.discriminatedUnion('type', [decisionInputTextSchema, decisionInputImageSchema])),
+      ]),
+    }),
+  ]),
 ]);
 
-export const decisionRequestSchema = z.object({
-  model: z.string().trim().min(1),
-  input: decisionInputSchema.refine(
-    (input) =>
-      typeof input === 'string' ||
-      input.reduce(
-        (count, message) =>
-          count +
-          (Array.isArray(message.content)
-            ? message.content.filter((part) => part.type === 'input_image').length
-            : 0),
-        0,
-      ) <= 128,
+export const decisionInputSchema = z.union([z.string(), z.array(decisionInputItemSchema)]).refine(
+  (input) => {
+    if (typeof input === 'string') {
+      return true;
+    }
+    const calls = new Map<string, 'function_call' | 'custom_tool_call'>();
+    return input.every((item) => {
+      if (item.type === 'function_call' || item.type === 'custom_tool_call') {
+        calls.set(item.call_id, item.type);
+      } else if (item.type === 'function_call_output' || item.type === 'custom_tool_call_output') {
+        return item.type === `${calls.get(item.call_id)}_output`;
+      }
+      return true;
+    });
+  },
+  { message: 'Each tool output must reference an earlier matching call_id' },
+);
+
+export const decisionRequestSchema = z
+  .object({
+    model: z.string().trim().min(1),
+    input: decisionInputSchema,
+    questions: decisionQuestionsSchema,
+    prompt_cache_key: z.string().max(64).nullish(),
+    prompt_cache_options: z
+      .object({
+        mode: z.enum(['implicit', 'explicit']).nullish(),
+        ttl: z.literal('30m').optional(),
+      })
+      .nullish(),
+    safety_identifier: z.string().max(128).nullable().optional(),
+  })
+  .refine(
+    ({ input, questions }) => {
+      const sharedParts =
+        typeof input === 'string'
+          ? []
+          : input.map((item) =>
+              'content' in item ? item.content : 'output' in item ? item.output : undefined,
+            );
+      return (
+        [...sharedParts, ...questions.map((question) => question.instructions)].reduce<number>(
+          (total, parts) =>
+            total +
+            (Array.isArray(parts) ? parts.filter((part) => part.type === 'input_image').length : 0),
+          0,
+        ) <= 128
+      );
+    },
     { message: 'Decisions accepts at most 128 images per request' },
-  ),
-  questions: decisionQuestionsSchema,
-  safety_identifier: z.string().max(128).nullable().optional(),
-});
+  );
 
 const decisionAnswerName = { name: z.string().nullable() };
 

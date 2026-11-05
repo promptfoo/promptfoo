@@ -57,6 +57,25 @@ function hasSensitiveValue(value: unknown): boolean {
     : false;
 }
 
+function hasHostedDecisionImage(body: DecisionRequest): boolean {
+  const parts = [
+    ...body.questions.map((question) => question.instructions),
+    ...(typeof body.input === 'string'
+      ? []
+      : body.input.map((item) =>
+          'content' in item ? item.content : 'output' in item ? item.output : undefined,
+        )),
+  ];
+  return parts.some(
+    (items) =>
+      Array.isArray(items) &&
+      items.some(
+        (item) =>
+          item.type === 'input_image' && !/^data:image\/[^;,]+;base64,/i.test(item.image_url),
+      ),
+  );
+}
+
 function getHeaderCredentials(name: string, value: string): string[] {
   const trimmed = value.trim();
   const credentials = [value, trimmed.replace(/^[!#$%&'*+.^_`|~0-9A-Za-z-]+\s+/, '')];
@@ -318,6 +337,12 @@ export class AzureDecisionsProvider extends AzureGenericProvider<AzureDecisionsO
           ? error.issues.map((issue) => `${issue.path.join('.')}: ${issue.message}`).join('; ')
           : String(error);
       return { error: `Invalid Azure Decisions request: ${detail}` };
+    }
+    if (hasHostedDecisionImage(body)) {
+      return {
+        error:
+          'Invalid Azure Decisions request: Azure Decisions images must be inline base64 data URLs.',
+      };
     }
 
     const apiUrl = /\/openai\/v1$/i.test(apiBaseUrl)
