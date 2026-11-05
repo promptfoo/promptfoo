@@ -1529,7 +1529,7 @@ For example, use `bedrock:runtime:chat:us.moonshotai.kimi-k3` or
 [Kimi K3](https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-moonshot-ai-kimi-k3.html)
 requires a supported US, India, or global inference profile on both Runtime APIs; bare
 model IDs and foundation-model ARNs are rejected before transport. Kimi supports Priority
-and Flex through these HTTP APIs; its Converse and Invoke APIs remain Standard-only.
+and Flex on the US, India, and global profiles, including Converse and InvokeModel.
 For US/global Kimi K3 and [Grok 4.6](https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-xai-grok-4-6.html)
 inference profiles, Runtime Chat and Responses cost estimates use Priority at 1.75× Standard
 and Flex at 0.5× Standard. Unpublished Grok cache-write rates remain unknown.
@@ -1716,8 +1716,8 @@ require cross-region inference profiles. Use `bedrock:us.zai.glm-5.3` or
 `in.moonshotai.kimi-k3` from supported India regions. GLM 5.3 InvokeModel accepts `reasoning_effort: max`; on Converse, set `additionalModelRequestFields: { reasoning_effort: max }`.
 For Converse, add `converse:` after `bedrock:`. Kimi K3 and GLM 5.3 Converse cost estimates
 include cache reads/writes for the published US/global rates and the India Kimi rate.
-Kimi K3 Converse/Invoke support Standard only; its Priority/Flex
-tiers require the Responses or Chat Completions APIs. GLM 5.3 Converse estimates include
+For Kimi K3, set `serviceTier: { type: priority }` on Converse or `service_tier: priority`
+on InvokeModel for Priority processing. Use `flex` for Flex processing. India estimates cover Standard. GLM 5.3 Converse supports
 Standard, Priority, and Flex. InvokeModel cost remains unavailable for both models. Rates follow the model card and [AWS pricing](https://aws.amazon.com/bedrock/pricing/). AWS documents Kimi K3 Converse limitations for document inputs
 and multi-turn history containing reasoning blocks; remove earlier reasoning blocks
 before sending a subsequent Converse turn.

@@ -2,10 +2,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache } from '../../../src/cache';
 import { BedrockOpenAiResponsesProvider } from '../../../src/providers/bedrock/openaiResponses';
 import {
-  calculateBedrockCost,
-  calculateBedrockInvokeModelCost,
-} from '../../../src/providers/bedrock/pricing';
-import {
   getBedrockRuntimeModelError,
   getBedrockTextRoute,
 } from '../../../src/providers/bedrock/routing';
@@ -909,23 +905,6 @@ describe.each([
     ).toThrow('Invalid AWS region');
   });
 });
-
-it.each(['us', 'global', 'in'])(
-  'keeps native Kimi pricing restrictions separate from HTTP tiers (%s)',
-  (profile) => {
-    const region = profile === 'in' ? 'ap-south-1' : 'us-east-1';
-    for (const tier of ['priority', 'flex'] as const) {
-      expect(
-        calculateBedrockCost(`${profile}.moonshotai.kimi-k3`, 700, 1000, 200, 100, region, {
-          type: tier,
-        }),
-      ).toBeUndefined();
-    }
-    expect(
-      calculateBedrockInvokeModelCost(`${profile}.moonshotai.kimi-k3`, 700, 1000, 200, 100, region),
-    ).toBeUndefined();
-  },
-);
 
 describe('Runtime Responses restrictions and state', () => {
   it('preserves stored conversation controls and Runtime service tiers', async () => {

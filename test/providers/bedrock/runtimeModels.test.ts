@@ -203,12 +203,6 @@ describe('Bedrock Runtime pricing', () => {
       ['priority', 1.75],
       ['flex', 0.5],
     ] as const) {
-      if (model.includes('kimi-k3') && type !== 'default') {
-        expect(
-          calculateBedrockCost(model, 800, 500, 200, 0, 'us-east-1', { type }),
-        ).toBeUndefined();
-        continue;
-      }
       const writes = write > 0 ? 100 : 0;
       const expected =
         ((800 * input + 500 * output + 200 * read + writes * write) / 1e6) * multiplier;
@@ -278,6 +272,17 @@ describe('Bedrock Runtime pricing', () => {
       calculateBedrockInvokeModelCost(model, 800, 500, 200, 100, 'ap-south-1'),
     ).toBeUndefined();
   });
+
+  it.each(['us', 'in', 'global'])(
+    'sends a configured Kimi K3 InvokeModel tier on the %s profile',
+    async (geo) => {
+      const id = geo + '.moonshotai.kimi-k3';
+      const handler = getHandlerForModel(id);
+      const config = { service_tier: 'flex' as const, region: 'us-east-1' };
+      expect(await handler.params(config, 'Hello', [], id)).toMatchObject({ service_tier: 'flex' });
+      expect(await handler.params({}, 'Hello', [], id)).not.toHaveProperty('service_tier');
+    },
+  );
 
   it('does not invent cache-write pricing for Grok 4.7', () => {
     expect(calculateBedrockCost('global.xai.grok-4.7', 800, 500, 200, 100)).toBeUndefined();
