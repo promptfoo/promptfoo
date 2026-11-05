@@ -61,16 +61,24 @@ const VERTEX_GLOBAL_DEFAULT_MODELS = new Set([
 ]);
 
 // Vertex's managed Llama 4 MaaS endpoints are currently available in us-east5.
-const VERTEX_US_EAST5_DEFAULT_MODELS = new Set([
-  'llama-4-maverick-17b-128e-instruct-maas',
-  'llama-4-scout-17b-16e-instruct-maas',
+const VERTEX_LLAMA_4_MODELS = new Set([
+  'meta/llama-4-maverick-17b-128e-instruct-maas',
+  'meta/llama-4-scout-17b-16e-instruct-maas',
 ]);
+
+export function getVertexLlamaWireId(modelName: string): string {
+  return modelName.startsWith('meta/') ? modelName : `meta/${modelName}`;
+}
+
+export function isVertexLlama4Model(modelName: string): boolean {
+  return VERTEX_LLAMA_4_MODELS.has(getVertexLlamaWireId(modelName));
+}
 
 export function getVertexModelDefaultRegion(modelName: string): string | undefined {
   if (VERTEX_GLOBAL_DEFAULT_MODELS.has(modelName)) {
     return 'global';
   }
-  if (VERTEX_US_EAST5_DEFAULT_MODELS.has(modelName)) {
+  if (isVertexLlama4Model(modelName)) {
     return 'us-east5';
   }
   return undefined;

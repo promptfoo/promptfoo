@@ -33,7 +33,7 @@ import {
 } from '../shared';
 import { GoogleAuthManager } from './auth';
 import { GoogleGenericProvider, type GoogleProviderOptions } from './base';
-import { getVertexApiHostForRegion } from './shared';
+import { getVertexApiHostForRegion, getVertexLlamaWireId, isVertexLlama4Model } from './shared';
 import {
   calculateGoogleCost,
   calculateGoogleCostFromUsage,
@@ -102,11 +102,6 @@ const VERTEX_CLAUDE_SONNET_4_5_LONG_CONTEXT_PRICING = {
   output: 22.5 / 1e6,
 };
 
-const VERTEX_LLAMA_4_MODELS = new Set([
-  'llama-4-maverick-17b-128e-instruct-maas',
-  'llama-4-scout-17b-16e-instruct-maas',
-]);
-
 interface VertexLlamaModelSafetySettings {
   enabled: boolean;
   llama_guard_settings: Record<string, unknown>;
@@ -127,7 +122,7 @@ type VertexLlamaSafetyRequestConfig =
   | { error: string };
 
 function getRequiredVertexLlamaRegion(modelName: string): 'us-central1' | 'us-east5' {
-  return VERTEX_LLAMA_4_MODELS.has(modelName) ? 'us-east5' : 'us-central1';
+  return isVertexLlama4Model(modelName) ? 'us-east5' : 'us-central1';
 }
 
 function getVertexLlamaRegionError(modelName: string, region: string): string | undefined {
@@ -136,7 +131,7 @@ function getVertexLlamaRegionError(modelName: string, region: string): string | 
     return undefined;
   }
 
-  const availabilitySubject = VERTEX_LLAMA_4_MODELS.has(modelName)
+  const availabilitySubject = isVertexLlama4Model(modelName)
     ? `Llama model ${modelName} is`
     : 'Llama models are';
   return `${availabilitySubject} only available in the ${requiredRegion} region. Current region: ${region}. Please set region: '${requiredRegion}' in your configuration.`;
@@ -146,7 +141,7 @@ function getVertexLlamaSafetyRequestConfig(
   modelName: string,
   llamaConfig: GoogleProviderConfig['llamaConfig'],
 ): VertexLlamaSafetyRequestConfig {
-  if (VERTEX_LLAMA_4_MODELS.has(modelName)) {
+  if (isVertexLlama4Model(modelName)) {
     if (
       llamaConfig?.safetySettings?.enabled === true ||
       llamaConfig?.safetySettings?.llama_guard_settings !== undefined
@@ -1224,7 +1219,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
 
     // Prepare the request body for Llama models
     const body = {
-      model: `meta/${this.modelName}`,
+      model: getVertexLlamaWireId(this.modelName),
       messages,
       max_tokens: this.config.maxOutputTokens || 1024,
       stream: false,
