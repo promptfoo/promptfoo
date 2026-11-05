@@ -620,6 +620,10 @@ This ensures that any JSON LLM output adheres to the schema specified in the `to
 - Fail if MCP tool calls fail (output contains "MCP Tool Error")
 - Continue to validate traditional function tools as before
 
+`not-is-valid-openai-tools-call` and `not-is-valid-function-call` invert the validation result. A configuration error, such as no tools configured, a tool schema that does not compile, or a provider that cannot validate function calls, still fails.
+
+Negation checks for an invalid call, so a failed MCP call can also pass. To check that no tool was called, assert on the absence of tool calls instead. Custom provider validators should throw `InvalidToolCallError` from `promptfoo/contracts` for invalid calls and ordinary errors for configuration or operational failures.
+
 Example with MCP tools:
 
 ```yaml
@@ -1548,7 +1552,7 @@ For additional context, read about the metric on [Wikipedia](https://en.wikipedi
 METEOR requires the optional `natural` package. Install it before using METEOR assertions:
 
 ```bash
-npm install natural@^8.1.0
+npm install natural@^8.2.3
 ```
 
 If the package is not installed, METEOR assertions return a failed result (`pass: false`, `score: 0`) with installation instructions in the reason.

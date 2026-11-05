@@ -401,7 +401,10 @@ describe('GoogleVideoProvider', () => {
       });
 
       expect((provider as any).loadImageData(fileRef)).toEqual({
-        data: Buffer.from('media-data').toString('base64'),
+        image: {
+          bytesBase64Encoded: Buffer.from('media-data').toString('base64'),
+          mimeType: 'image/png',
+        },
       });
       expect(fs.existsSync).toHaveBeenCalledWith(expectedPath);
     });
@@ -2417,7 +2420,7 @@ describe('GoogleVideoProvider', () => {
     it.each([true, false])(
       'encodes first, last, and reference images for vertexai=%s',
       async (vertexai) => {
-        const imageData = Buffer.from('image data').toString('base64');
+        const imageData = Buffer.from([0xff, 0xd8, 0xff, 0xe0]).toString('base64');
         const operationName = 'models/veo-3.1-generate-preview/operations/image';
         const operation = {
           name: operationName,
@@ -2442,7 +2445,7 @@ describe('GoogleVideoProvider', () => {
         const body = JSON.parse(
           vertexai ? mockRequest.mock.calls[0][0].body : mockFetchWithTimeout.mock.calls[0][1].body,
         );
-        const image = { bytesBase64Encoded: imageData, mimeType: 'image/png' };
+        const image = { bytesBase64Encoded: imageData, mimeType: 'image/jpeg' };
 
         expect(result.error).toBeUndefined();
         expect(body.instances).toEqual([
