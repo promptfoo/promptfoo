@@ -342,24 +342,30 @@ async function fetchWithRedirectValidation(
   // rejection on a redirect response, matching native fetch. Following every
   // redirect here would silently break both contracts.
   if ((options.redirect ?? 'follow') !== 'follow') {
+    let hopAgent: ActiveAgent | undefined;
     if (!callerDispatcher) {
       const hopProxyUrl = getProxyForUrl(currentUrl);
-      currentOptions.dispatcher = hopProxyUrl
-        ? getOrCreateProxyAgent(hopProxyUrl, tlsOptions)
-        : getOrCreateAgent(tlsOptions);
+      hopAgent = acquireAgent(hopProxyUrl, tlsOptions);
+      currentOptions.dispatcher = hopAgent.dispatcher;
     }
-    const response = await monkeyPatchFetch(currentUrl, currentOptions);
-    if (
-      options.redirect === 'error' &&
-      isRedirectStatus(response.status) &&
-      response.headers.get('location')
-    ) {
-      await response.body?.cancel().catch(() => undefined);
-      throw new TypeError(
-        'fetch failed: redirects are not allowed for a request with redirect mode "error"',
-      );
+    try {
+      const response = await monkeyPatchFetch(currentUrl, currentOptions);
+      if (
+        options.redirect === 'error' &&
+        isRedirectStatus(response.status) &&
+        response.headers.get('location')
+      ) {
+        await response.body?.cancel().catch(() => undefined);
+        throw new TypeError(
+          'fetch failed: redirects are not allowed for a request with redirect mode "error"',
+        );
+      }
+      return response;
+    } finally {
+      if (hopAgent) {
+        releaseAgent(hopAgent);
+      }
     }
-    return response;
   }
 
   for (let hop = 0; hop <= MAX_GUARDED_REDIRECT_HOPS; hop++) {
@@ -642,11 +648,7 @@ async function fetchWithTransientRetries(
   const guardRedirects = isPrivateRangeGuardContextActive();
   const doSingleFetch = (options: FetchOptions & { dispatcher?: any }): Promise<Response> =>
     guardRedirects
-      ? fetchWithRedirectValidation(
-          getFetchUrlString(url) ?? '',
-          options,
-          tlsOptions ?? {},
-        )
+      ? fetchWithRedirectValidation(getFetchUrlString(url) ?? '', options, tlsOptions ?? {})
       : monkeyPatchFetch(url, options);
 
   for (let attempt = 0; attempt <= maxTransientRetries; attempt++) {
