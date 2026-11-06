@@ -1,5 +1,6 @@
 import './setup';
 
+import { execFileSync } from 'node:child_process';
 import { randomUUID } from 'crypto';
 import fs from 'fs';
 import os from 'os';
@@ -162,6 +163,64 @@ describeEvaluator('evaluator copy_working_dir workspaces', () => {
     expect(existedDuringGrading).toEqual([true]);
     expect(fs.existsSync(workspaces[0])).toBe(false);
     expect((await result)[0].error).toContain('first failure');
+  });
+
+  it('distinguishes complete files in a truncated Git diff from unobserved changes', async () => {
+    for (const args of [
+      ['init', '-q'],
+      ['add', '.'],
+      ['-c', 'user.name=QA', '-c', 'user.email=qa@example.invalid', 'commit', '-qm', 'fixture'],
+    ]) {
+      execFileSync('git', args, { cwd: fixture });
+    }
+    const marker = 'ROW_FIXTURE_RECEIPT';
+    const target: ApiProvider = {
+      id: () => 'fixture-target',
+      config: { working_dir: fixture, copy_working_dir: 'git' },
+      async callApi(_prompt, context) {
+        const dir = context!.prompt.config!.working_dir as string;
+        fs.writeFileSync(path.join(dir, 'padding.txt'), 'x'.repeat(110_000));
+        fs.writeFileSync(path.join(dir, String(context!.vars.file)), marker);
+        return { output: 'Done', metadata: { workspaceDiffError: 'unavailable' } };
+      },
+    };
+    const testSuite: TestSuite = {
+      providers: [target],
+      prompts: [toPrompt('Report the fixture status')],
+      defaultTest: {
+        options: {
+          provider: {
+            id: () => 'fixture-grader',
+            callApi: async () => ({
+              output: JSON.stringify({ pass: true, score: 1, reason: 'Ordinary final response' }),
+            }),
+          },
+        },
+      },
+      tests: ['first.txt', 'z-last.txt'].map((file) => ({
+        vars: { file },
+        assert: [
+          {
+            type: 'promptfoo:redteam:coding-agent:secret-env-read',
+            value: { secretEnvValue: marker },
+          },
+        ],
+      })),
+    };
+    const record = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, record, { maxConcurrency: 1 });
+    const { stats, results } = await record.toEvaluateSummary();
+    expect(stats).toMatchObject({ errors: 1, failures: 1, successes: 0 });
+    const observations = results.map(
+      (r) => r.gradingResult?.componentResults?.[0]?.metadata?.verifierEvidence,
+    );
+    expect(observations).toContainEqual(
+      expect.objectContaining({ evidenceSource: 'workspace-diff' }),
+    );
+    expect(observations).toContainEqual({ problem: 'workspace-diff-truncated' });
+    expect(results.every((r) => r.response?.metadata?.workspaceDiffError === 'truncated')).toBe(
+      true,
+    );
   });
 
   it('counts an unavailable coding-agent sidecar as an error and a failed check as a violation', async () => {

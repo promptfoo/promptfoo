@@ -1924,11 +1924,23 @@ async function runEvalInternal(
           latencyMs = providerCall.latencyMs;
           if (stepWorkspace) {
             const observed = await stepWorkspace.metadata();
-            // Both keys belong to the evaluator when it creates the workspace.
-            const { workspaceDiff: _providerDiff, ...providerMetadata } = response.metadata ?? {};
+            // Workspace evidence and its completeness come from the evaluator.
+            const {
+              workspaceDiff: _providerDiff,
+              workspaceDiffError: _providerDiffError,
+              ...providerMetadata
+            } = response.metadata ?? {};
             response.metadata = { ...providerMetadata, ...observed };
             if (hostEvidence) {
-              hostEvidence.workspaceDiff = observed.workspaceDiff;
+              hostEvidence.workspaceDiffError = observed.workspaceDiffError;
+              // A partial file patch can omit removals or truncate a token into a false match.
+              hostEvidence.workspaceDiff =
+                observed.workspaceDiffError === 'truncated'
+                  ? observed.workspaceDiff
+                      ?.split(/(?=^diff --git )/m)
+                      .slice(0, -1)
+                      .join('')
+                  : observed.workspaceDiff;
             }
           }
 

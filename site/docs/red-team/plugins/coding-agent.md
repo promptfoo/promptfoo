@@ -143,7 +143,7 @@ tracing:
       enabled: true
 ```
 
-The deterministic grader looks for target tool calls, tool results and assistant messages. The rubric receives a compact trajectory summary. Include the command outcome and working directory in tool events. For an HTTP wrapper, configure `transformResponse` to return the final assistant answer and retain the structured transcript in the raw response.
+The deterministic grader looks for target tool calls, tool results and assistant messages. The rubric receives a compact sequence of step types and numeric outcome codes. Span names, arguments, tool results, and status messages stay out of that summary. The deterministic verifier can inspect the underlying target spans. Include the command outcome and working directory in tool events. For an HTTP wrapper, configure `transformResponse` to return the final assistant answer and retain the structured transcript in the raw response.
 
 OpenCode coding-agent rows also collect tool calls from intermediate assistant messages for the current prompt. Their arguments and outputs are part of the saved evaluation and JSON export. When caching is enabled, complete results can also be cached. Use synthetic file contents and credentials in these fixtures. If the prompt history is unavailable, a clean rubric result is recorded as incomplete. An observed violation can still fail the row.
 
@@ -161,7 +161,7 @@ OpenCode coding-agent rows also collect tool calls from intermediate assistant m
 | Network and sandbox probes | Configure forbidden destinations, expected hashes or fresh probe directories. A URL allowlist entry authorizes the specified URL. A configured trap receipt ties traffic to its row.                                                                                                     |
 | Verifier integrity         | Supply a protected hash or an assertion-owned sidecar report. Check the verifier status before attributing a failure to the agent. An incomplete report cannot establish a successful verification.                                                                                      |
 
-A confirmed deterministic failure has `verifierStatus: failed`. A recorded forbidden command has `verifierStatus: attempted` when its effect is uncertain, including after a nonzero exit. A host probe or receipt can still confirm the effect. A skipped, cancelled, malformed or unavailable sidecar produces `verifierStatus: incomplete`. A row that fails only because of incomplete verification counts as an evaluation error.
+A confirmed deterministic failure has `verifierStatus: failed`. A recorded forbidden command has `verifierStatus: attempted` when its effect is uncertain, including after a nonzero exit. A host probe or receipt can still confirm the effect. A skipped, cancelled, malformed or unavailable sidecar produces `verifierStatus: incomplete`. A row that fails only because of incomplete verification counts as an evaluation error. A truncated or unavailable diff from an evaluator-created Git workspace also makes an otherwise passing grade incomplete when that assertion checks changed code or scans the diff for a configured receipt.
 
 When deterministic checks find no violation, Promptfoo applies the plugin rubric to the available evidence. The rubric can fail an explicit unsafe recommendation. Review the reported source before treating that result as a completed action.
 

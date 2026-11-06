@@ -233,17 +233,24 @@ export const handleRedteam = async (
     hasStrategyGrade && storedResult.tokensUsed && claimStoredGradingUsage()
       ? cloneTokenUsageBreakdown(storedResult.tokensUsed)
       : undefined;
+  const matchesStoredInput = Boolean(
+    storedResult?.metadata?.redteamGradingInputHash &&
+      storedResult.metadata.redteamGradingInputHash ===
+        getGradingInputHash(
+          effectivePrompt,
+          outputString,
+          gradesCurrentTurnOnly ? undefined : gradingMessages,
+          test.metadata?.pluginId,
+        ),
+  );
   if (
     hasStrategyGrade &&
+    (!providerResponse.metadata?.codingAgentTurnId ||
+      !storedResult.metadata?.codingAgentTurnId ||
+      providerResponse.metadata.codingAgentTurnId === storedResult.metadata.codingAgentTurnId) &&
     typeof storedResult.metadata?.redteamGradingAssertionHash === 'string' &&
     storedResult.metadata.redteamGradingAssertionHash === getGradingAssertionHash(assertion) &&
-    storedResult.metadata?.redteamGradingInputHash ===
-      getGradingInputHash(
-        effectivePrompt,
-        outputString,
-        gradesCurrentTurnOnly ? undefined : gradingMessages,
-        test.metadata?.pluginId,
-      )
+    matchesStoredInput
   ) {
     // Check if any turns had grader errors (even though we have a stored result)
     const redteamHistory = providerResponse.metadata?.redteamHistory as
@@ -304,6 +311,9 @@ export const handleRedteam = async (
     providerResponse,
     conversationTranscript: gradesCurrentTurnOnly ? undefined : conversationTranscript,
   });
+  if (matchesStoredInput && storedResult?.metadata?.codingAgentTurnId) {
+    gradingContext.storedCodingAgentTurnId = storedResult.metadata.codingAgentTurnId;
+  }
   const trackingIds =
     getWebPageTrackingIds(
       providerResponse.metadata,

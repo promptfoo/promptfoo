@@ -54,7 +54,7 @@ interface TrajectoryStepStatus {
 interface JudgeTrajectoryStep {
   collapsedCount?: number;
   index: number;
-  name: string;
+  name?: string;
   spanName?: string;
   status?: TrajectoryStepStatus;
   type: TrajectoryStepType;
@@ -104,14 +104,17 @@ function isSearchLikeSpan(span: TraceSpan): boolean {
   );
 }
 
-function getTrajectoryStepStatus(step: Pick<TrajectoryStep, 'statusCode' | 'statusMessage'>) {
-  if (step.statusCode === undefined || step.statusCode === 0) {
+function getTrajectoryStepStatus(
+  step: Pick<TrajectoryStep, 'statusCode' | 'statusMessage'>,
+  includeMessage = true,
+) {
+  if (typeof step.statusCode !== 'number' || step.statusCode === 0) {
     return undefined;
   }
 
   return {
     code: step.statusCode,
-    ...(step.statusMessage ? { message: step.statusMessage } : {}),
+    ...(includeMessage && step.statusMessage ? { message: step.statusMessage } : {}),
   };
 }
 
@@ -495,15 +498,18 @@ function truncateJudgeTrajectorySteps(
   ];
 }
 
-export function summarizeTrajectoryForJudge(trace: TraceData): string {
+export function summarizeTrajectoryForJudge(
+  trace: TraceData,
+  { includeSpanText = true }: { includeSpanText?: boolean } = {},
+): string {
   const rawSteps = extractTrajectorySteps(trace).map((step, index) => {
-    const status = getTrajectoryStepStatus(step);
+    const status = getTrajectoryStepStatus(step, includeSpanText);
     return {
       index: index + 1,
       type: step.type,
-      name: step.name,
-      ...(step.spanName === step.name ? {} : { spanName: step.spanName }),
-      ...(status ? { status } : {}),
+      ...(includeSpanText && { name: step.name }),
+      ...(includeSpanText && step.spanName !== step.name && { spanName: step.spanName }),
+      ...(status && { status }),
     };
   });
   const compactedSteps = compactJudgeTrajectorySteps(rawSteps);
@@ -511,7 +517,7 @@ export function summarizeTrajectoryForJudge(trace: TraceData): string {
 
   return JSON.stringify(
     {
-      traceId: trace.traceId,
+      ...(includeSpanText && { traceId: trace.traceId }),
       stepCount: rawSteps.length,
       compactedStepCount: compactedSteps.length,
       steps,

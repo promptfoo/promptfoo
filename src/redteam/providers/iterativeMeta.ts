@@ -717,6 +717,9 @@ export async function runMetaAgentRedteam({
         // Use the last prompt sent to target (e.g., fetchPrompt for indirect-web-pwn layer)
         // This ensures UI shows what was actually sent, not the pre-transform jailbreak
         redteamFinalPrompt: lastFinalAttackPrompt || bestPrompt,
+        ...(lastResponse?.metadata?.codingAgentTurnId && {
+          codingAgentTurnId: lastResponse.metadata.codingAgentTurnId,
+        }),
         storedGraderResult,
         stopReason,
         redteamHistory,

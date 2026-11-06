@@ -20,6 +20,7 @@ export interface CodingAgentHostEvidence {
   /** Initial file position, or null if the trap log did not exist. */
   trapLogs?: Map<string, TrapLogPosition | null>;
   workspaceDiff?: string;
+  workspaceDiffError?: 'truncated' | 'unavailable';
   turns?: Map<string, { prompt?: string; response: ProviderResponse; spanId?: string }>;
 }
 
