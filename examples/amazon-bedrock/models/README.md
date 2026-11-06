@@ -354,9 +354,10 @@ requests are billed. Configure AWS credentials and model access in `us-east-1`, 
 npx promptfoo@latest eval -c promptfooconfig.embeddings.yaml --no-cache -o embeddings-results.json
 ```
 
-Both assertions compare identical text and expect similarity near 1. Nova exposes
-`embeddingPurpose`, `embeddingDimension`, and `truncationMode`. This provider route
-accepts text only; it does not submit media or asynchronous embedding jobs.
+Both models grade the same pair of related phrases with a shared similarity threshold.
+The Nova test requests a 256-dimensional vector. See the
+[Bedrock embedding options](https://www.promptfoo.dev/docs/providers/aws-bedrock/#embeddings)
+for the other dimensions, embedding purposes, and truncation settings.
 
 ## Getting Started
 
