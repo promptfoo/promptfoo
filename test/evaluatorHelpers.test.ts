@@ -1435,24 +1435,38 @@ describe('evaluatorHelpers', () => {
         const value = '{% extends "base.njk" %}{% block body %}{{ super() ~ "!" }}{% endblock %}';
         const renderedPrompt = await renderPrompt(toPrompt('{{v}}'), { v: value }, {});
 
-        expect(renderedPrompt).toBe('B!\n');
+        const parentOutput = getNunjucksEngine().render('base.njk');
+        expect(renderedPrompt).toBe(parentOutput.replace('B', 'B!'));
       } finally {
         process.chdir(previousCwd);
       }
     });
 
     it('should avoid quadratic scope snapshots for sibling macros', async () => {
-      const value = Array.from(
-        { length: 6000 },
-        (_, index) => `{% macro m${index}() %}x{% endmacro %}`,
-      ).join('');
-      const started = performance.now();
-      const renderedPrompt = await renderPrompt(toPrompt('{"text":"{{v}}"}'), { v: value }, {});
-      const elapsed = performance.now() - started;
+      const OriginalSet = globalThis.Set;
+      let copiedElements = 0;
+      const CountingSet = class extends OriginalSet {
+        constructor(values?: any) {
+          super(values);
+          if (values) {
+            copiedElements += values.size ?? values.length ?? 0;
+          }
+        }
+      };
+      vi.stubGlobal('Set', CountingSet);
+      try {
+        const value = Array.from(
+          { length: 6000 },
+          (_, index) => `{% macro m${index}() %}x{% endmacro %}`,
+        ).join('');
+        const renderedPrompt = await renderPrompt(toPrompt('{"text":"{{v}}"}'), { v: value }, {});
 
-      expect(renderedPrompt).toHaveLength(JSON.stringify({ text: value }, null, 2).length);
-      expect(renderedPrompt).toContain('m5999');
-      expect(elapsed).toBeLessThan(100);
+        expect(renderedPrompt).toHaveLength(JSON.stringify({ text: value }, null, 2).length);
+        expect(renderedPrompt).toContain('m5999');
+        expect(copiedElements).toBeLessThan(20000);
+      } finally {
+        vi.unstubAllGlobals();
+      }
     });
 
     it.each([
