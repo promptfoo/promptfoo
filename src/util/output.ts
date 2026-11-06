@@ -26,7 +26,10 @@ import {
   ResultFailureReason,
 } from '../types';
 import { streamEvalCsv } from './eval/evalTableUtils';
-import { resolveJsonlOutputPath } from './exportToFile/resolveJsonlOutputPath';
+import {
+  createJsonlOutputDirectories,
+  resolveJsonlOutputPath,
+} from './exportToFile/resolveJsonlOutputPath';
 import invariant from './invariant';
 import { writeJunitXmlOutput } from './junit';
 import { getOutputFileFormat, SUPPORTED_OUTPUT_FILE_FORMATS } from './outputFormats';
@@ -539,9 +542,12 @@ export async function writeOutput(
     `Unsupported output file format ${path.extname(outputPath).slice(1).toLowerCase()}. Please use one of: ${SUPPORTED_OUTPUT_FILE_FORMATS.join(', ')}.`,
   );
 
-  // Ensure the directory exists (mkdir with recursive is idempotent)
+  // JSONL resolves the full path before creating directories so dangling directory symlinks
+  // and paths containing symlink-relative `..` segments can be prepared safely.
   const outputDir = path.dirname(outputPath);
-  await fsPromises.mkdir(outputDir, { recursive: true });
+  if (outputExtension !== 'jsonl') {
+    await fsPromises.mkdir(outputDir, { recursive: true });
+  }
 
   if (outputExtension === 'junit.xml') {
     await writeJunitXmlOutput(outputPath, evalRecord);
@@ -622,13 +628,9 @@ export async function writeOutput(
     });
     await fsPromises.writeFile(outputPath, htmlOutput);
   } else if (outputExtension === 'jsonl') {
-    const jsonlOutputPath = await resolveJsonlOutputPath(outputPath);
-    if (jsonlOutputPath !== outputPath) {
-      // For a symlink, the mkdir above only ensured the link's own directory. Ensure the
-      // resolved target's directory exists too, so the sibling temp-file rewrite can land
-      // next to it (a symlink may point at a target in a not-yet-created directory).
-      await fsPromises.mkdir(path.dirname(jsonlOutputPath), { recursive: true });
-    }
+    const jsonlOutputPlan = await resolveJsonlOutputPath(outputPath);
+    await createJsonlOutputDirectories(jsonlOutputPlan);
+    const jsonlOutputPath = jsonlOutputPlan.targetPath;
     const outputMode = await getExistingFileMode(jsonlOutputPath);
     const recoveredResults = evalRecord.resultPersistenceFailed
       ? await collectJsonlResultsAfterPersistenceFailure(jsonlOutputPath, evalRecord)

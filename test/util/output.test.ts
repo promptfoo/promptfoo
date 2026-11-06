@@ -1,3 +1,4 @@
+import { lstatSync } from 'fs';
 import * as fsPromises from 'fs/promises';
 import * as path from 'path';
 
@@ -89,6 +90,7 @@ describe('writeOutput', () => {
     vi.mocked(fsPromises.copyFile).mockResolvedValue(undefined);
     vi.mocked(fsPromises.mkdtemp).mockResolvedValue(JSONL_TEMP_DIRECTORY);
     vi.mocked(fsPromises.lstat).mockRejectedValue(fileNotFoundError);
+    vi.mocked(fsPromises.realpath).mockRejectedValue(fileNotFoundError);
     vi.mocked(fsPromises.stat).mockRejectedValue(fileNotFoundError);
     consoleLogSpy = mockConsole('log');
     // @ts-expect-error getDb is mocked with a partial test double.
@@ -1655,15 +1657,23 @@ describe('writeOutput', () => {
     const firstSymlinkTarget = path.basename(intermediatePath);
     const secondSymlinkTarget = path.join('nested', 'missing.jsonl');
     const resolvedTarget = path.resolve(path.dirname(intermediatePath), secondSymlinkTarget);
-    vi.mocked(fsPromises.lstat).mockResolvedValueOnce({
-      isSymbolicLink: () => true,
-    } as never);
-    vi.mocked(fsPromises.lstat).mockResolvedValueOnce({
-      isSymbolicLink: () => true,
-    } as never);
-    vi.mocked(fsPromises.realpath)
-      .mockRejectedValueOnce(fileNotFoundError)
-      .mockRejectedValueOnce(fileNotFoundError);
+    vi.mocked(fsPromises.lstat).mockImplementation(async (filePath) => {
+      const resolvedPath = path.resolve(String(filePath));
+      if (
+        [outputPath, intermediatePath].some((candidate) => path.resolve(candidate) === resolvedPath)
+      ) {
+        return { isSymbolicLink: () => true, isDirectory: () => false } as never;
+      }
+      if (resolvedPath === path.resolve(path.dirname(outputPath))) {
+        return { isSymbolicLink: () => false, isDirectory: () => true } as never;
+      }
+      try {
+        return lstatSync(resolvedPath);
+      } catch {
+        throw fileNotFoundError;
+      }
+    });
+    vi.mocked(fsPromises.realpath).mockRejectedValueOnce(fileNotFoundError);
     vi.mocked(fsPromises.readlink)
       .mockResolvedValueOnce(firstSymlinkTarget)
       .mockResolvedValueOnce(secondSymlinkTarget);
@@ -1680,15 +1690,23 @@ describe('writeOutput', () => {
     const firstSymlinkTarget = path.basename(intermediatePath);
     const secondSymlinkTarget = path.join('nested', 'missing.jsonl');
     const resolvedTarget = path.resolve(path.dirname(intermediatePath), secondSymlinkTarget);
-    vi.mocked(fsPromises.lstat).mockResolvedValueOnce({
-      isSymbolicLink: () => true,
-    } as never);
-    vi.mocked(fsPromises.lstat).mockResolvedValueOnce({
-      isSymbolicLink: () => true,
-    } as never);
-    vi.mocked(fsPromises.realpath)
-      .mockRejectedValueOnce(fileNotFoundError)
-      .mockRejectedValueOnce(fileNotFoundError);
+    vi.mocked(fsPromises.lstat).mockImplementation(async (filePath) => {
+      const resolvedPath = path.resolve(String(filePath));
+      if (
+        [outputPath, intermediatePath].some((candidate) => path.resolve(candidate) === resolvedPath)
+      ) {
+        return { isSymbolicLink: () => true, isDirectory: () => false } as never;
+      }
+      if (resolvedPath === path.resolve(path.dirname(outputPath))) {
+        return { isSymbolicLink: () => false, isDirectory: () => true } as never;
+      }
+      try {
+        return lstatSync(resolvedPath);
+      } catch {
+        throw fileNotFoundError;
+      }
+    });
+    vi.mocked(fsPromises.realpath).mockRejectedValueOnce(fileNotFoundError);
     vi.mocked(fsPromises.readlink)
       .mockResolvedValueOnce(firstSymlinkTarget)
       .mockResolvedValueOnce(secondSymlinkTarget);

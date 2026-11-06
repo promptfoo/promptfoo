@@ -53,6 +53,151 @@ describe('JsonlFileWriter (real filesystem)', () => {
     expect(fs.readFileSync(target, 'utf-8')).toBe('{"a":1}\n');
   });
 
+  it('creates missing parents behind an intermediate directory symlink', async () => {
+    if (process.platform === 'win32') {
+      return;
+    }
+
+    const link = path.join(dir, 'out.jsonl');
+    const directoryLink = path.join(dir, 'linked-dir');
+    const target = path.join(dir, 'missing-parent', 'nested', 'out.jsonl');
+    fs.symlinkSync(path.join(path.basename(directoryLink), 'out.jsonl'), link);
+    fs.symlinkSync(path.relative(path.dirname(directoryLink), path.dirname(target)), directoryLink);
+
+    const writer = new JsonlFileWriter(link);
+    await writer.write({ a: 1 });
+    await writer.close();
+
+    expect(fs.lstatSync(link).isSymbolicLink()).toBe(true);
+    expect(fs.lstatSync(directoryLink).isSymbolicLink()).toBe(true);
+    expect(fs.readFileSync(target, 'utf-8')).toBe('{"a":1}\n');
+  });
+
+  it('resolves dot-dot after following an intermediate symlink', async () => {
+    if (process.platform === 'win32') {
+      return;
+    }
+
+    const link = path.join(dir, 'out.jsonl');
+    const pivot = path.join(dir, 'pivot');
+    const target = path.join(dir, 'real', 'nested', 'result.jsonl');
+    const lexicalBlocker = path.join(dir, 'nested');
+    fs.mkdirSync(path.dirname(target), { recursive: true });
+    fs.mkdirSync(path.join(dir, 'real', 'inner'), { recursive: true });
+    fs.writeFileSync(lexicalBlocker, 'keep this file');
+    fs.symlinkSync(path.join('real', 'inner'), pivot);
+    fs.symlinkSync(['pivot', '..', 'nested', 'result.jsonl'].join(path.sep), link);
+
+    const writer = new JsonlFileWriter(link);
+    await writer.write({ a: 1 });
+    await writer.close();
+
+    expect(fs.lstatSync(link).isSymbolicLink()).toBe(true);
+    expect(fs.readFileSync(target, 'utf-8')).toBe('{"a":1}\n');
+    expect(fs.readFileSync(lexicalBlocker, 'utf-8')).toBe('keep this file');
+  });
+
+  it('resolves an existing output after following a symlink before dot-dot', async () => {
+    if (process.platform === 'win32') {
+      return;
+    }
+
+    const pivot = path.join(dir, 'pivot');
+    const outputPath = `${dir}${path.sep}${['pivot', '..', 'nested', 'result.jsonl'].join(path.sep)}`;
+    const target = path.join(dir, 'real', 'nested', 'result.jsonl');
+    const lexicalBlocker = path.join(dir, 'nested');
+    fs.mkdirSync(path.dirname(target), { recursive: true });
+    fs.mkdirSync(path.join(dir, 'real', 'inner'), { recursive: true });
+    fs.writeFileSync(target, '{"old":true}\n');
+    fs.writeFileSync(lexicalBlocker, 'keep this file');
+    fs.symlinkSync(path.join('real', 'inner'), pivot);
+
+    const writer = new JsonlFileWriter(outputPath);
+    await writer.write({ a: 1 });
+    await writer.close();
+
+    expect(fs.readFileSync(target, 'utf-8')).toBe('{"a":1}\n');
+    expect(fs.readFileSync(lexicalBlocker, 'utf-8')).toBe('keep this file');
+  });
+
+  it('creates a missing component before resolving a following dot-dot', async () => {
+    if (process.platform === 'win32') {
+      return;
+    }
+
+    const link = path.join(dir, 'out.jsonl');
+    const target = path.join(dir, 'nested', 'result.jsonl');
+    fs.mkdirSync(path.dirname(target));
+    fs.symlinkSync(['missing', '..', 'nested', 'result.jsonl'].join(path.sep), link);
+
+    const writer = new JsonlFileWriter(link);
+    await writer.write({ a: 1 });
+    await writer.close();
+
+    expect(fs.lstatSync(link).isSymbolicLink()).toBe(true);
+    expect(fs.statSync(path.join(dir, 'missing')).isDirectory()).toBe(true);
+    expect(fs.readFileSync(target, 'utf-8')).toBe('{"a":1}\n');
+  });
+
+  it('allows revisiting the same symlink after dot-dot traversal', async () => {
+    if (process.platform === 'win32') {
+      return;
+    }
+
+    const link = path.join(dir, 'out.jsonl');
+    const alias = path.join(dir, 'alias');
+    const target = path.join(dir, 'physical', 'inner', 'nested', 'result.jsonl');
+    fs.mkdirSync(path.dirname(target), { recursive: true });
+    fs.mkdirSync(path.join(dir, 'physical', 'nested'), { recursive: true });
+    fs.symlinkSync(path.join('physical', 'inner'), alias);
+    fs.symlinkSync(['alias', '..', '..', 'alias', 'nested', 'result.jsonl'].join(path.sep), link);
+
+    const writer = new JsonlFileWriter(link);
+    await writer.write({ a: 1 });
+    await writer.close();
+
+    expect(fs.lstatSync(link).isSymbolicLink()).toBe(true);
+    expect(fs.readFileSync(target, 'utf-8')).toBe('{"a":1}\n');
+  });
+
+  it('preserves ENOTDIR when a regular file precedes dot-dot', async () => {
+    if (process.platform === 'win32') {
+      return;
+    }
+
+    const link = path.join(dir, 'out.jsonl');
+    const blocker = path.join(dir, 'blocker');
+    fs.writeFileSync(blocker, 'keep this file');
+    fs.symlinkSync(['blocker', '..', 'nested', 'result.jsonl'].join(path.sep), link);
+
+    const writer = new JsonlFileWriter(link);
+    await expect(writer.write({ a: 1 })).rejects.toMatchObject({
+      cause: expect.objectContaining({ code: 'ENOTDIR' }),
+    });
+
+    expect(fs.readFileSync(blocker, 'utf-8')).toBe('keep this file');
+    expect(fs.existsSync(path.join(dir, 'nested'))).toBe(false);
+    expect(fs.lstatSync(link).isSymbolicLink()).toBe(true);
+  });
+
+  it('preserves a trailing separator on a dangling symlink target', async () => {
+    if (process.platform === 'win32') {
+      return;
+    }
+
+    const link = path.join(dir, 'out.jsonl');
+    const target = path.join(dir, 'missing-target.jsonl');
+    fs.symlinkSync(`${path.basename(target)}${path.sep}`, link);
+
+    const writer = new JsonlFileWriter(link);
+    await expect(writer.write({ a: 1 })).rejects.toMatchObject({
+      cause: expect.objectContaining({ code: 'ENOENT' }),
+    });
+
+    expect(fs.existsSync(target)).toBe(false);
+    expect(fs.lstatSync(link).isSymbolicLink()).toBe(true);
+  });
+
   it.each([
     { targetType: 'relative', absoluteTargets: false },
     { targetType: 'absolute', absoluteTargets: true },
