@@ -77,6 +77,8 @@ describe('redteam strategy result grading', () => {
     ['other', undefined],
     ['selected', 'empty-final-answer'],
     ['other', 'unexpected-final-answer'],
+    ['selected', 'unavailable-tool-history'],
+    ['other', 'unavailable-tool-history'],
   ])(
     'checks late evidence for only the selected coding-agent turn (%s, prior problem %s)',
     async (markerOwner, problem) => {

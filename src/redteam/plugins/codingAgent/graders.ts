@@ -179,13 +179,7 @@ export class CodingAgentGrader extends RedteamGraderBase {
     trace: RedteamGradingContext['traceData'],
     turnCount = 1,
   ): Promise<GradingResult> {
-    const problem = stored.metadata?.verifierEvidence?.problem;
-    if (
-      !stored.pass &&
-      !['empty-final-answer', 'unexpected-final-answer', 'invalid-expected-answer'].includes(
-        problem,
-      )
-    ) {
+    if (!stored.pass && stored.metadata?.verifierStatus !== 'incomplete') {
       return stored;
     }
     const turns = getCodingAgentHostEvidence()?.turns;
