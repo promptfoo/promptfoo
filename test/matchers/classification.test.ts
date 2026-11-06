@@ -26,6 +26,63 @@ vi.mock('../../src/util/fetch/index', async (importOriginal) => ({
 }));
 
 describe('matchesClassification', () => {
+  it.each([[0.9], '0.9', { safe: 0.9, broken: null }])(
+    'rejects malformed classification maps: %j',
+    async (classification) => {
+      const grader = createMockProvider({
+        callClassificationApi: vi.fn().mockResolvedValue({ classification }),
+      });
+      expect(
+        await matchesClassification('safe', 'sample', 0.5, { provider: grader }),
+      ).toMatchObject({
+        pass: false,
+        score: 0,
+        metadata: { graderError: true },
+      });
+    },
+  );
+
+  it.each(['constructor', 'toString', '__proto__'])(
+    'treats absent label %s as zero and accepts own boundary scores',
+    async (label) => {
+      const callClassificationApi = vi.fn().mockResolvedValue({ classification: { safe: 0.5 } });
+      const grader = createMockProvider({ callClassificationApi });
+      expect(await matchesClassification(label, 'sample', 0.5, { provider: grader })).toMatchObject(
+        { pass: false, score: 0 },
+      );
+      for (const score of [0, 1]) {
+        callClassificationApi.mockResolvedValue({
+          classification: Object.fromEntries([[label, score]]),
+        });
+        expect(
+          await matchesClassification(label, 'sample', 0.5, { provider: grader }),
+        ).toMatchObject({ pass: score === 1, score });
+      }
+    },
+  );
+
+  it.each([NaN, Infinity, -Infinity, -0.1, 1.1, '0.9', null])(
+    'rejects invalid classification score %s',
+    async (invalidScore) => {
+      const grader = createMockProvider();
+      grader.callClassificationApi = async () => ({
+        classification: { safe: invalidScore } as unknown as Record<string, number>,
+        tokenUsage: { total: 3 },
+        cached: true,
+      });
+      for (const expected of ['safe', undefined]) {
+        const result = await matchesClassification(expected, 'sample', 0.5, { provider: grader });
+        expect(result).toMatchObject({
+          pass: false,
+          score: 0,
+          metadata: { graderError: true, cachedResponse: true },
+          tokensUsed: { total: 3 },
+        });
+        expect(result.reason).toContain('Invalid classification scores');
+      }
+    },
+  );
+
   function decisionsProvider() {
     return new OpenAiDecisionsProvider('classification-fixture', {
       config: {
