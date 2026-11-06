@@ -25,6 +25,7 @@ describe.each([
     ['us.anthropic.claude-opus-4-7-v1:0', undefined],
     ['gpt-4.1', haiku],
     ['ft:claude-haiku-5-5:org:label:id', undefined],
+    ['ft:anthropic/claude-haiku-5-5:org:label:id', undefined],
   ] as const)('omits sampling for %s with model override %s', async (configured, override) => {
     const provider = new Provider(configured, {
       config: {
@@ -49,6 +50,7 @@ describe.each([
     ['claude-haiku-5-5-internal-example', undefined],
     ['prod-claude-haiku-5-5-router', undefined],
     ['ft:gpt-4.1:org:claude-haiku-5-5:id', undefined],
+    ['ft:gpt-4.1:org:anthropic/claude-haiku-5-5:id', undefined],
     [haiku, 'gpt-4.1'],
   ] as const)('keeps sampling for %s with model override %s', async (configured, override) => {
     const provider = new Provider(configured, {

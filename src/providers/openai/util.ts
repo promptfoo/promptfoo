@@ -774,7 +774,8 @@ export function omitDeprecatedClaudeSamplingParams(body: Record<string, unknown>
   }
   // Only the fine-tune base identifies the model; later fields are user-defined.
   const fineTuneBase = /(?:^|\/)ft:([^:]+)(?::|$)/.exec(body.model)?.[1];
-  const leaf = fineTuneBase ?? body.model.slice(body.model.lastIndexOf('/') + 1);
+  const model = fineTuneBase ?? body.model;
+  const leaf = model.slice(model.lastIndexOf('/') + 1);
   if (isKnownClaudeModelWithDeprecatedSampling(leaf)) {
     delete body.temperature;
     delete body.top_p;
