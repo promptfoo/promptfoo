@@ -9,6 +9,64 @@ const OUTPUT_TOKENS = 5_000;
 const costAtRates = (input: number, output: number) =>
   (INPUT_TOKENS / 1e6) * input + (OUTPUT_TOKENS / 1e6) * output;
 
+describe('Bedrock Converse GPT-6 Luna and GPT-6.1 Sol pricing', () => {
+  it.each([
+    ['us.openai.gpt-6-luna', 0.11, 0.011, 0.1375, 0.55],
+    ['global.openai.gpt-6-luna', 0.1, 0.01, 0.125, 0.5],
+    ['us.openai.gpt-6.1-sol', 2.2, 0.11, 2.75, 11],
+    [
+      'arn:aws:bedrock:us-east-1:123456789012:inference-profile/global.openai.gpt-6.1-sol',
+      2,
+      0.1,
+      2.5,
+      10,
+    ],
+  ] as const)(
+    'prices every token in %s at the published context tier',
+    (model, input, read, write, output) => {
+      const shortInputCost = (271_500 * input + 200 * read + 300 * write) / 1e6;
+      expect(calculateBedrockCost(model, 271_500, 100, 200, 300, 'us-east-1')).toBeCloseTo(
+        shortInputCost + (100 * output) / 1e6,
+        12,
+      );
+      expect(calculateBedrockCost(model, 271_501, 100, 200, 300, 'us-east-1')).toBeCloseTo(
+        2 * (shortInputCost + input / 1e6) + (100 * 1.5 * output) / 1e6,
+        12,
+      );
+    },
+  );
+
+  it.each([
+    'openai.gpt-6-luna',
+    'eu.openai.gpt-6-luna',
+    'us.openai.gpt-6.1-sol-future',
+    'arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/us.openai.gpt-6-luna',
+  ])('leaves unsupported profile %s unpriced', (model) => {
+    expect(calculateBedrockCost(model, 1000, 100, 0, 0, 'us-east-1')).toBeUndefined();
+  });
+
+  it('leaves missing usage and unpublished billing modes unknown', () => {
+    const model = 'us.openai.gpt-6-luna';
+    expect(calculateBedrockCost(model, undefined, 100, 0, 0, 'us-east-1')).toBeUndefined();
+    expect(calculateBedrockCost(model, 1000, undefined, 0, 0, 'us-east-1')).toBeUndefined();
+    for (const type of ['priority', 'flex', 'reserved'] as const) {
+      expect(calculateBedrockCost(model, 1000, 100, 0, 0, 'us-east-1', { type })).toBeUndefined();
+    }
+    expect(
+      calculateBedrockCost(model, 1000, 100, 0, 100, 'us-east-1', undefined, 100),
+    ).toBeUndefined();
+    for (const region of ['us-gov-east-1', 'eu-west-1']) {
+      expect(calculateBedrockCost(model, 1000, 100, 0, 0, region)).toBeUndefined();
+    }
+    expect(
+      calculateBedrockCost('global.openai.gpt-6-luna', 1000, 100, 0, 0, 'eu-west-1'),
+    ).toBeCloseTo(0.00015, 12);
+    expect(
+      calculateBedrockCost('global.openai.gpt-6-luna', 1000, 100, 0, 0, 'cn-north-1'),
+    ).toBeUndefined();
+  });
+});
+
 describe('Bedrock GovCloud OpenAI inference profiles', () => {
   it.each([
     ['us-gov.openai.gpt-5.6-terra', 2.7, 16.2],
